@@ -1,0 +1,22 @@
+{
+  "name": "but-why-sandcastle-v1-execution-spike",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build-docker-image": "bash scripts/build-docker-image.sh",
+    "prepare-sandcastle-main": "bash scripts/prepare-sandcastle-main.sh",
+    "start": "tsx src/prototype.ts",
+    "run-once": "tsx src/prototype.ts --all",
+    "spike-main": "bash scripts/run-main.sh",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@ai-hero/sandcastle": "file:/tmp/but-why-ai-hero-sandcastle-main-2d93226d37da129c54d4ecfd5b370122b48b31b2.tgz",
+    "effect": "^3.20.0"
+  },
+  "devDependencies": {
+    "@types/node": "^25.5.0",
+    "tsx": "^4.21.0",
+    "typescript": "^6.0.3"
+  }
+}

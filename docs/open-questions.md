@@ -2,19 +2,30 @@
 
 ## Sandcastle spike result
 
-Sandcastle is the intended v1 execution engine, but this is not proven yet.
+Result: green against Sandcastle main with release and token-usage caveats, not against published `0.10.0`.
 
-The first prototype must decide whether Sandcastle cleanly supports:
+The spike report lives at:
+
+```text
+docs/spikes/sandcastle-v1-execution.md
+```
+
+Sandcastle main commit `2d93226d37da129c54d4ecfd5b370122b48b31b2` proved:
 
 - validation worktrees from temp refs
-- configured check commands
+- configured check commands through `sandbox.exec()`
 - Pi reviewer agents
-- structured output validation and retry
-- logs and artifacts
-- token usage
+- structured output validation and retry through `Output.object(..., maxRetries)`
+- reviewer log file paths
+- Docker sandbox execution
+- Pi reviewer execution in Docker with host Pi auth mounted read-only
 - cleanup
 
-If the spike fails, decide whether to patch Sandcastle, contribute upstream, or narrow v1.
+Remaining open points:
+
+- Wait for or pin a Sandcastle release that includes the required main-branch APIs.
+- Verify Pi token usage for the selected runtime and model, because `result.iterations[].usage` was missing in the local run.
+- Optionally run a Podman smoke test if v1 wants to advertise Podman support.
 
 ## Validation phase configuration
 
