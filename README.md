@@ -6,8 +6,10 @@ CLI: `by`.
 
 Current direction:
 
-- validate completed code against approved context
-- use existing tools for execution, agents, checks, and GitHub
-- keep custom code focused on state, findings, decisions, and policy
+- manage repo-scoped tasks for agent-assisted code work
+- validate submitted branches against task intent
+- use Sandcastle for execution, agents, checks, logs, retries, and token usage
+- publish only validated changes through GitHub PRs
+- keep custom code focused on tasks, runs, findings, PR readiness, and policy
 
 Nothing is stable yet.

@@ -1,95 +1,111 @@
 # Open questions
 
-## Task workspace abstraction
+## Sandcastle spike result
 
-We still need to decide how task workspaces are created and managed.
+Sandcastle is the intended v1 execution engine, but this is not proven yet.
 
-Options include:
+The first prototype must decide whether Sandcastle cleanly supports:
 
-- Worktrunk-style branch and worktree lifecycle
-- Treehouse-style warmed disposable worktrees plus later branch creation
-- custom minimal git orchestration
-- agent-managed raw git with guardrails
+- validation worktrees from temp refs
+- configured check commands
+- Pi reviewer agents
+- structured output validation and retry
+- logs and artifacts
+- token usage
+- cleanup
 
-The user-facing object should be a task, not a branch or worktree.
+If the spike fails, decide whether to patch Sandcastle, contribute upstream, or narrow v1.
 
-## Intent binding
+## Validation phase configuration
 
-We need a simple way to bind approved context to a validation run.
+We have chosen fixed phases instead of a generic CI pipeline.
 
-The gate should not infer intent from the implementing agent.
+The remaining question is the exact shape of repo config for:
 
-The gate should not be tightly coupled to Lavish.
-
-The likely model is an explicit `IntentRef` that points to approved context artifacts.
-
-## Sandcastle dependency risk
-
-Sandcastle may save a lot of code.
-
-It is also young and pre-1.0.
-
-We need a spike before depending on it heavily.
-
-The dependency should sit behind `ExecutionProvider`.
-
-## Dagger versus repo scripts
-
-Repo scripts are the simplest check runner for v1.
-
-Dagger may become useful if we want reproducible local and CI check environments.
-
-We should not require Dagger until normal scripts become painful.
-
-## Effect
-
-Effect may reduce cognitive load in orchestration code.
-
-It is most useful for:
-
-- typed errors
-- retries
+- check commands
+- intent reviewer
+- quality reviewers
+- sequential versus parallel reviewer groups
 - timeouts
-- resource cleanup
-- dependency injection
+- ignore patterns
 
-It should not be used for pure policy functions if plain TypeScript is clearer.
+The config should stay small and should not become a generic workflow language.
 
-## PR babysitting scope
+## Reviewer role set
 
-We need to decide how much PR babysitting belongs in early versions.
+Reviewer roles are configurable and are not fixed by the v1 architecture.
 
-Minimum:
+We still need to decide the default reviewer set created by `by init`.
 
-- create or update PR
-- watch CI
-- surface failure
+Possible roles include:
 
-Later:
+- intent
+- bugs
+- simplicity
+- domain
+- documentation
 
-- diagnose CI failures
-- run fixer agents
-- rebase or merge latest main
-- resolve mechanical conflicts
-- ask user on semantic conflicts
+## GitHub readiness details
 
-## Observability vendor
+V1 requires GitHub PR publishing.
 
-We want traces, costs, artifacts, and run history.
+We still need exact rules for `ready`:
 
-We do not want to build a dashboard early.
+- required checks only or all checks
+- requested changes review handling
+- draft PR handling
+- timeout default
+- closed PR without merge behavior
 
-Candidates:
+Current direction: a PR is ready only when GitHub says it is mergeable, required checks pass, and no active requested-changes review blocks it.
+
+## Agent profiles and Sandcastle mapping
+
+We chose `agentRuntime` and `agentModel` instead of provider/model.
+
+We still need to map profile fields to Sandcastle provider options.
+
+Open details include:
+
+- Pi thinking settings
+- sandbox defaults
+- environment variables
+- session storage
+- log locations
+- provider-specific permissions
+
+## Token accounting
+
+V1 records tokens, not dollar costs.
+
+We still need to verify what Sandcastle returns for each runtime and normalize it into:
+
+```text
+inputTokens
+cachedInputTokens
+outputTokens
+totalTokens
+```
+
+Dollar costs are deferred.
+
+## Evals
+
+Reviewer agents need evals from the beginning.
+
+The unresolved question is how formal those evals need to be in v1.
+
+At minimum, we need golden fixtures for task context plus diff plus expected findings behavior.
+
+## Observability beyond local records
+
+V1 stores runs, rounds, logs, artifacts, findings, and token usage locally.
+
+We still need to decide whether later versions should export traces to:
 
 - OpenTelemetry
 - Langfuse
 - Braintrust
-- local SQLite plus artifact files
+- another existing observability tool
 
-## Agent role evals
-
-Reviewer and fixer agents need evals from the beginning.
-
-The main unresolved question is how formal those evals need to be in v1.
-
-At minimum, we need golden fixtures for intent plus diff plus expected findings.
+No custom dashboard should be built early.
