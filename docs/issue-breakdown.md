@@ -2,7 +2,7 @@
 
 This breakdown turns the PRD into smaller tracer-bullet implementation issues.
 
-It is not the final local issue draft set until approved.
+The local issue draft set is approved for product implementation after the green-ish Sandcastle spike.
 
 ## 1. Prove Sandcastle can support v1 execution
 

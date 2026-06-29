@@ -2,7 +2,9 @@
 
 ## Sandcastle spike result
 
-Result: green against Sandcastle main with release and token-usage caveats, not against published `0.10.0`.
+Result: green-ish.
+Sandcastle has released the required `.exec` method, so product implementation is approved to proceed, but some Sandcastle follow-up issues are still in progress.
+Token-usage verification remains open.
 
 The spike report lives at:
 
@@ -23,8 +25,9 @@ Sandcastle main commit `2d93226d37da129c54d4ecfd5b370122b48b31b2` proved:
 
 Remaining open points:
 
-- Wait for or pin a Sandcastle release that includes the required main-branch APIs.
+- Pin a Sandcastle release that includes the required `.exec` API.
 - Verify Pi token usage for the selected runtime and model, because `result.iterations[].usage` was missing in the local run.
+- Track remaining Sandcastle follow-up issues that could affect v1 execution behavior.
 - Optionally run a Podman smoke test if v1 wants to advertise Podman support.
 
 ## Validation phase configuration

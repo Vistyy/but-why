@@ -25,6 +25,11 @@ A place where humans or agents view tasks, change task state, and read task comm
 A task surface can be built into But Why? or backed by an external board.
 _Avoid_: Board, tracker, project management system when speaking about the But Why? domain
 
+**Actionable Dashboard Item**:
+A task that should appear in the default `by` dashboard because it has a clear next human or agent action.
+In v1, actionable dashboard items are tasks in `todo`, `needs_input`, or `ready`.
+_Avoid_: Treating every non-done task as dashboard-actionable
+
 **Submission**:
 A completed code candidate handed to But Why? for validation.
 A submission is the normal trigger after an agent or human finishes implementing a task.
