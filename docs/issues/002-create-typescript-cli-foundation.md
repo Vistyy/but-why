@@ -32,6 +32,7 @@ help[1]:
 Issue 002 must not add counts, version, config details, or extra next-action fields to this pre-init home view.
 
 The `bin` value must be the current executable path with the user's home directory collapsed to `~`.
+Exact output tests may normalize or assert the dynamic `bin` value separately, but they must verify it is the current executable path with the user's home directory collapsed to `~`.
 
 ### Output boundary
 
@@ -55,7 +56,7 @@ Exit codes:
 - `1` means runtime error.
 - `2` means usage error.
 
-Baseline usage error shape:
+Baseline usage error shape for future commands:
 
 ```toon
 error:
@@ -68,12 +69,22 @@ help[1]:
 Unknown commands or flags are usage errors with exit code `2`.
 They must print a structured error to stdout and must not dump generic help.
 
-Example:
+Unknown command example:
 
 ```toon
 error:
   code: unknown_command
   message: Unknown command: frobnicate
+help[1]:
+  Run `by --help`
+```
+
+Unknown flag example:
+
+```toon
+error:
+  code: unknown_flag
+  message: Unknown flag: --bad
 help[1]:
   Run `by --help`
 ```
@@ -98,9 +109,11 @@ help[1]:
 
 Issue 002 uses the chosen repo toolchain:
 
-- Nix provides the project Node.js, pnpm, and Just tools.
-- Node.js is `nodejs_24` from the repo flake.
-- pnpm is the Nix pnpm package overridden to use that same Node.js package.
+- Nix provides the blessed reproducible development environment, but Nix is not required for development.
+- Any development environment with the pinned Node.js `24.x`, pnpm, Just, and project dependencies may run the project checks.
+- The `by` CLI must not require Nix at runtime.
+- The repo flake pins the exact Node.js patch version for the blessed environment.
+- pnpm should use the pinned Node.js version in the blessed environment.
 - Corepack is not part of the repo toolchain.
 - Agents use Just recipes instead of invoking pnpm directly.
 - The module system is ESM.
@@ -108,7 +121,9 @@ Issue 002 uses the chosen repo toolchain:
 - Biome handles linting and formatting.
 - TypeScript compiler typechecks with `tsc --noEmit`.
 - SQLite access uses `node:sqlite`.
-- Issue 002 should use a tiny explicit argv router instead of a CLI parser unless a concrete need appears.
+- Issue 002 should use an isolated argv routing boundary instead of introducing a CLI parser yet.
+  This boundary only needs to support `by` and `by --help` in issue 002.
+  It must be replaceable by Effect CLI or an equivalent parser later without changing command handlers or output formatting.
 - `just quality` wires formatting checks, linting, typechecking, and tests.
 - All choices must support strict TypeScript, Effect, Effect Schema, SQLite access, and AXI output.
 - CLI behavior must remain non-interactive.
@@ -126,6 +141,7 @@ just typecheck
 just test
 just format
 just format-check
+just by [args]      # run the repo-local `by` CLI with optional arguments
 ```
 
 Agents should call these recipes instead of invoking package-manager-specific tooling directly.
@@ -148,10 +164,22 @@ The home view may suggest `by init`, even though issue 003 implements that comma
 
 ### Help behavior
 
-`by --help` must print a concise command reference.
+`by --help` must print a concise TOON command reference to stdout.
 It must document only the command surface that exists in issue 002.
 It must not replace the no-args home view.
 Bare `by` remains live content, not help.
+
+Expected exact field set:
+
+```toon
+bin: ~/.local/bin/by
+description: Manage But Why? tasks in this workspace
+usage: by [--help]
+commands[1]{command,description}:
+  by,Show workspace task dashboard
+flags[1]{flag,description}:
+  --help,Show this help
+```
 
 ### SQLite scope
 
@@ -174,7 +202,8 @@ Persisted repo-local state belongs to issue 003.
 ## Acceptance criteria
 
 - [ ] The `by` executable can run from the repo.
-- [ ] Running `by` prints a structured empty dashboard instead of generic help.
+- [ ] `just by [args]` runs the repo-local `by` CLI with optional arguments.
+- [ ] Running `by` in an uninitialized workspace prints the specified AXI home view instead of generic help.
 - [ ] Structured output goes to stdout.
 - [ ] Progress and diagnostics go to stderr.
 - [ ] The project uses strict TypeScript, Effect, Effect Schema, SQLite access, linting, typechecking, and tests.
@@ -182,7 +211,9 @@ Persisted repo-local state belongs to issue 003.
 - [ ] The repo provides stable agent-facing Just recipes for quality tasks regardless of underlying tooling.
 - [ ] CLI errors are structured and actionable.
 - [ ] `by --help` prints a concise command reference for the current command surface.
+- [ ] `docs/config.md` documents the selected foundation tooling, Just recipes, and blessed-but-optional Nix development environment.
+- [ ] Exact CLI output tests lock the stdout shape for `just by`, `just by --help`, an unknown command usage error, and an unknown flag usage error.
 
-## Blocked by
+## Dependency status
 
-- 001-prove-sandcastle-v1-execution.md
+- `001-prove-sandcastle-v1-execution.md` is complete enough for issue 002 to proceed.
