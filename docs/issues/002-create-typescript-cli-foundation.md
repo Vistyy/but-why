@@ -201,18 +201,18 @@ Persisted repo-local state belongs to issue 003.
 
 ## Acceptance criteria
 
-- [ ] The `by` executable can run from the repo.
-- [ ] `just by [args]` runs the repo-local `by` CLI with optional arguments.
-- [ ] Running `by` in an uninitialized workspace prints the specified AXI home view instead of generic help.
-- [ ] Structured output goes to stdout.
-- [ ] Progress and diagnostics go to stderr.
-- [ ] The project uses strict TypeScript, Effect, Effect Schema, SQLite access, linting, typechecking, and tests.
-- [ ] `just quality` verifies formatting, linting, typechecking, and tests without modifying files.
-- [ ] The repo provides stable agent-facing Just recipes for quality tasks regardless of underlying tooling.
-- [ ] CLI errors are structured and actionable.
-- [ ] `by --help` prints a concise command reference for the current command surface.
-- [ ] `docs/config.md` documents the selected foundation tooling, Just recipes, and blessed-but-optional Nix development environment.
-- [ ] Exact CLI output tests lock the stdout shape for `just by`, `just by --help`, an unknown command usage error, and an unknown flag usage error.
+- [x] The `by` executable can run from the repo.
+- [x] `just by [args]` runs the repo-local `by` CLI with optional arguments.
+- [x] Running `by` in an uninitialized workspace prints the specified AXI home view instead of generic help.
+- [x] Structured output goes to stdout.
+- [x] Progress and diagnostics go to stderr.
+- [x] The project uses strict TypeScript, Effect, Effect Schema, SQLite access, linting, typechecking, and tests.
+- [x] `just quality` verifies formatting, linting, typechecking, and tests without modifying files.
+- [x] The repo provides stable agent-facing Just recipes for quality tasks regardless of underlying tooling.
+- [x] CLI errors are structured and actionable.
+- [x] `by --help` prints a concise command reference for the current command surface.
+- [x] `docs/config.md` documents the selected foundation tooling, Just recipes, and blessed-but-optional Nix development environment.
+- [x] Exact CLI output tests lock the stdout shape for `just by`, `just by --help`, an unknown command usage error, and an unknown flag usage error.
 
 ## Dependency status
 
