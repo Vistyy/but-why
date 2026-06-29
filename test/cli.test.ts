@@ -1,4 +1,5 @@
 import { spawnSync } from "node:child_process";
+import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
@@ -77,7 +78,7 @@ help[1]: Report this failure with the command and workspace path`);
   });
 
   it("collapses the home directory in executable paths", () => {
-    expect(expectedBin).toMatch(/^~\//);
-    expect(expectedBin).toContain("/projects/but-why/bin/by");
+    expect(collapseHome(join(homedir(), ".local/bin/by"))).toBe("~/.local/bin/by");
+    expect(expectedBin).toBe(collapseHome(join(repoRoot, "bin/by")));
   });
 });
