@@ -1,0 +1,5 @@
+#!/usr/bin/env sh
+set -eu
+
+repo_dir=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+BUT_WHY_EXECUTABLE_PATH="$repo_dir/bin/by" exec node --import tsx "$repo_dir/src/main.ts" "$@"

@@ -205,3 +205,53 @@ totalTokens
 ```
 
 Run and task totals sum each token bucket separately.
+
+## Foundation tooling
+
+The repository foundation uses ESM TypeScript on Node.js 24.x.
+
+Nix provides the blessed reproducible development environment.
+
+Nix is optional for development.
+
+A non-Nix environment may run the project if it provides Node.js 24.x, pnpm, Just, and installed project dependencies.
+
+Corepack is not part of the repo toolchain.
+
+Agents should use Just recipes instead of invoking pnpm directly.
+
+The project uses Vitest for tests.
+
+Biome handles formatting and linting.
+
+The TypeScript compiler runs strict typechecking with `tsc --noEmit`.
+
+SQLite access uses `node:sqlite`.
+
+CLI output is converted to TOON-style text only at the stdout boundary.
+
+Internal command logic uses typed JSON-like objects.
+
+## Agent-facing Just recipes
+
+The stable recipes are:
+
+```sh
+just quality
+just lint
+just typecheck
+just test
+just format
+just format-check
+just by [args]
+```
+
+`just quality` runs format checks, linting, typechecking, and tests.
+
+`just quality` must not modify files.
+
+`just format` may modify files.
+
+`just format-check` must not modify files.
+
+`just by [args]` runs the repo-local `by` CLI.

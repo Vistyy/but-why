@@ -1,0 +1,27 @@
+{
+  "name": "but-why",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "by": "./bin/by"
+  },
+  "scripts": {
+    "format": "biome format --write .",
+    "format-check": "biome format .",
+    "lint": "biome lint .",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@toon-format/toon": "^2.3.0",
+    "effect": "^3.17.7"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.2.0",
+    "@types/node": "^24.0.0",
+    "tsx": "^4.20.3",
+    "typescript": "^5.9.2",
+    "vitest": "^3.2.4"
+  }
+}
