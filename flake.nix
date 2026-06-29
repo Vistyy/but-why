@@ -9,13 +9,15 @@
     let
       system = "x86_64-linux";
       pkgs = import nixpkgs { inherit system; };
+      node = pkgs.nodejs_24;
+      pnpm = pkgs.pnpm.override { nodejs = node; };
     in
     {
       devShells.${system}.default = pkgs.mkShell {
-        packages = with pkgs; [
-          corepack
-          nodejs_24
+        packages = [
+          node
           pnpm
+          pkgs.just
         ];
       };
     };
