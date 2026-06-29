@@ -56,8 +56,8 @@ Issue 003 creates `.but-why/state.sqlite` with migration metadata only.
 It does not create task, run, finding, or reviewer tables.
 Those tables belong to later feature issues.
 
-If `--task-prefix` is missing in a non-TTY context, init fails with a structured missing-flag error.
-If `--task-prefix` is missing in a TTY context, init may prompt a human for the prefix.
+If `--task-prefix` is missing, init fails with a structured missing-flag error.
+Init is always non-interactive.
 
 A successful first init writes this TOON-style shape to stdout:
 
@@ -122,7 +122,7 @@ help[1]:
   Run git init first, or cd into an existing Git repository.
 ```
 
-If `--task-prefix` is missing in a non-TTY context, init fails with this TOON-style shape:
+If `--task-prefix` is missing, init fails with this TOON-style shape:
 
 ```toon
 error:
@@ -184,28 +184,28 @@ V1 uses synchronous `by submit <task-id>` validation, and the repo-local daemon 
 
 ## Acceptance criteria
 
-- [ ] `by init --task-prefix <prefix>` initializes the current Git work tree root non-interactively.
-- [ ] Running init from a subdirectory writes `.but-why/` and `.gitignore` at the Git work tree root.
-- [ ] `by init` may prompt for a task prefix only in a TTY context.
-- [ ] `by init` fails with `missing_task_prefix` when `--task-prefix` is missing in a non-TTY context.
-- [ ] Task prefixes are validated with `^[A-Z][A-Z0-9]{1,9}$`.
-- [ ] `.but-why/config.json` is created with only `taskPrefix`.
-- [ ] `.but-why/state.sqlite` is created with migration metadata only.
-- [ ] `.but-why/state.sqlite` contains `schema_migrations` with applied migration `001_init`.
-- [ ] `.but-why/reviewers/` is created without default reviewer files.
-- [ ] `.gitignore` is created if missing.
-- [ ] `.gitignore` contains exactly one idempotent `# But Why?` block for local SQLite state.
-- [ ] `.but-why/config.json` and `.but-why/reviewers/` remain trackable.
-- [ ] Successful first init prints `status: initialized` with created and updated paths.
-- [ ] No-op init prints `status: unchanged`.
-- [ ] Repair init prints `status: repaired` with only paths changed during that invocation.
-- [ ] Re-running init is unchanged when all initialized artifacts already match.
-- [ ] Re-running init repairs missing generated artifacts when `.but-why/config.json` has the requested task prefix.
-- [ ] Re-running init fails with `task_prefix_conflict` when `.but-why/config.json` has a different task prefix.
-- [ ] Re-running init fails with `invalid_repo_config` when `.but-why/config.json` is malformed or has the wrong schema.
-- [ ] Init fails with `not_git_work_tree` outside a Git work tree.
-- [ ] Exact CLI output tests lock the stdout shape for `task_prefix_conflict`, `not_git_work_tree`, `missing_task_prefix`, `invalid_task_prefix`, and `invalid_repo_config`.
-- [ ] Init does not require global agent profiles.
+- [x] `by init --task-prefix <prefix>` initializes the current Git work tree root non-interactively.
+- [x] Running init from a subdirectory writes `.but-why/` and `.gitignore` at the Git work tree root.
+- [x] `by init` is non-interactive.
+- [x] `by init` fails with `missing_task_prefix` when `--task-prefix` is missing.
+- [x] Task prefixes are validated with `^[A-Z][A-Z0-9]{1,9}$`.
+- [x] `.but-why/config.json` is created with only `taskPrefix`.
+- [x] `.but-why/state.sqlite` is created with migration metadata only.
+- [x] `.but-why/state.sqlite` contains `schema_migrations` with applied migration `001_init`.
+- [x] `.but-why/reviewers/` is created without default reviewer files.
+- [x] `.gitignore` is created if missing.
+- [x] `.gitignore` contains exactly one idempotent `# But Why?` block for local SQLite state.
+- [x] `.but-why/config.json` and `.but-why/reviewers/` remain trackable.
+- [x] Successful first init prints `status: initialized` with created and updated paths.
+- [x] No-op init prints `status: unchanged`.
+- [x] Repair init prints `status: repaired` with only paths changed during that invocation.
+- [x] Re-running init is unchanged when all initialized artifacts already match.
+- [x] Re-running init repairs missing generated artifacts when `.but-why/config.json` has the requested task prefix.
+- [x] Re-running init fails with `task_prefix_conflict` when `.but-why/config.json` has a different task prefix.
+- [x] Re-running init fails with `invalid_repo_config` when `.but-why/config.json` is malformed or has the wrong schema.
+- [x] Init fails with `not_git_work_tree` outside a Git work tree.
+- [x] Exact CLI output tests lock the stdout shape for `task_prefix_conflict`, `not_git_work_tree`, `missing_task_prefix`, `invalid_task_prefix`, and `invalid_repo_config`.
+- [x] Init does not require global agent profiles.
 
 ## Blocked by
 

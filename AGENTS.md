@@ -58,7 +58,7 @@ Avoid generic wrappers like `runCommand`, `runAgent`, or `collectArtifacts` unle
 
 The CLI is agent-first.
 
-Commands must be non-interactive unless they are explicitly human setup commands such as `by init`.
+Commands must be non-interactive.
 
 Structured output goes to stdout.
 

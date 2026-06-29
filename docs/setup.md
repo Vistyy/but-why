@@ -6,15 +6,13 @@ But Why? is not implemented yet.
 
 These commands describe the planned interface.
 
-## Human setup
+## Setup
 
-Human setup can be interactive:
+Setup is non-interactive:
 
 ```bash
-by init
+by init --task-prefix BY
 ```
-
-The setup flow should ask for a task prefix.
 
 The prefix is required because task IDs are generated from it.
 
@@ -23,14 +21,6 @@ Example task IDs:
 ```text
 BY-1
 BY-2
-```
-
-## Agent setup
-
-Agent setup should be non-interactive:
-
-```bash
-by init --task-prefix BY
 ```
 
 Agents should follow this document and `AGENTS.md` before running setup.
