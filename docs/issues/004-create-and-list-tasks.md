@@ -12,21 +12,21 @@ This should make But Why? useful as a repo-local Task store before validation ex
 
 ## Acceptance criteria
 
-- [ ] `by task create --title "..." --description-file <file>` creates a Task.
-- [ ] Task title is required and non-empty.
-- [ ] Task description file is required and non-empty.
-- [ ] New Tasks start in `todo`.
-- [ ] Task IDs use the configured task prefix.
-- [ ] `by task list` shows non-done Tasks by default.
-- [ ] `by task list --all` includes done Tasks.
-- [ ] `by task list --state <state>` filters by state and implies `--all`.
-- [ ] `by` shows only actionable dashboard items.
-- [ ] Task summary output includes `id`, `title`, `state`, `createdAt`, and `updatedAt`.
-- [ ] List and dashboard output includes `count`.
-- [ ] Empty list and dashboard output exits `0` with explicit zero-count structured output.
-- [ ] Structured errors are written to stdout with actionable `help[...]`.
-- [ ] Usage errors exit `2`; runtime and state errors exit `1`.
-- [ ] CLI output tests cover create, list, empty list, bare dashboard, and structured errors.
+- [x] `by task create --title "..." --description-file <file>` creates a Task.
+- [x] Task title is required and non-empty.
+- [x] Task description file is required and non-empty.
+- [x] New Tasks start in `todo`.
+- [x] Task IDs use the configured task prefix.
+- [x] `by task list` shows non-done Tasks by default.
+- [x] `by task list --all` includes done Tasks.
+- [x] `by task list --state <state>` filters by state and implies `--all`.
+- [x] `by` shows only actionable dashboard items.
+- [x] Task summary output includes `id`, `title`, `state`, `createdAt`, and `updatedAt`.
+- [x] List and dashboard output includes `count`.
+- [x] Empty list and dashboard output exits `0` with explicit zero-count structured output.
+- [x] Structured errors are written to stdout with actionable `help[...]`.
+- [x] Usage errors exit `2`; runtime and state errors exit `1`.
+- [x] CLI output tests cover create, list, empty list, bare dashboard, and structured errors.
 
 ## Resolved decisions
 
