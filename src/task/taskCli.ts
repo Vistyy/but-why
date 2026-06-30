@@ -6,8 +6,16 @@ import { findGitRoot } from "../init/git.js";
 import { taskPrefixPattern } from "../init/initRepo.js";
 import { readRepoConfig } from "../init/repoConfig.js";
 import type { ToonObject, ToonValue } from "../output/toon.js";
+import { readCommentFile, type CommentFileReadError } from "./commentFile.js";
 import { readDescriptionFile, type DescriptionFileReadError } from "./descriptionFile.js";
-import { createTask, getTaskById, listActionableTasks, listTasks } from "./taskStore.js";
+import {
+  appendTaskComment,
+  createTask,
+  getTaskById,
+  getTaskContextById,
+  listActionableTasks,
+  listTasks,
+} from "./taskStore.js";
 import {
   isTaskState,
   taskStates,
@@ -43,6 +51,10 @@ export const routeTask = (args: readonly string[], environment: CliEnvironment):
 
   if (subcommand === "context") {
     return routeTaskContextCommand(args.slice(1), environment);
+  }
+
+  if (subcommand === "comment") {
+    return routeTaskComment(args.slice(1), environment);
   }
 
   if (subcommand?.startsWith("-")) {
@@ -237,7 +249,7 @@ const routeTaskShow = (args: readonly string[], environment: CliEnvironment): Cl
         branch: null,
         latestRun: null,
         tokenTotals: null,
-        commentCount: null,
+        commentCount: task.commentCount,
       },
     }),
   );
@@ -251,16 +263,102 @@ const routeTaskContextCommand = (
     return taskDetailHelp("by task context <task-id>", "by task context BY-1");
   }
 
-  return routeExistingTask(args, environment, "by task context <task-id>", (task) =>
-    success({
+  return routeExistingTaskContext(args, environment);
+};
+
+const routeTaskComment = (args: readonly string[], environment: CliEnvironment): CliResult => {
+  if (args.length === 1 && args[0] === "--help") {
+    return success({
+      usage: "by task comment <task-id> --file <file>",
+      arguments: [
+        {
+          argument: "<task-id>",
+          description: "Public Task ID, such as BY-1",
+        },
+      ],
+      flags: [
+        {
+          flag: "--file <file>",
+          description: "Required UTF-8 Markdown comment file. Stdin is not supported.",
+        },
+        {
+          flag: "--help",
+          description: "Show this help",
+        },
+      ],
+      examples: ["by task comment BY-1 --file comment.md"],
+    });
+  }
+
+  const parseResult = parseTaskCommentArgs(args);
+
+  if (!parseResult.ok) {
+    return parseResult.result;
+  }
+
+  if (parseResult.commentFile === undefined) {
+    return usageError({
+      code: "missing_comment_file",
+      message: "--file is required.",
+      help: ["Run `by task comment <task-id> --file <file>` to append a Task comment."],
+    });
+  }
+
+  const repoContext = loadTaskContext(environment.cwd);
+
+  if (!repoContext.ok) {
+    return repoContext.result;
+  }
+
+  const taskId = validateTaskIdPrefix(parseResult.taskId, repoContext.taskPrefix);
+
+  if (!taskId.ok) {
+    return taskId.result;
+  }
+
+  try {
+    if (getTaskById(repoContext.statePath, taskId.taskId) === undefined) {
+      return taskNotFound(taskId.taskId);
+    }
+  } catch {
+    return stateStoreUnavailable(repoContext.taskPrefix);
+  }
+
+  if (parseResult.commentFile === "-") {
+    return runtimeError({
+      code: "unsupported_stdin_comment_file",
+      message: "Reading Task comments from stdin is not supported in v1.",
+      help: ["Write the comment to a file, then rerun `by task comment <task-id> --file <file>`."],
+    });
+  }
+
+  const comment = readCommentFile(environment.cwd, parseResult.commentFile);
+
+  if (!comment.ok) {
+    return commentFileError(comment.error);
+  }
+
+  try {
+    const result = appendTaskComment({
+      statePath: repoContext.statePath,
+      taskId: taskId.taskId,
+      content: comment.content,
+      now: () => environment.now().toISOString(),
+    });
+
+    if (result === undefined) {
+      return taskNotFound(taskId.taskId);
+    }
+
+    return success({
       task: {
-        id: task.id,
-        title: task.title,
-        description: task.description,
-        comments: [],
+        id: result.taskId,
+        commentCount: result.commentCount,
       },
-    }),
-  );
+    });
+  } catch {
+    return stateStoreUnavailable(repoContext.taskPrefix);
+  }
 };
 
 const taskDetailHelp = (usage: string, example: string): CliResult =>
@@ -311,6 +409,45 @@ const routeExistingTask = (
     }
 
     return render(task);
+  } catch {
+    return stateStoreUnavailable(context.taskPrefix);
+  }
+};
+
+const routeExistingTaskContext = (
+  args: readonly string[],
+  environment: CliEnvironment,
+): CliResult => {
+  const taskIdShape = parseTaskIdShape(args, "by task context <task-id>");
+
+  if (!taskIdShape.ok) {
+    return taskIdShape.result;
+  }
+
+  const context = loadTaskConfigContext(environment.cwd);
+
+  if (!context.ok) {
+    return context.result;
+  }
+
+  const taskId = validateTaskIdPrefix(taskIdShape.taskId, context.taskPrefix);
+
+  if (!taskId.ok) {
+    return taskId.result;
+  }
+
+  if (!existsSync(context.statePath)) {
+    return stateStoreUnavailable(context.taskPrefix);
+  }
+
+  try {
+    const task = getTaskContextById(context.statePath, taskId.taskId);
+
+    if (task === undefined) {
+      return taskNotFound(taskId.taskId);
+    }
+
+    return success({ task });
   } catch {
     return stateStoreUnavailable(context.taskPrefix);
   }
@@ -374,7 +511,7 @@ const invalidTaskId = (
   taskId: string,
   expectedFormat: string,
   help: string,
-): TaskIdArgParseResult => ({
+): Extract<TaskIdArgParseResult, { readonly ok: false }> => ({
   ok: false,
   result: usageError({
     code: "invalid_task_id",
@@ -389,6 +526,17 @@ type TaskCreateArgsParseResult =
       readonly ok: true;
       readonly title: string | undefined;
       readonly descriptionFile: string | undefined;
+    }
+  | {
+      readonly ok: false;
+      readonly result: CliResult;
+    };
+
+type TaskCommentArgsParseResult =
+  | {
+      readonly ok: true;
+      readonly taskId: PublicTaskId;
+      readonly commentFile: string | undefined;
     }
   | {
       readonly ok: false;
@@ -448,6 +596,65 @@ const parseTaskCreateArgs = (args: readonly string[]): TaskCreateArgsParseResult
   }
 
   return { ok: true, title, descriptionFile };
+};
+
+const parseTaskCommentArgs = (args: readonly string[]): TaskCommentArgsParseResult => {
+  const [taskIdArg, ...rest] = args;
+
+  if (taskIdArg === undefined) {
+    return {
+      ok: false,
+      result: usageError({
+        code: "missing_task_id",
+        message: "Task ID is required.",
+        help: ["Run `by task comment <task-id> --file <file>`."],
+      }),
+    };
+  }
+
+  if (!hasPublicTaskIdShape(taskIdArg)) {
+    return invalidTaskId(taskIdArg, "<PREFIX>-<number>", "Use a public Task ID such as BY-1.");
+  }
+
+  let commentFile: string | undefined;
+
+  for (let index = 0; index < rest.length; index += 1) {
+    const arg = rest[index];
+
+    if (arg === "--file") {
+      const value = rest[index + 1];
+
+      if (value === undefined) {
+        return { ok: true, taskId: publicTaskId(taskIdArg), commentFile: undefined };
+      }
+
+      commentFile = value;
+      index += 1;
+      continue;
+    }
+
+    if (arg?.startsWith("-")) {
+      return {
+        ok: false,
+        result: usageError({
+          code: "unknown_flag",
+          message: `Unknown flag: ${arg}`,
+          help: ["Run `by task comment --help`."],
+        }),
+      };
+    }
+
+    return {
+      ok: false,
+      result: usageError({
+        code: "unknown_argument",
+        message: `Unknown argument: ${arg ?? ""}`,
+        help: ["Run `by task comment --help`."],
+      }),
+    };
+  }
+
+  return { ok: true, taskId: publicTaskId(taskIdArg), commentFile };
 };
 
 type TaskListArgsParseResult =
@@ -605,6 +812,10 @@ const taskHelpView = (): ToonObject => ({
       command: "by task context <task-id>",
       description: "Show full Task Context",
     },
+    {
+      command: "by task comment <task-id> --file <file>",
+      description: "Append a Markdown Task comment",
+    },
   ],
 });
 
@@ -619,6 +830,32 @@ const taskSummaryRows = (tasks: readonly TaskSummary[]): readonly ToonValue[] =>
 
 const createTaskHelp =
   'Run `by task create --title "..." --description-file <file>` to create a task.';
+
+const commentFileError = (error: CommentFileReadError): CliResult => {
+  switch (error.code) {
+    case "comment_file_not_found":
+      return runtimeError({
+        code: error.code,
+        message: "Task comment file was not found.",
+        details: { path: error.path },
+        help: ["Create the file, then rerun `by task comment <task-id> --file <file>`."],
+      });
+    case "comment_file_unreadable":
+      return runtimeError({
+        code: error.code,
+        message: "Task comment file is not readable UTF-8 text.",
+        details: { path: error.path },
+        help: ["Use a readable UTF-8 file for `--file`."],
+      });
+    case "empty_comment":
+      return runtimeError({
+        code: error.code,
+        message: "Task comment must not be empty.",
+        details: { path: error.path },
+        help: ["Write a non-empty comment file and rerun the command."],
+      });
+  }
+};
 
 const descriptionFileError = (error: DescriptionFileReadError): CliResult => {
   switch (error.code) {

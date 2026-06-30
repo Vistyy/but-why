@@ -130,6 +130,7 @@ updated[1]: .gitignore`);
       expect(database.prepare("SELECT name FROM schema_migrations").all()).toEqual([
         { name: "001_init" },
         { name: "002_tasks" },
+        { name: "003_task_comments" },
       ]);
       expect(
         database
@@ -137,7 +138,7 @@ updated[1]: .gitignore`);
             "SELECT name FROM sqlite_schema WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name",
           )
           .all(),
-      ).toEqual([{ name: "schema_migrations" }, { name: "tasks" }]);
+      ).toEqual([{ name: "schema_migrations" }, { name: "task_comments" }, { name: "tasks" }]);
     } finally {
       database.close();
     }

@@ -122,6 +122,7 @@ help[1]: Move the conflicting path aside before running init again.`);
       expect(repairedDatabase.prepare("SELECT name FROM schema_migrations").all()).toEqual([
         { name: "001_init" },
         { name: "002_tasks" },
+        { name: "003_task_comments" },
       ]);
     } finally {
       repairedDatabase.close();

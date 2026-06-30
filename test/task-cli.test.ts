@@ -165,7 +165,7 @@ tasks[1]{id,title,state,createdAt,updatedAt}:
   branch: null
   latestRun: null
   tokenTotals: null
-  commentCount: null`);
+  commentCount: 0`);
   });
 
   it("shows Task Context without metadata", () => {
@@ -194,7 +194,244 @@ tasks[1]{id,title,state,createdAt,updatedAt}:
   comments: []`);
   });
 
-  it.each(["show", "context"])("validates Task ID arguments before %s lookup", (command) => {
+  it("appends Task comments as ordered raw Task Context without changing state", () => {
+    const root = initializedRepo();
+
+    createTask(root, firstNow, "Commented task");
+    updateTaskState(root, "BY-1", "needs_input", secondNow);
+    writeFileSync(join(root, "comment-1.md"), "First comment\n\nWith Markdown.\n");
+    writeFileSync(join(root, "comment-2.md"), "First comment\n\nWith Markdown.\n");
+
+    const firstResult = runByInProcess(
+      root,
+      ["task", "comment", "BY-1", "--file", "comment-1.md"],
+      thirdNow,
+    );
+    const duplicateResult = runByInProcess(
+      root,
+      ["task", "comment", "BY-1", "--file", "comment-2.md"],
+      "2026-06-30T12:15:00.000Z",
+    );
+
+    expect(firstResult.status).toBe(0);
+    expect(firstResult.stderr).toBe("");
+    expect(firstResult.stdout).toBe(`task:
+  id: BY-1
+  commentCount: 1`);
+    expect(duplicateResult.status).toBe(0);
+    expect(duplicateResult.stdout).toBe(`task:
+  id: BY-1
+  commentCount: 2`);
+
+    expect(runByInProcess(root, ["task", "show", "BY-1"]).stdout).toBe(`task:
+  id: BY-1
+  title: Commented task
+  state: needs_input
+  createdAt: "${firstNow}"
+  updatedAt: "2026-06-30T12:15:00.000Z"
+  branch: null
+  latestRun: null
+  tokenTotals: null
+  commentCount: 2`);
+    expect(runByInProcess(root, ["task", "context", "BY-1"]).stdout).toBe(`task:
+  id: BY-1
+  title: Commented task
+  description: Description for Commented task
+  comments[2]: "First comment\\n\\nWith Markdown.\\n","First comment\\n\\nWith Markdown.\\n"`);
+  });
+
+  it("preserves a leading UTF-8 BOM in Task comment content", () => {
+    const root = initializedRepo();
+
+    createTask(root, firstNow, "BOM comment");
+    writeFileSync(join(root, "bom.md"), Buffer.from([0xef, 0xbb, 0xbf, 0x42, 0x4f, 0x4d]));
+
+    const result = runByInProcess(root, ["task", "comment", "BY-1", "--file", "bom.md"], secondNow);
+
+    expect(result.status).toBe(0);
+
+    const database = new DatabaseSync(join(root, ".but-why/state.sqlite"));
+
+    try {
+      expect(database.prepare("SELECT content FROM task_comments").get()).toEqual({
+        content: "\uFEFFBOM",
+      });
+    } finally {
+      database.close();
+    }
+  });
+
+  it("reports actionable Task comment input errors without changing the Task", () => {
+    const root = initializedRepo();
+
+    createTask(root, firstNow, "Input errors");
+    writeFileSync(join(root, "valid.md"), "Valid comment");
+    mkdirSync(join(root, "comment-dir"));
+    writeFileSync(join(root, "empty.md"), " \n\t");
+    writeFileSync(join(root, "invalid.bin"), Buffer.from([0xff]));
+
+    const cases = [
+      {
+        name: "missing file flag",
+        args: ["task", "comment", "BY-1"],
+        status: 2,
+        code: "missing_comment_file",
+      },
+      {
+        name: "malformed task ID",
+        args: ["task", "comment", "by-1", "--file", "valid.md"],
+        status: 2,
+        code: "invalid_task_id",
+      },
+      {
+        name: "unknown task",
+        args: ["task", "comment", "BY-999", "--file", "valid.md"],
+        status: 1,
+        code: "task_not_found",
+      },
+      {
+        name: "unknown task before missing file",
+        args: ["task", "comment", "BY-999", "--file", "missing.md"],
+        status: 1,
+        code: "task_not_found",
+      },
+      {
+        name: "unknown task before stdin file",
+        args: ["task", "comment", "BY-999", "--file", "-"],
+        status: 1,
+        code: "task_not_found",
+      },
+      {
+        name: "missing file",
+        args: ["task", "comment", "BY-1", "--file", "missing.md"],
+        status: 1,
+        code: "comment_file_not_found",
+      },
+      {
+        name: "unreadable file",
+        args: ["task", "comment", "BY-1", "--file", "comment-dir"],
+        status: 1,
+        code: "comment_file_unreadable",
+      },
+      {
+        name: "invalid UTF-8",
+        args: ["task", "comment", "BY-1", "--file", "invalid.bin"],
+        status: 1,
+        code: "comment_file_unreadable",
+      },
+      {
+        name: "empty comment",
+        args: ["task", "comment", "BY-1", "--file", "empty.md"],
+        status: 1,
+        code: "empty_comment",
+      },
+      {
+        name: "stdin file",
+        args: ["task", "comment", "BY-1", "--file", "-"],
+        status: 1,
+        code: "unsupported_stdin_comment_file",
+      },
+    ] as const;
+
+    for (const testCase of cases) {
+      const result = runByInProcess(root, testCase.args, thirdNow);
+
+      expect(result.status, testCase.name).toBe(testCase.status);
+      expect(result.stderr, testCase.name).toBe("");
+      expect(result.stdout, testCase.name).toContain(`code: ${testCase.code}`);
+      expect(result.stdout, testCase.name).toContain("help[1]");
+    }
+
+    expect(runByInProcess(root, ["task", "show", "BY-1"]).stdout).toContain(
+      `updatedAt: "${firstNow}"`,
+    );
+    expect(runByInProcess(root, ["task", "context", "BY-1"]).stdout).toContain("comments: []");
+  });
+
+  it("persists Task comments across CLI processes", async () => {
+    const root = initializedRepo();
+
+    createTask(root, firstNow, "Persistent comments");
+    writeFileSync(join(root, "comment.md"), "Persist me exactly\n");
+
+    const appendResult = await runByAsync(
+      root,
+      { BUT_WHY_NOW: secondNow },
+      "task",
+      "comment",
+      "BY-1",
+      "--file",
+      "comment.md",
+    );
+
+    expect(appendResult.status).toBe(0);
+    expect(appendResult.stderr).toBe("");
+    expect(appendResult.stdout).toBe(`task:
+  id: BY-1
+  commentCount: 1`);
+    expect(runByInProcess(root, ["task", "context", "BY-1"]).stdout).toBe(`task:
+  id: BY-1
+  title: Persistent comments
+  description: Description for Persistent comments
+  comments[1]: "Persist me exactly\\n"`);
+  });
+
+  it("preserves all concurrent Task comment appends", async () => {
+    const root = initializedRepo();
+    const commentCount = 8;
+
+    createTask(root, firstNow, "Concurrent comments");
+
+    for (let index = 0; index < commentCount; index += 1) {
+      writeFileSync(join(root, `comment-${index}.md`), `Comment ${index}`);
+    }
+
+    const results = await Promise.all(
+      Array.from({ length: commentCount }, (_value, index) =>
+        runByAsync(
+          root,
+          { BUT_WHY_NOW: secondNow },
+          "task",
+          "comment",
+          "BY-1",
+          "--file",
+          `comment-${index}.md`,
+        ),
+      ),
+    );
+
+    expect(results.every((result) => result.status === 0)).toBe(true);
+
+    const database = new DatabaseSync(join(root, ".but-why/state.sqlite"));
+
+    try {
+      expect(
+        database.prepare("SELECT content FROM task_comments ORDER BY sequence ASC").all(),
+      ).toHaveLength(commentCount);
+      expect(
+        new Set(
+          database
+            .prepare("SELECT content FROM task_comments ORDER BY sequence ASC")
+            .all()
+            .map((row) => (row as { readonly content: string }).content),
+        ),
+      ).toEqual(
+        new Set(Array.from({ length: commentCount }, (_value, index) => `Comment ${index}`)),
+      );
+    } finally {
+      database.close();
+    }
+
+    expect(runByInProcess(root, ["task", "show", "BY-1"]).stdout).toContain(
+      `commentCount: ${commentCount}`,
+    );
+  });
+
+  it.each([
+    "show",
+    "context",
+    "comment",
+  ])("validates Task ID arguments before %s lookup", (command) => {
     const root = createGitRepo();
 
     for (const [taskId, code] of [
@@ -462,6 +699,7 @@ help[1]: "Move or restore .but-why/state.sqlite, then run \`by init --task-prefi
       expect(database.prepare("SELECT name FROM schema_migrations ORDER BY name").all()).toEqual([
         { name: "001_init" },
         { name: "002_tasks" },
+        { name: "003_task_comments" },
       ]);
       expect(
         database
@@ -469,7 +707,7 @@ help[1]: "Move or restore .but-why/state.sqlite, then run \`by init --task-prefi
             "SELECT name FROM sqlite_schema WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name",
           )
           .all(),
-      ).toEqual([{ name: "schema_migrations" }, { name: "tasks" }]);
+      ).toEqual([{ name: "schema_migrations" }, { name: "task_comments" }, { name: "tasks" }]);
       expect(() =>
         database
           .prepare("INSERT INTO tasks VALUES (?, ?, ?, ?, ?, ?, ?)")

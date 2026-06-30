@@ -19,6 +19,14 @@ export type TaskSummary = {
 
 export type TaskRecord = TaskSummary & {
   readonly description: string;
+  readonly commentCount: number;
+};
+
+export type TaskContext = {
+  readonly id: string;
+  readonly title: string;
+  readonly description: string;
+  readonly comments: readonly string[];
 };
 
 const taskStateSet = new Set<string>(taskStates);

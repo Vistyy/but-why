@@ -29,6 +29,22 @@ const migrations: readonly Migration[] = [
       )
     `,
   },
+  {
+    name: "003_task_comments",
+    apply: `
+      CREATE TABLE IF NOT EXISTS task_comments (
+        sequence INTEGER PRIMARY KEY AUTOINCREMENT,
+        id TEXT NOT NULL UNIQUE,
+        task_id TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        content TEXT NOT NULL,
+        FOREIGN KEY (task_id) REFERENCES tasks(id)
+      );
+
+      CREATE INDEX IF NOT EXISTS task_comments_task_id_sequence_idx
+      ON task_comments (task_id, sequence)
+    `,
+  },
 ];
 
 export const ensureStateDatabase = (path: string): StateDatabaseChange => {
