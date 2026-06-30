@@ -66,6 +66,8 @@ Progress and diagnostics go to stderr.
 
 Use TOON-style output for CLI responses.
 
+`by` is an AXI CLI.
+
 Errors should be structured and actionable.
 
 ## Documentation rules

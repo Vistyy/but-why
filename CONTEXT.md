@@ -65,6 +65,12 @@ The command, reviewer, service, or tool that creates a finding, artifact, or tok
 Producers are shown as the human-readable source of validation output.
 _Avoid_: Tool, actor, substep
 
+**Task Comment**:
+An append-only Markdown note attached to a task as Task Context.
+Task comments do not change Task state.
+In v1, Task Context exposes comments as ordered content, not public comment records.
+_Avoid_: Finding, validation comment, note
+
 **Task Context**:
 The task title, task description, and task comment content used by reviewers to judge a submission.
 Task context is the v1 source of intent.
