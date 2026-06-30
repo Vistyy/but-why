@@ -7,8 +7,20 @@ import { taskPrefixPattern } from "../init/initRepo.js";
 import { readRepoConfig } from "../init/repoConfig.js";
 import type { ToonObject, ToonValue } from "../output/toon.js";
 import { readDescriptionFile, type DescriptionFileReadError } from "./descriptionFile.js";
-import { createTask, listActionableTasks, listTasks } from "./taskStore.js";
-import { isTaskState, taskStates, type TaskState, type TaskSummary } from "./task.js";
+import { createTask, getTaskById, listActionableTasks, listTasks } from "./taskStore.js";
+import {
+  isTaskState,
+  taskStates,
+  type TaskRecord,
+  type TaskState,
+  type TaskSummary,
+} from "./task.js";
+import {
+  hasPublicTaskIdShape,
+  isTaskIdForPrefix,
+  publicTaskId,
+  type PublicTaskId,
+} from "./taskId.js";
 
 export const routeTask = (args: readonly string[], environment: CliEnvironment): CliResult => {
   if (args.length === 0 || (args.length === 1 && args[0] === "--help")) {
@@ -23,6 +35,14 @@ export const routeTask = (args: readonly string[], environment: CliEnvironment):
 
   if (subcommand === "list") {
     return routeTaskList(args.slice(1), environment);
+  }
+
+  if (subcommand === "show") {
+    return routeTaskShow(args.slice(1), environment);
+  }
+
+  if (subcommand === "context") {
+    return routeTaskContextCommand(args.slice(1), environment);
   }
 
   if (subcommand?.startsWith("-")) {
@@ -201,6 +221,169 @@ const routeTaskList = (args: readonly string[], environment: CliEnvironment): Cl
   }
 };
 
+const routeTaskShow = (args: readonly string[], environment: CliEnvironment): CliResult => {
+  if (args.length === 1 && args[0] === "--help") {
+    return taskDetailHelp("by task show <task-id>", "by task show BY-1");
+  }
+
+  return routeExistingTask(args, environment, "by task show <task-id>", (task) =>
+    success({
+      task: {
+        id: task.id,
+        title: task.title,
+        state: task.state,
+        createdAt: task.createdAt,
+        updatedAt: task.updatedAt,
+        branch: null,
+        latestRun: null,
+        tokenTotals: null,
+        commentCount: null,
+      },
+    }),
+  );
+};
+
+const routeTaskContextCommand = (
+  args: readonly string[],
+  environment: CliEnvironment,
+): CliResult => {
+  if (args.length === 1 && args[0] === "--help") {
+    return taskDetailHelp("by task context <task-id>", "by task context BY-1");
+  }
+
+  return routeExistingTask(args, environment, "by task context <task-id>", (task) =>
+    success({
+      task: {
+        id: task.id,
+        title: task.title,
+        description: task.description,
+        comments: [],
+      },
+    }),
+  );
+};
+
+const taskDetailHelp = (usage: string, example: string): CliResult =>
+  success({
+    usage,
+    arguments: [
+      {
+        argument: "<task-id>",
+        description: "Public Task ID, such as BY-1",
+      },
+    ],
+    examples: [example],
+  });
+
+const routeExistingTask = (
+  args: readonly string[],
+  environment: CliEnvironment,
+  usage: string,
+  render: (task: TaskRecord) => CliResult,
+): CliResult => {
+  const taskIdShape = parseTaskIdShape(args, usage);
+
+  if (!taskIdShape.ok) {
+    return taskIdShape.result;
+  }
+
+  const context = loadTaskConfigContext(environment.cwd);
+
+  if (!context.ok) {
+    return context.result;
+  }
+
+  const taskId = validateTaskIdPrefix(taskIdShape.taskId, context.taskPrefix);
+
+  if (!taskId.ok) {
+    return taskId.result;
+  }
+
+  if (!existsSync(context.statePath)) {
+    return stateStoreUnavailable(context.taskPrefix);
+  }
+
+  try {
+    const task = getTaskById(context.statePath, taskId.taskId);
+
+    if (task === undefined) {
+      return taskNotFound(taskId.taskId);
+    }
+
+    return render(task);
+  } catch {
+    return stateStoreUnavailable(context.taskPrefix);
+  }
+};
+
+type TaskIdArgParseResult =
+  | {
+      readonly ok: true;
+      readonly taskId: PublicTaskId;
+    }
+  | {
+      readonly ok: false;
+      readonly result: CliResult;
+    };
+
+const parseTaskIdShape = (args: readonly string[], usage: string): TaskIdArgParseResult => {
+  const [taskId, extraArg] = args;
+
+  if (taskId === undefined) {
+    return {
+      ok: false,
+      result: usageError({
+        code: "missing_task_id",
+        message: "Task ID is required.",
+        help: [`Run \`${usage}\`.`],
+      }),
+    };
+  }
+
+  if (extraArg !== undefined) {
+    return {
+      ok: false,
+      result: usageError({
+        code: "unknown_argument",
+        message: `Unknown argument: ${extraArg}`,
+        help: [`Run \`${usage}\`.`],
+      }),
+    };
+  }
+
+  if (!hasPublicTaskIdShape(taskId)) {
+    return invalidTaskId(taskId, "<PREFIX>-<number>", "Use a public Task ID such as BY-1.");
+  }
+
+  return { ok: true, taskId: publicTaskId(taskId) };
+};
+
+const validateTaskIdPrefix = (taskId: PublicTaskId, taskPrefix: string): TaskIdArgParseResult => {
+  if (!isTaskIdForPrefix(taskId, taskPrefix)) {
+    return invalidTaskId(
+      taskId,
+      `${taskPrefix}-<number>`,
+      `Use a public Task ID such as ${taskPrefix}-1.`,
+    );
+  }
+
+  return { ok: true, taskId };
+};
+
+const invalidTaskId = (
+  taskId: string,
+  expectedFormat: string,
+  help: string,
+): TaskIdArgParseResult => ({
+  ok: false,
+  result: usageError({
+    code: "invalid_task_id",
+    message: `Invalid Task ID: ${taskId}`,
+    details: { taskId, expectedFormat },
+    help: [help],
+  }),
+});
+
 type TaskCreateArgsParseResult =
   | {
       readonly ok: true;
@@ -353,6 +536,20 @@ type TaskContextResult =
     };
 
 const loadTaskContext = (cwd: string): TaskContextResult => {
+  const context = loadTaskConfigContext(cwd);
+
+  if (!context.ok) {
+    return context;
+  }
+
+  if (!existsSync(context.statePath)) {
+    return { ok: false, result: stateStoreUnavailable(context.taskPrefix) };
+  }
+
+  return context;
+};
+
+const loadTaskConfigContext = (cwd: string): TaskContextResult => {
   const gitRoot = findGitRoot(cwd);
 
   if (!gitRoot.ok) {
@@ -381,10 +578,6 @@ const loadTaskContext = (cwd: string): TaskContextResult => {
     };
   }
 
-  if (!existsSync(statePath)) {
-    return { ok: false, result: stateStoreUnavailable(repoConfig.config.taskPrefix) };
-  }
-
   return {
     ok: true,
     root,
@@ -403,6 +596,14 @@ const taskHelpView = (): ToonObject => ({
     {
       command: "by task list [--all] [--state <state>]",
       description: "List repo-local Tasks",
+    },
+    {
+      command: "by task show <task-id>",
+      description: "Show compact Task metadata",
+    },
+    {
+      command: "by task context <task-id>",
+      description: "Show full Task Context",
     },
   ],
 });
@@ -477,6 +678,14 @@ const stateStoreUnavailable = (taskPrefix: string | undefined): CliResult =>
         ? "Move or restore .but-why/state.sqlite, then run `by init --task-prefix <prefix>`."
         : `Move or restore .but-why/state.sqlite, then run \`by init --task-prefix ${taskPrefix}\`.`,
     ],
+  });
+
+const taskNotFound = (taskId: string): CliResult =>
+  runtimeError({
+    code: "task_not_found",
+    message: `Task was not found: ${taskId}`,
+    details: { taskId },
+    help: ["Run `by task list --all` to see known Tasks."],
   });
 
 const success = (stdout: ToonObject): CliResult => ({

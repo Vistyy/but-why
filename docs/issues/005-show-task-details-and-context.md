@@ -12,15 +12,15 @@ Agents should be able to inspect state cheaply and request full intent context o
 
 ## Acceptance criteria
 
-- [ ] `by task show <task-id>` shows compact metadata.
-- [ ] Compact metadata includes `id`, `title`, `state`, `createdAt`, and `updatedAt`.
-- [ ] Compact metadata includes explicit future-backed fields as `null`: `branch`, `latestRun`, `tokenTotals`, and `commentCount`.
-- [ ] `by task show` does not include description, comment IDs, comment bodies, or comment previews.
-- [ ] `by task context <task-id>` shows only `id`, `title`, `description`, and `comments`.
-- [ ] `by task context <task-id>` returns `comments: []` until comment storage exists.
-- [ ] Missing and malformed Task IDs return structured actionable usage errors and exit `2`.
-- [ ] Well-formed unknown Task IDs return structured actionable `task_not_found` errors and exit `1`.
-- [ ] Detail output remains structured and suitable for agents.
+- [x] `by task show <task-id>` shows compact metadata.
+- [x] Compact metadata includes `id`, `title`, `state`, `createdAt`, and `updatedAt`.
+- [x] Compact metadata includes explicit future-backed fields as `null`: `branch`, `latestRun`, `tokenTotals`, and `commentCount`.
+- [x] `by task show` does not include description, comment IDs, comment bodies, or comment previews.
+- [x] `by task context <task-id>` shows only `id`, `title`, `description`, and `comments`.
+- [x] `by task context <task-id>` returns `comments: []` until comment storage exists.
+- [x] Missing and malformed Task IDs return structured actionable usage errors and exit `2`.
+- [x] Well-formed unknown Task IDs return structured actionable `task_not_found` errors and exit `1`.
+- [x] Detail output remains structured and suitable for agents.
 
 ## Output contract
 

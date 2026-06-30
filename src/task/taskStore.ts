@@ -1,7 +1,8 @@
 import { DatabaseSync } from "node:sqlite";
 
 import { ensureStateDatabase, stateDatabaseTimeoutMs } from "../init/stateDatabase.js";
-import { isTaskState, type TaskState, type TaskSummary } from "./task.js";
+import { isTaskState, type TaskRecord, type TaskState, type TaskSummary } from "./task.js";
+import type { PublicTaskId } from "./taskId.js";
 
 export type CreateTaskInput = {
   readonly statePath: string;
@@ -16,6 +17,12 @@ export type ListTasksInput = {
   readonly includeDone: boolean;
   readonly state?: TaskState;
 };
+
+const taskTimestampColumns = ["created_at AS createdAt", "updated_at AS updatedAt"];
+const taskSummaryColumns = ["id", "title", "state", ...taskTimestampColumns].join(", ");
+const taskRecordColumns = ["id", "title", "description", "state", ...taskTimestampColumns].join(
+  ", ",
+);
 
 export const createTask = (input: CreateTaskInput): TaskSummary => {
   ensureStateDatabase(input.statePath);
@@ -61,7 +68,7 @@ export const listTasks = (input: ListTasksInput): readonly TaskSummary[] => {
     const rows = input.state
       ? database
           .prepare(`
-            SELECT id, title, state, created_at AS createdAt, updated_at AS updatedAt
+            SELECT ${taskSummaryColumns}
             FROM tasks
             WHERE state = ?
             ORDER BY created_at ASC, numeric_id ASC
@@ -70,14 +77,14 @@ export const listTasks = (input: ListTasksInput): readonly TaskSummary[] => {
       : input.includeDone
         ? database
             .prepare(`
-              SELECT id, title, state, created_at AS createdAt, updated_at AS updatedAt
+              SELECT ${taskSummaryColumns}
               FROM tasks
               ORDER BY created_at ASC, numeric_id ASC
             `)
             .all()
         : database
             .prepare(`
-              SELECT id, title, state, created_at AS createdAt, updated_at AS updatedAt
+              SELECT ${taskSummaryColumns}
               FROM tasks
               WHERE state <> 'done'
               ORDER BY created_at ASC, numeric_id ASC
@@ -97,7 +104,7 @@ export const listActionableTasks = (statePath: string): readonly TaskSummary[] =
   try {
     return database
       .prepare(`
-        SELECT id, title, state, created_at AS createdAt, updated_at AS updatedAt
+        SELECT ${taskSummaryColumns}
         FROM tasks
         WHERE state IN ('todo', 'needs_input', 'ready')
         ORDER BY
@@ -111,6 +118,29 @@ export const listActionableTasks = (statePath: string): readonly TaskSummary[] =
       `)
       .all()
       .map(rowToTaskSummary);
+  } finally {
+    database.close();
+  }
+};
+
+export const getTaskById = (statePath: string, taskId: PublicTaskId): TaskRecord | undefined => {
+  ensureStateDatabase(statePath);
+  const database = new DatabaseSync(statePath, { timeout: stateDatabaseTimeoutMs });
+
+  try {
+    const row = database
+      .prepare(`
+        SELECT ${taskRecordColumns}
+        FROM tasks
+        WHERE id = ?
+      `)
+      .get(taskId);
+
+    if (row === undefined) {
+      return undefined;
+    }
+
+    return rowToTaskRecord(row);
   } finally {
     database.close();
   }
@@ -142,6 +172,17 @@ const rowToTaskSummary = (row: unknown): TaskSummary => {
   };
 };
 
+const rowToTaskRecord = (row: unknown): TaskRecord => {
+  if (!isTaskRecordRow(row)) {
+    throw new Error("Invalid task row");
+  }
+
+  return {
+    ...rowToTaskSummary(row),
+    description: row.description,
+  };
+};
+
 type NumericIdRow = {
   readonly numericId: number | bigint;
 };
@@ -154,6 +195,8 @@ const isNumericIdRow = (value: unknown): value is NumericIdRow =>
 
 type TaskSummaryRow = TaskSummary;
 
+type TaskRecordRow = TaskRecord;
+
 const isTaskSummaryRow = (value: unknown): value is TaskSummaryRow =>
   typeof value === "object" &&
   value !== null &&
@@ -163,3 +206,7 @@ const isTaskSummaryRow = (value: unknown): value is TaskSummaryRow =>
   isTaskState((value as { readonly state: string }).state) &&
   typeof (value as { readonly createdAt?: unknown }).createdAt === "string" &&
   typeof (value as { readonly updatedAt?: unknown }).updatedAt === "string";
+
+const isTaskRecordRow = (value: unknown): value is TaskRecordRow =>
+  isTaskSummaryRow(value) &&
+  typeof (value as { readonly description?: unknown }).description === "string";

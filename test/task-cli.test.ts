@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { afterEach, describe, expect, it } from "vitest";
@@ -144,6 +144,103 @@ tasks[2]{id,title,state,createdAt,updatedAt}:
     expect(runByInProcess(root, ["task", "list", "--state", "done"]).stdout).toBe(`count: 1
 tasks[1]{id,title,state,createdAt,updatedAt}:
   BY-1,First,done,"${firstNow}","${thirdNow}"`);
+  });
+
+  it("shows compact Task metadata without Task Context", () => {
+    const root = initializedRepo();
+
+    createTask(root, firstNow, "Inspect task");
+    updateTaskState(root, "BY-1", "needs_input", secondNow);
+
+    const result = runByInProcess(root, ["task", "show", "BY-1"]);
+
+    expect(result.status).toBe(0);
+    expect(result.stderr).toBe("");
+    expect(result.stdout).toBe(`task:
+  id: BY-1
+  title: Inspect task
+  state: needs_input
+  createdAt: "${firstNow}"
+  updatedAt: "${secondNow}"
+  branch: null
+  latestRun: null
+  tokenTotals: null
+  commentCount: null`);
+  });
+
+  it("shows Task Context without metadata", () => {
+    const root = initializedRepo();
+
+    writeFileSync(join(root, "context.md"), "Full intent\n\nWith details.");
+    const createResult = runByInProcess(root, [
+      "task",
+      "create",
+      "--title",
+      "Use context",
+      "--description-file",
+      "context.md",
+    ]);
+
+    expect(createResult.status).toBe(0);
+
+    const result = runByInProcess(root, ["task", "context", "BY-1"]);
+
+    expect(result.status).toBe(0);
+    expect(result.stderr).toBe("");
+    expect(result.stdout).toBe(`task:
+  id: BY-1
+  title: Use context
+  description: "Full intent\\n\\nWith details."
+  comments: []`);
+  });
+
+  it.each(["show", "context"])("validates Task ID arguments before %s lookup", (command) => {
+    const root = createGitRepo();
+
+    for (const [taskId, code] of [
+      [undefined, "missing_task_id"],
+      ["by-1", "invalid_task_id"],
+      ["123", "invalid_task_id"],
+      ["foo", "invalid_task_id"],
+    ] as const) {
+      const result = runByInProcess(
+        root,
+        taskId === undefined ? ["task", command] : ["task", command, taskId],
+      );
+
+      expect(result.status).toBe(2);
+      expect(result.stderr).toBe("");
+      expect(result.stdout).toContain(`code: ${code}`);
+      expect(result.stdout).toContain("help[1]");
+    }
+  });
+
+  it.each([
+    "show",
+    "context",
+  ])("rejects wrong Task ID prefixes before state access in %s", (command) => {
+    const root = initializedRepo();
+
+    rmSync(join(root, ".but-why/state.sqlite"));
+    const result = runByInProcess(root, ["task", command, "ZZ-1"]);
+
+    expect(result.status).toBe(2);
+    expect(result.stderr).toBe("");
+    expect(result.stdout).toContain("code: invalid_task_id");
+    expect(result.stdout).toContain("expectedFormat: BY-<number>");
+  });
+
+  it.each(["show", "context"])("prints task_not_found for unknown Task IDs in %s", (command) => {
+    const root = initializedRepo();
+    const result = runByInProcess(root, ["task", command, "BY-999"]);
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toBe("");
+    expect(result.stdout).toBe(`error:
+  code: task_not_found
+  message: "Task was not found: BY-999"
+  taskId: BY-999
+help[1]: Run \`by task list --all\` to see known Tasks.`);
   });
 
   it("prints explicit empty list output with create help", () => {

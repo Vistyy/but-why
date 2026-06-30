@@ -17,6 +17,10 @@ export type TaskSummary = {
   readonly updatedAt: string;
 };
 
+export type TaskRecord = TaskSummary & {
+  readonly description: string;
+};
+
 const taskStateSet = new Set<string>(taskStates);
 
 export const isTaskState = (value: string): value is TaskState => taskStateSet.has(value);
