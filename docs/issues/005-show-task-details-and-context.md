@@ -1,5 +1,9 @@
 # Show Task details and Task Context
 
+## Status
+
+Done.
+
 ## Parent
 
 `docs/prd.md`

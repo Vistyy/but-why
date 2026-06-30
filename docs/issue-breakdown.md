@@ -20,7 +20,7 @@ This includes validation worktrees from temp refs, command checks, Pi reviewer a
 
 **User stories covered**: 28, 29.
 
-Create the project foundation with the `by` executable, strict TypeScript, Effect, Effect Schema, SQLite access, linting, typechecking, tests, and TOON-style CLI output conventions.
+Create the project foundation with the `by` executable, strict TypeScript, Effect, Effect Schema, SQLite access, linting, typechecking, tests, structured CLI result objects, and TOON default output.
 
 This slice should make `by` runnable and verifiable, even if it only prints an empty dashboard.
 
@@ -76,7 +76,7 @@ This slice preserves existing command behavior while giving later Task start and
 
 ## 8. Start Tasks
 
-**Blocked by**: Issue 7.
+**Blocked by**: Issues 7 and 21.
 
 **User stories covered**: 3, 28, 29.
 
@@ -204,6 +204,16 @@ Add golden fixtures for Task Context, diffs, reviewer behavior, and expected Fin
 
 This slice protects reviewer prompts, schema contracts, and finding behavior from drift.
 
+## 21. Support JSON CLI output
+
+**Blocked by**: Issue 7.
+
+**User stories covered**: 28, 29.
+
+Add JSON as a supported stdout format for programmatic CLI consumers while keeping TOON as the default AXI-style agent format.
+
+This slice keeps serialization at the CLI output boundary and prevents task lifecycle modules from depending on either TOON or JSON.
+
 ## Proposed dependency graph
 
 ```text
@@ -214,8 +224,9 @@ This slice protects reviewer prompts, schema contracts, and finding behavior fro
         -> 5 task show/context
           -> 6 comments
             -> 7 deepen Task architecture seams
-              -> 8 start Tasks
-                -> 9 submit preflight and Run creation
+              -> 21 JSON CLI output
+                -> 8 start Tasks
+                  -> 9 submit preflight and Run creation
                   -> 10 validation workspace
                     -> 11 checks and check Findings
                       -> 12 inspection commands

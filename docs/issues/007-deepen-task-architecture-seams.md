@@ -1,5 +1,9 @@
 # Deepen Task architecture seams
 
+## Status
+
+Done.
+
 ## Parent
 
 `docs/prd.md`

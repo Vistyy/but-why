@@ -30,6 +30,18 @@ Remaining open points:
 - Track remaining Sandcastle follow-up issues that could affect v1 execution behavior.
 - Optionally run a Podman smoke test if v1 wants to advertise Podman support.
 
+## Implementation orchestration
+
+We need to decide how implementation work is started and coordinated after a Task moves to `implementing`.
+
+Open options include:
+
+- an agent reads Task Context and uses `by` commands directly
+- `by` triggers an implementation loop through the CLI
+- But Why? orchestrates implementation programmatically through its own solution
+
+This must stay distinct from the Validation Gate, which validates a completed submission and is not a generic pipeline.
+
 ## Validation phase configuration
 
 We have chosen fixed phases instead of a generic CI pipeline.

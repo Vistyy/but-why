@@ -25,6 +25,11 @@ A place where humans or agents view tasks, change task state, and read task comm
 A task surface can be built into But Why? or backed by an external board.
 _Avoid_: Board, tracker, project management system when speaking about the But Why? domain
 
+**Programmatic CLI Consumer**:
+Software that invokes `by` as a subprocess and parses structured stdout as an API contract.
+Programmatic CLI consumers are first-class v1 consumers alongside shell-based agents.
+_Avoid_: Internal API, human CLI user
+
 **Actionable Dashboard Item**:
 A task that should appear in the default `by` dashboard because it has a clear next human or agent action.
 In v1, actionable dashboard items are tasks in `todo`, `needs_input`, or `ready`.

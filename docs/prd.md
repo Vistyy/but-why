@@ -214,7 +214,15 @@ Sandcastle is the intended execution engine for validation worktrees, command ch
 
 - V1 submit fails during preflight if a GitHub PR target cannot be detected.
 
-- CLI output is TOON-style structured output on stdout.
+- CLI output is structured output on stdout.
+
+- TOON is the default stdout format for AXI-style agent shell use.
+
+- JSON is supported for programmatic CLI consumers.
+
+- Command handlers return structured result objects before serialization.
+
+- Domain modules do not depend on TOON or JSON.
 
 - Progress and diagnostics go to stderr.
 

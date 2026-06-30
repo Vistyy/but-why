@@ -1,5 +1,9 @@
 # Implement repo initialization
 
+## Status
+
+Done.
+
 ## Parent
 
 `docs/prd.md`

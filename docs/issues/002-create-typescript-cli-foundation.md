@@ -1,5 +1,9 @@
 # Create the TypeScript CLI foundation
 
+## Status
+
+Done.
+
 ## Parent
 
 `docs/prd.md`

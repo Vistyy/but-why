@@ -1,5 +1,9 @@
 # Prove Sandcastle can support v1 execution
 
+## Status
+
+Done.
+
 ## Parent
 
 `docs/prd.md`
