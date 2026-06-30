@@ -10,12 +10,15 @@ export const byExecutable = join(repoRoot, "bin/by");
 
 export const tempRoots: string[] = [];
 
-export const runBy = (cwd: string, ...args: readonly string[]) =>
+export const runBy = (cwd: string, ...args: readonly string[]) => runByWithEnv(cwd, {}, ...args);
+
+export const runByWithEnv = (cwd: string, env: NodeJS.ProcessEnv, ...args: readonly string[]) =>
   spawnSync(byExecutable, [...args], {
     cwd,
     encoding: "utf8",
     env: {
       ...process.env,
+      ...env,
       FORCE_COLOR: "0",
       NO_COLOR: "1",
     },

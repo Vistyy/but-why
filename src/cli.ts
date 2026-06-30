@@ -4,6 +4,7 @@ import { Effect, Schema } from "effect";
 
 import { initRepo, taskPrefixPattern } from "./init/initRepo.js";
 import type { ToonObject } from "./output/toon.js";
+import { dashboard, routeTask } from "./task/taskCli.js";
 
 export type CliResult = {
   readonly exitCode: 0 | 1 | 2;
@@ -13,17 +14,10 @@ export type CliResult = {
 export type CliEnvironment = {
   readonly executablePath: string;
   readonly cwd: string;
+  readonly now: () => Date;
 };
 
-const description = "Manage But Why? tasks in this workspace";
-
-const homeViewSchema = Schema.Struct({
-  bin: Schema.String,
-  description: Schema.Literal(description),
-  initialized: Schema.Boolean,
-  tasks: Schema.String,
-  help: Schema.Array(Schema.String),
-});
+const description = "Validate completed code changes against approved human intent.";
 
 const helpViewSchema = Schema.Struct({
   bin: Schema.String,
@@ -60,7 +54,7 @@ export const routeArgs = (args: readonly string[], environment: CliEnvironment):
   const bin = collapseHome(environment.executablePath);
 
   if (args.length === 0) {
-    return success(homeView(bin));
+    return dashboard(bin, description, environment);
   }
 
   if (args.length === 1 && args[0] === "--help") {
@@ -71,6 +65,10 @@ export const routeArgs = (args: readonly string[], environment: CliEnvironment):
 
   if (firstArg === "init") {
     return routeInit(args.slice(1), environment);
+  }
+
+  if (firstArg === "task") {
+    return routeTask(args.slice(1), environment);
   }
 
   if (firstArg?.startsWith("-")) {
@@ -114,15 +112,6 @@ export const collapseHome = (executablePath: string): string => {
   return absolutePath;
 };
 
-const homeView = (bin: string): ToonObject =>
-  Schema.decodeUnknownSync(homeViewSchema)({
-    bin,
-    description,
-    initialized: false,
-    tasks: "0 tasks found because this workspace is not initialized",
-    help: ["Run `by init` to create repo-local But Why? state"],
-  });
-
 const helpView = (bin: string): ToonObject =>
   Schema.decodeUnknownSync(helpViewSchema)({
     bin,
@@ -136,6 +125,14 @@ const helpView = (bin: string): ToonObject =>
       {
         command: "by init --task-prefix <prefix>",
         description: "Create repo-local But Why? state",
+      },
+      {
+        command: "by task create --title <title> --description-file <file>",
+        description: "Create a repo-local Task",
+      },
+      {
+        command: "by task list [--all] [--state <state>]",
+        description: "List repo-local Tasks",
       },
     ],
     flags: [

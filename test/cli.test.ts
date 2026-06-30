@@ -21,16 +21,15 @@ const expectedBin = collapseHome(join(repoRoot, "bin/by"));
 afterEach(cleanupTempRoots);
 
 describe("by CLI", () => {
-  it("prints the pre-init home view for bare just by", () => {
+  it("prints not_initialized for bare just by before setup", () => {
     const result = runJustBy();
 
-    expect(result.status).toBe(0);
+    expect(result.status).toBe(1);
     expect(result.stderr).toBe("");
-    expect(result.stdout).toBe(`bin: ${expectedBin}
-description: Manage But Why? tasks in this workspace
-initialized: false
-tasks: 0 tasks found because this workspace is not initialized
-help[1]: Run \`by init\` to create repo-local But Why? state`);
+    expect(result.stdout).toBe(`error:
+  code: not_initialized
+  message: This workspace is not initialized for But Why?.
+help[1]: Run \`by init --task-prefix BY\` in the repository root.`);
   });
 
   it("prints the help view", () => {
@@ -39,11 +38,13 @@ help[1]: Run \`by init\` to create repo-local But Why? state`);
     expect(result.status).toBe(0);
     expect(result.stderr).toBe("");
     expect(result.stdout).toBe(`bin: ${expectedBin}
-description: Manage But Why? tasks in this workspace
+description: Validate completed code changes against approved human intent.
 usage: "by [command] [--help]"
-commands[2]{command,description}:
+commands[4]{command,description}:
   by,Show workspace task dashboard
   by init --task-prefix <prefix>,Create repo-local But Why? state
+  by task create --title <title> --description-file <file>,Create a repo-local Task
+  "by task list [--all] [--state <state>]",List repo-local Tasks
 flags[1]{flag,description}:
   "--help",Show this help`);
   });
@@ -118,7 +119,7 @@ updated[1]: .gitignore`);
     expect(existsSync(join(subdirectory, ".but-why/config.json"))).toBe(false);
   });
 
-  it("creates only SQLite migration metadata", () => {
+  it("creates SQLite migration metadata and task storage", () => {
     const root = createGitRepo();
 
     expect(runBy(root, "init", "--task-prefix", "BY").status).toBe(0);
@@ -128,6 +129,7 @@ updated[1]: .gitignore`);
     try {
       expect(database.prepare("SELECT name FROM schema_migrations").all()).toEqual([
         { name: "001_init" },
+        { name: "002_tasks" },
       ]);
       expect(
         database
@@ -135,7 +137,7 @@ updated[1]: .gitignore`);
             "SELECT name FROM sqlite_schema WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name",
           )
           .all(),
-      ).toEqual([{ name: "schema_migrations" }]);
+      ).toEqual([{ name: "schema_migrations" }, { name: "tasks" }]);
     } finally {
       database.close();
     }
