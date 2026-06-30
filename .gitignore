@@ -19,3 +19,6 @@ coverage/
 # But Why local runtime state
 .but-why/state.sqlite
 .but-why/state.sqlite-*
+
+# Local review artifacts
+.lavish/

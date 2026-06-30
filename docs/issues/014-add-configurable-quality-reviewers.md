@@ -24,4 +24,4 @@ Reviewer role names should come from config, not hard-coded architecture assumpt
 
 ## Blocked by
 
-- 012-add-intent-reviewer-agent.md
+- 013-add-intent-reviewer-agent.md

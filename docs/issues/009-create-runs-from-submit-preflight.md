@@ -26,4 +26,4 @@ This should prove Task state rules, branch safety, GitHub target detection, bran
 ## Blocked by
 
 - 003-implement-repo-initialization.md
-- 007-start-tasks.md
+- 008-start-tasks.md

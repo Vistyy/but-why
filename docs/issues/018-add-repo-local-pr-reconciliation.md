@@ -22,4 +22,4 @@ This gives users and agents a way to update Task state after PR state changes ou
 
 ## Blocked by
 
-- 015-watch-prs-during-submit-until-ready-or-blocked.md
+- 016-watch-prs-during-submit-until-ready-or-blocked.md

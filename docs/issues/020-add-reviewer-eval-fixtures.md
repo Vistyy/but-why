@@ -23,5 +23,5 @@ These fixtures should protect reviewer prompts, schema contracts, and expected b
 
 ## Blocked by
 
-- 012-add-intent-reviewer-agent.md
-- 013-add-configurable-quality-reviewers.md
+- 013-add-intent-reviewer-agent.md
+- 014-add-configurable-quality-reviewers.md

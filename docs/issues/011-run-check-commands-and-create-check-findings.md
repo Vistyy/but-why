@@ -24,4 +24,4 @@ Failed checks should become blocking Findings so all validation blockers are vis
 
 ## Blocked by
 
-- 009-create-validation-workspaces-through-sandcastle.md
+- 010-create-validation-workspaces-through-sandcastle.md

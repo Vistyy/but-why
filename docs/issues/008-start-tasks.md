@@ -20,4 +20,4 @@ This keeps task creation and implementation start as separate decisions.
 
 ## Blocked by
 
-- 004-create-and-list-tasks.md
+- 007-deepen-task-architecture-seams.md
