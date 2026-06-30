@@ -2,7 +2,7 @@ import { homedir } from "node:os";
 import { resolve, sep } from "node:path";
 import { Effect, Schema } from "effect";
 
-import { initRepo, taskPrefixPattern } from "./init/initRepo.js";
+import { initRepoLocalContext } from "./init/repoContext.js";
 import type { ToonObject } from "./output/toon.js";
 import { dashboard, routeTask } from "./task/taskCli.js";
 
@@ -177,24 +177,22 @@ const routeInit = (args: readonly string[], environment: CliEnvironment): CliRes
     });
   }
 
-  if (!taskPrefixPattern.test(taskPrefix)) {
-    return {
-      exitCode: 2,
-      stdout: {
-        error: {
-          code: "invalid_task_prefix",
-          message: "Task prefix must match ^[A-Z][A-Z0-9]{1,9}$.",
-          taskPrefix,
-        },
-        help: ["Use 2 to 10 uppercase letters or digits, starting with a letter, such as BY."],
-      },
-    };
-  }
-
-  const initResult = initRepo({ cwd: environment.cwd, taskPrefix });
+  const initResult = initRepoLocalContext({ cwd: environment.cwd, taskPrefix });
 
   if (!initResult.ok) {
     switch (initResult.error.code) {
+      case "invalid_task_prefix":
+        return {
+          exitCode: 2,
+          stdout: {
+            error: {
+              code: "invalid_task_prefix",
+              message: "Task prefix must match ^[A-Z][A-Z0-9]{1,9}$.",
+              taskPrefix: initResult.error.taskPrefix,
+            },
+            help: ["Use 2 to 10 uppercase letters or digits, starting with a letter, such as BY."],
+          },
+        };
       case "not_git_work_tree":
         return {
           exitCode: 1,

@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { existsSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 
 import { ensureStateDatabase, stateDatabaseTimeoutMs } from "../init/stateDatabase.js";
@@ -11,22 +12,30 @@ import {
 } from "./task.js";
 import type { PublicTaskId } from "./taskId.js";
 
+export type DurableTaskState = {
+  readonly createTask: (input: CreateTaskInput) => TaskSummary;
+  readonly listTasks: (input: ListTasksInput) => readonly TaskSummary[];
+  readonly listActionableTasks: () => readonly TaskSummary[];
+  readonly getTaskById: (taskId: PublicTaskId) => TaskRecord | undefined;
+  readonly getTaskContextById: (taskId: PublicTaskId) => TaskContext | undefined;
+  readonly appendTaskComment: (
+    input: AppendTaskCommentInput,
+  ) => AppendTaskCommentResult | undefined;
+  readonly transitionTaskState: (input: TransitionTaskStateInput) => TaskStateTransitionResult;
+};
+
 export type CreateTaskInput = {
-  readonly statePath: string;
-  readonly taskPrefix: string;
   readonly title: string;
   readonly description: string;
   readonly now: string;
 };
 
 export type ListTasksInput = {
-  readonly statePath: string;
   readonly includeDone: boolean;
   readonly state?: TaskState;
 };
 
 export type AppendTaskCommentInput = {
-  readonly statePath: string;
   readonly taskId: PublicTaskId;
   readonly content: string;
   readonly now: () => string;
@@ -35,6 +44,40 @@ export type AppendTaskCommentInput = {
 export type AppendTaskCommentResult = {
   readonly taskId: PublicTaskId;
   readonly commentCount: number;
+};
+
+export type TransitionTaskStateInput = {
+  readonly taskId: PublicTaskId;
+  readonly to: TaskState;
+  readonly now: string;
+};
+
+export type TaskStateTransitionResult =
+  | {
+      readonly ok: true;
+      readonly changed: boolean;
+      readonly task: TaskRecord;
+    }
+  | {
+      readonly ok: false;
+      readonly code: "task_not_found";
+    }
+  | {
+      readonly ok: false;
+      readonly code: "invalid_task_state_transition";
+      readonly from: TaskState;
+      readonly to: TaskState;
+    };
+
+export class DurableTaskStateUnavailableError extends Error {
+  constructor() {
+    super("Durable Task state is unavailable");
+  }
+}
+
+type DurableTaskStateInput = {
+  readonly statePath: string;
+  readonly taskPrefix: string;
 };
 
 const taskTimestampColumns = ["created_at AS createdAt", "updated_at AS updatedAt"];
@@ -48,204 +91,280 @@ const taskRecordColumns = [
   "(SELECT COUNT(*) FROM task_comments WHERE task_id = tasks.id) AS commentCount",
 ].join(", ");
 
-export const createTask = (input: CreateTaskInput): TaskSummary => {
-  ensureStateDatabase(input.statePath);
-  const database = new DatabaseSync(input.statePath, { timeout: stateDatabaseTimeoutMs });
+/**
+ * V1 Task lifecycle transitions live here so lifecycle commands do not encode SQL or state rules.
+ * Issue 008 uses todo to implementing and the implementing no-op.
+ * Submit, validation, publishing, and reconciliation issues use the remaining transitions in this graph.
+ */
+const validTaskStateTransitions: ReadonlyMap<TaskState, readonly TaskState[]> = new Map([
+  ["todo", ["implementing"]],
+  ["implementing", ["validating"]],
+  ["validating", ["needs_input", "ready"]],
+  ["needs_input", ["validating"]],
+  ["ready", ["done", "needs_input"]],
+  ["done", []],
+]);
 
-  try {
-    database.exec("BEGIN IMMEDIATE");
+export const openDurableTaskState = (input: DurableTaskStateInput): DurableTaskState => {
+  const withDatabase = <Result>(work: (database: DatabaseSync) => Result): Result => {
+    if (!existsSync(input.statePath)) {
+      throw new DurableTaskStateUnavailableError();
+    }
+
+    ensureStateDatabase(input.statePath);
+    const database = new DatabaseSync(input.statePath, { timeout: stateDatabaseTimeoutMs });
 
     try {
-      const numericId = nextTaskNumericId(database);
-      const id = `${input.taskPrefix}-${numericId}`;
-
-      database
-        .prepare(`
-          INSERT INTO tasks (id, numeric_id, title, description, state, created_at, updated_at)
-          VALUES (?, ?, ?, ?, ?, ?, ?)
-        `)
-        .run(id, numericId, input.title, input.description, "todo", input.now, input.now);
-
-      database.exec("COMMIT");
-
-      return {
-        id,
-        title: input.title,
-        state: "todo",
-        createdAt: input.now,
-        updatedAt: input.now,
-      };
-    } catch (error) {
-      database.exec("ROLLBACK");
-      throw error;
+      return work(database);
+    } finally {
+      database.close();
     }
-  } finally {
-    database.close();
+  };
+
+  return {
+    createTask: (taskInput) =>
+      withDatabase((database) => createTask(database, input.taskPrefix, taskInput)),
+    listTasks: (taskInput) => withDatabase((database) => listTasks(database, taskInput)),
+    listActionableTasks: () => withDatabase(listActionableTasks),
+    getTaskById: (taskId) => withDatabase((database) => getTaskById(database, taskId)),
+    getTaskContextById: (taskId) =>
+      withDatabase((database) => getTaskContextById(database, taskId)),
+    appendTaskComment: (taskInput) =>
+      withDatabase((database) => appendTaskComment(database, taskInput)),
+    transitionTaskState: (taskInput) =>
+      withDatabase((database) => transitionTaskState(database, taskInput)),
+  };
+};
+
+const createTask = (
+  database: DatabaseSync,
+  taskPrefix: string,
+  input: CreateTaskInput,
+): TaskSummary => {
+  database.exec("BEGIN IMMEDIATE");
+
+  try {
+    const numericId = nextTaskNumericId(database);
+    const id = `${taskPrefix}-${numericId}`;
+
+    database
+      .prepare(`
+        INSERT INTO tasks (id, numeric_id, title, description, state, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+      `)
+      .run(id, numericId, input.title, input.description, "todo", input.now, input.now);
+
+    database.exec("COMMIT");
+
+    return {
+      id,
+      title: input.title,
+      state: "todo",
+      createdAt: input.now,
+      updatedAt: input.now,
+    };
+  } catch (error) {
+    database.exec("ROLLBACK");
+    throw error;
   }
 };
 
-export const listTasks = (input: ListTasksInput): readonly TaskSummary[] => {
-  ensureStateDatabase(input.statePath);
-  const database = new DatabaseSync(input.statePath, { timeout: stateDatabaseTimeoutMs });
-
-  try {
-    const rows = input.state
+const listTasks = (database: DatabaseSync, input: ListTasksInput): readonly TaskSummary[] => {
+  const rows = input.state
+    ? database
+        .prepare(`
+          SELECT ${taskSummaryColumns}
+          FROM tasks
+          WHERE state = ?
+          ORDER BY created_at ASC, numeric_id ASC
+        `)
+        .all(input.state)
+    : input.includeDone
       ? database
           .prepare(`
             SELECT ${taskSummaryColumns}
             FROM tasks
-            WHERE state = ?
             ORDER BY created_at ASC, numeric_id ASC
           `)
-          .all(input.state)
-      : input.includeDone
-        ? database
-            .prepare(`
-              SELECT ${taskSummaryColumns}
-              FROM tasks
-              ORDER BY created_at ASC, numeric_id ASC
-            `)
-            .all()
-        : database
-            .prepare(`
-              SELECT ${taskSummaryColumns}
-              FROM tasks
-              WHERE state <> 'done'
-              ORDER BY created_at ASC, numeric_id ASC
-            `)
-            .all();
+          .all()
+      : database
+          .prepare(`
+            SELECT ${taskSummaryColumns}
+            FROM tasks
+            WHERE state <> 'done'
+            ORDER BY created_at ASC, numeric_id ASC
+          `)
+          .all();
 
-    return rows.map(rowToTaskSummary);
-  } finally {
-    database.close();
-  }
+  return rows.map(rowToTaskSummary);
 };
 
-export const listActionableTasks = (statePath: string): readonly TaskSummary[] => {
-  ensureStateDatabase(statePath);
-  const database = new DatabaseSync(statePath, { timeout: stateDatabaseTimeoutMs });
+const listActionableTasks = (database: DatabaseSync): readonly TaskSummary[] =>
+  database
+    .prepare(`
+      SELECT ${taskSummaryColumns}
+      FROM tasks
+      WHERE state IN ('todo', 'needs_input', 'ready')
+      ORDER BY
+        CASE state
+          WHEN 'needs_input' THEN 0
+          WHEN 'ready' THEN 1
+          WHEN 'todo' THEN 2
+        END ASC,
+        updated_at DESC,
+        numeric_id ASC
+    `)
+    .all()
+    .map(rowToTaskSummary);
 
-  try {
-    return database
-      .prepare(`
-        SELECT ${taskSummaryColumns}
-        FROM tasks
-        WHERE state IN ('todo', 'needs_input', 'ready')
-        ORDER BY
-          CASE state
-            WHEN 'needs_input' THEN 0
-            WHEN 'ready' THEN 1
-            WHEN 'todo' THEN 2
-          END ASC,
-          updated_at DESC,
-          numeric_id ASC
-      `)
-      .all()
-      .map(rowToTaskSummary);
-  } finally {
-    database.close();
+const getTaskById = (database: DatabaseSync, taskId: PublicTaskId): TaskRecord | undefined => {
+  const row = database
+    .prepare(`
+      SELECT ${taskRecordColumns}
+      FROM tasks
+      WHERE id = ?
+    `)
+    .get(taskId);
+
+  if (row === undefined) {
+    return undefined;
   }
+
+  return rowToTaskRecord(row);
 };
 
-export const getTaskById = (statePath: string, taskId: PublicTaskId): TaskRecord | undefined => {
-  ensureStateDatabase(statePath);
-  const database = new DatabaseSync(statePath, { timeout: stateDatabaseTimeoutMs });
-
-  try {
-    const row = database
-      .prepare(`
-        SELECT ${taskRecordColumns}
-        FROM tasks
-        WHERE id = ?
-      `)
-      .get(taskId);
-
-    if (row === undefined) {
-      return undefined;
-    }
-
-    return rowToTaskRecord(row);
-  } finally {
-    database.close();
-  }
-};
-
-export const getTaskContextById = (
-  statePath: string,
+const getTaskContextById = (
+  database: DatabaseSync,
   taskId: PublicTaskId,
 ): TaskContext | undefined => {
-  ensureStateDatabase(statePath);
-  const database = new DatabaseSync(statePath, { timeout: stateDatabaseTimeoutMs });
+  const row = database
+    .prepare(`
+      SELECT id, title, description
+      FROM tasks
+      WHERE id = ?
+    `)
+    .get(taskId);
+
+  if (row === undefined) {
+    return undefined;
+  }
+
+  const task = rowToTaskContextHeader(row);
+  const comments = database
+    .prepare(`
+      SELECT content
+      FROM task_comments
+      WHERE task_id = ?
+      ORDER BY sequence ASC
+    `)
+    .all(taskId)
+    .map(rowToCommentContent);
+
+  return { ...task, comments };
+};
+
+const appendTaskComment = (
+  database: DatabaseSync,
+  input: AppendTaskCommentInput,
+): AppendTaskCommentResult | undefined => {
+  database.exec("BEGIN IMMEDIATE");
 
   try {
-    const row = database
-      .prepare(`
-        SELECT id, title, description
-        FROM tasks
-        WHERE id = ?
-      `)
-      .get(taskId);
+    const task = database.prepare("SELECT id FROM tasks WHERE id = ?").get(input.taskId);
 
-    if (row === undefined) {
+    if (task === undefined) {
+      database.exec("ROLLBACK");
       return undefined;
     }
 
-    const task = rowToTaskContextHeader(row);
-    const comments = database
-      .prepare(`
-        SELECT content
-        FROM task_comments
-        WHERE task_id = ?
-        ORDER BY sequence ASC
-      `)
-      .all(taskId)
-      .map(rowToCommentContent);
+    const now = input.now();
 
-    return { ...task, comments };
-  } finally {
-    database.close();
+    database
+      .prepare(`
+        INSERT INTO task_comments (id, task_id, created_at, content)
+        VALUES (?, ?, ?, ?)
+      `)
+      .run(randomUUID(), input.taskId, now, input.content);
+
+    database.prepare("UPDATE tasks SET updated_at = ? WHERE id = ?").run(now, input.taskId);
+
+    const count = commentCountForTask(database, input.taskId);
+
+    database.exec("COMMIT");
+
+    return { taskId: input.taskId, commentCount: count };
+  } catch (error) {
+    database.exec("ROLLBACK");
+    throw error;
   }
 };
 
-export const appendTaskComment = (
-  input: AppendTaskCommentInput,
-): AppendTaskCommentResult | undefined => {
-  ensureStateDatabase(input.statePath);
-  const database = new DatabaseSync(input.statePath, { timeout: stateDatabaseTimeoutMs });
+const transitionTaskState = (
+  database: DatabaseSync,
+  input: TransitionTaskStateInput,
+): TaskStateTransitionResult => {
+  database.exec("BEGIN IMMEDIATE");
 
   try {
-    database.exec("BEGIN IMMEDIATE");
+    const current = getTaskById(database, input.taskId);
 
-    try {
-      const task = database.prepare("SELECT id FROM tasks WHERE id = ?").get(input.taskId);
+    if (current === undefined) {
+      database.exec("ROLLBACK");
+      return { ok: false, code: "task_not_found" };
+    }
 
-      if (task === undefined) {
-        database.exec("ROLLBACK");
-        return undefined;
+    if (current.state === input.to) {
+      if (input.to === "implementing") {
+        database.exec("COMMIT");
+        return { ok: true, changed: false, task: current };
       }
 
-      const now = input.now();
-
-      database
-        .prepare(`
-          INSERT INTO task_comments (id, task_id, created_at, content)
-          VALUES (?, ?, ?, ?)
-        `)
-        .run(randomUUID(), input.taskId, now, input.content);
-
-      database.prepare("UPDATE tasks SET updated_at = ? WHERE id = ?").run(now, input.taskId);
-
-      const count = commentCountForTask(database, input.taskId);
-
-      database.exec("COMMIT");
-
-      return { taskId: input.taskId, commentCount: count };
-    } catch (error) {
       database.exec("ROLLBACK");
-      throw error;
+      return {
+        ok: false,
+        code: "invalid_task_state_transition",
+        from: current.state,
+        to: input.to,
+      };
     }
-  } finally {
-    database.close();
+
+    if (!canTransitionTaskState(current.state, input.to)) {
+      database.exec("ROLLBACK");
+      return {
+        ok: false,
+        code: "invalid_task_state_transition",
+        from: current.state,
+        to: input.to,
+      };
+    }
+
+    database
+      .prepare("UPDATE tasks SET state = ?, updated_at = ? WHERE id = ?")
+      .run(input.to, input.now, input.taskId);
+
+    const updated = getTaskById(database, input.taskId);
+
+    if (updated === undefined) {
+      throw new Error("Task disappeared during state transition");
+    }
+
+    database.exec("COMMIT");
+
+    return { ok: true, changed: true, task: updated };
+  } catch (error) {
+    rollbackIfOpen(database);
+    throw error;
+  }
+};
+
+const canTransitionTaskState = (from: TaskState, to: TaskState): boolean =>
+  validTaskStateTransitions.get(from)?.includes(to) ?? false;
+
+const rollbackIfOpen = (database: DatabaseSync): void => {
+  try {
+    database.exec("ROLLBACK");
+  } catch {
+    // The transaction may already be rolled back for expected domain failures.
   }
 };
 

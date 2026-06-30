@@ -37,20 +37,20 @@ Sandcastle execution remains behind But Why domain seams in later validation wor
 
 ## Acceptance criteria
 
-- [ ] Existing `by init`, `by`, `by task create`, `by task list`, `by task show`, `by task context`, and `by task comment` behavior is preserved.
-- [ ] Repo-local state setup has one module interface for initialization and loading repo-local But Why context.
-- [ ] Task command code no longer rebuilds repo config and state paths directly.
-- [ ] Task prefix validation policy is owned by repo-local state setup rather than duplicated at command call sites.
-- [ ] Durable state has one module interface for Task persistence behavior needed by existing commands.
-- [ ] SQLite lifecycle and migration setup are hidden behind the durable state module interface.
-- [ ] Task row validation is hidden behind the durable state module interface.
-- [ ] Tests for Task behavior do not mutate SQLite directly to force Task states.
-- [ ] Tests verify preserved behavior through CLI-level commands or the new Task-shaped module interface, including create, list, dashboard actionability, show, context, and comments.
-- [ ] The Task command module keeps CLI parsing and TOON rendering at the CLI edge.
-- [ ] Task lookup, Task Context, Actionable Dashboard Item ordering, and comment behavior are exercised through Task-shaped module behavior.
-- [ ] The new module shape is documented enough for issue 008 and issue 009 implementers to use it without rediscovering the old call graph.
-- [ ] A short module-level note in the relevant source file or project documentation explains which module future Task lifecycle commands should call for Task lookup, state transitions, Task Context, and persistence.
-- [ ] No Sandcastle execution plumbing is added.
+- [x] Existing `by init`, `by`, `by task create`, `by task list`, `by task show`, `by task context`, and `by task comment` behavior is preserved.
+- [x] Repo-local state setup has one module interface for initialization and loading repo-local But Why context.
+- [x] Task command code no longer rebuilds repo config and state paths directly.
+- [x] Task prefix validation policy is owned by repo-local state setup rather than duplicated at command call sites.
+- [x] Durable state has one module interface for Task persistence behavior needed by existing commands.
+- [x] SQLite lifecycle and migration setup are hidden behind the durable state module interface.
+- [x] Task row validation is hidden behind the durable state module interface.
+- [x] Tests for Task behavior do not mutate SQLite directly to force Task states.
+- [x] Tests verify preserved behavior through CLI-level commands or the new Task-shaped module interface, including create, list, dashboard actionability, show, context, and comments.
+- [x] The Task command module keeps CLI parsing and TOON rendering at the CLI edge.
+- [x] Task lookup, Task Context, Actionable Dashboard Item ordering, and comment behavior are exercised through Task-shaped module behavior.
+- [x] The new module shape is documented enough for issue 008 and issue 009 implementers to use it without rediscovering the old call graph.
+- [x] A short module-level note in the relevant source file or project documentation explains which module future Task lifecycle commands should call for Task lookup, state transitions, Task Context, and persistence.
+- [x] No Sandcastle execution plumbing is added.
 
 ## Blocked by
 

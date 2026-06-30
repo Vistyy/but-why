@@ -5,6 +5,9 @@ import { DatabaseSync } from "node:sqlite";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { collapseHome } from "../src/cli.js";
+import type { TaskState } from "../src/task/task.js";
+import { loadRepoTaskModule } from "../src/task/taskModule.js";
+import { publicTaskId } from "../src/task/taskId.js";
 import {
   byExecutable,
   cleanupTempRoots,
@@ -101,7 +104,7 @@ help[1]: Run \`by task list\` to see open tasks.`);
 
     createTask(root, firstNow, "First");
     createTask(root, secondNow, "Second");
-    updateTaskState(root, "BY-2", "needs_input", thirdNow);
+    transitionTaskState(root, "BY-2", "needs_input", thirdNow);
 
     const result = runByInProcess(root, ["task", "list"]);
 
@@ -125,12 +128,67 @@ tasks[2]{id,title,state,createdAt,updatedAt}:
   BY-2,Second,todo,"${firstNow}","${firstNow}"`);
   });
 
+  it("transitions todo Tasks to implementing through the Task module idempotently", () => {
+    const root = initializedRepo();
+
+    createTask(root, firstNow, "Startable task");
+    const taskModule = loadRepoTaskModule({ cwd: root, requireState: true });
+
+    if (!taskModule.ok) {
+      throw new Error(`Could not load Task module: ${taskModule.error.code}`);
+    }
+
+    const firstTransition = taskModule.tasks.transitionTaskState({
+      taskId: publicTaskId("BY-1"),
+      to: "implementing",
+      now: secondNow,
+    });
+    const secondTransition = taskModule.tasks.transitionTaskState({
+      taskId: publicTaskId("BY-1"),
+      to: "implementing",
+      now: thirdNow,
+    });
+
+    expect(firstTransition).toMatchObject({ ok: true, changed: true });
+    expect(secondTransition).toMatchObject({ ok: true, changed: false });
+    expect(runByInProcess(root, ["task", "show", "BY-1"]).stdout).toContain(
+      `state: implementing\n  createdAt: "${firstNow}"\n  updatedAt: "${secondNow}"`,
+    );
+  });
+
+  it("rejects invalid Task state transitions through the Task module", () => {
+    const root = initializedRepo();
+
+    createTask(root, firstNow, "Invalid transition");
+    const taskModule = loadRepoTaskModule({ cwd: root, requireState: true });
+
+    if (!taskModule.ok) {
+      throw new Error(`Could not load Task module: ${taskModule.error.code}`);
+    }
+
+    expect(
+      taskModule.tasks.transitionTaskState({
+        taskId: publicTaskId("BY-1"),
+        to: "ready",
+        now: secondNow,
+      }),
+    ).toEqual({
+      ok: false,
+      code: "invalid_task_state_transition",
+      from: "todo",
+      to: "ready",
+    });
+    expect(runByInProcess(root, ["task", "show", "BY-1"]).stdout).toContain(
+      `state: todo\n  createdAt: "${firstNow}"\n  updatedAt: "${firstNow}"`,
+    );
+  });
+
   it("supports --all and --state, with --state implying done visibility", () => {
     const root = initializedRepo();
 
     createTask(root, firstNow, "First");
     createTask(root, secondNow, "Second");
-    updateTaskState(root, "BY-1", "done", thirdNow);
+    transitionTaskState(root, "BY-1", "done", thirdNow);
 
     expect(runByInProcess(root, ["task", "list"]).stdout).toBe(`count: 1
 tasks[1]{id,title,state,createdAt,updatedAt}:
@@ -150,7 +208,7 @@ tasks[1]{id,title,state,createdAt,updatedAt}:
     const root = initializedRepo();
 
     createTask(root, firstNow, "Inspect task");
-    updateTaskState(root, "BY-1", "needs_input", secondNow);
+    transitionTaskState(root, "BY-1", "needs_input", secondNow);
 
     const result = runByInProcess(root, ["task", "show", "BY-1"]);
 
@@ -198,7 +256,7 @@ tasks[1]{id,title,state,createdAt,updatedAt}:
     const root = initializedRepo();
 
     createTask(root, firstNow, "Commented task");
-    updateTaskState(root, "BY-1", "needs_input", secondNow);
+    transitionTaskState(root, "BY-1", "needs_input", secondNow);
     writeFileSync(join(root, "comment-1.md"), "First comment\n\nWith Markdown.\n");
     writeFileSync(join(root, "comment-2.md"), "First comment\n\nWith Markdown.\n");
 
@@ -497,21 +555,16 @@ help[1]: "Run \`by task create --title \\"...\\" --description-file <file>\` to 
     createTask(root, firstNow, "Todo old");
     createTask(root, secondNow, "Ready");
     createTask(root, thirdNow, "Input");
-    updateTaskState(root, "BY-2", "ready", secondNow);
-    updateTaskState(root, "BY-3", "needs_input", firstNow);
-
-    const database = new DatabaseSync(join(root, ".but-why/state.sqlite"));
-
-    try {
-      database
-        .prepare("INSERT INTO tasks VALUES (?, ?, ?, ?, ?, ?, ?)")
-        .run("BY-4", 4, "Implementing", "Description", "implementing", firstNow, thirdNow);
-      database
-        .prepare("INSERT INTO tasks VALUES (?, ?, ?, ?, ?, ?, ?)")
-        .run("BY-5", 5, "Todo new", "Description", "todo", firstNow, thirdNow);
-    } finally {
-      database.close();
-    }
+    transitionTaskState(root, "BY-2", "ready", secondNow);
+    transitionTaskState(root, "BY-3", "needs_input", firstNow);
+    createTask(root, firstNow, "Implementing");
+    transitionTaskState(root, "BY-4", "implementing", thirdNow);
+    createTask(root, firstNow, "Todo new");
+    writeFileSync(join(root, "todo-new-comment.md"), "Bump updated time");
+    expect(
+      runByInProcess(root, ["task", "comment", "BY-5", "--file", "todo-new-comment.md"], thirdNow)
+        .status,
+    ).toBe(0);
 
     const result = runByInProcess(root, []);
 
@@ -742,15 +795,37 @@ const createTask = (root: string, now: string, title: string): void => {
   expect(result.status).toBe(0);
 };
 
-const updateTaskState = (root: string, id: string, state: string, updatedAt: string): void => {
-  const database = new DatabaseSync(join(root, ".but-why/state.sqlite"));
+const taskStateTransitionPaths = {
+  todo: [],
+  implementing: ["implementing"],
+  validating: ["implementing", "validating"],
+  needs_input: ["implementing", "validating", "needs_input"],
+  ready: ["implementing", "validating", "ready"],
+  done: ["implementing", "validating", "ready", "done"],
+} satisfies Record<TaskState, readonly TaskState[]>;
 
-  try {
-    database
-      .prepare("UPDATE tasks SET state = ?, updated_at = ? WHERE id = ?")
-      .run(state, updatedAt, id);
-  } finally {
-    database.close();
+const transitionTaskState = (
+  root: string,
+  id: string,
+  state: TaskState,
+  updatedAt: string,
+): void => {
+  const taskModule = loadRepoTaskModule({ cwd: root, requireState: true });
+
+  if (!taskModule.ok) {
+    throw new Error(`Could not load Task module: ${taskModule.error.code}`);
+  }
+
+  for (const nextState of taskStateTransitionPaths[state]) {
+    const result = taskModule.tasks.transitionTaskState({
+      taskId: publicTaskId(id),
+      to: nextState,
+      now: updatedAt,
+    });
+
+    if (!result.ok) {
+      throw new Error(`Could not transition ${id} to ${nextState}: ${result.code}`);
+    }
   }
 };
 

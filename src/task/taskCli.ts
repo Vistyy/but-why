@@ -1,21 +1,7 @@
-import { existsSync } from "node:fs";
-import { join } from "node:path";
-
 import type { CliEnvironment, CliResult } from "../cli.js";
-import { findGitRoot } from "../init/git.js";
-import { taskPrefixPattern } from "../init/initRepo.js";
-import { readRepoConfig } from "../init/repoConfig.js";
 import type { ToonObject, ToonValue } from "../output/toon.js";
 import { readCommentFile, type CommentFileReadError } from "./commentFile.js";
 import { readDescriptionFile, type DescriptionFileReadError } from "./descriptionFile.js";
-import {
-  appendTaskComment,
-  createTask,
-  getTaskById,
-  getTaskContextById,
-  listActionableTasks,
-  listTasks,
-} from "./taskStore.js";
 import {
   isTaskState,
   taskStates,
@@ -23,12 +9,8 @@ import {
   type TaskState,
   type TaskSummary,
 } from "./task.js";
-import {
-  hasPublicTaskIdShape,
-  isTaskIdForPrefix,
-  publicTaskId,
-  type PublicTaskId,
-} from "./taskId.js";
+import { loadRepoTaskModule, type RepoTaskModule } from "./taskModule.js";
+import { hasPublicTaskIdShape, publicTaskId, type PublicTaskId } from "./taskId.js";
 
 export const routeTask = (args: readonly string[], environment: CliEnvironment): CliResult => {
   if (args.length === 0 || (args.length === 1 && args[0] === "--help")) {
@@ -77,14 +59,14 @@ export const dashboard = (
   description: string,
   environment: CliEnvironment,
 ): CliResult => {
-  const context = loadTaskContext(environment.cwd);
+  const taskModule = loadTaskModule(environment.cwd, true);
 
-  if (!context.ok) {
-    return context.result;
+  if (!taskModule.ok) {
+    return taskModule.result;
   }
 
   try {
-    const tasks = listActionableTasks(context.statePath);
+    const tasks = taskModule.tasks.listActionableTasks();
 
     return success({
       bin,
@@ -94,7 +76,7 @@ export const dashboard = (
       ...(tasks.length === 0 ? { help: [createTaskHelp] } : {}),
     });
   } catch {
-    return stateStoreUnavailable(context.taskPrefix);
+    return stateStoreUnavailable(taskModule.tasks.taskPrefix);
   }
 };
 
@@ -152,10 +134,10 @@ const routeTaskCreate = (args: readonly string[], environment: CliEnvironment): 
     });
   }
 
-  const context = loadTaskContext(environment.cwd);
+  const taskModule = loadTaskModule(environment.cwd, true);
 
-  if (!context.ok) {
-    return context.result;
+  if (!taskModule.ok) {
+    return taskModule.result;
   }
 
   const description = readDescriptionFile(environment.cwd, parseResult.descriptionFile);
@@ -165,9 +147,7 @@ const routeTaskCreate = (args: readonly string[], environment: CliEnvironment): 
   }
 
   try {
-    const task = createTask({
-      statePath: context.statePath,
-      taskPrefix: context.taskPrefix,
+    const task = taskModule.tasks.createTask({
       title,
       description: description.content,
       now: environment.now().toISOString(),
@@ -178,7 +158,7 @@ const routeTaskCreate = (args: readonly string[], environment: CliEnvironment): 
       help: ["Run `by task list` to see open tasks."],
     });
   } catch {
-    return stateStoreUnavailable(context.taskPrefix);
+    return stateStoreUnavailable(taskModule.tasks.taskPrefix);
   }
 };
 
@@ -210,15 +190,14 @@ const routeTaskList = (args: readonly string[], environment: CliEnvironment): Cl
     return parseResult.result;
   }
 
-  const context = loadTaskContext(environment.cwd);
+  const taskModule = loadTaskModule(environment.cwd, true);
 
-  if (!context.ok) {
-    return context.result;
+  if (!taskModule.ok) {
+    return taskModule.result;
   }
 
   try {
-    const tasks = listTasks({
-      statePath: context.statePath,
+    const tasks = taskModule.tasks.listTasks({
       includeDone: parseResult.all || parseResult.state !== undefined,
       ...(parseResult.state === undefined ? {} : { state: parseResult.state }),
     });
@@ -229,7 +208,7 @@ const routeTaskList = (args: readonly string[], environment: CliEnvironment): Cl
       ...(tasks.length === 0 ? { help: [createTaskHelp] } : {}),
     });
   } catch {
-    return stateStoreUnavailable(context.taskPrefix);
+    return stateStoreUnavailable(taskModule.tasks.taskPrefix);
   }
 };
 
@@ -304,24 +283,24 @@ const routeTaskComment = (args: readonly string[], environment: CliEnvironment):
     });
   }
 
-  const repoContext = loadTaskContext(environment.cwd);
+  const taskModule = loadTaskModule(environment.cwd, true);
 
-  if (!repoContext.ok) {
-    return repoContext.result;
+  if (!taskModule.ok) {
+    return taskModule.result;
   }
 
-  const taskId = validateTaskIdPrefix(parseResult.taskId, repoContext.taskPrefix);
+  const taskId = taskModule.tasks.resolveTaskId(parseResult.taskId);
 
   if (!taskId.ok) {
-    return taskId.result;
+    return invalidTaskId(parseResult.taskId, taskId.expectedFormat, taskId.help).result;
   }
 
   try {
-    if (getTaskById(repoContext.statePath, taskId.taskId) === undefined) {
+    if (taskModule.tasks.getTaskById(taskId.taskId) === undefined) {
       return taskNotFound(taskId.taskId);
     }
   } catch {
-    return stateStoreUnavailable(repoContext.taskPrefix);
+    return stateStoreUnavailable(taskModule.tasks.taskPrefix);
   }
 
   if (parseResult.commentFile === "-") {
@@ -339,8 +318,7 @@ const routeTaskComment = (args: readonly string[], environment: CliEnvironment):
   }
 
   try {
-    const result = appendTaskComment({
-      statePath: repoContext.statePath,
+    const result = taskModule.tasks.appendTaskComment({
       taskId: taskId.taskId,
       content: comment.content,
       now: () => environment.now().toISOString(),
@@ -357,7 +335,7 @@ const routeTaskComment = (args: readonly string[], environment: CliEnvironment):
       },
     });
   } catch {
-    return stateStoreUnavailable(repoContext.taskPrefix);
+    return stateStoreUnavailable(taskModule.tasks.taskPrefix);
   }
 };
 
@@ -385,24 +363,20 @@ const routeExistingTask = (
     return taskIdShape.result;
   }
 
-  const context = loadTaskConfigContext(environment.cwd);
+  const taskModule = loadTaskModule(environment.cwd, false);
 
-  if (!context.ok) {
-    return context.result;
+  if (!taskModule.ok) {
+    return taskModule.result;
   }
 
-  const taskId = validateTaskIdPrefix(taskIdShape.taskId, context.taskPrefix);
+  const taskId = taskModule.tasks.resolveTaskId(taskIdShape.taskId);
 
   if (!taskId.ok) {
-    return taskId.result;
-  }
-
-  if (!existsSync(context.statePath)) {
-    return stateStoreUnavailable(context.taskPrefix);
+    return invalidTaskId(taskIdShape.taskId, taskId.expectedFormat, taskId.help).result;
   }
 
   try {
-    const task = getTaskById(context.statePath, taskId.taskId);
+    const task = taskModule.tasks.getTaskById(taskId.taskId);
 
     if (task === undefined) {
       return taskNotFound(taskId.taskId);
@@ -410,7 +384,7 @@ const routeExistingTask = (
 
     return render(task);
   } catch {
-    return stateStoreUnavailable(context.taskPrefix);
+    return stateStoreUnavailable(taskModule.tasks.taskPrefix);
   }
 };
 
@@ -424,24 +398,20 @@ const routeExistingTaskContext = (
     return taskIdShape.result;
   }
 
-  const context = loadTaskConfigContext(environment.cwd);
+  const taskModule = loadTaskModule(environment.cwd, false);
 
-  if (!context.ok) {
-    return context.result;
+  if (!taskModule.ok) {
+    return taskModule.result;
   }
 
-  const taskId = validateTaskIdPrefix(taskIdShape.taskId, context.taskPrefix);
+  const taskId = taskModule.tasks.resolveTaskId(taskIdShape.taskId);
 
   if (!taskId.ok) {
-    return taskId.result;
-  }
-
-  if (!existsSync(context.statePath)) {
-    return stateStoreUnavailable(context.taskPrefix);
+    return invalidTaskId(taskIdShape.taskId, taskId.expectedFormat, taskId.help).result;
   }
 
   try {
-    const task = getTaskContextById(context.statePath, taskId.taskId);
+    const task = taskModule.tasks.getTaskContextById(taskId.taskId);
 
     if (task === undefined) {
       return taskNotFound(taskId.taskId);
@@ -449,7 +419,7 @@ const routeExistingTaskContext = (
 
     return success({ task });
   } catch {
-    return stateStoreUnavailable(context.taskPrefix);
+    return stateStoreUnavailable(taskModule.tasks.taskPrefix);
   }
 };
 
@@ -493,18 +463,6 @@ const parseTaskIdShape = (args: readonly string[], usage: string): TaskIdArgPars
   }
 
   return { ok: true, taskId: publicTaskId(taskId) };
-};
-
-const validateTaskIdPrefix = (taskId: PublicTaskId, taskPrefix: string): TaskIdArgParseResult => {
-  if (!isTaskIdForPrefix(taskId, taskPrefix)) {
-    return invalidTaskId(
-      taskId,
-      `${taskPrefix}-<number>`,
-      `Use a public Task ID such as ${taskPrefix}-1.`,
-    );
-  }
-
-  return { ok: true, taskId };
 };
 
 const invalidTaskId = (
@@ -730,67 +688,39 @@ const invalidTaskState = (state: string): TaskListArgsParseResult => ({
   }),
 });
 
-type TaskContextResult =
+type TaskModuleLoadResult =
   | {
       readonly ok: true;
-      readonly root: string;
-      readonly statePath: string;
-      readonly taskPrefix: string;
+      readonly tasks: RepoTaskModule;
     }
   | {
       readonly ok: false;
       readonly result: CliResult;
     };
 
-const loadTaskContext = (cwd: string): TaskContextResult => {
-  const context = loadTaskConfigContext(cwd);
+const loadTaskModule = (cwd: string, requireState: boolean): TaskModuleLoadResult => {
+  const result = loadRepoTaskModule({ cwd, requireState });
 
-  if (!context.ok) {
-    return context;
+  if (result.ok) {
+    return result;
   }
 
-  if (!existsSync(context.statePath)) {
-    return { ok: false, result: stateStoreUnavailable(context.taskPrefix) };
+  switch (result.error.code) {
+    case "not_initialized":
+      return { ok: false, result: notInitialized() };
+    case "invalid_repo_config":
+      return {
+        ok: false,
+        result: runtimeError({
+          code: "invalid_repo_config",
+          message: ".but-why/config.json is not valid But Why? repo config.",
+          details: { path: ".but-why/config.json" },
+          help: ["Fix the JSON or run `by init --task-prefix <prefix>` after moving it aside."],
+        }),
+      };
+    case "state_store_unavailable":
+      return { ok: false, result: stateStoreUnavailable(result.error.taskPrefix) };
   }
-
-  return context;
-};
-
-const loadTaskConfigContext = (cwd: string): TaskContextResult => {
-  const gitRoot = findGitRoot(cwd);
-
-  if (!gitRoot.ok) {
-    return { ok: false, result: notInitialized() };
-  }
-
-  const root = gitRoot.root;
-  const configPath = join(root, ".but-why/config.json");
-  const statePath = join(root, ".but-why/state.sqlite");
-
-  if (!existsSync(configPath)) {
-    return { ok: false, result: notInitialized() };
-  }
-
-  const repoConfig = readRepoConfig(configPath);
-
-  if (!repoConfig.ok || !taskPrefixPattern.test(repoConfig.config.taskPrefix)) {
-    return {
-      ok: false,
-      result: runtimeError({
-        code: "invalid_repo_config",
-        message: ".but-why/config.json is not valid But Why? repo config.",
-        details: { path: ".but-why/config.json" },
-        help: ["Fix the JSON or run `by init --task-prefix <prefix>` after moving it aside."],
-      }),
-    };
-  }
-
-  return {
-    ok: true,
-    root,
-    statePath,
-    taskPrefix: repoConfig.config.taskPrefix,
-  };
 };
 
 const taskHelpView = (): ToonObject => ({
