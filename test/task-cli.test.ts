@@ -10,8 +10,7 @@ import {
   cleanupTempRoots,
   createGitRepo,
   createTempRoot,
-  runBy,
-  runByWithEnv,
+  runByInProcess,
 } from "./support/by-cli.js";
 
 const expectedBin = collapseHome(byExecutable);
@@ -26,15 +25,10 @@ describe("by task CLI", () => {
     const root = initializedRepo();
     writeFileSync(join(root, "task.md"), "  Preserve me exactly.\n\n");
 
-    const result = runByWithEnv(
+    const result = runByInProcess(
       root,
-      { BUT_WHY_NOW: firstNow },
-      "task",
-      "create",
-      "--title",
-      "  Add   login  ",
-      "--description-file",
-      "task.md",
+      ["task", "create", "--title", "  Add   login  ", "--description-file", "task.md"],
+      firstNow,
     );
 
     expect(result.status).toBe(0);
@@ -73,15 +67,10 @@ help[1]: Run \`by task list\` to see open tasks.`);
 
     writeFileSync(outsideDescription, "Outside description");
 
-    const result = runByWithEnv(
+    const result = runByInProcess(
       root,
-      { BUT_WHY_NOW: firstNow },
-      "task",
-      "create",
-      "--title",
-      "Outside file",
-      "--description-file",
-      outsideDescription,
+      ["task", "create", "--title", "Outside file", "--description-file", outsideDescription],
+      firstNow,
     );
 
     expect(result.status).toBe(0);
@@ -93,18 +82,14 @@ help[1]: Run \`by task list\` to see open tasks.`);
     writeFileSync(join(root, "task.md"), "Description");
 
     expect(
-      runBy(root, "task", "create", "--title", "   ", "--description-file", "task.md").status,
+      runByInProcess(root, ["task", "create", "--title", "   ", "--description-file", "task.md"])
+        .status,
     ).toBe(2);
 
-    const result = runByWithEnv(
+    const result = runByInProcess(
       root,
-      { BUT_WHY_NOW: firstNow },
-      "task",
-      "create",
-      "--title",
-      "First valid",
-      "--description-file",
-      "task.md",
+      ["task", "create", "--title", "First valid", "--description-file", "task.md"],
+      firstNow,
     );
 
     expect(result.status).toBe(0);
@@ -118,7 +103,7 @@ help[1]: Run \`by task list\` to see open tasks.`);
     createTask(root, secondNow, "Second");
     updateTaskState(root, "BY-2", "needs_input", thirdNow);
 
-    const result = runBy(root, "task", "list");
+    const result = runByInProcess(root, ["task", "list"]);
 
     expect(result.status).toBe(0);
     expect(result.stderr).toBe("");
@@ -134,7 +119,7 @@ tasks[2]{id,title,state,createdAt,updatedAt}:
     createTask(root, firstNow, "First");
     createTask(root, firstNow, "Second");
 
-    expect(runBy(root, "task", "list").stdout).toBe(`count: 2
+    expect(runByInProcess(root, ["task", "list"]).stdout).toBe(`count: 2
 tasks[2]{id,title,state,createdAt,updatedAt}:
   BY-1,First,todo,"${firstNow}","${firstNow}"
   BY-2,Second,todo,"${firstNow}","${firstNow}"`);
@@ -147,23 +132,23 @@ tasks[2]{id,title,state,createdAt,updatedAt}:
     createTask(root, secondNow, "Second");
     updateTaskState(root, "BY-1", "done", thirdNow);
 
-    expect(runBy(root, "task", "list").stdout).toBe(`count: 1
+    expect(runByInProcess(root, ["task", "list"]).stdout).toBe(`count: 1
 tasks[1]{id,title,state,createdAt,updatedAt}:
   BY-2,Second,todo,"${secondNow}","${secondNow}"`);
 
-    expect(runBy(root, "task", "list", "--all").stdout).toBe(`count: 2
+    expect(runByInProcess(root, ["task", "list", "--all"]).stdout).toBe(`count: 2
 tasks[2]{id,title,state,createdAt,updatedAt}:
   BY-1,First,done,"${firstNow}","${thirdNow}"
   BY-2,Second,todo,"${secondNow}","${secondNow}"`);
 
-    expect(runBy(root, "task", "list", "--state", "done").stdout).toBe(`count: 1
+    expect(runByInProcess(root, ["task", "list", "--state", "done"]).stdout).toBe(`count: 1
 tasks[1]{id,title,state,createdAt,updatedAt}:
   BY-1,First,done,"${firstNow}","${thirdNow}"`);
   });
 
   it("prints explicit empty list output with create help", () => {
     const root = initializedRepo();
-    const result = runBy(root, "task", "list");
+    const result = runByInProcess(root, ["task", "list"]);
 
     expect(result.status).toBe(0);
     expect(result.stderr).toBe("");
@@ -194,7 +179,7 @@ help[1]: "Run \`by task create --title \\"...\\" --description-file <file>\` to 
       database.close();
     }
 
-    const result = runBy(root);
+    const result = runByInProcess(root, []);
 
     expect(result.status).toBe(0);
     expect(result.stderr).toBe("");
@@ -210,7 +195,7 @@ tasks[4]{id,title,state,createdAt,updatedAt}:
 
   it("prints explicit empty dashboard output with create help", () => {
     const root = initializedRepo();
-    const result = runBy(root);
+    const result = runByInProcess(root, []);
 
     expect(result.status).toBe(0);
     expect(result.stderr).toBe("");
@@ -223,7 +208,7 @@ help[1]: "Run \`by task create --title \\"...\\" --description-file <file>\` to 
 
   it("prints structured usage errors to stdout", () => {
     const root = initializedRepo();
-    const result = runBy(root, "task", "list", "--state", "blocked");
+    const result = runByInProcess(root, ["task", "list", "--state", "blocked"]);
 
     expect(result.status).toBe(2);
     expect(result.stderr).toBe("");
@@ -249,7 +234,7 @@ help[1]: "Use one of: todo, implementing, validating, needs_input, ready, done."
   ])("prints %s as a usage error", (_name, args, code) => {
     const root = initializedRepo();
     writeFileSync(join(root, "task.md"), "Description");
-    const result = runBy(root, ...args);
+    const result = runByInProcess(root, args);
 
     expect(result.status).toBe(2);
     expect(result.stderr).toBe("");
@@ -277,15 +262,14 @@ help[1]: "Use one of: todo, implementing, validating, needs_input, ready, done."
       writeFileSync(filePath, "  \n\t");
     }
 
-    const result = runBy(
-      root,
+    const result = runByInProcess(root, [
       "task",
       "create",
       "--title",
       "Title",
       "--description-file",
       fileName,
-    );
+    ]);
 
     expect(result.status).toBe(2);
     expect(result.stderr).toBe("");
@@ -295,7 +279,7 @@ help[1]: "Use one of: todo, implementing, validating, needs_input, ready, done."
 
   it("prints not_initialized before task access to missing setup", () => {
     const root = createGitRepo();
-    const result = runBy(root, "task", "list");
+    const result = runByInProcess(root, ["task", "list"]);
 
     expect(result.status).toBe(1);
     expect(result.stderr).toBe("");
@@ -310,7 +294,7 @@ help[1]: Run \`by init --task-prefix BY\` in the repository root.`);
 
     mkdirSync(join(root, ".but-why"));
     writeFileSync(join(root, ".but-why/config.json"), "{");
-    const result = runBy(root, "task", "list");
+    const result = runByInProcess(root, ["task", "list"]);
 
     expect(result.status).toBe(1);
     expect(result.stderr).toBe("");
@@ -363,7 +347,7 @@ help[1]: Run \`by init --task-prefix BY\` in the repository root.`);
     const root = initializedRepo();
 
     writeFileSync(join(root, ".but-why/state.sqlite"), "not sqlite");
-    const result = runBy(root, "task", "list");
+    const result = runByInProcess(root, ["task", "list"]);
 
     expect(result.status).toBe(1);
     expect(result.stderr).toBe("");
@@ -402,7 +386,7 @@ help[1]: "Move or restore .but-why/state.sqlite, then run \`by init --task-prefi
 
 const initializedRepo = (): string => {
   const root = createGitRepo();
-  const result = runBy(root, "init", "--task-prefix", "BY");
+  const result = runByInProcess(root, ["init", "--task-prefix", "BY"]);
 
   expect(result.status).toBe(0);
   expect(result.stderr).toBe("");
@@ -414,15 +398,10 @@ const createTask = (root: string, now: string, title: string): void => {
   const descriptionPath = join(root, `${title}.md`);
 
   writeFileSync(descriptionPath, `Description for ${title}`);
-  const result = runByWithEnv(
+  const result = runByInProcess(
     root,
-    { BUT_WHY_NOW: now },
-    "task",
-    "create",
-    "--title",
-    title,
-    "--description-file",
-    descriptionPath,
+    ["task", "create", "--title", title, "--description-file", descriptionPath],
+    now,
   );
 
   expect(result.status).toBe(0);

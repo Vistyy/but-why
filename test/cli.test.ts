@@ -12,7 +12,7 @@ import {
   createGitRepo,
   createTempRoot,
   repoRoot,
-  runBy,
+  runByInProcessArgs as runBy,
   runJustBy,
 } from "./support/by-cli.js";
 
@@ -33,7 +33,7 @@ help[1]: Run \`by init --task-prefix BY\` in the repository root.`);
   });
 
   it("prints the help view", () => {
-    const result = runJustBy("--help");
+    const result = runBy(repoRoot, "--help");
 
     expect(result.status).toBe(0);
     expect(result.stderr).toBe("");
@@ -50,7 +50,7 @@ flags[1]{flag,description}:
   });
 
   it("prints the init help view", () => {
-    const result = runJustBy("init", "--help");
+    const result = runBy(repoRoot, "init", "--help");
 
     expect(result.status).toBe(0);
     expect(result.stderr).toBe("");
@@ -62,7 +62,7 @@ examples[1]: by init --task-prefix BY`);
   });
 
   it("prints a structured unknown command usage error", () => {
-    const result = runJustBy("frobnicate");
+    const result = runBy(repoRoot, "frobnicate");
 
     expect(result.status).toBe(2);
     expect(result.stderr).toBe("");
@@ -73,7 +73,7 @@ help[1]: Run \`by --help\``);
   });
 
   it("prints a structured unknown flag usage error", () => {
-    const result = runJustBy("--bad");
+    const result = runBy(repoRoot, "--bad");
 
     expect(result.status).toBe(2);
     expect(result.stderr).toBe("");

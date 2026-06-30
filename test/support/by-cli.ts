@@ -1,9 +1,13 @@
 import { spawnSync } from "node:child_process";
 import { mkdtempSync, rmSync } from "node:fs";
+import { Effect } from "effect";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { expect } from "vitest";
+
+import { runCli } from "../../src/cli.js";
+import { encodeToon } from "../../src/output/toon.js";
 
 export const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 export const byExecutable = join(repoRoot, "bin/by");
@@ -34,6 +38,35 @@ export const runJustBy = (...args: readonly string[]) =>
       NO_COLOR: "1",
     },
   });
+
+type InProcessCliResult = {
+  readonly status: 0 | 1 | 2;
+  readonly stdout: string;
+  readonly stderr: string;
+};
+
+export const runByInProcess = (
+  cwd: string,
+  args: readonly string[],
+  now = "2026-06-30T12:00:00.000Z",
+): InProcessCliResult => {
+  const result = Effect.runSync(
+    runCli(args, {
+      executablePath: byExecutable,
+      cwd,
+      now: () => new Date(now),
+    }),
+  );
+
+  return {
+    status: result.exitCode,
+    stdout: encodeToon(result.stdout),
+    stderr: "",
+  };
+};
+
+export const runByInProcessArgs = (cwd: string, ...args: readonly string[]): InProcessCliResult =>
+  runByInProcess(cwd, args);
 
 export const createTempRoot = () => {
   const root = mkdtempSync(join(tmpdir(), "but-why-test-"));
