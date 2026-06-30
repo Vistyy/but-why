@@ -66,8 +66,9 @@ Producers are shown as the human-readable source of validation output.
 _Avoid_: Tool, actor, substep
 
 **Task Context**:
-The task title, task description, and task comments used by reviewers to judge a submission.
+The task title, task description, and task comment content used by reviewers to judge a submission.
 Task context is the v1 source of intent.
+Task context excludes Task metadata such as state, branch, runs, token totals, and comment count.
 _Avoid_: Ticket data, prompt context
 
 **Agent Profile**:
