@@ -1,5 +1,9 @@
 # Track token usage summaries
 
+## Status
+
+Not done.
+
 ## Parent
 
 `docs/prd.md`

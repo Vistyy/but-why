@@ -1,5 +1,9 @@
 # Support JSON CLI output
 
+## Status
+
+Done.
+
 ## Parent
 
 `docs/adr/0003-support-json-for-programmatic-cli-consumers.md`

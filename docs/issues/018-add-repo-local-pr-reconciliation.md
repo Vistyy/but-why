@@ -1,5 +1,9 @@
 # Add repo-local PR reconciliation
 
+## Status
+
+Not done.
+
 ## Parent
 
 `docs/prd.md`

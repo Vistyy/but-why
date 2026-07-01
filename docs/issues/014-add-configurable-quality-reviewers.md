@@ -1,5 +1,9 @@
 # Add configurable quality reviewers
 
+## Status
+
+Not done.
+
 ## Parent
 
 `docs/prd.md`

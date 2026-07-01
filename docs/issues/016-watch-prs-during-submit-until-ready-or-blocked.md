@@ -1,5 +1,9 @@
 # Watch PRs during submit until ready or blocked
 
+## Status
+
+Not done.
+
 ## Parent
 
 `docs/prd.md`
