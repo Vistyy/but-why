@@ -20,6 +20,11 @@ In v1, each task owns one branch, and that branch belongs to only that task.
 A task can have many runs as its branch changes over time.
 _Avoid_: Ticket, issue, card when speaking about the But Why? domain
 
+**Task Start**:
+The explicit act of marking that implementation work has begun for a task.
+A task start does not create the task, submit code for validation, or run implementation work.
+_Avoid_: Submission, validation trigger, agent kickoff
+
 **Task Surface**:
 A place where humans or agents view tasks, change task state, and read task comments.
 A task surface can be built into But Why? or backed by an external board.

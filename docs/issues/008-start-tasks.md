@@ -17,6 +17,19 @@ This keeps task creation and implementation start as separate decisions.
 This issue only records that implementation has begun.
 It does not run, trigger, or orchestrate implementation work.
 
+## Resolved design notes
+
+- Add `startTask(taskId, now)` as the Task-module lifecycle operation.
+- Keep the generic durable state transition underneath `startTask` as storage-level plumbing.
+- Do not let storage-level `invalid_task_state_transition` leak into CLI output.
+- Use `invalid_task_state` as the public error when an existing Task cannot be started from its current state.
+- Keep the successful output shape exactly as specified below, including `task.changed`.
+- Treat `next` as command guidance, not persistent Task data.
+- Do not add `startedAt`, `startedBy`, or a separate started flag.
+- Keep dashboard actionability derived from Task state only.
+- Test lifecycle policy at the Task module layer and structured TOON and JSON output at the CLI layer.
+- Do not create an ADR for this issue.
+
 ## Acceptance criteria
 
 - [ ] `by task start <task-id>` moves a Task from `todo` to `implementing`.
