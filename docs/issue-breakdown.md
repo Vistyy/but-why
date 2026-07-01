@@ -206,7 +206,7 @@ This slice protects reviewer prompts, schema contracts, and finding behavior fro
 
 ## 21. Support JSON CLI output
 
-**Blocked by**: Issue 7.
+**Blocked by**: None.
 
 **User stories covered**: 28, 29.
 
