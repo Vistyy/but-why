@@ -140,6 +140,12 @@ But Why? should use Sandcastle for:
 
 But Why? should not reimplement those concerns.
 
+## Code naming
+
+File and type names should use the most specific product or code role name, not architecture vocabulary.
+Avoid `Module` suffixes when a domain name fits.
+For example, prefer names like `repoTasks`, `submitPreflight`, or `cliResults` over names like `taskModule`, `submitModule`, or `cliResultModule`.
+
 Wrap Sandcastle only at But Why? domain seams.
 
 Good seams speak But Why? language:

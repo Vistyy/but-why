@@ -26,4 +26,4 @@ Validation should operate on a temp validation ref at the submitted commit and s
 
 ## Blocked by
 
-- 009-create-runs-from-submit-preflight.md
+- 010-deepen-task-submission-and-cli-seams.md

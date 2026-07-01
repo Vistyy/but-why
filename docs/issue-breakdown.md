@@ -76,7 +76,7 @@ This slice preserves existing command behavior while giving later Task start and
 
 ## 8. Start Tasks
 
-**Blocked by**: Issues 7 and 21.
+**Blocked by**: Issues 7 and 22.
 
 **User stories covered**: 3, 28, 29.
 
@@ -94,9 +94,19 @@ Implement the preflight part of `by submit <task-id>` without running validation
 
 This slice enforces allowed states, clean working tree, non-protected branch, GitHub target detection, branch binding, commit capture, and task-scoped Run creation.
 
-## 10. Create validation workspaces through Sandcastle
+## 10. Deepen Task, Submission, and CLI result seams
 
-**Blocked by**: Issue 9.
+**Blocked by**: Issues 9 and 22.
+
+**User stories covered**: 5, 6, 7, 8, 9, 28, 29.
+
+Deepen the three architecture seams identified after submit preflight: Task durable state, Submission preflight, and CLI result construction.
+
+This slice preserves existing behavior while concentrating Task and Run durability, preflight policy, and Programmatic CLI Consumer result shape before Validation Gate work begins.
+
+## 11. Create validation workspaces through Sandcastle
+
+**Blocked by**: Issue 10.
 
 **User stories covered**: 10, 32.
 
@@ -104,9 +114,9 @@ Use the proven Sandcastle path to create a temp validation ref and isolated vali
 
 This slice proves the real submit path can validate a commit without mutating the user's checkout.
 
-## 11. Run check commands and create check Findings
+## 12. Run check commands and create check Findings
 
-**Blocked by**: Issue 10.
+**Blocked by**: Issue 11.
 
 **User stories covered**: 11, 12, 13, 17, 18.
 
@@ -114,9 +124,9 @@ Run configured check commands through Sandcastle.
 
 This slice records phase and round history, stores logs as artifacts, and creates blocking Findings when a check fails.
 
-## 12. Inspect Runs and latest Task Findings
+## 13. Inspect Runs and latest Task Findings
 
-**Blocked by**: Issue 11.
+**Blocked by**: Issue 12.
 
 **User stories covered**: 19, 28, 29.
 
@@ -124,9 +134,9 @@ Implement `by task findings <task-id>` and `by run show <run-id>` for check-base
 
 This slice gives agents direct access to latest Findings without requiring a Run ID.
 
-## 13. Add intent reviewer agent
+## 14. Add intent reviewer agent
 
-**Blocked by**: Issue 12.
+**Blocked by**: Issue 13.
 
 **User stories covered**: 14, 16, 17, 18, 27, 31.
 
@@ -134,9 +144,9 @@ Run the configured intent reviewer through Sandcastle after checks pass.
 
 This slice validates structured JSON, stores reviewer Findings, stores token usage, and moves the Task to `needs_input` when intent review finds anything.
 
-## 14. Add configurable quality reviewers
+## 15. Add configurable quality reviewers
 
-**Blocked by**: Issue 13.
+**Blocked by**: Issue 14.
 
 **User stories covered**: 15, 16, 17, 18, 27, 31.
 
@@ -144,9 +154,9 @@ Run configured quality reviewers after intent review passes.
 
 This slice supports sequential or parallel reviewer groups according to repo config and stores producer/model token usage.
 
-## 15. Publish clean Runs to GitHub PRs
+## 16. Publish clean Runs to GitHub PRs
 
-**Blocked by**: Issue 14.
+**Blocked by**: Issue 15.
 
 **User stories covered**: 22, 24.
 
@@ -154,9 +164,9 @@ After a Run has no Findings, push the task branch and open or update a GitHub PR
 
 This slice records PR state but does not yet watch CI to readiness.
 
-## 16. Watch PRs during submit until ready or blocked
+## 17. Watch PRs during submit until ready or blocked
 
-**Blocked by**: Issue 15.
+**Blocked by**: Issue 16.
 
 **User stories covered**: 23, 24.
 
@@ -164,9 +174,9 @@ Extend `by submit` to watch the PR until it is ready, blocked, errored, or timed
 
 This slice creates blocking Findings for CI failure, merge conflict, requested changes, or timeout.
 
-## 17. Track token usage summaries
+## 18. Track token usage summaries
 
-**Blocked by**: Issues 13 and 14.
+**Blocked by**: Issues 14 and 15.
 
 **User stories covered**: 27.
 
@@ -174,9 +184,9 @@ Add run-level and task-level token summaries split by producer, model, input, ca
 
 This slice makes token data visible in `by run show` and `by task show`.
 
-## 18. Add repo-local PR reconciliation
+## 19. Add repo-local PR reconciliation
 
-**Blocked by**: Issue 16.
+**Blocked by**: Issue 17.
 
 **User stories covered**: 25, 26.
 
@@ -184,9 +194,9 @@ Implement `by reconcile` for one-shot GitHub PR state reconciliation.
 
 This slice moves ready Tasks to done when PRs are merged and ready Tasks to needs input when PRs become unready.
 
-## 19. Add repo-local daemon
+## 20. Add repo-local daemon
 
-**Blocked by**: Issue 18.
+**Blocked by**: Issue 19.
 
 **User stories covered**: 25, 26.
 
@@ -194,9 +204,9 @@ Implement `by daemon` as a polling loop around the same reconciliation logic.
 
 This slice does not process new submissions.
 
-## 20. Add reviewer eval fixtures
+## 21. Add reviewer eval fixtures
 
-**Blocked by**: Issues 13 and 14.
+**Blocked by**: Issues 14 and 15.
 
 **User stories covered**: 14, 15, 16, 17, 18.
 
@@ -204,7 +214,7 @@ Add golden fixtures for Task Context, diffs, reviewer behavior, and expected Fin
 
 This slice protects reviewer prompts, schema contracts, and finding behavior from drift.
 
-## 21. Support JSON CLI output
+## 22. Support JSON CLI output
 
 **Blocked by**: None.
 
@@ -224,25 +234,26 @@ This slice keeps serialization at the CLI output boundary and prevents task life
         -> 5 task show/context
           -> 6 comments
             -> 7 deepen Task architecture seams
-              -> 21 JSON CLI output
+              -> 22 JSON CLI output
                 -> 8 start Tasks
                   -> 9 submit preflight and Run creation
-                  -> 10 validation workspace
-                    -> 11 checks and check Findings
-                      -> 12 inspection commands
-                        -> 13 intent reviewer
-                          -> 14 quality reviewers
-                            -> 15 publish PR
-                              -> 16 watch PR
-                                -> 18 reconcile
-                                  -> 19 daemon
-                          -> 17 token summaries
-                          -> 20 reviewer evals
+                    -> 10 deepen Task, Submission, and CLI result seams
+                      -> 11 validation workspace
+                        -> 12 checks and check Findings
+                          -> 13 inspection commands
+                            -> 14 intent reviewer
+                              -> 15 quality reviewers
+                                -> 16 publish PR
+                                  -> 17 watch PR
+                                    -> 19 reconcile
+                                      -> 20 daemon
+                              -> 18 token summaries
+                              -> 21 reviewer evals
 ```
 
 ## Questions for approval
 
 - Does this granularity feel closer?
-- Should token summaries be merged into reviewer implementation instead of separate issue 16?
+- Should token summaries be merged into reviewer implementation instead of separate issue 18?
 - Should reviewer evals move earlier, before quality reviewers?
 - Are any slices still too broad?

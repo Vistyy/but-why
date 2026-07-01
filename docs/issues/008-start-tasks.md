@@ -49,4 +49,4 @@ It does not run, trigger, or orchestrate implementation work.
 ## Blocked by
 
 - 007-deepen-task-architecture-seams.md
-- 021-support-json-cli-output.md
+- 022-support-json-cli-output.md

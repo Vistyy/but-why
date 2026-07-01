@@ -26,4 +26,4 @@ Agents should be able to inspect latest Task Findings without knowing the latest
 
 ## Blocked by
 
-- 011-run-check-commands-and-create-check-findings.md
+- 012-run-check-commands-and-create-check-findings.md
