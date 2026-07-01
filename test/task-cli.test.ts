@@ -116,6 +116,40 @@ tasks[2]{id,title,state,createdAt,updatedAt}:
   BY-2,Second,needs_input,"${secondNow}","${thirdNow}"`);
   });
 
+  it("lists Tasks as compact JSON when selected after the command", () => {
+    const root = initializedRepo();
+
+    createTask(root, firstNow, "First");
+    createTask(root, secondNow, "Second");
+    transitionTaskState(root, "BY-2", "needs_input", thirdNow);
+
+    const result = runByInProcess(root, ["task", "list", "--output", "json"]);
+
+    expect(result.status).toBe(0);
+    expect(result.stderr).toBe("");
+    expect(result.stdout.endsWith("\n")).toBe(true);
+    expect(result.stdout.trimEnd()).not.toContain("\n");
+    expect(JSON.parse(result.stdout)).toEqual({
+      count: 2,
+      tasks: [
+        {
+          id: "BY-1",
+          title: "First",
+          state: "todo",
+          createdAt: firstNow,
+          updatedAt: firstNow,
+        },
+        {
+          id: "BY-2",
+          title: "Second",
+          state: "needs_input",
+          createdAt: secondNow,
+          updatedAt: thirdNow,
+        },
+      ],
+    });
+  });
+
   it("uses numeric ID order when Tasks share the same creation timestamp", () => {
     const root = initializedRepo();
 

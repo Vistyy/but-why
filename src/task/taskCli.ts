@@ -1,5 +1,7 @@
 import type { CliEnvironment, CliResult } from "../cli.js";
-import type { ToonObject, ToonValue } from "../output/toon.js";
+import { structuredError, type StructuredErrorInput } from "../cliError.js";
+import { withGlobalHelpFlags } from "../cliHelp.js";
+import type { StructuredObject, StructuredValue } from "../output/structured.js";
 import { readCommentFile, type CommentFileReadError } from "./commentFile.js";
 import { readDescriptionFile, type DescriptionFileReadError } from "./descriptionFile.js";
 import {
@@ -84,7 +86,7 @@ const routeTaskCreate = (args: readonly string[], environment: CliEnvironment): 
   if (args.length === 1 && args[0] === "--help") {
     return success({
       usage: "by task create --title <title> --description-file <file>",
-      flags: [
+      flags: withGlobalHelpFlags([
         {
           flag: "--title <title>",
           description: "Required Task title",
@@ -93,11 +95,7 @@ const routeTaskCreate = (args: readonly string[], environment: CliEnvironment): 
           flag: "--description-file <file>",
           description: "Required UTF-8 Task description file, max 256 KiB",
         },
-        {
-          flag: "--help",
-          description: "Show this help",
-        },
-      ],
+      ]),
       examples: ['by task create --title "Add login" --description-file task.md'],
     });
   }
@@ -166,7 +164,7 @@ const routeTaskList = (args: readonly string[], environment: CliEnvironment): Cl
   if (args.length === 1 && args[0] === "--help") {
     return success({
       usage: "by task list [--all] [--state <state>]",
-      flags: [
+      flags: withGlobalHelpFlags([
         {
           flag: "--all",
           description: "Include done Tasks",
@@ -175,11 +173,7 @@ const routeTaskList = (args: readonly string[], environment: CliEnvironment): Cl
           flag: "--state <state>",
           description: "Show only Tasks in one state",
         },
-        {
-          flag: "--help",
-          description: "Show this help",
-        },
-      ],
+      ]),
       examples: ["by task list", "by task list --all", "by task list --state needs_input"],
     });
   }
@@ -255,16 +249,12 @@ const routeTaskComment = (args: readonly string[], environment: CliEnvironment):
           description: "Public Task ID, such as BY-1",
         },
       ],
-      flags: [
+      flags: withGlobalHelpFlags([
         {
           flag: "--file <file>",
           description: "Required UTF-8 Markdown comment file. Stdin is not supported.",
         },
-        {
-          flag: "--help",
-          description: "Show this help",
-        },
-      ],
+      ]),
       examples: ["by task comment BY-1 --file comment.md"],
     });
   }
@@ -348,6 +338,7 @@ const taskDetailHelp = (usage: string, example: string): CliResult =>
         description: "Public Task ID, such as BY-1",
       },
     ],
+    flags: withGlobalHelpFlags(),
     examples: [example],
   });
 
@@ -723,7 +714,7 @@ const loadTaskModule = (cwd: string, requireState: boolean): TaskModuleLoadResul
   }
 };
 
-const taskHelpView = (): ToonObject => ({
+const taskHelpView = (): StructuredObject => ({
   usage: "by task <command> [--help]",
   commands: [
     {
@@ -747,9 +738,10 @@ const taskHelpView = (): ToonObject => ({
       description: "Append a Markdown Task comment",
     },
   ],
+  flags: withGlobalHelpFlags(),
 });
 
-const taskSummaryRows = (tasks: readonly TaskSummary[]): readonly ToonValue[] =>
+const taskSummaryRows = (tasks: readonly TaskSummary[]): readonly StructuredValue[] =>
   tasks.map((task) => ({
     id: task.id,
     title: task.title,
@@ -855,33 +847,19 @@ const taskNotFound = (taskId: string): CliResult =>
     help: ["Run `by task list --all` to see known Tasks."],
   });
 
-const success = (stdout: ToonObject): CliResult => ({
+const success = (stdout: StructuredObject): CliResult => ({
   exitCode: 0,
   stdout,
 });
 
 const usageError = (input: ErrorInput): CliResult => ({
   exitCode: 2,
-  stdout: errorView(input),
+  stdout: structuredError(input),
 });
 
 const runtimeError = (input: ErrorInput): CliResult => ({
   exitCode: 1,
-  stdout: errorView(input),
+  stdout: structuredError(input),
 });
 
-type ErrorInput = {
-  readonly code: string;
-  readonly message: string;
-  readonly details?: ToonObject;
-  readonly help: readonly string[];
-};
-
-const errorView = (input: ErrorInput): ToonObject => ({
-  error: {
-    code: input.code,
-    message: input.message,
-    ...(input.details ?? {}),
-  },
-  help: input.help,
-});
+type ErrorInput = StructuredErrorInput;

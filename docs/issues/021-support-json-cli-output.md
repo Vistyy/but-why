@@ -29,23 +29,23 @@ Domain modules must not depend on TOON or JSON.
 
 ## Acceptance criteria
 
-- [ ] CLI commands support selecting stdout output with `--output <format>` and `-o <format>` before or after the command.
-- [ ] Valid output formats are only lowercase `toon` and `json`.
-- [ ] TOON remains the default stdout output format and can be selected explicitly with `--output toon` and `-o toon`.
-- [ ] JSON stdout output can be selected with `--output json` and `-o json`.
-- [ ] JSON output uses the same structured result objects as TOON output, without a versioned envelope in v1.
-- [ ] JSON output is compact single-line JSON with a trailing newline.
-- [ ] Structured errors are emitted as JSON when `--output json` or `-o json` is selected and the output selector itself is valid.
-- [ ] Structured errors include required stable `error.code` and `error.message` fields.
-- [ ] Other error fields, such as `help`, `details`, or `valid`, are optional.
-- [ ] Error codes are stable snake_case strings.
-- [ ] Invalid `--output` values and missing output values are emitted as structured TOON usage errors with `error.code: invalid_output_format` and exit with code 2.
-- [ ] Duplicate output selectors are emitted as structured TOON usage errors with `error.code: duplicate_output_selector` and exit with code 2.
-- [ ] Usage errors after exactly one valid output selector use the selected serializer and exit with code 2.
-- [ ] Command failures after exactly one valid output selector use the selected serializer and exit with code 1 unless a more specific exit code is documented.
-- [ ] Structured success and structured errors go to stdout.
-- [ ] Progress and diagnostics remain on stderr.
-- [ ] Help output documents `--output <format>`, `-o <format>`, default `toon`, and valid values `toon` and `json`.
-- [ ] Task lifecycle modules do not import or depend on TOON or JSON serializers.
-- [ ] CLI tests cover default TOON success, explicit TOON success, JSON success, JSON structured command error, JSON structured usage error after a valid selector, invalid selector TOON usage error, missing selector value TOON usage error, duplicate selector TOON usage error, and selector placement before and after the command.
+- [x] CLI commands support selecting stdout output with `--output <format>` and `-o <format>` before or after the command.
+- [x] Valid output formats are only lowercase `toon` and `json`.
+- [x] TOON remains the default stdout output format and can be selected explicitly with `--output toon` and `-o toon`.
+- [x] JSON stdout output can be selected with `--output json` and `-o json`.
+- [x] JSON output uses the same structured result objects as TOON output, without a versioned envelope in v1.
+- [x] JSON output is compact single-line JSON with a trailing newline.
+- [x] Structured errors are emitted as JSON when `--output json` or `-o json` is selected and the output selector itself is valid.
+- [x] Structured errors include required stable `error.code` and `error.message` fields.
+- [x] Other error fields, such as `help`, `details`, or `valid`, are optional.
+- [x] Error codes are stable snake_case strings.
+- [x] Invalid `--output` values and missing output values are emitted as structured TOON usage errors with `error.code: invalid_output_format` and exit with code 2.
+- [x] Duplicate output selectors are emitted as structured TOON usage errors with `error.code: duplicate_output_selector` and exit with code 2.
+- [x] Usage errors after exactly one valid output selector use the selected serializer and exit with code 2.
+- [x] Command failures after exactly one valid output selector use the selected serializer and exit with code 1 unless a more specific exit code is documented.
+- [x] Structured success and structured errors go to stdout.
+- [x] Progress and diagnostics remain on stderr.
+- [x] Help output documents `--output <format>`, `-o <format>`, default `toon`, and valid values `toon` and `json`.
+- [x] Task lifecycle modules do not import or depend on TOON or JSON serializers.
+- [x] CLI tests cover default TOON success, explicit TOON success, JSON success, JSON structured command error, JSON structured usage error after a valid selector, invalid selector TOON usage error, missing selector value TOON usage error, duplicate selector TOON usage error, and selector placement before and after the command.
 

@@ -1,7 +1,8 @@
 import { Effect } from "effect";
 
 import { mapRuntimeError, runCli } from "./cli.js";
-import { encodeToon } from "./output/toon.js";
+import { outputFormatForArgs } from "./cliOutputSelection.js";
+import { serializeOutput } from "./output/serialize.js";
 
 const executablePath = process.env.BUT_WHY_EXECUTABLE_PATH ?? process.argv[1] ?? process.execPath;
 const args = process.argv.slice(2);
@@ -15,11 +16,11 @@ Effect.runPromise(
   }),
 )
   .then((result) => {
-    process.stdout.write(encodeToon(result.stdout));
+    process.stdout.write(serializeOutput(result.stdout, result.outputFormat ?? "toon"));
     process.exitCode = result.exitCode;
   })
   .catch(() => {
-    const result = mapRuntimeError();
-    process.stdout.write(encodeToon(result.stdout));
+    const result = mapRuntimeError(outputFormatForArgs(args));
+    process.stdout.write(serializeOutput(result.stdout, result.outputFormat ?? "toon"));
     process.exitCode = result.exitCode;
   });

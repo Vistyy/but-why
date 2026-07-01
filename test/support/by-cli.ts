@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url";
 import { expect } from "vitest";
 
 import { runCli } from "../../src/cli.js";
-import { encodeToon } from "../../src/output/toon.js";
+import { serializeOutput } from "../../src/output/serialize.js";
 
 export const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 export const byExecutable = join(repoRoot, "bin/by");
@@ -60,7 +60,7 @@ export const runByInProcess = (
 
   return {
     status: result.exitCode,
-    stdout: encodeToon(result.stdout),
+    stdout: serializeOutput(result.stdout, result.outputFormat ?? "toon"),
     stderr: "",
   };
 };

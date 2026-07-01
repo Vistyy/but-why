@@ -39,14 +39,134 @@ help[1]: Run \`by init --task-prefix BY\` in the repository root.`);
     expect(result.stderr).toBe("");
     expect(result.stdout).toBe(`bin: ${expectedBin}
 description: Validate completed code changes against approved human intent.
-usage: "by [command] [--help]"
+usage: "by [--output <format>] [command] [--help]"
 commands[4]{command,description}:
   by,Show workspace task dashboard
   by init --task-prefix <prefix>,Create repo-local But Why? state
   by task create --title <title> --description-file <file>,Create a repo-local Task
   "by task list [--all] [--state <state>]",List repo-local Tasks
-flags[1]{flag,description}:
+flags[3]{flag,description}:
+  "--output <format>","Set stdout format: toon or json. Default: toon."
+  "-o <format>","Alias for --output <format>. Valid values: toon, json."
   "--help",Show this help`);
+  });
+
+  it("prints JSON help when selected before the command", () => {
+    const result = runBy(repoRoot, "--output", "json", "--help");
+
+    expect(result.status).toBe(0);
+    expect(result.stderr).toBe("");
+    expect(result.stdout.endsWith("\n")).toBe(true);
+    expect(result.stdout.trimEnd()).not.toContain("\n");
+    expect(JSON.parse(result.stdout)).toEqual({
+      bin: expectedBin,
+      description: "Validate completed code changes against approved human intent.",
+      usage: "by [--output <format>] [command] [--help]",
+      commands: [
+        { command: "by", description: "Show workspace task dashboard" },
+        {
+          command: "by init --task-prefix <prefix>",
+          description: "Create repo-local But Why? state",
+        },
+        {
+          command: "by task create --title <title> --description-file <file>",
+          description: "Create a repo-local Task",
+        },
+        { command: "by task list [--all] [--state <state>]", description: "List repo-local Tasks" },
+      ],
+      flags: [
+        {
+          flag: "--output <format>",
+          description: "Set stdout format: toon or json. Default: toon.",
+        },
+        {
+          flag: "-o <format>",
+          description: "Alias for --output <format>. Valid values: toon, json.",
+        },
+        { flag: "--help", description: "Show this help" },
+      ],
+    });
+  });
+
+  it("prints JSON help when selected after the command", () => {
+    const result = runBy(repoRoot, "--help", "-o", "json");
+
+    expect(result.status).toBe(0);
+    expect(result.stderr).toBe("");
+    expect(JSON.parse(result.stdout).usage).toBe("by [--output <format>] [command] [--help]");
+  });
+
+  it("keeps TOON output when selected explicitly", () => {
+    const result = runBy(repoRoot, "-o", "toon", "--help");
+
+    expect(result.status).toBe(0);
+    expect(result.stderr).toBe("");
+    expect(result.stdout).toContain('usage: "by [--output <format>] [command] [--help]"');
+    expect(() => JSON.parse(result.stdout)).toThrow();
+  });
+
+  it("prints JSON usage errors after a valid JSON selector", () => {
+    const result = runBy(repoRoot, "--output", "json", "--bad");
+
+    expect(result.status).toBe(2);
+    expect(result.stderr).toBe("");
+    expect(JSON.parse(result.stdout)).toEqual({
+      error: {
+        code: "unknown_flag",
+        message: "Unknown flag: --bad",
+      },
+      help: ["Run `by --help`"],
+    });
+  });
+
+  it("prints JSON command errors after a valid JSON selector", () => {
+    const root = createGitRepo();
+    const result = runBy(root, "--output", "json", "task", "list");
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toBe("");
+    expect(JSON.parse(result.stdout)).toEqual({
+      error: {
+        code: "not_initialized",
+        message: "This workspace is not initialized for But Why?.",
+      },
+      help: ["Run `by init --task-prefix BY` in the repository root."],
+    });
+  });
+
+  it("prints invalid output selectors as TOON usage errors", () => {
+    const result = runBy(repoRoot, "--output", "xml", "--help");
+
+    expect(result.status).toBe(2);
+    expect(result.stderr).toBe("");
+    expect(result.stdout).toBe(`error:
+  code: invalid_output_format
+  message: "Invalid output format: xml"
+  valid[2]: toon,json
+help[1]: Use --output toon or --output json.`);
+  });
+
+  it("prints missing output selector values as TOON usage errors", () => {
+    const result = runBy(repoRoot, "task", "list", "--output");
+
+    expect(result.status).toBe(2);
+    expect(result.stderr).toBe("");
+    expect(result.stdout).toBe(`error:
+  code: invalid_output_format
+  message: Missing output format after --output.
+  valid[2]: toon,json
+help[1]: Use --output toon or --output json.`);
+  });
+
+  it("prints duplicate output selectors as TOON usage errors", () => {
+    const result = runBy(repoRoot, "--output", "json", "--help", "-o", "toon");
+
+    expect(result.status).toBe(2);
+    expect(result.stderr).toBe("");
+    expect(result.stdout).toBe(`error:
+  code: duplicate_output_selector
+  message: Only one output selector is allowed.
+help[1]: "Use either --output <format> or -o <format>, not both."`);
   });
 
   it("prints the init help view", () => {
@@ -55,8 +175,10 @@ flags[1]{flag,description}:
     expect(result.status).toBe(0);
     expect(result.stderr).toBe("");
     expect(result.stdout).toBe(`usage: by init --task-prefix <prefix>
-flags[2]{flag,description}:
+flags[4]{flag,description}:
   "--task-prefix <prefix>",Required task ID prefix such as BY
+  "--output <format>","Set stdout format: toon or json. Default: toon."
+  "-o <format>","Alias for --output <format>. Valid values: toon, json."
   "--help",Show this help
 examples[1]: by init --task-prefix BY`);
   });
