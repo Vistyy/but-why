@@ -2,7 +2,7 @@
 
 ## Status
 
-Not done.
+Done.
 
 ## Parent
 
@@ -61,35 +61,35 @@ If a seam exists only for tests, keep it internal to the deeper module unless pr
 
 ## Acceptance criteria
 
-- [ ] Existing `by init`, `by`, `by task create`, `by task list`, `by task show`, `by task context`, `by task comment`, `by task start`, and `by submit` behavior is preserved.
-- [ ] Existing TOON stdout shape, error codes, exit codes, and help text remain unchanged unless an intentional output contract update is documented in this issue.
-- [ ] Existing JSON stdout shape, error codes, exit codes, and help text remain supported through the serializer seam from ADR-0003.
-- [ ] Task and Run durability sit behind one durable state module interface that speaks in Task and Run terms and hides SQLite and migrations.
-- [ ] Submit code no longer duplicates Task state validation logic.
-- [ ] Submit code no longer owns SQL details for branch binding persistence, active Run uniqueness, Run ID allocation, or Task state mutation.
-- [ ] Task branch binding persistence, Run persistence, and Task state mutation happen inside one local transaction.
-- [ ] Tests set up Task and Run scenarios through the durable state module interface or CLI behavior, not raw SQLite mutation.
-- [ ] Submit preflight returns a domain result that distinguishes Run created, preflight rejection, and tooling error.
-- [ ] Git facts, protected branch policy, and GitHub PR Target detection are concentrated behind the submit preflight module interface.
-- [ ] Git and GitHub helper files, if kept, are internal to submit preflight and are not used by other callers.
-- [ ] Git and GitHub process substitution used by tests is internal to submit preflight and does not become a generic execution seam.
-- [ ] Submit preflight does not run checks, create validation workspaces, call Sandcastle, publish PRs, or watch PRs.
-- [ ] CLI routes share one result construction path for success, structured usage errors, structured runtime errors, and module-load errors.
-- [ ] New CLI result code uses a domain name such as `cliResults.ts`, not a `Module` suffix.
-- [ ] CLI route code keeps argument parsing at the edge and delegates domain behavior to Task and submit preflight modules.
-- [ ] Domain modules do not depend on TOON, JSON, or stdout formatting.
-- [ ] Old shallow helper paths are removed once the deeper modules replace them.
-- [ ] `taskModule.ts` is renamed to `repoTasks.ts` and callers use the new path.
-- [ ] `RepoTaskModule` is renamed to `RepoTasks` or another domain name without the `Module` suffix.
-- [ ] `submitModule.ts` is renamed to `submitPreflight.ts` and callers use the new path.
-- [ ] `RepoSubmitModule` is renamed to `RepoSubmitPreflight` or another domain name without the `Module` suffix.
-- [ ] Other touched file names, type names, and exported names follow the `docs/architecture.md` rule to use domain names instead of `Module` suffixes.
-- [ ] `gitPreflight.ts` is renamed to `gitFacts.ts` if kept as a separate helper.
-- [ ] `submitStore.ts` is deleted or reduced to a non-domain adapter with no Task state rules, branch binding rules, Run ID allocation, or active Run policy.
-- [ ] Existing golden CLI behavior tests stay green for TOON and JSON output.
-- [ ] New module tests cover only the new public seams and do not test removed internals.
-- [ ] `just quality` passes after the refactor, including format check, lint, typecheck, and tests.
-- [ ] A short module-level note documents which modules future validation workspace work should call for Task durability, submit preflight, and CLI result construction.
+- [x] Existing `by init`, `by`, `by task create`, `by task list`, `by task show`, `by task context`, `by task comment`, `by task start`, and `by submit` behavior is preserved.
+- [x] Existing TOON stdout shape, error codes, exit codes, and help text remain unchanged unless an intentional output contract update is documented in this issue.
+- [x] Existing JSON stdout shape, error codes, exit codes, and help text remain supported through the serializer seam from ADR-0003.
+- [x] Task and Run durability sit behind one durable state module interface that speaks in Task and Run terms and hides SQLite and migrations.
+- [x] Submit code no longer duplicates Task state validation logic.
+- [x] Submit code no longer owns SQL details for branch binding persistence, active Run uniqueness, Run ID allocation, or Task state mutation.
+- [x] Task branch binding persistence, Run persistence, and Task state mutation happen inside one local transaction.
+- [x] Tests set up Task and Run scenarios through the durable state module interface or CLI behavior, not raw SQLite mutation.
+- [x] Submit preflight returns a domain result that distinguishes Run created, preflight rejection, and tooling error.
+- [x] Git facts, protected branch policy, and GitHub PR Target detection are concentrated behind the submit preflight module interface.
+- [x] Git and GitHub helper files, if kept, are internal to submit preflight and are not used by other callers.
+- [x] Git and GitHub process substitution used by tests is internal to submit preflight and does not become a generic execution seam.
+- [x] Submit preflight does not run checks, create validation workspaces, call Sandcastle, publish PRs, or watch PRs.
+- [x] CLI routes share one result construction path for success, structured usage errors, structured runtime errors, and module-load errors.
+- [x] New CLI result code uses a domain name such as `cliResults.ts`, not a `Module` suffix.
+- [x] CLI route code keeps argument parsing at the edge and delegates domain behavior to Task and submit preflight modules.
+- [x] Domain modules do not depend on TOON, JSON, or stdout formatting.
+- [x] Old shallow helper paths are removed once the deeper modules replace them.
+- [x] `taskModule.ts` is renamed to `repoTasks.ts` and callers use the new path.
+- [x] `RepoTaskModule` is renamed to `RepoTasks` or another domain name without the `Module` suffix.
+- [x] `submitModule.ts` is renamed to `submitPreflight.ts` and callers use the new path.
+- [x] `RepoSubmitModule` is renamed to `RepoSubmitPreflight` or another domain name without the `Module` suffix.
+- [x] Other touched file names, type names, and exported names follow the `docs/architecture.md` rule to use domain names instead of `Module` suffixes.
+- [x] `gitPreflight.ts` is renamed to `gitFacts.ts` if kept as a separate helper.
+- [x] `submitStore.ts` is deleted or reduced to a non-domain adapter with no Task state rules, branch binding rules, Run ID allocation, or active Run policy.
+- [x] Existing golden CLI behavior tests stay green for TOON and JSON output.
+- [x] New module tests cover only the new public seams and do not test removed internals.
+- [x] `just quality` passes after the refactor, including format check, lint, typecheck, and tests.
+- [x] A short module-level note documents which modules future validation workspace work should call for Task durability, submit preflight, and CLI result construction.
 
 ## Blocked by
 

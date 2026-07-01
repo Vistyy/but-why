@@ -1,13 +1,14 @@
 import type { CliEnvironment, CliResult } from "../cli.js";
-import { structuredError, type StructuredErrorInput } from "../cliError.js";
+import type { StructuredErrorInput } from "../cliError.js";
+import { repoStateLoadError, runtimeError, success, usageError } from "../cliResults.js";
 import { withGlobalHelpFlags } from "../cliHelp.js";
 import type { StructuredObject } from "../output/structured.js";
 import { hasPublicTaskIdShape, publicTaskId, type PublicTaskId } from "../task/taskId.js";
 import {
-  loadRepoSubmitModule,
-  type RepoSubmitModule,
+  loadRepoSubmitPreflight,
+  type RepoSubmitPreflight,
   type SubmitTaskResult,
-} from "./submitModule.js";
+} from "./submitPreflight.js";
 
 export const routeSubmit = (args: readonly string[], environment: CliEnvironment): CliResult => {
   if (args.length === 1 && args[0] === "--help") {
@@ -20,13 +21,13 @@ export const routeSubmit = (args: readonly string[], environment: CliEnvironment
     return taskIdShape.result;
   }
 
-  const submitModule = loadSubmitModule(environment.cwd);
+  const submitPreflight = loadSubmitPreflight(environment.cwd);
 
-  if (!submitModule.ok) {
-    return submitModule.result;
+  if (!submitPreflight.ok) {
+    return submitPreflight.result;
   }
 
-  const taskId = submitModule.submit.resolveTaskId(taskIdShape.taskId);
+  const taskId = submitPreflight.submit.resolveTaskId(taskIdShape.taskId);
 
   if (!taskId.ok) {
     return usageError({
@@ -38,7 +39,7 @@ export const routeSubmit = (args: readonly string[], environment: CliEnvironment
   }
 
   try {
-    const result = submitModule.submit.submitTask({
+    const result = submitPreflight.submit.submitTask({
       taskId: taskId.taskId,
       now: environment.now().toISOString(),
     });
@@ -111,39 +112,24 @@ const parseSubmitTaskId = (args: readonly string[]): SubmitTaskIdArgParseResult 
   return { ok: true, taskId: publicTaskId(taskId) };
 };
 
-type SubmitModuleLoadResult =
+type SubmitPreflightLoadResult =
   | {
       readonly ok: true;
-      readonly submit: RepoSubmitModule;
+      readonly submit: RepoSubmitPreflight;
     }
   | {
       readonly ok: false;
       readonly result: CliResult;
     };
 
-const loadSubmitModule = (cwd: string): SubmitModuleLoadResult => {
-  const result = loadRepoSubmitModule(cwd);
+const loadSubmitPreflight = (cwd: string): SubmitPreflightLoadResult => {
+  const result = loadRepoSubmitPreflight(cwd);
 
   if (result.ok) {
     return result;
   }
 
-  switch (result.error.code) {
-    case "not_initialized":
-      return { ok: false, result: notInitialized() };
-    case "invalid_repo_config":
-      return {
-        ok: false,
-        result: runtimeError({
-          code: "invalid_repo_config",
-          message: ".but-why/config.json is not valid But Why? repo config.",
-          details: { path: ".but-why/config.json" },
-          help: ["Fix the JSON or run `by init --task-prefix <prefix>` after moving it aside."],
-        }),
-      };
-    case "state_store_unavailable":
-      return { ok: false, result: stateStoreUnavailable(result.error.taskPrefix) };
-  }
+  return { ok: false, result: repoStateLoadError(result.error) };
 };
 
 const renderSubmitResult = (result: SubmitTaskResult): CliResult => {
@@ -244,44 +230,9 @@ const submitPreflightError = (
   }
 };
 
-const notInitialized = (): CliResult =>
-  runtimeError({
-    code: "not_initialized",
-    message: "This workspace is not initialized for But Why?.",
-    help: ["Run `by init --task-prefix BY` in the repository root."],
-  });
-
-const stateStoreUnavailable = (taskPrefix: string | undefined): CliResult =>
-  runtimeError({
-    code: "state_store_unavailable",
-    message: "Repo-local But Why? state is unavailable.",
-    help: [
-      taskPrefix === undefined
-        ? "Move or restore .but-why/state.sqlite, then run `by init --task-prefix <prefix>`."
-        : `Move or restore .but-why/state.sqlite, then run \`by init --task-prefix ${taskPrefix}\`.`,
-    ],
-  });
-
 const toolingError = (): CliResult =>
   runtimeError({
     code: "tooling_error",
     message: "Submit preflight failed unexpectedly.",
     help: ["Check Git, GitHub authentication, and repo-local state, then rerun submit."],
   });
-
-const success = (stdout: StructuredObject): CliResult => ({
-  exitCode: 0,
-  stdout,
-});
-
-const usageError = (input: ErrorInput): CliResult => ({
-  exitCode: 2,
-  stdout: structuredError(input),
-});
-
-const runtimeError = (input: ErrorInput): CliResult => ({
-  exitCode: 1,
-  stdout: structuredError(input),
-});
-
-type ErrorInput = StructuredErrorInput;

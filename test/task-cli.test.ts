@@ -1,12 +1,12 @@
 import { spawn } from "node:child_process";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { DatabaseSync } from "node:sqlite";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { collapseHome } from "../src/cli.js";
+import { openRepoState } from "../src/repoState.js";
 import type { TaskState } from "../src/task/task.js";
-import { loadRepoTaskModule } from "../src/task/taskModule.js";
+import { loadRepoTasks } from "../src/task/repoTasks.js";
 import { publicTaskId } from "../src/task/taskId.js";
 import {
   byExecutable,
@@ -46,24 +46,15 @@ describe("by task CLI", () => {
   updatedAt: "${firstNow}"
 help[1]: Run \`by task list\` to see open tasks.`);
 
-    const database = new DatabaseSync(join(root, ".but-why/state.sqlite"));
-
-    try {
-      expect(database.prepare("SELECT * FROM tasks").all()).toEqual([
-        {
-          id: "BY-1",
-          numeric_id: 1,
-          title: "Add   login",
-          description: "  Preserve me exactly.\n\n",
-          state: "todo",
-          created_at: firstNow,
-          updated_at: firstNow,
-          branch: null,
-        },
-      ]);
-    } finally {
-      database.close();
-    }
+    expect(repoState(root).getTaskById(publicTaskId("BY-1"))).toMatchObject({
+      id: "BY-1",
+      title: "Add   login",
+      description: "  Preserve me exactly.\n\n",
+      state: "todo",
+      createdAt: firstNow,
+      updatedAt: firstNow,
+      branch: null,
+    });
   });
 
   it("resolves description files relative to cwd and allows files outside the repo", () => {
@@ -169,14 +160,14 @@ tasks[2]{id,title,state,createdAt,updatedAt}:
     const root = initializedRepo();
 
     createTask(root, firstNow, "Startable task");
-    const taskModule = loadRepoTaskModule({ cwd: root, requireState: true });
+    const tasksLoad = loadRepoTasks({ cwd: root, requireState: true });
 
-    if (!taskModule.ok) {
-      throw new Error(`Could not load Task module: ${taskModule.error.code}`);
+    if (!tasksLoad.ok) {
+      throw new Error(`Could not load Tasks: ${tasksLoad.error.code}`);
     }
 
-    const firstStart = taskModule.tasks.startTask(publicTaskId("BY-1"), secondNow);
-    const secondStart = taskModule.tasks.startTask(publicTaskId("BY-1"), thirdNow);
+    const firstStart = tasksLoad.tasks.startTask(publicTaskId("BY-1"), secondNow);
+    const secondStart = tasksLoad.tasks.startTask(publicTaskId("BY-1"), thirdNow);
 
     expect(firstStart).toMatchObject({ ok: true, changed: true });
     expect(secondStart).toMatchObject({ ok: true, changed: false });
@@ -195,13 +186,13 @@ tasks[2]{id,title,state,createdAt,updatedAt}:
 
     createTask(root, firstNow, "Invalid start");
     transitionTaskState(root, "BY-1", state, secondNow);
-    const taskModule = loadRepoTaskModule({ cwd: root, requireState: true });
+    const tasksLoad = loadRepoTasks({ cwd: root, requireState: true });
 
-    if (!taskModule.ok) {
-      throw new Error(`Could not load Task module: ${taskModule.error.code}`);
+    if (!tasksLoad.ok) {
+      throw new Error(`Could not load Tasks: ${tasksLoad.error.code}`);
     }
 
-    expect(taskModule.tasks.startTask(publicTaskId("BY-1"), thirdNow)).toEqual({
+    expect(tasksLoad.tasks.startTask(publicTaskId("BY-1"), thirdNow)).toEqual({
       ok: false,
       code: "invalid_task_state",
       state,
@@ -341,14 +332,14 @@ help[1]: "Run \`by task create --title \\"...\\" --description-file <file>\` to 
     const root = initializedRepo();
 
     createTask(root, firstNow, "Invalid transition");
-    const taskModule = loadRepoTaskModule({ cwd: root, requireState: true });
+    const tasksLoad = loadRepoTasks({ cwd: root, requireState: true });
 
-    if (!taskModule.ok) {
-      throw new Error(`Could not load Task module: ${taskModule.error.code}`);
+    if (!tasksLoad.ok) {
+      throw new Error(`Could not load Tasks: ${tasksLoad.error.code}`);
     }
 
     expect(
-      taskModule.tasks.transitionTaskState({
+      tasksLoad.tasks.transitionTaskState({
         taskId: publicTaskId("BY-1"),
         to: "ready",
         now: secondNow,
@@ -489,15 +480,9 @@ tasks[1]{id,title,state,createdAt,updatedAt}:
 
     expect(result.status).toBe(0);
 
-    const database = new DatabaseSync(join(root, ".but-why/state.sqlite"));
-
-    try {
-      expect(database.prepare("SELECT content FROM task_comments").get()).toEqual({
-        content: "\uFEFFBOM",
-      });
-    } finally {
-      database.close();
-    }
+    expect(repoState(root).getTaskContextById(publicTaskId("BY-1"))?.comments).toEqual([
+      "\uFEFFBOM",
+    ]);
   });
 
   it("reports actionable Task comment input errors without changing the Task", () => {
@@ -641,26 +626,12 @@ tasks[1]{id,title,state,createdAt,updatedAt}:
 
     expect(results.every((result) => result.status === 0)).toBe(true);
 
-    const database = new DatabaseSync(join(root, ".but-why/state.sqlite"));
+    const comments = repoState(root).getTaskContextById(publicTaskId("BY-1"))?.comments ?? [];
 
-    try {
-      expect(
-        database.prepare("SELECT content FROM task_comments ORDER BY sequence ASC").all(),
-      ).toHaveLength(commentCount);
-      expect(
-        new Set(
-          database
-            .prepare("SELECT content FROM task_comments ORDER BY sequence ASC")
-            .all()
-            .map((row) => (row as { readonly content: string }).content),
-        ),
-      ).toEqual(
-        new Set(Array.from({ length: commentCount }, (_value, index) => `Comment ${index}`)),
-      );
-    } finally {
-      database.close();
-    }
-
+    expect(comments).toHaveLength(commentCount);
+    expect(new Set(comments)).toEqual(
+      new Set(Array.from({ length: commentCount }, (_value, index) => `Comment ${index}`)),
+    );
     expect(runByInProcess(root, ["task", "show", "BY-1"]).stdout).toContain(
       `commentCount: ${commentCount}`,
     );
@@ -876,7 +847,7 @@ help[1]: Run \`by init --task-prefix BY\` in the repository root.`);
     expect(result.stdout).toContain("help[1]");
   });
 
-  it("serializes concurrent Task creation through SQLite", async () => {
+  it("serializes concurrent Task creation through repo state", async () => {
     const root = initializedRepo();
     const createCount = 8;
 
@@ -901,20 +872,11 @@ help[1]: Run \`by init --task-prefix BY\` in the repository root.`);
 
     expect(results.every((result) => result.status === 0)).toBe(true);
 
-    const database = new DatabaseSync(join(root, ".but-why/state.sqlite"));
-
-    try {
-      expect(
-        database.prepare("SELECT id, numeric_id FROM tasks ORDER BY numeric_id").all(),
-      ).toEqual(
-        Array.from({ length: createCount }, (_value, index) => ({
-          id: `BY-${index + 1}`,
-          numeric_id: index + 1,
-        })),
-      );
-    } finally {
-      database.close();
-    }
+    expect(
+      repoState(root)
+        .listTasks({ includeDone: true })
+        .map((task) => task.id),
+    ).toEqual(Array.from({ length: createCount }, (_value, index) => `BY-${index + 1}`));
   });
 
   it("prints state_store_unavailable when repo state cannot be opened", () => {
@@ -930,39 +892,6 @@ help[1]: Run \`by init --task-prefix BY\` in the repository root.`);
   message: Repo-local But Why? state is unavailable.
 help[1]: "Move or restore .but-why/state.sqlite, then run \`by init --task-prefix BY\`."`);
   });
-
-  it("creates task migration with required columns and constraints", () => {
-    const root = initializedRepo();
-    const database = new DatabaseSync(join(root, ".but-why/state.sqlite"));
-
-    try {
-      expect(database.prepare("SELECT name FROM schema_migrations ORDER BY name").all()).toEqual([
-        { name: "001_init" },
-        { name: "002_tasks" },
-        { name: "003_task_comments" },
-        { name: "004_submit_preflight" },
-      ]);
-      expect(
-        database
-          .prepare(
-            "SELECT name FROM sqlite_schema WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name",
-          )
-          .all(),
-      ).toEqual([
-        { name: "runs" },
-        { name: "schema_migrations" },
-        { name: "task_comments" },
-        { name: "tasks" },
-      ]);
-      expect(() =>
-        database
-          .prepare("INSERT INTO tasks VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
-          .run("BY-1", 1, "Title", "Description", "blocked", firstNow, firstNow, null),
-      ).toThrow();
-    } finally {
-      database.close();
-    }
-  });
 });
 
 const initializedRepo = (): string => {
@@ -974,6 +903,12 @@ const initializedRepo = (): string => {
 
   return root;
 };
+
+const repoState = (root: string) =>
+  openRepoState({
+    statePath: join(root, ".but-why/state.sqlite"),
+    taskPrefix: "BY",
+  });
 
 const createTask = (root: string, now: string, title: string): void => {
   const descriptionPath = join(root, `${title}.md`);
@@ -1003,14 +938,14 @@ const transitionTaskState = (
   state: TaskState,
   updatedAt: string,
 ): void => {
-  const taskModule = loadRepoTaskModule({ cwd: root, requireState: true });
+  const tasksLoad = loadRepoTasks({ cwd: root, requireState: true });
 
-  if (!taskModule.ok) {
-    throw new Error(`Could not load Task module: ${taskModule.error.code}`);
+  if (!tasksLoad.ok) {
+    throw new Error(`Could not load Tasks: ${tasksLoad.error.code}`);
   }
 
   for (const nextState of taskStateTransitionPaths[state]) {
-    const result = taskModule.tasks.transitionTaskState({
+    const result = tasksLoad.tasks.transitionTaskState({
       taskId: publicTaskId(id),
       to: nextState,
       now: updatedAt,

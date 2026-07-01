@@ -2,6 +2,14 @@ export const runStatuses = ["active", "error"] as const;
 
 export type RunStatus = (typeof runStatuses)[number];
 
+export type GitHubPrTarget = {
+  readonly owner: string;
+  readonly repo: string;
+  readonly baseBranch: string;
+  readonly remoteName: string;
+  readonly remoteUrl: string;
+};
+
 export type RunRecord = {
   readonly id: string;
   readonly taskId: string;

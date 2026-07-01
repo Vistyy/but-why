@@ -1,7 +1,7 @@
-import { structuredUsageErrorResult, type UsageErrorResult } from "./cliError.js";
+import { usageError, type CliUsageErrorResult } from "./cliResults.js";
 import { outputFormats, type OutputFormat } from "./output/structured.js";
 
-type OutputSelectionUsageError = UsageErrorResult;
+type OutputSelectionUsageError = CliUsageErrorResult;
 
 export type OutputSelectionResult =
   | {
@@ -25,7 +25,7 @@ export const selectOutput = (args: readonly string[]): OutputSelectionResult => 
       result: usageError({
         code: "duplicate_output_selector",
         message: "Only one output selector is allowed.",
-        help: "Use either --output <format> or -o <format>, not both.",
+        help: ["Use either --output <format> or -o <format>, not both."],
       }),
     };
   }
@@ -68,8 +68,6 @@ const invalidOutputFormat = (message: string): OutputSelectionResult => ({
     code: "invalid_output_format",
     message,
     details: { valid: outputFormats },
-    help: "Use --output toon or --output json.",
+    help: ["Use --output toon or --output json."],
   }),
 });
-
-const usageError = structuredUsageErrorResult;

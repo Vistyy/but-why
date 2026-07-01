@@ -1,14 +1,7 @@
 import { spawnSync } from "node:child_process";
 
-import { type GitCommandRunner, runGitCommand } from "./gitPreflight.js";
-
-export type GitHubPrTarget = {
-  readonly owner: string;
-  readonly repo: string;
-  readonly baseBranch: string;
-  readonly remoteName: string;
-  readonly remoteUrl: string;
-};
+import type { GitHubPrTarget } from "../run/run.js";
+import { type GitCommandRunner, runGitCommand } from "./gitFacts.js";
 
 export type GitHubTargetResult =
   | {

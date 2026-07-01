@@ -1,29 +1,27 @@
 import { existsSync } from "node:fs";
 
 import {
-  exampleTaskId,
-  expectedTaskIdFormat,
-  isPublicTaskIdForPrefix,
   loadRepoLocalContext,
   type LoadRepoLocalContextError,
   type RepoLocalContext,
 } from "../init/repoContext.js";
 import type { TaskContext, TaskRecord, TaskState, TaskSummary } from "./task.js";
-import { hasPublicTaskIdShape, type PublicTaskId } from "./taskId.js";
+import { resolveRepoTaskId, type RepoTaskIdResolution } from "./repoTaskIds.js";
+import type { PublicTaskId } from "./taskId.js";
 import {
-  openDurableTaskState,
+  openRepoState,
   type AppendTaskCommentResult,
   type TaskStateTransitionResult,
-} from "./taskStore.js";
+} from "../repoState.js";
 
 /**
  * Task lifecycle commands should enter through this module.
  * Use it for Task lookup, state transitions, Task Context, dashboard actionability, comments, and persistence.
- * CLI files should keep argument parsing and TOON rendering at the edge, then delegate Task behavior here.
+ * CLI files should keep argument parsing and stdout formatting at the edge, then delegate Task behavior here.
  */
-export type RepoTaskModule = {
+export type RepoTasks = {
   readonly taskPrefix: string;
-  readonly resolveTaskId: (taskId: PublicTaskId) => TaskIdResolution;
+  readonly resolveTaskId: (taskId: PublicTaskId) => RepoTaskIdResolution;
   readonly createTask: (input: CreateTaskInput) => TaskSummary;
   readonly listTasks: (input: ListTasksInput) => readonly TaskSummary[];
   readonly listActionableTasks: () => readonly TaskSummary[];
@@ -36,37 +34,26 @@ export type RepoTaskModule = {
   readonly transitionTaskState: (input: TransitionTaskStateInput) => TaskStateTransitionResult;
 };
 
-export type LoadRepoTaskModuleInput = {
+export type LoadRepoTasksInput = {
   readonly cwd: string;
   readonly requireState: boolean;
 };
 
-export type LoadRepoTaskModuleResult =
+export type LoadRepoTasksResult =
   | {
       readonly ok: true;
-      readonly tasks: RepoTaskModule;
+      readonly tasks: RepoTasks;
     }
   | {
       readonly ok: false;
-      readonly error: LoadRepoTaskModuleError;
+      readonly error: LoadRepoTasksError;
     };
 
-export type LoadRepoTaskModuleError =
+export type LoadRepoTasksError =
   | LoadRepoLocalContextError
   | {
       readonly code: "state_store_unavailable";
       readonly taskPrefix: string;
-    };
-
-export type TaskIdResolution =
-  | {
-      readonly ok: true;
-      readonly taskId: PublicTaskId;
-    }
-  | {
-      readonly ok: false;
-      readonly expectedFormat: string;
-      readonly help: string;
     };
 
 export type CreateTaskInput = {
@@ -117,7 +104,7 @@ export type StartTaskResult =
       readonly state: UnstartableTaskState;
     };
 
-export const loadRepoTaskModule = (input: LoadRepoTaskModuleInput): LoadRepoTaskModuleResult => {
+export const loadRepoTasks = (input: LoadRepoTasksInput): LoadRepoTasksResult => {
   const repoContext = loadRepoLocalContext(input.cwd);
 
   if (!repoContext.ok) {
@@ -136,19 +123,19 @@ export const loadRepoTaskModule = (input: LoadRepoTaskModuleInput): LoadRepoTask
 
   return {
     ok: true,
-    tasks: repoTaskModule(repoContext.context),
+    tasks: repoTasks(repoContext.context),
   };
 };
 
-const repoTaskModule = (context: RepoLocalContext): RepoTaskModule => {
-  const state = openDurableTaskState({
+const repoTasks = (context: RepoLocalContext): RepoTasks => {
+  const state = openRepoState({
     statePath: context.paths.statePath,
     taskPrefix: context.taskPrefix,
   });
 
   return {
     taskPrefix: context.taskPrefix,
-    resolveTaskId: (taskId) => resolveTaskIdForContext(context, taskId),
+    resolveTaskId: (taskId) => resolveRepoTaskId(context, taskId),
     createTask: state.createTask,
     listTasks: state.listTasks,
     listActionableTasks: state.listActionableTasks,
@@ -161,7 +148,7 @@ const repoTaskModule = (context: RepoLocalContext): RepoTaskModule => {
 };
 
 const startTask = (
-  transitionTaskState: RepoTaskModule["transitionTaskState"],
+  transitionTaskState: RepoTasks["transitionTaskState"],
   taskId: PublicTaskId,
   now: string,
 ): StartTaskResult => {
@@ -190,18 +177,3 @@ const unstartableTaskStateSet = new Set<TaskState>(unstartableTaskStates);
 
 const isUnstartableTaskState = (state: TaskState): state is UnstartableTaskState =>
   unstartableTaskStateSet.has(state);
-
-const resolveTaskIdForContext = (
-  context: RepoLocalContext,
-  taskId: PublicTaskId,
-): TaskIdResolution => {
-  if (!hasPublicTaskIdShape(taskId) || !isPublicTaskIdForPrefix(taskId, context.taskPrefix)) {
-    return {
-      ok: false,
-      expectedFormat: expectedTaskIdFormat(context.taskPrefix),
-      help: `Use a public Task ID such as ${exampleTaskId(context.taskPrefix)}.`,
-    };
-  }
-
-  return { ok: true, taskId };
-};

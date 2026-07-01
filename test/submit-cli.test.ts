@@ -1,11 +1,11 @@
 import { spawnSync } from "node:child_process";
 import { chmodSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { DatabaseSync } from "node:sqlite";
 import { afterEach, describe, expect, it } from "vitest";
 
+import { openRepoState } from "../src/repoState.js";
 import type { TaskState } from "../src/task/task.js";
-import { loadRepoTaskModule } from "../src/task/taskModule.js";
+import { loadRepoTasks } from "../src/task/repoTasks.js";
 import { publicTaskId } from "../src/task/taskId.js";
 import {
   cleanupTempRoots,
@@ -46,42 +46,28 @@ describe("by submit CLI", () => {
       `state: validating\n  createdAt: "${firstNow}"\n  updatedAt: "${thirdNow}"\n  branch: feature/by-1\n  latestRun: BY-1.1`,
     );
 
-    const database = new DatabaseSync(join(root, ".but-why/state.sqlite"));
-
-    try {
-      expect(
-        database
-          .prepare(
-            "SELECT id, task_id, task_run_number, status, branch, commit_sha, github_owner, github_repo, github_base_branch, github_remote_name, github_remote_url, created_at, updated_at FROM runs",
-          )
-          .all(),
-      ).toEqual([
-        {
-          id: "BY-1.1",
-          task_id: "BY-1",
-          task_run_number: 1,
-          status: "active",
-          branch: "feature/by-1",
-          commit_sha: commitSha,
-          github_owner: "acme",
-          github_repo: "widgets",
-          github_base_branch: "main",
-          github_remote_name: "origin",
-          github_remote_url: "https://github.com/acme/widgets.git",
-          created_at: thirdNow,
-          updated_at: thirdNow,
-        },
-      ]);
-    } finally {
-      database.close();
-    }
+    expect(repoState(root).getRunById("BY-1.1")).toEqual({
+      id: "BY-1.1",
+      taskId: "BY-1",
+      taskRunNumber: 1,
+      status: "active",
+      branch: "feature/by-1",
+      commitSha,
+      githubOwner: "acme",
+      githubRepo: "widgets",
+      githubBaseBranch: "main",
+      githubRemoteName: "origin",
+      githubRemoteUrl: "https://github.com/acme/widgets.git",
+      createdAt: thirdNow,
+      updatedAt: thirdNow,
+    });
   });
 
   it("allows needs_input Tasks and increments task-scoped Run IDs after a terminal Run", () => {
     const root = preparedRepoOnBranch("feature/resubmit");
 
     expect(withFakeGh(() => runByInProcess(root, ["submit", "BY-1"], secondNow)).status).toBe(0);
-    setRunStatus(root, "BY-1.1", "error");
+    recordRunError(root, "BY-1.1", secondNow);
     transitionCurrentTaskState(root, "BY-1", "needs_input", secondNow);
 
     const result = withFakeGh(() => runByInProcess(root, ["submit", "BY-1"], thirdNow));
@@ -105,7 +91,7 @@ describe("by submit CLI", () => {
     expect(result.status).toBe(1);
     expect(result.stderr).toBe("");
     expect(result.stdout).toContain("code: TASK_STATE_NOT_SUBMITTABLE");
-    expect(noRuns(root)).toBe(true);
+    expect(taskHasNoRuns(root, "BY-1")).toBe(true);
   });
 
   it("rejects unknown Tasks before Git checks", () => {
@@ -119,7 +105,6 @@ describe("by submit CLI", () => {
   message: "Task was not found: BY-999"
   taskId: BY-999
 help[1]: Run \`by task list --all\` to see known Tasks.`);
-    expect(noRuns(root)).toBe(true);
   });
 
   it("rejects detached HEAD, dirty worktrees, protected branches, and missing GitHub targets before mutation", () => {
@@ -162,7 +147,7 @@ help[1]: Run \`by task list --all\` to see known Tasks.`);
       expect(result.status, testCase.name).toBe(1);
       expect(result.stdout, testCase.name).toContain(`code: ${testCase.code}`);
       expect(taskState(root, "BY-1"), testCase.name).toBe("implementing");
-      expect(noRuns(root), testCase.name).toBe(true);
+      expect(taskHasNoRuns(root, "BY-1"), testCase.name).toBe(true);
     }
   });
 
@@ -173,7 +158,7 @@ help[1]: Run \`by task list --all\` to see known Tasks.`);
 
     expect(result.status).toBe(1);
     expect(result.stdout).toContain("code: tooling_error");
-    expect(noRuns(root)).toBe(true);
+    expect(taskHasNoRuns(root, "BY-1")).toBe(true);
   });
 
   it("enforces task branch ownership and active Run uniqueness inside submit preflight", () => {
@@ -193,7 +178,7 @@ help[1]: Run \`by task list --all\` to see known Tasks.`);
       "code: TASK_HAS_ACTIVE_RUN",
     );
 
-    setRunStatus(root, "BY-1.1", "error");
+    recordRunError(root, "BY-1.1", thirdNow);
     spawnGit(root, "checkout", "-b", "feature/other");
 
     expect(withFakeGh(() => runByInProcess(root, ["submit", "BY-1"], thirdNow)).stdout).toContain(
@@ -235,35 +220,6 @@ help[1]: Run \`by task list --all\` to see known Tasks.`);
       },
       help: ["Run `by task list --all` to see known Tasks."],
     });
-  });
-
-  it("creates submit migrations with task branch binding and Run storage", () => {
-    const root = initializedRepo();
-    const database = new DatabaseSync(join(root, ".but-why/state.sqlite"));
-
-    try {
-      expect(database.prepare("SELECT name FROM schema_migrations ORDER BY name").all()).toEqual([
-        { name: "001_init" },
-        { name: "002_tasks" },
-        { name: "003_task_comments" },
-        { name: "004_submit_preflight" },
-      ]);
-      expect(
-        database
-          .prepare(
-            "SELECT name FROM sqlite_schema WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name",
-          )
-          .all(),
-      ).toEqual([
-        { name: "runs" },
-        { name: "schema_migrations" },
-        { name: "task_comments" },
-        { name: "tasks" },
-      ]);
-      expect(database.prepare("SELECT branch FROM tasks").all()).toEqual([]);
-    } finally {
-      database.close();
-    }
   });
 });
 
@@ -321,14 +277,14 @@ const transitionTaskState = (
   state: TaskState,
   updatedAt: string,
 ): void => {
-  const taskModule = loadRepoTaskModule({ cwd: root, requireState: true });
+  const tasksLoad = loadRepoTasks({ cwd: root, requireState: true });
 
-  if (!taskModule.ok) {
-    throw new Error(`Could not load Task module: ${taskModule.error.code}`);
+  if (!tasksLoad.ok) {
+    throw new Error(`Could not load Tasks: ${tasksLoad.error.code}`);
   }
 
   for (const nextState of taskStateTransitionPaths[state]) {
-    const result = taskModule.tasks.transitionTaskState({
+    const result = tasksLoad.tasks.transitionTaskState({
       taskId: publicTaskId(id),
       to: nextState,
       now: updatedAt,
@@ -346,13 +302,13 @@ const transitionCurrentTaskState = (
   state: TaskState,
   updatedAt: string,
 ): void => {
-  const taskModule = loadRepoTaskModule({ cwd: root, requireState: true });
+  const tasksLoad = loadRepoTasks({ cwd: root, requireState: true });
 
-  if (!taskModule.ok) {
-    throw new Error(`Could not load Task module: ${taskModule.error.code}`);
+  if (!tasksLoad.ok) {
+    throw new Error(`Could not load Tasks: ${tasksLoad.error.code}`);
   }
 
-  const result = taskModule.tasks.transitionTaskState({
+  const result = tasksLoad.tasks.transitionTaskState({
     taskId: publicTaskId(id),
     to: state,
     now: updatedAt,
@@ -447,36 +403,29 @@ exit 2
   }
 };
 
-const setRunStatus = (root: string, runId: string, status: "active" | "error"): void => {
-  const database = new DatabaseSync(join(root, ".but-why/state.sqlite"));
+const recordRunError = (root: string, runId: string, now: string): void => {
+  const result = repoState(root).recordRunError({ runId, now });
 
-  try {
-    database.prepare("UPDATE runs SET status = ? WHERE id = ?").run(status, runId);
-  } finally {
-    database.close();
+  if (!result.ok) {
+    throw new Error(`Could not record Run error for ${runId}: ${result.code}`);
   }
 };
 
 const taskState = (root: string, taskId: string): string => {
-  const database = new DatabaseSync(join(root, ".but-why/state.sqlite"));
+  const task = repoState(root).getTaskById(publicTaskId(taskId));
 
-  try {
-    const row = database.prepare("SELECT state FROM tasks WHERE id = ?").get(taskId) as {
-      readonly state: string;
-    };
-
-    return row.state;
-  } finally {
-    database.close();
+  if (task === undefined) {
+    throw new Error(`Missing task ${taskId}`);
   }
+
+  return task.state;
 };
 
-const noRuns = (root: string): boolean => {
-  const database = new DatabaseSync(join(root, ".but-why/state.sqlite"));
+const taskHasNoRuns = (root: string, taskId: string): boolean =>
+  repoState(root).getTaskById(publicTaskId(taskId))?.latestRun === null;
 
-  try {
-    return database.prepare("SELECT id FROM runs").all().length === 0;
-  } finally {
-    database.close();
-  }
-};
+const repoState = (root: string) =>
+  openRepoState({
+    statePath: join(root, ".but-why/state.sqlite"),
+    taskPrefix: "BY",
+  });

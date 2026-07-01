@@ -1,5 +1,11 @@
 import type { CliEnvironment, CliResult } from "../cli.js";
-import { structuredError, type StructuredErrorInput } from "../cliError.js";
+import {
+  repoStateLoadError,
+  runtimeError,
+  stateStoreUnavailable,
+  success,
+  usageError,
+} from "../cliResults.js";
 import { withGlobalHelpFlags } from "../cliHelp.js";
 import type { StructuredObject, StructuredValue } from "../output/structured.js";
 import { readCommentFile, type CommentFileReadError } from "./commentFile.js";
@@ -11,11 +17,7 @@ import {
   type TaskState,
   type TaskSummary,
 } from "./task.js";
-import {
-  loadRepoTaskModule,
-  type RepoTaskModule,
-  type UnstartableTaskState,
-} from "./taskModule.js";
+import { loadRepoTasks, type RepoTasks, type UnstartableTaskState } from "./repoTasks.js";
 import { hasPublicTaskIdShape, publicTaskId, type PublicTaskId } from "./taskId.js";
 
 export const routeTask = (args: readonly string[], environment: CliEnvironment): CliResult => {
@@ -69,14 +71,14 @@ export const dashboard = (
   description: string,
   environment: CliEnvironment,
 ): CliResult => {
-  const taskModule = loadTaskModule(environment.cwd, true);
+  const tasksLoad = loadTasks(environment.cwd, true);
 
-  if (!taskModule.ok) {
-    return taskModule.result;
+  if (!tasksLoad.ok) {
+    return tasksLoad.result;
   }
 
   try {
-    const tasks = taskModule.tasks.listActionableTasks();
+    const tasks = tasksLoad.tasks.listActionableTasks();
 
     return success({
       bin,
@@ -86,7 +88,7 @@ export const dashboard = (
       ...(tasks.length === 0 ? { help: [createTaskHelp] } : {}),
     });
   } catch {
-    return stateStoreUnavailable(taskModule.tasks.taskPrefix);
+    return stateStoreUnavailable(tasksLoad.tasks.taskPrefix);
   }
 };
 
@@ -140,10 +142,10 @@ const routeTaskCreate = (args: readonly string[], environment: CliEnvironment): 
     });
   }
 
-  const taskModule = loadTaskModule(environment.cwd, true);
+  const tasksLoad = loadTasks(environment.cwd, true);
 
-  if (!taskModule.ok) {
-    return taskModule.result;
+  if (!tasksLoad.ok) {
+    return tasksLoad.result;
   }
 
   const description = readDescriptionFile(environment.cwd, parseResult.descriptionFile);
@@ -153,7 +155,7 @@ const routeTaskCreate = (args: readonly string[], environment: CliEnvironment): 
   }
 
   try {
-    const task = taskModule.tasks.createTask({
+    const task = tasksLoad.tasks.createTask({
       title,
       description: description.content,
       now: environment.now().toISOString(),
@@ -164,7 +166,7 @@ const routeTaskCreate = (args: readonly string[], environment: CliEnvironment): 
       help: ["Run `by task list` to see open tasks."],
     });
   } catch {
-    return stateStoreUnavailable(taskModule.tasks.taskPrefix);
+    return stateStoreUnavailable(tasksLoad.tasks.taskPrefix);
   }
 };
 
@@ -192,14 +194,14 @@ const routeTaskList = (args: readonly string[], environment: CliEnvironment): Cl
     return parseResult.result;
   }
 
-  const taskModule = loadTaskModule(environment.cwd, true);
+  const tasksLoad = loadTasks(environment.cwd, true);
 
-  if (!taskModule.ok) {
-    return taskModule.result;
+  if (!tasksLoad.ok) {
+    return tasksLoad.result;
   }
 
   try {
-    const tasks = taskModule.tasks.listTasks({
+    const tasks = tasksLoad.tasks.listTasks({
       includeDone: parseResult.all || parseResult.state !== undefined,
       ...(parseResult.state === undefined ? {} : { state: parseResult.state }),
     });
@@ -210,7 +212,7 @@ const routeTaskList = (args: readonly string[], environment: CliEnvironment): Cl
       ...(tasks.length === 0 ? { help: [createTaskHelp] } : {}),
     });
   } catch {
-    return stateStoreUnavailable(taskModule.tasks.taskPrefix);
+    return stateStoreUnavailable(tasksLoad.tasks.taskPrefix);
   }
 };
 
@@ -313,24 +315,24 @@ const routeTaskComment = (args: readonly string[], environment: CliEnvironment):
     });
   }
 
-  const taskModule = loadTaskModule(environment.cwd, true);
+  const tasksLoad = loadTasks(environment.cwd, true);
 
-  if (!taskModule.ok) {
-    return taskModule.result;
+  if (!tasksLoad.ok) {
+    return tasksLoad.result;
   }
 
-  const taskId = taskModule.tasks.resolveTaskId(parseResult.taskId);
+  const taskId = tasksLoad.tasks.resolveTaskId(parseResult.taskId);
 
   if (!taskId.ok) {
     return invalidTaskId(parseResult.taskId, taskId.expectedFormat, taskId.help).result;
   }
 
   try {
-    if (taskModule.tasks.getTaskById(taskId.taskId) === undefined) {
+    if (tasksLoad.tasks.getTaskById(taskId.taskId) === undefined) {
       return taskNotFound(taskId.taskId);
     }
   } catch {
-    return stateStoreUnavailable(taskModule.tasks.taskPrefix);
+    return stateStoreUnavailable(tasksLoad.tasks.taskPrefix);
   }
 
   if (parseResult.commentFile === "-") {
@@ -348,7 +350,7 @@ const routeTaskComment = (args: readonly string[], environment: CliEnvironment):
   }
 
   try {
-    const result = taskModule.tasks.appendTaskComment({
+    const result = tasksLoad.tasks.appendTaskComment({
       taskId: taskId.taskId,
       content: comment.content,
       now: () => environment.now().toISOString(),
@@ -365,7 +367,7 @@ const routeTaskComment = (args: readonly string[], environment: CliEnvironment):
       },
     });
   } catch {
-    return stateStoreUnavailable(taskModule.tasks.taskPrefix);
+    return stateStoreUnavailable(tasksLoad.tasks.taskPrefix);
   }
 };
 
@@ -424,7 +426,7 @@ const routeResolvedTaskId = (
   args: readonly string[],
   environment: CliEnvironment,
   usage: string,
-  route: (tasks: RepoTaskModule, taskId: PublicTaskId) => CliResult,
+  route: (tasks: RepoTasks, taskId: PublicTaskId) => CliResult,
 ): CliResult => {
   const taskIdShape = parseTaskIdShape(args, usage);
 
@@ -432,19 +434,19 @@ const routeResolvedTaskId = (
     return taskIdShape.result;
   }
 
-  const taskModule = loadTaskModule(environment.cwd, false);
+  const tasksLoad = loadTasks(environment.cwd, false);
 
-  if (!taskModule.ok) {
-    return taskModule.result;
+  if (!tasksLoad.ok) {
+    return tasksLoad.result;
   }
 
-  const taskId = taskModule.tasks.resolveTaskId(taskIdShape.taskId);
+  const taskId = tasksLoad.tasks.resolveTaskId(taskIdShape.taskId);
 
   if (!taskId.ok) {
     return invalidTaskId(taskIdShape.taskId, taskId.expectedFormat, taskId.help).result;
   }
 
-  return route(taskModule.tasks, taskId.taskId);
+  return route(tasksLoad.tasks, taskId.taskId);
 };
 
 type TaskIdArgParseResult =
@@ -712,39 +714,24 @@ const invalidTaskState = (state: string): TaskListArgsParseResult => ({
   }),
 });
 
-type TaskModuleLoadResult =
+type TasksLoadResult =
   | {
       readonly ok: true;
-      readonly tasks: RepoTaskModule;
+      readonly tasks: RepoTasks;
     }
   | {
       readonly ok: false;
       readonly result: CliResult;
     };
 
-const loadTaskModule = (cwd: string, requireState: boolean): TaskModuleLoadResult => {
-  const result = loadRepoTaskModule({ cwd, requireState });
+const loadTasks = (cwd: string, requireState: boolean): TasksLoadResult => {
+  const result = loadRepoTasks({ cwd, requireState });
 
   if (result.ok) {
     return result;
   }
 
-  switch (result.error.code) {
-    case "not_initialized":
-      return { ok: false, result: notInitialized() };
-    case "invalid_repo_config":
-      return {
-        ok: false,
-        result: runtimeError({
-          code: "invalid_repo_config",
-          message: ".but-why/config.json is not valid But Why? repo config.",
-          details: { path: ".but-why/config.json" },
-          help: ["Fix the JSON or run `by init --task-prefix <prefix>` after moving it aside."],
-        }),
-      };
-    case "state_store_unavailable":
-      return { ok: false, result: stateStoreUnavailable(result.error.taskPrefix) };
-  }
+  return { ok: false, result: repoStateLoadError(result.error) };
 };
 
 const taskHelpView = (): StructuredObject => ({
@@ -858,24 +845,6 @@ const descriptionFileError = (error: DescriptionFileReadError): CliResult => {
   }
 };
 
-const notInitialized = (): CliResult =>
-  runtimeError({
-    code: "not_initialized",
-    message: "This workspace is not initialized for But Why?.",
-    help: ["Run `by init --task-prefix BY` in the repository root."],
-  });
-
-const stateStoreUnavailable = (taskPrefix: string | undefined): CliResult =>
-  runtimeError({
-    code: "state_store_unavailable",
-    message: "Repo-local But Why? state is unavailable.",
-    help: [
-      taskPrefix === undefined
-        ? "Move or restore .but-why/state.sqlite, then run `by init --task-prefix <prefix>`."
-        : `Move or restore .but-why/state.sqlite, then run \`by init --task-prefix ${taskPrefix}\`.`,
-    ],
-  });
-
 const taskNotFound = (taskId: string): CliResult =>
   runtimeError({
     code: "task_not_found",
@@ -904,20 +873,3 @@ const invalidTaskStartHelp = (taskId: PublicTaskId, state: UnstartableTaskState)
 
 const startTaskNextAction = (taskId: string): string =>
   `Implement the task, then run by submit ${taskId}`;
-
-const success = (stdout: StructuredObject): CliResult => ({
-  exitCode: 0,
-  stdout,
-});
-
-const usageError = (input: ErrorInput): CliResult => ({
-  exitCode: 2,
-  stdout: structuredError(input),
-});
-
-const runtimeError = (input: ErrorInput): CliResult => ({
-  exitCode: 1,
-  stdout: structuredError(input),
-});
-
-type ErrorInput = StructuredErrorInput;

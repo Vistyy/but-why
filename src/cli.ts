@@ -2,19 +2,15 @@ import { homedir } from "node:os";
 import { resolve, sep } from "node:path";
 import { Effect, Schema } from "effect";
 
-import { structuredError, structuredUsageErrorResult as usageError } from "./cliError.js";
 import { withGlobalHelpFlags } from "./cliHelp.js";
 import { selectOutput } from "./cliOutputSelection.js";
+import { runtimeError, success, type CliResult, usageError } from "./cliResults.js";
 import { initRepoLocalContext } from "./init/repoContext.js";
 import type { OutputFormat, StructuredObject } from "./output/structured.js";
 import { routeSubmit } from "./submit/submitCli.js";
 import { dashboard, routeTask } from "./task/taskCli.js";
 
-export type CliResult = {
-  readonly exitCode: 0 | 1 | 2;
-  readonly stdout: StructuredObject;
-  readonly outputFormat?: OutputFormat;
-};
+export type { CliResult } from "./cliResults.js";
 
 export type CliEnvironment = {
   readonly executablePath: string;
@@ -88,25 +84,24 @@ const routeCommandArgs = (args: readonly string[], environment: CliEnvironment):
     return usageError({
       code: "unknown_flag",
       message: `Unknown flag: ${firstArg}`,
-      help: "Run `by --help`",
+      help: ["Run `by --help`"],
     });
   }
 
   return usageError({
     code: "unknown_command",
     message: `Unknown command: ${firstArg ?? ""}`,
-    help: "Run `by --help`",
+    help: ["Run `by --help`"],
   });
 };
 
 export const mapRuntimeError = (outputFormat: OutputFormat = "toon"): CliResult => ({
-  exitCode: 1,
-  outputFormat,
-  stdout: structuredError({
+  ...runtimeError({
     code: "internal_error",
     message: "The command failed unexpectedly",
     help: ["Report this failure with the command and workspace path"],
   }),
+  outputFormat,
 });
 
 export const collapseHome = (executablePath: string): string => {
@@ -180,7 +175,7 @@ const routeInit = (args: readonly string[], environment: CliEnvironment): CliRes
     return usageError({
       code: "missing_task_prefix",
       message: "--task-prefix is required in non-interactive init.",
-      help: "Run by init --task-prefix BY.",
+      help: ["Run by init --task-prefix BY."],
     });
   }
 
@@ -189,60 +184,45 @@ const routeInit = (args: readonly string[], environment: CliEnvironment): CliRes
   if (!initResult.ok) {
     switch (initResult.error.code) {
       case "invalid_task_prefix":
-        return {
-          exitCode: 2,
-          stdout: structuredError({
-            code: "invalid_task_prefix",
-            message: "Task prefix must match ^[A-Z][A-Z0-9]{1,9}$.",
-            details: { taskPrefix: initResult.error.taskPrefix },
-            help: ["Use 2 to 10 uppercase letters or digits, starting with a letter, such as BY."],
-          }),
-        };
+        return usageError({
+          code: "invalid_task_prefix",
+          message: "Task prefix must match ^[A-Z][A-Z0-9]{1,9}$.",
+          details: { taskPrefix: initResult.error.taskPrefix },
+          help: ["Use 2 to 10 uppercase letters or digits, starting with a letter, such as BY."],
+        });
       case "not_git_work_tree":
-        return {
-          exitCode: 1,
-          stdout: structuredError({
-            code: "not_git_work_tree",
-            message: "by init must be run inside a Git work tree.",
-            help: ["Run git init first, or cd into an existing Git repository."],
-          }),
-        };
+        return runtimeError({
+          code: "not_git_work_tree",
+          message: "by init must be run inside a Git work tree.",
+          help: ["Run git init first, or cd into an existing Git repository."],
+        });
       case "invalid_repo_config":
-        return {
-          exitCode: 1,
-          stdout: structuredError({
-            code: "invalid_repo_config",
-            message: ".but-why/config.json is not valid But Why? repo config.",
-            details: { path: ".but-why/config.json" },
-            help: ["Fix the JSON or move the file aside before running init again."],
-          }),
-        };
+        return runtimeError({
+          code: "invalid_repo_config",
+          message: ".but-why/config.json is not valid But Why? repo config.",
+          details: { path: ".but-why/config.json" },
+          help: ["Fix the JSON or move the file aside before running init again."],
+        });
       case "task_prefix_conflict":
-        return {
-          exitCode: 1,
-          stdout: structuredError({
-            code: "task_prefix_conflict",
-            message: `Repository is already initialized with task prefix ${initResult.error.existingTaskPrefix}.`,
-            details: {
-              path: ".but-why/config.json",
-              existingTaskPrefix: initResult.error.existingTaskPrefix,
-              requestedTaskPrefix: initResult.error.requestedTaskPrefix,
-            },
-            help: [
-              `Keep using ${initResult.error.existingTaskPrefix}, or manually migrate .but-why/config.json before running init again.`,
-            ],
-          }),
-        };
+        return runtimeError({
+          code: "task_prefix_conflict",
+          message: `Repository is already initialized with task prefix ${initResult.error.existingTaskPrefix}.`,
+          details: {
+            path: ".but-why/config.json",
+            existingTaskPrefix: initResult.error.existingTaskPrefix,
+            requestedTaskPrefix: initResult.error.requestedTaskPrefix,
+          },
+          help: [
+            `Keep using ${initResult.error.existingTaskPrefix}, or manually migrate .but-why/config.json before running init again.`,
+          ],
+        });
       case "invalid_repo_state":
-        return {
-          exitCode: 1,
-          stdout: structuredError({
-            code: "invalid_repo_state",
-            message: `${initResult.error.path} must be a ${initResult.error.expected}.`,
-            details: { path: initResult.error.path },
-            help: ["Move the conflicting path aside before running init again."],
-          }),
-        };
+        return runtimeError({
+          code: "invalid_repo_state",
+          message: `${initResult.error.path} must be a ${initResult.error.expected}.`,
+          details: { path: initResult.error.path },
+          help: ["Move the conflicting path aside before running init again."],
+        });
     }
   }
 
@@ -291,7 +271,7 @@ const parseInitArgs = (args: readonly string[]): InitArgsParseResult => {
         result: usageError({
           code: "unknown_flag",
           message: `Unknown flag: ${arg}`,
-          help: "Run `by init --task-prefix BY`",
+          help: ["Run `by init --task-prefix BY`"],
         }),
       };
     }
@@ -301,15 +281,10 @@ const parseInitArgs = (args: readonly string[]): InitArgsParseResult => {
       result: usageError({
         code: "unknown_argument",
         message: `Unknown argument: ${arg ?? ""}`,
-        help: "Run `by init --task-prefix BY`",
+        help: ["Run `by init --task-prefix BY`"],
       }),
     };
   }
 
   return { ok: true, taskPrefix };
 };
-
-const success = (stdout: StructuredObject): CliResult => ({
-  exitCode: 0,
-  stdout,
-});

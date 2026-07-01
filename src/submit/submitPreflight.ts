@@ -1,51 +1,43 @@
 import { existsSync } from "node:fs";
 
 import {
-  exampleTaskId,
-  expectedTaskIdFormat,
-  isPublicTaskIdForPrefix,
   loadRepoLocalContext,
   type LoadRepoLocalContextError,
   type RepoLocalContext,
 } from "../init/repoContext.js";
-import { isSubmittableTaskState, type TaskState } from "../task/task.js";
+import type { GitHubPrTarget } from "../run/run.js";
+import type { TaskState } from "../task/task.js";
+import { resolveRepoTaskId, type RepoTaskIdResolution } from "../task/repoTaskIds.js";
 import type { PublicTaskId } from "../task/taskId.js";
-import { readGitFacts } from "./gitPreflight.js";
-import { detectGitHubPrTarget, protectedBranchNames, type GitHubPrTarget } from "./githubTarget.js";
-import { openDurableSubmitState, type DurableSubmitState } from "./submitStore.js";
+import { openRepoState, type RepoState } from "../repoState.js";
+import { readGitFacts } from "./gitFacts.js";
+import { detectGitHubPrTarget, protectedBranchNames } from "./githubTarget.js";
 
-export type RepoSubmitModule = {
+/**
+ * Future validation workspace code should call this module after implementation work is complete.
+ * This module owns submit preflight policy and asks durable Task state to create Runs transactionally.
+ */
+export type RepoSubmitPreflight = {
   readonly taskPrefix: string;
-  readonly resolveTaskId: (taskId: PublicTaskId) => SubmitTaskIdResolution;
+  readonly resolveTaskId: (taskId: PublicTaskId) => RepoTaskIdResolution;
   readonly submitTask: (input: SubmitTaskInput) => SubmitTaskResult;
 };
 
-export type LoadRepoSubmitModuleResult =
+export type LoadRepoSubmitPreflightResult =
   | {
       readonly ok: true;
-      readonly submit: RepoSubmitModule;
+      readonly submit: RepoSubmitPreflight;
     }
   | {
       readonly ok: false;
-      readonly error: LoadRepoSubmitModuleError;
+      readonly error: LoadRepoSubmitPreflightError;
     };
 
-export type LoadRepoSubmitModuleError =
+export type LoadRepoSubmitPreflightError =
   | LoadRepoLocalContextError
   | {
       readonly code: "state_store_unavailable";
       readonly taskPrefix: string;
-    };
-
-export type SubmitTaskIdResolution =
-  | {
-      readonly ok: true;
-      readonly taskId: PublicTaskId;
-    }
-  | {
-      readonly ok: false;
-      readonly expectedFormat: string;
-      readonly help: string;
     };
 
 export type SubmitTaskInput = {
@@ -89,7 +81,7 @@ export type SubmitPreflightRejectionCode =
   | "TASK_BRANCH_MISMATCH"
   | "TASK_HAS_ACTIVE_RUN";
 
-export const loadRepoSubmitModule = (cwd: string): LoadRepoSubmitModuleResult => {
+export const loadRepoSubmitPreflight = (cwd: string): LoadRepoSubmitPreflightResult => {
   const repoContext = loadRepoLocalContext(cwd);
 
   if (!repoContext.ok) {
@@ -108,43 +100,33 @@ export const loadRepoSubmitModule = (cwd: string): LoadRepoSubmitModuleResult =>
 
   return {
     ok: true,
-    submit: repoSubmitModule(repoContext.context),
+    submit: repoSubmitPreflight(repoContext.context),
   };
 };
 
-const repoSubmitModule = (context: RepoLocalContext): RepoSubmitModule => {
-  const state = openDurableSubmitState({ statePath: context.paths.statePath });
+const repoSubmitPreflight = (context: RepoLocalContext): RepoSubmitPreflight => {
+  const state = openRepoState({
+    statePath: context.paths.statePath,
+    taskPrefix: context.taskPrefix,
+  });
 
   return {
     taskPrefix: context.taskPrefix,
-    resolveTaskId: (taskId) => resolveTaskIdForContext(context, taskId),
+    resolveTaskId: (taskId) => resolveRepoTaskId(context, taskId),
     submitTask: (input) => submitTask(context.root, state, input),
   };
 };
 
-const submitTask = (
-  root: string,
-  state: DurableSubmitState,
-  input: SubmitTaskInput,
-): SubmitTaskResult => {
-  const task = state.getTaskForSubmit(input.taskId);
+const submitTask = (root: string, state: RepoState, input: SubmitTaskInput): SubmitTaskResult => {
+  const readiness = state.getTaskSubmitReadiness(input.taskId);
 
-  if (task === undefined) {
+  if (!readiness.ok) {
     return {
       ok: false,
       kind: "preflight_rejection",
-      code: "TASK_NOT_FOUND",
+      code: readiness.code,
       taskId: input.taskId,
-    };
-  }
-
-  if (!isSubmittableTaskState(task.state)) {
-    return {
-      ok: false,
-      kind: "preflight_rejection",
-      code: "TASK_STATE_NOT_SUBMITTABLE",
-      taskId: input.taskId,
-      state: task.state,
+      ...(readiness.code === "TASK_STATE_NOT_SUBMITTABLE" ? { state: readiness.state } : {}),
     };
   }
 
@@ -198,7 +180,7 @@ const submitTask = (
     };
   }
 
-  const createRun = state.createRunFromPreflight({
+  const createRun = state.createRunFromSubmitPreflight({
     taskId: input.taskId,
     branch: gitFacts.facts.branch,
     commitSha: gitFacts.facts.commitSha,
@@ -228,19 +210,4 @@ const submitTask = (
     taskState: createRun.taskState,
     prTarget: prTarget.target,
   };
-};
-
-const resolveTaskIdForContext = (
-  context: RepoLocalContext,
-  taskId: PublicTaskId,
-): SubmitTaskIdResolution => {
-  if (!isPublicTaskIdForPrefix(taskId, context.taskPrefix)) {
-    return {
-      ok: false,
-      expectedFormat: expectedTaskIdFormat(context.taskPrefix),
-      help: `Use a public Task ID such as ${exampleTaskId(context.taskPrefix)}.`,
-    };
-  }
-
-  return { ok: true, taskId };
 };
