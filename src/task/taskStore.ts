@@ -88,6 +88,8 @@ const taskRecordColumns = [
   "description",
   "state",
   ...taskTimestampColumns,
+  "branch",
+  "(SELECT id FROM runs WHERE task_id = tasks.id ORDER BY task_run_number DESC LIMIT 1) AS latestRun",
   "(SELECT COUNT(*) FROM task_comments WHERE task_id = tasks.id) AS commentCount",
 ].join(", ");
 
@@ -402,6 +404,8 @@ const rowToTaskRecord = (row: unknown): TaskRecord => {
   return {
     ...rowToTaskSummary(row),
     description: row.description,
+    branch: row.branch,
+    latestRun: row.latestRun,
     commentCount: Number(row.commentCount),
   };
 };
@@ -452,6 +456,8 @@ type TaskSummaryRow = TaskSummary;
 
 type TaskRecordRow = TaskSummary & {
   readonly description: string;
+  readonly branch: string | null;
+  readonly latestRun: string | null;
   readonly commentCount: number | bigint;
 };
 
@@ -482,6 +488,8 @@ const isTaskSummaryRow = (value: unknown): value is TaskSummaryRow =>
 const isTaskRecordRow = (value: unknown): value is TaskRecordRow =>
   isTaskSummaryRow(value) &&
   typeof (value as { readonly description?: unknown }).description === "string" &&
+  isNullableString((value as { readonly branch?: unknown }).branch) &&
+  isNullableString((value as { readonly latestRun?: unknown }).latestRun) &&
   isCount((value as { readonly commentCount?: unknown }).commentCount);
 
 const isTaskContextHeaderRow = (value: unknown): value is TaskContextHeaderRow =>
@@ -503,3 +511,6 @@ const isCommentCountRow = (value: unknown): value is CommentCountRow =>
 
 const isCount = (value: unknown): value is number | bigint =>
   typeof value === "number" || typeof value === "bigint";
+
+const isNullableString = (value: unknown): value is string | null =>
+  value === null || typeof value === "string";

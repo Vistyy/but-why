@@ -7,6 +7,7 @@ import { withGlobalHelpFlags } from "./cliHelp.js";
 import { selectOutput } from "./cliOutputSelection.js";
 import { initRepoLocalContext } from "./init/repoContext.js";
 import type { OutputFormat, StructuredObject } from "./output/structured.js";
+import { routeSubmit } from "./submit/submitCli.js";
 import { dashboard, routeTask } from "./task/taskCli.js";
 
 export type CliResult = {
@@ -79,6 +80,10 @@ const routeCommandArgs = (args: readonly string[], environment: CliEnvironment):
     return routeTask(args.slice(1), environment);
   }
 
+  if (firstArg === "submit") {
+    return routeSubmit(args.slice(1), environment);
+  }
+
   if (firstArg?.startsWith("-")) {
     return usageError({
       code: "unknown_flag",
@@ -140,6 +145,10 @@ const helpView = (bin: string): StructuredObject =>
       {
         command: "by task list [--all] [--state <state>]",
         description: "List repo-local Tasks",
+      },
+      {
+        command: "by submit <task-id>",
+        description: "Create a Run from submit preflight",
       },
     ],
     flags: withGlobalHelpFlags(),

@@ -58,6 +58,7 @@ help[1]: Run \`by task list\` to see open tasks.`);
           state: "todo",
           created_at: firstNow,
           updated_at: firstNow,
+          branch: null,
         },
       ]);
     } finally {
@@ -939,6 +940,7 @@ help[1]: "Move or restore .but-why/state.sqlite, then run \`by init --task-prefi
         { name: "001_init" },
         { name: "002_tasks" },
         { name: "003_task_comments" },
+        { name: "004_submit_preflight" },
       ]);
       expect(
         database
@@ -946,11 +948,16 @@ help[1]: "Move or restore .but-why/state.sqlite, then run \`by init --task-prefi
             "SELECT name FROM sqlite_schema WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name",
           )
           .all(),
-      ).toEqual([{ name: "schema_migrations" }, { name: "task_comments" }, { name: "tasks" }]);
+      ).toEqual([
+        { name: "runs" },
+        { name: "schema_migrations" },
+        { name: "task_comments" },
+        { name: "tasks" },
+      ]);
       expect(() =>
         database
-          .prepare("INSERT INTO tasks VALUES (?, ?, ?, ?, ?, ?, ?)")
-          .run("BY-1", 1, "Title", "Description", "blocked", firstNow, firstNow),
+          .prepare("INSERT INTO tasks VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
+          .run("BY-1", 1, "Title", "Description", "blocked", firstNow, firstNow, null),
       ).toThrow();
     } finally {
       database.close();

@@ -123,6 +123,7 @@ help[1]: Move the conflicting path aside before running init again.`);
         { name: "001_init" },
         { name: "002_tasks" },
         { name: "003_task_comments" },
+        { name: "004_submit_preflight" },
       ]);
     } finally {
       repairedDatabase.close();

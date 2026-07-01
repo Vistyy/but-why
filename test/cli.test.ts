@@ -40,11 +40,12 @@ help[1]: Run \`by init --task-prefix BY\` in the repository root.`);
     expect(result.stdout).toBe(`bin: ${expectedBin}
 description: Validate completed code changes against approved human intent.
 usage: "by [--output <format>] [command] [--help]"
-commands[4]{command,description}:
+commands[5]{command,description}:
   by,Show workspace task dashboard
   by init --task-prefix <prefix>,Create repo-local But Why? state
   by task create --title <title> --description-file <file>,Create a repo-local Task
   "by task list [--all] [--state <state>]",List repo-local Tasks
+  by submit <task-id>,Create a Run from submit preflight
 flags[3]{flag,description}:
   "--output <format>","Set stdout format: toon or json. Default: toon."
   "-o <format>","Alias for --output <format>. Valid values: toon, json."
@@ -73,6 +74,7 @@ flags[3]{flag,description}:
           description: "Create a repo-local Task",
         },
         { command: "by task list [--all] [--state <state>]", description: "List repo-local Tasks" },
+        { command: "by submit <task-id>", description: "Create a Run from submit preflight" },
       ],
       flags: [
         {
@@ -253,6 +255,7 @@ updated[1]: .gitignore`);
         { name: "001_init" },
         { name: "002_tasks" },
         { name: "003_task_comments" },
+        { name: "004_submit_preflight" },
       ]);
       expect(
         database
@@ -260,7 +263,12 @@ updated[1]: .gitignore`);
             "SELECT name FROM sqlite_schema WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name",
           )
           .all(),
-      ).toEqual([{ name: "schema_migrations" }, { name: "task_comments" }, { name: "tasks" }]);
+      ).toEqual([
+        { name: "runs" },
+        { name: "schema_migrations" },
+        { name: "task_comments" },
+        { name: "tasks" },
+      ]);
     } finally {
       database.close();
     }

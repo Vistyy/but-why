@@ -45,6 +45,41 @@ const migrations: readonly Migration[] = [
       ON task_comments (task_id, sequence)
     `,
   },
+  {
+    name: "004_submit_preflight",
+    apply: `
+      ALTER TABLE tasks ADD COLUMN branch TEXT;
+
+      CREATE UNIQUE INDEX IF NOT EXISTS tasks_branch_unique_idx
+      ON tasks (branch)
+      WHERE branch IS NOT NULL;
+
+      CREATE TABLE IF NOT EXISTS runs (
+        id TEXT NOT NULL UNIQUE,
+        task_id TEXT NOT NULL,
+        task_run_number INTEGER NOT NULL,
+        status TEXT NOT NULL CHECK (status IN ('active', 'error')),
+        branch TEXT NOT NULL,
+        commit_sha TEXT NOT NULL,
+        github_owner TEXT NOT NULL,
+        github_repo TEXT NOT NULL,
+        github_base_branch TEXT NOT NULL,
+        github_remote_name TEXT NOT NULL,
+        github_remote_url TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        FOREIGN KEY (task_id) REFERENCES tasks(id),
+        UNIQUE (task_id, task_run_number)
+      );
+
+      CREATE UNIQUE INDEX IF NOT EXISTS runs_active_task_unique_idx
+      ON runs (task_id)
+      WHERE status = 'active';
+
+      CREATE INDEX IF NOT EXISTS runs_task_id_number_idx
+      ON runs (task_id, task_run_number DESC)
+    `,
+  },
 ];
 
 export const ensureStateDatabase = (path: string): StateDatabaseChange => {
