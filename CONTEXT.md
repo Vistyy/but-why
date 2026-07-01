@@ -6,7 +6,9 @@ But Why? validates completed code changes against approved human intent and coor
 
 **Run**:
 A durable validation record for one commit SHA.
+A task can have only one active run at a time.
 A run can resume after a crash, but a new commit creates a successor run that may reuse prior results when policy allows.
+A terminal run may be followed by another run for the same commit when validation must be retried.
 _Avoid_: Job, pipeline run
 
 **Trigger**:
@@ -43,7 +45,13 @@ _Avoid_: Treating every non-done task as dashboard-actionable
 **Submission**:
 A completed code candidate handed to But Why? for validation.
 A submission is the normal trigger after an agent or human finishes implementing a task.
+A failed preflight rejection is not a submission because the candidate never entered validation.
 _Avoid_: Push, handoff, delivery
+
+**GitHub PR Target**:
+The GitHub repository and base branch where But Why? will eventually publish the task's PR.
+A GitHub PR target is usable only when But Why? can identify the repository, identify the base branch, and make an authenticated read request for that repository.
+_Avoid_: Remote, upstream, origin
 
 **Implementer**:
 The agent or human responsible for making the requested code change.
