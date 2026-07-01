@@ -32,6 +32,7 @@ export type RepoTaskModule = {
   readonly appendTaskComment: (
     input: AppendTaskCommentInput,
   ) => AppendTaskCommentResult | undefined;
+  readonly startTask: (taskId: PublicTaskId, now: string) => StartTaskResult;
   readonly transitionTaskState: (input: TransitionTaskStateInput) => TaskStateTransitionResult;
 };
 
@@ -91,6 +92,31 @@ export type TransitionTaskStateInput = {
   readonly now: string;
 };
 
+export const unstartableTaskStates = [
+  "validating",
+  "needs_input",
+  "ready",
+  "done",
+] as const satisfies readonly TaskState[];
+
+export type UnstartableTaskState = (typeof unstartableTaskStates)[number];
+
+export type StartTaskResult =
+  | {
+      readonly ok: true;
+      readonly changed: boolean;
+      readonly task: TaskRecord;
+    }
+  | {
+      readonly ok: false;
+      readonly code: "task_not_found";
+    }
+  | {
+      readonly ok: false;
+      readonly code: "invalid_task_state";
+      readonly state: UnstartableTaskState;
+    };
+
 export const loadRepoTaskModule = (input: LoadRepoTaskModuleInput): LoadRepoTaskModuleResult => {
   const repoContext = loadRepoLocalContext(input.cwd);
 
@@ -129,9 +155,41 @@ const repoTaskModule = (context: RepoLocalContext): RepoTaskModule => {
     getTaskById: state.getTaskById,
     getTaskContextById: state.getTaskContextById,
     appendTaskComment: state.appendTaskComment,
+    startTask: (taskId, now) => startTask(state.transitionTaskState, taskId, now),
     transitionTaskState: state.transitionTaskState,
   };
 };
+
+const startTask = (
+  transitionTaskState: RepoTaskModule["transitionTaskState"],
+  taskId: PublicTaskId,
+  now: string,
+): StartTaskResult => {
+  const result = transitionTaskState({ taskId, to: "implementing", now });
+
+  if (result.ok) {
+    return result;
+  }
+
+  if (result.code === "invalid_task_state_transition") {
+    if (!isUnstartableTaskState(result.from)) {
+      throw new Error(`Unexpected invalid Task start from ${result.from}`);
+    }
+
+    return {
+      ok: false,
+      code: "invalid_task_state",
+      state: result.from,
+    };
+  }
+
+  return result;
+};
+
+const unstartableTaskStateSet = new Set<TaskState>(unstartableTaskStates);
+
+const isUnstartableTaskState = (state: TaskState): state is UnstartableTaskState =>
+  unstartableTaskStateSet.has(state);
 
 const resolveTaskIdForContext = (
   context: RepoLocalContext,

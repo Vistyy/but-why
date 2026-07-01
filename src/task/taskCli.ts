@@ -11,7 +11,11 @@ import {
   type TaskState,
   type TaskSummary,
 } from "./task.js";
-import { loadRepoTaskModule, type RepoTaskModule } from "./taskModule.js";
+import {
+  loadRepoTaskModule,
+  type RepoTaskModule,
+  type UnstartableTaskState,
+} from "./taskModule.js";
 import { hasPublicTaskIdShape, publicTaskId, type PublicTaskId } from "./taskId.js";
 
 export const routeTask = (args: readonly string[], environment: CliEnvironment): CliResult => {
@@ -31,6 +35,10 @@ export const routeTask = (args: readonly string[], environment: CliEnvironment):
 
   if (subcommand === "show") {
     return routeTaskShow(args.slice(1), environment);
+  }
+
+  if (subcommand === "start") {
+    return routeTaskStart(args.slice(1), environment);
   }
 
   if (subcommand === "context") {
@@ -228,6 +236,38 @@ const routeTaskShow = (args: readonly string[], environment: CliEnvironment): Cl
   );
 };
 
+const routeTaskStart = (args: readonly string[], environment: CliEnvironment): CliResult => {
+  if (args.length === 1 && args[0] === "--help") {
+    return taskDetailHelp("by task start <task-id>", "by task start BY-1");
+  }
+
+  return routeResolvedTaskId(args, environment, "by task start <task-id>", (tasks, taskId) => {
+    try {
+      const result = tasks.startTask(taskId, environment.now().toISOString());
+
+      if (!result.ok) {
+        if (result.code === "task_not_found") {
+          return taskNotFound(taskId);
+        }
+
+        return invalidTaskStart(taskId, result.state);
+      }
+
+      return success({
+        task: {
+          id: result.task.id,
+          state: result.task.state,
+          changed: result.changed,
+          updatedAt: result.task.updatedAt,
+        },
+        next: startTaskNextAction(result.task.id),
+      });
+    } catch {
+      return stateStoreUnavailable(tasks.taskPrefix);
+    }
+  });
+};
+
 const routeTaskContextCommand = (
   args: readonly string[],
   environment: CliEnvironment,
@@ -347,6 +387,44 @@ const routeExistingTask = (
   environment: CliEnvironment,
   usage: string,
   render: (task: TaskRecord) => CliResult,
+): CliResult =>
+  routeResolvedTaskId(args, environment, usage, (tasks, taskId) => {
+    try {
+      const task = tasks.getTaskById(taskId);
+
+      if (task === undefined) {
+        return taskNotFound(taskId);
+      }
+
+      return render(task);
+    } catch {
+      return stateStoreUnavailable(tasks.taskPrefix);
+    }
+  });
+
+const routeExistingTaskContext = (
+  args: readonly string[],
+  environment: CliEnvironment,
+): CliResult =>
+  routeResolvedTaskId(args, environment, "by task context <task-id>", (tasks, taskId) => {
+    try {
+      const task = tasks.getTaskContextById(taskId);
+
+      if (task === undefined) {
+        return taskNotFound(taskId);
+      }
+
+      return success({ task });
+    } catch {
+      return stateStoreUnavailable(tasks.taskPrefix);
+    }
+  });
+
+const routeResolvedTaskId = (
+  args: readonly string[],
+  environment: CliEnvironment,
+  usage: string,
+  route: (tasks: RepoTaskModule, taskId: PublicTaskId) => CliResult,
 ): CliResult => {
   const taskIdShape = parseTaskIdShape(args, usage);
 
@@ -366,52 +444,7 @@ const routeExistingTask = (
     return invalidTaskId(taskIdShape.taskId, taskId.expectedFormat, taskId.help).result;
   }
 
-  try {
-    const task = taskModule.tasks.getTaskById(taskId.taskId);
-
-    if (task === undefined) {
-      return taskNotFound(taskId.taskId);
-    }
-
-    return render(task);
-  } catch {
-    return stateStoreUnavailable(taskModule.tasks.taskPrefix);
-  }
-};
-
-const routeExistingTaskContext = (
-  args: readonly string[],
-  environment: CliEnvironment,
-): CliResult => {
-  const taskIdShape = parseTaskIdShape(args, "by task context <task-id>");
-
-  if (!taskIdShape.ok) {
-    return taskIdShape.result;
-  }
-
-  const taskModule = loadTaskModule(environment.cwd, false);
-
-  if (!taskModule.ok) {
-    return taskModule.result;
-  }
-
-  const taskId = taskModule.tasks.resolveTaskId(taskIdShape.taskId);
-
-  if (!taskId.ok) {
-    return invalidTaskId(taskIdShape.taskId, taskId.expectedFormat, taskId.help).result;
-  }
-
-  try {
-    const task = taskModule.tasks.getTaskContextById(taskId.taskId);
-
-    if (task === undefined) {
-      return taskNotFound(taskId.taskId);
-    }
-
-    return success({ task });
-  } catch {
-    return stateStoreUnavailable(taskModule.tasks.taskPrefix);
-  }
+  return route(taskModule.tasks, taskId.taskId);
 };
 
 type TaskIdArgParseResult =
@@ -730,6 +763,10 @@ const taskHelpView = (): StructuredObject => ({
       description: "Show compact Task metadata",
     },
     {
+      command: "by task start <task-id>",
+      description: "Mark implementation work as started",
+    },
+    {
       command: "by task context <task-id>",
       description: "Show full Task Context",
     },
@@ -846,6 +883,27 @@ const taskNotFound = (taskId: string): CliResult =>
     details: { taskId },
     help: ["Run `by task list --all` to see known Tasks."],
   });
+
+const invalidTaskStart = (taskId: PublicTaskId, state: UnstartableTaskState): CliResult =>
+  runtimeError({
+    code: "invalid_task_state",
+    message: `Cannot start task ${taskId} from state ${state}`,
+    details: { taskId, state },
+    help: [invalidTaskStartHelp(taskId, state)],
+  });
+
+const invalidTaskStartHelpByState = {
+  validating: () => "Wait for validation to finish.",
+  needs_input: (taskId) => `Address findings or add Task Context, then run by submit ${taskId}.`,
+  ready: () => "Review and merge the pull request.",
+  done: () => "Task is already done.",
+} satisfies Record<UnstartableTaskState, (taskId: PublicTaskId) => string>;
+
+const invalidTaskStartHelp = (taskId: PublicTaskId, state: UnstartableTaskState): string =>
+  invalidTaskStartHelpByState[state](taskId);
+
+const startTaskNextAction = (taskId: string): string =>
+  `Implement the task, then run by submit ${taskId}`;
 
 const success = (stdout: StructuredObject): CliResult => ({
   exitCode: 0,

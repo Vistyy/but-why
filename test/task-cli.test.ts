@@ -20,6 +20,8 @@ const expectedBin = collapseHome(byExecutable);
 const firstNow = "2026-06-30T12:00:00.000Z";
 const secondNow = "2026-06-30T12:05:00.000Z";
 const thirdNow = "2026-06-30T12:10:00.000Z";
+const firstTaskStartNext = "Implement the task, then run by submit BY-1";
+const firstTaskStartNextToon = `"${firstTaskStartNext}"`;
 
 afterEach(cleanupTempRoots);
 
@@ -162,7 +164,7 @@ tasks[2]{id,title,state,createdAt,updatedAt}:
   BY-2,Second,todo,"${firstNow}","${firstNow}"`);
   });
 
-  it("transitions todo Tasks to implementing through the Task module idempotently", () => {
+  it("starts todo Tasks through the Task module idempotently", () => {
     const root = initializedRepo();
 
     createTask(root, firstNow, "Startable task");
@@ -172,22 +174,166 @@ tasks[2]{id,title,state,createdAt,updatedAt}:
       throw new Error(`Could not load Task module: ${taskModule.error.code}`);
     }
 
-    const firstTransition = taskModule.tasks.transitionTaskState({
-      taskId: publicTaskId("BY-1"),
-      to: "implementing",
-      now: secondNow,
-    });
-    const secondTransition = taskModule.tasks.transitionTaskState({
-      taskId: publicTaskId("BY-1"),
-      to: "implementing",
-      now: thirdNow,
-    });
+    const firstStart = taskModule.tasks.startTask(publicTaskId("BY-1"), secondNow);
+    const secondStart = taskModule.tasks.startTask(publicTaskId("BY-1"), thirdNow);
 
-    expect(firstTransition).toMatchObject({ ok: true, changed: true });
-    expect(secondTransition).toMatchObject({ ok: true, changed: false });
+    expect(firstStart).toMatchObject({ ok: true, changed: true });
+    expect(secondStart).toMatchObject({ ok: true, changed: false });
     expect(runByInProcess(root, ["task", "show", "BY-1"]).stdout).toContain(
       `state: implementing\n  createdAt: "${firstNow}"\n  updatedAt: "${secondNow}"`,
     );
+  });
+
+  it.each([
+    "validating",
+    "needs_input",
+    "ready",
+    "done",
+  ] as const)("rejects %s Task starts through the Task module with public state errors", (state) => {
+    const root = initializedRepo();
+
+    createTask(root, firstNow, "Invalid start");
+    transitionTaskState(root, "BY-1", state, secondNow);
+    const taskModule = loadRepoTaskModule({ cwd: root, requireState: true });
+
+    if (!taskModule.ok) {
+      throw new Error(`Could not load Task module: ${taskModule.error.code}`);
+    }
+
+    expect(taskModule.tasks.startTask(publicTaskId("BY-1"), thirdNow)).toEqual({
+      ok: false,
+      code: "invalid_task_state",
+      state,
+    });
+    expect(runByInProcess(root, ["task", "show", "BY-1"]).stdout).toContain(
+      `state: ${state}\n  createdAt: "${firstNow}"\n  updatedAt: "${secondNow}"`,
+    );
+  });
+
+  it("starts todo Tasks from the CLI and persists the implementing state", () => {
+    const root = initializedRepo();
+
+    createTask(root, firstNow, "CLI start");
+
+    const result = runByInProcess(root, ["task", "start", "BY-1"], secondNow);
+
+    expect(result.status).toBe(0);
+    expect(result.stderr).toBe("");
+    expect(result.stdout).toBe(`task:
+  id: BY-1
+  state: implementing
+  changed: true
+  updatedAt: "${secondNow}"
+next: ${firstTaskStartNextToon}`);
+    expect(runByInProcess(root, ["task", "show", "BY-1"]).stdout).toContain(
+      `state: implementing\n  createdAt: "${firstNow}"\n  updatedAt: "${secondNow}"`,
+    );
+  });
+
+  it("reports already implementing Task starts as no-ops without updating updatedAt", () => {
+    const root = initializedRepo();
+
+    createTask(root, firstNow, "No-op start");
+    transitionTaskState(root, "BY-1", "implementing", secondNow);
+
+    const result = runByInProcess(root, ["task", "start", "BY-1"], thirdNow);
+
+    expect(result.status).toBe(0);
+    expect(result.stderr).toBe("");
+    expect(result.stdout).toBe(`task:
+  id: BY-1
+  state: implementing
+  changed: false
+  updatedAt: "${secondNow}"
+next: ${firstTaskStartNextToon}`);
+    expect(runByInProcess(root, ["task", "show", "BY-1"]).stdout).toContain(
+      `state: implementing\n  createdAt: "${firstNow}"\n  updatedAt: "${secondNow}"`,
+    );
+  });
+
+  it("serializes Task start success as compact JSON", () => {
+    const root = initializedRepo();
+
+    createTask(root, firstNow, "JSON start");
+
+    const result = runByInProcess(root, ["task", "start", "BY-1", "--output", "json"], secondNow);
+
+    expect(result.status).toBe(0);
+    expect(result.stderr).toBe("");
+    expect(JSON.parse(result.stdout)).toEqual({
+      task: {
+        id: "BY-1",
+        state: "implementing",
+        changed: true,
+        updatedAt: secondNow,
+      },
+      next: firstTaskStartNext,
+    });
+  });
+
+  it("serializes invalid Task start errors as JSON", () => {
+    const root = initializedRepo();
+
+    createTask(root, firstNow, "Invalid JSON start");
+    transitionTaskState(root, "BY-1", "ready", secondNow);
+
+    const result = runByInProcess(root, ["task", "start", "BY-1", "--output", "json"], thirdNow);
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toBe("");
+    expect(JSON.parse(result.stdout)).toEqual({
+      error: {
+        code: "invalid_task_state",
+        message: "Cannot start task BY-1 from state ready",
+        taskId: "BY-1",
+        state: "ready",
+      },
+      help: ["Review and merge the pull request."],
+    });
+  });
+
+  it.each([
+    ["validating", "Wait for validation to finish.", "Wait for validation to finish."],
+    [
+      "needs_input",
+      "Address findings or add Task Context, then run by submit BY-1.",
+      '"Address findings or add Task Context, then run by submit BY-1."',
+    ],
+    ["ready", "Review and merge the pull request.", "Review and merge the pull request."],
+    ["done", "Task is already done.", "Task is already done."],
+  ] as const)("rejects starting %s Tasks with state-specific help", (state, _help, toonHelp) => {
+    const root = initializedRepo();
+
+    createTask(root, firstNow, `Invalid ${state}`);
+    transitionTaskState(root, "BY-1", state, secondNow);
+
+    const result = runByInProcess(root, ["task", "start", "BY-1"], thirdNow);
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toBe("");
+    expect(result.stdout).toBe(`error:
+  code: invalid_task_state
+  message: Cannot start task BY-1 from state ${state}
+  taskId: BY-1
+  state: ${state}
+help[1]: ${toonHelp}`);
+    expect(result.stdout).not.toContain("invalid_task_state_transition");
+    expect(runByInProcess(root, ["task", "show", "BY-1"]).stdout).toContain(
+      `state: ${state}\n  createdAt: "${firstNow}"\n  updatedAt: "${secondNow}"`,
+    );
+  });
+
+  it("removes started Tasks from the default dashboard", () => {
+    const root = initializedRepo();
+
+    createTask(root, firstNow, "Started");
+    expect(runByInProcess(root, ["task", "start", "BY-1"], secondNow).status).toBe(0);
+
+    expect(runByInProcess(root, []).stdout).toBe(`bin: ${expectedBin}
+description: Validate completed code changes against approved human intent.
+count: 0
+tasks: []
+help[1]: "Run \`by task create --title \\"...\\" --description-file <file>\` to create a task."`);
   });
 
   it("rejects invalid Task state transitions through the Task module", () => {
@@ -523,6 +669,7 @@ tasks[1]{id,title,state,createdAt,updatedAt}:
     "show",
     "context",
     "comment",
+    "start",
   ])("validates Task ID arguments before %s lookup", (command) => {
     const root = createGitRepo();
 
@@ -547,6 +694,7 @@ tasks[1]{id,title,state,createdAt,updatedAt}:
   it.each([
     "show",
     "context",
+    "start",
   ])("rejects wrong Task ID prefixes before state access in %s", (command) => {
     const root = initializedRepo();
 
@@ -559,7 +707,11 @@ tasks[1]{id,title,state,createdAt,updatedAt}:
     expect(result.stdout).toContain("expectedFormat: BY-<number>");
   });
 
-  it.each(["show", "context"])("prints task_not_found for unknown Task IDs in %s", (command) => {
+  it.each([
+    "show",
+    "context",
+    "start",
+  ])("prints task_not_found for unknown Task IDs in %s", (command) => {
     const root = initializedRepo();
     const result = runByInProcess(root, ["task", command, "BY-999"]);
 
