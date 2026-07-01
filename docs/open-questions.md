@@ -30,17 +30,75 @@ Remaining open points:
 - Track remaining Sandcastle follow-up issues that could affect v1 execution behavior.
 - Optionally run a Podman smoke test if v1 wants to advertise Podman support.
 
-## Implementation orchestration
+## Task readiness and orchestration
 
-We need to decide how implementation work is started and coordinated after a Task moves to `implementing`.
+We need to decide how task readiness, refinement, implementation, and escalation should work after the validation-focused v1 path.
 
-Open options include:
+Open concerns:
+
+- Many tasks may be too undercooked to implement safely.
+- The user should not have to manually refine every task with the main agent.
+- Refinement should be mostly automated if it exists.
+- Future refinement must support centralized escalation across many tasks without requiring the user to enter each task's agent session.
+- The exact shape of that centralized escalation mechanism is undecided.
+
+Possible lifecycle ideas include adding states before `todo`, such as `draft` or `refining`, but these are not yet accepted domain states.
+
+Possible future loops include:
+
+- a task-readiness or refinement loop before implementation
+- an implementation loop that turns ready tasks into committed code ready for submission
+- the current validation loop that validates completed submissions
+
+Open implementation options include:
 
 - an agent reads Task Context and uses `by` commands directly
 - `by` triggers an implementation loop through the CLI
-- But Why? orchestrates implementation programmatically through its own solution
+- But Why? orchestrates loops programmatically through its own solution
 
 This must stay distinct from the Validation Gate, which validates a completed submission and is not a generic pipeline.
+
+## Task metadata, tags, and routing
+
+Tasks may need metadata for classification, routing, automation policy, and scheduling.
+
+Tags are a candidate mechanism, but some needs may deserve first-class fields or relationships instead.
+
+Open questions include:
+
+- whether lifecycle readiness belongs in state, tags, or another concept
+- how to represent tasks that should exist but not be touched yet
+- how to represent tasks that are ready but should not be automated
+- whether tags should influence validation profiles or reviewer selection
+- whether task categories such as UI need different validation loops
+- which semantics must be enforced by But Why? instead of treated as loose labels
+
+## Task relationships and dependencies
+
+Tasks may need relationships so related work and dependencies are visible.
+
+Open questions include:
+
+- what relationship types exist
+- whether dependencies block `todo`, `implementing`, or `submit`
+- how related tasks and blocked tasks appear in dashboards
+- whether relationships are local-only or must map to future external Task Surfaces
+
+This is not part of validation-focused v1 unless explicitly pulled in.
+
+## Validation status
+
+The v1 validation model is architecturally decided, but several details remain open.
+
+Settled for v1:
+
+- `by submit <task-id>` starts validation.
+- Validation is synchronous.
+- Validation checks a completed committed branch.
+- Validation uses fixed Validation Gate phases.
+- Validation is distinct from refinement and implementation.
+- Any Finding moves the Task to `needs_input`.
+- Clean validation publishes or updates a GitHub PR.
 
 ## Validation phase configuration
 
