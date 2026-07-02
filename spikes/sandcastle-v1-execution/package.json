@@ -11,8 +11,8 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@ai-hero/sandcastle": "file:/tmp/but-why-ai-hero-sandcastle-main-2d93226d37da129c54d4ecfd5b370122b48b31b2.tgz",
-    "effect": "^3.20.0"
+    "@ai-hero/sandcastle": "0.12.0",
+    "effect": "3.20.0"
   },
   "devDependencies": {
     "@types/node": "^25.5.0",

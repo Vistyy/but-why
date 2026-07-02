@@ -131,7 +131,7 @@ const tokenUsageFromIterations = (
 export class SandcastleSpikeRunner {
   private fixtureRepoPath: string | undefined;
   private submittedCommit: string | undefined;
-  private tempValidationBranch: string | undefined;
+  private tempValidationRef: string | undefined;
   private checkSandbox: SandboxHandle | undefined;
   private sandboxName: string | undefined;
 
@@ -155,6 +155,7 @@ export class SandcastleSpikeRunner {
     await mkdir(join(repoPath, "scripts"), { recursive: true });
     await mkdir(join(repoPath, ".sandcastle"), { recursive: true });
     await writeFile(join(repoPath, "README.md"), "# Disposable validation fixture\n", "utf8");
+    await writeFile(join(repoPath, ".gitignore"), ".sandcastle/worktrees/\n.sandcastle/logs/\n", "utf8");
     await writeFile(
       join(repoPath, "scripts", "check-pass.js"),
       'console.log("pass check saw", process.cwd());\n',
@@ -181,28 +182,41 @@ export class SandcastleSpikeRunner {
     await shell("git add feature.txt && git commit -m 'task change'", repoPath);
 
     const submittedCommit = await shell("git rev-parse HEAD", repoPath);
-    const tempBranch = `but-why/validation/BY-1-1-${Date.now()}`;
-    await shell(`git branch ${tempBranch} ${submittedCommit}`, repoPath);
+    const tempRef = "refs/but-why/runs/BY-1.1/validation";
+    await shell(`git update-ref ${tempRef} ${submittedCommit}`, repoPath);
     this.submittedCommit = submittedCommit;
-    this.tempValidationBranch = tempBranch;
+    this.tempValidationRef = tempRef;
 
     this.emit({
       type: "fixtureReady",
       repoPath,
       submittedCommit,
-      tempValidationBranch: tempBranch,
+      tempValidationRef: tempRef,
     });
-    this.emit({ type: "stepPassed", id: "fixture", detail: tempBranch });
+    this.emit({ type: "stepPassed", id: "fixture", detail: tempRef });
 
     this.emit({ type: "stepStarted", id: "workspace" });
     const selected = await sandboxProvider();
     this.sandboxName = selected.name;
     this.checkSandbox = await createSandbox({
       cwd: repoPath,
-      branch: tempBranch,
+      branch: tempRef,
       sandbox: selected.provider,
     });
-    this.emit({ type: "workspaceReady", worktreePath: this.checkSandbox.worktreePath });
+
+    const worktreeHead = await shell("git rev-parse HEAD", this.checkSandbox.worktreePath);
+    const originalHeadAfterWorkspace = await shell("git rev-parse HEAD", repoPath);
+    const originalBranchAfterWorkspace = await shell("git branch --show-current", repoPath);
+    const originalStatusAfterWorkspace = await shell("git status --porcelain=v1", repoPath);
+
+    this.emit({
+      type: "workspaceReady",
+      worktreePath: this.checkSandbox.worktreePath,
+      worktreeHead,
+      originalHeadAfterWorkspace,
+      originalBranchAfterWorkspace,
+      originalStatusAfterWorkspace,
+    });
     this.emit({ type: "stepPassed", id: "workspace", detail: this.checkSandbox.worktreePath });
   }
 
@@ -257,8 +271,8 @@ export class SandcastleSpikeRunner {
       return;
     }
 
-    if (!this.fixtureRepoPath || !this.tempValidationBranch) {
-      throw new Error("Fixture repo and temp validation branch are not ready.");
+    if (!this.fixtureRepoPath || !this.tempValidationRef) {
+      throw new Error("Fixture repo and temp validation ref are not ready.");
     }
 
     const model = process.env.SANDCASTLE_PI_MODEL ?? "openai-codex/gpt-5.5";
@@ -282,7 +296,7 @@ export class SandcastleSpikeRunner {
     try {
       const result = await run({
         cwd: this.fixtureRepoPath,
-        branchStrategy: { type: "branch", branch: this.tempValidationBranch },
+        branchStrategy: { type: "branch", branch: this.tempValidationRef },
         sandbox: (await sandboxProvider()).provider,
         agent: pi(model, { thinking }),
         prompt,
@@ -331,9 +345,9 @@ export class SandcastleSpikeRunner {
     await this.closeCheckSandbox();
     worktreeClosed = true;
 
-    if (this.fixtureRepoPath && this.tempValidationBranch) {
+    if (this.fixtureRepoPath && this.tempValidationRef) {
       try {
-        await shell(`git branch -D ${this.tempValidationBranch}`, this.fixtureRepoPath);
+        await shell(`git update-ref -d ${this.tempValidationRef}`, this.fixtureRepoPath);
         tempRefDeleted = true;
       } catch {
         tempRefDeleted = false;

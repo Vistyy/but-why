@@ -205,6 +205,12 @@ Repo config owns validation behavior.
 
 Global config owns user defaults.
 
+But Why validation config lives under `.but-why`.
+
+A `.sandcastle/` directory is optional and only for low-level Sandcastle runtime assets.
+
+Normal But Why validation must not require a tracked `.sandcastle/` directory.
+
 Git facts such as base branch, publish remote, GitHub repository, and GitHub auth are detected at runtime.
 
 Agent profiles use `agentRuntime` and `agentModel`.

@@ -51,8 +51,12 @@ export interface SpikeState {
   readonly steps: readonly StepRecord[];
   readonly fixtureRepoPath?: string;
   readonly submittedCommit?: string;
-  readonly tempValidationBranch?: string;
+  readonly tempValidationRef?: string;
   readonly worktreePath?: string;
+  readonly worktreeHead?: string;
+  readonly originalHeadAfterWorkspace?: string;
+  readonly originalBranchAfterWorkspace?: string;
+  readonly originalStatusAfterWorkspace?: string;
   readonly checks: readonly CheckRound[];
   readonly reviewers: readonly ReviewerRound[];
   readonly sandcastleVersion?: string;
@@ -69,8 +73,15 @@ export type SpikeEvent =
   | { readonly type: "stepPassed"; readonly id: string; readonly detail?: string }
   | { readonly type: "stepFailed"; readonly id: string; readonly detail: string }
   | { readonly type: "stepSkipped"; readonly id: string; readonly detail: string }
-  | { readonly type: "fixtureReady"; readonly repoPath: string; readonly submittedCommit: string; readonly tempValidationBranch: string }
-  | { readonly type: "workspaceReady"; readonly worktreePath: string }
+  | { readonly type: "fixtureReady"; readonly repoPath: string; readonly submittedCommit: string; readonly tempValidationRef: string }
+  | {
+      readonly type: "workspaceReady";
+      readonly worktreePath: string;
+      readonly worktreeHead: string;
+      readonly originalHeadAfterWorkspace: string;
+      readonly originalBranchAfterWorkspace: string;
+      readonly originalStatusAfterWorkspace: string;
+    }
   | { readonly type: "checkRecorded"; readonly check: CheckRound }
   | { readonly type: "reviewerRecorded"; readonly reviewer: ReviewerRound }
   | { readonly type: "metadata"; readonly sandcastleVersion?: string; readonly sandboxProvider?: string }
@@ -87,7 +98,7 @@ const initialSteps: readonly StepRecord[] = [
 
 export const initialState = (): SpikeState => ({
   question:
-    "Can But Why? use Sandcastle for v1 validation execution without reimplementing worktree, command, reviewer, structured output retry, log, token usage, or cleanup plumbing?",
+    "Can But Why? use Sandcastle 0.12.0 to create a validation worktree from a Run-owned temp ref without touching the original checkout? PROTOTYPE - throwaway logic prototype for issue 011.",
   steps: initialSteps,
   checks: [],
   reviewers: [],
@@ -118,10 +129,17 @@ export const applyEvent = (state: SpikeState, event: SpikeEvent): SpikeState => 
         ...state,
         fixtureRepoPath: event.repoPath,
         submittedCommit: event.submittedCommit,
-        tempValidationBranch: event.tempValidationBranch,
+        tempValidationRef: event.tempValidationRef,
       };
     case "workspaceReady":
-      return { ...state, worktreePath: event.worktreePath };
+      return {
+        ...state,
+        worktreePath: event.worktreePath,
+        worktreeHead: event.worktreeHead,
+        originalHeadAfterWorkspace: event.originalHeadAfterWorkspace,
+        originalBranchAfterWorkspace: event.originalBranchAfterWorkspace,
+        originalStatusAfterWorkspace: event.originalStatusAfterWorkspace,
+      };
     case "checkRecorded":
       return { ...state, checks: [...state.checks, event.check] };
     case "reviewerRecorded":

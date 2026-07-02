@@ -9,11 +9,11 @@ importers:
   .:
     dependencies:
       '@ai-hero/sandcastle':
-        specifier: file:/tmp/but-why-ai-hero-sandcastle-main-2d93226d37da129c54d4ecfd5b370122b48b31b2.tgz
-        version: file:../../../../../../tmp/but-why-ai-hero-sandcastle-main-2d93226d37da129c54d4ecfd5b370122b48b31b2.tgz
+        specifier: 0.12.0
+        version: 0.12.0
       effect:
-        specifier: ^3.20.0
-        version: 3.21.4
+        specifier: 3.20.0
+        version: 3.20.0
     devDependencies:
       '@types/node':
         specifier: ^25.5.0
@@ -27,9 +27,8 @@ importers:
 
 packages:
 
-  '@ai-hero/sandcastle@file:../../../../../../tmp/but-why-ai-hero-sandcastle-main-2d93226d37da129c54d4ecfd5b370122b48b31b2.tgz':
-    resolution: {integrity: sha512-CMUprbxQu+6a57lPn1xqWvMImaJ/TYEUi58pBJrnuHhOghpjuc8TM3Jsdh6vpodMi8pRi3bwO/1q8owXuZp83w==, tarball: file:../../../../../../tmp/but-why-ai-hero-sandcastle-main-2d93226d37da129c54d4ecfd5b370122b48b31b2.tgz}
-    version: 0.11.0
+  '@ai-hero/sandcastle@0.12.0':
+    resolution: {integrity: sha512-kdQ414rM8t1QiWeqZ3Klz4KSd0PqQG4bRVuqGpRDUomWhojSZkEAc1tbcEcThVmBEaHkCt8LmYR49vqEPNIoYQ==}
     hasBin: true
     peerDependencies:
       '@daytona/sdk': ^0.164.0
@@ -210,8 +209,8 @@ packages:
   '@types/node@25.9.4':
     resolution: {integrity: sha512-dszCsrKb5U7ZsVZBWiHFklTloVl0mSEnWH/iZXfZUlI4rzCUnsvGmgqfuVRHL54ugE7/wRuxEIXRa2iMZ+BG6g==}
 
-  effect@3.21.4:
-    resolution: {integrity: sha512-B89v/xSgPbl1J2Ai2u18jxq3odpFauU1rC6/eSs4FeNHi72kwKdJp12VGigvRV2lK+kRnx+OOz41XV8guZd4gQ==}
+  effect@3.20.0:
+    resolution: {integrity: sha512-qMLfDJscrNG8p/aw+IkT9W7fgj50Z4wG5bLBy0Txsxz8iUHjDIkOgO3SV0WZfnQbNG2VJYb0b+rDLMrhM4+Krw==}
 
   esbuild@0.28.1:
     resolution: {integrity: sha512-HrJrvZv5ayxBzPfwphOoNzkzOIIlifzk0KJrGK2c8R4+LKpMtpYLQeUdjnwjWv/LZlkH2laZk+4w78pi99D4Vw==}
@@ -257,10 +256,9 @@ packages:
 
 snapshots:
 
-  '@ai-hero/sandcastle@file:../../../../../../tmp/but-why-ai-hero-sandcastle-main-2d93226d37da129c54d4ecfd5b370122b48b31b2.tgz':
+  '@ai-hero/sandcastle@0.12.0':
     dependencies:
       '@clack/prompts': 1.6.0
-      '@standard-schema/spec': 1.1.0
 
   '@clack/core@1.4.2':
     dependencies:
@@ -358,7 +356,7 @@ snapshots:
     dependencies:
       undici-types: 7.24.6
 
-  effect@3.21.4:
+  effect@3.20.0:
     dependencies:
       '@standard-schema/spec': 1.1.0
       fast-check: 3.23.2

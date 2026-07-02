@@ -63,6 +63,16 @@ The stage that judges a submission against the task intent and project checks.
 The validation gate is made of phases and rounds, and it must not trust the implementer’s own summary of intent.
 _Avoid_: Pipeline, CI
 
+**Validation Workspace**:
+Run-scoped setup that provides an isolated copy of the submitted commit before validation phases begin.
+A validation workspace is not itself a validation phase or round.
+_Avoid_: Workspace phase, setup round, CI workspace
+
+**Validation Tooling Failure**:
+A failure in But Why? or its validation tooling that prevents validation from judging the submission.
+A validation tooling failure is recorded on the run and is not a finding.
+_Avoid_: Finding, submission problem, needs input
+
 **Finding**:
 A validation result that records a blocking problem or question about a submission.
 In v1, any finding sends the task to needs input.

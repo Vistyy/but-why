@@ -2,9 +2,9 @@
 
 ## Sandcastle spike result
 
-Result: green-ish.
-Sandcastle has released the required `.exec` method, so product implementation is approved to proceed, but some Sandcastle follow-up issues are still in progress.
-Token-usage verification remains open.
+Result: green for validation workspace creation, with token-usage verification still open.
+Sandcastle `0.12.0` has the required workspace and `.exec` primitives for issue 011.
+Some Sandcastle follow-up issues are still in progress.
 
 The spike report lives at:
 
@@ -12,9 +12,10 @@ The spike report lives at:
 docs/spikes/sandcastle-v1-execution.md
 ```
 
-Sandcastle main commit `2d93226d37da129c54d4ecfd5b370122b48b31b2` proved:
+Sandcastle `0.12.0` proved:
 
-- validation worktrees from temp refs
+- validation worktrees from Run-owned temp refs
+- clean original checkout when Sandcastle runtime paths are ignored
 - configured check commands through `sandbox.exec()`
 - Pi reviewer agents
 - structured output validation and retry through `Output.object(..., maxRetries)`
@@ -25,7 +26,6 @@ Sandcastle main commit `2d93226d37da129c54d4ecfd5b370122b48b31b2` proved:
 
 Remaining open points:
 
-- Pin a Sandcastle release that includes the required `.exec` API.
 - Verify Pi token usage for the selected runtime and model, because `result.iterations[].usage` was missing in the local run.
 - Track remaining Sandcastle follow-up issues that could affect v1 execution behavior.
 - Optionally run a Podman smoke test if v1 wants to advertise Podman support.

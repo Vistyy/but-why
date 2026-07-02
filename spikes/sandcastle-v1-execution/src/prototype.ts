@@ -18,7 +18,7 @@ const runner = new SandcastleSpikeRunner(emit);
 const render = (current: SpikeState): void => {
   console.clear();
   console.log(`${bold}But Why? Sandcastle v1 execution spike${reset}`);
-  console.log(`${dim}PROTOTYPE - throwaway logic prototype for issue 001.${reset}`);
+  console.log(`${dim}PROTOTYPE - throwaway logic prototype for issue 011.${reset}`);
   console.log("");
   console.log(`${bold}Question${reset}`);
   console.log(current.question);
@@ -31,8 +31,12 @@ const render = (current: SpikeState): void => {
   console.log(`${bold}State${reset}`);
   console.log(`fixtureRepoPath: ${current.fixtureRepoPath ?? ""}`);
   console.log(`submittedCommit: ${current.submittedCommit ?? ""}`);
-  console.log(`tempValidationBranch: ${current.tempValidationBranch ?? ""}`);
+  console.log(`tempValidationRef: ${current.tempValidationRef ?? ""}`);
   console.log(`worktreePath: ${current.worktreePath ?? ""}`);
+  console.log(`worktreeHead: ${current.worktreeHead ?? ""}`);
+  console.log(`originalHeadAfterWorkspace: ${current.originalHeadAfterWorkspace ?? ""}`);
+  console.log(`originalBranchAfterWorkspace: ${current.originalBranchAfterWorkspace ?? ""}`);
+  console.log(`originalStatusAfterWorkspace: ${JSON.stringify(current.originalStatusAfterWorkspace ?? "")}`);
   console.log(`cleanup: ${current.cleanup ? JSON.stringify(current.cleanup) : ""}`);
   console.log("");
   console.log(`${bold}Steps${reset}`);

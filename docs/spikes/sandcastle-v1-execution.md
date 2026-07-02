@@ -2,31 +2,37 @@
 
 ## Summary verdict
 
-Verdict: green with release and token-usage caveats.
+Verdict: green with a token-usage caveat.
 
-Sandcastle main has the execution shape But Why needs for v1.
-The published `@ai-hero/sandcastle@0.10.0` does not.
+The published `@ai-hero/sandcastle@0.12.0` has the execution shape But Why needs for issue 011.
+It can create a validation worktree from a Run-owned temp ref and run commands inside it.
 
-But Why can use Sandcastle for v1 if it depends on a release after commit `2d93226d37da129c54d4ecfd5b370122b48b31b2`, or temporarily pins an equivalent commit.
+But Why can use Sandcastle `0.12.0` for v1 validation workspace creation.
 Do not build against published `0.10.0` for v1 validation execution.
 
 ## Versions tested
 
-Published release checked:
+Published release checked first:
 
 ```text
 @ai-hero/sandcastle@0.10.0
 v0.10.0 commit: faad913252a524dabae1ec2aa5f577d8a2824f2a
 ```
 
-Main commit spiked:
+Main commit spiked next:
 
 ```text
 2d93226d37da129c54d4ecfd5b370122b48b31b2
 ```
 
-The main commit reports package version `0.11.0` in its local package metadata.
-It was not available from `pnpm view @ai-hero/sandcastle version` during the spike.
+Published release rechecked for issue 011:
+
+```text
+@ai-hero/sandcastle@0.12.0
+v0.12.0 tag commit: e99f832f26dc9d245c019a9ddd19fa5dee792427
+```
+
+The `0.12.0` package reported version `0.12.0` at runtime.
 
 ## Prototype path
 
@@ -34,7 +40,13 @@ It was not available from `pnpm view @ai-hero/sandcastle version` during the spi
 spikes/sandcastle-v1-execution/
 ```
 
-Run the main-commit spike with:
+Run the published `0.12.0` spike with:
+
+```bash
+pnpm --dir spikes/sandcastle-v1-execution run-once
+```
+
+Run the older main-commit spike with:
 
 ```bash
 pnpm --dir spikes/sandcastle-v1-execution spike-main
@@ -68,6 +80,17 @@ SANDCASTLE_PI_MODEL='anthropic/claude-sonnet-4.6' \
 SANDCASTLE_PI_THINKING=low \
 pnpm --dir spikes/sandcastle-v1-execution spike-main
 ```
+
+## What worked on Sandcastle 0.12.0
+
+- A disposable submitted commit was created on a task branch.
+- A Run-owned temp ref was created at `refs/but-why/runs/BY-1.1/validation`.
+- Sandcastle accepted that full ref as the `createSandbox({ branch })` value.
+- Sandcastle created an isolated validation worktree from that temp ref.
+- The validation worktree `HEAD` matched the submitted commit SHA.
+- The original checkout stayed on `task/BY-1` at the submitted commit SHA.
+- The original checkout had clean `git status` when `.sandcastle/worktrees/` was ignored.
+- Cleanup removed the Sandcastle worktree, temp ref, and disposable fixture repo.
 
 ## What worked on Sandcastle main
 
@@ -149,9 +172,10 @@ Keep Sandcastle as the intended v1 execution engine.
 
 Required next action:
 
-- Depend on a Sandcastle release that includes `sandbox.exec()` and structured output `maxRetries`, or pin commit `2d93226d37da129c54d4ecfd5b370122b48b31b2` temporarily.
+- Depend on `@ai-hero/sandcastle@0.12.0` for issue 011.
+- Ensure `.sandcastle/worktrees/` and `.sandcastle/logs/` do not appear as user checkout changes.
 
-Do not implement a custom command runner unless Sandcastle does not release or stabilize these APIs.
+Do not implement a custom command runner.
 
 ## Documentation changes needed
 

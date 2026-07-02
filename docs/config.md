@@ -24,6 +24,12 @@ Repo config owns validation behavior.
 
 Global config owns user defaults.
 
+But Why validation config lives under `.but-why`.
+
+A `.sandcastle/` directory is optional and only for low-level Sandcastle runtime assets, such as a custom Dockerfile.
+
+But Why should not require a tracked `.sandcastle/` directory for normal validation.
+
 ## Git facts are detected
 
 Repo config should not duplicate Git facts unless there is a later proven need.
@@ -69,6 +75,9 @@ If detection fails, `by submit <task-id>` fails during preflight.
       "profile": "default",
       "instructionsFile": ".but-why/reviewers/bugs.md"
     }
+  },
+  "validationWorkspace": {
+    "copyFiles": [".env.test", "config/local-validation.json"]
   },
   "ignorePatterns": [
     "*.generated.ts",
@@ -127,6 +136,30 @@ reviewer inline setting
   -> global agent profile
   -> error
 ```
+
+## Validation workspace
+
+Repo config may allowlist untracked files to copy into the validation workspace.
+
+These paths are repo-relative.
+
+They are copied into the Sandcastle worktree before validation commands or reviewers run.
+
+Example:
+
+```json
+{
+  "validationWorkspace": {
+    "copyFiles": [".env.test", "config/local-validation.json"]
+  }
+}
+```
+
+V1 should not copy untracked files automatically.
+
+Missing allowlisted files should be structured tooling errors.
+
+Copied files are not part of the submitted commit SHA.
 
 ## Checks
 
