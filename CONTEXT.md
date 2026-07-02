@@ -27,6 +27,11 @@ The explicit act of marking that implementation work has begun for a task.
 A task start does not create the task, submit code for validation, or run implementation work.
 _Avoid_: Submission, validation trigger, agent kickoff
 
+**Task Lifecycle**:
+The state model that describes where a Task is in the workflow and which state transitions are valid.
+Task Lifecycle is distinct from view-specific display policy such as dashboard actionability.
+_Avoid_: Pipeline state, dashboard status
+
 **Task Surface**:
 A place where humans or agents view tasks, change task state, and read task comments.
 A task surface can be built into But Why? or backed by an external board.
