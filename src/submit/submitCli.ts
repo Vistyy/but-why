@@ -9,8 +9,12 @@ import {
   type RepoSubmitPreflight,
   type SubmitTaskResult,
 } from "./submitPreflight.js";
+import type { ValidationWorkspaceToolingError } from "../validation/createValidationWorkspace.js";
 
-export const routeSubmit = (args: readonly string[], environment: CliEnvironment): CliResult => {
+export const routeSubmit = async (
+  args: readonly string[],
+  environment: CliEnvironment,
+): Promise<CliResult> => {
   if (args.length === 1 && args[0] === "--help") {
     return success(submitHelpView());
   }
@@ -39,12 +43,31 @@ export const routeSubmit = (args: readonly string[], environment: CliEnvironment
   }
 
   try {
+    const now = environment.now().toISOString();
     const result = submitPreflight.submit.submitTask({
       taskId: taskId.taskId,
-      now: environment.now().toISOString(),
+      now,
     });
 
-    return renderSubmitResult(result);
+    if (!result.ok) {
+      return renderSubmitResult(result);
+    }
+
+    const validationWorkspace = await submitPreflight.submit.createValidationWorkspaceForRun({
+      runId: result.runId,
+      commitSha: result.commitSha,
+      taskRecoveryState: result.previousTaskState,
+      now,
+    });
+
+    if (!validationWorkspace.ok) {
+      return validationWorkspaceSetupError(validationWorkspace.toolingError);
+    }
+
+    return renderSubmitResult({
+      ...result,
+      validationWorkspace: validationWorkspace.validationWorkspace,
+    });
   } catch {
     return toolingError();
   }
@@ -148,6 +171,19 @@ const renderSubmitResult = (result: SubmitTaskResult): CliResult => {
           remoteName: result.prTarget.remoteName,
           remoteUrl: result.prTarget.remoteUrl,
         },
+        ...(result.validationWorkspace === undefined
+          ? {}
+          : {
+              validationWorkspace: {
+                tempRefName: result.validationWorkspace.tempRefName,
+                submittedSha: result.validationWorkspace.submittedSha,
+                worktreeHead: result.validationWorkspace.worktreeHead,
+                cleanupResult: {
+                  worktree: result.validationWorkspace.cleanupResult.worktree,
+                  tempRef: result.validationWorkspace.cleanupResult.tempRef,
+                },
+              },
+            }),
       },
     });
   }
@@ -229,6 +265,24 @@ const submitPreflightError = (
       };
   }
 };
+
+const validationWorkspaceSetupError = (error: ValidationWorkspaceToolingError): CliResult =>
+  runtimeError({
+    code: "validation_workspace_setup_failed",
+    message: "Validation workspace setup failed.",
+    details: {
+      operationName: error.operationName,
+      tempRefName: error.tempRefName,
+      submittedSha: error.submittedSha,
+      ...(error.worktreePath === undefined ? {} : { worktreePath: error.worktreePath }),
+      errorMessage: error.errorMessage,
+      cleanupResult: {
+        worktree: error.cleanupResult.worktree,
+        tempRef: error.cleanupResult.tempRef,
+      },
+    },
+    help: ["Fix the validation workspace setup problem, then rerun submit."],
+  });
 
 const toolingError = (): CliResult =>
   runtimeError({

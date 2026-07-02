@@ -41,58 +41,69 @@ const helpViewSchema = Schema.Struct({
 export const runCli = (
   args: readonly string[],
   environment: CliEnvironment,
-): Effect.Effect<CliResult> => Effect.sync(() => routeArgs(args, environment));
+): Effect.Effect<CliResult> => routeArgs(args, environment);
 
-export const routeArgs = (args: readonly string[], environment: CliEnvironment): CliResult => {
+const routeArgs = (
+  args: readonly string[],
+  environment: CliEnvironment,
+): Effect.Effect<CliResult> => {
   const outputSelection = selectOutput(args);
 
   if (!outputSelection.ok) {
-    return { ...outputSelection.result, outputFormat: "toon" };
+    return Effect.succeed({ ...outputSelection.result, outputFormat: "toon" });
   }
 
-  const result = routeCommandArgs(outputSelection.args, environment);
-
-  return { ...result, outputFormat: outputSelection.outputFormat };
+  return Effect.map(routeCommandArgs(outputSelection.args, environment), (result) => ({
+    ...result,
+    outputFormat: outputSelection.outputFormat,
+  }));
 };
 
-const routeCommandArgs = (args: readonly string[], environment: CliEnvironment): CliResult => {
+const routeCommandArgs = (
+  args: readonly string[],
+  environment: CliEnvironment,
+): Effect.Effect<CliResult> => {
   const bin = collapseHome(environment.executablePath);
 
   if (args.length === 0) {
-    return dashboard(bin, description, environment);
+    return Effect.succeed(dashboard(bin, description, environment));
   }
 
   if (args.length === 1 && args[0] === "--help") {
-    return success(helpView(bin));
+    return Effect.succeed(success(helpView(bin)));
   }
 
   const firstArg = args[0];
 
   if (firstArg === "init") {
-    return routeInit(args.slice(1), environment);
+    return Effect.succeed(routeInit(args.slice(1), environment));
   }
 
   if (firstArg === "task") {
-    return routeTask(args.slice(1), environment);
+    return Effect.succeed(routeTask(args.slice(1), environment));
   }
 
   if (firstArg === "submit") {
-    return routeSubmit(args.slice(1), environment);
+    return Effect.promise(() => routeSubmit(args.slice(1), environment));
   }
 
   if (firstArg?.startsWith("-")) {
-    return usageError({
-      code: "unknown_flag",
-      message: `Unknown flag: ${firstArg}`,
-      help: ["Run `by --help`"],
-    });
+    return Effect.succeed(
+      usageError({
+        code: "unknown_flag",
+        message: `Unknown flag: ${firstArg}`,
+        help: ["Run `by --help`"],
+      }),
+    );
   }
 
-  return usageError({
-    code: "unknown_command",
-    message: `Unknown command: ${firstArg ?? ""}`,
-    help: ["Run `by --help`"],
-  });
+  return Effect.succeed(
+    usageError({
+      code: "unknown_command",
+      message: `Unknown command: ${firstArg ?? ""}`,
+      help: ["Run `by --help`"],
+    }),
+  );
 };
 
 export const mapRuntimeError = (outputFormat: OutputFormat = "toon"): CliResult => ({

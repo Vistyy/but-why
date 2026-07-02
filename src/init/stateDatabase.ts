@@ -80,6 +80,39 @@ const migrations: readonly Migration[] = [
       ON runs (task_id, task_run_number DESC)
     `,
   },
+  {
+    name: "005_validation_workspace_setup",
+    apply: `
+      CREATE TABLE IF NOT EXISTS validation_workspace_setups (
+        run_id TEXT PRIMARY KEY,
+        temp_ref_name TEXT NOT NULL,
+        submitted_sha TEXT NOT NULL,
+        worktree_path TEXT NOT NULL,
+        worktree_head TEXT NOT NULL,
+        cleanup_worktree TEXT NOT NULL CHECK (cleanup_worktree IN ('removed', 'not_created', 'failed')),
+        cleanup_temp_ref TEXT NOT NULL CHECK (cleanup_temp_ref IN ('removed', 'not_created', 'failed')),
+        created_at TEXT NOT NULL,
+        FOREIGN KEY (run_id) REFERENCES runs(id)
+      );
+
+      CREATE TABLE IF NOT EXISTS run_tooling_errors (
+        sequence INTEGER PRIMARY KEY AUTOINCREMENT,
+        run_id TEXT NOT NULL,
+        operation_name TEXT NOT NULL,
+        temp_ref_name TEXT NOT NULL,
+        submitted_sha TEXT NOT NULL,
+        worktree_path TEXT,
+        error_message TEXT NOT NULL,
+        cleanup_worktree TEXT NOT NULL CHECK (cleanup_worktree IN ('removed', 'not_created', 'failed')),
+        cleanup_temp_ref TEXT NOT NULL CHECK (cleanup_temp_ref IN ('removed', 'not_created', 'failed')),
+        created_at TEXT NOT NULL,
+        FOREIGN KEY (run_id) REFERENCES runs(id)
+      );
+
+      CREATE INDEX IF NOT EXISTS run_tooling_errors_run_id_sequence_idx
+      ON run_tooling_errors (run_id, sequence)
+    `,
+  },
 ];
 
 export const ensureStateDatabase = (path: string): StateDatabaseChange => {

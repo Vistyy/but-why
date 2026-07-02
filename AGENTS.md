@@ -20,11 +20,11 @@ If the task touches an architectural decision, read `docs/adr/` first.
 
 ## Current project state
 
-This repo is still in planning and design.
+This repo is in early product implementation.
 
-Do not start product implementation before the Sandcastle spike is done or explicitly approved.
+The Sandcastle spike is done and Sandcastle is accepted as the v1 execution engine.
 
-The first implementation issue is `docs/issues/001-prove-sandcastle-v1-execution.md`.
+The current implementation sequence is tracked in `docs/issue-breakdown.md`.
 
 ## Product rules
 
@@ -44,7 +44,7 @@ Any validation finding sends the task to `needs_input`.
 
 ## Execution rules
 
-Sandcastle is the intended v1 execution engine, pending spike.
+Sandcastle is the accepted v1 execution engine.
 
 Do not reimplement Sandcastle execution plumbing unless the spike proves it cannot support the required behavior.
 

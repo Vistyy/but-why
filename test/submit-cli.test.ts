@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { chmodSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
@@ -12,6 +12,7 @@ import {
   createGitRepo,
   createTempRoot,
   runByInProcess,
+  runByWithEnv,
 } from "./support/by-cli.js";
 
 const firstNow = "2026-06-30T12:00:00.000Z";
@@ -25,7 +26,9 @@ describe("by submit CLI", () => {
     const root = preparedRepoOnBranch("feature/by-1");
     const commitSha = currentCommitSha(root);
 
-    const result = withFakeGh(() => runByInProcess(root, ["submit", "BY-1"], thirdNow));
+    const branchBeforeSubmit = currentBranch(root);
+    const statusBeforeSubmit = gitStatus(root);
+    const result = withFakeGh(() => runSubmit(root, ["BY-1"], thirdNow));
 
     expect(result.status).toBe(0);
     expect(result.stderr).toBe("");
@@ -40,7 +43,32 @@ describe("by submit CLI", () => {
     repo: widgets
     baseBranch: main
     remoteName: origin
-    remoteUrl: "https://github.com/acme/widgets.git"`);
+    remoteUrl: "https://github.com/acme/widgets.git"
+  validationWorkspace:
+    tempRefName: refs/but-why/runs/BY-1.1/validation
+    submittedSha: ${commitSha}
+    worktreeHead: ${commitSha}
+    cleanupResult:
+      worktree: removed
+      tempRef: removed`);
+
+    expect(currentBranch(root)).toBe(branchBeforeSubmit);
+    expect(currentCommitSha(root)).toBe(commitSha);
+    expect(gitStatus(root)).toBe(statusBeforeSubmit);
+    expect(gitRefExists(root, "refs/but-why/runs/BY-1.1/validation")).toBe(false);
+
+    const validationWorkspace = repoState(root).getValidationWorkspaceSetup("BY-1.1");
+
+    expect(validationWorkspace).toMatchObject({
+      runId: "BY-1.1",
+      tempRefName: "refs/but-why/runs/BY-1.1/validation",
+      submittedSha: commitSha,
+      worktreeHead: commitSha,
+      cleanupWorktree: "removed",
+      cleanupTempRef: "removed",
+    });
+    expect(existsSync(validationWorkspace?.worktreePath ?? "")).toBe(false);
+    expect(readFileSync(join(root, ".gitignore"), "utf8")).toContain(".sandcastle/worktrees/");
 
     expect(runByInProcess(root, ["task", "show", "BY-1"]).stdout).toContain(
       `state: validating\n  createdAt: "${firstNow}"\n  updatedAt: "${thirdNow}"\n  branch: feature/by-1\n  latestRun: BY-1.1`,
@@ -63,14 +91,46 @@ describe("by submit CLI", () => {
     });
   });
 
+  it("records workspace setup tooling errors on the Run without sending the Task to needs_input", () => {
+    const root = preparedRepoOnBranch("feature/missing-copy-file");
+    const commitSha = currentCommitSha(root);
+
+    writeFileSync(
+      join(root, ".but-why/config.json"),
+      `${JSON.stringify({ taskPrefix: "BY", validationWorkspace: { copyFiles: [".env.test"] } }, null, 2)}\n`,
+    );
+    spawnGit(root, "add", ".but-why/config.json");
+    spawnGit(root, "commit", "-m", "Configure validation workspace copy files");
+
+    const result = withFakeGh(() => runSubmit(root, ["BY-1"], thirdNow));
+
+    expect(result.status).toBe(1);
+    expect(result.stdout).toContain("code: validation_workspace_setup_failed");
+    expect(result.stdout).toContain("operationName: copy_allowlisted_file");
+    expect(repoState(root).getRunById("BY-1.1")).toMatchObject({ status: "error" });
+    expect(repoState(root).listRunToolingErrors("BY-1.1")).toEqual([
+      expect.objectContaining({
+        runId: "BY-1.1",
+        operationName: "copy_allowlisted_file",
+        tempRefName: "refs/but-why/runs/BY-1.1/validation",
+        submittedSha: currentCommitSha(root),
+        cleanupWorktree: "not_created",
+        cleanupTempRef: "removed",
+      }),
+    ]);
+    expect(taskState(root, "BY-1")).toBe("implementing");
+    expect(gitRefExists(root, "refs/but-why/runs/BY-1.1/validation")).toBe(false);
+    expect(currentCommitSha(root)).not.toBe(commitSha);
+  });
+
   it("allows needs_input Tasks and increments task-scoped Run IDs after a terminal Run", () => {
     const root = preparedRepoOnBranch("feature/resubmit");
 
-    expect(withFakeGh(() => runByInProcess(root, ["submit", "BY-1"], secondNow)).status).toBe(0);
+    expect(withFakeGh(() => runSubmit(root, ["BY-1"], secondNow)).status).toBe(0);
     recordRunError(root, "BY-1.1", secondNow);
     transitionCurrentTaskState(root, "BY-1", "needs_input", secondNow);
 
-    const result = withFakeGh(() => runByInProcess(root, ["submit", "BY-1"], thirdNow));
+    const result = withFakeGh(() => runSubmit(root, ["BY-1"], thirdNow));
 
     expect(result.status).toBe(0);
     expect(result.stdout).toContain("runId: BY-1.2");
@@ -86,7 +146,7 @@ describe("by submit CLI", () => {
     createTask(root, "BY-1 state");
     transitionTaskState(root, "BY-1", state, secondNow);
 
-    const result = runByInProcess(root, ["submit", "BY-1"], thirdNow);
+    const result = runSubmit(root, ["BY-1"], thirdNow);
 
     expect(result.status).toBe(1);
     expect(result.stderr).toBe("");
@@ -97,7 +157,7 @@ describe("by submit CLI", () => {
   it("rejects unknown Tasks before Git checks", () => {
     const root = initializedRepo();
 
-    const result = runByInProcess(root, ["submit", "BY-999"], thirdNow);
+    const result = runSubmit(root, ["BY-999"], thirdNow);
 
     expect(result.status).toBe(1);
     expect(result.stdout).toBe(`error:
@@ -142,19 +202,19 @@ help[1]: Run \`by task list --all\` to see known Tasks.`);
       );
       testCase.setup(root);
 
-      const result = withFakeGh(() => runByInProcess(root, ["submit", "BY-1"], thirdNow));
+      const result = withFakeGh(() => runSubmit(root, ["BY-1"], thirdNow));
 
       expect(result.status, testCase.name).toBe(1);
       expect(result.stdout, testCase.name).toContain(`code: ${testCase.code}`);
       expect(taskState(root, "BY-1"), testCase.name).toBe("implementing");
       expect(taskHasNoRuns(root, "BY-1"), testCase.name).toBe(true);
     }
-  });
+  }, 10_000);
 
   it("reports GitHub read command failures as tooling errors", () => {
     const root = preparedRepoOnBranch("feature/github-tooling");
 
-    const result = withFailingGh(() => runByInProcess(root, ["submit", "BY-1"], thirdNow));
+    const result = withFailingGh(() => runSubmit(root, ["BY-1"], thirdNow));
 
     expect(result.status).toBe(1);
     expect(result.stdout).toContain("code: tooling_error");
@@ -168,20 +228,20 @@ help[1]: Run \`by task list --all\` to see known Tasks.`);
     spawnGit(root, "commit", "-m", "Add second task");
     transitionTaskState(root, "BY-2", "implementing", secondNow);
 
-    expect(withFakeGh(() => runByInProcess(root, ["submit", "BY-1"], secondNow)).status).toBe(0);
+    expect(withFakeGh(() => runSubmit(root, ["BY-1"], secondNow)).status).toBe(0);
 
-    expect(withFakeGh(() => runByInProcess(root, ["submit", "BY-2"], thirdNow)).stdout).toContain(
+    expect(withFakeGh(() => runSubmit(root, ["BY-2"], thirdNow)).stdout).toContain(
       "code: BRANCH_ALREADY_BOUND",
     );
     transitionCurrentTaskState(root, "BY-1", "needs_input", thirdNow);
-    expect(withFakeGh(() => runByInProcess(root, ["submit", "BY-1"], thirdNow)).stdout).toContain(
+    expect(withFakeGh(() => runSubmit(root, ["BY-1"], thirdNow)).stdout).toContain(
       "code: TASK_HAS_ACTIVE_RUN",
     );
 
     recordRunError(root, "BY-1.1", thirdNow);
     spawnGit(root, "checkout", "-b", "feature/other");
 
-    expect(withFakeGh(() => runByInProcess(root, ["submit", "BY-1"], thirdNow)).stdout).toContain(
+    expect(withFakeGh(() => runSubmit(root, ["BY-1"], thirdNow)).stdout).toContain(
       "code: TASK_BRANCH_MISMATCH",
     );
   });
@@ -189,9 +249,7 @@ help[1]: Run \`by task list --all\` to see known Tasks.`);
   it("serializes submit success and preflight errors as JSON", () => {
     const root = preparedRepoOnBranch("feature/json");
 
-    const success = withFakeGh(() =>
-      runByInProcess(root, ["submit", "BY-1", "--output", "json"], thirdNow),
-    );
+    const success = withFakeGh(() => runSubmit(root, ["BY-1", "--output", "json"], thirdNow));
 
     expect(success.status).toBe(0);
     expect(JSON.parse(success.stdout)).toMatchObject({
@@ -209,7 +267,7 @@ help[1]: Run \`by task list --all\` to see known Tasks.`);
       },
     });
 
-    const missing = runByInProcess(root, ["submit", "BY-999", "--output", "json"], thirdNow);
+    const missing = runSubmit(root, ["BY-999", "--output", "json"], thirdNow);
 
     expect(missing.status).toBe(1);
     expect(JSON.parse(missing.stdout)).toEqual({
@@ -340,6 +398,19 @@ const currentCommitSha = (root: string): string =>
 
 const currentBranch = (root: string): string =>
   spawnSync("git", ["branch", "--show-current"], { cwd: root, encoding: "utf8" }).stdout.trim();
+
+const gitStatus = (root: string): string =>
+  spawnSync("git", ["status", "--porcelain=v1"], { cwd: root, encoding: "utf8" }).stdout;
+
+const gitRefExists = (root: string, ref: string): boolean =>
+  spawnSync("git", ["rev-parse", "--verify", `${ref}^{commit}`], {
+    cwd: root,
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "ignore"],
+  }).status === 0;
+
+const runSubmit = (root: string, args: readonly string[], now: string) =>
+  runByWithEnv(root, { BUT_WHY_NOW: now }, "submit", ...args);
 
 const withFakeGh = <Result>(work: () => Result): Result => {
   const originalPath = process.env.PATH;

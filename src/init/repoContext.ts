@@ -3,7 +3,7 @@ import { join } from "node:path";
 
 import { findGitRoot } from "./git.js";
 import { ensureGitignoreBlock } from "./gitignore.js";
-import { readRepoConfig, writeRepoConfig } from "./repoConfig.js";
+import { readRepoConfig, type RepoConfig, writeRepoConfig } from "./repoConfig.js";
 import { ensureStateDatabase } from "./stateDatabase.js";
 
 export const taskPrefixPattern = /^[A-Z][A-Z0-9]{1,9}$/;
@@ -19,6 +19,7 @@ export type RepoLocalPaths = {
 export type RepoLocalContext = {
   readonly root: string;
   readonly taskPrefix: string;
+  readonly config: RepoConfig;
   readonly paths: RepoLocalPaths;
 };
 
@@ -212,6 +213,7 @@ export const loadRepoLocalContext = (cwd: string): LoadRepoLocalContextResult =>
       root: gitRoot.root,
       paths,
       taskPrefix: repoConfig.config.taskPrefix,
+      config: repoConfig.config,
     },
   };
 };

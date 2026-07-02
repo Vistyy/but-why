@@ -126,7 +126,7 @@ Task commands can show the latest Run Findings without duplicating them as comme
 
 ## Execution boundary
 
-Sandcastle is the intended v1 execution engine, pending spike.
+Sandcastle is the accepted v1 execution engine.
 
 But Why? should use Sandcastle for:
 

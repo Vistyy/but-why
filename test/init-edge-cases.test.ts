@@ -3,9 +3,10 @@ import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { afterEach, describe, expect, it } from "vitest";
 
+import { butWhyGitignoreBlock } from "../src/init/gitignore.js";
 import { cleanupTempRoots, createGitRepo, runByInProcessArgs as runBy } from "./support/by-cli.js";
 
-const managedGitignoreBlock = `# But Why?\n.but-why/state.sqlite\n.but-why/state.sqlite-*\n`;
+const managedGitignoreBlock = `${butWhyGitignoreBlock}\n`;
 
 const writeConfig = (root: string, taskPrefix = "BY") => {
   mkdirSync(join(root, ".but-why"), { recursive: true });
@@ -124,6 +125,7 @@ help[1]: Move the conflicting path aside before running init again.`);
         { name: "002_tasks" },
         { name: "003_task_comments" },
         { name: "004_submit_preflight" },
+        { name: "005_validation_workspace_setup" },
       ]);
     } finally {
       repairedDatabase.close();

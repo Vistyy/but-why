@@ -6,6 +6,7 @@ import { DatabaseSync } from "node:sqlite";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { collapseHome, mapRuntimeError } from "../src/cli.js";
+import { butWhyGitignoreBlock } from "../src/init/gitignore.js";
 import { encodeToon } from "../src/output/toon.js";
 import {
   cleanupTempRoots,
@@ -17,6 +18,7 @@ import {
 } from "./support/by-cli.js";
 
 const expectedBin = collapseHome(join(repoRoot, "bin/by"));
+const managedGitignoreBlock = `${butWhyGitignoreBlock}\n`;
 
 afterEach(cleanupTempRoots);
 
@@ -224,9 +226,7 @@ updated[1]: .gitignore`);
     });
     expect(existsSync(join(root, ".but-why/state.sqlite"))).toBe(true);
     expect(readdirSync(join(root, ".but-why/reviewers"))).toEqual([]);
-    expect(readFileSync(join(root, ".gitignore"), "utf8")).toBe(
-      `# But Why?\n.but-why/state.sqlite\n.but-why/state.sqlite-*\n`,
-    );
+    expect(readFileSync(join(root, ".gitignore"), "utf8")).toBe(managedGitignoreBlock);
   });
 
   it("initializes the root when run from a subdirectory", () => {
@@ -256,6 +256,7 @@ updated[1]: .gitignore`);
         { name: "002_tasks" },
         { name: "003_task_comments" },
         { name: "004_submit_preflight" },
+        { name: "005_validation_workspace_setup" },
       ]);
       expect(
         database
@@ -264,10 +265,12 @@ updated[1]: .gitignore`);
           )
           .all(),
       ).toEqual([
+        { name: "run_tooling_errors" },
         { name: "runs" },
         { name: "schema_migrations" },
         { name: "task_comments" },
         { name: "tasks" },
+        { name: "validation_workspace_setups" },
       ]);
     } finally {
       database.close();
@@ -341,9 +344,7 @@ created[1]: .but-why/reviewers/`);
     expect(runBy(root, "init", "--task-prefix", "BY").status).toBe(0);
     expect(runBy(root, "init", "--task-prefix", "BY").status).toBe(0);
 
-    expect(readFileSync(join(root, ".gitignore"), "utf8")).toBe(
-      `# But Why?\n.but-why/state.sqlite\n.but-why/state.sqlite-*\n`,
-    );
+    expect(readFileSync(join(root, ".gitignore"), "utf8")).toBe(managedGitignoreBlock);
   });
 
   it("appends the managed gitignore block after existing content", () => {
@@ -353,7 +354,7 @@ created[1]: .but-why/reviewers/`);
 
     expect(runBy(root, "init", "--task-prefix", "BY").status).toBe(0);
     expect(readFileSync(join(root, ".gitignore"), "utf8")).toBe(
-      `node_modules/\n\n# But Why?\n.but-why/state.sqlite\n.but-why/state.sqlite-*\n`,
+      `node_modules/\n\n${managedGitignoreBlock}`,
     );
   });
 
@@ -363,9 +364,7 @@ created[1]: .but-why/reviewers/`);
     writeFileSync(join(root, ".gitignore"), "# But Why?\n.but-why/state.sqlite\n");
 
     expect(runBy(root, "init", "--task-prefix", "BY").status).toBe(0);
-    expect(readFileSync(join(root, ".gitignore"), "utf8")).toBe(
-      `# But Why?\n.but-why/state.sqlite\n.but-why/state.sqlite-*\n`,
-    );
+    expect(readFileSync(join(root, ".gitignore"), "utf8")).toBe(managedGitignoreBlock);
   });
 
   it("prints not_git_work_tree outside Git", () => {

@@ -6,7 +6,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { expect } from "vitest";
 
-import { runCli } from "../../src/cli.js";
+import { runCli, type CliResult } from "../../src/cli.js";
 import { serializeOutput } from "../../src/output/serialize.js";
 
 export const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
@@ -45,25 +45,41 @@ type InProcessCliResult = {
   readonly stderr: string;
 };
 
+const cliResultToInProcessResult = (result: CliResult): InProcessCliResult => ({
+  status: result.exitCode,
+  stdout: serializeOutput(result.stdout, result.outputFormat ?? "toon"),
+  stderr: "",
+});
+
 export const runByInProcess = (
   cwd: string,
   args: readonly string[],
   now = "2026-06-30T12:00:00.000Z",
-): InProcessCliResult => {
-  const result = Effect.runSync(
-    runCli(args, {
-      executablePath: byExecutable,
-      cwd,
-      now: () => new Date(now),
-    }),
+): InProcessCliResult =>
+  cliResultToInProcessResult(
+    Effect.runSync(
+      runCli(args, {
+        executablePath: byExecutable,
+        cwd,
+        now: () => new Date(now),
+      }),
+    ),
   );
 
-  return {
-    status: result.exitCode,
-    stdout: serializeOutput(result.stdout, result.outputFormat ?? "toon"),
-    stderr: "",
-  };
-};
+export const runByInProcessAsync = async (
+  cwd: string,
+  args: readonly string[],
+  now = "2026-06-30T12:00:00.000Z",
+): Promise<InProcessCliResult> =>
+  cliResultToInProcessResult(
+    await Effect.runPromise(
+      runCli(args, {
+        executablePath: byExecutable,
+        cwd,
+        now: () => new Date(now),
+      }),
+    ),
+  );
 
 export const runByInProcessArgs = (cwd: string, ...args: readonly string[]): InProcessCliResult =>
   runByInProcess(cwd, args);

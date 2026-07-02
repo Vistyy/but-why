@@ -14,8 +14,9 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@ai-hero/sandcastle": "0.12.0",
     "@toon-format/toon": "^2.3.0",
-    "effect": "^3.17.7"
+    "effect": "3.20.0"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.2.0",

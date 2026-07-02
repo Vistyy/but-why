@@ -25,11 +25,19 @@ export type RepoState = {
   readonly getTaskById: (taskId: PublicTaskId) => TaskRecord | undefined;
   readonly getTaskContextById: (taskId: PublicTaskId) => TaskContext | undefined;
   readonly getRunById: (runId: string) => RunRecord | undefined;
+  readonly getValidationWorkspaceSetup: (
+    runId: string,
+  ) => ValidationWorkspaceSetupRecord | undefined;
+  readonly listRunToolingErrors: (runId: string) => readonly RunToolingErrorRecord[];
   readonly getTaskSubmitReadiness: (taskId: PublicTaskId) => TaskSubmitReadinessResult;
   readonly createRunFromSubmitPreflight: (
     input: CreateRunFromSubmitPreflightInput,
   ) => CreateRunFromSubmitPreflightResult;
   readonly recordRunError: (input: RecordRunErrorInput) => RecordRunErrorResult;
+  readonly recordValidationWorkspaceSetup: (
+    input: RecordValidationWorkspaceSetupInput,
+  ) => RecordRunErrorResult;
+  readonly recordRunToolingError: (input: RecordRunToolingErrorInput) => RecordRunErrorResult;
   readonly appendTaskComment: (
     input: AppendTaskCommentInput,
   ) => AppendTaskCommentResult | undefined;
@@ -109,6 +117,7 @@ export type CreateRunFromSubmitPreflightResult =
       readonly ok: true;
       readonly runId: string;
       readonly taskState: "validating";
+      readonly previousTaskState: "implementing" | "needs_input";
     }
   | {
       readonly ok: false;
@@ -126,6 +135,44 @@ export type CreateRunFromSubmitPreflightResult =
 export type RecordRunErrorInput = {
   readonly runId: string;
   readonly now: string;
+};
+
+export type CleanupState = "removed" | "not_created" | "failed";
+
+export type RecordValidationWorkspaceSetupInput = {
+  readonly runId: string;
+  readonly tempRefName: string;
+  readonly submittedSha: string;
+  readonly worktreePath: string;
+  readonly worktreeHead: string;
+  readonly cleanupWorktree: CleanupState;
+  readonly cleanupTempRef: CleanupState;
+  readonly now: string;
+};
+
+export type ValidationWorkspaceSetupRecord = Omit<RecordValidationWorkspaceSetupInput, "now"> & {
+  readonly createdAt: string;
+};
+
+export type RecordRunToolingErrorInput = {
+  readonly runId: string;
+  readonly operationName: string;
+  readonly tempRefName: string;
+  readonly submittedSha: string;
+  readonly worktreePath?: string;
+  readonly errorMessage: string;
+  readonly cleanupWorktree: CleanupState;
+  readonly cleanupTempRef: CleanupState;
+  readonly taskRecoveryState?: "implementing" | "needs_input";
+  readonly now: string;
+};
+
+export type RunToolingErrorRecord = Omit<
+  RecordRunToolingErrorInput,
+  "now" | "taskRecoveryState"
+> & {
+  readonly sequence: number;
+  readonly createdAt: string;
 };
 
 export type RecordRunErrorResult =
@@ -174,6 +221,28 @@ const runRecordColumns = [
   "github_remote_url AS githubRemoteUrl",
   ...taskTimestampColumns,
 ].join(", ");
+const validationWorkspaceSetupColumns = [
+  "run_id AS runId",
+  "temp_ref_name AS tempRefName",
+  "submitted_sha AS submittedSha",
+  "worktree_path AS worktreePath",
+  "worktree_head AS worktreeHead",
+  "cleanup_worktree AS cleanupWorktree",
+  "cleanup_temp_ref AS cleanupTempRef",
+  "created_at AS createdAt",
+].join(", ");
+const runToolingErrorColumns = [
+  "sequence",
+  "run_id AS runId",
+  "operation_name AS operationName",
+  "temp_ref_name AS tempRefName",
+  "submitted_sha AS submittedSha",
+  "worktree_path AS worktreePath",
+  "error_message AS errorMessage",
+  "cleanup_worktree AS cleanupWorktree",
+  "cleanup_temp_ref AS cleanupTempRef",
+  "created_at AS createdAt",
+].join(", ");
 
 /**
  * V1 Task lifecycle transitions live here so lifecycle commands do not encode SQL or state rules.
@@ -214,11 +283,19 @@ export const openRepoState = (input: RepoStateInput): RepoState => {
     getTaskContextById: (taskId) =>
       withDatabase((database) => getTaskContextById(database, taskId)),
     getRunById: (runId) => withDatabase((database) => getRunById(database, runId)),
+    getValidationWorkspaceSetup: (runId) =>
+      withDatabase((database) => getValidationWorkspaceSetup(database, runId)),
+    listRunToolingErrors: (runId) =>
+      withDatabase((database) => listRunToolingErrors(database, runId)),
     getTaskSubmitReadiness: (taskId) =>
       withDatabase((database) => getTaskSubmitReadiness(database, taskId)),
     createRunFromSubmitPreflight: (submitInput) =>
       withDatabase((database) => createRunFromSubmitPreflight(database, submitInput)),
     recordRunError: (runInput) => withDatabase((database) => recordRunError(database, runInput)),
+    recordValidationWorkspaceSetup: (runInput) =>
+      withDatabase((database) => recordValidationWorkspaceSetup(database, runInput)),
+    recordRunToolingError: (runInput) =>
+      withDatabase((database) => recordRunToolingError(database, runInput)),
     appendTaskComment: (taskInput) =>
       withDatabase((database) => appendTaskComment(database, taskInput)),
     transitionTaskState: (taskInput) =>
@@ -338,6 +415,39 @@ const getRunById = (database: DatabaseSync, runId: string): RunRecord | undefine
 
   return rowToRunRecord(row);
 };
+
+const getValidationWorkspaceSetup = (
+  database: DatabaseSync,
+  runId: string,
+): ValidationWorkspaceSetupRecord | undefined => {
+  const row = database
+    .prepare(`
+      SELECT ${validationWorkspaceSetupColumns}
+      FROM validation_workspace_setups
+      WHERE run_id = ?
+    `)
+    .get(runId);
+
+  if (row === undefined) {
+    return undefined;
+  }
+
+  return rowToValidationWorkspaceSetup(row);
+};
+
+const listRunToolingErrors = (
+  database: DatabaseSync,
+  runId: string,
+): readonly RunToolingErrorRecord[] =>
+  database
+    .prepare(`
+      SELECT ${runToolingErrorColumns}
+      FROM run_tooling_errors
+      WHERE run_id = ?
+      ORDER BY sequence ASC
+    `)
+    .all(runId)
+    .map(rowToRunToolingError);
 
 const getTaskForSubmit = (
   database: DatabaseSync,
@@ -504,7 +614,12 @@ const createRunFromSubmitPreflight = (
 
     database.exec("COMMIT");
 
-    return { ok: true, runId, taskState: "validating" };
+    return {
+      ok: true,
+      runId,
+      taskState: "validating",
+      previousTaskState: submittableTaskState(task.state),
+    };
   } catch (error) {
     rollbackIfOpen(database);
     throw error;
@@ -534,6 +649,123 @@ const recordRunError = (
     throw error;
   }
 };
+
+const recordValidationWorkspaceSetup = (
+  database: DatabaseSync,
+  input: RecordValidationWorkspaceSetupInput,
+): RecordRunErrorResult => {
+  database.exec("BEGIN IMMEDIATE");
+
+  try {
+    if (!runExists(database, input.runId)) {
+      database.exec("ROLLBACK");
+      return { ok: false, code: "RUN_NOT_FOUND" };
+    }
+
+    database
+      .prepare(`
+        INSERT INTO validation_workspace_setups (
+          run_id,
+          temp_ref_name,
+          submitted_sha,
+          worktree_path,
+          worktree_head,
+          cleanup_worktree,
+          cleanup_temp_ref,
+          created_at
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(run_id) DO UPDATE SET
+          temp_ref_name = excluded.temp_ref_name,
+          submitted_sha = excluded.submitted_sha,
+          worktree_path = excluded.worktree_path,
+          worktree_head = excluded.worktree_head,
+          cleanup_worktree = excluded.cleanup_worktree,
+          cleanup_temp_ref = excluded.cleanup_temp_ref,
+          created_at = excluded.created_at
+      `)
+      .run(
+        input.runId,
+        input.tempRefName,
+        input.submittedSha,
+        input.worktreePath,
+        input.worktreeHead,
+        input.cleanupWorktree,
+        input.cleanupTempRef,
+        input.now,
+      );
+
+    database.prepare("UPDATE runs SET updated_at = ? WHERE id = ?").run(input.now, input.runId);
+
+    database.exec("COMMIT");
+    return { ok: true };
+  } catch (error) {
+    rollbackIfOpen(database);
+    throw error;
+  }
+};
+
+const recordRunToolingError = (
+  database: DatabaseSync,
+  input: RecordRunToolingErrorInput,
+): RecordRunErrorResult => {
+  database.exec("BEGIN IMMEDIATE");
+
+  try {
+    if (!runExists(database, input.runId)) {
+      database.exec("ROLLBACK");
+      return { ok: false, code: "RUN_NOT_FOUND" };
+    }
+
+    database
+      .prepare(`
+        INSERT INTO run_tooling_errors (
+          run_id,
+          operation_name,
+          temp_ref_name,
+          submitted_sha,
+          worktree_path,
+          error_message,
+          cleanup_worktree,
+          cleanup_temp_ref,
+          created_at
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `)
+      .run(
+        input.runId,
+        input.operationName,
+        input.tempRefName,
+        input.submittedSha,
+        input.worktreePath ?? null,
+        input.errorMessage,
+        input.cleanupWorktree,
+        input.cleanupTempRef,
+        input.now,
+      );
+
+    database
+      .prepare("UPDATE runs SET status = 'error', updated_at = ? WHERE id = ?")
+      .run(input.now, input.runId);
+
+    if (input.taskRecoveryState !== undefined) {
+      database
+        .prepare(
+          "UPDATE tasks SET state = ?, updated_at = ? WHERE id = (SELECT task_id FROM runs WHERE id = ?)",
+        )
+        .run(input.taskRecoveryState, input.now, input.runId);
+    }
+
+    database.exec("COMMIT");
+    return { ok: true };
+  } catch (error) {
+    rollbackIfOpen(database);
+    throw error;
+  }
+};
+
+const runExists = (database: DatabaseSync, runId: string): boolean =>
+  database.prepare("SELECT id FROM runs WHERE id = ?").get(runId) !== undefined;
 
 const appendTaskComment = (
   database: DatabaseSync,
@@ -632,6 +864,14 @@ const transitionTaskState = (
 const canTransitionTaskState = (from: TaskState, to: TaskState): boolean =>
   validTaskStateTransitions.get(from)?.includes(to) ?? false;
 
+const submittableTaskState = (state: TaskState): "implementing" | "needs_input" => {
+  if (state === "implementing" || state === "needs_input") {
+    return state;
+  }
+
+  throw new Error("Task state is not submittable");
+};
+
 const rollbackIfOpen = (database: DatabaseSync): void => {
   try {
     database.exec("ROLLBACK");
@@ -713,6 +953,33 @@ const rowToRunRecord = (row: unknown): RunRecord => {
     githubRemoteUrl: row.githubRemoteUrl,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
+  };
+};
+
+const rowToValidationWorkspaceSetup = (row: unknown): ValidationWorkspaceSetupRecord => {
+  if (!isValidationWorkspaceSetupRow(row)) {
+    throw new Error("Invalid validation workspace setup row");
+  }
+
+  return row;
+};
+
+const rowToRunToolingError = (row: unknown): RunToolingErrorRecord => {
+  if (!isRunToolingErrorRow(row)) {
+    throw new Error("Invalid Run tooling error row");
+  }
+
+  return {
+    sequence: Number(row.sequence),
+    runId: row.runId,
+    operationName: row.operationName,
+    tempRefName: row.tempRefName,
+    submittedSha: row.submittedSha,
+    ...(row.worktreePath === null ? {} : { worktreePath: row.worktreePath }),
+    errorMessage: row.errorMessage,
+    cleanupWorktree: row.cleanupWorktree,
+    cleanupTempRef: row.cleanupTempRef,
+    createdAt: row.createdAt,
   };
 };
 
@@ -822,6 +1089,13 @@ type RunRecordRow = {
   readonly updatedAt: string;
 };
 
+type ValidationWorkspaceSetupRow = ValidationWorkspaceSetupRecord;
+
+type RunToolingErrorRow = Omit<RunToolingErrorRecord, "sequence" | "worktreePath"> & {
+  readonly sequence: number | bigint;
+  readonly worktreePath: string | null;
+};
+
 type TaskContextHeaderRow = {
   readonly id: string;
   readonly title: string;
@@ -870,6 +1144,35 @@ const isRunRecordRow = (value: unknown): value is RunRecordRow =>
   typeof (value as { readonly githubRemoteUrl?: unknown }).githubRemoteUrl === "string" &&
   typeof (value as { readonly createdAt?: unknown }).createdAt === "string" &&
   typeof (value as { readonly updatedAt?: unknown }).updatedAt === "string";
+
+const isValidationWorkspaceSetupRow = (value: unknown): value is ValidationWorkspaceSetupRow =>
+  typeof value === "object" &&
+  value !== null &&
+  typeof (value as { readonly runId?: unknown }).runId === "string" &&
+  typeof (value as { readonly tempRefName?: unknown }).tempRefName === "string" &&
+  typeof (value as { readonly submittedSha?: unknown }).submittedSha === "string" &&
+  typeof (value as { readonly worktreePath?: unknown }).worktreePath === "string" &&
+  typeof (value as { readonly worktreeHead?: unknown }).worktreeHead === "string" &&
+  isCleanupState((value as { readonly cleanupWorktree?: unknown }).cleanupWorktree) &&
+  isCleanupState((value as { readonly cleanupTempRef?: unknown }).cleanupTempRef) &&
+  typeof (value as { readonly createdAt?: unknown }).createdAt === "string";
+
+const isRunToolingErrorRow = (value: unknown): value is RunToolingErrorRow =>
+  typeof value === "object" &&
+  value !== null &&
+  isCount((value as { readonly sequence?: unknown }).sequence) &&
+  typeof (value as { readonly runId?: unknown }).runId === "string" &&
+  typeof (value as { readonly operationName?: unknown }).operationName === "string" &&
+  typeof (value as { readonly tempRefName?: unknown }).tempRefName === "string" &&
+  typeof (value as { readonly submittedSha?: unknown }).submittedSha === "string" &&
+  isNullableString((value as { readonly worktreePath?: unknown }).worktreePath) &&
+  typeof (value as { readonly errorMessage?: unknown }).errorMessage === "string" &&
+  isCleanupState((value as { readonly cleanupWorktree?: unknown }).cleanupWorktree) &&
+  isCleanupState((value as { readonly cleanupTempRef?: unknown }).cleanupTempRef) &&
+  typeof (value as { readonly createdAt?: unknown }).createdAt === "string";
+
+const isCleanupState = (value: unknown): value is CleanupState =>
+  value === "removed" || value === "not_created" || value === "failed";
 
 const isTaskContextHeaderRow = (value: unknown): value is TaskContextHeaderRow =>
   typeof value === "object" &&

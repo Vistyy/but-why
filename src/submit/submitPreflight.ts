@@ -10,6 +10,11 @@ import type { TaskState } from "../task/task.js";
 import { resolveRepoTaskId, type RepoTaskIdResolution } from "../task/repoTaskIds.js";
 import type { PublicTaskId } from "../task/taskId.js";
 import { openRepoState, type RepoState } from "../repoState.js";
+import {
+  createValidationWorkspace,
+  type ValidationWorkspaceSetup,
+  type ValidationWorkspaceToolingError,
+} from "../validation/createValidationWorkspace.js";
 import { readGitFacts } from "./gitFacts.js";
 import { detectGitHubPrTarget, protectedBranchNames } from "./githubTarget.js";
 
@@ -21,6 +26,9 @@ export type RepoSubmitPreflight = {
   readonly taskPrefix: string;
   readonly resolveTaskId: (taskId: PublicTaskId) => RepoTaskIdResolution;
   readonly submitTask: (input: SubmitTaskInput) => SubmitTaskResult;
+  readonly createValidationWorkspaceForRun: (
+    input: CreateValidationWorkspaceForRunInput,
+  ) => Promise<CreateValidationWorkspaceForRunResult>;
 };
 
 export type LoadRepoSubmitPreflightResult =
@@ -45,6 +53,23 @@ export type SubmitTaskInput = {
   readonly now: string;
 };
 
+export type CreateValidationWorkspaceForRunInput = {
+  readonly runId: string;
+  readonly commitSha: string;
+  readonly taskRecoveryState: "implementing" | "needs_input";
+  readonly now: string;
+};
+
+export type CreateValidationWorkspaceForRunResult =
+  | {
+      readonly ok: true;
+      readonly validationWorkspace: ValidationWorkspaceSetup;
+    }
+  | {
+      readonly ok: false;
+      readonly toolingError: ValidationWorkspaceToolingError;
+    };
+
 export type SubmitTaskResult =
   | {
       readonly ok: true;
@@ -53,7 +78,9 @@ export type SubmitTaskResult =
       readonly branch: string;
       readonly commitSha: string;
       readonly taskState: "validating";
+      readonly previousTaskState: "implementing" | "needs_input";
       readonly prTarget: GitHubPrTarget;
+      readonly validationWorkspace?: ValidationWorkspaceSetup;
     }
   | {
       readonly ok: false;
@@ -113,11 +140,64 @@ const repoSubmitPreflight = (context: RepoLocalContext): RepoSubmitPreflight => 
   return {
     taskPrefix: context.taskPrefix,
     resolveTaskId: (taskId) => resolveRepoTaskId(context, taskId),
-    submitTask: (input) => submitTask(context.root, state, input),
+    submitTask: (input) =>
+      submitTask(context.root, state, context.config.validationWorkspace?.copyFiles ?? [], input),
+    createValidationWorkspaceForRun: (input) =>
+      createValidationWorkspaceForRun(context, state, input),
   };
 };
 
-const submitTask = (root: string, state: RepoState, input: SubmitTaskInput): SubmitTaskResult => {
+const createValidationWorkspaceForRun = async (
+  context: RepoLocalContext,
+  state: RepoState,
+  input: CreateValidationWorkspaceForRunInput,
+): Promise<CreateValidationWorkspaceForRunResult> => {
+  const result = await createValidationWorkspace({
+    repoRoot: context.root,
+    runId: input.runId,
+    submittedSha: input.commitSha,
+    copyFiles: context.config.validationWorkspace?.copyFiles ?? [],
+  });
+
+  if (result.ok) {
+    state.recordValidationWorkspaceSetup({
+      runId: input.runId,
+      tempRefName: result.setup.tempRefName,
+      submittedSha: result.setup.submittedSha,
+      worktreePath: result.setup.worktreePath,
+      worktreeHead: result.setup.worktreeHead,
+      cleanupWorktree: result.setup.cleanupResult.worktree,
+      cleanupTempRef: result.setup.cleanupResult.tempRef,
+      now: input.now,
+    });
+
+    return { ok: true, validationWorkspace: result.setup };
+  }
+
+  state.recordRunToolingError({
+    runId: input.runId,
+    operationName: result.toolingError.operationName,
+    tempRefName: result.toolingError.tempRefName,
+    submittedSha: result.toolingError.submittedSha,
+    ...(result.toolingError.worktreePath === undefined
+      ? {}
+      : { worktreePath: result.toolingError.worktreePath }),
+    errorMessage: result.toolingError.errorMessage,
+    cleanupWorktree: result.toolingError.cleanupResult.worktree,
+    cleanupTempRef: result.toolingError.cleanupResult.tempRef,
+    taskRecoveryState: input.taskRecoveryState,
+    now: input.now,
+  });
+
+  return { ok: false, toolingError: result.toolingError };
+};
+
+const submitTask = (
+  root: string,
+  state: RepoState,
+  allowedUntrackedFiles: readonly string[],
+  input: SubmitTaskInput,
+): SubmitTaskResult => {
   const readiness = state.getTaskSubmitReadiness(input.taskId);
 
   if (!readiness.ok) {
@@ -130,7 +210,7 @@ const submitTask = (root: string, state: RepoState, input: SubmitTaskInput): Sub
     };
   }
 
-  const gitFacts = readGitFacts(root);
+  const gitFacts = readGitFacts(root, undefined, { allowedUntrackedFiles });
 
   if (!gitFacts.ok) {
     if (gitFacts.code === "GIT_TOOLING_ERROR") {
@@ -208,6 +288,7 @@ const submitTask = (root: string, state: RepoState, input: SubmitTaskInput): Sub
     branch: gitFacts.facts.branch,
     commitSha: gitFacts.facts.commitSha,
     taskState: createRun.taskState,
+    previousTaskState: createRun.previousTaskState,
     prTarget: prTarget.target,
   };
 };

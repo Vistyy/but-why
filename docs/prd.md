@@ -24,7 +24,7 @@ A human or agent can read the Task Context and latest Findings, make changes or 
 
 V1 is synchronous for submission and uses a repo-local daemon only for PR reconciliation.
 
-Sandcastle is the intended execution engine for validation worktrees, command checks, reviewer agents, logs, structured output retries, and token usage.
+Sandcastle is the accepted execution engine for validation worktrees, command checks, reviewer agents, logs, structured output retries, and token usage.
 
 ## User Stories
 
@@ -230,7 +230,7 @@ Sandcastle is the intended execution engine for validation worktrees, command ch
 
 - Effect Schema is used for schemas and validation.
 
-- Sandcastle is the intended v1 execution engine pending spike.
+- Sandcastle is the accepted v1 execution engine.
 
 - Sandcastle should be wrapped only at But Why domain seams.
 
@@ -246,7 +246,7 @@ Sandcastle is the intended execution engine for validation worktrees, command ch
 
 - Validation Gate tests should use fake Sandcastle adapters where possible.
 
-- The Sandcastle spike must use the real dependency before production implementation starts.
+- The Sandcastle spike used the real dependency before production implementation started.
 
 - Reviewer output tests should use golden fixtures for task context, diff, and expected findings behavior.
 
@@ -296,9 +296,9 @@ Sandcastle is the intended execution engine for validation worktrees, command ch
 
 ## Further Notes
 
-The first implementation work should be the Sandcastle spike.
+The first implementation work was the Sandcastle spike.
 
-If the spike fails, the execution plan should be revisited before building product code.
+The spike passed for validation workspace creation, so product code may depend on Sandcastle.
 
 The current architecture is intentionally conservative about automation.
 

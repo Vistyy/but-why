@@ -40,9 +40,14 @@ export const runGitCommand: GitCommandRunner = (args, cwd) => {
   return { ok: true, stdout: result.stdout };
 };
 
+export type ReadGitFactsOptions = {
+  readonly allowedUntrackedFiles?: readonly string[];
+};
+
 export const readGitFacts = (
   cwd: string,
   runGit: GitCommandRunner = runGitCommand,
+  options: ReadGitFactsOptions = {},
 ): GitFactsResult => {
   const branch = runGit(["branch", "--show-current"], cwd);
 
@@ -62,7 +67,7 @@ export const readGitFacts = (
     return { ok: false, code: "GIT_TOOLING_ERROR" };
   }
 
-  if (status.stdout.trim().length > 0) {
+  if (dirtyStatusLines(status.stdout, options.allowedUntrackedFiles ?? []).length > 0) {
     return { ok: false, code: "WORKTREE_NOT_CLEAN" };
   }
 
@@ -85,4 +90,27 @@ export const readGitFacts = (
       commitSha,
     },
   };
+};
+
+const dirtyStatusLines = (
+  status: string,
+  allowedUntrackedFiles: readonly string[],
+): readonly string[] =>
+  status
+    .split("\n")
+    .map((line) => line.trimEnd())
+    .filter((line) => line.length > 0)
+    .filter((line) => !isAllowedUntrackedLine(line, allowedUntrackedFiles));
+
+const isAllowedUntrackedLine = (
+  line: string,
+  allowedUntrackedFiles: readonly string[],
+): boolean => {
+  if (!line.startsWith("?? ")) {
+    return false;
+  }
+
+  const path = line.slice(3);
+
+  return allowedUntrackedFiles.includes(path);
 };

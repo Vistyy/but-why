@@ -83,7 +83,12 @@ describe("module seams", () => {
         prTarget,
         now: thirdNow,
       }),
-    ).toEqual({ ok: true, runId: "BY-1.1", taskState: "validating" });
+    ).toEqual({
+      ok: true,
+      runId: "BY-1.1",
+      taskState: "validating",
+      previousTaskState: "implementing",
+    });
     expect(repoState.getTaskById(taskId)).toMatchObject({
       id: "BY-1",
       state: "validating",
