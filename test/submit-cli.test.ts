@@ -413,20 +413,24 @@ const runSubmit = (root: string, args: readonly string[], now: string) =>
   runByWithEnv(root, { BUT_WHY_NOW: now }, "submit", ...args);
 
 const withGhScript = <Result>(script: string, work: () => Result): Result => {
+  // biome-ignore lint/complexity/useLiteralKeys: TS index signature
   const originalPath = process.env["PATH"];
   const bin = createTempRoot();
   const ghPath = join(bin, "gh");
 
   writeFileSync(ghPath, script);
   chmodSync(ghPath, 0o755);
+  // biome-ignore lint/complexity/useLiteralKeys: TS index signature
   process.env["PATH"] = originalPath === undefined ? bin : `${bin}:${originalPath}`;
 
   try {
     return work();
   } finally {
     if (originalPath === undefined) {
+      // biome-ignore lint/complexity/useLiteralKeys: TS index signature
       delete process.env["PATH"];
     } else {
+      // biome-ignore lint/complexity/useLiteralKeys: TS index signature
       process.env["PATH"] = originalPath;
     }
   }

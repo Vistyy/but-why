@@ -46,7 +46,7 @@ None - can start immediately.
 
 ## Implementation notes
 
-Needed override:
+Needed suppressions:
 
-- `biome.json` disables `lint/complexity/useLiteralKeys`.
-  This keeps Biome from recommending dot property access that TypeScript now rejects for index-signature backed values under `noPropertyAccessFromIndexSignature`.
+- A few `lint/complexity/useLiteralKeys` suppressions mark accesses where TypeScript requires bracket syntax under `noPropertyAccessFromIndexSignature`.
+  The Biome rule remains enabled for fixed-shape object properties.

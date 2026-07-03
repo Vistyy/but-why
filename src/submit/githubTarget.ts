@@ -237,6 +237,7 @@ const readExistingPullRequestBase = (
   }
 
   const value = parseJsonObject(result.stdout);
+  // biome-ignore lint/complexity/useLiteralKeys: TS index signature
   const baseRefName = value?.["baseRefName"];
 
   return {
@@ -260,6 +261,7 @@ const readRepositoryDefaultBranch = (
   }
 
   const value = parseJsonObject(result.stdout);
+  // biome-ignore lint/complexity/useLiteralKeys: TS index signature
   const defaultBranchRef = value?.["defaultBranchRef"];
 
   if (typeof defaultBranchRef !== "object" || defaultBranchRef === null) {

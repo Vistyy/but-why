@@ -28,9 +28,6 @@
       "suspicious": {
         "noExplicitAny": "error"
       },
-      "complexity": {
-        "useLiteralKeys": "off"
-      },
       "style": {
         "noNonNullAssertion": "error"
       },
