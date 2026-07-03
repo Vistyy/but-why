@@ -6,7 +6,7 @@ Not done.
 
 ## Parent
 
-`docs/prd.md`
+`docs/prds/v1-validation-prd.md`
 
 ## What to build
 
@@ -28,4 +28,4 @@ The intent reviewer should judge whether the submitted branch satisfies the Task
 
 ## Blocked by
 
-- 013-inspect-runs-and-latest-task-findings.md
+- `docs/issues/028-snapshot-task-context-for-validation-runs.md`

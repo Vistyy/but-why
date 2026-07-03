@@ -6,7 +6,7 @@ Done.
 
 ## Parent
 
-`docs/prd.md`
+`docs/prds/v1-validation-prd.md`
 
 ## What to build
 

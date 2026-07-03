@@ -6,7 +6,7 @@ Not done.
 
 ## Parent
 
-`docs/prd.md`
+`docs/prds/v1-validation-prd.md`
 
 ## What to build
 
@@ -32,4 +32,4 @@ Failed checks should become blocking Findings so all validation blockers are vis
 
 ## Blocked by
 
-- 011-create-validation-workspaces-through-sandcastle.md
+- `docs/issues/027-represent-validation-run-separately-from-run.md`

@@ -7,10 +7,6 @@ Read this file before changing the repo.
 Before implementation work, read:
 
 - `CONTEXT.md`
-- `docs/architecture.md`
-- `docs/prd.md`
-- `docs/issue-breakdown.md`
-- `docs/open-questions.md`
 
 If the task touches configuration, also read `docs/config.md`.
 

@@ -5,10 +5,16 @@ But Why? validates completed code changes against approved human intent and coor
 ## Language
 
 **Run**:
-A durable validation record for one commit SHA.
-A task can have only one active run at a time.
-A run can resume after a crash, but a new commit creates a successor run that may reuse prior results when policy allows.
-A terminal run may be followed by another run for the same commit when validation must be retried.
+A durable record of one But Why execution attempt for a Task.
+A Run can store status, timing, artifacts, logs, token usage, and links to more specific execution records.
+A Task can have many Runs.
+_Avoid_: Treating Run as validation-specific when the rule belongs to Validation Run.
+
+**Validation Run**:
+A Run that validates one submitted commit SHA against Task Context through the Validation Gate.
+In v1, a Task can have only one active Validation Run at a time.
+A Validation Run can resume after a crash, but a new commit creates a successor Validation Run that may reuse prior results when policy allows.
+A terminal Validation Run may be followed by another Validation Run for the same commit when validation must be retried.
 _Avoid_: Job, pipeline run
 
 **Trigger**:
@@ -17,10 +23,11 @@ A trigger is not the source of truth for validation state.
 _Avoid_: Workflow state, lifecycle state
 
 **Task**:
-A requested change represented by either one local record or one external board item.
+A But Why work unit that captures requested change intent.
+A Task can have zero or more External References, and many Tasks can reference the same external tracker item.
 In v1, each task owns one branch, and that branch belongs to only that task.
 A task can have many runs as its branch changes over time.
-_Avoid_: Ticket, issue, card when speaking about the But Why? domain
+_Avoid_: Treating an external ticket, issue, or card as the Task identity.
 
 **Task Start**:
 The explicit act of marking that implementation work has begun for a task.
@@ -31,6 +38,17 @@ _Avoid_: Submission, validation trigger, agent kickoff
 The state model that describes where a Task is in the workflow and which state transitions are valid.
 Task Lifecycle is distinct from view-specific display policy such as dashboard actionability.
 _Avoid_: Pipeline state, dashboard status
+
+**External Reference**:
+A link from a Task to another system's work item, such as a Jira issue, GitHub issue, Linear issue, or board card.
+An External Reference provides context or traceability, but it does not define the Task's identity.
+_Avoid_: Using the external issue key as the But Why Task unless the Task Surface explicitly defines that mapping.
+
+**Task Authority**:
+The place responsible for the durable Task content and lifecycle state at a given time.
+Local-only tasks can be authoritative inside But Why local state.
+Remote-backed tasks can be authoritative in an external Task Surface while But Why stores local validation state.
+_Avoid_: Assuming all Task data in local state is authoritative.
 
 **Task Surface**:
 A place where humans or agents view tasks, change task state, and read task comments.

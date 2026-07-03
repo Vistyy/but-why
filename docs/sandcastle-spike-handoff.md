@@ -15,7 +15,7 @@ Read these first:
 - `AGENTS.md`
 - `CONTEXT.md`
 - `docs/architecture.md`
-- `docs/prd.md`
+- `docs/prds/v1-validation-prd.md`
 - `docs/issues/001-prove-sandcastle-v1-execution.md`
 - `docs/open-questions.md`
 - `docs/config.md`
@@ -275,7 +275,7 @@ The report must include:
 - what failed
 - required workarounds
 - whether But Why can use Sandcastle for v1
-- changes needed to `docs/architecture.md`, `docs/prd.md`, or issue drafts
+- changes needed to `docs/architecture.md`, `docs/prds/v1-validation-prd.md`, or issue drafts
 
 ## Go/no-go criteria
 

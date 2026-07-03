@@ -6,7 +6,7 @@ Not done.
 
 ## Parent
 
-`docs/prd.md`
+`docs/prds/v1-validation-prd.md`
 
 ## What to build
 
@@ -63,3 +63,7 @@ This is a standalone cleanup task and does not need to fit into the larger imple
 - [ ] Durable storage constraints that duplicate Task state strings are covered by a drift test against `taskStates`.
 - [ ] Dashboard actionability is not pulled into the Task lifecycle seam as part of this issue.
 - [ ] Existing Task state behavior remains unchanged.
+
+## Blocked by
+
+- `docs/issues/011-create-validation-workspaces-through-sandcastle.md`
