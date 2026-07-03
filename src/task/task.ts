@@ -1,13 +1,4 @@
-export const taskStates = [
-  "todo",
-  "implementing",
-  "validating",
-  "needs_input",
-  "ready",
-  "done",
-] as const;
-
-export type TaskState = (typeof taskStates)[number];
+import type { TaskState } from "./lifecycle.js";
 
 export type TaskSummary = {
   readonly id: string;
@@ -30,16 +21,3 @@ export type TaskContext = {
   readonly description: string;
   readonly comments: readonly string[];
 };
-
-export const submittableTaskStates = [
-  "implementing",
-  "needs_input",
-] as const satisfies readonly TaskState[];
-
-const taskStateSet = new Set<string>(taskStates);
-const submittableTaskStateSet = new Set<TaskState>(submittableTaskStates);
-
-export const isTaskState = (value: string): value is TaskState => taskStateSet.has(value);
-
-export const isSubmittableTaskState = (value: TaskState): boolean =>
-  submittableTaskStateSet.has(value);

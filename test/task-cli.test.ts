@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import { collapseHome } from "../src/cli.js";
 import { openRepoState } from "../src/repoState.js";
-import type { TaskState } from "../src/task/task.js";
+import type { TaskState } from "../src/task/lifecycle.js";
 import { loadRepoTasks } from "../src/task/repoTasks.js";
 import { publicTaskId } from "../src/task/taskId.js";
 import {
@@ -15,6 +15,7 @@ import {
   createTempRoot,
   runByInProcess,
 } from "./support/by-cli.js";
+import { taskStateTransitionPath } from "./support/taskLifecycle.js";
 
 const expectedBin = collapseHome(byExecutable);
 const firstNow = "2026-06-30T12:00:00.000Z";
@@ -923,15 +924,6 @@ const createTask = (root: string, now: string, title: string): void => {
   expect(result.status).toBe(0);
 };
 
-const taskStateTransitionPaths = {
-  todo: [],
-  implementing: ["implementing"],
-  validating: ["implementing", "validating"],
-  needs_input: ["implementing", "validating", "needs_input"],
-  ready: ["implementing", "validating", "ready"],
-  done: ["implementing", "validating", "ready", "done"],
-} satisfies Record<TaskState, readonly TaskState[]>;
-
 const transitionTaskState = (
   root: string,
   id: string,
@@ -944,7 +936,7 @@ const transitionTaskState = (
     throw new Error(`Could not load Tasks: ${tasksLoad.error.code}`);
   }
 
-  for (const nextState of taskStateTransitionPaths[state]) {
+  for (const nextState of taskStateTransitionPath(state)) {
     const result = tasksLoad.tasks.transitionTaskState({
       taskId: publicTaskId(id),
       to: nextState,

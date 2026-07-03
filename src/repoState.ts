@@ -4,14 +4,9 @@ import { DatabaseSync } from "node:sqlite";
 
 import { ensureStateDatabase, stateDatabaseTimeoutMs } from "./init/stateDatabase.js";
 import { isRunStatus, type GitHubPrTarget, type RunRecord } from "./run/run.js";
-import {
-  isSubmittableTaskState,
-  isTaskState,
-  type TaskContext,
-  type TaskRecord,
-  type TaskState,
-  type TaskSummary,
-} from "./task/task.js";
+import { canTransition, isTaskState, type TaskState } from "./task/lifecycle.js";
+import { canSubmitFrom, type SubmitEligibleState } from "./task/submitPolicy.js";
+import type { TaskContext, TaskRecord, TaskSummary } from "./task/task.js";
 import type { PublicTaskId } from "./task/taskId.js";
 
 /**
@@ -117,7 +112,7 @@ export type CreateRunFromSubmitPreflightResult =
       readonly ok: true;
       readonly runId: string;
       readonly taskState: "validating";
-      readonly previousTaskState: "implementing" | "needs_input";
+      readonly previousTaskState: SubmitEligibleState;
     }
   | {
       readonly ok: false;
@@ -163,7 +158,7 @@ export type RecordRunToolingErrorInput = {
   readonly errorMessage: string;
   readonly cleanupWorktree: CleanupState;
   readonly cleanupTempRef: CleanupState;
-  readonly taskRecoveryState?: "implementing" | "needs_input";
+  readonly taskRecoveryState?: SubmitEligibleState;
   readonly now: string;
 };
 
@@ -243,20 +238,6 @@ const runToolingErrorColumns = [
   "cleanup_temp_ref AS cleanupTempRef",
   "created_at AS createdAt",
 ].join(", ");
-
-/**
- * V1 Task lifecycle transitions live here so lifecycle commands do not encode SQL or state rules.
- * Issue 008 uses todo to implementing and the implementing no-op.
- * Submit, validation, publishing, and reconciliation issues use the remaining transitions in this graph.
- */
-const validTaskStateTransitions: ReadonlyMap<TaskState, readonly TaskState[]> = new Map([
-  ["todo", ["implementing"]],
-  ["implementing", ["validating"]],
-  ["validating", ["needs_input", "ready"]],
-  ["needs_input", ["validating"]],
-  ["ready", ["done", "needs_input"]],
-  ["done", []],
-]);
 
 export const openRepoState = (input: RepoStateInput): RepoState => {
   const withDatabase = <Result>(work: (database: DatabaseSync) => Result): Result => {
@@ -510,7 +491,7 @@ const getTaskSubmitReadiness = (
     return { ok: false, code: "TASK_NOT_FOUND" };
   }
 
-  if (!isSubmittableTaskState(task.state)) {
+  if (!canSubmitFrom(task.state)) {
     return { ok: false, code: "TASK_STATE_NOT_SUBMITTABLE", state: task.state };
   }
 
@@ -545,6 +526,10 @@ const createRunFromSubmitPreflight = (
     if (task === undefined) {
       database.exec("ROLLBACK");
       return { ok: false, code: "TASK_NOT_FOUND" };
+    }
+
+    if (!canSubmitFrom(task.state)) {
+      throw new Error("Task state is not submittable");
     }
 
     if (task.branch !== null && task.branch !== input.branch) {
@@ -618,7 +603,7 @@ const createRunFromSubmitPreflight = (
       ok: true,
       runId,
       taskState: "validating",
-      previousTaskState: submittableTaskState(task.state),
+      previousTaskState: task.state,
     };
   } catch (error) {
     rollbackIfOpen(database);
@@ -832,7 +817,7 @@ const transitionTaskState = (
       };
     }
 
-    if (!canTransitionTaskState(current.state, input.to)) {
+    if (!canTransition(current.state, input.to)) {
       database.exec("ROLLBACK");
       return {
         ok: false,
@@ -859,17 +844,6 @@ const transitionTaskState = (
     rollbackIfOpen(database);
     throw error;
   }
-};
-
-const canTransitionTaskState = (from: TaskState, to: TaskState): boolean =>
-  validTaskStateTransitions.get(from)?.includes(to) ?? false;
-
-const submittableTaskState = (state: TaskState): "implementing" | "needs_input" => {
-  if (state === "implementing" || state === "needs_input") {
-    return state;
-  }
-
-  throw new Error("Task state is not submittable");
 };
 
 const rollbackIfOpen = (database: DatabaseSync): void => {

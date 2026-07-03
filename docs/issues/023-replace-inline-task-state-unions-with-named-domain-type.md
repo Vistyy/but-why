@@ -2,7 +2,7 @@
 
 ## Status
 
-Not done.
+Done.
 
 ## Parent
 
@@ -59,23 +59,23 @@ This is a standalone cleanup task and does not need to fit into the larger imple
 
 ## Acceptance criteria
 
-- [ ] `src/task/lifecycle.ts` owns the canonical Task state vocabulary and hides the valid transition graph behind `canTransition(from, to)`.
-- [ ] `src/task/submitPolicy.ts` owns submit eligibility through `canSubmitFrom(state)` and a stored-state type such as `SubmitEligibleState`.
+- [x] `src/task/lifecycle.ts` owns the canonical Task state vocabulary and hides the valid transition graph behind `canTransition(from, to)`.
+- [x] `src/task/submitPolicy.ts` owns submit eligibility through `canSubmitFrom(state)` and a stored-state type such as `SubmitEligibleState`.
   `canSubmitFrom(state)` is a TypeScript type guard that narrows to `SubmitEligibleState`.
-- [ ] Submit recovery stores the previous `SubmitEligibleState` instead of introducing a separate recovery-state concept.
-- [ ] `src/task/startPolicy.ts` owns start eligibility through `canStartFrom(state)`.
+- [x] Submit recovery stores the previous `SubmitEligibleState` instead of introducing a separate recovery-state concept.
+- [x] `src/task/startPolicy.ts` owns start eligibility through `canStartFrom(state)`.
   `canStartFrom("implementing")` returns true because `by start` is idempotent from `implementing`.
   `canTransition("implementing", "implementing")` returns false because same-state command no-ops are not Task Lifecycle transitions.
-- [ ] Domain callers ask focused lifecycle or policy questions such as `canTransition(from, to)`, `canSubmitFrom(state)`, or `canStartFrom(state)` instead of importing raw state lists or repeating inline state unions.
-- [ ] No new inline Task state string unions are introduced in domain TypeScript code.
+- [x] Domain callers ask focused lifecycle or policy questions such as `canTransition(from, to)`, `canSubmitFrom(state)`, or `canStartFrom(state)` instead of importing raw state lists or repeating inline state unions.
+- [x] No new inline Task state string unions are introduced in domain TypeScript code.
   SQL constraints and CLI help text may still use Task state literals at boundaries.
-- [ ] Tests use lifecycle or policy helpers instead of copying Task transition paths.
+- [x] Tests use lifecycle or policy helpers instead of copying Task transition paths.
   At most one lifecycle test lists the full canonical transition graph.
-- [ ] Redundant old production helpers, state lists, and pass-through exports are deleted after callers move to the focused seams.
+- [x] Redundant old production helpers, state lists, and pass-through exports are deleted after callers move to the focused seams.
   Old import paths are not kept through compatibility exports.
-- [ ] Durable storage constraints that duplicate Task state strings are covered by a drift test against `taskStates`.
-- [ ] Dashboard actionability is not pulled into the Task lifecycle seam as part of this issue.
-- [ ] Existing Task state behavior remains unchanged.
+- [x] Durable storage constraints that duplicate Task state strings are covered by a drift test against `taskStates`.
+- [x] Dashboard actionability is not pulled into the Task lifecycle seam as part of this issue.
+- [x] Existing Task state behavior remains unchanged.
 
 ## Blocked by
 

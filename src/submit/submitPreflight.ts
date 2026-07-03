@@ -6,7 +6,8 @@ import {
   type RepoLocalContext,
 } from "../init/repoContext.js";
 import type { GitHubPrTarget } from "../run/run.js";
-import type { TaskState } from "../task/task.js";
+import type { TaskState } from "../task/lifecycle.js";
+import type { SubmitEligibleState } from "../task/submitPolicy.js";
 import { resolveRepoTaskId, type RepoTaskIdResolution } from "../task/repoTaskIds.js";
 import type { PublicTaskId } from "../task/taskId.js";
 import { openRepoState, type RepoState } from "../repoState.js";
@@ -56,7 +57,7 @@ export type SubmitTaskInput = {
 export type CreateValidationWorkspaceForRunInput = {
   readonly runId: string;
   readonly commitSha: string;
-  readonly taskRecoveryState: "implementing" | "needs_input";
+  readonly taskRecoveryState: SubmitEligibleState;
   readonly now: string;
 };
 
@@ -78,7 +79,7 @@ export type SubmitTaskResult =
       readonly branch: string;
       readonly commitSha: string;
       readonly taskState: "validating";
-      readonly previousTaskState: "implementing" | "needs_input";
+      readonly previousTaskState: SubmitEligibleState;
       readonly prTarget: GitHubPrTarget;
       readonly validationWorkspace?: ValidationWorkspaceSetup;
     }

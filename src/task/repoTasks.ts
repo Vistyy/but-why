@@ -5,7 +5,9 @@ import {
   type LoadRepoLocalContextError,
   type RepoLocalContext,
 } from "../init/repoContext.js";
-import type { TaskContext, TaskRecord, TaskState, TaskSummary } from "./task.js";
+import { canStartFrom, type StartIneligibleState } from "./startPolicy.js";
+import type { TaskState } from "./lifecycle.js";
+import type { TaskContext, TaskRecord, TaskSummary } from "./task.js";
 import { resolveRepoTaskId, type RepoTaskIdResolution } from "./repoTaskIds.js";
 import type { PublicTaskId } from "./taskId.js";
 import {
@@ -79,15 +81,6 @@ export type TransitionTaskStateInput = {
   readonly now: string;
 };
 
-export const unstartableTaskStates = [
-  "validating",
-  "needs_input",
-  "ready",
-  "done",
-] as const satisfies readonly TaskState[];
-
-export type UnstartableTaskState = (typeof unstartableTaskStates)[number];
-
 export type StartTaskResult =
   | {
       readonly ok: true;
@@ -101,7 +94,7 @@ export type StartTaskResult =
   | {
       readonly ok: false;
       readonly code: "invalid_task_state";
-      readonly state: UnstartableTaskState;
+      readonly state: StartIneligibleState;
     };
 
 export const loadRepoTasks = (input: LoadRepoTasksInput): LoadRepoTasksResult => {
@@ -159,7 +152,7 @@ const startTask = (
   }
 
   if (result.code === "invalid_task_state_transition") {
-    if (!isUnstartableTaskState(result.from)) {
+    if (canStartFrom(result.from)) {
       throw new Error(`Unexpected invalid Task start from ${result.from}`);
     }
 
@@ -172,8 +165,3 @@ const startTask = (
 
   return result;
 };
-
-const unstartableTaskStateSet = new Set<TaskState>(unstartableTaskStates);
-
-const isUnstartableTaskState = (state: TaskState): state is UnstartableTaskState =>
-  unstartableTaskStateSet.has(state);

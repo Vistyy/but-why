@@ -10,14 +10,10 @@ import { withGlobalHelpFlags } from "../cliHelp.js";
 import type { StructuredObject, StructuredValue } from "../output/structured.js";
 import { readCommentFile, type CommentFileReadError } from "./commentFile.js";
 import { readDescriptionFile, type DescriptionFileReadError } from "./descriptionFile.js";
-import {
-  isTaskState,
-  taskStates,
-  type TaskRecord,
-  type TaskState,
-  type TaskSummary,
-} from "./task.js";
-import { loadRepoTasks, type RepoTasks, type UnstartableTaskState } from "./repoTasks.js";
+import { isTaskState, taskStates, type TaskState } from "./lifecycle.js";
+import type { StartIneligibleState } from "./startPolicy.js";
+import type { TaskRecord, TaskSummary } from "./task.js";
+import { loadRepoTasks, type RepoTasks } from "./repoTasks.js";
 import { hasPublicTaskIdShape, publicTaskId, type PublicTaskId } from "./taskId.js";
 
 export const routeTask = (args: readonly string[], environment: CliEnvironment): CliResult => {
@@ -853,7 +849,7 @@ const taskNotFound = (taskId: string): CliResult =>
     help: ["Run `by task list --all` to see known Tasks."],
   });
 
-const invalidTaskStart = (taskId: PublicTaskId, state: UnstartableTaskState): CliResult =>
+const invalidTaskStart = (taskId: PublicTaskId, state: StartIneligibleState): CliResult =>
   runtimeError({
     code: "invalid_task_state",
     message: `Cannot start task ${taskId} from state ${state}`,
@@ -866,9 +862,9 @@ const invalidTaskStartHelpByState = {
   needs_input: (taskId) => `Address findings or add Task Context, then run by submit ${taskId}.`,
   ready: () => "Review and merge the pull request.",
   done: () => "Task is already done.",
-} satisfies Record<UnstartableTaskState, (taskId: PublicTaskId) => string>;
+} satisfies Record<StartIneligibleState, (taskId: PublicTaskId) => string>;
 
-const invalidTaskStartHelp = (taskId: PublicTaskId, state: UnstartableTaskState): string =>
+const invalidTaskStartHelp = (taskId: PublicTaskId, state: StartIneligibleState): string =>
   invalidTaskStartHelpByState[state](taskId);
 
 const startTaskNextAction = (taskId: string): string =>
