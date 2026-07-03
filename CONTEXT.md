@@ -36,6 +36,7 @@ _Avoid_: Submission, validation trigger, agent kickoff
 
 **Task Lifecycle**:
 The state model that describes where a Task is in the workflow and which state transitions are valid.
+Same-state command no-ops are command behavior, not Task Lifecycle transitions.
 Task Lifecycle is distinct from view-specific display policy such as dashboard actionability.
 _Avoid_: Pipeline state, dashboard status
 
@@ -94,6 +95,7 @@ _Avoid_: Workspace phase, setup round, CI workspace
 **Validation Tooling Failure**:
 A failure in But Why? or its validation tooling that prevents validation from judging the submission.
 A validation tooling failure is recorded on the run and is not a finding.
+After a validation tooling failure, the task returns to its previous submit-eligible state.
 _Avoid_: Finding, submission problem, needs input
 
 **Finding**:
