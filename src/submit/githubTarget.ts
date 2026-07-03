@@ -237,7 +237,7 @@ const readExistingPullRequestBase = (
   }
 
   const value = parseJsonObject(result.stdout);
-  const baseRefName = value?.baseRefName;
+  const baseRefName = value?.["baseRefName"];
 
   return {
     ok: true,
@@ -260,7 +260,7 @@ const readRepositoryDefaultBranch = (
   }
 
   const value = parseJsonObject(result.stdout);
-  const defaultBranchRef = value?.defaultBranchRef;
+  const defaultBranchRef = value?.["defaultBranchRef"];
 
   if (typeof defaultBranchRef !== "object" || defaultBranchRef === null) {
     return { ok: true, baseBranch: undefined };

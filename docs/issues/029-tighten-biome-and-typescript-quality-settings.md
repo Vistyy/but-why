@@ -2,7 +2,7 @@
 
 ## Status
 
-Not done.
+Done.
 
 ## Parent
 
@@ -28,18 +28,25 @@ The normal quality command should continue to run formatting, linting, typecheck
 
 ## Acceptance criteria
 
-- [ ] Biome explicitly blocks console usage in production source.
-- [ ] Biome explicitly blocks explicit `any` usage across Biome-checked TypeScript unless a concrete incompatibility requires a documented override.
-- [ ] Biome explicitly blocks non-null assertions across Biome-checked TypeScript unless a concrete incompatibility requires a documented override.
-- [ ] Biome explicitly blocks barrel files across Biome-checked TypeScript unless a concrete incompatibility requires a documented override.
-- [ ] TypeScript rejects unreachable code.
-- [ ] TypeScript rejects unused labels.
-- [ ] TypeScript rejects unsafe property access from index signatures where compatible with the current codebase.
-- [ ] The existing quality command still runs format check, lint, typecheck, and tests.
-- [ ] Existing code is updated to satisfy the stricter settings when the fix does not change product behavior.
-- [ ] Any overrides needed for compatibility are reported by the implementer.
-- [ ] Quality passes after the stricter settings are enabled.
+- [x] Biome explicitly blocks console usage in production source.
+- [x] Biome explicitly blocks explicit `any` usage across Biome-checked TypeScript unless a concrete incompatibility requires a documented override.
+- [x] Biome explicitly blocks non-null assertions across Biome-checked TypeScript unless a concrete incompatibility requires a documented override.
+- [x] Biome explicitly blocks barrel files across Biome-checked TypeScript unless a concrete incompatibility requires a documented override.
+- [x] TypeScript rejects unreachable code.
+- [x] TypeScript rejects unused labels.
+- [x] TypeScript rejects unsafe property access from index signatures where compatible with the current codebase.
+- [x] The existing quality command still runs format check, lint, typecheck, and tests.
+- [x] Existing code is updated to satisfy the stricter settings when the fix does not change product behavior.
+- [x] Any overrides needed for compatibility are reported by the implementer.
+- [x] Quality passes after the stricter settings are enabled.
 
 ## Blocked by
 
 None - can start immediately.
+
+## Implementation notes
+
+Needed override:
+
+- `biome.json` disables `lint/complexity/useLiteralKeys`.
+  This keeps Biome from recommending dot property access that TypeScript now rejects for index-signature backed values under `noPropertyAccessFromIndexSignature`.

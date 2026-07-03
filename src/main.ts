@@ -4,9 +4,10 @@ import { mapRuntimeError, runCli } from "./cli.js";
 import { outputFormatForArgs } from "./cliOutputSelection.js";
 import { serializeOutput } from "./output/serialize.js";
 
-const executablePath = process.env.BUT_WHY_EXECUTABLE_PATH ?? process.argv[1] ?? process.execPath;
+const executablePath =
+  process.env["BUT_WHY_EXECUTABLE_PATH"] ?? process.argv[1] ?? process.execPath;
 const args = process.argv.slice(2);
-const fixedNow = process.env.BUT_WHY_NOW;
+const fixedNow = process.env["BUT_WHY_NOW"];
 
 Effect.runPromise(
   runCli(args, {

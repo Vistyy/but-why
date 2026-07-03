@@ -412,13 +412,28 @@ const gitRefExists = (root: string, ref: string): boolean =>
 const runSubmit = (root: string, args: readonly string[], now: string) =>
   runByWithEnv(root, { BUT_WHY_NOW: now }, "submit", ...args);
 
-const withFakeGh = <Result>(work: () => Result): Result => {
-  const originalPath = process.env.PATH;
+const withGhScript = <Result>(script: string, work: () => Result): Result => {
+  const originalPath = process.env["PATH"];
   const bin = createTempRoot();
   const ghPath = join(bin, "gh");
 
-  writeFileSync(
-    ghPath,
+  writeFileSync(ghPath, script);
+  chmodSync(ghPath, 0o755);
+  process.env["PATH"] = originalPath === undefined ? bin : `${bin}:${originalPath}`;
+
+  try {
+    return work();
+  } finally {
+    if (originalPath === undefined) {
+      delete process.env["PATH"];
+    } else {
+      process.env["PATH"] = originalPath;
+    }
+  }
+};
+
+const withFakeGh = <Result>(work: () => Result): Result =>
+  withGhScript(
     `#!/usr/bin/env sh
 set -eu
 if [ "$1" = "repo" ] && [ "$2" = "view" ]; then
@@ -430,28 +445,11 @@ if [ "$1" = "pr" ] && [ "$2" = "view" ]; then
 fi
 exit 1
 `,
+    work,
   );
-  chmodSync(ghPath, 0o755);
-  process.env.PATH = originalPath === undefined ? bin : `${bin}:${originalPath}`;
 
-  try {
-    return work();
-  } finally {
-    if (originalPath === undefined) {
-      delete process.env.PATH;
-    } else {
-      process.env.PATH = originalPath;
-    }
-  }
-};
-
-const withFailingGh = <Result>(work: () => Result): Result => {
-  const originalPath = process.env.PATH;
-  const bin = createTempRoot();
-  const ghPath = join(bin, "gh");
-
-  writeFileSync(
-    ghPath,
+const withFailingGh = <Result>(work: () => Result): Result =>
+  withGhScript(
     `#!/usr/bin/env sh
 set -eu
 if [ "$1" = "pr" ] && [ "$2" = "view" ]; then
@@ -459,20 +457,8 @@ if [ "$1" = "pr" ] && [ "$2" = "view" ]; then
 fi
 exit 2
 `,
+    work,
   );
-  chmodSync(ghPath, 0o755);
-  process.env.PATH = originalPath === undefined ? bin : `${bin}:${originalPath}`;
-
-  try {
-    return work();
-  } finally {
-    if (originalPath === undefined) {
-      delete process.env.PATH;
-    } else {
-      process.env.PATH = originalPath;
-    }
-  }
-};
 
 const recordRunError = (root: string, runId: string, now: string): void => {
   const result = repoState(root).recordRunError({ runId, now });
