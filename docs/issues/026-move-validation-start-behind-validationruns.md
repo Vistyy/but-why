@@ -34,6 +34,7 @@ This slice preserves current submit behavior while moving validation-start rules
 - [ ] Remote rollback and recovery behavior is not implemented.
 - [ ] Tests cover successful local validation start through the new seam.
 - [ ] Tests cover existing preflight rejection behavior.
+- [ ] Fallow boundary rules enforce that submit code reaches validation only through ValidationRuns, with no direct validation-start orchestration outside that seam.
 
 ## Blocked by
 

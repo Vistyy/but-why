@@ -34,6 +34,7 @@ This slice should not add remote Task Surfaces, sync, reindexing, or new configu
 - [ ] Existing CLI output, error codes, and behavior remain unchanged.
 - [ ] Tests set up Task and Run scenarios through public seams, not raw SQLite mutation.
 - [ ] Direct SQLite implementation details remain hidden from command handlers.
+- [ ] Fallow boundary rules enforce that Task code uses TaskStore and Run or validation code uses RunStore, with no direct cross-store imports.
 - [ ] No remote Task Surface behavior is added.
 - [ ] No local alias behavior is added.
 
