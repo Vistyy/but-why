@@ -59,14 +59,14 @@ export const repoStateLoadError = (error: RepoStateLoadError): CliResult => {
   }
 };
 
-export const notInitialized = (): CliResult =>
+const notInitialized = (): CliResult =>
   runtimeError({
     code: "not_initialized",
     message: "This workspace is not initialized for But Why?.",
     help: ["Run `by init --task-prefix BY` in the repository root."],
   });
 
-export const invalidRepoConfig = (): CliResult =>
+const invalidRepoConfig = (): CliResult =>
   runtimeError({
     code: "invalid_repo_config",
     message: ".but-why/config.json is not valid But Why? repo config.",

@@ -1,0 +1,218 @@
+{
+  "$schema": "https://raw.githubusercontent.com/fallow-rs/fallow/main/config-schema.json",
+  "entry": ["src/main.ts", "test/**/*.ts"],
+  "ignorePatterns": ["spikes/**", "dist/**", "build/**", "coverage/**"],
+  "rulePacks": ["./fallow-rules/architecture.json"],
+  "rules": {
+    "unused-files": "error",
+    "unused-exports": "error",
+    "unused-types": "error",
+    "unused-dependencies": "error",
+    "unused-dev-dependencies": "error",
+    "unused-optional-dependencies": "error",
+    "unused-enum-members": "error",
+    "unused-class-members": "error",
+    "unresolved-imports": "error",
+    "unlisted-dependencies": "error",
+    "duplicate-exports": "error",
+    "type-only-dependencies": "error",
+    "test-only-dependencies": "error",
+    "dev-dependencies-in-production": "error",
+    "circular-dependencies": "error",
+    "re-export-cycle": "error",
+    "boundary-violation": "error",
+    "stale-suppressions": "error",
+    "require-suppression-reason": "error",
+    "policy-violation": "error",
+    // This CLI repo does not use framework, CSS, catalog, or client/server surface rules.
+    // Keep them off so every enabled active-source rule is blocking.
+    "unused-store-members": "off",
+    "unprovided-injects": "off",
+    "unrendered-components": "off",
+    "unused-component-props": "off",
+    "unused-component-emits": "off",
+    "unused-component-inputs": "off",
+    "unused-component-outputs": "off",
+    "unused-svelte-events": "off",
+    "unused-server-actions": "off",
+    "unused-load-data-keys": "off",
+    "css-token-drift": "off",
+    "css-duplicate-block": "off",
+    "css-selector-complexity": "off",
+    "css-dead-surface": "off",
+    "css-broken-reference": "off",
+    "unused-catalog-entries": "off",
+    "empty-catalog-groups": "off",
+    "unused-dependency-overrides": "off",
+    "invalid-client-export": "off",
+    "mixed-client-server-barrel": "off",
+    "misplaced-directive": "off"
+  },
+  "duplicates": {
+    "enabled": true,
+    "ignoreDefaults": false,
+    // Include tests, but avoid blocking on repeated assertion boilerplate.
+    // This still blocks clone groups of 40 or more lines across active source.
+    "minLines": 40
+  },
+  "health": {
+    // CRAP needs real coverage to be stable. This repo does not produce coverage yet.
+    // Keep default cyclomatic and cognitive thresholds blocking.
+    "maxCrap": 1000,
+    // Existing integration tests and orchestration seams intentionally use long scenario bodies.
+    // Gate substantial new unit-size growth while keeping current source actionable through score and hotspot output.
+    "maxUnitSize": 900,
+    "thresholdOverrides": [
+      {
+        "files": ["src/submit/submitCli.ts"],
+        "functions": ["submitPreflightError"],
+        "maxCyclomatic": 29,
+        "maxCognitive": 20,
+        "reason": "Existing exhaustive CLI error mapper. Keep the current ceiling blocking so any growth must split the mapper."
+      },
+      {
+        "files": ["src/validation/createValidationWorkspace.ts"],
+        "functions": ["createValidationWorkspace"],
+        "maxCognitive": 18,
+        "reason": "Existing validation workspace orchestration is intentionally linear until the validation seam is split. Keep the current ceiling blocking."
+      },
+      {
+        "files": ["src/init/repoContext.ts"],
+        "functions": ["initRepoLocalContext"],
+        "maxCognitive": 18,
+        "reason": "Existing repo initialization flow handles config, paths, and storage setup in one command seam. Keep the current ceiling blocking."
+      },
+      {
+        "files": ["src/submit/submitPreflight.ts"],
+        "functions": ["runSubmitPreflight"],
+        "maxCognitive": 18,
+        "reason": "Existing submit preflight policy is intentionally centralized before ValidationRuns exists. Keep the current ceiling blocking."
+      },
+      {
+        "files": ["src/task/taskCli.ts"],
+        "functions": ["parseTaskCreateArgs"],
+        "maxCognitive": 16,
+        "reason": "Existing non-interactive CLI argument parser has branchy validation. Keep the current ceiling blocking."
+      }
+    ],
+    "ignore": ["spikes/**"]
+  },
+  "boundaries": {
+    "zones": [
+      {
+        "name": "cli-edge",
+        "patterns": ["src/main.ts", "src/cli.ts", "src/cli*.ts", "src/task/taskCli.ts", "src/submit/submitCli.ts"]
+      },
+      {
+        "name": "output",
+        "patterns": ["src/output/**"]
+      },
+      {
+        "name": "pure-task-domain",
+        "patterns": [
+          "src/task/lifecycle.ts",
+          "src/task/startPolicy.ts",
+          "src/task/submitPolicy.ts",
+          "src/task/task.ts",
+          "src/task/taskId.ts"
+        ]
+      },
+      {
+        "name": "task-adapter",
+        "patterns": [
+          "src/task/repoTaskIds.ts",
+          "src/task/repoTasks.ts",
+          "src/task/commentFile.ts",
+          "src/task/descriptionFile.ts"
+        ]
+      },
+      {
+        "name": "pure-run-domain",
+        "patterns": ["src/run/**"]
+      },
+      {
+        "name": "repo-local-persistence",
+        "patterns": ["src/repoState.ts"]
+      },
+      {
+        "name": "storage-init",
+        "patterns": ["src/init/stateDatabase.ts"]
+      },
+      {
+        "name": "init",
+        "patterns": ["src/init/**"]
+      },
+      {
+        "name": "validation",
+        "patterns": ["src/validation/**"]
+      },
+      {
+        "name": "submit",
+        "patterns": ["src/submit/**"]
+      }
+    ],
+    "rules": [
+      {
+        "from": "cli-edge",
+        "allow": [
+          "output",
+          "pure-task-domain",
+          "task-adapter",
+          "pure-run-domain",
+          "repo-local-persistence",
+          "storage-init",
+          "init",
+          "validation",
+          "submit"
+        ]
+      },
+      {
+        "from": "output",
+        "allow": []
+      },
+      {
+        "from": "pure-task-domain",
+        "allow": []
+      },
+      {
+        "from": "task-adapter",
+        "allow": ["pure-task-domain", "repo-local-persistence", "init"]
+      },
+      {
+        "from": "pure-run-domain",
+        "allow": []
+      },
+      {
+        "from": "repo-local-persistence",
+        "allow": ["pure-task-domain", "pure-run-domain", "storage-init"]
+      },
+      {
+        "from": "storage-init",
+        "allow": []
+      },
+      {
+        "from": "init",
+        "allow": ["storage-init"]
+      },
+      {
+        "from": "validation",
+        "allow": ["pure-run-domain"]
+      },
+      {
+        "from": "submit",
+        "allow": [
+          "pure-task-domain",
+          "task-adapter",
+          "pure-run-domain",
+          "repo-local-persistence",
+          "init",
+          "validation"
+        ]
+      }
+    ],
+    "coverage": {
+      "requireAllFiles": true,
+      "allowUnmatched": ["test/**"]
+    }
+  }
+}

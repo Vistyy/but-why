@@ -142,7 +142,12 @@ const repoSubmitPreflight = (context: RepoLocalContext): RepoSubmitPreflight => 
     taskPrefix: context.taskPrefix,
     resolveTaskId: (taskId) => resolveRepoTaskId(context, taskId),
     submitTask: (input) =>
-      submitTask(context.root, state, context.config.validationWorkspace?.copyFiles ?? [], input),
+      runSubmitPreflight(
+        context.root,
+        state,
+        context.config.validationWorkspace?.copyFiles ?? [],
+        input,
+      ),
     createValidationWorkspaceForRun: (input) =>
       createValidationWorkspaceForRun(context, state, input),
   };
@@ -193,7 +198,7 @@ const createValidationWorkspaceForRun = async (
   return { ok: false, toolingError: result.toolingError };
 };
 
-const submitTask = (
+const runSubmitPreflight = (
   root: string,
   state: RepoState,
   allowedUntrackedFiles: readonly string[],

@@ -2,7 +2,7 @@ import { readFileSync, statSync } from "node:fs";
 import { resolve } from "node:path";
 import { TextDecoder } from "node:util";
 
-export const maxDescriptionBytes = 256 * 1024;
+const maxDescriptionBytes = 256 * 1024;
 
 export type DescriptionFileReadResult =
   | {

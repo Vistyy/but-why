@@ -8,7 +8,7 @@ export type HelpFlagView = {
   readonly description: string;
 };
 
-export const globalOutputFlags = [
+const globalOutputFlags = [
   {
     flag: "--output <format>",
     description: `Set stdout format: ${outputFormatPair}. Default: toon.`,
@@ -19,12 +19,12 @@ export const globalOutputFlags = [
   },
 ] as const satisfies readonly HelpFlagView[];
 
-export const helpFlag = {
+const helpFlag = {
   flag: "--help",
   description: "Show this help",
 } as const satisfies HelpFlagView;
 
-export const globalHelpFlags = [...globalOutputFlags, helpFlag] as const;
+const globalHelpFlags = [...globalOutputFlags, helpFlag] as const;
 
 export const withGlobalHelpFlags = (
   localFlags: readonly HelpFlagView[] = [],

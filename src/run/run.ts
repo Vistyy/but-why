@@ -1,4 +1,4 @@
-export const runStatuses = ["active", "error"] as const;
+const runStatuses = ["active", "error"] as const;
 
 export type RunStatus = (typeof runStatuses)[number];
 

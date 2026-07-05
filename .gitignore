@@ -20,5 +20,8 @@ coverage/
 .but-why/state.sqlite
 .but-why/state.sqlite-*
 
+# Local tool caches
+.fallow/
+
 # Local review artifacts
 .lavish/

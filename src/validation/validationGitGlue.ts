@@ -4,7 +4,7 @@ import { join } from "node:path";
 
 import type { Sandbox } from "@ai-hero/sandcastle";
 
-import type { CleanupState } from "../repoState.js";
+import type { CleanupState } from "../run/cleanup.js";
 
 export type ValidationWorkspaceCleanupResult = {
   readonly worktree: CleanupState;

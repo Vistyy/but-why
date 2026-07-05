@@ -3,6 +3,7 @@ import { existsSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 
 import { ensureStateDatabase, stateDatabaseTimeoutMs } from "./init/stateDatabase.js";
+import type { CleanupState } from "./run/cleanup.js";
 import { isRunStatus, type GitHubPrTarget, type RunRecord } from "./run/run.js";
 import { canTransition, isTaskState, type TaskState } from "./task/lifecycle.js";
 import { canSubmitFrom, type SubmitEligibleState } from "./task/submitPolicy.js";
@@ -39,18 +40,18 @@ export type RepoState = {
   readonly transitionTaskState: (input: TransitionTaskStateInput) => TaskStateTransitionResult;
 };
 
-export type CreateTaskInput = {
+type CreateTaskInput = {
   readonly title: string;
   readonly description: string;
   readonly now: string;
 };
 
-export type ListTasksInput = {
+type ListTasksInput = {
   readonly includeDone: boolean;
   readonly state?: TaskState;
 };
 
-export type AppendTaskCommentInput = {
+type AppendTaskCommentInput = {
   readonly taskId: PublicTaskId;
   readonly content: string;
   readonly now: () => string;
@@ -61,7 +62,7 @@ export type AppendTaskCommentResult = {
   readonly commentCount: number;
 };
 
-export type TransitionTaskStateInput = {
+type TransitionTaskStateInput = {
   readonly taskId: PublicTaskId;
   readonly to: TaskState;
   readonly now: string;
@@ -132,8 +133,6 @@ export type RecordRunErrorInput = {
   readonly now: string;
 };
 
-export type CleanupState = "removed" | "not_created" | "failed";
-
 export type RecordValidationWorkspaceSetupInput = {
   readonly runId: string;
   readonly tempRefName: string;
@@ -179,7 +178,7 @@ export type RecordRunErrorResult =
       readonly code: "RUN_NOT_FOUND";
     };
 
-export class RepoStateUnavailableError extends Error {
+class RepoStateUnavailableError extends Error {
   constructor() {
     super("Durable Task state is unavailable");
   }
@@ -638,15 +637,8 @@ const recordRunError = (
 const recordValidationWorkspaceSetup = (
   database: DatabaseSync,
   input: RecordValidationWorkspaceSetupInput,
-): RecordRunErrorResult => {
-  database.exec("BEGIN IMMEDIATE");
-
-  try {
-    if (!runExists(database, input.runId)) {
-      database.exec("ROLLBACK");
-      return { ok: false, code: "RUN_NOT_FOUND" };
-    }
-
+): RecordRunErrorResult =>
+  recordExistingRunMutation(database, input.runId, () => {
     database
       .prepare(`
         INSERT INTO validation_workspace_setups (
@@ -681,27 +673,13 @@ const recordValidationWorkspaceSetup = (
       );
 
     database.prepare("UPDATE runs SET updated_at = ? WHERE id = ?").run(input.now, input.runId);
-
-    database.exec("COMMIT");
-    return { ok: true };
-  } catch (error) {
-    rollbackIfOpen(database);
-    throw error;
-  }
-};
+  });
 
 const recordRunToolingError = (
   database: DatabaseSync,
   input: RecordRunToolingErrorInput,
-): RecordRunErrorResult => {
-  database.exec("BEGIN IMMEDIATE");
-
-  try {
-    if (!runExists(database, input.runId)) {
-      database.exec("ROLLBACK");
-      return { ok: false, code: "RUN_NOT_FOUND" };
-    }
-
+): RecordRunErrorResult =>
+  recordExistingRunMutation(database, input.runId, () => {
     database
       .prepare(`
         INSERT INTO run_tooling_errors (
@@ -740,7 +718,22 @@ const recordRunToolingError = (
         )
         .run(input.taskRecoveryState, input.now, input.runId);
     }
+  });
 
+const recordExistingRunMutation = (
+  database: DatabaseSync,
+  runId: string,
+  mutate: () => void,
+): RecordRunErrorResult => {
+  database.exec("BEGIN IMMEDIATE");
+
+  try {
+    if (!runExists(database, runId)) {
+      database.exec("ROLLBACK");
+      return { ok: false, code: "RUN_NOT_FOUND" };
+    }
+
+    mutate();
     database.exec("COMMIT");
     return { ok: true };
   } catch (error) {

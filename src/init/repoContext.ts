@@ -6,7 +6,7 @@ import { ensureGitignoreBlock } from "./gitignore.js";
 import { readRepoConfig, type RepoConfig, writeRepoConfig } from "./repoConfig.js";
 import { ensureStateDatabase } from "./stateDatabase.js";
 
-export const taskPrefixPattern = /^[A-Z][A-Z0-9]{1,9}$/;
+const taskPrefixPattern = /^[A-Z][A-Z0-9]{1,9}$/;
 
 export type RepoLocalPaths = {
   readonly butWhyDir: string;
@@ -82,8 +82,7 @@ export type LoadRepoLocalContextError =
       readonly code: "invalid_repo_config";
     };
 
-export const isValidTaskPrefix = (taskPrefix: string): boolean =>
-  taskPrefixPattern.test(taskPrefix);
+const isValidTaskPrefix = (taskPrefix: string): boolean => taskPrefixPattern.test(taskPrefix);
 
 export const isPublicTaskIdForPrefix = (taskId: string, taskPrefix: string): boolean =>
   new RegExp(`^${escapeRegExp(taskPrefix)}-[1-9][0-9]*$`).test(taskId);
@@ -92,7 +91,7 @@ export const expectedTaskIdFormat = (taskPrefix: string): string => `${taskPrefi
 
 export const exampleTaskId = (taskPrefix: string): string => `${taskPrefix}-1`;
 
-export const repoLocalPaths = (root: string): RepoLocalPaths => {
+const repoLocalPaths = (root: string): RepoLocalPaths => {
   const butWhyDir = join(root, ".but-why");
 
   return {

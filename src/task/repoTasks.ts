@@ -58,24 +58,24 @@ export type LoadRepoTasksError =
       readonly taskPrefix: string;
     };
 
-export type CreateTaskInput = {
+type CreateTaskInput = {
   readonly title: string;
   readonly description: string;
   readonly now: string;
 };
 
-export type ListTasksInput = {
+type ListTasksInput = {
   readonly includeDone: boolean;
   readonly state?: TaskState;
 };
 
-export type AppendTaskCommentInput = {
+type AppendTaskCommentInput = {
   readonly taskId: PublicTaskId;
   readonly content: string;
   readonly now: () => string;
 };
 
-export type TransitionTaskStateInput = {
+type TransitionTaskStateInput = {
   readonly taskId: PublicTaskId;
   readonly to: TaskState;
   readonly now: string;

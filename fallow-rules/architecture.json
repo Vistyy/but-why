@@ -1,0 +1,35 @@
+{
+  "$schema": "https://raw.githubusercontent.com/fallow-rs/fallow/main/rule-pack-schema.json",
+  "version": 1,
+  "name": "but-why-architecture",
+  "description": "Project architecture rules that complement Fallow import boundaries.",
+  "rules": [
+    {
+      "id": "pure-domain-no-node-infrastructure-imports",
+      "kind": "banned-import",
+      "specifiers": [
+        "node:fs",
+        "node:fs/promises",
+        "fs",
+        "fs/promises",
+        "node:child_process",
+        "child_process",
+        "node:process",
+        "process",
+        "node:sqlite"
+      ],
+      "zones": ["pure-task-domain", "pure-run-domain"],
+      "message": "Pure domain modules must stay free of filesystem, process execution, process, and SQLite imports.",
+      "severity": "error"
+    },
+    {
+      "id": "node-sqlite-only-in-persistence-source",
+      "kind": "banned-import",
+      "specifiers": ["node:sqlite"],
+      "files": ["src/**/*.ts"],
+      "exclude": ["src/repoState.ts", "src/init/stateDatabase.ts"],
+      "message": "Direct node:sqlite imports in production source are limited to repo-local persistence and storage initialization modules.",
+      "severity": "error"
+    }
+  ]
+}

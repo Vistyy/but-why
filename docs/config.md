@@ -259,6 +259,8 @@ Biome handles formatting and linting.
 
 The TypeScript compiler runs strict typechecking with `tsc --noEmit`.
 
+Fallow handles codebase health, dead code, duplication, dependency, and architecture boundary checks for active project source.
+
 SQLite access uses `node:sqlite`.
 
 CLI output is converted to TOON-style text only at the stdout boundary.
@@ -276,15 +278,18 @@ just typecheck
 just test
 just format
 just format-check
+just fallow-check
 just by [args]
 ```
 
-`just quality` runs format checks, linting, typechecking, and tests.
+`just quality` runs format checks, linting, typechecking, tests, and Fallow codebase health checks.
 
 `just quality` must not modify files.
 
 `just format` may modify files.
 
 `just format-check` must not modify files.
+
+`just fallow-check` must not modify files.
 
 `just by [args]` runs the repo-local `by` CLI.
