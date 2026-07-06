@@ -47,4 +47,4 @@ Tests that covered the temporary helper in issue 025 should move to `ValidationR
 
 ## Blocked by
 
-- `docs/issues/025-split-taskstore-from-runstore-with-sqlite.md`
+- `docs/issues/034-split-task-cli-edge-modules.md`

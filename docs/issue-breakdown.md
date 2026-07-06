@@ -10,13 +10,12 @@ Done issues are omitted from this graph.
 
 ## Can start immediately
 
-- `025-split-taskstore-from-runstore-with-sqlite.md`
-- `033-add-ast-grep-structural-bans.md`
+- `034-split-task-cli-edge-modules.md`
 
 ## Remaining dependency graph
 
 ```text
-025 TaskStore and RunStore split
+034 split task CLI edge modules
   -> 026 ValidationRuns.start seam
     -> 027 separate Validation Run from generic Run
       -> 012 checks and check Findings
@@ -31,16 +30,13 @@ Done issues are omitted from this graph.
               -> 018 token summaries
               -> 021 reviewer evals
 
-025 TaskStore and RunStore split
-  -> 032 stable module boundaries with Fallow
-
 026 ValidationRuns.start seam
   -> 032 stable module boundaries with Fallow
 ```
 
 ## Notes
 
-- Issue 025 can start now because Task identity is opaque.
-- Issue 033 can start now because stricter Biome/TypeScript settings exist and Task identity is opaque.
-- Issue 032 should wait until the store/start seams exist.
+- Issue 034 can start now because `TaskUseCases` exists after issue 025.
+- Issue 026 should follow issue 034 so task CLI edge complexity is reduced before validation-start patterns spread.
+- Issue 032 should wait until the task CLI split and ValidationRuns seam exist.
 - Issue 028 fits after run inspection and before reviewer agents, because reviewer validation needs stable Task Context snapshots.
