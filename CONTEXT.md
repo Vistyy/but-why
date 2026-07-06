@@ -29,6 +29,11 @@ In v1, each task owns one branch, and that branch belongs to only that task.
 A task can have many runs as its branch changes over time.
 _Avoid_: Treating an external ticket, issue, or card as the Task identity.
 
+**Task Slug**:
+A deterministic, Git-safe and filesystem-safe operational name derived from a Task identity.
+A Task Slug is for naming branches, refs, workspaces, and artifact paths, not for identifying the Task itself or labeling a Task in user-facing task UX.
+_Avoid_: Treating a slug as the Task identity.
+
 **Task Start**:
 The explicit act of marking that implementation work has begun for a task.
 A task start does not create the task, submit code for validation, or run implementation work.
