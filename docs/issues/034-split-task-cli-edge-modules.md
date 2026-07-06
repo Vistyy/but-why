@@ -12,19 +12,27 @@ Not done.
 
 Restructure the task CLI edge so task command parsing, routing, output shaping, and error mapping are no longer concentrated in one large file.
 
-Move task CLI code out of `src/task` and into a dedicated CLI edge area under `src/cli/task`.
+Move task CLI code out of `src/task` and into a dedicated Task CLI Adapter under `src/cli/task`.
 
 Split task subcommands into vertical command modules.
 
 Each command module should keep its own argument parsing, command-specific help, use-case call, and CLI result mapping together.
 
+Each command module should expose one narrow command runner function, such as `runCreateCommand(args, env)`.
+The command runner `env` must stay narrow.
+It should contain only edge dependencies the command needs, such as `TaskUseCases`, current working directory inputs, file-reading inputs, and existing CLI output format options.
+Do not use `env` as a broad service locator.
 Do not split one command across separate parser, handler, and renderer folders.
 
 Keep `src/task` focused on Task domain code, Task use cases, Task storage seams, and Task-specific non-CLI adapters.
 
-Move Task description and comment file adapters under `src/task/files` so they are distinct from domain and use-case modules.
+Move Task description and comment file adapters under `src/task/files` so they are distinct from domain, use-case, and CLI modules.
+These are Task file adapters.
+They should only translate file contents into Task text inputs.
 
-The task CLI must continue to enter Task behavior through `TaskUseCases`.
+The Task CLI Adapter translates between the AXI shell contract and `TaskUseCases`.
+It owns args, help, stdout shaping, stderr diagnostics, structured errors, and exit codes.
+It must continue to enter Task behavior through `TaskUseCases`.
 
 This is a behavior-preserving refactor.
 
@@ -39,8 +47,8 @@ Preserve AXI behavior for stdout, stderr, structured errors, exit codes, no-args
 ```text
 src/cli/task/
   taskCli.ts
-  support.ts
   dashboard.ts
+  taskCliSupport.ts
   commands/
     create.ts
     list.ts
@@ -65,16 +73,24 @@ src/task/
 
 The exact filenames may change if a clearer name appears during implementation.
 
-The important shape is that CLI edge code lives under `src/cli/task`, command modules are vertical slices, and Task domain or use-case files do not depend on CLI modules.
+The important shape is that task CLI adapter code lives under `src/cli/task`, command modules are vertical slices, and Task domain or use-case files do not depend on CLI modules.
+
+`dashboard.ts` owns the no-args `by task` output.
+`taskCli.ts` owns routing, top-level task help dispatch, and delegating no-args execution to `dashboard.ts`.
+
+`taskCliSupport.ts` must stay mechanical and task-specific.
+It may contain only Task CLI glue reused by multiple task commands, such as Task ID resolution, use-case loading, and mapping known Task errors to the existing structured CLI error contract.
 
 ## Acceptance criteria
 
 - [ ] `src/task/taskCli.ts` is removed or reduced to a moved compatibility-free implementation under `src/cli/task`.
 - [ ] Top-level CLI routing imports the task CLI from `src/cli/task`.
 - [ ] Task create, list, show, start, context, and comment commands live in separate vertical command modules.
-- [ ] Dashboard or no-args task output is separated from subcommand routing.
-- [ ] Shared task CLI loading, Task ID resolution helpers, and common error rendering live in a small support module.
-- [ ] `descriptionFile.ts` and `commentFile.ts` move under `src/task/files`.
+- [ ] Each task command module exposes one narrow command runner function rather than parser, handler, and renderer objects.
+- [ ] Command runner `env` values stay narrow and do not become broad service locators.
+- [ ] Dashboard or no-args task output is owned by `dashboard.ts` and separated from subcommand routing.
+- [ ] Shared task CLI loading, Task ID resolution helpers, and common error mapping live in a small mechanical Task CLI support module.
+- [ ] `descriptionFile.ts` and `commentFile.ts` move under `src/task/files` as Task file adapters.
 - [ ] Task CLI modules depend on `TaskUseCases` and do not bypass it for Task behavior.
 - [ ] Task domain and use-case modules do not import task CLI modules.
 - [ ] Existing task CLI stdout shape remains unchanged.
@@ -82,7 +98,8 @@ The important shape is that CLI edge code lives under `src/cli/task`, command mo
 - [ ] Existing task CLI `--help` and no-args behavior remain unchanged.
 - [ ] No external CLI framework is introduced.
 - [ ] Fallow boundary configuration reflects the new CLI task location if needed.
-- [ ] If the Fallow health score allows it, restore the score gate toward the previous `88.7` baseline.
+- [ ] Fallow has no new boundary violations from this refactor.
+- [ ] If this split naturally allows the Fallow health score gate to move toward the previous `88.7` baseline, restore it.
 - [ ] If the previous Fallow score gate cannot be restored in this issue, document which remaining hotspots block it.
 - [ ] `just quality` passes.
 
