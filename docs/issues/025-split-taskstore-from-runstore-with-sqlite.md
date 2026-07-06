@@ -2,7 +2,7 @@
 
 ## Status
 
-Not done.
+Done.
 
 ## Parent
 
@@ -48,7 +48,9 @@ That helper must be internal, documented as transitional, and removed by `docs/i
 
 Tests should cover that the helper preserves current atomic submit-start behavior.
 
-Boundary tooling should allow only that explicit temporary exception, so no other cross-store dependency can spread.
+Boundary tooling should allow only explicit use-case-level composition.
+The transitional submit-start helper is the only cross-store transactional write exception.
+Task command read use cases may compose TaskStore and RunStore to preserve existing task detail output such as `latestRun`.
 
 `just quality` must run the relevant Fallow checks so the boundary is enforced by the normal quality gate.
 
@@ -68,32 +70,32 @@ The issue should define store boundaries and forbidden shapes, but does not need
 
 ## Acceptance criteria
 
-- [ ] Task commands depend on TaskStore behavior rather than a broad mixed state interface.
-- [ ] TaskStore does not expose Run reads or depend on RunStore behavior.
-- [ ] TaskStore does not expose validation-workflow-specific methods.
-- [ ] Run and validation-related code depends on RunStore behavior rather than TaskStore internals.
-- [ ] RunStore does not expose Task reads or depend on TaskStore behavior, except for storing Task identity as a reference.
-- [ ] RunStore does not expose submit-workflow-specific methods.
-- [ ] Any temporary cross-store submit-start helper is internal, clearly marked as transitional, and points to issue 026 for removal.
-- [ ] Tests cover that the temporary helper preserves current atomic submit-start behavior.
-- [ ] Fallow permits only the explicit temporary submit-start helper to import both TaskStore and RunStore.
-- [ ] `just quality` enforces the TaskStore/RunStore boundary through Fallow.
-- [ ] SQLite remains the only storage implementation.
-- [ ] One SQLite file may still back both TaskStore and RunStore.
-- [ ] The public `RepoState` interface is removed.
-- [ ] Any shared SQLite code is private implementation detail, not a public `RepoState`-style seam.
-- [ ] Shared transactions are not exposed as a generic public transaction API.
-- [ ] No new broad generic durable-state seam replaces `RepoState`.
-- [ ] Existing SQLite migrations and persistence behavior remain compatible with existing local state.
-- [ ] No schema migration is added unless strictly required for compatibility.
-- [ ] Existing CLI output, error codes, and behavior remain unchanged.
-- [ ] Tests set up Task and Run scenarios through public seams, not raw SQLite mutation.
-- [ ] Raw SQLite test access is limited to low-level SQLite implementation, initialization, or migration tests.
-- [ ] Direct SQLite implementation details remain hidden from command handlers.
-- [ ] Fallow boundary rules enforce that Task code uses TaskStore and Run or validation code uses RunStore, with no direct cross-store imports except the explicit temporary helper.
-- [ ] `just quality` passes.
-- [ ] No remote Task Surface behavior is added.
-- [ ] No local alias behavior is added.
+- [x] Task commands depend on TaskStore behavior rather than a broad mixed state interface.
+- [x] TaskStore does not expose Run reads or depend on RunStore behavior.
+- [x] TaskStore does not expose validation-workflow-specific methods.
+- [x] Run and validation-related code depends on RunStore behavior rather than TaskStore internals.
+- [x] RunStore does not expose Task reads or depend on TaskStore behavior, except for storing Task identity as a reference.
+- [x] RunStore does not expose submit-workflow-specific methods.
+- [x] Any temporary cross-store submit-start helper is internal, clearly marked as transitional, and points to issue 026 for removal.
+- [x] Tests cover that the temporary helper preserves current atomic submit-start behavior.
+- [x] Fallow permits only explicit use-case-level composition and the temporary submit-start transactional helper.
+- [x] `just quality` enforces the TaskStore/RunStore boundary through Fallow.
+- [x] SQLite remains the only storage implementation.
+- [x] One SQLite file may still back both TaskStore and RunStore.
+- [x] The public `RepoState` interface is removed.
+- [x] Any shared SQLite code is private implementation detail, not a public `RepoState`-style seam.
+- [x] Shared transactions are not exposed as a generic public transaction API.
+- [x] No new broad generic durable-state seam replaces `RepoState`.
+- [x] Existing SQLite migrations and persistence behavior remain compatible with existing local state.
+- [x] No schema migration is added unless strictly required for compatibility.
+- [x] Existing CLI output, error codes, and behavior remain unchanged.
+- [x] Tests set up Task and Run scenarios through public seams, not raw SQLite mutation.
+- [x] Raw SQLite test access is limited to low-level SQLite implementation, initialization, or migration tests.
+- [x] Direct SQLite implementation details remain hidden from command handlers.
+- [x] Fallow boundary rules enforce that Task code uses TaskStore and Run or validation code uses RunStore, with only explicit use-case composition and the temporary submit-start transactional helper.
+- [x] `just quality` passes.
+- [x] No remote Task Surface behavior is added.
+- [x] No local alias behavior is added.
 
 ## Blocked by
 

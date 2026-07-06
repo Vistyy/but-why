@@ -2,8 +2,10 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { repoStateLoadError, runtimeError, success, usageError } from "../src/cliResults.js";
-import { openRepoState } from "../src/repoState.js";
 import type { GitHubPrTarget } from "../src/run/run.js";
+import { openSqliteRunStore } from "../src/sqlite/runStore.js";
+import { openSqliteSubmitStartHelper } from "../src/sqlite/submitStart.js";
+import { openSqliteTaskStore } from "../src/sqlite/taskStore.js";
 import { loadRepoSubmitPreflight } from "../src/submit/submitPreflight.js";
 import { publicTaskId } from "../src/task/taskId.js";
 import { cleanupTempRoots, createGitRepo, runByInProcess } from "./support/by-cli.js";
@@ -59,14 +61,12 @@ describe("module seams", () => {
     });
   });
 
-  it("persists Task branch binding, Run creation, and Task state in one repo-state call", () => {
+  it("preserves atomic submit-start behavior in the transitional cross-store helper", () => {
     const root = initializedRepo();
-    const repoState = openRepoState({
-      statePath: join(root, ".but-why/state.sqlite"),
-      taskPrefix: "BY",
-      migrationTimestamp: () => firstNow,
-    });
-    const task = repoState.createTask({
+    const taskStore = sqliteTaskStore(root);
+    const runStore = sqliteRunStore(root);
+    const submitStart = sqliteSubmitStart(root);
+    const task = taskStore.createTask({
       title: "Submit through state",
       description: "Description",
       now: firstNow,
@@ -74,11 +74,11 @@ describe("module seams", () => {
     const taskId = publicTaskId(task.id);
 
     expect(
-      repoState.transitionTaskState({ taskId, to: "implementing", now: secondNow }),
+      taskStore.transitionTaskState({ taskId, to: "implementing", now: secondNow }),
     ).toMatchObject({ ok: true, changed: true });
 
     expect(
-      repoState.createRunFromSubmitPreflight({
+      submitStart.createRunFromSubmitPreflight({
         taskId,
         branch: "feature/by-1",
         commitSha: "abc123",
@@ -91,19 +91,19 @@ describe("module seams", () => {
       taskState: "validating",
       previousTaskState: "implementing",
     });
-    expect(repoState.getTaskById(taskId)).toMatchObject({
+    expect(taskStore.getTaskById(taskId)).toMatchObject({
       id: "BY-1",
       state: "validating",
       branch: "feature/by-1",
-      latestRun: firstTaskRunId,
       updatedAt: thirdNow,
     });
+    expect(runStore.getLatestRunIdForTask(taskId)).toBe(firstTaskRunId);
 
     expect(
-      repoState.transitionTaskState({ taskId, to: "needs_input", now: thirdNow }),
+      taskStore.transitionTaskState({ taskId, to: "needs_input", now: thirdNow }),
     ).toMatchObject({ ok: true });
     expect(
-      repoState.createRunFromSubmitPreflight({
+      submitStart.createRunFromSubmitPreflight({
         taskId,
         branch: "feature/by-1",
         commitSha: "def456",
@@ -111,16 +111,18 @@ describe("module seams", () => {
         now: thirdNow,
       }),
     ).toEqual({ ok: false, code: "TASK_HAS_ACTIVE_RUN" });
+    expect(taskStore.getTaskById(taskId)).toMatchObject({
+      state: "needs_input",
+      branch: "feature/by-1",
+    });
+    expect(runStore.getLatestRunIdForTask(taskId)).toBe(firstTaskRunId);
   });
 
   it("returns submit preflight domain rejections before Git facts are read", () => {
     const root = initializedRepo();
-    const repoState = openRepoState({
-      statePath: join(root, ".but-why/state.sqlite"),
-      taskPrefix: "BY",
-      migrationTimestamp: () => firstNow,
-    });
-    const task = repoState.createTask({
+    const taskStore = sqliteTaskStore(root);
+    const runStore = sqliteRunStore(root);
+    const task = taskStore.createTask({
       title: "Not started",
       description: "Description",
       now: firstNow,
@@ -140,11 +142,11 @@ describe("module seams", () => {
       taskId: "BY-1",
       state: "todo",
     });
-    expect(repoState.getTaskById(publicTaskId(task.id))).toMatchObject({
+    expect(taskStore.getTaskById(publicTaskId(task.id))).toMatchObject({
       state: "todo",
       branch: null,
-      latestRun: null,
     });
+    expect(runStore.getLatestRunIdForTask(publicTaskId(task.id))).toBeNull();
   });
 });
 
@@ -157,3 +159,22 @@ const initializedRepo = (): string => {
 
   return root;
 };
+
+const sqliteTaskStore = (root: string) =>
+  openSqliteTaskStore({
+    statePath: join(root, ".but-why/state.sqlite"),
+    taskPrefix: "BY",
+    migrationTimestamp: () => firstNow,
+  });
+
+const sqliteRunStore = (root: string) =>
+  openSqliteRunStore({
+    statePath: join(root, ".but-why/state.sqlite"),
+    migrationTimestamp: () => firstNow,
+  });
+
+const sqliteSubmitStart = (root: string) =>
+  openSqliteSubmitStartHelper({
+    statePath: join(root, ".but-why/state.sqlite"),
+    migrationTimestamp: () => firstNow,
+  });

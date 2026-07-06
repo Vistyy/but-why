@@ -3,7 +3,8 @@ import { chmodSync, existsSync, readFileSync, rmSync, writeFileSync } from "node
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
-import { openRepoState } from "../src/repoState.js";
+import { openSqliteRunStore } from "../src/sqlite/runStore.js";
+import { openSqliteTaskStore } from "../src/sqlite/taskStore.js";
 import type { TaskState } from "../src/task/lifecycle.js";
 import { loadRepoTasks } from "../src/task/repoTasks.js";
 import { publicTaskId } from "../src/task/taskId.js";
@@ -61,7 +62,7 @@ describe("by submit CLI", () => {
     expect(gitStatus(root)).toBe(statusBeforeSubmit);
     expect(gitRefExists(root, firstTaskValidationRef)).toBe(false);
 
-    const validationWorkspace = repoState(root).getValidationWorkspaceSetup(firstTaskRunId);
+    const validationWorkspace = runStore(root).getValidationWorkspaceSetup(firstTaskRunId);
 
     expect(validationWorkspace).toMatchObject({
       runId: firstTaskRunId,
@@ -78,7 +79,7 @@ describe("by submit CLI", () => {
       `state: validating\n  createdAt: "${firstNow}"\n  updatedAt: "${thirdNow}"\n  branch: feature/by-1\n  latestRun: ${firstTaskRunId}`,
     );
 
-    expect(repoState(root).getRunById(firstTaskRunId)).toEqual({
+    expect(runStore(root).getRunById(firstTaskRunId)).toEqual({
       id: firstTaskRunId,
       taskId: "BY-1",
       taskRunNumber: 1,
@@ -111,8 +112,8 @@ describe("by submit CLI", () => {
     expect(result.status).toBe(1);
     expect(result.stdout).toContain("code: validation_workspace_setup_failed");
     expect(result.stdout).toContain("operationName: copy_allowlisted_file");
-    expect(repoState(root).getRunById(firstTaskRunId)).toMatchObject({ status: "error" });
-    expect(repoState(root).listRunToolingErrors(firstTaskRunId)).toEqual([
+    expect(runStore(root).getRunById(firstTaskRunId)).toMatchObject({ status: "error" });
+    expect(runStore(root).listRunToolingErrors(firstTaskRunId)).toEqual([
       expect.objectContaining({
         runId: firstTaskRunId,
         operationName: "copy_allowlisted_file",
@@ -491,7 +492,7 @@ exit 2
   );
 
 const recordRunError = (root: string, runId: string, now: string): void => {
-  const result = repoState(root).recordRunError({ runId, now });
+  const result = runStore(root).recordRunError({ runId, now });
 
   if (!result.ok) {
     throw new Error(`Could not record Run error for ${runId}: ${result.code}`);
@@ -499,7 +500,7 @@ const recordRunError = (root: string, runId: string, now: string): void => {
 };
 
 const taskState = (root: string, taskId: string): string => {
-  const task = repoState(root).getTaskById(publicTaskId(taskId));
+  const task = taskStore(root).getTaskById(publicTaskId(taskId));
 
   if (task === undefined) {
     throw new Error(`Missing task ${taskId}`);
@@ -509,11 +510,17 @@ const taskState = (root: string, taskId: string): string => {
 };
 
 const taskHasNoRuns = (root: string, taskId: string): boolean =>
-  repoState(root).getTaskById(publicTaskId(taskId))?.latestRun === null;
+  runStore(root).getLatestRunIdForTask(publicTaskId(taskId)) === null;
 
-const repoState = (root: string) =>
-  openRepoState({
+const taskStore = (root: string) =>
+  openSqliteTaskStore({
     statePath: join(root, ".but-why/state.sqlite"),
     taskPrefix: "BY",
+    migrationTimestamp: () => firstNow,
+  });
+
+const runStore = (root: string) =>
+  openSqliteRunStore({
+    statePath: join(root, ".but-why/state.sqlite"),
     migrationTimestamp: () => firstNow,
   });

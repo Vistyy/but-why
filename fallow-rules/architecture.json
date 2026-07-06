@@ -27,8 +27,24 @@
       "kind": "banned-import",
       "specifiers": ["node:sqlite"],
       "files": ["src/**/*.ts"],
-      "exclude": ["src/repoState.ts", "src/init/stateDatabase.ts"],
-      "message": "Direct node:sqlite imports in production source are limited to repo-local persistence and storage initialization modules.",
+      "exclude": ["src/sqlite/**/*.ts", "src/init/stateDatabase.ts"],
+      "message": "Direct node:sqlite imports in production source are limited to SQLite persistence and storage initialization modules.",
+      "severity": "error"
+    },
+    {
+      "id": "task-store-implementation-does-not-import-run-store",
+      "kind": "banned-import",
+      "specifiers": ["../run/runStore.js", "../sqlite/runStore.js"],
+      "files": ["src/task/taskStore.ts", "src/sqlite/taskStore.ts"],
+      "message": "TaskStore must not read RunStore data. Compose Task and Run views outside the TaskStore implementation.",
+      "severity": "error"
+    },
+    {
+      "id": "run-store-implementation-does-not-import-task-store",
+      "kind": "banned-import",
+      "specifiers": ["../task/taskStore.js", "../sqlite/taskStore.js"],
+      "files": ["src/run/runStore.ts", "src/sqlite/runStore.ts"],
+      "message": "RunStore must not depend on TaskStore behavior. The submit-start helper is the only temporary cross-store exception.",
       "severity": "error"
     }
   ]

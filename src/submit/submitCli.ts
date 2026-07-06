@@ -59,6 +59,7 @@ export const routeSubmit = async (
     }
 
     const validationWorkspace = await submitPreflight.submit.createValidationWorkspaceForRun({
+      taskId: result.taskId,
       runId: result.runId,
       commitSha: result.commitSha,
       taskRecoveryState: result.previousTaskState,

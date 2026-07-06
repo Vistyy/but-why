@@ -5,16 +5,15 @@ import {
   type LoadRepoLocalContextError,
   type RepoLocalContext,
 } from "../init/repoContext.js";
+import type { RunStore } from "../run/runStore.js";
+import { openSqliteRunStore } from "../sqlite/runStore.js";
+import { openSqliteTaskStore } from "../sqlite/taskStore.js";
 import { canStartFrom, type StartIneligibleState } from "./startPolicy.js";
 import type { TaskState } from "./lifecycle.js";
 import type { TaskContext, TaskRecord, TaskSummary } from "./task.js";
 import { resolveRepoTaskId, type RepoTaskIdResolution } from "./repoTaskIds.js";
 import type { PublicTaskId } from "./taskId.js";
-import {
-  openRepoState,
-  type AppendTaskCommentResult,
-  type TaskStateTransitionResult,
-} from "../repoState.js";
+import type { AppendTaskCommentResult, StoredTaskRecord, TaskStore } from "./taskStore.js";
 
 /**
  * Task lifecycle commands should enter through this module.
@@ -33,7 +32,7 @@ export type RepoTasks = {
     input: AppendTaskCommentInput,
   ) => AppendTaskCommentResult | undefined;
   readonly startTask: (taskId: PublicTaskId, now: string) => StartTaskResult;
-  readonly transitionTaskState: (input: TransitionTaskStateInput) => TaskStateTransitionResult;
+  readonly transitionTaskState: (input: TransitionTaskStateInput) => RepoTaskStateTransitionResult;
 };
 
 export type LoadRepoTasksInput = {
@@ -82,6 +81,23 @@ type TransitionTaskStateInput = {
   readonly now: string;
 };
 
+export type RepoTaskStateTransitionResult =
+  | {
+      readonly ok: true;
+      readonly changed: boolean;
+      readonly task: TaskRecord;
+    }
+  | {
+      readonly ok: false;
+      readonly code: "task_not_found";
+    }
+  | {
+      readonly ok: false;
+      readonly code: "invalid_task_state_transition";
+      readonly from: TaskState;
+      readonly to: TaskState;
+    };
+
 export type StartTaskResult =
   | {
       readonly ok: true;
@@ -122,32 +138,77 @@ export const loadRepoTasks = (input: LoadRepoTasksInput): LoadRepoTasksResult =>
 };
 
 const repoTasks = (context: RepoLocalContext, migrationTimestamp: () => string): RepoTasks => {
-  const state = openRepoState({
+  const taskStore = openSqliteTaskStore({
     statePath: context.paths.statePath,
     taskPrefix: context.taskPrefix,
+    migrationTimestamp,
+  });
+  const runStore = openSqliteRunStore({
+    statePath: context.paths.statePath,
     migrationTimestamp,
   });
 
   return {
     taskPrefix: context.taskPrefix,
     resolveTaskId: (taskId) => resolveRepoTaskId(context, taskId),
-    createTask: state.createTask,
-    listTasks: state.listTasks,
-    listActionableTasks: state.listActionableTasks,
-    getTaskById: state.getTaskById,
-    getTaskContextById: state.getTaskContextById,
-    appendTaskComment: state.appendTaskComment,
-    startTask: (taskId, now) => startTask(state.transitionTaskState, taskId, now),
-    transitionTaskState: state.transitionTaskState,
+    createTask: taskStore.createTask,
+    listTasks: taskStore.listTasks,
+    listActionableTasks: taskStore.listActionableTasks,
+    getTaskById: (taskId) => getTaskById(taskStore, runStore, taskId),
+    getTaskContextById: taskStore.getTaskContextById,
+    appendTaskComment: taskStore.appendTaskComment,
+    startTask: (taskId, now) => startTask(taskStore, runStore, taskId, now),
+    transitionTaskState: (input) => transitionTaskState(taskStore, runStore, input),
   };
 };
 
+const getTaskById = (
+  taskStore: TaskStore,
+  runStore: RunStore,
+  taskId: PublicTaskId,
+): TaskRecord | undefined => {
+  const task = taskStore.getTaskById(taskId);
+
+  if (task === undefined) {
+    return undefined;
+  }
+
+  return withLatestRun(task, runStore.getLatestRunIdForTask(taskId));
+};
+
+const transitionTaskState = (
+  taskStore: TaskStore,
+  runStore: RunStore,
+  input: TransitionTaskStateInput,
+): RepoTaskStateTransitionResult => {
+  const result = taskStore.transitionTaskState(input);
+
+  if (!result.ok) {
+    return result;
+  }
+
+  return {
+    ...result,
+    task: withLatestRun(result.task, runStore.getLatestRunIdForTask(input.taskId)),
+  };
+};
+
+const withLatestRun = (task: StoredTaskRecord, latestRun: string | null): TaskRecord => ({
+  ...task,
+  latestRun,
+});
+
 const startTask = (
-  transitionTaskState: RepoTasks["transitionTaskState"],
+  taskStore: TaskStore,
+  runStore: RunStore,
   taskId: PublicTaskId,
   now: string,
 ): StartTaskResult => {
-  const result = transitionTaskState({ taskId, to: "implementing", now });
+  const result = transitionTaskState(taskStore, runStore, {
+    taskId,
+    to: "implementing",
+    now,
+  });
 
   if (result.ok) {
     return result;

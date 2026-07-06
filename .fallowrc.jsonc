@@ -118,21 +118,44 @@
         ]
       },
       {
+        "name": "task-use-case",
+        "patterns": ["src/task/repoTasks.ts"]
+      },
+      {
         "name": "task-adapter",
         "patterns": [
           "src/task/repoTaskIds.ts",
-          "src/task/repoTasks.ts",
           "src/task/commentFile.ts",
           "src/task/descriptionFile.ts"
         ]
       },
       {
-        "name": "pure-run-domain",
-        "patterns": ["src/run/**"]
+        "name": "task-store",
+        "patterns": ["src/task/taskStore.ts"]
       },
       {
-        "name": "repo-local-persistence",
-        "patterns": ["src/repoState.ts"]
+        "name": "pure-run-domain",
+        "patterns": ["src/run/cleanup.ts", "src/run/run.ts"]
+      },
+      {
+        "name": "run-store",
+        "patterns": ["src/run/runStore.ts"]
+      },
+      {
+        "name": "sqlite-core",
+        "patterns": ["src/sqlite/connection.ts", "src/sqlite/query.ts"]
+      },
+      {
+        "name": "sqlite-task-store",
+        "patterns": ["src/sqlite/taskStore.ts"]
+      },
+      {
+        "name": "sqlite-run-store",
+        "patterns": ["src/sqlite/runStore.ts"]
+      },
+      {
+        "name": "sqlite-submit-start",
+        "patterns": ["src/sqlite/submitStart.ts"]
       },
       {
         "name": "storage-init",
@@ -157,13 +180,11 @@
         "allow": [
           "output",
           "pure-task-domain",
+          "task-use-case",
           "task-adapter",
-          "pure-run-domain",
-          "repo-local-persistence",
-          "storage-init",
+          "submit",
           "init",
-          "validation",
-          "submit"
+          "validation"
         ]
       },
       {
@@ -175,16 +196,55 @@
         "allow": []
       },
       {
+        "from": "task-store",
+        "allow": ["pure-task-domain"]
+      },
+      {
+        "from": "task-use-case",
+        "allow": [
+          "pure-task-domain",
+          "pure-run-domain",
+          "task-store",
+          "run-store",
+          "task-adapter",
+          "sqlite-task-store",
+          "sqlite-run-store",
+          "init"
+        ]
+      },
+      {
         "from": "task-adapter",
-        "allow": ["pure-task-domain", "repo-local-persistence", "init"]
+        "allow": ["pure-task-domain", "init"]
       },
       {
         "from": "pure-run-domain",
         "allow": []
       },
       {
-        "from": "repo-local-persistence",
-        "allow": ["pure-task-domain", "pure-run-domain", "storage-init"]
+        "from": "run-store",
+        "allow": ["pure-task-domain", "pure-run-domain"]
+      },
+      {
+        "from": "sqlite-core",
+        "allow": ["storage-init"]
+      },
+      {
+        "from": "sqlite-task-store",
+        "allow": ["pure-task-domain", "task-store", "sqlite-core"]
+      },
+      {
+        "from": "sqlite-run-store",
+        "allow": ["pure-task-domain", "pure-run-domain", "run-store", "sqlite-core"]
+      },
+      {
+        "from": "sqlite-submit-start",
+        "allow": [
+          "pure-task-domain",
+          "pure-run-domain",
+          "run-store",
+          "sqlite-core",
+          "sqlite-run-store"
+        ]
       },
       {
         "from": "storage-init",
@@ -204,7 +264,9 @@
           "pure-task-domain",
           "task-adapter",
           "pure-run-domain",
-          "repo-local-persistence",
+          "run-store",
+          "sqlite-run-store",
+          "sqlite-submit-start",
           "init",
           "validation"
         ]

@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { collapseHome } from "../src/cli.js";
-import { openRepoState } from "../src/repoState.js";
+import { openSqliteTaskStore } from "../src/sqlite/taskStore.js";
 import type { TaskState } from "../src/task/lifecycle.js";
 import { loadRepoTasks } from "../src/task/repoTasks.js";
 import { publicTaskId } from "../src/task/taskId.js";
@@ -49,7 +49,7 @@ describe("by task CLI", () => {
   updatedAt: "${firstNow}"
 help[1]: Run \`by task list\` to see open tasks.`);
 
-    expect(repoState(root).getTaskById(publicTaskId("BY-1"))).toMatchObject({
+    expect(taskStore(root).getTaskById(publicTaskId("BY-1"))).toMatchObject({
       id: "BY-1",
       title: "Add   login",
       description: "  Preserve me exactly.\n\n",
@@ -495,7 +495,7 @@ tasks[1]{id,title,state,createdAt,updatedAt}:
 
     expect(result.status).toBe(0);
 
-    expect(repoState(root).getTaskContextById(publicTaskId("BY-1"))?.comments).toEqual([
+    expect(taskStore(root).getTaskContextById(publicTaskId("BY-1"))?.comments).toEqual([
       "\uFEFFBOM",
     ]);
   });
@@ -641,7 +641,7 @@ tasks[1]{id,title,state,createdAt,updatedAt}:
 
     expect(results.every((result) => result.status === 0)).toBe(true);
 
-    const comments = repoState(root).getTaskContextById(publicTaskId("BY-1"))?.comments ?? [];
+    const comments = taskStore(root).getTaskContextById(publicTaskId("BY-1"))?.comments ?? [];
 
     expect(comments).toHaveLength(commentCount);
     expect(new Set(comments)).toEqual(
@@ -888,7 +888,7 @@ help[1]: Run \`by init --task-prefix BY\` in the repository root.`);
     expect(results.every((result) => result.status === 0)).toBe(true);
 
     expect(
-      repoState(root)
+      taskStore(root)
         .listTasks({ includeDone: true })
         .map((task) => task.id),
     ).toEqual(Array.from({ length: createCount }, (_value, index) => `BY-${index + 1}`));
@@ -919,8 +919,8 @@ const initializedRepo = (): string => {
   return root;
 };
 
-const repoState = (root: string) =>
-  openRepoState({
+const taskStore = (root: string) =>
+  openSqliteTaskStore({
     statePath: join(root, ".but-why/state.sqlite"),
     taskPrefix: "BY",
     migrationTimestamp: () => firstNow,

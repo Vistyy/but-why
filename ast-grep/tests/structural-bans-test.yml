@@ -1,6 +1,6 @@
 id: no-direct-sqlite-construction
 valid:
-  - openRepoState(input)
+  - openSqliteTaskStore(input)
 invalid:
   - new DatabaseSync(path)
 ---
@@ -14,6 +14,14 @@ invalid:
     database.exec(`
       PRAGMA user_version
     `)
+---
+id: no-sqlite-row-type-guards
+valid:
+  - const rowToTask = (row) => row
+  - const isTaskState = (value) => value === "todo"
+invalid:
+  - const isTaskRow = (value) => true
+  - function isRunRecordRow(value) { return true }
 ---
 id: no-process-globals-outside-main
 valid:

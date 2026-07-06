@@ -1,28 +1,39 @@
 id: no-direct-sqlite-construction
 language: TypeScript
 severity: error
-message: Use the repo state or state database seams instead of constructing DatabaseSync directly.
+message: Use the SQLite persistence or state database seams instead of constructing DatabaseSync directly.
 files:
   - src/**/*.ts
 ignores:
   - src/init/stateDatabase.ts
-  - src/repoState.ts
+  - src/sqlite/**/*.ts
 rule:
   pattern: new DatabaseSync($$$ARGS)
 ---
 id: no-raw-sql-outside-state
 language: TypeScript
 severity: error
-message: Keep raw SQL inside src/init/stateDatabase.ts or src/repoState.ts.
+message: Keep raw SQL inside src/init/stateDatabase.ts or src/sqlite.
 files:
   - src/**/*.ts
 ignores:
   - src/init/stateDatabase.ts
-  - src/repoState.ts
+  - src/sqlite/**/*.ts
 rule:
   all:
     - kind: call_expression
     - regex: '[\s\S]*\.(prepare|exec)\([`"]\s*(SELECT|INSERT|UPDATE|DELETE|CREATE|ALTER|DROP|BEGIN|COMMIT|ROLLBACK|PRAGMA)\b[\s\S]*'
+---
+id: no-sqlite-row-type-guards
+language: TypeScript
+severity: error
+message: Do not add per-row is*Row guards in SQLite stores. Use typed queryOne/queryAll rows and schema-backed mapper types instead.
+files:
+  - src/sqlite/**/*.ts
+rule:
+  all:
+    - kind: identifier
+    - regex: '^is[A-Z][A-Za-z0-9]*Row$'
 ---
 id: no-process-globals-outside-main
 language: TypeScript

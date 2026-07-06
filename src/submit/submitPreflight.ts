@@ -6,16 +6,19 @@ import {
   type RepoLocalContext,
 } from "../init/repoContext.js";
 import type { GitHubPrTarget } from "../run/run.js";
+import type { RunStore } from "../run/runStore.js";
+import { openSqliteRunStore } from "../sqlite/runStore.js";
+import { openSqliteSubmitStartHelper, type SubmitStartHelper } from "../sqlite/submitStart.js";
 import type { TaskState } from "../task/lifecycle.js";
 import type { SubmitEligibleState } from "../task/submitPolicy.js";
 import { resolveRepoTaskId, type RepoTaskIdResolution } from "../task/repoTaskIds.js";
 import type { PublicTaskId } from "../task/taskId.js";
-import { openRepoState, type RepoState } from "../repoState.js";
 import {
   createValidationWorkspace,
   type ValidationWorkspaceSetup,
   type ValidationWorkspaceToolingError,
 } from "../validation/createValidationWorkspace.js";
+
 import { readGitFacts } from "./gitFacts.js";
 import { detectGitHubPrTarget, protectedBranchNames } from "./githubTarget.js";
 
@@ -55,6 +58,7 @@ export type SubmitTaskInput = {
 };
 
 export type CreateValidationWorkspaceForRunInput = {
+  readonly taskId: PublicTaskId;
   readonly runId: string;
   readonly commitSha: string;
   readonly taskRecoveryState: SubmitEligibleState;
@@ -142,9 +146,12 @@ const repoSubmitPreflight = (
   context: RepoLocalContext,
   migrationTimestamp: () => string,
 ): RepoSubmitPreflight => {
-  const state = openRepoState({
+  const submitStart = openSqliteSubmitStartHelper({
     statePath: context.paths.statePath,
-    taskPrefix: context.taskPrefix,
+    migrationTimestamp,
+  });
+  const runStore = openSqliteRunStore({
+    statePath: context.paths.statePath,
     migrationTimestamp,
   });
 
@@ -154,18 +161,19 @@ const repoSubmitPreflight = (
     submitTask: (input) =>
       runSubmitPreflight(
         context.root,
-        state,
+        submitStart,
         context.config.validationWorkspace?.copyFiles ?? [],
         input,
       ),
     createValidationWorkspaceForRun: (input) =>
-      createValidationWorkspaceForRun(context, state, input),
+      createValidationWorkspaceForRun(context, runStore, submitStart, input),
   };
 };
 
 const createValidationWorkspaceForRun = async (
   context: RepoLocalContext,
-  state: RepoState,
+  runStore: RunStore,
+  submitStart: SubmitStartHelper,
   input: CreateValidationWorkspaceForRunInput,
 ): Promise<CreateValidationWorkspaceForRunResult> => {
   const result = await createValidationWorkspace({
@@ -176,7 +184,7 @@ const createValidationWorkspaceForRun = async (
   });
 
   if (result.ok) {
-    state.recordValidationWorkspaceSetup({
+    runStore.recordValidationWorkspaceSetup({
       runId: input.runId,
       tempRefName: result.setup.tempRefName,
       submittedSha: result.setup.submittedSha,
@@ -190,7 +198,7 @@ const createValidationWorkspaceForRun = async (
     return { ok: true, validationWorkspace: result.setup };
   }
 
-  state.recordRunToolingError({
+  const recovery = submitStart.recordRunToolingErrorAndRecoverTask({
     runId: input.runId,
     operationName: result.toolingError.operationName,
     tempRefName: result.toolingError.tempRefName,
@@ -205,16 +213,20 @@ const createValidationWorkspaceForRun = async (
     now: input.now,
   });
 
+  if (!recovery.ok) {
+    throw new Error(`Could not recover Task after validation tooling failure: ${recovery.code}`);
+  }
+
   return { ok: false, toolingError: result.toolingError };
 };
 
 const runSubmitPreflight = (
   root: string,
-  state: RepoState,
+  submitStart: SubmitStartHelper,
   allowedUntrackedFiles: readonly string[],
   input: SubmitTaskInput,
 ): SubmitTaskResult => {
-  const readiness = state.getTaskSubmitReadiness(input.taskId);
+  const readiness = submitStart.getTaskSubmitReadiness(input.taskId);
 
   if (!readiness.ok) {
     return {
@@ -276,7 +288,7 @@ const runSubmitPreflight = (
     };
   }
 
-  const createRun = state.createRunFromSubmitPreflight({
+  const createRun = submitStart.createRunFromSubmitPreflight({
     taskId: input.taskId,
     branch: gitFacts.facts.branch,
     commitSha: gitFacts.facts.commitSha,

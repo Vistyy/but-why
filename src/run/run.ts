@@ -25,7 +25,3 @@ export type RunRecord = {
   readonly createdAt: string;
   readonly updatedAt: string;
 };
-
-const runStatusSet = new Set<string>(runStatuses);
-
-export const isRunStatus = (value: string): value is RunStatus => runStatusSet.has(value);
