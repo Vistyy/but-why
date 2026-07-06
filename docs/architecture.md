@@ -247,18 +247,18 @@ BY-1
 BY-2
 ```
 
-Run IDs are task-scoped:
+Run IDs are task-scoped operational names built from the canonical Task Slug plus the task run number:
 
 ```text
-BY-1.1
-BY-1.2
+by-1-09224d806043.1
+by-1-09224d806043.2
 ```
 
 Finding IDs are run-scoped:
 
 ```text
-BY-1.2-F1
-BY-1.2-F2
+by-1-09224d806043.2-F1
+by-1-09224d806043.2-F2
 ```
 
 Artifact refs use this form:

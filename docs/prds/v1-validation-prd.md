@@ -44,7 +44,7 @@ Sandcastle is the accepted execution engine for validation worktrees, command ch
 
 8. As a user, I want each submit to create a commit-bound Run, so that validation history is tied to the exact code snapshot that was checked.
 
-9. As a user, I want Run IDs to include the Task ID, so that run history is easy to read.
+9. As a user, I want Run IDs to include a readable Task Slug, so that run history is easy to read without embedding raw Task IDs in operational names.
 
 10. As a user, I want validation to run in an isolated worktree, so that my current checkout is not disturbed.
 

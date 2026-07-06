@@ -87,8 +87,6 @@ const isValidTaskPrefix = (taskPrefix: string): boolean => taskPrefixPattern.tes
 export const isPublicTaskIdForPrefix = (taskId: string, taskPrefix: string): boolean =>
   new RegExp(`^${escapeRegExp(taskPrefix)}-[1-9][0-9]*$`).test(taskId);
 
-export const expectedTaskIdFormat = (taskPrefix: string): string => `${taskPrefix}-<number>`;
-
 export const exampleTaskId = (taskPrefix: string): string => `${taskPrefix}-1`;
 
 const repoLocalPaths = (root: string): RepoLocalPaths => {

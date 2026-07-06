@@ -503,10 +503,10 @@ tasks[1]{id,title,state,createdAt,updatedAt}:
         code: "missing_comment_file",
       },
       {
-        name: "malformed task ID",
+        name: "remote-backed task ID",
         args: ["task", "comment", "by-1", "--file", "valid.md"],
-        status: 2,
-        code: "invalid_task_id",
+        status: 1,
+        code: "remote_tasks_not_supported",
       },
       {
         name: "unknown task",
@@ -648,9 +648,9 @@ tasks[1]{id,title,state,createdAt,updatedAt}:
 
     for (const [taskId, code] of [
       [undefined, "missing_task_id"],
-      ["by-1", "invalid_task_id"],
-      ["123", "invalid_task_id"],
-      ["foo", "invalid_task_id"],
+      [" BY-1", "invalid_task_id"],
+      ["BY-1\n", "invalid_task_id"],
+      ["BY-\u00001", "invalid_task_id"],
     ] as const) {
       const result = runByInProcess(
         root,
@@ -668,16 +668,16 @@ tasks[1]{id,title,state,createdAt,updatedAt}:
     "show",
     "context",
     "start",
-  ])("rejects wrong Task ID prefixes before state access in %s", (command) => {
+  ])("rejects non-local Task IDs before state access in %s", (command) => {
     const root = initializedRepo();
 
     rmSync(join(root, ".but-why/state.sqlite"));
     const result = runByInProcess(root, ["task", command, "ZZ-1"]);
 
-    expect(result.status).toBe(2);
+    expect(result.status).toBe(1);
     expect(result.stderr).toBe("");
-    expect(result.stdout).toContain("code: invalid_task_id");
-    expect(result.stdout).toContain("expectedFormat: BY-<number>");
+    expect(result.stdout).toContain("code: remote_tasks_not_supported");
+    expect(result.stdout).toContain("taskId: ZZ-1");
   });
 
   it.each([

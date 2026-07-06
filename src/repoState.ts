@@ -8,7 +8,7 @@ import { isRunStatus, type GitHubPrTarget, type RunRecord } from "./run/run.js";
 import { canTransition, isTaskState, type TaskState } from "./task/lifecycle.js";
 import { canSubmitFrom, type SubmitEligibleState } from "./task/submitPolicy.js";
 import type { TaskContext, TaskRecord, TaskSummary } from "./task/task.js";
-import type { PublicTaskId } from "./task/taskId.js";
+import { taskSlugForId, type PublicTaskId } from "./task/taskId.js";
 
 /**
  * Future validation workspace and validation gate code should use this durable state interface.
@@ -552,7 +552,7 @@ const createRunFromSubmitPreflight = (
     }
 
     const taskRunNumber = nextTaskRunNumber(database, input.taskId);
-    const runId = `${input.taskId}.${taskRunNumber}`;
+    const runId = `${taskSlugForId(input.taskId)}.${taskRunNumber}`;
 
     if (task.branch === null) {
       database.prepare("UPDATE tasks SET branch = ? WHERE id = ?").run(input.branch, input.taskId);

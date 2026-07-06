@@ -1,6 +1,5 @@
 import {
   exampleTaskId,
-  expectedTaskIdFormat,
   isPublicTaskIdForPrefix,
   type RepoLocalContext,
 } from "../init/repoContext.js";
@@ -13,7 +12,8 @@ export type RepoTaskIdResolution =
     }
   | {
       readonly ok: false;
-      readonly expectedFormat: string;
+      readonly code: "remote_tasks_not_supported";
+      readonly taskId: PublicTaskId;
       readonly help: string;
     };
 
@@ -21,13 +21,14 @@ export const resolveRepoTaskId = (
   context: RepoLocalContext,
   taskId: PublicTaskId,
 ): RepoTaskIdResolution => {
-  if (!hasPublicTaskIdShape(taskId) || !isPublicTaskIdForPrefix(taskId, context.taskPrefix)) {
-    return {
-      ok: false,
-      expectedFormat: expectedTaskIdFormat(context.taskPrefix),
-      help: `Use a public Task ID such as ${exampleTaskId(context.taskPrefix)}.`,
-    };
+  if (hasPublicTaskIdShape(taskId) && isPublicTaskIdForPrefix(taskId, context.taskPrefix)) {
+    return { ok: true, taskId };
   }
 
-  return { ok: true, taskId };
+  return {
+    ok: false,
+    code: "remote_tasks_not_supported",
+    taskId,
+    help: `Use a repo-local Task ID such as ${exampleTaskId(context.taskPrefix)}. Remote Task authorities are not supported yet.`,
+  };
 };

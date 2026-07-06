@@ -13,8 +13,9 @@ import { readDescriptionFile, type DescriptionFileReadError } from "./descriptio
 import { isTaskState, taskStates, type TaskState } from "./lifecycle.js";
 import type { StartIneligibleState } from "./startPolicy.js";
 import type { TaskRecord, TaskSummary } from "./task.js";
+import type { RepoTaskIdResolution } from "./repoTaskIds.js";
 import { loadRepoTasks, type RepoTasks } from "./repoTasks.js";
-import { hasPublicTaskIdShape, publicTaskId, type PublicTaskId } from "./taskId.js";
+import { parsePublicTaskId, type PublicTaskId, type PublicTaskIdParseResult } from "./taskId.js";
 
 export const routeTask = (args: readonly string[], environment: CliEnvironment): CliResult => {
   if (args.length === 0 || (args.length === 1 && args[0] === "--help")) {
@@ -311,7 +312,7 @@ const routeTaskComment = (args: readonly string[], environment: CliEnvironment):
     });
   }
 
-  const tasksLoad = loadTasks(environment.cwd, true);
+  const tasksLoad = loadTasks(environment.cwd, false);
 
   if (!tasksLoad.ok) {
     return tasksLoad.result;
@@ -320,7 +321,7 @@ const routeTaskComment = (args: readonly string[], environment: CliEnvironment):
   const taskId = tasksLoad.tasks.resolveTaskId(parseResult.taskId);
 
   if (!taskId.ok) {
-    return invalidTaskId(parseResult.taskId, taskId.expectedFormat, taskId.help).result;
+    return repoTaskIdResolutionError(taskId).result;
   }
 
   try {
@@ -424,10 +425,10 @@ const routeResolvedTaskId = (
   usage: string,
   route: (tasks: RepoTasks, taskId: PublicTaskId) => CliResult,
 ): CliResult => {
-  const taskIdShape = parseTaskIdShape(args, usage);
+  const taskIdParse = parseTaskIdArg(args, usage);
 
-  if (!taskIdShape.ok) {
-    return taskIdShape.result;
+  if (!taskIdParse.ok) {
+    return taskIdParse.result;
   }
 
   const tasksLoad = loadTasks(environment.cwd, false);
@@ -436,10 +437,10 @@ const routeResolvedTaskId = (
     return tasksLoad.result;
   }
 
-  const taskId = tasksLoad.tasks.resolveTaskId(taskIdShape.taskId);
+  const taskId = tasksLoad.tasks.resolveTaskId(taskIdParse.taskId);
 
   if (!taskId.ok) {
-    return invalidTaskId(taskIdShape.taskId, taskId.expectedFormat, taskId.help).result;
+    return repoTaskIdResolutionError(taskId).result;
   }
 
   return route(tasksLoad.tasks, taskId.taskId);
@@ -455,7 +456,7 @@ type TaskIdArgParseResult =
       readonly result: CliResult;
     };
 
-const parseTaskIdShape = (args: readonly string[], usage: string): TaskIdArgParseResult => {
+const parseTaskIdArg = (args: readonly string[], usage: string): TaskIdArgParseResult => {
   const [taskId, extraArg] = args;
 
   if (taskId === undefined) {
@@ -480,24 +481,41 @@ const parseTaskIdShape = (args: readonly string[], usage: string): TaskIdArgPars
     };
   }
 
-  if (!hasPublicTaskIdShape(taskId)) {
-    return invalidTaskId(taskId, "<PREFIX>-<number>", "Use a public Task ID such as BY-1.");
+  const parsed = parsePublicTaskId(taskId);
+
+  if (!parsed.ok) {
+    return invalidTaskId(taskId, parsed);
   }
 
-  return { ok: true, taskId: publicTaskId(taskId) };
+  return { ok: true, taskId: parsed.taskId };
 };
 
 const invalidTaskId = (
   taskId: string,
-  expectedFormat: string,
-  help: string,
+  error: Exclude<PublicTaskIdParseResult, { readonly ok: true }>,
 ): Extract<TaskIdArgParseResult, { readonly ok: false }> => ({
   ok: false,
   result: usageError({
     code: "invalid_task_id",
     message: `Invalid Task ID: ${taskId}`,
-    details: { taskId, expectedFormat },
-    help: [help],
+    details: {
+      taskId,
+      reason: error.code,
+      ...(error.code === "task_id_too_long" ? { maxLength: error.maxLength } : {}),
+    },
+    help: ["Use a non-empty Task ID with no surrounding whitespace or control characters."],
+  }),
+});
+
+const repoTaskIdResolutionError = (
+  resolution: Extract<RepoTaskIdResolution, { readonly ok: false }>,
+): Extract<TaskIdArgParseResult, { readonly ok: false }> => ({
+  ok: false,
+  result: runtimeError({
+    code: resolution.code,
+    message: `Remote-backed Tasks are not supported yet: ${resolution.taskId}`,
+    details: { taskId: resolution.taskId },
+    help: [resolution.help],
   }),
 });
 
@@ -592,8 +610,10 @@ const parseTaskCommentArgs = (args: readonly string[]): TaskCommentArgsParseResu
     };
   }
 
-  if (!hasPublicTaskIdShape(taskIdArg)) {
-    return invalidTaskId(taskIdArg, "<PREFIX>-<number>", "Use a public Task ID such as BY-1.");
+  const parsedTaskId = parsePublicTaskId(taskIdArg);
+
+  if (!parsedTaskId.ok) {
+    return invalidTaskId(taskIdArg, parsedTaskId);
   }
 
   let commentFile: string | undefined;
@@ -605,7 +625,7 @@ const parseTaskCommentArgs = (args: readonly string[]): TaskCommentArgsParseResu
       const value = rest[index + 1];
 
       if (value === undefined) {
-        return { ok: true, taskId: publicTaskId(taskIdArg), commentFile: undefined };
+        return { ok: true, taskId: parsedTaskId.taskId, commentFile: undefined };
       }
 
       commentFile = value;
@@ -634,7 +654,7 @@ const parseTaskCommentArgs = (args: readonly string[]): TaskCommentArgsParseResu
     };
   }
 
-  return { ok: true, taskId: publicTaskId(taskIdArg), commentFile };
+  return { ok: true, taskId: parsedTaskId.taskId, commentFile };
 };
 
 type TaskListArgsParseResult =

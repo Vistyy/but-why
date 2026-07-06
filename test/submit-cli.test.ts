@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { chmodSync, existsSync, readFileSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
@@ -19,6 +19,9 @@ import { taskStateTransitionPath } from "./support/taskLifecycle.js";
 const firstNow = "2026-06-30T12:00:00.000Z";
 const secondNow = "2026-06-30T12:05:00.000Z";
 const thirdNow = "2026-06-30T12:10:00.000Z";
+const firstTaskRunId = "by-1-09224d806043.1";
+const secondTaskRunId = "by-1-09224d806043.2";
+const firstTaskValidationRef = `refs/but-why/runs/${firstTaskRunId}/validation`;
 
 afterEach(cleanupTempRoots);
 
@@ -35,7 +38,7 @@ describe("by submit CLI", () => {
     expect(result.stderr).toBe("");
     expect(result.stdout).toBe(`submission:
   taskId: BY-1
-  runId: BY-1.1
+  runId: ${firstTaskRunId}
   branch: feature/by-1
   commitSha: ${commitSha}
   taskState: validating
@@ -46,7 +49,7 @@ describe("by submit CLI", () => {
     remoteName: origin
     remoteUrl: "https://github.com/acme/widgets.git"
   validationWorkspace:
-    tempRefName: refs/but-why/runs/BY-1.1/validation
+    tempRefName: ${firstTaskValidationRef}
     submittedSha: ${commitSha}
     worktreeHead: ${commitSha}
     cleanupResult:
@@ -56,13 +59,13 @@ describe("by submit CLI", () => {
     expect(currentBranch(root)).toBe(branchBeforeSubmit);
     expect(currentCommitSha(root)).toBe(commitSha);
     expect(gitStatus(root)).toBe(statusBeforeSubmit);
-    expect(gitRefExists(root, "refs/but-why/runs/BY-1.1/validation")).toBe(false);
+    expect(gitRefExists(root, firstTaskValidationRef)).toBe(false);
 
-    const validationWorkspace = repoState(root).getValidationWorkspaceSetup("BY-1.1");
+    const validationWorkspace = repoState(root).getValidationWorkspaceSetup(firstTaskRunId);
 
     expect(validationWorkspace).toMatchObject({
-      runId: "BY-1.1",
-      tempRefName: "refs/but-why/runs/BY-1.1/validation",
+      runId: firstTaskRunId,
+      tempRefName: firstTaskValidationRef,
       submittedSha: commitSha,
       worktreeHead: commitSha,
       cleanupWorktree: "removed",
@@ -72,11 +75,11 @@ describe("by submit CLI", () => {
     expect(readFileSync(join(root, ".gitignore"), "utf8")).toContain(".sandcastle/worktrees/");
 
     expect(runByInProcess(root, ["task", "show", "BY-1"]).stdout).toContain(
-      `state: validating\n  createdAt: "${firstNow}"\n  updatedAt: "${thirdNow}"\n  branch: feature/by-1\n  latestRun: BY-1.1`,
+      `state: validating\n  createdAt: "${firstNow}"\n  updatedAt: "${thirdNow}"\n  branch: feature/by-1\n  latestRun: ${firstTaskRunId}`,
     );
 
-    expect(repoState(root).getRunById("BY-1.1")).toEqual({
-      id: "BY-1.1",
+    expect(repoState(root).getRunById(firstTaskRunId)).toEqual({
+      id: firstTaskRunId,
       taskId: "BY-1",
       taskRunNumber: 1,
       status: "active",
@@ -108,19 +111,19 @@ describe("by submit CLI", () => {
     expect(result.status).toBe(1);
     expect(result.stdout).toContain("code: validation_workspace_setup_failed");
     expect(result.stdout).toContain("operationName: copy_allowlisted_file");
-    expect(repoState(root).getRunById("BY-1.1")).toMatchObject({ status: "error" });
-    expect(repoState(root).listRunToolingErrors("BY-1.1")).toEqual([
+    expect(repoState(root).getRunById(firstTaskRunId)).toMatchObject({ status: "error" });
+    expect(repoState(root).listRunToolingErrors(firstTaskRunId)).toEqual([
       expect.objectContaining({
-        runId: "BY-1.1",
+        runId: firstTaskRunId,
         operationName: "copy_allowlisted_file",
-        tempRefName: "refs/but-why/runs/BY-1.1/validation",
+        tempRefName: firstTaskValidationRef,
         submittedSha: currentCommitSha(root),
         cleanupWorktree: "not_created",
         cleanupTempRef: "removed",
       }),
     ]);
     expect(taskState(root, "BY-1")).toBe("implementing");
-    expect(gitRefExists(root, "refs/but-why/runs/BY-1.1/validation")).toBe(false);
+    expect(gitRefExists(root, firstTaskValidationRef)).toBe(false);
     expect(currentCommitSha(root)).not.toBe(commitSha);
   });
 
@@ -128,13 +131,13 @@ describe("by submit CLI", () => {
     const root = preparedRepoOnBranch("feature/resubmit");
 
     expect(withFakeGh(() => runSubmit(root, ["BY-1"], secondNow)).status).toBe(0);
-    recordRunError(root, "BY-1.1", secondNow);
+    recordRunError(root, firstTaskRunId, secondNow);
     transitionCurrentTaskState(root, "BY-1", "needs_input", secondNow);
 
     const result = withFakeGh(() => runSubmit(root, ["BY-1"], thirdNow));
 
     expect(result.status).toBe(0);
-    expect(result.stdout).toContain("runId: BY-1.2");
+    expect(result.stdout).toContain(`runId: ${secondTaskRunId}`);
   });
 
   it.each([
@@ -166,6 +169,29 @@ describe("by submit CLI", () => {
   message: "Task was not found: BY-999"
   taskId: BY-999
 help[1]: Run \`by task list --all\` to see known Tasks.`);
+  });
+
+  it("rejects remote-style Task IDs after opaque parsing and before Git checks", () => {
+    const root = initializedRepo();
+    createTask(root, "Existing task");
+
+    const result = runSubmit(root, ["linear/ENG-123:acceptance"], thirdNow);
+
+    expect(result.status).toBe(1);
+    expect(result.stdout).toContain("code: remote_tasks_not_supported");
+    expect(result.stdout).toContain('taskId: "linear/ENG-123:acceptance"');
+    expect(taskHasNoRuns(root, "BY-1")).toBe(true);
+  });
+
+  it("rejects remote-style Task IDs before requiring local state", () => {
+    const root = initializedRepo();
+    rmSync(join(root, ".but-why/state.sqlite"));
+
+    const result = runSubmit(root, ["linear/ENG-123:acceptance"], thirdNow);
+
+    expect(result.status).toBe(1);
+    expect(result.stdout).toContain("code: remote_tasks_not_supported");
+    expect(result.stdout).toContain('taskId: "linear/ENG-123:acceptance"');
   });
 
   it("rejects detached HEAD, dirty worktrees, protected branches, and missing GitHub targets before mutation", () => {
@@ -239,7 +265,7 @@ help[1]: Run \`by task list --all\` to see known Tasks.`);
       "code: TASK_HAS_ACTIVE_RUN",
     );
 
-    recordRunError(root, "BY-1.1", thirdNow);
+    recordRunError(root, firstTaskRunId, thirdNow);
     spawnGit(root, "checkout", "-b", "feature/other");
 
     expect(withFakeGh(() => runSubmit(root, ["BY-1"], thirdNow)).stdout).toContain(
@@ -256,7 +282,7 @@ help[1]: Run \`by task list --all\` to see known Tasks.`);
     expect(JSON.parse(success.stdout)).toMatchObject({
       submission: {
         taskId: "BY-1",
-        runId: "BY-1.1",
+        runId: firstTaskRunId,
         branch: "feature/json",
         taskState: "validating",
         prTarget: {

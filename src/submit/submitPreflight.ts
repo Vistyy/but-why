@@ -109,14 +109,17 @@ export type SubmitPreflightRejectionCode =
   | "TASK_BRANCH_MISMATCH"
   | "TASK_HAS_ACTIVE_RUN";
 
-export const loadRepoSubmitPreflight = (cwd: string): LoadRepoSubmitPreflightResult => {
+export const loadRepoSubmitPreflight = (
+  cwd: string,
+  input: { readonly requireState?: boolean } = {},
+): LoadRepoSubmitPreflightResult => {
   const repoContext = loadRepoLocalContext(cwd);
 
   if (!repoContext.ok) {
     return repoContext;
   }
 
-  if (!existsSync(repoContext.context.paths.statePath)) {
+  if (input.requireState !== false && !existsSync(repoContext.context.paths.statePath)) {
     return {
       ok: false,
       error: {

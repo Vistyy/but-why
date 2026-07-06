@@ -3,7 +3,12 @@ import type { StructuredErrorInput } from "../cliError.js";
 import { repoStateLoadError, runtimeError, success, usageError } from "../cliResults.js";
 import { withGlobalHelpFlags } from "../cliHelp.js";
 import type { StructuredObject } from "../output/structured.js";
-import { hasPublicTaskIdShape, publicTaskId, type PublicTaskId } from "../task/taskId.js";
+import type { RepoTaskIdResolution } from "../task/repoTaskIds.js";
+import {
+  parsePublicTaskId,
+  type PublicTaskId,
+  type PublicTaskIdParseResult,
+} from "../task/taskId.js";
 import {
   loadRepoSubmitPreflight,
   type RepoSubmitPreflight,
@@ -19,27 +24,28 @@ export const routeSubmit = async (
     return success(submitHelpView());
   }
 
-  const taskIdShape = parseSubmitTaskId(args);
+  const taskIdParse = parseSubmitTaskId(args);
 
-  if (!taskIdShape.ok) {
-    return taskIdShape.result;
+  if (!taskIdParse.ok) {
+    return taskIdParse.result;
   }
 
-  const submitPreflight = loadSubmitPreflight(environment.cwd);
+  const taskIdResolutionPreflight = loadSubmitPreflight(environment.cwd, false);
+
+  if (!taskIdResolutionPreflight.ok) {
+    return taskIdResolutionPreflight.result;
+  }
+
+  const taskId = taskIdResolutionPreflight.submit.resolveTaskId(taskIdParse.taskId);
+
+  if (!taskId.ok) {
+    return repoTaskIdResolutionError(taskId);
+  }
+
+  const submitPreflight = loadSubmitPreflight(environment.cwd, true);
 
   if (!submitPreflight.ok) {
     return submitPreflight.result;
-  }
-
-  const taskId = submitPreflight.submit.resolveTaskId(taskIdShape.taskId);
-
-  if (!taskId.ok) {
-    return usageError({
-      code: "invalid_task_id",
-      message: `Invalid Task ID: ${taskIdShape.taskId}`,
-      details: { taskId: taskIdShape.taskId, expectedFormat: taskId.expectedFormat },
-      help: [taskId.help],
-    });
   }
 
   try {
@@ -120,20 +126,41 @@ const parseSubmitTaskId = (args: readonly string[]): SubmitTaskIdArgParseResult 
     };
   }
 
-  if (!hasPublicTaskIdShape(taskId)) {
-    return {
-      ok: false,
-      result: usageError({
-        code: "invalid_task_id",
-        message: `Invalid Task ID: ${taskId}`,
-        details: { taskId, expectedFormat: "<PREFIX>-<number>" },
-        help: ["Use a public Task ID such as BY-1."],
-      }),
-    };
+  const parsed = parsePublicTaskId(taskId);
+
+  if (!parsed.ok) {
+    return invalidTaskId(taskId, parsed);
   }
 
-  return { ok: true, taskId: publicTaskId(taskId) };
+  return { ok: true, taskId: parsed.taskId };
 };
+
+const invalidTaskId = (
+  taskId: string,
+  error: Exclude<PublicTaskIdParseResult, { readonly ok: true }>,
+): SubmitTaskIdArgParseResult => ({
+  ok: false,
+  result: usageError({
+    code: "invalid_task_id",
+    message: `Invalid Task ID: ${taskId}`,
+    details: {
+      taskId,
+      reason: error.code,
+      ...(error.code === "task_id_too_long" ? { maxLength: error.maxLength } : {}),
+    },
+    help: ["Use a non-empty Task ID with no surrounding whitespace or control characters."],
+  }),
+});
+
+const repoTaskIdResolutionError = (
+  resolution: Extract<RepoTaskIdResolution, { readonly ok: false }>,
+): CliResult =>
+  runtimeError({
+    code: resolution.code,
+    message: `Remote-backed Tasks are not supported yet: ${resolution.taskId}`,
+    details: { taskId: resolution.taskId },
+    help: [resolution.help],
+  });
 
 type SubmitPreflightLoadResult =
   | {
@@ -145,8 +172,8 @@ type SubmitPreflightLoadResult =
       readonly result: CliResult;
     };
 
-const loadSubmitPreflight = (cwd: string): SubmitPreflightLoadResult => {
-  const result = loadRepoSubmitPreflight(cwd);
+const loadSubmitPreflight = (cwd: string, requireState: boolean): SubmitPreflightLoadResult => {
+  const result = loadRepoSubmitPreflight(cwd, { requireState });
 
   if (result.ok) {
     return result;

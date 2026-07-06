@@ -11,6 +11,7 @@ import { cleanupTempRoots, createGitRepo, runByInProcess } from "./support/by-cl
 const firstNow = "2026-06-30T12:00:00.000Z";
 const secondNow = "2026-06-30T12:05:00.000Z";
 const thirdNow = "2026-06-30T12:10:00.000Z";
+const firstTaskRunId = "by-1-09224d806043.1";
 
 const prTarget: GitHubPrTarget = {
   owner: "acme",
@@ -85,7 +86,7 @@ describe("module seams", () => {
       }),
     ).toEqual({
       ok: true,
-      runId: "BY-1.1",
+      runId: firstTaskRunId,
       taskState: "validating",
       previousTaskState: "implementing",
     });
@@ -93,7 +94,7 @@ describe("module seams", () => {
       id: "BY-1",
       state: "validating",
       branch: "feature/by-1",
-      latestRun: "BY-1.1",
+      latestRun: firstTaskRunId,
       updatedAt: thirdNow,
     });
 
