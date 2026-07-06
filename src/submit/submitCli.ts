@@ -1,14 +1,13 @@
 import type { CliEnvironment, CliResult } from "../cli.js";
 import type { StructuredErrorInput } from "../cliError.js";
-import { repoStateLoadError, runtimeError, success, usageError } from "../cliResults.js";
+import { repoStateLoadError, runtimeError, success } from "../cliResults.js";
 import { withGlobalHelpFlags } from "../cliHelp.js";
-import type { StructuredObject } from "../output/structured.js";
-import type { RepoTaskIdResolution } from "../task/repoTaskIds.js";
 import {
-  parsePublicTaskId,
-  type PublicTaskId,
-  type PublicTaskIdParseResult,
-} from "../task/taskId.js";
+  parseCliTaskIdArg,
+  repoTaskIdResolutionError,
+  type CliTaskIdParseResult,
+} from "../cliTaskId.js";
+import type { StructuredObject } from "../output/structured.js";
 import {
   loadRepoSubmitPreflight,
   type RepoSubmitPreflight,
@@ -91,75 +90,11 @@ const submitHelpView = (): StructuredObject => ({
   examples: ["by submit BY-1"],
 });
 
-type SubmitTaskIdArgParseResult =
-  | {
-      readonly ok: true;
-      readonly taskId: PublicTaskId;
-    }
-  | {
-      readonly ok: false;
-      readonly result: CliResult;
-    };
-
-const parseSubmitTaskId = (args: readonly string[]): SubmitTaskIdArgParseResult => {
-  const [taskId, extraArg] = args;
-
-  if (taskId === undefined) {
-    return {
-      ok: false,
-      result: usageError({
-        code: "missing_task_id",
-        message: "Task ID is required.",
-        help: ["Run `by submit <task-id>`."],
-      }),
-    };
-  }
-
-  if (extraArg !== undefined) {
-    return {
-      ok: false,
-      result: usageError({
-        code: extraArg.startsWith("-") ? "unknown_flag" : "unknown_argument",
-        message: `${extraArg.startsWith("-") ? "Unknown flag" : "Unknown argument"}: ${extraArg}`,
-        help: ["Run `by submit --help`."],
-      }),
-    };
-  }
-
-  const parsed = parsePublicTaskId(taskId);
-
-  if (!parsed.ok) {
-    return invalidTaskId(taskId, parsed);
-  }
-
-  return { ok: true, taskId: parsed.taskId };
-};
-
-const invalidTaskId = (
-  taskId: string,
-  error: Exclude<PublicTaskIdParseResult, { readonly ok: true }>,
-): SubmitTaskIdArgParseResult => ({
-  ok: false,
-  result: usageError({
-    code: "invalid_task_id",
-    message: `Invalid Task ID: ${taskId}`,
-    details: {
-      taskId,
-      reason: error.code,
-      ...(error.code === "task_id_too_long" ? { maxLength: error.maxLength } : {}),
-    },
-    help: ["Use a non-empty Task ID with no surrounding whitespace or control characters."],
-  }),
-});
-
-const repoTaskIdResolutionError = (
-  resolution: Extract<RepoTaskIdResolution, { readonly ok: false }>,
-): CliResult =>
-  runtimeError({
-    code: resolution.code,
-    message: `Remote-backed Tasks are not supported yet: ${resolution.taskId}`,
-    details: { taskId: resolution.taskId },
-    help: [resolution.help],
+const parseSubmitTaskId = (args: readonly string[]): CliTaskIdParseResult =>
+  parseCliTaskIdArg(args, {
+    missingHelp: "Run `by submit <task-id>`.",
+    extraHelp: "Run `by submit --help`.",
+    classifyExtraArg: (arg) => (arg.startsWith("-") ? "unknown_flag" : "unknown_argument"),
   });
 
 type SubmitPreflightLoadResult =

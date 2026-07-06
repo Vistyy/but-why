@@ -23,7 +23,7 @@ const managedGitignoreBlock = `${butWhyGitignoreBlock}\n`;
 afterEach(cleanupTempRoots);
 
 describe("by CLI", () => {
-  it("prints not_initialized for bare just by before setup", () => {
+  it("prints not_initialized for bare just by before setup without touching the repo root", () => {
     const result = runJustBy();
 
     expect(result.status).toBe(1);

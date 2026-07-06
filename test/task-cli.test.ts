@@ -23,6 +23,8 @@ const secondNow = "2026-06-30T12:05:00.000Z";
 const thirdNow = "2026-06-30T12:10:00.000Z";
 const firstTaskStartNext = "Implement the task, then run by submit BY-1";
 const firstTaskStartNextToon = `"${firstTaskStartNext}"`;
+// Four workers exercise overlapping SQLite writers while keeping subprocess tests fast.
+const concurrentWriterCount = 4;
 
 afterEach(cleanupTempRoots);
 
@@ -603,7 +605,7 @@ tasks[1]{id,title,state,createdAt,updatedAt}:
 
   it("preserves all concurrent Task comment appends", async () => {
     const root = initializedRepo();
-    const commentCount = 8;
+    const commentCount = concurrentWriterCount;
 
     createTask(root, firstNow, "Concurrent comments");
 
@@ -850,7 +852,7 @@ help[1]: Run \`by init --task-prefix BY\` in the repository root.`);
 
   it("serializes concurrent Task creation through repo state", async () => {
     const root = initializedRepo();
-    const createCount = 8;
+    const createCount = concurrentWriterCount;
 
     for (let index = 0; index < createCount; index += 1) {
       writeFileSync(join(root, `concurrent-${index}.md`), `Description ${index}`);

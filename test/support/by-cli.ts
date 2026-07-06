@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { Effect } from "effect";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
@@ -28,9 +28,16 @@ export const runByWithEnv = (cwd: string, env: NodeJS.ProcessEnv, ...args: reado
     },
   });
 
-export const runJustBy = (...args: readonly string[]) =>
-  spawnSync("just", ["by", ...args], {
-    cwd: repoRoot,
+export const runJustBy = (...args: readonly string[]) => {
+  const root = createGitRepo();
+
+  writeFileSync(
+    join(root, "justfile"),
+    `set positional-arguments\n\n[no-exit-message]\nby *args:\n    @${byExecutable} "$@"\n`,
+  );
+
+  return spawnSync("just", ["by", ...args], {
+    cwd: root,
     encoding: "utf8",
     env: {
       ...process.env,
@@ -38,6 +45,7 @@ export const runJustBy = (...args: readonly string[]) =>
       NO_COLOR: "1",
     },
   });
+};
 
 type InProcessCliResult = {
   readonly status: 0 | 1 | 2;

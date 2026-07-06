@@ -12,10 +12,15 @@ import { readCommentFile, type CommentFileReadError } from "./commentFile.js";
 import { readDescriptionFile, type DescriptionFileReadError } from "./descriptionFile.js";
 import { isTaskState, taskStates, type TaskState } from "./lifecycle.js";
 import type { StartIneligibleState } from "./startPolicy.js";
+import {
+  parseCliTaskIdArg,
+  parseCliTaskIdValue,
+  repoTaskIdResolutionError,
+  type CliTaskIdParseResult,
+} from "../cliTaskId.js";
 import type { TaskRecord, TaskSummary } from "./task.js";
-import type { RepoTaskIdResolution } from "./repoTaskIds.js";
 import { loadRepoTasks, type RepoTasks } from "./repoTasks.js";
-import { parsePublicTaskId, type PublicTaskId, type PublicTaskIdParseResult } from "./taskId.js";
+import type { PublicTaskId } from "./taskId.js";
 
 export const routeTask = (args: readonly string[], environment: CliEnvironment): CliResult => {
   if (args.length === 0 || (args.length === 1 && args[0] === "--help")) {
@@ -321,7 +326,7 @@ const routeTaskComment = (args: readonly string[], environment: CliEnvironment):
   const taskId = tasksLoad.tasks.resolveTaskId(parseResult.taskId);
 
   if (!taskId.ok) {
-    return repoTaskIdResolutionError(taskId).result;
+    return repoTaskIdResolutionError(taskId);
   }
 
   try {
@@ -440,84 +445,17 @@ const routeResolvedTaskId = (
   const taskId = tasksLoad.tasks.resolveTaskId(taskIdParse.taskId);
 
   if (!taskId.ok) {
-    return repoTaskIdResolutionError(taskId).result;
+    return repoTaskIdResolutionError(taskId);
   }
 
   return route(tasksLoad.tasks, taskId.taskId);
 };
 
-type TaskIdArgParseResult =
-  | {
-      readonly ok: true;
-      readonly taskId: PublicTaskId;
-    }
-  | {
-      readonly ok: false;
-      readonly result: CliResult;
-    };
-
-const parseTaskIdArg = (args: readonly string[], usage: string): TaskIdArgParseResult => {
-  const [taskId, extraArg] = args;
-
-  if (taskId === undefined) {
-    return {
-      ok: false,
-      result: usageError({
-        code: "missing_task_id",
-        message: "Task ID is required.",
-        help: [`Run \`${usage}\`.`],
-      }),
-    };
-  }
-
-  if (extraArg !== undefined) {
-    return {
-      ok: false,
-      result: usageError({
-        code: "unknown_argument",
-        message: `Unknown argument: ${extraArg}`,
-        help: [`Run \`${usage}\`.`],
-      }),
-    };
-  }
-
-  const parsed = parsePublicTaskId(taskId);
-
-  if (!parsed.ok) {
-    return invalidTaskId(taskId, parsed);
-  }
-
-  return { ok: true, taskId: parsed.taskId };
-};
-
-const invalidTaskId = (
-  taskId: string,
-  error: Exclude<PublicTaskIdParseResult, { readonly ok: true }>,
-): Extract<TaskIdArgParseResult, { readonly ok: false }> => ({
-  ok: false,
-  result: usageError({
-    code: "invalid_task_id",
-    message: `Invalid Task ID: ${taskId}`,
-    details: {
-      taskId,
-      reason: error.code,
-      ...(error.code === "task_id_too_long" ? { maxLength: error.maxLength } : {}),
-    },
-    help: ["Use a non-empty Task ID with no surrounding whitespace or control characters."],
-  }),
-});
-
-const repoTaskIdResolutionError = (
-  resolution: Extract<RepoTaskIdResolution, { readonly ok: false }>,
-): Extract<TaskIdArgParseResult, { readonly ok: false }> => ({
-  ok: false,
-  result: runtimeError({
-    code: resolution.code,
-    message: `Remote-backed Tasks are not supported yet: ${resolution.taskId}`,
-    details: { taskId: resolution.taskId },
-    help: [resolution.help],
-  }),
-});
+const parseTaskIdArg = (args: readonly string[], usage: string): CliTaskIdParseResult =>
+  parseCliTaskIdArg(args, {
+    missingHelp: `Run \`${usage}\`.`,
+    extraHelp: `Run \`${usage}\`.`,
+  });
 
 type TaskCreateArgsParseResult =
   | {
@@ -610,10 +548,10 @@ const parseTaskCommentArgs = (args: readonly string[]): TaskCommentArgsParseResu
     };
   }
 
-  const parsedTaskId = parsePublicTaskId(taskIdArg);
+  const parsedTaskId = parseCliTaskIdValue(taskIdArg);
 
   if (!parsedTaskId.ok) {
-    return invalidTaskId(taskIdArg, parsedTaskId);
+    return parsedTaskId;
   }
 
   let commentFile: string | undefined;
