@@ -22,10 +22,10 @@ A private SQLite layer owns shared connection handling and low-level SQL.
 Shared transactions are allowed inside that SQLite implementation only.
 They are not exposed as a generic transaction API.
 
-Submit start is a temporary cross-store exception.
-It atomically checks Task submit readiness, binds the Task branch when needed, creates the Run, and moves the Task to validating.
-It also preserves the existing atomic workspace setup failure recovery until issue 026 moves validation start behind ValidationRuns.
-This helper is transitional and should be removed by issue 026.
+ValidationRuns owns validation start coordination.
+For local SQLite-backed Tasks, it atomically rechecks submit readiness, binds the Task branch when needed, creates the Run, and moves the Task to validating.
+It also owns validation tooling failure recovery that records the Run tooling error and restores the Task to its prior submit-eligible state.
+Submit keeps early read-only readiness checks for UX, but those checks are not authoritative.
 
 SQLite query results use typed query helpers instead of scattered per-row `is*Row` guards.
 The schema, selected column aliases, mapper types, and integration tests are the contract.
@@ -45,4 +45,4 @@ An ast-grep rule blocks reintroducing SQLite row guard sprawl.
 - RunStore no longer exposes submit-start behavior.
 - SQLite remains the only storage implementation.
 - The CLI keeps its existing output and persistence behavior.
-- Issue 026 must remove the transitional submit-start helper.
+- ValidationRuns is the only local validation-start write seam.

@@ -4,9 +4,10 @@ import { afterEach, describe, expect, it } from "vitest";
 import { repoStateLoadError, runtimeError, success, usageError } from "../src/cliResults.js";
 import type { GitHubPrTarget } from "../src/run/run.js";
 import { openSqliteRunStore } from "../src/sqlite/sqliteRunStore.js";
-import { openSqliteSubmitStartHelper } from "../src/sqlite/submitStart.js";
 import { openSqliteTaskStore } from "../src/sqlite/sqliteTaskStore.js";
-import { loadRepoSubmitPreflight } from "../src/submit/submitPreflight.js";
+import { openSqliteValidationRuns } from "../src/sqlite/sqliteValidationRuns.js";
+import { unsupportedValidationRuns } from "../src/validation/validationRuns.js";
+import { loadRepoSubmitPreflight } from "../src/repoSubmit/submitPreflight.js";
 import { publicTaskId } from "../src/task/taskId.js";
 import { cleanupTempRoots, createGitRepo, runByInProcess } from "./support/by-cli.js";
 
@@ -61,11 +62,11 @@ describe("module seams", () => {
     });
   });
 
-  it("preserves atomic submit-start behavior in the transitional cross-store helper", () => {
+  it("starts local validation through the ValidationRuns seam", () => {
     const root = initializedRepo();
     const taskStore = sqliteTaskStore(root);
     const runStore = sqliteRunStore(root);
-    const submitStart = sqliteSubmitStart(root);
+    const validationRuns = sqliteValidationRuns(root);
     const task = taskStore.createTask({
       title: "Submit through state",
       description: "Description",
@@ -78,7 +79,7 @@ describe("module seams", () => {
     ).toMatchObject({ ok: true, changed: true });
 
     expect(
-      submitStart.createRunFromSubmitPreflight({
+      validationRuns.start({
         taskId,
         branch: "feature/by-1",
         commitSha: "abc123",
@@ -103,7 +104,7 @@ describe("module seams", () => {
       taskStore.transitionTaskState({ taskId, to: "needs_input", now: thirdNow }),
     ).toMatchObject({ ok: true });
     expect(
-      submitStart.createRunFromSubmitPreflight({
+      validationRuns.start({
         taskId,
         branch: "feature/by-1",
         commitSha: "def456",
@@ -116,6 +117,72 @@ describe("module seams", () => {
       branch: "feature/by-1",
     });
     expect(runStore.getLatestRunIdForTask(taskId)).toBe(firstTaskRunId);
+  });
+
+  it("rejects invalid local validation starts through the ValidationRuns seam", () => {
+    const root = initializedRepo();
+    const taskStore = sqliteTaskStore(root);
+    const runStore = sqliteRunStore(root);
+    const validationRuns = sqliteValidationRuns(root);
+    const task = taskStore.createTask({
+      title: "Reject invalid starts",
+      description: "Description",
+      now: firstNow,
+    });
+    const taskId = publicTaskId(task.id);
+
+    expect(
+      validationRuns.start({
+        taskId,
+        branch: "feature/by-1",
+        commitSha: "abc123",
+        prTarget,
+        now: secondNow,
+      }),
+    ).toEqual({ ok: false, code: "TASK_STATE_NOT_SUBMITTABLE", state: "todo" });
+    expect(runStore.getLatestRunIdForTask(taskId)).toBeNull();
+
+    expect(
+      taskStore.transitionTaskState({ taskId, to: "implementing", now: secondNow }),
+    ).toMatchObject({ ok: true });
+    expect(
+      validationRuns.start({
+        taskId,
+        branch: "feature/by-1",
+        commitSha: "abc123",
+        prTarget,
+        now: thirdNow,
+      }),
+    ).toMatchObject({ ok: true });
+    expect(runStore.recordRunError({ runId: firstTaskRunId, now: thirdNow })).toEqual({ ok: true });
+    expect(
+      taskStore.transitionTaskState({ taskId, to: "needs_input", now: thirdNow }),
+    ).toMatchObject({ ok: true });
+
+    expect(
+      validationRuns.start({
+        taskId,
+        branch: "feature/other",
+        commitSha: "def456",
+        prTarget,
+        now: thirdNow,
+      }),
+    ).toEqual({ ok: false, code: "TASK_BRANCH_MISMATCH", boundBranch: "feature/by-1" });
+    expect(runStore.getLatestRunIdForTask(taskId)).toBe(firstTaskRunId);
+  });
+
+  it("rejects unsupported validation starts with a structured error", () => {
+    const validationRuns = unsupportedValidationRuns();
+
+    expect(
+      validationRuns.start({
+        taskId: publicTaskId("REMOTE-1"),
+        branch: "feature/remote",
+        commitSha: "abc123",
+        prTarget,
+        now: thirdNow,
+      }),
+    ).toEqual({ ok: false, code: "TASK_AUTHORITY_UNSUPPORTED" });
   });
 
   it("returns submit preflight domain rejections before Git facts are read", () => {
@@ -173,8 +240,8 @@ const sqliteRunStore = (root: string) =>
     migrationTimestamp: () => firstNow,
   });
 
-const sqliteSubmitStart = (root: string) =>
-  openSqliteSubmitStartHelper({
+const sqliteValidationRuns = (root: string) =>
+  openSqliteValidationRuns({
     statePath: join(root, ".but-why/state.sqlite"),
     migrationTimestamp: () => firstNow,
   });

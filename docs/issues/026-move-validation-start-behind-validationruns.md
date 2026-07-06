@@ -2,7 +2,7 @@
 
 ## Status
 
-Not done.
+Done.
 
 ## Parent
 
@@ -63,20 +63,20 @@ Tests that covered the temporary helper in issue 025 should move to `ValidationR
 
 ## Acceptance criteria
 
-- [ ] Submit code starts validation through a ValidationRuns seam.
-- [ ] The temporary cross-store submit-start helper from issue 025 is removed completely.
-- [ ] The temporary Fallow exception for that helper is removed completely.
-- [ ] ValidationRuns.start owns Task state movement to validating for local Tasks.
-- [ ] ValidationRuns.start owns Run creation for local validation.
-- [ ] ValidationRuns.start owns first-submit branch binding where current behavior requires it.
-- [ ] Local SQLite validation start remains atomic.
-- [ ] Existing submit preflight behavior remains unchanged.
-- [ ] Existing submit CLI output and structured errors remain unchanged.
-- [ ] Remote rollback and recovery behavior is not implemented.
-- [ ] Tests cover successful local validation start through the new seam.
-- [ ] Tests cover existing preflight rejection behavior.
-- [ ] Temporary-helper tests from issue 025 are moved to `ValidationRuns.start` or deleted if redundant.
-- [ ] Fallow boundary rules enforce that submit code reaches validation only through ValidationRuns, with no direct validation-start orchestration outside that seam.
+- [x] Submit code starts validation through a ValidationRuns seam.
+- [x] The temporary cross-store submit-start helper from issue 025 is removed completely.
+- [x] The temporary Fallow exception for that helper is removed completely.
+- [x] ValidationRuns.start owns Task state movement to validating for local Tasks.
+- [x] ValidationRuns.start owns Run creation for local validation.
+- [x] ValidationRuns.start owns first-submit branch binding where current behavior requires it.
+- [x] Local SQLite validation start remains atomic.
+- [x] Existing submit preflight behavior remains unchanged.
+- [x] Existing submit CLI output and structured errors remain unchanged.
+- [x] Remote rollback and recovery behavior is not implemented.
+- [x] Tests cover successful local validation start through the new seam.
+- [x] Tests cover existing preflight rejection behavior.
+- [x] Temporary-helper tests from issue 025 are moved to `ValidationRuns.start` or deleted if redundant.
+- [x] Fallow boundary rules enforce that submit code reaches validation only through ValidationRuns, with no direct validation-start orchestration outside that seam.
 
 ## Blocked by
 

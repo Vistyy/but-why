@@ -81,12 +81,6 @@
         "functions": ["initRepoLocalContext"],
         "maxCognitive": 18,
         "reason": "Existing repo initialization flow handles config, paths, and storage setup in one command seam. Keep the current ceiling blocking."
-      },
-      {
-        "files": ["src/submit/submitPreflight.ts"],
-        "functions": ["runSubmitPreflight"],
-        "maxCognitive": 18,
-        "reason": "Existing submit preflight policy is intentionally centralized before ValidationRuns exists. Keep the current ceiling blocking."
       }
     ],
     "ignore": ["spikes/**"]
@@ -144,8 +138,8 @@
         "patterns": ["src/sqlite/sqliteRunStore.ts"]
       },
       {
-        "name": "sqlite-submit-start",
-        "patterns": ["src/sqlite/submitStart.ts"]
+        "name": "sqlite-validation-runs",
+        "patterns": ["src/sqlite/sqliteValidationRuns.ts"]
       },
       {
         "name": "storage-init",
@@ -160,6 +154,10 @@
         "patterns": ["src/validation/**"]
       },
       {
+        "name": "repo-submit",
+        "patterns": ["src/repoSubmit/**"]
+      },
+      {
         "name": "submit",
         "patterns": ["src/submit/**"]
       }
@@ -172,6 +170,7 @@
           "pure-task-domain",
           "task-use-case",
           "task-adapter",
+          "repo-submit",
           "submit",
           "init",
           "validation"
@@ -227,14 +226,8 @@
         "allow": ["pure-task-domain", "pure-run-domain", "run-store", "sqlite-core"]
       },
       {
-        "from": "sqlite-submit-start",
-        "allow": [
-          "pure-task-domain",
-          "pure-run-domain",
-          "run-store",
-          "sqlite-core",
-          "sqlite-run-store"
-        ]
+        "from": "sqlite-validation-runs",
+        "allow": ["pure-task-domain", "sqlite-core", "sqlite-run-store", "validation"]
       },
       {
         "from": "storage-init",
@@ -246,20 +239,26 @@
       },
       {
         "from": "validation",
-        "allow": ["pure-run-domain"]
+        "allow": ["pure-task-domain", "pure-run-domain", "run-store"]
       },
       {
-        "from": "submit",
+        "from": "repo-submit",
         "allow": [
           "pure-task-domain",
           "task-adapter",
-          "pure-run-domain",
+          "task-store",
           "run-store",
+          "sqlite-task-store",
           "sqlite-run-store",
-          "sqlite-submit-start",
+          "sqlite-validation-runs",
           "init",
+          "submit",
           "validation"
         ]
+      },
+      {
+        "from": "submit",
+        "allow": ["pure-task-domain", "task-store", "pure-run-domain", "validation"]
       }
     ],
     "coverage": {

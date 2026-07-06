@@ -1,79 +1,26 @@
-import { existsSync } from "node:fs";
-
-import {
-  loadRepoLocalContext,
-  type LoadRepoLocalContextError,
-  type RepoLocalContext,
-} from "../init/repoContext.js";
 import type { GitHubPrTarget } from "../run/run.js";
-import type { RunStore } from "../run/runStore.js";
-import { openSqliteRunStore } from "../sqlite/sqliteRunStore.js";
-import { openSqliteSubmitStartHelper, type SubmitStartHelper } from "../sqlite/submitStart.js";
 import type { TaskState } from "../task/lifecycle.js";
 import type { SubmitEligibleState } from "../task/submitPolicy.js";
-import { resolveRepoTaskId, type RepoTaskIdResolution } from "../task/repoTaskIds.js";
 import type { PublicTaskId } from "../task/taskId.js";
-import {
-  createValidationWorkspace,
-  type ValidationWorkspaceSetup,
-  type ValidationWorkspaceToolingError,
-} from "../validation/createValidationWorkspace.js";
+import type { ValidationWorkspaceSetup } from "../validation/createValidationWorkspace.js";
+import type { StartValidationRunResult, ValidationRuns } from "../validation/validationRuns.js";
 
 import { readGitFacts } from "./gitFacts.js";
 import { detectGitHubPrTarget, protectedBranchNames } from "./githubTarget.js";
+import type { SubmitReadiness } from "./submitReadiness.js";
 
 /**
  * Future validation workspace code should call this module after implementation work is complete.
- * This module owns submit preflight policy and asks durable Task state to create Runs transactionally.
+ * This module owns submit preflight policy and asks ValidationRuns to start validation atomically.
  */
-export type RepoSubmitPreflight = {
-  readonly taskPrefix: string;
-  readonly resolveTaskId: (taskId: PublicTaskId) => RepoTaskIdResolution;
+export type SubmitPreflight = {
   readonly submitTask: (input: SubmitTaskInput) => SubmitTaskResult;
-  readonly createValidationWorkspaceForRun: (
-    input: CreateValidationWorkspaceForRunInput,
-  ) => Promise<CreateValidationWorkspaceForRunResult>;
 };
-
-export type LoadRepoSubmitPreflightResult =
-  | {
-      readonly ok: true;
-      readonly submit: RepoSubmitPreflight;
-    }
-  | {
-      readonly ok: false;
-      readonly error: LoadRepoSubmitPreflightError;
-    };
-
-export type LoadRepoSubmitPreflightError =
-  | LoadRepoLocalContextError
-  | {
-      readonly code: "state_store_unavailable";
-      readonly taskPrefix: string;
-    };
 
 export type SubmitTaskInput = {
   readonly taskId: PublicTaskId;
   readonly now: string;
 };
-
-export type CreateValidationWorkspaceForRunInput = {
-  readonly taskId: PublicTaskId;
-  readonly runId: string;
-  readonly commitSha: string;
-  readonly taskRecoveryState: SubmitEligibleState;
-  readonly now: string;
-};
-
-export type CreateValidationWorkspaceForRunResult =
-  | {
-      readonly ok: true;
-      readonly validationWorkspace: ValidationWorkspaceSetup;
-    }
-  | {
-      readonly ok: false;
-      readonly toolingError: ValidationWorkspaceToolingError;
-    };
 
 export type SubmitTaskResult =
   | {
@@ -99,6 +46,11 @@ export type SubmitTaskResult =
     }
   | {
       readonly ok: false;
+      readonly kind: "unsupported_task_authority";
+      readonly taskId: PublicTaskId;
+    }
+  | {
+      readonly ok: false;
       readonly kind: "tooling_error";
     };
 
@@ -113,120 +65,30 @@ export type SubmitPreflightRejectionCode =
   | "TASK_BRANCH_MISMATCH"
   | "TASK_HAS_ACTIVE_RUN";
 
-export const loadRepoSubmitPreflight = (
-  cwd: string,
-  input: {
-    readonly requireState?: boolean;
-    readonly migrationTimestamp: () => string;
-  },
-): LoadRepoSubmitPreflightResult => {
-  const repoContext = loadRepoLocalContext(cwd);
-
-  if (!repoContext.ok) {
-    return repoContext;
-  }
-
-  if (input.requireState !== false && !existsSync(repoContext.context.paths.statePath)) {
-    return {
-      ok: false,
-      error: {
-        code: "state_store_unavailable",
-        taskPrefix: repoContext.context.taskPrefix,
-      },
-    };
-  }
-
-  return {
-    ok: true,
-    submit: repoSubmitPreflight(repoContext.context, input.migrationTimestamp),
-  };
-};
-
-const repoSubmitPreflight = (
-  context: RepoLocalContext,
-  migrationTimestamp: () => string,
-): RepoSubmitPreflight => {
-  const submitStart = openSqliteSubmitStartHelper({
-    statePath: context.paths.statePath,
-    migrationTimestamp,
-  });
-  const runStore = openSqliteRunStore({
-    statePath: context.paths.statePath,
-    migrationTimestamp,
-  });
-
-  return {
-    taskPrefix: context.taskPrefix,
-    resolveTaskId: (taskId) => resolveRepoTaskId(context, taskId),
-    submitTask: (input) =>
-      runSubmitPreflight(
-        context.root,
-        submitStart,
-        context.config.validationWorkspace?.copyFiles ?? [],
-        input,
-      ),
-    createValidationWorkspaceForRun: (input) =>
-      createValidationWorkspaceForRun(context, runStore, submitStart, input),
-  };
-};
-
-const createValidationWorkspaceForRun = async (
-  context: RepoLocalContext,
-  runStore: RunStore,
-  submitStart: SubmitStartHelper,
-  input: CreateValidationWorkspaceForRunInput,
-): Promise<CreateValidationWorkspaceForRunResult> => {
-  const result = await createValidationWorkspace({
-    repoRoot: context.root,
-    runId: input.runId,
-    submittedSha: input.commitSha,
-    copyFiles: context.config.validationWorkspace?.copyFiles ?? [],
-  });
-
-  if (result.ok) {
-    runStore.recordValidationWorkspaceSetup({
-      runId: input.runId,
-      tempRefName: result.setup.tempRefName,
-      submittedSha: result.setup.submittedSha,
-      worktreePath: result.setup.worktreePath,
-      worktreeHead: result.setup.worktreeHead,
-      cleanupWorktree: result.setup.cleanupResult.worktree,
-      cleanupTempRef: result.setup.cleanupResult.tempRef,
-      now: input.now,
-    });
-
-    return { ok: true, validationWorkspace: result.setup };
-  }
-
-  const recovery = submitStart.recordRunToolingErrorAndRecoverTask({
-    runId: input.runId,
-    operationName: result.toolingError.operationName,
-    tempRefName: result.toolingError.tempRefName,
-    submittedSha: result.toolingError.submittedSha,
-    ...(result.toolingError.worktreePath === undefined
-      ? {}
-      : { worktreePath: result.toolingError.worktreePath }),
-    errorMessage: result.toolingError.errorMessage,
-    cleanupWorktree: result.toolingError.cleanupResult.worktree,
-    cleanupTempRef: result.toolingError.cleanupResult.tempRef,
-    taskRecoveryState: input.taskRecoveryState,
-    now: input.now,
-  });
-
-  if (!recovery.ok) {
-    throw new Error(`Could not recover Task after validation tooling failure: ${recovery.code}`);
-  }
-
-  return { ok: false, toolingError: result.toolingError };
-};
+export const openSubmitPreflight = (input: {
+  readonly root: string;
+  readonly submitReadiness: SubmitReadiness;
+  readonly validationRuns: ValidationRuns;
+  readonly allowedUntrackedFiles: readonly string[];
+}): SubmitPreflight => ({
+  submitTask: (taskInput) =>
+    runSubmitPreflight(
+      input.root,
+      input.submitReadiness,
+      input.validationRuns,
+      input.allowedUntrackedFiles,
+      taskInput,
+    ),
+});
 
 const runSubmitPreflight = (
   root: string,
-  submitStart: SubmitStartHelper,
+  submitReadiness: SubmitReadiness,
+  validationRuns: ValidationRuns,
   allowedUntrackedFiles: readonly string[],
   input: SubmitTaskInput,
 ): SubmitTaskResult => {
-  const readiness = submitStart.getTaskSubmitReadiness(input.taskId);
+  const readiness = submitReadiness.getTaskSubmitReadiness(input.taskId);
 
   if (!readiness.ok) {
     return {
@@ -288,7 +150,7 @@ const runSubmitPreflight = (
     };
   }
 
-  const createRun = submitStart.createRunFromSubmitPreflight({
+  const createRun = validationRuns.start({
     taskId: input.taskId,
     branch: gitFacts.facts.branch,
     commitSha: gitFacts.facts.commitSha,
@@ -297,16 +159,7 @@ const runSubmitPreflight = (
   });
 
   if (!createRun.ok) {
-    return {
-      ok: false,
-      kind: "preflight_rejection",
-      code: createRun.code,
-      taskId: input.taskId,
-      ...(createRun.state === undefined ? {} : { state: createRun.state }),
-      ...(createRun.boundBranch === undefined ? {} : { boundBranch: createRun.boundBranch }),
-      ...(createRun.boundTaskId === undefined ? {} : { boundTaskId: createRun.boundTaskId }),
-      branch: gitFacts.facts.branch,
-    };
+    return validationStartRejection(createRun, input.taskId, gitFacts.facts.branch);
   }
 
   return {
@@ -318,5 +171,26 @@ const runSubmitPreflight = (
     taskState: createRun.taskState,
     previousTaskState: createRun.previousTaskState,
     prTarget: prTarget.target,
+  };
+};
+
+const validationStartRejection = (
+  result: Extract<StartValidationRunResult, { readonly ok: false }>,
+  taskId: PublicTaskId,
+  branch: string,
+): SubmitTaskResult => {
+  if (result.code === "TASK_AUTHORITY_UNSUPPORTED") {
+    return { ok: false, kind: "unsupported_task_authority", taskId };
+  }
+
+  return {
+    ok: false,
+    kind: "preflight_rejection",
+    code: result.code,
+    taskId,
+    ...(result.state === undefined ? {} : { state: result.state }),
+    ...(result.boundBranch === undefined ? {} : { boundBranch: result.boundBranch }),
+    ...(result.boundTaskId === undefined ? {} : { boundTaskId: result.boundTaskId }),
+    branch,
   };
 };

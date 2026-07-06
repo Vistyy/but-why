@@ -12,7 +12,7 @@ import {
   loadRepoSubmitPreflight,
   type RepoSubmitPreflight,
   type SubmitTaskResult,
-} from "./submitPreflight.js";
+} from "../repoSubmit/submitPreflight.js";
 import type { ValidationWorkspaceToolingError } from "../validation/createValidationWorkspace.js";
 
 export const routeSubmit = async (
@@ -59,7 +59,6 @@ export const routeSubmit = async (
     }
 
     const validationWorkspace = await submitPreflight.submit.createValidationWorkspaceForRun({
-      taskId: result.taskId,
       runId: result.runId,
       commitSha: result.commitSha,
       taskRecoveryState: result.previousTaskState,
@@ -161,6 +160,10 @@ const renderSubmitResult = (result: SubmitTaskResult): CliResult => {
     return toolingError();
   }
 
+  if (result.kind === "unsupported_task_authority") {
+    return unsupportedTaskAuthorityError(result.taskId);
+  }
+
   return runtimeError(submitPreflightError(result));
 };
 
@@ -234,6 +237,14 @@ const submitPreflightError = (
       };
   }
 };
+
+const unsupportedTaskAuthorityError = (taskId: string): CliResult =>
+  runtimeError({
+    code: "TASK_AUTHORITY_UNSUPPORTED",
+    message: "Validation start is not supported for this Task Authority.",
+    details: { taskId },
+    help: ["Use a local But Why? Task for validation start in this version."],
+  });
 
 const validationWorkspaceSetupError = (error: ValidationWorkspaceToolingError): CliResult =>
   runtimeError({

@@ -44,7 +44,19 @@
       "kind": "banned-import",
       "specifiers": ["../task/taskStore.js", "../sqlite/sqliteTaskStore.js"],
       "files": ["src/run/runStore.ts", "src/sqlite/sqliteRunStore.ts"],
-      "message": "RunStore must not depend on TaskStore behavior. The submit-start helper is the only temporary cross-store exception.",
+      "message": "RunStore must not depend on TaskStore behavior. ValidationRuns owns validation start coordination.",
+      "severity": "error"
+    },
+    {
+      "id": "submit-does-not-import-validation-start-stores",
+      "kind": "banned-import",
+      "specifiers": [
+        "../sqlite/sqliteTaskStore.js",
+        "../sqlite/sqliteRunStore.js",
+        "../sqlite/sqliteValidationRuns.js"
+      ],
+      "files": ["src/submit/**/*.ts"],
+      "message": "Submit code must reach validation start and recovery through ValidationRuns, not SQLite store wiring.",
       "severity": "error"
     }
   ]

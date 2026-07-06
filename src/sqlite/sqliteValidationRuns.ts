@@ -3,113 +3,39 @@ import type { DatabaseSync } from "node:sqlite";
 import { rollbackIfOpen, withStateDatabase, type SqliteStoreInput } from "./connection.js";
 import { queryOne } from "./query.js";
 import { recordRunToolingErrorMutation, runExists } from "./sqliteRunStore.js";
-import type { GitHubPrTarget } from "../run/run.js";
-import type { RecordRunErrorResult, RecordRunToolingErrorInput } from "../run/runStore.js";
-import type { TaskState } from "../task/lifecycle.js";
-import { canSubmitFrom, type SubmitEligibleState } from "../task/submitPolicy.js";
+import { submitStateReadiness } from "../task/submitPolicy.js";
 import { storedPublicTaskId, taskSlugForId, type PublicTaskId } from "../task/taskId.js";
+import type { TaskState } from "../task/lifecycle.js";
+import type {
+  RecordValidationToolingFailureInput,
+  RecordValidationToolingFailureResult,
+  StartValidationRunInput,
+  StartValidationRunResult,
+  ValidationRuns,
+} from "../validation/validationRuns.js";
 
-/**
- * Transitional cross-store submit-start helper.
- *
- * This is the only v1 bridge that atomically touches TaskStore and RunStore data.
- * It preserves current submit-start behavior and workspace setup failure recovery until issue 026
- * moves validation start behind ValidationRuns and removes this exception.
- */
-export type SubmitStartHelper = {
-  readonly getTaskSubmitReadiness: (taskId: PublicTaskId) => TaskSubmitReadinessResult;
-  readonly createRunFromSubmitPreflight: (
-    input: CreateRunFromSubmitPreflightInput,
-  ) => CreateRunFromSubmitPreflightResult;
-  readonly recordRunToolingErrorAndRecoverTask: (
-    input: RecordRunToolingErrorAndRecoverTaskInput,
-  ) => RecordRunErrorResult;
-};
-
-export type RecordRunToolingErrorAndRecoverTaskInput = RecordRunToolingErrorInput & {
-  readonly taskRecoveryState: SubmitEligibleState;
-};
-
-export type TaskSubmitReadinessResult =
-  | {
-      readonly ok: true;
-      readonly taskId: PublicTaskId;
-      readonly previousTaskState: SubmitEligibleState;
-    }
-  | {
-      readonly ok: false;
-      readonly code: "TASK_NOT_FOUND";
-    }
-  | {
-      readonly ok: false;
-      readonly code: "TASK_STATE_NOT_SUBMITTABLE";
-      readonly state: TaskState;
-    };
-
-export type CreateRunFromSubmitPreflightInput = {
-  readonly taskId: PublicTaskId;
-  readonly branch: string;
-  readonly commitSha: string;
-  readonly prTarget: GitHubPrTarget;
-  readonly now: string;
-};
-
-export type CreateRunFromSubmitPreflightResult =
-  | {
-      readonly ok: true;
-      readonly runId: string;
-      readonly taskState: "validating";
-      readonly previousTaskState: SubmitEligibleState;
-    }
-  | {
-      readonly ok: false;
-      readonly code:
-        | "TASK_NOT_FOUND"
-        | "TASK_STATE_NOT_SUBMITTABLE"
-        | "BRANCH_ALREADY_BOUND"
-        | "TASK_BRANCH_MISMATCH"
-        | "TASK_HAS_ACTIVE_RUN";
-      readonly state?: TaskState;
-      readonly boundBranch?: string;
-      readonly boundTaskId?: string;
-    };
-
-export const openSqliteSubmitStartHelper = (input: SqliteStoreInput): SubmitStartHelper => ({
-  getTaskSubmitReadiness: (taskId) =>
-    withStateDatabase(input, (database) => getTaskSubmitReadiness(database, taskId)),
-  createRunFromSubmitPreflight: (submitInput) =>
-    withStateDatabase(input, (database) => createRunFromSubmitPreflight(database, submitInput)),
-  recordRunToolingErrorAndRecoverTask: (toolingErrorInput) =>
-    withStateDatabase(input, (database) =>
-      recordRunToolingErrorAndRecoverTask(database, toolingErrorInput),
-    ),
+export const openSqliteValidationRuns = (input: SqliteStoreInput): ValidationRuns => ({
+  start: (startInput) =>
+    withStateDatabase(input, (database) => startValidationRun(database, startInput)),
+  recordToolingFailure: (toolingErrorInput) =>
+    withStateDatabase(input, (database) => recordToolingFailure(database, toolingErrorInput)),
 });
 
-const getTaskSubmitReadiness = (
+const startValidationRun = (
   database: DatabaseSync,
-  taskId: PublicTaskId,
-): TaskSubmitReadinessResult => {
-  const task = getTaskForSubmit(database, taskId);
-
-  if (task === undefined) {
-    return { ok: false, code: "TASK_NOT_FOUND" };
-  }
-
-  if (!canSubmitFrom(task.state)) {
-    return { ok: false, code: "TASK_STATE_NOT_SUBMITTABLE", state: task.state };
-  }
-
-  return { ok: true, taskId, previousTaskState: task.state };
-};
-
-const createRunFromSubmitPreflight = (
-  database: DatabaseSync,
-  input: CreateRunFromSubmitPreflightInput,
-): CreateRunFromSubmitPreflightResult => {
+  input: StartValidationRunInput,
+): StartValidationRunResult => {
   database.exec("BEGIN IMMEDIATE");
 
   try {
-    const readiness = getTaskSubmitReadiness(database, input.taskId);
+    const task = getTaskForSubmit(database, input.taskId);
+
+    if (task === undefined) {
+      database.exec("ROLLBACK");
+      return { ok: false, code: "TASK_NOT_FOUND" };
+    }
+
+    const readiness = submitStateReadiness(task.state);
 
     if (!readiness.ok) {
       database.exec("ROLLBACK");
@@ -125,17 +51,6 @@ const createRunFromSubmitPreflight = (
     if (activeRun !== undefined) {
       database.exec("ROLLBACK");
       return { ok: false, code: "TASK_HAS_ACTIVE_RUN" };
-    }
-
-    const task = getTaskForSubmit(database, input.taskId);
-
-    if (task === undefined) {
-      database.exec("ROLLBACK");
-      return { ok: false, code: "TASK_NOT_FOUND" };
-    }
-
-    if (!canSubmitFrom(task.state)) {
-      throw new Error("Task state is not submittable");
     }
 
     if (task.branch !== null && task.branch !== input.branch) {
@@ -207,7 +122,7 @@ const createRunFromSubmitPreflight = (
       ok: true,
       runId,
       taskState: "validating",
-      previousTaskState: task.state,
+      previousTaskState: readiness.previousTaskState,
     };
   } catch (error) {
     rollbackIfOpen(database);
@@ -215,10 +130,10 @@ const createRunFromSubmitPreflight = (
   }
 };
 
-const recordRunToolingErrorAndRecoverTask = (
+const recordToolingFailure = (
   database: DatabaseSync,
-  input: RecordRunToolingErrorAndRecoverTaskInput,
-): RecordRunErrorResult => {
+  input: RecordValidationToolingFailureInput,
+): RecordValidationToolingFailureResult => {
   database.exec("BEGIN IMMEDIATE");
 
   try {
