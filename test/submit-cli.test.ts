@@ -353,7 +353,11 @@ const transitionTaskState = (
   state: TaskState,
   updatedAt: string,
 ): void => {
-  const tasksLoad = loadRepoTasks({ cwd: root, requireState: true });
+  const tasksLoad = loadRepoTasks({
+    cwd: root,
+    requireState: true,
+    migrationTimestamp: () => firstNow,
+  });
 
   if (!tasksLoad.ok) {
     throw new Error(`Could not load Tasks: ${tasksLoad.error.code}`);
@@ -378,7 +382,11 @@ const transitionCurrentTaskState = (
   state: TaskState,
   updatedAt: string,
 ): void => {
-  const tasksLoad = loadRepoTasks({ cwd: root, requireState: true });
+  const tasksLoad = loadRepoTasks({
+    cwd: root,
+    requireState: true,
+    migrationTimestamp: () => firstNow,
+  });
 
   if (!tasksLoad.ok) {
     throw new Error(`Could not load Tasks: ${tasksLoad.error.code}`);
@@ -507,4 +515,5 @@ const repoState = (root: string) =>
   openRepoState({
     statePath: join(root, ".but-why/state.sqlite"),
     taskPrefix: "BY",
+    migrationTimestamp: () => firstNow,
   });

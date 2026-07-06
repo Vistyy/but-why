@@ -163,7 +163,11 @@ tasks[2]{id,title,state,createdAt,updatedAt}:
     const root = initializedRepo();
 
     createTask(root, firstNow, "Startable task");
-    const tasksLoad = loadRepoTasks({ cwd: root, requireState: true });
+    const tasksLoad = loadRepoTasks({
+      cwd: root,
+      requireState: true,
+      migrationTimestamp: () => firstNow,
+    });
 
     if (!tasksLoad.ok) {
       throw new Error(`Could not load Tasks: ${tasksLoad.error.code}`);
@@ -189,7 +193,11 @@ tasks[2]{id,title,state,createdAt,updatedAt}:
 
     createTask(root, firstNow, "Invalid start");
     transitionTaskState(root, "BY-1", state, secondNow);
-    const tasksLoad = loadRepoTasks({ cwd: root, requireState: true });
+    const tasksLoad = loadRepoTasks({
+      cwd: root,
+      requireState: true,
+      migrationTimestamp: () => firstNow,
+    });
 
     if (!tasksLoad.ok) {
       throw new Error(`Could not load Tasks: ${tasksLoad.error.code}`);
@@ -335,7 +343,11 @@ help[1]: "Run \`by task create --title \\"...\\" --description-file <file>\` to 
     const root = initializedRepo();
 
     createTask(root, firstNow, "Invalid transition");
-    const tasksLoad = loadRepoTasks({ cwd: root, requireState: true });
+    const tasksLoad = loadRepoTasks({
+      cwd: root,
+      requireState: true,
+      migrationTimestamp: () => firstNow,
+    });
 
     if (!tasksLoad.ok) {
       throw new Error(`Could not load Tasks: ${tasksLoad.error.code}`);
@@ -911,6 +923,7 @@ const repoState = (root: string) =>
   openRepoState({
     statePath: join(root, ".but-why/state.sqlite"),
     taskPrefix: "BY",
+    migrationTimestamp: () => firstNow,
   });
 
 const createTask = (root: string, now: string, title: string): void => {
@@ -932,7 +945,11 @@ const transitionTaskState = (
   state: TaskState,
   updatedAt: string,
 ): void => {
-  const tasksLoad = loadRepoTasks({ cwd: root, requireState: true });
+  const tasksLoad = loadRepoTasks({
+    cwd: root,
+    requireState: true,
+    migrationTimestamp: () => firstNow,
+  });
 
   if (!tasksLoad.ok) {
     throw new Error(`Could not load Tasks: ${tasksLoad.error.code}`);

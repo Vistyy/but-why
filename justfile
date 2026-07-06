@@ -3,9 +3,13 @@ set positional-arguments
 quality:
     just format-check
     just lint
+    just ast-grep-check
     just typecheck
     just test
     just fallow-check
+
+ast-grep-check:
+    pnpm run ast-grep-check
 
 fallow-check:
     pnpm exec fallow dead-code --no-production --no-cache --fail-on-issues

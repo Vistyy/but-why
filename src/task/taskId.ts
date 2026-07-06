@@ -63,6 +63,16 @@ export const publicTaskId = (value: string): PublicTaskId => {
   return parsed.taskId;
 };
 
+export const storedPublicTaskId = (value: string): PublicTaskId => {
+  const parsed = parsePublicTaskId(value);
+
+  if (!parsed.ok) {
+    throw new Error("Invalid stored Task ID");
+  }
+
+  return parsed.taskId;
+};
+
 export const taskSlugForId = (taskId: PublicTaskId): TaskSlug => {
   const parsed = parsePublicTaskId(taskId);
 

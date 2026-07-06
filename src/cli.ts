@@ -190,7 +190,11 @@ const routeInit = (args: readonly string[], environment: CliEnvironment): CliRes
     });
   }
 
-  const initResult = initRepoLocalContext({ cwd: environment.cwd, taskPrefix });
+  const initResult = initRepoLocalContext({
+    cwd: environment.cwd,
+    taskPrefix,
+    migrationTimestamp: () => environment.now().toISOString(),
+  });
 
   if (!initResult.ok) {
     switch (initResult.error.code) {

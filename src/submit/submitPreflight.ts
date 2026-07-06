@@ -111,7 +111,10 @@ export type SubmitPreflightRejectionCode =
 
 export const loadRepoSubmitPreflight = (
   cwd: string,
-  input: { readonly requireState?: boolean } = {},
+  input: {
+    readonly requireState?: boolean;
+    readonly migrationTimestamp: () => string;
+  },
 ): LoadRepoSubmitPreflightResult => {
   const repoContext = loadRepoLocalContext(cwd);
 
@@ -131,14 +134,18 @@ export const loadRepoSubmitPreflight = (
 
   return {
     ok: true,
-    submit: repoSubmitPreflight(repoContext.context),
+    submit: repoSubmitPreflight(repoContext.context, input.migrationTimestamp),
   };
 };
 
-const repoSubmitPreflight = (context: RepoLocalContext): RepoSubmitPreflight => {
+const repoSubmitPreflight = (
+  context: RepoLocalContext,
+  migrationTimestamp: () => string,
+): RepoSubmitPreflight => {
   const state = openRepoState({
     statePath: context.paths.statePath,
     taskPrefix: context.taskPrefix,
+    migrationTimestamp,
   });
 
   return {

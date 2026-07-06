@@ -26,6 +26,7 @@ export type RepoLocalContext = {
 export type InitRepoInput = {
   readonly cwd: string;
   readonly taskPrefix: string;
+  readonly migrationTimestamp: () => string;
 };
 
 export type InitRepoResult =
@@ -83,11 +84,6 @@ export type LoadRepoLocalContextError =
     };
 
 const isValidTaskPrefix = (taskPrefix: string): boolean => taskPrefixPattern.test(taskPrefix);
-
-export const isPublicTaskIdForPrefix = (taskId: string, taskPrefix: string): boolean =>
-  new RegExp(`^${escapeRegExp(taskPrefix)}-[1-9][0-9]*$`).test(taskId);
-
-export const exampleTaskId = (taskPrefix: string): string => `${taskPrefix}-1`;
 
 const repoLocalPaths = (root: string): RepoLocalPaths => {
   const butWhyDir = join(root, ".but-why");
@@ -147,7 +143,7 @@ export const initRepoLocalContext = (input: InitRepoInput): InitRepoResult => {
     created.push(".but-why/config.json");
   }
 
-  const stateChange = ensureStateDatabase(paths.statePath);
+  const stateChange = ensureStateDatabase(paths.statePath, input.migrationTimestamp);
 
   if (stateChange === "created") {
     created.push(".but-why/state.sqlite");
@@ -224,8 +220,6 @@ type ReviewersPathRepairResult =
       readonly ok: false;
       readonly error: Extract<InitRepoError, { readonly code: "invalid_repo_state" }>;
     };
-
-const escapeRegExp = (value: string): string => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 const ensureReviewersPath = (reviewersPath: string): ReviewersPathRepairResult => {
   if (!existsSync(reviewersPath)) {

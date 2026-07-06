@@ -8,7 +8,7 @@ import { isRunStatus, type GitHubPrTarget, type RunRecord } from "./run/run.js";
 import { canTransition, isTaskState, type TaskState } from "./task/lifecycle.js";
 import { canSubmitFrom, type SubmitEligibleState } from "./task/submitPolicy.js";
 import type { TaskContext, TaskRecord, TaskSummary } from "./task/task.js";
-import { taskSlugForId, type PublicTaskId } from "./task/taskId.js";
+import { storedPublicTaskId, taskSlugForId, type PublicTaskId } from "./task/taskId.js";
 
 /**
  * Future validation workspace and validation gate code should use this durable state interface.
@@ -187,6 +187,7 @@ class RepoStateUnavailableError extends Error {
 type RepoStateInput = {
   readonly statePath: string;
   readonly taskPrefix: string;
+  readonly migrationTimestamp: () => string;
 };
 
 const taskTimestampColumns = ["created_at AS createdAt", "updated_at AS updatedAt"];
@@ -244,7 +245,7 @@ export const openRepoState = (input: RepoStateInput): RepoState => {
       throw new RepoStateUnavailableError();
     }
 
-    ensureStateDatabase(input.statePath);
+    ensureStateDatabase(input.statePath, input.migrationTimestamp);
     const database = new DatabaseSync(input.statePath, { timeout: stateDatabaseTimeoutMs });
 
     try {
@@ -444,7 +445,7 @@ const getTaskForSubmit = (
   }
 
   return {
-    id: row.id as PublicTaskId,
+    id: storedPublicTaskId(row.id),
     state: row.state,
     branch: row.branch,
   };

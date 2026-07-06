@@ -261,6 +261,8 @@ The TypeScript compiler runs strict typechecking with `tsc --noEmit`.
 
 Fallow handles codebase health, dead code, duplication, dependency, and architecture boundary checks for active project source.
 
+ast-grep enforces blocking structural bans over active production TypeScript source.
+
 SQLite access uses `node:sqlite`.
 
 CLI output is converted to TOON-style text only at the stdout boundary.
@@ -278,17 +280,22 @@ just typecheck
 just test
 just format
 just format-check
+just ast-grep-check
 just fallow-check
 just by [args]
 ```
 
-`just quality` runs format checks, linting, typechecking, tests, and Fallow codebase health checks.
+`just quality` runs format checks, linting, ast-grep structural bans, typechecking, tests, and Fallow codebase health checks.
 
 `just quality` must not modify files.
 
 `just format` may modify files.
 
 `just format-check` must not modify files.
+
+`just ast-grep-check` runs ast-grep rule fixtures and scans active production TypeScript source.
+
+`just ast-grep-check` must not modify files.
 
 `just fallow-check` must not modify files.
 

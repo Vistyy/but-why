@@ -64,6 +64,7 @@ describe("module seams", () => {
     const repoState = openRepoState({
       statePath: join(root, ".but-why/state.sqlite"),
       taskPrefix: "BY",
+      migrationTimestamp: () => firstNow,
     });
     const task = repoState.createTask({
       title: "Submit through state",
@@ -117,13 +118,14 @@ describe("module seams", () => {
     const repoState = openRepoState({
       statePath: join(root, ".but-why/state.sqlite"),
       taskPrefix: "BY",
+      migrationTimestamp: () => firstNow,
     });
     const task = repoState.createTask({
       title: "Not started",
       description: "Description",
       now: firstNow,
     });
-    const submitPreflight = loadRepoSubmitPreflight(root);
+    const submitPreflight = loadRepoSubmitPreflight(root, { migrationTimestamp: () => firstNow });
 
     if (!submitPreflight.ok) {
       throw new Error(`Could not load submit preflight: ${submitPreflight.error.code}`);

@@ -115,7 +115,10 @@ const migrations: readonly Migration[] = [
   },
 ];
 
-export const ensureStateDatabase = (path: string): StateDatabaseChange => {
+export const ensureStateDatabase = (
+  path: string,
+  migrationTimestamp: () => string,
+): StateDatabaseChange => {
   const existed = existsSync(path);
   const database = new DatabaseSync(path, { timeout: stateDatabaseTimeoutMs });
   let updated = false;
@@ -134,7 +137,7 @@ export const ensureStateDatabase = (path: string): StateDatabaseChange => {
         .get(migration.name);
 
       if (result === undefined) {
-        applyMigration(database, migration);
+        applyMigration(database, migration, migrationTimestamp);
         updated = true;
       }
     }
@@ -149,7 +152,11 @@ export const ensureStateDatabase = (path: string): StateDatabaseChange => {
   }
 };
 
-const applyMigration = (database: DatabaseSync, migration: Migration): void => {
+const applyMigration = (
+  database: DatabaseSync,
+  migration: Migration,
+  migrationTimestamp: () => string,
+): void => {
   database.exec("BEGIN");
 
   try {
@@ -159,7 +166,7 @@ const applyMigration = (database: DatabaseSync, migration: Migration): void => {
 
     database
       .prepare("INSERT INTO schema_migrations (name, applied_at) VALUES (?, ?)")
-      .run(migration.name, new Date().toISOString());
+      .run(migration.name, migrationTimestamp());
     database.exec("COMMIT");
   } catch (error) {
     database.exec("ROLLBACK");

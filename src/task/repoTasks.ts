@@ -39,6 +39,7 @@ export type RepoTasks = {
 export type LoadRepoTasksInput = {
   readonly cwd: string;
   readonly requireState: boolean;
+  readonly migrationTimestamp: () => string;
 };
 
 export type LoadRepoTasksResult =
@@ -116,14 +117,15 @@ export const loadRepoTasks = (input: LoadRepoTasksInput): LoadRepoTasksResult =>
 
   return {
     ok: true,
-    tasks: repoTasks(repoContext.context),
+    tasks: repoTasks(repoContext.context, input.migrationTimestamp),
   };
 };
 
-const repoTasks = (context: RepoLocalContext): RepoTasks => {
+const repoTasks = (context: RepoLocalContext, migrationTimestamp: () => string): RepoTasks => {
   const state = openRepoState({
     statePath: context.paths.statePath,
     taskPrefix: context.taskPrefix,
+    migrationTimestamp,
   });
 
   return {

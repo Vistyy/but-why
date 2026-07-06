@@ -1,9 +1,12 @@
-import {
-  exampleTaskId,
-  isPublicTaskIdForPrefix,
-  type RepoLocalContext,
-} from "../init/repoContext.js";
+import type { RepoLocalContext } from "../init/repoContext.js";
 import { hasPublicTaskIdShape, type PublicTaskId } from "./taskId.js";
+
+const escapeRegExp = (value: string): string => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+const isPublicTaskIdForPrefix = (taskId: string, taskPrefix: string): boolean =>
+  new RegExp(`^${escapeRegExp(taskPrefix)}-[1-9][0-9]*$`).test(taskId);
+
+const exampleTaskId = (taskPrefix: string): string => `${taskPrefix}-1`;
 
 export type RepoTaskIdResolution =
   | {

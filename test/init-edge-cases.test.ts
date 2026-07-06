@@ -4,7 +4,12 @@ import { DatabaseSync } from "node:sqlite";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { butWhyGitignoreBlock } from "../src/init/gitignore.js";
-import { cleanupTempRoots, createGitRepo, runByInProcessArgs as runBy } from "./support/by-cli.js";
+import {
+  cleanupTempRoots,
+  createGitRepo,
+  runByInProcessArgs as runBy,
+  runByWithEnv,
+} from "./support/by-cli.js";
 
 const managedGitignoreBlock = `${butWhyGitignoreBlock}\n`;
 
@@ -129,6 +134,25 @@ help[1]: Move the conflicting path aside before running init again.`);
       ]);
     } finally {
       repairedDatabase.close();
+    }
+  });
+
+  it("records migration timestamps from BUT_WHY_NOW", () => {
+    const root = createGitRepo();
+    const now = "2026-07-06T01:02:03.004Z";
+    const result = runByWithEnv(root, { BUT_WHY_NOW: now }, "init", "--task-prefix", "BY");
+
+    expect(result.status).toBe(0);
+    expect(result.stderr).toBe("");
+
+    const database = new DatabaseSync(join(root, ".but-why/state.sqlite"));
+
+    try {
+      expect(
+        database.prepare("SELECT DISTINCT applied_at AS appliedAt FROM schema_migrations").all(),
+      ).toEqual([{ appliedAt: now }]);
+    } finally {
+      database.close();
     }
   });
 

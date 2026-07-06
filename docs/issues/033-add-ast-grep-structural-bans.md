@@ -2,7 +2,7 @@
 
 ## Status
 
-Not done.
+Done.
 
 ## Parent
 
@@ -122,39 +122,39 @@ The ast-grep messages should name the seam or helper to use instead of the banne
 
 ## Acceptance criteria
 
-- [ ] ast-grep is installed as a development tool.
-- [ ] ast-grep project configuration exists.
-- [ ] `just ast-grep-check` runs ast-grep without modifying files.
-- [ ] `just quality` runs `just ast-grep-check`.
-- [ ] ast-grep scans active production TypeScript source.
-- [ ] Normal test source is excluded from production-only structural bans.
-- [ ] Rule fixtures or equivalent checks prove each rule catches a violation and allows the intended seam.
-- [ ] Fixtures include alias or import-bypass cases for rules that depend on sensitive imported functions.
-- [ ] Direct SQLite construction is blocked outside allowed storage or init implementation code.
-- [ ] Reliable raw SQL call shapes are blocked outside allowed storage or init implementation code.
-- [ ] Direct process-global access is blocked outside `src/main.ts`.
-- [ ] Direct Effect runtime execution is blocked outside `src/main.ts`.
-- [ ] Output serialization is blocked outside output and stdout-boundary seams.
-- [ ] Direct Sandcastle sandbox factory calls and factory imports are blocked outside the validation workspace seam.
-- [ ] Direct child-process execution and child-process imports are blocked outside command adapter seams.
-- [ ] Inline Task state unions are blocked outside lifecycle and policy seams without banning all Task state string literals.
-- [ ] Raw Task ID parsing is blocked outside Task ID and CLI task-resolution seams.
-- [ ] Local Task ID prefix helpers live in a Task ID or task-resolution seam before their old location is banned.
-- [ ] Branded Task identity casts are blocked outside the Task ID seam.
-- [ ] Known direct branch, ref, worktree path, artifact path, and run-name construction from raw Task IDs is blocked without blocking user-facing Task ID messages.
-- [ ] Filesystem mutation is blocked outside repo init/config seams.
-- [ ] Destructive filesystem APIs are blocked in production source.
-- [ ] Raw file reads are blocked outside config, gitignore, repo-context discovery, and Task file-input seams.
-- [ ] fs namespace, default, dynamic, and require-style imports are blocked in production source.
-- [ ] `node:fs/promises` and `fs/promises` are covered by the filesystem import and API rules.
-- [ ] Direct JSON parsing is blocked outside repo config and external-tool parser seams.
-- [ ] Direct JSON stringification is blocked outside repo config and CLI JSON output seams.
-- [ ] Direct wall-clock reads are blocked outside `src/main.ts` while `new Date(value)` remains allowed.
-- [ ] Migration `applied_at` timestamps use the injected clock before the wall-clock rule is enabled.
-- [ ] A test proves migration `applied_at` honors `BUT_WHY_NOW`.
-- [ ] Each rule has a clear message that tells the contributor which seam to use instead.
-- [ ] `docs/config.md` documents `just ast-grep-check` and ast-grep as part of `just quality` after the rule is enabled.
-- [ ] Quality passes with the ast-grep rules enabled.
+- [x] ast-grep is installed as a development tool.
+- [x] ast-grep project configuration exists.
+- [x] `just ast-grep-check` runs ast-grep without modifying files.
+- [x] `just quality` runs `just ast-grep-check`.
+- [x] ast-grep scans active production TypeScript source.
+- [x] Normal test source is excluded from production-only structural bans.
+- [x] Rule fixtures or equivalent checks prove each rule catches a violation and allows the intended seam.
+- [x] Fixtures include alias or import-bypass cases for rules that depend on sensitive imported functions.
+- [x] Direct SQLite construction is blocked outside allowed storage or init implementation code.
+- [x] Reliable raw SQL call shapes are blocked outside allowed storage or init implementation code.
+- [x] Direct process-global access is blocked outside `src/main.ts`.
+- [x] Direct Effect runtime execution is blocked outside `src/main.ts`.
+- [x] Output serialization is blocked outside output and stdout-boundary seams.
+- [x] Direct Sandcastle sandbox factory calls and factory imports are blocked outside the validation workspace seam.
+- [x] Direct child-process execution and child-process imports are blocked outside command adapter seams.
+- [x] Inline Task state unions are blocked outside lifecycle and policy seams without banning all Task state string literals.
+- [x] Raw Task ID parsing is blocked outside Task ID and CLI task-resolution seams.
+- [x] Local Task ID prefix helpers live in a Task ID or task-resolution seam before their old location is banned.
+- [x] Branded Task identity casts are blocked outside the Task ID seam.
+- [x] Known direct branch, ref, worktree path, artifact path, and run-name construction from raw Task IDs is blocked without blocking user-facing Task ID messages.
+- [x] Filesystem mutation is blocked outside repo init/config seams.
+- [x] Destructive filesystem APIs are blocked in production source.
+- [x] Raw file reads are blocked outside config, gitignore, repo-context discovery, and Task file-input seams.
+- [x] fs namespace, default, dynamic, and require-style imports are blocked in production source.
+- [x] `node:fs/promises` and `fs/promises` are covered by the filesystem import and API rules.
+- [x] Direct JSON parsing is blocked outside repo config and external-tool parser seams.
+- [x] Direct JSON stringification is blocked outside repo config and CLI JSON output seams.
+- [x] Direct wall-clock reads are blocked outside `src/main.ts` while `new Date(value)` remains allowed.
+- [x] Migration `applied_at` timestamps use the injected clock before the wall-clock rule is enabled.
+- [x] A test proves migration `applied_at` honors `BUT_WHY_NOW`.
+- [x] Each rule has a clear message that tells the contributor which seam to use instead.
+- [x] `docs/config.md` documents `just ast-grep-check` and ast-grep as part of `just quality` after the rule is enabled.
+- [x] Quality passes with the ast-grep rules enabled.
 
 ## Blocked by
 

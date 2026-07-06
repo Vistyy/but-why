@@ -29,7 +29,7 @@ export const routeSubmit = async (
     return taskIdParse.result;
   }
 
-  const taskIdResolutionPreflight = loadSubmitPreflight(environment.cwd, false);
+  const taskIdResolutionPreflight = loadSubmitPreflight(environment, false);
 
   if (!taskIdResolutionPreflight.ok) {
     return taskIdResolutionPreflight.result;
@@ -41,7 +41,7 @@ export const routeSubmit = async (
     return repoTaskIdResolutionError(taskId);
   }
 
-  const submitPreflight = loadSubmitPreflight(environment.cwd, true);
+  const submitPreflight = loadSubmitPreflight(environment, true);
 
   if (!submitPreflight.ok) {
     return submitPreflight.result;
@@ -107,8 +107,14 @@ type SubmitPreflightLoadResult =
       readonly result: CliResult;
     };
 
-const loadSubmitPreflight = (cwd: string, requireState: boolean): SubmitPreflightLoadResult => {
-  const result = loadRepoSubmitPreflight(cwd, { requireState });
+const loadSubmitPreflight = (
+  environment: CliEnvironment,
+  requireState: boolean,
+): SubmitPreflightLoadResult => {
+  const result = loadRepoSubmitPreflight(environment.cwd, {
+    requireState,
+    migrationTimestamp: () => environment.now().toISOString(),
+  });
 
   if (result.ok) {
     return result;

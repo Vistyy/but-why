@@ -73,7 +73,7 @@ export const dashboard = (
   description: string,
   environment: CliEnvironment,
 ): CliResult => {
-  const tasksLoad = loadTasks(environment.cwd, true);
+  const tasksLoad = loadTasks(environment, true);
 
   if (!tasksLoad.ok) {
     return tasksLoad.result;
@@ -144,7 +144,7 @@ const routeTaskCreate = (args: readonly string[], environment: CliEnvironment): 
     });
   }
 
-  const tasksLoad = loadTasks(environment.cwd, true);
+  const tasksLoad = loadTasks(environment, true);
 
   if (!tasksLoad.ok) {
     return tasksLoad.result;
@@ -196,7 +196,7 @@ const routeTaskList = (args: readonly string[], environment: CliEnvironment): Cl
     return parseResult.result;
   }
 
-  const tasksLoad = loadTasks(environment.cwd, true);
+  const tasksLoad = loadTasks(environment, true);
 
   if (!tasksLoad.ok) {
     return tasksLoad.result;
@@ -317,7 +317,7 @@ const routeTaskComment = (args: readonly string[], environment: CliEnvironment):
     });
   }
 
-  const tasksLoad = loadTasks(environment.cwd, false);
+  const tasksLoad = loadTasks(environment, false);
 
   if (!tasksLoad.ok) {
     return tasksLoad.result;
@@ -436,7 +436,7 @@ const routeResolvedTaskId = (
     return taskIdParse.result;
   }
 
-  const tasksLoad = loadTasks(environment.cwd, false);
+  const tasksLoad = loadTasks(environment, false);
 
   if (!tasksLoad.ok) {
     return tasksLoad.result;
@@ -678,8 +678,12 @@ type TasksLoadResult =
       readonly result: CliResult;
     };
 
-const loadTasks = (cwd: string, requireState: boolean): TasksLoadResult => {
-  const result = loadRepoTasks({ cwd, requireState });
+const loadTasks = (environment: CliEnvironment, requireState: boolean): TasksLoadResult => {
+  const result = loadRepoTasks({
+    cwd: environment.cwd,
+    requireState,
+    migrationTimestamp: () => environment.now().toISOString(),
+  });
 
   if (result.ok) {
     return result;
