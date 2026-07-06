@@ -8,7 +8,8 @@ import { runtimeError, success, type CliResult, usageError } from "./cliResults.
 import { initRepoLocalContext } from "./init/repoContext.js";
 import type { OutputFormat, StructuredObject } from "./output/structured.js";
 import { routeSubmit } from "./submit/submitCli.js";
-import { dashboard, routeTask } from "./task/taskCli.js";
+import { dashboard } from "./cli/task/dashboard.js";
+import { routeTask } from "./cli/task/taskCli.js";
 
 export type { CliResult } from "./cliResults.js";
 
@@ -80,7 +81,7 @@ const routeCommandArgs = (
   }
 
   if (firstArg === "task") {
-    return Effect.succeed(routeTask(args.slice(1), environment));
+    return Effect.succeed(routeTask(args.slice(1), environment, { bin, description }));
   }
 
   if (firstArg === "submit") {

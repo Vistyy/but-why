@@ -87,12 +87,6 @@
         "functions": ["runSubmitPreflight"],
         "maxCognitive": 18,
         "reason": "Existing submit preflight policy is intentionally centralized before ValidationRuns exists. Keep the current ceiling blocking."
-      },
-      {
-        "files": ["src/task/taskCli.ts"],
-        "functions": ["parseTaskCreateArgs"],
-        "maxCognitive": 16,
-        "reason": "Existing non-interactive CLI argument parser has branchy validation. Keep the current ceiling blocking."
       }
     ],
     "ignore": ["spikes/**"]
@@ -101,7 +95,7 @@
     "zones": [
       {
         "name": "cli-edge",
-        "patterns": ["src/main.ts", "src/cli.ts", "src/cli*.ts", "src/task/taskCli.ts", "src/submit/submitCli.ts"]
+        "patterns": ["src/main.ts", "src/cli.ts", "src/cli*.ts", "src/cli/task/**", "src/submit/submitCli.ts"]
       },
       {
         "name": "output",
@@ -123,11 +117,7 @@
       },
       {
         "name": "task-adapter",
-        "patterns": [
-          "src/task/repoTaskIds.ts",
-          "src/task/commentFile.ts",
-          "src/task/descriptionFile.ts"
-        ]
+        "patterns": ["src/task/repoTaskIds.ts", "src/task/files/**"]
       },
       {
         "name": "task-store",

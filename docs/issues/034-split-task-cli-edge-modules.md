@@ -2,7 +2,7 @@
 
 ## Status
 
-Not done.
+Done.
 
 ## Parent
 
@@ -83,25 +83,33 @@ It may contain only Task CLI glue reused by multiple task commands, such as Task
 
 ## Acceptance criteria
 
-- [ ] `src/task/taskCli.ts` is removed or reduced to a moved compatibility-free implementation under `src/cli/task`.
-- [ ] Top-level CLI routing imports the task CLI from `src/cli/task`.
-- [ ] Task create, list, show, start, context, and comment commands live in separate vertical command modules.
-- [ ] Each task command module exposes one narrow command runner function rather than parser, handler, and renderer objects.
-- [ ] Command runner `env` values stay narrow and do not become broad service locators.
-- [ ] Dashboard or no-args task output is owned by `dashboard.ts` and separated from subcommand routing.
-- [ ] Shared task CLI loading, Task ID resolution helpers, and common error mapping live in a small mechanical Task CLI support module.
-- [ ] `descriptionFile.ts` and `commentFile.ts` move under `src/task/files` as Task file adapters.
-- [ ] Task CLI modules depend on `TaskUseCases` and do not bypass it for Task behavior.
-- [ ] Task domain and use-case modules do not import task CLI modules.
-- [ ] Existing task CLI stdout shape remains unchanged.
-- [ ] Existing task CLI structured errors and exit codes remain unchanged.
-- [ ] Existing task CLI `--help` and no-args behavior remain unchanged.
-- [ ] No external CLI framework is introduced.
-- [ ] Fallow boundary configuration reflects the new CLI task location if needed.
-- [ ] Fallow has no new boundary violations from this refactor.
-- [ ] If this split naturally allows the Fallow health score gate to move toward the previous `88.7` baseline, restore it.
-- [ ] If the previous Fallow score gate cannot be restored in this issue, document which remaining hotspots block it.
-- [ ] `just quality` passes.
+- [x] `src/task/taskCli.ts` is removed or reduced to a moved compatibility-free implementation under `src/cli/task`.
+- [x] Top-level CLI routing imports the task CLI from `src/cli/task`.
+- [x] Task create, list, show, start, context, and comment commands live in separate vertical command modules.
+- [x] Each task command module exposes one narrow command runner function rather than parser, handler, and renderer objects.
+- [x] Command runner `env` values stay narrow and do not become broad service locators.
+- [x] Dashboard or no-args task output is owned by `dashboard.ts` and separated from subcommand routing.
+- [x] Shared task CLI loading, Task ID resolution helpers, and common error mapping live in a small mechanical Task CLI support module.
+- [x] `descriptionFile.ts` and `commentFile.ts` move under `src/task/files` as Task file adapters.
+- [x] Task CLI modules depend on `TaskUseCases` and do not bypass it for Task behavior.
+- [x] Task domain and use-case modules do not import task CLI modules.
+- [x] Existing task CLI stdout shape remains unchanged.
+- [x] Existing task CLI structured errors and exit codes remain unchanged.
+- [x] Existing task CLI `--help` and no-args behavior remain unchanged.
+- [x] No external CLI framework is introduced.
+- [x] Fallow boundary configuration reflects the new CLI task location if needed.
+- [x] Fallow has no new boundary violations from this refactor.
+- [x] If this split naturally allows the Fallow health score gate to move toward the previous `88.7` baseline, restore it.
+- [x] If the previous Fallow score gate cannot be restored in this issue, document which remaining hotspots block it.
+- [x] `just quality` passes.
+
+## Implementation notes
+
+The Fallow score gate was not restored to `88.7` in this issue.
+`pnpm exec fallow health --no-production --no-cache --min-score 88.7 --score` reports health score `88.1`, which rounds to `88`, below the minimum threshold `89`.
+The remaining deductions are unit size `-10.0` and coupling `-1.9`.
+The blocking hotspots are the existing large submit, init, and validation orchestration seams listed by active threshold overrides in `.fallowrc.jsonc`.
+This issue removed the old `src/task/taskCli.ts` threshold override and kept the current score gate at `87.8`.
 
 ## Blocked by
 

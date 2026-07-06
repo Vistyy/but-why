@@ -381,8 +381,8 @@ files:
 ignores:
   - src/init/repoConfig.ts
   - src/init/gitignore.ts
-  - src/task/descriptionFile.ts
-  - src/task/commentFile.ts
+  - src/task/files/descriptionFile.ts
+  - src/task/files/commentFile.ts
 rule:
   any:
     - pattern: readFileSync($$$ARGS)
@@ -397,8 +397,8 @@ files:
   - src/**/*.ts
 ignores:
   - src/init/repoContext.ts
-  - src/task/descriptionFile.ts
-  - src/task/commentFile.ts
+  - src/task/files/descriptionFile.ts
+  - src/task/files/commentFile.ts
 rule:
   any:
     - pattern: statSync($$$ARGS)
