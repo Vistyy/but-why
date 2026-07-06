@@ -34,16 +34,16 @@
     {
       "id": "task-store-implementation-does-not-import-run-store",
       "kind": "banned-import",
-      "specifiers": ["../run/runStore.js", "../sqlite/runStore.js"],
-      "files": ["src/task/taskStore.ts", "src/sqlite/taskStore.ts"],
+      "specifiers": ["../run/runStore.js", "../sqlite/sqliteRunStore.js"],
+      "files": ["src/task/taskStore.ts", "src/sqlite/sqliteTaskStore.ts"],
       "message": "TaskStore must not read RunStore data. Compose Task and Run views outside the TaskStore implementation.",
       "severity": "error"
     },
     {
       "id": "run-store-implementation-does-not-import-task-store",
       "kind": "banned-import",
-      "specifiers": ["../task/taskStore.js", "../sqlite/taskStore.js"],
-      "files": ["src/run/runStore.ts", "src/sqlite/runStore.ts"],
+      "specifiers": ["../task/taskStore.js", "../sqlite/sqliteTaskStore.js"],
+      "files": ["src/run/runStore.ts", "src/sqlite/sqliteRunStore.ts"],
       "message": "RunStore must not depend on TaskStore behavior. The submit-start helper is the only temporary cross-store exception.",
       "severity": "error"
     }

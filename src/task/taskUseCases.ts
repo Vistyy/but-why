@@ -6,8 +6,8 @@ import {
   type RepoLocalContext,
 } from "../init/repoContext.js";
 import type { RunStore } from "../run/runStore.js";
-import { openSqliteRunStore } from "../sqlite/runStore.js";
-import { openSqliteTaskStore } from "../sqlite/taskStore.js";
+import { openSqliteRunStore } from "../sqlite/sqliteRunStore.js";
+import { openSqliteTaskStore } from "../sqlite/sqliteTaskStore.js";
 import { canStartFrom, type StartIneligibleState } from "./startPolicy.js";
 import type { TaskState } from "./lifecycle.js";
 import type { TaskContext, TaskRecord, TaskSummary } from "./task.js";
@@ -20,7 +20,7 @@ import type { AppendTaskCommentResult, StoredTaskRecord, TaskStore } from "./tas
  * Use it for Task lookup, state transitions, Task Context, dashboard actionability, comments, and persistence.
  * CLI files should keep argument parsing and stdout formatting at the edge, then delegate Task behavior here.
  */
-export type RepoTasks = {
+export type TaskUseCases = {
   readonly taskPrefix: string;
   readonly resolveTaskId: (taskId: PublicTaskId) => RepoTaskIdResolution;
   readonly createTask: (input: CreateTaskInput) => TaskSummary;
@@ -35,23 +35,23 @@ export type RepoTasks = {
   readonly transitionTaskState: (input: TransitionTaskStateInput) => RepoTaskStateTransitionResult;
 };
 
-export type LoadRepoTasksInput = {
+export type LoadTaskUseCasesInput = {
   readonly cwd: string;
   readonly requireState: boolean;
   readonly migrationTimestamp: () => string;
 };
 
-export type LoadRepoTasksResult =
+export type LoadTaskUseCasesResult =
   | {
       readonly ok: true;
-      readonly tasks: RepoTasks;
+      readonly tasks: TaskUseCases;
     }
   | {
       readonly ok: false;
-      readonly error: LoadRepoTasksError;
+      readonly error: LoadTaskUseCasesError;
     };
 
-export type LoadRepoTasksError =
+export type LoadTaskUseCasesError =
   | LoadRepoLocalContextError
   | {
       readonly code: "state_store_unavailable";
@@ -114,7 +114,7 @@ export type StartTaskResult =
       readonly state: StartIneligibleState;
     };
 
-export const loadRepoTasks = (input: LoadRepoTasksInput): LoadRepoTasksResult => {
+export const loadTaskUseCases = (input: LoadTaskUseCasesInput): LoadTaskUseCasesResult => {
   const repoContext = loadRepoLocalContext(input.cwd);
 
   if (!repoContext.ok) {
@@ -133,11 +133,14 @@ export const loadRepoTasks = (input: LoadRepoTasksInput): LoadRepoTasksResult =>
 
   return {
     ok: true,
-    tasks: repoTasks(repoContext.context, input.migrationTimestamp),
+    tasks: openTaskUseCases(repoContext.context, input.migrationTimestamp),
   };
 };
 
-const repoTasks = (context: RepoLocalContext, migrationTimestamp: () => string): RepoTasks => {
+const openTaskUseCases = (
+  context: RepoLocalContext,
+  migrationTimestamp: () => string,
+): TaskUseCases => {
   const taskStore = openSqliteTaskStore({
     statePath: context.paths.statePath,
     taskPrefix: context.taskPrefix,

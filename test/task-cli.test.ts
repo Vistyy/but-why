@@ -4,9 +4,9 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { collapseHome } from "../src/cli.js";
-import { openSqliteTaskStore } from "../src/sqlite/taskStore.js";
+import { openSqliteTaskStore } from "../src/sqlite/sqliteTaskStore.js";
 import type { TaskState } from "../src/task/lifecycle.js";
-import { loadRepoTasks } from "../src/task/repoTasks.js";
+import { loadTaskUseCases } from "../src/task/taskUseCases.js";
 import { publicTaskId } from "../src/task/taskId.js";
 import {
   byExecutable,
@@ -163,7 +163,7 @@ tasks[2]{id,title,state,createdAt,updatedAt}:
     const root = initializedRepo();
 
     createTask(root, firstNow, "Startable task");
-    const tasksLoad = loadRepoTasks({
+    const tasksLoad = loadTaskUseCases({
       cwd: root,
       requireState: true,
       migrationTimestamp: () => firstNow,
@@ -193,7 +193,7 @@ tasks[2]{id,title,state,createdAt,updatedAt}:
 
     createTask(root, firstNow, "Invalid start");
     transitionTaskState(root, "BY-1", state, secondNow);
-    const tasksLoad = loadRepoTasks({
+    const tasksLoad = loadTaskUseCases({
       cwd: root,
       requireState: true,
       migrationTimestamp: () => firstNow,
@@ -343,7 +343,7 @@ help[1]: "Run \`by task create --title \\"...\\" --description-file <file>\` to 
     const root = initializedRepo();
 
     createTask(root, firstNow, "Invalid transition");
-    const tasksLoad = loadRepoTasks({
+    const tasksLoad = loadTaskUseCases({
       cwd: root,
       requireState: true,
       migrationTimestamp: () => firstNow,
@@ -945,7 +945,7 @@ const transitionTaskState = (
   state: TaskState,
   updatedAt: string,
 ): void => {
-  const tasksLoad = loadRepoTasks({
+  const tasksLoad = loadTaskUseCases({
     cwd: root,
     requireState: true,
     migrationTimestamp: () => firstNow,

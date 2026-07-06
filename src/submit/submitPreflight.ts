@@ -7,7 +7,7 @@ import {
 } from "../init/repoContext.js";
 import type { GitHubPrTarget } from "../run/run.js";
 import type { RunStore } from "../run/runStore.js";
-import { openSqliteRunStore } from "../sqlite/runStore.js";
+import { openSqliteRunStore } from "../sqlite/sqliteRunStore.js";
 import { openSqliteSubmitStartHelper, type SubmitStartHelper } from "../sqlite/submitStart.js";
 import type { TaskState } from "../task/lifecycle.js";
 import type { SubmitEligibleState } from "../task/submitPolicy.js";

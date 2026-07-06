@@ -3,9 +3,9 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import { repoStateLoadError, runtimeError, success, usageError } from "../src/cliResults.js";
 import type { GitHubPrTarget } from "../src/run/run.js";
-import { openSqliteRunStore } from "../src/sqlite/runStore.js";
+import { openSqliteRunStore } from "../src/sqlite/sqliteRunStore.js";
 import { openSqliteSubmitStartHelper } from "../src/sqlite/submitStart.js";
-import { openSqliteTaskStore } from "../src/sqlite/taskStore.js";
+import { openSqliteTaskStore } from "../src/sqlite/sqliteTaskStore.js";
 import { loadRepoSubmitPreflight } from "../src/submit/submitPreflight.js";
 import { publicTaskId } from "../src/task/taskId.js";
 import { cleanupTempRoots, createGitRepo, runByInProcess } from "./support/by-cli.js";

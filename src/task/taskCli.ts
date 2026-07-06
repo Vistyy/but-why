@@ -19,7 +19,7 @@ import {
   type CliTaskIdParseResult,
 } from "../cliTaskId.js";
 import type { TaskRecord, TaskSummary } from "./task.js";
-import { loadRepoTasks, type RepoTasks } from "./repoTasks.js";
+import { loadTaskUseCases, type TaskUseCases } from "./taskUseCases.js";
 import type { PublicTaskId } from "./taskId.js";
 
 export const routeTask = (args: readonly string[], environment: CliEnvironment): CliResult => {
@@ -428,7 +428,7 @@ const routeResolvedTaskId = (
   args: readonly string[],
   environment: CliEnvironment,
   usage: string,
-  route: (tasks: RepoTasks, taskId: PublicTaskId) => CliResult,
+  route: (tasks: TaskUseCases, taskId: PublicTaskId) => CliResult,
 ): CliResult => {
   const taskIdParse = parseTaskIdArg(args, usage);
 
@@ -671,7 +671,7 @@ const invalidTaskState = (state: string): TaskListArgsParseResult => ({
 type TasksLoadResult =
   | {
       readonly ok: true;
-      readonly tasks: RepoTasks;
+      readonly tasks: TaskUseCases;
     }
   | {
       readonly ok: false;
@@ -679,7 +679,7 @@ type TasksLoadResult =
     };
 
 const loadTasks = (environment: CliEnvironment, requireState: boolean): TasksLoadResult => {
-  const result = loadRepoTasks({
+  const result = loadTaskUseCases({
     cwd: environment.cwd,
     requireState,
     migrationTimestamp: () => environment.now().toISOString(),

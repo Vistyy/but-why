@@ -144,7 +144,7 @@ But Why? should not reimplement those concerns.
 
 File and type names should use the most specific product or code role name, not architecture vocabulary.
 Avoid `Module` suffixes when a domain name fits.
-For example, prefer names like `repoTasks`, `submitPreflight`, or `cliResults` over names like `taskModule`, `submitModule`, or `cliResultModule`.
+For example, prefer names like `taskUseCases`, `submitPreflight`, or `cliResults` over names like `taskModule`, `submitModule`, or `cliResultModule`.
 
 Wrap Sandcastle only at But Why? domain seams.
 

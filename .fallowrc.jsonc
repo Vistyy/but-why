@@ -119,7 +119,7 @@
       },
       {
         "name": "task-use-case",
-        "patterns": ["src/task/repoTasks.ts"]
+        "patterns": ["src/task/taskUseCases.ts"]
       },
       {
         "name": "task-adapter",
@@ -147,11 +147,11 @@
       },
       {
         "name": "sqlite-task-store",
-        "patterns": ["src/sqlite/taskStore.ts"]
+        "patterns": ["src/sqlite/sqliteTaskStore.ts"]
       },
       {
         "name": "sqlite-run-store",
-        "patterns": ["src/sqlite/runStore.ts"]
+        "patterns": ["src/sqlite/sqliteRunStore.ts"]
       },
       {
         "name": "sqlite-submit-start",

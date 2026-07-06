@@ -3,10 +3,10 @@ import { chmodSync, existsSync, readFileSync, rmSync, writeFileSync } from "node
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
-import { openSqliteRunStore } from "../src/sqlite/runStore.js";
-import { openSqliteTaskStore } from "../src/sqlite/taskStore.js";
+import { openSqliteRunStore } from "../src/sqlite/sqliteRunStore.js";
+import { openSqliteTaskStore } from "../src/sqlite/sqliteTaskStore.js";
 import type { TaskState } from "../src/task/lifecycle.js";
-import { loadRepoTasks } from "../src/task/repoTasks.js";
+import { loadTaskUseCases } from "../src/task/taskUseCases.js";
 import { publicTaskId } from "../src/task/taskId.js";
 import {
   cleanupTempRoots,
@@ -354,7 +354,7 @@ const transitionTaskState = (
   state: TaskState,
   updatedAt: string,
 ): void => {
-  const tasksLoad = loadRepoTasks({
+  const tasksLoad = loadTaskUseCases({
     cwd: root,
     requireState: true,
     migrationTimestamp: () => firstNow,
@@ -383,7 +383,7 @@ const transitionCurrentTaskState = (
   state: TaskState,
   updatedAt: string,
 ): void => {
-  const tasksLoad = loadRepoTasks({
+  const tasksLoad = loadTaskUseCases({
     cwd: root,
     requireState: true,
     migrationTimestamp: () => firstNow,

@@ -6,7 +6,7 @@ status: accepted
 
 But Why uses command-facing use-case modules over private SQLite persistence.
 The public architecture is not a generic RepoState and not direct store access from CLI handlers.
-CLI handlers delegate to use-case modules such as `RepoTasks` and submit preflight.
+CLI handlers delegate to use-case modules such as `TaskUseCases` and submit preflight.
 Those modules may compose the narrow persistence operations needed to preserve existing command behavior.
 
 The former RepoState seam mixed Task, Run, submit, and validation persistence behind one broad interface.

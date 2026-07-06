@@ -18,7 +18,7 @@ This issue should not add new user-facing commands.
 It should preserve the behavior delivered by issues 001 through 009 and the JSON output behavior from issue 022.
 The goal is not cosmetic file movement.
 The touched module names should follow the global naming rule in `docs/architecture.md`: use domain names, not `Module` suffixes.
-Rename `taskModule.ts` to `repoTasks.ts` and `submitModule.ts` to `submitPreflight.ts` as part of the deepening.
+Rename `taskModule.ts` to a task use-case module and `submitModule.ts` to `submitPreflight.ts` as part of the deepening.
 The goal is to turn shallow modules into deeper modules with smaller interfaces, better leverage, and better locality before the Validation Gate grows.
 
 Deepen Task durable state first.
@@ -79,8 +79,8 @@ If a seam exists only for tests, keep it internal to the deeper module unless pr
 - [x] CLI route code keeps argument parsing at the edge and delegates domain behavior to Task and submit preflight modules.
 - [x] Domain modules do not depend on TOON, JSON, or stdout formatting.
 - [x] Old shallow helper paths are removed once the deeper modules replace them.
-- [x] `taskModule.ts` is renamed to `repoTasks.ts` and callers use the new path.
-- [x] `RepoTaskModule` is renamed to `RepoTasks` or another domain name without the `Module` suffix.
+- [x] `taskModule.ts` is renamed to `taskUseCases.ts` and callers use the new path.
+- [x] `RepoTaskModule` is renamed to `TaskUseCases` or another domain name without the `Module` suffix.
 - [x] `submitModule.ts` is renamed to `submitPreflight.ts` and callers use the new path.
 - [x] `RepoSubmitModule` is renamed to `RepoSubmitPreflight` or another domain name without the `Module` suffix.
 - [x] Other touched file names, type names, and exported names follow the `docs/architecture.md` rule to use domain names instead of `Module` suffixes.
