@@ -130,6 +130,26 @@ The quality gate should be easy for agents to run, should fail with actionable m
 
 - ast-grep rules should block direct branch or worktree path construction from raw Task IDs once safe slug helpers exist.
 
+- ast-grep rules should block direct process-global access outside the CLI edge.
+
+- ast-grep rules should block direct Effect runtime execution outside the CLI edge while allowing normal Effect construction and composition.
+
+- ast-grep rules should block output serialization outside output and stdout-boundary seams.
+
+- ast-grep rules should block direct Sandcastle sandbox factory calls outside the validation workspace seam.
+
+- ast-grep rules should block direct child-process execution outside command adapter seams.
+
+- ast-grep rules should block branded Task identity casts outside the Task ID seam.
+
+- ast-grep rules should block filesystem mutation, destructive filesystem APIs, and raw file reads outside their named seams where the pattern is reliable.
+
+- ast-grep rules should block fs import shapes that bypass named API rules.
+
+- ast-grep rules should block ad hoc JSON parsing and stringification outside repo config, external-tool parser, and output seams.
+
+- ast-grep rules should block direct wall-clock reads outside the CLI edge while allowing timestamp parsing or conversion.
+
 - Small custom checks are acceptable for repository-specific text rules that do not fit Biome, Fallow, TypeScript, Vitest, or ast-grep.
 
 - Custom checks should stay small and boring.
