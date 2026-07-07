@@ -166,7 +166,7 @@ For example, prefer names like `taskUseCases`, `submitPreflight`, or `cliResults
 
 Effect is the accepted orchestration tool for validation workflow code.
 
-Use Effect at workflow, IO, resource lifecycle, retry, scheduling, concurrency, and schema-validation seams.
+Use Effect at validation workflow, adapter, resource lifecycle, retry, scheduling, concurrency, and schema-validation seams.
 
 Do not expose Effect types from pure Task, Validation Run, Finding, or policy modules.
 
