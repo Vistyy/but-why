@@ -12,9 +12,11 @@ Not done.
 
 Split submission validation orchestration into two explicit seams.
 
-`TaskAuthority` is the seam for where Task truth and validation state changes live.
+`TaskAuthority` is the seam for Task truth.
+It hides where authoritative Task content, lifecycle state, readiness, validation start, and tooling-failure recovery are stored or coordinated.
 
-`SubmissionEnvironment` is the seam for where the submitted code candidate, Git facts, GitHub PR target, and Validation Workspace live.
+`SubmissionEnvironment` is the seam for the submitted code candidate and repo or runtime facts.
+It hides whether the submission comes from a local checkout, CI, or a remote environment.
 
 The local v1 implementation should make this distinction explicit without changing submit behavior.
 
@@ -30,15 +32,20 @@ Submit should coordinate the two seams without knowing SQLite store wiring or re
 
 - Task ID resolution where it depends on the Task Authority.
 - submit readiness reads.
-- `ValidationRuns.start` for local validation start.
-- validation tooling failure recovery through `ValidationRuns.recordToolingFailure`.
+- validation start as seen by submit.
+- validation tooling failure recovery as seen by submit.
+
+For local v1, `TaskAuthority` should delegate validation start and tooling-failure recovery to `ValidationRuns` instead of replacing that lower seam.
 
 `SubmissionEnvironment` should own candidate-code behavior:
 
 - current branch and commit facts.
 - worktree cleanliness checks.
 - GitHub PR target detection.
-- Validation Workspace setup.
+- Validation Workspace preparation.
+
+`SubmissionEnvironment` should not own validation history.
+Validation history belongs to Runs through `RunStore` and `ValidationRuns`.
 
 The local adapters should use explicit local names, such as `LocalTaskAuthority` and `LocalSubmissionEnvironment`.
 

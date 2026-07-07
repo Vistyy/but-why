@@ -51,9 +51,8 @@ An External Reference provides context or traceability, but it does not define t
 _Avoid_: Using the external issue key as the But Why Task unless the Task Surface explicitly defines that mapping.
 
 **Task Authority**:
-The place responsible for the durable Task content and lifecycle state at a given time.
-Local-only tasks can be authoritative inside But Why local state.
-Remote-backed tasks can be authoritative in an external Task Surface while But Why stores local validation state.
+The source that owns durable Task content and lifecycle state at a given time.
+But Why asks the Task Authority for authoritative task decisions instead of depending on where the task data is stored.
 _Avoid_: Assuming all Task data in local state is authoritative.
 
 **Task Surface**:
@@ -76,6 +75,11 @@ A completed code candidate handed to But Why? for validation.
 A submission is the normal trigger after an agent or human finishes implementing a task.
 A failed preflight rejection is not a submission because the candidate never entered validation.
 _Avoid_: Push, handoff, delivery
+
+**Submission Environment**:
+The source of the submitted code candidate and the repo or runtime facts needed to validate it.
+A Submission Environment can be local, CI-backed, or remote-backed without changing what a Submission means.
+_Avoid_: Treating the current local checkout as the only possible submission environment.
 
 **GitHub PR Target**:
 The GitHub repository and base branch where But Why? will eventually publish the task's PR.
