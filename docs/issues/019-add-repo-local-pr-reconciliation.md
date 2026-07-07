@@ -22,7 +22,8 @@ This gives users and agents a way to update Task state after PR state changes ou
 - [ ] Reconciliation is idempotent.
 - [ ] Reconciliation does not process new submissions.
 - [ ] Reconciliation output reports changed and unchanged Tasks.
-- [ ] GitHub tooling errors are structured and actionable.
+- [ ] GitHub tooling errors are typed, structured, and actionable.
+- [ ] PR state classification shares the same typed result model as submit watch.
 
 ## Blocked by
 

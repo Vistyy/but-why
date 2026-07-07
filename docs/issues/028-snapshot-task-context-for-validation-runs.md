@@ -26,6 +26,7 @@ This should land before reviewer agents depend on mutable Task Context.
 - [ ] Existing submit behavior remains unchanged except for durable snapshot recording.
 - [ ] Run inspection can identify the Task Context snapshot or revision used by the Validation Run.
 - [ ] Later Task comments do not change the stored context for an earlier Validation Run.
+- [ ] Snapshot creation failure is recorded as a typed validation-start tooling error.
 - [ ] Tests cover snapshot creation at validation start.
 - [ ] Tests cover old snapshots remaining stable after Task Context changes.
 - [ ] No reviewer agent behavior is added.

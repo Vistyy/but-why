@@ -21,9 +21,12 @@ Usage should stay split by producer, model, and token bucket because later dolla
 - [ ] `by task show <task-id>` shows task-level token totals across all Runs.
 - [ ] Task token summaries preserve input, cached input, output, and total buckets separately.
 - [ ] Missing token fields from a runtime are represented consistently.
+- [ ] Token usage records follow the Effect Schema contract used for reviewer output boundaries.
+- [ ] Invalid token usage payloads are recorded as typed tooling errors.
 - [ ] No dollar cost calculation is added.
 
 ## Blocked by
 
 - 014-add-intent-reviewer-agent.md
 - 015-add-configurable-quality-reviewers.md
+- `docs/issues/039-validate-config-and-reviewer-contracts-with-effect-schema.md`

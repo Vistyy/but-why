@@ -20,12 +20,16 @@ The intent reviewer should judge whether the submitted branch satisfies the Task
 - [ ] Intent reviewer input includes Task title, description, comments, repo context, and diff.
 - [ ] Reviewer output is JSON validated with Effect Schema.
 - [ ] Sandcastle structured output retry is used instead of a custom retry loop.
+- [ ] Invalid reviewer JSON after Sandcastle retry is exhausted is recorded as a typed tooling error.
 - [ ] Valid reviewer Findings are stored on the Run.
+- [ ] Intent review orchestration preserves Findings separately from tooling errors.
 - [ ] Any intent Finding moves the Task to `needs_input`.
 - [ ] Empty findings allow validation to continue.
 - [ ] Token usage is stored for the intent reviewer producer and model.
-- [ ] Missing reviewer profile fails during preflight with a structured error.
+- [ ] Missing reviewer profile fails during preflight with a structured typed config error.
 
 ## Blocked by
 
 - `docs/issues/028-snapshot-task-context-for-validation-runs.md`
+- `docs/issues/037-introduce-validation-effect-error-taxonomy.md`
+- `docs/issues/039-validate-config-and-reviewer-contracts-with-effect-schema.md`

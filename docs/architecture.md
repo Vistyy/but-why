@@ -160,6 +160,18 @@ File and type names should use the most specific product or code role name, not 
 Avoid `Module` suffixes when a domain name fits.
 For example, prefer names like `taskUseCases`, `submitPreflight`, or `cliResults` over names like `taskModule`, `submitModule`, or `cliResultModule`.
 
+Effect is the accepted orchestration tool for validation workflow code.
+
+Use Effect at workflow, IO, resource lifecycle, retry, scheduling, concurrency, and schema-validation seams.
+
+Do not expose Effect types from pure Task, Run, Validation Run, Finding, or policy modules.
+
+Validation workflows should preserve the domain distinction between Findings and tooling errors.
+
+Findings are validation results that block a Task.
+
+Tooling errors are infrastructure, configuration, Sandcastle, Git, GitHub, or malformed external-output failures recorded on the Validation Run.
+
 Wrap Sandcastle only at But Why? domain seams.
 
 Good seams speak But Why? language:

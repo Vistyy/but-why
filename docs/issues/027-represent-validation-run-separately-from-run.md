@@ -26,6 +26,8 @@ This slice should keep current behavior while making the validation-specific dat
 - [ ] Existing local validation submit behavior remains unchanged.
 - [ ] Existing Run IDs remain usable for current CLI behavior.
 - [ ] Existing validation workspace records remain associated with the validation attempt.
+- [ ] Validation Run can record typed tooling errors separately from Findings.
+- [ ] Validation Run phase status can represent Effect workflow failures without exposing Effect types publicly.
 - [ ] Tests prove a submitted commit is tied to a Validation Run.
 - [ ] Tests prove existing run inspection behavior remains compatible.
 - [ ] No refinement or implementation loop behavior is added.

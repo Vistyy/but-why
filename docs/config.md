@@ -20,6 +20,8 @@ Repo config owns validation behavior.
 
 Global config owns user defaults.
 
+Repo and global config should be validated at their read boundaries with Effect Schema.
+
 But Why validation config lives under `.but-why`.
 
 A `.sandcastle/` directory is optional and only for low-level Sandcastle runtime assets, such as a custom Dockerfile.

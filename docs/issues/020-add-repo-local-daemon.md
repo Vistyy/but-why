@@ -19,10 +19,13 @@ The daemon should repeatedly run the same reconciliation behavior as `by reconci
 - [ ] `by daemon` starts a repo-local polling loop.
 - [ ] The daemon reconciles only the current repo.
 - [ ] The daemon uses the same state transition rules as `by reconcile`.
+- [ ] The daemon uses the shared Effect-scheduled GitHub polling mechanics.
 - [ ] The daemon does not process new submissions.
 - [ ] The daemon reports progress and diagnostics to stderr.
 - [ ] The daemon can shut down cleanly.
+- [ ] Shutdown does not interrupt state writes midway.
 - [ ] Poll interval is configurable or has a documented default.
+- [ ] Poll interval config validation reports typed config errors.
 
 ## Blocked by
 
