@@ -22,12 +22,12 @@ Sandcastle remains the execution engine for worktrees, commands, agents, logs, s
 
 ## Acceptance criteria
 
-- [ ] The `effect` dependency is upgraded to the current stable patch or minor version after checking release notes.
-- [ ] Architecture docs state that Effect belongs at validation workflow, adapter, resource, retry, concurrency, and schema boundaries.
-- [ ] Architecture docs state that pure Task, Run, Validation Run, Finding, and policy modules should not expose Effect types.
-- [ ] Architecture docs preserve the distinction between Findings and tooling errors.
+- [ ] The `effect` dependency is upgraded to `3.21.4` after checking release notes, and `pnpm-lock.yaml` is refreshed.
+- [ ] Architecture docs state that Effect belongs at validation workflow, adapter, resource, retry, concurrency, and schema-validation seams.
+- [ ] Architecture docs state that pure Task, Validation Run, Finding, and policy modules should not expose Effect types.
+- [ ] Architecture docs preserve the distinction between Findings and Validation Tooling Failures.
 - [ ] Architecture docs preserve Sandcastle ownership of command execution, agent execution, logs, structured output retry, and token usage capture.
-- [ ] No broad migration to `@effect/cli`, `@effect/platform`, or `@effect/ai` is added in this slice.
+- [ ] No broad migration to `@effect/cli`, `@effect/platform`, or `@effect/ai` is added in this slice, verified by dependency review.
 - [ ] Direct Effect runtime execution remains limited to `src/main.ts`.
 - [ ] Existing tests, typecheck, ast-grep, and Fallow checks pass.
 

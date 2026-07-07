@@ -170,11 +170,11 @@ Use Effect at workflow, IO, resource lifecycle, retry, scheduling, concurrency, 
 
 Do not expose Effect types from pure Task, Validation Run, Finding, or policy modules.
 
-Validation workflows should preserve the domain distinction between Findings and tooling errors.
+Validation workflows should preserve the domain distinction between Findings and Validation Tooling Failures.
 
 Findings are validation results that block a Task.
 
-Tooling errors are infrastructure, configuration, Sandcastle, Git, GitHub, or malformed external-output failures recorded on the Validation Run.
+Validation Tooling Failures are infrastructure, configuration, Sandcastle, Git, GitHub, or malformed external-output failures recorded on the Validation Run.
 
 Wrap Sandcastle only at But Why? domain seams.
 
