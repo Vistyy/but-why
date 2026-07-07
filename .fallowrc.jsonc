@@ -107,6 +107,7 @@
         "name": "domain",
         "patterns": [
           "src/validationRun/cleanup.ts",
+          "src/validationRun/toolingErrorKind.ts",
           "src/validationRun/validationRun.ts",
           "src/task/lifecycle.ts",
           "src/task/startPolicy.ts",
@@ -126,6 +127,14 @@
       {
         "name": "validation-runs",
         "patterns": ["src/validation/validationRuns.ts"]
+      },
+      {
+        "name": "submit-rejection-errors",
+        "patterns": ["src/submit/submitRejectionErrors.ts"]
+      },
+      {
+        "name": "validation-tooling-failures",
+        "patterns": ["src/validation/validationToolingFailures.ts"]
       },
       {
         "name": "task-authority-port",
@@ -214,6 +223,7 @@
           "local-orchestration",
           "output-types",
           "repo-init",
+          "submit-rejection-errors",
           "task-adapter",
           "use-cases"
         ],
@@ -241,7 +251,16 @@
       },
       {
         "from": "validation-runs",
-        "allow": ["domain"]
+        "allow": ["domain", "validation-tooling-failures"]
+      },
+      {
+        "from": "submit-rejection-errors",
+        "allow": []
+      },
+      {
+        "from": "validation-tooling-failures",
+        "allow": ["domain"],
+        "allowTypeOnly": ["validation-workspace"]
       },
       {
         "from": "task-authority-port",
@@ -283,9 +302,11 @@
           "sandcastle-adapter",
           "submission-environment-port",
           "task-adapter",
+          "submit-rejection-errors",
           "task-authority-port",
           "task-store",
           "use-cases",
+          "validation-tooling-failures",
           "validation-runs"
         ],
         "allowTypeOnly": ["validation-workspace"]
@@ -306,7 +327,14 @@
       },
       {
         "from": "sqlite-concrete-stores",
-        "allow": ["domain", "sqlite-core", "task-store", "validation-run-store", "validation-runs"]
+        "allow": [
+          "domain",
+          "sqlite-core",
+          "task-store",
+          "validation-tooling-failures",
+          "validation-run-store",
+          "validation-runs"
+        ]
       },
       {
         "from": "storage-init",

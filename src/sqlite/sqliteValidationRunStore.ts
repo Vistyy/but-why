@@ -310,12 +310,12 @@ const rowToValidationRunToolingError = (
   validationRunId: row.validationRunId,
   errorKind: row.errorKind,
   operationName: row.operationName,
-  tempRefName: row.tempRefName,
-  submittedSha: row.submittedSha,
+  ...(row.tempRefName === null ? {} : { tempRefName: row.tempRefName }),
+  ...(row.submittedSha === null ? {} : { submittedSha: row.submittedSha }),
   ...(row.worktreePath === null ? {} : { worktreePath: row.worktreePath }),
   errorMessage: row.errorMessage,
-  cleanupWorktree: row.cleanupWorktree,
-  cleanupTempRef: row.cleanupTempRef,
+  ...(row.cleanupWorktree === null ? {} : { cleanupWorktree: row.cleanupWorktree }),
+  ...(row.cleanupTempRef === null ? {} : { cleanupTempRef: row.cleanupTempRef }),
   createdAt: row.createdAt,
 });
 
@@ -349,8 +349,17 @@ type ValidationRunPhaseStatusRow = ValidationRunPhaseStatusRecord;
 
 type ValidationRunToolingErrorRow = Omit<
   ValidationRunToolingErrorRecord,
-  "sequence" | "worktreePath"
+  | "sequence"
+  | "tempRefName"
+  | "submittedSha"
+  | "worktreePath"
+  | "cleanupWorktree"
+  | "cleanupTempRef"
 > & {
   readonly sequence: number | bigint;
+  readonly tempRefName: string | null;
+  readonly submittedSha: string | null;
   readonly worktreePath: string | null;
+  readonly cleanupWorktree: NonNullable<ValidationRunToolingErrorRecord["cleanupWorktree"]> | null;
+  readonly cleanupTempRef: NonNullable<ValidationRunToolingErrorRecord["cleanupTempRef"]> | null;
 };

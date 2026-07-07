@@ -2,7 +2,7 @@
 
 ## Status
 
-Not done.
+Done.
 
 ## Parent
 
@@ -24,22 +24,22 @@ Effect error types should live in workflow or adapter seams and should not leak 
 
 ## Acceptance criteria
 
-- [ ] Validation workflow errors are represented with `Data.TaggedError`.
-- [ ] The taxonomy distinguishes Submit Rejection Errors from Validation Tooling Failures.
-- [ ] Submit Rejection Errors cover repo and global config validation failure.
-- [ ] Submit Rejection Errors cover missing reviewer profile or invalid reviewer config.
-- [ ] Submit Rejection Errors cover invalid sandbox mode from config.
-- [ ] Validation Tooling Failures cover validation workspace setup failure.
-- [ ] Validation Tooling Failures cover unavailable sandboxing at runtime.
-- [ ] Validation Tooling Failures cover command execution tooling failure separately from a check command's non-zero exit.
-- [ ] A check command's non-zero exit remains a Finding and is not represented as an Effect failure.
-- [ ] Validation Tooling Failures cover Reviewer Output Contract Failure after Sandcastle structured output retry is exhausted.
-- [ ] Validation Tooling Failures cover GitHub publishing and polling tooling failures.
-- [ ] Findings remain ordinary validation results, not Effect failures.
-- [ ] Tooling errors can be recorded on a Validation Run without creating Findings.
-- [ ] CLI rendering still happens at the CLI/output boundary.
-- [ ] Pure domain modules do not expose Effect types in their public interfaces.
-- [ ] Tests cover at least one typed tooling error being recorded without moving the Task to `needs_input`.
+- [x] Validation workflow errors are represented with `Data.TaggedError`.
+- [x] The taxonomy distinguishes Submit Rejection Errors from Validation Tooling Failures.
+- [x] Submit Rejection Errors cover repo and global config validation failure.
+- [x] Submit Rejection Errors cover missing reviewer profile or invalid reviewer config.
+- [x] Submit Rejection Errors cover invalid sandbox mode from config.
+- [x] Validation Tooling Failures cover validation workspace setup failure.
+- [x] Validation Tooling Failures cover unavailable sandboxing at runtime.
+- [x] Validation Tooling Failures cover command execution tooling failure separately from a check command's non-zero exit.
+- [x] A check command's non-zero exit remains a Finding and is not represented as an Effect failure.
+- [x] Validation Tooling Failures cover Reviewer Output Contract Failure after Sandcastle structured output retry is exhausted.
+- [x] Validation Tooling Failures cover GitHub publishing and polling tooling failures.
+- [x] Findings remain ordinary validation results, not Effect failures.
+- [x] Tooling errors can be recorded on a Validation Run without creating Findings.
+- [x] CLI rendering still happens at the CLI/output boundary.
+- [x] Pure domain modules do not expose Effect types in their public interfaces.
+- [x] Tests cover at least one typed tooling error being recorded without moving the Task to `needs_input`.
 
 ## Blocked by
 

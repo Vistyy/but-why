@@ -27,12 +27,12 @@ export const recordValidationRunToolingErrorMutation = (
       input.validationRunId,
       input.errorKind,
       input.operationName,
-      input.tempRefName,
-      input.submittedSha,
+      input.tempRefName ?? null,
+      input.submittedSha ?? null,
       input.worktreePath ?? null,
       input.errorMessage,
-      input.cleanupWorktree,
-      input.cleanupTempRef,
+      input.cleanupWorktree ?? null,
+      input.cleanupTempRef ?? null,
       input.now,
     );
 

@@ -9,6 +9,27 @@ import { openSqliteValidationRuns } from "../src/sqlite/sqliteValidationRuns.js"
 import { openSubmitPreflight } from "../src/submit/submitPreflight.js";
 import type { SubmissionEnvironment } from "../src/submissionEnvironment/submissionEnvironment.js";
 import type { TaskAuthority } from "../src/taskAuthority/taskAuthority.js";
+import {
+  GlobalConfigValidationFailed,
+  InvalidReviewerConfig,
+  InvalidSandboxModeFromConfig,
+  MissingReviewerProfile,
+  RepoConfigValidationFailed,
+  type SubmitRejectionError,
+} from "../src/submit/submitRejectionErrors.js";
+import {
+  CheckCommandExecutionToolingFailed,
+  GitHubPollingToolingFailed,
+  GitHubPublishingToolingFailed,
+  GitToolingFailed,
+  InfrastructureToolingFailed,
+  ReviewerOutputContractFailed,
+  SandcastleToolingFailed,
+  SandboxingUnavailable,
+  ValidationWorkspaceSetupFailed,
+  validationToolingFailureKind,
+  type ValidationToolingFailure,
+} from "../src/validation/validationToolingFailures.js";
 import { unsupportedValidationRuns } from "../src/validation/validationRuns.js";
 import { loadLocalSubmitPreflight } from "../src/localSubmit/submitPreflight.js";
 import { publicTaskId } from "../src/task/taskId.js";
@@ -63,6 +84,73 @@ describe("module seams", () => {
         help: ["Move or restore .but-why/state.sqlite, then run `by init --task-prefix BY`."],
       },
     });
+  });
+
+  it("exposes the typed validation error taxonomy", () => {
+    const submitRejections = [
+      new RepoConfigValidationFailed({
+        path: ".but-why/config.json",
+        message: "Invalid repo config.",
+      }),
+      new GlobalConfigValidationFailed({ message: "Invalid global config." }),
+      new MissingReviewerProfile({ profileName: "intent" }),
+      new InvalidReviewerConfig({ profileName: "quality", message: "Invalid reviewer config." }),
+      new InvalidSandboxModeFromConfig({ sandboxMode: "root", message: "Invalid sandbox mode." }),
+    ] satisfies readonly SubmitRejectionError[];
+    const toolingFailures = [
+      new ValidationWorkspaceSetupFailed({
+        operationName: "copy_allowlisted_file",
+        tempRefName: firstTaskValidationRunId,
+        submittedSha: "abc123",
+        errorMessage: "Missing allowlisted file.",
+        cleanupResult: { worktree: "not_created", tempRef: "removed" },
+      }),
+      new InfrastructureToolingFailed({
+        operationName: "prepare_validation_infrastructure",
+        message: "Temp directory failed.",
+      }),
+      new GitToolingFailed({ operationName: "create_temp_ref", message: "git failed" }),
+      new SandcastleToolingFailed({
+        operationName: "create_workspace",
+        message: "sandcastle failed",
+      }),
+      new SandboxingUnavailable({
+        operationName: "create_sandbox",
+        message: "Sandbox runtime is unavailable.",
+      }),
+      new CheckCommandExecutionToolingFailed({
+        operationName: "run_check_command",
+        command: "just test",
+        message: "spawn failed",
+      }),
+      new ReviewerOutputContractFailed({
+        operationName: "intent_review",
+        reviewer: "intent",
+        attempts: 3,
+        message: "bad output",
+      }),
+      new GitHubPublishingToolingFailed({ operationName: "publish_pr", message: "gh failed" }),
+      new GitHubPollingToolingFailed({ operationName: "watch_pr", message: "gh failed" }),
+    ] satisfies readonly ValidationToolingFailure[];
+
+    expect(submitRejections.map((error) => error._tag)).toEqual([
+      "RepoConfigValidationFailed",
+      "GlobalConfigValidationFailed",
+      "MissingReviewerProfile",
+      "InvalidReviewerConfig",
+      "InvalidSandboxModeFromConfig",
+    ]);
+    expect(toolingFailures.map(validationToolingFailureKind)).toEqual([
+      "validation_workspace_setup_failed",
+      "infrastructure_tooling_failed",
+      "git_tooling_failed",
+      "sandcastle_tooling_failed",
+      "sandboxing_unavailable",
+      "check_command_execution_tooling_failed",
+      "reviewer_output_contract_failed",
+      "github_publishing_tooling_failed",
+      "github_polling_tooling_failed",
+    ]);
   });
 
   it("starts local validation through the ValidationRuns seam", () => {
@@ -124,6 +212,85 @@ describe("module seams", () => {
     expect(validationRunStore.getLatestValidationRunIdForTask(taskId)).toBe(
       firstTaskValidationRunId,
     );
+  });
+
+  it("records typed tooling failures without moving the Task to needs_input", () => {
+    const root = initializedRepo();
+    const taskStore = sqliteTaskStore(root);
+    const validationRunStore = sqliteValidationRunStore(root);
+    const validationRuns = sqliteValidationRuns(root);
+    const task = taskStore.createTask({
+      title: "Record typed tooling failure",
+      description: "Description",
+      now: firstNow,
+    });
+    const taskId = publicTaskId(task.id);
+    const failure = new ValidationWorkspaceSetupFailed({
+      operationName: "copy_allowlisted_file",
+      tempRefName: `refs/but-why/validation-runs/${firstTaskValidationRunId}/validation`,
+      submittedSha: "abc123",
+      worktreePath: "/tmp/but-why-worktree",
+      errorMessage: "Allowlisted validation workspace file is missing: .env.test",
+      cleanupResult: {
+        worktree: "not_created",
+        tempRef: "removed",
+      },
+    });
+
+    expect(
+      taskStore.transitionTaskState({ taskId, to: "implementing", now: secondNow }),
+    ).toMatchObject({ ok: true });
+    expect(
+      validationRuns.start({
+        taskId,
+        branch: "feature/by-1",
+        commitSha: "abc123",
+        prTarget,
+        now: thirdNow,
+      }),
+    ).toMatchObject({ ok: true });
+
+    expect(
+      validationRuns.recordToolingFailure({
+        validationRunId: firstTaskValidationRunId,
+        toolingFailure: failure,
+        taskRecoveryState: "implementing",
+        now: thirdNow,
+      }),
+    ).toEqual({ ok: true });
+    const sandboxFailure = new SandboxingUnavailable({
+      operationName: "create_sandbox",
+      message: "Sandbox runtime is unavailable.",
+    });
+
+    expect(
+      validationRuns.recordToolingFailure({
+        validationRunId: firstTaskValidationRunId,
+        toolingFailure: sandboxFailure,
+        taskRecoveryState: "implementing",
+        now: thirdNow,
+      }),
+    ).toEqual({ ok: true });
+    const toolingErrors =
+      validationRunStore.listValidationRunToolingErrors(firstTaskValidationRunId);
+
+    expect(toolingErrors).toEqual([
+      expect.objectContaining({
+        errorKind: "validation_workspace_setup_failed",
+        operationName: "copy_allowlisted_file",
+      }),
+      expect.objectContaining({
+        errorKind: "sandboxing_unavailable",
+        operationName: "create_sandbox",
+      }),
+    ]);
+    expect(toolingErrors[1]).not.toHaveProperty("tempRefName");
+    expect(toolingErrors[1]).not.toHaveProperty("submittedSha");
+    expect(toolingErrors[1]).not.toHaveProperty("cleanupWorktree");
+    expect(toolingErrors[1]).not.toHaveProperty("cleanupTempRef");
+    expect(taskStore.getTaskById(taskId)).toMatchObject({
+      state: "implementing",
+    });
   });
 
   it("rejects invalid local validation starts through the ValidationRuns seam", () => {
@@ -264,7 +431,7 @@ describe("module seams", () => {
     const submitPreflight = loadLocalSubmitPreflight(root, { migrationTimestamp: () => firstNow });
 
     if (!submitPreflight.ok) {
-      throw new Error(`Could not load submit preflight: ${submitPreflight.error.code}`);
+      throw new Error("Could not load submit preflight");
     }
 
     expect(

@@ -1,5 +1,5 @@
-import type { CleanupState } from "../validationRun/cleanup.js";
 import type { GitHubPrTarget } from "../validationRun/validationRun.js";
+import type { ValidationToolingFailure } from "./validationToolingFailures.js";
 import type { TaskState } from "../task/lifecycle.js";
 import type { SubmitEligibleState } from "../task/submitPolicy.js";
 import type { PublicTaskId } from "../task/taskId.js";
@@ -42,14 +42,7 @@ export type StartValidationRunResult =
 
 export type RecordValidationToolingFailureInput = {
   readonly validationRunId: string;
-  readonly errorKind: "validation_workspace_setup_failed";
-  readonly operationName: string;
-  readonly tempRefName: string;
-  readonly submittedSha: string;
-  readonly worktreePath?: string;
-  readonly errorMessage: string;
-  readonly cleanupWorktree: CleanupState;
-  readonly cleanupTempRef: CleanupState;
+  readonly toolingFailure: ValidationToolingFailure;
   readonly taskRecoveryState: SubmitEligibleState;
   readonly now: string;
 };

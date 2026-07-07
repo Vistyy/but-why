@@ -212,6 +212,60 @@ const migrations: readonly Migration[] = [
       )
     `,
   },
+  {
+    name: "007_general_validation_tooling_errors",
+    apply: `
+      DROP INDEX IF EXISTS validation_run_tooling_errors_validation_run_id_sequence_idx;
+
+      CREATE TABLE validation_run_tooling_errors_new (
+        sequence INTEGER PRIMARY KEY AUTOINCREMENT,
+        validation_run_id TEXT NOT NULL,
+        error_kind TEXT NOT NULL,
+        operation_name TEXT NOT NULL,
+        temp_ref_name TEXT,
+        submitted_sha TEXT,
+        worktree_path TEXT,
+        error_message TEXT NOT NULL,
+        cleanup_worktree TEXT CHECK (cleanup_worktree IS NULL OR cleanup_worktree IN ('removed', 'not_created', 'failed')),
+        cleanup_temp_ref TEXT CHECK (cleanup_temp_ref IS NULL OR cleanup_temp_ref IN ('removed', 'not_created', 'failed')),
+        created_at TEXT NOT NULL,
+        FOREIGN KEY (validation_run_id) REFERENCES validation_runs(id)
+      );
+
+      INSERT INTO validation_run_tooling_errors_new (
+        sequence,
+        validation_run_id,
+        error_kind,
+        operation_name,
+        temp_ref_name,
+        submitted_sha,
+        worktree_path,
+        error_message,
+        cleanup_worktree,
+        cleanup_temp_ref,
+        created_at
+      )
+      SELECT
+        sequence,
+        validation_run_id,
+        error_kind,
+        operation_name,
+        temp_ref_name,
+        submitted_sha,
+        worktree_path,
+        error_message,
+        cleanup_worktree,
+        cleanup_temp_ref,
+        created_at
+      FROM validation_run_tooling_errors;
+
+      DROP TABLE validation_run_tooling_errors;
+      ALTER TABLE validation_run_tooling_errors_new RENAME TO validation_run_tooling_errors;
+
+      CREATE INDEX validation_run_tooling_errors_validation_run_id_sequence_idx
+      ON validation_run_tooling_errors (validation_run_id, sequence)
+    `,
+  },
 ];
 
 export const ensureStateDatabase = (

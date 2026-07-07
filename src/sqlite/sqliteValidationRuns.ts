@@ -9,6 +9,7 @@ import {
 import { submitStateReadiness } from "../task/submitPolicy.js";
 import { storedPublicTaskId, taskSlugForId, type PublicTaskId } from "../task/taskId.js";
 import type { TaskState } from "../task/lifecycle.js";
+import { validationToolingFailureRecord } from "../validation/validationToolingFailures.js";
 import type {
   RecordValidationToolingFailureInput,
   RecordValidationToolingFailureResult,
@@ -145,9 +146,11 @@ const recordToolingFailure = (
       return { ok: false, code: "VALIDATION_RUN_NOT_FOUND" };
     }
 
-    const { taskRecoveryState: _taskRecoveryState, ...validationRunInput } = input;
-
-    recordValidationRunToolingErrorMutation(database, validationRunInput);
+    recordValidationRunToolingErrorMutation(database, {
+      validationRunId: input.validationRunId,
+      ...validationToolingFailureRecord(input.toolingFailure),
+      now: input.now,
+    });
     database
       .prepare(
         "UPDATE tasks SET state = ?, updated_at = ? WHERE id = (SELECT task_id FROM validation_runs WHERE id = ?)",

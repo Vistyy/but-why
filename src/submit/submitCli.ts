@@ -13,6 +13,14 @@ import {
   type LocalSubmitPreflight,
   type SubmitTaskResult,
 } from "../localSubmit/submitPreflight.js";
+import {
+  GlobalConfigValidationFailed,
+  InvalidReviewerConfig,
+  InvalidSandboxModeFromConfig,
+  MissingReviewerProfile,
+  RepoConfigValidationFailed,
+  type SubmitRejectionError,
+} from "../submit/submitRejectionErrors.js";
 import type { ValidationWorkspaceToolingError } from "../validation/validationWorkspace.js";
 
 export const routeSubmit = async (
@@ -121,7 +129,58 @@ const loadSubmitPreflight = (
     return result;
   }
 
+  if (isSubmitRejectionError(result.error)) {
+    return { ok: false, result: runtimeError(submitRejectionLoadError(result.error)) };
+  }
+
   return { ok: false, result: repoStateLoadError(result.error) };
+};
+
+const isSubmitRejectionError = (error: unknown): error is SubmitRejectionError =>
+  error instanceof RepoConfigValidationFailed ||
+  error instanceof GlobalConfigValidationFailed ||
+  error instanceof MissingReviewerProfile ||
+  error instanceof InvalidReviewerConfig ||
+  error instanceof InvalidSandboxModeFromConfig;
+
+const submitRejectionLoadError = (error: SubmitRejectionError): StructuredErrorInput => {
+  switch (error._tag) {
+    case "RepoConfigValidationFailed":
+      return {
+        code: "invalid_repo_config",
+        message: error.message,
+        details: { path: error.path ?? ".but-why/config.json" },
+        help: ["Fix the JSON or run `by init --task-prefix <prefix>` after moving it aside."],
+      };
+    case "GlobalConfigValidationFailed":
+      return {
+        code: "invalid_global_config",
+        message: error.message,
+        ...(error.path === undefined ? {} : { details: { path: error.path } }),
+        help: ["Fix the global But Why? config, then rerun submit."],
+      };
+    case "MissingReviewerProfile":
+      return {
+        code: "missing_reviewer_profile",
+        message: `Reviewer profile was not found: ${error.profileName}`,
+        details: { profileName: error.profileName },
+        help: ["Define the reviewer profile in repo or global config, then rerun submit."],
+      };
+    case "InvalidReviewerConfig":
+      return {
+        code: "invalid_reviewer_config",
+        message: error.message,
+        ...(error.profileName === undefined ? {} : { details: { profileName: error.profileName } }),
+        help: ["Fix the reviewer config, then rerun submit."],
+      };
+    case "InvalidSandboxModeFromConfig":
+      return {
+        code: "invalid_sandbox_mode",
+        message: error.message,
+        details: { sandboxMode: error.sandboxMode },
+        help: ["Use a supported validation sandbox mode, then rerun submit."],
+      };
+  }
 };
 
 const renderSubmitResult = (result: SubmitTaskResult): CliResult => {

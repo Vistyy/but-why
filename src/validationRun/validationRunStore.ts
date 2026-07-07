@@ -1,4 +1,5 @@
 import type { CleanupState } from "./cleanup.js";
+import type { ValidationToolingFailureKind } from "./toolingErrorKind.js";
 import type { ValidationRunPhaseStatusRecord, ValidationRunRecord } from "./validationRun.js";
 
 export type ValidationRunStore = {
@@ -44,18 +45,18 @@ export type ValidationWorkspaceSetupRecord = Omit<RecordValidationWorkspaceSetup
   readonly createdAt: string;
 };
 
-export type ValidationRunToolingErrorKind = "validation_workspace_setup_failed";
+export type ValidationRunToolingErrorKind = ValidationToolingFailureKind;
 
 export type RecordValidationRunToolingErrorInput = {
   readonly validationRunId: string;
   readonly errorKind: ValidationRunToolingErrorKind;
   readonly operationName: string;
-  readonly tempRefName: string;
-  readonly submittedSha: string;
+  readonly tempRefName?: string;
+  readonly submittedSha?: string;
   readonly worktreePath?: string;
   readonly errorMessage: string;
-  readonly cleanupWorktree: CleanupState;
-  readonly cleanupTempRef: CleanupState;
+  readonly cleanupWorktree?: CleanupState;
+  readonly cleanupTempRef?: CleanupState;
   readonly now: string;
 };
 

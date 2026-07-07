@@ -21,6 +21,11 @@ import { localTaskAuthority } from "../taskAuthority/localTaskAuthority.js";
 import type { SubmitEligibleState } from "../task/submitPolicy.js";
 import type { PublicTaskId } from "../task/taskId.js";
 import type { SubmissionEnvironment } from "../submissionEnvironment/submissionEnvironment.js";
+import {
+  RepoConfigValidationFailed,
+  type SubmitRejectionError,
+} from "../submit/submitRejectionErrors.js";
+import { ValidationWorkspaceSetupFailed } from "../validation/validationToolingFailures.js";
 
 export type LocalSubmitPreflight = {
   readonly taskPrefix: string;
@@ -42,7 +47,8 @@ export type LoadLocalSubmitPreflightResult =
     };
 
 export type LoadLocalSubmitPreflightError =
-  | LoadRepoLocalContextError
+  | Exclude<LoadRepoLocalContextError, { readonly code: "invalid_repo_config" }>
+  | SubmitRejectionError
   | {
       readonly code: "state_store_unavailable";
       readonly taskPrefix: string;
@@ -65,7 +71,18 @@ export const loadLocalSubmitPreflight = (
   const repoContext = loadRepoLocalContext(cwd);
 
   if (!repoContext.ok) {
-    return repoContext;
+    switch (repoContext.error.code) {
+      case "invalid_repo_config":
+        return {
+          ok: false,
+          error: new RepoConfigValidationFailed({
+            path: ".but-why/config.json",
+            message: ".but-why/config.json is not valid But Why? repo config.",
+          }),
+        };
+      case "not_initialized":
+        return { ok: false, error: repoContext.error };
+    }
   }
 
   if (input.requireState !== false && !existsSync(repoContext.context.paths.statePath)) {
@@ -128,9 +145,7 @@ const createValidationWorkspaceForValidationRun = async (
     return result;
   }
 
-  const recovery = taskAuthority.recordValidationToolingFailure({
-    validationRunId: input.validationRunId,
-    errorKind: "validation_workspace_setup_failed",
+  const toolingFailure = new ValidationWorkspaceSetupFailed({
     operationName: result.toolingError.operationName,
     tempRefName: result.toolingError.tempRefName,
     submittedSha: result.toolingError.submittedSha,
@@ -138,8 +153,12 @@ const createValidationWorkspaceForValidationRun = async (
       ? {}
       : { worktreePath: result.toolingError.worktreePath }),
     errorMessage: result.toolingError.errorMessage,
-    cleanupWorktree: result.toolingError.cleanupResult.worktree,
-    cleanupTempRef: result.toolingError.cleanupResult.tempRef,
+    cleanupResult: result.toolingError.cleanupResult,
+  });
+
+  const recovery = taskAuthority.recordValidationToolingFailure({
+    validationRunId: input.validationRunId,
+    toolingFailure,
     taskRecoveryState: input.taskRecoveryState,
     now: input.now,
   });
