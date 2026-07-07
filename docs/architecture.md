@@ -9,27 +9,31 @@ It validates submitted branches against Task Context and publishes only validate
 But Why is a domain-centered modular monolith with selective ports and adapters.
 Domain-named modules and use cases sit at the center.
 CLI output, SQLite, GitHub, and Sandcastle sit at the edges as adapters.
-Ports are added only where behavior truly varies, such as Task Authority, Submission Environment, Validation Runs, Task Store, and Run Store.
+Ports are added only where behavior truly varies, such as Task Authority, Submission Environment, Validation Runs, Task Store, and Validation Run storage.
 
 ## Core domain
 
 The core objects are:
 
 - `Task`
-- `Run`
+- `Submission`
 - `Validation Run`
 - `Finding`
 - `PR`
 
 In v1, one Task belongs to one repo, one branch, and one PR.
 
-One `by submit <task-id>` creates one Run.
+One accepted `by submit <task-id>` creates one Submission and one Validation Run.
+
+A failed preflight creates neither a Submission nor a Validation Run.
 
 There is no public Submission ID in v1.
 
-A Run validates one commit SHA.
+A Validation Run validates one submitted commit SHA.
 
-A new commit creates a new Run.
+A new commit creates a new Validation Run.
+
+Retrying the same commit also creates a new Validation Run.
 
 ## Task lifecycle
 
@@ -103,11 +107,11 @@ V1 has no auto-fix or repair phase.
 
 V1 validation phases must not modify the submitted branch.
 
-Validation runs use Run-owned temp refs and isolated worktrees.
+Validation Runs use Validation Run-owned temp refs and isolated worktrees.
 
 Validation must not run against the checked-out task branch.
 
-Tooling failures are recorded on the Run and are not Findings.
+Tooling failures are recorded on the Validation Run and are not Findings.
 
 After a tooling failure, the Task returns to its previous submit-eligible state.
 
@@ -121,7 +125,7 @@ V1 does not create follow-up Tasks from validation.
 
 V1 does not pause and resume for human input.
 
-A later `by submit <task-id>` starts a new Run.
+A later `by submit <task-id>` starts a new Validation Run.
 
 Finding fields are:
 
@@ -134,9 +138,9 @@ files
 artifactRefs
 ```
 
-Findings are stored on Runs.
+Findings are stored on Validation Runs.
 
-Task commands can show the latest Run Findings without duplicating them as comments.
+Task commands can show the latest Validation Run Findings without duplicating them as comments.
 
 ## Execution boundary
 
@@ -164,7 +168,7 @@ Effect is the accepted orchestration tool for validation workflow code.
 
 Use Effect at workflow, IO, resource lifecycle, retry, scheduling, concurrency, and schema-validation seams.
 
-Do not expose Effect types from pure Task, Run, Validation Run, Finding, or policy modules.
+Do not expose Effect types from pure Task, Validation Run, Finding, or policy modules.
 
 Validation workflows should preserve the domain distinction between Findings and tooling errors.
 
@@ -273,24 +277,24 @@ BY-1
 BY-2
 ```
 
-Run IDs are task-scoped operational names built from the canonical Task Slug plus the task run number:
+Validation Run IDs are task-scoped operational names built from the canonical Task Slug plus the task validation number:
 
 ```text
-by-1-09224d806043.1
-by-1-09224d806043.2
+by-1-09224d806043.v1
+by-1-09224d806043.v2
 ```
 
-Finding IDs are run-scoped:
+Finding IDs are Validation Run-scoped:
 
 ```text
-by-1-09224d806043.2-F1
-by-1-09224d806043.2-F2
+by-1-09224d806043.v2-F1
+by-1-09224d806043.v2-F2
 ```
 
 Artifact refs use this form:
 
 ```text
-artifact:<run-id>/<phase>/<producer>/<filename>
+artifact:<validation-run-id>/<phase>/<producer>/<filename>
 ```
 
 ## Token accounting
@@ -309,7 +313,7 @@ outputTokens
 totalTokens
 ```
 
-Run and Task totals sum each bucket separately.
+Validation Run and Task totals sum each bucket separately.
 
 ## CLI surface
 
@@ -321,7 +325,7 @@ V1 command areas are:
 init
 task
 submit
-run
+validation-run
 daemon
 reconcile
 ```
