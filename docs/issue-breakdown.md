@@ -11,7 +11,6 @@ Done issues are omitted from this graph.
 ## Can start immediately
 
 - `027-represent-validation-run-separately-from-run.md`
-- `036-establish-effect-adoption-baseline.md`
 
 ## Remaining dependency graph
 
@@ -33,12 +32,8 @@ Done issues are omitted from this graph.
                 -> 018 token summaries
                 -> 021 reviewer evals
 
-036 Effect adoption baseline
-  -> 037 validation Effect error taxonomy
-
 ```
 
 ## Notes
 
 - Issue 028 fits after run inspection and before reviewer agents, because reviewer validation needs stable Task Context snapshots.
-- Issue 036 can start immediately because it establishes dependency and architecture guidance before workflow refactors.
