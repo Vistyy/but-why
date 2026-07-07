@@ -11,7 +11,6 @@ Done issues are omitted from this graph.
 ## Can start immediately
 
 - `027-represent-validation-run-separately-from-run.md`
-- `035-introduce-task-authority-and-submission-environment.md`
 
 ## Remaining dependency graph
 
@@ -29,11 +28,8 @@ Done issues are omitted from this graph.
           -> 018 token summaries
           -> 021 reviewer evals
 
-035 introduce TaskAuthority and SubmissionEnvironment
-  -> 032 stable module boundaries with Fallow
 ```
 
 ## Notes
 
-- Issue 032 should wait until TaskAuthority and SubmissionEnvironment seams exist.
 - Issue 028 fits after run inspection and before reviewer agents, because reviewer validation needs stable Task Context snapshots.
