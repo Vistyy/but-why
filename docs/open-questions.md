@@ -1,110 +1,63 @@
 # Open questions
 
-## Sandcastle spike result
+This file tracks only unresolved product and architecture questions.
 
-Result: green for validation workspace creation, with token-usage verification still open.
-Sandcastle `0.12.0` has the required workspace and `.exec` primitives for issue 011.
-Some Sandcastle follow-up issues are still in progress.
+Do not add backlog, follow-up work, or completed decisions here.
 
-The spike report lives at:
+Settled decisions belong in `docs/architecture.md` or `docs/adr/`.
 
-```text
-docs/spikes/sandcastle-v1-execution.md
-```
+## Sandcastle
 
-Sandcastle `0.12.0` proved:
+Open questions:
 
-- validation worktrees from Run-owned temp refs
-- clean original checkout when Sandcastle runtime paths are ignored
-- configured check commands through `sandbox.exec()`
-- Pi reviewer agents
-- structured output validation and retry through `Output.object(..., maxRetries)`
-- reviewer log file paths
-- Docker sandbox execution
-- Pi reviewer execution in Docker with host Pi auth mounted read-only
-- cleanup
-
-Remaining open points:
-
-- Verify Pi token usage for the selected runtime and model, because `result.iterations[].usage` was missing in the local run.
-- Track remaining Sandcastle follow-up issues that could affect v1 execution behavior.
-- Optionally run a Podman smoke test if v1 wants to advertise Podman support.
+- What Pi token usage does Sandcastle return for the selected runtime and model?
+- Does v1 advertise Podman support?
+- If v1 advertises Podman support, what smoke test is required?
 
 ## Task readiness and orchestration
 
 We need to decide how task readiness, refinement, implementation, and escalation should work after the validation-focused v1 path.
 
-Open concerns:
+Open questions:
 
-- Many tasks may be too undercooked to implement safely.
-- The user should not have to manually refine every task with the main agent.
-- Refinement should be mostly automated if it exists.
-- Future refinement must support centralized escalation across many tasks without requiring the user to enter each task's agent session.
-- The exact shape of that centralized escalation mechanism is undecided.
+- How should undercooked tasks be detected before implementation?
+- Should refinement be a state, a tag, a command, or a separate loop?
+- How should users handle centralized escalation across many tasks?
+- Should `by` orchestrate implementation, or should agents use `by` commands directly?
 
-Possible lifecycle ideas include adding states before `todo`, such as `draft` or `refining`, but these are not yet accepted domain states.
-
-Possible future loops include:
-
-- a task-readiness or refinement loop before implementation
-- an implementation loop that turns ready tasks into committed code ready for submission
-- the current validation loop that validates completed submissions
-
-Open implementation options include:
-
-- an agent reads Task Context and uses `by` commands directly
-- `by` triggers an implementation loop through the CLI
-- But Why? orchestrates loops programmatically through its own solution
-
-This must stay distinct from the Validation Gate, which validates a completed submission and is not a generic pipeline.
+This must stay distinct from the Validation Gate, which validates a completed submission.
 
 ## Task metadata, tags, and routing
 
 Tasks may need metadata for classification, routing, automation policy, and scheduling.
 
-Tags are a candidate mechanism, but some needs may deserve first-class fields or relationships instead.
+Open questions:
 
-Open questions include:
-
-- whether lifecycle readiness belongs in state, tags, or another concept
-- how to represent tasks that should exist but not be touched yet
-- how to represent tasks that are ready but should not be automated
-- whether tags should influence validation profiles or reviewer selection
-- whether task categories such as UI need different validation loops
-- which semantics must be enforced by But Why? instead of treated as loose labels
+- Which needs belong in lifecycle state?
+- Which needs belong in tags?
+- Which needs deserve first-class fields or relationships?
+- Should tags influence validation profiles or reviewer selection?
+- Should categories such as UI change validation behavior?
+- Which semantics must But Why? enforce instead of treating them as labels?
 
 ## Task relationships and dependencies
 
 Tasks may need relationships so related work and dependencies are visible.
 
-Open questions include:
+Open questions:
 
-- what relationship types exist
-- whether dependencies block `todo`, `implementing`, or `submit`
-- how related tasks and blocked tasks appear in dashboards
-- whether relationships are local-only or must map to future external Task Surfaces
+- What relationship types exist?
+- Do dependencies block `todo`, `implementing`, or `submit`?
+- How do related and blocked tasks appear in dashboards?
+- Are relationships local-only, or must they map to future external Task Surfaces?
 
 This is not part of validation-focused v1 unless explicitly pulled in.
 
-## Validation status
-
-The v1 validation model is architecturally decided, but several details remain open.
-
-Settled for v1:
-
-- `by submit <task-id>` starts validation.
-- Validation is synchronous.
-- Validation checks a completed committed branch.
-- Validation uses fixed Validation Gate phases.
-- Validation is distinct from refinement and implementation.
-- Any Finding moves the Task to `needs_input`.
-- Clean validation publishes or updates a GitHub PR.
-
 ## Validation phase configuration
 
-We have chosen fixed phases instead of a generic CI pipeline.
+V1 uses fixed phases instead of a generic CI pipeline.
 
-The remaining question is the exact shape of repo config for:
+The remaining config shape is open for:
 
 - check commands
 - intent reviewer
@@ -121,7 +74,7 @@ Reviewer roles are configurable and are not fixed by the v1 architecture.
 
 We still need to decide the default reviewer set created by `by init`.
 
-Possible roles include:
+Candidate roles:
 
 - intent
 - bugs
@@ -136,7 +89,7 @@ V1 requires GitHub PR publishing.
 We still need exact rules for `ready`:
 
 - required checks only or all checks
-- requested changes review handling
+- requested-changes review handling
 - draft PR handling
 - timeout default
 - closed PR without merge behavior
@@ -145,11 +98,11 @@ Current direction: a PR is ready only when GitHub says it is mergeable, required
 
 ## Agent profiles and Sandcastle mapping
 
-We chose `agentRuntime` and `agentModel` instead of provider/model.
+We chose `agentRuntime` and `agentModel` instead of `provider` and `model`.
 
 We still need to map profile fields to Sandcastle provider options.
 
-Open details include:
+Open details:
 
 - Pi thinking settings
 - sandbox defaults
@@ -170,8 +123,6 @@ cachedInputTokens
 outputTokens
 totalTokens
 ```
-
-Dollar costs are deferred.
 
 ## Evals
 

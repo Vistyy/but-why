@@ -25,6 +25,7 @@ They are not exposed as a generic transaction API.
 ValidationRuns owns validation start coordination.
 For local SQLite-backed Tasks, it atomically rechecks submit readiness, binds the Task branch when needed, creates the Run, and moves the Task to validating.
 It also owns validation tooling failure recovery that records the Run tooling error and restores the Task to its prior submit-eligible state.
+A validation tooling failure is not a Finding.
 Submit keeps early read-only readiness checks for UX, but those checks are not authoritative.
 
 SQLite query results use typed query helpers instead of scattered per-row `is*Row` guards.

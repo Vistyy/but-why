@@ -19,4 +19,5 @@ The Sandcastle spike proved the required validation workspace behavior for issue
 Production validation code may now depend on Sandcastle.
 Sandcastle owns validation worktree creation, sandbox lifecycle, command execution, agent execution, logs, structured output retries, and token usage.
 But Why? owns Run-scoped temp validation refs and Run-scoped tooling error diagnostics because Sandcastle takes a branch or ref as input and does not own But Why? Run state.
+Validation should pass Run-owned temp refs to Sandcastle instead of running against the checked-out task branch.
 But Why? should keep its execution seams domain-specific and should not grow a custom replacement by accident.

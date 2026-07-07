@@ -1,77 +1,38 @@
-# Agent instructions for But Why?
+## Always-on facts
 
-Read this file before changing the repo.
+- But Why? validates completed code changes against approved human intent.
+- But Why? is task-based.
+- `by` is an agent-first, non-interactive AXI CLI.
 
-## Required reading
+## Pointers
 
-Before implementation work, read:
+- Domain language: `CONTEXT.md`.
+- Current v1 architecture: `docs/architecture.md`.
+- Current implementation order: `docs/issue-breakdown.md`.
+- Detailed implementation work: `docs/issues/` and `docs/prds/`; PRDs are context, not accepted architecture.
+- Development tooling: `docs/tooling.md`.
+- Accepted architecture decisions: `docs/adr/`.
+- Open design questions: `docs/open-questions.md`.
+- Configuration: `docs/config.md`.
+- Setup and onboarding: `docs/setup.md`.
 
-- `CONTEXT.md`
+## Code map
 
-If the task touches configuration, also read `docs/config.md`.
+- `src/main.ts`: executable entrypoint.
+- `src/cli.ts`: top-level CLI routing.
+- `src/cli/`: command modules and output boundary.
+- `src/task/`: task use cases.
+- `src/run/`: run use cases.
+- `src/submit/`: submit flow.
+- `src/repoSubmit/`: repo-backed submit flow.
+- `src/validation/`: validation gate.
+- `src/sqlite/`: SQLite internals.
+- `src/output/`: structured output helpers.
+- `src/init/`: repo initialization.
+- `spikes/`: prototypes and spikes.
 
-If the task touches setup or onboarding, also read `docs/setup.md`.
+## Commands
 
-If the task touches an architectural decision, read `docs/adr/` first.
+Run `just` to list available recipes.
 
-## Current project state
-
-This repo is in early product implementation.
-
-The Sandcastle spike is done and Sandcastle is accepted as the v1 execution engine.
-
-The current implementation sequence is tracked in `docs/issue-breakdown.md`.
-
-## Product rules
-
-But Why? is task-based, not pipeline-based.
-
-Design around `Task`, `Run`, `Finding`, and `PR`.
-
-Do not design around generic CI jobs, pushes, or board statuses.
-
-V1 uses synchronous `by submit <task-id>` validation.
-
-V1 always publishes through GitHub PRs.
-
-V1 has no auto-fix or repair phase.
-
-Any validation finding sends the task to `needs_input`.
-
-## Execution rules
-
-Sandcastle is the accepted v1 execution engine.
-
-Do not reimplement Sandcastle execution plumbing unless the spike proves it cannot support the required behavior.
-
-Use thin domain seams around Sandcastle.
-
-Good seams speak But Why? language, such as `runCheckRound`, `runReviewerRound`, and `createValidationWorkspace`.
-
-Avoid generic wrappers like `runCommand`, `runAgent`, or `collectArtifacts` unless there is a proven need.
-
-## CLI rules
-
-The CLI is agent-first.
-
-Commands must be non-interactive.
-
-Structured output goes to stdout.
-
-Progress and diagnostics go to stderr.
-
-Use TOON-style output for CLI responses.
-
-`by` is an AXI CLI.
-
-Errors should be structured and actionable.
-
-## Documentation rules
-
-Keep planning docs current as decisions change.
-
-When a domain term is resolved, update `CONTEXT.md` immediately.
-
-When a hard-to-reverse architecture decision is made, add an ADR under `docs/adr/`.
-
-When writing or substantially editing Markdown, put each full sentence on its own line.
+Use Just recipes instead of package-manager commands.

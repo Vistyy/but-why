@@ -1,5 +1,8 @@
 set positional-arguments
 
+default:
+    @just --list
+
 quality:
     just format-check
     just lint

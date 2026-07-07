@@ -1,10 +1,6 @@
 # Setup
 
-This document describes the intended v1 setup flow for But Why?.
-
-But Why? is not implemented yet.
-
-These commands describe the planned interface.
+This document describes the v1 setup flow for But Why?.
 
 ## Setup
 
@@ -23,7 +19,7 @@ BY-1
 BY-2
 ```
 
-Agents should follow this document and `AGENTS.md` before running setup.
+Use `docs/config.md` for configuration details.
 
 ## What init creates
 
@@ -62,23 +58,13 @@ If any required GitHub fact cannot be detected, `by submit <task-id>` fails duri
 
 ## Global agent profiles
 
-Reviewer agents use agent profiles.
-
-Global profiles live at:
-
-```text
-~/.config/but-why/config.json
-```
-
-Repo profiles live in:
-
-```text
-.but-why/config.json
-```
+Reviewer agents use agent profiles from global or repo config.
 
 Repo init may succeed without an agent profile.
 
 `by submit <task-id>` fails if a required reviewer profile cannot be resolved.
+
+See `docs/config.md` for profile paths and precedence.
 
 ## First expected workflow
 

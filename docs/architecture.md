@@ -12,6 +12,7 @@ The core objects are:
 
 - `Task`
 - `Run`
+- `Validation Run`
 - `Finding`
 - `PR`
 
@@ -96,6 +97,14 @@ Intent review runs before quality review.
 V1 has no auto-fix or repair phase.
 
 V1 validation phases must not modify the submitted branch.
+
+Validation runs use Run-owned temp refs and isolated worktrees.
+
+Validation must not run against the checked-out task branch.
+
+Tooling failures are recorded on the Run and are not Findings.
+
+After a tooling failure, the Task returns to its previous submit-eligible state.
 
 ## Findings
 
@@ -287,22 +296,17 @@ Run and Task totals sum each bucket separately.
 
 ## CLI surface
 
-V1 commands are:
+The public CLI is `by`.
 
-```bash
-by
-by init
-by task create --title "..." --description-file task.md
-by task list
-by task show <task-id>
-by task context <task-id>
-by task findings <task-id>
-by task comment <task-id> --file comment.md
-by task start <task-id>
-by submit <task-id>
-by run show <run-id>
-by daemon
-by reconcile
+V1 command areas are:
+
+```text
+init
+task
+submit
+run
+daemon
+reconcile
 ```
 
 CLI output is structured data on stdout.

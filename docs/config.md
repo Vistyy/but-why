@@ -1,10 +1,6 @@
 # Configuration
 
-This document describes the intended v1 configuration model.
-
-But Why? is not implemented yet.
-
-These examples describe the planned shape.
+This document describes the v1 configuration model.
 
 ## Config files
 
@@ -239,64 +235,6 @@ totalTokens
 
 Run and task totals sum each token bucket separately.
 
-## Foundation tooling
+## Related docs
 
-The repository foundation uses ESM TypeScript on Node.js 24.x.
-
-Nix provides the blessed reproducible development environment.
-
-Nix is optional for development.
-
-A non-Nix environment may run the project if it provides Node.js 24.x, pnpm, Just, and installed project dependencies.
-
-Corepack is not part of the repo toolchain.
-
-Agents should use Just recipes instead of invoking pnpm directly.
-
-The project uses Vitest for tests.
-
-Biome handles formatting and linting.
-
-The TypeScript compiler runs strict typechecking with `tsc --noEmit`.
-
-Fallow handles codebase health, dead code, duplication, dependency, and architecture boundary checks for active project source.
-
-ast-grep enforces blocking structural bans over active production TypeScript source.
-
-SQLite access uses `node:sqlite`.
-
-CLI output is converted to TOON-style text only at the stdout boundary.
-
-Internal command logic uses typed JSON-like objects.
-
-## Agent-facing Just recipes
-
-The stable recipes are:
-
-```sh
-just quality
-just lint
-just typecheck
-just test
-just format
-just format-check
-just ast-grep-check
-just fallow-check
-just by [args]
-```
-
-`just quality` runs format checks, linting, ast-grep structural bans, typechecking, tests, and Fallow codebase health checks.
-
-`just quality` must not modify files.
-
-`just format` may modify files.
-
-`just format-check` must not modify files.
-
-`just ast-grep-check` runs ast-grep rule fixtures and scans active production TypeScript source.
-
-`just ast-grep-check` must not modify files.
-
-`just fallow-check` must not modify files.
-
-`just by [args]` runs the repo-local `by` CLI.
+Development tooling is documented in `docs/tooling.md`.

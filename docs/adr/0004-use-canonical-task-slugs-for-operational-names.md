@@ -16,5 +16,6 @@ This deliberately changes local internal refs and paths instead of preserving `B
 ## Consequences
 
 - Current user-facing local Task IDs stay unchanged.
+- Task Slugs are operational names, not Task identity.
 - Internal Git refs, worktree paths, artifact paths, and Git/filesystem-facing run names may change for local Tasks.
 - Callers should consume Task Slugs for operational names instead of inspecting Task ID shape.
