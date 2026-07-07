@@ -21,6 +21,7 @@ That keeps `latestRun` out of TaskStore while preserving the existing CLI output
 A private SQLite layer owns shared connection handling and low-level SQL.
 Shared transactions are allowed inside that SQLite implementation only.
 They are not exposed as a generic transaction API.
+Concrete SQLite stores are wired through a local repo storage seam, not from command-facing use cases.
 
 ValidationRuns owns validation start coordination.
 For local SQLite-backed Tasks, it atomically rechecks submit readiness, binds the Task branch when needed, creates the Run, and moves the Task to validating.

@@ -6,6 +6,11 @@ It is task-based, not pipeline-based.
 
 It validates submitted branches against Task Context and publishes only validated changes through GitHub PRs.
 
+But Why is a domain-centered modular monolith with selective ports and adapters.
+Domain-named modules and use cases sit at the center.
+CLI output, SQLite, GitHub, and Sandcastle sit at the edges as adapters.
+Ports are added only where behavior truly varies, such as Task Authority, Submission Environment, Validation Runs, Task Store, and Run Store.
+
 ## Core domain
 
 The core objects are:
