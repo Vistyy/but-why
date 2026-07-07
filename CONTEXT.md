@@ -71,6 +71,11 @@ A Submission is not the Validation Run itself.
 A failed preflight rejection is not a Submission because the candidate never entered validation.
 _Avoid_: Push, handoff, delivery
 
+**Submit Rejection Error**:
+A failure that rejects a submitted candidate before But Why? creates a Submission or Validation Run.
+A submit rejection error is not a finding and is not recorded on a Validation Run.
+_Avoid_: Validation tooling failure, finding, Run error
+
 **Submission Environment**:
 The source of the submitted code candidate and the repo or runtime facts needed to validate it.
 A Submission Environment can be local, CI-backed, or remote-backed without changing what a Submission means.
@@ -101,6 +106,10 @@ A failure in But Why? or its validation tooling that prevents validation from ju
 A validation tooling failure is recorded on the Validation Run and is not a finding.
 After a validation tooling failure, the task returns to its previous submit-eligible state.
 _Avoid_: Finding, submission problem, needs input
+
+**Reviewer Output Contract Failure**:
+A Validation Tooling Failure where a reviewer never produces structured output that But Why? can safely interpret as a validation result.
+_Avoid_: Parse error, exhausted retry, malformed finding
 
 **Finding**:
 A validation result that records a blocking problem or question about a submission.
