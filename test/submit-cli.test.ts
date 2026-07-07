@@ -3,7 +3,7 @@ import { chmodSync, existsSync, readFileSync, rmSync, writeFileSync } from "node
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
-import { openSqliteRunStore } from "../src/sqlite/sqliteRunStore.js";
+import { openSqliteValidationRunStore } from "../src/sqlite/sqliteValidationRunStore.js";
 import { openSqliteTaskStore } from "../src/sqlite/sqliteTaskStore.js";
 import { loadTaskUseCases } from "../src/localTask/taskUseCases.js";
 import type { TaskState } from "../src/task/lifecycle.js";
@@ -20,14 +20,14 @@ import { taskStateTransitionPath } from "./support/taskLifecycle.js";
 const firstNow = "2026-06-30T12:00:00.000Z";
 const secondNow = "2026-06-30T12:05:00.000Z";
 const thirdNow = "2026-06-30T12:10:00.000Z";
-const firstTaskRunId = "by-1-09224d806043.1";
-const secondTaskRunId = "by-1-09224d806043.2";
-const firstTaskValidationRef = `refs/but-why/runs/${firstTaskRunId}/validation`;
+const firstTaskValidationRunId = "by-1-09224d806043.1";
+const secondTaskValidationRunId = "by-1-09224d806043.2";
+const firstTaskValidationRef = `refs/but-why/validation-runs/${firstTaskValidationRunId}/validation`;
 
 afterEach(cleanupTempRoots);
 
 describe("by submit CLI", () => {
-  it("creates a commit-bound active Run and moves an implementing Task to validating", () => {
+  it("creates a commit-bound active Validation Run and moves an implementing Task to validating", () => {
     const root = preparedRepoOnBranch("feature/by-1");
     const commitSha = currentCommitSha(root);
 
@@ -39,7 +39,7 @@ describe("by submit CLI", () => {
     expect(result.stderr).toBe("");
     expect(result.stdout).toBe(`submission:
   taskId: BY-1
-  runId: ${firstTaskRunId}
+  validationRunId: ${firstTaskValidationRunId}
   branch: feature/by-1
   commitSha: ${commitSha}
   taskState: validating
@@ -62,10 +62,11 @@ describe("by submit CLI", () => {
     expect(gitStatus(root)).toBe(statusBeforeSubmit);
     expect(gitRefExists(root, firstTaskValidationRef)).toBe(false);
 
-    const validationWorkspace = runStore(root).getValidationWorkspaceSetup(firstTaskRunId);
+    const validationWorkspace =
+      validationRunStore(root).getValidationWorkspaceSetup(firstTaskValidationRunId);
 
     expect(validationWorkspace).toMatchObject({
-      runId: firstTaskRunId,
+      validationRunId: firstTaskValidationRunId,
       tempRefName: firstTaskValidationRef,
       submittedSha: commitSha,
       worktreeHead: commitSha,
@@ -76,13 +77,13 @@ describe("by submit CLI", () => {
     expect(readFileSync(join(root, ".gitignore"), "utf8")).toContain(".sandcastle/worktrees/");
 
     expect(runByInProcess(root, ["task", "show", "BY-1"]).stdout).toContain(
-      `state: validating\n  createdAt: "${firstNow}"\n  updatedAt: "${thirdNow}"\n  branch: feature/by-1\n  latestRun: ${firstTaskRunId}`,
+      `state: validating\n  createdAt: "${firstNow}"\n  updatedAt: "${thirdNow}"\n  branch: feature/by-1\n  latestValidationRun: ${firstTaskValidationRunId}`,
     );
 
-    expect(runStore(root).getRunById(firstTaskRunId)).toEqual({
-      id: firstTaskRunId,
+    expect(validationRunStore(root).getValidationRunById(firstTaskValidationRunId)).toEqual({
+      id: firstTaskValidationRunId,
       taskId: "BY-1",
-      taskRunNumber: 1,
+      taskValidationNumber: 1,
       status: "active",
       branch: "feature/by-1",
       commitSha,
@@ -94,9 +95,12 @@ describe("by submit CLI", () => {
       createdAt: thirdNow,
       updatedAt: thirdNow,
     });
+    expect(
+      validationRunStore(root).listValidationRunPhaseStatuses(firstTaskValidationRunId),
+    ).toEqual([]);
   });
 
-  it("records workspace setup tooling errors on the Run without sending the Task to needs_input", () => {
+  it("records workspace setup tooling errors on the Validation Run without sending the Task to needs_input", () => {
     const root = preparedRepoOnBranch("feature/missing-copy-file");
     const commitSha = currentCommitSha(root);
 
@@ -112,10 +116,15 @@ describe("by submit CLI", () => {
     expect(result.status).toBe(1);
     expect(result.stdout).toContain("code: validation_workspace_setup_failed");
     expect(result.stdout).toContain("operationName: copy_allowlisted_file");
-    expect(runStore(root).getRunById(firstTaskRunId)).toMatchObject({ status: "error" });
-    expect(runStore(root).listRunToolingErrors(firstTaskRunId)).toEqual([
+    expect(validationRunStore(root).getValidationRunById(firstTaskValidationRunId)).toMatchObject({
+      status: "error",
+    });
+    expect(
+      validationRunStore(root).listValidationRunToolingErrors(firstTaskValidationRunId),
+    ).toEqual([
       expect.objectContaining({
-        runId: firstTaskRunId,
+        validationRunId: firstTaskValidationRunId,
+        errorKind: "validation_workspace_setup_failed",
         operationName: "copy_allowlisted_file",
         tempRefName: firstTaskValidationRef,
         submittedSha: currentCommitSha(root),
@@ -128,17 +137,17 @@ describe("by submit CLI", () => {
     expect(currentCommitSha(root)).not.toBe(commitSha);
   });
 
-  it("allows needs_input Tasks and increments task-scoped Run IDs after a terminal Run", () => {
+  it("allows needs_input Tasks and increments task-scoped Validation Run IDs after a terminal Validation Run", () => {
     const root = preparedRepoOnBranch("feature/resubmit");
 
     expect(withFakeGh(() => runSubmit(root, ["BY-1"], secondNow)).status).toBe(0);
-    recordRunError(root, firstTaskRunId, secondNow);
+    recordValidationRunError(root, firstTaskValidationRunId, secondNow);
     transitionCurrentTaskState(root, "BY-1", "needs_input", secondNow);
 
     const result = withFakeGh(() => runSubmit(root, ["BY-1"], thirdNow));
 
     expect(result.status).toBe(0);
-    expect(result.stdout).toContain(`runId: ${secondTaskRunId}`);
+    expect(result.stdout).toContain(`validationRunId: ${secondTaskValidationRunId}`);
   });
 
   it.each([
@@ -156,7 +165,7 @@ describe("by submit CLI", () => {
     expect(result.status).toBe(1);
     expect(result.stderr).toBe("");
     expect(result.stdout).toContain("code: TASK_STATE_NOT_SUBMITTABLE");
-    expect(taskHasNoRuns(root, "BY-1")).toBe(true);
+    expect(taskHasNoValidationRuns(root, "BY-1")).toBe(true);
   });
 
   it("rejects unknown Tasks before Git checks", () => {
@@ -181,7 +190,7 @@ help[1]: Run \`by task list --all\` to see known Tasks.`);
     expect(result.status).toBe(1);
     expect(result.stdout).toContain("code: remote_tasks_not_supported");
     expect(result.stdout).toContain('taskId: "linear/ENG-123:acceptance"');
-    expect(taskHasNoRuns(root, "BY-1")).toBe(true);
+    expect(taskHasNoValidationRuns(root, "BY-1")).toBe(true);
   });
 
   it("rejects remote-style Task IDs before requiring local state", () => {
@@ -235,7 +244,7 @@ help[1]: Run \`by task list --all\` to see known Tasks.`);
       expect(result.status, testCase.name).toBe(1);
       expect(result.stdout, testCase.name).toContain(`code: ${testCase.code}`);
       expect(taskState(root, "BY-1"), testCase.name).toBe("implementing");
-      expect(taskHasNoRuns(root, "BY-1"), testCase.name).toBe(true);
+      expect(taskHasNoValidationRuns(root, "BY-1"), testCase.name).toBe(true);
     }
   }, 10_000);
 
@@ -246,10 +255,10 @@ help[1]: Run \`by task list --all\` to see known Tasks.`);
 
     expect(result.status).toBe(1);
     expect(result.stdout).toContain("code: tooling_error");
-    expect(taskHasNoRuns(root, "BY-1")).toBe(true);
+    expect(taskHasNoValidationRuns(root, "BY-1")).toBe(true);
   });
 
-  it("enforces task branch ownership and active Run uniqueness inside submit preflight", () => {
+  it("enforces task branch ownership and active Validation Run uniqueness inside submit preflight", () => {
     const root = preparedRepoOnBranch("feature/owned");
     createTask(root, "Second task");
     spawnGit(root, "add", ".");
@@ -263,10 +272,10 @@ help[1]: Run \`by task list --all\` to see known Tasks.`);
     );
     transitionCurrentTaskState(root, "BY-1", "needs_input", thirdNow);
     expect(withFakeGh(() => runSubmit(root, ["BY-1"], thirdNow)).stdout).toContain(
-      "code: TASK_HAS_ACTIVE_RUN",
+      "code: TASK_HAS_ACTIVE_VALIDATION_RUN",
     );
 
-    recordRunError(root, firstTaskRunId, thirdNow);
+    recordValidationRunError(root, firstTaskValidationRunId, thirdNow);
     spawnGit(root, "checkout", "-b", "feature/other");
 
     expect(withFakeGh(() => runSubmit(root, ["BY-1"], thirdNow)).stdout).toContain(
@@ -283,7 +292,7 @@ help[1]: Run \`by task list --all\` to see known Tasks.`);
     expect(JSON.parse(success.stdout)).toMatchObject({
       submission: {
         taskId: "BY-1",
-        runId: firstTaskRunId,
+        validationRunId: firstTaskValidationRunId,
         branch: "feature/json",
         taskState: "validating",
         prTarget: {
@@ -491,11 +500,11 @@ exit 2
     work,
   );
 
-const recordRunError = (root: string, runId: string, now: string): void => {
-  const result = runStore(root).recordRunError({ runId, now });
+const recordValidationRunError = (root: string, validationRunId: string, now: string): void => {
+  const result = validationRunStore(root).recordValidationRunError({ validationRunId, now });
 
   if (!result.ok) {
-    throw new Error(`Could not record Run error for ${runId}: ${result.code}`);
+    throw new Error(`Could not record Validation Run error for ${validationRunId}: ${result.code}`);
   }
 };
 
@@ -509,8 +518,8 @@ const taskState = (root: string, taskId: string): string => {
   return task.state;
 };
 
-const taskHasNoRuns = (root: string, taskId: string): boolean =>
-  runStore(root).getLatestRunIdForTask(publicTaskId(taskId)) === null;
+const taskHasNoValidationRuns = (root: string, taskId: string): boolean =>
+  validationRunStore(root).getLatestValidationRunIdForTask(publicTaskId(taskId)) === null;
 
 const taskStore = (root: string) =>
   openSqliteTaskStore({
@@ -519,8 +528,8 @@ const taskStore = (root: string) =>
     migrationTimestamp: () => firstNow,
   });
 
-const runStore = (root: string) =>
-  openSqliteRunStore({
+const validationRunStore = (root: string) =>
+  openSqliteValidationRunStore({
     statePath: join(root, ".but-why/state.sqlite"),
     migrationTimestamp: () => firstNow,
   });

@@ -58,12 +58,13 @@ export const routeSubmit = async (
       return renderSubmitResult(result);
     }
 
-    const validationWorkspace = await submitPreflight.submit.createValidationWorkspaceForRun({
-      runId: result.runId,
-      commitSha: result.commitSha,
-      taskRecoveryState: result.previousTaskState,
-      now,
-    });
+    const validationWorkspace =
+      await submitPreflight.submit.createValidationWorkspaceForValidationRun({
+        validationRunId: result.validationRunId,
+        commitSha: result.commitSha,
+        taskRecoveryState: result.previousTaskState,
+        now,
+      });
 
     if (!validationWorkspace.ok) {
       return validationWorkspaceSetupError(validationWorkspace.toolingError);
@@ -128,7 +129,7 @@ const renderSubmitResult = (result: SubmitTaskResult): CliResult => {
     return success({
       submission: {
         taskId: result.taskId,
-        runId: result.runId,
+        validationRunId: result.validationRunId,
         branch: result.branch,
         commitSha: result.commitSha,
         taskState: result.taskState,
@@ -228,12 +229,12 @@ const submitPreflightError = (
         },
         help: ["Checkout the bound task branch, then rerun submit."],
       };
-    case "TASK_HAS_ACTIVE_RUN":
+    case "TASK_HAS_ACTIVE_VALIDATION_RUN":
       return {
         code: result.code,
-        message: `Task ${result.taskId ?? ""} already has an active Run.`,
+        message: `Task ${result.taskId ?? ""} already has an active Validation Run.`,
         details: { taskId: result.taskId ?? "" },
-        help: ["Wait for the active Run to finish before submitting again."],
+        help: ["Wait for the active Validation Run to finish before submitting again."],
       };
   }
 };

@@ -1,4 +1,4 @@
-import type { GitHubPrTarget } from "../run/run.js";
+import type { GitHubPrTarget } from "../validationRun/validationRun.js";
 import type {
   ValidationWorkspaceSetup,
   ValidationWorkspaceToolingError,
@@ -6,9 +6,9 @@ import type {
 
 export type SubmissionEnvironment = {
   readonly readSubmittedCodeCandidate: () => SubmittedCodeCandidateResult;
-  readonly createValidationWorkspaceForRun: (
-    input: CreateValidationWorkspaceForRunInput,
-  ) => Promise<CreateValidationWorkspaceForRunResult>;
+  readonly createValidationWorkspaceForValidationRun: (
+    input: CreateValidationWorkspaceForValidationRunInput,
+  ) => Promise<CreateValidationWorkspaceForValidationRunResult>;
 };
 
 export type SubmittedCodeCandidate = {
@@ -39,13 +39,13 @@ export type SubmissionEnvironmentRejectionCode =
   | "PROTECTED_BRANCH"
   | "PR_TARGET_NOT_FOUND";
 
-export type CreateValidationWorkspaceForRunInput = {
-  readonly runId: string;
+export type CreateValidationWorkspaceForValidationRunInput = {
+  readonly validationRunId: string;
   readonly commitSha: string;
   readonly now: string;
 };
 
-export type CreateValidationWorkspaceForRunResult =
+export type CreateValidationWorkspaceForValidationRunResult =
   | {
       readonly ok: true;
       readonly validationWorkspace: ValidationWorkspaceSetup;

@@ -1,6 +1,6 @@
 import { spawnSync } from "node:child_process";
 
-import type { GitHubPrTarget } from "../run/run.js";
+import type { GitHubPrTarget } from "../validationRun/validationRun.js";
 import { type GitCommandRunner, runGitCommand } from "./gitFacts.js";
 
 export type GitHubTargetResult =

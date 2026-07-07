@@ -4,13 +4,13 @@ import { join } from "node:path";
 
 import type { Sandbox } from "@ai-hero/sandcastle";
 
-import type { CleanupState } from "../run/cleanup.js";
+import type { CleanupState } from "../validationRun/cleanup.js";
 import type { ValidationWorkspaceCleanupResult } from "./validationWorkspace.js";
 
 const zeroSha = "0000000000000000000000000000000000000000";
 
-export const validationTempRefName = (runId: string): string =>
-  `refs/but-why/runs/${runId}/validation`;
+export const validationTempRefName = (validationRunId: string): string =>
+  `refs/but-why/validation-runs/${validationRunId}/validation`;
 
 export const expectedSandcastleWorktreePath = (repoRoot: string, tempRefName: string): string =>
   join(repoRoot, ".sandcastle", "worktrees", tempRefName.replaceAll("/", "-"));

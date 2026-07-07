@@ -47,7 +47,7 @@ commands[5]{command,description}:
   by init --task-prefix <prefix>,Create repo-local But Why? state
   by task create --title <title> --description-file <file>,Create a repo-local Task
   "by task list [--all] [--state <state>]",List repo-local Tasks
-  by submit <task-id>,Create a Run from submit preflight
+  by submit <task-id>,Create a Validation Run from submit preflight
 flags[3]{flag,description}:
   "--output <format>","Set stdout format: toon or json. Default: toon."
   "-o <format>","Alias for --output <format>. Valid values: toon, json."
@@ -76,7 +76,10 @@ flags[3]{flag,description}:
           description: "Create a repo-local Task",
         },
         { command: "by task list [--all] [--state <state>]", description: "List repo-local Tasks" },
-        { command: "by submit <task-id>", description: "Create a Run from submit preflight" },
+        {
+          command: "by submit <task-id>",
+          description: "Create a Validation Run from submit preflight",
+        },
       ],
       flags: [
         {
@@ -257,6 +260,7 @@ updated[1]: .gitignore`);
         { name: "003_task_comments" },
         { name: "004_submit_preflight" },
         { name: "005_validation_workspace_setup" },
+        { name: "006_validation_runs" },
       ]);
       expect(
         database
@@ -265,13 +269,35 @@ updated[1]: .gitignore`);
           )
           .all(),
       ).toEqual([
-        { name: "run_tooling_errors" },
-        { name: "runs" },
         { name: "schema_migrations" },
         { name: "task_comments" },
         { name: "tasks" },
+        { name: "validation_run_artifacts" },
+        { name: "validation_run_findings" },
+        { name: "validation_run_logs" },
+        { name: "validation_run_phase_statuses" },
+        { name: "validation_run_rounds" },
+        { name: "validation_run_token_usage" },
+        { name: "validation_run_tooling_errors" },
+        { name: "validation_runs" },
         { name: "validation_workspace_setups" },
       ]);
+      expect(
+        database
+          .prepare(
+            "SELECT sql FROM sqlite_schema WHERE type = 'table' AND name = 'validation_run_phase_statuses'",
+          )
+          .get(),
+      ).toEqual({
+        sql: expect.stringContaining("'workflow_failed'"),
+      });
+      expect(
+        database
+          .prepare(
+            "SELECT name FROM pragma_table_info('validation_run_tooling_errors') WHERE name = 'error_kind'",
+          )
+          .get(),
+      ).toEqual({ name: "error_kind" });
     } finally {
       database.close();
     }

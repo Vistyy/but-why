@@ -106,8 +106,8 @@
       {
         "name": "domain",
         "patterns": [
-          "src/run/cleanup.ts",
-          "src/run/run.ts",
+          "src/validationRun/cleanup.ts",
+          "src/validationRun/validationRun.ts",
           "src/task/lifecycle.ts",
           "src/task/startPolicy.ts",
           "src/task/submitPolicy.ts",
@@ -120,8 +120,8 @@
         "patterns": ["src/task/taskStore.ts"]
       },
       {
-        "name": "run-store",
-        "patterns": ["src/run/runStore.ts"]
+        "name": "validation-run-store",
+        "patterns": ["src/validationRun/validationRunStore.ts"]
       },
       {
         "name": "validation-runs",
@@ -173,13 +173,13 @@
         "patterns": [
           "src/sqlite/connection.ts",
           "src/sqlite/query.ts",
-          "src/sqlite/sqliteRunInternals.ts"
+          "src/sqlite/sqliteValidationRunInternals.ts"
         ]
       },
       {
         "name": "sqlite-concrete-stores",
         "patterns": [
-          "src/sqlite/sqliteRunStore.ts",
+          "src/sqlite/sqliteValidationRunStore.ts",
           "src/sqlite/sqliteTaskStore.ts",
           "src/sqlite/sqliteValidationRuns.ts"
         ]
@@ -236,7 +236,7 @@
         "allow": ["domain"]
       },
       {
-        "from": "run-store",
+        "from": "validation-run-store",
         "allow": ["domain"]
       },
       {
@@ -261,7 +261,7 @@
         "allow": [
           "domain",
           "repo-init",
-          "run-store",
+          "validation-run-store",
           "submission-environment-port",
           "task-adapter",
           "task-authority-port",
@@ -302,11 +302,11 @@
       },
       {
         "from": "sqlite-core",
-        "allow": ["run-store", "storage-init"]
+        "allow": ["storage-init", "validation-run-store"]
       },
       {
         "from": "sqlite-concrete-stores",
-        "allow": ["domain", "run-store", "sqlite-core", "task-store", "validation-runs"]
+        "allow": ["domain", "sqlite-core", "task-store", "validation-run-store", "validation-runs"]
       },
       {
         "from": "storage-init",
@@ -318,7 +318,13 @@
       },
       {
         "from": "repo-local-storage-wiring",
-        "allow": ["repo-init", "run-store", "sqlite-concrete-stores", "task-store", "validation-runs"],
+        "allow": [
+          "repo-init",
+          "sqlite-concrete-stores",
+          "task-store",
+          "validation-run-store",
+          "validation-runs"
+        ],
         "allowTypeOnly": ["validation-workspace"]
       }
     ],

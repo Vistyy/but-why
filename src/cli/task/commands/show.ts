@@ -42,7 +42,7 @@ export const runShowCommand = (
         createdAt: task.createdAt,
         updatedAt: task.updatedAt,
         branch: task.branch,
-        latestRun: task.latestRun,
+        latestValidationRun: task.latestValidationRun,
         tokenTotals: null,
         commentCount: task.commentCount,
       },

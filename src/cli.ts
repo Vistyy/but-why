@@ -155,7 +155,7 @@ const helpView = (bin: string): StructuredObject =>
       },
       {
         command: "by submit <task-id>",
-        description: "Create a Run from submit preflight",
+        description: "Create a Validation Run from submit preflight",
       },
     ],
     flags: withGlobalHelpFlags(),

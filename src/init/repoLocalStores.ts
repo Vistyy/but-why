@@ -1,5 +1,5 @@
-import type { RunStore } from "../run/runStore.js";
-import { openSqliteRunStore } from "../sqlite/sqliteRunStore.js";
+import type { ValidationRunStore } from "../validationRun/validationRunStore.js";
+import { openSqliteValidationRunStore } from "../sqlite/sqliteValidationRunStore.js";
 import { openSqliteTaskStore } from "../sqlite/sqliteTaskStore.js";
 import { openSqliteValidationRuns } from "../sqlite/sqliteValidationRuns.js";
 import type { TaskStore } from "../task/taskStore.js";
@@ -9,7 +9,7 @@ import type { RepoLocalContext } from "./repoContext.js";
 
 export type RepoLocalStores = {
   readonly taskStore: TaskStore;
-  readonly runStore: RunStore;
+  readonly validationRunStore: ValidationRunStore;
   readonly validationRuns: ValidationRuns;
   readonly recordValidationWorkspaceSetup: (now: string, setup: ValidationWorkspaceSetup) => void;
 };
@@ -23,27 +23,27 @@ export const openRepoLocalStores = (
     migrationTimestamp,
   };
 
-  const runStore = openSqliteRunStore(sqliteInput);
+  const validationRunStore = openSqliteValidationRunStore(sqliteInput);
 
   return {
     taskStore: openSqliteTaskStore({
       ...sqliteInput,
       taskPrefix: context.taskPrefix,
     }),
-    runStore,
+    validationRunStore,
     validationRuns: openSqliteValidationRuns(sqliteInput),
     recordValidationWorkspaceSetup: (now, setup) =>
-      recordValidationWorkspaceSetup(runStore, now, setup),
+      recordValidationWorkspaceSetup(validationRunStore, now, setup),
   };
 };
 
 const recordValidationWorkspaceSetup = (
-  runStore: RunStore,
+  validationRunStore: ValidationRunStore,
   now: string,
   setup: ValidationWorkspaceSetup,
 ): void => {
-  runStore.recordValidationWorkspaceSetup({
-    runId: setup.runId,
+  validationRunStore.recordValidationWorkspaceSetup({
+    validationRunId: setup.validationRunId,
     tempRefName: setup.tempRefName,
     submittedSha: setup.submittedSha,
     worktreePath: setup.worktreePath,

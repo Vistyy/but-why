@@ -408,7 +408,7 @@ tasks[1]{id,title,state,createdAt,updatedAt}:
   createdAt: "${firstNow}"
   updatedAt: "${secondNow}"
   branch: null
-  latestRun: null
+  latestValidationRun: null
   tokenTotals: null
   commentCount: 0`);
   });
@@ -475,7 +475,7 @@ tasks[1]{id,title,state,createdAt,updatedAt}:
   createdAt: "${firstNow}"
   updatedAt: "2026-06-30T12:15:00.000Z"
   branch: null
-  latestRun: null
+  latestValidationRun: null
   tokenTotals: null
   commentCount: 2`);
     expect(runByInProcess(root, ["task", "context", "BY-1"]).stdout).toBe(`task:

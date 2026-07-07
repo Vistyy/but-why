@@ -1,5 +1,5 @@
-import type { CleanupState } from "../run/cleanup.js";
-import type { GitHubPrTarget } from "../run/run.js";
+import type { CleanupState } from "../validationRun/cleanup.js";
+import type { GitHubPrTarget } from "../validationRun/validationRun.js";
 import type { TaskState } from "../task/lifecycle.js";
 import type { SubmitEligibleState } from "../task/submitPolicy.js";
 import type { PublicTaskId } from "../task/taskId.js";
@@ -22,7 +22,7 @@ export type StartValidationRunInput = {
 export type StartValidationRunResult =
   | {
       readonly ok: true;
-      readonly runId: string;
+      readonly validationRunId: string;
       readonly taskState: "validating";
       readonly previousTaskState: SubmitEligibleState;
     }
@@ -33,7 +33,7 @@ export type StartValidationRunResult =
         | "TASK_STATE_NOT_SUBMITTABLE"
         | "BRANCH_ALREADY_BOUND"
         | "TASK_BRANCH_MISMATCH"
-        | "TASK_HAS_ACTIVE_RUN"
+        | "TASK_HAS_ACTIVE_VALIDATION_RUN"
         | "TASK_AUTHORITY_UNSUPPORTED";
       readonly state?: TaskState;
       readonly boundBranch?: string;
@@ -41,7 +41,8 @@ export type StartValidationRunResult =
     };
 
 export type RecordValidationToolingFailureInput = {
-  readonly runId: string;
+  readonly validationRunId: string;
+  readonly errorKind: "validation_workspace_setup_failed";
   readonly operationName: string;
   readonly tempRefName: string;
   readonly submittedSha: string;
@@ -59,7 +60,7 @@ export type RecordValidationToolingFailureResult =
     }
   | {
       readonly ok: false;
-      readonly code: "RUN_NOT_FOUND" | "TASK_AUTHORITY_UNSUPPORTED";
+      readonly code: "VALIDATION_RUN_NOT_FOUND" | "TASK_AUTHORITY_UNSUPPORTED";
     };
 
 export const unsupportedValidationRuns = (): ValidationRuns => ({

@@ -2,7 +2,7 @@
 
 ## Status
 
-Not done.
+Done.
 
 ## Parent
 
@@ -29,23 +29,23 @@ This slice should make the validation-specific data model explicit before checks
 
 ## Acceptance criteria
 
-- [ ] Validation Run records represent validation of one submitted commit.
-- [ ] Validation-specific fields are associated with Validation Run behavior.
-- [ ] Submitted commit SHA is associated with the Validation Run.
-- [ ] Phases, rounds, findings, logs, artifacts, and token usage are associated with the Validation Run.
-- [ ] Existing local validation submit behavior remains unchanged.
-- [ ] Existing validation workspace records remain associated with the Validation Run.
-- [ ] Validation Run can record typed tooling errors separately from Findings.
-- [ ] Validation Run phase status can represent Effect workflow failures without exposing Effect types publicly.
-- [ ] Product-facing CLI and output names use Validation Run language, not generic Run language.
-- [ ] `by run` is removed or renamed to `by validation-run`.
-- [ ] Public IDs and artifact refs use `validationRunId` / `<validation-run-id>`, not `runId` / `<run-id>`.
-- [ ] Findings are scoped to Validation Runs.
-- [ ] Architecture and ADR docs do not keep generic Run as an accepted domain concept.
-- [ ] Tests prove a submitted commit is tied to a Validation Run.
-- [ ] Tests do not preserve generic Run as a public compatibility concept.
-- [ ] No refinement or implementation loop behavior is added.
-- [ ] No shared higher-level loop concept is added.
+- [x] Validation Run records represent validation of one submitted commit.
+- [x] Validation-specific fields are associated with Validation Run behavior.
+- [x] Submitted commit SHA is associated with the Validation Run.
+- [x] Phases, rounds, findings, logs, artifacts, and token usage are associated with the Validation Run.
+- [x] Existing local validation submit behavior remains unchanged.
+- [x] Existing validation workspace records remain associated with the Validation Run.
+- [x] Validation Run can record typed tooling errors separately from Findings.
+- [x] Validation Run phase status can represent Effect workflow failures without exposing Effect types publicly.
+- [x] Product-facing CLI and output names use Validation Run language, not generic Run language.
+- [x] `by run` is removed or renamed to `by validation-run`.
+- [x] Public IDs and artifact refs use `validationRunId` / `<validation-run-id>`, not `runId` / `<run-id>`.
+- [x] Findings are scoped to Validation Runs.
+- [x] Architecture and ADR docs do not keep generic Run as an accepted domain concept.
+- [x] Tests prove a submitted commit is tied to a Validation Run.
+- [x] Tests do not preserve generic Run as a public compatibility concept.
+- [x] No refinement or implementation loop behavior is added.
+- [x] No shared higher-level loop concept is added.
 
 ## Dependencies
 

@@ -19,7 +19,7 @@ import type {
 
 export type CreateValidationWorkspaceInput = {
   readonly repoRoot: string;
-  readonly runId: string;
+  readonly validationRunId: string;
   readonly submittedSha: string;
   readonly copyFiles: readonly string[];
 };
@@ -37,7 +37,7 @@ export type CreateValidationWorkspaceResult =
 export const createValidationWorkspace = async (
   input: CreateValidationWorkspaceInput,
 ): Promise<CreateValidationWorkspaceResult> => {
-  const tempRefName = validationTempRefName(input.runId);
+  const tempRefName = validationTempRefName(input.validationRunId);
   const expectedWorktreePath = expectedSandcastleWorktreePath(input.repoRoot, tempRefName);
   let sandbox: Sandbox | undefined;
   let tempRefReady = false;
@@ -95,7 +95,7 @@ export const createValidationWorkspace = async (
   ) {
     return fail(
       "create_sandcastle_workspace",
-      `Validation worktree already exists for a different Run: ${expectedWorktreePath}`,
+      `Validation worktree already exists for a different Validation Run: ${expectedWorktreePath}`,
     );
   }
 
@@ -176,7 +176,7 @@ export const createValidationWorkspace = async (
   return {
     ok: true,
     setup: {
-      runId: input.runId,
+      validationRunId: input.validationRunId,
       tempRefName,
       submittedSha: input.submittedSha,
       worktreePath,

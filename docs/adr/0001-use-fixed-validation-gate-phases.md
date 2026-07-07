@@ -6,7 +6,7 @@ status: accepted
 
 But Why? uses an opinionated validation gate with fixed phases instead of a generic CI pipeline language.
 Repos can configure checks and reviewers inside those phases, but v1 does not allow arbitrary phase ordering or arbitrary step types.
-This keeps But Why? focused on task intent, findings, runs, and PR readiness while avoiding ownership of a full CI system.
+This keeps But Why? focused on task intent, findings, Validation Runs, and PR readiness while avoiding ownership of a full CI system.
 
 ## Considered Options
 

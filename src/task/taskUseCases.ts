@@ -1,5 +1,5 @@
 import type { RepoLocalContext } from "../init/repoContext.js";
-import type { RunStore } from "../run/runStore.js";
+import type { ValidationRunStore } from "../validationRun/validationRunStore.js";
 import { canStartFrom, type StartIneligibleState } from "./startPolicy.js";
 import type { TaskState } from "./lifecycle.js";
 import type { TaskContext, TaskRecord, TaskSummary } from "./task.js";
@@ -87,7 +87,7 @@ export const openTaskUseCases = (
   context: RepoLocalContext,
   stores: {
     readonly taskStore: TaskStore;
-    readonly runStore: RunStore;
+    readonly validationRunStore: ValidationRunStore;
   },
 ): TaskUseCases => {
   return {
@@ -96,17 +96,18 @@ export const openTaskUseCases = (
     createTask: stores.taskStore.createTask,
     listTasks: stores.taskStore.listTasks,
     listActionableTasks: stores.taskStore.listActionableTasks,
-    getTaskById: (taskId) => getTaskById(stores.taskStore, stores.runStore, taskId),
+    getTaskById: (taskId) => getTaskById(stores.taskStore, stores.validationRunStore, taskId),
     getTaskContextById: stores.taskStore.getTaskContextById,
     appendTaskComment: stores.taskStore.appendTaskComment,
-    startTask: (taskId, now) => startTask(stores.taskStore, stores.runStore, taskId, now),
-    transitionTaskState: (input) => transitionTaskState(stores.taskStore, stores.runStore, input),
+    startTask: (taskId, now) => startTask(stores.taskStore, stores.validationRunStore, taskId, now),
+    transitionTaskState: (input) =>
+      transitionTaskState(stores.taskStore, stores.validationRunStore, input),
   };
 };
 
 const getTaskById = (
   taskStore: TaskStore,
-  runStore: RunStore,
+  validationRunStore: ValidationRunStore,
   taskId: PublicTaskId,
 ): TaskRecord | undefined => {
   const task = taskStore.getTaskById(taskId);
@@ -115,12 +116,12 @@ const getTaskById = (
     return undefined;
   }
 
-  return withLatestRun(task, runStore.getLatestRunIdForTask(taskId));
+  return withLatestValidationRun(task, validationRunStore.getLatestValidationRunIdForTask(taskId));
 };
 
 const transitionTaskState = (
   taskStore: TaskStore,
-  runStore: RunStore,
+  validationRunStore: ValidationRunStore,
   input: TransitionTaskStateInput,
 ): RepoTaskStateTransitionResult => {
   const result = taskStore.transitionTaskState(input);
@@ -131,22 +132,28 @@ const transitionTaskState = (
 
   return {
     ...result,
-    task: withLatestRun(result.task, runStore.getLatestRunIdForTask(input.taskId)),
+    task: withLatestValidationRun(
+      result.task,
+      validationRunStore.getLatestValidationRunIdForTask(input.taskId),
+    ),
   };
 };
 
-const withLatestRun = (task: StoredTaskRecord, latestRun: string | null): TaskRecord => ({
+const withLatestValidationRun = (
+  task: StoredTaskRecord,
+  latestValidationRun: string | null,
+): TaskRecord => ({
   ...task,
-  latestRun,
+  latestValidationRun,
 });
 
 const startTask = (
   taskStore: TaskStore,
-  runStore: RunStore,
+  validationRunStore: ValidationRunStore,
   taskId: PublicTaskId,
   now: string,
 ): StartTaskResult => {
-  const result = transitionTaskState(taskStore, runStore, {
+  const result = transitionTaskState(taskStore, validationRunStore, {
     taskId,
     to: "implementing",
     now,

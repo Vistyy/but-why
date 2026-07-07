@@ -10,6 +10,10 @@ type Migration = {
   readonly apply: string;
 };
 
+const validationPhaseSql =
+  "'preflight', 'checks', 'intent_review', 'quality_review', 'publish_pr', 'watch_pr'";
+const validationPhaseStatusSql = "'pending', 'active', 'passed', 'failed', 'workflow_failed'";
+
 const migrations: readonly Migration[] = [
   {
     name: "001_init",
@@ -111,6 +115,101 @@ const migrations: readonly Migration[] = [
 
       CREATE INDEX IF NOT EXISTS run_tooling_errors_run_id_sequence_idx
       ON run_tooling_errors (run_id, sequence)
+    `,
+  },
+  // This migration mentions legacy Run table names only to upgrade state databases
+  // created before Validation Run became the durable validation model.
+  {
+    name: "006_validation_runs",
+    apply: `
+      DROP INDEX IF EXISTS runs_active_task_unique_idx;
+      DROP INDEX IF EXISTS runs_task_id_number_idx;
+      DROP INDEX IF EXISTS run_tooling_errors_run_id_sequence_idx;
+
+      ALTER TABLE runs RENAME TO validation_runs;
+      ALTER TABLE validation_runs RENAME COLUMN task_run_number TO task_validation_number;
+      ALTER TABLE validation_workspace_setups RENAME COLUMN run_id TO validation_run_id;
+      ALTER TABLE run_tooling_errors RENAME TO validation_run_tooling_errors;
+      ALTER TABLE validation_run_tooling_errors RENAME COLUMN run_id TO validation_run_id;
+      ALTER TABLE validation_run_tooling_errors
+      ADD COLUMN error_kind TEXT NOT NULL DEFAULT 'validation_workspace_setup_failed';
+
+      CREATE UNIQUE INDEX IF NOT EXISTS validation_runs_active_task_unique_idx
+      ON validation_runs (task_id)
+      WHERE status = 'active';
+
+      CREATE INDEX IF NOT EXISTS validation_runs_task_id_number_idx
+      ON validation_runs (task_id, task_validation_number DESC);
+
+      CREATE INDEX IF NOT EXISTS validation_run_tooling_errors_validation_run_id_sequence_idx
+      ON validation_run_tooling_errors (validation_run_id, sequence);
+
+      CREATE TABLE IF NOT EXISTS validation_run_phase_statuses (
+        validation_run_id TEXT NOT NULL,
+        phase TEXT NOT NULL CHECK (phase IN (${validationPhaseSql})),
+        status TEXT NOT NULL CHECK (status IN (${validationPhaseStatusSql})),
+        error_message TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        PRIMARY KEY (validation_run_id, phase),
+        FOREIGN KEY (validation_run_id) REFERENCES validation_runs(id)
+      );
+
+      CREATE TABLE IF NOT EXISTS validation_run_rounds (
+        validation_run_id TEXT NOT NULL,
+        phase TEXT NOT NULL CHECK (phase IN (${validationPhaseSql})),
+        round_number INTEGER NOT NULL,
+        status TEXT NOT NULL CHECK (status IN (${validationPhaseStatusSql})),
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        PRIMARY KEY (validation_run_id, phase, round_number),
+        FOREIGN KEY (validation_run_id) REFERENCES validation_runs(id)
+      );
+
+      CREATE TABLE IF NOT EXISTS validation_run_findings (
+        id TEXT PRIMARY KEY,
+        validation_run_id TEXT NOT NULL,
+        title TEXT NOT NULL,
+        description TEXT NOT NULL,
+        severity TEXT NOT NULL CHECK (severity IN ('critical', 'high', 'medium', 'low')),
+        evidence TEXT NOT NULL,
+        files TEXT NOT NULL,
+        artifact_refs TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        FOREIGN KEY (validation_run_id) REFERENCES validation_runs(id)
+      );
+
+      CREATE TABLE IF NOT EXISTS validation_run_logs (
+        id TEXT PRIMARY KEY,
+        validation_run_id TEXT NOT NULL,
+        phase TEXT NOT NULL CHECK (phase IN (${validationPhaseSql})),
+        producer TEXT NOT NULL,
+        content TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        FOREIGN KEY (validation_run_id) REFERENCES validation_runs(id)
+      );
+
+      CREATE TABLE IF NOT EXISTS validation_run_artifacts (
+        ref TEXT PRIMARY KEY,
+        validation_run_id TEXT NOT NULL,
+        phase TEXT NOT NULL CHECK (phase IN (${validationPhaseSql})),
+        producer TEXT NOT NULL,
+        path TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        FOREIGN KEY (validation_run_id) REFERENCES validation_runs(id)
+      );
+
+      CREATE TABLE IF NOT EXISTS validation_run_token_usage (
+        validation_run_id TEXT NOT NULL,
+        phase TEXT NOT NULL CHECK (phase IN (${validationPhaseSql})),
+        producer TEXT NOT NULL,
+        input_tokens INTEGER NOT NULL,
+        output_tokens INTEGER NOT NULL,
+        created_at TEXT NOT NULL,
+        PRIMARY KEY (validation_run_id, phase, producer),
+        FOREIGN KEY (validation_run_id) REFERENCES validation_runs(id)
+      )
     `,
   },
 ];

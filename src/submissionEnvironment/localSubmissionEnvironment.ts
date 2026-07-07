@@ -3,8 +3,8 @@ import { createValidationWorkspace } from "../validation/createValidationWorkspa
 import { readGitFacts } from "./gitFacts.js";
 import { detectGitHubPrTarget, protectedBranchNames } from "./githubTarget.js";
 import type {
-  CreateValidationWorkspaceForRunInput,
-  CreateValidationWorkspaceForRunResult,
+  CreateValidationWorkspaceForValidationRunInput,
+  CreateValidationWorkspaceForValidationRunResult,
   SubmittedCodeCandidateResult,
   SubmissionEnvironment,
 } from "./submissionEnvironment.js";
@@ -13,8 +13,8 @@ export const localSubmissionEnvironment = (input: {
   readonly context: RepoLocalContext;
 }): SubmissionEnvironment => ({
   readSubmittedCodeCandidate: () => readSubmittedCodeCandidate(input.context),
-  createValidationWorkspaceForRun: (workspaceInput) =>
-    createValidationWorkspaceForRun(input.context, workspaceInput),
+  createValidationWorkspaceForValidationRun: (workspaceInput) =>
+    createValidationWorkspaceForValidationRun(input.context, workspaceInput),
 });
 
 const readSubmittedCodeCandidate = (context: RepoLocalContext): SubmittedCodeCandidateResult => {
@@ -76,13 +76,13 @@ const readSubmittedCodeCandidate = (context: RepoLocalContext): SubmittedCodeCan
   };
 };
 
-const createValidationWorkspaceForRun = async (
+const createValidationWorkspaceForValidationRun = async (
   context: RepoLocalContext,
-  input: CreateValidationWorkspaceForRunInput,
-): Promise<CreateValidationWorkspaceForRunResult> => {
+  input: CreateValidationWorkspaceForValidationRunInput,
+): Promise<CreateValidationWorkspaceForValidationRunResult> => {
   const result = await createValidationWorkspace({
     repoRoot: context.root,
-    runId: input.runId,
+    validationRunId: input.validationRunId,
     submittedSha: input.commitSha,
     copyFiles: context.config.validationWorkspace?.copyFiles ?? [],
   });

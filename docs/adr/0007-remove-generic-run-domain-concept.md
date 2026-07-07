@@ -11,5 +11,5 @@ A shared higher-level loop concept should be introduced later only if multiple r
 ## Consequences
 
 - Public docs, CLI commands, IDs, artifact refs, and Finding scopes should use `Validation Run` language for validation history.
-- Issue 027 may rename or remove old `Run` code paths instead of preserving compatibility shims.
-- Old internal names such as `RunStore` are temporary implementation debt, not accepted domain language.
+- Issue 027 should rename or remove old `Run` code paths instead of preserving compatibility shims.
+- Internal validation state names should use `Validation Run`, not generic `Run`.

@@ -1,4 +1,4 @@
-import type { CleanupState } from "../run/cleanup.js";
+import type { CleanupState } from "../validationRun/cleanup.js";
 
 export type ValidationWorkspaceCleanupResult = {
   readonly worktree: CleanupState;
@@ -6,7 +6,7 @@ export type ValidationWorkspaceCleanupResult = {
 };
 
 export type ValidationWorkspaceSetup = {
-  readonly runId: string;
+  readonly validationRunId: string;
   readonly tempRefName: string;
   readonly submittedSha: string;
   readonly worktreePath: string;

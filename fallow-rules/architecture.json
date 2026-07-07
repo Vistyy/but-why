@@ -32,19 +32,25 @@
       "severity": "error"
     },
     {
-      "id": "task-store-implementation-does-not-import-run-store",
+      "id": "task-store-implementation-does-not-import-validation-run-store",
       "kind": "banned-import",
-      "specifiers": ["../run/runStore.js", "../sqlite/sqliteRunStore.js"],
+      "specifiers": [
+        "../validationRun/validationRunStore.js",
+        "../sqlite/sqliteValidationRunStore.js"
+      ],
       "files": ["src/task/taskStore.ts", "src/sqlite/sqliteTaskStore.ts"],
-      "message": "TaskStore must not read RunStore data. Compose Task and Run views outside the TaskStore implementation.",
+      "message": "TaskStore must not read ValidationRunStore data. Compose Task and Validation Run views outside the TaskStore implementation.",
       "severity": "error"
     },
     {
-      "id": "run-store-implementation-does-not-import-task-store",
+      "id": "validation-run-store-implementation-does-not-import-task-store",
       "kind": "banned-import",
       "specifiers": ["../task/taskStore.js", "../sqlite/sqliteTaskStore.js"],
-      "files": ["src/run/runStore.ts", "src/sqlite/sqliteRunStore.ts"],
-      "message": "RunStore must not depend on TaskStore behavior. ValidationRuns owns validation start coordination.",
+      "files": [
+        "src/validationRun/validationRunStore.ts",
+        "src/sqlite/sqliteValidationRunStore.ts"
+      ],
+      "message": "ValidationRunStore must not depend on TaskStore behavior. ValidationRuns owns validation start coordination.",
       "severity": "error"
     },
     {
@@ -52,16 +58,16 @@
       "kind": "banned-import",
       "specifiers": [
         "./sqliteTaskStore.js",
-        "./sqliteRunStore.js",
+        "./sqliteValidationRunStore.js",
         "./sqliteValidationRuns.js",
         "../sqlite/sqliteTaskStore.js",
-        "../sqlite/sqliteRunStore.js",
+        "../sqlite/sqliteValidationRunStore.js",
         "../sqlite/sqliteValidationRuns.js",
         "../../sqlite/sqliteTaskStore.js",
-        "../../sqlite/sqliteRunStore.js",
+        "../../sqlite/sqliteValidationRunStore.js",
         "../../sqlite/sqliteValidationRuns.js",
         "../../../sqlite/sqliteTaskStore.js",
-        "../../../sqlite/sqliteRunStore.js",
+        "../../../sqlite/sqliteValidationRunStore.js",
         "../../../sqlite/sqliteValidationRuns.js"
       ],
       "files": ["src/**/*.ts"],

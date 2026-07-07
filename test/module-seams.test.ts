@@ -2,8 +2,8 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { repoStateLoadError, runtimeError, success, usageError } from "../src/cliResults.js";
-import type { GitHubPrTarget } from "../src/run/run.js";
-import { openSqliteRunStore } from "../src/sqlite/sqliteRunStore.js";
+import type { GitHubPrTarget } from "../src/validationRun/validationRun.js";
+import { openSqliteValidationRunStore } from "../src/sqlite/sqliteValidationRunStore.js";
 import { openSqliteTaskStore } from "../src/sqlite/sqliteTaskStore.js";
 import { openSqliteValidationRuns } from "../src/sqlite/sqliteValidationRuns.js";
 import { openSubmitPreflight } from "../src/submit/submitPreflight.js";
@@ -17,7 +17,7 @@ import { cleanupTempRoots, createGitRepo, runByInProcess } from "./support/by-cl
 const firstNow = "2026-06-30T12:00:00.000Z";
 const secondNow = "2026-06-30T12:05:00.000Z";
 const thirdNow = "2026-06-30T12:10:00.000Z";
-const firstTaskRunId = "by-1-09224d806043.1";
+const firstTaskValidationRunId = "by-1-09224d806043.1";
 
 const prTarget: GitHubPrTarget = {
   owner: "acme",
@@ -68,7 +68,7 @@ describe("module seams", () => {
   it("starts local validation through the ValidationRuns seam", () => {
     const root = initializedRepo();
     const taskStore = sqliteTaskStore(root);
-    const runStore = sqliteRunStore(root);
+    const validationRunStore = sqliteValidationRunStore(root);
     const validationRuns = sqliteValidationRuns(root);
     const task = taskStore.createTask({
       title: "Submit through state",
@@ -91,7 +91,7 @@ describe("module seams", () => {
       }),
     ).toEqual({
       ok: true,
-      runId: firstTaskRunId,
+      validationRunId: firstTaskValidationRunId,
       taskState: "validating",
       previousTaskState: "implementing",
     });
@@ -101,7 +101,9 @@ describe("module seams", () => {
       branch: "feature/by-1",
       updatedAt: thirdNow,
     });
-    expect(runStore.getLatestRunIdForTask(taskId)).toBe(firstTaskRunId);
+    expect(validationRunStore.getLatestValidationRunIdForTask(taskId)).toBe(
+      firstTaskValidationRunId,
+    );
 
     expect(
       taskStore.transitionTaskState({ taskId, to: "needs_input", now: thirdNow }),
@@ -114,18 +116,20 @@ describe("module seams", () => {
         prTarget,
         now: thirdNow,
       }),
-    ).toEqual({ ok: false, code: "TASK_HAS_ACTIVE_RUN" });
+    ).toEqual({ ok: false, code: "TASK_HAS_ACTIVE_VALIDATION_RUN" });
     expect(taskStore.getTaskById(taskId)).toMatchObject({
       state: "needs_input",
       branch: "feature/by-1",
     });
-    expect(runStore.getLatestRunIdForTask(taskId)).toBe(firstTaskRunId);
+    expect(validationRunStore.getLatestValidationRunIdForTask(taskId)).toBe(
+      firstTaskValidationRunId,
+    );
   });
 
   it("rejects invalid local validation starts through the ValidationRuns seam", () => {
     const root = initializedRepo();
     const taskStore = sqliteTaskStore(root);
-    const runStore = sqliteRunStore(root);
+    const validationRunStore = sqliteValidationRunStore(root);
     const validationRuns = sqliteValidationRuns(root);
     const task = taskStore.createTask({
       title: "Reject invalid starts",
@@ -143,7 +147,7 @@ describe("module seams", () => {
         now: secondNow,
       }),
     ).toEqual({ ok: false, code: "TASK_STATE_NOT_SUBMITTABLE", state: "todo" });
-    expect(runStore.getLatestRunIdForTask(taskId)).toBeNull();
+    expect(validationRunStore.getLatestValidationRunIdForTask(taskId)).toBeNull();
 
     expect(
       taskStore.transitionTaskState({ taskId, to: "implementing", now: secondNow }),
@@ -157,7 +161,12 @@ describe("module seams", () => {
         now: thirdNow,
       }),
     ).toMatchObject({ ok: true });
-    expect(runStore.recordRunError({ runId: firstTaskRunId, now: thirdNow })).toEqual({ ok: true });
+    expect(
+      validationRunStore.recordValidationRunError({
+        validationRunId: firstTaskValidationRunId,
+        now: thirdNow,
+      }),
+    ).toEqual({ ok: true });
     expect(
       taskStore.transitionTaskState({ taskId, to: "needs_input", now: thirdNow }),
     ).toMatchObject({ ok: true });
@@ -171,7 +180,9 @@ describe("module seams", () => {
         now: thirdNow,
       }),
     ).toEqual({ ok: false, code: "TASK_BRANCH_MISMATCH", boundBranch: "feature/by-1" });
-    expect(runStore.getLatestRunIdForTask(taskId)).toBe(firstTaskRunId);
+    expect(validationRunStore.getLatestValidationRunIdForTask(taskId)).toBe(
+      firstTaskValidationRunId,
+    );
   });
 
   it("rejects unsupported validation starts with a structured error", () => {
@@ -202,7 +213,7 @@ describe("module seams", () => {
         events.push(`start:${input.branch}:${input.commitSha}`);
         return {
           ok: true,
-          runId: firstTaskRunId,
+          validationRunId: firstTaskValidationRunId,
           taskState: "validating",
           previousTaskState: "implementing",
         };
@@ -221,7 +232,7 @@ describe("module seams", () => {
           },
         };
       },
-      createValidationWorkspaceForRun: async () => {
+      createValidationWorkspaceForValidationRun: async () => {
         throw new Error("not used by submit preflight");
       },
     };
@@ -231,7 +242,7 @@ describe("module seams", () => {
     expect(submitPreflight.submitTask({ taskId, now: thirdNow })).toEqual({
       ok: true,
       taskId,
-      runId: firstTaskRunId,
+      validationRunId: firstTaskValidationRunId,
       branch: "feature/by-1",
       commitSha: "abc123",
       taskState: "validating",
@@ -244,7 +255,7 @@ describe("module seams", () => {
   it("returns submit preflight domain rejections before Git facts are read", () => {
     const root = initializedRepo();
     const taskStore = sqliteTaskStore(root);
-    const runStore = sqliteRunStore(root);
+    const validationRunStore = sqliteValidationRunStore(root);
     const task = taskStore.createTask({
       title: "Not started",
       description: "Description",
@@ -269,7 +280,7 @@ describe("module seams", () => {
       state: "todo",
       branch: null,
     });
-    expect(runStore.getLatestRunIdForTask(publicTaskId(task.id))).toBeNull();
+    expect(validationRunStore.getLatestValidationRunIdForTask(publicTaskId(task.id))).toBeNull();
   });
 });
 
@@ -290,8 +301,8 @@ const sqliteTaskStore = (root: string) =>
     migrationTimestamp: () => firstNow,
   });
 
-const sqliteRunStore = (root: string) =>
-  openSqliteRunStore({
+const sqliteValidationRunStore = (root: string) =>
+  openSqliteValidationRunStore({
     statePath: join(root, ".but-why/state.sqlite"),
     migrationTimestamp: () => firstNow,
   });

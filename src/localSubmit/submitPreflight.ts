@@ -11,7 +11,7 @@ import {
   type SubmitTaskInput,
   type SubmitTaskResult,
 } from "../submit/submitPreflight.js";
-import type { CreateValidationWorkspaceForRunResult } from "../submissionEnvironment/submissionEnvironment.js";
+import type { CreateValidationWorkspaceForValidationRunResult } from "../submissionEnvironment/submissionEnvironment.js";
 import { localSubmissionEnvironment } from "../submissionEnvironment/localSubmissionEnvironment.js";
 import type {
   TaskAuthority,
@@ -26,9 +26,9 @@ export type LocalSubmitPreflight = {
   readonly taskPrefix: string;
   readonly resolveTaskId: (taskId: PublicTaskId) => TaskAuthorityTaskIdResolution;
   readonly submitTask: (input: SubmitTaskInput) => SubmitTaskResult;
-  readonly createValidationWorkspaceForRun: (
-    input: CreateLocalValidationWorkspaceForRunInput,
-  ) => Promise<CreateValidationWorkspaceForRunResult>;
+  readonly createValidationWorkspaceForValidationRun: (
+    input: CreateLocalValidationWorkspaceForValidationRunInput,
+  ) => Promise<CreateValidationWorkspaceForValidationRunResult>;
 };
 
 export type LoadLocalSubmitPreflightResult =
@@ -48,8 +48,8 @@ export type LoadLocalSubmitPreflightError =
       readonly taskPrefix: string;
     };
 
-export type CreateLocalValidationWorkspaceForRunInput = {
-  readonly runId: string;
+export type CreateLocalValidationWorkspaceForValidationRunInput = {
+  readonly validationRunId: string;
   readonly commitSha: string;
   readonly taskRecoveryState: SubmitEligibleState;
   readonly now: string;
@@ -100,8 +100,8 @@ const localSubmitPreflight = (
     taskPrefix: taskAuthority.taskPrefix,
     resolveTaskId: taskAuthority.resolveTaskId,
     submitTask: submitPreflight.submitTask,
-    createValidationWorkspaceForRun: (input) =>
-      createValidationWorkspaceForRun(
+    createValidationWorkspaceForValidationRun: (input) =>
+      createValidationWorkspaceForValidationRun(
         taskAuthority,
         submissionEnvironment,
         recordValidationWorkspaceSetup,
@@ -110,14 +110,14 @@ const localSubmitPreflight = (
   };
 };
 
-const createValidationWorkspaceForRun = async (
+const createValidationWorkspaceForValidationRun = async (
   taskAuthority: TaskAuthority,
   submissionEnvironment: SubmissionEnvironment,
   recordValidationWorkspaceSetup: RepoLocalStores["recordValidationWorkspaceSetup"],
-  input: CreateLocalValidationWorkspaceForRunInput,
-): Promise<CreateValidationWorkspaceForRunResult> => {
-  const result = await submissionEnvironment.createValidationWorkspaceForRun({
-    runId: input.runId,
+  input: CreateLocalValidationWorkspaceForValidationRunInput,
+): Promise<CreateValidationWorkspaceForValidationRunResult> => {
+  const result = await submissionEnvironment.createValidationWorkspaceForValidationRun({
+    validationRunId: input.validationRunId,
     commitSha: input.commitSha,
     now: input.now,
   });
@@ -129,7 +129,8 @@ const createValidationWorkspaceForRun = async (
   }
 
   const recovery = taskAuthority.recordValidationToolingFailure({
-    runId: input.runId,
+    validationRunId: input.validationRunId,
+    errorKind: "validation_workspace_setup_failed",
     operationName: result.toolingError.operationName,
     tempRefName: result.toolingError.tempRefName,
     submittedSha: result.toolingError.submittedSha,

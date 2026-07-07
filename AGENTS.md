@@ -22,7 +22,7 @@
 - `src/cli.ts`: top-level CLI routing.
 - `src/cli/`: command modules and output boundary.
 - `src/task/`: task use cases.
-- `src/run/`: run use cases.
+- `src/validationRun/`: Validation Run domain records and storage ports.
 - `src/submit/`: submit flow.
 - `src/repoSubmit/`: repo-backed submit flow.
 - `src/validation/`: validation gate.

@@ -131,6 +131,7 @@ help[1]: Move the conflicting path aside before running init again.`);
         { name: "003_task_comments" },
         { name: "004_submit_preflight" },
         { name: "005_validation_workspace_setup" },
+        { name: "006_validation_runs" },
       ]);
     } finally {
       repairedDatabase.close();

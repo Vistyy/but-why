@@ -1,4 +1,4 @@
-import type { GitHubPrTarget } from "../run/run.js";
+import type { GitHubPrTarget } from "../validationRun/validationRun.js";
 import type { TaskState } from "../task/lifecycle.js";
 import type { SubmitEligibleState } from "../task/submitPolicy.js";
 import type { PublicTaskId } from "../task/taskId.js";
@@ -26,7 +26,7 @@ export type SubmitTaskResult =
   | {
       readonly ok: true;
       readonly taskId: PublicTaskId;
-      readonly runId: string;
+      readonly validationRunId: string;
       readonly branch: string;
       readonly commitSha: string;
       readonly taskState: "validating";
@@ -63,7 +63,7 @@ export type SubmitPreflightRejectionCode =
   | "PR_TARGET_NOT_FOUND"
   | "BRANCH_ALREADY_BOUND"
   | "TASK_BRANCH_MISMATCH"
-  | "TASK_HAS_ACTIVE_RUN";
+  | "TASK_HAS_ACTIVE_VALIDATION_RUN";
 
 export const openSubmitPreflight = (input: {
   readonly taskAuthority: TaskAuthority;
@@ -107,7 +107,7 @@ const runSubmitPreflight = (
     };
   }
 
-  const createRun = seams.taskAuthority.startValidation({
+  const validationStart = seams.taskAuthority.startValidation({
     taskId: input.taskId,
     branch: submissionCandidate.candidate.branch,
     commitSha: submissionCandidate.candidate.commitSha,
@@ -115,18 +115,22 @@ const runSubmitPreflight = (
     now: input.now,
   });
 
-  if (!createRun.ok) {
-    return validationStartRejection(createRun, input.taskId, submissionCandidate.candidate.branch);
+  if (!validationStart.ok) {
+    return validationStartRejection(
+      validationStart,
+      input.taskId,
+      submissionCandidate.candidate.branch,
+    );
   }
 
   return {
     ok: true,
     taskId: input.taskId,
-    runId: createRun.runId,
+    validationRunId: validationStart.validationRunId,
     branch: submissionCandidate.candidate.branch,
     commitSha: submissionCandidate.candidate.commitSha,
-    taskState: createRun.taskState,
-    previousTaskState: createRun.previousTaskState,
+    taskState: validationStart.taskState,
+    previousTaskState: validationStart.previousTaskState,
     prTarget: submissionCandidate.candidate.prTarget,
   };
 };

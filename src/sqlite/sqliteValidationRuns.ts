@@ -2,7 +2,10 @@ import type { DatabaseSync } from "node:sqlite";
 
 import { rollbackIfOpen, withStateDatabase, type SqliteStoreInput } from "./connection.js";
 import { queryOne } from "./query.js";
-import { recordRunToolingErrorMutation, runExists } from "./sqliteRunInternals.js";
+import {
+  recordValidationRunToolingErrorMutation,
+  validationRunExists,
+} from "./sqliteValidationRunInternals.js";
 import { submitStateReadiness } from "../task/submitPolicy.js";
 import { storedPublicTaskId, taskSlugForId, type PublicTaskId } from "../task/taskId.js";
 import type { TaskState } from "../task/lifecycle.js";
@@ -42,15 +45,15 @@ const startValidationRun = (
       return readiness;
     }
 
-    const activeRun = queryOne<RunIdRow>(
+    const activeValidationRun = queryOne<ValidationRunIdRow>(
       database,
-      "SELECT id FROM runs WHERE task_id = ? AND status = 'active' LIMIT 1",
+      "SELECT id FROM validation_runs WHERE task_id = ? AND status = 'active' LIMIT 1",
       [input.taskId],
     );
 
-    if (activeRun !== undefined) {
+    if (activeValidationRun !== undefined) {
       database.exec("ROLLBACK");
-      return { ok: false, code: "TASK_HAS_ACTIVE_RUN" };
+      return { ok: false, code: "TASK_HAS_ACTIVE_VALIDATION_RUN" };
     }
 
     if (task.branch !== null && task.branch !== input.branch) {
@@ -71,8 +74,8 @@ const startValidationRun = (
       }
     }
 
-    const taskRunNumber = nextTaskRunNumber(database, input.taskId);
-    const runId = `${taskSlugForId(input.taskId)}.${taskRunNumber}`;
+    const taskValidationNumber = nextTaskValidationNumber(database, input.taskId);
+    const validationRunId = `${taskSlugForId(input.taskId)}.${taskValidationNumber}`;
 
     if (task.branch === null) {
       database.prepare("UPDATE tasks SET branch = ? WHERE id = ?").run(input.branch, input.taskId);
@@ -80,10 +83,10 @@ const startValidationRun = (
 
     database
       .prepare(`
-        INSERT INTO runs (
+        INSERT INTO validation_runs (
           id,
           task_id,
-          task_run_number,
+          task_validation_number,
           status,
           branch,
           commit_sha,
@@ -98,9 +101,9 @@ const startValidationRun = (
         VALUES (?, ?, ?, 'active', ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `)
       .run(
-        runId,
+        validationRunId,
         input.taskId,
-        taskRunNumber,
+        taskValidationNumber,
         input.branch,
         input.commitSha,
         input.prTarget.owner,
@@ -120,7 +123,7 @@ const startValidationRun = (
 
     return {
       ok: true,
-      runId,
+      validationRunId,
       taskState: "validating",
       previousTaskState: readiness.previousTaskState,
     };
@@ -137,19 +140,19 @@ const recordToolingFailure = (
   database.exec("BEGIN IMMEDIATE");
 
   try {
-    if (!runExists(database, input.runId)) {
+    if (!validationRunExists(database, input.validationRunId)) {
       database.exec("ROLLBACK");
-      return { ok: false, code: "RUN_NOT_FOUND" };
+      return { ok: false, code: "VALIDATION_RUN_NOT_FOUND" };
     }
 
-    const { taskRecoveryState: _taskRecoveryState, ...runInput } = input;
+    const { taskRecoveryState: _taskRecoveryState, ...validationRunInput } = input;
 
-    recordRunToolingErrorMutation(database, runInput);
+    recordValidationRunToolingErrorMutation(database, validationRunInput);
     database
       .prepare(
-        "UPDATE tasks SET state = ?, updated_at = ? WHERE id = (SELECT task_id FROM runs WHERE id = ?)",
+        "UPDATE tasks SET state = ?, updated_at = ? WHERE id = (SELECT task_id FROM validation_runs WHERE id = ?)",
       )
-      .run(input.taskRecoveryState, input.now, input.runId);
+      .run(input.taskRecoveryState, input.now, input.validationRunId);
 
     database.exec("COMMIT");
     return { ok: true };
@@ -159,18 +162,18 @@ const recordToolingFailure = (
   }
 };
 
-const nextTaskRunNumber = (database: DatabaseSync, taskId: PublicTaskId): number => {
-  const row = queryOne<TaskRunNumberRow>(
+const nextTaskValidationNumber = (database: DatabaseSync, taskId: PublicTaskId): number => {
+  const row = queryOne<TaskValidationNumberRow>(
     database,
-    "SELECT COALESCE(MAX(task_run_number), 0) + 1 AS taskRunNumber FROM runs WHERE task_id = ?",
+    "SELECT COALESCE(MAX(task_validation_number), 0) + 1 AS taskValidationNumber FROM validation_runs WHERE task_id = ?",
     [taskId],
   );
 
   if (row === undefined) {
-    throw new Error("Missing next task Run number");
+    throw new Error("Missing next task Validation Run number");
   }
 
-  return Number(row.taskRunNumber);
+  return Number(row.taskValidationNumber);
 };
 
 const getTaskForSubmit = (
@@ -206,7 +209,7 @@ type SubmitTaskRow = {
   readonly branch: string | null;
 };
 
-type RunIdRow = {
+type ValidationRunIdRow = {
   readonly id: string;
 };
 
@@ -214,6 +217,6 @@ type TaskIdRow = {
   readonly id: string;
 };
 
-type TaskRunNumberRow = {
-  readonly taskRunNumber: number | bigint;
+type TaskValidationNumberRow = {
+  readonly taskValidationNumber: number | bigint;
 };

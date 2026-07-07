@@ -14,7 +14,7 @@ export type TaskStore = {
   readonly transitionTaskState: (input: TransitionTaskStateInput) => TaskStateTransitionResult;
 };
 
-export type StoredTaskRecord = Omit<TaskRecord, "latestRun">;
+export type StoredTaskRecord = Omit<TaskRecord, "latestValidationRun">;
 
 export type CreateTaskInput = {
   readonly title: string;

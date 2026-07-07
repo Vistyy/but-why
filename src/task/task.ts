@@ -11,7 +11,7 @@ export type TaskSummary = {
 export type TaskRecord = TaskSummary & {
   readonly description: string;
   readonly branch: string | null;
-  readonly latestRun: string | null;
+  readonly latestValidationRun: string | null;
   readonly commentCount: number;
 };
 
