@@ -6,8 +6,11 @@ import type { GitHubPrTarget } from "../src/run/run.js";
 import { openSqliteRunStore } from "../src/sqlite/sqliteRunStore.js";
 import { openSqliteTaskStore } from "../src/sqlite/sqliteTaskStore.js";
 import { openSqliteValidationRuns } from "../src/sqlite/sqliteValidationRuns.js";
+import { openSubmitPreflight } from "../src/submit/submitPreflight.js";
+import type { SubmissionEnvironment } from "../src/submissionEnvironment/submissionEnvironment.js";
+import type { TaskAuthority } from "../src/taskAuthority/taskAuthority.js";
 import { unsupportedValidationRuns } from "../src/validation/validationRuns.js";
-import { loadRepoSubmitPreflight } from "../src/repoSubmit/submitPreflight.js";
+import { loadLocalSubmitPreflight } from "../src/localSubmit/submitPreflight.js";
 import { publicTaskId } from "../src/task/taskId.js";
 import { cleanupTempRoots, createGitRepo, runByInProcess } from "./support/by-cli.js";
 
@@ -185,6 +188,59 @@ describe("module seams", () => {
     ).toEqual({ ok: false, code: "TASK_AUTHORITY_UNSUPPORTED" });
   });
 
+  it("coordinates submit through TaskAuthority and SubmissionEnvironment seams", () => {
+    const taskId = publicTaskId("BY-1");
+    const events: string[] = [];
+    const taskAuthority: TaskAuthority = {
+      taskPrefix: "BY",
+      resolveTaskId: (inputTaskId) => ({ ok: true, taskId: inputTaskId }),
+      getTaskSubmitReadiness: (inputTaskId) => {
+        events.push(`readiness:${inputTaskId}`);
+        return { ok: true, taskId: inputTaskId, previousTaskState: "implementing" };
+      },
+      startValidation: (input) => {
+        events.push(`start:${input.branch}:${input.commitSha}`);
+        return {
+          ok: true,
+          runId: firstTaskRunId,
+          taskState: "validating",
+          previousTaskState: "implementing",
+        };
+      },
+      recordValidationToolingFailure: () => ({ ok: true }),
+    };
+    const submissionEnvironment: SubmissionEnvironment = {
+      readSubmittedCodeCandidate: () => {
+        events.push("candidate");
+        return {
+          ok: true,
+          candidate: {
+            branch: "feature/by-1",
+            commitSha: "abc123",
+            prTarget,
+          },
+        };
+      },
+      createValidationWorkspaceForRun: async () => {
+        throw new Error("not used by submit preflight");
+      },
+    };
+
+    const submitPreflight = openSubmitPreflight({ taskAuthority, submissionEnvironment });
+
+    expect(submitPreflight.submitTask({ taskId, now: thirdNow })).toEqual({
+      ok: true,
+      taskId,
+      runId: firstTaskRunId,
+      branch: "feature/by-1",
+      commitSha: "abc123",
+      taskState: "validating",
+      previousTaskState: "implementing",
+      prTarget,
+    });
+    expect(events).toEqual(["readiness:BY-1", "candidate", "start:feature/by-1:abc123"]);
+  });
+
   it("returns submit preflight domain rejections before Git facts are read", () => {
     const root = initializedRepo();
     const taskStore = sqliteTaskStore(root);
@@ -194,7 +250,7 @@ describe("module seams", () => {
       description: "Description",
       now: firstNow,
     });
-    const submitPreflight = loadRepoSubmitPreflight(root, { migrationTimestamp: () => firstNow });
+    const submitPreflight = loadLocalSubmitPreflight(root, { migrationTimestamp: () => firstNow });
 
     if (!submitPreflight.ok) {
       throw new Error(`Could not load submit preflight: ${submitPreflight.error.code}`);

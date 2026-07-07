@@ -150,12 +150,36 @@
         "patterns": ["src/init/**"]
       },
       {
-        "name": "validation",
-        "patterns": ["src/validation/**"]
+        "name": "validation-runs",
+        "patterns": ["src/validation/validationRuns.ts"]
       },
       {
-        "name": "repo-submit",
-        "patterns": ["src/repoSubmit/**"]
+        "name": "validation-workspace",
+        "patterns": ["src/validation/createValidationWorkspace.ts", "src/validation/validationGitGlue.ts"]
+      },
+      {
+        "name": "task-authority",
+        "patterns": ["src/taskAuthority/taskAuthority.ts"]
+      },
+      {
+        "name": "local-task-authority",
+        "patterns": ["src/taskAuthority/localTaskAuthority.ts"]
+      },
+      {
+        "name": "submission-environment",
+        "patterns": ["src/submissionEnvironment/submissionEnvironment.ts"]
+      },
+      {
+        "name": "local-submission-environment",
+        "patterns": [
+          "src/submissionEnvironment/localSubmissionEnvironment.ts",
+          "src/submissionEnvironment/gitFacts.ts",
+          "src/submissionEnvironment/githubTarget.ts"
+        ]
+      },
+      {
+        "name": "local-submit",
+        "patterns": ["src/localSubmit/**"]
       },
       {
         "name": "submit",
@@ -170,10 +194,10 @@
           "pure-task-domain",
           "task-use-case",
           "task-adapter",
-          "repo-submit",
+          "local-submit",
           "submit",
           "init",
-          "validation"
+          "validation-workspace"
         ]
       },
       {
@@ -227,7 +251,7 @@
       },
       {
         "from": "sqlite-validation-runs",
-        "allow": ["pure-task-domain", "sqlite-core", "sqlite-run-store", "validation"]
+        "allow": ["pure-task-domain", "sqlite-core", "sqlite-run-store", "validation-runs"]
       },
       {
         "from": "storage-init",
@@ -238,27 +262,55 @@
         "allow": ["storage-init"]
       },
       {
-        "from": "validation",
-        "allow": ["pure-task-domain", "pure-run-domain", "run-store"]
+        "from": "validation-runs",
+        "allow": ["pure-task-domain", "pure-run-domain"]
       },
       {
-        "from": "repo-submit",
+        "from": "validation-workspace",
+        "allow": ["pure-run-domain"]
+      },
+      {
+        "from": "task-authority",
+        "allow": ["pure-task-domain", "validation-runs"]
+      },
+      {
+        "from": "local-task-authority",
+        "allow": ["init", "pure-task-domain", "task-adapter", "task-store", "task-authority", "validation-runs"]
+      },
+      {
+        "from": "submission-environment",
+        "allow": ["pure-run-domain", "validation-workspace"]
+      },
+      {
+        "from": "local-submission-environment",
+        "allow": ["init", "pure-run-domain", "submission-environment", "validation-workspace"]
+      },
+      {
+        "from": "local-submit",
         "allow": [
+          "init",
           "pure-task-domain",
-          "task-adapter",
-          "task-store",
           "run-store",
           "sqlite-task-store",
           "sqlite-run-store",
           "sqlite-validation-runs",
-          "init",
+          "local-task-authority",
+          "task-authority",
+          "local-submission-environment",
+          "submission-environment",
           "submit",
-          "validation"
+          "validation-workspace"
         ]
       },
       {
         "from": "submit",
-        "allow": ["pure-task-domain", "task-store", "pure-run-domain", "validation"]
+        "allow": [
+          "pure-task-domain",
+          "pure-run-domain",
+          "submission-environment",
+          "task-authority",
+          "validation-workspace"
+        ]
       }
     ],
     "coverage": {

@@ -1,6 +1,5 @@
 import type { CliResult } from "./cli.js";
 import { runtimeError, usageError } from "./cliResults.js";
-import type { RepoTaskIdResolution } from "./task/repoTaskIds.js";
 import {
   parsePublicTaskId,
   type PublicTaskId,
@@ -15,6 +14,18 @@ export type CliTaskIdParseResult =
   | {
       readonly ok: false;
       readonly result: CliResult;
+    };
+
+type CliTaskIdResolution =
+  | {
+      readonly ok: true;
+      readonly taskId: PublicTaskId;
+    }
+  | {
+      readonly ok: false;
+      readonly code: "remote_tasks_not_supported";
+      readonly taskId: PublicTaskId;
+      readonly help: string;
     };
 
 type UnknownExtraArgCode = "unknown_argument" | "unknown_flag";
@@ -68,8 +79,8 @@ export const parseCliTaskIdValue = (taskId: string): CliTaskIdParseResult => {
   return { ok: true, taskId: parsed.taskId };
 };
 
-export const repoTaskIdResolutionError = (
-  resolution: Extract<RepoTaskIdResolution, { readonly ok: false }>,
+export const taskIdResolutionError = (
+  resolution: Extract<CliTaskIdResolution, { readonly ok: false }>,
 ): CliResult =>
   runtimeError({
     code: resolution.code,

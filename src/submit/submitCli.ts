@@ -4,15 +4,15 @@ import { repoStateLoadError, runtimeError, success } from "../cliResults.js";
 import { withGlobalHelpFlags } from "../cliHelp.js";
 import {
   parseCliTaskIdArg,
-  repoTaskIdResolutionError,
+  taskIdResolutionError,
   type CliTaskIdParseResult,
 } from "../cliTaskId.js";
 import type { StructuredObject } from "../output/structured.js";
 import {
-  loadRepoSubmitPreflight,
-  type RepoSubmitPreflight,
+  loadLocalSubmitPreflight,
+  type LocalSubmitPreflight,
   type SubmitTaskResult,
-} from "../repoSubmit/submitPreflight.js";
+} from "../localSubmit/submitPreflight.js";
 import type { ValidationWorkspaceToolingError } from "../validation/createValidationWorkspace.js";
 
 export const routeSubmit = async (
@@ -38,7 +38,7 @@ export const routeSubmit = async (
   const taskId = taskIdResolutionPreflight.submit.resolveTaskId(taskIdParse.taskId);
 
   if (!taskId.ok) {
-    return repoTaskIdResolutionError(taskId);
+    return taskIdResolutionError(taskId);
   }
 
   const submitPreflight = loadSubmitPreflight(environment, true);
@@ -100,7 +100,7 @@ const parseSubmitTaskId = (args: readonly string[]): CliTaskIdParseResult =>
 type SubmitPreflightLoadResult =
   | {
       readonly ok: true;
-      readonly submit: RepoSubmitPreflight;
+      readonly submit: LocalSubmitPreflight;
     }
   | {
       readonly ok: false;
@@ -111,7 +111,7 @@ const loadSubmitPreflight = (
   environment: CliEnvironment,
   requireState: boolean,
 ): SubmitPreflightLoadResult => {
-  const result = loadRepoSubmitPreflight(environment.cwd, {
+  const result = loadLocalSubmitPreflight(environment.cwd, {
     requireState,
     migrationTimestamp: () => environment.now().toISOString(),
   });

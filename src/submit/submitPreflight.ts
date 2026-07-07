@@ -2,16 +2,16 @@ import type { GitHubPrTarget } from "../run/run.js";
 import type { TaskState } from "../task/lifecycle.js";
 import type { SubmitEligibleState } from "../task/submitPolicy.js";
 import type { PublicTaskId } from "../task/taskId.js";
+import type { SubmissionEnvironment } from "../submissionEnvironment/submissionEnvironment.js";
+import type {
+  TaskAuthority,
+  TaskAuthorityStartValidationResult,
+} from "../taskAuthority/taskAuthority.js";
 import type { ValidationWorkspaceSetup } from "../validation/createValidationWorkspace.js";
-import type { StartValidationRunResult, ValidationRuns } from "../validation/validationRuns.js";
-
-import { readGitFacts } from "./gitFacts.js";
-import { detectGitHubPrTarget, protectedBranchNames } from "./githubTarget.js";
-import type { SubmitReadiness } from "./submitReadiness.js";
 
 /**
  * Future validation workspace code should call this module after implementation work is complete.
- * This module owns submit preflight policy and asks ValidationRuns to start validation atomically.
+ * This module owns submit preflight policy and starts validation through the TaskAuthority seam.
  */
 export type SubmitPreflight = {
   readonly submitTask: (input: SubmitTaskInput) => SubmitTaskResult;
@@ -66,29 +66,20 @@ export type SubmitPreflightRejectionCode =
   | "TASK_HAS_ACTIVE_RUN";
 
 export const openSubmitPreflight = (input: {
-  readonly root: string;
-  readonly submitReadiness: SubmitReadiness;
-  readonly validationRuns: ValidationRuns;
-  readonly allowedUntrackedFiles: readonly string[];
+  readonly taskAuthority: TaskAuthority;
+  readonly submissionEnvironment: SubmissionEnvironment;
 }): SubmitPreflight => ({
-  submitTask: (taskInput) =>
-    runSubmitPreflight(
-      input.root,
-      input.submitReadiness,
-      input.validationRuns,
-      input.allowedUntrackedFiles,
-      taskInput,
-    ),
+  submitTask: (taskInput) => runSubmitPreflight(input, taskInput),
 });
 
 const runSubmitPreflight = (
-  root: string,
-  submitReadiness: SubmitReadiness,
-  validationRuns: ValidationRuns,
-  allowedUntrackedFiles: readonly string[],
+  seams: {
+    readonly taskAuthority: TaskAuthority;
+    readonly submissionEnvironment: SubmissionEnvironment;
+  },
   input: SubmitTaskInput,
 ): SubmitTaskResult => {
-  const readiness = submitReadiness.getTaskSubmitReadiness(input.taskId);
+  const readiness = seams.taskAuthority.getTaskSubmitReadiness(input.taskId);
 
   if (!readiness.ok) {
     return {
@@ -100,82 +91,48 @@ const runSubmitPreflight = (
     };
   }
 
-  const gitFacts = readGitFacts(root, undefined, { allowedUntrackedFiles });
+  const submissionCandidate = seams.submissionEnvironment.readSubmittedCodeCandidate();
 
-  if (!gitFacts.ok) {
-    if (gitFacts.code === "GIT_TOOLING_ERROR") {
+  if (!submissionCandidate.ok) {
+    if (submissionCandidate.kind === "tooling_error") {
       return { ok: false, kind: "tooling_error" };
     }
 
     return {
       ok: false,
       kind: "preflight_rejection",
-      code: gitFacts.code,
+      code: submissionCandidate.code,
       taskId: input.taskId,
+      ...(submissionCandidate.branch === undefined ? {} : { branch: submissionCandidate.branch }),
     };
   }
 
-  if (protectedBranchNames.has(gitFacts.facts.branch)) {
-    return {
-      ok: false,
-      kind: "preflight_rejection",
-      code: "PROTECTED_BRANCH",
-      taskId: input.taskId,
-      branch: gitFacts.facts.branch,
-    };
-  }
-
-  const prTarget = detectGitHubPrTarget(root, gitFacts.facts.branch);
-
-  if (!prTarget.ok) {
-    if (prTarget.code === "GITHUB_TOOLING_ERROR") {
-      return { ok: false, kind: "tooling_error" };
-    }
-
-    return {
-      ok: false,
-      kind: "preflight_rejection",
-      code: "PR_TARGET_NOT_FOUND",
-      taskId: input.taskId,
-    };
-  }
-
-  if (gitFacts.facts.branch === prTarget.target.baseBranch) {
-    return {
-      ok: false,
-      kind: "preflight_rejection",
-      code: "PROTECTED_BRANCH",
-      taskId: input.taskId,
-      branch: gitFacts.facts.branch,
-    };
-  }
-
-  const createRun = validationRuns.start({
+  const createRun = seams.taskAuthority.startValidation({
     taskId: input.taskId,
-    branch: gitFacts.facts.branch,
-    commitSha: gitFacts.facts.commitSha,
-    prTarget: prTarget.target,
+    branch: submissionCandidate.candidate.branch,
+    commitSha: submissionCandidate.candidate.commitSha,
+    prTarget: submissionCandidate.candidate.prTarget,
     now: input.now,
   });
 
   if (!createRun.ok) {
-    return validationStartRejection(createRun, input.taskId, gitFacts.facts.branch);
+    return validationStartRejection(createRun, input.taskId, submissionCandidate.candidate.branch);
   }
 
   return {
     ok: true,
     taskId: input.taskId,
     runId: createRun.runId,
-    branch: gitFacts.facts.branch,
-    commitSha: gitFacts.facts.commitSha,
+    branch: submissionCandidate.candidate.branch,
+    commitSha: submissionCandidate.candidate.commitSha,
     taskState: createRun.taskState,
     previousTaskState: createRun.previousTaskState,
-    prTarget: prTarget.target,
+    prTarget: submissionCandidate.candidate.prTarget,
   };
 };
 
 const validationStartRejection = (
-  result: Extract<StartValidationRunResult, { readonly ok: false }>,
+  result: Extract<TaskAuthorityStartValidationResult, { readonly ok: false }>,
   taskId: PublicTaskId,
   branch: string,
 ): SubmitTaskResult => {

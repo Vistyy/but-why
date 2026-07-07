@@ -215,8 +215,8 @@ files:
   - src/**/*.ts
 ignores:
   - src/init/git.ts
-  - src/submit/gitFacts.ts
-  - src/submit/githubTarget.ts
+  - src/submissionEnvironment/gitFacts.ts
+  - src/submissionEnvironment/githubTarget.ts
   - src/validation/validationGitGlue.ts
 rule:
   any:
@@ -236,8 +236,8 @@ files:
   - src/**/*.ts
 ignores:
   - src/init/git.ts
-  - src/submit/gitFacts.ts
-  - src/submit/githubTarget.ts
+  - src/submissionEnvironment/gitFacts.ts
+  - src/submissionEnvironment/githubTarget.ts
   - src/validation/validationGitGlue.ts
 rule:
   all:
@@ -437,7 +437,7 @@ files:
   - src/**/*.ts
 ignores:
   - src/init/repoConfig.ts
-  - src/submit/githubTarget.ts
+  - src/submissionEnvironment/githubTarget.ts
 rule:
   pattern: JSON.parse($$$ARGS)
 ---

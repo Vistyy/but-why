@@ -2,7 +2,7 @@ import type { CliResult } from "../../cliResults.js";
 import { repoStateLoadError, runtimeError } from "../../cliResults.js";
 import {
   parseCliTaskIdArg,
-  repoTaskIdResolutionError,
+  taskIdResolutionError,
   type CliTaskIdParseResult,
 } from "../../cliTaskId.js";
 import type { PublicTaskId } from "../../task/taskId.js";
@@ -75,7 +75,7 @@ export const resolveTaskId = (tasks: TaskUseCases, taskId: PublicTaskId): Resolv
   const resolvedTaskId = tasks.resolveTaskId(taskId);
 
   if (!resolvedTaskId.ok) {
-    return { ok: false, result: repoTaskIdResolutionError(resolvedTaskId) };
+    return { ok: false, result: taskIdResolutionError(resolvedTaskId) };
   }
 
   return { ok: true, tasks, taskId: resolvedTaskId.taskId };

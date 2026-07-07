@@ -2,7 +2,7 @@
 
 ## Status
 
-Not done.
+Done.
 
 ## Parent
 
@@ -55,17 +55,17 @@ Avoid generic `Backend` names because task authority and submission environment 
 
 ## Acceptance criteria
 
-- [ ] A `TaskAuthority` seam exists in product language.
-- [ ] A local Task Authority adapter owns local Task reads, submit readiness, validation start, and validation tooling failure recovery.
-- [ ] A `SubmissionEnvironment` seam exists in product language.
-- [ ] A local Submission Environment adapter owns current-checkout Git facts, GitHub PR target detection, and Validation Workspace setup.
-- [ ] Submit CLI does not import SQLite store wiring.
-- [ ] `repoSubmit` naming is removed or replaced with local Task Authority and local Submission Environment naming.
-- [ ] Existing submit CLI output and structured errors remain unchanged.
-- [ ] Existing submit behavior remains unchanged.
-- [ ] Tests cover submit behavior through the new seams.
-- [ ] Fallow boundary rules enforce the new seams.
-- [ ] The Fallow score floor is raised to `88` if the quality gate passes cleanly.
+- [x] A `TaskAuthority` seam exists in product language.
+- [x] A local Task Authority adapter owns local Task reads, submit readiness, validation start, and validation tooling failure recovery.
+- [x] A `SubmissionEnvironment` seam exists in product language.
+- [x] A local Submission Environment adapter owns current-checkout Git facts, GitHub PR target detection, and Validation Workspace setup.
+- [x] Submit CLI does not import SQLite store wiring.
+- [x] `repoSubmit` naming is removed or replaced with local Task Authority and local Submission Environment naming.
+- [x] Existing submit CLI output and structured errors remain unchanged.
+- [x] Existing submit behavior remains unchanged.
+- [x] Tests cover submit behavior through the new seams.
+- [x] Fallow boundary rules enforce the new seams.
+- [x] The Fallow score floor is raised to `88` if the quality gate passes cleanly.
 
 ## Blocked by
 
