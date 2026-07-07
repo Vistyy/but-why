@@ -1,14 +1,11 @@
 import { existsSync } from "node:fs";
 
+import { openRepoLocalStores, type RepoLocalStores } from "../init/repoLocalStores.js";
 import {
   loadRepoLocalContext,
   type LoadRepoLocalContextError,
   type RepoLocalContext,
 } from "../init/repoContext.js";
-import type { RunStore } from "../run/runStore.js";
-import { openSqliteRunStore } from "../sqlite/sqliteRunStore.js";
-import { openSqliteTaskStore } from "../sqlite/sqliteTaskStore.js";
-import { openSqliteValidationRuns } from "../sqlite/sqliteValidationRuns.js";
 import {
   openSubmitPreflight,
   type SubmitTaskInput,
@@ -24,7 +21,6 @@ import { localTaskAuthority } from "../taskAuthority/localTaskAuthority.js";
 import type { SubmitEligibleState } from "../task/submitPolicy.js";
 import type { PublicTaskId } from "../task/taskId.js";
 import type { SubmissionEnvironment } from "../submissionEnvironment/submissionEnvironment.js";
-import type { ValidationWorkspaceSetup } from "../validation/createValidationWorkspace.js";
 
 export type LocalSubmitPreflight = {
   readonly taskPrefix: string;
@@ -92,19 +88,10 @@ const localSubmitPreflight = (
   context: RepoLocalContext,
   migrationTimestamp: () => string,
 ): LocalSubmitPreflight => {
-  const taskStore = openSqliteTaskStore({
-    statePath: context.paths.statePath,
-    taskPrefix: context.taskPrefix,
+  const { taskStore, validationRuns, recordValidationWorkspaceSetup } = openRepoLocalStores(
+    context,
     migrationTimestamp,
-  });
-  const validationRuns = openSqliteValidationRuns({
-    statePath: context.paths.statePath,
-    migrationTimestamp,
-  });
-  const runStore = openSqliteRunStore({
-    statePath: context.paths.statePath,
-    migrationTimestamp,
-  });
+  );
   const taskAuthority = localTaskAuthority({ context, taskStore, validationRuns });
   const submissionEnvironment = localSubmissionEnvironment({ context });
   const submitPreflight = openSubmitPreflight({ taskAuthority, submissionEnvironment });
@@ -114,14 +101,19 @@ const localSubmitPreflight = (
     resolveTaskId: taskAuthority.resolveTaskId,
     submitTask: submitPreflight.submitTask,
     createValidationWorkspaceForRun: (input) =>
-      createValidationWorkspaceForRun(taskAuthority, submissionEnvironment, runStore, input),
+      createValidationWorkspaceForRun(
+        taskAuthority,
+        submissionEnvironment,
+        recordValidationWorkspaceSetup,
+        input,
+      ),
   };
 };
 
 const createValidationWorkspaceForRun = async (
   taskAuthority: TaskAuthority,
   submissionEnvironment: SubmissionEnvironment,
-  runStore: RunStore,
+  recordValidationWorkspaceSetup: RepoLocalStores["recordValidationWorkspaceSetup"],
   input: CreateLocalValidationWorkspaceForRunInput,
 ): Promise<CreateValidationWorkspaceForRunResult> => {
   const result = await submissionEnvironment.createValidationWorkspaceForRun({
@@ -131,7 +123,7 @@ const createValidationWorkspaceForRun = async (
   });
 
   if (result.ok) {
-    recordValidationWorkspaceSetup(runStore, input.now, result.validationWorkspace);
+    recordValidationWorkspaceSetup(input.now, result.validationWorkspace);
 
     return result;
   }
@@ -156,23 +148,6 @@ const createValidationWorkspaceForRun = async (
   }
 
   return result;
-};
-
-const recordValidationWorkspaceSetup = (
-  runStore: RunStore,
-  now: string,
-  setup: ValidationWorkspaceSetup,
-): void => {
-  runStore.recordValidationWorkspaceSetup({
-    runId: setup.runId,
-    tempRefName: setup.tempRefName,
-    submittedSha: setup.submittedSha,
-    worktreePath: setup.worktreePath,
-    worktreeHead: setup.worktreeHead,
-    cleanupWorktree: setup.cleanupResult.worktree,
-    cleanupTempRef: setup.cleanupResult.tempRef,
-    now,
-  });
 };
 
 export type { SubmitTaskResult };

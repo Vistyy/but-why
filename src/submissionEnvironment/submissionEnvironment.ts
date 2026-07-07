@@ -2,7 +2,7 @@ import type { GitHubPrTarget } from "../run/run.js";
 import type {
   ValidationWorkspaceSetup,
   ValidationWorkspaceToolingError,
-} from "../validation/createValidationWorkspace.js";
+} from "../validation/validationWorkspace.js";
 
 export type SubmissionEnvironment = {
   readonly readSubmittedCodeCandidate: () => SubmittedCodeCandidateResult;

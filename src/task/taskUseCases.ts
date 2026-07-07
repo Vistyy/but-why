@@ -1,13 +1,5 @@
-import { existsSync } from "node:fs";
-
-import {
-  loadRepoLocalContext,
-  type LoadRepoLocalContextError,
-  type RepoLocalContext,
-} from "../init/repoContext.js";
+import type { RepoLocalContext } from "../init/repoContext.js";
 import type { RunStore } from "../run/runStore.js";
-import { openSqliteRunStore } from "../sqlite/sqliteRunStore.js";
-import { openSqliteTaskStore } from "../sqlite/sqliteTaskStore.js";
 import { canStartFrom, type StartIneligibleState } from "./startPolicy.js";
 import type { TaskState } from "./lifecycle.js";
 import type { TaskContext, TaskRecord, TaskSummary } from "./task.js";
@@ -34,29 +26,6 @@ export type TaskUseCases = {
   readonly startTask: (taskId: PublicTaskId, now: string) => StartTaskResult;
   readonly transitionTaskState: (input: TransitionTaskStateInput) => RepoTaskStateTransitionResult;
 };
-
-export type LoadTaskUseCasesInput = {
-  readonly cwd: string;
-  readonly requireState: boolean;
-  readonly migrationTimestamp: () => string;
-};
-
-export type LoadTaskUseCasesResult =
-  | {
-      readonly ok: true;
-      readonly tasks: TaskUseCases;
-    }
-  | {
-      readonly ok: false;
-      readonly error: LoadTaskUseCasesError;
-    };
-
-export type LoadTaskUseCasesError =
-  | LoadRepoLocalContextError
-  | {
-      readonly code: "state_store_unavailable";
-      readonly taskPrefix: string;
-    };
 
 type CreateTaskInput = {
   readonly title: string;
@@ -114,54 +83,24 @@ export type StartTaskResult =
       readonly state: StartIneligibleState;
     };
 
-export const loadTaskUseCases = (input: LoadTaskUseCasesInput): LoadTaskUseCasesResult => {
-  const repoContext = loadRepoLocalContext(input.cwd);
-
-  if (!repoContext.ok) {
-    return repoContext;
-  }
-
-  if (input.requireState && !existsSync(repoContext.context.paths.statePath)) {
-    return {
-      ok: false,
-      error: {
-        code: "state_store_unavailable",
-        taskPrefix: repoContext.context.taskPrefix,
-      },
-    };
-  }
-
-  return {
-    ok: true,
-    tasks: openTaskUseCases(repoContext.context, input.migrationTimestamp),
-  };
-};
-
-const openTaskUseCases = (
+export const openTaskUseCases = (
   context: RepoLocalContext,
-  migrationTimestamp: () => string,
+  stores: {
+    readonly taskStore: TaskStore;
+    readonly runStore: RunStore;
+  },
 ): TaskUseCases => {
-  const taskStore = openSqliteTaskStore({
-    statePath: context.paths.statePath,
-    taskPrefix: context.taskPrefix,
-    migrationTimestamp,
-  });
-  const runStore = openSqliteRunStore({
-    statePath: context.paths.statePath,
-    migrationTimestamp,
-  });
-
   return {
     taskPrefix: context.taskPrefix,
     resolveTaskId: (taskId) => resolveRepoTaskId(context, taskId),
-    createTask: taskStore.createTask,
-    listTasks: taskStore.listTasks,
-    listActionableTasks: taskStore.listActionableTasks,
-    getTaskById: (taskId) => getTaskById(taskStore, runStore, taskId),
-    getTaskContextById: taskStore.getTaskContextById,
-    appendTaskComment: taskStore.appendTaskComment,
-    startTask: (taskId, now) => startTask(taskStore, runStore, taskId, now),
-    transitionTaskState: (input) => transitionTaskState(taskStore, runStore, input),
+    createTask: stores.taskStore.createTask,
+    listTasks: stores.taskStore.listTasks,
+    listActionableTasks: stores.taskStore.listActionableTasks,
+    getTaskById: (taskId) => getTaskById(stores.taskStore, stores.runStore, taskId),
+    getTaskContextById: stores.taskStore.getTaskContextById,
+    appendTaskComment: stores.taskStore.appendTaskComment,
+    startTask: (taskId, now) => startTask(stores.taskStore, stores.runStore, taskId, now),
+    transitionTaskState: (input) => transitionTaskState(stores.taskStore, stores.runStore, input),
   };
 };
 

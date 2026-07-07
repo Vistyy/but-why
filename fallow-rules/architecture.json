@@ -18,8 +18,8 @@
         "process",
         "node:sqlite"
       ],
-      "zones": ["pure-task-domain", "pure-run-domain"],
-      "message": "Pure domain modules must stay free of filesystem, process execution, process, and SQLite imports.",
+      "zones": ["domain"],
+      "message": "Domain modules must stay free of filesystem, process execution, process, and SQLite imports.",
       "severity": "error"
     },
     {
@@ -48,15 +48,59 @@
       "severity": "error"
     },
     {
-      "id": "submit-does-not-import-validation-start-stores",
+      "id": "concrete-sqlite-stores-only-in-repo-local-storage-wiring",
       "kind": "banned-import",
       "specifiers": [
+        "./sqliteTaskStore.js",
+        "./sqliteRunStore.js",
+        "./sqliteValidationRuns.js",
         "../sqlite/sqliteTaskStore.js",
         "../sqlite/sqliteRunStore.js",
-        "../sqlite/sqliteValidationRuns.js"
+        "../sqlite/sqliteValidationRuns.js",
+        "../../sqlite/sqliteTaskStore.js",
+        "../../sqlite/sqliteRunStore.js",
+        "../../sqlite/sqliteValidationRuns.js",
+        "../../../sqlite/sqliteTaskStore.js",
+        "../../../sqlite/sqliteRunStore.js",
+        "../../../sqlite/sqliteValidationRuns.js"
       ],
-      "files": ["src/submit/**/*.ts"],
-      "message": "Submit code must reach validation start and recovery through ValidationRuns, not SQLite store wiring.",
+      "files": ["src/**/*.ts"],
+      "exclude": ["src/init/repoLocalStores.ts"],
+      "message": "Production code must open concrete SQLite stores only through src/init/repoLocalStores.ts.",
+      "severity": "error"
+    },
+    {
+      "id": "command-code-does-not-import-output-serializers",
+      "kind": "banned-import",
+      "specifiers": [
+        "./output/json.js",
+        "./output/serialize.js",
+        "./output/toon.js",
+        "../output/json.js",
+        "../output/serialize.js",
+        "../output/toon.js",
+        "../../output/json.js",
+        "../../output/serialize.js",
+        "../../output/toon.js",
+        "../../../output/json.js",
+        "../../../output/serialize.js",
+        "../../../output/toon.js"
+      ],
+      "files": ["src/cli*.ts", "src/cli/**/*.ts", "src/submit/submitCli.ts"],
+      "message": "CLI command code may use structured output types but must leave JSON, TOON, and serializer implementation imports at the process edge.",
+      "severity": "error"
+    },
+    {
+      "id": "submit-and-validation-do-not-bypass-validation-runs",
+      "kind": "banned-import",
+      "specifiers": [
+        "./sqliteValidationRuns.js",
+        "../sqlite/sqliteValidationRuns.js",
+        "../../sqlite/sqliteValidationRuns.js",
+        "../../../sqlite/sqliteValidationRuns.js"
+      ],
+      "files": ["src/submit/**/*.ts", "src/localSubmit/**/*.ts", "src/validation/**/*.ts"],
+      "message": "Submit and validation flow must start validation through the ValidationRuns seam, not by importing the SQLite implementation directly.",
       "severity": "error"
     }
   ]

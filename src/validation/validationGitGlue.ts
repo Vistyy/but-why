@@ -5,11 +5,7 @@ import { join } from "node:path";
 import type { Sandbox } from "@ai-hero/sandcastle";
 
 import type { CleanupState } from "../run/cleanup.js";
-
-export type ValidationWorkspaceCleanupResult = {
-  readonly worktree: CleanupState;
-  readonly tempRef: CleanupState;
-};
+import type { ValidationWorkspaceCleanupResult } from "./validationWorkspace.js";
 
 const zeroSha = "0000000000000000000000000000000000000000";
 

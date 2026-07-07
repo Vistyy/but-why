@@ -2,7 +2,7 @@ import type { DatabaseSync } from "node:sqlite";
 
 import { rollbackIfOpen, withStateDatabase, type SqliteStoreInput } from "./connection.js";
 import { queryOne } from "./query.js";
-import { recordRunToolingErrorMutation, runExists } from "./sqliteRunStore.js";
+import { recordRunToolingErrorMutation, runExists } from "./sqliteRunInternals.js";
 import { submitStateReadiness } from "../task/submitPolicy.js";
 import { storedPublicTaskId, taskSlugForId, type PublicTaskId } from "../task/taskId.js";
 import type { TaskState } from "../task/lifecycle.js";

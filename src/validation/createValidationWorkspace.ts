@@ -11,26 +11,11 @@ import {
   inspectExistingWorktree,
   removeValidationWorktree,
   validationTempRefName,
-  type ValidationWorkspaceCleanupResult,
 } from "./validationGitGlue.js";
-
-export type ValidationWorkspaceSetup = {
-  readonly runId: string;
-  readonly tempRefName: string;
-  readonly submittedSha: string;
-  readonly worktreePath: string;
-  readonly worktreeHead: string;
-  readonly cleanupResult: ValidationWorkspaceCleanupResult;
-};
-
-export type ValidationWorkspaceToolingError = {
-  readonly operationName: string;
-  readonly tempRefName: string;
-  readonly submittedSha: string;
-  readonly worktreePath?: string;
-  readonly errorMessage: string;
-  readonly cleanupResult: ValidationWorkspaceCleanupResult;
-};
+import type {
+  ValidationWorkspaceSetup,
+  ValidationWorkspaceToolingError,
+} from "./validationWorkspace.js";
 
 export type CreateValidationWorkspaceInput = {
   readonly repoRoot: string;

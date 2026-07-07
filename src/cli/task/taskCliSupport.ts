@@ -5,8 +5,9 @@ import {
   taskIdResolutionError,
   type CliTaskIdParseResult,
 } from "../../cliTaskId.js";
+import { loadTaskUseCases } from "../../localTask/taskUseCases.js";
 import type { PublicTaskId } from "../../task/taskId.js";
-import { loadTaskUseCases, type TaskUseCases } from "../../task/taskUseCases.js";
+import type { TaskUseCases } from "../../task/taskUseCases.js";
 
 export type TaskCommandEnvironment = {
   readonly cwd: string;

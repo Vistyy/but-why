@@ -7,7 +7,7 @@ import type {
   TaskAuthority,
   TaskAuthorityStartValidationResult,
 } from "../taskAuthority/taskAuthority.js";
-import type { ValidationWorkspaceSetup } from "../validation/createValidationWorkspace.js";
+import type { ValidationWorkspaceSetup } from "../validation/validationWorkspace.js";
 
 /**
  * Future validation workspace code should call this module after implementation work is complete.

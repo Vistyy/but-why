@@ -5,8 +5,8 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import { collapseHome } from "../src/cli.js";
 import { openSqliteTaskStore } from "../src/sqlite/sqliteTaskStore.js";
+import { loadTaskUseCases } from "../src/localTask/taskUseCases.js";
 import type { TaskState } from "../src/task/lifecycle.js";
-import { loadTaskUseCases } from "../src/task/taskUseCases.js";
 import { publicTaskId } from "../src/task/taskId.js";
 import {
   byExecutable,

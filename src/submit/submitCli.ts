@@ -13,7 +13,7 @@ import {
   type LocalSubmitPreflight,
   type SubmitTaskResult,
 } from "../localSubmit/submitPreflight.js";
-import type { ValidationWorkspaceToolingError } from "../validation/createValidationWorkspace.js";
+import type { ValidationWorkspaceToolingError } from "../validation/validationWorkspace.js";
 
 export const routeSubmit = async (
   args: readonly string[],
