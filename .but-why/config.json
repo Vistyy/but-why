@@ -1,0 +1,15 @@
+{
+  "taskPrefix": "BY",
+  "validation": {
+    "sandbox": {
+      "mode": "none"
+    }
+  },
+  "checks": [
+    {
+      "id": "quality",
+      "command": "just quality",
+      "timeoutSeconds": 1200
+    }
+  ]
+}
