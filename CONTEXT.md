@@ -119,13 +119,18 @@ _Avoid_: Parse error, exhausted retry, malformed finding
 
 **Finding**:
 A validation result that records a blocking problem or question about a submission, including failed configured checks.
-In v1, any finding sends the task to needs input.
+In v1, any Finding sends the Task to needs input, and severity is optional impact judgment owned by producer contracts.
 _Avoid_: Issue, error, comment, note
 
 **Phase**:
-A fixed part of the validation gate, such as checks, review, publishing, or PR watching.
+A fixed part of the validation gate, such as prepare, checks, review, publishing, or PR watching.
 Phases give findings and artifacts a stable place in validation history.
 _Avoid_: Pipeline step, job
+
+**Prepare Phase**:
+A fixed validation gate phase that prepares the Validation Workspace for validation phases that need repo tooling.
+Prepare Phase failures are validation findings when the submitted workspace cannot be prepared for validation.
+_Avoid_: Setup step, pre-check hook, install step, prepare checks
 
 **Round**:
 One recorded attempt inside a validation phase.

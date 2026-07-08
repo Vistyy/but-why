@@ -36,7 +36,7 @@ Failed checks should become blocking Findings so all validation blockers are vis
 - [ ] Each check can set `timeoutSeconds`.
 - [ ] `timeoutSeconds` must be a positive integer.
 - [ ] Checks without `timeoutSeconds` default to `1200` seconds.
-- [ ] Check timeouts create high-severity Findings, not Validation Tooling Failures.
+- [ ] Check timeouts create Findings, not Validation Tooling Failures.
 - [ ] Validation stops immediately after a check timeout.
 - [ ] `checks[].id` is the Producer id for the check round.
 - [ ] Check ids are valid for artifact refs.
@@ -48,10 +48,10 @@ Failed checks should become blocking Findings so all validation blockers are vis
 - [ ] Check artifacts are saved outside the Validation Workspace before workspace cleanup.
 - [ ] Check artifact capture uses the command result returned by Sandcastle, not files left in the Validation Workspace.
 - [ ] A failed check exit code creates a blocking Finding from the `checks` phase because a Finding is any validation blocker about the submission, including failed configured checks.
-- [ ] Failed check Findings use `severity: high`.
+- [ ] Failed check Findings do not include a `severity` field.
 - [ ] Failed check Finding evidence includes the command and exit code, not stdout or stderr excerpts.
 - [ ] Failed check Finding `files` is empty.
-- [ ] Timeout Findings use `title: Check timed out: <check id>`, `severity: high`, evidence with command and `timeoutSeconds`, and empty `files`.
+- [ ] Timeout Findings use `title: Check timed out: <check id>`, evidence with command and `timeoutSeconds`, empty `files`, and no `severity` field.
 - [ ] Failed and timed-out check Findings include stdout, stderr, exit-code, and logs artifact refs.
 - [ ] Command execution tooling failures use typed validation errors and are recorded as Validation Tooling Failures, not Findings.
 - [ ] Command execution tooling failures are limited to cases where But Why or Sandcastle cannot start, observe, capture, or record the command result.
