@@ -25,6 +25,10 @@ The skill should make But Why? usable by agents without requiring them to redisc
 - [ ] The skill tells agents that Validation Tooling Failures are tooling problems, not submission problems.
 - [ ] The skill includes the expected prepare-and-check submit loop.
 - [ ] The skill explains that agents should configure explicit `validation.prepare` and `validation.checks` policy instead of relying on hidden dependency setup.
+- [ ] The skill explains that `by init` gives concise setup hints, while the skill carries the detailed agent workflow.
+- [ ] The skill includes prepare examples for common ecosystems such as pnpm, uv, Cargo, and .NET.
+- [ ] The skill tells agents not to hide dependency setup inside checks when `validation.prepare` is available.
+- [ ] The skill explains how to install or run the packaged `by` CLI.
 - [ ] The skill includes guidance for creating a But Why Task from an existing markdown issue with `--description-file` without treating markdown files as the Task authority.
 - [ ] The skill warns agents not to edit repo-local SQLite state directly.
 - [ ] The skill warns agents not to inspect validation artifacts through workspace paths.
@@ -36,3 +40,4 @@ The skill should make But Why? usable by agents without requiring them to redisc
 
 - 013-inspect-runs-and-latest-task-findings.md
 - 043-guide-init-validation-configuration.md
+- 044-package-by-as-installable-cli.md
