@@ -3,12 +3,16 @@
   "validation": {
     "sandbox": {
       "mode": "none"
+    },
+    "prepare": {
+      "command": "pnpm install --frozen-lockfile --prefer-offline",
+      "timeoutSeconds": 1200
     }
   },
   "checks": [
     {
       "id": "quality",
-      "command": "pnpm install --frozen-lockfile && just quality",
+      "command": "just quality",
       "timeoutSeconds": 1200
     }
   ]
