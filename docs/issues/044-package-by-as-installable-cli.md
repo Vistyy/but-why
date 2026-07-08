@@ -13,7 +13,8 @@ Not done.
 Make `by` installable and usable outside this source checkout.
 
 Today `by` is mainly a project-local wrapper under `bin/`.
-A normal user or agent should be able to install it, run it from another repo, and use it without depending on this repo's source tree or local `node_modules` layout.
+A normal user or agent should be able to install it from a local `npm pack` tarball, run it from another repo, and use it without depending on this repo's source tree or local `node_modules` layout.
+The same local tarball should support global installation from the latest local checkout without publishing to the npm registry.
 
 Use `just by ...` or the repo-local CLI when developing But Why? itself.
 Use the Installed CLI, invoked as `by ...`, when using But Why? from another repository.
@@ -21,6 +22,7 @@ Use the Installed CLI, invoked as `by ...`, when using But Why? from another rep
 ## Acceptance criteria
 
 - [ ] `by` can be installed from an `npm pack` tarball for use from another repository.
+- [ ] The same local tarball can be installed globally from the latest local checkout and run as `by`.
 - [ ] The installed CLI runs without relying on `src/main.ts` at runtime.
 - [ ] The installed CLI runs without relying on `tsx` as a runtime loader.
 - [ ] The package build uses plain `tsc` TypeScript emit and emits `dist/main.js` as the stable JavaScript runtime entrypoint.
@@ -35,10 +37,11 @@ Use the Installed CLI, invoked as `by ...`, when using But Why? from another rep
 - [ ] The development workflow still supports running `by` from this repo through `just by ...` or an equivalent repo-local CLI path.
 - [ ] The repo-local CLI may remain source-based for development, including use of `tsx`, as long as the Installed CLI does not depend on it.
 - [ ] A smoke test installs the `npm pack` tarball as a project-local dependency in a temp Git repo and runs `by --help` through that repo's local installed bin.
+- [ ] A separate install check proves the same tarball can be installed globally from the latest local checkout and run as `by`.
 - [ ] Installed CLI help smoke tests assert successful help output, not a repo-local `bin` path.
 - [ ] A smoke test runs `by init --task-prefix BY` from a separate temp Git repo through that repo's local installed bin.
-- [ ] Smoke tests do not require global package installation.
-- [ ] Tarball-only install instructions are documented in `docs/setup.md`.
+- [ ] Smoke tests remain project-local and do not require global package installation.
+- [ ] Tarball-only install instructions are documented in `docs/setup.md`, including global installation from the latest local checkout tarball.
 - [ ] `docs/setup.md` says npm registry install is not available until issue 046 publishes the package.
 - [ ] Agent-facing install guidance is documented or made ready for issue 041.
 - [ ] Agent-guided repository configuration of `validation.prepare`, `checks`, and reviewer/profile policy is out of scope for this issue and belongs to issue 043 or a follow-up setup issue.

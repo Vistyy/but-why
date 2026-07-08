@@ -34,7 +34,7 @@ It should reference the setup and install guidance produced by issue 044.
 - [ ] The skill distinguishes Repo-local CLI usage from Installed CLI usage: use `just by ...` when developing But Why? itself, and use installed `by ...` when operating in another repository.
 - [ ] The skill references the setup and install guidance produced by issue 044 instead of being the only bootstrap source.
 - [ ] The skill treats npm registry publishing as future work until issue 046 is complete.
-- [ ] The skill uses tarball install guidance only while registry publishing is unavailable.
+- [ ] The skill uses tarball install guidance before registry publishing is available and for latest-local-checkout installs after publishing.
 - [ ] The skill does not require `by --version` until issue 046 adds it.
 - [ ] The skill includes guidance for creating a But Why Task from an existing markdown issue with `--description-file` without treating markdown files as the Task authority.
 - [ ] The skill warns agents not to edit repo-local SQLite state directly.

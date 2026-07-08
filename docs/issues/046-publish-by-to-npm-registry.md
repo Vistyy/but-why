@@ -10,7 +10,7 @@ Not done.
 
 ## What to build
 
-Publish the But Why? CLI package to the npm registry so users and agents can install or invoke `by` without a local tarball.
+Publish the But Why? CLI package to the npm registry so users and agents can install or invoke `by` from the npm registry without needing a local tarball.
 
 Issue 044 makes the package publish-ready and tarball-installable.
 This issue chooses the registry release path and makes registry installation the supported public install path.
@@ -23,9 +23,9 @@ This issue chooses the registry release path and makes registry installation the
 - [ ] The release process for versioning, packaging, and publishing is documented.
 - [ ] npm authentication, access, and provenance requirements are documented or automated.
 - [ ] The package is published to the npm registry.
-- [ ] `docs/setup.md` documents registry-based install or invocation.
+- [ ] `docs/setup.md` documents stable registry-based install or invocation.
 - [ ] `docs/setup.md` keeps tarball install only as a local development or release-verification path if still useful.
-- [ ] Agent-facing install guidance references the registry install path after publishing.
+- [ ] Agent-facing install guidance references the stable registry install path after publishing.
 - [ ] Existing `npm pack` verification remains part of release confidence.
 
 ## Out of scope
@@ -33,6 +33,7 @@ This issue chooses the registry release path and makes registry installation the
 - Changing validation behavior.
 - Agent-guided repository configuration of prepare, checks, reviewers, or profiles.
 - Replacing the repo-local development CLI.
+- Removing local tarball installation from the latest checkout as a development or release-verification path.
 
 ## Blocked by
 
