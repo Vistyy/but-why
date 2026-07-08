@@ -13,6 +13,7 @@ export type RepoLocalPaths = {
   readonly configPath: string;
   readonly statePath: string;
   readonly reviewersPath: string;
+  readonly artifactsPath: string;
   readonly gitignorePath: string;
 };
 
@@ -93,6 +94,7 @@ const repoLocalPaths = (root: string): RepoLocalPaths => {
     configPath: join(butWhyDir, "config.json"),
     statePath: join(butWhyDir, "state.sqlite"),
     reviewersPath: join(butWhyDir, "reviewers"),
+    artifactsPath: join(butWhyDir, "artifacts"),
     gitignorePath: join(root, ".gitignore"),
   };
 };

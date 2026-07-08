@@ -337,6 +337,7 @@ ignores:
   - src/init/repoContext.ts
   - src/init/repoConfig.ts
   - src/init/gitignore.ts
+  - src/validationRun/artifactFiles.ts
 rule:
   any:
     - pattern: writeFileSync($$$ARGS)

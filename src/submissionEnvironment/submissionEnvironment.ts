@@ -1,7 +1,11 @@
 import type { Effect } from "effect";
 
 import type { GitHubPrTarget } from "../validationRun/validationRun.js";
+import type { ValidationToolingFailure } from "../validation/validationToolingFailures.js";
 import type {
+  ActiveValidationWorkspace,
+  ActiveValidationWorkspaceResult,
+  ValidationSandboxMode,
   ValidationWorkspaceSetup,
   ValidationWorkspaceToolingError,
 } from "../validation/validationWorkspace.js";
@@ -44,7 +48,11 @@ export type SubmissionEnvironmentRejectionCode =
 export type CreateValidationWorkspaceForValidationRunInput = {
   readonly validationRunId: string;
   readonly commitSha: string;
+  readonly sandboxMode: ValidationSandboxMode;
   readonly now: string;
+  readonly runInWorkspace?: (
+    workspace: ActiveValidationWorkspace,
+  ) => Effect.Effect<ActiveValidationWorkspaceResult, ValidationToolingFailure>;
   readonly recordInterruptedCleanupResult?: (
     toolingError: ValidationWorkspaceToolingError,
   ) => Effect.Effect<void>;
@@ -54,8 +62,13 @@ export type CreateValidationWorkspaceForValidationRunResult =
   | {
       readonly ok: true;
       readonly validationWorkspace: ValidationWorkspaceSetup;
+      readonly activeWorkspaceResult?: ActiveValidationWorkspaceResult;
     }
   | {
       readonly ok: false;
       readonly toolingError: ValidationWorkspaceToolingError;
+    }
+  | {
+      readonly ok: false;
+      readonly toolingFailure: ValidationToolingFailure;
     };

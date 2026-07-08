@@ -7,8 +7,11 @@ import {
   validationRunExists,
 } from "./sqliteValidationRunInternals.js";
 import type {
+  ValidationRunArtifactRecord,
+  ValidationRunFindingRecord,
   ValidationRunPhaseStatusRecord,
   ValidationRunRecord,
+  ValidationRunRoundRecord,
 } from "../validationRun/validationRun.js";
 import type {
   RecordValidationRunErrorInput,
@@ -65,6 +68,35 @@ const validationRunPhaseStatusColumns = [
   "created_at AS createdAt",
   "updated_at AS updatedAt",
 ].join(", ");
+const validationRunRoundColumns = [
+  "validation_run_id AS validationRunId",
+  "phase",
+  "round_number AS roundNumber",
+  "status",
+  "created_at AS createdAt",
+  "updated_at AS updatedAt",
+].join(", ");
+const validationRunFindingColumns = [
+  "id",
+  "validation_run_id AS validationRunId",
+  "phase",
+  "title",
+  "description",
+  "severity",
+  "evidence",
+  "files",
+  "artifact_refs AS artifactRefs",
+  "created_at AS createdAt",
+  "updated_at AS updatedAt",
+].join(", ");
+const validationRunArtifactColumns = [
+  "ref",
+  "validation_run_id AS validationRunId",
+  "phase",
+  "producer",
+  "path",
+  "created_at AS createdAt",
+].join(", ");
 const validationPhaseOrderSql = `
   CASE phase
     WHEN 'preflight' THEN 1
@@ -91,6 +123,12 @@ export const openSqliteValidationRunStore = (input: SqliteStoreInput): Validatio
     withStateDatabase(input, (database) =>
       listValidationRunPhaseStatuses(database, validationRunId),
     ),
+  listValidationRunRounds: (validationRunId) =>
+    withStateDatabase(input, (database) => listValidationRunRounds(database, validationRunId)),
+  listValidationRunFindings: (validationRunId) =>
+    withStateDatabase(input, (database) => listValidationRunFindings(database, validationRunId)),
+  listValidationRunArtifacts: (validationRunId) =>
+    withStateDatabase(input, (database) => listValidationRunArtifacts(database, validationRunId)),
   recordValidationRunError: (validationRunInput) =>
     withStateDatabase(input, (database) => recordValidationRunError(database, validationRunInput)),
   recordValidationWorkspaceSetup: (validationRunInput) =>
@@ -184,6 +222,59 @@ const listValidationRunPhaseStatuses = (
     `,
     [validationRunId],
   ).map(rowToValidationRunPhaseStatus);
+
+const listValidationRunRounds = (
+  database: DatabaseSync,
+  validationRunId: string,
+): readonly ValidationRunRoundRecord[] =>
+  queryAll<ValidationRunRoundRow>(
+    database,
+    `
+      SELECT ${validationRunRoundColumns}
+      FROM validation_run_rounds
+      WHERE validation_run_id = ?
+      ORDER BY phase ASC, round_number ASC
+    `,
+    [validationRunId],
+  ).map(rowToValidationRunRound);
+
+const listValidationRunFindings = (
+  database: DatabaseSync,
+  validationRunId: string,
+): readonly ValidationRunFindingRecord[] =>
+  queryAll<ValidationRunFindingRow>(
+    database,
+    `
+      SELECT ${validationRunFindingColumns}
+      FROM validation_run_findings
+      WHERE validation_run_id = ?
+      ORDER BY id ASC
+    `,
+    [validationRunId],
+  ).map(rowToValidationRunFinding);
+
+const listValidationRunArtifacts = (
+  database: DatabaseSync,
+  validationRunId: string,
+): readonly ValidationRunArtifactRecord[] =>
+  queryAll<ValidationRunArtifactRow>(
+    database,
+    `
+      SELECT ${validationRunArtifactColumns}
+      FROM validation_run_artifacts
+      WHERE validation_run_id = ?
+      ORDER BY producer ASC,
+        CASE
+          WHEN ref LIKE '%/stdout.txt' THEN 1
+          WHEN ref LIKE '%/stderr.txt' THEN 2
+          WHEN ref LIKE '%/exit-code.json' THEN 3
+          WHEN ref LIKE '%/logs.txt' THEN 4
+          ELSE 5
+        END,
+        ref ASC
+    `,
+    [validationRunId],
+  ).map(rowToValidationRunArtifact);
 
 const recordValidationRunError = (
   database: DatabaseSync,
@@ -319,6 +410,16 @@ const rowToValidationRunPhaseStatus = (
   row: ValidationRunPhaseStatusRow,
 ): ValidationRunPhaseStatusRecord => row;
 
+const rowToValidationRunRound = (row: ValidationRunRoundRow): ValidationRunRoundRecord => ({
+  ...row,
+  roundNumber: Number(row.roundNumber),
+});
+
+const rowToValidationRunFinding = (row: ValidationRunFindingRow): ValidationRunFindingRecord => row;
+
+const rowToValidationRunArtifact = (row: ValidationRunArtifactRow): ValidationRunArtifactRecord =>
+  row;
+
 type ValidationRunIdRow = {
   readonly id: string;
 };
@@ -342,6 +443,14 @@ type ValidationRunRecordRow = {
 type ValidationWorkspaceSetupRow = ValidationWorkspaceSetupRecord;
 
 type ValidationRunPhaseStatusRow = ValidationRunPhaseStatusRecord;
+
+type ValidationRunRoundRow = Omit<ValidationRunRoundRecord, "roundNumber"> & {
+  readonly roundNumber: number | bigint;
+};
+
+type ValidationRunFindingRow = ValidationRunFindingRecord;
+
+type ValidationRunArtifactRow = ValidationRunArtifactRecord;
 
 type ValidationRunToolingErrorRow = Omit<
   ValidationRunToolingErrorRecord,

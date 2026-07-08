@@ -1,4 +1,5 @@
 import type { GitHubPrTarget } from "../validationRun/validationRun.js";
+import type { RecordValidationRunCheckRoundInput } from "../validationRun/validationRunStore.js";
 import type { ValidationToolingFailure } from "./validationToolingFailures.js";
 import type { TaskState } from "../task/lifecycle.js";
 import type { SubmitEligibleState } from "../task/submitPolicy.js";
@@ -9,6 +10,9 @@ export type ValidationRuns = {
   readonly recordToolingFailure: (
     input: RecordValidationToolingFailureInput,
   ) => RecordValidationToolingFailureResult;
+  readonly recordCheckRound: (
+    input: RecordValidationRunCheckRoundInput,
+  ) => RecordValidationCheckRoundResult;
 };
 
 export type StartValidationRunInput = {
@@ -56,7 +60,17 @@ export type RecordValidationToolingFailureResult =
       readonly code: "VALIDATION_RUN_NOT_FOUND" | "TASK_AUTHORITY_UNSUPPORTED";
     };
 
+export type RecordValidationCheckRoundResult =
+  | {
+      readonly ok: true;
+    }
+  | {
+      readonly ok: false;
+      readonly code: "VALIDATION_RUN_NOT_FOUND" | "TASK_AUTHORITY_UNSUPPORTED";
+    };
+
 export const unsupportedValidationRuns = (): ValidationRuns => ({
   start: () => ({ ok: false, code: "TASK_AUTHORITY_UNSUPPORTED" }),
   recordToolingFailure: () => ({ ok: false, code: "TASK_AUTHORITY_UNSUPPORTED" }),
+  recordCheckRound: () => ({ ok: false, code: "TASK_AUTHORITY_UNSUPPORTED" }),
 });

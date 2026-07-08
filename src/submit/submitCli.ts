@@ -23,7 +23,14 @@ import {
   RepoConfigValidationFailed,
   type SubmitRejectionError,
 } from "../submit/submitRejectionErrors.js";
-import type { ValidationWorkspaceToolingError } from "../validation/validationWorkspace.js";
+import {
+  validationToolingFailureRecord,
+  type ValidationToolingFailure,
+} from "../validation/validationToolingFailures.js";
+import type {
+  ValidationWorkspaceSetup,
+  ValidationWorkspaceToolingError,
+} from "../validation/validationWorkspace.js";
 
 export const routeSubmit = (
   args: readonly string[],
@@ -78,7 +85,15 @@ export const routeSubmit = (
         });
 
       if (!validationWorkspace.ok) {
+        if ("toolingFailure" in validationWorkspace) {
+          return validationToolingFailureError(validationWorkspace.toolingFailure);
+        }
+
         return validationWorkspaceSetupError(validationWorkspace.toolingError);
+      }
+
+      if (validationWorkspace.activeWorkspaceResult?.checkFindings === 1) {
+        return validationFindingsError(result, validationWorkspace.validationWorkspace);
       }
 
       return renderSubmitResult({
@@ -308,6 +323,44 @@ const unsupportedTaskAuthorityError = (taskId: string): CliResult =>
     details: { taskId },
     help: ["Use a local But Why? Task for validation start in this version."],
   });
+
+const validationFindingsError = (
+  result: Extract<SubmitTaskResult, { readonly ok: true }>,
+  validationWorkspace: ValidationWorkspaceSetup,
+): CliResult =>
+  runtimeError({
+    code: "validation_findings",
+    message: "Validation produced blocking Findings.",
+    details: {
+      taskId: result.taskId,
+      validationRunId: result.validationRunId,
+      taskState: "needs_input",
+      validationWorkspace: {
+        tempRefName: validationWorkspace.tempRefName,
+        submittedSha: validationWorkspace.submittedSha,
+        worktreeHead: validationWorkspace.worktreeHead,
+        cleanupResult: {
+          worktree: validationWorkspace.cleanupResult.worktree,
+          tempRef: validationWorkspace.cleanupResult.tempRef,
+        },
+      },
+    },
+    help: ["Inspect the latest Validation Run Findings, fix the submission, then rerun submit."],
+  });
+
+const validationToolingFailureError = (failure: ValidationToolingFailure): CliResult => {
+  const record = validationToolingFailureRecord(failure);
+
+  return runtimeError({
+    code: record.errorKind,
+    message: "Validation tooling failed.",
+    details: {
+      operationName: record.operationName,
+      errorMessage: record.errorMessage,
+    },
+    help: ["Fix the validation tooling problem, then rerun submit."],
+  });
+};
 
 const validationWorkspaceSetupError = (error: ValidationWorkspaceToolingError): CliResult =>
   runtimeError({

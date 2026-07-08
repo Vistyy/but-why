@@ -8,6 +8,7 @@ const input = {
   validationRunId: "by-1-test.1",
   submittedSha: "abc123",
   copyFiles: [],
+  sandboxMode: "none" as const,
 };
 
 const tempRefName = "refs/but-why/validation-runs/by-1-test.1/validation";

@@ -3,7 +3,23 @@ import { posix, win32 } from "node:path";
 
 export type RepoConfig = {
   readonly taskPrefix: string;
+  readonly validation?: RepoValidationConfig;
+  readonly checks?: readonly RepoCheckConfig[];
   readonly validationWorkspace?: RepoValidationWorkspaceConfig;
+};
+
+export type RepoValidationConfig = {
+  readonly sandbox?: RepoValidationSandboxConfig;
+};
+
+export type RepoValidationSandboxConfig = {
+  readonly mode?: string;
+};
+
+export type RepoCheckConfig = {
+  readonly id: string;
+  readonly command: string;
+  readonly timeoutSeconds?: number;
 };
 
 export type RepoValidationWorkspaceConfig = {
@@ -19,7 +35,7 @@ export type ConfigReadResult =
       readonly ok: false;
     };
 
-const repoConfigKeys = new Set(["taskPrefix", "validationWorkspace"]);
+const repoConfigKeys = new Set(["taskPrefix", "validation", "checks", "validationWorkspace"]);
 
 export const readRepoConfig = (path: string): ConfigReadResult => {
   try {
@@ -54,14 +70,86 @@ const isRepoConfig = (value: unknown): value is RepoConfig => {
     return false;
   }
 
+  const validation = (value as { readonly validation?: unknown }).validation;
+
+  if (validation !== undefined && !isValidationConfig(validation)) {
+    return false;
+  }
+
+  const checks = (value as { readonly checks?: unknown }).checks;
+
+  if (checks !== undefined && !isChecksConfig(checks)) {
+    return false;
+  }
+
   const validationWorkspace = (value as { readonly validationWorkspace?: unknown })
     .validationWorkspace;
 
-  if (validationWorkspace === undefined) {
-    return true;
+  if (validationWorkspace !== undefined && !isValidationWorkspaceConfig(validationWorkspace)) {
+    return false;
   }
 
-  return isValidationWorkspaceConfig(validationWorkspace);
+  return true;
+};
+
+const isValidationConfig = (value: unknown): value is RepoValidationConfig => {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return false;
+  }
+
+  const entries = Object.entries(value);
+
+  if (!entries.every(([key]) => key === "sandbox")) {
+    return false;
+  }
+
+  const sandbox = (value as { readonly sandbox?: unknown }).sandbox;
+
+  return sandbox === undefined || isValidationSandboxConfig(sandbox);
+};
+
+const isValidationSandboxConfig = (value: unknown): value is RepoValidationSandboxConfig => {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return false;
+  }
+
+  const entries = Object.entries(value);
+
+  return (
+    entries.every(([key]) => key === "mode") &&
+    ((value as { readonly mode?: unknown }).mode === undefined ||
+      typeof (value as { readonly mode?: unknown }).mode === "string")
+  );
+};
+
+const isChecksConfig = (value: unknown): value is readonly RepoCheckConfig[] =>
+  Array.isArray(value) && value.every(isCheckConfig);
+
+const isCheckConfig = (value: unknown): value is RepoCheckConfig => {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return false;
+  }
+
+  const entries = Object.entries(value);
+
+  if (!entries.every(([key]) => key === "id" || key === "command" || key === "timeoutSeconds")) {
+    return false;
+  }
+
+  const check = value as {
+    readonly id?: unknown;
+    readonly command?: unknown;
+    readonly timeoutSeconds?: unknown;
+  };
+
+  return (
+    typeof check.id === "string" &&
+    typeof check.command === "string" &&
+    (check.timeoutSeconds === undefined ||
+      (typeof check.timeoutSeconds === "number" &&
+        Number.isInteger(check.timeoutSeconds) &&
+        check.timeoutSeconds > 0))
+  );
 };
 
 const isValidationWorkspaceConfig = (value: unknown): value is RepoValidationWorkspaceConfig => {

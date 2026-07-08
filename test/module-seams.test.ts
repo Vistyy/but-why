@@ -1,3 +1,4 @@
+import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { Effect } from "effect";
 import { afterEach, describe, expect, it } from "vitest";
@@ -387,6 +388,7 @@ describe("module seams", () => {
         };
       },
       recordValidationToolingFailure: () => ({ ok: true }),
+      recordCheckRound: () => ({ ok: true }),
     };
     const submissionEnvironment: SubmissionEnvironment = {
       readSubmittedCodeCandidate: () => {
@@ -457,6 +459,10 @@ const initializedRepo = (): string => {
 
   expect(result.status).toBe(0);
   expect(result.stderr).toBe("");
+  writeFileSync(
+    join(root, ".but-why/config.json"),
+    `${JSON.stringify({ taskPrefix: "BY", checks: [{ id: "quality", command: "true" }] }, null, 2)}\n`,
+  );
 
   return root;
 };

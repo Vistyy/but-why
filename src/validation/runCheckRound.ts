@@ -1,0 +1,311 @@
+import type { Sandbox } from "@ai-hero/sandcastle";
+import { Effect } from "effect";
+
+import type { SubmitCheckConfig } from "../submit/submitRepoConfig.js";
+import { writeValidationRunArtifactFile } from "../validationRun/artifactFiles.js";
+import type { RecordValidationRunCheckRoundInput } from "../validationRun/validationRunStore.js";
+import {
+  CheckCommandExecutionToolingFailed,
+  InfrastructureToolingFailed,
+  type ValidationToolingFailure,
+} from "./validationToolingFailures.js";
+
+export type RunCheckPhaseInput = {
+  readonly validationRunId: string;
+  readonly checks: readonly SubmitCheckConfig[];
+  readonly sandbox: Pick<Sandbox, "exec">;
+  readonly repoRoot: string;
+  readonly now: string;
+  readonly recordCheckRound: (input: RecordValidationRunCheckRoundInput) => void;
+};
+
+export type RunCheckPhaseResult =
+  | {
+      readonly ok: true;
+      readonly findings: 0;
+    }
+  | {
+      readonly ok: true;
+      readonly findings: 1;
+      readonly validationRunId: string;
+    };
+
+type CommandResult = {
+  readonly exitCode: number;
+  readonly stdout: string;
+  readonly stderr: string;
+};
+
+type CheckCommandResult = {
+  readonly commandResult: CommandResult;
+  readonly timedOut: boolean;
+};
+
+type CheckRound = {
+  readonly roundNumber: number;
+  readonly failed: boolean;
+  readonly lastCheck: boolean;
+  readonly artifactRecords: RecordValidationRunCheckRoundInput["artifactRecords"];
+  readonly finding?: NonNullable<RecordValidationRunCheckRoundInput["finding"]>;
+};
+
+const timeoutExitCode = 124;
+const artifactFileNames = ["stdout.txt", "stderr.txt", "exit-code.json", "logs.txt"] as const;
+
+export const runCheckPhase = (
+  input: RunCheckPhaseInput,
+): Effect.Effect<RunCheckPhaseResult, ValidationToolingFailure> =>
+  Effect.gen(function* () {
+    for (const [index, check] of input.checks.entries()) {
+      const checkRound = yield* runSingleCheck(input, check, index);
+
+      yield* recordCheckRound(input, checkRound);
+
+      if (checkRound.failed) {
+        return { ok: true, findings: 1, validationRunId: input.validationRunId };
+      }
+    }
+
+    return { ok: true, findings: 0 };
+  });
+
+const runSingleCheck = (
+  input: RunCheckPhaseInput,
+  check: SubmitCheckConfig,
+  index: number,
+): Effect.Effect<CheckRound, ValidationToolingFailure> =>
+  Effect.gen(function* () {
+    const checkCommandResult = yield* runCheckCommand(input.sandbox, check);
+    const { commandResult, timedOut } = checkCommandResult;
+    const artifactRefs = artifactFileNames.map((fileName) =>
+      checkArtifactRef(input.validationRunId, check.id, fileName),
+    );
+    const artifactRecords = yield* writeCheckArtifacts({
+      validationRunId: input.validationRunId,
+      check,
+      commandResult,
+      timedOut,
+      repoRoot: input.repoRoot,
+      now: input.now,
+    });
+    const failed = commandResult.exitCode !== 0;
+
+    return {
+      roundNumber: index + 1,
+      failed,
+      lastCheck: index === input.checks.length - 1,
+      artifactRecords,
+      ...(failed
+        ? {
+            finding: checkFinding(
+              input.validationRunId,
+              check,
+              commandResult,
+              timedOut,
+              artifactRefs,
+            ),
+          }
+        : {}),
+    };
+  });
+
+const recordCheckRound = (
+  input: RunCheckPhaseInput,
+  checkRound: CheckRound,
+): Effect.Effect<void, ValidationToolingFailure> =>
+  Effect.try({
+    try: () => {
+      input.recordCheckRound({
+        validationRunId: input.validationRunId,
+        roundNumber: checkRound.roundNumber,
+        roundStatus: checkRound.failed ? "failed" : "passed",
+        phaseStatus: checkRound.failed ? "failed" : checkRound.lastCheck ? "passed" : "active",
+        artifactRecords: checkRound.artifactRecords,
+        ...(checkRound.finding === undefined ? {} : { finding: checkRound.finding }),
+        now: input.now,
+      });
+    },
+    catch: (error) =>
+      new InfrastructureToolingFailed({
+        operationName: "record_check_round",
+        message: errorMessage(error),
+      }),
+  });
+
+const checkFinding = (
+  validationRunId: string,
+  check: SubmitCheckConfig,
+  commandResult: CommandResult,
+  timedOut: boolean,
+  artifactRefs: readonly string[],
+): NonNullable<RecordValidationRunCheckRoundInput["finding"]> => ({
+  id: `${validationRunId}-F1`,
+  validationRunId,
+  phase: "checks",
+  title: timedOut ? `Check timed out: ${check.id}` : `Check failed: ${check.id}`,
+  description: timedOut
+    ? `Configured check ${check.id} timed out after ${check.timeoutSeconds} seconds.`
+    : `Configured check ${check.id} exited with code ${commandResult.exitCode}.`,
+  severity: "high",
+  evidence: timedOut
+    ? `command: ${check.command}\ntimeoutSeconds: ${check.timeoutSeconds}`
+    : `command: ${check.command}\nexitCode: ${commandResult.exitCode}`,
+  files: "[]",
+  artifactRefs: jsonStringArray(artifactRefs),
+});
+
+const runCheckCommand = (
+  sandbox: Pick<Sandbox, "exec">,
+  check: SubmitCheckConfig,
+): Effect.Effect<CheckCommandResult, ValidationToolingFailure> =>
+  Effect.tryPromise({
+    try: async () => {
+      await ensureTimeoutCommandAvailable(sandbox, check);
+
+      const marker = checkCompletionMarker(check.id);
+      const result = await sandbox.exec(timeoutWrappedCommand(check, marker));
+      const parsed = parseCheckCompletionMarker(result.stderr, marker);
+
+      return {
+        commandResult: {
+          exitCode: parsed.completed ? parsed.exitCode : timeoutExitCode,
+          stdout: result.stdout,
+          stderr: parsed.stderr,
+        },
+        timedOut: !parsed.completed,
+      };
+    },
+    catch: (error) =>
+      new CheckCommandExecutionToolingFailed({
+        operationName: "run_check_command",
+        command: check.command,
+        message: errorMessage(error),
+      }),
+  });
+
+const ensureTimeoutCommandAvailable = async (
+  sandbox: Pick<Sandbox, "exec">,
+  check: SubmitCheckConfig,
+): Promise<void> => {
+  const result = await sandbox.exec("command -v timeout >/dev/null 2>&1");
+
+  if (result.exitCode !== 0) {
+    throw new Error(`Could not find timeout command for check ${check.id}.`);
+  }
+};
+
+const writeCheckArtifacts = (input: {
+  readonly validationRunId: string;
+  readonly check: SubmitCheckConfig;
+  readonly commandResult: CommandResult;
+  readonly timedOut: boolean;
+  readonly repoRoot: string;
+  readonly now: string;
+}): Effect.Effect<
+  readonly RecordValidationRunCheckRoundInput["artifactRecords"][number][],
+  ValidationToolingFailure
+> =>
+  Effect.try({
+    try: () => {
+      const artifacts = [
+        { fileName: "stdout.txt", content: input.commandResult.stdout },
+        { fileName: "stderr.txt", content: input.commandResult.stderr },
+        {
+          fileName: "exit-code.json",
+          content: [
+            "{",
+            `  "exitCode": ${input.commandResult.exitCode},`,
+            `  "timedOut": ${input.timedOut}`,
+            "}",
+            "",
+          ].join("\n"),
+        },
+        {
+          fileName: "logs.txt",
+          content: checkLogContent(input.check, input.commandResult, input.timedOut),
+        },
+      ] as const;
+
+      return artifacts.map((artifact) => {
+        const path = writeValidationRunArtifactFile({
+          repoRoot: input.repoRoot,
+          validationRunId: input.validationRunId,
+          phase: "checks",
+          producer: input.check.id,
+          fileName: artifact.fileName,
+          content: artifact.content,
+        });
+
+        return {
+          ref: checkArtifactRef(input.validationRunId, input.check.id, artifact.fileName),
+          validationRunId: input.validationRunId,
+          phase: "checks" as const,
+          producer: input.check.id,
+          path,
+        };
+      });
+    },
+    catch: (error) =>
+      new InfrastructureToolingFailed({
+        operationName: "record_check_artifacts",
+        message: errorMessage(error),
+      }),
+  });
+
+const checkArtifactRef = (validationRunId: string, checkId: string, fileName: string): string =>
+  `artifact:${validationRunId}/checks/${checkId}/${fileName}`;
+
+const jsonStringArray = (values: readonly string[]): string =>
+  `[${values.map((value) => `"${value}"`).join(",")}]`;
+
+const timeoutWrappedCommand = (check: SubmitCheckConfig, marker: string): string =>
+  [
+    `timeout ${check.timeoutSeconds}s sh -c`,
+    shellQuote(`sh -c "$1"
+check_exit_code=$?
+printf '\n%s:%s\n' "$2" "$check_exit_code" >&2
+exit "$check_exit_code"`),
+    "_",
+    shellQuote(check.command),
+    shellQuote(marker),
+  ].join(" ");
+
+const parseCheckCompletionMarker = (
+  stderr: string,
+  marker: string,
+):
+  | { readonly completed: true; readonly exitCode: number; readonly stderr: string }
+  | { readonly completed: false; readonly stderr: string } => {
+  const markerMatch = stderr.match(new RegExp(`\\n${marker}:(\\d+)\\n?$`));
+
+  if (markerMatch === null) {
+    return { completed: false, stderr };
+  }
+
+  return {
+    completed: true,
+    exitCode: Number(markerMatch[1]),
+    stderr: stderr.slice(0, markerMatch.index),
+  };
+};
+
+const checkCompletionMarker = (checkId: string): string => `__BUTWHY_CHECK_COMPLETED_${checkId}__`;
+
+const shellQuote = (value: string): string => `'${value.replaceAll("'", `'\\''`)}'`;
+
+const checkLogContent = (
+  check: SubmitCheckConfig,
+  commandResult: CommandResult,
+  timedOut: boolean,
+): string =>
+  [
+    `checkId: ${check.id}`,
+    `command: ${check.command}`,
+    `timeoutSeconds: ${check.timeoutSeconds}`,
+    `exitCode: ${commandResult.exitCode}`,
+    `timedOut: ${timedOut}`,
+    "",
+  ].join("\n");
+
+const errorMessage = (error: unknown): string =>
+  error instanceof Error ? error.message : String(error);

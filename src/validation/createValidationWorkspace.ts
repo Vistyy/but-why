@@ -1,8 +1,10 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 
-import { createSandbox, type Sandbox } from "@ai-hero/sandcastle";
+import { createSandbox, type Sandbox, type SandboxProvider } from "@ai-hero/sandcastle";
+import { docker } from "@ai-hero/sandcastle/sandboxes/docker";
 import { noSandbox } from "@ai-hero/sandcastle/sandboxes/no-sandbox";
+import { podman } from "@ai-hero/sandcastle/sandboxes/podman";
 import { Effect, Ref, type Scope } from "effect";
 
 import {
@@ -13,7 +15,11 @@ import {
   removeValidationWorktree,
   validationTempRefName,
 } from "./validationGitGlue.js";
+import type { ValidationToolingFailure } from "./validationToolingFailures.js";
 import type {
+  ActiveValidationWorkspace,
+  ActiveValidationWorkspaceResult,
+  ValidationSandboxMode,
   ValidationWorkspaceCleanupResult,
   ValidationWorkspaceSetup,
   ValidationWorkspaceToolingError,
@@ -24,19 +30,28 @@ export type CreateValidationWorkspaceInput = {
   readonly validationRunId: string;
   readonly submittedSha: string;
   readonly copyFiles: readonly string[];
+  readonly sandboxMode: ValidationSandboxMode;
   readonly recordInterruptedCleanupResult?: (
     toolingError: ValidationWorkspaceToolingError,
   ) => Effect.Effect<void>;
+  readonly runInWorkspace?: (
+    workspace: ActiveValidationWorkspace,
+  ) => Effect.Effect<ActiveValidationWorkspaceResult, ValidationToolingFailure>;
 };
 
 export type CreateValidationWorkspaceResult =
   | {
       readonly ok: true;
       readonly setup: ValidationWorkspaceSetup;
+      readonly activeWorkspaceResult?: ActiveValidationWorkspaceResult;
     }
   | {
       readonly ok: false;
       readonly toolingError: ValidationWorkspaceToolingError;
+    }
+  | {
+      readonly ok: false;
+      readonly toolingFailure: ValidationToolingFailure;
     };
 
 type ValidationWorkspaceAdapters = {
@@ -56,6 +71,7 @@ type ValidationWorkspaceAdapters = {
     readonly repoRoot: string;
     readonly tempRefName: string;
     readonly copyFiles: readonly string[];
+    readonly sandboxProvider: SandboxProvider;
   }) => Effect.Effect<
     | {
         readonly ok: true;
@@ -102,6 +118,7 @@ type WorkspaceSetupAttempt = WorkspaceSetupSuccess | WorkspaceSetupFailure;
 type WorkspaceSetupSuccess = {
   readonly ok: true;
   readonly setup: Omit<ValidationWorkspaceSetup, "cleanupResult">;
+  readonly activeWorkspaceResult?: ActiveValidationWorkspaceResult;
 };
 
 type WorkspaceSetupFailure = {
@@ -118,15 +135,29 @@ const initialCleanupResult: ValidationWorkspaceCleanupResult = {
   tempRef: "not_created",
 };
 
+const validationSandboxProvider = (mode: ValidationSandboxMode): SandboxProvider => {
+  switch (mode) {
+    case "none":
+      return noSandbox();
+    case "docker":
+      return docker();
+    case "podman":
+      return podman();
+  }
+};
+
 export const createValidationWorkspace = (
   input: CreateValidationWorkspaceInput,
 ): Effect.Effect<CreateValidationWorkspaceResult> =>
-  createValidationWorkspaceWithAdapters(input, productionValidationWorkspaceAdapters);
+  Effect.catchAll(
+    createValidationWorkspaceWithAdapters(input, productionValidationWorkspaceAdapters),
+    (toolingFailure) => Effect.succeed({ ok: false, toolingFailure }),
+  );
 
 const createValidationWorkspaceWithAdapters = (
   input: CreateValidationWorkspaceInput,
   adapters: ValidationWorkspaceAdapters,
-): Effect.Effect<CreateValidationWorkspaceResult> =>
+): Effect.Effect<CreateValidationWorkspaceResult, ValidationToolingFailure> =>
   Effect.gen(function* () {
     const tempRefName = validationTempRefName(input.validationRunId);
     const expectedWorktreePath = expectedSandcastleWorktreePath(input.repoRoot, tempRefName);
@@ -185,16 +216,19 @@ const createValidationWorkspaceWithAdapters = (
         ...setupAttempt.setup,
         cleanupResult: finalCleanupResult,
       },
+      ...(setupAttempt.activeWorkspaceResult === undefined
+        ? {}
+        : { activeWorkspaceResult: setupAttempt.activeWorkspaceResult }),
     };
   });
 
 const withInterruptedCleanupRecording = (
-  scopedSetup: Effect.Effect<WorkspaceSetupAttempt>,
+  scopedSetup: Effect.Effect<WorkspaceSetupAttempt, ValidationToolingFailure>,
   input: CreateValidationWorkspaceInput,
   tempRefName: string,
   expectedWorktreePath: string,
   cleanupResult: Ref.Ref<ValidationWorkspaceCleanupResult>,
-): Effect.Effect<WorkspaceSetupAttempt> => {
+): Effect.Effect<WorkspaceSetupAttempt, ValidationToolingFailure> => {
   const recordInterruptedCleanupResult = input.recordInterruptedCleanupResult;
 
   if (recordInterruptedCleanupResult === undefined) {
@@ -225,7 +259,7 @@ const setupValidationWorkspaceScope = (
   state: WorkspaceScopeState,
   adapters: ValidationWorkspaceAdapters,
   cleanupResult: Ref.Ref<ValidationWorkspaceCleanupResult>,
-): Effect.Effect<WorkspaceSetupAttempt, never, Scope.Scope> =>
+): Effect.Effect<WorkspaceSetupAttempt, ValidationToolingFailure, Scope.Scope> =>
   Effect.gen(function* () {
     const tempRefAttempt = yield* acquireTempRef(input, state, adapters, cleanupResult);
 
@@ -251,7 +285,29 @@ const setupValidationWorkspaceScope = (
       return worktreeAttempt;
     }
 
-    return yield* verifyWorktreeHead(input, state, adapters, worktreeAttempt.sandbox);
+    const verifiedWorkspace = yield* verifyWorktreeHead(
+      input,
+      state,
+      adapters,
+      worktreeAttempt.sandbox,
+    );
+
+    if (!verifiedWorkspace.ok) {
+      return verifiedWorkspace;
+    }
+
+    const activeWorkspaceResult =
+      input.runInWorkspace === undefined
+        ? undefined
+        : yield* input.runInWorkspace({
+            sandbox: worktreeAttempt.sandbox,
+            worktreePath: state.worktreePath ?? state.expectedWorktreePath,
+          });
+
+    return {
+      ...verifiedWorkspace,
+      ...(activeWorkspaceResult === undefined ? {} : { activeWorkspaceResult }),
+    };
   });
 
 const acquireTempRef = (
@@ -362,6 +418,7 @@ const acquireSandcastleWorktree = (
       repoRoot: input.repoRoot,
       tempRefName: state.tempRefName,
       copyFiles: input.copyFiles,
+      sandboxProvider: validationSandboxProvider(input.sandboxMode),
     });
 
     if (!worktree.ok) {
@@ -429,7 +486,7 @@ const productionValidationWorkspaceAdapters: ValidationWorkspaceAdapters = {
         const sandbox = await createSandbox({
           cwd: input.repoRoot,
           branch: input.tempRefName,
-          sandbox: noSandbox(),
+          sandbox: input.sandboxProvider,
           copyToWorktree: [...input.copyFiles],
         });
 

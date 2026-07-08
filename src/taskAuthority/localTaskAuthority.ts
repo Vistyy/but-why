@@ -17,6 +17,7 @@ export const localTaskAuthority = (input: {
   startValidation: (validationInput) => input.validationRuns.start(validationInput),
   recordValidationToolingFailure: (failureInput) =>
     input.validationRuns.recordToolingFailure(failureInput),
+  recordCheckRound: (checkRoundInput) => input.validationRuns.recordCheckRound(checkRoundInput),
 });
 
 const getTaskSubmitReadiness = (

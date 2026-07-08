@@ -120,7 +120,11 @@
       },
       {
         "name": "validation-runs",
-        "patterns": ["src/validation/validationRuns.ts"]
+        "patterns": [
+          "src/validation/validationRuns.ts",
+          "src/validation/runCheckRound.ts",
+          "src/validationRun/artifactFiles.ts"
+        ]
       },
       {
         "name": "submit-rejection-errors",
@@ -144,7 +148,11 @@
       },
       {
         "name": "use-cases",
-        "patterns": ["src/task/taskUseCases.ts", "src/submit/submitPreflight.ts"]
+        "patterns": [
+          "src/task/taskUseCases.ts",
+          "src/submit/submitPreflight.ts",
+          "src/submit/submitRepoConfig.ts"
+        ]
       },
       {
         "name": "task-adapter",
@@ -219,7 +227,8 @@
           "repo-init",
           "submit-rejection-errors",
           "task-adapter",
-          "use-cases"
+          "use-cases",
+          "validation-tooling-failures"
         ],
         "allowTypeOnly": ["submission-environment-port", "validation-workspace"]
       },
@@ -245,7 +254,8 @@
       },
       {
         "from": "validation-runs",
-        "allow": ["domain", "validation-tooling-failures"]
+        "allow": ["domain", "validation-tooling-failures"],
+        "allowTypeOnly": ["use-cases", "validation-run-store"]
       },
       {
         "from": "submit-rejection-errors",
@@ -258,12 +268,13 @@
       },
       {
         "from": "task-authority-port",
-        "allow": ["domain", "validation-runs"]
+        "allow": ["domain", "validation-runs"],
+        "allowTypeOnly": ["validation-run-store"]
       },
       {
         "from": "submission-environment-port",
         "allow": ["domain"],
-        "allowTypeOnly": ["validation-workspace"]
+        "allowTypeOnly": ["validation-tooling-failures", "validation-workspace"]
       },
       {
         "from": "validation-workspace",
@@ -278,7 +289,8 @@
           "submission-environment-port",
           "task-adapter",
           "task-authority-port",
-          "task-store"
+          "task-store",
+          "submit-rejection-errors"
         ],
         "allowTypeOnly": ["validation-workspace"]
       },
@@ -313,8 +325,8 @@
       {
         "from": "sandcastle-adapter",
         "allow": ["domain", "github-adapter"],
-        "allowTypeOnly": ["validation-workspace"]
-      },
+        "allowTypeOnly": ["validation-tooling-failures", "validation-workspace"]
+      }
       {
         "from": "sqlite-core",
         "allow": ["storage-init", "validation-run-store"]

@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { chmodSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
@@ -97,17 +97,150 @@ describe("by submit CLI", () => {
     });
     expect(
       validationRunStore(root).listValidationRunPhaseStatuses(firstTaskValidationRunId),
-    ).toEqual([]);
+    ).toEqual([
+      {
+        validationRunId: firstTaskValidationRunId,
+        phase: "checks",
+        status: "passed",
+        errorMessage: null,
+        createdAt: thirdNow,
+        updatedAt: thirdNow,
+      },
+    ]);
+    expect(validationRunStore(root).listValidationRunRounds(firstTaskValidationRunId)).toEqual([
+      {
+        validationRunId: firstTaskValidationRunId,
+        phase: "checks",
+        roundNumber: 1,
+        status: "passed",
+        createdAt: thirdNow,
+        updatedAt: thirdNow,
+      },
+    ]);
+    expect(validationRunStore(root).listValidationRunArtifacts(firstTaskValidationRunId)).toEqual([
+      expect.objectContaining({
+        ref: `artifact:${firstTaskValidationRunId}/checks/quality/stdout.txt`,
+        validationRunId: firstTaskValidationRunId,
+        phase: "checks",
+        producer: "quality",
+      }),
+      expect.objectContaining({
+        ref: `artifact:${firstTaskValidationRunId}/checks/quality/stderr.txt`,
+        validationRunId: firstTaskValidationRunId,
+        phase: "checks",
+        producer: "quality",
+      }),
+      expect.objectContaining({
+        ref: `artifact:${firstTaskValidationRunId}/checks/quality/exit-code.json`,
+        validationRunId: firstTaskValidationRunId,
+        phase: "checks",
+        producer: "quality",
+      }),
+      expect.objectContaining({
+        ref: `artifact:${firstTaskValidationRunId}/checks/quality/logs.txt`,
+        validationRunId: firstTaskValidationRunId,
+        phase: "checks",
+        producer: "quality",
+      }),
+    ]);
+    for (const artifact of validationRunStore(root).listValidationRunArtifacts(
+      firstTaskValidationRunId,
+    )) {
+      expect(existsSync(join(root, artifact.path))).toBe(true);
+    }
+  });
+
+  it("rejects missing check config before Validation Run creation", () => {
+    const root = preparedRepoOnBranch("feature/missing-checks");
+
+    writeRepoConfig(root, { taskPrefix: "BY" });
+    spawnGit(root, "add", ".but-why/config.json");
+    spawnGit(root, "commit", "-m", "Remove check config");
+
+    const result = withFakeGh(() => runSubmit(root, ["BY-1"], thirdNow));
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toBe("");
+    expect(result.stdout).toContain("code: invalid_repo_config");
+    expect(result.stdout).toContain("Repo config must define at least one check.");
+    expect(taskHasNoValidationRuns(root, "BY-1")).toBe(true);
+    expect(taskState(root, "BY-1")).toBe("implementing");
+  });
+
+  it("turns a failed check into a blocking Finding and leaves the submitted branch unchanged", () => {
+    const root = preparedRepoOnBranch("feature/failing-check");
+    const commitSha = currentCommitSha(root);
+
+    writeRepoConfig(root, {
+      taskPrefix: "BY",
+      checks: [{ id: "quality", command: 'node -e "process.exit(7)"' }],
+    });
+    spawnGit(root, "add", ".but-why/config.json");
+    spawnGit(root, "commit", "-m", "Make validation check fail");
+    const failingCommitSha = currentCommitSha(root);
+
+    const branchBeforeSubmit = currentBranch(root);
+    const result = withFakeGh(() => runSubmit(root, ["BY-1"], thirdNow));
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toBe("");
+    expect(result.stdout).toContain("code: validation_findings");
+    expect(result.stdout).toContain("validationRunId: by-1-09224d806043.1");
+    expect(currentBranch(root)).toBe(branchBeforeSubmit);
+    expect(currentCommitSha(root)).toBe(failingCommitSha);
+    expect(currentCommitSha(root)).not.toBe(commitSha);
+    expect(taskState(root, "BY-1")).toBe("needs_input");
+    expect(validationRunStore(root).getValidationRunById(firstTaskValidationRunId)).toMatchObject({
+      status: "failed",
+    });
+    expect(validationRunStore(root).listValidationRunRounds(firstTaskValidationRunId)).toEqual([
+      {
+        validationRunId: firstTaskValidationRunId,
+        phase: "checks",
+        roundNumber: 1,
+        status: "failed",
+        createdAt: thirdNow,
+        updatedAt: thirdNow,
+      },
+    ]);
+
+    const artifactRefs = [
+      `artifact:${firstTaskValidationRunId}/checks/quality/stdout.txt`,
+      `artifact:${firstTaskValidationRunId}/checks/quality/stderr.txt`,
+      `artifact:${firstTaskValidationRunId}/checks/quality/exit-code.json`,
+      `artifact:${firstTaskValidationRunId}/checks/quality/logs.txt`,
+    ];
+    expect(validationRunStore(root).listValidationRunFindings(firstTaskValidationRunId)).toEqual([
+      {
+        id: `${firstTaskValidationRunId}-F1`,
+        validationRunId: firstTaskValidationRunId,
+        phase: "checks",
+        title: "Check failed: quality",
+        description: "Configured check quality exited with code 7.",
+        severity: "high",
+        evidence: 'command: node -e "process.exit(7)"\nexitCode: 7',
+        files: "[]",
+        artifactRefs: `[${artifactRefs.map((ref) => `"${ref}"`).join(",")}]`,
+        createdAt: thirdNow,
+        updatedAt: thirdNow,
+      },
+    ]);
+    expect(
+      validationRunStore(root)
+        .listValidationRunArtifacts(firstTaskValidationRunId)
+        .map((artifact) => artifact.ref),
+    ).toEqual(artifactRefs);
   });
 
   it("records workspace setup tooling errors on the Validation Run without sending the Task to needs_input", () => {
     const root = preparedRepoOnBranch("feature/missing-copy-file");
     const commitSha = currentCommitSha(root);
 
-    writeFileSync(
-      join(root, ".but-why/config.json"),
-      `${JSON.stringify({ taskPrefix: "BY", validationWorkspace: { copyFiles: [".env.test"] } }, null, 2)}\n`,
-    );
+    writeRepoConfig(root, {
+      taskPrefix: "BY",
+      validationWorkspace: { copyFiles: [".env.test"] },
+      checks: [{ id: "quality", command: "true" }],
+    });
     spawnGit(root, "add", ".but-why/config.json");
     spawnGit(root, "commit", "-m", "Configure validation workspace copy files");
 
@@ -324,6 +457,10 @@ const initializedRepo = (): string => {
 
   expect(result.status).toBe(0);
   expect(result.stderr).toBe("");
+  writeRepoConfig(root, {
+    taskPrefix: "BY",
+    checks: [{ id: "quality", command: "true" }],
+  });
 
   return root;
 };
@@ -342,6 +479,10 @@ const preparedRepoOnBranch = (branch: string): string => {
   transitionTaskState(root, "BY-1", "implementing", secondNow);
 
   return root;
+};
+
+const writeRepoConfig = (root: string, config: object): void => {
+  writeFileSync(join(root, ".but-why/config.json"), `${JSON.stringify(config, null, 2)}\n`);
 };
 
 const createTask = (root: string, title: string): void => {

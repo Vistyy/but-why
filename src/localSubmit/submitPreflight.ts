@@ -23,11 +23,16 @@ import { localTaskAuthority } from "../taskAuthority/localTaskAuthority.js";
 import type { SubmitEligibleState } from "../task/submitPolicy.js";
 import type { PublicTaskId } from "../task/taskId.js";
 import type { SubmissionEnvironment } from "../submissionEnvironment/submissionEnvironment.js";
+import { submitRepoConfig, type SubmitRepoConfig } from "../submit/submitRepoConfig.js";
 import {
   RepoConfigValidationFailed,
   type SubmitRejectionError,
 } from "../submit/submitRejectionErrors.js";
-import { ValidationWorkspaceSetupFailed } from "../validation/validationToolingFailures.js";
+import { runCheckPhase } from "../validation/runCheckRound.js";
+import {
+  ValidationWorkspaceSetupFailed,
+  type ValidationToolingFailure,
+} from "../validation/validationToolingFailures.js";
 
 export type LocalSubmitPreflight = {
   readonly taskPrefix: string;
@@ -97,15 +102,27 @@ export const loadLocalSubmitPreflight = (
     };
   }
 
+  const validationConfig =
+    input.requireState === false ? undefined : submitRepoConfig(repoContext.context.config);
+
+  if (validationConfig !== undefined && !validationConfig.ok) {
+    return { ok: false, error: validationConfig.error };
+  }
+
   return {
     ok: true,
-    submit: localSubmitPreflight(repoContext.context, input.migrationTimestamp),
+    submit: localSubmitPreflight(
+      repoContext.context,
+      input.migrationTimestamp,
+      validationConfig?.config,
+    ),
   };
 };
 
 const localSubmitPreflight = (
   context: RepoLocalContext,
   migrationTimestamp: () => string,
+  validationConfig: SubmitRepoConfig | undefined,
 ): LocalSubmitPreflight => {
   const { taskStore, validationRuns, recordValidationWorkspaceSetup } = openRepoLocalStores(
     context,
@@ -124,6 +141,8 @@ const localSubmitPreflight = (
         taskAuthority,
         submissionEnvironment,
         recordValidationWorkspaceSetup,
+        validationConfig,
+        context,
         input,
       ),
   };
@@ -133,13 +152,40 @@ const createValidationWorkspaceForValidationRun = (
   taskAuthority: TaskAuthority,
   submissionEnvironment: SubmissionEnvironment,
   recordValidationWorkspaceSetup: RepoLocalStores["recordValidationWorkspaceSetup"],
+  validationConfig: SubmitRepoConfig | undefined,
+  context: RepoLocalContext,
   input: CreateLocalValidationWorkspaceForValidationRunInput,
 ): Effect.Effect<CreateValidationWorkspaceForValidationRunResult> =>
   Effect.gen(function* () {
+    if (validationConfig === undefined) {
+      throw new Error(
+        "Submit validation config must be loaded before creating a Validation Workspace.",
+      );
+    }
+
     const result = yield* submissionEnvironment.createValidationWorkspaceForValidationRun({
       validationRunId: input.validationRunId,
       commitSha: input.commitSha,
+      sandboxMode: validationConfig.sandboxMode,
       now: input.now,
+      runInWorkspace: (workspace) =>
+        Effect.map(
+          runCheckPhase({
+            validationRunId: input.validationRunId,
+            checks: validationConfig.checks,
+            sandbox: workspace.sandbox,
+            repoRoot: context.root,
+            now: input.now,
+            recordCheckRound: (checkRoundInput) => {
+              const recordResult = taskAuthority.recordCheckRound(checkRoundInput);
+
+              if (!recordResult.ok) {
+                throw new Error(`Could not record check round: ${recordResult.code}`);
+              }
+            },
+          }),
+          (checkResult) => ({ checkFindings: checkResult.findings }),
+        ),
       recordInterruptedCleanupResult: (toolingError) =>
         Effect.sync(() => {
           recordValidationWorkspaceToolingFailure(taskAuthority, input, toolingError);
@@ -148,6 +194,12 @@ const createValidationWorkspaceForValidationRun = (
 
     if (result.ok) {
       recordValidationWorkspaceSetup(input.now, result.validationWorkspace);
+
+      return result;
+    }
+
+    if ("toolingFailure" in result) {
+      recordValidationToolingFailure(taskAuthority, input, result.toolingFailure);
 
       return result;
     }
@@ -161,7 +213,10 @@ const recordValidationWorkspaceToolingFailure = (
   taskAuthority: TaskAuthority,
   input: CreateLocalValidationWorkspaceForValidationRunInput,
   toolingError: NonNullable<
-    Extract<CreateValidationWorkspaceForValidationRunResult, { readonly ok: false }>["toolingError"]
+    Extract<
+      CreateValidationWorkspaceForValidationRunResult,
+      { readonly toolingError: unknown }
+    >["toolingError"]
   >,
 ): void => {
   const toolingFailure = new ValidationWorkspaceSetupFailed({
@@ -173,6 +228,14 @@ const recordValidationWorkspaceToolingFailure = (
     cleanupResult: toolingError.cleanupResult,
   });
 
+  recordValidationToolingFailure(taskAuthority, input, toolingFailure);
+};
+
+const recordValidationToolingFailure = (
+  taskAuthority: TaskAuthority,
+  input: CreateLocalValidationWorkspaceForValidationRunInput,
+  toolingFailure: ValidationToolingFailure,
+): void => {
   const recovery = taskAuthority.recordValidationToolingFailure({
     validationRunId: input.validationRunId,
     toolingFailure,

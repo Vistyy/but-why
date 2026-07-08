@@ -12,6 +12,7 @@ type Migration = {
 
 const validationPhaseSql =
   "'preflight', 'checks', 'intent_review', 'quality_review', 'publish_pr', 'watch_pr'";
+const validationRunStatusSql = "'active', 'failed', 'error'";
 const validationPhaseStatusSql = "'pending', 'active', 'passed', 'failed', 'workflow_failed'";
 
 const migrations: readonly Migration[] = [
@@ -270,6 +271,79 @@ const migrations: readonly Migration[] = [
     name: "008_drop_durable_validation_workspace_path",
     apply: `
       ALTER TABLE validation_workspace_setups DROP COLUMN worktree_path
+    `,
+  },
+  {
+    name: "009_failed_validation_run_status",
+    apply: `
+      DROP INDEX IF EXISTS validation_runs_active_task_unique_idx;
+      DROP INDEX IF EXISTS validation_runs_task_id_number_idx;
+
+      CREATE TABLE validation_runs_new (
+        id TEXT NOT NULL UNIQUE,
+        task_id TEXT NOT NULL,
+        task_validation_number INTEGER NOT NULL,
+        status TEXT NOT NULL CHECK (status IN (${validationRunStatusSql})),
+        branch TEXT NOT NULL,
+        commit_sha TEXT NOT NULL,
+        github_owner TEXT NOT NULL,
+        github_repo TEXT NOT NULL,
+        github_base_branch TEXT NOT NULL,
+        github_remote_name TEXT NOT NULL,
+        github_remote_url TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        FOREIGN KEY (task_id) REFERENCES tasks(id),
+        UNIQUE (task_id, task_validation_number)
+      );
+
+      INSERT INTO validation_runs_new (
+        id,
+        task_id,
+        task_validation_number,
+        status,
+        branch,
+        commit_sha,
+        github_owner,
+        github_repo,
+        github_base_branch,
+        github_remote_name,
+        github_remote_url,
+        created_at,
+        updated_at
+      )
+      SELECT
+        id,
+        task_id,
+        task_validation_number,
+        status,
+        branch,
+        commit_sha,
+        github_owner,
+        github_repo,
+        github_base_branch,
+        github_remote_name,
+        github_remote_url,
+        created_at,
+        updated_at
+      FROM validation_runs;
+
+      DROP TABLE validation_runs;
+      ALTER TABLE validation_runs_new RENAME TO validation_runs;
+
+      CREATE UNIQUE INDEX validation_runs_active_task_unique_idx
+      ON validation_runs (task_id)
+      WHERE status = 'active';
+
+      CREATE INDEX validation_runs_task_id_number_idx
+      ON validation_runs (task_id, task_validation_number DESC)
+    `,
+  },
+  {
+    name: "010_validation_finding_phase",
+    apply: `
+      ALTER TABLE validation_run_findings
+      ADD COLUMN phase TEXT NOT NULL DEFAULT 'checks' CHECK (phase IN (${validationPhaseSql}))
     `,
   },
 ];

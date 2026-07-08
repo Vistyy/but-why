@@ -1,7 +1,9 @@
 import type { TaskState } from "../task/lifecycle.js";
 import type { SubmitEligibleState } from "../task/submitPolicy.js";
 import type { PublicTaskId } from "../task/taskId.js";
+import type { RecordValidationRunCheckRoundInput } from "../validationRun/validationRunStore.js";
 import type {
+  RecordValidationCheckRoundResult,
   RecordValidationToolingFailureInput,
   RecordValidationToolingFailureResult,
   StartValidationRunInput,
@@ -16,6 +18,9 @@ export type TaskAuthority = {
   readonly recordValidationToolingFailure: (
     input: RecordValidationToolingFailureInput,
   ) => RecordValidationToolingFailureResult;
+  readonly recordCheckRound: (
+    input: RecordValidationRunCheckRoundInput,
+  ) => RecordValidationCheckRoundResult;
 };
 
 export type TaskAuthorityStartValidationResult = StartValidationRunResult;

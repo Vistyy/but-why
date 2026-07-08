@@ -88,15 +88,27 @@ const createValidationWorkspaceForValidationRun = (
       validationRunId: input.validationRunId,
       submittedSha: input.commitSha,
       copyFiles: context.config.validationWorkspace?.copyFiles ?? [],
+      sandboxMode: input.sandboxMode,
+      ...(input.runInWorkspace === undefined ? {} : { runInWorkspace: input.runInWorkspace }),
       ...(input.recordInterruptedCleanupResult === undefined
         ? {}
         : { recordInterruptedCleanupResult: input.recordInterruptedCleanupResult }),
     }),
     (result) => {
       if (!result.ok) {
+        if ("toolingFailure" in result) {
+          return { ok: false, toolingFailure: result.toolingFailure };
+        }
+
         return { ok: false, toolingError: result.toolingError };
       }
 
-      return { ok: true, validationWorkspace: result.setup };
+      return {
+        ok: true,
+        validationWorkspace: result.setup,
+        ...(result.activeWorkspaceResult === undefined
+          ? {}
+          : { activeWorkspaceResult: result.activeWorkspaceResult }),
+      };
     },
   );

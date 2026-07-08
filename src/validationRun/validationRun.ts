@@ -1,4 +1,4 @@
-const validationRunStatuses = ["active", "error"] as const;
+const validationRunStatuses = ["active", "failed", "error"] as const;
 const validationPhases = [
   "preflight",
   "checks",
@@ -50,4 +50,36 @@ export type ValidationRunPhaseStatusRecord = {
   readonly errorMessage: string | null;
   readonly createdAt: string;
   readonly updatedAt: string;
+};
+
+export type ValidationRunRoundRecord = {
+  readonly validationRunId: string;
+  readonly phase: ValidationPhase;
+  readonly roundNumber: number;
+  readonly status: ValidationPhaseStatus;
+  readonly createdAt: string;
+  readonly updatedAt: string;
+};
+
+export type ValidationRunFindingRecord = {
+  readonly id: string;
+  readonly validationRunId: string;
+  readonly phase: ValidationPhase;
+  readonly title: string;
+  readonly description: string;
+  readonly severity: "critical" | "high" | "medium" | "low";
+  readonly evidence: string;
+  readonly files: string;
+  readonly artifactRefs: string;
+  readonly createdAt: string;
+  readonly updatedAt: string;
+};
+
+export type ValidationRunArtifactRecord = {
+  readonly ref: string;
+  readonly validationRunId: string;
+  readonly phase: ValidationPhase;
+  readonly producer: string;
+  readonly path: string;
+  readonly createdAt: string;
 };

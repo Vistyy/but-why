@@ -10,7 +10,9 @@ import { submitStateReadiness } from "../task/submitPolicy.js";
 import { storedPublicTaskId, taskSlugForId, type PublicTaskId } from "../task/taskId.js";
 import type { TaskState } from "../task/lifecycle.js";
 import { validationToolingFailureRecord } from "../validation/validationToolingFailures.js";
+import type { RecordValidationRunCheckRoundInput } from "../validationRun/validationRunStore.js";
 import type {
+  RecordValidationCheckRoundResult,
   RecordValidationToolingFailureInput,
   RecordValidationToolingFailureResult,
   StartValidationRunInput,
@@ -23,6 +25,8 @@ export const openSqliteValidationRuns = (input: SqliteStoreInput): ValidationRun
     withStateDatabase(input, (database) => startValidationRun(database, startInput)),
   recordToolingFailure: (toolingErrorInput) =>
     withStateDatabase(input, (database) => recordToolingFailure(database, toolingErrorInput)),
+  recordCheckRound: (checkRoundInput) =>
+    withStateDatabase(input, (database) => recordCheckRound(database, checkRoundInput)),
 });
 
 const startValidationRun = (
@@ -156,6 +160,126 @@ const recordToolingFailure = (
         "UPDATE tasks SET state = ?, updated_at = ? WHERE id = (SELECT task_id FROM validation_runs WHERE id = ?)",
       )
       .run(input.taskRecoveryState, input.now, input.validationRunId);
+
+    database.exec("COMMIT");
+    return { ok: true };
+  } catch (error) {
+    rollbackIfOpen(database);
+    throw error;
+  }
+};
+
+const recordCheckRound = (
+  database: DatabaseSync,
+  input: RecordValidationRunCheckRoundInput,
+): RecordValidationCheckRoundResult => {
+  database.exec("BEGIN IMMEDIATE");
+
+  try {
+    if (!validationRunExists(database, input.validationRunId)) {
+      database.exec("ROLLBACK");
+      return { ok: false, code: "VALIDATION_RUN_NOT_FOUND" };
+    }
+
+    database
+      .prepare(`
+        INSERT INTO validation_run_rounds (
+          validation_run_id,
+          phase,
+          round_number,
+          status,
+          created_at,
+          updated_at
+        )
+        VALUES (?, 'checks', ?, ?, ?, ?)
+      `)
+      .run(input.validationRunId, input.roundNumber, input.roundStatus, input.now, input.now);
+
+    database
+      .prepare(`
+        INSERT INTO validation_run_phase_statuses (
+          validation_run_id,
+          phase,
+          status,
+          error_message,
+          created_at,
+          updated_at
+        )
+        VALUES (?, 'checks', ?, NULL, ?, ?)
+        ON CONFLICT(validation_run_id, phase) DO UPDATE SET
+          status = excluded.status,
+          error_message = excluded.error_message,
+          updated_at = excluded.updated_at
+      `)
+      .run(input.validationRunId, input.phaseStatus, input.now, input.now);
+
+    for (const artifact of input.artifactRecords) {
+      database
+        .prepare(`
+          INSERT INTO validation_run_artifacts (
+            ref,
+            validation_run_id,
+            phase,
+            producer,
+            path,
+            created_at
+          )
+          VALUES (?, ?, ?, ?, ?, ?)
+        `)
+        .run(
+          artifact.ref,
+          artifact.validationRunId,
+          artifact.phase,
+          artifact.producer,
+          artifact.path,
+          input.now,
+        );
+    }
+
+    if (input.finding !== undefined) {
+      database
+        .prepare(`
+          INSERT INTO validation_run_findings (
+            id,
+            validation_run_id,
+            phase,
+            title,
+            description,
+            severity,
+            evidence,
+            files,
+            artifact_refs,
+            created_at,
+            updated_at
+          )
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `)
+        .run(
+          input.finding.id,
+          input.finding.validationRunId,
+          input.finding.phase,
+          input.finding.title,
+          input.finding.description,
+          input.finding.severity,
+          input.finding.evidence,
+          input.finding.files,
+          input.finding.artifactRefs,
+          input.now,
+          input.now,
+        );
+      database
+        .prepare("UPDATE validation_runs SET status = 'failed', updated_at = ? WHERE id = ?")
+        .run(input.now, input.validationRunId);
+      database
+        .prepare(
+          "UPDATE tasks SET state = 'needs_input', updated_at = ? WHERE id = (SELECT task_id FROM validation_runs WHERE id = ?)",
+        )
+        .run(input.now, input.validationRunId);
+    } else {
+      database
+        .prepare("UPDATE validation_runs SET updated_at = ? WHERE id = ?")
+        .run(input.now, input.validationRunId);
+    }
 
     database.exec("COMMIT");
     return { ok: true };

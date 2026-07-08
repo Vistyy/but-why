@@ -1,6 +1,13 @@
 import type { CleanupState } from "./cleanup.js";
 import type { ValidationToolingFailureKind } from "./toolingErrorKind.js";
-import type { ValidationRunPhaseStatusRecord, ValidationRunRecord } from "./validationRun.js";
+import type {
+  ValidationPhaseStatus,
+  ValidationRunArtifactRecord,
+  ValidationRunFindingRecord,
+  ValidationRunPhaseStatusRecord,
+  ValidationRunRecord,
+  ValidationRunRoundRecord,
+} from "./validationRun.js";
 
 export type ValidationRunStore = {
   readonly getValidationRunById: (validationRunId: string) => ValidationRunRecord | undefined;
@@ -14,6 +21,15 @@ export type ValidationRunStore = {
   readonly listValidationRunPhaseStatuses: (
     validationRunId: string,
   ) => readonly ValidationRunPhaseStatusRecord[];
+  readonly listValidationRunRounds: (
+    validationRunId: string,
+  ) => readonly ValidationRunRoundRecord[];
+  readonly listValidationRunFindings: (
+    validationRunId: string,
+  ) => readonly ValidationRunFindingRecord[];
+  readonly listValidationRunArtifacts: (
+    validationRunId: string,
+  ) => readonly ValidationRunArtifactRecord[];
   readonly recordValidationRunError: (
     input: RecordValidationRunErrorInput,
   ) => RecordValidationRunErrorResult;
@@ -65,6 +81,16 @@ export type ValidationRunToolingErrorRecord = Omit<
 > & {
   readonly sequence: number;
   readonly createdAt: string;
+};
+
+export type RecordValidationRunCheckRoundInput = {
+  readonly validationRunId: string;
+  readonly roundNumber: number;
+  readonly roundStatus: ValidationPhaseStatus;
+  readonly phaseStatus: ValidationPhaseStatus;
+  readonly artifactRecords: readonly Omit<ValidationRunArtifactRecord, "createdAt">[];
+  readonly finding?: Omit<ValidationRunFindingRecord, "createdAt" | "updatedAt">;
+  readonly now: string;
 };
 
 export type RecordValidationRunErrorResult =
