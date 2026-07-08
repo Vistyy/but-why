@@ -97,7 +97,8 @@ The validation gate is made of phases and rounds, and it must not trust the impl
 _Avoid_: Pipeline, CI
 
 **Validation Workspace**:
-Setup scoped to exactly one Validation Run that provides an isolated copy of the submitted commit before validation phases begin.
+A resource scoped to exactly one Validation Run that provides an isolated copy of the submitted commit for validation phases to use.
+A Validation Workspace exists until the Validation Run no longer needs that isolated copy.
 A Validation Workspace is not itself a validation phase or round.
 _Avoid_: Workspace phase, setup round, CI workspace
 

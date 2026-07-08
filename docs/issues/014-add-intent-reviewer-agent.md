@@ -17,11 +17,12 @@ The intent reviewer should judge whether the submitted branch satisfies the Task
 ## Acceptance criteria
 
 - [ ] Intent review runs only after checks pass.
+- [ ] Intent review runs inside the Validation Workspace, not the user's checkout.
 - [ ] Intent reviewer input includes Task title, description, comments, repo context, and diff.
 - [ ] Reviewer output is JSON validated with Effect Schema.
 - [ ] Sandcastle structured output retry is used instead of a custom retry loop.
 - [ ] Invalid reviewer JSON after Sandcastle retry is exhausted is recorded as a typed tooling error.
-- [ ] Valid reviewer Findings are stored on the Run.
+- [ ] Valid reviewer Findings are stored on the Validation Run.
 - [ ] Intent review orchestration preserves Findings separately from tooling errors.
 - [ ] Any intent Finding moves the Task to `needs_input`.
 - [ ] Empty findings allow validation to continue.
