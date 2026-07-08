@@ -46,7 +46,6 @@ const recordValidationWorkspaceSetup = (
     validationRunId: setup.validationRunId,
     tempRefName: setup.tempRefName,
     submittedSha: setup.submittedSha,
-    worktreePath: setup.worktreePath,
     worktreeHead: setup.worktreeHead,
     cleanupWorktree: setup.cleanupResult.worktree,
     cleanupTempRef: setup.cleanupResult.tempRef,

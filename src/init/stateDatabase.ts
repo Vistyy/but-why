@@ -266,6 +266,12 @@ const migrations: readonly Migration[] = [
       ON validation_run_tooling_errors (validation_run_id, sequence)
     `,
   },
+  {
+    name: "008_drop_durable_validation_workspace_path",
+    apply: `
+      ALTER TABLE validation_workspace_setups DROP COLUMN worktree_path
+    `,
+  },
 ];
 
 export const ensureStateDatabase = (

@@ -9,7 +9,6 @@ export type ValidationWorkspaceSetup = {
   readonly validationRunId: string;
   readonly tempRefName: string;
   readonly submittedSha: string;
-  readonly worktreePath: string;
   readonly worktreeHead: string;
   readonly cleanupResult: ValidationWorkspaceCleanupResult;
 };

@@ -1,4 +1,5 @@
 import { join } from "node:path";
+import { Effect } from "effect";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { repoStateLoadError, runtimeError, success, usageError } from "../src/cliResults.js";
@@ -399,9 +400,8 @@ describe("module seams", () => {
           },
         };
       },
-      createValidationWorkspaceForValidationRun: async () => {
-        throw new Error("not used by submit preflight");
-      },
+      createValidationWorkspaceForValidationRun: () =>
+        Effect.die(new Error("not used by submit preflight")),
     };
 
     const submitPreflight = openSubmitPreflight({ taskAuthority, submissionEnvironment });

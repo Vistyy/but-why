@@ -1,3 +1,5 @@
+import type { Effect } from "effect";
+
 import type { GitHubPrTarget } from "../validationRun/validationRun.js";
 import type {
   ValidationWorkspaceSetup,
@@ -8,7 +10,7 @@ export type SubmissionEnvironment = {
   readonly readSubmittedCodeCandidate: () => SubmittedCodeCandidateResult;
   readonly createValidationWorkspaceForValidationRun: (
     input: CreateValidationWorkspaceForValidationRunInput,
-  ) => Promise<CreateValidationWorkspaceForValidationRunResult>;
+  ) => Effect.Effect<CreateValidationWorkspaceForValidationRunResult>;
 };
 
 export type SubmittedCodeCandidate = {
@@ -43,6 +45,9 @@ export type CreateValidationWorkspaceForValidationRunInput = {
   readonly validationRunId: string;
   readonly commitSha: string;
   readonly now: string;
+  readonly recordInterruptedCleanupResult?: (
+    toolingError: ValidationWorkspaceToolingError,
+  ) => Effect.Effect<void>;
 };
 
 export type CreateValidationWorkspaceForValidationRunResult =

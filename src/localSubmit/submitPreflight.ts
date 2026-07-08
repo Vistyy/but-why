@@ -1,5 +1,7 @@
 import { existsSync } from "node:fs";
 
+import { Effect } from "effect";
+
 import { openRepoLocalStores, type RepoLocalStores } from "../init/repoLocalStores.js";
 import {
   loadRepoLocalContext,
@@ -33,7 +35,7 @@ export type LocalSubmitPreflight = {
   readonly submitTask: (input: SubmitTaskInput) => SubmitTaskResult;
   readonly createValidationWorkspaceForValidationRun: (
     input: CreateLocalValidationWorkspaceForValidationRunInput,
-  ) => Promise<CreateValidationWorkspaceForValidationRunResult>;
+  ) => Effect.Effect<CreateValidationWorkspaceForValidationRunResult>;
 };
 
 export type LoadLocalSubmitPreflightResult =
@@ -127,33 +129,48 @@ const localSubmitPreflight = (
   };
 };
 
-const createValidationWorkspaceForValidationRun = async (
+const createValidationWorkspaceForValidationRun = (
   taskAuthority: TaskAuthority,
   submissionEnvironment: SubmissionEnvironment,
   recordValidationWorkspaceSetup: RepoLocalStores["recordValidationWorkspaceSetup"],
   input: CreateLocalValidationWorkspaceForValidationRunInput,
-): Promise<CreateValidationWorkspaceForValidationRunResult> => {
-  const result = await submissionEnvironment.createValidationWorkspaceForValidationRun({
-    validationRunId: input.validationRunId,
-    commitSha: input.commitSha,
-    now: input.now,
-  });
+): Effect.Effect<CreateValidationWorkspaceForValidationRunResult> =>
+  Effect.gen(function* () {
+    const result = yield* submissionEnvironment.createValidationWorkspaceForValidationRun({
+      validationRunId: input.validationRunId,
+      commitSha: input.commitSha,
+      now: input.now,
+      recordInterruptedCleanupResult: (toolingError) =>
+        Effect.sync(() => {
+          recordValidationWorkspaceToolingFailure(taskAuthority, input, toolingError);
+        }),
+    });
 
-  if (result.ok) {
-    recordValidationWorkspaceSetup(input.now, result.validationWorkspace);
+    if (result.ok) {
+      recordValidationWorkspaceSetup(input.now, result.validationWorkspace);
+
+      return result;
+    }
+
+    recordValidationWorkspaceToolingFailure(taskAuthority, input, result.toolingError);
 
     return result;
-  }
+  });
 
+const recordValidationWorkspaceToolingFailure = (
+  taskAuthority: TaskAuthority,
+  input: CreateLocalValidationWorkspaceForValidationRunInput,
+  toolingError: NonNullable<
+    Extract<CreateValidationWorkspaceForValidationRunResult, { readonly ok: false }>["toolingError"]
+  >,
+): void => {
   const toolingFailure = new ValidationWorkspaceSetupFailed({
-    operationName: result.toolingError.operationName,
-    tempRefName: result.toolingError.tempRefName,
-    submittedSha: result.toolingError.submittedSha,
-    ...(result.toolingError.worktreePath === undefined
-      ? {}
-      : { worktreePath: result.toolingError.worktreePath }),
-    errorMessage: result.toolingError.errorMessage,
-    cleanupResult: result.toolingError.cleanupResult,
+    operationName: toolingError.operationName,
+    tempRefName: toolingError.tempRefName,
+    submittedSha: toolingError.submittedSha,
+    ...(toolingError.worktreePath === undefined ? {} : { worktreePath: toolingError.worktreePath }),
+    errorMessage: toolingError.errorMessage,
+    cleanupResult: toolingError.cleanupResult,
   });
 
   const recovery = taskAuthority.recordValidationToolingFailure({
@@ -166,8 +183,6 @@ const createValidationWorkspaceForValidationRun = async (
   if (!recovery.ok) {
     throw new Error(`Could not recover Task after validation tooling failure: ${recovery.code}`);
   }
-
-  return result;
 };
 
 export type { SubmitTaskResult };

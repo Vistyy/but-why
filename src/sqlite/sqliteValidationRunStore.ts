@@ -39,7 +39,6 @@ const validationWorkspaceSetupColumns = [
   "validation_run_id AS validationRunId",
   "temp_ref_name AS tempRefName",
   "submitted_sha AS submittedSha",
-  "worktree_path AS worktreePath",
   "worktree_head AS worktreeHead",
   "cleanup_worktree AS cleanupWorktree",
   "cleanup_temp_ref AS cleanupTempRef",
@@ -221,17 +220,15 @@ const recordValidationWorkspaceSetup = (
           validation_run_id,
           temp_ref_name,
           submitted_sha,
-          worktree_path,
           worktree_head,
           cleanup_worktree,
           cleanup_temp_ref,
           created_at
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(validation_run_id) DO UPDATE SET
           temp_ref_name = excluded.temp_ref_name,
           submitted_sha = excluded.submitted_sha,
-          worktree_path = excluded.worktree_path,
           worktree_head = excluded.worktree_head,
           cleanup_worktree = excluded.cleanup_worktree,
           cleanup_temp_ref = excluded.cleanup_temp_ref,
@@ -241,7 +238,6 @@ const recordValidationWorkspaceSetup = (
         input.validationRunId,
         input.tempRefName,
         input.submittedSha,
-        input.worktreePath,
         input.worktreeHead,
         input.cleanupWorktree,
         input.cleanupTempRef,

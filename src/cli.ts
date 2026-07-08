@@ -85,7 +85,7 @@ const routeCommandArgs = (
   }
 
   if (firstArg === "submit") {
-    return Effect.promise(() => routeSubmit(args.slice(1), environment));
+    return routeSubmit(args.slice(1), environment);
   }
 
   if (firstArg?.startsWith("-")) {

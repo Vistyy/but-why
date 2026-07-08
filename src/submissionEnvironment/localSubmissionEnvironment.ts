@@ -1,3 +1,5 @@
+import { Effect } from "effect";
+
 import type { RepoLocalContext } from "../init/repoContext.js";
 import { createValidationWorkspace } from "../validation/createValidationWorkspace.js";
 import { readGitFacts } from "./gitFacts.js";
@@ -76,20 +78,25 @@ const readSubmittedCodeCandidate = (context: RepoLocalContext): SubmittedCodeCan
   };
 };
 
-const createValidationWorkspaceForValidationRun = async (
+const createValidationWorkspaceForValidationRun = (
   context: RepoLocalContext,
   input: CreateValidationWorkspaceForValidationRunInput,
-): Promise<CreateValidationWorkspaceForValidationRunResult> => {
-  const result = await createValidationWorkspace({
-    repoRoot: context.root,
-    validationRunId: input.validationRunId,
-    submittedSha: input.commitSha,
-    copyFiles: context.config.validationWorkspace?.copyFiles ?? [],
-  });
+): Effect.Effect<CreateValidationWorkspaceForValidationRunResult> =>
+  Effect.map(
+    createValidationWorkspace({
+      repoRoot: context.root,
+      validationRunId: input.validationRunId,
+      submittedSha: input.commitSha,
+      copyFiles: context.config.validationWorkspace?.copyFiles ?? [],
+      ...(input.recordInterruptedCleanupResult === undefined
+        ? {}
+        : { recordInterruptedCleanupResult: input.recordInterruptedCleanupResult }),
+    }),
+    (result) => {
+      if (!result.ok) {
+        return { ok: false, toolingError: result.toolingError };
+      }
 
-  if (!result.ok) {
-    return { ok: false, toolingError: result.toolingError };
-  }
-
-  return { ok: true, validationWorkspace: result.setup };
-};
+      return { ok: true, validationWorkspace: result.setup };
+    },
+  );

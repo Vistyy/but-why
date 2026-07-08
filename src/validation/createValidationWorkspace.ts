@@ -3,9 +3,10 @@ import { join } from "node:path";
 
 import { createSandbox, type Sandbox } from "@ai-hero/sandcastle";
 import { noSandbox } from "@ai-hero/sandcastle/sandboxes/no-sandbox";
+import { Effect, Ref, type Scope } from "effect";
 
 import {
-  cleanupValidationWorkspace,
+  deleteValidationTempRef,
   ensureValidationTempRef,
   expectedSandcastleWorktreePath,
   inspectExistingWorktree,
@@ -13,6 +14,7 @@ import {
   validationTempRefName,
 } from "./validationGitGlue.js";
 import type {
+  ValidationWorkspaceCleanupResult,
   ValidationWorkspaceSetup,
   ValidationWorkspaceToolingError,
 } from "./validationWorkspace.js";
@@ -22,6 +24,9 @@ export type CreateValidationWorkspaceInput = {
   readonly validationRunId: string;
   readonly submittedSha: string;
   readonly copyFiles: readonly string[];
+  readonly recordInterruptedCleanupResult?: (
+    toolingError: ValidationWorkspaceToolingError,
+  ) => Effect.Effect<void>;
 };
 
 export type CreateValidationWorkspaceResult =
@@ -34,157 +39,509 @@ export type CreateValidationWorkspaceResult =
       readonly toolingError: ValidationWorkspaceToolingError;
     };
 
-export const createValidationWorkspace = async (
-  input: CreateValidationWorkspaceInput,
-): Promise<CreateValidationWorkspaceResult> => {
-  const tempRefName = validationTempRefName(input.validationRunId);
-  const expectedWorktreePath = expectedSandcastleWorktreePath(input.repoRoot, tempRefName);
-  let sandbox: Sandbox | undefined;
-  let tempRefReady = false;
-  let worktreePath: string | undefined;
+type ValidationWorkspaceAdapters = {
+  readonly createTempRef: (
+    repoRoot: string,
+    tempRefName: string,
+    submittedSha: string,
+  ) => Effect.Effect<{ readonly ok: true } | { readonly ok: false; readonly message: string }>;
+  readonly deleteTempRef: (
+    repoRoot: string,
+    tempRefName: string,
+  ) => ValidationWorkspaceCleanupResult["tempRef"];
+  readonly allowlistedFileExists: (repoRoot: string, path: string) => boolean;
+  readonly inspectExistingWorktree: (worktreePath: string) => ExistingWorktree;
+  readonly removeWorktree: (repoRoot: string, worktreePath: string) => CleanupAttempt;
+  readonly createSandcastleWorktree: (input: {
+    readonly repoRoot: string;
+    readonly tempRefName: string;
+    readonly copyFiles: readonly string[];
+  }) => Effect.Effect<
+    | {
+        readonly ok: true;
+        readonly sandbox: SandboxLike;
+        readonly worktreePath: string;
+      }
+    | {
+        readonly ok: false;
+        readonly message: string;
+        readonly worktreePath?: string;
+      }
+  >;
+  readonly readWorktreeHead: (sandbox: SandboxLike) => Effect.Effect<CommandResult>;
+};
 
-  const fail = async (
-    operationName: string,
-    errorMessage: string,
-  ): Promise<CreateValidationWorkspaceResult> => {
-    const cleanupResult = await cleanupValidationWorkspace({
-      repoRoot: input.repoRoot,
+type SandboxLike = Pick<Sandbox, "close" | "exec" | "worktreePath">;
+
+type CommandResult = {
+  readonly exitCode: number;
+  readonly stdout: string;
+  readonly stderr: string;
+};
+
+type CleanupAttempt = { readonly ok: true } | { readonly ok: false; readonly message: string };
+
+type ExistingWorktree =
+  | { readonly exists: false }
+  | {
+      readonly exists: true;
+      readonly branch: string | undefined;
+      readonly head: string | undefined;
+      readonly dirty: boolean;
+    };
+
+type WorkspaceScopeState = {
+  readonly tempRefName: string;
+  readonly expectedWorktreePath: string;
+  sandbox: SandboxLike | undefined;
+  worktreePath: string | undefined;
+};
+
+type WorkspaceSetupAttempt = WorkspaceSetupSuccess | WorkspaceSetupFailure;
+
+type WorkspaceSetupSuccess = {
+  readonly ok: true;
+  readonly setup: Omit<ValidationWorkspaceSetup, "cleanupResult">;
+};
+
+type WorkspaceSetupFailure = {
+  readonly ok: false;
+  readonly operationName: string;
+  readonly errorMessage: string;
+  readonly worktreePath?: string;
+};
+
+const cleanupStepTimeoutMs = 5_000;
+
+const initialCleanupResult: ValidationWorkspaceCleanupResult = {
+  worktree: "not_created",
+  tempRef: "not_created",
+};
+
+export const createValidationWorkspace = (
+  input: CreateValidationWorkspaceInput,
+): Effect.Effect<CreateValidationWorkspaceResult> =>
+  createValidationWorkspaceWithAdapters(input, productionValidationWorkspaceAdapters);
+
+const createValidationWorkspaceWithAdapters = (
+  input: CreateValidationWorkspaceInput,
+  adapters: ValidationWorkspaceAdapters,
+): Effect.Effect<CreateValidationWorkspaceResult> =>
+  Effect.gen(function* () {
+    const tempRefName = validationTempRefName(input.validationRunId);
+    const expectedWorktreePath = expectedSandcastleWorktreePath(input.repoRoot, tempRefName);
+    const cleanupResult = yield* Ref.make<ValidationWorkspaceCleanupResult>(initialCleanupResult);
+    const state: WorkspaceScopeState = {
       tempRefName,
-      sandbox,
-      worktreePath,
-      tempRefReady,
-    });
+      expectedWorktreePath,
+      sandbox: undefined,
+      worktreePath: undefined,
+    };
+
+    const scopedSetup = Effect.scoped(
+      setupValidationWorkspaceScope(input, state, adapters, cleanupResult),
+    );
+    const setupAttempt = yield* withInterruptedCleanupRecording(
+      scopedSetup,
+      input,
+      tempRefName,
+      expectedWorktreePath,
+      cleanupResult,
+    );
+
+    const finalCleanupResult = yield* Ref.get(cleanupResult);
+
+    if (!setupAttempt.ok) {
+      return {
+        ok: false,
+        toolingError: {
+          operationName: setupAttempt.operationName,
+          tempRefName,
+          submittedSha: input.submittedSha,
+          worktreePath: setupAttempt.worktreePath ?? expectedWorktreePath,
+          errorMessage: setupAttempt.errorMessage,
+          cleanupResult: finalCleanupResult,
+        },
+      };
+    }
+
+    if (finalCleanupResult.worktree === "failed" || finalCleanupResult.tempRef === "failed") {
+      return {
+        ok: false,
+        toolingError: {
+          operationName: "cleanup_validation_workspace",
+          tempRefName,
+          submittedSha: input.submittedSha,
+          ...(state.worktreePath === undefined ? {} : { worktreePath: state.worktreePath }),
+          errorMessage: "Validation workspace cleanup failed after successful setup.",
+          cleanupResult: finalCleanupResult,
+        },
+      };
+    }
 
     return {
-      ok: false,
-      toolingError: {
-        operationName,
-        tempRefName,
-        submittedSha: input.submittedSha,
-        worktreePath: worktreePath ?? expectedWorktreePath,
-        errorMessage,
-        cleanupResult,
+      ok: true,
+      setup: {
+        ...setupAttempt.setup,
+        cleanupResult: finalCleanupResult,
       },
     };
-  };
+  });
 
-  const refResult = ensureValidationTempRef(input.repoRoot, tempRefName, input.submittedSha);
+const withInterruptedCleanupRecording = (
+  scopedSetup: Effect.Effect<WorkspaceSetupAttempt>,
+  input: CreateValidationWorkspaceInput,
+  tempRefName: string,
+  expectedWorktreePath: string,
+  cleanupResult: Ref.Ref<ValidationWorkspaceCleanupResult>,
+): Effect.Effect<WorkspaceSetupAttempt> => {
+  const recordInterruptedCleanupResult = input.recordInterruptedCleanupResult;
 
-  if (!refResult.ok) {
-    return fail("create_temp_ref", refResult.message);
+  if (recordInterruptedCleanupResult === undefined) {
+    return scopedSetup;
   }
 
-  tempRefReady = true;
+  return Effect.onInterrupt(scopedSetup, () =>
+    Effect.gen(function* () {
+      const finalCleanupResult = yield* Ref.get(cleanupResult);
+      yield* recordInterruptedCleanupResult({
+        operationName: "validation_workspace_interrupted",
+        tempRefName,
+        submittedSha: input.submittedSha,
+        worktreePath: expectedWorktreePath,
+        errorMessage: "Validation workspace setup was interrupted.",
+        cleanupResult: finalCleanupResult,
+      }).pipe(
+        Effect.catchAllDefect(() => Effect.void),
+        Effect.timeoutOption(`${cleanupStepTimeoutMs} millis`),
+        Effect.ignore,
+      );
+    }),
+  );
+};
 
+const setupValidationWorkspaceScope = (
+  input: CreateValidationWorkspaceInput,
+  state: WorkspaceScopeState,
+  adapters: ValidationWorkspaceAdapters,
+  cleanupResult: Ref.Ref<ValidationWorkspaceCleanupResult>,
+): Effect.Effect<WorkspaceSetupAttempt, never, Scope.Scope> =>
+  Effect.gen(function* () {
+    const tempRefAttempt = yield* acquireTempRef(input, state, adapters, cleanupResult);
+
+    if (!tempRefAttempt.ok) {
+      return tempRefAttempt;
+    }
+
+    const copyFileAttempt = validateAllowlistedCopyFiles(input, adapters);
+
+    if (!copyFileAttempt.ok) {
+      return copyFileAttempt;
+    }
+
+    const existingWorktreeAttempt = prepareExistingWorktree(input, state, adapters);
+
+    if (!existingWorktreeAttempt.ok) {
+      return existingWorktreeAttempt;
+    }
+
+    const worktreeAttempt = yield* acquireSandcastleWorktree(input, state, adapters, cleanupResult);
+
+    if (!worktreeAttempt.ok) {
+      return worktreeAttempt;
+    }
+
+    return yield* verifyWorktreeHead(input, state, adapters, worktreeAttempt.sandbox);
+  });
+
+const acquireTempRef = (
+  input: CreateValidationWorkspaceInput,
+  state: WorkspaceScopeState,
+  adapters: ValidationWorkspaceAdapters,
+  cleanupResult: Ref.Ref<ValidationWorkspaceCleanupResult>,
+): Effect.Effect<{ readonly ok: true } | WorkspaceSetupFailure, never, Scope.Scope> =>
+  Effect.gen(function* () {
+    const tempRef = yield* adapters.createTempRef(
+      input.repoRoot,
+      state.tempRefName,
+      input.submittedSha,
+    );
+
+    if (!tempRef.ok) {
+      return setupFailed("create_temp_ref", tempRef.message);
+    }
+
+    yield* Effect.acquireRelease(Effect.succeed(state.tempRefName), () =>
+      releaseTempRef(input.repoRoot, state.tempRefName, adapters, cleanupResult),
+    );
+
+    return { ok: true };
+  });
+
+const validateAllowlistedCopyFiles = (
+  input: CreateValidationWorkspaceInput,
+  adapters: ValidationWorkspaceAdapters,
+): { readonly ok: true } | WorkspaceSetupFailure => {
   for (const path of input.copyFiles) {
-    if (!existsSync(join(input.repoRoot, path))) {
-      return fail(
+    if (!adapters.allowlistedFileExists(input.repoRoot, path)) {
+      return setupFailed(
         "copy_allowlisted_file",
         `Allowlisted validation workspace file is missing: ${path}`,
       );
     }
   }
 
-  const existingWorktree = inspectExistingWorktree(expectedWorktreePath);
+  return { ok: true };
+};
+
+const prepareExistingWorktree = (
+  input: CreateValidationWorkspaceInput,
+  state: WorkspaceScopeState,
+  adapters: ValidationWorkspaceAdapters,
+): { readonly ok: true } | WorkspaceSetupFailure => {
+  const existingWorktree = adapters.inspectExistingWorktree(state.expectedWorktreePath);
+
+  if (!existingWorktree.exists) {
+    return { ok: true };
+  }
 
   if (
-    existingWorktree.exists &&
     existingWorktree.branch !== undefined &&
     existingWorktree.branch !== "HEAD" &&
-    existingWorktree.branch !== tempRefName
+    existingWorktree.branch !== state.tempRefName
   ) {
-    return fail(
+    return setupFailed(
       "create_sandcastle_workspace",
-      `Validation worktree already exists for a different Validation Run: ${expectedWorktreePath}`,
+      `Validation worktree already exists for a different Validation Run: ${state.expectedWorktreePath}`,
     );
   }
 
-  if (existingWorktree.exists && existingWorktree.head !== input.submittedSha) {
-    return fail(
+  if (existingWorktree.head !== input.submittedSha) {
+    return setupFailed(
       "create_sandcastle_workspace",
-      `Validation worktree already exists for a different commit: ${expectedWorktreePath}`,
+      `Validation worktree already exists for a different commit: ${state.expectedWorktreePath}`,
     );
   }
 
-  if (existingWorktree.exists && existingWorktree.dirty) {
-    worktreePath = expectedWorktreePath;
-    const removed = removeValidationWorktree(input.repoRoot, expectedWorktreePath);
+  if (!existingWorktree.dirty) {
+    return { ok: true };
+  }
 
-    if (!removed && existsSync(expectedWorktreePath)) {
-      return fail(
+  state.worktreePath = state.expectedWorktreePath;
+  const removed = adapters.removeWorktree(input.repoRoot, state.expectedWorktreePath);
+
+  if (!removed.ok && adapters.inspectExistingWorktree(state.expectedWorktreePath).exists) {
+    return setupFailed(
+      "create_sandcastle_workspace",
+      `Validation worktree already exists with uncommitted changes: ${state.expectedWorktreePath}`,
+      state.expectedWorktreePath,
+    );
+  }
+
+  state.worktreePath = undefined;
+  return { ok: true };
+};
+
+const acquireSandcastleWorktree = (
+  input: CreateValidationWorkspaceInput,
+  state: WorkspaceScopeState,
+  adapters: ValidationWorkspaceAdapters,
+  cleanupResult: Ref.Ref<ValidationWorkspaceCleanupResult>,
+): Effect.Effect<
+  { readonly ok: true; readonly sandbox: SandboxLike } | WorkspaceSetupFailure,
+  never,
+  Scope.Scope
+> =>
+  Effect.gen(function* () {
+    yield* Effect.acquireRelease(Effect.succeed(state.expectedWorktreePath), () =>
+      releaseWorktree(input.repoRoot, state, adapters, cleanupResult),
+    );
+
+    state.worktreePath = state.expectedWorktreePath;
+    const worktree = yield* adapters.createSandcastleWorktree({
+      repoRoot: input.repoRoot,
+      tempRefName: state.tempRefName,
+      copyFiles: input.copyFiles,
+    });
+
+    if (!worktree.ok) {
+      state.worktreePath = worktree.worktreePath ?? state.expectedWorktreePath;
+      return setupFailed("create_sandcastle_workspace", worktree.message, state.worktreePath);
+    }
+
+    state.sandbox = worktree.sandbox;
+    state.worktreePath = worktree.worktreePath;
+
+    return { ok: true, sandbox: worktree.sandbox };
+  });
+
+const verifyWorktreeHead = (
+  input: CreateValidationWorkspaceInput,
+  state: WorkspaceScopeState,
+  adapters: ValidationWorkspaceAdapters,
+  sandbox: SandboxLike,
+): Effect.Effect<WorkspaceSetupAttempt> =>
+  Effect.gen(function* () {
+    const headResult = yield* adapters.readWorktreeHead(sandbox);
+
+    if (headResult.exitCode !== 0) {
+      return setupFailed(
         "create_sandcastle_workspace",
-        `Validation worktree already exists with uncommitted changes: ${expectedWorktreePath}`,
+        [headResult.stderr, headResult.stdout].join("\n").trim(),
+        state.worktreePath,
       );
     }
 
-    worktreePath = undefined;
-  }
+    const worktreeHead = headResult.stdout.trim();
 
-  try {
-    sandbox = await createSandbox({
-      cwd: input.repoRoot,
-      branch: tempRefName,
-      sandbox: noSandbox(),
-      copyToWorktree: [...input.copyFiles],
-    });
-  } catch (error) {
-    worktreePath = expectedWorktreePath;
-    return fail("create_sandcastle_workspace", errorMessage(error));
-  }
+    if (worktreeHead !== input.submittedSha) {
+      return setupFailed(
+        "create_sandcastle_workspace",
+        `Validation worktree HEAD ${worktreeHead} did not match submitted SHA ${input.submittedSha}.`,
+        state.worktreePath,
+      );
+    }
 
-  worktreePath = sandbox.worktreePath;
-  const headResult = await sandbox.exec("git rev-parse HEAD");
-
-  if (headResult.exitCode !== 0) {
-    return fail(
-      "create_sandcastle_workspace",
-      [headResult.stderr, headResult.stdout].join("\n").trim(),
-    );
-  }
-
-  const worktreeHead = headResult.stdout.trim();
-
-  if (worktreeHead !== input.submittedSha) {
-    return fail(
-      "create_sandcastle_workspace",
-      `Validation worktree HEAD ${worktreeHead} did not match submitted SHA ${input.submittedSha}.`,
-    );
-  }
-
-  const cleanupResult = await cleanupValidationWorkspace({
-    repoRoot: input.repoRoot,
-    tempRefName,
-    sandbox,
-    worktreePath,
-    tempRefReady,
+    return {
+      ok: true,
+      setup: {
+        validationRunId: input.validationRunId,
+        tempRefName: state.tempRefName,
+        submittedSha: input.submittedSha,
+        worktreeHead,
+      },
+    } satisfies WorkspaceSetupAttempt;
   });
 
-  if (cleanupResult.worktree === "failed" || cleanupResult.tempRef === "failed") {
-    return {
-      ok: false,
-      toolingError: {
-        operationName: "cleanup_validation_workspace",
-        tempRefName,
-        submittedSha: input.submittedSha,
-        worktreePath,
-        errorMessage: "Validation workspace cleanup failed after successful setup.",
-        cleanupResult,
-      },
-    };
+const productionValidationWorkspaceAdapters: ValidationWorkspaceAdapters = {
+  createTempRef: (repoRoot, tempRefName, submittedSha) =>
+    Effect.sync(() => ensureValidationTempRef(repoRoot, tempRefName, submittedSha)),
+  deleteTempRef: (repoRoot, tempRefName) => deleteValidationTempRef(repoRoot, tempRefName),
+  allowlistedFileExists: (repoRoot, path) => existsSync(join(repoRoot, path)),
+  inspectExistingWorktree,
+  removeWorktree: (repoRoot, worktreePath) =>
+    removeValidationWorktree(repoRoot, worktreePath)
+      ? { ok: true }
+      : { ok: false, message: "Validation worktree removal failed." },
+  createSandcastleWorktree: (input) =>
+    Effect.promise(async () => {
+      try {
+        const sandbox = await createSandbox({
+          cwd: input.repoRoot,
+          branch: input.tempRefName,
+          sandbox: noSandbox(),
+          copyToWorktree: [...input.copyFiles],
+        });
+
+        return {
+          ok: true,
+          sandbox,
+          worktreePath: sandbox.worktreePath,
+        } as const;
+      } catch (error) {
+        return {
+          ok: false,
+          message: errorMessage(error),
+          worktreePath: expectedSandcastleWorktreePath(input.repoRoot, input.tempRefName),
+        } as const;
+      }
+    }),
+  readWorktreeHead: (sandbox) => Effect.promise(() => sandbox.exec("git rev-parse HEAD")),
+};
+
+const setupFailed = (
+  operationName: string,
+  errorMessage: string,
+  worktreePath?: string,
+): WorkspaceSetupFailure => ({
+  ok: false,
+  operationName,
+  errorMessage,
+  ...(worktreePath === undefined ? {} : { worktreePath }),
+});
+
+const releaseWorktree = (
+  repoRoot: string,
+  state: WorkspaceScopeState,
+  adapters: ValidationWorkspaceAdapters,
+  cleanupResult: Ref.Ref<ValidationWorkspaceCleanupResult>,
+): Effect.Effect<void> =>
+  Effect.gen(function* () {
+    const worktree = yield* cleanupWorktree(repoRoot, state, adapters);
+    yield* Ref.update(cleanupResult, (current) => ({ ...current, worktree }));
+  });
+
+const cleanupWorktree = (
+  repoRoot: string,
+  state: WorkspaceScopeState,
+  adapters: ValidationWorkspaceAdapters,
+): Effect.Effect<ValidationWorkspaceCleanupResult["worktree"]> => {
+  if (state.sandbox === undefined && state.worktreePath === undefined) {
+    return Effect.succeed("not_created");
   }
 
-  return {
-    ok: true,
-    setup: {
-      validationRunId: input.validationRunId,
-      tempRefName,
-      submittedSha: input.submittedSha,
-      worktreePath,
-      worktreeHead,
-      cleanupResult,
-    },
-  };
+  return Effect.gen(function* () {
+    if (state.sandbox !== undefined) {
+      const closeResult: { readonly preservedWorktreePath?: string } | undefined =
+        yield* Effect.promise(async () => {
+          try {
+            return await withCleanupTimeout(() => state.sandbox?.close() ?? Promise.resolve({}));
+          } catch {
+            return undefined;
+          }
+        });
+
+      if (closeResult === undefined) {
+        return "failed";
+      }
+
+      const preservedPath = closeResult.preservedWorktreePath ?? state.worktreePath;
+
+      if (preservedPath === undefined || !adapters.inspectExistingWorktree(preservedPath).exists) {
+        return "removed";
+      }
+
+      return adapters.removeWorktree(repoRoot, preservedPath).ok ? "removed" : "failed";
+    }
+
+    if (
+      state.worktreePath === undefined ||
+      !adapters.inspectExistingWorktree(state.worktreePath).exists
+    ) {
+      return "not_created";
+    }
+
+    return adapters.removeWorktree(repoRoot, state.worktreePath).ok ? "removed" : "failed";
+  });
 };
+
+const releaseTempRef = (
+  repoRoot: string,
+  tempRefName: string,
+  adapters: ValidationWorkspaceAdapters,
+  cleanupResult: Ref.Ref<ValidationWorkspaceCleanupResult>,
+): Effect.Effect<void> =>
+  Effect.gen(function* () {
+    const tempRef = adapters.deleteTempRef(repoRoot, tempRefName);
+    yield* Ref.update(cleanupResult, (current) => ({ ...current, tempRef }));
+  });
 
 const errorMessage = (error: unknown): string =>
   error instanceof Error ? error.message : String(error);
+
+const withCleanupTimeout = async <Result>(
+  work: () => Promise<Result>,
+): Promise<Result | undefined> => {
+  let timeout: NodeJS.Timeout | undefined;
+  const timedOut = new Promise<undefined>((resolve) => {
+    timeout = setTimeout(() => resolve(undefined), cleanupStepTimeoutMs);
+  });
+
+  try {
+    return await Promise.race([work(), timedOut]);
+  } finally {
+    if (timeout !== undefined) {
+      clearTimeout(timeout);
+    }
+  }
+};

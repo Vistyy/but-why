@@ -2,7 +2,7 @@
 
 ## Status
 
-Not done.
+Done.
 
 ## Parent
 
@@ -48,37 +48,37 @@ Later phase execution issues should explicitly require phase work to run inside 
 
 ## Acceptance criteria
 
-- [ ] Temp validation refs are acquired and released through an Effect scoped lifecycle.
-- [ ] Sandcastle validation worktrees are acquired and released through an Effect scoped lifecycle.
-- [ ] Lifecycle code remains behind the Validation Workspace seam.
-- [ ] Temp validation ref acquisition happens before Sandcastle worktree acquisition.
-- [ ] If temp ref creation fails, no cleanup runs.
-- [ ] If worktree creation fails after temp ref creation, temp ref cleanup still runs.
-- [ ] Future validation phases are expected to run inside the Validation Workspace.
-- [ ] Issue 038 does not add validation phase execution.
-- [ ] Until validation phase execution exists, successful workspace setup is followed by immediate scoped cleanup.
-- [ ] Callers do not receive or invoke a manual cleanup function.
-- [ ] Reviewer agents and command producers do not receive the workspace path directly.
-- [ ] Only the Sandcastle or execution adapter layer handles the workspace path.
-- [ ] Workspace paths are not stored as durable Validation Run state.
-- [ ] Workspace paths may appear in tooling error details or logs when needed for diagnostics.
-- [ ] Cleanup runs when the Validation Run workflow no longer needs the workspace.
-- [ ] Cleanup runs after setup failure once any cleanup-relevant resource has been acquired.
-- [ ] Cleanup runs when the Effect workflow is interrupted.
-- [ ] Interruption cleanup details are recorded when possible, without blocking shutdown forever.
-- [ ] Cleanup result details are recorded on Validation Tooling Failures.
-- [ ] Cleanup failure is a Validation Tooling Failure, not a Finding.
-- [ ] If setup fails and cleanup also fails, the setup failure remains the primary Validation Tooling Failure and cleanup failure is recorded as secondary detail.
-- [ ] Cleanup is best effort and does not retry indefinitely.
-- [ ] Cleanup attempts every acquired resource even if one cleanup step fails.
-- [ ] Cleanup removes the Sandcastle worktree before deleting the temp validation ref.
-- [ ] All cleanup failures are recorded.
-- [ ] Caller-visible validation workspace behavior from issue 011 remains unchanged.
-- [ ] Sandcastle factory usage remains behind the Validation Workspace seam.
-- [ ] Issue 038 does not redesign Sandcastle worktree creation or execution behavior.
-- [ ] Direct Effect runtime execution remains limited to `src/main.ts`.
-- [ ] Tests cover successful cleanup, partial setup cleanup, cleanup after failure, and cleanup after interruption.
-- [ ] Lifecycle edge case tests use fake adapters and do not require real Sandcastle or git for every case.
+- [x] Temp validation refs are acquired and released through an Effect scoped lifecycle.
+- [x] Sandcastle validation worktrees are acquired and released through an Effect scoped lifecycle.
+- [x] Lifecycle code remains behind the Validation Workspace seam.
+- [x] Temp validation ref acquisition happens before Sandcastle worktree acquisition.
+- [x] If temp ref creation fails, no cleanup runs.
+- [x] If worktree creation fails after temp ref creation, temp ref cleanup still runs.
+- [x] Future validation phases are expected to run inside the Validation Workspace.
+- [x] Issue 038 does not add validation phase execution.
+- [x] Until validation phase execution exists, successful workspace setup is followed by immediate scoped cleanup.
+- [x] Callers do not receive or invoke a manual cleanup function.
+- [x] Reviewer agents and command producers do not receive the workspace path directly.
+- [x] Only the Sandcastle or execution adapter layer handles the workspace path.
+- [x] Workspace paths are not stored as durable Validation Run state.
+- [x] Workspace paths may appear in tooling error details or logs when needed for diagnostics.
+- [x] Cleanup runs when the Validation Run workflow no longer needs the workspace.
+- [x] Cleanup runs after setup failure once any cleanup-relevant resource has been acquired.
+- [x] Cleanup runs when the Effect workflow is interrupted.
+- [x] Interruption cleanup details are recorded when possible, without blocking shutdown forever.
+- [x] Cleanup result details are recorded on Validation Tooling Failures.
+- [x] Cleanup failure is a Validation Tooling Failure, not a Finding.
+- [x] If setup fails and cleanup also fails, the setup failure remains the primary Validation Tooling Failure and cleanup failure is recorded as secondary detail.
+- [x] Cleanup is best effort and does not retry indefinitely.
+- [x] Cleanup attempts every acquired resource even if one cleanup step fails.
+- [x] Cleanup removes the Sandcastle worktree before deleting the temp validation ref.
+- [x] All cleanup failures are recorded.
+- [x] Caller-visible validation workspace behavior from issue 011 remains unchanged.
+- [x] Sandcastle factory usage remains behind the Validation Workspace seam.
+- [x] Issue 038 does not redesign Sandcastle worktree creation or execution behavior.
+- [x] Direct Effect runtime execution remains limited to `src/main.ts`.
+- [x] Tests cover successful cleanup, partial setup cleanup, cleanup after failure, and cleanup after interruption.
+- [x] Lifecycle edge case tests use fake adapters and do not require real Sandcastle or git for every case.
 
 ## Blocked by
 

@@ -2,12 +2,10 @@ import { spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 
-import type { Sandbox } from "@ai-hero/sandcastle";
-
 import type { CleanupState } from "../validationRun/cleanup.js";
-import type { ValidationWorkspaceCleanupResult } from "./validationWorkspace.js";
 
 const zeroSha = "0000000000000000000000000000000000000000";
+const validationGitOperationTimeoutMs = 5_000;
 
 export const validationTempRefName = (validationRunId: string): string =>
   `refs/but-why/validation-runs/${validationRunId}/validation`;
@@ -82,53 +80,7 @@ export const removeValidationWorktree = (repoRoot: string, worktreePath: string)
   return removed.ok || !existsSync(worktreePath);
 };
 
-export const cleanupValidationWorkspace = async (input: {
-  readonly repoRoot: string;
-  readonly tempRefName: string;
-  readonly sandbox: Sandbox | undefined;
-  readonly worktreePath: string | undefined;
-  readonly tempRefReady: boolean;
-}): Promise<ValidationWorkspaceCleanupResult> => {
-  const worktree = await cleanupWorktree(input.repoRoot, input.sandbox, input.worktreePath);
-  const tempRef = input.tempRefReady
-    ? deleteTempRef(input.repoRoot, input.tempRefName)
-    : "not_created";
-
-  return { worktree, tempRef };
-};
-
-const cleanupWorktree = async (
-  repoRoot: string,
-  sandbox: Sandbox | undefined,
-  worktreePath: string | undefined,
-): Promise<CleanupState> => {
-  if (sandbox === undefined && worktreePath === undefined) {
-    return "not_created";
-  }
-
-  try {
-    if (sandbox === undefined) {
-      if (worktreePath === undefined || !existsSync(worktreePath)) {
-        return "not_created";
-      }
-
-      return removeValidationWorktree(repoRoot, worktreePath) ? "removed" : "failed";
-    }
-
-    const closeResult = await sandbox.close();
-    const preservedPath = closeResult.preservedWorktreePath ?? worktreePath;
-
-    if (preservedPath !== undefined && existsSync(preservedPath)) {
-      return removeValidationWorktree(repoRoot, preservedPath) ? "removed" : "failed";
-    }
-
-    return "removed";
-  } catch {
-    return "failed";
-  }
-};
-
-const deleteTempRef = (repoRoot: string, tempRefName: string): CleanupState => {
+export const deleteValidationTempRef = (repoRoot: string, tempRefName: string): CleanupState => {
   const result = git(repoRoot, ["update-ref", "-d", tempRefName]);
 
   if (result.ok) {
@@ -155,6 +107,7 @@ const git = (cwd: string, args: readonly string[]): GitResult => {
     cwd,
     encoding: "utf8",
     stdio: ["ignore", "pipe", "pipe"],
+    timeout: validationGitOperationTimeoutMs,
   });
 
   if (result.status === 0) {

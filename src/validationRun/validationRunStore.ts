@@ -34,7 +34,6 @@ export type RecordValidationWorkspaceSetupInput = {
   readonly validationRunId: string;
   readonly tempRefName: string;
   readonly submittedSha: string;
-  readonly worktreePath: string;
   readonly worktreeHead: string;
   readonly cleanupWorktree: CleanupState;
   readonly cleanupTempRef: CleanupState;

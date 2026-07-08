@@ -71,12 +71,6 @@
         "reason": "Existing exhaustive CLI error mapper. Keep the current ceiling blocking so any growth must split the mapper."
       },
       {
-        "files": ["src/validation/createValidationWorkspace.ts"],
-        "functions": ["createValidationWorkspace"],
-        "maxCognitive": 18,
-        "reason": "Existing validation workspace orchestration is intentionally linear until the validation seam is split. Keep the current ceiling blocking."
-      },
-      {
         "files": ["src/init/repoContext.ts"],
         "functions": ["initRepoLocalContext"],
         "maxCognitive": 18,

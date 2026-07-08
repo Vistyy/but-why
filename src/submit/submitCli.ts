@@ -1,3 +1,5 @@
+import { Effect } from "effect";
+
 import type { CliEnvironment, CliResult } from "../cli.js";
 import type { StructuredErrorInput } from "../cliError.js";
 import { repoStateLoadError, runtimeError, success } from "../cliResults.js";
@@ -23,68 +25,69 @@ import {
 } from "../submit/submitRejectionErrors.js";
 import type { ValidationWorkspaceToolingError } from "../validation/validationWorkspace.js";
 
-export const routeSubmit = async (
+export const routeSubmit = (
   args: readonly string[],
   environment: CliEnvironment,
-): Promise<CliResult> => {
+): Effect.Effect<CliResult> => {
   if (args.length === 1 && args[0] === "--help") {
-    return success(submitHelpView());
+    return Effect.succeed(success(submitHelpView()));
   }
 
-  const taskIdParse = parseSubmitTaskId(args);
+  return Effect.catchAllDefect(
+    Effect.gen(function* () {
+      const taskIdParse = parseSubmitTaskId(args);
 
-  if (!taskIdParse.ok) {
-    return taskIdParse.result;
-  }
+      if (!taskIdParse.ok) {
+        return taskIdParse.result;
+      }
 
-  const taskIdResolutionPreflight = loadSubmitPreflight(environment, false);
+      const taskIdResolutionPreflight = loadSubmitPreflight(environment, false);
 
-  if (!taskIdResolutionPreflight.ok) {
-    return taskIdResolutionPreflight.result;
-  }
+      if (!taskIdResolutionPreflight.ok) {
+        return taskIdResolutionPreflight.result;
+      }
 
-  const taskId = taskIdResolutionPreflight.submit.resolveTaskId(taskIdParse.taskId);
+      const taskId = taskIdResolutionPreflight.submit.resolveTaskId(taskIdParse.taskId);
 
-  if (!taskId.ok) {
-    return taskIdResolutionError(taskId);
-  }
+      if (!taskId.ok) {
+        return taskIdResolutionError(taskId);
+      }
 
-  const submitPreflight = loadSubmitPreflight(environment, true);
+      const submitPreflight = loadSubmitPreflight(environment, true);
 
-  if (!submitPreflight.ok) {
-    return submitPreflight.result;
-  }
+      if (!submitPreflight.ok) {
+        return submitPreflight.result;
+      }
 
-  try {
-    const now = environment.now().toISOString();
-    const result = submitPreflight.submit.submitTask({
-      taskId: taskId.taskId,
-      now,
-    });
-
-    if (!result.ok) {
-      return renderSubmitResult(result);
-    }
-
-    const validationWorkspace =
-      await submitPreflight.submit.createValidationWorkspaceForValidationRun({
-        validationRunId: result.validationRunId,
-        commitSha: result.commitSha,
-        taskRecoveryState: result.previousTaskState,
+      const now = environment.now().toISOString();
+      const result = submitPreflight.submit.submitTask({
+        taskId: taskId.taskId,
         now,
       });
 
-    if (!validationWorkspace.ok) {
-      return validationWorkspaceSetupError(validationWorkspace.toolingError);
-    }
+      if (!result.ok) {
+        return renderSubmitResult(result);
+      }
 
-    return renderSubmitResult({
-      ...result,
-      validationWorkspace: validationWorkspace.validationWorkspace,
-    });
-  } catch {
-    return toolingError();
-  }
+      const validationWorkspace =
+        yield* submitPreflight.submit.createValidationWorkspaceForValidationRun({
+          validationRunId: result.validationRunId,
+          commitSha: result.commitSha,
+          taskRecoveryState: result.previousTaskState,
+          now,
+        });
+
+      if (!validationWorkspace.ok) {
+        return validationWorkspaceSetupError(validationWorkspace.toolingError);
+      }
+
+      return renderSubmitResult({
+        ...result,
+        validationWorkspace: validationWorkspace.validationWorkspace,
+      });
+    }),
+    () => Effect.succeed(toolingError()),
+  );
 };
 
 const submitHelpView = (): StructuredObject => ({

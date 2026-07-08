@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { chmodSync, existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
@@ -73,7 +73,7 @@ describe("by submit CLI", () => {
       cleanupWorktree: "removed",
       cleanupTempRef: "removed",
     });
-    expect(existsSync(validationWorkspace?.worktreePath ?? "")).toBe(false);
+    expect(validationWorkspace).not.toHaveProperty("worktreePath");
     expect(readFileSync(join(root, ".gitignore"), "utf8")).toContain(".sandcastle/worktrees/");
 
     expect(runByInProcess(root, ["task", "show", "BY-1"]).stdout).toContain(
