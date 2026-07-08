@@ -297,6 +297,18 @@ Artifact refs use this form:
 artifact:<validation-run-id>/<phase>/<producer>/<filename>
 ```
 
+Artifacts are durable validation output records.
+
+V1 stores artifact contents as local files under But Why repo-local state.
+
+SQLite stores artifact metadata and refs.
+
+Artifact storage is outside the Validation Workspace.
+
+Workspace cleanup must not delete artifacts.
+
+Domain and use-case code should address artifacts through artifact refs, not raw workspace paths.
+
 ## Token accounting
 
 V1 records tokens, not dollar costs.

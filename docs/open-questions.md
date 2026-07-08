@@ -59,7 +59,7 @@ V1 uses fixed phases instead of a generic CI pipeline.
 
 The remaining config shape is open for:
 
-- check commands
+- whether check commands should support argv arrays after Sandcastle supports argv-native execution
 - intent reviewer
 - quality reviewers
 - sequential versus parallel reviewer groups

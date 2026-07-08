@@ -48,10 +48,15 @@ If detection fails, `by submit <task-id>` fails during preflight.
 ```json
 {
   "taskPrefix": "BY",
+  "validation": {
+    "sandbox": {
+      "mode": "none"
+    }
+  },
   "checks": [
     {
-      "id": "validate",
-      "command": "just validate",
+      "id": "quality",
+      "command": "just quality",
       "timeoutSeconds": 1200
     }
   ],
@@ -159,11 +164,55 @@ Missing allowlisted files should be structured tooling errors.
 
 Copied files are not part of the submitted commit SHA.
 
+## Validation sandboxing
+
+Repo config chooses validation execution sandboxing with `validation.sandbox.mode`.
+
+Missing `validation.sandbox.mode` defaults to `none`.
+
+The sandbox mode is repo-level validation execution policy, not per-check config.
+
+`none` means no Docker or Podman sandbox, but checks still run inside the Validation Workspace.
+
+Example:
+
+```json
+{
+  "validation": {
+    "sandbox": {
+      "mode": "none"
+    }
+  }
+}
+```
+
+Supported v1 modes are:
+
+```text
+none
+docker
+podman
+```
+
+Invalid modes are Submit Rejection Errors before Validation Run creation.
+
+Requested modes that are unavailable at runtime are Validation Tooling Failures.
+
+Checks run from the repo root inside the Validation Workspace.
+
 ## Checks
 
 Checks are repo-owned commands.
 
+Repo config must define at least one check.
+
+Missing or empty `checks` is a Submit Rejection Error before Validation Run creation.
+
 But Why does not own the repo's CI logic.
+
+V1 check commands are shell command strings.
+
+Argv-array check commands are deferred until Sandcastle supports argv-native execution.
 
 A repo can use any command it wants:
 
@@ -175,11 +224,66 @@ nx affected
 ./scripts/validate.sh
 ```
 
+A check may set `timeoutSeconds`.
+
+`timeoutSeconds` must be a positive integer.
+
+Checks without `timeoutSeconds` default to `1200` seconds.
+
+A timed-out check creates a high-severity Finding, not a Validation Tooling Failure.
+
+Validation stops immediately after a check timeout.
+
+A check `id` is the Producer id for that check's validation output.
+
+Check ids must be valid for artifact refs.
+
+Check ids contain only lowercase letters, numbers, `-`, and `_`.
+
+Check ids start with a lowercase letter or number.
+
+Duplicate check ids are a Submit Rejection Error before Validation Run creation.
+
+Check artifacts use refs shaped like:
+
+```text
+artifact:<validation-run-id>/checks/<check-id>/<filename>
+```
+
+Each check round captures these artifacts:
+
+```text
+stdout.txt
+stderr.txt
+exit-code.json
+logs.txt
+```
+
+Check artifacts are saved outside the Validation Workspace before workspace cleanup.
+
+Check artifact capture uses the command result returned by Sandcastle, not files left in the Validation Workspace.
+
 V1 checks run sequentially.
 
 V1 stops on the first failed check.
 
+Every executed check records a round and artifacts, whether it passes, fails, or times out.
+
+Checks skipped after an earlier failure or timeout do not record rounds or artifacts.
+
+Check commands may modify the Validation Workspace, but those changes never modify the submitted branch.
+
 A failed check creates a blocking finding.
+
+Failed check Findings use `severity: high`.
+
+Failed check Finding evidence includes the command and exit code, not stdout or stderr excerpts.
+
+Timeout Findings use `severity: high`.
+
+Timeout Finding evidence includes the command and `timeoutSeconds`.
+
+Failed and timed-out check Findings include stdout, stderr, exit-code, and logs artifact refs.
 
 ## Validation phases
 

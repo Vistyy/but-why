@@ -113,7 +113,7 @@ A Validation Tooling Failure where a reviewer never produces structured output t
 _Avoid_: Parse error, exhausted retry, malformed finding
 
 **Finding**:
-A validation result that records a blocking problem or question about a submission.
+A validation result that records a blocking problem or question about a submission, including failed configured checks.
 In v1, any finding sends the task to needs input.
 _Avoid_: Issue, error, comment, note
 
@@ -131,6 +131,11 @@ _Avoid_: Step run, attempt
 The command, reviewer, service, or tool that creates a finding, artifact, or token usage record inside a round.
 Producers are shown as the human-readable source of validation output.
 _Avoid_: Tool, actor, substep
+
+**Artifact**:
+A durable validation output record, such as command stdout, stderr, exit code, logs, reviewer output, or transcript, addressed by an artifact ref.
+Artifact storage is outside the Validation Workspace.
+_Avoid_: Workspace file, temp file, attachment
 
 **Task Comment**:
 An append-only Markdown note attached to a task as Task Context.
