@@ -2,6 +2,36 @@
 
 This document describes the v1 setup flow for But Why?.
 
+## Install from a local tarball
+
+But Why? is not available from the npm registry until issue 046 publishes the package.
+
+Build a local install tarball from the latest checkout:
+
+```bash
+just pack
+```
+
+Install that tarball in another repository:
+
+```bash
+npm install /path/to/but-why-0.0.0.tgz
+npx by --help
+```
+
+Install the same tarball under a global npm prefix when you need `by` on `PATH`:
+
+```bash
+npm install --global /path/to/but-why-0.0.0.tgz
+by --help
+```
+
+Use the installed `by` command from repositories that use But Why?.
+Use `just by ...` only when developing But Why? itself from this source checkout.
+
+For agent-facing setup in issue 041, give agents a tarball path or a `by` on `PATH` from the tarball install above.
+Agents should run the Installed CLI as `by ...` inside the target repository, not the source checkout wrapper.
+
 ## Setup
 
 Setup is non-interactive:

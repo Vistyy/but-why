@@ -31,6 +31,9 @@ typecheck:
 test:
     pnpm run test
 
+pack:
+    npm pack
+
 format:
     pnpm run format
 

@@ -1,3 +1,4 @@
+#!/usr/bin/env node
 import { Effect } from "effect";
 
 import { mapRuntimeError, runCli } from "./cli.js";
