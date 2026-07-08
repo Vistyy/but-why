@@ -23,7 +23,8 @@ The skill should make But Why? usable by agents without requiring them to redisc
 - [ ] The skill explains the difference between Submit Rejection Errors, Validation Tooling Failures, and Findings.
 - [ ] The skill tells agents that Findings send Tasks to `needs_input` and require code changes before resubmit.
 - [ ] The skill tells agents that Validation Tooling Failures are tooling problems, not submission problems.
-- [ ] The skill includes the expected checks-only submit loop for the current implementation.
+- [ ] The skill includes the expected prepare-and-check submit loop.
+- [ ] The skill explains that agents should configure explicit `validation.prepare` and `validation.checks` policy instead of relying on hidden dependency setup.
 - [ ] The skill includes guidance for creating a But Why Task from an existing markdown issue with `--description-file` without treating markdown files as the Task authority.
 - [ ] The skill warns agents not to edit repo-local SQLite state directly.
 - [ ] The skill warns agents not to inspect validation artifacts through workspace paths.
@@ -34,3 +35,4 @@ The skill should make But Why? usable by agents without requiring them to redisc
 ## Blocked by
 
 - 013-inspect-runs-and-latest-task-findings.md
+- 043-guide-init-validation-configuration.md
