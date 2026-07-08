@@ -346,6 +346,21 @@ const migrations: readonly Migration[] = [
       ADD COLUMN phase TEXT NOT NULL DEFAULT 'checks' CHECK (phase IN (${validationPhaseSql}))
     `,
   },
+  {
+    name: "011_validation_finding_producer",
+    apply: `
+      ALTER TABLE validation_run_findings
+      ADD COLUMN producer TEXT NOT NULL DEFAULT 'unknown';
+
+      UPDATE validation_run_findings
+      SET producer = substr(title, length('Check failed: ') + 1)
+      WHERE phase = 'checks' AND title LIKE 'Check failed: %';
+
+      UPDATE validation_run_findings
+      SET producer = substr(title, length('Check timed out: ') + 1)
+      WHERE phase = 'checks' AND title LIKE 'Check timed out: %'
+    `,
+  },
 ];
 
 export const ensureStateDatabase = (

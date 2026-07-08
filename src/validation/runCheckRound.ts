@@ -142,6 +142,7 @@ const checkFinding = (
   id: `${validationRunId}-F1`,
   validationRunId,
   phase: "checks",
+  producer: check.id,
   title: timedOut ? `Check timed out: ${check.id}` : `Check failed: ${check.id}`,
   description: timedOut
     ? `Configured check ${check.id} timed out after ${check.timeoutSeconds} seconds.`
@@ -150,8 +151,8 @@ const checkFinding = (
   evidence: timedOut
     ? `command: ${check.command}\ntimeoutSeconds: ${check.timeoutSeconds}`
     : `command: ${check.command}\nexitCode: ${commandResult.exitCode}`,
-  files: "[]",
-  artifactRefs: jsonStringArray(artifactRefs),
+  files: [],
+  artifactRefs,
 });
 
 const runCheckCommand = (
@@ -254,9 +255,6 @@ const writeCheckArtifacts = (input: {
 
 const checkArtifactRef = (validationRunId: string, checkId: string, fileName: string): string =>
   `artifact:${validationRunId}/checks/${checkId}/${fileName}`;
-
-const jsonStringArray = (values: readonly string[]): string =>
-  `[${values.map((value) => `"${value}"`).join(",")}]`;
 
 const timeoutWrappedCommand = (check: SubmitCheckConfig, marker: string): string =>
   [

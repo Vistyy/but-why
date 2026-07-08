@@ -10,6 +10,7 @@ import type { OutputFormat, StructuredObject } from "./output/structured.js";
 import { routeSubmit } from "./submit/submitCli.js";
 import { dashboard } from "./cli/task/dashboard.js";
 import { routeTask } from "./cli/task/taskCli.js";
+import { routeValidationRun } from "./cli/validationRun/validationRunCli.js";
 
 export type { CliResult } from "./cliResults.js";
 
@@ -88,6 +89,10 @@ const routeCommandArgs = (
     return routeSubmit(args.slice(1), environment);
   }
 
+  if (firstArg === "validation-run") {
+    return Effect.succeed(routeValidationRun(args.slice(1), environment));
+  }
+
   if (firstArg?.startsWith("-")) {
     return Effect.succeed(
       usageError({
@@ -156,6 +161,10 @@ const helpView = (bin: string): StructuredObject =>
       {
         command: "by submit <task-id>",
         description: "Create a Validation Run from submit preflight",
+      },
+      {
+        command: "by validation-run show <validation-run-id>",
+        description: "Show full Validation Run details",
       },
     ],
     flags: withGlobalHelpFlags(),

@@ -12,6 +12,9 @@ import type {
 export type ValidationRunStore = {
   readonly getValidationRunById: (validationRunId: string) => ValidationRunRecord | undefined;
   readonly getLatestValidationRunIdForTask: (taskId: string) => string | null;
+  readonly listValidationRunSummariesForTask: (
+    taskId: string,
+  ) => readonly ValidationRunSummaryRecord[];
   readonly getValidationWorkspaceSetup: (
     validationRunId: string,
   ) => ValidationWorkspaceSetupRecord | undefined;
@@ -39,6 +42,14 @@ export type ValidationRunStore = {
   readonly recordValidationRunToolingError: (
     input: RecordValidationRunToolingErrorInput,
   ) => RecordValidationRunErrorResult;
+};
+
+export type ValidationRunSummaryRecord = Pick<
+  ValidationRunRecord,
+  "id" | "taskValidationNumber" | "status" | "branch" | "commitSha" | "createdAt" | "updatedAt"
+> & {
+  readonly findingCount: number;
+  readonly toolingFailureCount: number;
 };
 
 export type RecordValidationRunErrorInput = {

@@ -20,8 +20,8 @@ import { taskStateTransitionPath } from "./support/taskLifecycle.js";
 const firstNow = "2026-06-30T12:00:00.000Z";
 const secondNow = "2026-06-30T12:05:00.000Z";
 const thirdNow = "2026-06-30T12:10:00.000Z";
-const firstTaskValidationRunId = "by-1-09224d806043.1";
-const secondTaskValidationRunId = "by-1-09224d806043.2";
+const firstTaskValidationRunId = "by-1-09224d806043.v1";
+const secondTaskValidationRunId = "by-1-09224d806043.v2";
 const firstTaskValidationRef = `refs/but-why/validation-runs/${firstTaskValidationRunId}/validation`;
 
 afterEach(cleanupTempRoots);
@@ -185,7 +185,7 @@ describe("by submit CLI", () => {
     expect(result.status).toBe(1);
     expect(result.stderr).toBe("");
     expect(result.stdout).toContain("code: validation_findings");
-    expect(result.stdout).toContain("validationRunId: by-1-09224d806043.1");
+    expect(result.stdout).toContain("validationRunId: by-1-09224d806043.v1");
     expect(currentBranch(root)).toBe(branchBeforeSubmit);
     expect(currentCommitSha(root)).toBe(failingCommitSha);
     expect(currentCommitSha(root)).not.toBe(commitSha);
@@ -215,12 +215,13 @@ describe("by submit CLI", () => {
         id: `${firstTaskValidationRunId}-F1`,
         validationRunId: firstTaskValidationRunId,
         phase: "checks",
+        producer: "quality",
         title: "Check failed: quality",
         description: "Configured check quality exited with code 7.",
         severity: "high",
         evidence: 'command: node -e "process.exit(7)"\nexitCode: 7',
-        files: "[]",
-        artifactRefs: `[${artifactRefs.map((ref) => `"${ref}"`).join(",")}]`,
+        files: [],
+        artifactRefs,
         createdAt: thirdNow,
         updatedAt: thirdNow,
       },

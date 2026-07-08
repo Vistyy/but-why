@@ -42,12 +42,13 @@ help[1]: Run \`by init --task-prefix BY\` in the repository root.`);
     expect(result.stdout).toBe(`bin: ${expectedBin}
 description: Validate completed code changes against approved human intent.
 usage: "by [--output <format>] [command] [--help]"
-commands[5]{command,description}:
+commands[6]{command,description}:
   by,Show workspace task dashboard
   by init --task-prefix <prefix>,Create repo-local But Why? state
   by task create --title <title> --description-file <file>,Create a repo-local Task
   "by task list [--all] [--state <state>]",List repo-local Tasks
   by submit <task-id>,Create a Validation Run from submit preflight
+  by validation-run show <validation-run-id>,Show full Validation Run details
 flags[3]{flag,description}:
   "--output <format>","Set stdout format: toon or json. Default: toon."
   "-o <format>","Alias for --output <format>. Valid values: toon, json."
@@ -79,6 +80,10 @@ flags[3]{flag,description}:
         {
           command: "by submit <task-id>",
           description: "Create a Validation Run from submit preflight",
+        },
+        {
+          command: "by validation-run show <validation-run-id>",
+          description: "Show full Validation Run details",
         },
       ],
       flags: [
@@ -265,6 +270,7 @@ updated[1]: .gitignore`);
         { name: "008_drop_durable_validation_workspace_path" },
         { name: "009_failed_validation_run_status" },
         { name: "010_validation_finding_phase" },
+        { name: "011_validation_finding_producer" },
       ]);
       expect(
         database

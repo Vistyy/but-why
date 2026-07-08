@@ -1,5 +1,13 @@
 import type { RepoLocalContext } from "../init/repoContext.js";
-import type { ValidationRunStore } from "../validationRun/validationRunStore.js";
+import type {
+  ValidationRunFindingRecord,
+  ValidationRunRecord,
+} from "../validationRun/validationRun.js";
+import type {
+  ValidationRunStore,
+  ValidationRunSummaryRecord,
+  ValidationRunToolingErrorRecord,
+} from "../validationRun/validationRunStore.js";
 import { canStartFrom, type StartIneligibleState } from "./startPolicy.js";
 import type { TaskState } from "./lifecycle.js";
 import type { TaskContext, TaskRecord, TaskSummary } from "./task.js";
@@ -19,6 +27,10 @@ export type TaskUseCases = {
   readonly listTasks: (input: ListTasksInput) => readonly TaskSummary[];
   readonly listActionableTasks: () => readonly TaskSummary[];
   readonly getTaskById: (taskId: PublicTaskId) => TaskRecord | undefined;
+  readonly getLatestTaskValidationFindings: (
+    taskId: PublicTaskId,
+  ) => TaskLatestValidationFindings | undefined;
+  readonly listTaskValidationRuns: (taskId: PublicTaskId) => TaskValidationRunHistory | undefined;
   readonly getTaskContextById: (taskId: PublicTaskId) => TaskContext | undefined;
   readonly appendTaskComment: (
     input: AppendTaskCommentInput,
@@ -48,6 +60,18 @@ type TransitionTaskStateInput = {
   readonly taskId: PublicTaskId;
   readonly to: TaskState;
   readonly now: string;
+};
+
+export type TaskLatestValidationFindings = {
+  readonly task: TaskRecord;
+  readonly validationRun: ValidationRunRecord | null;
+  readonly findings: readonly ValidationRunFindingRecord[];
+  readonly toolingFailures: readonly ValidationRunToolingErrorRecord[];
+};
+
+export type TaskValidationRunHistory = {
+  readonly task: TaskRecord;
+  readonly validationRuns: readonly ValidationRunSummaryRecord[];
 };
 
 export type RepoTaskStateTransitionResult =
@@ -97,6 +121,10 @@ export const openTaskUseCases = (
     listTasks: stores.taskStore.listTasks,
     listActionableTasks: stores.taskStore.listActionableTasks,
     getTaskById: (taskId) => getTaskById(stores.taskStore, stores.validationRunStore, taskId),
+    getLatestTaskValidationFindings: (taskId) =>
+      getLatestTaskValidationFindings(stores.taskStore, stores.validationRunStore, taskId),
+    listTaskValidationRuns: (taskId) =>
+      listTaskValidationRuns(stores.taskStore, stores.validationRunStore, taskId),
     getTaskContextById: stores.taskStore.getTaskContextById,
     appendTaskComment: stores.taskStore.appendTaskComment,
     startTask: (taskId, now) => startTask(stores.taskStore, stores.validationRunStore, taskId, now),
@@ -117,6 +145,57 @@ const getTaskById = (
   }
 
   return withLatestValidationRun(task, validationRunStore.getLatestValidationRunIdForTask(taskId));
+};
+
+const getLatestTaskValidationFindings = (
+  taskStore: TaskStore,
+  validationRunStore: ValidationRunStore,
+  taskId: PublicTaskId,
+): TaskLatestValidationFindings | undefined => {
+  const task = getTaskById(taskStore, validationRunStore, taskId);
+
+  if (task === undefined) {
+    return undefined;
+  }
+
+  if (task.latestValidationRun === null) {
+    return {
+      task,
+      validationRun: null,
+      findings: [],
+      toolingFailures: [],
+    };
+  }
+
+  const validationRun = validationRunStore.getValidationRunById(task.latestValidationRun);
+
+  if (validationRun === undefined) {
+    throw new Error(`Latest Validation Run was not found: ${task.latestValidationRun}`);
+  }
+
+  return {
+    task,
+    validationRun,
+    findings: validationRunStore.listValidationRunFindings(validationRun.id),
+    toolingFailures: validationRunStore.listValidationRunToolingErrors(validationRun.id),
+  };
+};
+
+const listTaskValidationRuns = (
+  taskStore: TaskStore,
+  validationRunStore: ValidationRunStore,
+  taskId: PublicTaskId,
+): TaskValidationRunHistory | undefined => {
+  const task = getTaskById(taskStore, validationRunStore, taskId);
+
+  if (task === undefined) {
+    return undefined;
+  }
+
+  return {
+    task,
+    validationRuns: validationRunStore.listValidationRunSummariesForTask(taskId),
+  };
 };
 
 const transitionTaskState = (

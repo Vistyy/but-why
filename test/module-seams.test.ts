@@ -40,7 +40,7 @@ import { cleanupTempRoots, createGitRepo, runByInProcess } from "./support/by-cl
 const firstNow = "2026-06-30T12:00:00.000Z";
 const secondNow = "2026-06-30T12:05:00.000Z";
 const thirdNow = "2026-06-30T12:10:00.000Z";
-const firstTaskValidationRunId = "by-1-09224d806043.1";
+const firstTaskValidationRunId = "by-1-09224d806043.v1";
 
 const prTarget: GitHubPrTarget = {
   owner: "acme",

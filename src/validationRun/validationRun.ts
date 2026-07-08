@@ -65,12 +65,13 @@ export type ValidationRunFindingRecord = {
   readonly id: string;
   readonly validationRunId: string;
   readonly phase: ValidationPhase;
+  readonly producer: string;
   readonly title: string;
   readonly description: string;
   readonly severity: "critical" | "high" | "medium" | "low";
   readonly evidence: string;
-  readonly files: string;
-  readonly artifactRefs: string;
+  readonly files: readonly string[];
+  readonly artifactRefs: readonly string[];
   readonly createdAt: string;
   readonly updatedAt: string;
 };

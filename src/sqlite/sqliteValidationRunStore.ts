@@ -1,6 +1,7 @@
 import type { DatabaseSync } from "node:sqlite";
 
 import { rollbackIfOpen, withStateDatabase, type SqliteStoreInput } from "./connection.js";
+import { decodeSqliteJsonStringArray } from "./sqliteJsonStringArray.js";
 import { queryAll, queryOne } from "./query.js";
 import {
   recordValidationRunToolingErrorMutation,
@@ -19,6 +20,7 @@ import type {
   RecordValidationRunToolingErrorInput,
   RecordValidationWorkspaceSetupInput,
   ValidationRunStore,
+  ValidationRunSummaryRecord,
   ValidationRunToolingErrorRecord,
   ValidationWorkspaceSetupRecord,
 } from "../validationRun/validationRunStore.js";
@@ -80,6 +82,7 @@ const validationRunFindingColumns = [
   "id",
   "validation_run_id AS validationRunId",
   "phase",
+  "producer",
   "title",
   "description",
   "severity",
@@ -113,6 +116,8 @@ export const openSqliteValidationRunStore = (input: SqliteStoreInput): Validatio
     withStateDatabase(input, (database) => getValidationRunById(database, validationRunId)),
   getLatestValidationRunIdForTask: (taskId) =>
     withStateDatabase(input, (database) => getLatestValidationRunIdForTask(database, taskId)),
+  listValidationRunSummariesForTask: (taskId) =>
+    withStateDatabase(input, (database) => listValidationRunSummariesForTask(database, taskId)),
   getValidationWorkspaceSetup: (validationRunId) =>
     withStateDatabase(input, (database) => getValidationWorkspaceSetup(database, validationRunId)),
   listValidationRunToolingErrors: (validationRunId) =>
@@ -171,6 +176,38 @@ const getLatestValidationRunIdForTask = (database: DatabaseSync, taskId: string)
 
   return row?.id ?? null;
 };
+
+const listValidationRunSummariesForTask = (
+  database: DatabaseSync,
+  taskId: string,
+): readonly ValidationRunSummaryRecord[] =>
+  queryAll<ValidationRunSummaryRow>(
+    database,
+    `
+      SELECT
+        id,
+        task_validation_number AS taskValidationNumber,
+        status,
+        branch,
+        commit_sha AS commitSha,
+        created_at AS createdAt,
+        updated_at AS updatedAt,
+        (
+          SELECT COUNT(*)
+          FROM validation_run_findings
+          WHERE validation_run_findings.validation_run_id = validation_runs.id
+        ) AS findingCount,
+        (
+          SELECT COUNT(*)
+          FROM validation_run_tooling_errors
+          WHERE validation_run_tooling_errors.validation_run_id = validation_runs.id
+        ) AS toolingFailureCount
+      FROM validation_runs
+      WHERE task_id = ?
+      ORDER BY task_validation_number DESC
+    `,
+    [taskId],
+  ).map(rowToValidationRunSummary);
 
 const getValidationWorkspaceSetup = (
   database: DatabaseSync,
@@ -370,6 +407,18 @@ const recordExistingValidationRunMutation = (
   }
 };
 
+const rowToValidationRunSummary = (row: ValidationRunSummaryRow): ValidationRunSummaryRecord => ({
+  id: row.id,
+  taskValidationNumber: Number(row.taskValidationNumber),
+  status: row.status,
+  branch: row.branch,
+  commitSha: row.commitSha,
+  findingCount: Number(row.findingCount),
+  toolingFailureCount: Number(row.toolingFailureCount),
+  createdAt: row.createdAt,
+  updatedAt: row.updatedAt,
+});
+
 const rowToValidationRunRecord = (row: ValidationRunRecordRow): ValidationRunRecord => ({
   id: row.id,
   taskId: row.taskId,
@@ -415,13 +464,26 @@ const rowToValidationRunRound = (row: ValidationRunRoundRow): ValidationRunRound
   roundNumber: Number(row.roundNumber),
 });
 
-const rowToValidationRunFinding = (row: ValidationRunFindingRow): ValidationRunFindingRecord => row;
+const rowToValidationRunFinding = (row: ValidationRunFindingRow): ValidationRunFindingRecord => ({
+  ...row,
+  files: decodeSqliteJsonStringArray(row.files),
+  artifactRefs: decodeSqliteJsonStringArray(row.artifactRefs),
+});
 
 const rowToValidationRunArtifact = (row: ValidationRunArtifactRow): ValidationRunArtifactRecord =>
   row;
 
 type ValidationRunIdRow = {
   readonly id: string;
+};
+
+type ValidationRunSummaryRow = Omit<
+  ValidationRunSummaryRecord,
+  "taskValidationNumber" | "findingCount" | "toolingFailureCount"
+> & {
+  readonly taskValidationNumber: number | bigint;
+  readonly findingCount: number | bigint;
+  readonly toolingFailureCount: number | bigint;
 };
 
 type ValidationRunRecordRow = {
@@ -448,7 +510,10 @@ type ValidationRunRoundRow = Omit<ValidationRunRoundRecord, "roundNumber"> & {
   readonly roundNumber: number | bigint;
 };
 
-type ValidationRunFindingRow = ValidationRunFindingRecord;
+type ValidationRunFindingRow = Omit<ValidationRunFindingRecord, "files" | "artifactRefs"> & {
+  readonly files: string;
+  readonly artifactRefs: string;
+};
 
 type ValidationRunArtifactRow = ValidationRunArtifactRecord;
 

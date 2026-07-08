@@ -5,9 +5,11 @@ import type { StructuredObject } from "../../output/structured.js";
 import { runCommentCommand } from "./commands/comment.js";
 import { runContextCommand } from "./commands/context.js";
 import { runCreateCommand } from "./commands/create.js";
+import { runFindingsCommand } from "./commands/findings.js";
 import { runListCommand } from "./commands/list.js";
 import { runShowCommand } from "./commands/show.js";
 import { runStartCommand } from "./commands/start.js";
+import { runValidationRunsCommand } from "./commands/validationRuns.js";
 import { dashboard } from "./dashboard.js";
 import type { TaskCommandEnvironment } from "./taskCliSupport.js";
 
@@ -41,6 +43,14 @@ export const routeTask = (
 
   if (subcommand === "show") {
     return runShowCommand(args.slice(1), environment);
+  }
+
+  if (subcommand === "findings") {
+    return runFindingsCommand(args.slice(1), environment);
+  }
+
+  if (subcommand === "validation-runs") {
+    return runValidationRunsCommand(args.slice(1), environment);
   }
 
   if (subcommand === "start") {
@@ -88,6 +98,14 @@ const taskHelpView = (): StructuredObject => ({
     {
       command: "by task start <task-id>",
       description: "Mark implementation work as started",
+    },
+    {
+      command: "by task findings <task-id>",
+      description: "Show Findings from the latest Task Validation Run",
+    },
+    {
+      command: "by task validation-runs <task-id>",
+      description: "List Task Validation Run History",
     },
     {
       command: "by task context <task-id>",

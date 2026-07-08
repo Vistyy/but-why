@@ -150,6 +150,7 @@
         "name": "use-cases",
         "patterns": [
           "src/task/taskUseCases.ts",
+          "src/validationRun/validationRunUseCases.ts",
           "src/submit/submitPreflight.ts",
           "src/submit/submitRepoConfig.ts"
         ]
@@ -163,6 +164,7 @@
         "patterns": [
           "src/localSubmit/**",
           "src/localTask/**",
+          "src/localValidationRun/**",
           "src/submissionEnvironment/localSubmissionEnvironment.ts",
           "src/taskAuthority/localTaskAuthority.ts"
         ]
@@ -184,6 +186,7 @@
         "patterns": [
           "src/sqlite/connection.ts",
           "src/sqlite/query.ts",
+          "src/sqlite/sqliteJsonStringArray.ts",
           "src/sqlite/sqliteValidationRunInternals.ts"
         ]
       },

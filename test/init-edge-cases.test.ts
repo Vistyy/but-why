@@ -136,6 +136,7 @@ help[1]: Move the conflicting path aside before running init again.`);
         { name: "008_drop_durable_validation_workspace_path" },
         { name: "009_failed_validation_run_status" },
         { name: "010_validation_finding_phase" },
+        { name: "011_validation_finding_producer" },
       ]);
     } finally {
       repairedDatabase.close();
