@@ -85,6 +85,8 @@ const expectInstalledHelp = (result: CommandResult) => {
     "description: Validate completed code changes against approved human intent.",
   );
   expect(result.stdout).toContain('usage: "by [--output <format>] [command] [--help]"');
+  expect(result.stdout).toContain("docs/public/setup.md");
+  expect(result.stdout).toContain("docs/public/config.md");
   expect(result.stdout).not.toContain("src/main.ts");
   expect(result.stdout).not.toContain(join(repoRoot, "bin/by"));
 };
@@ -98,9 +100,16 @@ describe("installable by CLI package", () => {
     expect(packed.files).toContain("dist/main.js");
     expect(packed.files).toContain("package.json");
     expect(packed.files).toContain("README.md");
+    expect(packed.files).toContain("docs/public/config.md");
+    expect(packed.files).toContain("docs/public/setup.md");
     expect(packed.files.some((path) => path.startsWith("src/"))).toBe(false);
     expect(packed.files.some((path) => path.startsWith("test/"))).toBe(false);
     expect(packed.files.some((path) => path.startsWith("spikes/"))).toBe(false);
+    expect(packed.files.some((path) => path.startsWith("docs/issues/"))).toBe(false);
+    expect(packed.files.some((path) => path.startsWith("docs/prds/"))).toBe(false);
+    expect(packed.files.some((path) => path.startsWith("docs/adr/"))).toBe(false);
+    expect(packed.files.some((path) => path.startsWith("docs/spikes/"))).toBe(false);
+    expect(packed.files).not.toContain("docs/open-questions.md");
     expect(packed.files).not.toContain("bin/by");
     expect(packed.files).not.toContain("justfile");
   }, 120_000);

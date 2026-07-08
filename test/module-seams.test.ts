@@ -463,7 +463,11 @@ const initializedRepo = (): string => {
   expect(result.stderr).toBe("");
   writeFileSync(
     join(root, ".but-why/config.json"),
-    `${JSON.stringify({ taskPrefix: "BY", checks: [{ id: "quality", command: "true" }] }, null, 2)}\n`,
+    `${JSON.stringify(
+      { taskPrefix: "BY", validation: { checks: [{ id: "quality", command: "true" }] } },
+      null,
+      2,
+    )}\n`,
   );
 
   return root;

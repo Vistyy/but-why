@@ -2,7 +2,7 @@
 
 ## Status
 
-Not done.
+Done.
 
 ## Parent
 
@@ -33,35 +33,35 @@ It should always include a lightweight next step pointing agents to shipped publ
 
 ## Acceptance criteria
 
-- [ ] `by init` remains non-interactive.
-- [ ] Successful init output includes concise next-step guidance pointing to shipped public docs.
-- [ ] No-op and repair init output include the same docs guidance.
-- [ ] Init guidance does not branch on whether validation is already configured.
-- [ ] Init guidance assumes `by` is already available through the Installed CLI or a repo-local development CLI.
-- [ ] Init guidance tells agents to inspect repo tooling before choosing commands.
-- [ ] Public docs for installed users live under `docs/public/`.
-- [ ] Package contents include `docs/public/`.
-- [ ] Package contents do not include internal planning docs such as `docs/issues/`, `docs/prds/`, `docs/adr/`, `docs/spikes/`, or `docs/open-questions.md`.
-- [ ] Init guidance points to the shipped config docs by resolved installed path.
-- [ ] `by --help` points to shipped public docs by resolved installed path.
-- [ ] `by init --help` points to shipped public docs by resolved installed path.
-- [ ] Repo config schema accepts checks at `validation.checks`.
-- [ ] Repo config schema no longer accepts top-level `checks`.
-- [ ] Submit reads verification commands from `validation.checks`.
-- [ ] All code paths and tests are updated to use `validation.checks` instead of top-level `checks`.
-- [ ] This repository's `.but-why/config.json` is migrated from top-level `checks` to `validation.checks`.
-- [ ] Init guidance may name `validation.prepare` and `validation.checks` as anchors, but does not teach config inline.
-- [ ] Init guidance says `.but-why/config.json` is tracked repo policy.
-- [ ] Init guidance tells agents to configure validation policy to the best of their ability based on observed repository tooling, while keeping the resulting `.but-why/config.json` explicit and reviewable.
-- [ ] Init guidance points agents to shipped public docs for examples and detail.
-- [ ] Init guidance is structured stdout that agents can parse.
-- [ ] Init guidance follows AXI contextual help rules.
-- [ ] `by init --help` mentions that init creates repo policy files and then guides validation setup.
-- [ ] Tests lock the init output shape for initialized, unchanged, and repaired states.
-- [ ] Submit tests cover `validation.checks` as the accepted checks location.
-- [ ] Submit tests cover top-level `checks` as rejected config.
-- [ ] `docs/public/config.md` documents `validation.checks` as the checks location and the expected post-init configuration flow.
-- [ ] Public setup docs mention configuring validation policy after init.
+- [x] `by init` remains non-interactive.
+- [x] Successful init output includes concise next-step guidance pointing to shipped public docs.
+- [x] No-op and repair init output include the same docs guidance.
+- [x] Init guidance does not branch on whether validation is already configured.
+- [x] Init guidance assumes `by` is already available through the Installed CLI or a repo-local development CLI.
+- [x] Init guidance tells agents to inspect repo tooling before choosing commands.
+- [x] Public docs for installed users live under `docs/public/`.
+- [x] Package contents include `docs/public/`.
+- [x] Package contents do not include internal planning docs such as `docs/issues/`, `docs/prds/`, `docs/adr/`, `docs/spikes/`, or `docs/open-questions.md`.
+- [x] Init guidance points to the shipped config docs by resolved installed path.
+- [x] `by --help` points to shipped public docs by resolved installed path.
+- [x] `by init --help` points to shipped public docs by resolved installed path.
+- [x] Repo config schema accepts checks at `validation.checks`.
+- [x] Repo config schema no longer accepts top-level `checks`.
+- [x] Submit reads verification commands from `validation.checks`.
+- [x] All code paths and tests are updated to use `validation.checks` instead of top-level `checks`.
+- [x] This repository's `.but-why/config.json` is migrated from top-level `checks` to `validation.checks`.
+- [x] Init guidance may name `validation.prepare` and `validation.checks` as anchors, but does not teach config inline.
+- [x] Init guidance says `.but-why/config.json` is tracked repo policy.
+- [x] Init guidance tells agents to configure validation policy to the best of their ability based on observed repository tooling, while keeping the resulting `.but-why/config.json` explicit and reviewable.
+- [x] Init guidance points agents to shipped public docs for examples and detail.
+- [x] Init guidance is structured stdout that agents can parse.
+- [x] Init guidance follows AXI contextual help rules.
+- [x] `by init --help` mentions that init creates repo policy files and then guides validation setup.
+- [x] Tests lock the init output shape for initialized, unchanged, and repaired states.
+- [x] Submit tests cover `validation.checks` as the accepted checks location.
+- [x] Submit tests cover top-level `checks` as rejected config.
+- [x] `docs/public/config.md` documents `validation.checks` as the checks location and the expected post-init configuration flow.
+- [x] Public setup docs mention configuring validation policy after init.
 
 ## Out of scope
 

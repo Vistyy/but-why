@@ -1,5 +1,6 @@
+import { realpathSync } from "node:fs";
 import { homedir } from "node:os";
-import { resolve, sep } from "node:path";
+import { dirname, join, resolve, sep } from "node:path";
 import { Effect, Schema } from "effect";
 
 import { withGlobalHelpFlags } from "./cliHelp.js";
@@ -22,6 +23,13 @@ export type CliEnvironment = {
 
 const description = "Validate completed code changes against approved human intent.";
 
+const docsSchema = Schema.Array(
+  Schema.Struct({
+    name: Schema.String,
+    path: Schema.String,
+  }),
+);
+
 const helpViewSchema = Schema.Struct({
   bin: Schema.String,
   description: Schema.Literal(description),
@@ -38,6 +46,7 @@ const helpViewSchema = Schema.Struct({
       description: Schema.String,
     }),
   ),
+  docs: docsSchema,
 });
 
 export const runCli = (
@@ -72,7 +81,7 @@ const routeCommandArgs = (
   }
 
   if (args.length === 1 && args[0] === "--help") {
-    return Effect.succeed(success(helpView(bin)));
+    return Effect.succeed(success(helpView(bin, publicDocs(environment))));
   }
 
   const firstArg = args[0];
@@ -136,7 +145,51 @@ export const collapseHome = (executablePath: string): string => {
   return absolutePath;
 };
 
-const helpView = (bin: string): StructuredObject =>
+type PublicDocs = {
+  readonly setup: string;
+  readonly config: string;
+};
+
+const publicDocs = (environment: CliEnvironment): PublicDocs => {
+  const executablePath = realExecutablePath(environment.executablePath);
+  const packageRoot = resolve(dirname(executablePath), "..");
+
+  return {
+    setup: join(packageRoot, "docs/public/setup.md"),
+    config: join(packageRoot, "docs/public/config.md"),
+  };
+};
+
+const realExecutablePath = (executablePath: string): string => {
+  try {
+    return realpathSync(executablePath);
+  } catch {
+    return resolve(executablePath);
+  }
+};
+
+const publicDocsList = (docs: PublicDocs) => [
+  { name: "setup", path: docs.setup },
+  { name: "config", path: docs.config },
+];
+
+const validationSetupGuidance = (docs: PublicDocs) => ({
+  policyFile: ".but-why/config.json",
+  policy: "tracked repo policy",
+  configDoc: docs.config,
+  setupDoc: docs.setup,
+  guidance: [
+    { step: "inspect", detail: "Inspect repo tooling before choosing validation commands." },
+    {
+      step: "configure",
+      detail:
+        "Configure validation.prepare and validation.checks to the best of your ability from observed tooling.",
+    },
+    { step: "review", detail: "Keep .but-why/config.json explicit and reviewable." },
+  ],
+});
+
+const helpView = (bin: string, docs: PublicDocs): StructuredObject =>
   Schema.decodeUnknownSync(helpViewSchema)({
     bin,
     description,
@@ -168,12 +221,16 @@ const helpView = (bin: string): StructuredObject =>
       },
     ],
     flags: withGlobalHelpFlags(),
+    docs: publicDocsList(docs),
   });
 
 const routeInit = (args: readonly string[], environment: CliEnvironment): CliResult => {
+  const docs = publicDocs(environment);
+
   if (args.length === 1 && args[0] === "--help") {
     return success({
       usage: "by init --task-prefix <prefix>",
+      description: "Create repo policy files and then guide validation setup.",
       flags: withGlobalHelpFlags([
         {
           flag: "--task-prefix <prefix>",
@@ -181,6 +238,7 @@ const routeInit = (args: readonly string[], environment: CliEnvironment): CliRes
         },
       ]),
       examples: ["by init --task-prefix BY"],
+      docs: publicDocsList(docs),
     });
   }
 
@@ -259,6 +317,7 @@ const routeInit = (args: readonly string[], environment: CliEnvironment): CliRes
     },
     ...(initResult.created.length > 0 ? { created: initResult.created } : {}),
     ...(initResult.updated.length > 0 ? { updated: initResult.updated } : {}),
+    validationSetup: validationSetupGuidance(docs),
   });
 };
 

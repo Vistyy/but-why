@@ -159,7 +159,7 @@ describe("by submit CLI", () => {
     }
   });
 
-  it("rejects missing check config before Validation Run creation", () => {
+  it("rejects missing validation.checks before Validation Run creation", () => {
     const root = preparedRepoOnBranch("feature/missing-checks");
 
     writeRepoConfig(root, { taskPrefix: "BY" });
@@ -171,7 +171,29 @@ describe("by submit CLI", () => {
     expect(result.status).toBe(1);
     expect(result.stderr).toBe("");
     expect(result.stdout).toContain("code: invalid_repo_config");
-    expect(result.stdout).toContain("Repo config must define at least one check.");
+    expect(result.stdout).toContain(
+      "Repo config must define at least one validation.checks entry.",
+    );
+    expect(taskHasNoValidationRuns(root, "BY-1")).toBe(true);
+    expect(taskState(root, "BY-1")).toBe("implementing");
+  });
+
+  it("rejects top-level checks config before Validation Run creation", () => {
+    const root = preparedRepoOnBranch("feature/top-level-checks");
+
+    writeRepoConfig(root, {
+      taskPrefix: "BY",
+      checks: [{ id: "quality", command: "true" }],
+    });
+    spawnGit(root, "add", ".but-why/config.json");
+    spawnGit(root, "commit", "-m", "Move checks to top level");
+
+    const result = withFakeGh(() => runSubmit(root, ["BY-1"], thirdNow));
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toBe("");
+    expect(result.stdout).toContain("code: invalid_repo_config");
+    expect(result.stdout).toContain(".but-why/config.json is not valid But Why? repo config.");
     expect(taskHasNoValidationRuns(root, "BY-1")).toBe(true);
     expect(taskState(root, "BY-1")).toBe("implementing");
   });
@@ -183,8 +205,8 @@ describe("by submit CLI", () => {
       taskPrefix: "BY",
       validation: {
         prepare: { command: "printf prepared > prepared.txt" },
+        checks: [{ id: "quality", command: 'test "$(cat prepared.txt)" = prepared' }],
       },
-      checks: [{ id: "quality", command: 'test "$(cat prepared.txt)" = prepared' }],
     });
     spawnGit(root, "add", ".but-why/config.json");
     spawnGit(root, "commit", "-m", "Configure prepare");
@@ -272,8 +294,8 @@ describe("by submit CLI", () => {
       taskPrefix: "BY",
       validation: {
         prepare: { command: 'printf out && printf err >&2 && node -e "process.exit(7)"' },
+        checks: [{ id: "quality", command: "true" }],
       },
-      checks: [{ id: "quality", command: "true" }],
     });
     spawnGit(root, "add", ".but-why/config.json");
     spawnGit(root, "commit", "-m", "Configure failing prepare");
@@ -384,8 +406,8 @@ describe("by submit CLI", () => {
       taskPrefix: "BY",
       validation: {
         prepare: { command: "sleep 10", timeoutSeconds: 1 },
+        checks: [{ id: "quality", command: "true" }],
       },
-      checks: [{ id: "quality", command: "true" }],
     });
     spawnGit(root, "add", ".but-why/config.json");
     spawnGit(root, "commit", "-m", "Configure timed-out prepare");
@@ -409,8 +431,10 @@ describe("by submit CLI", () => {
 
     writeRepoConfig(root, {
       taskPrefix: "BY",
-      validation: { prepare: { command: "   " } },
-      checks: [{ id: "quality", command: "true" }],
+      validation: {
+        prepare: { command: "   " },
+        checks: [{ id: "quality", command: "true" }],
+      },
     });
     spawnGit(root, "add", ".but-why/config.json");
     spawnGit(root, "commit", "-m", "Configure empty prepare");
@@ -430,7 +454,7 @@ describe("by submit CLI", () => {
 
     writeRepoConfig(root, {
       taskPrefix: "BY",
-      checks: [{ id: "quality", command: 'node -e "process.exit(7)"' }],
+      validation: { checks: [{ id: "quality", command: 'node -e "process.exit(7)"' }] },
     });
     spawnGit(root, "add", ".but-why/config.json");
     spawnGit(root, "commit", "-m", "Make validation check fail");
@@ -494,8 +518,8 @@ describe("by submit CLI", () => {
 
     writeRepoConfig(root, {
       taskPrefix: "BY",
+      validation: { checks: [{ id: "quality", command: "true" }] },
       validationWorkspace: { copyFiles: [".env.test"] },
-      checks: [{ id: "quality", command: "true" }],
     });
     spawnGit(root, "add", ".but-why/config.json");
     spawnGit(root, "commit", "-m", "Configure validation workspace copy files");
@@ -715,7 +739,7 @@ const initializedRepo = (): string => {
   expect(result.stderr).toBe("");
   writeRepoConfig(root, {
     taskPrefix: "BY",
-    checks: [{ id: "quality", command: "true" }],
+    validation: { checks: [{ id: "quality", command: "true" }] },
   });
 
   return root;

@@ -55,15 +55,15 @@ If detection fails, `by submit <task-id>` fails during preflight.
     "prepare": {
       "command": "pnpm install --frozen-lockfile --prefer-offline",
       "timeoutSeconds": 1200
-    }
+    },
+    "checks": [
+      {
+        "id": "quality",
+        "command": "just quality",
+        "timeoutSeconds": 1200
+      }
+    ]
   },
-  "checks": [
-    {
-      "id": "quality",
-      "command": "just quality",
-      "timeoutSeconds": 1200
-    }
-  ],
   "review": {
     "intent": {
       "reviewer": "intent"
@@ -272,9 +272,11 @@ logs.txt
 
 Checks are repo-owned commands.
 
-Repo config must define at least one check.
+Repo config must define at least one check at `validation.checks`.
 
-Missing or empty `checks` is a Submit Rejection Error before Validation Run creation.
+Top-level `checks` is not valid config.
+
+Missing or empty `validation.checks` is a Submit Rejection Error before Validation Run creation.
 
 But Why does not own the repo's CI logic.
 

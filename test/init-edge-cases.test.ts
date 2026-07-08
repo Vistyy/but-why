@@ -61,7 +61,10 @@ describe("by init edge cases", () => {
     ["extra key", { taskPrefix: "BY", extra: true }],
     [
       "check severity",
-      { taskPrefix: "BY", checks: [{ id: "quality", command: "true", severity: "high" }] },
+      {
+        taskPrefix: "BY",
+        validation: { checks: [{ id: "quality", command: "true", severity: "high" }] },
+      },
     ],
     ["prepare severity", { taskPrefix: "BY", prepare: { severity: "high" } }],
     ["validation prepare without command", { taskPrefix: "BY", validation: { prepare: {} } }],

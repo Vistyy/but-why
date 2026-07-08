@@ -18,6 +18,8 @@ import {
 } from "./support/by-cli.js";
 
 const expectedBin = collapseHome(join(repoRoot, "bin/by"));
+const expectedConfigDoc = join(repoRoot, "docs/public/config.md");
+const expectedSetupDoc = join(repoRoot, "docs/public/setup.md");
 const managedGitignoreBlock = `${butWhyGitignoreBlock}\n`;
 
 afterEach(cleanupTempRoots);
@@ -52,7 +54,10 @@ commands[6]{command,description}:
 flags[3]{flag,description}:
   "--output <format>","Set stdout format: toon or json. Default: toon."
   "-o <format>","Alias for --output <format>. Valid values: toon, json."
-  "--help",Show this help`);
+  "--help",Show this help
+docs[2]{name,path}:
+  setup,${expectedSetupDoc}
+  config,${expectedConfigDoc}`);
   });
 
   it("prints JSON help when selected before the command", () => {
@@ -62,31 +67,31 @@ flags[3]{flag,description}:
     expect(result.stderr).toBe("");
     expect(result.stdout.endsWith("\n")).toBe(true);
     expect(result.stdout.trimEnd()).not.toContain("\n");
-    expect(JSON.parse(result.stdout)).toEqual({
+    const parsed = JSON.parse(result.stdout);
+
+    expect(parsed).toMatchObject({
       bin: expectedBin,
       description: "Validate completed code changes against approved human intent.",
       usage: "by [--output <format>] [command] [--help]",
-      commands: [
-        { command: "by", description: "Show workspace task dashboard" },
-        {
-          command: "by init --task-prefix <prefix>",
-          description: "Create repo-local But Why? state",
-        },
-        {
-          command: "by task create --title <title> --description-file <file>",
-          description: "Create a repo-local Task",
-        },
-        { command: "by task list [--all] [--state <state>]", description: "List repo-local Tasks" },
-        {
-          command: "by submit <task-id>",
-          description: "Create a Validation Run from submit preflight",
-        },
-        {
-          command: "by validation-run show <validation-run-id>",
-          description: "Show full Validation Run details",
-        },
+      docs: [
+        { name: "setup", path: expectedSetupDoc },
+        { name: "config", path: expectedConfigDoc },
       ],
+    });
+    expect(parsed.commands).toHaveLength(6);
+    expect(parsed.flags).toHaveLength(3);
+  });
+
+  it("prints JSON init help", () => {
+    const result = runBy(repoRoot, "--output", "json", "init", "--help");
+
+    expect(result.status).toBe(0);
+    expect(result.stderr).toBe("");
+    expect(JSON.parse(result.stdout)).toEqual({
+      usage: "by init --task-prefix <prefix>",
+      description: "Create repo policy files and then guide validation setup.",
       flags: [
+        { flag: "--task-prefix <prefix>", description: "Required task ID prefix such as BY" },
         {
           flag: "--output <format>",
           description: "Set stdout format: toon or json. Default: toon.",
@@ -97,6 +102,36 @@ flags[3]{flag,description}:
         },
         { flag: "--help", description: "Show this help" },
       ],
+      examples: ["by init --task-prefix BY"],
+      docs: [
+        { name: "setup", path: expectedSetupDoc },
+        { name: "config", path: expectedConfigDoc },
+      ],
+    });
+  });
+
+  it("prints JSON init guidance", () => {
+    const root = createGitRepo();
+    const result = runBy(root, "--output", "json", "init", "--task-prefix", "BY");
+
+    expect(result.status).toBe(0);
+    expect(result.stderr).toBe("");
+    expect(JSON.parse(result.stdout)).toMatchObject({
+      validationSetup: {
+        policyFile: ".but-why/config.json",
+        policy: "tracked repo policy",
+        configDoc: expectedConfigDoc,
+        setupDoc: expectedSetupDoc,
+        guidance: [
+          { step: "inspect", detail: "Inspect repo tooling before choosing validation commands." },
+          {
+            step: "configure",
+            detail:
+              "Configure validation.prepare and validation.checks to the best of your ability from observed tooling.",
+          },
+          { step: "review", detail: "Keep .but-why/config.json explicit and reviewable." },
+        ],
+      },
     });
   });
 
@@ -187,12 +222,16 @@ help[1]: "Use either --output <format> or -o <format>, not both."`);
     expect(result.status).toBe(0);
     expect(result.stderr).toBe("");
     expect(result.stdout).toBe(`usage: by init --task-prefix <prefix>
+description: Create repo policy files and then guide validation setup.
 flags[4]{flag,description}:
   "--task-prefix <prefix>",Required task ID prefix such as BY
   "--output <format>","Set stdout format: toon or json. Default: toon."
   "-o <format>","Alias for --output <format>. Valid values: toon, json."
   "--help",Show this help
-examples[1]: by init --task-prefix BY`);
+examples[1]: by init --task-prefix BY
+docs[2]{name,path}:
+  setup,${expectedSetupDoc}
+  config,${expectedConfigDoc}`);
   });
 
   it("prints a structured unknown command usage error", () => {
@@ -228,7 +267,16 @@ help[1]: Run \`by --help\``);
   root: ${root}
   taskPrefix: BY
 created[3]: .but-why/config.json,.but-why/state.sqlite,.but-why/reviewers/
-updated[1]: .gitignore`);
+updated[1]: .gitignore
+validationSetup:
+  policyFile: .but-why/config.json
+  policy: tracked repo policy
+  configDoc: ${expectedConfigDoc}
+  setupDoc: ${expectedSetupDoc}
+  guidance[3]{step,detail}:
+    inspect,Inspect repo tooling before choosing validation commands.
+    configure,Configure validation.prepare and validation.checks to the best of your ability from observed tooling.
+    review,Keep .but-why/config.json explicit and reviewable.`);
     expect(JSON.parse(readFileSync(join(root, ".but-why/config.json"), "utf8"))).toEqual({
       taskPrefix: "BY",
     });
@@ -339,7 +387,16 @@ updated[1]: .gitignore`);
     expect(result.stdout).toBe(`init:
   status: unchanged
   root: ${root}
-  taskPrefix: BY`);
+  taskPrefix: BY
+validationSetup:
+  policyFile: .but-why/config.json
+  policy: tracked repo policy
+  configDoc: ${expectedConfigDoc}
+  setupDoc: ${expectedSetupDoc}
+  guidance[3]{step,detail}:
+    inspect,Inspect repo tooling before choosing validation commands.
+    configure,Configure validation.prepare and validation.checks to the best of your ability from observed tooling.
+    review,Keep .but-why/config.json explicit and reviewable.`);
   });
 
   it("repairs missing generated artifacts", () => {
@@ -357,7 +414,16 @@ updated[1]: .gitignore`);
   root: ${root}
   taskPrefix: BY
 created[1]: .but-why/state.sqlite
-updated[1]: .gitignore`);
+updated[1]: .gitignore
+validationSetup:
+  policyFile: .but-why/config.json
+  policy: tracked repo policy
+  configDoc: ${expectedConfigDoc}
+  setupDoc: ${expectedSetupDoc}
+  guidance[3]{step,detail}:
+    inspect,Inspect repo tooling before choosing validation commands.
+    configure,Configure validation.prepare and validation.checks to the best of your ability from observed tooling.
+    review,Keep .but-why/config.json explicit and reviewable.`);
   });
 
   it("repairs the missing reviewers directory", () => {
@@ -373,7 +439,16 @@ updated[1]: .gitignore`);
   status: repaired
   root: ${root}
   taskPrefix: BY
-created[1]: .but-why/reviewers/`);
+created[1]: .but-why/reviewers/
+validationSetup:
+  policyFile: .but-why/config.json
+  policy: tracked repo policy
+  configDoc: ${expectedConfigDoc}
+  setupDoc: ${expectedSetupDoc}
+  guidance[3]{step,detail}:
+    inspect,Inspect repo tooling before choosing validation commands.
+    configure,Configure validation.prepare and validation.checks to the best of your ability from observed tooling.
+    review,Keep .but-why/config.json explicit and reviewable.`);
   });
 
   it("does not duplicate the managed gitignore block", () => {

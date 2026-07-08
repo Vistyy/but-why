@@ -51,14 +51,16 @@ export const submitRepoConfig = (
     return prepareValidation;
   }
 
-  if (config.checks === undefined || config.checks.length === 0) {
-    return invalidConfig("Repo config must define at least one check.");
+  const configuredChecks = config.validation?.checks;
+
+  if (configuredChecks === undefined || configuredChecks.length === 0) {
+    return invalidConfig("Repo config must define at least one validation.checks entry.");
   }
 
   const seenCheckIds = new Set<string>();
   const checks: SubmitCheckConfig[] = [];
 
-  for (const check of config.checks) {
+  for (const check of configuredChecks) {
     const validation = validateCheck(check, seenCheckIds);
 
     if (!validation.ok) {
