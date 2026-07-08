@@ -271,6 +271,7 @@ updated[1]: .gitignore`);
         { name: "009_failed_validation_run_status" },
         { name: "010_validation_finding_phase" },
         { name: "011_validation_finding_producer" },
+        { name: "012_optional_finding_severity" },
       ]);
       expect(
         database

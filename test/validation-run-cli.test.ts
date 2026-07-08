@@ -183,7 +183,6 @@ describe("Validation Run inspection CLI", () => {
           source: "checks/quality",
           title: "Check failed: quality",
           description: "Configured check quality exited with code 7.",
-          severity: "high",
           evidence: "command: npm test\nexitCode: 7",
           files: [],
           artifactRefs: [
@@ -214,6 +213,11 @@ describe("Validation Run inspection CLI", () => {
         },
       ],
     });
+
+    const humanReadable = runByInProcess(root, ["validation-run", "show", validationRunId]);
+
+    expect(humanReadable.status).toBe(0);
+    expect(humanReadable.stdout).not.toContain("severity");
   });
 
   it("reports unknown Task IDs and unknown Validation Run IDs as command errors", () => {
@@ -315,7 +319,6 @@ const recordFailedCheckRound = (
       producer,
       title: `Check failed: ${producer}`,
       description: `Configured check ${producer} exited with code 7.`,
-      severity: "high",
       evidence: "command: npm test\nexitCode: 7",
       files: [],
       artifactRefs,

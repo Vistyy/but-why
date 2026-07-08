@@ -147,7 +147,6 @@ const checkFinding = (
   description: timedOut
     ? `Configured check ${check.id} timed out after ${check.timeoutSeconds} seconds.`
     : `Configured check ${check.id} exited with code ${commandResult.exitCode}.`,
-  severity: "high",
   evidence: timedOut
     ? `command: ${check.command}\ntimeoutSeconds: ${check.timeoutSeconds}`
     : `command: ${check.command}\nexitCode: ${commandResult.exitCode}`,

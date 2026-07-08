@@ -172,7 +172,7 @@ const migrations: readonly Migration[] = [
         validation_run_id TEXT NOT NULL,
         title TEXT NOT NULL,
         description TEXT NOT NULL,
-        severity TEXT NOT NULL CHECK (severity IN ('critical', 'high', 'medium', 'low')),
+        severity TEXT CHECK (severity IS NULL OR severity IN ('critical', 'high', 'medium', 'low')),
         evidence TEXT NOT NULL,
         files TEXT NOT NULL,
         artifact_refs TEXT NOT NULL,
@@ -359,6 +359,60 @@ const migrations: readonly Migration[] = [
       UPDATE validation_run_findings
       SET producer = substr(title, length('Check timed out: ') + 1)
       WHERE phase = 'checks' AND title LIKE 'Check timed out: %'
+    `,
+  },
+  // SQLite cannot drop NOT NULL from a column in place, so this migration
+  // rebuilds the Findings table with the current full schema.
+  {
+    name: "012_optional_finding_severity",
+    apply: `
+      CREATE TABLE validation_run_findings_new (
+        id TEXT PRIMARY KEY,
+        validation_run_id TEXT NOT NULL,
+        title TEXT NOT NULL,
+        description TEXT NOT NULL,
+        severity TEXT CHECK (severity IS NULL OR severity IN ('critical', 'high', 'medium', 'low')),
+        evidence TEXT NOT NULL,
+        files TEXT NOT NULL,
+        artifact_refs TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        phase TEXT NOT NULL DEFAULT 'checks' CHECK (phase IN (${validationPhaseSql})),
+        producer TEXT NOT NULL DEFAULT 'unknown',
+        FOREIGN KEY (validation_run_id) REFERENCES validation_runs(id)
+      );
+
+      INSERT INTO validation_run_findings_new (
+        id,
+        validation_run_id,
+        title,
+        description,
+        severity,
+        evidence,
+        files,
+        artifact_refs,
+        created_at,
+        updated_at,
+        phase,
+        producer
+      )
+      SELECT
+        id,
+        validation_run_id,
+        title,
+        description,
+        severity,
+        evidence,
+        files,
+        artifact_refs,
+        created_at,
+        updated_at,
+        phase,
+        producer
+      FROM validation_run_findings;
+
+      DROP TABLE validation_run_findings;
+      ALTER TABLE validation_run_findings_new RENAME TO validation_run_findings
     `,
   },
 ];

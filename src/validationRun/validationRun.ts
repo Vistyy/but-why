@@ -18,6 +18,7 @@ const validationPhaseStatuses = [
 export type ValidationRunStatus = (typeof validationRunStatuses)[number];
 export type ValidationPhase = (typeof validationPhases)[number];
 export type ValidationPhaseStatus = (typeof validationPhaseStatuses)[number];
+export type FindingSeverity = "critical" | "high" | "medium" | "low";
 
 export type GitHubPrTarget = {
   readonly owner: string;
@@ -68,7 +69,7 @@ export type ValidationRunFindingRecord = {
   readonly producer: string;
   readonly title: string;
   readonly description: string;
-  readonly severity: "critical" | "high" | "medium" | "low";
+  readonly severity?: FindingSeverity;
   readonly evidence: string;
   readonly files: readonly string[];
   readonly artifactRefs: readonly string[];

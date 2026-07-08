@@ -263,7 +263,7 @@ const recordCheckRound = (
           input.finding.producer,
           input.finding.title,
           input.finding.description,
-          input.finding.severity,
+          input.finding.severity ?? null,
           input.finding.evidence,
           encodeSqliteJsonStringArray(input.finding.files),
           encodeSqliteJsonStringArray(input.finding.artifactRefs),

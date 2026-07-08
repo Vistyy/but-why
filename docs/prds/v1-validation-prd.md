@@ -170,11 +170,15 @@ Sandcastle is the accepted execution engine for validation worktrees, command ch
 
 - Sandcastle should handle structured output retry.
 
-- V1 Finding fields are title, description, severity, evidence, files, and artifact references.
+- V1 Finding fields are title, description, optional severity, evidence, files, and artifact references.
 
 - Severity values are critical, high, medium, and low.
 
-- All v1 Findings are blocking.
+- Reviewer producer contracts require severity.
+
+- Command-produced Findings can omit severity.
+
+- All v1 Findings are blocking, regardless of severity.
 
 - Any Finding moves the Task to `needs_input`.
 

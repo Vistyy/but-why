@@ -465,9 +465,18 @@ const rowToValidationRunRound = (row: ValidationRunRoundRow): ValidationRunRound
 });
 
 const rowToValidationRunFinding = (row: ValidationRunFindingRow): ValidationRunFindingRecord => ({
-  ...row,
+  id: row.id,
+  validationRunId: row.validationRunId,
+  phase: row.phase,
+  producer: row.producer,
+  title: row.title,
+  description: row.description,
+  ...(row.severity === null ? {} : { severity: row.severity }),
+  evidence: row.evidence,
   files: decodeSqliteJsonStringArray(row.files),
   artifactRefs: decodeSqliteJsonStringArray(row.artifactRefs),
+  createdAt: row.createdAt,
+  updatedAt: row.updatedAt,
 });
 
 const rowToValidationRunArtifact = (row: ValidationRunArtifactRow): ValidationRunArtifactRecord =>
@@ -510,7 +519,11 @@ type ValidationRunRoundRow = Omit<ValidationRunRoundRecord, "roundNumber"> & {
   readonly roundNumber: number | bigint;
 };
 
-type ValidationRunFindingRow = Omit<ValidationRunFindingRecord, "files" | "artifactRefs"> & {
+type ValidationRunFindingRow = Omit<
+  ValidationRunFindingRecord,
+  "severity" | "files" | "artifactRefs"
+> & {
+  readonly severity: NonNullable<ValidationRunFindingRecord["severity"]> | null;
   readonly files: string;
   readonly artifactRefs: string;
 };

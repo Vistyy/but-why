@@ -59,6 +59,11 @@ describe("by init edge cases", () => {
     ["non-string taskPrefix", { taskPrefix: 123 }],
     ["invalid existing taskPrefix", { taskPrefix: "B" }],
     ["extra key", { taskPrefix: "BY", extra: true }],
+    [
+      "check severity",
+      { taskPrefix: "BY", checks: [{ id: "quality", command: "true", severity: "high" }] },
+    ],
+    ["prepare severity", { taskPrefix: "BY", prepare: { severity: "high" } }],
   ])("rejects repo config with %s", (_name, config) => {
     const root = createGitRepo();
 
@@ -137,6 +142,7 @@ help[1]: Move the conflicting path aside before running init again.`);
         { name: "009_failed_validation_run_status" },
         { name: "010_validation_finding_phase" },
         { name: "011_validation_finding_producer" },
+        { name: "012_optional_finding_severity" },
       ]);
     } finally {
       repairedDatabase.close();

@@ -117,9 +117,15 @@ After a tooling failure, the Task returns to its previous submit-eligible state.
 
 ## Findings
 
-V1 Findings are blocking.
+V1 Findings are blocking, regardless of severity.
 
 Any Finding sends the Task to `needs_input`.
+
+Severity is an optional impact judgment, not the workflow reason a Finding blocks validation.
+
+Reviewer producer contracts require severity because reviewers judge impact.
+
+Command-produced Findings can omit severity.
 
 V1 does not create follow-up Tasks from validation.
 
@@ -132,7 +138,7 @@ Finding fields are:
 ```text
 title
 description
-severity: critical | high | medium | low
+severity?: critical | high | medium | low
 evidence
 files
 artifactRefs

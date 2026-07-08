@@ -226,11 +226,13 @@ nx affected
 
 A check may set `timeoutSeconds`.
 
+Check config does not support `severity` in v1.
+
 `timeoutSeconds` must be a positive integer.
 
 Checks without `timeoutSeconds` default to `1200` seconds.
 
-A timed-out check creates a high-severity Finding, not a Validation Tooling Failure.
+A timed-out check creates a blocking Finding without severity, not a Validation Tooling Failure.
 
 Validation stops immediately after a check timeout.
 
@@ -273,13 +275,11 @@ Checks skipped after an earlier failure or timeout do not record rounds or artif
 
 Check commands may modify the Validation Workspace, but those changes never modify the submitted branch.
 
-A failed check creates a blocking finding.
-
-Failed check Findings use `severity: high`.
+A failed check creates a blocking Finding without severity.
 
 Failed check Finding evidence includes the command and exit code, not stdout or stderr excerpts.
 
-Timeout Findings use `severity: high`.
+Timeout Findings omit severity.
 
 Timeout Finding evidence includes the command and `timeoutSeconds`.
 
@@ -302,6 +302,10 @@ watch_pr
 
 Config fills these phases.
 
+Prepare config is not implemented in v1.
+
+A repo config field such as `prepare` or `prepare.severity` is rejected as unsupported config.
+
 Config should not allow arbitrary phase ordering in v1.
 
 ## Reviewer output
@@ -321,7 +325,11 @@ files
 artifactRefs
 ```
 
-Any finding blocks v1 validation and moves the task to `needs_input`.
+Reviewer Findings must include `severity`.
+
+Missing or invalid reviewer severity is a reviewer output contract failure.
+
+Any Finding blocks v1 validation and moves the Task to `needs_input`, regardless of severity.
 
 ## Token accounting
 

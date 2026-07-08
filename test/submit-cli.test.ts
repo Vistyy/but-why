@@ -210,7 +210,9 @@ describe("by submit CLI", () => {
       `artifact:${firstTaskValidationRunId}/checks/quality/exit-code.json`,
       `artifact:${firstTaskValidationRunId}/checks/quality/logs.txt`,
     ];
-    expect(validationRunStore(root).listValidationRunFindings(firstTaskValidationRunId)).toEqual([
+    const findings = validationRunStore(root).listValidationRunFindings(firstTaskValidationRunId);
+
+    expect(findings).toEqual([
       {
         id: `${firstTaskValidationRunId}-F1`,
         validationRunId: firstTaskValidationRunId,
@@ -218,7 +220,6 @@ describe("by submit CLI", () => {
         producer: "quality",
         title: "Check failed: quality",
         description: "Configured check quality exited with code 7.",
-        severity: "high",
         evidence: 'command: node -e "process.exit(7)"\nexitCode: 7',
         files: [],
         artifactRefs,
@@ -226,6 +227,7 @@ describe("by submit CLI", () => {
         updatedAt: thirdNow,
       },
     ]);
+    expect(findings[0]).not.toHaveProperty("severity");
     expect(
       validationRunStore(root)
         .listValidationRunArtifacts(firstTaskValidationRunId)
