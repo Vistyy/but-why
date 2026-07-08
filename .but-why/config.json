@@ -7,8 +7,8 @@
   },
   "checks": [
     {
-      "id": "workspace_smoke",
-      "command": "git rev-parse --verify HEAD",
+      "id": "quality",
+      "command": "pnpm install --frozen-lockfile && just quality",
       "timeoutSeconds": 1200
     }
   ]
