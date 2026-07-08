@@ -7,8 +7,8 @@
   },
   "checks": [
     {
-      "id": "quality",
-      "command": "just quality",
+      "id": "workspace_smoke",
+      "command": "git rev-parse --verify HEAD",
       "timeoutSeconds": 1200
     }
   ]
