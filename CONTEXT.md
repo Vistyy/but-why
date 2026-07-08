@@ -64,6 +64,16 @@ Software that invokes `by` as a subprocess and parses structured stdout as an AP
 Programmatic CLI consumers are first-class v1 consumers alongside shell-based agents.
 _Avoid_: Internal API, human CLI user
 
+**Installed CLI**:
+The `by` executable as used from outside the But Why? source checkout after package installation.
+Installed CLI behavior is the user and agent contract for other repositories.
+_Avoid_: Repo-local development command, source checkout wrapper
+
+**Repo-local CLI**:
+The `by` command path used by But Why? contributors to run the current source checkout.
+Repo-local CLI usage is for developing But Why? itself, not for using But Why? from another repository.
+_Avoid_: Installed CLI, published CLI
+
 **Actionable Dashboard Item**:
 A task that should appear in the default `by` dashboard because it has a clear next human or agent action.
 In v1, actionable dashboard items are tasks in `todo`, `needs_input`, or `ready`.
