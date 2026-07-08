@@ -12,18 +12,54 @@ Not done.
 
 Add read commands for validation results.
 
-Agents should be able to inspect latest Task Findings without knowing the latest Validation Run ID, and inspect full Validation Run details when debugging.
+Agents should be able to inspect latest Task Findings without knowing the latest Validation Run ID, list a Task's Validation Run History, and inspect full Validation Run details when debugging.
+
+`by task findings <task-id>` shows Findings from the latest Validation Run by task validation number.
+If the latest Validation Run has no Findings, the command shows no Findings rather than falling back to older Validation Runs.
+Prior Findings remain inspectable through Validation Run History and `by validation-run show <validation-run-id>`.
+`by task findings <task-id>` shows tooling failures only from the latest Validation Run.
+Unknown Task IDs and unknown Validation Run IDs are command errors.
+Known Tasks with no Validation Run History are successful empty reads.
+
+## Output contracts
+
+`by task findings <task-id>` returns `task`, `validationRun`, `findings`, `toolingFailures`, and `count`.
+
+`by task validation-runs <task-id>` returns summaries only.
+Each summary includes `id`, `taskValidationNumber`, `status`, `branch`, `commit`, `findingCount`, `toolingFailureCount`, `createdAt`, and `updatedAt`.
+
+`by validation-run show <validation-run-id>` returns full details without artifact contents.
+It includes artifact refs and artifact metadata.
+Findings include their evidence artifact refs, and the top-level `artifacts` section provides the full artifact index.
 
 ## Acceptance criteria
 
-- [ ] `by task findings <task-id>` shows latest Findings for the Task.
+- [ ] `by task findings <task-id>` shows Findings from the latest Validation Run for the Task.
 - [ ] `by task findings <task-id>` does not require a Validation Run ID.
-- [ ] `by validation-run show <validation-run-id>` shows full Validation Run details.
+- [ ] `by task findings <task-id>` does not fall back to older Validation Runs when the latest Validation Run has no Findings.
+- [ ] `by task findings <task-id>` succeeds with `findings: []` and `validationRun: null` when the Task has no Validation Runs.
+- [ ] `by task findings <task-id>` succeeds with `findings: []` and the latest Validation Run ID and status when the latest Validation Run has no Findings.
+- [ ] `by task findings <task-id>` succeeds with `findings: []` and typed tooling failures when the latest Validation Run has tooling failures but no Findings.
+- [ ] `by task findings <task-id>` includes tooling failures only from the latest Validation Run.
+- [ ] `by task findings <task-id>` returns `task`, `validationRun`, `findings`, `toolingFailures`, and `count`.
+- [ ] `by task validation-runs <task-id>` lists the Task's Validation Run History newest first by task validation number.
+- [ ] `by task validation-runs <task-id>` returns summaries with `id`, `taskValidationNumber`, `status`, `branch`, `commit`, `findingCount`, `toolingFailureCount`, `createdAt`, and `updatedAt`.
+- [ ] `by validation-run show <validation-run-id>` shows full Validation Run details for any Validation Run in the Task's Validation Run History.
+- [ ] Validation Run details are structured as top-level `validationRun`, `phases`, `rounds`, `findings`, `toolingFailures`, and `artifacts` sections.
 - [ ] Validation Run details include phases, rounds, Findings, artifact refs, status, branch, and commit.
+- [ ] Validation Run details include artifact refs and artifact metadata, not artifact contents.
 - [ ] Run details distinguish Findings from typed tooling errors.
+- [ ] Findings record `producer` as the stable slug-like validator name that created the Finding, unique within the phase.
+- [ ] Finding output includes `phase`, `producer`, and computed `source`.
 - [ ] Finding source is shown as `phase/producer`.
-- [ ] Finding IDs use the Validation Run-scoped form such as `BY-1.1-F1`.
+- [ ] Finding `producer` is not derived from artifact refs.
+- [ ] Findings include their evidence artifact refs.
+- [ ] The top-level `artifacts` section provides the full artifact index.
+- [ ] Finding IDs use the Validation Run-scoped form such as `by-1-09224d806043.v2-F1`.
 - [ ] Artifact refs use the agreed artifact ref format.
+- [ ] Unknown Task IDs are command errors.
+- [ ] Unknown Validation Run IDs are command errors.
+- [ ] `validation-run` is a top-level command group.
 
 ## Blocked by
 

@@ -11,6 +11,11 @@ A Validation Run can resume after a crash, but a new commit creates a successor 
 A terminal Validation Run may be followed by another Validation Run for the same commit when validation must be retried.
 _Avoid_: Run, job, pipeline run
 
+**Validation Run History**:
+The ordered set of Validation Runs for a Task across submissions and retries.
+Validation Run History keeps prior Findings inspectable without changing the meaning of latest Findings.
+_Avoid_: Run archive, finding history
+
 **Trigger**:
 An external signal that asks But Why? to start or continue validation.
 A trigger is not the source of truth for validation state.
