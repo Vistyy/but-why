@@ -2,7 +2,7 @@
 
 ## Status
 
-Not done.
+Done.
 
 ## Parent
 
@@ -39,48 +39,48 @@ Example config shape:
 
 ## Acceptance criteria
 
-- [ ] Repo config supports optional `validation.prepare.command`.
-- [ ] Repo config supports optional `validation.prepare.timeoutSeconds`.
-- [ ] Present `validation.prepare` requires `command`.
-- [ ] Prepare commands are non-empty shell command strings.
-- [ ] Prepare supports one command string in v1.
-- [ ] Prepare does not support argv arrays or multiple command entries in v1.
-- [ ] Missing `validation.prepare` records the prepare phase as skipped and runs later validation phases directly.
-- [ ] Prepare runs after Validation Workspace creation and before later validation phases.
-- [ ] Prepare runs inside the Validation Workspace.
-- [ ] Prepare runs from the repo root inside the Validation Workspace.
-- [ ] Prepare runs through the configured validation sandbox mode.
-- [ ] Prepare has no separate network policy; network access is controlled by the validation sandbox mode.
-- [ ] Prepare may modify files inside the Validation Workspace.
-- [ ] Later validation phases run against the workspace after prepare mutations.
-- [ ] Prepare mutations are not committed back to the task branch.
-- [ ] Prepare without `timeoutSeconds` defaults to the same timeout default as checks.
-- [ ] `validation.prepare.timeoutSeconds` must be a positive integer.
-- [ ] A non-zero prepare exit code creates a blocking Finding.
-- [ ] A prepare timeout creates a blocking Finding.
-- [ ] Prepare command execution tooling failures are recorded as Validation Tooling Failures, not Findings.
-- [ ] Later validation phases run only when prepare passes.
-- [ ] Later validation phases are skipped when prepare fails or times out.
-- [ ] A failed or timed-out prepare ends the Validation Gate early as a prepare-specific gate rule.
-- [ ] Prepare artifacts use refs shaped like `artifact:<validation-run-id>/prepare/prepare/<filename>`.
-- [ ] Prepare records one prepare round with producer id `prepare`.
-- [ ] Prepare captures `stdout.txt`, `stderr.txt`, `exit-code.json`, and `logs.txt` artifacts for passed, failed, and timed-out prepare rounds.
-- [ ] Prepare artifacts are saved outside the Validation Workspace before workspace cleanup.
-- [ ] Prepare does not preserve workspace file changes as artifacts.
-- [ ] Prepare failure Findings use title `Prepare failed`.
-- [ ] Prepare timeout Findings use title `Prepare timed out`.
-- [ ] Prepare Findings include stdout, stderr, exit-code, and logs artifact refs.
-- [ ] Prepare Findings use empty `files`.
-- [ ] Prepare Findings do not include a `severity` field under the command-produced Finding contract.
-- [ ] A failed prepare moves the Task to `needs_input`.
-- [ ] Validation Run records include the prepare phase status.
-- [ ] Validation Run records include prepare status even when prepare is skipped.
-- [ ] Skipped phase records distinguish prepare skipped because it was not configured from later phases skipped because prepare failed.
-- [ ] The canonical v1 phase list is updated to `preflight`, `prepare`, `checks`, `intent_review`, `quality_review`, `publish_pr`, and `watch_pr`.
-- [ ] Retrying validation for the same commit creates a fresh Validation Run and runs configured prepare again.
-- [ ] `by validation-run show` can show prepare phase status and artifact refs once issue 013 exists.
-- [ ] `docs/config.md` documents `validation.prepare`.
-- [ ] Tests cover passing prepare, failing prepare, prepare timeout, skipped later validation phases after prepare failure, and missing prepare.
+- [x] Repo config supports optional `validation.prepare.command`.
+- [x] Repo config supports optional `validation.prepare.timeoutSeconds`.
+- [x] Present `validation.prepare` requires `command`.
+- [x] Prepare commands are non-empty shell command strings.
+- [x] Prepare supports one command string in v1.
+- [x] Prepare does not support argv arrays or multiple command entries in v1.
+- [x] Missing `validation.prepare` records the prepare phase as skipped and runs later validation phases directly.
+- [x] Prepare runs after Validation Workspace creation and before later validation phases.
+- [x] Prepare runs inside the Validation Workspace.
+- [x] Prepare runs from the repo root inside the Validation Workspace.
+- [x] Prepare runs through the configured validation sandbox mode.
+- [x] Prepare has no separate network policy; network access is controlled by the validation sandbox mode.
+- [x] Prepare may modify files inside the Validation Workspace.
+- [x] Later validation phases run against the workspace after prepare mutations.
+- [x] Prepare mutations are not committed back to the task branch.
+- [x] Prepare without `timeoutSeconds` defaults to the same timeout default as checks.
+- [x] `validation.prepare.timeoutSeconds` must be a positive integer.
+- [x] A non-zero prepare exit code creates a blocking Finding.
+- [x] A prepare timeout creates a blocking Finding.
+- [x] Prepare command execution tooling failures are recorded as Validation Tooling Failures, not Findings.
+- [x] Later validation phases run only when prepare passes.
+- [x] Later validation phases are skipped when prepare fails or times out.
+- [x] A failed or timed-out prepare ends the Validation Gate early as a prepare-specific gate rule.
+- [x] Prepare artifacts use refs shaped like `artifact:<validation-run-id>/prepare/prepare/<filename>`.
+- [x] Prepare records one prepare round with producer id `prepare`.
+- [x] Prepare captures `stdout.txt`, `stderr.txt`, `exit-code.json`, and `logs.txt` artifacts for passed, failed, and timed-out prepare rounds.
+- [x] Prepare artifacts are saved outside the Validation Workspace before workspace cleanup.
+- [x] Prepare does not preserve workspace file changes as artifacts.
+- [x] Prepare failure Findings use title `Prepare failed`.
+- [x] Prepare timeout Findings use title `Prepare timed out`.
+- [x] Prepare Findings include stdout, stderr, exit-code, and logs artifact refs.
+- [x] Prepare Findings use empty `files`.
+- [x] Prepare Findings do not include a `severity` field under the command-produced Finding contract.
+- [x] A failed prepare moves the Task to `needs_input`.
+- [x] Validation Run records include the prepare phase status.
+- [x] Validation Run records include prepare status even when prepare is skipped.
+- [x] Skipped phase records distinguish prepare skipped because it was not configured from later phases skipped because prepare failed.
+- [x] The canonical v1 phase list is updated to `preflight`, `prepare`, `checks`, `intent_review`, `quality_review`, `publish_pr`, and `watch_pr`.
+- [x] Retrying validation for the same commit creates a fresh Validation Run and runs configured prepare again.
+- [x] `by validation-run show` can show prepare phase status and artifact refs once issue 013 exists.
+- [x] `docs/config.md` documents `validation.prepare`.
+- [x] Tests cover passing prepare, failing prepare, prepare timeout, skipped later validation phases after prepare failure, and missing prepare.
 
 ## Blocked by
 

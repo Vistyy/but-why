@@ -388,6 +388,8 @@ describe("module seams", () => {
         };
       },
       recordValidationToolingFailure: () => ({ ok: true }),
+      recordPhaseStatus: () => ({ ok: true }),
+      recordPrepareRound: () => ({ ok: true }),
       recordCheckRound: () => ({ ok: true }),
     };
     const submissionEnvironment: SubmissionEnvironment = {

@@ -100,6 +100,14 @@ describe("by submit CLI", () => {
     ).toEqual([
       {
         validationRunId: firstTaskValidationRunId,
+        phase: "prepare",
+        status: "skipped",
+        errorMessage: "Prepare is not configured.",
+        createdAt: thirdNow,
+        updatedAt: thirdNow,
+      },
+      {
+        validationRunId: firstTaskValidationRunId,
         phase: "checks",
         status: "passed",
         errorMessage: null,
@@ -111,6 +119,7 @@ describe("by submit CLI", () => {
       {
         validationRunId: firstTaskValidationRunId,
         phase: "checks",
+        producer: "quality",
         roundNumber: 1,
         status: "passed",
         createdAt: thirdNow,
@@ -167,6 +176,254 @@ describe("by submit CLI", () => {
     expect(taskState(root, "BY-1")).toBe("implementing");
   });
 
+  it("runs prepare before checks inside the Validation Workspace", () => {
+    const root = preparedRepoOnBranch("feature/prepare-passes");
+
+    writeRepoConfig(root, {
+      taskPrefix: "BY",
+      validation: {
+        prepare: { command: "printf prepared > prepared.txt" },
+      },
+      checks: [{ id: "quality", command: 'test "$(cat prepared.txt)" = prepared' }],
+    });
+    spawnGit(root, "add", ".but-why/config.json");
+    spawnGit(root, "commit", "-m", "Configure prepare");
+    const submittedSha = currentCommitSha(root);
+
+    const result = withFakeGh(() => runSubmit(root, ["BY-1"], thirdNow));
+
+    expect(result.status).toBe(0);
+    expect(result.stderr).toBe("");
+    expect(currentCommitSha(root)).toBe(submittedSha);
+    expect(existsSync(join(root, "prepared.txt"))).toBe(false);
+    expect(
+      validationRunStore(root).listValidationRunPhaseStatuses(firstTaskValidationRunId),
+    ).toEqual([
+      {
+        validationRunId: firstTaskValidationRunId,
+        phase: "prepare",
+        status: "passed",
+        errorMessage: null,
+        createdAt: thirdNow,
+        updatedAt: thirdNow,
+      },
+      {
+        validationRunId: firstTaskValidationRunId,
+        phase: "checks",
+        status: "passed",
+        errorMessage: null,
+        createdAt: thirdNow,
+        updatedAt: thirdNow,
+      },
+    ]);
+    expect(validationRunStore(root).listValidationRunRounds(firstTaskValidationRunId)).toEqual([
+      {
+        validationRunId: firstTaskValidationRunId,
+        phase: "prepare",
+        producer: "prepare",
+        roundNumber: 1,
+        status: "passed",
+        createdAt: thirdNow,
+        updatedAt: thirdNow,
+      },
+      {
+        validationRunId: firstTaskValidationRunId,
+        phase: "checks",
+        producer: "quality",
+        roundNumber: 1,
+        status: "passed",
+        createdAt: thirdNow,
+        updatedAt: thirdNow,
+      },
+    ]);
+    const artifactRefs = [
+      ...prepareArtifactRefs(firstTaskValidationRunId),
+      ...checkArtifactRefs(firstTaskValidationRunId, "quality"),
+    ];
+
+    expect(
+      validationRunStore(root)
+        .listValidationRunArtifacts(firstTaskValidationRunId)
+        .map((artifact) => artifact.ref),
+    ).toEqual(artifactRefs);
+
+    const shown = runByInProcess(root, [
+      "validation-run",
+      "show",
+      firstTaskValidationRunId,
+      "--output",
+      "json",
+    ]);
+
+    expect(shown.status).toBe(0);
+    expect(JSON.parse(shown.stdout)).toMatchObject({
+      phases: [
+        { phase: "prepare", status: "passed" },
+        { phase: "checks", status: "passed" },
+      ],
+      artifacts: artifactRefs.map((ref) => ({ ref })),
+    });
+  });
+
+  it("turns a failed prepare into a blocking Finding and skips checks", () => {
+    const root = preparedRepoOnBranch("feature/prepare-fails");
+
+    writeRepoConfig(root, {
+      taskPrefix: "BY",
+      validation: {
+        prepare: { command: 'printf out && printf err >&2 && node -e "process.exit(7)"' },
+      },
+      checks: [{ id: "quality", command: "true" }],
+    });
+    spawnGit(root, "add", ".but-why/config.json");
+    spawnGit(root, "commit", "-m", "Configure failing prepare");
+
+    const result = withFakeGh(() => runSubmit(root, ["BY-1"], thirdNow));
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toBe("");
+    expect(result.stdout).toContain("code: validation_findings");
+    expect(taskState(root, "BY-1")).toBe("needs_input");
+    expect(validationRunStore(root).getValidationRunById(firstTaskValidationRunId)).toMatchObject({
+      status: "failed",
+    });
+    expect(
+      validationRunStore(root).listValidationRunPhaseStatuses(firstTaskValidationRunId),
+    ).toEqual([
+      {
+        validationRunId: firstTaskValidationRunId,
+        phase: "prepare",
+        status: "failed",
+        errorMessage: null,
+        createdAt: thirdNow,
+        updatedAt: thirdNow,
+      },
+      {
+        validationRunId: firstTaskValidationRunId,
+        phase: "checks",
+        status: "skipped",
+        errorMessage: "Prepare did not pass.",
+        createdAt: thirdNow,
+        updatedAt: thirdNow,
+      },
+      {
+        validationRunId: firstTaskValidationRunId,
+        phase: "intent_review",
+        status: "skipped",
+        errorMessage: "Prepare did not pass.",
+        createdAt: thirdNow,
+        updatedAt: thirdNow,
+      },
+      {
+        validationRunId: firstTaskValidationRunId,
+        phase: "quality_review",
+        status: "skipped",
+        errorMessage: "Prepare did not pass.",
+        createdAt: thirdNow,
+        updatedAt: thirdNow,
+      },
+      {
+        validationRunId: firstTaskValidationRunId,
+        phase: "publish_pr",
+        status: "skipped",
+        errorMessage: "Prepare did not pass.",
+        createdAt: thirdNow,
+        updatedAt: thirdNow,
+      },
+      {
+        validationRunId: firstTaskValidationRunId,
+        phase: "watch_pr",
+        status: "skipped",
+        errorMessage: "Prepare did not pass.",
+        createdAt: thirdNow,
+        updatedAt: thirdNow,
+      },
+    ]);
+    expect(validationRunStore(root).listValidationRunRounds(firstTaskValidationRunId)).toEqual([
+      {
+        validationRunId: firstTaskValidationRunId,
+        phase: "prepare",
+        producer: "prepare",
+        roundNumber: 1,
+        status: "failed",
+        createdAt: thirdNow,
+        updatedAt: thirdNow,
+      },
+    ]);
+
+    const artifactRefs = prepareArtifactRefs(firstTaskValidationRunId);
+    const findings = validationRunStore(root).listValidationRunFindings(firstTaskValidationRunId);
+
+    expect(findings).toEqual([
+      {
+        id: `${firstTaskValidationRunId}-F1`,
+        validationRunId: firstTaskValidationRunId,
+        phase: "prepare",
+        producer: "prepare",
+        title: "Prepare failed",
+        description: "Prepare command exited with code 7.",
+        evidence: 'command: printf out && printf err >&2 && node -e "process.exit(7)"\nexitCode: 7',
+        files: [],
+        artifactRefs,
+        createdAt: thirdNow,
+        updatedAt: thirdNow,
+      },
+    ]);
+    expect(findings[0]).not.toHaveProperty("severity");
+    expect(
+      validationRunStore(root)
+        .listValidationRunArtifacts(firstTaskValidationRunId)
+        .map((artifact) => artifact.ref),
+    ).toEqual(artifactRefs);
+  });
+
+  it("turns a timed-out prepare into a blocking Finding", () => {
+    const root = preparedRepoOnBranch("feature/prepare-timeout");
+
+    writeRepoConfig(root, {
+      taskPrefix: "BY",
+      validation: {
+        prepare: { command: "sleep 10", timeoutSeconds: 1 },
+      },
+      checks: [{ id: "quality", command: "true" }],
+    });
+    spawnGit(root, "add", ".but-why/config.json");
+    spawnGit(root, "commit", "-m", "Configure timed-out prepare");
+
+    const result = withFakeGh(() => runSubmit(root, ["BY-1"], thirdNow));
+
+    expect(result.status).toBe(1);
+    expect(result.stdout).toContain("code: validation_findings");
+    expect(validationRunStore(root).listValidationRunFindings(firstTaskValidationRunId)).toEqual([
+      expect.objectContaining({
+        title: "Prepare timed out",
+        description: "Prepare command timed out after 1 seconds.",
+        artifactRefs: prepareArtifactRefs(firstTaskValidationRunId),
+        files: [],
+      }),
+    ]);
+  });
+
+  it("rejects empty prepare command before Validation Run creation", () => {
+    const root = preparedRepoOnBranch("feature/empty-prepare");
+
+    writeRepoConfig(root, {
+      taskPrefix: "BY",
+      validation: { prepare: { command: "   " } },
+      checks: [{ id: "quality", command: "true" }],
+    });
+    spawnGit(root, "add", ".but-why/config.json");
+    spawnGit(root, "commit", "-m", "Configure empty prepare");
+
+    const result = withFakeGh(() => runSubmit(root, ["BY-1"], thirdNow));
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toBe("");
+    expect(result.stdout).toContain("code: invalid_repo_config");
+    expect(result.stdout).toContain("Prepare command must not be empty.");
+    expect(taskHasNoValidationRuns(root, "BY-1")).toBe(true);
+  });
+
   it("turns a failed check into a blocking Finding and leaves the submitted branch unchanged", () => {
     const root = preparedRepoOnBranch("feature/failing-check");
     const commitSha = currentCommitSha(root);
@@ -197,6 +454,7 @@ describe("by submit CLI", () => {
       {
         validationRunId: firstTaskValidationRunId,
         phase: "checks",
+        producer: "quality",
         roundNumber: 1,
         status: "failed",
         createdAt: thirdNow,
@@ -204,12 +462,7 @@ describe("by submit CLI", () => {
       },
     ]);
 
-    const artifactRefs = [
-      `artifact:${firstTaskValidationRunId}/checks/quality/stdout.txt`,
-      `artifact:${firstTaskValidationRunId}/checks/quality/stderr.txt`,
-      `artifact:${firstTaskValidationRunId}/checks/quality/exit-code.json`,
-      `artifact:${firstTaskValidationRunId}/checks/quality/logs.txt`,
-    ];
+    const artifactRefs = checkArtifactRefs(firstTaskValidationRunId, "quality");
     const findings = validationRunStore(root).listValidationRunFindings(firstTaskValidationRunId);
 
     expect(findings).toEqual([
@@ -483,6 +736,21 @@ const preparedRepoOnBranch = (branch: string): string => {
 
   return root;
 };
+
+const prepareArtifactRefs = (validationRunId: string): readonly string[] =>
+  commandArtifactRefs(validationRunId, "prepare", "prepare");
+
+const checkArtifactRefs = (validationRunId: string, producer: string): readonly string[] =>
+  commandArtifactRefs(validationRunId, "checks", producer);
+
+const commandArtifactRefs = (
+  validationRunId: string,
+  phase: string,
+  producer: string,
+): readonly string[] =>
+  ["stdout.txt", "stderr.txt", "exit-code.json", "logs.txt"].map(
+    (fileName) => `artifact:${validationRunId}/${phase}/${producer}/${fileName}`,
+  );
 
 const writeRepoConfig = (root: string, config: object): void => {
   writeFileSync(join(root, ".but-why/config.json"), `${JSON.stringify(config, null, 2)}\n`);

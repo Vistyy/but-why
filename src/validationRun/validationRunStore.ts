@@ -1,6 +1,7 @@
 import type { CleanupState } from "./cleanup.js";
 import type { ValidationToolingFailureKind } from "./toolingErrorKind.js";
 import type {
+  ValidationPhase,
   ValidationPhaseStatus,
   ValidationRunArtifactRecord,
   ValidationRunFindingRecord,
@@ -94,8 +95,18 @@ export type ValidationRunToolingErrorRecord = Omit<
   readonly createdAt: string;
 };
 
-export type RecordValidationRunCheckRoundInput = {
+export type RecordValidationRunPhaseStatusInput = {
   readonly validationRunId: string;
+  readonly phase: ValidationPhase;
+  readonly status: ValidationPhaseStatus;
+  readonly errorMessage?: string;
+  readonly now: string;
+};
+
+export type RecordValidationRunCommandRoundInput = {
+  readonly validationRunId: string;
+  readonly phase: ValidationPhase;
+  readonly producer: string;
   readonly roundNumber: number;
   readonly roundStatus: ValidationPhaseStatus;
   readonly phaseStatus: ValidationPhaseStatus;
@@ -103,6 +114,16 @@ export type RecordValidationRunCheckRoundInput = {
   readonly finding?: Omit<ValidationRunFindingRecord, "createdAt" | "updatedAt">;
   readonly now: string;
 };
+
+export type RecordValidationRunCheckRoundInput = Omit<
+  RecordValidationRunCommandRoundInput,
+  "phase"
+>;
+
+export type RecordValidationRunPrepareRoundInput = Omit<
+  RecordValidationRunCommandRoundInput,
+  "phase" | "producer"
+>;
 
 export type RecordValidationRunErrorResult =
   | {

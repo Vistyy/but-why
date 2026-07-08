@@ -18,7 +18,7 @@ export type ActiveValidationWorkspace = {
 };
 
 export type ActiveValidationWorkspaceResult = {
-  readonly checkFindings: 0 | 1;
+  readonly validationFindings: 0 | 1;
 };
 
 export type ValidationWorkspaceSetup = {

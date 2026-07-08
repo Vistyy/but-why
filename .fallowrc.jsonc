@@ -123,6 +123,7 @@
         "patterns": [
           "src/validation/validationRuns.ts",
           "src/validation/runCheckRound.ts",
+          "src/validation/runPreparePhase.ts",
           "src/validation/reviewerOutputContract.ts",
           "src/validationRun/artifactFiles.ts"
         ]

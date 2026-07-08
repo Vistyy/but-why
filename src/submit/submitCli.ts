@@ -92,7 +92,7 @@ export const routeSubmit = (
         return validationWorkspaceSetupError(validationWorkspace.toolingError);
       }
 
-      if (validationWorkspace.activeWorkspaceResult?.checkFindings === 1) {
+      if (validationWorkspace.activeWorkspaceResult?.validationFindings === 1) {
         return validationFindingsError(result, validationWorkspace.validationWorkspace);
       }
 

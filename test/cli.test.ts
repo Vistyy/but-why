@@ -272,6 +272,7 @@ updated[1]: .gitignore`);
         { name: "010_validation_finding_phase" },
         { name: "011_validation_finding_producer" },
         { name: "012_optional_finding_severity" },
+        { name: "013_validation_prepare_phase" },
       ]);
       expect(
         database

@@ -73,6 +73,7 @@ const validationRunPhaseStatusColumns = [
 const validationRunRoundColumns = [
   "validation_run_id AS validationRunId",
   "phase",
+  "producer",
   "round_number AS roundNumber",
   "status",
   "created_at AS createdAt",
@@ -103,11 +104,12 @@ const validationRunArtifactColumns = [
 const validationPhaseOrderSql = `
   CASE phase
     WHEN 'preflight' THEN 1
-    WHEN 'checks' THEN 2
-    WHEN 'intent_review' THEN 3
-    WHEN 'quality_review' THEN 4
-    WHEN 'publish_pr' THEN 5
-    WHEN 'watch_pr' THEN 6
+    WHEN 'prepare' THEN 2
+    WHEN 'checks' THEN 3
+    WHEN 'intent_review' THEN 4
+    WHEN 'quality_review' THEN 5
+    WHEN 'publish_pr' THEN 6
+    WHEN 'watch_pr' THEN 7
   END
 `;
 
@@ -270,7 +272,7 @@ const listValidationRunRounds = (
       SELECT ${validationRunRoundColumns}
       FROM validation_run_rounds
       WHERE validation_run_id = ?
-      ORDER BY phase ASC, round_number ASC
+      ORDER BY ${validationPhaseOrderSql}, producer ASC, round_number ASC
     `,
     [validationRunId],
   ).map(rowToValidationRunRound);
@@ -300,7 +302,7 @@ const listValidationRunArtifacts = (
       SELECT ${validationRunArtifactColumns}
       FROM validation_run_artifacts
       WHERE validation_run_id = ?
-      ORDER BY producer ASC,
+      ORDER BY ${validationPhaseOrderSql}, producer ASC,
         CASE
           WHEN ref LIKE '%/stdout.txt' THEN 1
           WHEN ref LIKE '%/stderr.txt' THEN 2

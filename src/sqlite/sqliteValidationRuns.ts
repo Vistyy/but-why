@@ -11,9 +11,15 @@ import { submitStateReadiness } from "../task/submitPolicy.js";
 import { storedPublicTaskId, taskSlugForId, type PublicTaskId } from "../task/taskId.js";
 import type { TaskState } from "../task/lifecycle.js";
 import { validationToolingFailureRecord } from "../validation/validationToolingFailures.js";
-import type { RecordValidationRunCheckRoundInput } from "../validationRun/validationRunStore.js";
 import type {
-  RecordValidationCheckRoundResult,
+  RecordValidationRunCheckRoundInput,
+  RecordValidationRunCommandRoundInput,
+  RecordValidationRunPhaseStatusInput,
+  RecordValidationRunPrepareRoundInput,
+} from "../validationRun/validationRunStore.js";
+import type {
+  RecordValidationCommandRoundResult,
+  RecordValidationPhaseStatusResult,
   RecordValidationToolingFailureInput,
   RecordValidationToolingFailureResult,
   StartValidationRunInput,
@@ -26,6 +32,10 @@ export const openSqliteValidationRuns = (input: SqliteStoreInput): ValidationRun
     withStateDatabase(input, (database) => startValidationRun(database, startInput)),
   recordToolingFailure: (toolingErrorInput) =>
     withStateDatabase(input, (database) => recordToolingFailure(database, toolingErrorInput)),
+  recordPhaseStatus: (phaseStatusInput) =>
+    withStateDatabase(input, (database) => recordPhaseStatus(database, phaseStatusInput)),
+  recordPrepareRound: (prepareRoundInput) =>
+    withStateDatabase(input, (database) => recordPrepareRound(database, prepareRoundInput)),
   recordCheckRound: (checkRoundInput) =>
     withStateDatabase(input, (database) => recordCheckRound(database, checkRoundInput)),
 });
@@ -170,10 +180,47 @@ const recordToolingFailure = (
   }
 };
 
+const recordPhaseStatus = (
+  database: DatabaseSync,
+  input: RecordValidationRunPhaseStatusInput,
+): RecordValidationPhaseStatusResult => {
+  database.exec("BEGIN IMMEDIATE");
+
+  try {
+    if (!validationRunExists(database, input.validationRunId)) {
+      database.exec("ROLLBACK");
+      return { ok: false, code: "VALIDATION_RUN_NOT_FOUND" };
+    }
+
+    recordPhaseStatusMutation(database, input);
+    database
+      .prepare("UPDATE validation_runs SET updated_at = ? WHERE id = ?")
+      .run(input.now, input.validationRunId);
+
+    database.exec("COMMIT");
+    return { ok: true };
+  } catch (error) {
+    rollbackIfOpen(database);
+    throw error;
+  }
+};
+
+const recordPrepareRound = (
+  database: DatabaseSync,
+  input: RecordValidationRunPrepareRoundInput,
+): RecordValidationCommandRoundResult =>
+  recordCommandRound(database, { ...input, phase: "prepare", producer: "prepare" });
+
 const recordCheckRound = (
   database: DatabaseSync,
   input: RecordValidationRunCheckRoundInput,
-): RecordValidationCheckRoundResult => {
+): RecordValidationCommandRoundResult =>
+  recordCommandRound(database, { ...input, phase: "checks" });
+
+const recordCommandRound = (
+  database: DatabaseSync,
+  input: RecordValidationRunCommandRoundInput,
+): RecordValidationCommandRoundResult => {
   database.exec("BEGIN IMMEDIATE");
 
   try {
@@ -187,32 +234,30 @@ const recordCheckRound = (
         INSERT INTO validation_run_rounds (
           validation_run_id,
           phase,
+          producer,
           round_number,
           status,
           created_at,
           updated_at
         )
-        VALUES (?, 'checks', ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
       `)
-      .run(input.validationRunId, input.roundNumber, input.roundStatus, input.now, input.now);
+      .run(
+        input.validationRunId,
+        input.phase,
+        input.producer,
+        input.roundNumber,
+        input.roundStatus,
+        input.now,
+        input.now,
+      );
 
-    database
-      .prepare(`
-        INSERT INTO validation_run_phase_statuses (
-          validation_run_id,
-          phase,
-          status,
-          error_message,
-          created_at,
-          updated_at
-        )
-        VALUES (?, 'checks', ?, NULL, ?, ?)
-        ON CONFLICT(validation_run_id, phase) DO UPDATE SET
-          status = excluded.status,
-          error_message = excluded.error_message,
-          updated_at = excluded.updated_at
-      `)
-      .run(input.validationRunId, input.phaseStatus, input.now, input.now);
+    recordPhaseStatusMutation(database, {
+      validationRunId: input.validationRunId,
+      phase: input.phase,
+      status: input.phaseStatus,
+      now: input.now,
+    });
 
     for (const artifact of input.artifactRecords) {
       database
@@ -290,6 +335,36 @@ const recordCheckRound = (
     rollbackIfOpen(database);
     throw error;
   }
+};
+
+const recordPhaseStatusMutation = (
+  database: DatabaseSync,
+  input: RecordValidationRunPhaseStatusInput,
+): void => {
+  database
+    .prepare(`
+      INSERT INTO validation_run_phase_statuses (
+        validation_run_id,
+        phase,
+        status,
+        error_message,
+        created_at,
+        updated_at
+      )
+      VALUES (?, ?, ?, ?, ?, ?)
+      ON CONFLICT(validation_run_id, phase) DO UPDATE SET
+        status = excluded.status,
+        error_message = excluded.error_message,
+        updated_at = excluded.updated_at
+    `)
+    .run(
+      input.validationRunId,
+      input.phase,
+      input.status,
+      input.errorMessage ?? null,
+      input.now,
+      input.now,
+    );
 };
 
 const nextTaskValidationNumber = (database: DatabaseSync, taskId: PublicTaskId): number => {

@@ -10,10 +10,16 @@ export type RepoConfig = {
 
 export type RepoValidationConfig = {
   readonly sandbox?: RepoValidationSandboxConfig;
+  readonly prepare?: RepoValidationPrepareConfig;
 };
 
 export type RepoValidationSandboxConfig = {
   readonly mode?: string;
+};
+
+export type RepoValidationPrepareConfig = {
+  readonly command: string;
+  readonly timeoutSeconds?: number;
 };
 
 export type RepoCheckConfig = {
@@ -99,13 +105,19 @@ const isValidationConfig = (value: unknown): value is RepoValidationConfig => {
 
   const entries = Object.entries(value);
 
-  if (!entries.every(([key]) => key === "sandbox")) {
+  if (!entries.every(([key]) => key === "sandbox" || key === "prepare")) {
     return false;
   }
 
   const sandbox = (value as { readonly sandbox?: unknown }).sandbox;
 
-  return sandbox === undefined || isValidationSandboxConfig(sandbox);
+  if (sandbox !== undefined && !isValidationSandboxConfig(sandbox)) {
+    return false;
+  }
+
+  const prepare = (value as { readonly prepare?: unknown }).prepare;
+
+  return prepare === undefined || isValidationPrepareConfig(prepare);
 };
 
 const isValidationSandboxConfig = (value: unknown): value is RepoValidationSandboxConfig => {
@@ -119,6 +131,31 @@ const isValidationSandboxConfig = (value: unknown): value is RepoValidationSandb
     entries.every(([key]) => key === "mode") &&
     ((value as { readonly mode?: unknown }).mode === undefined ||
       typeof (value as { readonly mode?: unknown }).mode === "string")
+  );
+};
+
+const isValidationPrepareConfig = (value: unknown): value is RepoValidationPrepareConfig => {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return false;
+  }
+
+  const entries = Object.entries(value);
+
+  if (!entries.every(([key]) => key === "command" || key === "timeoutSeconds")) {
+    return false;
+  }
+
+  const prepare = value as {
+    readonly command?: unknown;
+    readonly timeoutSeconds?: unknown;
+  };
+
+  return (
+    typeof prepare.command === "string" &&
+    (prepare.timeoutSeconds === undefined ||
+      (typeof prepare.timeoutSeconds === "number" &&
+        Number.isInteger(prepare.timeoutSeconds) &&
+        prepare.timeoutSeconds > 0))
   );
 };
 

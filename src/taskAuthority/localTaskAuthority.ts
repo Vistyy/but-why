@@ -17,6 +17,9 @@ export const localTaskAuthority = (input: {
   startValidation: (validationInput) => input.validationRuns.start(validationInput),
   recordValidationToolingFailure: (failureInput) =>
     input.validationRuns.recordToolingFailure(failureInput),
+  recordPhaseStatus: (phaseStatusInput) => input.validationRuns.recordPhaseStatus(phaseStatusInput),
+  recordPrepareRound: (prepareRoundInput) =>
+    input.validationRuns.recordPrepareRound(prepareRoundInput),
   recordCheckRound: (checkRoundInput) => input.validationRuns.recordCheckRound(checkRoundInput),
 });
 

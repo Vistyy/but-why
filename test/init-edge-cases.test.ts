@@ -64,6 +64,27 @@ describe("by init edge cases", () => {
       { taskPrefix: "BY", checks: [{ id: "quality", command: "true", severity: "high" }] },
     ],
     ["prepare severity", { taskPrefix: "BY", prepare: { severity: "high" } }],
+    ["validation prepare without command", { taskPrefix: "BY", validation: { prepare: {} } }],
+    [
+      "validation prepare command array",
+      { taskPrefix: "BY", validation: { prepare: { command: ["pnpm", "install"] } } },
+    ],
+    [
+      "validation prepare commands array",
+      { taskPrefix: "BY", validation: { prepare: { commands: ["pnpm install"] } } },
+    ],
+    [
+      "validation prepare zero timeout",
+      { taskPrefix: "BY", validation: { prepare: { command: "true", timeoutSeconds: 0 } } },
+    ],
+    [
+      "validation prepare decimal timeout",
+      { taskPrefix: "BY", validation: { prepare: { command: "true", timeoutSeconds: 1.5 } } },
+    ],
+    [
+      "validation prepare extra key",
+      { taskPrefix: "BY", validation: { prepare: { command: "true", severity: "high" } } },
+    ],
   ])("rejects repo config with %s", (_name, config) => {
     const root = createGitRepo();
 
@@ -143,6 +164,7 @@ help[1]: Move the conflicting path aside before running init again.`);
         { name: "010_validation_finding_phase" },
         { name: "011_validation_finding_producer" },
         { name: "012_optional_finding_severity" },
+        { name: "013_validation_prepare_phase" },
       ]);
     } finally {
       repairedDatabase.close();

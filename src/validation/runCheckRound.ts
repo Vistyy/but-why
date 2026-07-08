@@ -15,6 +15,7 @@ export type RunCheckPhaseInput = {
   readonly checks: readonly SubmitCheckConfig[];
   readonly sandbox: Pick<Sandbox, "exec">;
   readonly repoRoot: string;
+  readonly commandCwd?: string;
   readonly now: string;
   readonly recordCheckRound: (input: RecordValidationRunCheckRoundInput) => void;
 };
@@ -42,6 +43,7 @@ type CheckCommandResult = {
 };
 
 type CheckRound = {
+  readonly producer: string;
   readonly roundNumber: number;
   readonly failed: boolean;
   readonly lastCheck: boolean;
@@ -75,8 +77,11 @@ const runSingleCheck = (
   index: number,
 ): Effect.Effect<CheckRound, ValidationToolingFailure> =>
   Effect.gen(function* () {
-    const checkCommandResult = yield* runCheckCommand(input.sandbox, check);
-    const { commandResult, timedOut } = checkCommandResult;
+    const { commandResult, timedOut } = yield* runCheckCommand(
+      input.sandbox,
+      check,
+      input.commandCwd,
+    );
     const artifactRefs = artifactFileNames.map((fileName) =>
       checkArtifactRef(input.validationRunId, check.id, fileName),
     );
@@ -91,6 +96,7 @@ const runSingleCheck = (
     const failed = commandResult.exitCode !== 0;
 
     return {
+      producer: check.id,
       roundNumber: index + 1,
       failed,
       lastCheck: index === input.checks.length - 1,
@@ -117,6 +123,7 @@ const recordCheckRound = (
     try: () => {
       input.recordCheckRound({
         validationRunId: input.validationRunId,
+        producer: checkRound.producer,
         roundNumber: checkRound.roundNumber,
         roundStatus: checkRound.failed ? "failed" : "passed",
         phaseStatus: checkRound.failed ? "failed" : checkRound.lastCheck ? "passed" : "active",
@@ -157,13 +164,17 @@ const checkFinding = (
 const runCheckCommand = (
   sandbox: Pick<Sandbox, "exec">,
   check: SubmitCheckConfig,
+  commandCwd: string | undefined,
 ): Effect.Effect<CheckCommandResult, ValidationToolingFailure> =>
   Effect.tryPromise({
     try: async () => {
       await ensureTimeoutCommandAvailable(sandbox, check);
 
       const marker = checkCompletionMarker(check.id);
-      const result = await sandbox.exec(timeoutWrappedCommand(check, marker));
+      const result = await sandbox.exec(
+        timeoutWrappedCommand(check, marker),
+        commandCwd === undefined ? undefined : { cwd: commandCwd },
+      );
       const parsed = parseCheckCompletionMarker(result.stderr, marker);
 
       return {

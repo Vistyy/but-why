@@ -11,9 +11,10 @@ type Migration = {
 };
 
 const validationPhaseSql =
-  "'preflight', 'checks', 'intent_review', 'quality_review', 'publish_pr', 'watch_pr'";
+  "'preflight', 'prepare', 'checks', 'intent_review', 'quality_review', 'publish_pr', 'watch_pr'";
 const validationRunStatusSql = "'active', 'failed', 'error'";
-const validationPhaseStatusSql = "'pending', 'active', 'passed', 'failed', 'workflow_failed'";
+const validationPhaseStatusSql =
+  "'pending', 'active', 'passed', 'failed', 'skipped', 'workflow_failed'";
 
 const migrations: readonly Migration[] = [
   {
@@ -413,6 +414,217 @@ const migrations: readonly Migration[] = [
 
       DROP TABLE validation_run_findings;
       ALTER TABLE validation_run_findings_new RENAME TO validation_run_findings
+    `,
+  },
+  {
+    name: "013_validation_prepare_phase",
+    apply: `
+      CREATE TABLE validation_run_phase_statuses_new (
+        validation_run_id TEXT NOT NULL,
+        phase TEXT NOT NULL CHECK (phase IN (${validationPhaseSql})),
+        status TEXT NOT NULL CHECK (status IN (${validationPhaseStatusSql})),
+        error_message TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        PRIMARY KEY (validation_run_id, phase),
+        FOREIGN KEY (validation_run_id) REFERENCES validation_runs(id)
+      );
+
+      INSERT INTO validation_run_phase_statuses_new (
+        validation_run_id,
+        phase,
+        status,
+        error_message,
+        created_at,
+        updated_at
+      )
+      SELECT
+        validation_run_id,
+        phase,
+        status,
+        error_message,
+        created_at,
+        updated_at
+      FROM validation_run_phase_statuses;
+
+      DROP TABLE validation_run_phase_statuses;
+      ALTER TABLE validation_run_phase_statuses_new RENAME TO validation_run_phase_statuses;
+
+      CREATE TABLE validation_run_rounds_new (
+        validation_run_id TEXT NOT NULL,
+        phase TEXT NOT NULL CHECK (phase IN (${validationPhaseSql})),
+        producer TEXT NOT NULL,
+        round_number INTEGER NOT NULL,
+        status TEXT NOT NULL CHECK (status IN (${validationPhaseStatusSql})),
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        PRIMARY KEY (validation_run_id, phase, producer, round_number),
+        FOREIGN KEY (validation_run_id) REFERENCES validation_runs(id)
+      );
+
+      INSERT INTO validation_run_rounds_new (
+        validation_run_id,
+        phase,
+        producer,
+        round_number,
+        status,
+        created_at,
+        updated_at
+      )
+      SELECT
+        validation_run_id,
+        phase,
+        CASE
+          WHEN phase = 'prepare' THEN 'prepare'
+          ELSE 'unknown'
+        END,
+        round_number,
+        status,
+        created_at,
+        updated_at
+      FROM validation_run_rounds;
+
+      DROP TABLE validation_run_rounds;
+      ALTER TABLE validation_run_rounds_new RENAME TO validation_run_rounds;
+
+      CREATE TABLE validation_run_findings_new (
+        id TEXT PRIMARY KEY,
+        validation_run_id TEXT NOT NULL,
+        title TEXT NOT NULL,
+        description TEXT NOT NULL,
+        severity TEXT CHECK (severity IS NULL OR severity IN ('critical', 'high', 'medium', 'low')),
+        evidence TEXT NOT NULL,
+        files TEXT NOT NULL,
+        artifact_refs TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        phase TEXT NOT NULL DEFAULT 'checks' CHECK (phase IN (${validationPhaseSql})),
+        producer TEXT NOT NULL DEFAULT 'unknown',
+        FOREIGN KEY (validation_run_id) REFERENCES validation_runs(id)
+      );
+
+      INSERT INTO validation_run_findings_new (
+        id,
+        validation_run_id,
+        title,
+        description,
+        severity,
+        evidence,
+        files,
+        artifact_refs,
+        created_at,
+        updated_at,
+        phase,
+        producer
+      )
+      SELECT
+        id,
+        validation_run_id,
+        title,
+        description,
+        severity,
+        evidence,
+        files,
+        artifact_refs,
+        created_at,
+        updated_at,
+        phase,
+        producer
+      FROM validation_run_findings;
+
+      DROP TABLE validation_run_findings;
+      ALTER TABLE validation_run_findings_new RENAME TO validation_run_findings;
+
+      CREATE TABLE validation_run_artifacts_new (
+        ref TEXT PRIMARY KEY,
+        validation_run_id TEXT NOT NULL,
+        phase TEXT NOT NULL CHECK (phase IN (${validationPhaseSql})),
+        producer TEXT NOT NULL,
+        path TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        FOREIGN KEY (validation_run_id) REFERENCES validation_runs(id)
+      );
+
+      INSERT INTO validation_run_artifacts_new (
+        ref,
+        validation_run_id,
+        phase,
+        producer,
+        path,
+        created_at
+      )
+      SELECT
+        ref,
+        validation_run_id,
+        phase,
+        producer,
+        path,
+        created_at
+      FROM validation_run_artifacts;
+
+      DROP TABLE validation_run_artifacts;
+      ALTER TABLE validation_run_artifacts_new RENAME TO validation_run_artifacts;
+
+      CREATE TABLE validation_run_logs_new (
+        id TEXT PRIMARY KEY,
+        validation_run_id TEXT NOT NULL,
+        phase TEXT NOT NULL CHECK (phase IN (${validationPhaseSql})),
+        producer TEXT NOT NULL,
+        content TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        FOREIGN KEY (validation_run_id) REFERENCES validation_runs(id)
+      );
+
+      INSERT INTO validation_run_logs_new (
+        id,
+        validation_run_id,
+        phase,
+        producer,
+        content,
+        created_at
+      )
+      SELECT
+        id,
+        validation_run_id,
+        phase,
+        producer,
+        content,
+        created_at
+      FROM validation_run_logs;
+
+      DROP TABLE validation_run_logs;
+      ALTER TABLE validation_run_logs_new RENAME TO validation_run_logs;
+
+      CREATE TABLE validation_run_token_usage_new (
+        validation_run_id TEXT NOT NULL,
+        phase TEXT NOT NULL CHECK (phase IN (${validationPhaseSql})),
+        producer TEXT NOT NULL,
+        input_tokens INTEGER NOT NULL,
+        output_tokens INTEGER NOT NULL,
+        created_at TEXT NOT NULL,
+        PRIMARY KEY (validation_run_id, phase, producer),
+        FOREIGN KEY (validation_run_id) REFERENCES validation_runs(id)
+      );
+
+      INSERT INTO validation_run_token_usage_new (
+        validation_run_id,
+        phase,
+        producer,
+        input_tokens,
+        output_tokens,
+        created_at
+      )
+      SELECT
+        validation_run_id,
+        phase,
+        producer,
+        input_tokens,
+        output_tokens,
+        created_at
+      FROM validation_run_token_usage;
+
+      DROP TABLE validation_run_token_usage;
+      ALTER TABLE validation_run_token_usage_new RENAME TO validation_run_token_usage
     `,
   },
 ];

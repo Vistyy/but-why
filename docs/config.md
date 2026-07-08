@@ -51,6 +51,10 @@ If detection fails, `by submit <task-id>` fails during preflight.
   "validation": {
     "sandbox": {
       "mode": "none"
+    },
+    "prepare": {
+      "command": "pnpm install --frozen-lockfile --prefer-offline",
+      "timeoutSeconds": 1200
     }
   },
   "checks": [
@@ -198,7 +202,71 @@ Invalid modes are Submit Rejection Errors before Validation Run creation.
 
 Requested modes that are unavailable at runtime are Validation Tooling Failures.
 
-Checks run from the repo root inside the Validation Workspace.
+Validation commands run from the repo root inside the Validation Workspace.
+
+## Prepare
+
+Prepare is an optional repo-owned command at `validation.prepare`.
+
+It runs after the Validation Workspace is created and before checks.
+
+Use it for dependency install, restore, sync, or fetch work needed by later validation phases.
+
+Example:
+
+```json
+{
+  "validation": {
+    "prepare": {
+      "command": "pnpm install --frozen-lockfile --prefer-offline",
+      "timeoutSeconds": 1200
+    }
+  }
+}
+```
+
+If `validation.prepare` is present, `command` is required.
+
+The command must be a non-empty shell command string.
+
+V1 supports one prepare command string.
+
+V1 does not support prepare argv arrays or multiple prepare commands.
+
+`timeoutSeconds` is optional and defaults to `1200` seconds.
+
+`timeoutSeconds` must be a positive integer.
+
+Prepare runs through the configured validation sandbox mode.
+
+Prepare has no separate network policy.
+
+Network access is controlled by the sandbox mode.
+
+Prepare may modify files inside the Validation Workspace.
+
+Later validation phases run against those workspace changes.
+
+Prepare changes are not committed to the task branch and are not preserved as artifacts.
+
+Missing `validation.prepare` records the prepare phase as skipped.
+
+A failed or timed-out prepare creates a blocking Finding without severity and stops later validation phases.
+
+Prepare artifacts use refs shaped like:
+
+```text
+artifact:<validation-run-id>/prepare/prepare/<filename>
+```
+
+Each prepare round captures these artifacts:
+
+```text
+stdout.txt
+stderr.txt
+exit-code.json
+logs.txt
+```
 
 ## Checks
 
@@ -289,10 +357,11 @@ Failed and timed-out check Findings include stdout, stderr, exit-code, and logs 
 
 V1 uses fixed phases, not a generic workflow language.
 
-The planned phases are:
+The phases are:
 
 ```text
 preflight
+prepare
 checks
 intent_review
 quality_review
@@ -301,10 +370,6 @@ watch_pr
 ```
 
 Config fills these phases.
-
-Prepare config is not implemented in v1.
-
-A repo config field such as `prepare` or `prepare.severity` is rejected as unsupported config.
 
 Config should not allow arbitrary phase ordering in v1.
 

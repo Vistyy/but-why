@@ -29,6 +29,7 @@ import {
   type SubmitRejectionError,
 } from "../submit/submitRejectionErrors.js";
 import { runCheckPhase } from "../validation/runCheckRound.js";
+import { runPreparePhase } from "../validation/runPreparePhase.js";
 import {
   ValidationWorkspaceSetupFailed,
   type ValidationToolingFailure,
@@ -169,12 +170,60 @@ const createValidationWorkspaceForValidationRun = (
       sandboxMode: validationConfig.sandboxMode,
       now: input.now,
       runInWorkspace: (workspace) =>
-        Effect.map(
-          runCheckPhase({
+        Effect.gen(function* () {
+          if (validationConfig.prepare === undefined) {
+            recordPhaseStatus(taskAuthority, {
+              validationRunId: input.validationRunId,
+              phase: "prepare",
+              status: "skipped",
+              errorMessage: "Prepare is not configured.",
+              now: input.now,
+            });
+          } else {
+            const prepareResult = yield* runPreparePhase({
+              validationRunId: input.validationRunId,
+              prepare: validationConfig.prepare,
+              sandbox: workspace.sandbox,
+              repoRoot: context.root,
+              commandCwd: workspace.worktreePath,
+              now: input.now,
+              recordPrepareRound: (prepareRoundInput) => {
+                const recordResult = taskAuthority.recordPrepareRound(prepareRoundInput);
+
+                if (!recordResult.ok) {
+                  throw new Error(`Could not record prepare round: ${recordResult.code}`);
+                }
+              },
+            }).pipe(
+              Effect.catchAll((toolingFailure) =>
+                Effect.zipRight(
+                  Effect.sync(() => {
+                    recordPhaseStatus(taskAuthority, {
+                      validationRunId: input.validationRunId,
+                      phase: "prepare",
+                      status: "workflow_failed",
+                      errorMessage: "Prepare command tooling failed.",
+                      now: input.now,
+                    });
+                  }),
+                  Effect.fail(toolingFailure),
+                ),
+              ),
+            );
+
+            if (prepareResult.findings === 1) {
+              recordSkippedPhasesAfterPrepareFailure(taskAuthority, input);
+
+              return { validationFindings: 1 as const };
+            }
+          }
+
+          const checkResult = yield* runCheckPhase({
             validationRunId: input.validationRunId,
             checks: validationConfig.checks,
             sandbox: workspace.sandbox,
             repoRoot: context.root,
+            commandCwd: workspace.worktreePath,
             now: input.now,
             recordCheckRound: (checkRoundInput) => {
               const recordResult = taskAuthority.recordCheckRound(checkRoundInput);
@@ -183,9 +232,10 @@ const createValidationWorkspaceForValidationRun = (
                 throw new Error(`Could not record check round: ${recordResult.code}`);
               }
             },
-          }),
-          (checkResult) => ({ checkFindings: checkResult.findings }),
-        ),
+          });
+
+          return { validationFindings: checkResult.findings };
+        }),
       recordInterruptedCleanupResult: (toolingError) =>
         Effect.sync(() => {
           recordValidationWorkspaceToolingFailure(taskAuthority, input, toolingError);
@@ -208,6 +258,40 @@ const createValidationWorkspaceForValidationRun = (
 
     return result;
   });
+
+const skippedPhasesAfterPrepareFailure = [
+  "checks",
+  "intent_review",
+  "quality_review",
+  "publish_pr",
+  "watch_pr",
+] as const;
+
+const recordSkippedPhasesAfterPrepareFailure = (
+  taskAuthority: TaskAuthority,
+  input: CreateLocalValidationWorkspaceForValidationRunInput,
+): void => {
+  for (const phase of skippedPhasesAfterPrepareFailure) {
+    recordPhaseStatus(taskAuthority, {
+      validationRunId: input.validationRunId,
+      phase,
+      status: "skipped",
+      errorMessage: "Prepare did not pass.",
+      now: input.now,
+    });
+  }
+};
+
+const recordPhaseStatus = (
+  taskAuthority: TaskAuthority,
+  input: Parameters<TaskAuthority["recordPhaseStatus"]>[0],
+): void => {
+  const recordResult = taskAuthority.recordPhaseStatus(input);
+
+  if (!recordResult.ok) {
+    throw new Error(`Could not record validation phase status: ${recordResult.code}`);
+  }
+};
 
 const recordValidationWorkspaceToolingFailure = (
   taskAuthority: TaskAuthority,

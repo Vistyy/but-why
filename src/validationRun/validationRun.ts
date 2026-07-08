@@ -1,6 +1,7 @@
 const validationRunStatuses = ["active", "failed", "error"] as const;
 const validationPhases = [
   "preflight",
+  "prepare",
   "checks",
   "intent_review",
   "quality_review",
@@ -12,6 +13,7 @@ const validationPhaseStatuses = [
   "active",
   "passed",
   "failed",
+  "skipped",
   "workflow_failed",
 ] as const;
 
@@ -56,6 +58,7 @@ export type ValidationRunPhaseStatusRecord = {
 export type ValidationRunRoundRecord = {
   readonly validationRunId: string;
   readonly phase: ValidationPhase;
+  readonly producer: string;
   readonly roundNumber: number;
   readonly status: ValidationPhaseStatus;
   readonly createdAt: string;

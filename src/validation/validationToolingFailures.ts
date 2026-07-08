@@ -35,6 +35,14 @@ export class SandboxingUnavailable extends Data.TaggedError("SandboxingUnavailab
   readonly message: string;
 }> {}
 
+export class PrepareCommandExecutionToolingFailed extends Data.TaggedError(
+  "PrepareCommandExecutionToolingFailed",
+)<{
+  readonly operationName: string;
+  readonly command: string;
+  readonly message: string;
+}> {}
+
 export class CheckCommandExecutionToolingFailed extends Data.TaggedError(
   "CheckCommandExecutionToolingFailed",
 )<{
@@ -68,6 +76,7 @@ export type ValidationToolingFailure =
   | GitToolingFailed
   | SandcastleToolingFailed
   | SandboxingUnavailable
+  | PrepareCommandExecutionToolingFailed
   | CheckCommandExecutionToolingFailed
   | ReviewerOutputContractFailed
   | GitHubPublishingToolingFailed
@@ -126,6 +135,12 @@ export const validationToolingFailureRecord = (
         errorKind: "sandboxing_unavailable",
         operationName: failure.operationName,
         errorMessage: failure.message,
+      };
+    case "PrepareCommandExecutionToolingFailed":
+      return {
+        errorKind: "prepare_command_execution_tooling_failed",
+        operationName: failure.operationName,
+        errorMessage: `${failure.message}: ${failure.command}`,
       };
     case "CheckCommandExecutionToolingFailed":
       return {

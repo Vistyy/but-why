@@ -82,6 +82,7 @@ V1 phases are:
 
 ```text
 preflight
+prepare
 checks
 intent_review
 quality_review
@@ -90,6 +91,10 @@ watch_pr
 ```
 
 Config fills these phases but does not reorder them.
+
+Prepare runs after the Validation Workspace is created and before checks.
+
+Prepare is repo-owned setup for dependency install, restore, sync, or fetch work needed by later phases.
 
 Checks run before reviewer agents to save tokens.
 

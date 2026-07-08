@@ -168,6 +168,7 @@ describe("Validation Run inspection CLI", () => {
         {
           validationRunId,
           phase: "checks",
+          producer: "quality",
           roundNumber: 1,
           status: "failed",
           createdAt: thirdNow,
@@ -302,6 +303,7 @@ const recordFailedCheckRound = (
   ];
   const result = validationRuns(root).recordCheckRound({
     validationRunId,
+    producer,
     roundNumber: 1,
     roundStatus: "failed",
     phaseStatus: "failed",
