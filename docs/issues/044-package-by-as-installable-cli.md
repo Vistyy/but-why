@@ -39,13 +39,13 @@ Use the Installed CLI, invoked as `by ...`, when using But Why? from another rep
 - [ ] A smoke test runs `by init --task-prefix BY` from a separate temp Git repo through that repo's local installed bin.
 - [ ] Smoke tests do not require global package installation.
 - [ ] Tarball-only install instructions are documented in `docs/setup.md`.
-- [ ] `docs/setup.md` says npm registry install is not available until a later publishing issue.
+- [ ] `docs/setup.md` says npm registry install is not available until issue 046 publishes the package.
 - [ ] Agent-facing install guidance is documented or made ready for issue 041.
 - [ ] Agent-guided repository configuration of `validation.prepare`, `checks`, and reviewer/profile policy is out of scope for this issue and belongs to issue 043 or a follow-up setup issue.
-- [ ] Packaging is publish-ready but does not publish to a registry unless a later issue explicitly chooses that release path.
-- [ ] `by --version` is out of scope for this issue and belongs to a later npm publishing issue.
+- [ ] Packaging is publish-ready but does not publish to a registry; issue 046 owns the npm registry release path.
+- [ ] `by --version` is out of scope for this issue and belongs to issue 046.
 - [ ] Cleanup of whether `by --help` should include a `bin` field is out of scope for this issue.
-- [ ] `package.json` remains private for this issue unless a later npm publishing issue removes that guard.
+- [ ] `package.json` remains private for this issue unless issue 046 removes that guard.
 
 ## Blocked by
 

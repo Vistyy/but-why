@@ -12,7 +12,10 @@ Not done.
 
 Create an agent-facing `SKILL.md` that teaches coding agents how to operate the `by` CLI safely and effectively.
 
-The skill should make But Why? usable by agents without requiring them to rediscover command order, output contracts, task lifecycle rules, or validation failure handling.
+The skill should make But Why? usable by agents without requiring them to rediscover command order, output contracts, task lifecycle rules, validation failure handling, or the Installed CLI versus Repo-local CLI split.
+
+The skill is not the bootstrap source for installing But Why? before the skill is available.
+It should reference the setup and install guidance produced by issue 044.
 
 ## Acceptance criteria
 
@@ -28,7 +31,11 @@ The skill should make But Why? usable by agents without requiring them to redisc
 - [ ] The skill explains that `by init` gives concise setup hints, while the skill carries the detailed agent workflow.
 - [ ] The skill includes prepare examples for common ecosystems such as pnpm, uv, Cargo, and .NET.
 - [ ] The skill tells agents not to hide dependency setup inside checks when `validation.prepare` is available.
-- [ ] The skill explains how to install or run the packaged `by` CLI.
+- [ ] The skill distinguishes Repo-local CLI usage from Installed CLI usage: use `just by ...` when developing But Why? itself, and use installed `by ...` when operating in another repository.
+- [ ] The skill references the setup and install guidance produced by issue 044 instead of being the only bootstrap source.
+- [ ] The skill treats npm registry publishing as future work until issue 046 is complete.
+- [ ] The skill uses tarball install guidance only while registry publishing is unavailable.
+- [ ] The skill does not require `by --version` until issue 046 adds it.
 - [ ] The skill includes guidance for creating a But Why Task from an existing markdown issue with `--description-file` without treating markdown files as the Task authority.
 - [ ] The skill warns agents not to edit repo-local SQLite state directly.
 - [ ] The skill warns agents not to inspect validation artifacts through workspace paths.
