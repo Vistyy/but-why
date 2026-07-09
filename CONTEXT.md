@@ -174,6 +174,11 @@ Task context is the v1 source of intent.
 Task context excludes Task metadata such as state, branch, Validation Runs, token totals, and comment count.
 _Avoid_: Ticket data, prompt context
 
+**Task Context Snapshot**:
+The immutable Task Context owned by a Validation Run that records the intent judged by that run.
+It contains the title, description, and ordered Task Comment content captured when validation starts.
+_Avoid_: Task Context revision, live Task Context
+
 **Agent Profile**:
 A named configuration for running an agent reviewer.
 Agent profiles choose the agent runtime and model without making the reviewer role depend on one specific runtime.
