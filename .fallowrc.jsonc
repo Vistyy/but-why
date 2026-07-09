@@ -288,7 +288,7 @@
       {
         "from": "validation-tooling-failures",
         "allow": ["domain"],
-        "allowTypeOnly": ["validation-workspace"]
+        "allowTypeOnly": ["contracts", "validation-workspace"]
       },
       {
         "from": "task-authority-port",

@@ -2,7 +2,7 @@
 
 ## Status
 
-Not done.
+Done.
 
 ## Parent
 
@@ -75,15 +75,15 @@ The existing Validation Runs seam records typed reviewer contract failures witho
 
 ## Acceptance criteria
 
-- [ ] Repo config is decoded through Effect Schema or a schema built on the same contract.
-- [ ] Global config is decoded through Effect Schema or a schema built on the same contract.
-- [ ] Reviewer Finding output is decoded through Effect Schema.
-- [ ] Token usage summaries are decoded or normalized through a documented schema contract.
-- [ ] Schema decode errors become typed config or reviewer tooling errors.
-- [ ] Invalid reviewer JSON after Sandcastle structured-output retry is exhausted records a tooling error, not a Finding.
-- [ ] Schema validation errors are actionable enough for an agent to repair config or reviewer output.
-- [ ] The public config examples in `docs/config.md` match the implemented schemas.
-- [ ] Tests cover valid config, invalid config, valid reviewer Findings, and invalid reviewer output.
+- [x] Repo config is decoded through Effect Schema or a schema built on the same contract.
+- [x] Global config is decoded through Effect Schema or a schema built on the same contract.
+- [x] Reviewer Finding output is decoded through Effect Schema.
+- [x] Token usage summaries are decoded or normalized through a documented schema contract.
+- [x] Schema decode errors become typed config or reviewer tooling errors.
+- [x] Invalid reviewer JSON after Sandcastle structured-output retry is exhausted records a tooling error, not a Finding.
+- [x] Schema validation errors are actionable enough for an agent to repair config or reviewer output.
+- [x] The public config examples in `docs/config.md` match the implemented schemas.
+- [x] Tests cover valid config, invalid config, valid reviewer Findings, and invalid reviewer output.
 
 ## Blocked by
 
