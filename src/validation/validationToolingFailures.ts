@@ -2,7 +2,13 @@ import { Data } from "effect";
 
 import type { CleanupState } from "../validationRun/cleanup.js";
 import type { ValidationToolingFailureKind } from "../validationRun/toolingErrorKind.js";
+import type { TaskContextSnapshotOperationName } from "../validationRun/taskContextSnapshot.js";
 import type { ValidationWorkspaceCleanupResult } from "./validationWorkspace.js";
+
+export class TaskContextSnapshotFailed extends Data.TaggedError("TaskContextSnapshotFailed")<{
+  readonly operationName: TaskContextSnapshotOperationName;
+  readonly message: string;
+}> {}
 
 export class ValidationWorkspaceSetupFailed extends Data.TaggedError(
   "ValidationWorkspaceSetupFailed",
@@ -71,6 +77,7 @@ export class GitHubPollingToolingFailed extends Data.TaggedError("GitHubPollingT
 }> {}
 
 export type ValidationToolingFailure =
+  | TaskContextSnapshotFailed
   | ValidationWorkspaceSetupFailed
   | InfrastructureToolingFailed
   | GitToolingFailed
@@ -101,6 +108,12 @@ export const validationToolingFailureRecord = (
   failure: ValidationToolingFailure,
 ): ValidationToolingFailureRecordInput => {
   switch (failure._tag) {
+    case "TaskContextSnapshotFailed":
+      return {
+        errorKind: "task_context_snapshot_failed",
+        operationName: failure.operationName,
+        errorMessage: failure.message,
+      };
     case "ValidationWorkspaceSetupFailed":
       return {
         errorKind: "validation_workspace_setup_failed",

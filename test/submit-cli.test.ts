@@ -1,9 +1,11 @@
 import { spawnSync } from "node:child_process";
 import { chmodSync, existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { openSqliteValidationRunStore } from "../src/sqlite/sqliteValidationRunStore.js";
+import { openSqliteValidationRuns } from "../src/sqlite/sqliteValidationRuns.js";
 import { openSqliteTaskStore } from "../src/sqlite/sqliteTaskStore.js";
 import { loadTaskUseCases } from "../src/localTask/taskUseCases.js";
 import type { TaskState } from "../src/task/lifecycle.js";
@@ -30,6 +32,16 @@ describe("by submit CLI", () => {
   it("creates a commit-bound active Validation Run and moves an implementing Task to validating", () => {
     const root = preparedRepoOnBranch("feature/by-1");
     const commitSha = currentCommitSha(root);
+    taskStore(root).appendTaskComment({
+      taskId: publicTaskId("BY-1"),
+      content: "Approved first comment",
+      now: () => secondNow,
+    });
+    taskStore(root).appendTaskComment({
+      taskId: publicTaskId("BY-1"),
+      content: "Approved second comment",
+      now: () => secondNow,
+    });
 
     const branchBeforeSubmit = currentBranch(root);
     const statusBeforeSubmit = gitStatus(root);
@@ -74,6 +86,23 @@ describe("by submit CLI", () => {
       cleanupTempRef: "removed",
     });
     expect(validationWorkspace).not.toHaveProperty("worktreePath");
+    expect(validationRunStore(root).getTaskContextSnapshot(firstTaskValidationRunId)).toEqual({
+      version: 1,
+      title: "Submit task",
+      description: "Description for Submit task",
+      comments: ["Approved first comment", "Approved second comment"],
+    });
+    taskStore(root).appendTaskComment({
+      taskId: publicTaskId("BY-1"),
+      content: "Later comment",
+      now: () => thirdNow,
+    });
+    expect(validationRunStore(root).getTaskContextSnapshot(firstTaskValidationRunId)).toEqual({
+      version: 1,
+      title: "Submit task",
+      description: "Description for Submit task",
+      comments: ["Approved first comment", "Approved second comment"],
+    });
     expect(readFileSync(join(root, ".gitignore"), "utf8")).toContain(".sandcastle/worktrees/");
 
     expect(runByInProcess(root, ["task", "show", "BY-1"]).stdout).toContain(
@@ -157,6 +186,92 @@ describe("by submit CLI", () => {
     )) {
       expect(existsSync(join(root, artifact.path))).toBe(true);
     }
+  });
+
+  it("records a typed tooling failure when Task Context Snapshot creation fails", () => {
+    const root = preparedRepoOnBranch("feature/by-1");
+    const database = new DatabaseSync(join(root, ".but-why/state.sqlite"));
+
+    database.exec(`
+      CREATE TRIGGER reject_task_context_snapshot_save
+      BEFORE UPDATE OF task_context_snapshot_state ON validation_runs
+      WHEN NEW.task_context_snapshot_state = 'saved'
+      BEGIN
+        SELECT RAISE(FAIL, 'snapshot storage unavailable');
+      END
+    `);
+    database.close();
+
+    const result = withFakeGh(() => runSubmit(root, ["BY-1", "--output", "json"], thirdNow));
+
+    expect(result.status).toBe(1);
+    expect(JSON.parse(result.stdout)).toEqual({
+      error: {
+        code: "task_context_snapshot_failed",
+        message: "Validation tooling failed.",
+        operationName: "save_task_context_snapshot",
+        errorMessage: "snapshot storage unavailable",
+      },
+      help: ["Fix the validation tooling problem, then rerun submit."],
+    });
+    expect(taskStore(root).getTaskById(publicTaskId("BY-1"))).toMatchObject({
+      state: "implementing",
+    });
+    expect(validationRunStore(root).getValidationRunById(firstTaskValidationRunId)).toMatchObject({
+      status: "error",
+    });
+    expect(validationRunStore(root).getTaskContextSnapshot(firstTaskValidationRunId)).toBeNull();
+    expect(
+      validationRunStore(root).listValidationRunToolingErrors(firstTaskValidationRunId),
+    ).toEqual([
+      expect.objectContaining({
+        errorKind: "task_context_snapshot_failed",
+        operationName: "save_task_context_snapshot",
+        errorMessage: "snapshot storage unavailable",
+      }),
+    ]);
+    expect(
+      validationRunStore(root).getValidationWorkspaceSetup(firstTaskValidationRunId),
+    ).toBeUndefined();
+  });
+
+  it("recovers an interrupted pending snapshot before starting a later submit", () => {
+    const root = preparedRepoOnBranch("feature/by-1");
+    const commitSha = currentCommitSha(root);
+    const interrupted = validationRuns(root).start({
+      taskId: publicTaskId("BY-1"),
+      branch: "feature/by-1",
+      commitSha,
+      prTarget: {
+        owner: "acme",
+        repo: "widgets",
+        baseBranch: "main",
+        remoteName: "origin",
+        remoteUrl: "https://github.com/acme/widgets.git",
+      },
+      now: secondNow,
+    });
+
+    expect(interrupted).toMatchObject({ ok: true, validationRunId: firstTaskValidationRunId });
+
+    const result = withFakeGh(() => runSubmit(root, ["BY-1", "--output", "json"], thirdNow));
+
+    expect(result.status).toBe(0);
+    expect(JSON.parse(result.stdout)).toMatchObject({
+      submission: { validationRunId: secondTaskValidationRunId },
+    });
+    expect(validationRunStore(root).getValidationRunById(firstTaskValidationRunId)).toMatchObject({
+      status: "error",
+    });
+    expect(
+      validationRunStore(root).listValidationRunToolingErrors(firstTaskValidationRunId),
+    ).toEqual([expect.objectContaining({ errorKind: "task_context_snapshot_failed" })]);
+    expect(
+      validationRunStore(root).getTaskContextSnapshot(secondTaskValidationRunId),
+    ).toMatchObject({
+      version: 1,
+      title: "Submit task",
+    });
   });
 
   it("rejects missing validation.checks before Validation Run creation", () => {
@@ -961,6 +1076,12 @@ const taskStore = (root: string) =>
   openSqliteTaskStore({
     statePath: join(root, ".but-why/state.sqlite"),
     taskPrefix: "BY",
+    migrationTimestamp: () => firstNow,
+  });
+
+const validationRuns = (root: string) =>
+  openSqliteValidationRuns({
+    statePath: join(root, ".but-why/state.sqlite"),
     migrationTimestamp: () => firstNow,
   });
 

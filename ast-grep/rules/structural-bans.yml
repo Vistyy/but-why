@@ -433,24 +433,26 @@ rule:
 id: no-json-parse-outside-seams
 language: TypeScript
 severity: error
-message: Parse JSON only in repo config or external-tool parser seams.
+message: Parse JSON only in approved configuration, external-tool, or persistence codec seams.
 files:
   - src/**/*.ts
 ignores:
   - src/init/repoConfig.ts
   - src/submissionEnvironment/githubTarget.ts
+  - src/sqlite/sqliteTaskContextSnapshot.ts
 rule:
   pattern: JSON.parse($$$ARGS)
 ---
 id: no-json-stringify-outside-seams
 language: TypeScript
 severity: error
-message: Stringify JSON only in repo config or CLI JSON output seams.
+message: Stringify JSON only in approved configuration, output, or persistence codec seams.
 files:
   - src/**/*.ts
 ignores:
   - src/init/repoConfig.ts
   - src/output/json.ts
+  - src/sqlite/sqliteTaskContextSnapshot.ts
 rule:
   pattern: JSON.stringify($$$ARGS)
 ---

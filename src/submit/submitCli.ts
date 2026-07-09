@@ -24,6 +24,7 @@ import {
   type SubmitRejectionError,
 } from "../submit/submitRejectionErrors.js";
 import {
+  TaskContextSnapshotFailed,
   validationToolingFailureRecord,
   type ValidationToolingFailure,
 } from "../validation/validationToolingFailures.js";
@@ -236,6 +237,15 @@ const renderSubmitResult = (result: SubmitTaskResult): CliResult => {
 
   if (result.kind === "tooling_error") {
     return toolingError();
+  }
+
+  if (result.kind === "task_context_snapshot_failed") {
+    return validationToolingFailureError(
+      new TaskContextSnapshotFailed({
+        operationName: result.operationName,
+        message: result.message,
+      }),
+    );
   }
 
   if (result.kind === "unsupported_task_authority") {

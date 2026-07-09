@@ -321,6 +321,7 @@ validationSetup:
         { name: "011_validation_finding_producer" },
         { name: "012_optional_finding_severity" },
         { name: "013_validation_prepare_phase" },
+        { name: "014_task_context_snapshots" },
       ]);
       expect(
         database

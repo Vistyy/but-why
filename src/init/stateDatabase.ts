@@ -627,6 +627,21 @@ const migrations: readonly Migration[] = [
       ALTER TABLE validation_run_token_usage_new RENAME TO validation_run_token_usage
     `,
   },
+  {
+    name: "014_task_context_snapshots",
+    apply: `
+      ALTER TABLE validation_runs
+      ADD COLUMN previous_task_state TEXT
+      CHECK (previous_task_state IS NULL OR previous_task_state IN ('implementing', 'needs_input'));
+
+      ALTER TABLE validation_runs
+      ADD COLUMN task_context_snapshot_state TEXT NOT NULL DEFAULT 'not_required'
+      CHECK (task_context_snapshot_state IN ('not_required', 'pending', 'saved', 'failed'));
+
+      ALTER TABLE validation_runs
+      ADD COLUMN task_context_snapshot TEXT
+    `,
+  },
 ];
 
 export const ensureStateDatabase = (

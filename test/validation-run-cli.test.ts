@@ -154,6 +154,7 @@ describe("Validation Run inspection CLI", () => {
         createdAt: thirdNow,
         updatedAt: thirdNow,
       },
+      taskContextSnapshot: null,
       phases: [
         {
           validationRunId,

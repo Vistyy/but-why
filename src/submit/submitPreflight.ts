@@ -1,3 +1,4 @@
+import type { TaskContextSnapshotOperationName } from "../validationRun/taskContextSnapshot.js";
 import type { GitHubPrTarget } from "../validationRun/validationRun.js";
 import type { TaskState } from "../task/lifecycle.js";
 import type { SubmitEligibleState } from "../task/submitPolicy.js";
@@ -51,6 +52,12 @@ export type SubmitTaskResult =
     }
   | {
       readonly ok: false;
+      readonly kind: "task_context_snapshot_failed";
+      readonly operationName: TaskContextSnapshotOperationName;
+      readonly message: string;
+    }
+  | {
+      readonly ok: false;
       readonly kind: "tooling_error";
     };
 
@@ -79,6 +86,15 @@ const runSubmitPreflight = (
   },
   input: SubmitTaskInput,
 ): SubmitTaskResult => {
+  const recovery = seams.taskAuthority.recoverPendingTaskContextSnapshot({
+    taskId: input.taskId,
+    now: input.now,
+  });
+
+  if (!recovery.ok) {
+    return { ok: false, kind: "unsupported_task_authority", taskId: input.taskId };
+  }
+
   const readiness = seams.taskAuthority.getTaskSubmitReadiness(input.taskId);
 
   if (!readiness.ok) {
@@ -140,6 +156,15 @@ const validationStartRejection = (
   taskId: PublicTaskId,
   branch: string,
 ): SubmitTaskResult => {
+  if (result.code === "TASK_CONTEXT_SNAPSHOT_FAILED") {
+    return {
+      ok: false,
+      kind: "task_context_snapshot_failed",
+      operationName: result.operationName,
+      message: result.message,
+    };
+  }
+
   if (result.code === "TASK_AUTHORITY_UNSUPPORTED") {
     return { ok: false, kind: "unsupported_task_authority", taskId };
   }
@@ -149,9 +174,13 @@ const validationStartRejection = (
     kind: "preflight_rejection",
     code: result.code,
     taskId,
-    ...(result.state === undefined ? {} : { state: result.state }),
-    ...(result.boundBranch === undefined ? {} : { boundBranch: result.boundBranch }),
-    ...(result.boundTaskId === undefined ? {} : { boundTaskId: result.boundTaskId }),
+    ...("state" in result && result.state !== undefined ? { state: result.state } : {}),
+    ...("boundBranch" in result && result.boundBranch !== undefined
+      ? { boundBranch: result.boundBranch }
+      : {}),
+    ...("boundTaskId" in result && result.boundTaskId !== undefined
+      ? { boundTaskId: result.boundTaskId }
+      : {}),
     branch,
   };
 };

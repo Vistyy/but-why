@@ -7,6 +7,8 @@ import {
   recordValidationRunToolingErrorMutation,
   validationRunExists,
 } from "./sqliteValidationRunInternals.js";
+import { decodeSqliteTaskContextSnapshot } from "./sqliteTaskContextSnapshot.js";
+import type { TaskContextSnapshotState } from "../validationRun/taskContextSnapshot.js";
 import type {
   ValidationRunArtifactRecord,
   ValidationRunFindingRecord,
@@ -118,6 +120,8 @@ export const openSqliteValidationRunStore = (input: SqliteStoreInput): Validatio
     withStateDatabase(input, (database) => getValidationRunById(database, validationRunId)),
   getLatestValidationRunIdForTask: (taskId) =>
     withStateDatabase(input, (database) => getLatestValidationRunIdForTask(database, taskId)),
+  getTaskContextSnapshot: (validationRunId) =>
+    withStateDatabase(input, (database) => getTaskContextSnapshot(database, validationRunId)),
   listValidationRunSummariesForTask: (taskId) =>
     withStateDatabase(input, (database) => listValidationRunSummariesForTask(database, taskId)),
   getValidationWorkspaceSetup: (validationRunId) =>
@@ -167,6 +171,28 @@ const getValidationRunById = (
   }
 
   return rowToValidationRunRecord(row);
+};
+
+const getTaskContextSnapshot = (
+  database: DatabaseSync,
+  validationRunId: string,
+): ReturnType<ValidationRunStore["getTaskContextSnapshot"]> => {
+  const row = queryOne<TaskContextSnapshotRow>(
+    database,
+    `SELECT task_context_snapshot_state AS state, task_context_snapshot AS snapshot
+     FROM validation_runs WHERE id = ?`,
+    [validationRunId],
+  );
+
+  if (row === undefined || row.state !== "saved") {
+    return null;
+  }
+
+  if (row.snapshot === null) {
+    throw new Error("Saved Task Context Snapshot is missing");
+  }
+
+  return decodeSqliteTaskContextSnapshot(row.snapshot);
 };
 
 const getLatestValidationRunIdForTask = (database: DatabaseSync, taskId: string): string | null => {
@@ -486,6 +512,11 @@ const rowToValidationRunArtifact = (row: ValidationRunArtifactRow): ValidationRu
 
 type ValidationRunIdRow = {
   readonly id: string;
+};
+
+type TaskContextSnapshotRow = {
+  readonly state: TaskContextSnapshotState;
+  readonly snapshot: string | null;
 };
 
 type ValidationRunSummaryRow = Omit<

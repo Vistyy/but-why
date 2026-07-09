@@ -28,6 +28,7 @@ import {
   ReviewerOutputContractFailed,
   SandcastleToolingFailed,
   SandboxingUnavailable,
+  TaskContextSnapshotFailed,
   ValidationWorkspaceSetupFailed,
   validationToolingFailureKind,
   type ValidationToolingFailure,
@@ -100,6 +101,10 @@ describe("module seams", () => {
       new InvalidSandboxModeFromConfig({ sandboxMode: "root", message: "Invalid sandbox mode." }),
     ] satisfies readonly SubmitRejectionError[];
     const toolingFailures = [
+      new TaskContextSnapshotFailed({
+        operationName: "save_task_context_snapshot",
+        message: "snapshot failed",
+      }),
       new ValidationWorkspaceSetupFailed({
         operationName: "copy_allowlisted_file",
         tempRefName: firstTaskValidationRunId,
@@ -143,6 +148,7 @@ describe("module seams", () => {
       "InvalidSandboxModeFromConfig",
     ]);
     expect(toolingFailures.map(validationToolingFailureKind)).toEqual([
+      "task_context_snapshot_failed",
       "validation_workspace_setup_failed",
       "infrastructure_tooling_failed",
       "git_tooling_failed",
@@ -214,6 +220,61 @@ describe("module seams", () => {
     expect(validationRunStore.getLatestValidationRunIdForTask(taskId)).toBe(
       firstTaskValidationRunId,
     );
+  });
+
+  it("saves an immutable Task Context Snapshot through the ValidationRuns seam", () => {
+    const root = initializedRepo();
+    const taskStore = sqliteTaskStore(root);
+    const validationRunStore = sqliteValidationRunStore(root);
+    const validationRuns = sqliteValidationRuns(root);
+    const task = taskStore.createTask({
+      title: "Snapshot intent",
+      description: "Judge this intent",
+      now: firstNow,
+    });
+    const taskId = publicTaskId(task.id);
+    const snapshot = {
+      version: 1 as const,
+      title: "Snapshot intent",
+      description: "Judge this intent",
+      comments: ["First comment", "Second comment"],
+    };
+
+    expect(
+      taskStore.transitionTaskState({ taskId, to: "implementing", now: secondNow }),
+    ).toMatchObject({ ok: true });
+    expect(
+      validationRuns.start({
+        taskId,
+        branch: "feature/by-1",
+        commitSha: "abc123",
+        prTarget,
+        now: thirdNow,
+      }),
+    ).toMatchObject({ ok: true });
+
+    expect(
+      validationRuns.saveTaskContextSnapshot({
+        validationRunId: firstTaskValidationRunId,
+        snapshot,
+        now: thirdNow,
+      }),
+    ).toEqual({ ok: true });
+    expect(
+      validationRuns.saveTaskContextSnapshot({
+        validationRunId: firstTaskValidationRunId,
+        snapshot,
+        now: thirdNow,
+      }),
+    ).toEqual({ ok: true });
+    expect(
+      validationRuns.saveTaskContextSnapshot({
+        validationRunId: firstTaskValidationRunId,
+        snapshot: { ...snapshot, comments: ["Replacement"] },
+        now: thirdNow,
+      }),
+    ).toEqual({ ok: false, code: "TASK_CONTEXT_SNAPSHOT_REPLACEMENT_REJECTED" });
+    expect(validationRunStore.getTaskContextSnapshot(firstTaskValidationRunId)).toEqual(snapshot);
   });
 
   it("records typed tooling failures without moving the Task to needs_input", () => {
@@ -374,6 +435,10 @@ describe("module seams", () => {
     const taskAuthority: TaskAuthority = {
       taskPrefix: "BY",
       resolveTaskId: (inputTaskId) => ({ ok: true, taskId: inputTaskId }),
+      recoverPendingTaskContextSnapshot: (input) => {
+        events.push(`recover:${input.taskId}`);
+        return { ok: true, recoveredValidationRunId: null };
+      },
       getTaskSubmitReadiness: (inputTaskId) => {
         events.push(`readiness:${inputTaskId}`);
         return { ok: true, taskId: inputTaskId, previousTaskState: "implementing" };
@@ -420,7 +485,12 @@ describe("module seams", () => {
       previousTaskState: "implementing",
       prTarget,
     });
-    expect(events).toEqual(["readiness:BY-1", "candidate", "start:feature/by-1:abc123"]);
+    expect(events).toEqual([
+      "recover:BY-1",
+      "readiness:BY-1",
+      "candidate",
+      "start:feature/by-1:abc123",
+    ]);
   });
 
   it("returns submit preflight domain rejections before Git facts are read", () => {

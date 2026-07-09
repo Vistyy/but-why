@@ -2,7 +2,7 @@
 
 ## Status
 
-Not done.
+Done.
 
 ## Parent
 
@@ -38,16 +38,16 @@ This should land before reviewer agents depend on mutable Task Context.
 
 ## Acceptance criteria
 
-- [ ] A Validation Run records or references the Task Context used for validation.
-- [ ] The snapshot includes the Task title, description, and Task comment content used by reviewers.
-- [ ] Existing Task Context commands remain unchanged.
-- [ ] Existing submit behavior remains unchanged except for durable snapshot recording.
-- [ ] Run inspection can identify the Task Context snapshot or revision used by the Validation Run.
-- [ ] Later Task comments do not change the stored context for an earlier Validation Run.
-- [ ] Snapshot creation failure is recorded as a typed validation-start tooling error.
-- [ ] Tests cover snapshot creation at validation start.
-- [ ] Tests cover old snapshots remaining stable after Task Context changes.
-- [ ] No reviewer agent behavior is added.
+- [x] A Validation Run records or references the Task Context used for validation.
+- [x] The snapshot includes the Task title, description, and Task comment content used by reviewers.
+- [x] Existing Task Context commands remain unchanged.
+- [x] Existing submit behavior remains unchanged except for durable snapshot recording.
+- [x] Run inspection can identify the Task Context snapshot or revision used by the Validation Run.
+- [x] Later Task comments do not change the stored context for an earlier Validation Run.
+- [x] Snapshot creation failure is recorded as a typed validation-start tooling error.
+- [x] Tests cover snapshot creation at validation start.
+- [x] Tests cover old snapshots remaining stable after Task Context changes.
+- [x] No reviewer agent behavior is added.
 
 ## Blocked by
 

@@ -94,6 +94,7 @@ const runShowCommand = (
 
     return success({
       validationRun: validationRunDetailView(details.validationRun),
+      taskContextSnapshot: details.taskContextSnapshot,
       phases: details.phases,
       rounds: details.rounds,
       findings: details.findings.map(validationRunFindingView),

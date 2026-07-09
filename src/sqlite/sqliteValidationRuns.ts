@@ -7,21 +7,29 @@ import {
   recordValidationRunToolingErrorMutation,
   validationRunExists,
 } from "./sqliteValidationRunInternals.js";
-import { submitStateReadiness } from "../task/submitPolicy.js";
+import { submitStateReadiness, type SubmitEligibleState } from "../task/submitPolicy.js";
 import { storedPublicTaskId, taskSlugForId, type PublicTaskId } from "../task/taskId.js";
 import type { TaskState } from "../task/lifecycle.js";
-import { validationToolingFailureRecord } from "../validation/validationToolingFailures.js";
+import {
+  TaskContextSnapshotFailed,
+  validationToolingFailureRecord,
+} from "../validation/validationToolingFailures.js";
 import type {
   RecordValidationRunCheckRoundInput,
   RecordValidationRunCommandRoundInput,
   RecordValidationRunPhaseStatusInput,
   RecordValidationRunPrepareRoundInput,
 } from "../validationRun/validationRunStore.js";
+import { encodeSqliteTaskContextSnapshot } from "./sqliteTaskContextSnapshot.js";
 import type {
   RecordValidationCommandRoundResult,
   RecordValidationPhaseStatusResult,
   RecordValidationToolingFailureInput,
   RecordValidationToolingFailureResult,
+  RecoverPendingTaskContextSnapshotInput,
+  RecoverPendingTaskContextSnapshotResult,
+  SaveTaskContextSnapshotInput,
+  SaveTaskContextSnapshotResult,
   StartValidationRunInput,
   StartValidationRunResult,
   ValidationRuns,
@@ -30,6 +38,12 @@ import type {
 export const openSqliteValidationRuns = (input: SqliteStoreInput): ValidationRuns => ({
   start: (startInput) =>
     withStateDatabase(input, (database) => startValidationRun(database, startInput)),
+  saveTaskContextSnapshot: (snapshotInput) =>
+    withStateDatabase(input, (database) => saveTaskContextSnapshot(database, snapshotInput)),
+  recoverPendingTaskContextSnapshot: (recoveryInput) =>
+    withStateDatabase(input, (database) =>
+      recoverPendingTaskContextSnapshot(database, recoveryInput),
+    ),
   recordToolingFailure: (toolingErrorInput) =>
     withStateDatabase(input, (database) => recordToolingFailure(database, toolingErrorInput)),
   recordPhaseStatus: (phaseStatusInput) =>
@@ -112,9 +126,12 @@ const startValidationRun = (
           github_remote_name,
           github_remote_url,
           created_at,
-          updated_at
+          updated_at,
+          previous_task_state,
+          task_context_snapshot_state,
+          task_context_snapshot
         )
-        VALUES (?, ?, ?, 'active', ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, 'active', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', NULL)
       `)
       .run(
         validationRunId,
@@ -129,6 +146,7 @@ const startValidationRun = (
         input.prTarget.remoteUrl,
         input.now,
         input.now,
+        readiness.previousTaskState,
       );
 
     database
@@ -143,6 +161,107 @@ const startValidationRun = (
       taskState: "validating",
       previousTaskState: readiness.previousTaskState,
     };
+  } catch (error) {
+    rollbackIfOpen(database);
+    throw error;
+  }
+};
+
+const saveTaskContextSnapshot = (
+  database: DatabaseSync,
+  input: SaveTaskContextSnapshotInput,
+): SaveTaskContextSnapshotResult => {
+  database.exec("BEGIN IMMEDIATE");
+
+  try {
+    const row = queryOne<TaskContextSnapshotRow>(
+      database,
+      `SELECT task_context_snapshot_state AS state, task_context_snapshot AS snapshot
+       FROM validation_runs WHERE id = ?`,
+      [input.validationRunId],
+    );
+
+    if (row === undefined) {
+      database.exec("ROLLBACK");
+      return { ok: false, code: "VALIDATION_RUN_NOT_FOUND" };
+    }
+
+    const encoded = encodeSqliteTaskContextSnapshot(input.snapshot);
+
+    if (row.state === "saved") {
+      database.exec("ROLLBACK");
+      return row.snapshot === encoded
+        ? { ok: true }
+        : { ok: false, code: "TASK_CONTEXT_SNAPSHOT_REPLACEMENT_REJECTED" };
+    }
+
+    if (row.state !== "pending" || row.snapshot !== null) {
+      database.exec("ROLLBACK");
+      return { ok: false, code: "TASK_CONTEXT_SNAPSHOT_NOT_PENDING" };
+    }
+
+    database
+      .prepare(
+        `UPDATE validation_runs
+         SET task_context_snapshot_state = 'saved', task_context_snapshot = ?, updated_at = ?
+         WHERE id = ? AND task_context_snapshot_state = 'pending' AND task_context_snapshot IS NULL`,
+      )
+      .run(encoded, input.now, input.validationRunId);
+    database.exec("COMMIT");
+    return { ok: true };
+  } catch (error) {
+    rollbackIfOpen(database);
+    throw error;
+  }
+};
+
+const recoverPendingTaskContextSnapshot = (
+  database: DatabaseSync,
+  input: RecoverPendingTaskContextSnapshotInput,
+): RecoverPendingTaskContextSnapshotResult => {
+  database.exec("BEGIN IMMEDIATE");
+
+  try {
+    const pending = queryOne<PendingSnapshotRow>(
+      database,
+      `SELECT id, previous_task_state AS previousTaskState
+       FROM validation_runs
+       WHERE task_id = ? AND status = 'active' AND task_context_snapshot_state = 'pending'
+       LIMIT 1`,
+      [input.taskId],
+    );
+
+    if (pending === undefined) {
+      database.exec("COMMIT");
+      return { ok: true, recoveredValidationRunId: null };
+    }
+
+    if (pending.previousTaskState === null) {
+      throw new Error("Pending Task Context Snapshot is missing its previous Task state");
+    }
+
+    const failure = new TaskContextSnapshotFailed({
+      operationName: "recover_pending_task_context_snapshot",
+      message: "Task Context Snapshot creation was interrupted before it was saved.",
+    });
+    recordValidationRunToolingErrorMutation(database, {
+      validationRunId: pending.id,
+      ...validationToolingFailureRecord(failure),
+      now: input.now,
+    });
+    database
+      .prepare(
+        `UPDATE validation_runs
+         SET task_context_snapshot_state = 'failed', status = 'error', updated_at = ?
+         WHERE id = ?`,
+      )
+      .run(input.now, pending.id);
+    database
+      .prepare("UPDATE tasks SET state = ?, updated_at = ? WHERE id = ?")
+      .run(pending.previousTaskState, input.now, input.taskId);
+
+    database.exec("COMMIT");
+    return { ok: true, recoveredValidationRunId: pending.id };
   } catch (error) {
     rollbackIfOpen(database);
     throw error;
@@ -166,11 +285,29 @@ const recordToolingFailure = (
       ...validationToolingFailureRecord(input.toolingFailure),
       now: input.now,
     });
+
+    if (input.toolingFailure._tag === "TaskContextSnapshotFailed") {
+      database
+        .prepare(
+          "UPDATE validation_runs SET task_context_snapshot_state = 'failed' WHERE id = ? AND task_context_snapshot_state = 'pending'",
+        )
+        .run(input.validationRunId);
+    }
+
+    const recovery = queryOne<PreviousTaskStateRow>(
+      database,
+      "SELECT previous_task_state AS previousTaskState FROM validation_runs WHERE id = ?",
+      [input.validationRunId],
+    );
     database
       .prepare(
         "UPDATE tasks SET state = ?, updated_at = ? WHERE id = (SELECT task_id FROM validation_runs WHERE id = ?)",
       )
-      .run(input.taskRecoveryState, input.now, input.validationRunId);
+      .run(
+        recovery?.previousTaskState ?? input.taskRecoveryState,
+        input.now,
+        input.validationRunId,
+      );
 
     database.exec("COMMIT");
     return { ok: true };
@@ -415,6 +552,19 @@ type SubmitTaskRow = {
 };
 
 type ValidationRunIdRow = {
+  readonly id: string;
+};
+
+type TaskContextSnapshotRow = {
+  readonly state: "not_required" | "pending" | "saved" | "failed";
+  readonly snapshot: string | null;
+};
+
+type PreviousTaskStateRow = {
+  readonly previousTaskState: SubmitEligibleState | null;
+};
+
+type PendingSnapshotRow = PreviousTaskStateRow & {
   readonly id: string;
 };
 

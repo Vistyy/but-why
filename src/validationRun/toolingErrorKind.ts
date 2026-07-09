@@ -1,4 +1,5 @@
 export type ValidationToolingFailureKind =
+  | "task_context_snapshot_failed"
   | "validation_workspace_setup_failed"
   | "infrastructure_tooling_failed"
   | "git_tooling_failed"

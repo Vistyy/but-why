@@ -1,6 +1,7 @@
 import type { TaskState } from "../task/lifecycle.js";
 import type { SubmitEligibleState } from "../task/submitPolicy.js";
 import type { PublicTaskId } from "../task/taskId.js";
+import type { TaskContextSnapshotOperationName } from "../validationRun/taskContextSnapshot.js";
 import type {
   RecordValidationRunCheckRoundInput,
   RecordValidationRunPhaseStatusInput,
@@ -11,6 +12,8 @@ import type {
   RecordValidationPhaseStatusResult,
   RecordValidationToolingFailureInput,
   RecordValidationToolingFailureResult,
+  RecoverPendingTaskContextSnapshotInput,
+  RecoverPendingTaskContextSnapshotResult,
   StartValidationRunInput,
   StartValidationRunResult,
 } from "../validation/validationRuns.js";
@@ -19,7 +22,10 @@ export type TaskAuthority = {
   readonly taskPrefix: string;
   readonly resolveTaskId: (taskId: PublicTaskId) => TaskAuthorityTaskIdResolution;
   readonly getTaskSubmitReadiness: (taskId: PublicTaskId) => TaskSubmitReadinessResult;
-  readonly startValidation: (input: StartValidationRunInput) => StartValidationRunResult;
+  readonly recoverPendingTaskContextSnapshot: (
+    input: RecoverPendingTaskContextSnapshotInput,
+  ) => RecoverPendingTaskContextSnapshotResult;
+  readonly startValidation: (input: StartValidationRunInput) => TaskAuthorityStartValidationResult;
   readonly recordValidationToolingFailure: (
     input: RecordValidationToolingFailureInput,
   ) => RecordValidationToolingFailureResult;
@@ -34,7 +40,14 @@ export type TaskAuthority = {
   ) => RecordValidationCommandRoundResult;
 };
 
-export type TaskAuthorityStartValidationResult = StartValidationRunResult;
+export type TaskAuthorityStartValidationResult =
+  | StartValidationRunResult
+  | {
+      readonly ok: false;
+      readonly code: "TASK_CONTEXT_SNAPSHOT_FAILED";
+      readonly operationName: TaskContextSnapshotOperationName;
+      readonly message: string;
+    };
 
 export type TaskAuthorityTaskIdResolution =
   | {

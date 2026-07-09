@@ -1,5 +1,6 @@
 import type { CleanupState } from "./cleanup.js";
 import type { ValidationToolingFailureKind } from "./toolingErrorKind.js";
+import type { TaskContextSnapshotV1 } from "./taskContextSnapshot.js";
 import type {
   ValidationPhase,
   ValidationPhaseStatus,
@@ -13,6 +14,7 @@ import type {
 export type ValidationRunStore = {
   readonly getValidationRunById: (validationRunId: string) => ValidationRunRecord | undefined;
   readonly getLatestValidationRunIdForTask: (taskId: string) => string | null;
+  readonly getTaskContextSnapshot: (validationRunId: string) => TaskContextSnapshotV1 | null;
   readonly listValidationRunSummariesForTask: (
     taskId: string,
   ) => readonly ValidationRunSummaryRecord[];

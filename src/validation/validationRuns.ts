@@ -8,9 +8,16 @@ import type { ValidationToolingFailure } from "./validationToolingFailures.js";
 import type { TaskState } from "../task/lifecycle.js";
 import type { SubmitEligibleState } from "../task/submitPolicy.js";
 import type { PublicTaskId } from "../task/taskId.js";
+import type { TaskContextSnapshotV1 } from "../validationRun/taskContextSnapshot.js";
 
 export type ValidationRuns = {
   readonly start: (input: StartValidationRunInput) => StartValidationRunResult;
+  readonly saveTaskContextSnapshot: (
+    input: SaveTaskContextSnapshotInput,
+  ) => SaveTaskContextSnapshotResult;
+  readonly recoverPendingTaskContextSnapshot: (
+    input: RecoverPendingTaskContextSnapshotInput,
+  ) => RecoverPendingTaskContextSnapshotResult;
   readonly recordToolingFailure: (
     input: RecordValidationToolingFailureInput,
   ) => RecordValidationToolingFailureResult;
@@ -54,6 +61,32 @@ export type StartValidationRunResult =
       readonly boundTaskId?: string;
     };
 
+export type SaveTaskContextSnapshotInput = {
+  readonly validationRunId: string;
+  readonly snapshot: TaskContextSnapshotV1;
+  readonly now: string;
+};
+
+export type SaveTaskContextSnapshotResult =
+  | { readonly ok: true }
+  | {
+      readonly ok: false;
+      readonly code:
+        | "VALIDATION_RUN_NOT_FOUND"
+        | "TASK_CONTEXT_SNAPSHOT_NOT_PENDING"
+        | "TASK_CONTEXT_SNAPSHOT_REPLACEMENT_REJECTED"
+        | "TASK_AUTHORITY_UNSUPPORTED";
+    };
+
+export type RecoverPendingTaskContextSnapshotInput = {
+  readonly taskId: PublicTaskId;
+  readonly now: string;
+};
+
+export type RecoverPendingTaskContextSnapshotResult =
+  | { readonly ok: true; readonly recoveredValidationRunId: string | null }
+  | { readonly ok: false; readonly code: "TASK_AUTHORITY_UNSUPPORTED" };
+
 export type RecordValidationToolingFailureInput = {
   readonly validationRunId: string;
   readonly toolingFailure: ValidationToolingFailure;
@@ -90,6 +123,11 @@ export type RecordValidationCommandRoundResult =
 
 export const unsupportedValidationRuns = (): ValidationRuns => ({
   start: () => ({ ok: false, code: "TASK_AUTHORITY_UNSUPPORTED" }),
+  saveTaskContextSnapshot: () => ({ ok: false, code: "TASK_AUTHORITY_UNSUPPORTED" }),
+  recoverPendingTaskContextSnapshot: () => ({
+    ok: false,
+    code: "TASK_AUTHORITY_UNSUPPORTED",
+  }),
   recordToolingFailure: () => ({ ok: false, code: "TASK_AUTHORITY_UNSUPPORTED" }),
   recordPhaseStatus: () => ({ ok: false, code: "TASK_AUTHORITY_UNSUPPORTED" }),
   recordPrepareRound: () => ({ ok: false, code: "TASK_AUTHORITY_UNSUPPORTED" }),

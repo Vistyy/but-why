@@ -156,33 +156,42 @@ const getTaskContextById = (
   database: DatabaseSync,
   taskId: PublicTaskId,
 ): TaskContext | undefined => {
-  const row = queryOne<TaskContextHeaderRow>(
-    database,
-    `
-      SELECT id, title, description
-      FROM tasks
-      WHERE id = ?
-    `,
-    [taskId],
-  );
+  database.exec("BEGIN");
 
-  if (row === undefined) {
-    return undefined;
+  try {
+    const row = queryOne<TaskContextHeaderRow>(
+      database,
+      `
+        SELECT id, title, description
+        FROM tasks
+        WHERE id = ?
+      `,
+      [taskId],
+    );
+
+    if (row === undefined) {
+      database.exec("ROLLBACK");
+      return undefined;
+    }
+
+    const task = rowToTaskContextHeader(row);
+    const comments = queryAll<CommentContentRow>(
+      database,
+      `
+        SELECT content
+        FROM task_comments
+        WHERE task_id = ?
+        ORDER BY sequence ASC
+      `,
+      [taskId],
+    ).map(rowToCommentContent);
+
+    database.exec("COMMIT");
+    return { ...task, comments };
+  } catch (error) {
+    rollbackIfOpen(database);
+    throw error;
   }
-
-  const task = rowToTaskContextHeader(row);
-  const comments = queryAll<CommentContentRow>(
-    database,
-    `
-      SELECT content
-      FROM task_comments
-      WHERE task_id = ?
-      ORDER BY sequence ASC
-    `,
-    [taskId],
-  ).map(rowToCommentContent);
-
-  return { ...task, comments };
 };
 
 const appendTaskComment = (

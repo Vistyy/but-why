@@ -6,6 +6,7 @@ import type {
   ValidationRunRoundRecord,
 } from "./validationRun.js";
 import type { ValidationRunStore, ValidationRunToolingErrorRecord } from "./validationRunStore.js";
+import type { TaskContextSnapshotV1 } from "./taskContextSnapshot.js";
 
 export type ValidationRunUseCases = {
   readonly getValidationRunDetails: (validationRunId: string) => ValidationRunDetails | undefined;
@@ -13,6 +14,7 @@ export type ValidationRunUseCases = {
 
 export type ValidationRunDetails = {
   readonly validationRun: ValidationRunRecord;
+  readonly taskContextSnapshot: TaskContextSnapshotV1 | null;
   readonly phases: readonly ValidationRunPhaseStatusRecord[];
   readonly rounds: readonly ValidationRunRoundRecord[];
   readonly findings: readonly ValidationRunFindingRecord[];
@@ -39,6 +41,7 @@ const getValidationRunDetails = (
 
   return {
     validationRun,
+    taskContextSnapshot: validationRunStore.getTaskContextSnapshot(validationRunId),
     phases: validationRunStore.listValidationRunPhaseStatuses(validationRunId),
     rounds: validationRunStore.listValidationRunRounds(validationRunId),
     findings: validationRunStore.listValidationRunFindings(validationRunId),
