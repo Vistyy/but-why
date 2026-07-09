@@ -1,11 +1,15 @@
+import type { AgentProfileConfig } from "../contracts/agentConfig.js";
+import type { GlobalConfig } from "../contracts/globalConfig.js";
 import type {
   RepoCheckConfig,
   RepoConfig,
   RepoValidationPrepareConfig,
-} from "../init/repoConfig.js";
+  ReviewerConfig,
+} from "../contracts/repoConfig.js";
 import type { ValidationSandboxMode } from "../validation/validationWorkspace.js";
 import {
-  InvalidSandboxModeFromConfig,
+  InvalidReviewerConfig,
+  MissingReviewerProfile,
   RepoConfigValidationFailed,
   type SubmitRejectionError,
 } from "./submitRejectionErrors.js";
@@ -14,6 +18,16 @@ export type SubmitRepoConfig = {
   readonly sandboxMode: ValidationSandboxMode;
   readonly prepare?: SubmitPrepareConfig;
   readonly checks: readonly SubmitCheckConfig[];
+  readonly intentReviewer?: SubmitReviewerConfig;
+  readonly qualityReview?: {
+    readonly mode: "sequential" | "parallel";
+    readonly reviewers: readonly SubmitReviewerConfig[];
+  };
+};
+
+export type SubmitReviewerConfig = AgentProfileConfig & {
+  readonly id: string;
+  readonly instructionsFile: string;
 };
 
 export type SubmitPrepareConfig = RepoValidationPrepareConfig & {
@@ -24,33 +38,14 @@ export type SubmitCheckConfig = RepoCheckConfig & {
   readonly timeoutSeconds: number;
 };
 
-const checkIdPattern = /^[a-z0-9][a-z0-9_-]*$/;
 const defaultValidationCommandTimeoutSeconds = 1200;
-const sandboxModes = new Set<ValidationSandboxMode>(["none", "docker", "podman"]);
 
 export const submitRepoConfig = (
   config: RepoConfig,
+  globalConfig: GlobalConfig,
 ):
   | { readonly ok: true; readonly config: SubmitRepoConfig }
   | { readonly ok: false; readonly error: SubmitRejectionError } => {
-  const sandboxMode = config.validation?.sandbox?.mode ?? "none";
-
-  if (!isValidationSandboxMode(sandboxMode)) {
-    return {
-      ok: false,
-      error: new InvalidSandboxModeFromConfig({
-        sandboxMode,
-        message: `Unsupported validation sandbox mode: ${sandboxMode}`,
-      }),
-    };
-  }
-
-  const prepareValidation = validatePrepare(config.validation?.prepare);
-
-  if (!prepareValidation.ok) {
-    return prepareValidation;
-  }
-
   const configuredChecks = config.validation?.checks;
 
   if (configuredChecks === undefined || configuredChecks.length === 0) {
@@ -61,10 +56,8 @@ export const submitRepoConfig = (
   const checks: SubmitCheckConfig[] = [];
 
   for (const check of configuredChecks) {
-    const validation = validateCheck(check, seenCheckIds);
-
-    if (!validation.ok) {
-      return validation;
+    if (seenCheckIds.has(check.id)) {
+      return invalidConfig(`Duplicate check id: ${check.id}`);
     }
 
     seenCheckIds.add(check.id);
@@ -75,79 +68,171 @@ export const submitRepoConfig = (
     });
   }
 
+  const reviewers = resolveSelectedReviewers(config, globalConfig);
+
+  if (!reviewers.ok) {
+    return reviewers;
+  }
+
+  const prepare = config.validation?.prepare;
+
   return {
     ok: true,
     config: {
-      sandboxMode,
-      ...(prepareValidation.prepare === undefined ? {} : { prepare: prepareValidation.prepare }),
+      sandboxMode: config.validation?.sandbox?.mode ?? "none",
+      ...(prepare === undefined
+        ? {}
+        : {
+            prepare: {
+              command: prepare.command,
+              timeoutSeconds: prepare.timeoutSeconds ?? defaultValidationCommandTimeoutSeconds,
+            },
+          }),
       checks,
+      ...(reviewers.intentReviewer === undefined
+        ? {}
+        : { intentReviewer: reviewers.intentReviewer }),
+      ...(reviewers.qualityReview === undefined ? {} : { qualityReview: reviewers.qualityReview }),
     },
   };
 };
 
-const isValidationSandboxMode = (value: string): value is ValidationSandboxMode =>
-  sandboxModes.has(value as ValidationSandboxMode);
+type ResolvedReviewers = {
+  readonly intentReviewer?: SubmitReviewerConfig;
+  readonly qualityReview?: {
+    readonly mode: "sequential" | "parallel";
+    readonly reviewers: readonly SubmitReviewerConfig[];
+  };
+};
 
-const validatePrepare = (
-  prepare: RepoValidationPrepareConfig | undefined,
+const resolveSelectedReviewers = (
+  config: RepoConfig,
+  globalConfig: GlobalConfig,
 ):
-  | { readonly ok: true; readonly prepare?: SubmitPrepareConfig }
+  | ({ readonly ok: true } & ResolvedReviewers)
   | { readonly ok: false; readonly error: SubmitRejectionError } => {
-  if (prepare === undefined) {
-    return { ok: true };
+  const configuredReviewers = new Map<string, SubmitReviewerConfig>();
+
+  for (const reviewerId of Object.keys(config.reviewers ?? {})) {
+    const reviewer = resolveReviewer(reviewerId, config, globalConfig);
+
+    if (!reviewer.ok) {
+      return reviewer;
+    }
+
+    configuredReviewers.set(reviewerId, reviewer.reviewer);
   }
 
-  if (prepare.command.trim().length === 0) {
-    return invalidConfig("Prepare command must not be empty.");
+  const intentReviewerId = config.review?.intent?.reviewer;
+  const intentReviewer =
+    intentReviewerId === undefined
+      ? undefined
+      : selectedReviewer(intentReviewerId, configuredReviewers);
+
+  if (intentReviewer !== undefined && !intentReviewer.ok) {
+    return intentReviewer;
   }
 
-  if (prepare.timeoutSeconds !== undefined && !Number.isInteger(prepare.timeoutSeconds)) {
-    return invalidConfig("Prepare timeoutSeconds must be a positive integer.");
-  }
+  const quality = config.review?.quality;
+  const qualityReviewers: SubmitReviewerConfig[] = [];
 
-  if (prepare.timeoutSeconds !== undefined && prepare.timeoutSeconds <= 0) {
-    return invalidConfig("Prepare timeoutSeconds must be a positive integer.");
+  if (quality !== undefined) {
+    for (const reviewerId of quality.reviewers) {
+      const reviewer = selectedReviewer(reviewerId, configuredReviewers);
+
+      if (!reviewer.ok) {
+        return reviewer;
+      }
+
+      qualityReviewers.push(reviewer.reviewer);
+    }
   }
 
   return {
     ok: true,
-    prepare: {
-      command: prepare.command,
-      timeoutSeconds: prepare.timeoutSeconds ?? defaultValidationCommandTimeoutSeconds,
-    },
+    ...(intentReviewer === undefined ? {} : { intentReviewer: intentReviewer.reviewer }),
+    ...(quality === undefined
+      ? {}
+      : { qualityReview: { mode: quality.mode, reviewers: qualityReviewers } }),
   };
 };
 
-const validateCheck = (
-  check: RepoCheckConfig,
-  seenCheckIds: ReadonlySet<string>,
-): { readonly ok: true } | { readonly ok: false; readonly error: SubmitRejectionError } => {
-  if (!checkIdPattern.test(check.id)) {
-    return invalidConfig(`Check id is not valid for artifact refs: ${check.id}`);
+const selectedReviewer = (
+  reviewerId: string,
+  configuredReviewers: ReadonlyMap<string, SubmitReviewerConfig>,
+):
+  | { readonly ok: true; readonly reviewer: SubmitReviewerConfig }
+  | { readonly ok: false; readonly error: SubmitRejectionError } => {
+  const reviewer = configuredReviewers.get(reviewerId);
+
+  return reviewer === undefined
+    ? {
+        ok: false,
+        error: new InvalidReviewerConfig({
+          message: `Selected reviewer is not defined: ${reviewerId}`,
+        }),
+      }
+    : { ok: true, reviewer };
+};
+
+const resolveReviewer = (
+  reviewerId: string,
+  config: RepoConfig,
+  globalConfig: GlobalConfig,
+):
+  | { readonly ok: true; readonly reviewer: SubmitReviewerConfig }
+  | { readonly ok: false; readonly error: SubmitRejectionError } => {
+  const reviewer: ReviewerConfig | undefined = config.reviewers?.[reviewerId];
+
+  if (reviewer === undefined) {
+    return {
+      ok: false,
+      error: new InvalidReviewerConfig({
+        message: `Selected reviewer is not defined: ${reviewerId}`,
+      }),
+    };
   }
 
-  if (seenCheckIds.has(check.id)) {
-    return invalidConfig(`Duplicate check id: ${check.id}`);
+  if (!("profile" in reviewer)) {
+    return {
+      ok: true,
+      reviewer: {
+        id: reviewerId,
+        instructionsFile: reviewer.instructionsFile,
+        agentRuntime: reviewer.agentRuntime,
+        agentModel: reviewer.agentModel,
+        ...(reviewer.thinking === undefined ? {} : { thinking: reviewer.thinking }),
+      },
+    };
   }
 
-  if (check.command.trim().length === 0) {
-    return invalidConfig(`Check command must not be empty: ${check.id}`);
+  const profile =
+    config.agentProfiles?.[reviewer.profile] ?? globalConfig.agentProfiles?.[reviewer.profile];
+
+  if (profile === undefined) {
+    return {
+      ok: false,
+      error: new MissingReviewerProfile({ profileName: reviewer.profile }),
+    };
   }
 
-  if (check.timeoutSeconds !== undefined && !Number.isInteger(check.timeoutSeconds)) {
-    return invalidConfig(`Check timeoutSeconds must be a positive integer: ${check.id}`);
-  }
-
-  if (check.timeoutSeconds !== undefined && check.timeoutSeconds <= 0) {
-    return invalidConfig(`Check timeoutSeconds must be a positive integer: ${check.id}`);
-  }
-
-  return { ok: true };
+  return {
+    ok: true,
+    reviewer: {
+      id: reviewerId,
+      instructionsFile: reviewer.instructionsFile,
+      ...profile,
+    },
+  };
 };
 
 const invalidConfig = (
   message: string,
 ): { readonly ok: false; readonly error: SubmitRejectionError } => ({
   ok: false,
-  error: new RepoConfigValidationFailed({ path: ".but-why/config.json", message }),
+  error: new RepoConfigValidationFailed({
+    path: ".but-why/config.json",
+    diagnostics: [],
+    message,
+  }),
 });

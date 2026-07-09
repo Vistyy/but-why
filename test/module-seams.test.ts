@@ -4,6 +4,7 @@ import { Effect } from "effect";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { repoStateLoadError, runtimeError, success, usageError } from "../src/cliResults.js";
+import { decodeReviewerOutputContract } from "../src/contracts/reviewerOutput.js";
 import type { GitHubPrTarget } from "../src/validationRun/validationRun.js";
 import { openSqliteValidationRunStore } from "../src/sqlite/sqliteValidationRunStore.js";
 import { openSqliteTaskStore } from "../src/sqlite/sqliteTaskStore.js";
@@ -14,7 +15,6 @@ import type { TaskAuthority } from "../src/taskAuthority/taskAuthority.js";
 import {
   GlobalConfigValidationFailed,
   InvalidReviewerConfig,
-  InvalidSandboxModeFromConfig,
   MissingReviewerProfile,
   RepoConfigValidationFailed,
   type SubmitRejectionError,
@@ -29,6 +29,7 @@ import {
   SandcastleToolingFailed,
   SandboxingUnavailable,
   TaskContextSnapshotFailed,
+  TokenUsageContractFailed,
   ValidationWorkspaceSetupFailed,
   validationToolingFailureKind,
   type ValidationToolingFailure,
@@ -93,12 +94,12 @@ describe("module seams", () => {
     const submitRejections = [
       new RepoConfigValidationFailed({
         path: ".but-why/config.json",
+        diagnostics: [],
         message: "Invalid repo config.",
       }),
-      new GlobalConfigValidationFailed({ message: "Invalid global config." }),
+      new GlobalConfigValidationFailed({ diagnostics: [], message: "Invalid global config." }),
       new MissingReviewerProfile({ profileName: "intent" }),
       new InvalidReviewerConfig({ profileName: "quality", message: "Invalid reviewer config." }),
-      new InvalidSandboxModeFromConfig({ sandboxMode: "root", message: "Invalid sandbox mode." }),
     ] satisfies readonly SubmitRejectionError[];
     const toolingFailures = [
       new TaskContextSnapshotFailed({
@@ -134,7 +135,13 @@ describe("module seams", () => {
         operationName: "intent_review",
         reviewer: "intent",
         attempts: 3,
+        diagnostics: [],
         message: "bad output",
+      }),
+      new TokenUsageContractFailed({
+        operationName: "record_token_usage",
+        diagnostics: [],
+        message: "bad token usage",
       }),
       new GitHubPublishingToolingFailed({ operationName: "publish_pr", message: "gh failed" }),
       new GitHubPollingToolingFailed({ operationName: "watch_pr", message: "gh failed" }),
@@ -145,7 +152,6 @@ describe("module seams", () => {
       "GlobalConfigValidationFailed",
       "MissingReviewerProfile",
       "InvalidReviewerConfig",
-      "InvalidSandboxModeFromConfig",
     ]);
     expect(toolingFailures.map(validationToolingFailureKind)).toEqual([
       "task_context_snapshot_failed",
@@ -156,6 +162,7 @@ describe("module seams", () => {
       "sandboxing_unavailable",
       "check_command_execution_tooling_failed",
       "reviewer_output_contract_failed",
+      "token_usage_contract_failed",
       "github_publishing_tooling_failed",
       "github_polling_tooling_failed",
     ]);
@@ -356,6 +363,61 @@ describe("module seams", () => {
     });
   });
 
+  it("records exhausted reviewer output as tooling failure without Findings", () => {
+    const root = initializedRepo();
+    const taskStore = sqliteTaskStore(root);
+    const validationRunStore = sqliteValidationRunStore(root);
+    const validationRuns = sqliteValidationRuns(root);
+    const task = taskStore.createTask({
+      title: "Reject malformed reviewer output",
+      description: "Description",
+      now: firstNow,
+    });
+    const taskId = publicTaskId(task.id);
+
+    expect(
+      taskStore.transitionTaskState({ taskId, to: "implementing", now: secondNow }),
+    ).toMatchObject({ ok: true });
+    expect(
+      validationRuns.start({
+        taskId,
+        branch: "feature/by-1",
+        commitSha: "abc123",
+        prTarget,
+        now: thirdNow,
+      }),
+    ).toMatchObject({ ok: true });
+
+    const failure = Effect.runSync(
+      Effect.flip(
+        decodeReviewerOutputContract({
+          reviewer: "intent",
+          attempts: 3,
+          output: { findings: [{ title: "Malformed" }] },
+        }),
+      ),
+    );
+
+    expect(failure).toMatchObject({
+      _tag: "ReviewerOutputContractFailed",
+      reviewer: "intent",
+      attempts: 3,
+    });
+    expect(
+      validationRuns.recordToolingFailure({
+        validationRunId: firstTaskValidationRunId,
+        toolingFailure: failure,
+        taskRecoveryState: "implementing",
+        now: thirdNow,
+      }),
+    ).toEqual({ ok: true });
+    expect(validationRunStore.listValidationRunFindings(firstTaskValidationRunId)).toEqual([]);
+    expect(validationRunStore.listValidationRunToolingErrors(firstTaskValidationRunId)).toEqual([
+      expect.objectContaining({ errorKind: "reviewer_output_contract_failed" }),
+    ]);
+    expect(taskStore.getTaskById(taskId)).toMatchObject({ state: "implementing" });
+  });
+
   it("rejects invalid local validation starts through the ValidationRuns seam", () => {
     const root = initializedRepo();
     const taskStore = sqliteTaskStore(root);
@@ -502,7 +564,10 @@ describe("module seams", () => {
       description: "Description",
       now: firstNow,
     });
-    const submitPreflight = loadLocalSubmitPreflight(root, { migrationTimestamp: () => firstNow });
+    const submitPreflight = loadLocalSubmitPreflight(root, {
+      globalConfigPath: join(root, ".test-global-config.json"),
+      migrationTimestamp: () => firstNow,
+    });
 
     if (!submitPreflight.ok) {
       throw new Error("Could not load submit preflight");

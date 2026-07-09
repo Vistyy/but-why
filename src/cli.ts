@@ -7,6 +7,7 @@ import { withGlobalHelpFlags } from "./cliHelp.js";
 import { selectOutput } from "./cliOutputSelection.js";
 import { runtimeError, success, type CliResult, usageError } from "./cliResults.js";
 import { initRepoLocalContext } from "./init/repoContext.js";
+import { structuredContractDiagnostics } from "./output/contractDiagnostics.js";
 import type { OutputFormat, StructuredObject } from "./output/structured.js";
 import { routeSubmit } from "./submit/submitCli.js";
 import { dashboard } from "./cli/task/dashboard.js";
@@ -18,6 +19,7 @@ export type { CliResult } from "./cliResults.js";
 export type CliEnvironment = {
   readonly executablePath: string;
   readonly cwd: string;
+  readonly globalConfigPath: string;
   readonly now: () => Date;
 };
 
@@ -282,8 +284,11 @@ const routeInit = (args: readonly string[], environment: CliEnvironment): CliRes
       case "invalid_repo_config":
         return runtimeError({
           code: "invalid_repo_config",
-          message: ".but-why/config.json is not valid But Why? repo config.",
-          details: { path: ".but-why/config.json" },
+          message: initResult.error.error.message,
+          details: {
+            path: initResult.error.error.path ?? ".but-why/config.json",
+            diagnostics: structuredContractDiagnostics(initResult.error.error.diagnostics),
+          },
           help: ["Fix the JSON or move the file aside before running init again."],
         });
       case "task_prefix_conflict":

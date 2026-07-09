@@ -2,6 +2,7 @@ import { existsSync } from "node:fs";
 
 import { Effect } from "effect";
 
+import { readGlobalConfig } from "../init/globalConfig.js";
 import { openRepoLocalStores, type RepoLocalStores } from "../init/repoLocalStores.js";
 import {
   loadRepoLocalContext,
@@ -24,10 +25,7 @@ import type { SubmitEligibleState } from "../task/submitPolicy.js";
 import type { PublicTaskId } from "../task/taskId.js";
 import type { SubmissionEnvironment } from "../submissionEnvironment/submissionEnvironment.js";
 import { submitRepoConfig, type SubmitRepoConfig } from "../submit/submitRepoConfig.js";
-import {
-  RepoConfigValidationFailed,
-  type SubmitRejectionError,
-} from "../submit/submitRejectionErrors.js";
+import type { SubmitRejectionError } from "../submit/submitRejectionErrors.js";
 import { runCheckPhase } from "../validation/runCheckRound.js";
 import { runPreparePhase } from "../validation/runPreparePhase.js";
 import {
@@ -72,6 +70,7 @@ export type CreateLocalValidationWorkspaceForValidationRunInput = {
 export const loadLocalSubmitPreflight = (
   cwd: string,
   input: {
+    readonly globalConfigPath: string;
     readonly requireState?: boolean;
     readonly migrationTimestamp: () => string;
   },
@@ -81,13 +80,7 @@ export const loadLocalSubmitPreflight = (
   if (!repoContext.ok) {
     switch (repoContext.error.code) {
       case "invalid_repo_config":
-        return {
-          ok: false,
-          error: new RepoConfigValidationFailed({
-            path: ".but-why/config.json",
-            message: ".but-why/config.json is not valid But Why? repo config.",
-          }),
-        };
+        return { ok: false, error: repoContext.error.error };
       case "not_initialized":
         return { ok: false, error: repoContext.error };
     }
@@ -103,8 +96,17 @@ export const loadLocalSubmitPreflight = (
     };
   }
 
+  const globalConfig =
+    input.requireState === false ? undefined : readGlobalConfig(input.globalConfigPath);
+
+  if (globalConfig !== undefined && !globalConfig.ok) {
+    return { ok: false, error: globalConfig.error };
+  }
+
   const validationConfig =
-    input.requireState === false ? undefined : submitRepoConfig(repoContext.context.config);
+    input.requireState === false
+      ? undefined
+      : submitRepoConfig(repoContext.context.config, globalConfig?.config ?? {});
 
   if (validationConfig !== undefined && !validationConfig.ok) {
     return { ok: false, error: validationConfig.error };

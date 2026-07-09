@@ -244,7 +244,8 @@ Global config lives at:
 
 Repo config owns validation behavior.
 
-Global config owns user defaults.
+Global config owns reusable local settings such as Agent Profiles.
+Global config is not a fallback for repo validation policy.
 
 But Why validation config lives under `.but-why`.
 

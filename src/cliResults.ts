@@ -1,4 +1,5 @@
 import type { LoadRepoLocalContextError } from "./init/repoContext.js";
+import { structuredContractDiagnostics } from "./output/contractDiagnostics.js";
 import type { OutputFormat, StructuredObject } from "./output/structured.js";
 import { structuredError, type StructuredErrorInput } from "./cliError.js";
 
@@ -53,7 +54,7 @@ export const repoStateLoadError = (error: RepoStateLoadError): CliResult => {
     case "not_initialized":
       return notInitialized();
     case "invalid_repo_config":
-      return invalidRepoConfig();
+      return invalidRepoConfig(error.error);
     case "state_store_unavailable":
       return stateStoreUnavailable(error.taskPrefix);
   }
@@ -66,11 +67,16 @@ const notInitialized = (): CliResult =>
     help: ["Run `by init --task-prefix BY` in the repository root."],
   });
 
-const invalidRepoConfig = (): CliResult =>
+const invalidRepoConfig = (
+  error: Extract<LoadRepoLocalContextError, { readonly code: "invalid_repo_config" }>["error"],
+): CliResult =>
   runtimeError({
     code: "invalid_repo_config",
-    message: ".but-why/config.json is not valid But Why? repo config.",
-    details: { path: ".but-why/config.json" },
+    message: error.message,
+    details: {
+      path: error.path ?? ".but-why/config.json",
+      diagnostics: structuredContractDiagnostics(error.diagnostics),
+    },
     help: ["Fix the JSON or run `by init --task-prefix <prefix>` after moving it aside."],
   });
 

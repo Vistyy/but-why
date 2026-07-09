@@ -94,8 +94,16 @@
         "patterns": ["src/output/structured.ts"]
       },
       {
+        "name": "contract-output",
+        "patterns": ["src/output/contractDiagnostics.ts"]
+      },
+      {
         "name": "output-serializers",
         "patterns": ["src/output/json.ts", "src/output/serialize.ts", "src/output/toon.ts"]
+      },
+      {
+        "name": "contracts",
+        "patterns": ["src/contracts/**"]
       },
       {
         "name": "domain",
@@ -125,7 +133,6 @@
           "src/validation/validationRuns.ts",
           "src/validation/runCheckRound.ts",
           "src/validation/runPreparePhase.ts",
-          "src/validation/reviewerOutputContract.ts",
           "src/validationRun/artifactFiles.ts"
         ]
       },
@@ -211,6 +218,7 @@
         "patterns": [
           "src/init/git.ts",
           "src/init/gitignore.ts",
+          "src/init/globalConfig.ts",
           "src/init/repoConfig.ts",
           "src/init/repoContext.ts"
         ]
@@ -228,6 +236,7 @@
       {
         "from": "cli-command-edge",
         "allow": [
+          "contract-output",
           "domain",
           "local-orchestration",
           "output-types",
@@ -244,8 +253,16 @@
         "allow": []
       },
       {
+        "from": "contract-output",
+        "allow": ["contracts", "output-types"]
+      },
+      {
         "from": "output-serializers",
         "allow": ["output-types"]
+      },
+      {
+        "from": "contracts",
+        "allow": ["validation-tooling-failures"]
       },
       {
         "from": "domain",
@@ -266,7 +283,7 @@
       },
       {
         "from": "submit-rejection-errors",
-        "allow": []
+        "allow": ["contracts"]
       },
       {
         "from": "validation-tooling-failures",
@@ -290,6 +307,7 @@
       {
         "from": "use-cases",
         "allow": [
+          "contracts",
           "domain",
           "repo-init",
           "validation-run-store",
@@ -356,7 +374,7 @@
       },
       {
         "from": "repo-init",
-        "allow": ["storage-init"]
+        "allow": ["contracts", "storage-init"]
       },
       {
         "from": "repo-local-storage-wiring",

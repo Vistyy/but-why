@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { chmodSync, existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { afterEach, describe, expect, it } from "vitest";
@@ -293,6 +293,86 @@ describe("by submit CLI", () => {
     expect(taskState(root, "BY-1")).toBe("implementing");
   });
 
+  it("resolves selected reviewers from global Agent Profiles", () => {
+    const root = preparedRepoOnBranch("feature/global-reviewer-profile");
+    const globalConfigPath = join(root, ".test-home/.config/but-why/config.json");
+
+    writeRepoConfig(root, {
+      taskPrefix: "BY",
+      validation: { checks: [{ id: "quality", command: "true" }] },
+      review: { intent: { reviewer: "intent" } },
+      reviewers: {
+        intent: {
+          profile: "default",
+          instructionsFile: ".but-why/reviewers/intent.md",
+        },
+      },
+    });
+    mkdirSync(join(root, ".test-home/.config/but-why"), { recursive: true });
+    writeFileSync(
+      globalConfigPath,
+      JSON.stringify({
+        agentProfiles: {
+          default: { agentRuntime: "pi", agentModel: "openai-codex/gpt-5.5" },
+        },
+      }),
+    );
+    writeFileSync(join(root, ".git/info/exclude"), ".test-home/\n", { flag: "a" });
+    spawnGit(root, "add", ".but-why/config.json");
+    spawnGit(root, "commit", "-m", "Configure intent reviewer");
+
+    const result = withFakeGh(() => runSubmit(root, ["BY-1"], thirdNow));
+
+    expect(result.status).toBe(0);
+    expect(result.stderr).toBe("");
+  });
+
+  it("rejects unresolved configured reviewer profiles before Validation Run creation", () => {
+    const root = preparedRepoOnBranch("feature/missing-reviewer-profile");
+
+    writeRepoConfig(root, {
+      taskPrefix: "BY",
+      validation: { checks: [{ id: "quality", command: "true" }] },
+      reviewers: {
+        unused: {
+          profile: "missing",
+          instructionsFile: ".but-why/reviewers/intent.md",
+        },
+      },
+    });
+    spawnGit(root, "add", ".but-why/config.json");
+    spawnGit(root, "commit", "-m", "Configure intent reviewer");
+
+    const result = withFakeGh(() => runSubmit(root, ["BY-1"], thirdNow));
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toBe("");
+    expect(result.stdout).toContain("code: missing_reviewer_profile");
+    expect(result.stdout).toContain("profileName: missing");
+    expect(taskHasNoValidationRuns(root, "BY-1")).toBe(true);
+    expect(taskState(root, "BY-1")).toBe("implementing");
+  });
+
+  it("rejects invalid global config before Validation Run creation", () => {
+    const root = preparedRepoOnBranch("feature/invalid-global-config");
+    const globalConfigPath = join(root, ".test-home/.config/but-why/config.json");
+
+    mkdirSync(join(root, ".test-home/.config/but-why"), { recursive: true });
+    writeFileSync(
+      globalConfigPath,
+      JSON.stringify({ agentProfiles: { default: { agentRuntime: "pi" } } }),
+    );
+
+    const result = withFakeGh(() => runSubmit(root, ["BY-1"], thirdNow));
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toBe("");
+    expect(result.stdout).toContain("code: invalid_global_config");
+    expect(result.stdout).toContain("agentProfiles.default.agentModel");
+    expect(taskHasNoValidationRuns(root, "BY-1")).toBe(true);
+    expect(taskState(root, "BY-1")).toBe("implementing");
+  });
+
   it("rejects top-level checks config before Validation Run creation", () => {
     const root = preparedRepoOnBranch("feature/top-level-checks");
 
@@ -308,7 +388,7 @@ describe("by submit CLI", () => {
     expect(result.status).toBe(1);
     expect(result.stderr).toBe("");
     expect(result.stdout).toContain("code: invalid_repo_config");
-    expect(result.stdout).toContain(".but-why/config.json is not valid But Why? repo config.");
+    expect(result.stdout).toContain("checks: Unknown key.");
     expect(taskHasNoValidationRuns(root, "BY-1")).toBe(true);
     expect(taskState(root, "BY-1")).toBe("implementing");
   });
@@ -559,7 +639,8 @@ describe("by submit CLI", () => {
     expect(result.status).toBe(1);
     expect(result.stderr).toBe("");
     expect(result.stdout).toContain("code: invalid_repo_config");
-    expect(result.stdout).toContain("Prepare command must not be empty.");
+    expect(result.stdout).toContain("validation.prepare.command");
+    expect(result.stdout).toContain("Expected a non-empty string");
     expect(taskHasNoValidationRuns(root, "BY-1")).toBe(true);
   });
 
@@ -997,7 +1078,7 @@ const gitRefExists = (root: string, ref: string): boolean =>
   }).status === 0;
 
 const runSubmit = (root: string, args: readonly string[], now: string) =>
-  runByWithEnv(root, { BUT_WHY_NOW: now }, "submit", ...args);
+  runByWithEnv(root, { BUT_WHY_NOW: now, HOME: join(root, ".test-home") }, "submit", ...args);
 
 const withGhScript = <Result>(script: string, work: () => Result): Result => {
   // biome-ignore lint/complexity/useLiteralKeys: TS index signature

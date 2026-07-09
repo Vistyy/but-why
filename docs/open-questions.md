@@ -57,14 +57,7 @@ This is not part of validation-focused v1 unless explicitly pulled in.
 
 V1 uses fixed phases instead of a generic CI pipeline.
 
-The remaining config shape is open for:
-
-- whether check commands should support argv arrays after Sandcastle supports argv-native execution
-- intent reviewer
-- quality reviewers
-- sequential versus parallel reviewer groups
-- timeouts
-- ignore patterns
+The remaining config shape is open for whether check commands should support argv arrays after Sandcastle supports argv-native execution.
 
 The config should stay small and should not become a generic workflow language.
 
@@ -104,8 +97,6 @@ We still need to map profile fields to Sandcastle provider options.
 
 Open details:
 
-- Pi thinking settings
-- sandbox defaults
 - environment variables
 - session storage
 - log locations
@@ -115,7 +106,7 @@ Open details:
 
 V1 records tokens, not dollar costs.
 
-We still need to verify what Sandcastle returns for each runtime and normalize it into:
+We still need to verify how each Sandcastle runtime maps its output into the canonical buckets:
 
 ```text
 inputTokens

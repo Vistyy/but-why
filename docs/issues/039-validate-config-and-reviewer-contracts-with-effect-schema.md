@@ -66,6 +66,13 @@ After that tooling failure, the Task returns to its previous submit-ready state.
 
 Reviewer structured output has exactly one top-level field, `findings`, and rejects unknown top-level fields.
 
+## Implementation boundary
+
+This issue provides the decoded contracts and typed failures consumed by validation orchestration.
+Issues 014 and 015 own reviewer execution and call the reviewer output contract after Sandcastle exhausts structured-output retries.
+Issue 018 owns token usage persistence and calls the token usage contract when ingesting Sandcastle usage payloads.
+The existing Validation Runs seam records typed reviewer contract failures without Findings and restores the Task's submit-ready state.
+
 ## Acceptance criteria
 
 - [ ] Repo config is decoded through Effect Schema or a schema built on the same contract.

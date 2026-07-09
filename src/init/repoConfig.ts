@@ -1,79 +1,87 @@
 import { readFileSync, writeFileSync } from "node:fs";
-import { posix, win32 } from "node:path";
-import { Schema } from "effect";
 
-const timeoutSecondsSchema = Schema.Number.pipe(Schema.int(), Schema.positive());
+import { Either } from "effect";
 
-const repoValidationSandboxConfigSchema = Schema.Struct({
-  mode: Schema.optional(Schema.String),
-});
+import type { ContractDiagnostic } from "../contracts/contractDiagnostics.js";
+import { formatContractDiagnostics } from "../contracts/contractDiagnostics.js";
+import { RepoConfigValidationFailed } from "../contracts/configErrors.js";
+import { decodeRepoConfig, type RepoConfig } from "../contracts/repoConfig.js";
 
-const repoValidationPrepareConfigSchema = Schema.Struct({
-  command: Schema.String,
-  timeoutSeconds: Schema.optional(timeoutSecondsSchema),
-});
+export type ConfigReadResult<Config, Failure> =
+  | { readonly ok: true; readonly config: Config }
+  | { readonly ok: false; readonly error: Failure };
 
-const repoCheckConfigSchema = Schema.Struct({
-  id: Schema.String,
-  command: Schema.String,
-  timeoutSeconds: Schema.optional(timeoutSecondsSchema),
-});
+type ConfigDecoder<Config, Failure> = (
+  input: unknown,
+  path: string,
+) => Either.Either<Config, Failure>;
 
-const repoRelativePathSchema = Schema.String.pipe(
-  Schema.filter((value) => isRepoRelativePath(value)),
-);
+type ConfigFailureFactory<Failure> = (
+  path: string,
+  diagnostics: readonly ContractDiagnostic[],
+) => Failure;
 
-const repoValidationWorkspaceConfigSchema = Schema.Struct({
-  copyFiles: Schema.Array(repoRelativePathSchema),
-});
+export const readConfigDocument = <Config, Failure>(
+  path: string,
+  decode: ConfigDecoder<Config, Failure>,
+  failure: ConfigFailureFactory<Failure>,
+): ConfigReadResult<Config, Failure> => {
+  let source: string;
 
-const repoValidationConfigSchema = Schema.Struct({
-  sandbox: Schema.optional(repoValidationSandboxConfigSchema),
-  prepare: Schema.optional(repoValidationPrepareConfigSchema),
-  checks: Schema.optional(Schema.Array(repoCheckConfigSchema)),
-});
-
-const repoConfigSchema = Schema.Struct({
-  taskPrefix: Schema.String,
-  validation: Schema.optional(repoValidationConfigSchema),
-  validationWorkspace: Schema.optional(repoValidationWorkspaceConfigSchema),
-});
-
-export type RepoConfig = Schema.Schema.Type<typeof repoConfigSchema>;
-export type RepoValidationPrepareConfig = Schema.Schema.Type<
-  typeof repoValidationPrepareConfigSchema
->;
-export type RepoCheckConfig = Schema.Schema.Type<typeof repoCheckConfigSchema>;
-
-export type ConfigReadResult =
-  | {
-      readonly ok: true;
-      readonly config: RepoConfig;
-    }
-  | {
-      readonly ok: false;
-    };
-
-export const readRepoConfig = (path: string): ConfigReadResult => {
   try {
-    const value: unknown = JSON.parse(readFileSync(path, "utf8"));
-    const config = Schema.decodeUnknownSync(repoConfigSchema, { onExcessProperty: "error" })(value);
-
-    return { ok: true, config };
-  } catch {
-    return { ok: false };
+    source = readFileSync(path, "utf8");
+  } catch (error) {
+    return configReadFailure(
+      path,
+      "Could not read config.",
+      "a readable config file",
+      error,
+      failure,
+    );
   }
+
+  let value: unknown;
+
+  try {
+    value = JSON.parse(source);
+  } catch (error) {
+    return configReadFailure(path, jsonErrorMessage(error), "valid JSON", source, failure);
+  }
+
+  const result = decode(value, path);
+  return Either.isRight(result)
+    ? { ok: true, config: result.right }
+    : { ok: false, error: result.left };
 };
+
+export const readRepoConfig = (
+  path: string,
+): ConfigReadResult<RepoConfig, RepoConfigValidationFailed> =>
+  readConfigDocument(
+    path,
+    decodeRepoConfig,
+    (sourcePath, diagnostics) =>
+      new RepoConfigValidationFailed({
+        path: sourcePath,
+        diagnostics,
+        message: formatContractDiagnostics(diagnostics),
+      }),
+  );
 
 export const writeRepoConfig = (path: string, taskPrefix: string): void => {
   writeFileSync(path, `${JSON.stringify({ taskPrefix }, null, 2)}\n`);
 };
 
-function isRepoRelativePath(value: string): boolean {
-  return (
-    value.length > 0 &&
-    !posix.isAbsolute(value) &&
-    !win32.isAbsolute(value) &&
-    !value.split(/[\\/]/).includes("..")
-  );
-}
+const configReadFailure = <Config, Failure>(
+  path: string,
+  message: string,
+  expected: string,
+  actual: unknown,
+  failure: ConfigFailureFactory<Failure>,
+): ConfigReadResult<Config, Failure> => {
+  const diagnostics: readonly ContractDiagnostic[] = [{ path: [], expected, actual, message }];
+  return { ok: false, error: failure(path, diagnostics) };
+};
+
+const jsonErrorMessage = (error: unknown): string =>
+  error instanceof Error ? `Invalid JSON: ${error.message}` : "Invalid JSON.";

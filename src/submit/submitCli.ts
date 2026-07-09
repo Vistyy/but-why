@@ -9,6 +9,7 @@ import {
   taskIdResolutionError,
   type CliTaskIdParseResult,
 } from "../cliTaskId.js";
+import { structuredContractDiagnostics } from "../output/contractDiagnostics.js";
 import type { StructuredObject } from "../output/structured.js";
 import {
   loadLocalSubmitPreflight,
@@ -18,7 +19,6 @@ import {
 import {
   GlobalConfigValidationFailed,
   InvalidReviewerConfig,
-  InvalidSandboxModeFromConfig,
   MissingReviewerProfile,
   RepoConfigValidationFailed,
   type SubmitRejectionError,
@@ -140,6 +140,7 @@ const loadSubmitPreflight = (
   requireState: boolean,
 ): SubmitPreflightLoadResult => {
   const result = loadLocalSubmitPreflight(environment.cwd, {
+    globalConfigPath: environment.globalConfigPath,
     requireState,
     migrationTimestamp: () => environment.now().toISOString(),
   });
@@ -159,8 +160,7 @@ const isSubmitRejectionError = (error: unknown): error is SubmitRejectionError =
   error instanceof RepoConfigValidationFailed ||
   error instanceof GlobalConfigValidationFailed ||
   error instanceof MissingReviewerProfile ||
-  error instanceof InvalidReviewerConfig ||
-  error instanceof InvalidSandboxModeFromConfig;
+  error instanceof InvalidReviewerConfig;
 
 const submitRejectionLoadError = (error: SubmitRejectionError): StructuredErrorInput => {
   switch (error._tag) {
@@ -168,14 +168,20 @@ const submitRejectionLoadError = (error: SubmitRejectionError): StructuredErrorI
       return {
         code: "invalid_repo_config",
         message: error.message,
-        details: { path: error.path ?? ".but-why/config.json" },
+        details: {
+          path: error.path ?? ".but-why/config.json",
+          diagnostics: structuredContractDiagnostics(error.diagnostics),
+        },
         help: ["Fix the JSON or run `by init --task-prefix <prefix>` after moving it aside."],
       };
     case "GlobalConfigValidationFailed":
       return {
         code: "invalid_global_config",
         message: error.message,
-        ...(error.path === undefined ? {} : { details: { path: error.path } }),
+        details: {
+          ...(error.path === undefined ? {} : { path: error.path }),
+          diagnostics: structuredContractDiagnostics(error.diagnostics),
+        },
         help: ["Fix the global But Why? config, then rerun submit."],
       };
     case "MissingReviewerProfile":
@@ -191,13 +197,6 @@ const submitRejectionLoadError = (error: SubmitRejectionError): StructuredErrorI
         message: error.message,
         ...(error.profileName === undefined ? {} : { details: { profileName: error.profileName } }),
         help: ["Fix the reviewer config, then rerun submit."],
-      };
-    case "InvalidSandboxModeFromConfig":
-      return {
-        code: "invalid_sandbox_mode",
-        message: error.message,
-        details: { sandboxMode: error.sandboxMode },
-        help: ["Use a supported validation sandbox mode, then rerun submit."],
       };
   }
 };

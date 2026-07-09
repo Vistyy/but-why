@@ -57,10 +57,24 @@ export class CheckCommandExecutionToolingFailed extends Data.TaggedError(
   readonly message: string;
 }> {}
 
+type ContractFailureDiagnostic = {
+  readonly path: readonly (string | number)[];
+  readonly expected: string;
+  readonly actual: unknown;
+  readonly message: string;
+};
+
 export class ReviewerOutputContractFailed extends Data.TaggedError("ReviewerOutputContractFailed")<{
   readonly operationName: string;
   readonly reviewer: string;
   readonly attempts: number;
+  readonly diagnostics: readonly ContractFailureDiagnostic[];
+  readonly message: string;
+}> {}
+
+export class TokenUsageContractFailed extends Data.TaggedError("TokenUsageContractFailed")<{
+  readonly operationName: string;
+  readonly diagnostics: readonly ContractFailureDiagnostic[];
   readonly message: string;
 }> {}
 
@@ -86,6 +100,7 @@ export type ValidationToolingFailure =
   | PrepareCommandExecutionToolingFailed
   | CheckCommandExecutionToolingFailed
   | ReviewerOutputContractFailed
+  | TokenUsageContractFailed
   | GitHubPublishingToolingFailed
   | GitHubPollingToolingFailed;
 
@@ -166,6 +181,12 @@ export const validationToolingFailureRecord = (
         errorKind: "reviewer_output_contract_failed",
         operationName: failure.operationName,
         errorMessage: `${failure.message}: ${failure.reviewer} after ${failure.attempts} attempts`,
+      };
+    case "TokenUsageContractFailed":
+      return {
+        errorKind: "token_usage_contract_failed",
+        operationName: failure.operationName,
+        errorMessage: failure.message,
       };
     case "GitHubPublishingToolingFailed":
       return {

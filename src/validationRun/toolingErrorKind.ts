@@ -8,5 +8,6 @@ export type ValidationToolingFailureKind =
   | "prepare_command_execution_tooling_failed"
   | "check_command_execution_tooling_failed"
   | "reviewer_output_contract_failed"
+  | "token_usage_contract_failed"
   | "github_publishing_tooling_failed"
   | "github_polling_tooling_failed";

@@ -18,7 +18,8 @@ Global config lives at:
 
 Repo config owns validation behavior.
 
-Global config owns user defaults.
+Global config owns reusable local settings such as Agent Profiles.
+Global config is not a fallback for repo validation policy.
 
 Repo and global config should be validated at their read boundaries with Effect Schema.
 
@@ -70,7 +71,7 @@ If detection fails, `by submit <task-id>` fails during preflight.
     },
     "quality": {
       "mode": "parallel",
-      "reviewers": ["bugs", "simplicity", "domain", "docs"]
+      "reviewers": ["bugs"]
     }
   },
   "reviewers": {
@@ -131,6 +132,12 @@ Repo config may also define profiles:
 }
 ```
 
+A reviewer defines `instructionsFile` and either a named `profile` or inline `agentRuntime` and `agentModel` settings.
+Inline reviewer settings may include `thinking`.
+A reviewer cannot combine a named profile with inline runtime settings.
+For Pi-backed reviewers, `thinking` is one of `off`, `minimal`, `low`, `medium`, `high`, or `xhigh`.
+Other runtimes accept a non-empty runtime-defined `thinking` value.
+
 Profile lookup order is:
 
 ```text
@@ -145,6 +152,7 @@ reviewer inline setting
 Repo config may allowlist untracked files to copy into the validation workspace.
 
 These paths are repo-relative.
+When `validationWorkspace` is present, `copyFiles` contains at least one path.
 
 They are copied into the Sandcastle worktree before validation commands or reviewers run.
 
@@ -375,7 +383,10 @@ Config should not allow arbitrary phase ordering in v1.
 
 Reviewer output is JSON validated with Effect Schema.
 
-Sandcastle should handle structured output retry.
+Sandcastle handles structured output retry.
+But Why validates the final output before storing Findings.
+Reviewer output contains exactly one top-level field named `findings`.
+Unknown fields are rejected.
 
 Finding shape:
 
@@ -391,6 +402,12 @@ artifactRefs
 Reviewer Findings must include `severity`.
 
 Missing or invalid reviewer severity is a reviewer output contract failure.
+Finding text fields must be non-empty.
+Finding `files` entries must be repo-relative paths.
+The `files` array may be empty when the reviewer cannot identify a specific file.
+Finding `artifactRefs` entries use `artifact:<validation-run-id>/<phase>/<producer>/<filename>`.
+The `artifactRefs` array may be empty when no stored artifact supports the Finding.
+Schema decoding validates reference shape, while repository and artifact existence are checked later with the required runtime context.
 
 Any Finding blocks v1 validation and moves the Task to `needs_input`, regardless of severity.
 
@@ -411,6 +428,11 @@ totalTokens
 ```
 
 Run and task totals sum each token bucket separately.
+
+Runtime token usage payloads require `inputTokens` and `outputTokens` as non-negative integers.
+Missing `cachedInputTokens` normalizes to `0`.
+Missing `totalTokens` normalizes to `inputTokens + outputTokens`.
+An absent token usage payload creates no Token Usage Record.
 
 ## Related docs
 

@@ -28,7 +28,7 @@ Effect error types should live in workflow or adapter seams and should not leak 
 - [x] The taxonomy distinguishes Submit Rejection Errors from Validation Tooling Failures.
 - [x] Submit Rejection Errors cover repo and global config validation failure.
 - [x] Submit Rejection Errors cover missing reviewer profile or invalid reviewer config.
-- [x] Submit Rejection Errors cover invalid sandbox mode from config.
+- [x] Repo config validation failures cover unsupported sandbox modes before Validation Run creation.
 - [x] Validation Tooling Failures cover validation workspace setup failure.
 - [x] Validation Tooling Failures cover unavailable sandboxing at runtime.
 - [x] Validation Tooling Failures cover command execution tooling failure separately from a check command's non-zero exit.

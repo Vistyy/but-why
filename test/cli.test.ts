@@ -544,11 +544,10 @@ help[1]: "Keep using OLD, or manually migrate .but-why/config.json before runnin
 
     expect(result.status).toBe(1);
     expect(result.stderr).toBe("");
-    expect(result.stdout).toBe(`error:
-  code: invalid_repo_config
-  message: .but-why/config.json is not valid But Why? repo config.
-  path: .but-why/config.json
-help[1]: Fix the JSON or move the file aside before running init again.`);
+    expect(result.stdout).toContain("code: invalid_repo_config");
+    expect(result.stdout).toContain("expected: valid JSON");
+    expect(result.stdout).toContain('actual: "{"');
+    expect(result.stdout).toContain("Invalid JSON:");
   });
 
   it("prints invalid_repo_config for wrong config schema", () => {
@@ -563,11 +562,10 @@ help[1]: Fix the JSON or move the file aside before running init again.`);
 
     expect(result.status).toBe(1);
     expect(result.stderr).toBe("");
-    expect(result.stdout).toBe(`error:
-  code: invalid_repo_config
-  message: .but-why/config.json is not valid But Why? repo config.
-  path: .but-why/config.json
-help[1]: Fix the JSON or move the file aside before running init again.`);
+    expect(result.stdout).toContain("code: invalid_repo_config");
+    expect(result.stdout).toContain("path[1]: extra");
+    expect(result.stdout).toContain("actual: true");
+    expect(result.stdout).toContain("message: Unknown key.");
   });
 
   it("maps runtime errors without leaking stack traces", () => {

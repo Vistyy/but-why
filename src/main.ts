@@ -1,4 +1,7 @@
 #!/usr/bin/env node
+import { homedir } from "node:os";
+import { join } from "node:path";
+
 import { Effect } from "effect";
 
 import { mapRuntimeError, runCli } from "./cli.js";
@@ -16,6 +19,7 @@ Effect.runPromise(
   runCli(args, {
     executablePath,
     cwd: process.cwd(),
+    globalConfigPath: join(homedir(), ".config/but-why/config.json"),
     now: fixedNow === undefined ? () => new Date() : () => new Date(fixedNow),
   }),
 )

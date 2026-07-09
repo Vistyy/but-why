@@ -69,6 +69,7 @@ export const runByInProcess = (
       runCli(args, {
         executablePath: byExecutable,
         cwd,
+        globalConfigPath: join(cwd, ".test-global-config.json"),
         now: () => new Date(now),
       }),
     ),
@@ -84,6 +85,7 @@ export const runByInProcessAsync = async (
       runCli(args, {
         executablePath: byExecutable,
         cwd,
+        globalConfigPath: join(cwd, ".test-global-config.json"),
         now: () => new Date(now),
       }),
     ),

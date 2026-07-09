@@ -28,8 +28,8 @@ lint:
 typecheck:
     pnpm run typecheck
 
-test:
-    pnpm run test
+test *args:
+    pnpm exec vitest run "$@"
 
 pack:
     npm pack

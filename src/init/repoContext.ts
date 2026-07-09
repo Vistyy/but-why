@@ -1,9 +1,10 @@
 import { existsSync, mkdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 
+import type { RepoConfig } from "../contracts/repoConfig.js";
 import { findGitRoot } from "./git.js";
 import { ensureGitignoreBlock } from "./gitignore.js";
-import { readRepoConfig, type RepoConfig, writeRepoConfig } from "./repoConfig.js";
+import { readRepoConfig, writeRepoConfig } from "./repoConfig.js";
 import { ensureStateDatabase } from "./stateDatabase.js";
 
 const taskPrefixPattern = /^[A-Z][A-Z0-9]{1,9}$/;
@@ -54,6 +55,7 @@ export type InitRepoError =
     }
   | {
       readonly code: "invalid_repo_config";
+      readonly error: import("../contracts/configErrors.js").RepoConfigValidationFailed;
     }
   | {
       readonly code: "task_prefix_conflict";
@@ -82,6 +84,7 @@ export type LoadRepoLocalContextError =
     }
   | {
       readonly code: "invalid_repo_config";
+      readonly error: import("../contracts/configErrors.js").RepoConfigValidationFailed;
     };
 
 const isValidTaskPrefix = (taskPrefix: string): boolean => taskPrefixPattern.test(taskPrefix);
@@ -126,8 +129,8 @@ export const initRepoLocalContext = (input: InitRepoInput): InitRepoResult => {
   if (wasInitialized) {
     const config = readRepoConfig(paths.configPath);
 
-    if (!config.ok || !isValidTaskPrefix(config.config.taskPrefix)) {
-      return { ok: false, error: { code: "invalid_repo_config" } };
+    if (!config.ok) {
+      return { ok: false, error: { code: "invalid_repo_config", error: config.error } };
     }
 
     if (config.config.taskPrefix !== input.taskPrefix) {
@@ -198,8 +201,8 @@ export const loadRepoLocalContext = (cwd: string): LoadRepoLocalContextResult =>
 
   const repoConfig = readRepoConfig(paths.configPath);
 
-  if (!repoConfig.ok || !isValidTaskPrefix(repoConfig.config.taskPrefix)) {
-    return { ok: false, error: { code: "invalid_repo_config" } };
+  if (!repoConfig.ok) {
+    return { ok: false, error: { code: "invalid_repo_config", error: repoConfig.error } };
   }
 
   return {
