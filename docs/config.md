@@ -85,11 +85,7 @@ If detection fails, `by submit <task-id>` fails during preflight.
   },
   "validationWorkspace": {
     "copyFiles": [".env.test", "config/local-validation.json"]
-  },
-  "ignorePatterns": [
-    "*.generated.ts",
-    "vendor/**"
-  ]
+  }
 }
 ```
 

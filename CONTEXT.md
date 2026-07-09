@@ -157,6 +157,11 @@ The command, reviewer, service, or tool that creates a finding, artifact, or tok
 Producers are shown as the human-readable source of validation output.
 _Avoid_: Tool, actor, substep
 
+**Token Usage Record**:
+A validation accounting record that attributes agent token consumption to one Producer, agent runtime, and agent model.
+Token Usage Records preserve input, cached input, output, and total token buckets separately and are not dollar costs.
+_Avoid_: Cost record, usage blob, token total
+
 **Artifact**:
 A durable validation output record, such as command stdout, stderr, exit code, logs, reviewer output, or transcript, addressed by an artifact ref.
 Artifact storage is outside the Validation Workspace.
@@ -178,6 +183,16 @@ _Avoid_: Ticket data, prompt context
 The immutable Task Context owned by a Validation Run that records the intent judged by that run.
 It contains the title, description, and ordered Task Comment content captured when validation starts.
 _Avoid_: Task Context revision, live Task Context
+
+**Repo Config**:
+Repository-owned configuration that defines how But Why? validates work for that repository.
+Repo Config owns validation policy such as validation commands, sandbox policy, and reviewer selection.
+_Avoid_: Project defaults, local config
+
+**Global Config**:
+User-owned or machine-owned configuration for reusable local settings shared across repositories.
+Global Config can define Agent Profiles, but it does not define a repository's validation policy.
+_Avoid_: Repo fallback config, validation defaults
 
 **Agent Profile**:
 A named configuration for running an agent reviewer.
