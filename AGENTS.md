@@ -13,8 +13,9 @@
 - Development tooling: `docs/tooling.md`.
 - Accepted architecture decisions: `docs/adr/`.
 - Open design questions: `docs/open-questions.md`.
-- Configuration: `docs/config.md`.
-- Setup and onboarding: `docs/setup.md`.
+- Internal configuration reference: `docs/config.md`.
+- Internal setup and onboarding: `docs/setup.md`.
+- Shipped public docs for installed users: `docs/public/config.md` and `docs/public/setup.md`.
 
 ## Code map
 
