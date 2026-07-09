@@ -69,6 +69,11 @@ The `by` executable as used from outside the But Why? source checkout after pack
 Installed CLI behavior is the user and agent contract for other repositories.
 _Avoid_: Repo-local development command, source checkout wrapper
 
+**Agent-Assisted Setup Guide**:
+A public setup document that a user can hand to an agent or follow manually to install But Why?, initialize a repository, and choose whether and where to place the But Why agent skill.
+The guide is not a hidden installer and does not silently change agent behavior.
+_Avoid_: Interactive installer, bootstrap skill, silent skill install
+
 **Repo-local CLI**:
 The `by` command path used by But Why? contributors to run the current source checkout.
 Repo-local CLI usage is for developing But Why? itself, not for using But Why? from another repository.

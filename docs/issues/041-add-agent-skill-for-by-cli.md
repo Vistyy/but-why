@@ -10,38 +10,49 @@ Not done.
 
 ## What to build
 
-Create an agent-facing `SKILL.md` that teaches coding agents how to operate the `by` CLI safely and effectively.
+Create the public But Why agent skill artifact and the setup path that tells users and agents how to place it.
 
-The skill should make But Why? usable by agents without requiring them to rediscover command order, output contracts, task lifecycle rules, validation failure handling, or the Installed CLI versus Repo-local CLI split.
+This issue is about skill existence, packaging, and installation guidance.
+Detailed skill workflow content is deferred to `docs/issues/047-design-but-why-agent-skill-workflow-content.md`.
 
-The skill is not the bootstrap source for installing But Why? before the skill is available.
-It should reference the setup and install guidance produced by issue 044.
+`docs/public/setup.md` is the Agent-Assisted Setup Guide.
+It should include copyable setup instructions that a user can give to an agent or follow manually.
+The instructions should install But Why?, run `by init`, consult public setup docs, detect the user's existing skill-location preferences, and ask for confirmation before placing the But Why agent skill.
+
+The packaged skill source is `docs/public/skills/but-why/SKILL.md`.
+Installing the skill should be explicit and visible because it can change an agent's workflow.
+Skill placement is documentation-guided, not managed by the `by` CLI.
 
 ## Acceptance criteria
 
-- [ ] The skill documents that But Why? validates completed code changes against approved human intent.
-- [ ] The skill describes the Task lifecycle states agents need for normal use.
-- [ ] The skill tells agents when to use `by task create`, `by task start`, `by submit`, `by task findings`, and `by validation-run show`.
-- [ ] The skill tells agents to prefer structured CLI output and parse stdout as the command contract.
-- [ ] The skill explains the difference between Submit Rejection Errors, Validation Tooling Failures, and Findings.
-- [ ] The skill tells agents that Findings send Tasks to `needs_input` and require code changes before resubmit.
-- [ ] The skill tells agents that Validation Tooling Failures are tooling problems, not submission problems.
-- [ ] The skill includes the expected prepare-and-check submit loop.
-- [ ] The skill explains that agents should configure explicit `validation.prepare` and `validation.checks` policy instead of relying on hidden dependency setup.
-- [ ] The skill explains that `by init` gives concise setup hints, while the skill carries the detailed agent workflow.
-- [ ] The skill includes prepare examples for common ecosystems such as pnpm, uv, Cargo, and .NET.
-- [ ] The skill tells agents not to hide dependency setup inside checks when `validation.prepare` is available.
-- [ ] The skill distinguishes Repo-local CLI usage from Installed CLI usage: use `just by ...` when developing But Why? itself, and use installed `by ...` when operating in another repository.
-- [ ] The skill references the setup and install guidance produced by issue 044 instead of being the only bootstrap source.
-- [ ] The skill treats npm registry publishing as future work until issue 046 is complete.
-- [ ] The skill uses tarball install guidance before registry publishing is available and for latest-local-checkout installs after publishing.
-- [ ] The skill does not require `by --version` until issue 046 adds it.
-- [ ] The skill includes guidance for creating a But Why Task from an existing markdown issue with `--description-file` without treating markdown files as the Task authority.
-- [ ] The skill warns agents not to edit repo-local SQLite state directly.
-- [ ] The skill warns agents not to inspect validation artifacts through workspace paths.
-- [ ] The skill points agents at the CLI inspection commands for Findings, rounds, phases, artifacts, and tooling failures.
-- [ ] The skill follows AXI guidance for non-interactive agent-facing CLIs.
-- [ ] The skill location is documented so agents can install or reference it consistently.
+- [ ] The packaged skill source exists at `docs/public/skills/but-why/SKILL.md`.
+- [ ] The skill frontmatter uses `name: but-why`.
+- [ ] The skill description is narrow and triggers on running `by` commands or setting up But Why in a repository.
+- [ ] The skill body is minimal and points to `docs/public/setup.md` for setup before detailed workflow content exists.
+- [ ] The packaged skill source is included in tarballs and future npm releases.
+- [ ] `docs/public/setup.md` is the public Agent-Assisted Setup Guide.
+- [ ] `docs/public/setup.md` includes copyable instructions that a user can give to an agent.
+- [ ] The setup flow tells the user or agent to install But Why? using the current public install guidance.
+- [ ] The setup flow tells the user or agent to run `by init` after installation.
+- [ ] The setup flow treats skill installation as recommended for agent use, but optional.
+- [ ] The setup flow tells the agent to detect existing project and user skill-location conventions before proposing where to place the skill.
+- [ ] The setup flow does not present a fixed preferred destination list for skills.
+- [ ] The setup flow includes an option to skip skill installation.
+- [ ] The setup flow asks for explicit confirmation before copying the skill.
+- [ ] The setup flow preserves the folder shape `<chosen-skill-root>/but-why/SKILL.md`.
+- [ ] The setup flow asks the user to choose project or user scope after showing detected conventions.
+- [ ] The setup flow shows a diff or summary and asks for confirmation before overwriting an existing `but-why` skill.
+- [ ] README contains this minimal copyable prompt and does not duplicate setup steps:
+
+  ```text
+  Install But Why for this repository.
+  Follow docs/public/setup.md in this repository.
+  Before installing the agent skill, detect my existing skill conventions and ask where to place it.
+  ```
+- [ ] `by init` output points to `docs/public/setup.md` and may mention the packaged skill path.
+- [ ] `by init` does not install or copy the skill.
+- [ ] Issue 041 does not add a `by` command for skill installation.
+- [ ] Detailed CLI workflow guidance for the skill is deferred to `docs/issues/047-design-but-why-agent-skill-workflow-content.md`.
 
 ## Blocked by
 
