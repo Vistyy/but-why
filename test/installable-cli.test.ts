@@ -102,6 +102,7 @@ describe("installable by CLI package", () => {
     expect(packed.files).toContain("README.md");
     expect(packed.files).toContain("docs/public/config.md");
     expect(packed.files).toContain("docs/public/setup.md");
+    expect(packed.files).toContain("docs/public/skills/but-why/SKILL.md");
     expect(packed.files.some((path) => path.startsWith("src/"))).toBe(false);
     expect(packed.files.some((path) => path.startsWith("test/"))).toBe(false);
     expect(packed.files.some((path) => path.startsWith("spikes/"))).toBe(false);

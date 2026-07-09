@@ -13,3 +13,13 @@ Current direction:
 - keep custom code focused on tasks, runs, findings, PR readiness, and policy
 
 Nothing is stable yet.
+
+## Agent-assisted setup
+
+Give this prompt to an agent:
+
+```text
+Install But Why for this repository.
+Follow docs/public/setup.md in this repository.
+Before installing the agent skill, detect my existing skill conventions and ask where to place it.
+```
