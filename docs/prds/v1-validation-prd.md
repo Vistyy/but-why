@@ -54,7 +54,7 @@ Sandcastle is the accepted execution engine for validation worktrees, command ch
 
 13. As a repo maintainer, I want multiple check commands to be possible, so that different repositories can model validation at the right granularity.
 
-14. As a user, I want an early intent review, so that a branch that does not satisfy the Task does not go through the full review process.
+14. As a user, I want an early Acceptance Review, so that a branch that does not fully and correctly achieve the intended result does not go through the full review process.
 
 15. As a user, I want configurable reviewer roles, so that each repository can choose the review perspectives it needs.
 
@@ -86,9 +86,9 @@ Sandcastle is the accepted execution engine for validation worktrees, command ch
 
 29. As an agent, I want actionable structured errors, so that I can repair setup or state problems without guessing.
 
-30. As a repo maintainer, I want repo config and global agent profiles, so that validation behavior and user defaults are separated.
+30. As a repo maintainer, I want repo config, a global default agent harness, and reusable agent profiles, so that validation behavior and user defaults are separated.
 
-31. As a user, I want `agentRuntime` and `agentModel` to name agent settings, so that Pi model strings are not confused with generic provider names.
+31. As a user, I want `agentRuntime` to identify the harness and optional `agentModel` to override its default model, so that harness choice is explicit without repeating user model defaults.
 
 32. As a user, I want Sandcastle to handle execution plumbing, so that But Why? does not reimplement agent running, worktrees, logs, retries, or token usage.
 
@@ -118,7 +118,9 @@ Sandcastle is the accepted execution engine for validation worktrees, command ch
 
 - There is no public Submission ID in v1.
 
-- A Run validates one commit SHA.
+- A Run validates one submitted commit SHA relative to a fixed comparison base SHA.
+
+- The comparison base is the merge base between the submitted commit and the configured base branch captured when the Run starts.
 
 - A new commit creates a new Run.
 
@@ -148,7 +150,7 @@ Sandcastle is the accepted execution engine for validation worktrees, command ch
 
 - But Why? uses fixed Validation Gate phases instead of a generic CI pipeline language.
 
-- Planned v1 phases are preflight, checks, intent review, quality review, publish PR, and watch PR.
+- Planned v1 phases are preflight, prepare, checks, Acceptance Review, Quality Review, publish PR, and watch PR.
 
 - Repo config fills these phases but does not reorder them.
 
@@ -160,11 +162,15 @@ Sandcastle is the accepted execution engine for validation worktrees, command ch
 
 - A failed check creates a blocking Finding.
 
-- Reviewer roles are configurable and are not fixed by the architecture.
+- Acceptance Review is mandatory and runs before Quality Review.
 
-- Intent review runs before quality review.
+- The Acceptance Reviewer determines the intended result from the Task Context Snapshot and judges whether the submission achieves it fully and correctly.
 
-- Quality reviewer grouping can be configured later without changing the core model.
+- But Why? provides a default Acceptance Reviewer prompt.
+
+- Repo config can directly override the Acceptance Reviewer profile or completely replace its prompt.
+
+- Quality Reviewer roles and grouping are configurable without changing the core model.
 
 - Reviewer output is JSON validated with Effect Schema.
 
@@ -198,21 +204,27 @@ Sandcastle is the accepted execution engine for validation worktrees, command ch
 
 - V1 records token usage, not dollar cost.
 
-- Token usage is tracked per producer and model.
+- Token usage is tracked per producer and model when the harness supplies it.
+
+- Missing harness token usage is represented as unavailable without inventing values or failing review.
 
 - Token buckets are input, cached input, output, and total.
 
 - Repo config stores validation behavior.
 
-- Global config stores user defaults such as agent profiles and sandbox defaults.
+- Global config stores the default agent harness and reusable settings such as agent profiles and sandbox defaults.
 
-- Agent profiles use `agentRuntime` and `agentModel`.
+- Agent-assisted setup detects supported installed harnesses, records the user's chosen global default, and verifies that it can run.
 
-- Agent config precedence is reviewer inline setting, repo profile, global profile, then error.
+- The `by` CLI remains non-interactive when detection needs a user choice.
 
-- Repo init may succeed without agent profiles.
+- Agent profiles use `agentRuntime` and may use `agentModel` to override the harness default.
 
-- Submit fails during preflight if a required reviewer profile cannot be resolved.
+- Acceptance Reviewer config precedence is a direct `review.acceptance` override, a selected repo profile, the global default profile, then error.
+
+- Repo init may succeed without repo-local agent profiles.
+
+- Submit fails during preflight if no usable harness profile can be resolved.
 
 - Git facts such as base branch, remote, GitHub repository, and GitHub auth are detected at runtime.
 
@@ -252,7 +264,15 @@ Sandcastle is the accepted execution engine for validation worktrees, command ch
 
 - The Sandcastle spike used the real dependency before production implementation started.
 
-- Reviewer output tests should use golden fixtures for task context, diff, and expected findings behavior.
+- Reviewer orchestration, schema, retry, storage, and tooling-failure behavior are covered by code tests.
+
+- Reviewer judgment is measured by a model eval harness using small real repositories, fixed base and submitted commits, Task Context Snapshots, and human-reviewed expected results.
+
+- Acceptance Reviewer evals measure decision correctness, expected-problem coverage, Finding precision, evidence quality, and output-contract validity.
+
+- Objective eval facts are checked in code, while a separate pinned grader model judges semantic matches against the human-reviewed rubric.
+
+- Eval cases run repeatedly, record their full reviewer and grader setup, and use pass thresholds calibrated against human judgment.
 
 - Check failure tests should prove that failed commands become blocking Findings.
 

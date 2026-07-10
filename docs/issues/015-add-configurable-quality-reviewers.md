@@ -10,13 +10,13 @@ Not done.
 
 ## What to build
 
-Run configured quality reviewers after intent review passes.
+Run configured Quality Reviewers after Acceptance Review passes.
 
 Reviewer role names should come from config, not hard-coded architecture assumptions.
 
 ## Acceptance criteria
 
-- [ ] Quality reviewers run only after checks and intent review pass.
+- [ ] Quality Reviewers run only after checks and Acceptance Review pass.
 - [ ] Quality reviewers run inside the Validation Workspace, not the user's checkout.
 - [ ] Repo config can define reviewer roles and instruction files.
 - [ ] Reviewer roles can resolve inline settings, repo agent profiles, or global agent profiles.
@@ -32,6 +32,6 @@ Reviewer role names should come from config, not hard-coded architecture assumpt
 
 ## Blocked by
 
-- 014-add-intent-reviewer-agent.md
+- `docs/issues/021-build-reviewer-model-eval-harness.md`
 - `docs/issues/037-introduce-validation-effect-error-taxonomy.md`
 - `docs/issues/039-validate-config-and-reviewer-contracts-with-effect-schema.md`

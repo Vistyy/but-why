@@ -10,29 +10,35 @@ Done issues are omitted from this graph.
 
 ## Can start immediately
 
-- `041-add-agent-skill-for-by-cli.md`
 - `046-publish-by-to-npm-registry.md`
+- `047-design-but-why-agent-skill-workflow-content.md`
+- `049-configure-default-agent-harness-during-setup.md`
 
 ## Remaining dependency graph
 
 ```text
-041 agent skill for by CLI
-  -> 028 Validation Run Task Context snapshots
-  -> 039 config and reviewer Schema contracts
-    -> 014 intent reviewer
+049 default agent harness setup
+  -> 014 acceptance reviewer
+    -> 021 reviewer model eval harness
       -> 015 quality reviewers
         -> 016 publish PR
           -> 040 Effect-scheduled GitHub polling
             -> 017 watch PR
               -> 019 reconcile
                 -> 020 daemon
-      -> 018 token summaries
-      -> 021 reviewer evals
+        -> 018 token summaries
 
 046 publish by to npm registry
+
+047 agent skill workflow content
 ```
+
+## Deferred
+
+- `048-add-planning-phase-intent-reviewer.md` starts after Planning Phase architecture and the Task-readiness workflow are designed.
 
 ## Notes
 
-- Issue 041 can start now that init validation guidance and installable CLI packaging are done.
-- Issue 046 can start now that installable CLI packaging is done.
+- Issue 049 can start now that config and reviewer Schema contracts exist.
+- Acceptance Review uses the shared reviewer runner and context introduced by issue 014.
+- Quality Reviewers start after issue 021 establishes and calibrates the reviewer model eval harness.

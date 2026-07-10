@@ -61,15 +61,15 @@ The remaining config shape is open for whether check commands should support arg
 
 The config should stay small and should not become a generic workflow language.
 
-## Reviewer role set
+## Quality Reviewer role set
 
-Reviewer roles are configurable and are not fixed by the v1 architecture.
+Acceptance Review is mandatory.
+Quality Reviewer roles remain configurable and are not fixed by the v1 architecture.
 
-We still need to decide the default reviewer set created by `by init`.
+We still need to decide the default Quality Reviewer set created by `by init`.
 
 Candidate roles:
 
-- intent
 - bugs
 - simplicity
 - domain
@@ -114,14 +114,6 @@ cachedInputTokens
 outputTokens
 totalTokens
 ```
-
-## Evals
-
-Reviewer agents need evals from the beginning.
-
-The unresolved question is how formal those evals need to be in v1.
-
-At minimum, we need golden fixtures for task context plus diff plus expected findings behavior.
 
 ## Observability beyond local records
 

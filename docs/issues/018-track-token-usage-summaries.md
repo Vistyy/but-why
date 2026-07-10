@@ -27,6 +27,6 @@ Usage should stay split by producer, model, and token bucket because later dolla
 
 ## Blocked by
 
-- 014-add-intent-reviewer-agent.md
-- 015-add-configurable-quality-reviewers.md
+- `docs/issues/014-add-acceptance-reviewer-agent.md`
+- `docs/issues/015-add-configurable-quality-reviewers.md`
 - `docs/issues/039-validate-config-and-reviewer-contracts-with-effect-schema.md`

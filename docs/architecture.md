@@ -29,7 +29,9 @@ A failed preflight creates neither a Submission nor a Validation Run.
 
 There is no public Submission ID in v1.
 
-A Validation Run validates one submitted commit SHA.
+A Validation Run validates one submitted commit SHA relative to the fixed comparison base SHA captured when the run starts.
+
+The comparison base is the merge base between the submitted commit and the configured base branch.
 
 A new commit creates a new Validation Run.
 
@@ -84,7 +86,7 @@ V1 phases are:
 preflight
 prepare
 checks
-intent_review
+acceptance_review
 quality_review
 publish_pr
 watch_pr
@@ -104,9 +106,17 @@ V1 checks run sequentially and stop on first failure.
 
 A failed check creates a blocking Finding.
 
-Reviewer roles are configurable.
+Acceptance Review is mandatory and runs before Quality Review.
 
-Intent review runs before quality review.
+The Acceptance Reviewer judges whether the submission achieves the intended result in the Task Context Snapshot fully and correctly.
+
+But Why? supplies a default Acceptance Reviewer prompt.
+Repo config can directly override its Agent Profile or replace its prompt.
+
+Acceptance Reviewer output contains only Findings.
+An empty Findings list passes Acceptance Review.
+
+Quality Reviewer roles are configurable.
 
 V1 has no auto-fix or repair phase.
 
@@ -166,6 +176,15 @@ But Why? should use Sandcastle for:
 - logs
 - structured output retries
 - token usage
+
+One shared reviewer runner dispatches to the Sandcastle adapter selected by the resolved Agent Profile.
+
+Every reviewer receives the Task Context Snapshot, fixed comparison base SHA, submitted commit SHA, and a clean view of the submitted code.
+The execution wrapper presents Task Context and ordinary repository content as material to review while preserving the harness's trusted project instructions.
+
+Reviewer output and execution logs are Validation Run artifacts.
+Findings, tooling failures, and available token usage remain separate records.
+Missing harness token usage is represented as unavailable without failing review or inventing values.
 
 But Why? should not reimplement those concerns.
 
@@ -244,7 +263,7 @@ Global config lives at:
 
 Repo config owns validation behavior.
 
-Global config owns reusable local settings such as Agent Profiles.
+Global config owns the default agent harness and reusable local settings such as Agent Profiles.
 Global config is not a fallback for repo validation policy.
 
 But Why validation config lives under `.but-why`.
@@ -255,18 +274,21 @@ Normal But Why validation must not require a tracked `.sandcastle/` directory.
 
 Git facts such as base branch, publish remote, GitHub repository, and GitHub auth are detected at runtime.
 
-Agent profiles use `agentRuntime` and `agentModel`.
+Agent profiles use `agentRuntime` and may use `agentModel` to override the harness's own default model.
 
 Do not call these fields `provider` and `model`.
 
 Pi model strings can already contain provider-like names.
 
-Agent config precedence is:
+Agent-assisted global setup detects supported installed harnesses, records the user's selected default, and verifies that it can run.
+The setup agent makes any ambiguous choice with the user while `by` commands remain non-interactive.
+
+Acceptance Reviewer config precedence is:
 
 ```text
-reviewer inline setting
-  -> repo agent profile
-  -> global agent profile
+review.acceptance direct override
+  -> selected repo agent profile
+  -> global default agent profile
   -> error
 ```
 

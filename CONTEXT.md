@@ -5,7 +5,7 @@ But Why? validates completed code changes against approved human intent and coor
 ## Language
 
 **Validation Run**:
-A validation attempt that judges one submitted commit SHA against Task Context through the Validation Gate.
+A validation attempt that judges one submitted commit SHA against Task Context through the Validation Gate, using the fixed comparison base SHA captured when the attempt starts.
 In v1, a Task can have only one active Validation Run at a time.
 A Validation Run can resume after a crash, but a new commit creates a successor Validation Run that may reuse prior results when policy allows.
 A terminal Validation Run may be followed by another Validation Run for the same commit when validation must be retried.
@@ -115,6 +115,10 @@ _Avoid_: Factory agent, coder
 The stage that judges a submission against the task intent and project checks.
 The validation gate is made of phases and rounds, and it must not trust the implementer’s own summary of intent.
 _Avoid_: Pipeline, CI
+
+**Acceptance Reviewer**:
+A coding agent that determines the intended result from the Task Context Snapshot and judges whether the submission implements that result fully and correctly.
+_Avoid_: Intent Reviewer, requirements tracer, task summarizer
 
 **Validation Workspace**:
 A resource scoped to exactly one Validation Run that provides an isolated copy of the submitted commit for validation phases to use.
