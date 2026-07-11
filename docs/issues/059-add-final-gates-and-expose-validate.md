@@ -20,6 +20,7 @@ Fix their combined Findings, rerun both final reviewers until the Candidate pass
 - [ ] Resolved Final and Acceptance Findings link to an eligible successor result without mutating the original Finding.
 - [ ] The Validation Run becomes eligible only after every required final review returns no Findings.
 - [ ] `by validate` uses Issue 051's shared capability to automatically resolve the Change and capture or reuse the current Candidate before running the complete Validation Gate.
+- [ ] `by validate --rebind <change-id>` explicitly confirms an unproven branch rename through the shared capture capability.
 - [ ] `by validate` runs the complete Validation Gate on a standalone Change and never publishes.
 - [ ] Structured output distinguishes active, passed, blocked, Needs Input precursor, and tooling-failure outcomes.
 

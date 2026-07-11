@@ -362,12 +362,16 @@ Configured checks always run against the complete current Candidate.
 
 ## Base selection
 
-Automatic base selection currently follows this intended order:
+Automatic base selection follows this order:
 
 1. Existing active Change base.
-2. Existing PR base.
-3. Explicit CLI override.
-4. Repository-configured default branch.
+2. A base supplied by the caller for a new Change.
+3. The unambiguous remote default branch recorded by local Git.
+
+The capture capability does not depend on where a caller-supplied base came from.
+For example, later PR reconciliation may supply an existing PR base without adding PR knowledge to capture.
+Every selected base resolves to an existing full local `refs/heads/*` ref.
+If no base can be selected safely, capture rejects without fetching or guessing.
 
 The Candidate comparison base SHA is the Git merge base of its exact head and the selected base reference's resolved tip when the Candidate is captured.
 But Why? records the selected base reference, its resolved tip SHA, the comparison base SHA, and the Candidate head SHA.
