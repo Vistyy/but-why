@@ -303,7 +303,7 @@ describe("by submit CLI", () => {
       review: { intent: { reviewer: "intent" } },
       reviewers: {
         intent: {
-          profile: "default",
+          agentProfile: "default",
           instructionsFile: ".but-why/reviewers/intent.md",
         },
       },
@@ -333,9 +333,10 @@ describe("by submit CLI", () => {
     writeRepoConfig(root, {
       taskPrefix: "BY",
       validation: { checks: [{ id: "quality", command: "true" }] },
+      review: { intent: { reviewer: "intent" } },
       reviewers: {
-        unused: {
-          profile: "missing",
+        intent: {
+          agentProfile: "missing",
           instructionsFile: ".but-why/reviewers/intent.md",
         },
       },
@@ -347,13 +348,13 @@ describe("by submit CLI", () => {
 
     expect(result.status).toBe(1);
     expect(result.stderr).toBe("");
-    expect(result.stdout).toContain("code: missing_reviewer_profile");
+    expect(result.stdout).toContain("code: missing_agent_profile");
     expect(result.stdout).toContain("profileName: missing");
     expect(taskHasNoValidationRuns(root, "BY-1")).toBe(true);
     expect(taskState(root, "BY-1")).toBe("implementing");
   });
 
-  it("rejects invalid global config before Validation Run creation", () => {
+  it("does not validate unused Agent Profiles", () => {
     const root = preparedRepoOnBranch("feature/invalid-global-config");
     const globalConfigPath = join(root, ".test-home/.config/but-why/config.json");
 
@@ -362,15 +363,12 @@ describe("by submit CLI", () => {
       globalConfigPath,
       JSON.stringify({ agentProfiles: { default: { agentRuntime: "pi" } } }),
     );
+    writeFileSync(join(root, ".git/info/exclude"), ".test-home/\n", { flag: "a" });
 
     const result = withFakeGh(() => runSubmit(root, ["BY-1"], thirdNow));
 
-    expect(result.status).toBe(1);
+    expect(result.status).toBe(0);
     expect(result.stderr).toBe("");
-    expect(result.stdout).toContain("code: invalid_global_config");
-    expect(result.stdout).toContain("agentProfiles.default.agentModel");
-    expect(taskHasNoValidationRuns(root, "BY-1")).toBe(true);
-    expect(taskState(root, "BY-1")).toBe("implementing");
   });
 
   it("rejects top-level checks config before Validation Run creation", () => {

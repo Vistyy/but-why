@@ -13,7 +13,6 @@ Done issues are omitted from this graph.
 - `040-add-effect-scheduled-github-polling.md`
 - `046-publish-by-to-npm-registry.md`
 - `047-design-but-why-agent-skill-workflow-content.md`
-- `049-configure-default-agent-harness-during-setup.md`
 - `051-capture-and-inspect-standalone-change.md`
 - `054-link-tasks-and-project-initial-status.md`
 
@@ -27,11 +26,11 @@ Done issues are omitted from this graph.
 054 link Tasks and project initial status
   -> 068 add Task dependencies and eligibility
 
-049 default agent harness + 053 validation idempotency
+053 validation idempotency
   -> 055 shared reviewer runner
     -> 056 selective Specialist Reviewers
 
-049 default agent harness + 053 validation idempotency
+053 validation idempotency
   -> 057 Code-Writing Executions and check fixing
 
 056 Specialists + 057 Code-Writing Executions

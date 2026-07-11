@@ -2,7 +2,7 @@
 
 ## Status
 
-Not done.
+Done.
 
 ## Parent
 
@@ -44,23 +44,23 @@ Do not add harness listing, detection, verification, or configuration commands t
 
 ## Acceptance criteria
 
-- [ ] The public Agent-Assisted Setup Guide asks whether to use the current harness or another supported harness without scanning the machine.
-- [ ] The supported runtime choices are `pi`, `claude-code`, `codex`, `cursor`, `opencode`, and `copilot`.
-- [ ] One internal runtime adapter registry defines the supported choices, and a test keeps the public setup guide in sync with it.
-- [ ] Global Config selects a named Agent Profile through `defaultAgentProfile`.
-- [ ] Setup updates Global Config directly while preserving unrelated settings and existing Agent Profiles.
-- [ ] Setup reuses a matching Agent Profile and handles a conflicting runtime-based profile name by asking the user for another name.
-- [ ] An Agent Profile keeps `agentRuntime`, optional `agentModel`, and optional `thinking` together.
-- [ ] Setup suggests the current model when known and otherwise asks for a model when the selected adapter requires one.
-- [ ] Omitted `agentModel` is valid only when the selected runtime adapter supports the harness's own default model.
-- [ ] An explicit `agentProfile` resolves Repo Config first and Global Config second.
-- [ ] An omitted `agentProfile` resolves `defaultAgentProfile` from Global Config only.
-- [ ] Reviewer configuration uses `agentProfile`; reviewer `profile` and inline runtime, model, and thinking settings are removed.
-- [ ] The shared profile-resolution contract can be used by Implementer, Fixer Agent, Specialist Reviewer, Final Reviewer, and Acceptance Reviewer integrations without defining their outer phase config in this issue.
-- [ ] Agent Profile validation runs when an operation needs an agent and does not block unrelated commands.
-- [ ] Unsupported runtimes, missing profiles, missing required models, and harness launch failures produce structured typed errors with concrete setup actions.
-- [ ] Public setup and config docs explain supported harnesses, selection, profile creation, model handling, defaults, overrides, and runtime failure behavior.
-- [ ] No new harness listing, detection, verification, or configuration commands are added to `by`.
+- [x] The public Agent-Assisted Setup Guide asks whether to use the current harness or another supported harness without scanning the machine.
+- [x] The supported runtime choices are `pi`, `claude-code`, `codex`, `cursor`, `opencode`, and `copilot`.
+- [x] One internal runtime adapter registry defines the supported choices, and a test keeps the public setup guide in sync with it.
+- [x] Global Config selects a named Agent Profile through `defaultAgentProfile`.
+- [x] Setup updates Global Config directly while preserving unrelated settings and existing Agent Profiles.
+- [x] Setup reuses a matching Agent Profile and handles a conflicting runtime-based profile name by asking the user for another name.
+- [x] An Agent Profile keeps `agentRuntime`, optional `agentModel`, and optional `thinking` together.
+- [x] Setup suggests the current model when known and otherwise asks for a model when the selected adapter requires one.
+- [x] Omitted `agentModel` is valid only when the selected runtime adapter supports the harness's own default model.
+- [x] An explicit `agentProfile` resolves Repo Config first and Global Config second.
+- [x] An omitted `agentProfile` resolves `defaultAgentProfile` from Global Config only.
+- [x] Reviewer configuration uses `agentProfile`; reviewer `profile` and inline runtime, model, and thinking settings are removed.
+- [x] The shared profile-resolution contract can be used by Implementer, Fixer Agent, Specialist Reviewer, Final Reviewer, and Acceptance Reviewer integrations without defining their outer phase config in this issue.
+- [x] Agent Profile validation runs when an operation needs an agent and does not block unrelated commands.
+- [x] Unsupported runtimes, missing profiles, missing required models, and harness launch failures produce structured typed errors with concrete setup actions.
+- [x] Public setup and config docs explain supported harnesses, selection, profile creation, model handling, defaults, overrides, and runtime failure behavior.
+- [x] No new harness listing, detection, verification, or configuration commands are added to `by`.
 
 ## Blocked by
 

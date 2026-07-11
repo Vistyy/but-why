@@ -76,11 +76,10 @@ If detection fails, `by submit <task-id>` fails during preflight.
   },
   "reviewers": {
     "intent": {
-      "profile": "default",
+      "agentProfile": "strict-reviewer",
       "instructionsFile": ".but-why/reviewers/intent.md"
     },
     "bugs": {
-      "profile": "default",
       "instructionsFile": ".but-why/reviewers/bugs.md"
     }
   },
@@ -108,8 +107,9 @@ Example global config:
 
 ```json
 {
+  "defaultAgentProfile": "pi",
   "agentProfiles": {
-    "default": {
+    "pi": {
       "agentRuntime": "pi",
       "agentModel": "openai-codex/gpt-5.5",
       "thinking": "medium"
@@ -132,20 +132,14 @@ Repo config may also define profiles:
 }
 ```
 
-A reviewer defines `instructionsFile` and either a named `profile` or inline `agentRuntime` and `agentModel` settings.
-Inline reviewer settings may include `thinking`.
-A reviewer cannot combine a named profile with inline runtime settings.
+A reviewer defines `instructionsFile` and may select a named profile through `agentProfile`.
+An explicit selection resolves Repo Config profiles before Global Config profiles.
+A reviewer without `agentProfile` uses `defaultAgentProfile`, which resolves from Global Config only.
 For Pi-backed reviewers, `thinking` is one of `off`, `minimal`, `low`, `medium`, `high`, or `xhigh`.
 Other runtimes accept a non-empty runtime-defined `thinking` value.
-
-Profile lookup order is:
-
-```text
-reviewer inline setting
-  -> repo agent profile
-  -> global agent profile
-  -> error
-```
+The supported runtimes are `pi`, `claude-code`, `codex`, `cursor`, `opencode`, and `copilot`.
+All current adapters require `agentModel` when an operation runs an agent.
+Profile semantic validation is lazy so unrelated commands remain usable.
 
 ## Validation workspace
 

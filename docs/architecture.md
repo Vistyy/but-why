@@ -280,17 +280,13 @@ Do not call these fields `provider` and `model`.
 
 Pi model strings can already contain provider-like names.
 
-Agent-assisted global setup detects supported installed harnesses, records the user's selected default, and verifies that it can run.
-The setup agent makes any ambiguous choice with the user while `by` commands remain non-interactive.
+Agent-assisted global setup identifies its current harness from its execution context and asks whether to use it or another supported harness.
+It presents supported choices without scanning the machine and records the selected Default Agent Profile in Global Config.
+Harness execution is checked when an agent operation first launches it.
+The setup agent makes ambiguous choices with the user while `by` commands remain non-interactive.
 
-Acceptance Reviewer config precedence is:
-
-```text
-review.acceptance direct override
-  -> selected repo agent profile
-  -> global default agent profile
-  -> error
-```
+An explicit role `agentProfile` resolves Repo Config profiles before Global Config profiles.
+A role without an explicit selection uses `defaultAgentProfile`, resolved from Global Config only.
 
 ## State and IDs
 

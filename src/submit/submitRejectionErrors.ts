@@ -1,15 +1,16 @@
 import { Data } from "effect";
 
+import type {
+  MissingAgentModel,
+  MissingAgentProfile,
+  UnsupportedAgentRuntime,
+} from "../agent/agentProfileErrors.js";
 import {
   GlobalConfigValidationFailed,
   RepoConfigValidationFailed,
 } from "../contracts/configErrors.js";
 
 export { GlobalConfigValidationFailed, RepoConfigValidationFailed };
-
-export class MissingReviewerProfile extends Data.TaggedError("MissingReviewerProfile")<{
-  readonly profileName: string;
-}> {}
 
 export class InvalidReviewerConfig extends Data.TaggedError("InvalidReviewerConfig")<{
   readonly profileName?: string;
@@ -19,5 +20,7 @@ export class InvalidReviewerConfig extends Data.TaggedError("InvalidReviewerConf
 export type SubmitRejectionError =
   | RepoConfigValidationFailed
   | GlobalConfigValidationFailed
-  | MissingReviewerProfile
+  | MissingAgentProfile
+  | UnsupportedAgentRuntime
+  | MissingAgentModel
   | InvalidReviewerConfig;

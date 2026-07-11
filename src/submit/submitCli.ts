@@ -1,6 +1,11 @@
 import { Effect } from "effect";
 
 import type { CliEnvironment, CliResult } from "../cli.js";
+import {
+  MissingAgentModel,
+  MissingAgentProfile,
+  UnsupportedAgentRuntime,
+} from "../agent/agentProfileErrors.js";
 import type { StructuredErrorInput } from "../cliError.js";
 import { repoStateLoadError, runtimeError, success } from "../cliResults.js";
 import { withGlobalHelpFlags } from "../cliHelp.js";
@@ -19,7 +24,6 @@ import {
 import {
   GlobalConfigValidationFailed,
   InvalidReviewerConfig,
-  MissingReviewerProfile,
   RepoConfigValidationFailed,
   type SubmitRejectionError,
 } from "../submit/submitRejectionErrors.js";
@@ -159,7 +163,9 @@ const loadSubmitPreflight = (
 const isSubmitRejectionError = (error: unknown): error is SubmitRejectionError =>
   error instanceof RepoConfigValidationFailed ||
   error instanceof GlobalConfigValidationFailed ||
-  error instanceof MissingReviewerProfile ||
+  error instanceof MissingAgentProfile ||
+  error instanceof UnsupportedAgentRuntime ||
+  error instanceof MissingAgentModel ||
   error instanceof InvalidReviewerConfig;
 
 const submitRejectionLoadError = (error: SubmitRejectionError): StructuredErrorInput => {
@@ -184,12 +190,33 @@ const submitRejectionLoadError = (error: SubmitRejectionError): StructuredErrorI
         },
         help: ["Fix the global But Why? config, then rerun submit."],
       };
-    case "MissingReviewerProfile":
+    case "MissingAgentProfile":
       return {
-        code: "missing_reviewer_profile",
-        message: `Reviewer profile was not found: ${error.profileName}`,
-        details: { profileName: error.profileName },
-        help: ["Define the reviewer profile in repo or global config, then rerun submit."],
+        code: "missing_agent_profile",
+        message:
+          error.profileName === undefined
+            ? "Default Agent Profile is not configured."
+            : `Agent Profile was not found: ${error.profileName}`,
+        ...(error.profileName === undefined ? {} : { details: { profileName: error.profileName } }),
+        help: [
+          error.selection === "explicit"
+            ? "Define the Agent Profile in Repo or Global Config, then rerun submit."
+            : "Configure defaultAgentProfile and agentProfiles in Global Config, then rerun submit.",
+        ],
+      };
+    case "UnsupportedAgentRuntime":
+      return {
+        code: "unsupported_agent_runtime",
+        message: `Agent runtime is not supported: ${error.agentRuntime}`,
+        details: { profileName: error.profileName, agentRuntime: error.agentRuntime },
+        help: ["Choose a supported harness in the Agent-Assisted Setup Guide, then rerun submit."],
+      };
+    case "MissingAgentModel":
+      return {
+        code: "missing_agent_model",
+        message: `Agent Profile ${error.profileName} requires agentModel.`,
+        details: { profileName: error.profileName, agentRuntime: error.agentRuntime },
+        help: ["Set agentModel for the Agent Profile in Global or Repo Config, then rerun submit."],
       };
     case "InvalidReviewerConfig":
       return {

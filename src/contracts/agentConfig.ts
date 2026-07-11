@@ -13,7 +13,7 @@ const thinkingSchema = Schema.Literal("off", "minimal", "low", "medium", "high",
 
 const piAgentConfigSchema = Schema.Struct({
   agentRuntime: Schema.Literal("pi"),
-  agentModel: nonBlankStringSchema,
+  agentModel: Schema.optional(nonBlankStringSchema),
   thinking: Schema.optional(thinkingSchema),
 });
 
@@ -26,7 +26,7 @@ const nonPiRuntimeSchema = nonBlankStringSchema.pipe(
 
 const nonPiAgentConfigSchema = Schema.Struct({
   agentRuntime: nonPiRuntimeSchema,
-  agentModel: nonBlankStringSchema,
+  agentModel: Schema.optional(nonBlankStringSchema),
   thinking: Schema.optional(nonBlankStringSchema),
 });
 

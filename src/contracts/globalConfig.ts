@@ -5,6 +5,7 @@ import { contractDiagnostics, formatContractDiagnostics } from "./contractDiagno
 import { GlobalConfigValidationFailed } from "./configErrors.js";
 
 const globalConfigSchema = Schema.Struct({
+  defaultAgentProfile: Schema.optional(configNameSchema),
   agentProfiles: Schema.optional(
     Schema.Record({
       key: configNameSchema,

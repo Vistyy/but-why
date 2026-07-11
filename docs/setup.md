@@ -88,13 +88,14 @@ If any required GitHub fact cannot be detected, `by submit <task-id>` fails duri
 
 ## Global agent profiles
 
-Reviewer agents use agent profiles from global or repo config.
+Agent-assisted setup asks whether to use the setup agent's current harness or another supported harness without scanning the machine.
+It updates `~/.config/but-why/config.json` directly, preserves existing settings and profiles, and sets `defaultAgentProfile` to a matching or newly created Agent Profile.
+All current adapters require a model.
 
-Repo init may succeed without an agent profile.
+Repo init may succeed without an Agent Profile.
+Profiles are resolved and validated only when an operation needs an agent.
 
-`by submit <task-id>` fails if a required reviewer profile cannot be resolved.
-
-See `docs/config.md` for profile paths and precedence.
+See `docs/public/setup.md` for the setup procedure and `docs/config.md` for profile paths and precedence.
 
 ## First expected workflow
 

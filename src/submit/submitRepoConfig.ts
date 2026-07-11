@@ -1,3 +1,4 @@
+import { resolveAgentProfile } from "../agent/agentProfiles.js";
 import type { AgentProfileConfig } from "../contracts/agentConfig.js";
 import type { GlobalConfig } from "../contracts/globalConfig.js";
 import type {
@@ -9,7 +10,6 @@ import type {
 import type { ValidationSandboxMode } from "../validation/validationWorkspace.js";
 import {
   InvalidReviewerConfig,
-  MissingReviewerProfile,
   RepoConfigValidationFailed,
   type SubmitRejectionError,
 } from "./submitRejectionErrors.js";
@@ -111,23 +111,11 @@ const resolveSelectedReviewers = (
 ):
   | ({ readonly ok: true } & ResolvedReviewers)
   | { readonly ok: false; readonly error: SubmitRejectionError } => {
-  const configuredReviewers = new Map<string, SubmitReviewerConfig>();
-
-  for (const reviewerId of Object.keys(config.reviewers ?? {})) {
-    const reviewer = resolveReviewer(reviewerId, config, globalConfig);
-
-    if (!reviewer.ok) {
-      return reviewer;
-    }
-
-    configuredReviewers.set(reviewerId, reviewer.reviewer);
-  }
-
   const intentReviewerId = config.review?.intent?.reviewer;
   const intentReviewer =
     intentReviewerId === undefined
       ? undefined
-      : selectedReviewer(intentReviewerId, configuredReviewers);
+      : resolveReviewer(intentReviewerId, config, globalConfig);
 
   if (intentReviewer !== undefined && !intentReviewer.ok) {
     return intentReviewer;
@@ -138,7 +126,7 @@ const resolveSelectedReviewers = (
 
   if (quality !== undefined) {
     for (const reviewerId of quality.reviewers) {
-      const reviewer = selectedReviewer(reviewerId, configuredReviewers);
+      const reviewer = resolveReviewer(reviewerId, config, globalConfig);
 
       if (!reviewer.ok) {
         return reviewer;
@@ -155,24 +143,6 @@ const resolveSelectedReviewers = (
       ? {}
       : { qualityReview: { mode: quality.mode, reviewers: qualityReviewers } }),
   };
-};
-
-const selectedReviewer = (
-  reviewerId: string,
-  configuredReviewers: ReadonlyMap<string, SubmitReviewerConfig>,
-):
-  | { readonly ok: true; readonly reviewer: SubmitReviewerConfig }
-  | { readonly ok: false; readonly error: SubmitRejectionError } => {
-  const reviewer = configuredReviewers.get(reviewerId);
-
-  return reviewer === undefined
-    ? {
-        ok: false,
-        error: new InvalidReviewerConfig({
-          message: `Selected reviewer is not defined: ${reviewerId}`,
-        }),
-      }
-    : { ok: true, reviewer };
 };
 
 const resolveReviewer = (
@@ -193,27 +163,14 @@ const resolveReviewer = (
     };
   }
 
-  if (!("profile" in reviewer)) {
-    return {
-      ok: true,
-      reviewer: {
-        id: reviewerId,
-        instructionsFile: reviewer.instructionsFile,
-        agentRuntime: reviewer.agentRuntime,
-        agentModel: reviewer.agentModel,
-        ...(reviewer.thinking === undefined ? {} : { thinking: reviewer.thinking }),
-      },
-    };
-  }
+  const resolution = resolveAgentProfile({
+    ...(reviewer.agentProfile === undefined ? {} : { agentProfile: reviewer.agentProfile }),
+    ...(config.agentProfiles === undefined ? {} : { repoProfiles: config.agentProfiles }),
+    globalConfig,
+  });
 
-  const profile =
-    config.agentProfiles?.[reviewer.profile] ?? globalConfig.agentProfiles?.[reviewer.profile];
-
-  if (profile === undefined) {
-    return {
-      ok: false,
-      error: new MissingReviewerProfile({ profileName: reviewer.profile }),
-    };
+  if (!resolution.ok) {
+    return resolution;
   }
 
   return {
@@ -221,7 +178,7 @@ const resolveReviewer = (
     reviewer: {
       id: reviewerId,
       instructionsFile: reviewer.instructionsFile,
-      ...profile,
+      ...resolution.resolved.profile,
     },
   };
 };

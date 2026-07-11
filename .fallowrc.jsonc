@@ -106,6 +106,10 @@
         "patterns": ["src/contracts/**"]
       },
       {
+        "name": "agent-profiles",
+        "patterns": ["src/agent/**"]
+      },
+      {
         "name": "domain",
         "patterns": [
           "src/validationRun/cleanup.ts",
@@ -248,6 +252,7 @@
       {
         "from": "cli-command-edge",
         "allow": [
+          "agent-profiles",
           "contract-output",
           "domain",
           "local-orchestration",
@@ -277,6 +282,10 @@
         "allow": ["validation-tooling-failures"]
       },
       {
+        "from": "agent-profiles",
+        "allow": ["contracts"]
+      },
+      {
         "from": "domain",
         "allow": []
       },
@@ -303,7 +312,7 @@
       },
       {
         "from": "submit-rejection-errors",
-        "allow": ["contracts"]
+        "allow": ["agent-profiles", "contracts"]
       },
       {
         "from": "validation-tooling-failures",
@@ -327,6 +336,7 @@
       {
         "from": "use-cases",
         "allow": [
+          "agent-profiles",
           "contracts",
           "domain",
           "repo-init",

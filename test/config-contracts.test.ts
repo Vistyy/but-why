@@ -43,6 +43,7 @@ describe("configuration contracts", () => {
 
   it("decodes global Agent Profiles", () => {
     const config = {
+      defaultAgentProfile: "default",
       agentProfiles: {
         default: {
           agentRuntime: "pi",
@@ -88,13 +89,11 @@ describe("configuration contracts", () => {
       },
       reviewers: {
         intent: {
-          profile: "default",
+          agentProfile: "default",
           instructionsFile: ".but-why/reviewers/intent.md",
         },
         bugs: {
-          agentRuntime: "pi",
-          agentModel: "openai-codex/gpt-5.5",
-          thinking: "high",
+          agentProfile: "default",
           instructionsFile: ".but-why/reviewers/bugs.md",
         },
       },
@@ -138,20 +137,6 @@ describe("configuration contracts", () => {
       {
         taskPrefix: "BY",
         agentProfiles: { "": { agentRuntime: "pi", agentModel: "model" } },
-      },
-    ],
-    [
-      "profile and inline reviewer settings together",
-      {
-        taskPrefix: "BY",
-        reviewers: {
-          intent: {
-            profile: "default",
-            agentRuntime: "pi",
-            agentModel: "openai-codex/gpt-5.5",
-            instructionsFile: ".but-why/reviewers/intent.md",
-          },
-        },
       },
     ],
   ])("rejects repo config with %s", (_name, input) => {

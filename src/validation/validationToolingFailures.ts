@@ -37,6 +37,13 @@ export class SandcastleToolingFailed extends Data.TaggedError("SandcastleTooling
   readonly message: string;
 }> {}
 
+export class AgentHarnessLaunchFailed extends Data.TaggedError("AgentHarnessLaunchFailed")<{
+  readonly operationName: "launch_agent_harness";
+  readonly profileName: string;
+  readonly agentRuntime: string;
+  readonly message: string;
+}> {}
+
 export class SandboxingUnavailable extends Data.TaggedError("SandboxingUnavailable")<{
   readonly operationName: string;
   readonly message: string;
@@ -90,6 +97,7 @@ export type ValidationToolingFailure =
   | InfrastructureToolingFailed
   | GitToolingFailed
   | SandcastleToolingFailed
+  | AgentHarnessLaunchFailed
   | SandboxingUnavailable
   | PrepareCommandExecutionToolingFailed
   | CheckCommandExecutionToolingFailed
@@ -151,6 +159,12 @@ export const validationToolingFailureRecord = (
         errorKind: "sandcastle_tooling_failed",
         operationName: failure.operationName,
         errorMessage: failure.message,
+      };
+    case "AgentHarnessLaunchFailed":
+      return {
+        errorKind: "agent_harness_launch_failed",
+        operationName: failure.operationName,
+        errorMessage: `${failure.message}. Run Agent-Assisted Setup and choose a working ${failure.agentRuntime} profile instead of ${failure.profileName}.`,
       };
     case "SandboxingUnavailable":
       return {

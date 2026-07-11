@@ -13,13 +13,18 @@ import { openSubmitPreflight } from "../src/submit/submitPreflight.js";
 import type { SubmissionEnvironment } from "../src/submissionEnvironment/submissionEnvironment.js";
 import type { TaskAuthority } from "../src/taskAuthority/taskAuthority.js";
 import {
+  MissingAgentModel,
+  MissingAgentProfile,
+  UnsupportedAgentRuntime,
+} from "../src/agent/agentProfileErrors.js";
+import {
   GlobalConfigValidationFailed,
   InvalidReviewerConfig,
-  MissingReviewerProfile,
   RepoConfigValidationFailed,
   type SubmitRejectionError,
 } from "../src/submit/submitRejectionErrors.js";
 import {
+  AgentHarnessLaunchFailed,
   CheckCommandExecutionToolingFailed,
   GitHubPollingToolingFailed,
   GitHubPublishingToolingFailed,
@@ -98,7 +103,9 @@ describe("module seams", () => {
         message: "Invalid repo config.",
       }),
       new GlobalConfigValidationFailed({ diagnostics: [], message: "Invalid global config." }),
-      new MissingReviewerProfile({ profileName: "intent" }),
+      new MissingAgentProfile({ profileName: "intent", selection: "explicit" }),
+      new UnsupportedAgentRuntime({ profileName: "quality", agentRuntime: "unknown" }),
+      new MissingAgentModel({ profileName: "quality", agentRuntime: "pi" }),
       new InvalidReviewerConfig({ profileName: "quality", message: "Invalid reviewer config." }),
     ] satisfies readonly SubmitRejectionError[];
     const toolingFailures = [
@@ -121,6 +128,12 @@ describe("module seams", () => {
       new SandcastleToolingFailed({
         operationName: "create_workspace",
         message: "sandcastle failed",
+      }),
+      new AgentHarnessLaunchFailed({
+        operationName: "launch_agent_harness",
+        profileName: "review",
+        agentRuntime: "pi",
+        message: "launch failed",
       }),
       new SandboxingUnavailable({
         operationName: "create_sandbox",
@@ -150,7 +163,9 @@ describe("module seams", () => {
     expect(submitRejections.map((error) => error._tag)).toEqual([
       "RepoConfigValidationFailed",
       "GlobalConfigValidationFailed",
-      "MissingReviewerProfile",
+      "MissingAgentProfile",
+      "UnsupportedAgentRuntime",
+      "MissingAgentModel",
       "InvalidReviewerConfig",
     ]);
     expect(toolingFailures.map(validationToolingFailureKind)).toEqual([
@@ -159,6 +174,7 @@ describe("module seams", () => {
       "infrastructure_tooling_failed",
       "git_tooling_failed",
       "sandcastle_tooling_failed",
+      "agent_harness_launch_failed",
       "sandboxing_unavailable",
       "check_command_execution_tooling_failed",
       "reviewer_output_contract_failed",

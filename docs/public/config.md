@@ -1,9 +1,7 @@
 # But Why config
 
-Repo config lives at `.but-why/config.json`.
-It is tracked repo policy.
-Do not rely on hidden dependency setup.
-Make validation commands explicit and reviewable.
+Repo config lives at `.but-why/config.json` and is tracked repo policy.
+Global config lives at `~/.config/but-why/config.json` and owns reusable Agent Profiles plus the Default Agent Profile selection.
 
 ## Minimal validation config
 
@@ -11,19 +9,13 @@ Make validation commands explicit and reviewable.
 {
   "taskPrefix": "BY",
   "validation": {
-    "sandbox": {
-      "mode": "none"
-    },
+    "sandbox": { "mode": "none" },
     "prepare": {
       "command": "pnpm install --frozen-lockfile --prefer-offline",
       "timeoutSeconds": 1200
     },
     "checks": [
-      {
-        "id": "quality",
-        "command": "just quality",
-        "timeoutSeconds": 1200
-      }
+      { "id": "quality", "command": "just quality", "timeoutSeconds": 1200 }
     ]
   }
 }
@@ -31,39 +23,49 @@ Make validation commands explicit and reviewable.
 
 ## Post-init flow
 
-1. Inspect repo tooling before choosing commands.
+1. Inspect repository tooling before choosing commands.
 2. Put dependency install, restore, sync, or fetch work in `validation.prepare` when needed.
 3. Put verification commands in `validation.checks`.
 4. Commit `.but-why/config.json` so reviewers can inspect the policy.
 
 ## `validation.prepare`
 
-`validation.prepare` is optional.
-It runs before checks inside the Validation Workspace.
-Use it for setup needed by later validation phases.
-If present, `command` is required.
+`validation.prepare` is optional and runs before checks inside the Validation Workspace.
+Its `command` is required when the section is present.
 `timeoutSeconds` is optional and defaults to 1200.
 
 ## `validation.checks`
 
-`validation.checks` is required for submit.
-It must contain at least one check.
+`validation.checks` is required for submit and must contain at least one check.
 Top-level `checks` is not valid config.
-
 Each check needs an `id` and `command`.
-The `id` is used in artifact refs.
-Use lowercase letters, numbers, `-`, and `_`.
+Check IDs use lowercase letters, numbers, `-`, and `_`.
 `timeoutSeconds` is optional and defaults to 1200.
 
-## Reviewers and Agent Profiles
+## Agent Profiles
 
-Repo config selects reviewers and defines their instruction files.
-A reviewer uses either a named Agent Profile or inline `agentRuntime` and `agentModel` settings.
-Inline settings may include `thinking`.
-For Pi-backed reviewers, `thinking` is one of `off`, `minimal`, `low`, `medium`, `high`, or `xhigh`.
-Other runtimes accept a non-empty runtime-defined `thinking` value.
+Supported `agentRuntime` values are `pi`, `claude-code`, `codex`, `cursor`, `opencode`, and `copilot`.
+An Agent Profile keeps `agentRuntime`, optional `agentModel`, and optional `thinking` together.
+All current adapters require `agentModel` when an agent operation resolves the profile.
+For Pi, `thinking` is `off`, `minimal`, `low`, `medium`, `high`, or `xhigh`.
+Other runtimes accept a non-empty runtime-defined value.
 
-Example repo reviewer config:
+Global config selects its default by name:
+
+```json
+{
+  "defaultAgentProfile": "pi",
+  "agentProfiles": {
+    "pi": {
+      "agentRuntime": "pi",
+      "agentModel": "openai-codex/gpt-5.5",
+      "thinking": "medium"
+    }
+  }
+}
+```
+
+A reviewer may explicitly select a profile:
 
 ```json
 {
@@ -76,26 +78,24 @@ Example repo reviewer config:
   },
   "reviewers": {
     "intent": {
-      "profile": "default",
+      "agentProfile": "strict-reviewer",
       "instructionsFile": ".but-why/reviewers/intent.md"
     }
-  }
-}
-```
-
-Global config lives at `~/.config/but-why/config.json` and owns reusable local Agent Profiles.
-It does not provide fallback validation policy.
-
-```json
-{
+  },
   "agentProfiles": {
-    "default": {
+    "strict-reviewer": {
       "agentRuntime": "pi",
-      "agentModel": "openai-codex/gpt-5.5",
-      "thinking": "medium"
+      "agentModel": "anthropic/claude-sonnet-4",
+      "thinking": "high"
     }
   }
 }
 ```
+
+An explicit `agentProfile` resolves Repo Config first, then Global Config.
+A reviewer without `agentProfile` uses `defaultAgentProfile` and resolves that profile from Global Config only.
+Profiles are validated when an operation needs to run an agent, so unrelated commands remain usable.
+Unsupported runtimes, missing profiles, and required missing models produce typed errors with setup actions.
+A harness launch failure is reported when But Why first attempts to use the harness.
 
 Config rejects unknown keys, including `ignorePatterns`.

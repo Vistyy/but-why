@@ -16,20 +16,10 @@ export const repoRelativePathSchema = Schema.String.pipe(
   }),
 );
 
-const profileReviewerSchema = Schema.Struct({
-  profile: configNameSchema,
+const reviewerSchema = Schema.Struct({
+  agentProfile: Schema.optional(configNameSchema),
   instructionsFile: repoRelativePathSchema,
 });
-
-const inlineReviewerSchema = agentProfileSchema.pipe(
-  Schema.extend(
-    Schema.Struct({
-      instructionsFile: repoRelativePathSchema,
-    }),
-  ),
-);
-
-const reviewerSchema = Schema.Union(profileReviewerSchema, inlineReviewerSchema);
 
 const repoValidationSandboxConfigSchema = Schema.Struct({
   mode: Schema.optional(Schema.Literal("none", "docker", "podman")),

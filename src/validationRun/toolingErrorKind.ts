@@ -4,6 +4,7 @@ export type ValidationToolingFailureKind =
   | "infrastructure_tooling_failed"
   | "git_tooling_failed"
   | "sandcastle_tooling_failed"
+  | "agent_harness_launch_failed"
   | "sandboxing_unavailable"
   | "prepare_command_execution_tooling_failed"
   | "check_command_execution_tooling_failed"
