@@ -6,7 +6,7 @@
 
 ## What to build
 
-Record exceptional blockers once on the Change and let standalone commands or Task Resume continue from durable facts after the blocker is addressed.
+Record exceptional blockers once on the Change and let `by validate`, `by submit`, or Task Resume continue from durable facts after the blocker is addressed.
 Linked Tasks project the Change condition without owning it.
 
 ## Acceptance criteria
@@ -17,7 +17,7 @@ Linked Tasks project the Change condition without owning it.
 - [ ] A standalone Change reports Needs Input without creating a Task.
 - [ ] Repeating `by validate` or `by submit` records prior Needs Input as addressed and continues the open Change.
 - [ ] Task Resume adopts current Acceptance Context, records prior Needs Input as addressed, and continues the same Change.
-- [ ] Explicit standalone or Task resume starts a fresh code-writing safety budget.
+- [ ] An explicit `by validate`, `by submit`, or Task Resume starts a fresh code-writing safety budget.
 - [ ] Internal retries and publication handoffs do not reset that budget.
 - [ ] An unresolved blocker records Needs Input again without losing history.
 

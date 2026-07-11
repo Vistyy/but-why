@@ -18,7 +18,7 @@ Supervisor-managed registration and launch follow in a later slice.
 - [ ] A durable atomic claim checks dependency eligibility and prevents duplicate worker ownership.
 - [ ] Removing `afk` before claim prevents pickup without cancelling active claimed work.
 - [ ] The worker creates or reuses the Task's Change and managed Change Workspace.
-- [ ] Implementation and delivery use the same Implementer, validation, fixing, and submit paths as manual commands.
+- [ ] Implementation and delivery use the same Implementer, shared Change and Candidate capture, validation, fixing, and submit paths as user-triggered flows.
 - [ ] Repository policy controls automatic fixing and execution limits.
 - [ ] Durable state commits before any wake signal is emitted.
 

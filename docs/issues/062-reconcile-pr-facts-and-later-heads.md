@@ -14,6 +14,7 @@ Later heads and retargeted bases return through Candidate capture and validation
 - [ ] Reconciliation records open, draft, checks, reviews, mergeability, base, head, closed, and merged facts.
 - [ ] `ready` requires the same PR to be open, non-draft, on the expected base, at the exact validated head, passing every required check, mergeable, and free of blocking review.
 - [ ] Missing or pending readiness facts project `validating`, and merge projects `done`.
+- [ ] External PR heads and retargeted bases extend Issue 051's shared capture capability with observed PR provenance instead of introducing separate Change discovery or Candidate capture logic.
 - [ ] An external PR head creates a Candidate and remains ineligible until that exact head passes.
 - [ ] A retargeted PR preserves the Change and PR, creates a replacement Candidate, and forces full validation.
 - [ ] A validated successor head updates the same PR.

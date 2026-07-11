@@ -29,6 +29,20 @@ A local branch in a Local Repository, identified by its full ref such as `refs/h
 Renaming a Repository Branch preserves its Open Change when the rename can be proven or is explicitly confirmed.
 _Avoid_: Short branch name, remote branch, GitHub PR Target
 
+**Proven Branch Rename**:
+A Repository Branch rename shown by an exact Git rename record in the same Local Repository.
+Only a Proven Branch Rename automatically preserves the Open Change under the new branch name.
+_Avoid_: Matching commit, matching history, guessed rename
+
+**Change Base**:
+The target branch chosen for a Change when its first Candidate is captured.
+It remains fixed unless the Change's PR is deliberately retargeted.
+_Avoid_: Candidate comparison base, current default branch
+
+**Rebind**:
+The explicit act of moving an Open Change's Repository Branch binding to a branch with no Change history.
+_Avoid_: Rename guess, creating a Change, reopening a Change
+
 **Candidate**:
 One exact committed version of a Change with a permanent opaque record identity.
 Its immutable code identity within that Change is its fixed comparison base SHA and head SHA.

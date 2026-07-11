@@ -11,7 +11,7 @@ The command reuses eligible evidence and creates or updates one durable PR only 
 
 ## Acceptance criteria
 
-- [ ] `by submit` finds or creates the current branch's Change without requiring a Task.
+- [ ] `by submit` uses Issue 051's shared capability to automatically resolve the Change and capture or reuse the current Candidate without requiring a Task.
 - [ ] Eligible validation evidence is reused, while missing or stale evidence enters the normal validation and fixing flow.
 - [ ] GitHub target discovery happens only when publication is needed.
 - [ ] A fresh read-only PR Writer uses final code, eligible evidence, optional Acceptance Context, and filtered Implementation Decisions.

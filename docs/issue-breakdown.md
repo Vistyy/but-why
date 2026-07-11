@@ -13,18 +13,16 @@ Done issues are omitted from this graph.
 - `040-add-effect-scheduled-github-polling.md`
 - `046-publish-by-to-npm-registry.md`
 - `047-design-but-why-agent-skill-workflow-content.md`
-- `051-capture-and-inspect-standalone-change.md`
-- `054-link-tasks-and-project-initial-status.md`
+- `051-add-automatic-change-and-candidate-capture.md`
 
 ## Change-centered dependency graph
 
 ```text
-051 capture and inspect standalone Change
+051 automatic Change and Candidate capture
   -> 052 validate Candidate checks without Task
     -> 053 freeze policy and make validation idempotent
-
-054 link Tasks and project initial status
-  -> 068 add Task dependencies and eligibility
+  -> 054 link Tasks and project initial status
+    -> 068 add Task dependencies and eligibility
 
 053 validation idempotency
   -> 055 shared reviewer runner
@@ -88,6 +86,7 @@ Done issues are omitted from this graph.
 
 ## Migration notes
 
+- Every validation, submission, Task, PR reconciliation, and worker entry point uses Issue 051's shared Change and Candidate capture capability instead of implementing separate discovery or capture logic.
 - Issues 051 through 067 migrate complete product paths.
 - Issue 068 adds Task dependency storage and start or pickup eligibility.
 - Issue 069 hardens multi-repository worker operation.

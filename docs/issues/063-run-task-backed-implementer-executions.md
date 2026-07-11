@@ -14,7 +14,7 @@ Continuity comes from durable workspace and Change records rather than captured 
 - [ ] An Implementer Execution receives Acceptance Context, repository guidance, current workspace facts, prior durable results, and the remaining implementation goal.
 - [ ] Every invocation uses the shared Code-Writing Execution record and a fresh agent process.
 - [ ] Sandcastle owns the managed writable Change Workspace and attached execution sandbox.
-- [ ] Successful implementation commits and captures the initial Candidate.
+- [ ] Successful implementation commits and uses Issue 051's shared capability to capture or reuse the initial Candidate.
 - [ ] Interrupted dirty work is preserved for a later fresh Implementer Execution.
 - [ ] Manual Task Start requires every Task Dependency to be `done` and reports blocking prerequisites through structured output.
 - [ ] Dependency eligibility and the implementation claim share one durable atomic boundary.

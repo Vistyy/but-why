@@ -1,4 +1,4 @@
-# Capture and inspect a standalone Change
+# Add automatic Change and Candidate capture
 
 ## Parent
 
@@ -6,8 +6,8 @@
 
 ## What to build
 
-From a clean committed branch, find or create its open Change and capture the exact Candidate without requiring a Task or GitHub.
-Expose the selected Change and Candidate through structured command output so the behavior is independently verifiable.
+Build the internal application capability that automatically finds or creates the open Change for a clean committed branch and captures its exact Candidate without requiring a Task or GitHub.
+Return the selected Change and Candidate as structured application data so later `by validate`, `by submit`, Task, and background-worker flows can use the same behavior.
 
 ## Acceptance criteria
 
@@ -17,11 +17,10 @@ Expose the selected Change and Candidate through structured command output so th
 - [ ] Base selection uses the existing Change base, existing PR base, explicit override, then configured default branch.
 - [ ] Candidate capture stores the selected base reference, resolved target SHA, exact comparison base, and head.
 - [ ] Conflicting provenance for an existing Candidate identity returns a typed rejection without changing history.
-- [ ] Task workspace metadata selects its linked Change before branch discovery.
 - [ ] A proven branch rename preserves the open Change by rebinding it atomically.
 - [ ] An unproven rename requires explicit rebind, and rebind rejects a destination that has any Change history.
 - [ ] Closed Changes, ambiguous bindings, dirty work, and conflicting branch facts fail without guessing or changing Git state.
-- [ ] Structured output identifies the Change ID, Candidate ID, branch, selected base provenance, comparison base, and head.
+- [ ] The application result identifies the Change ID, Candidate ID, branch, selected base provenance, comparison base, and head.
 
 ## Blocked by
 

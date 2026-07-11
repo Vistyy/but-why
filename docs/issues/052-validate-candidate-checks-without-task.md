@@ -23,4 +23,4 @@ Keep this partial path behind the application boundary until the complete Valida
 ## Blocked by
 
 - `docs/issues/050-expand-storage-with-change-and-candidate.md`
-- `docs/issues/051-capture-and-inspect-standalone-change.md`
+- `docs/issues/051-add-automatic-change-and-candidate-capture.md`

@@ -13,6 +13,7 @@ Later slices extend the projection when they add validation, Needs Input, public
 ## Acceptance criteria
 
 - [ ] Task Start creates the Task's sole Change and Change Workspace when absent or reuses them when open.
+- [ ] Task Start and Task Resume use Issue 051's shared Change resolution, with Task workspace metadata taking precedence over branch discovery.
 - [ ] Task Start uses the storage cardinality from Issue 050 and rejects a closed linked Change.
 - [ ] Repeated Task Start does not create duplicate Changes, workspaces, or Implementer Executions.
 - [ ] Task Start and Task Resume adopt immutable Acceptance Context from the current Task Context.
@@ -25,3 +26,4 @@ Later slices extend the projection when they add validation, Needs Input, public
 ## Blocked by
 
 - `docs/issues/050-expand-storage-with-change-and-candidate.md`
+- `docs/issues/051-add-automatic-change-and-candidate-capture.md`
