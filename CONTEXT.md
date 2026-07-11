@@ -6,12 +6,34 @@ But Why? validates completed code changes against approved human intent and coor
 
 **Change**:
 The durable lineage root for one evolving code change, including its Candidates, validation evidence, decisions, blocking state, and optional PR.
-A Change may be linked to a Task, but it does not require one, and a repository branch has at most one open Change.
-Starting a replacement Change atomically supersedes the prior open Change.
+A Change has a permanent opaque identity independent of its branch and optional Task.
+A Change may be linked to a Task, but it does not require one, and a Repository Branch binds at most one Change.
 _Avoid_: Task, branch, Validation Run
 
+**Open Change**:
+The current active Change for a Repository Branch, to which new Candidates and validation history are added.
+An Open Change becomes terminal when its work is closed.
+_Avoid_: Latest Candidate, open pull request, active Task
+
+**Closed Change**:
+A terminal Change whose work is no longer active because it completed or was cancelled.
+It remains available as history, records why it closed, and cannot reopen or accept new Candidates.
+_Avoid_: Deleted Change, open pull request
+
+**Local Repository**:
+One local Git repository instance, shared by its main worktree and linked worktrees and identified by its canonical Git common directory.
+_Avoid_: GitHub repository, clone-independent repository identity, worktree
+
+**Repository Branch**:
+A local branch in a Local Repository, identified by its full ref such as `refs/heads/feature`.
+Renaming a Repository Branch preserves its Open Change when the rename can be proven or is explicitly confirmed.
+_Avoid_: Short branch name, remote branch, GitHub PR Target
+
 **Candidate**:
-One exact committed version of a Change, identified by its fixed comparison base SHA and head SHA.
+One exact committed version of a Change with a permanent opaque record identity.
+Its immutable code identity within that Change is its fixed comparison base SHA and head SHA.
+Submitting the same comparison again reuses the existing Candidate when its recorded base provenance also matches.
+A conflicting account of how the base was chosen is rejected rather than changing the Candidate's history.
 A Candidate may contain many Git commits between those SHAs.
 _Avoid_: Single commit, working tree, branch head
 
@@ -48,7 +70,7 @@ _Avoid_: Workflow state, lifecycle state
 
 **Task**:
 A But Why work unit that captures requested change intent, comments, approval, tags, and user-facing progress.
-A Task may have many Changes over time and can have zero or more External References without owning validation state directly.
+A Task may have at most one Change and can have zero or more External References without owning validation state directly.
 _Avoid_: Change, external ticket identity, workflow command bus
 
 **Task Slug**:
@@ -76,6 +98,11 @@ The user-facing state model derived from Task approval and the active Change's p
 Task Lifecycle describes progress without authorizing Change or Validation Gate phases.
 _Avoid_: Pipeline state, workflow command bus, duplicate Change state
 
+**Task Dependency**:
+A directed prerequisite relationship in which one Task must be done before another Task can start.
+Task Dependencies govern both manual starts and automatic pickup.
+_Avoid_: Issue implementation order, scheduling priority, Change dependency
+
 **New Task**:
 A Task whose intent is still being created or refined under human supervision.
 A New Task is not eligible for autonomous implementation.
@@ -85,6 +112,11 @@ _Avoid_: Draft Task, todo Task, implementation-ready Task
 A Task whose intent has been approved for implementation.
 A Todo Task is available for manual implementation and becomes eligible for automatic pickup when it has the AFK tag.
 _Avoid_: New Task, ready Task, treating every created Task as approved
+
+**Cancelled Task**:
+A terminal Task whose work will not continue or reopen.
+Cancelling a Task also closes its Open Change as cancelled while preserving their history.
+_Avoid_: Done Task, deleted Task, abandoned Task
 
 **Task Tag**:
 A validated label attached to a Task from the set of tags known to But Why?.

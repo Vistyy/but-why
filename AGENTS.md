@@ -17,6 +17,11 @@
 - Internal setup and onboarding: `docs/setup.md`.
 - Shipped public docs for installed users: `docs/public/config.md` and `docs/public/setup.md`.
 
+## Issue completion
+
+After completing an issue from `docs/issues/`, update `docs/issue-breakdown.md` in the same commit.
+Remove the completed issue from the dependency graph and move each newly unblocked issue into `Can start immediately`.
+
 ## Code map
 
 - `src/main.ts`: executable entrypoint.

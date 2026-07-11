@@ -42,16 +42,20 @@ Open questions:
 
 ## Task relationships and dependencies
 
-Tasks may need relationships so related work and dependencies are visible.
+Task Dependencies are accepted directed prerequisites.
+They block manual start and automatic pickup until every prerequisite Task is `done`.
+Other Task relationship behavior remains open.
 
 Open questions:
 
-- What relationship types exist?
-- Do dependencies block `todo`, `implementing`, or `submit`?
-- How do related and blocked tasks appear in dashboards?
+- What relationship types exist beyond Task Dependencies?
+- Can dependencies be added or removed after either Task starts?
+- Do Task Dependencies also block submission if they are added after work starts?
+- What happens to dependent Tasks when a prerequisite Task is cancelled?
+- How are blocked Tasks and dependency changes shown in dashboards?
+- How are dependency cycles handled?
 - Are relationships local-only, or must they map to future external Task Surfaces?
 
-This is not part of validation-focused v1 unless explicitly pulled in.
 
 ## Validation phase configuration
 

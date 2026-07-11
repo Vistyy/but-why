@@ -16,6 +16,8 @@ Continuity comes from durable workspace and Change records rather than captured 
 - [ ] Sandcastle owns the managed writable Change Workspace and attached execution sandbox.
 - [ ] Successful implementation commits and captures the initial Candidate.
 - [ ] Interrupted dirty work is preserved for a later fresh Implementer Execution.
+- [ ] Manual Task Start requires every Task Dependency to be `done` and reports blocking prerequisites through structured output.
+- [ ] Dependency eligibility and the implementation claim share one durable atomic boundary.
 - [ ] Repeated Task Start never launches concurrent implementation.
 - [ ] The Implementer never receives or fixes Validation Findings.
 
@@ -23,3 +25,4 @@ Continuity comes from durable workspace and Change records rather than captured 
 
 - `docs/issues/054-link-tasks-to-changes-and-project-status.md`
 - `docs/issues/057-record-code-writing-executions-and-fix-check-findings.md`
+- `docs/issues/068-add-task-dependencies-and-eligibility.md`

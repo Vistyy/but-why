@@ -51,16 +51,20 @@ But Why? does not claim that every Specialist Reviewer inspected the final SHA.
 ### Task
 
 A Task owns requested intent, comments, approval, tags, and its user-facing lifecycle.
-A Task may have many Changes over time.
-At most one automatic Change for a Task is active at a time.
+A Task may have at most one Change, and a Change may have at most one linked Task.
+The optional Task-Change link is permanent.
+Unrelated work uses a different Task, branch, worktree, and Change.
 
 A Task does not own validation state.
-Its displayed progress reflects facts from its active Change.
+Its displayed progress reflects facts from its linked Change.
 
 ### Change
 
 A Change is the durable lineage root for one evolving code change.
+It has a permanent opaque ID.
 It may be linked to a Task, but it does not require one.
+A Change is `open` or `closed`.
+A closed Change permanently records `completed` or `cancelled` and accepts no new Candidates.
 
 A Change groups:
 
@@ -77,8 +81,11 @@ Change state stays small and is derived from durable work facts where possible.
 
 ### Candidate
 
-A Candidate is one exact committed version of a Change.
-It records a fixed comparison base SHA and an exact head SHA.
+A Candidate is one exact committed version of a Change with a permanent opaque record ID.
+Its immutable code identity within the Change is its fixed comparison base SHA and exact head SHA.
+It retains the selected base reference and resolved target SHA as provenance.
+Repeated capture reuses the Candidate when identity and provenance match.
+Conflicting provenance is rejected without changing Candidate history.
 The range may contain many Git commits.
 
 Dirty working tree content is not a Candidate.
@@ -89,10 +96,14 @@ A fix, external commit, rebase, or force-push never mutates an existing Candidat
 
 ### Change discovery
 
-A repository branch may have at most one open Change.
+A repository branch may bind at most one Change.
+Repository identity is the canonical Git common-directory path, and branch identity is the full local ref.
 Task workspace metadata selects its linked Change first.
-Otherwise But Why? reuses the open Change bound to the current repository and branch or creates one when none exists.
-Closed and superseded Changes remain history and are never reused.
+Otherwise But Why? reuses the open Change bound to the current repository and branch or creates one when that branch has no Change history.
+Closed Changes remain history and are never reopened or reused.
+A branch with a closed Change rejects new capture.
+Unrelated work uses a new branch instead of reusing an existing branch.
+A branch rename preserves its open Change when Git facts prove the rename or the user explicitly confirms the rebind.
 Ambiguous or conflicting bindings fail without guessing.
 
 ### Validation Run
@@ -255,7 +266,8 @@ When fixing is disabled, a Finding pauses the Change for human action.
 Task Context is the current Task title, description, and ordered comments.
 Task Comments do not change active Acceptance Context by themselves.
 
-Task Start captures Task Context as immutable Acceptance Context for the new Change.
+Task Start creates the Task's sole Change when absent or reuses it when open, then captures Task Context as immutable Acceptance Context.
+Task Start rejects a closed linked Change.
 `by task resume` approves and adopts the latest Task Context as a new Acceptance Context snapshot, clears the addressed Change-level Needs Input record, and emits a Trigger.
 The Change Coordinator continues the same Change from its durable blocker, Candidate, evidence, and resolved operation mode rather than blindly starting a particular run type.
 
@@ -295,25 +307,25 @@ Needs Input does not duplicate that reason in another field.
 
 ## Task status projection
 
-Task status is derived from Task approval facts and the active Change rather than used to authorize Change phases.
-Historical or superseded Changes do not affect the displayed status.
+Task status is derived from Task approval facts and its linked Change rather than used to authorize Change phases.
 
 The target projection is:
 
 - `new` when the Task has no approved Acceptance Context.
-- `todo` when intent is approved and no active Change is progressing.
-- `implementing` while the active Change is producing its initial Candidate.
-- `validating` while the active Change is checking, reviewing, fixing Findings, publishing, or waiting for PR readiness facts.
-- `needs_input` while the active Change records Needs Input.
-- `ready` when the active Change PR satisfies readiness policy.
+- `todo` when intent is approved and its Change is not progressing.
+- `implementing` while its Change is producing its initial Candidate.
+- `validating` while its Change is checking, reviewing, fixing Findings, publishing, or waiting for PR readiness facts.
+- `needs_input` while its Change records Needs Input.
+- `ready` when its Change PR satisfies readiness policy.
 - `done` when that PR is merged.
+- `cancelled` when the user explicitly ends work without completion.
 
 An inactive unfinished Task remains `todo` indefinitely.
-Age alone never cancels a Task, supersedes a Change, or removes its workspace or history.
-Explicit Task cancellation is outside this design.
+Age alone never cancels a Task, closes a Change, or removes its workspace or history.
+Explicit Task cancellation is a separate future capability.
+It permanently closes the Task's open Change as `cancelled` while preserving history.
 
 Needs Input is stored once on the Change and read through the Task projection.
-Starting a replacement Change makes that Change the only source of active progress.
 
 ## Finding resolution
 
@@ -370,7 +382,9 @@ Tasks begin in `new`.
 Task tags are validated, and unknown tags are rejected.
 The built-in `afk` tag enables automatic pickup without becoming a lifecycle state.
 
-A Todo Task with `afk` is eligible for atomic worker claim.
+A Todo Task cannot start manually or be claimed automatically until every Task it depends on is `done`.
+A Todo Task with `afk` and completed prerequisites is eligible for atomic worker claim.
+Dependency eligibility is checked again at the durable claim boundary.
 Approval and tag changes commit before waking the Supervisor.
 Removing `afk` before claim prevents pickup.
 Removing it after claim does not cancel active work, but it prevents later automatic pickup.
@@ -448,7 +462,7 @@ The PR Writer is also a fresh execution, uses only durable approved inputs, and 
 
 ## Automatic execution safety
 
-The configurable default safety budget is 20 code-writing agent executions across one automatic Change journey.
+The configurable default safety budget is 20 code-writing agent executions across one Change journey.
 Repo Config may choose another limit.
 Implementer Executions and Fixer Executions consume the budget.
 Checks, reviewer executions, PR Writer execution, operational retries, and time waiting for GitHub do not.
@@ -495,12 +509,12 @@ Publication recovery and reconciliation never create a second PR for the Change.
 A validation-only success does not close the Change.
 A later `by submit` may publish the same eligible Candidate without repeating validation.
 
-A Change closes when its PR is merged.
-Starting a replacement Change for the same branch atomically marks the prior open Change as superseded.
-No separate abandonment step is required.
-Branch reuse after a closed or superseded Change creates a new Change rather than reopening the old one.
+A Change closes as `completed` when its PR is merged.
+A Change closes as `cancelled` when its linked Task is explicitly cancelled.
+Closure is permanent, and a closed Change accepts no new Candidates.
+Unrelated work uses a fresh branch, worktree, Task, and Change.
 
-Closing or superseding a Change removes a clean managed workspace automatically.
+Closing a Change removes a clean managed workspace automatically.
 Dirty managed workspaces are preserved for inspection.
 Standalone user checkouts are never removed.
 Durable Change, Candidate, validation, decision, and PR history remains available.
@@ -571,15 +585,9 @@ The following decisions no longer apply:
 - Needs Input belongs only to a Task.
 - Decisions belong to a Task rather than a Change.
 
-## Deferred interface decision
-
-The domain permits an explicit request to start a replacement Change, which atomically supersedes the branch's current open Change.
-The CLI spelling for that exceptional request can be chosen with the command implementation.
-
 ## Documentation consequences
 
-A new ADR must approve Change as the ownership center before this becomes accepted architecture.
-The ADR should supersede only the Task-required validation and Task-owned delivery parts of current v1 architecture.
+ADR 0008 approves Change as the ownership center and supersedes only the Task-required validation and Task-owned delivery parts of current v1 architecture.
 
 The existing Sandcastle, modular-monolith, private SQLite store, and no-generic-Run decisions remain valid.
 

@@ -14,6 +14,8 @@ Remove Task-owned Validation Run identity, lifecycle authority, submission prefl
 - [ ] Validation Runs require Candidate ownership and use optional Task traceability only.
 - [ ] Task-derived Validation Run IDs, active-run uniqueness, and artifact identity are replaced by Change-centered forms.
 - [ ] Task status is read only through the approved projection.
+- [ ] Storage enforces at most one Change per Task and at most one Task per Change.
+- [ ] Change lifecycle uses permanent `open` or `closed` state without replacement or supersession storage.
 - [ ] Candidate capture is independent from GitHub publication targeting.
 - [ ] Old Quality Reviewer and publication phase write paths are removed after historical records remain readable through supported views.
 - [ ] Task Authority no longer coordinates validation or publication.
@@ -31,3 +33,4 @@ Remove Task-owned Validation Run identity, lifecycle authority, submission prefl
 - `docs/issues/063-run-task-backed-implementer-executions.md`
 - `docs/issues/064-pick-up-afk-tasks-in-repository-workers.md`
 - `docs/issues/066-expose-change-activity-and-usage.md`
+- `docs/issues/068-add-task-dependencies-and-eligibility.md`

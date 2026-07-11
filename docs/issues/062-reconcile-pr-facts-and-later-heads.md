@@ -17,8 +17,8 @@ Later heads and retargeted bases return through Candidate capture and validation
 - [ ] An external PR head creates a Candidate and remains ineligible until that exact head passes.
 - [ ] A retargeted PR preserves the Change and PR, creates a replacement Candidate, and forces full validation.
 - [ ] A validated successor head updates the same PR.
-- [ ] Merge closes the Change and removes only clean managed workspaces.
-- [ ] A closed unmerged PR records a blocker without silently abandoning the Change.
+- [ ] Merge permanently closes the Change as `completed` and removes only clean managed workspaces.
+- [ ] A closed unmerged PR records a blocker without silently closing the Change.
 
 ## Blocked by
 

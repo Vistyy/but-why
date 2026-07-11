@@ -11,11 +11,11 @@ Task views aggregate linked Change facts without owning them.
 
 ## Acceptance criteria
 
-- [ ] A Change view shows its Candidates, current eligibility, Needs Input, PR identity, and lifecycle facts.
+- [ ] A Change view shows its Candidates, current eligibility, Needs Input, PR identity, state, close reason, closed timestamp, and other lifecycle facts.
 - [ ] Validation Run views show policy, checks, reviewers, Findings, completion evidence, failures, and Artifacts.
 - [ ] Code-Writing Execution views show role, inputs, status, result, decisions, failures, Artifacts, and usage.
 - [ ] Usage summaries group tokens by Change, Candidate, Validation Run, execution role, reviewer, and agent profile where applicable.
-- [ ] Task views link to and summarize the active Change without copying its records.
+- [ ] Task views link to and summarize their linked Change without copying its records.
 - [ ] Human and structured outputs distinguish unknown usage from zero usage.
 
 ## Blocked by
