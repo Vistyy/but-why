@@ -134,6 +134,18 @@
         "patterns": ["src/change/changeStore.ts"]
       },
       {
+        "name": "change-candidate-capture-store",
+        "patterns": ["src/changeCandidateCapture/changeCandidateCaptureStore.ts"]
+      },
+      {
+        "name": "change-candidate-capture",
+        "patterns": ["src/changeCandidateCapture/captureLocalCandidate.ts"]
+      },
+      {
+        "name": "local-git-candidate-adapter",
+        "patterns": ["src/changeCandidateCapture/localGitCandidate.ts"]
+      },
+      {
         "name": "task-store",
         "patterns": ["src/task/taskStore.ts"]
       },
@@ -220,6 +232,7 @@
         "patterns": [
           "src/sqlite/sqliteValidationRunStore.ts",
           "src/sqlite/sqliteCandidateStore.ts",
+          "src/sqlite/sqliteChangeCandidateCaptureStore.ts",
           "src/sqlite/sqliteChangeStore.ts",
           "src/sqlite/sqliteTaskStore.ts",
           "src/sqlite/sqliteValidationRuns.ts"
@@ -296,6 +309,23 @@
       {
         "from": "change-store",
         "allow": ["domain"]
+      },
+      {
+        "from": "change-candidate-capture-store",
+        "allow": []
+      },
+      {
+        "from": "change-candidate-capture",
+        "allow": [
+          "change-store",
+          "domain",
+          "local-git-candidate-adapter",
+          "repo-local-storage-wiring"
+        ]
+      },
+      {
+        "from": "local-git-candidate-adapter",
+        "allow": []
       },
       {
         "from": "task-store",
@@ -391,6 +421,7 @@
         "from": "sqlite-concrete-stores",
         "allow": [
           "candidate-store",
+          "change-candidate-capture-store",
           "change-store",
           "domain",
           "sqlite-core",
@@ -412,6 +443,7 @@
         "from": "repo-local-storage-wiring",
         "allow": [
           "candidate-store",
+          "change-candidate-capture-store",
           "change-store",
           "repo-init",
           "sqlite-concrete-stores",

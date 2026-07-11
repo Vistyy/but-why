@@ -13,16 +13,17 @@ Done issues are omitted from this graph.
 - `040-add-effect-scheduled-github-polling.md`
 - `046-publish-by-to-npm-registry.md`
 - `047-design-but-why-agent-skill-workflow-content.md`
-- `051-add-automatic-change-and-candidate-capture.md`
+- `052-validate-candidate-checks-without-task.md`
+- `054-link-tasks-to-changes-and-project-status.md`
 
 ## Change-centered dependency graph
 
 ```text
-051 automatic Change and Candidate capture
-  -> 052 validate Candidate checks without Task
-    -> 053 freeze policy and make validation idempotent
-  -> 054 link Tasks and project initial status
-    -> 068 add Task dependencies and eligibility
+052 validate Candidate checks without Task
+  -> 053 freeze policy and make validation idempotent
+
+054 link Tasks and project initial status
+  -> 068 add Task dependencies and eligibility
 
 053 validation idempotency
   -> 055 shared reviewer runner

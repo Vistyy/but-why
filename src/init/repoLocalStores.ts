@@ -1,6 +1,8 @@
 import type { CandidateStore } from "../candidate/candidateStore.js";
+import type { ChangeCandidateCaptureStore } from "../changeCandidateCapture/changeCandidateCaptureStore.js";
 import type { ChangeStore } from "../change/changeStore.js";
 import { openSqliteCandidateStore } from "../sqlite/sqliteCandidateStore.js";
+import { openSqliteChangeCandidateCaptureStore } from "../sqlite/sqliteChangeCandidateCaptureStore.js";
 import { openSqliteChangeStore } from "../sqlite/sqliteChangeStore.js";
 import type { ValidationRunStore } from "../validationRun/validationRunStore.js";
 import { openSqliteValidationRunStore } from "../sqlite/sqliteValidationRunStore.js";
@@ -11,6 +13,11 @@ import type { ValidationRuns } from "../validation/validationRuns.js";
 import type { ValidationWorkspaceSetup } from "../validation/validationWorkspace.js";
 import type { RepoLocalContext } from "./repoContext.js";
 
+export type ChangeCandidateCaptureStores = {
+  readonly captureStore: ChangeCandidateCaptureStore;
+  readonly changeStore: ChangeStore;
+};
+
 export type RepoLocalStores = {
   readonly candidateStore: CandidateStore;
   readonly changeStore: ChangeStore;
@@ -19,6 +26,14 @@ export type RepoLocalStores = {
   readonly validationRuns: ValidationRuns;
   readonly recordValidationWorkspaceSetup: (now: string, setup: ValidationWorkspaceSetup) => void;
 };
+
+export const openChangeCandidateCaptureStores = (input: {
+  readonly statePath: string;
+  readonly migrationTimestamp: () => string;
+}): ChangeCandidateCaptureStores => ({
+  captureStore: openSqliteChangeCandidateCaptureStore(input),
+  changeStore: openSqliteChangeStore(input),
+});
 
 export const openRepoLocalStores = (
   context: RepoLocalContext,

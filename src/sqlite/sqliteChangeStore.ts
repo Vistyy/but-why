@@ -19,6 +19,7 @@ const changeColumns = [
   "id",
   "repository_common_directory AS repositoryCommonDirectory",
   "branch_ref AS branchRef",
+  "base_ref AS baseRef",
   "task_id AS taskId",
   "state",
   "close_reason AS closeReason",
@@ -32,6 +33,10 @@ export const openSqliteChangeStore = (input: SqliteStoreInput): ChangeStore => (
     withStateDatabase(input, (database) => createChange(database, changeInput)),
   getChangeById: (changeId) =>
     withStateDatabase(input, (database) => getChangeById(database, changeId)),
+  getChangeByRepositoryBranch: (repositoryCommonDirectory, branchRef) =>
+    withStateDatabase(input, (database) =>
+      getChangeByRepositoryBranch(database, repositoryCommonDirectory, branchRef),
+    ),
   closeChange: (closeInput) =>
     withStateDatabase(input, (database) => closeChange(database, closeInput)),
   linkTask: (linkInput) => withStateDatabase(input, (database) => linkTask(database, linkInput)),
@@ -191,18 +196,31 @@ const linkTask = (database: DatabaseSync, input: LinkTaskInput): LinkTaskResult 
   }
 };
 
-const getChangeById = (database: DatabaseSync, changeId: string): ChangeRecord | undefined => {
-  const row = queryOne<ChangeRow>(database, `SELECT ${changeColumns} FROM changes WHERE id = ?`, [
-    changeId,
-  ]);
+const getChangeById = (database: DatabaseSync, changeId: string): ChangeRecord | undefined =>
+  mapChangeRow(
+    queryOne<ChangeRow>(database, `SELECT ${changeColumns} FROM changes WHERE id = ?`, [changeId]),
+  );
 
-  if (row === undefined) return undefined;
+const getChangeByRepositoryBranch = (
+  database: DatabaseSync,
+  repositoryCommonDirectory: string,
+  branchRef: string,
+): ChangeRecord | undefined =>
+  mapChangeRow(
+    queryOne<ChangeRow>(
+      database,
+      `SELECT ${changeColumns} FROM changes WHERE repository_common_directory = ? AND branch_ref = ?`,
+      [repositoryCommonDirectory, branchRef],
+    ),
+  );
 
-  return {
-    ...row,
-    taskId: row.taskId === null ? null : storedPublicTaskId(row.taskId),
-  };
-};
+const mapChangeRow = (row: ChangeRow | undefined): ChangeRecord | undefined =>
+  row === undefined
+    ? undefined
+    : {
+        ...row,
+        taskId: row.taskId === null ? null : storedPublicTaskId(row.taskId),
+      };
 
 type ChangeRow = Omit<ChangeRecord, "taskId"> & {
   readonly taskId: string | null;

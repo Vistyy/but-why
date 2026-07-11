@@ -36,11 +36,10 @@ const captureCandidate = (
   database.exec("BEGIN IMMEDIATE");
 
   try {
-    const change = queryOne<{ readonly state: "open" | "closed" }>(
-      database,
-      "SELECT state FROM changes WHERE id = ?",
-      [input.changeId],
-    );
+    const change = queryOne<{
+      readonly state: "open" | "closed";
+      readonly baseRef: string | null;
+    }>(database, "SELECT state, base_ref AS baseRef FROM changes WHERE id = ?", [input.changeId]);
     if (change === undefined) {
       database.exec("ROLLBACK");
       return { ok: false, code: "change_not_found" };
@@ -60,15 +59,23 @@ const captureCandidate = (
       [input.changeId, input.comparisonBaseSha, input.headSha],
     );
     if (existing !== undefined) {
-      database.exec("COMMIT");
       if (
-        existing.selectedBaseRef === input.selectedBaseRef &&
-        existing.resolvedTargetSha === input.resolvedTargetSha
+        existing.selectedBaseRef !== input.selectedBaseRef ||
+        existing.resolvedTargetSha !== input.resolvedTargetSha
       ) {
-        return { ok: true, reused: true, candidate: existing };
+        database.exec("ROLLBACK");
+        return { ok: false, code: "candidate_provenance_conflict", candidate: existing };
       }
-      return { ok: false, code: "candidate_provenance_conflict", candidate: existing };
+      assignInitialBase(database, input.changeId, change.baseRef, input.selectedBaseRef, input.now);
+      database.exec("COMMIT");
+      return { ok: true, reused: true, candidate: existing };
     }
+
+    if (change.baseRef !== null && change.baseRef !== input.selectedBaseRef) {
+      database.exec("ROLLBACK");
+      return { ok: false, code: "change_base_ref_conflict" };
+    }
+    assignInitialBase(database, input.changeId, change.baseRef, input.selectedBaseRef, input.now);
 
     const id = randomUUID();
     database
@@ -95,6 +102,20 @@ const captureCandidate = (
   } catch (error) {
     rollbackIfOpen(database);
     throw error;
+  }
+};
+
+const assignInitialBase = (
+  database: DatabaseSync,
+  changeId: string,
+  currentBaseRef: string | null,
+  selectedBaseRef: string,
+  now: string,
+): void => {
+  if (currentBaseRef === null) {
+    database
+      .prepare("UPDATE changes SET base_ref = ?, updated_at = ? WHERE id = ?")
+      .run(selectedBaseRef, now, changeId);
   }
 };
 

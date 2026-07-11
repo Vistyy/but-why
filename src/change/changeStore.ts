@@ -3,6 +3,10 @@ import type { ChangeCloseReason, ChangeRecord } from "./change.js";
 export type ChangeStore = {
   readonly createChange: (input: CreateChangeInput) => CreateChangeResult;
   readonly getChangeById: (changeId: string) => ChangeRecord | undefined;
+  readonly getChangeByRepositoryBranch: (
+    repositoryCommonDirectory: string,
+    branchRef: string,
+  ) => ChangeRecord | undefined;
   readonly closeChange: (input: CloseChangeInput) => CloseChangeResult;
   readonly linkTask: (input: LinkTaskInput) => LinkTaskResult;
 };

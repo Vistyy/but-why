@@ -30,6 +30,7 @@ describe("Change storage", () => {
       id: expect.any(String),
       repositoryCommonDirectory: "/repos/example/.git",
       branchRef: "refs/heads/feature",
+      baseRef: null,
       taskId: null,
       state: "open",
       closeReason: null,
@@ -160,7 +161,8 @@ describe("Change and Candidate schema migration", () => {
     database.exec(`
       DROP TABLE candidates;
       DROP TABLE changes;
-      DELETE FROM schema_migrations WHERE name = '015_changes_and_candidates';
+      DELETE FROM schema_migrations
+      WHERE name IN ('015_changes_and_candidates', '016_change_base_ref');
     `);
     database.close();
 
@@ -169,6 +171,36 @@ describe("Change and Candidate schema migration", () => {
     expect(result.stdout).toContain("status: repaired");
     expect(taskStore(root).getTaskById(publicTaskId(task.id))).toMatchObject({ id: task.id });
     expect(createChange(root)).toMatchObject({ state: "open" });
+  });
+
+  it("adds optional Change bases without changing existing Change or Candidate history", () => {
+    const root = initializedRepo();
+    const change = createChange(root);
+    const candidate = candidateStore(root).captureCandidate({
+      changeId: change.id,
+      selectedBaseRef: "refs/heads/main",
+      resolvedTargetSha: "1111111111111111111111111111111111111111",
+      comparisonBaseSha: "2222222222222222222222222222222222222222",
+      headSha: "3333333333333333333333333333333333333333",
+      now,
+    });
+    expect(candidate.ok).toBe(true);
+    if (!candidate.ok) return;
+    const database = new DatabaseSync(join(root, ".but-why/state.sqlite"));
+    database.exec(`
+      ALTER TABLE changes DROP COLUMN base_ref;
+      DELETE FROM schema_migrations WHERE name = '016_change_base_ref';
+    `);
+    database.close();
+
+    expect(runBy(root, "init", "--task-prefix", "BY").status).toBe(0);
+    expect(changeStore(root).getChangeById(change.id)).toMatchObject({
+      id: change.id,
+      baseRef: null,
+    });
+    expect(candidateStore(root).getCandidateById(candidate.candidate.id)).toEqual(
+      candidate.candidate,
+    );
   });
 
   it("rejects invalid Change lifecycle rows in a newly initialized repository", () => {
@@ -302,6 +334,19 @@ describe("Candidate storage", () => {
     });
     expect(store.getCandidateById(result.candidate.id)).toEqual(result.candidate);
     expect(store.listCandidatesForChange(change.id)).toEqual([result.candidate]);
+    expect(changeStore(root).getChangeById(change.id)).toMatchObject({
+      baseRef: "refs/heads/main",
+    });
+    expect(
+      store.captureCandidate({
+        changeId: change.id,
+        selectedBaseRef: "refs/heads/release",
+        resolvedTargetSha: "4444444444444444444444444444444444444444",
+        comparisonBaseSha: "5555555555555555555555555555555555555555",
+        headSha: "6666666666666666666666666666666666666666",
+        now,
+      }),
+    ).toEqual({ ok: false, code: "change_base_ref_conflict" });
   });
 });
 

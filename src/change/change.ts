@@ -7,6 +7,7 @@ export type ChangeRecord = {
   readonly id: string;
   readonly repositoryCommonDirectory: string;
   readonly branchRef: string;
+  readonly baseRef: string | null;
   readonly taskId: PublicTaskId | null;
   readonly state: ChangeState;
   readonly closeReason: ChangeCloseReason | null;

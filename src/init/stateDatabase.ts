@@ -680,6 +680,12 @@ const migrations: readonly Migration[] = [
       ON candidates (change_id, created_at)
     `,
   },
+  {
+    name: "016_change_base_ref",
+    apply: `
+      ALTER TABLE changes ADD COLUMN base_ref TEXT
+    `,
+  },
 ];
 
 export const ensureStateDatabase = (

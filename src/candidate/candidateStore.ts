@@ -19,6 +19,10 @@ export type CaptureCandidateResult =
   | { readonly ok: true; readonly reused: boolean; readonly candidate: CandidateRecord }
   | {
       readonly ok: false;
-      readonly code: "change_not_found" | "change_closed" | "candidate_provenance_conflict";
+      readonly code:
+        | "change_not_found"
+        | "change_closed"
+        | "change_base_ref_conflict"
+        | "candidate_provenance_conflict";
       readonly candidate?: CandidateRecord;
     };

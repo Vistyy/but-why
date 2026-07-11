@@ -323,6 +323,7 @@ validationSetup:
         { name: "013_validation_prepare_phase" },
         { name: "014_task_context_snapshots" },
         { name: "015_changes_and_candidates" },
+        { name: "016_change_base_ref" },
       ]);
       expect(
         database
