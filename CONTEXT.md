@@ -341,6 +341,10 @@ Global Config can define Agent Profiles, but it does not define a repository's v
 _Avoid_: Repo fallback config, validation defaults
 
 **Agent Profile**:
-A named configuration for running an agent reviewer.
-Agent profiles choose the agent runtime and model without making the reviewer role depend on one specific runtime.
-_Avoid_: Provider config, model config
+A named configuration for running an agent in a specific runtime, with optional model and thinking settings.
+Agent Profiles let execution roles choose a complete agent configuration without depending on one runtime.
+_Avoid_: Provider config, model config, reviewer profile
+
+**Default Agent Profile**:
+The Agent Profile selected by Global Config for an agent execution role that does not select another profile.
+_Avoid_: Default runtime, profile named `default`
