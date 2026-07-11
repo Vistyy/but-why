@@ -112,12 +112,22 @@
           "src/validationRun/toolingErrorKind.ts",
           "src/validationRun/taskContextSnapshot.ts",
           "src/validationRun/validationRun.ts",
+          "src/candidate/candidate.ts",
+          "src/change/change.ts",
           "src/task/lifecycle.ts",
           "src/task/startPolicy.ts",
           "src/task/submitPolicy.ts",
           "src/task/task.ts",
           "src/task/taskId.ts"
         ]
+      },
+      {
+        "name": "candidate-store",
+        "patterns": ["src/candidate/candidateStore.ts"]
+      },
+      {
+        "name": "change-store",
+        "patterns": ["src/change/changeStore.ts"]
       },
       {
         "name": "task-store",
@@ -205,6 +215,8 @@
         "name": "sqlite-concrete-stores",
         "patterns": [
           "src/sqlite/sqliteValidationRunStore.ts",
+          "src/sqlite/sqliteCandidateStore.ts",
+          "src/sqlite/sqliteChangeStore.ts",
           "src/sqlite/sqliteTaskStore.ts",
           "src/sqlite/sqliteValidationRuns.ts"
         ]
@@ -267,6 +279,14 @@
       {
         "from": "domain",
         "allow": []
+      },
+      {
+        "from": "candidate-store",
+        "allow": ["domain"]
+      },
+      {
+        "from": "change-store",
+        "allow": ["domain"]
       },
       {
         "from": "task-store",
@@ -360,6 +380,8 @@
       {
         "from": "sqlite-concrete-stores",
         "allow": [
+          "candidate-store",
+          "change-store",
           "domain",
           "sqlite-core",
           "task-store",
@@ -379,6 +401,8 @@
       {
         "from": "repo-local-storage-wiring",
         "allow": [
+          "candidate-store",
+          "change-store",
           "repo-init",
           "sqlite-concrete-stores",
           "task-store",

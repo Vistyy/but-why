@@ -14,19 +14,18 @@ Done issues are omitted from this graph.
 - `046-publish-by-to-npm-registry.md`
 - `047-design-but-why-agent-skill-workflow-content.md`
 - `049-configure-default-agent-harness-during-setup.md`
-- `050-expand-storage-with-change-and-candidate.md`
+- `051-capture-and-inspect-standalone-change.md`
+- `054-link-tasks-and-project-initial-status.md`
 
 ## Change-centered dependency graph
 
 ```text
-050 expand Change and Candidate storage
-  -> 051 capture and inspect standalone Change
-    -> 052 validate Candidate checks without Task
-      -> 053 freeze policy and make validation idempotent
+051 capture and inspect standalone Change
+  -> 052 validate Candidate checks without Task
+    -> 053 freeze policy and make validation idempotent
 
-050 expand Change and Candidate storage
-  -> 054 link Tasks and project initial status
-    -> 068 add Task dependencies and eligibility
+054 link Tasks and project initial status
+  -> 068 add Task dependencies and eligibility
 
 049 default agent harness + 053 validation idempotency
   -> 055 shared reviewer runner
@@ -67,7 +66,7 @@ Done issues are omitted from this graph.
 056 Specialists + 059 final gates
   -> 067 reviewer eval harness
 
-050 Change lifecycle + 054 Task links + 068 Task dependencies
+054 Task links + 068 Task dependencies
   -> 071 cancel Task and Change
 
 052 Candidate checks + 054 Task projection + 059 final gates
@@ -90,7 +89,6 @@ Done issues are omitted from this graph.
 
 ## Migration notes
 
-- Issue 050 is the expand step for Change and Candidate ownership.
 - Issues 051 through 067 migrate complete product paths.
 - Issue 068 adds Task dependency storage and start or pickup eligibility.
 - Issue 069 hardens multi-repository worker operation.

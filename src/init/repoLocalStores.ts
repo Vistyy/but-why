@@ -1,3 +1,7 @@
+import type { CandidateStore } from "../candidate/candidateStore.js";
+import type { ChangeStore } from "../change/changeStore.js";
+import { openSqliteCandidateStore } from "../sqlite/sqliteCandidateStore.js";
+import { openSqliteChangeStore } from "../sqlite/sqliteChangeStore.js";
 import type { ValidationRunStore } from "../validationRun/validationRunStore.js";
 import { openSqliteValidationRunStore } from "../sqlite/sqliteValidationRunStore.js";
 import { openSqliteTaskStore } from "../sqlite/sqliteTaskStore.js";
@@ -8,6 +12,8 @@ import type { ValidationWorkspaceSetup } from "../validation/validationWorkspace
 import type { RepoLocalContext } from "./repoContext.js";
 
 export type RepoLocalStores = {
+  readonly candidateStore: CandidateStore;
+  readonly changeStore: ChangeStore;
   readonly taskStore: TaskStore;
   readonly validationRunStore: ValidationRunStore;
   readonly validationRuns: ValidationRuns;
@@ -26,6 +32,8 @@ export const openRepoLocalStores = (
   const validationRunStore = openSqliteValidationRunStore(sqliteInput);
 
   return {
+    candidateStore: openSqliteCandidateStore(sqliteInput),
+    changeStore: openSqliteChangeStore(sqliteInput),
     taskStore: openSqliteTaskStore({
       ...sqliteInput,
       taskPrefix: context.taskPrefix,

@@ -322,6 +322,7 @@ validationSetup:
         { name: "012_optional_finding_severity" },
         { name: "013_validation_prepare_phase" },
         { name: "014_task_context_snapshots" },
+        { name: "015_changes_and_candidates" },
       ]);
       expect(
         database
@@ -330,6 +331,8 @@ validationSetup:
           )
           .all(),
       ).toEqual([
+        { name: "candidates" },
+        { name: "changes" },
         { name: "schema_migrations" },
         { name: "task_comments" },
         { name: "tasks" },

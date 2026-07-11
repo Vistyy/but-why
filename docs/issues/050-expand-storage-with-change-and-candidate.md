@@ -11,16 +11,16 @@ This is the expand step of the ownership migration, so current behavior remains 
 
 ## Acceptance criteria
 
-- [ ] A Change has a permanent opaque ID and records its canonical Git common-directory identity, full local branch ref, lifecycle facts, and optional linked Task.
-- [ ] Change state is `open` or `closed`; a closed Change records `completed` or `cancelled` and when it closed.
-- [ ] Storage rejects invalid lifecycle combinations and never reopens a closed Change.
-- [ ] Storage enforces at most one Change for one repository branch, at most one Change for one Task, and at most one Task for one Change.
-- [ ] A Candidate has a permanent opaque ID and records its Change, selected base reference, resolved target SHA, comparison-base SHA, and exact head SHA.
-- [ ] Candidate identity is unique by Change, comparison-base SHA, and head SHA.
-- [ ] Repeated Candidate capture with matching provenance reuses the record, while conflicting provenance is rejected without changing history.
-- [ ] Closed Changes remain readable and accept no new Candidates.
-- [ ] Current Task-owned validation records and commands continue to work during expansion.
-- [ ] Schema migration and store tests cover existing and newly initialized repositories.
+- [x] A Change has a permanent opaque ID and records its canonical Git common-directory identity, full local branch ref, lifecycle facts, and optional linked Task.
+- [x] Change state is `open` or `closed`; a closed Change records `completed` or `cancelled` and when it closed.
+- [x] Storage rejects invalid lifecycle combinations and never reopens a closed Change.
+- [x] Storage enforces at most one Change for one repository branch, at most one Change for one Task, and at most one Task for one Change.
+- [x] A Candidate has a permanent opaque ID and records its Change, selected base reference, resolved target SHA, comparison-base SHA, and exact head SHA.
+- [x] Candidate identity is unique by Change, comparison-base SHA, and head SHA.
+- [x] Repeated Candidate capture with matching provenance reuses the record, while conflicting provenance is rejected without changing history.
+- [x] Closed Changes remain readable and accept no new Candidates.
+- [x] Current Task-owned validation records and commands continue to work during expansion.
+- [x] Schema migration and store tests cover existing and newly initialized repositories.
 
 ## Blocked by
 

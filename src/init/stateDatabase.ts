@@ -642,6 +642,44 @@ const migrations: readonly Migration[] = [
       ADD COLUMN task_context_snapshot TEXT
     `,
   },
+  {
+    name: "015_changes_and_candidates",
+    apply: `
+      CREATE TABLE changes (
+        id TEXT PRIMARY KEY,
+        repository_common_directory TEXT NOT NULL,
+        branch_ref TEXT NOT NULL,
+        task_id TEXT UNIQUE,
+        state TEXT NOT NULL CHECK (state IN ('open', 'closed')),
+        close_reason TEXT CHECK (close_reason IS NULL OR close_reason IN ('completed', 'cancelled')),
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        closed_at TEXT,
+        FOREIGN KEY (task_id) REFERENCES tasks(id),
+        UNIQUE (repository_common_directory, branch_ref),
+        CHECK (
+          (state = 'open' AND close_reason IS NULL AND closed_at IS NULL)
+          OR
+          (state = 'closed' AND close_reason IS NOT NULL AND closed_at IS NOT NULL)
+        )
+      );
+
+      CREATE TABLE candidates (
+        id TEXT PRIMARY KEY,
+        change_id TEXT NOT NULL,
+        selected_base_ref TEXT NOT NULL,
+        resolved_target_sha TEXT NOT NULL,
+        comparison_base_sha TEXT NOT NULL,
+        head_sha TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        FOREIGN KEY (change_id) REFERENCES changes(id),
+        UNIQUE (change_id, comparison_base_sha, head_sha)
+      );
+
+      CREATE INDEX candidates_change_id_created_at_idx
+      ON candidates (change_id, created_at)
+    `,
+  },
 ];
 
 export const ensureStateDatabase = (
