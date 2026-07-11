@@ -34,52 +34,10 @@ v0.12.0 tag commit: e99f832f26dc9d245c019a9ddd19fa5dee792427
 
 The `0.12.0` package reported version `0.12.0` at runtime.
 
-## Prototype path
+## Prototype archive
 
-```text
-spikes/sandcastle-v1-execution/
-```
-
-Run the published `0.12.0` spike with:
-
-```bash
-pnpm --dir spikes/sandcastle-v1-execution run-once
-```
-
-Run the older main-commit spike with:
-
-```bash
-pnpm --dir spikes/sandcastle-v1-execution spike-main
-```
-
-Run the reviewer portions too with:
-
-```bash
-SANDCASTLE_RUN_REVIEWER=1 \
-SANDCASTLE_PI_MODEL='anthropic/claude-sonnet-4.6' \
-SANDCASTLE_PI_THINKING=low \
-pnpm --dir spikes/sandcastle-v1-execution spike-main
-```
-
-The prototype builds a local tarball from the Sandcastle reference checkout when needed.
-That workaround exists only because the required Sandcastle commit is not published yet.
-
-## Commands run
-
-```bash
-git -C ~/projects/references/sandcastle fetch origin main:refs/heads/main
-git -C ~/projects/references/sandcastle checkout main
-git -C ~/projects/references/sandcastle reset --hard 2d93226d37da129c54d4ecfd5b370122b48b31b2
-
-pnpm --dir spikes/sandcastle-v1-execution install --frozen-lockfile=false
-pnpm --dir spikes/sandcastle-v1-execution typecheck
-pnpm --dir spikes/sandcastle-v1-execution spike-main
-
-SANDCASTLE_RUN_REVIEWER=1 \
-SANDCASTLE_PI_MODEL='anthropic/claude-sonnet-4.6' \
-SANDCASTLE_PI_THINKING=low \
-pnpm --dir spikes/sandcastle-v1-execution spike-main
-```
+The executable prototype was removed after its findings were incorporated into the accepted architecture and production implementation.
+See [ADR 0002](../adr/0002-use-sandcastle-as-v1-execution-engine.md) for the accepted decision and [issue 011](../issues/011-create-validation-workspaces-through-sandcastle.md) for the implementation record.
 
 ## What worked on Sandcastle 0.12.0
 
