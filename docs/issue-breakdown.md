@@ -4,32 +4,78 @@ This file tracks remaining issue ordering only.
 
 Detailed issue bodies live under `docs/issues/`.
 
-Parent PRDs live under `docs/prds/`.
+The target architecture is approved by `docs/adr/0008-use-change-as-validation-and-delivery-owner.md` and specified by `docs/prds/change-centered-validation-prd.md`.
 
 Done issues are omitted from this graph.
 
 ## Can start immediately
 
+- `040-add-effect-scheduled-github-polling.md`
 - `046-publish-by-to-npm-registry.md`
 - `047-design-but-why-agent-skill-workflow-content.md`
 - `049-configure-default-agent-harness-during-setup.md`
+- `050-expand-storage-with-change-and-candidate.md`
 
-## Remaining dependency graph
+## Change-centered dependency graph
 
 ```text
-049 default agent harness setup
-  -> 014 acceptance reviewer
-    -> 021 reviewer model eval harness
-      -> 015 quality reviewers
-        -> 016 publish PR
-          -> 040 Effect-scheduled GitHub polling
-            -> 017 watch PR
-              -> 019 reconcile
-                -> 020 daemon
-        -> 018 token summaries
+050 expand Change and Candidate storage
+  -> 051 capture and inspect standalone Change
+    -> 052 validate Candidate checks without Task
+      -> 053 freeze policy and make validation idempotent
 
+050 expand Change and Candidate storage
+  -> 054 link Tasks and project initial status
+
+049 default agent harness + 053 validation idempotency
+  -> 055 shared reviewer runner
+    -> 056 selective Specialist Reviewers
+
+049 default agent harness + 053 validation idempotency
+  -> 057 Code-Writing Executions and check fixing
+
+056 Specialists + 057 Code-Writing Executions
+  -> 058 Specialist fixing loop
+
+054 Task links + 055 reviewer runner + 058 Specialist loop
+  -> 059 final gates and complete by validate
+
+054 Task links + 057 Code-Writing Executions + 059 final gates
+  -> 060 Change-owned Needs Input and resume
+
+053 validation idempotency + 059 final gates + 060 Needs Input
+  -> 061 exact-head submit
+
+040 GitHub polling + 061 exact-head submit
+  -> 062 PR reconciliation
+
+054 Task links + 057 Code-Writing Executions
+  -> 063 Task-backed Implementer Executions
+
+061 exact-head submit + 063 Implementer Executions
+  -> 064 AFK repository worker pickup
+    -> 065 register and launch repository workers
+
+062 PR reconciliation + 065 worker launch
+  -> 069 recover and govern repository workers
+
+056 Specialists + 057 Code-Writing Executions + 060 Needs Input
++ 061 exact-head submit + 062 PR reconciliation
+  -> 066 Change activity and usage
+
+056 Specialists + 059 final gates
+  -> 067 reviewer eval harness
+
+052 Candidate checks + 054 Task projection + 059 final gates
++ 060 Needs Input + 061 exact-head submit + 062 PR reconciliation
++ 063 Implementer Executions + 064 AFK pickup + 066 observability
+  -> 070 contract Task-owned validation and delivery
+```
+
+## Independent work
+
+```text
 046 publish by to npm registry
-
 047 agent skill workflow content
 ```
 
@@ -37,8 +83,10 @@ Done issues are omitted from this graph.
 
 - `048-add-planning-phase-intent-reviewer.md` starts after Planning Phase architecture and the Task-readiness workflow are designed.
 
-## Notes
+## Migration notes
 
-- Issue 049 can start now that config and reviewer Schema contracts exist.
-- Acceptance Review uses the shared reviewer runner and context introduced by issue 014.
-- Quality Reviewers start after issue 021 establishes and calibrates the reviewer model eval harness.
+- Issue 050 is the expand step for Change and Candidate ownership.
+- Issues 051 through 067 migrate complete product paths.
+- Issue 069 hardens multi-repository worker operation.
+- Issue 070 is the contract step that removes the old Task-owned path after every old caller has migrated.
+- The obsolete planned issues 014 through 021 were replaced by the Change-centered slices.
