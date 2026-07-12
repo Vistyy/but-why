@@ -442,7 +442,6 @@ ignores:
   - src/init/repoConfig.ts
   - src/submissionEnvironment/githubTarget.ts
   - src/sqlite/sqliteTaskContextSnapshot.ts
-  - src/sqlite/sqliteCandidateValidationRunStore.ts
 rule:
   pattern: JSON.parse($$$ARGS)
 ---

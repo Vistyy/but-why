@@ -44,7 +44,6 @@ const repoValidationConfigSchema = Schema.Struct({
   sandbox: Schema.optional(repoValidationSandboxConfigSchema),
   prepare: Schema.optional(repoValidationPrepareConfigSchema),
   checks: Schema.optional(Schema.NonEmptyArray(repoCheckConfigSchema)),
-  automaticFixing: Schema.optional(Schema.Boolean),
 });
 
 const repoReviewConfigSchema = Schema.Struct({

@@ -16,95 +16,6 @@ const validationRunStatusSql = "'active', 'failed', 'error'";
 const validationPhaseStatusSql =
   "'pending', 'active', 'passed', 'failed', 'skipped', 'workflow_failed'";
 
-const candidateValidationSchemaSql = `
-  CREATE TABLE IF NOT EXISTS candidate_validation_runs (
-    id TEXT PRIMARY KEY,
-    change_id TEXT NOT NULL,
-    candidate_id TEXT NOT NULL,
-    task_id TEXT,
-    state TEXT NOT NULL CHECK (state IN ('active', 'complete', 'superseded')),
-    outcome TEXT CHECK (outcome IS NULL OR outcome IN ('passed', 'blocked', 'tooling_failed')),
-    policy_snapshot TEXT NOT NULL,
-    policy_fingerprint TEXT NOT NULL,
-    acceptance_context TEXT,
-    acceptance_context_fingerprint TEXT,
-    acceptance_context_key TEXT NOT NULL,
-    copied_files_fingerprint TEXT NOT NULL,
-    created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL,
-    FOREIGN KEY (change_id) REFERENCES changes(id),
-    FOREIGN KEY (candidate_id) REFERENCES candidates(id),
-    CHECK ((state = 'complete' AND outcome IS NOT NULL) OR (state <> 'complete' AND outcome IS NULL)),
-    CHECK ((acceptance_context IS NULL AND acceptance_context_fingerprint IS NULL) OR
-      (acceptance_context IS NOT NULL AND acceptance_context_fingerprint IS NOT NULL))
-  );
-  CREATE INDEX IF NOT EXISTS candidate_validation_runs_change_created_idx
-    ON candidate_validation_runs (change_id, created_at DESC);
-  CREATE INDEX IF NOT EXISTS candidate_validation_runs_candidate_created_idx
-    ON candidate_validation_runs (candidate_id, created_at DESC);
-  CREATE UNIQUE INDEX IF NOT EXISTS candidate_validation_runs_active_change_idx
-    ON candidate_validation_runs (change_id) WHERE state = 'active';
-  CREATE UNIQUE INDEX IF NOT EXISTS candidate_validation_runs_complete_reusable_idx
-    ON candidate_validation_runs (
-      candidate_id, policy_fingerprint, acceptance_context_key, copied_files_fingerprint
-    ) WHERE state = 'complete' AND outcome IN ('passed', 'blocked');
-
-  CREATE TABLE IF NOT EXISTS candidate_validation_run_copied_files (
-    validation_run_id TEXT NOT NULL,
-    path TEXT NOT NULL,
-    content_sha256 TEXT NOT NULL,
-    PRIMARY KEY (validation_run_id, path),
-    FOREIGN KEY (validation_run_id) REFERENCES candidate_validation_runs(id)
-  );
-
-  CREATE TABLE IF NOT EXISTS candidate_validation_run_findings (
-    id TEXT PRIMARY KEY,
-    validation_run_id TEXT NOT NULL,
-    phase TEXT NOT NULL,
-    producer TEXT NOT NULL,
-    title TEXT NOT NULL,
-    description TEXT NOT NULL,
-    evidence TEXT NOT NULL,
-    accepted INTEGER NOT NULL CHECK (accepted IN (0, 1)),
-    created_at TEXT NOT NULL,
-    FOREIGN KEY (validation_run_id) REFERENCES candidate_validation_runs(id)
-  );
-
-  CREATE TABLE IF NOT EXISTS candidate_validation_run_leases (
-    validation_run_id TEXT PRIMARY KEY,
-    lease_token TEXT NOT NULL UNIQUE,
-    holder_id TEXT NOT NULL,
-    state TEXT NOT NULL CHECK (state IN ('active', 'revoked', 'expired')),
-    acquired_at TEXT NOT NULL,
-    renewed_at TEXT NOT NULL,
-    expires_at_ms INTEGER NOT NULL,
-    FOREIGN KEY (validation_run_id) REFERENCES candidate_validation_runs(id)
-  );
-
-  CREATE TABLE IF NOT EXISTS candidate_validation_run_evidence (
-    sequence INTEGER PRIMARY KEY AUTOINCREMENT,
-    validation_run_id TEXT NOT NULL,
-    lease_token TEXT NOT NULL,
-    phase TEXT NOT NULL,
-    producer TEXT NOT NULL,
-    phase_status TEXT CHECK (phase_status IS NULL OR phase_status IN ('passed', 'incomplete')),
-    evidence TEXT NOT NULL,
-    accepted INTEGER NOT NULL CHECK (accepted IN (0, 1)),
-    created_at TEXT NOT NULL,
-    FOREIGN KEY (validation_run_id) REFERENCES candidate_validation_runs(id)
-  );
-
-  CREATE TABLE IF NOT EXISTS candidate_validation_state (
-    change_id TEXT PRIMARY KEY,
-    current_candidate_id TEXT NOT NULL,
-    current_validation_run_id TEXT,
-    updated_at TEXT NOT NULL,
-    FOREIGN KEY (change_id) REFERENCES changes(id),
-    FOREIGN KEY (current_candidate_id) REFERENCES candidates(id),
-    FOREIGN KEY (current_validation_run_id) REFERENCES candidate_validation_runs(id)
-  );
-`;
-
 const migrations: readonly Migration[] = [
   {
     name: "001_init",
@@ -774,10 +685,6 @@ const migrations: readonly Migration[] = [
     apply: `
       ALTER TABLE changes ADD COLUMN base_ref TEXT
     `,
-  },
-  {
-    name: "017_candidate_validation_runs",
-    apply: candidateValidationSchemaSql,
   },
 ];
 

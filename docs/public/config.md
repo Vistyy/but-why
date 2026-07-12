@@ -16,8 +16,7 @@ Global config lives at `~/.config/but-why/config.json` and owns reusable Agent P
     },
     "checks": [
       { "id": "quality", "command": "just quality", "timeoutSeconds": 1200 }
-    ],
-    "automaticFixing": true
+    ]
   }
 }
 ```
@@ -38,9 +37,6 @@ Its `command` is required when the section is present.
 ## `validation.checks`
 
 `validation.checks` is required for submit and must contain at least one check.
-`validation.automaticFixing` defaults to `true`.
-Manual `by submit` supports `--no-auto-fix` and `--auto-fix-command <command>` overrides.
-AFK work follows Repo Config and ignores manual overrides.
 Top-level `checks` is not valid config.
 Each check needs an `id` and `command`.
 Check IDs use lowercase letters, numbers, `-`, and `_`.

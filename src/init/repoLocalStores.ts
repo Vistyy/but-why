@@ -5,8 +5,6 @@ import { openSqliteCandidateStore } from "../sqlite/sqliteCandidateStore.js";
 import { openSqliteChangeCandidateCaptureStore } from "../sqlite/sqliteChangeCandidateCaptureStore.js";
 import { openSqliteChangeStore } from "../sqlite/sqliteChangeStore.js";
 import type { ValidationRunStore } from "../validationRun/validationRunStore.js";
-import type { CandidateValidationRunStore } from "../validationRun/candidateValidationRun.js";
-import { openSqliteCandidateValidationRunStore } from "../sqlite/sqliteCandidateValidationRunStore.js";
 import { openSqliteValidationRunStore } from "../sqlite/sqliteValidationRunStore.js";
 import { openSqliteTaskStore } from "../sqlite/sqliteTaskStore.js";
 import { openSqliteValidationRuns } from "../sqlite/sqliteValidationRuns.js";
@@ -25,7 +23,6 @@ export type RepoLocalStores = {
   readonly changeStore: ChangeStore;
   readonly taskStore: TaskStore;
   readonly validationRunStore: ValidationRunStore;
-  readonly candidateValidationRunStore: CandidateValidationRunStore;
   readonly validationRuns: ValidationRuns;
   readonly recordValidationWorkspaceSetup: (now: string, setup: ValidationWorkspaceSetup) => void;
 };
@@ -48,7 +45,6 @@ export const openRepoLocalStores = (
   };
 
   const validationRunStore = openSqliteValidationRunStore(sqliteInput);
-  const candidateValidationRunStore = openSqliteCandidateValidationRunStore(sqliteInput);
 
   return {
     candidateStore: openSqliteCandidateStore(sqliteInput),
@@ -58,7 +54,6 @@ export const openRepoLocalStores = (
       taskPrefix: context.taskPrefix,
     }),
     validationRunStore,
-    candidateValidationRunStore,
     validationRuns: openSqliteValidationRuns(sqliteInput),
     recordValidationWorkspaceSetup: (now, setup) =>
       recordValidationWorkspaceSetup(validationRunStore, now, setup),

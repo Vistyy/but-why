@@ -7,10 +7,10 @@ import {
   UnsupportedAgentRuntime,
 } from "../agent/agentProfileErrors.js";
 import type { StructuredErrorInput } from "../cliError.js";
-import { repoStateLoadError, runtimeError, success, usageError } from "../cliResults.js";
+import { repoStateLoadError, runtimeError, success } from "../cliResults.js";
 import { withGlobalHelpFlags } from "../cliHelp.js";
 import {
-  parseCliTaskIdValue,
+  parseCliTaskIdArg,
   taskIdResolutionError,
   type CliTaskIdParseResult,
 } from "../cliTaskId.js";
@@ -47,7 +47,7 @@ export const routeSubmit = (
 
   return Effect.catchAllDefect(
     Effect.gen(function* () {
-      const taskIdParse = parseSubmitArgs(args);
+      const taskIdParse = parseSubmitTaskId(args);
 
       if (!taskIdParse.ok) {
         return taskIdParse.result;
@@ -74,9 +74,6 @@ export const routeSubmit = (
       const now = environment.now().toISOString();
       const result = submitPreflight.submit.submitTask({
         taskId: taskId.taskId,
-        ...(taskIdParse.automaticFixingOverride === undefined
-          ? {}
-          : { automaticFixingOverride: taskIdParse.automaticFixingOverride }),
         now,
       });
 
@@ -121,76 +118,16 @@ const submitHelpView = (): StructuredObject => ({
       description: "Public Task ID, such as BY-1",
     },
   ],
-  flags: withGlobalHelpFlags([
-    {
-      flag: "--no-auto-fix",
-      description: "Disable automatic fixing for this manual submit.",
-    },
-    {
-      flag: "--auto-fix-command <command>",
-      description: "Override the automatic-fixing command for this manual submit.",
-    },
-  ]),
-  examples: ["by submit BY-1", "by submit BY-1 --no-auto-fix"],
+  flags: withGlobalHelpFlags(),
+  examples: ["by submit BY-1"],
 });
 
-type SubmitArgsResult =
-  | (Extract<CliTaskIdParseResult, { readonly ok: true }> & {
-      readonly automaticFixingOverride?: {
-        readonly enabled?: boolean;
-        readonly command?: string;
-      };
-    })
-  | Extract<CliTaskIdParseResult, { readonly ok: false }>;
-
-const parseSubmitArgs = (args: readonly string[]): SubmitArgsResult => {
-  const taskIdResult = parseCliTaskIdValue(args[0] ?? "");
-  if (!taskIdResult.ok) return taskIdResult;
-  const overrides = parseAutomaticFixingOverride(args.slice(1));
-  if (!overrides.ok) return overrides;
-  return {
-    ok: true,
-    taskId: taskIdResult.taskId,
-    ...(overrides.value === undefined ? {} : { automaticFixingOverride: overrides.value }),
-  };
-};
-
-type AutomaticFixingOverrideParseResult =
-  | {
-      readonly ok: true;
-      readonly value?: { readonly enabled?: boolean; readonly command?: string };
-    }
-  | Extract<CliTaskIdParseResult, { readonly ok: false }>;
-
-const parseAutomaticFixingOverride = (
-  args: readonly string[],
-): AutomaticFixingOverrideParseResult => {
-  if (args.length === 0) return { ok: true };
-  const flag = args[0];
-  if (flag === "--no-auto-fix" && args.length === 1) {
-    return { ok: true, value: { enabled: false } };
-  }
-  if (flag === "--auto-fix-command" && args.length === 2) {
-    const command = args[1];
-    return command === undefined || command.startsWith("-")
-      ? submitArgsUsage("A command is required after --auto-fix-command.")
-      : { ok: true, value: { command } };
-  }
-  return submitArgsUsage(
-    `${flag?.startsWith("-") ? "Unknown flag" : "Unexpected argument"}: ${flag ?? ""}`,
-  );
-};
-
-const submitArgsUsage = (
-  message: string,
-): Extract<CliTaskIdParseResult, { readonly ok: false }> => ({
-  ok: false,
-  result: usageError({
-    code: "invalid_submit_options",
-    message,
-    help: ["Run `by submit <task-id> --help`."],
-  }),
-});
+const parseSubmitTaskId = (args: readonly string[]): CliTaskIdParseResult =>
+  parseCliTaskIdArg(args, {
+    missingHelp: "Run `by submit <task-id>`.",
+    extraHelp: "Run `by submit --help`.",
+    classifyExtraArg: (arg) => (arg.startsWith("-") ? "unknown_flag" : "unknown_argument"),
+  });
 
 type SubmitPreflightLoadResult =
   | {

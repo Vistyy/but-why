@@ -1,9 +1,4 @@
 import { resolveAgentProfile } from "../agent/agentProfiles.js";
-import { readRepoRelativeBytes } from "../init/repoConfig.js";
-import {
-  resolveValidationPolicySnapshotFromSubmitConfig,
-  type SubmitPolicySnapshotResolution,
-} from "../validationRun/validationPolicySnapshot.js";
 import type { AgentProfileConfig } from "../contracts/agentConfig.js";
 import type { GlobalConfig } from "../contracts/globalConfig.js";
 import type {
@@ -21,7 +16,6 @@ import {
 
 export type SubmitRepoConfig = {
   readonly sandboxMode: ValidationSandboxMode;
-  readonly automaticFixing: boolean;
   readonly prepare?: SubmitPrepareConfig;
   readonly checks: readonly SubmitCheckConfig[];
   readonly intentReviewer?: SubmitReviewerConfig;
@@ -42,34 +36,6 @@ export type SubmitPrepareConfig = RepoValidationPrepareConfig & {
 
 export type SubmitCheckConfig = RepoCheckConfig & {
   readonly timeoutSeconds: number;
-};
-
-export const resolveSubmitPolicySnapshot = (input: {
-  readonly config: SubmitRepoConfig;
-  readonly repositoryRoot: string;
-}): SubmitPolicySnapshotResolution => {
-  const instructionsByPath: Record<string, string> = {};
-  const reviewers = [
-    ...(input.config.intentReviewer === undefined ? [] : [input.config.intentReviewer]),
-    ...(input.config.qualityReview?.reviewers ?? []),
-  ];
-  for (const reviewer of reviewers) {
-    try {
-      instructionsByPath[reviewer.instructionsFile] = new TextDecoder().decode(
-        readRepoRelativeBytes(input.repositoryRoot, reviewer.instructionsFile),
-      );
-    } catch {
-      return {
-        ok: false,
-        code: "reviewer_instructions_unreadable",
-        path: reviewer.instructionsFile,
-      };
-    }
-  }
-  return resolveValidationPolicySnapshotFromSubmitConfig({
-    config: input.config,
-    instructionsByPath,
-  });
 };
 
 const defaultValidationCommandTimeoutSeconds = 1200;
@@ -114,7 +80,6 @@ export const submitRepoConfig = (
     ok: true,
     config: {
       sandboxMode: config.validation?.sandbox?.mode ?? "none",
-      automaticFixing: config.validation?.automaticFixing ?? true,
       ...(prepare === undefined
         ? {}
         : {
