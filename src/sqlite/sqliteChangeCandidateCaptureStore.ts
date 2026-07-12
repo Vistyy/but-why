@@ -6,6 +6,10 @@ import type {
   CommitCandidateCaptureInput,
   CommitCandidateCaptureResult,
 } from "../changeCandidateCapture/changeCandidateCaptureStore.js";
+import {
+  setCurrentCandidate,
+  supersedeActiveCandidateValidationRuns,
+} from "./sqliteCandidateValidationInternals.js";
 import { rollbackIfOpen, withStateDatabase, type SqliteStoreInput } from "./connection.js";
 import { queryOne } from "./query.js";
 
@@ -45,6 +49,13 @@ const commitCapture = (
     if (!baseAssignment.ok) return rollback(database, baseAssignment);
     const candidate = captureStoredCandidate(database, selected.change.id, input);
     if (!candidate.ok) return rollback(database, candidate);
+    setCurrentCandidate(
+      database,
+      selected.change.id,
+      candidate.candidateId,
+      input.now,
+      candidate.reused,
+    );
 
     database.exec("COMMIT");
     return {
@@ -171,6 +182,7 @@ const captureStoredCandidate = (
       input.headSha,
       input.now,
     );
+  supersedeActiveCandidateValidationRuns(database, changeId, input.now);
   return { ok: true, candidateId, reused: false };
 };
 

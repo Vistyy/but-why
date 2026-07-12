@@ -1,4 +1,5 @@
 import { readFileSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 
 import { Either } from "effect";
 
@@ -71,6 +72,9 @@ export const readRepoConfig = (
 export const writeRepoConfig = (path: string, taskPrefix: string): void => {
   writeFileSync(path, `${JSON.stringify({ taskPrefix }, null, 2)}\n`);
 };
+
+export const readRepoRelativeBytes = (repositoryRoot: string, relativePath: string): Uint8Array =>
+  readFileSync(join(repositoryRoot, relativePath));
 
 const configReadFailure = <Config, Failure>(
   path: string,

@@ -74,6 +74,19 @@ describe("by submit CLI", () => {
     expect(gitStatus(root)).toBe(statusBeforeSubmit);
     expect(gitRefExists(root, firstTaskValidationRef)).toBe(false);
 
+    const candidateValidationDatabase = new DatabaseSync(join(root, ".but-why/state.sqlite"));
+    try {
+      expect(
+        candidateValidationDatabase
+          .prepare(
+            "SELECT candidate_id AS candidateId, task_id AS taskId, state FROM candidate_validation_runs WHERE task_id = ?",
+          )
+          .get("BY-1"),
+      ).toMatchObject({ candidateId: expect.any(String), taskId: "BY-1", state: "complete" });
+    } finally {
+      candidateValidationDatabase.close();
+    }
+
     const validationWorkspace =
       validationRunStore(root).getValidationWorkspaceSetup(firstTaskValidationRunId);
 
@@ -946,6 +959,15 @@ const preparedRepoOnBranch = (branch: string): string => {
   spawnGit(root, "remote", "add", "origin", "https://github.com/acme/widgets.git");
   spawnGit(root, "add", ".");
   spawnGit(root, "commit", "-m", "Initialize task repo");
+  const baseSha = currentCommitSha(root);
+  if (
+    spawnSync("git", ["show-ref", "--verify", "--quiet", "refs/heads/main"], { cwd: root })
+      .status !== 0
+  ) {
+    spawnGit(root, "branch", "main");
+  }
+  spawnGit(root, "update-ref", "refs/remotes/origin/main", baseSha);
+  spawnGit(root, "symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/main");
   if (currentBranch(root) !== branch) {
     spawnGit(root, "checkout", "-b", branch);
   }

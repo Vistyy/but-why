@@ -58,7 +58,9 @@ describe("Task lifecycle", () => {
 
   it("keeps the durable Task state constraint in sync with Task states", () => {
     const stateDatabaseSource = readFileSync("src/init/stateDatabase.ts", "utf8");
-    const match = stateDatabaseSource.match(/state IN \(([^)]+)\)/);
+    const match = stateDatabaseSource.match(
+      /CREATE TABLE IF NOT EXISTS tasks[\s\S]*?state IN \(([^)]+)\)/,
+    );
 
     if (match === null) {
       throw new Error("Task state SQL constraint was not found");

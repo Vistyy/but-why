@@ -7,6 +7,10 @@ import type {
   CaptureCandidateInput,
   CaptureCandidateResult,
 } from "../candidate/candidateStore.js";
+import {
+  setCurrentCandidate,
+  supersedeActiveCandidateValidationRuns,
+} from "./sqliteCandidateValidationInternals.js";
 import { rollbackIfOpen, withStateDatabase, type SqliteStoreInput } from "./connection.js";
 import { queryAll, queryOne } from "./query.js";
 
@@ -67,6 +71,7 @@ const captureCandidate = (
         return { ok: false, code: "candidate_provenance_conflict", candidate: existing };
       }
       assignInitialBase(database, input.changeId, change.baseRef, input.selectedBaseRef, input.now);
+      setCurrentCandidate(database, input.changeId, existing.id, input.now, true);
       database.exec("COMMIT");
       return { ok: true, reused: true, candidate: existing };
     }
@@ -94,6 +99,8 @@ const captureCandidate = (
         input.headSha,
         input.now,
       );
+    supersedeActiveCandidateValidationRuns(database, input.changeId, input.now);
+    setCurrentCandidate(database, input.changeId, id, input.now);
     const candidate = getCandidateById(database, id);
     if (candidate === undefined) throw new Error("Candidate disappeared after capture");
 

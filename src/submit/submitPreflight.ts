@@ -21,6 +21,10 @@ export type SubmitPreflight = {
 export type SubmitTaskInput = {
   readonly taskId: PublicTaskId;
   readonly now: string;
+  readonly automaticFixingOverride?: {
+    readonly enabled?: boolean;
+    readonly command?: string;
+  };
 };
 
 export type SubmitTaskResult =
@@ -28,6 +32,7 @@ export type SubmitTaskResult =
       readonly ok: true;
       readonly taskId: PublicTaskId;
       readonly validationRunId: string;
+      readonly candidateValidationRunId?: string;
       readonly branch: string;
       readonly commitSha: string;
       readonly taskState: "validating";

@@ -63,7 +63,8 @@ If detection fails, `by submit <task-id>` fails during preflight.
         "command": "just quality",
         "timeoutSeconds": 1200
       }
-    ]
+    ],
+    "automaticFixing": true
   },
   "review": {
     "intent": {
@@ -88,6 +89,10 @@ If detection fails, `by submit <task-id>` fails during preflight.
   }
 }
 ```
+
+`validation.automaticFixing` defaults to `true` and controls automatic fixing for repository-configured work.
+A manual `by submit` may override it with `--no-auto-fix` or `--auto-fix-command <command>`.
+AFK work ignores manual overrides and follows Repo Config.
 
 The exact reviewer roles are not fixed by architecture.
 

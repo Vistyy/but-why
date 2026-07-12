@@ -171,6 +171,7 @@ help[1]: Move the conflicting path aside before running init again.`);
         { name: "014_task_context_snapshots" },
         { name: "015_changes_and_candidates" },
         { name: "016_change_base_ref" },
+        { name: "017_candidate_validation_runs" },
       ]);
     } finally {
       repairedDatabase.close();

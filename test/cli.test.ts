@@ -324,6 +324,7 @@ validationSetup:
         { name: "014_task_context_snapshots" },
         { name: "015_changes_and_candidates" },
         { name: "016_change_base_ref" },
+        { name: "017_candidate_validation_runs" },
       ]);
       expect(
         database
@@ -332,6 +333,12 @@ validationSetup:
           )
           .all(),
       ).toEqual([
+        { name: "candidate_validation_run_copied_files" },
+        { name: "candidate_validation_run_evidence" },
+        { name: "candidate_validation_run_findings" },
+        { name: "candidate_validation_run_leases" },
+        { name: "candidate_validation_runs" },
+        { name: "candidate_validation_state" },
         { name: "candidates" },
         { name: "changes" },
         { name: "schema_migrations" },

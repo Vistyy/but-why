@@ -3,6 +3,7 @@ import { existsSync } from "node:fs";
 import { Effect } from "effect";
 
 import { readGlobalConfig } from "../init/globalConfig.js";
+import { requestCandidateOwnedSubmitValidation } from "../submit/candidateOwnedSubmitValidation.js";
 import { openRepoLocalStores, type RepoLocalStores } from "../init/repoLocalStores.js";
 import {
   loadRepoLocalContext,
@@ -127,18 +128,45 @@ const localSubmitPreflight = (
   migrationTimestamp: () => string,
   validationConfig: SubmitRepoConfig | undefined,
 ): LocalSubmitPreflight => {
-  const { taskStore, validationRuns, recordValidationWorkspaceSetup } = openRepoLocalStores(
-    context,
-    migrationTimestamp,
-  );
+  const {
+    taskStore,
+    changeStore,
+    candidateValidationRunStore,
+    validationRuns,
+    recordValidationWorkspaceSetup,
+  } = openRepoLocalStores(context, migrationTimestamp);
   const taskAuthority = localTaskAuthority({ context, taskStore, validationRuns });
   const submissionEnvironment = localSubmissionEnvironment({ context });
   const submitPreflight = openSubmitPreflight({ taskAuthority, submissionEnvironment });
+  const candidateExecution: CandidateExecution = { current: undefined };
 
   return {
     taskPrefix: taskAuthority.taskPrefix,
     resolveTaskId: taskAuthority.resolveTaskId,
-    submitTask: submitPreflight.submitTask,
+    submitTask: (input) => {
+      const candidateValidationRunId =
+        validationConfig === undefined
+          ? undefined
+          : requestCandidateBeforeLegacySubmit({
+              taskAuthority,
+              submissionEnvironment,
+              context,
+              taskStore,
+              changeStore,
+              candidateValidationRunStore,
+              candidateExecution,
+              validationConfig,
+              taskId: input.taskId,
+              ...(input.automaticFixingOverride === undefined
+                ? {}
+                : { automaticFixingOverride: input.automaticFixingOverride }),
+              now: input.now,
+            });
+      const result = submitPreflight.submitTask(input);
+      return result.ok && candidateValidationRunId !== undefined
+        ? { ...result, candidateValidationRunId }
+        : result;
+    },
     createValidationWorkspaceForValidationRun: (input) =>
       createValidationWorkspaceForValidationRun(
         taskAuthority,
@@ -146,9 +174,65 @@ const localSubmitPreflight = (
         recordValidationWorkspaceSetup,
         validationConfig,
         context,
+        candidateValidationRunStore,
+        candidateExecution,
         input,
       ),
   };
+};
+
+const requestCandidateBeforeLegacySubmit = (input: {
+  readonly taskAuthority: TaskAuthority;
+  readonly submissionEnvironment: SubmissionEnvironment;
+  readonly context: RepoLocalContext;
+  readonly taskStore: RepoLocalStores["taskStore"];
+  readonly changeStore: RepoLocalStores["changeStore"];
+  readonly candidateValidationRunStore: RepoLocalStores["candidateValidationRunStore"];
+  readonly candidateExecution: CandidateExecution;
+  readonly validationConfig: SubmitRepoConfig;
+  readonly taskId: PublicTaskId;
+  readonly automaticFixingOverride?: SubmitTaskInput["automaticFixingOverride"];
+  readonly now: string;
+}): string | undefined => {
+  const readiness = input.taskAuthority.getTaskSubmitReadiness(input.taskId);
+  if (!readiness.ok) return undefined;
+  if (!input.submissionEnvironment.readSubmittedCodeCandidate().ok) return undefined;
+
+  const candidateRequest = requestCandidateOwnedSubmitValidation({
+    context: input.context,
+    taskStore: input.taskStore,
+    changeStore: input.changeStore,
+    candidateValidationRunStore: input.candidateValidationRunStore,
+    validationConfig: input.validationConfig,
+    taskId: input.taskId,
+    ...(input.automaticFixingOverride === undefined
+      ? {}
+      : { automaticFixingOverride: input.automaticFixingOverride }),
+    now: input.now,
+  });
+  if (!candidateRequest.ok) return undefined;
+
+  const lease = input.candidateValidationRunStore.acquireLease({
+    validationRunId: candidateRequest.run.id,
+    holderId: "by-submit",
+    now: input.now,
+    nowMs: Date.parse(input.now),
+  });
+  if (!lease.ok) return undefined;
+  input.candidateExecution.current = {
+    validationRunId: candidateRequest.run.id,
+    leaseToken: lease.lease.leaseToken,
+  };
+  return candidateRequest.run.id;
+};
+
+type CandidateExecution = {
+  current:
+    | {
+        readonly validationRunId: string;
+        readonly leaseToken: string;
+      }
+    | undefined;
 };
 
 const createValidationWorkspaceForValidationRun = (
@@ -157,6 +241,8 @@ const createValidationWorkspaceForValidationRun = (
   recordValidationWorkspaceSetup: RepoLocalStores["recordValidationWorkspaceSetup"],
   validationConfig: SubmitRepoConfig | undefined,
   context: RepoLocalContext,
+  candidateValidationRunStore: RepoLocalStores["candidateValidationRunStore"],
+  candidateExecution: CandidateExecution,
   input: CreateLocalValidationWorkspaceForValidationRunInput,
 ): Effect.Effect<CreateValidationWorkspaceForValidationRunResult> =>
   Effect.gen(function* () {
@@ -246,20 +332,59 @@ const createValidationWorkspaceForValidationRun = (
 
     if (result.ok) {
       recordValidationWorkspaceSetup(input.now, result.validationWorkspace);
-
+      settleCandidateExecution(
+        candidateValidationRunStore,
+        candidateExecution,
+        input,
+        result.activeWorkspaceResult?.validationFindings === 1 ? "blocked" : "passed",
+      );
       return result;
     }
 
     if ("toolingFailure" in result) {
       recordValidationToolingFailure(taskAuthority, input, result.toolingFailure);
-
+      settleCandidateExecution(
+        candidateValidationRunStore,
+        candidateExecution,
+        input,
+        "tooling_failed",
+      );
       return result;
     }
 
     recordValidationWorkspaceToolingFailure(taskAuthority, input, result.toolingError);
-
+    settleCandidateExecution(
+      candidateValidationRunStore,
+      candidateExecution,
+      input,
+      "tooling_failed",
+    );
     return result;
   });
+
+const settleCandidateExecution = (
+  store: RepoLocalStores["candidateValidationRunStore"],
+  execution: CandidateExecution,
+  input: CreateLocalValidationWorkspaceForValidationRunInput,
+  outcome: "passed" | "blocked" | "tooling_failed",
+): void => {
+  const current = execution.current;
+  if (current === undefined) return;
+  const recorded = store.recordEvidence({
+    validationRunId: current.validationRunId,
+    leaseToken: current.leaseToken,
+    phase: "checks",
+    producer: "task-submit-execution-bridge",
+    phaseStatus: outcome === "passed" ? "passed" : "incomplete",
+    evidence: { legacyValidationRunId: input.validationRunId, outcome },
+    outcome,
+    now: input.now,
+  });
+  execution.current = undefined;
+  if (!recorded.ok) {
+    throw new Error(`Could not record Candidate Validation Run outcome: ${recorded.code}`);
+  }
+};
 
 const skippedPhasesAfterPrepareFailure = [
   "checks",

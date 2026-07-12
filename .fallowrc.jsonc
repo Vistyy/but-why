@@ -116,6 +116,10 @@
           "src/validationRun/toolingErrorKind.ts",
           "src/validationRun/taskContextSnapshot.ts",
           "src/validationRun/validationRun.ts",
+          "src/validationRun/acceptanceContext.ts",
+          "src/validationRun/automaticFixing.ts",
+          "src/validationRun/candidateValidationRun.ts",
+          "src/validationRun/canonicalJson.ts",
           "src/candidate/candidate.ts",
           "src/change/change.ts",
           "src/task/lifecycle.ts",
@@ -154,6 +158,13 @@
         "patterns": ["src/validationRun/validationRunStore.ts"]
       },
       {
+        "name": "validation-inputs",
+        "patterns": [
+          "src/validationRun/copiedFiles.ts",
+          "src/validationRun/validationPolicySnapshot.ts"
+        ]
+      },
+      {
         "name": "validation-runs",
         "patterns": [
           "src/validation/validationRuns.ts",
@@ -188,7 +199,8 @@
           "src/task/taskUseCases.ts",
           "src/validationRun/validationRunUseCases.ts",
           "src/submit/submitPreflight.ts",
-          "src/submit/submitRepoConfig.ts"
+          "src/submit/submitRepoConfig.ts",
+          "src/submit/candidateOwnedSubmitValidation.ts"
         ]
       },
       {
@@ -224,7 +236,8 @@
           "src/sqlite/query.ts",
           "src/sqlite/sqliteJsonStringArray.ts",
           "src/sqlite/sqliteTaskContextSnapshot.ts",
-          "src/sqlite/sqliteValidationRunInternals.ts"
+          "src/sqlite/sqliteValidationRunInternals.ts",
+          "src/sqlite/sqliteCandidateValidationInternals.ts"
         ]
       },
       {
@@ -235,7 +248,8 @@
           "src/sqlite/sqliteChangeCandidateCaptureStore.ts",
           "src/sqlite/sqliteChangeStore.ts",
           "src/sqlite/sqliteTaskStore.ts",
-          "src/sqlite/sqliteValidationRuns.ts"
+          "src/sqlite/sqliteValidationRuns.ts",
+          "src/sqlite/sqliteCandidateValidationRunStore.ts"
         ]
       },
       {
@@ -300,7 +314,8 @@
       },
       {
         "from": "domain",
-        "allow": []
+        "allow": [],
+        "allowTypeOnly": ["validation-inputs"]
       },
       {
         "from": "candidate-store",
@@ -336,6 +351,11 @@
         "allow": ["domain"]
       },
       {
+        "from": "validation-inputs",
+        "allow": ["domain", "repo-init"],
+        "allowTypeOnly": ["contracts", "use-cases", "validation-workspace"]
+      },
+      {
         "from": "validation-runs",
         "allow": ["domain", "validation-tooling-failures"],
         "allowTypeOnly": ["use-cases", "validation-run-store"]
@@ -367,9 +387,11 @@
         "from": "use-cases",
         "allow": [
           "agent-profiles",
+          "change-candidate-capture",
           "contracts",
           "domain",
           "repo-init",
+          "validation-inputs",
           "validation-run-store",
           "submission-environment-port",
           "task-adapter",
@@ -377,7 +399,7 @@
           "task-store",
           "submit-rejection-errors"
         ],
-        "allowTypeOnly": ["validation-workspace"]
+        "allowTypeOnly": ["repo-local-storage-wiring", "validation-workspace"]
       },
       {
         "from": "task-adapter",
@@ -386,6 +408,7 @@
       {
         "from": "local-orchestration",
         "allow": [
+          "change-candidate-capture",
           "domain",
           "github-adapter",
           "repo-init",
@@ -397,6 +420,7 @@
           "task-authority-port",
           "task-store",
           "use-cases",
+          "validation-inputs",
           "validation-tooling-failures",
           "validation-runs"
         ],
@@ -426,6 +450,7 @@
           "domain",
           "sqlite-core",
           "task-store",
+          "validation-inputs",
           "validation-tooling-failures",
           "validation-run-store",
           "validation-runs"
@@ -445,6 +470,7 @@
           "candidate-store",
           "change-candidate-capture-store",
           "change-store",
+          "domain",
           "repo-init",
           "sqlite-concrete-stores",
           "task-store",
