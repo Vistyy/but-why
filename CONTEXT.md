@@ -51,6 +51,11 @@ A conflicting account of how the base was chosen is rejected rather than changin
 A Candidate may contain many Git commits between those SHAs.
 _Avoid_: Single commit, working tree, branch head
 
+**Current Candidate**:
+The latest Candidate captured for an Open Change and the only Candidate whose validation may advance the Change's current state.
+Earlier Candidates and their validation evidence remain available as history.
+_Avoid_: Branch head, Validated Baseline, deleted Candidate
+
 **Acceptance Context**:
 The immutable approved requirements used by Acceptance Review.
 A Task Context Snapshot supplies Acceptance Context for a Task-backed Change, while a Change without Acceptance Context skips Acceptance Review.
@@ -61,6 +66,31 @@ A durable attempt that judges one Candidate through the Validation Gate under fi
 A new Candidate creates a new Validation Run, while the Change carries completed Specialist Reviewer evidence forward.
 A later Validation Run may judge the same Candidate when validation must be retried.
 _Avoid_: Change, job, pipeline run
+
+**Current Validation Run**:
+The Validation Run selected for an Open Change from its Current Candidate and immutable validation inputs.
+A matching request reuses its active work or completed evidence, while changed inputs replace it and supersede it only when it is still active.
+_Avoid_: Latest historical run, Validation Run History, parallel active run
+
+**Validation Run State**:
+The lifecycle position of a Validation Run: `active`, `complete`, or `superseded`.
+A complete run has a Validation Run Outcome, while a superseded run was replaced rather than completed or failed.
+_Avoid_: Task state, Change state, validation result
+
+**Validation Run Outcome**:
+The result of a complete Validation Run: `passed`, `blocked`, or `tooling_failed`.
+A blocked outcome has Findings, while a tooling-failed outcome records a Validation Tooling Failure.
+_Avoid_: Validation Run State, Needs Input, phase status
+
+**Superseded Validation Run**:
+An active Validation Run stopped because newer code or immutable validation inputs replaced it.
+Its recorded evidence remains inspectable but cannot advance the Change's current validation state.
+_Avoid_: Completed Validation Run, cancelled Candidate, deleted run
+
+**Validation Run Lease**:
+A temporary exclusive claim that allows one process to advance an active Validation Run.
+An expired lease ends that run with a Validation Tooling Failure so validation can retry without accepting late results.
+_Avoid_: Validation Run ownership, permanent lock, Task claim
 
 **Validation Run History**:
 The ordered set of Validation Runs for a Change across Candidates and retries.
@@ -281,7 +311,7 @@ It may repeat after revisions to its own Findings, but it does not reopen or coo
 _Avoid_: Specialist Reviewer, validation coordinator, PR Writer
 
 **Validation Workspace**:
-A read-only resource scoped to one Validation Run that provides an isolated copy of the exact Candidate head.
+An isolated resource scoped to one Validation Run that keeps the Candidate commit, index, and tracked content unchanged while allowing temporary environment files.
 A Validation Workspace exists until the Validation Run no longer needs it and is not itself a Phase or Round.
 _Avoid_: Change Workspace, workspace phase, CI workspace
 

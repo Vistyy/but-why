@@ -12,7 +12,8 @@ It receives immutable Candidate and policy inputs, optional Acceptance Context, 
 ## Acceptance criteria
 
 - [ ] A reviewer runs against the exact Candidate in a read-only Validation Workspace.
-- [ ] Reviewer input includes its role, instructions, policy, repository guidance, and optional Acceptance Context.
+- [ ] Reviewer input includes its role, instructions, policy, and repository guidance.
+- [ ] Only the Acceptance Reviewer receives optional Acceptance Context.
 - [ ] Structured output distinguishes Findings, no Findings, invalid output, tooling failure, and interrupted execution.
 - [ ] Artifacts and token usage are recorded for inspection.
 - [ ] Reviewer executions cannot modify the Change Workspace, publish, or resolve Findings directly.
@@ -21,4 +22,4 @@ It receives immutable Candidate and policy inputs, optional Acceptance Context, 
 ## Blocked by
 
 - `docs/issues/049-configure-default-agent-harness-during-setup.md`
-- `docs/issues/053-freeze-policy-and-make-validation-idempotent.md`
+- `docs/issues/052-validate-candidate-checks-without-task.md`

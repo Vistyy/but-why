@@ -24,4 +24,4 @@ The Fixer writes only through the attached clean checkout, commits a successor C
 ## Blocked by
 
 - `docs/issues/049-configure-default-agent-harness-during-setup.md`
-- `docs/issues/053-freeze-policy-and-make-validation-idempotent.md`
+- `docs/issues/052-validate-candidate-checks-without-task.md`

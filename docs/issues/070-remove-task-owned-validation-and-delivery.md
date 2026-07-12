@@ -6,20 +6,18 @@
 
 ## What to build
 
-Complete the contract step of the ownership migration.
-Remove Task-owned Validation Run identity, lifecycle authority, submission preflight, old reviewer phase writes, and compatibility paths so Change-centered behavior is the only supported path.
+Complete the cleanup step of the ownership migration.
+Remove remaining Task-owned lifecycle authority, submission preflight, old reviewer phase writes, and compatibility paths so Change-centered behavior is the only supported path.
 
 ## Acceptance criteria
 
-- [ ] Validation Runs require Candidate ownership and use optional Task traceability only.
-- [ ] Task-derived Validation Run IDs, active-run uniqueness, and artifact identity are replaced by Change-centered forms.
 - [ ] Task status is read only through the approved projection.
 - [ ] Storage enforces at most one Change per Task and at most one Task per Change.
 - [ ] Change lifecycle uses permanent `open` or `closed` state without replacement or supersession storage.
 - [ ] Candidate capture is independent from GitHub publication targeting.
-- [ ] Old Quality Reviewer and publication phase write paths are removed after historical records remain readable through supported views.
+- [ ] Old Quality Reviewer and publication phase write paths are removed while Candidate-owned history remains readable through supported views.
 - [ ] Task Authority no longer coordinates validation or publication.
-- [ ] Database migration preserves supported history and leaves no duplicate ownership implementation.
+- [ ] Storage leaves no duplicate ownership implementation.
 - [ ] All quality, migration, and end-to-end command checks pass through the Change-centered path.
 
 ## Blocked by

@@ -13,23 +13,23 @@ Done issues are omitted from this graph.
 - `040-add-effect-scheduled-github-polling.md`
 - `046-publish-by-to-npm-registry.md`
 - `047-design-but-why-agent-skill-workflow-content.md`
-- `052-validate-candidate-checks-without-task.md`
+- `053-freeze-policy-and-make-validation-idempotent.md`
 - `054-link-tasks-to-changes-and-project-status.md`
 
 ## Change-centered dependency graph
 
 ```text
-052 validate Candidate checks without Task
-  -> 053 freeze policy and make validation idempotent
+053 freeze policy and make validation idempotent
+  -> 052 validate Candidate checks without Task
 
 054 link Tasks and project initial status
   -> 068 add Task dependencies and eligibility
 
-053 validation idempotency
+052 Candidate checks
   -> 055 shared reviewer runner
     -> 056 selective Specialist Reviewers
 
-053 validation idempotency
+052 Candidate checks
   -> 057 Code-Writing Executions and check fixing
 
 056 Specialists + 057 Code-Writing Executions
@@ -71,7 +71,7 @@ Done issues are omitted from this graph.
 + 060 Needs Input + 061 exact-head submit + 062 PR reconciliation
 + 063 Implementer Executions + 064 AFK pickup + 066 observability
 + 068 Task dependencies
-  -> 070 contract Task-owned validation and delivery
+  -> 070 remove remaining Task-owned validation and delivery
 ```
 
 ## Independent work
@@ -92,6 +92,7 @@ Done issues are omitted from this graph.
 - Issue 068 adds Task dependency storage and start or pickup eligibility.
 - Issue 069 hardens multi-repository worker operation.
 - Issue 071 adds explicit Task cancellation and cancelled Change closure.
-- Issue 070 is the contract step that removes the old Task-owned path after every required ownership migration is complete.
+- Issue 053 replaces Task-owned Validation Run identity and storage directly because no historical product data requires compatibility.
+- Issue 070 removes remaining Task-owned validation and delivery code after every required ownership migration is complete.
 - Cancelled-prerequisite behavior remains unresolved.
 - The obsolete planned issues 014 through 021 were replaced by the Change-centered slices.
