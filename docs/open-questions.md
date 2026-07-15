@@ -29,31 +29,22 @@ This must stay distinct from the Validation Gate, which validates a completed su
 
 ## Task metadata, tags, and routing
 
-Tasks may need metadata for classification, routing, automation policy, and scheduling.
+V1 supports only the built-in `afk` tag for automatic pickup.
+Lifecycle control, dependencies, and Task Queue Order remain first-class behavior rather than tags.
 
-Open questions:
-
-- Which needs belong in lifecycle state?
-- Which needs belong in tags?
-- Which needs deserve first-class fields or relationships?
-- Should tags influence validation profiles or reviewer selection?
-- Should categories such as UI change validation behavior?
-- Which semantics must But Why? enforce instead of treating them as labels?
+Later versions may add classification or routing only when a concrete capability defines its behavior.
+Open questions include whether categories should select validation policy or map to external Task Surfaces.
 
 ## Task relationships and dependencies
 
-Task Dependencies are accepted directed prerequisites.
-They block manual start and automatic pickup until every prerequisite Task is `done`.
-Other Task relationship behavior remains open.
+Task Dependencies are directed prerequisites.
+They do not block Task editing or Approval, and every prerequisite must be done before the dependent Task may start manually or automatically.
+A dependent Task's prerequisite list becomes fixed when that Task starts.
+A cancelled prerequisite remains unsatisfied, and a cycle is rejected atomically with the complete cycle shown in the error.
 
 Open questions:
 
 - What relationship types exist beyond Task Dependencies?
-- Can dependencies be added or removed after either Task starts?
-- Do Task Dependencies also block submission if they are added after work starts?
-- What happens to dependent Tasks when a prerequisite Task is cancelled?
-- How are blocked Tasks and dependency changes shown in dashboards?
-- How are dependency cycles handled?
 - Are relationships local-only, or must they map to future external Task Surfaces?
 
 
@@ -65,52 +56,39 @@ The remaining config shape is open for whether check commands should support arg
 
 The config should stay small and should not become a generic workflow language.
 
-## Quality Reviewer role set
+## Reviewer role set
 
-Acceptance Review is mandatory.
-Quality Reviewer roles remain configurable and are not fixed by the v1 architecture.
-
-We still need to decide the default Quality Reviewer set created by `by init`.
-
-Candidate roles:
-
-- bugs
-- simplicity
-- domain
-- documentation
+V1 supports explicitly configured Specialist Reviewers, one always-on Final Reviewer, and an Acceptance Reviewer only when Acceptance Context exists.
+`by init` configures no Specialists by default.
+Specialists require repository-owned instruction files, while Final and Acceptance Review use built-in prompts unless Repo Config supplies overrides.
+The exact built-in prompt contents remain owned by their implementation Tasks and reviewer evaluation fixtures.
 
 ## GitHub readiness details
 
-V1 requires GitHub PR publishing.
-
-We still need exact rules for `ready`:
-
-- required checks only or all checks
-- requested-changes review handling
-- draft PR handling
-- timeout default
-- closed PR without merge behavior
-
-Current direction: a PR is ready only when GitHub says it is mergeable, required checks pass, and no active requested-changes review blocks it.
+V1 publishes one non-draft PR for one locally owned Change and treats GitHub as the authority for required checks and mergeability.
+A PR is ready only when it is open, non-draft, mergeable, at the expected base and exact validated head, all GitHub-required checks pass, and no active requested-changes review blocks it.
+Normal comments do not block readiness, and no comment or review text becomes automatic code-writing input.
+But Why? code records Needs Input when trusted GitHub facts show an active requested-changes review, external head push, base-target retargeting, or unmerged closed PR with no approved automatic continuation.
+An opt-in PR Readiness Fixer may address only failed required CI or a confirmed merge conflict on an exact owned PR through the hardened v1 sandbox boundary.
+The polling timeout and retry defaults remain owned by the PR watching Task.
 
 ## Agent profiles and Sandcastle mapping
 
-We chose `agentRuntime` and `agentModel` instead of `provider` and `model`.
+V1 executes only Pi Agent Profiles through Sandcastle.
+Additional runtimes become later vertical capabilities.
 
-We still need to map profile fields to Sandcastle provider options.
-
-Open details:
+The remaining Pi adapter details are:
 
 - environment variables
 - session storage
 - log locations
-- provider-specific permissions
+- permissions
 
 ## Token accounting
 
 V1 records tokens, not dollar costs.
 
-We still need to verify how each Sandcastle runtime maps its output into the canonical buckets:
+We still need to verify how the Pi Sandcastle adapter maps available usage into the canonical buckets:
 
 ```text
 inputTokens
@@ -131,3 +109,23 @@ We still need to decide whether later versions should export traces to:
 - another existing observability tool
 
 No custom dashboard should be built early.
+
+## Stronger automatic-writing isolation
+
+V1 uses a hardened Sandcastle Docker or rootless Podman provider as an explicit opt-in trade-off for unattended code writing.
+A future security slice may add an isolated Sandcastle provider backed by OpenShell or Gondolin after a spike proves Pi session transfer, private workspace synchronization, credential proxying, deny-by-default network policy, cancellation, resource limits, and Candidate export.
+Docker Sandboxes and gVisor remain comparison points rather than selected dependencies.
+
+## Supervisor terminal UI
+
+A future terminal UI may connect to the headless user-level Supervisor to inspect repositories, Task queues, worker health, activity, and blockers and to request Task reordering, start, resume, or cancellation actions.
+The terminal UI is a separate client, so closing it never stops Supervisor or worker automation.
+Design begins only after the worker protocol, health model, Task queue, and structured inspection commands are stable.
+The exact interaction model, command name, cross-repository views, and write operations remain open.
+
+## Coordinator Agent
+
+A future first-party Coordinator Agent may provide one conversational place to refine, order, dispatch, and monitor work across registered repositories.
+It is a client of durable Task, Change, validation, fleet-reporting, and targeted-dispatch interfaces rather than an owner of workflow state or part of the Supervisor.
+This capability begins only after single-repository automation, the headless Supervisor, targeted dispatch, and bounded fleet reporting are stable.
+Its agent harness, conversation surface, authority limits, and relationship to the terminal UI remain open.

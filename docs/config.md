@@ -143,12 +143,14 @@ Profile semantic validation is lazy so unrelated commands remain usable.
 
 ## Validation workspace
 
-Repo config may allowlist untracked files to copy into the validation workspace.
+Repo config may allowlist ordinary untracked or ignored regular files to copy into the validation workspace.
 
-These paths are repo-relative.
+These paths are normalized repository-relative paths.
+Tracked files, missing paths, directories, symbolic links, non-regular files, duplicate normalized paths, and paths outside the repository are Submit Rejections before Run creation.
 When `validationWorkspace` is present, `copyFiles` contains at least one path.
 
-They are copied into the Sandcastle worktree before validation commands or reviewers run.
+Each path's raw-byte SHA-256 and executable bit become immutable Run inputs.
+An Attempt verifies the identity while copying the file into the Sandcastle worktree before validation commands or reviewers run.
 
 Example:
 
@@ -162,9 +164,11 @@ Example:
 
 V1 should not copy untracked files automatically.
 
-Missing allowlisted files should be structured tooling errors.
+A file that changes after selection triggers one automatic complete input reselection.
+If a stable replacement input set cannot be selected, the Change records Needs Input rather than a Validation Tooling Failure.
 
 Copied files are not part of the submitted commit SHA.
+Their contents are not stored in SQLite.
 
 ## Validation sandboxing
 
@@ -302,11 +306,11 @@ Checks without `timeoutSeconds` default to `1200` seconds.
 
 A timed-out check creates a blocking Finding without severity, not a Validation Tooling Failure.
 
-Validation stops immediately after a check timeout.
+Later configured checks still run after a check failure or timeout.
 
 A check `id` is the Producer id for that check's validation output.
 
-Check ids must be valid for artifact refs.
+Check ids must be valid Producer identifiers.
 
 Check ids contain only lowercase letters, numbers, `-`, and `_`.
 
@@ -314,13 +318,9 @@ Check ids start with a lowercase letter or number.
 
 Duplicate check ids are a Submit Rejection Error before Validation Run creation.
 
-Check artifacts use refs shaped like:
+Check artifacts use opaque Artifact UUIDs with Run, Attempt, phase, Producer, and filename stored as provenance metadata.
 
-```text
-artifact:<validation-run-id>/checks/<check-id>/<filename>
-```
-
-Each check round captures these artifacts:
+Each check execution captures these artifacts:
 
 ```text
 stdout.txt
@@ -335,11 +335,11 @@ Check artifact capture uses the command result returned by Sandcastle, not files
 
 V1 checks run sequentially.
 
-V1 stops on the first failed check.
+Every configured check runs after an ordinary failure or timeout so one Attempt collects the complete set of check Findings.
 
-Every executed check records a round and artifacts, whether it passes, fails, or times out.
+Every executed check records its result and Artifacts, whether it passes, fails, or times out.
 
-Checks skipped after an earlier failure or timeout do not record rounds or artifacts.
+Prepare failure, Validation Tooling Failure, workspace-integrity failure, Hold, or cancellation stops later checks because the Attempt is no longer trustworthy or active.
 
 Check commands may modify the Validation Workspace, but those changes never modify the submitted branch.
 
@@ -403,7 +403,10 @@ Finding `artifactRefs` entries use `artifact:<validation-run-id>/<phase>/<produc
 The `artifactRefs` array may be empty when no stored artifact supports the Finding.
 Schema decoding validates reference shape, while repository and artifact existence are checked later with the required runtime context.
 
-Any Finding blocks v1 validation and moves the Task to `needs_input`, regardless of severity.
+Any Finding blocks that Candidate's Validation Run regardless of severity.
+When automatic fixing is enabled, orchestration sends the complete phase-local Finding batch to a Fixer.
+When no automatic fixing path is configured, But Why? code records Change-level Needs Input from the open Findings.
+Agents never request Needs Input or change lifecycle state.
 
 ## Token accounting
 

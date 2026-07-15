@@ -4,6 +4,9 @@
 
 Done.
 
+This issue records the implemented Task-owned behavior.
+The planned lifecycle narrows post-start comment mutation through `docs/issues/128-hold-and-resume-task-progress.md`.
+
 ## Parent
 
 `docs/prds/v1-validation-prd.md`

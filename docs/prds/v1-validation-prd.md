@@ -1,5 +1,9 @@
 # But Why? PRD
 
+> Historical input for the implemented Task-owned workflow.
+> Statements in this file are not accepted target behavior and must not guide planned Tasks.
+> The planned Change-centered contract is specified by `docs/prds/change-centered-validation-prd.md` and accepted ADRs.
+
 ## Problem Statement
 
 Agent-assisted coding can produce changes that look complete but do not reliably satisfy the user's actual task intent.

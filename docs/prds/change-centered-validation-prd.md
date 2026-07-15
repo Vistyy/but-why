@@ -109,17 +109,34 @@ Ambiguous or conflicting bindings fail without guessing.
 ### Validation Run
 
 A Validation Run judges one Candidate under immutable policy and optional Acceptance Context snapshots.
-A new Candidate creates a new Validation Run.
-The same Candidate may receive another Validation Run for retry or recovery.
+A new Candidate or changed immutable input creates a new Validation Run.
+Retry and recovery for the same Candidate and immutable inputs create a new Execution Attempt within that Run.
+The first Validation Tooling Failure receives one automatic fresh Attempt and workspace.
+After the approved retry is exhausted, But Why? code leaves the Run unfinished and records Needs Input from the second Tooling Failure.
+Task Resume or another explicit standalone validation request may then create a fresh Attempt in the same Run.
+Hold and cancellation end active work without consuming the automatic tooling retry.
 
 When a Validation Run starts, But Why? resolves the current Repo Config and applicable CLI overrides into an immutable Validation Policy Snapshot with a canonical fingerprint.
-That snapshot never changes during the run.
+The snapshot includes an internal validation contract version plus every resolved validation-affecting check, reviewer, instruction, agent, sandbox, and override field.
+Fixer policy and code-writing budgets are durable orchestration inputs outside validation evidence identity.
+Changing gate semantics requires a contract-version bump so older evidence cannot satisfy the newer gate accidentally.
+That snapshot never changes during the Run.
 Before reusing evidence or publishing, But Why? resolves the effective policy again.
 A fingerprint change makes the earlier evidence ineligible and starts a new Validation Run under the new policy.
 Asynchronous work resolves policy when the Validation Run starts rather than when its Trigger is emitted.
 
+Explicitly copied local inputs must be regular non-symlink files inside the repository that Git does not track, whether ordinarily untracked or ignored.
+Missing, invalid, duplicate, or out-of-repository paths are Submit Rejections when no stable identity can be selected before Run creation.
+Their immutable identity is normalized repository-relative path, raw-byte SHA-256, and executable bit.
+Each Attempt verifies the expected identity while copying the live bytes into its workspace.
+One detected read or copy race automatically reselects the complete input set and corresponding Run.
+After the approved reselection is exhausted, But Why? code records Needs Input from the second instability observation or inability to select stable inputs.
+File contents may exist temporarily while copying but are not stored in SQLite.
+
 Validation Runs do not require a Task ID.
 A Task link is optional traceability.
+After all preflight inputs are valid, one database transaction creates or reuses the Change, Candidate, Validation Run, and initial active Execution Attempt.
+A transaction failure leaves none of those new records, while later workspace or command failure is recorded on the durable Attempt.
 
 ## Agent roles
 
@@ -140,8 +157,9 @@ It does not review, validate, publish, or directly mark Findings resolved.
 
 ### Specialist Reviewer
 
-A Specialist Reviewer owns one configured review concern.
-All unfinished Specialist Reviewers run in parallel.
+A Specialist Reviewer owns one explicitly configured repository concern.
+`by init` configures no Specialists by default.
+All unfinished Specialist Reviewers run in parallel, while a repository with none proceeds from applicable Acceptance Review directly to Final Review.
 
 A Specialist Reviewer with Findings runs again after those Findings are fixed.
 Once it produces a result with no Findings, it is complete for later linear Candidates in the same Change while its configured concern, comparison base, and validation policy remain unchanged.
@@ -167,46 +185,74 @@ It does not implement, fix, or validate code.
 
 ## Validation and fixing flow
 
-### Initial checks
+### Prepare, workspace integrity, and initial checks
 
-All configured checks run against the complete Candidate before agent reviewers run.
-If checks fail, reviewer agents do not run on that Candidate.
+Each Execution Attempt receives a fresh disposable Validation Workspace at the exact Candidate.
+Prepare runs first when configured.
+A completed Prepare command with a non-zero exit or timeout creates a Finding and stops later checks, while inability to execute or observe Prepare is a Validation Tooling Failure.
 
+Configured checks then run sequentially against the complete Candidate.
+An ordinary check failure or timeout creates a Finding but does not stop later configured checks.
+After Prepare and every check, But Why? verifies that Candidate `HEAD`, index, tracked contents, and executable bits remain unchanged.
+Temporary untracked files are allowed.
+An integrity violation is a Validation Tooling Failure and stops the Attempt because later evidence would not describe the Candidate.
+
+If Prepare or checks produce Findings, reviewer agents do not run on that Candidate.
 The Fixer Agent may run any commands it chooses for private feedback while working.
 Only the full configured checks count as validation evidence.
 
+### Ordered gate and fixing
+
+Every Candidate enters the gate at Prepare and proceeds through Checks, Acceptance Review when Acceptance Context exists, Specialist Review, then Final Review.
+A phase runs only after every earlier applicable phase passes.
+A trustworthy phase with Findings completes that Candidate's Run as `blocked`.
+
+When automatic fixing is allowed, one Fixer receives every open Finding from that single blocking phase.
+Check, Acceptance, Specialist, and Final Findings never share a Fixer batch across phase boundaries.
+The Fixer makes its best available decisions, records consequential Implementation Decisions, attempts the complete batch, and never requests Needs Input or changes lifecycle state.
+But Why? independently verifies that the execution produced one clean committed successor Candidate.
+When no successor Candidate exists, orchestration preserves the execution evidence and open Findings, exhausts any approved recovery, and records Needs Input through a code-owned reason.
+Every successor Candidate starts a new Run from Prepare.
+
+When one phase runs multiple read-only reviewers in parallel, each trustworthy result is durable independently for the exact Candidate, policy, and reviewer identity.
+A tooling failure leaves the group incomplete but does not invalidate trustworthy sibling results.
+A later Attempt runs only failed or missing reviewers, and fixing waits until every required reviewer has a trustworthy result before batching the phase's Findings.
+Changed immutable inputs invalidate incomplete-group reuse.
+
+Any reviewer revisiting its prior Findings uses a fresh two-request session.
+The first request performs blind review and produces only a provisional result.
+The second request receives that provisional result and the reviewer's prior Finding IDs, then returns the authoritative open-Finding set.
+Retained prior IDs stay open, omitted prior IDs receive resolution links, and entries without prior IDs become new Findings.
+Unknown or duplicate prior IDs receive one structured-output retry and then become a Reviewer Output Contract Failure.
+
+### Acceptance Review
+
+After checks pass, Acceptance Review judges the exact Candidate against immutable Acceptance Context.
+Standalone Changes without Acceptance Context skip the phase.
+All Acceptance Findings form one Acceptance Fixer batch.
+A successor Candidate restarts from Prepare and must pass Acceptance Review again before later reviewer phases.
+
 ### Specialist loop
 
-The Specialist loop is:
+After applicable Acceptance Review passes, all unfinished Specialist Reviewers run in parallel.
+All Specialist Findings from that phase form one Specialist Fixer batch.
+A successor Candidate restarts from Prepare and, after earlier phases pass, reruns only Specialists whose previous result contained Findings.
+A Specialist becomes complete when it returns no Findings.
 
-1. Run every unfinished Specialist Reviewer in parallel.
-2. Collect all Findings.
-3. If automatic fixing is allowed, fix the Findings together in one coding-agent execution where practical.
-4. Commit a successor Candidate.
-5. Run all configured checks against that Candidate.
-6. Rerun only Specialist Reviewers whose previous result contained Findings.
-7. Mark each Specialist Reviewer complete when it returns no Findings.
-
-A completed Specialist Reviewer stays complete after later ordinary fixes.
-Completion carries from `by validate` into a later `by submit` for the same Change.
-Task Resume and adopted comments do not reset completion.
-A new Change, changed Specialist configuration, changed comparison base, changed validation policy, or non-linear history resets every Specialist Reviewer.
+A completed Specialist Reviewer may stay complete only across an eligible automatic Fixer successor.
+Manual changes, external commits, and other ineligible successors reset completion.
+Eligible completion carries from `by validate` into a later `by submit` for the same Change.
+An automatic Fixer successor may retain eligible completed Specialist evidence.
+A newly adopted Task Comment, new Change, changed Specialist configuration, changed comparison base, changed validation policy, or non-linear history resets every Specialist Reviewer.
+The reset does not expose Acceptance Context to Specialists.
 This is an explicit cost and confidence trade-off.
 
-### Final gate
+### Final Review
 
-After all Specialist Reviewers are complete and full checks pass, Final Review and Acceptance Review run in parallel.
-Acceptance Review is omitted when Acceptance Context does not exist.
-
-If either review produces Findings:
-
-1. Fix the combined Findings when automatic fixing is allowed.
-2. Commit a successor Candidate.
-3. Run all configured checks.
-4. Run Final Review and applicable Acceptance Review again against the same Candidate.
-
-Both applicable reviews must pass on the same final Candidate.
-Completed Specialist Reviewers remain complete.
+Final Review runs only after checks and applicable Acceptance Review pass and every Specialist Reviewer is complete.
+All Final Findings form one Final Fixer batch.
+A successor Candidate restarts from Prepare while eligible completed Specialist evidence remains reusable.
+The exact final Candidate must pass Checks, applicable Acceptance Review, and Final Review before publication.
 
 ### Publication
 
@@ -240,8 +286,8 @@ It publishes the final eligible Candidate to a PR.
 Repeated validation and submission are idempotent for the same Change, Candidate, Validation Policy Snapshot, and Acceptance Context.
 An active Validation Run is reused rather than replaced.
 An eligible completed Validation Run is reused.
-A terminal operational failure may be retried with a new Validation Run.
-Changed head, policy, or context creates a new Validation Run under the same Change.
+A terminal operational failure ends only its Execution Attempt and may be retried through a new Attempt in the same unfinished Validation Run.
+Changed head, policy, context, or allowlisted-file identity creates a new Validation Run under the same Change.
 Calling `by validate` never replaces the Change.
 An already published Candidate returns the existing PR.
 
@@ -251,32 +297,38 @@ An approved Task with the `afk` tag may be picked up automatically according to 
 The worker creates or reuses its Change, runs implementation, and invokes the same submit capability internally.
 No public Change creation command is required.
 
-## Automatic fixing policy
+## Fixer Policy
 
-Repo Config defines whether Findings are fixed automatically.
-Automatic fixing is enabled by default.
+Repo Config defines separate Validation Fixer and PR Fixer settings.
+Validation Fixer is enabled by default and may receive a CLI override for one command-started operation.
+AFK validation obeys Repo Config because no human command starts it.
+When Validation Fixer is disabled, But Why? code records Needs Input from the open Finding because no automatic fixing path is configured.
 
-A CLI option may override the policy for one command-started operation.
-AFK work obeys Repo Config because no human command starts it.
-
-When fixing is disabled, a Finding pauses the Change for human action.
+PR Fixer is disabled by default and requires explicit repository opt-in.
+It may address only failed GitHub-required checks or a confirmed merge conflict on an exact owned PR.
+But Why? code records Needs Input when an exact owned PR has an active requested-changes review.
+All free-form GitHub comments and review text remain nonblocking facts and never become code-writing instructions or agent-controlled lifecycle signals.
 
 ## Task Context and Acceptance Context
 
 Task Context is the current Task title, description, and ordered comments.
-Task Comments do not change active Acceptance Context by themselves.
+Title and description may change only before Task Start.
+Comments are append-only and, after Task Start, may be added only while the Task is Held or Needs Input.
+Hold reasons and external-resolution reasons are operational history rather than Task Context.
 
 Task Start creates the Task's sole Change when absent or reuses it when open, then captures Task Context as immutable Acceptance Context.
 Task Start rejects a closed linked Change.
-`by task resume` approves and adopts the latest Task Context as a new Acceptance Context snapshot, clears the addressed Change-level Needs Input record, and emits a Trigger.
-The Change Coordinator continues the same Change from its durable blocker, Candidate, evidence, and resolved operation mode rather than blindly starting a particular run type.
+Repeated Task Start returns the existing Change without capturing another snapshot or launching an agent.
 
-Adopting comments does not reopen completed Specialist Reviewers.
-But Why? does not classify Task edits as ordinary or major.
-`by task resume` always continues the same Change with the newly adopted Acceptance Context.
+Task Resume starts fresh work from the last durable checkpoint rather than resuming a process or agent session.
+When Task Context is unchanged, Resume retries the interrupted stage.
+When a new comment or unresolved Finding requires code changes, Resume returns through implementation before validation.
+Resuming Needs Input requires either a new comment or an external-resolution reason.
+Resume adopts changed Task Context as a new Acceptance Context snapshot and emits a Trigger.
+
+Adopting a new Task Comment resets every completed Specialist Reviewer before the new implementation cycle.
 A genuinely different request uses a new Task and Change.
 Final Review and Acceptance Review judge the resulting final Candidate.
-
 A Change without Acceptance Context skips Acceptance Review.
 Intent is never inferred from code and treated as Acceptance Context.
 
@@ -291,41 +343,57 @@ No separate standalone resume command is required.
 The new command records the prior Needs Input as addressed and continues from current durable facts.
 If the blocker remains, the Change records Needs Input again.
 
-Needs Input is exceptional.
-Normal agent uncertainty is resolved by making and recording a decision.
+Needs Input is an exceptional orchestration-owned circuit breaker, not an agent outcome or collaboration mode.
+Agents never request it, emit it, or change Task or Change lifecycle state.
+Reviewers report Findings, while Implementers and Fixers make their best available decisions, record consequential Implementation Decisions, and continue their assigned work.
+Agent uncertainty, disagreement, or preference is never itself a blocker.
 
-Valid Needs Input causes are:
+Every Needs Input transition requires:
 
-- Automatic fixing is disabled and Findings remain.
-- Approved requirements are impossible or directly contradictory.
-- An external permission or service blocks progress.
-- Safety or fixing limits are exhausted.
-- Tooling recovery repeatedly fails.
+- A code-owned reason matched from trusted workflow facts.
+- Preserved evidence for the detected blocker.
+- Exhaustion of every approved automatic recovery for that reason.
+- A resumable durable checkpoint.
+- Explicit recovery actions exposed to the caller.
 
-The blocking Finding or failure remains the source of the reason.
-Needs Input does not duplicate that reason in another field.
+Valid code-owned reasons include disabled automatic fixing with open Findings, a completed code-writing execution without a successor Candidate, an unavailable external permission or service after recovery, an exhausted safety or fixing limit, repeated Tooling Failure, a fixed policy stop such as Sensitive Change, or an authoritative remote ownership mismatch.
+The source Finding, execution, failure, policy fact, limit, or remote fact remains the evidence for the reason.
+Recurring reasons should gain named automatic recovery paths over time so Needs Input becomes progressively rarer.
 
-## Task status projection
+## Task lifecycle
 
-Task status is derived from Task approval facts and its linked Change rather than used to authorize Change phases.
+Task state changes only through named operations with checked preconditions.
+No command assigns an arbitrary state.
 
-The target projection is:
+The lifecycle is:
 
-- `new` when the Task has no approved Acceptance Context.
-- `todo` when intent is approved and its Change is not progressing.
-- `implementing` while its Change is producing its initial Candidate.
-- `validating` while its Change is checking, reviewing, fixing Findings, publishing, or waiting for PR readiness facts.
-- `needs_input` while its Change records Needs Input.
-- `ready` when its Change PR satisfies readiness policy.
-- `done` when that PR is merged.
-- `cancelled` when the user explicitly ends work without completion.
+- `new` before permanent Task Approval.
+- `todo` after Approval and before Task Start.
+- `implementing` while the linked Change is producing a Candidate.
+- `validating` while the Change is checking, reviewing, fixing, publishing, or waiting for GitHub facts.
+- `needs_input` while the Change records a blocker with no approved automatic continuation.
+- `ready` when the owned PR satisfies readiness policy.
+- `done` when the owned PR merges or verified no-change completion succeeds.
+- `cancelled` when the user permanently ends unfinished work.
 
-An inactive unfinished Task remains `todo` indefinitely.
-Age alone never cancels a Task, closes a Change, or removes its workspace or history.
-Explicit Task cancellation is a separate future capability.
-It permanently closes the Task's open Change as `cancelled` while preserving history.
+Task Hold temporarily projects an eligible Todo, implementing, validating, or ready Task as `held` and records the interrupted stage and required reason.
+Hold first fences durable writes, then stops active local work with the same cancellation mechanism used by terminal cancellation.
+It requests conversion of an owned PR to draft and records whether GitHub confirmed that remote protection.
+If confirmation fails, the local Hold remains effective, exposes `remote protection unconfirmed`, and retries best effort.
+An externally observed merge remains authoritative and completes the Task even during that uncertainty.
+Task Resume restores the interrupted stage and restarts unfinished work from durable facts with fresh processes.
+An owned PR remains draft until the current Candidate is validated and once again satisfies readiness policy.
+A Held Todo Task may edit its pre-start Task Context, `afk` tag, dependencies, and queue position.
+A Held started Task may add Task Comments.
+Every Held Task may inspect, Resume, use verified no-change completion when eligible, or Cancel.
 
+Done and Cancelled Tasks are read-only and leave Task Queue Order.
 Needs Input is stored once on the Change and read through the Task projection.
+Age alone never changes Task state or removes workspace or history.
+
+The default dashboard shows New, eligible Todo, Held, Needs Input, and Ready Tasks in Task Queue Order.
+Implementing, validating, and dependency-blocked Tasks appear in aggregate counts and explicit inspection rather than the actionable list.
+Task detail includes only currently legal state-changing actions as complete command templates so agents do not guess at transitions.
 
 ## Finding resolution
 
@@ -378,25 +446,32 @@ But Why? records the selected base reference, its resolved tip SHA, the comparis
 The comparison base and head identify the immutable diff that validation reviewed.
 Movement of the selected base reference does not change an existing Candidate while its comparison base remains the same.
 
-## Task approval and AFK pickup
+## Task approval, dependencies, ordering, and AFK pickup
 
 Tasks begin in `new`.
-`by task approve <task-id>` moves a Task to `todo` without changing its tags.
+`by task approve <task-id>` permanently and idempotently moves a Task to `todo` without changing its tags.
+Approval and Task Context editing do not depend on prerequisites.
 
-Task tags are validated, and unknown tags are rejected.
-The built-in `afk` tag enables automatic pickup without becoming a lifecycle state.
+V1 supports only the built-in `afk` tag.
+Adding an existing tag and removing an absent tag are successful no-ops.
+The tag may change only before Task Start and enables automatic pickup without becoming a lifecycle state.
 
-A Todo Task cannot start manually or be claimed automatically until every Task it depends on is `done`.
-A Todo Task with `afk` and completed prerequisites is eligible for atomic worker claim.
-Dependency eligibility is checked again at the durable claim boundary.
-Approval and tag changes commit before waking the Supervisor.
-Removing `afk` before claim prevents pickup.
-Removing it after claim does not cancel active work, but it prevents later automatic pickup.
-The tag persists until explicitly removed.
+A Todo Task cannot start manually or automatically until every prerequisite Task is `done`.
+Dependency edges may change only before the dependent Task starts.
+Adding an existing edge and removing an absent edge are successful no-ops.
+Self-edges and cycles are rejected atomically, with a cycle error showing the complete cycle.
+A Cancelled prerequisite remains unsatisfied.
 
-Manual Task Start and automatic pickup create or reuse the active Change and Change Workspace through the same durable claim boundary.
-Repeated Task Start reuses that Change and workspace and never launches a concurrent Implementer Execution.
-A later Implementer Execution starts only when prior implementation stopped before producing the initial Candidate.
+Every unfinished Task has one explicit Task Queue Order position.
+New Tasks append to that order, Held and blocked Tasks retain their position, and Done and Cancelled Tasks leave it.
+Reordering to the current position is a successful no-op.
+
+The worker atomically claims the first Task in Task Queue Order that is Todo, tagged `afk`, unheld, unstarted, and unblocked by dependencies.
+Approval, tag, dependency, and ordering changes commit before waking the Supervisor.
+Manual Task Start and automatic pickup use the same durable claim boundary.
+A successful claim atomically changes Todo to implementing.
+Manual Task Start launches no agent.
+Repeated Task Start returns the existing Change and workspace as a successful no-op.
 There is no public `by task implement` command.
 
 ## Supervisor and repository workers
@@ -436,8 +511,8 @@ Sandbox handles are process-local.
 The Change branch and workspace metadata are durable.
 
 A clean workspace may be removed and reconstructed from its branch.
-A dirty workspace is never removed, reset, discarded, or overwritten automatically.
-Interrupted dirty work is preserved for recovery.
+A dirty user-managed workspace is never removed, reset, discarded, or overwritten automatically, and Resume rejects until the user makes it clean.
+Interrupted dirty automatic work is copied into an immutable recovery Artifact before its managed workspace is rebuilt from the last durable Candidate.
 
 Completion removes a clean physical workspace while retaining Git history, run history, Artifacts, decisions, and PR identity.
 
@@ -466,17 +541,18 @@ The PR Writer is also a fresh execution, uses only durable approved inputs, and 
 
 ## Automatic execution safety
 
-The configurable default safety budget is 20 code-writing agent executions across one Change journey.
-Repo Config may choose another limit.
+The configurable default safety budget is 20 code-writing agent executions per Code-Writing Budget Cycle.
+Repo Config may choose another per-cycle limit.
 Implementer Executions and Fixer Executions consume the budget.
 Checks, reviewer executions, PR Writer execution, operational retries, and time waiting for GitHub do not.
 
-The twentieth execution completes and is judged normally.
-Needs Input is recorded only when a twenty-first code-writing execution would be required.
+The twentieth execution in one cycle completes and is judged normally.
+Needs Input is recorded only when a twenty-first execution in that cycle would be required.
 
-The budget does not reset across internal runs or publication handoffs.
-Explicit resume starts a fresh budget.
-Limit exhaustion preserves the branch, workspace, Candidates, Findings, decisions, Artifacts, and run history.
+The budget does not reset across internal Runs, publication handoffs, or Hold Resume.
+Task Start or automatic pickup begins the first budget cycle, and Resume from Needs Input begins a fresh cycle.
+Historical execution and usage totals remain cumulative across cycles.
+Limit exhaustion preserves the branch, workspace, Candidates, Findings, decisions, Artifacts, and Run history.
 
 Operational retry limits are separate from the code-writing budget.
 Operational failures remain distinct from Findings.
@@ -502,22 +578,49 @@ Pending facts project `validating`.
 Readiness projects `ready`.
 Merge projects `done`.
 
-A new head after publication stays in the same Change and uses the same PR.
+A new locally owned head after publication stays in the same Change and uses the same PR.
 It creates a new Candidate and must pass validation before But Why? updates the PR branch to that head.
-Retargeting the PR also preserves the Change and PR, but captures a replacement Candidate against the new comparison base and forces full validation.
-An externally pushed PR head is recorded as a new Candidate and projects `validating` until that exact head passes.
+When reconciliation observes an external PR head push or base-target retargeting, But Why? code records Needs Input instead of adopting it automatically in v1.
+Normal movement of the expected base branch may produce a confirmed merge conflict eligible for the opt-in PR Fixer.
+Conflict fixing merges the exact latest expected base tip into the owned PR branch and records a merge commit rather than rebasing or force-pushing rewritten history.
+The resulting Candidate must pass the complete gate, and GitHub and the human retain authority over the final PR merge method, including squash merge.
 Publication recovery and reconciliation never create a second PR for the Change.
 
-## Change completion
+## Owned PR readiness fixing
+
+Before every PR Fixer execution and remote write, But Why? re-reads and verifies the durable repository, PR number, head repository, head branch, base repository, base target, and expected remote head SHA.
+Any mismatch causes But Why? code to record Needs Input without running Pi or writing remotely.
+
+PR Fixer runs only through a hardened Sandcastle Docker or rootless Podman provider using a fixed image and non-root user.
+Its explicit environment allowlist excludes GitHub credentials, SSH agent access, host credentials, and repository secrets.
+No extra host mounts, supplementary groups, devices, or Docker socket are available.
+CI diagnostics are bounded, treated as untrusted data, and never override Task Context or fixed Fixer instructions.
+
+Pi writes only in the managed Change Workspace and cannot push.
+But Why? applies fixed orchestration policy to changed paths and content, and a matching Sensitive Change stops automatic publication and records Needs Input.
+Otherwise But Why? captures the clean successor Candidate, runs the complete local Validation Gate, rechecks the expected remote SHA, and updates the owned branch through a parent-controlled compare-and-swap push.
+The PR Fixer makes and records its own decisions but never approves, merges, requests Needs Input, or changes lifecycle state.
+But Why? code records Needs Input only when trusted workflow facts show no successor Candidate, ambiguous GitHub state, an ownership mismatch, a Sensitive Change, or an exhausted limit after every approved recovery.
+
+## Change and Task completion
 
 A validation-only success does not close the Change.
 A later `by submit` may publish the same eligible Candidate without repeating validation.
+Every Task that changes the repository completes only when its exact validated Candidate is published through its owned PR and GitHub reports that PR merged.
 
-A Change closes as `completed` when its PR is merged.
-A Change closes as `cancelled` when its linked Task is explicitly cancelled.
+`by task complete <task-id> --reason <reason>` is the only manual completion path.
+It is available only after permanent Task Approval and means that fulfilling the Task required no repository change.
+For an approved Task that never started, the absence of a Change and PR is the complete proof because But Why? never owned a workspace or result for it.
+For a started Task, the command first fences active work, then proves that the managed Change has no owned PR, its branch has no net tree diff from the recorded base, and its workspace has no staged, unstaged, untracked, or dirty submodule work.
+Ignored files do not count as repository changes.
+If changed work exists, completion rejects with guidance to submit or cancel it.
+Successful no-change completion records the reason, closes any open Change as `completed`, moves the Task to Done, and satisfies dependents.
+
+`by task cancel <task-id> --reason <reason>` permanently moves any unfinished Task to Cancelled.
+It fences active work, closes its Change and owned PR as cancelled, preserves history, and never satisfies dependents.
+Remote closure failure records durable pending work for retry without reopening local workflow.
+
 Closure is permanent, and a closed Change accepts no new Candidates.
-Unrelated work uses a fresh branch, worktree, Task, and Change.
-
 Closing a Change removes a clean managed workspace automatically.
 Dirty managed workspaces are preserved for inspection.
 Standalone user checkouts are never removed.
