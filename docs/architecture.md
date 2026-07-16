@@ -1,5 +1,8 @@
 # Architecture
 
+> This document describes the currently implemented Task-owned architecture.
+> The reduced Change-centered v1 target and migration are defined by `docs/prds/change-centered-validation-prd.md` and `docs/issue-breakdown.md`.
+
 But Why? is a repo-scoped validation workflow for agent-assisted code work.
 
 It is task-based, not pipeline-based.

@@ -1,7 +1,4 @@
-# Migrate Task inspection
-
-> Draft task boundary approved through the vertical-slice audit.
-> Grill this draft before implementation to resolve its exact interface, errors, limits, and edge cases.
+# Migrate Task inspection to Change-owned facts
 
 ## Specification
 
@@ -11,37 +8,27 @@
 
 ## Behaviors owned
 
-- Source capability: Task views summarize linked Change facts and stop reading Task-owned validation.
-- Own reader migration only and reuse Candidate history and PR facts.
-- This task owns only the behavior demonstrated through its primary verification seam.
+- Task list and show project current progress from Task, Change, Candidate, Validation Run, and owned PR facts.
 
 ## What to build
 
-Task views summarize linked Change facts and stop reading Task-owned validation.
-Implement the complete path through every required layer while keeping behavior assigned to later tasks outside this task.
-The repository must remain green when this task completes.
+Replace Task-owned validation readers with the new ownership model while preserving concise default output and detailed inspection links.
 
 ## Primary verification seam
 
-Task and Change inspection tests.
+Task list and show CLI tests across unstarted, blocked, validating, ready, done, and cancelled Tasks.
 
 ## Acceptance criteria
 
-- [ ] Task views summarize linked Change facts and stop reading Task-owned validation.
-- [ ] Own reader migration only and reuse Candidate history and PR facts.
-- [ ] The primary verification seam demonstrates the capability through caller-visible behavior.
-- [ ] Errors are typed, actionable, non-interactive, and preserve durable state on failure.
-- [ ] Existing supported behavior remains green unless this task explicitly replaces it.
-- [ ] No behavior owned by a dependent task is implemented speculatively.
-
-## Open decisions to grill
-
-- Exact interface and AXI output contract.
-- Failure, cancellation, retry, and idempotency details that apply to this capability.
-- Limits and edge cases required for implementation-ready acceptance criteria.
+- [ ] Task show exposes approval, direct dependencies, Change, managed worktree, starting commit, current Candidate, latest Findings, and PR state.
+- [ ] Task list exposes state, start eligibility, direct blockers, and the next legal action.
+- [ ] Validation detail links resolve through Candidate-owned Run inspection.
+- [ ] No Task inspection path reads legacy Task-owned validation or delivery tables.
+- [ ] Empty and unavailable states are explicit in structured output.
+- [ ] Output remains bounded with complete detail commands.
 
 ## Blocked by
 
-- `docs/issues/088-list-bounded-candidate-validation-history.md`
-- `docs/issues/101-reconcile-one-owned-pr-once.md`
-- `docs/issues/105-migrate-task-backed-submission.md`
+- `docs/issues/087-inspect-candidate-owned-validation-run.md`
+- `docs/issues/101-reconcile-owned-pr-during-submit.md`
+- `docs/issues/105-migrate-task-submit.md`

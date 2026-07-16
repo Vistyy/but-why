@@ -1,47 +1,31 @@
-# Publish but-why to npm
-
-> Draft task boundary approved through the vertical-slice audit.
-> Grill this draft before implementation to resolve its exact interface, errors, limits, and edge cases.
+# Publish But Why? to npm
 
 ## Specification
 
 - `docs/prds/change-centered-validation-prd.md`
-- `CONTEXT.md`
-- `docs/adr/0008-use-change-as-validation-and-delivery-owner.md`
-- `docs/public/setup.md`
-- `package.json`
+- `docs/issues/125-produce-installable-v1-package.md`
 
 ## Behaviors owned
 
-- Source capability: A clean repository installs the approved public package from npm.
-- Own trusted publishing, provenance, public access, and registry verification.
-- This task owns only the behavior demonstrated through its primary verification seam.
+- The verified unscoped `but-why` package is publicly installable with provenance.
 
 ## What to build
 
-A clean repository installs the approved public package from npm.
-Implement the complete path through every required layer while keeping behavior assigned to later tasks outside this task.
-The repository must remain green when this task completes.
+Publish the exact verified package candidate through npm trusted publishing and confirm installation from the public registry.
 
 ## Primary verification seam
 
-Registry installation test.
+Clean-repository installation from npm followed by the installed CLI smoke suite.
 
 ## Acceptance criteria
 
-- [ ] A clean repository installs the approved public package from npm.
-- [ ] Own trusted publishing, provenance, public access, and registry verification.
-- [ ] The primary verification seam demonstrates the capability through caller-visible behavior.
-- [ ] Errors are typed, actionable, non-interactive, and preserve durable state on failure.
-- [ ] Existing supported behavior remains green unless this task explicitly replaces it.
-- [ ] No behavior owned by a dependent task is implemented speculatively.
-
-## Open decisions to grill
-
-- Exact interface and AXI output contract.
-- Failure, cancellation, retry, and idempotency details that apply to this capability.
-- Limits and edge cases required for implementation-ready acceptance criteria.
+- [ ] Trusted publishing uses the verified source and package candidate without a long-lived npm token.
+- [ ] npm provenance identifies the release source and workflow.
+- [ ] The public package name, version, executable, files, and metadata match the verified candidate.
+- [ ] A clean local and global installation can run help, init, and the documented setup path.
+- [ ] Publication failure is recoverable without publishing a different artifact under the same version.
+- [ ] Release notes point to the supported manual v1 workflow and its explicit deferred capabilities.
 
 ## Blocked by
 
-- `docs/issues/125-produce-versioned-release-candidate.md`
+- `docs/issues/125-produce-installable-v1-package.md`

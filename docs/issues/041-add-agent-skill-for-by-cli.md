@@ -13,7 +13,7 @@ Done.
 Create the public But Why agent skill artifact and the setup path that tells users and agents how to place it.
 
 This issue is about skill existence, packaging, and installation guidance.
-Detailed installed manual workflow content belongs to `docs/issues/123-teach-installed-manual-workflow.md`.
+Detailed installed manual workflow content belongs to `docs/issues/123-ship-manual-task-workflow.md`.
 
 `docs/public/setup.md` is the Agent-Assisted Setup Guide.
 It should include copyable setup instructions that a user can give to an agent or follow manually.
@@ -52,7 +52,7 @@ Skill placement is documentation-guided, not managed by the `by` CLI.
 - [x] `by init` output points to `docs/public/setup.md` and may mention the packaged skill path.
 - [x] `by init` does not install or copy the skill.
 - [x] Issue 041 does not add a `by` command for skill installation.
-- [x] Detailed CLI workflow guidance for the skill belongs to `docs/issues/123-teach-installed-manual-workflow.md`.
+- [x] Detailed CLI workflow guidance for the skill belongs to `docs/issues/123-ship-manual-task-workflow.md`.
 
 ## Blocked by
 

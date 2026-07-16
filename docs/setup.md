@@ -1,6 +1,8 @@
 # Setup
 
-This document describes the v1 setup flow for But Why?.
+> This document describes setup for the currently implemented workflow.
+> Task 123 updates it when the reduced Change-centered v1 is implemented.
+
 
 ## Install from a local tarball
 

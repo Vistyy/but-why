@@ -5,7 +5,7 @@
 Done.
 
 This issue records the implemented Task-owned behavior.
-The planned lifecycle narrows post-start comment mutation through `docs/issues/128-hold-and-resume-task-progress.md`.
+The reduced v1 lifecycle makes Task Context immutable at Task Start.
 
 ## Parent
 
