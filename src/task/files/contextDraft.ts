@@ -99,6 +99,8 @@ const parseTaskContextDraft = (
     description = description.slice(1);
   } else if (description.startsWith("\r\n")) {
     description = description.slice(2);
+  } else {
+    return undefined;
   }
 
   if (title.length === 0 || description.trim().length === 0) {

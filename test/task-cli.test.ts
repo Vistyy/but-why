@@ -552,6 +552,31 @@ tasks[1]{id,title,state,createdAt,updatedAt}:
     );
   });
 
+  it("retains a Task Context draft without its required blank-line separator", () => {
+    const root = initializedRepo();
+
+    createTask(root, firstNow, "Original title");
+    const draftResult = runByInProcess(root, [
+      "task",
+      "context",
+      "draft",
+      "BY-1",
+      "--output",
+      "json",
+    ]);
+    const draft = JSON.parse(draftResult.stdout) as { draft: { path: string } };
+    writeFileSync(draft.draft.path, "# Updated title\nUpdated description");
+
+    const result = runByInProcess(root, ["task", "context", "apply", "BY-1"], secondNow);
+
+    expect(result.status).toBe(1);
+    expect(result.stdout).toContain("code: invalid_task_context_draft");
+    expect(existsSync(draft.draft.path)).toBe(true);
+    expect(runByInProcess(root, ["task", "context", "BY-1"]).stdout).toContain(
+      "title: Original title\n  description: Description for Original title",
+    );
+  });
+
   it.each([
     "implementing",
     "done",
