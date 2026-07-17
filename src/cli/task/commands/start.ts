@@ -37,6 +37,15 @@ export const runStartCommand = (
         return taskNotFound(taskId.taskId);
       }
 
+      if (result.code === "task_dependencies_unsatisfied") {
+        return runtimeError({
+          code: result.code,
+          message: `Cannot start task ${taskId.taskId} because prerequisites are incomplete.`,
+          details: { taskId: taskId.taskId, blockedBy: result.blockedBy },
+          help: ["Complete every prerequisite, then run the Task Start command again."],
+        });
+      }
+
       return invalidTaskStart(taskId.taskId, result.state);
     }
 

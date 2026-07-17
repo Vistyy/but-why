@@ -1,11 +1,14 @@
 import type { CliResult } from "../../../cliResults.js";
-import { stateStoreUnavailable, success, usageError } from "../../../cliResults.js";
+import { runtimeError, stateStoreUnavailable, success, usageError } from "../../../cliResults.js";
 import { withGlobalHelpFlags } from "../../../cliHelp.js";
 import {
   readDescriptionFile,
   type DescriptionFileReadError,
 } from "../../../task/files/descriptionFile.js";
-import { loadTasks, type TaskCommandEnvironment } from "../taskCliSupport.js";
+import { parseCliTaskIdValue } from "../../../cliTaskId.js";
+import { TaskDependencyValidationError } from "../../../task/task.js";
+import type { PublicTaskId } from "../../../task/taskId.js";
+import { loadTasks, resolveTaskId, type TaskCommandEnvironment } from "../taskCliSupport.js";
 
 export const runCreateCommand = (
   args: readonly string[],
@@ -13,7 +16,7 @@ export const runCreateCommand = (
 ): CliResult => {
   if (args.length === 1 && args[0] === "--help") {
     return success({
-      usage: "by task create --title <title> --description-file <file>",
+      usage: "by task create --title <title> --description-file <file> [--depends-on <task-id>]...",
       flags: withGlobalHelpFlags([
         {
           flag: "--title <title>",
@@ -22,6 +25,10 @@ export const runCreateCommand = (
         {
           flag: "--description-file <file>",
           description: "Required UTF-8 Task description file, max 256 KiB",
+        },
+        {
+          flag: "--depends-on <task-id>",
+          description: "Direct prerequisite; repeat for multiple Tasks",
         },
       ]),
       examples: ['by task create --title "Add login" --description-file task.md'],
@@ -80,20 +87,52 @@ export const runCreateCommand = (
     return descriptionFileError(description.error);
   }
 
+  const dependencies = resolveDependencies(parseResult.dependsOn, tasksLoad.tasks);
+  if (!dependencies.ok) return dependencies.result;
+
   try {
     const task = tasksLoad.tasks.createTask({
       title,
       description: description.content,
       now: environment.now().toISOString(),
+      dependsOn: dependencies.taskIds,
     });
 
     return success({
-      task,
+      task: {
+        id: task.id,
+        title: task.title,
+        state: task.state,
+        createdAt: task.createdAt,
+        updatedAt: task.updatedAt,
+      },
       help: ["Run `by task list` to see open tasks."],
     });
-  } catch {
+  } catch (error) {
+    if (error instanceof TaskDependencyValidationError) {
+      return dependencyError(error);
+    }
     return stateStoreUnavailable(tasksLoad.tasks.taskPrefix);
   }
+};
+
+type ResolveDependenciesResult =
+  | { readonly ok: true; readonly taskIds: readonly PublicTaskId[] }
+  | { readonly ok: false; readonly result: CliResult };
+
+const resolveDependencies = (
+  dependencies: readonly string[],
+  tasks: Parameters<typeof resolveTaskId>[0],
+): ResolveDependenciesResult => {
+  const taskIds: PublicTaskId[] = [];
+  for (const dependency of dependencies) {
+    const parsed = parseCliTaskIdValue(dependency);
+    if (!parsed.ok) return parsed;
+    const resolved = resolveTaskId(tasks, parsed.taskId);
+    if (!resolved.ok) return resolved;
+    taskIds.push(resolved.taskId);
+  }
+  return { ok: true, taskIds };
 };
 
 type TaskCreateArgsParseResult =
@@ -101,6 +140,7 @@ type TaskCreateArgsParseResult =
       readonly ok: true;
       readonly title: string | undefined;
       readonly descriptionFile: string | undefined;
+      readonly dependsOn: readonly string[];
     }
   | {
       readonly ok: false;
@@ -110,6 +150,7 @@ type TaskCreateArgsParseResult =
 const parseTaskCreateArgs = (args: readonly string[]): TaskCreateArgsParseResult => {
   let title: string | undefined;
   let descriptionFile: string | undefined;
+  const dependsOn: string[] = [];
 
   for (let index = 0; index < args.length; index += 1) {
     const arg = args[index] ?? "";
@@ -122,36 +163,49 @@ const parseTaskCreateArgs = (args: readonly string[]): TaskCreateArgsParseResult
     const value = args[index + 1];
 
     if (value === undefined || value.startsWith("-")) {
-      return missingCreateOptionValue(option, title, descriptionFile);
+      return missingCreateOptionValue(option, title, descriptionFile, dependsOn);
     }
 
     if (option === "title") {
       title = value;
-    } else {
+    } else if (option === "descriptionFile") {
       descriptionFile = value;
+    } else {
+      dependsOn.push(value);
     }
 
     index += 1;
   }
 
-  return { ok: true, title, descriptionFile };
+  return { ok: true, title, descriptionFile, dependsOn };
 };
 
-type CreateOption = "title" | "descriptionFile";
+type CreateOption = "title" | "descriptionFile" | "dependsOn";
 
 const createOptions: Partial<Record<string, CreateOption>> = {
   "--title": "title",
   "--description-file": "descriptionFile",
+  "--depends-on": "dependsOn",
 };
 
 const missingCreateOptionValue = (
   option: CreateOption,
   title: string | undefined,
   descriptionFile: string | undefined,
+  dependsOn: readonly string[],
 ): TaskCreateArgsParseResult =>
   option === "title"
-    ? { ok: true, title: undefined, descriptionFile }
-    : { ok: true, title, descriptionFile: undefined };
+    ? { ok: true, title: undefined, descriptionFile, dependsOn }
+    : option === "descriptionFile"
+      ? { ok: true, title, descriptionFile: undefined, dependsOn }
+      : {
+          ok: false,
+          result: usageError({
+            code: "missing_dependency_task_id",
+            message: "--depends-on requires a Task ID.",
+            help: ["Provide a Task ID after `--depends-on`."],
+          }),
+        };
 
 const unknownTaskCreateInput = (arg: string): TaskCreateArgsParseResult => ({
   ok: false,
@@ -161,6 +215,27 @@ const unknownTaskCreateInput = (arg: string): TaskCreateArgsParseResult => ({
     help: ["Run `by task create --help`."],
   }),
 });
+
+const dependencyError = (error: TaskDependencyValidationError): CliResult =>
+  runtimeError({
+    code: error.code,
+    message: dependencyErrorMessage(error),
+    ...(error.taskId === undefined ? {} : { details: { taskId: error.taskId } }),
+    help: ["Use existing Tasks from `by task list --all` as direct prerequisites."],
+  });
+
+const dependencyErrorMessage = (error: TaskDependencyValidationError): string => {
+  switch (error.code) {
+    case "dependency_unknown_task":
+      return `Dependency Task was not found: ${error.taskId ?? ""}`;
+    case "dependency_self":
+      return "A Task cannot depend on itself.";
+    case "dependency_duplicate":
+      return `Dependency was provided more than once: ${error.taskId ?? ""}`;
+    case "dependency_cycle":
+      return "Task dependencies must not contain a cycle.";
+  }
+};
 
 const descriptionFileError = (error: DescriptionFileReadError): CliResult => {
   switch (error.code) {

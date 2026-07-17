@@ -45,6 +45,8 @@ export const runShowCommand = (
         latestValidationRun: task.latestValidationRun,
         tokenTotals: null,
         commentCount: task.commentCount,
+        prerequisites: task.prerequisites,
+        dependents: task.dependents,
       },
     });
   } catch {

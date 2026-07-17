@@ -158,9 +158,21 @@ help[1]: Run \`by task list\` to see open tasks.`);
     expect(result.status).toBe(0);
     expect(result.stderr).toBe("");
     expect(result.stdout).toBe(`count: 2
-tasks[2]{id,title,state,createdAt,updatedAt}:
-  BY-1,First,new,"${firstNow}","${firstNow}"
-  BY-2,Second,needs_input,"${secondNow}","${thirdNow}"`);
+tasks[2]:
+  - id: BY-1
+    title: First
+    state: new
+    createdAt: "${firstNow}"
+    updatedAt: "${firstNow}"
+    startable: false
+    blockedBy: []
+  - id: BY-2
+    title: Second
+    state: needs_input
+    createdAt: "${secondNow}"
+    updatedAt: "${thirdNow}"
+    startable: false
+    blockedBy: []`);
   });
 
   it("lists Tasks as compact JSON when selected after the command", () => {
@@ -185,6 +197,8 @@ tasks[2]{id,title,state,createdAt,updatedAt}:
           state: "new",
           createdAt: firstNow,
           updatedAt: firstNow,
+          startable: false,
+          blockedBy: [],
         },
         {
           id: "BY-2",
@@ -192,6 +206,8 @@ tasks[2]{id,title,state,createdAt,updatedAt}:
           state: "needs_input",
           createdAt: secondNow,
           updatedAt: thirdNow,
+          startable: false,
+          blockedBy: [],
         },
       ],
     });
@@ -203,10 +219,11 @@ tasks[2]{id,title,state,createdAt,updatedAt}:
     createTask(root, firstNow, "First");
     createTask(root, firstNow, "Second");
 
-    expect(runByInProcess(root, ["task", "list"]).stdout).toBe(`count: 2
-tasks[2]{id,title,state,createdAt,updatedAt}:
-  BY-1,First,new,"${firstNow}","${firstNow}"
-  BY-2,Second,new,"${firstNow}","${firstNow}"`);
+    expect(
+      JSON.parse(runByInProcess(root, ["task", "list", "--output", "json"]).stdout),
+    ).toMatchObject({
+      tasks: [{ id: "BY-1" }, { id: "BY-2" }],
+    });
   });
 
   it("rejects starting new Tasks with approval guidance", () => {
@@ -455,18 +472,26 @@ help[1]: "Run \`by task create --title \\"...\\" --description-file <file>\` to 
     createTask(root, secondNow, "Second");
     transitionTaskState(root, "BY-1", "done", thirdNow);
 
-    expect(runByInProcess(root, ["task", "list"]).stdout).toBe(`count: 1
-tasks[1]{id,title,state,createdAt,updatedAt}:
-  BY-2,Second,new,"${secondNow}","${secondNow}"`);
+    expect(
+      JSON.parse(runByInProcess(root, ["task", "list", "--output", "json"]).stdout),
+    ).toMatchObject({
+      tasks: [{ id: "BY-2", state: "new" }],
+    });
 
-    expect(runByInProcess(root, ["task", "list", "--all"]).stdout).toBe(`count: 2
-tasks[2]{id,title,state,createdAt,updatedAt}:
-  BY-1,First,done,"${firstNow}","${thirdNow}"
-  BY-2,Second,new,"${secondNow}","${secondNow}"`);
+    expect(
+      JSON.parse(runByInProcess(root, ["task", "list", "--all", "--output", "json"]).stdout),
+    ).toMatchObject({
+      tasks: [
+        { id: "BY-1", state: "done" },
+        { id: "BY-2", state: "new" },
+      ],
+    });
 
-    expect(runByInProcess(root, ["task", "list", "--state", "done"]).stdout).toBe(`count: 1
-tasks[1]{id,title,state,createdAt,updatedAt}:
-  BY-1,First,done,"${firstNow}","${thirdNow}"`);
+    expect(
+      JSON.parse(
+        runByInProcess(root, ["task", "list", "--state", "done", "--output", "json"]).stdout,
+      ),
+    ).toMatchObject({ tasks: [{ id: "BY-1", state: "done" }] });
   });
 
   it("shows compact Task metadata without Task Context", () => {
@@ -488,7 +513,9 @@ tasks[1]{id,title,state,createdAt,updatedAt}:
   branch: null
   latestValidationRun: null
   tokenTotals: null
-  commentCount: 0`);
+  commentCount: 0
+  prerequisites: []
+  dependents: []`);
   });
 
   it("shows Task Context without metadata", () => {
@@ -723,7 +750,9 @@ tasks[1]{id,title,state,createdAt,updatedAt}:
   branch: null
   latestValidationRun: null
   tokenTotals: null
-  commentCount: 2`);
+  commentCount: 2
+  prerequisites: []
+  dependents: []`);
     expect(runByInProcess(root, ["task", "context", "BY-1"]).stdout).toBe(`task:
   id: BY-1
   title: Commented task

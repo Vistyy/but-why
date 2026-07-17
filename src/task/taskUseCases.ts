@@ -35,6 +35,10 @@ export type TaskUseCases = {
   readonly taskPrefix: string;
   readonly resolveTaskId: (taskId: PublicTaskId) => RepoTaskIdResolution;
   readonly createTask: (input: CreateTaskInput) => TaskSummary;
+  readonly replaceTaskDependencies: (
+    taskId: PublicTaskId,
+    prerequisiteTaskIds: readonly PublicTaskId[],
+  ) => RepoReplaceTaskDependenciesResult;
   readonly listTasks: (input: ListTasksInput) => readonly TaskSummary[];
   readonly listActionableTasks: () => readonly TaskSummary[];
   readonly getTaskById: (taskId: PublicTaskId) => TaskRecord | undefined;
@@ -57,6 +61,7 @@ type CreateTaskInput = {
   readonly title: string;
   readonly description: string;
   readonly now: string;
+  readonly dependsOn?: readonly PublicTaskId[];
 };
 
 type ListTasksInput = {
@@ -137,7 +142,11 @@ export type RepoTaskStateTransitionResult =
       readonly code: "invalid_task_state_transition";
       readonly from: TaskState;
       readonly to: TaskState;
-    };
+    }
+  | Extract<
+      ReturnType<TaskStore["transitionTaskState"]>,
+      { readonly code: "task_dependencies_unsatisfied" }
+    >;
 
 export type RepoTaskApprovalResult =
   | {
@@ -146,6 +155,10 @@ export type RepoTaskApprovalResult =
       readonly task: TaskRecord;
     }
   | Exclude<TaskApprovalResult, { readonly ok: true }>;
+
+export type RepoReplaceTaskDependenciesResult =
+  | { readonly ok: true; readonly task: TaskRecord }
+  | Exclude<ReturnType<TaskStore["replaceTaskDependencies"]>, { readonly ok: true }>;
 
 export type StartTaskResult =
   | {
@@ -161,7 +174,11 @@ export type StartTaskResult =
       readonly ok: false;
       readonly code: "invalid_task_state";
       readonly state: StartIneligibleState;
-    };
+    }
+  | Extract<
+      ReturnType<TaskStore["transitionTaskState"]>,
+      { readonly code: "task_dependencies_unsatisfied" }
+    >;
 
 export const openTaskUseCases = (
   context: RepoLocalContext,
@@ -174,6 +191,18 @@ export const openTaskUseCases = (
     taskPrefix: context.taskPrefix,
     resolveTaskId: (taskId) => resolveRepoTaskId(context, taskId),
     createTask: stores.taskStore.createTask,
+    replaceTaskDependencies: (taskId, prerequisiteTaskIds) => {
+      const result = stores.taskStore.replaceTaskDependencies({ taskId, prerequisiteTaskIds });
+      return result.ok
+        ? {
+            ok: true,
+            task: withLatestValidationRun(
+              result.task,
+              stores.validationRunStore.getLatestValidationRunIdForTask(taskId),
+            ),
+          }
+        : result;
+    },
     listTasks: stores.taskStore.listTasks,
     listActionableTasks: stores.taskStore.listActionableTasks,
     getTaskById: (taskId) => getTaskById(stores.taskStore, stores.validationRunStore, taskId),
@@ -377,6 +406,10 @@ const startTask = (
   });
 
   if (result.ok) {
+    return result;
+  }
+
+  if (result.code === "task_dependencies_unsatisfied") {
     return result;
   }
 

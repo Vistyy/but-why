@@ -824,6 +824,21 @@ const migrations: readonly Migration[] = [
       WHERE branch IS NOT NULL
     `,
   },
+  {
+    name: "020_task_dependencies",
+    apply: `
+      CREATE TABLE task_dependencies (
+        dependent_task_id TEXT NOT NULL,
+        prerequisite_task_id TEXT NOT NULL,
+        PRIMARY KEY (dependent_task_id, prerequisite_task_id),
+        FOREIGN KEY (dependent_task_id) REFERENCES tasks(id),
+        FOREIGN KEY (prerequisite_task_id) REFERENCES tasks(id)
+      );
+
+      CREATE INDEX task_dependencies_prerequisite_idx
+      ON task_dependencies (prerequisite_task_id, dependent_task_id)
+    `,
+  },
 ];
 
 export const ensureStateDatabase = (

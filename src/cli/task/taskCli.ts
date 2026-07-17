@@ -6,6 +6,7 @@ import { runApproveCommand } from "./commands/approve.js";
 import { runCommentCommand } from "./commands/comment.js";
 import { runContextCommand } from "./commands/context.js";
 import { runCreateCommand } from "./commands/create.js";
+import { runDependenciesCommand } from "./commands/dependencies.js";
 import { runFindingsCommand } from "./commands/findings.js";
 import { runListCommand } from "./commands/list.js";
 import { runShowCommand } from "./commands/show.js";
@@ -36,6 +37,10 @@ export const routeTask = (
 
   if (subcommand === "create") {
     return runCreateCommand(args.slice(1), environment);
+  }
+
+  if (subcommand === "dependencies") {
+    return runDependenciesCommand(args.slice(1), environment);
   }
 
   if (subcommand === "list") {
@@ -89,8 +94,13 @@ const taskHelpView = (): StructuredObject => ({
   usage: "by task <command> [--help]",
   commands: [
     {
-      command: "by task create --title <title> --description-file <file>",
+      command:
+        "by task create --title <title> --description-file <file> [--depends-on <task-id>]...",
       description: "Create a repo-local Task",
+    },
+    {
+      command: "by task dependencies set <task-id> [--depends-on <task-id>]...",
+      description: "Replace direct Task prerequisites before Start",
     },
     {
       command: "by task list [--all] [--state <state>]",

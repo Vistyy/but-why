@@ -135,6 +135,8 @@ const taskSummaryRows = (tasks: readonly TaskSummary[]): readonly StructuredValu
     state: task.state,
     createdAt: task.createdAt,
     updatedAt: task.updatedAt,
+    startable: task.startable,
+    blockedBy: task.blockedBy,
   }));
 
 const createTaskHelp =

@@ -4,8 +4,13 @@ import type { DatabaseSync } from "node:sqlite";
 import { rollbackIfOpen, withStateDatabase, type SqliteStoreInput } from "./connection.js";
 import { queryAll, queryOne } from "./query.js";
 import { canTransition } from "../task/lifecycle.js";
-import type { TaskContext, TaskSummary } from "../task/task.js";
-import type { PublicTaskId } from "../task/taskId.js";
+import {
+  TaskDependencyValidationError,
+  type TaskContext,
+  type TaskDependencyFact,
+  type TaskSummary,
+} from "../task/task.js";
+import { generatedPublicTaskId, type PublicTaskId } from "../task/taskId.js";
 import type {
   AppendTaskCommentInput,
   AppendTaskCommentResult,
@@ -18,6 +23,8 @@ import type {
   TaskApprovalResult,
   TaskStateTransitionResult,
   TaskStore,
+  ReplaceTaskDependenciesInput,
+  ReplaceTaskDependenciesResult,
 } from "../task/taskStore.js";
 
 export type SqliteTaskStoreInput = SqliteStoreInput & {
@@ -39,6 +46,8 @@ const storedTaskRecordColumns = [
 export const openSqliteTaskStore = (input: SqliteTaskStoreInput): TaskStore => ({
   createTask: (taskInput) =>
     withStateDatabase(input, (database) => createTask(database, input.taskPrefix, taskInput)),
+  replaceTaskDependencies: (taskInput) =>
+    withStateDatabase(input, (database) => replaceTaskDependencies(database, taskInput)),
   listTasks: (taskInput) => withStateDatabase(input, (database) => listTasks(database, taskInput)),
   listActionableTasks: () => withStateDatabase(input, listActionableTasks),
   getTaskById: (taskId) => withStateDatabase(input, (database) => getTaskById(database, taskId)),
@@ -63,7 +72,10 @@ const createTask = (
 
   try {
     const numericId = nextTaskNumericId(database);
-    const id = `${taskPrefix}-${numericId}`;
+    const taskId = generatedPublicTaskId(taskPrefix, numericId);
+    const id = taskId;
+    const prerequisiteTaskIds = input.dependsOn ?? [];
+    validateDependencies(database, taskId, prerequisiteTaskIds, false);
 
     database
       .prepare(`
@@ -72,15 +84,58 @@ const createTask = (
       `)
       .run(id, numericId, input.title, input.description, "new", input.now, input.now);
 
-    database.exec("COMMIT");
+    insertDependencies(database, taskId, prerequisiteTaskIds);
+    const created = getTaskById(database, taskId);
 
-    return {
-      id,
-      title: input.title,
-      state: "new",
-      createdAt: input.now,
-      updatedAt: input.now,
-    };
+    if (created === undefined) {
+      throw new Error("Task disappeared during creation");
+    }
+
+    database.exec("COMMIT");
+    return created;
+  } catch (error) {
+    rollbackIfOpen(database);
+    throw error;
+  }
+};
+
+const replaceTaskDependencies = (
+  database: DatabaseSync,
+  input: ReplaceTaskDependenciesInput,
+): ReplaceTaskDependenciesResult => {
+  database.exec("BEGIN IMMEDIATE");
+
+  try {
+    const current = getTaskById(database, input.taskId);
+
+    if (current === undefined) {
+      database.exec("ROLLBACK");
+      return { ok: false, code: "task_not_found" };
+    }
+
+    if (current.state !== "new" && current.state !== "todo") {
+      database.exec("ROLLBACK");
+      return { ok: false, code: "dependencies_locked", state: current.state };
+    }
+
+    try {
+      validateDependencies(database, input.taskId, input.prerequisiteTaskIds, true);
+    } catch (error) {
+      if (error instanceof TaskDependencyValidationError) {
+        database.exec("ROLLBACK");
+        return { ok: false, code: error.code, ...(error.taskId ? { taskId: error.taskId } : {}) };
+      }
+      throw error;
+    }
+
+    database.prepare("DELETE FROM task_dependencies WHERE dependent_task_id = ?").run(input.taskId);
+    insertDependencies(database, input.taskId, input.prerequisiteTaskIds);
+
+    const updated = getTaskById(database, input.taskId);
+    if (updated === undefined) throw new Error("Task disappeared during dependency replacement");
+
+    database.exec("COMMIT");
+    return { ok: true, task: updated };
   } catch (error) {
     rollbackIfOpen(database);
     throw error;
@@ -118,7 +173,7 @@ const listTasks = (database: DatabaseSync, input: ListTasksInput): readonly Task
           `,
         );
 
-  return rows.map(rowToTaskSummary);
+  return rows.map((row) => rowToTaskSummary(database, row));
 };
 
 const listActionableTasks = (database: DatabaseSync): readonly TaskSummary[] =>
@@ -138,7 +193,7 @@ const listActionableTasks = (database: DatabaseSync): readonly TaskSummary[] =>
         updated_at DESC,
         numeric_id ASC
     `,
-  ).map(rowToTaskSummary);
+  ).map((row) => rowToTaskSummary(database, row));
 
 const getTaskById = (
   database: DatabaseSync,
@@ -158,7 +213,7 @@ const getTaskById = (
     return undefined;
   }
 
-  return rowToStoredTaskRecord(row);
+  return rowToStoredTaskRecord(database, row);
 };
 
 const getTaskContextById = (
@@ -359,6 +414,16 @@ const transitionTaskState = (
       };
     }
 
+    if (input.to === "implementing") {
+      const blockedBy = dependencyFacts(database, input.taskId, "prerequisites").filter(
+        (dependency) => dependency.state !== "done",
+      );
+      if (blockedBy.length > 0) {
+        database.exec("ROLLBACK");
+        return { ok: false, code: "task_dependencies_unsatisfied", blockedBy };
+      }
+    }
+
     database
       .prepare("UPDATE tasks SET state = ?, updated_at = ? WHERE id = ?")
       .run(input.to, input.now, input.taskId);
@@ -378,6 +443,98 @@ const transitionTaskState = (
   }
 };
 
+const validateDependencies = (
+  database: DatabaseSync,
+  dependentTaskId: PublicTaskId,
+  prerequisiteTaskIds: readonly PublicTaskId[],
+  dependentExists: boolean,
+): void => {
+  const seen = new Set<string>();
+
+  for (const prerequisiteTaskId of prerequisiteTaskIds) {
+    if (seen.has(prerequisiteTaskId)) {
+      throw new TaskDependencyValidationError("dependency_duplicate", prerequisiteTaskId);
+    }
+    seen.add(prerequisiteTaskId);
+
+    if (prerequisiteTaskId === dependentTaskId) {
+      throw new TaskDependencyValidationError("dependency_self", prerequisiteTaskId);
+    }
+
+    if (getTaskById(database, prerequisiteTaskId) === undefined) {
+      throw new TaskDependencyValidationError("dependency_unknown_task", prerequisiteTaskId);
+    }
+
+    if (dependentExists && dependencyPathExists(database, prerequisiteTaskId, dependentTaskId)) {
+      throw new TaskDependencyValidationError("dependency_cycle");
+    }
+  }
+};
+
+const dependencyPathExists = (
+  database: DatabaseSync,
+  fromTaskId: PublicTaskId,
+  targetTaskId: PublicTaskId,
+): boolean =>
+  queryOne<{ readonly found: number }>(
+    database,
+    `
+      WITH RECURSIVE prerequisites(task_id) AS (
+        SELECT ?
+        UNION
+        SELECT task_dependencies.prerequisite_task_id
+        FROM task_dependencies
+        JOIN prerequisites
+          ON task_dependencies.dependent_task_id = prerequisites.task_id
+      )
+      SELECT 1 AS found FROM prerequisites WHERE task_id = ? LIMIT 1
+    `,
+    [fromTaskId, targetTaskId],
+  ) !== undefined;
+
+const insertDependencies = (
+  database: DatabaseSync,
+  dependentTaskId: PublicTaskId,
+  prerequisiteTaskIds: readonly PublicTaskId[],
+): void => {
+  const insert = database.prepare(`
+    INSERT INTO task_dependencies (dependent_task_id, prerequisite_task_id)
+    VALUES (?, ?)
+  `);
+  for (const prerequisiteTaskId of prerequisiteTaskIds) {
+    insert.run(dependentTaskId, prerequisiteTaskId);
+  }
+};
+
+const dependencyFacts = (
+  database: DatabaseSync,
+  taskId: string,
+  direction: "prerequisites" | "dependents",
+): readonly TaskDependencyFact[] =>
+  direction === "prerequisites"
+    ? queryAll<TaskDependencyFact>(
+        database,
+        `
+          SELECT tasks.id, tasks.title, tasks.state
+          FROM task_dependencies
+          JOIN tasks ON tasks.id = task_dependencies.prerequisite_task_id
+          WHERE task_dependencies.dependent_task_id = ?
+          ORDER BY tasks.numeric_id ASC
+        `,
+        [taskId],
+      )
+    : queryAll<TaskDependencyFact>(
+        database,
+        `
+          SELECT tasks.id, tasks.title, tasks.state
+          FROM task_dependencies
+          JOIN tasks ON tasks.id = task_dependencies.dependent_task_id
+          WHERE task_dependencies.prerequisite_task_id = ?
+          ORDER BY tasks.numeric_id ASC
+        `,
+        [taskId],
+      );
+
 const nextTaskNumericId = (database: DatabaseSync): number => {
   const row = queryOne<NumericIdRow>(
     database,
@@ -391,19 +548,32 @@ const nextTaskNumericId = (database: DatabaseSync): number => {
   return Number(row.numericId);
 };
 
-const rowToTaskSummary = (row: TaskSummaryRow): TaskSummary => ({
-  id: row.id,
-  title: row.title,
-  state: row.state,
-  createdAt: row.createdAt,
-  updatedAt: row.updatedAt,
-});
+const rowToTaskSummary = (database: DatabaseSync, row: TaskSummaryRow): TaskSummary => {
+  const blockedBy = dependencyFacts(database, row.id, "prerequisites").filter(
+    (dependency) => dependency.state !== "done",
+  );
 
-const rowToStoredTaskRecord = (row: StoredTaskRecordRow): StoredTaskRecord => ({
-  ...rowToTaskSummary(row),
+  return {
+    id: row.id,
+    title: row.title,
+    state: row.state,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+    startable: row.state === "todo" && blockedBy.length === 0,
+    blockedBy,
+  };
+};
+
+const rowToStoredTaskRecord = (
+  database: DatabaseSync,
+  row: StoredTaskRecordRow,
+): StoredTaskRecord => ({
+  ...rowToTaskSummary(database, row),
   description: row.description,
   branch: row.branch,
   commentCount: Number(row.commentCount),
+  prerequisites: dependencyFacts(database, row.id, "prerequisites"),
+  dependents: dependencyFacts(database, row.id, "dependents"),
 });
 
 const rowToTaskContextHeader = (row: TaskContextHeaderRow): Omit<TaskContext, "comments"> => ({

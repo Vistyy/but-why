@@ -37,7 +37,9 @@ describe("shared repository state", () => {
     const result = runByInProcess(linked, ["task", "list"]);
 
     expect(result.status).toBe(0);
-    expect(result.stdout).toContain("BY-1,Shared,new");
+    expect(result.stdout).toContain("id: BY-1");
+    expect(result.stdout).toContain("title: Shared");
+    expect(result.stdout).toContain("state: new");
     expect(existsSync(sharedStatePath(root))).toBe(true);
     expect(existsSync(join(root, ".but-why", "state.sqlite"))).toBe(false);
     expect(existsSync(join(linked, ".but-why", "state.sqlite"))).toBe(false);

@@ -63,6 +63,9 @@ export const publicTaskId = (value: string): PublicTaskId => {
   return parsed.taskId;
 };
 
+export const generatedPublicTaskId = (prefix: string, numericId: number): PublicTaskId =>
+  publicTaskId(`${prefix}-${numericId}`);
+
 export const storedPublicTaskId = (value: string): PublicTaskId => {
   const parsed = parsePublicTaskId(value);
 

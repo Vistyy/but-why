@@ -1,9 +1,18 @@
 import type { TaskState } from "./lifecycle.js";
-import type { TaskContext, TaskRecord, TaskSummary } from "./task.js";
+import type {
+  DependencyValidationCode,
+  TaskContext,
+  TaskDependencyFact,
+  TaskRecord,
+  TaskSummary,
+} from "./task.js";
 import type { PublicTaskId } from "./taskId.js";
 
 export type TaskStore = {
   readonly createTask: (input: CreateTaskInput) => TaskSummary;
+  readonly replaceTaskDependencies: (
+    input: ReplaceTaskDependenciesInput,
+  ) => ReplaceTaskDependenciesResult;
   readonly listTasks: (input: ListTasksInput) => readonly TaskSummary[];
   readonly listActionableTasks: () => readonly TaskSummary[];
   readonly getTaskById: (taskId: PublicTaskId) => StoredTaskRecord | undefined;
@@ -20,7 +29,19 @@ export type CreateTaskInput = {
   readonly title: string;
   readonly description: string;
   readonly now: string;
+  readonly dependsOn?: readonly PublicTaskId[];
 };
+
+export type ReplaceTaskDependenciesInput = {
+  readonly taskId: PublicTaskId;
+  readonly prerequisiteTaskIds: readonly PublicTaskId[];
+};
+
+export type ReplaceTaskDependenciesResult =
+  | { readonly ok: true; readonly task: StoredTaskRecord }
+  | { readonly ok: false; readonly code: "task_not_found" }
+  | { readonly ok: false; readonly code: DependencyValidationCode; readonly taskId?: PublicTaskId }
+  | { readonly ok: false; readonly code: "dependencies_locked"; readonly state: TaskState };
 
 export type ListTasksInput = {
   readonly includeDone: boolean;
@@ -113,4 +134,9 @@ export type TaskStateTransitionResult =
       readonly code: "invalid_task_state_transition";
       readonly from: TaskState;
       readonly to: TaskState;
+    }
+  | {
+      readonly ok: false;
+      readonly code: "task_dependencies_unsatisfied";
+      readonly blockedBy: readonly TaskDependencyFact[];
     };
