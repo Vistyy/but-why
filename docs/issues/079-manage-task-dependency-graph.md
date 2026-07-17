@@ -21,14 +21,21 @@ Task dependency CLI graph test.
 
 ## Acceptance criteria
 
-- [ ] Task creation accepts repeated `--depends-on <task-id>` options atomically.
-- [ ] `by task dependencies set <task-id> --depends-on <task-id>...` replaces the complete list atomically.
-- [ ] Unknown Tasks, self-dependencies, duplicate inputs, and cycles are rejected without changing the graph.
-- [ ] Dependencies lock when the dependent Task starts.
-- [ ] Start succeeds only when every prerequisite is Done.
-- [ ] Cancelled prerequisites remain unsatisfied.
-- [ ] Task show exposes direct prerequisites and dependents.
-- [ ] Task list exposes `startable` and direct `blockedBy` facts.
+- [x] Task creation accepts repeated `--depends-on <task-id>` options atomically.
+- [x] `by task dependencies set <task-id> --depends-on <task-id>...` replaces the complete list atomically.
+- [x] Unknown Tasks, self-dependencies, duplicate inputs, and cycles are rejected without changing the graph.
+- [x] Dependencies lock when the dependent Task starts.
+- [x] Start succeeds only when every prerequisite is Done.
+- [x] Cancelled prerequisites remain unsatisfied.
+- [x] Task show exposes direct prerequisites and dependents.
+- [x] Task list exposes `startable` and direct `blockedBy` facts.
+
+## Completion
+
+Implemented in `179bbba`.
+Spec review: Approved with required comments; completion-status correction committed in `6acdfff`.
+Standards review: Approved.
+Quality: Passed - format, lint, architecture checks, typecheck, 280 tests, and Fallow checks.
 
 ## Blocked by
 
