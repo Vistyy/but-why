@@ -12,6 +12,8 @@ import type {
   CreateTaskInput,
   ListTasksInput,
   StoredTaskRecord,
+  UpdateTaskContextInput,
+  UpdateTaskContextResult,
   TaskStateTransitionResult,
   TaskStore,
 } from "../task/taskStore.js";
@@ -42,6 +44,8 @@ export const openSqliteTaskStore = (input: SqliteTaskStoreInput): TaskStore => (
     withStateDatabase(input, (database) => getTaskContextById(database, taskId)),
   appendTaskComment: (taskInput) =>
     withStateDatabase(input, (database) => appendTaskComment(database, taskInput)),
+  updateTaskContext: (taskInput) =>
+    withStateDatabase(input, (database) => updateTaskContext(database, taskInput)),
   transitionTaskState: (taskInput) =>
     withStateDatabase(input, (database) => transitionTaskState(database, taskInput)),
 });
@@ -224,6 +228,43 @@ const appendTaskComment = (
     database.exec("COMMIT");
 
     return { taskId: input.taskId, commentCount: count };
+  } catch (error) {
+    rollbackIfOpen(database);
+    throw error;
+  }
+};
+
+const updateTaskContext = (
+  database: DatabaseSync,
+  input: UpdateTaskContextInput,
+): UpdateTaskContextResult => {
+  database.exec("BEGIN IMMEDIATE");
+
+  try {
+    const current = getTaskById(database, input.taskId);
+
+    if (current === undefined) {
+      database.exec("ROLLBACK");
+      return { ok: false, code: "task_not_found" };
+    }
+
+    if (current.state !== "todo") {
+      database.exec("ROLLBACK");
+      return { ok: false, code: "invalid_task_state", state: current.state };
+    }
+
+    database
+      .prepare("UPDATE tasks SET title = ?, description = ?, updated_at = ? WHERE id = ?")
+      .run(input.title, input.description, input.now, input.taskId);
+
+    const updated = getTaskById(database, input.taskId);
+
+    if (updated === undefined) {
+      throw new Error("Task disappeared during Task Context update");
+    }
+
+    database.exec("COMMIT");
+    return { ok: true, task: updated };
   } catch (error) {
     rollbackIfOpen(database);
     throw error;

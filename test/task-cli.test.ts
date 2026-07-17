@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
@@ -439,6 +439,149 @@ tasks[1]{id,title,state,createdAt,updatedAt}:
   comments: []`);
   });
 
+  it("creates a managed Task Context draft with the current title and description", () => {
+    const root = initializedRepo();
+
+    createTask(root, firstNow, "Draft title");
+
+    const result = runByInProcess(root, ["task", "context", "draft", "BY-1", "--output", "json"]);
+
+    expect(result.status).toBe(0);
+    expect(result.stderr).toBe("");
+
+    const output = JSON.parse(result.stdout) as { draft: { path: string } };
+
+    expect(output.draft.path).toMatch(
+      /\.git\/but-why\/task-context-drafts\/by-1-[a-f0-9]{12}\.md$/,
+    );
+    expect(existsSync(output.draft.path)).toBe(true);
+    expect(readFileSync(output.draft.path, "utf8")).toBe(
+      "# Draft title\n\nDescription for Draft title",
+    );
+  });
+
+  it("replaces a prior Task Context draft with current Task Context", () => {
+    const root = initializedRepo();
+
+    createTask(root, firstNow, "Original title");
+    const firstDraft = JSON.parse(
+      runByInProcess(root, ["task", "context", "draft", "BY-1", "--output", "json"]).stdout,
+    ) as { draft: { path: string } };
+    writeFileSync(firstDraft.draft.path, "# Current title\n\nCurrent description");
+    expect(runByInProcess(root, ["task", "context", "apply", "BY-1"], secondNow).status).toBe(0);
+
+    const draftResult = runByInProcess(root, [
+      "task",
+      "context",
+      "draft",
+      "BY-1",
+      "--output",
+      "json",
+    ]);
+    const draft = JSON.parse(draftResult.stdout) as { draft: { path: string } };
+    writeFileSync(draft.draft.path, "Discard this draft");
+
+    expect(runByInProcess(root, ["task", "context", "draft", "BY-1"]).status).toBe(0);
+    expect(draft.draft.path).toBe(firstDraft.draft.path);
+    expect(readFileSync(draft.draft.path, "utf8")).toBe("# Current title\n\nCurrent description");
+  });
+
+  it("applies a valid Task Context draft before Task Start and removes it", () => {
+    const root = initializedRepo();
+
+    createTask(root, firstNow, "Original title");
+
+    const draftResult = runByInProcess(root, [
+      "task",
+      "context",
+      "draft",
+      "BY-1",
+      "--output",
+      "json",
+    ]);
+    const draft = JSON.parse(draftResult.stdout) as { draft: { path: string } };
+    writeFileSync(draft.draft.path, "#  Updated title  \n\nUpdated description\n\n");
+
+    const result = runByInProcess(
+      root,
+      ["task", "context", "apply", "BY-1", "--output", "json"],
+      secondNow,
+    );
+
+    expect(result.status).toBe(0);
+    expect(result.stderr).toBe("");
+    expect(JSON.parse(result.stdout)).toMatchObject({
+      task: {
+        id: "BY-1",
+        title: "Updated title",
+        description: "Updated description\n\n",
+        state: "todo",
+        updatedAt: secondNow,
+      },
+    });
+    expect(existsSync(draft.draft.path)).toBe(false);
+    expect(runByInProcess(root, ["task", "context", "BY-1"]).stdout).toContain(
+      'title: Updated title\n  description: "Updated description\\n\\n"',
+    );
+  });
+
+  it("retains an invalid Task Context draft without changing the Task", () => {
+    const root = initializedRepo();
+
+    createTask(root, firstNow, "Original title");
+
+    const draftResult = runByInProcess(root, [
+      "task",
+      "context",
+      "draft",
+      "BY-1",
+      "--output",
+      "json",
+    ]);
+    const draft = JSON.parse(draftResult.stdout) as { draft: { path: string } };
+    writeFileSync(draft.draft.path, "Updated title\n\nUpdated description");
+
+    const result = runByInProcess(root, ["task", "context", "apply", "BY-1"], secondNow);
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toBe("");
+    expect(result.stdout).toContain("code: invalid_task_context_draft");
+    expect(existsSync(draft.draft.path)).toBe(true);
+    expect(runByInProcess(root, ["task", "context", "BY-1"]).stdout).toContain(
+      "title: Original title\n  description: Description for Original title",
+    );
+  });
+
+  it.each([
+    "implementing",
+    "done",
+  ] as const)("retains Task Context drafts when applying to a %s Task", (state) => {
+    const root = initializedRepo();
+
+    createTask(root, firstNow, "Original title");
+    const draftResult = runByInProcess(root, [
+      "task",
+      "context",
+      "draft",
+      "BY-1",
+      "--output",
+      "json",
+    ]);
+    const draft = JSON.parse(draftResult.stdout) as { draft: { path: string } };
+    writeFileSync(draft.draft.path, "# Updated title\n\nUpdated description");
+    transitionTaskState(root, "BY-1", state, secondNow);
+
+    const result = runByInProcess(root, ["task", "context", "apply", "BY-1"], thirdNow);
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toBe("");
+    expect(result.stdout).toContain("code: invalid_task_state");
+    expect(existsSync(draft.draft.path)).toBe(true);
+    expect(runByInProcess(root, ["task", "context", "BY-1"]).stdout).toContain(
+      "title: Original title\n  description: Description for Original title",
+    );
+  });
+
   it("appends Task comments as ordered raw Task Context without changing state", () => {
     const root = initializedRepo();
 
@@ -777,6 +920,24 @@ help[1]: "Run \`by task create --title \\"...\\" --description-file <file>\` to 
   message: Unknown task state blocked.
   state: blocked
 help[1]: "Use one of: todo, implementing, validating, needs_input, ready, done."`);
+  });
+
+  it("rejects Task titles containing line breaks", () => {
+    const root = initializedRepo();
+    writeFileSync(join(root, "task.md"), "Description");
+
+    const result = runByInProcess(root, [
+      "task",
+      "create",
+      "--title",
+      "Title\nwith line break",
+      "--description-file",
+      "task.md",
+    ]);
+
+    expect(result.status).toBe(2);
+    expect(result.stdout).toContain("code: invalid_task_title");
+    expect(runByInProcess(root, ["task", "list"]).stdout).toContain("count: 0");
   });
 
   it.each([

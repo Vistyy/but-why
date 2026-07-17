@@ -340,6 +340,7 @@ ignores:
   - src/init/repoConfig.ts
   - src/init/gitignore.ts
   - src/validationRun/artifactFiles.ts
+  - src/task/files/contextDraft.ts
 rule:
   any:
     - pattern: writeFileSync($$$ARGS)
@@ -353,6 +354,8 @@ severity: error
 message: Destructive filesystem APIs need an explicit production seam before use.
 files:
   - src/**/*.ts
+ignores:
+  - src/task/files/contextDraft.ts
 rule:
   any:
     - pattern: rmSync($$$ARGS)
@@ -386,6 +389,7 @@ ignores:
   - src/init/gitignore.ts
   - src/task/files/descriptionFile.ts
   - src/task/files/commentFile.ts
+  - src/task/files/contextDraft.ts
 rule:
   any:
     - pattern: readFileSync($$$ARGS)
@@ -402,6 +406,7 @@ ignores:
   - src/init/repoContext.ts
   - src/task/files/descriptionFile.ts
   - src/task/files/commentFile.ts
+  - src/task/files/contextDraft.ts
 rule:
   any:
     - pattern: statSync($$$ARGS)

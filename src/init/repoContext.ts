@@ -16,6 +16,7 @@ export type RepoLocalPaths = {
   readonly statePath: string;
   readonly reviewersPath: string;
   readonly artifactsPath: string;
+  readonly taskContextDraftsPath: string;
   readonly gitignorePath: string;
 };
 
@@ -112,6 +113,7 @@ const repoLocalPaths = (root: string, commonDirectory: string): RepoLocalPaths =
     statePath: join(operationalDir, "state.sqlite"),
     reviewersPath: join(butWhyDir, "reviewers"),
     artifactsPath: join(operationalDir, "artifacts"),
+    taskContextDraftsPath: join(operationalDir, "task-context-drafts"),
     gitignorePath: join(root, ".gitignore"),
   };
 };

@@ -43,6 +43,48 @@ describe("shared repository state", () => {
     expect(existsSync(join(linked, ".but-why", "state.sqlite"))).toBe(false);
   });
 
+  it("shares untracked Task Context drafts through Git common state across linked worktrees", () => {
+    const root = initializedRepo();
+    git(root, "config", "user.email", "test@example.com");
+    git(root, "config", "user.name", "Test User");
+    git(root, "add", ".but-why/config.json");
+    git(root, "commit", "-m", "configure but why");
+    const linked = join(createTempRoot(), "linked");
+    git(root, "worktree", "add", "-b", "linked", linked);
+    writeFileSync(join(root, "task.md"), "Shared Task");
+    expect(
+      runByInProcess(
+        root,
+        ["task", "create", "--title", "Shared", "--description-file", "task.md"],
+        now,
+      ).status,
+    ).toBe(0);
+
+    const rootStatusBeforeDraft = git(root, "status", "--short");
+    const linkedStatusBeforeDraft = git(linked, "status", "--short");
+
+    const draftResult = runByInProcess(root, [
+      "task",
+      "context",
+      "draft",
+      "BY-1",
+      "--output",
+      "json",
+    ]);
+    const draft = JSON.parse(draftResult.stdout) as { draft: { path: string } };
+    writeFileSync(draft.draft.path, "# Shared updated\n\nUpdated from another worktree");
+
+    const applyResult = runByInProcess(linked, ["task", "context", "apply", "BY-1"], now);
+
+    expect(applyResult.status).toBe(0);
+    expect(runByInProcess(linked, ["task", "context", "BY-1"]).stdout).toContain(
+      "title: Shared updated\n  description: Updated from another worktree",
+    );
+    expect(existsSync(draft.draft.path)).toBe(false);
+    expect(git(root, "status", "--short")).toBe(rootStatusBeforeDraft);
+    expect(git(linked, "status", "--short")).toBe(linkedStatusBeforeDraft);
+  });
+
   it("rejects shared state that belongs to another Git common directory", () => {
     const root = initializedRepo();
     const database = new DatabaseSync(sharedStatePath(root));

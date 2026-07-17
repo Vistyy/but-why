@@ -112,6 +112,14 @@ const taskHelpView = (): StructuredObject => ({
       description: "Show full Task Context",
     },
     {
+      command: "by task context draft <task-id>",
+      description: "Create an editable Task Context draft",
+    },
+    {
+      command: "by task context apply <task-id>",
+      description: "Apply an editable Task Context draft",
+    },
+    {
       command: "by task comment <task-id> --file <file>",
       description: "Append a Markdown Task comment",
     },

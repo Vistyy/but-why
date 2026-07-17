@@ -52,6 +52,14 @@ export const runCreateCommand = (
     });
   }
 
+  if (/[\r\n]/u.test(title)) {
+    return usageError({
+      code: "invalid_task_title",
+      message: "Task title must be one line.",
+      help: ['Provide a one-line title with `--title "..."`.'],
+    });
+  }
+
   if (parseResult.descriptionFile === undefined) {
     return usageError({
       code: "missing_description_file",

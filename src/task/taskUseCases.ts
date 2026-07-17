@@ -1,4 +1,10 @@
 import type { RepoLocalContext } from "../init/repoContext.js";
+import {
+  readTaskContextDraft,
+  removeTaskContextDraft,
+  writeTaskContextDraft,
+  type TaskContextDraftReadError,
+} from "./files/contextDraft.js";
 import type {
   ValidationRunFindingRecord,
   ValidationRunRecord,
@@ -32,6 +38,10 @@ export type TaskUseCases = {
   ) => TaskLatestValidationFindings | undefined;
   readonly listTaskValidationRuns: (taskId: PublicTaskId) => TaskValidationRunHistory | undefined;
   readonly getTaskContextById: (taskId: PublicTaskId) => TaskContext | undefined;
+  readonly createTaskContextDraft: (taskId: PublicTaskId) => TaskContextDraft | undefined;
+  readonly applyTaskContextDraft: (
+    input: ApplyTaskContextDraftInput,
+  ) => ApplyTaskContextDraftResult;
   readonly appendTaskComment: (
     input: AppendTaskCommentInput,
   ) => AppendTaskCommentResult | undefined;
@@ -61,6 +71,40 @@ type TransitionTaskStateInput = {
   readonly to: TaskState;
   readonly now: string;
 };
+
+export type TaskContextDraft = {
+  readonly path: string;
+};
+
+export type ApplyTaskContextDraftInput = {
+  readonly taskId: PublicTaskId;
+  readonly now: string;
+};
+
+export type ApplyTaskContextDraftResult =
+  | {
+      readonly ok: true;
+      readonly task: TaskRecord;
+    }
+  | {
+      readonly ok: false;
+      readonly code: "task_not_found";
+    }
+  | {
+      readonly ok: false;
+      readonly code: "invalid_task_state";
+      readonly state: TaskState;
+    }
+  | {
+      readonly ok: false;
+      readonly error: TaskContextDraftReadError;
+    }
+  | {
+      readonly ok: false;
+      readonly code: "task_context_draft_cleanup_failed";
+      readonly task: TaskRecord;
+      readonly path: string;
+    };
 
 export type TaskLatestValidationFindings = {
   readonly task: TaskRecord;
@@ -126,11 +170,70 @@ export const openTaskUseCases = (
     listTaskValidationRuns: (taskId) =>
       listTaskValidationRuns(stores.taskStore, stores.validationRunStore, taskId),
     getTaskContextById: stores.taskStore.getTaskContextById,
+    createTaskContextDraft: (taskId) => createTaskContextDraft(context, stores.taskStore, taskId),
+    applyTaskContextDraft: (input) =>
+      applyTaskContextDraft(context, stores.taskStore, stores.validationRunStore, input),
     appendTaskComment: stores.taskStore.appendTaskComment,
     startTask: (taskId, now) => startTask(stores.taskStore, stores.validationRunStore, taskId, now),
     transitionTaskState: (input) =>
       transitionTaskState(stores.taskStore, stores.validationRunStore, input),
   };
+};
+
+const createTaskContextDraft = (
+  context: RepoLocalContext,
+  taskStore: TaskStore,
+  taskId: PublicTaskId,
+): TaskContextDraft | undefined => {
+  const taskContext = taskStore.getTaskContextById(taskId);
+
+  if (taskContext === undefined) {
+    return undefined;
+  }
+
+  return {
+    path: writeTaskContextDraft(context.paths.taskContextDraftsPath, taskId, taskContext),
+  };
+};
+
+const applyTaskContextDraft = (
+  context: RepoLocalContext,
+  taskStore: TaskStore,
+  validationRunStore: ValidationRunStore,
+  input: ApplyTaskContextDraftInput,
+): ApplyTaskContextDraftResult => {
+  const draft = readTaskContextDraft(context.paths.taskContextDraftsPath, input.taskId);
+
+  if (!draft.ok) {
+    return { ok: false, error: draft.error };
+  }
+
+  const result = taskStore.updateTaskContext({
+    taskId: input.taskId,
+    title: draft.draft.title,
+    description: draft.draft.description,
+    now: input.now,
+  });
+
+  if (!result.ok) {
+    return result;
+  }
+
+  const task = withLatestValidationRun(
+    result.task,
+    validationRunStore.getLatestValidationRunIdForTask(input.taskId),
+  );
+
+  if (!removeTaskContextDraft(draft.draft.path)) {
+    return {
+      ok: false,
+      code: "task_context_draft_cleanup_failed",
+      task,
+      path: draft.draft.path,
+    };
+  }
+
+  return { ok: true, task };
 };
 
 const getTaskById = (

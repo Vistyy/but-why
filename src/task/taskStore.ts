@@ -11,6 +11,7 @@ export type TaskStore = {
   readonly appendTaskComment: (
     input: AppendTaskCommentInput,
   ) => AppendTaskCommentResult | undefined;
+  readonly updateTaskContext: (input: UpdateTaskContextInput) => UpdateTaskContextResult;
   readonly transitionTaskState: (input: TransitionTaskStateInput) => TaskStateTransitionResult;
 };
 
@@ -37,6 +38,28 @@ export type AppendTaskCommentResult = {
   readonly taskId: PublicTaskId;
   readonly commentCount: number;
 };
+
+export type UpdateTaskContextInput = {
+  readonly taskId: PublicTaskId;
+  readonly title: string;
+  readonly description: string;
+  readonly now: string;
+};
+
+export type UpdateTaskContextResult =
+  | {
+      readonly ok: true;
+      readonly task: StoredTaskRecord;
+    }
+  | {
+      readonly ok: false;
+      readonly code: "task_not_found";
+    }
+  | {
+      readonly ok: false;
+      readonly code: "invalid_task_state";
+      readonly state: TaskState;
+    };
 
 export type TransitionTaskStateInput = {
   readonly taskId: PublicTaskId;
