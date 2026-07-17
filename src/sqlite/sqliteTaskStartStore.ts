@@ -28,11 +28,22 @@ const columns = [
 ].join(", ");
 
 export const openSqliteTaskStartStore = (input: SqliteStoreInput): TaskStartStore => ({
+  prepare: (taskId) => withStateDatabase(input, (database) => prepare(database, taskId)),
   getByTaskId: (taskId) => withStateDatabase(input, (database) => getByTaskId(database, taskId)),
   bind: (bindInput) => withStateDatabase(input, (database) => bind(database, bindInput)),
   markReady: (taskId, now) =>
     withStateDatabase(input, (database) => markReady(database, taskId, now)),
 });
+
+const prepare = (
+  database: DatabaseSync,
+  taskId: PublicTaskId,
+): ReturnType<TaskStartStore["prepare"]> => {
+  const existing = getByTaskId(database, taskId);
+  if (existing !== undefined) return { ok: true, existing };
+  const eligibility = readEligibility(database, taskId);
+  return eligibility.ok ? { ok: true, existing: undefined } : eligibility;
+};
 
 const bind = (database: DatabaseSync, input: BindTaskStartInput): BindTaskStartResult => {
   database.exec("BEGIN IMMEDIATE");
@@ -46,35 +57,12 @@ const bind = (database: DatabaseSync, input: BindTaskStartInput): BindTaskStartR
         : { ok: false, code: "task_start_conflict" };
     }
 
-    const task = queryOne<TaskRow>(
-      database,
-      "SELECT id, title, description, state FROM tasks WHERE id = ?",
-      [input.taskId],
-    );
-    if (task === undefined) {
+    const eligibility = readEligibility(database, input.taskId);
+    if (!eligibility.ok) {
       database.exec("ROLLBACK");
-      return { ok: false, code: "task_not_found" };
+      return eligibility;
     }
-    if (task.state !== "todo") {
-      database.exec("ROLLBACK");
-      return { ok: false, code: "invalid_task_state", state: task.state };
-    }
-
-    const blockedBy = queryAll<TaskDependencyFact>(
-      database,
-      `
-        SELECT tasks.id, tasks.title, tasks.state
-        FROM task_dependencies
-        JOIN tasks ON tasks.id = task_dependencies.prerequisite_task_id
-        WHERE task_dependencies.dependent_task_id = ? AND tasks.state <> 'done'
-        ORDER BY tasks.numeric_id ASC
-      `,
-      [input.taskId],
-    );
-    if (blockedBy.length > 0) {
-      database.exec("ROLLBACK");
-      return { ok: false, code: "task_dependencies_unsatisfied", blockedBy };
-    }
+    const task = eligibility.task;
 
     const comments = queryAll<{ readonly content: string }>(
       database,
@@ -135,6 +123,37 @@ const bind = (database: DatabaseSync, input: BindTaskStartInput): BindTaskStartR
     rollbackIfOpen(database);
     throw error;
   }
+};
+
+const readEligibility = (
+  database: DatabaseSync,
+  taskId: PublicTaskId,
+):
+  | { readonly ok: true; readonly task: TaskRow }
+  | Exclude<ReturnType<TaskStartStore["prepare"]>, { readonly ok: true }> => {
+  const task = queryOne<TaskRow>(
+    database,
+    "SELECT id, title, description, state FROM tasks WHERE id = ?",
+    [taskId],
+  );
+  if (task === undefined) return { ok: false, code: "task_not_found" };
+  if (task.state !== "todo") {
+    return { ok: false, code: "invalid_task_state", state: task.state };
+  }
+  const blockedBy = queryAll<TaskDependencyFact>(
+    database,
+    `
+      SELECT tasks.id, tasks.title, tasks.state
+      FROM task_dependencies
+      JOIN tasks ON tasks.id = task_dependencies.prerequisite_task_id
+      WHERE task_dependencies.dependent_task_id = ? AND tasks.state <> 'done'
+      ORDER BY tasks.numeric_id ASC
+    `,
+    [taskId],
+  );
+  return blockedBy.length === 0
+    ? { ok: true, task }
+    : { ok: false, code: "task_dependencies_unsatisfied", blockedBy };
 };
 
 const markReady = (database: DatabaseSync, taskId: PublicTaskId, now: string): TaskStartRecord => {

@@ -423,20 +423,13 @@ const startTask = (
   taskId: PublicTaskId,
   now: string,
 ): StartTaskResult => {
-  const existing = taskStartStore.getByTaskId(taskId);
+  const prepared = taskStartStore.prepare(taskId);
+  if (!prepared.ok) return prepared;
+  const existing = prepared.existing;
   let changed = false;
   let start = existing;
 
   if (start === undefined) {
-    const task = taskStore.getTaskById(taskId);
-    if (task === undefined) return { ok: false, code: "task_not_found" };
-    if (task.state !== "todo") {
-      return { ok: false, code: "invalid_task_state", state: task.state };
-    }
-    if (task.blockedBy.length > 0) {
-      return { ok: false, code: "task_dependencies_unsatisfied", blockedBy: task.blockedBy };
-    }
-
     const gitIntent = resolveTaskStartGitIntent(context, taskId);
     if (!gitIntent.ok) return gitIntent;
 

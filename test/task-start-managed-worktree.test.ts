@@ -1,5 +1,13 @@
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  lstatSync,
+  mkdirSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
@@ -224,6 +232,24 @@ describe("by task start managed worktree", () => {
     });
     expect(git(root, "rev-parse", `${branch}^{commit}`)).toBe(originalCommit);
     expect(runByInProcess(root, ["task", "show", "BY-1"]).stdout).toContain("state: todo");
+  });
+
+  it("preserves a dangling symlink at the managed worktree path as a conflict", () => {
+    const root = initializedRepository();
+    createApprovedTask(root);
+    const slug = taskSlugForId(publicTaskId("BY-1"));
+    const commonDirectory = git(root, "rev-parse", "--path-format=absolute", "--git-common-dir");
+    const worktreePath = join(commonDirectory, "but-why", "worktrees", slug);
+    mkdirSync(join(commonDirectory, "but-why", "worktrees"), { recursive: true });
+    symlinkSync(join(commonDirectory, "missing-target"), worktreePath);
+
+    const result = runByInProcess(root, ["task", "start", "BY-1", "--output", "json"], now);
+
+    expect(result.status).toBe(1);
+    expect(JSON.parse(result.stdout)).toMatchObject({
+      error: { code: "task_start_conflict", taskId: "BY-1", worktreePath },
+    });
+    expect(lstatSync(worktreePath).isSymbolicLink()).toBe(true);
   });
 
   it("preserves an occupied worktree path and recovers the durable Task Start", () => {

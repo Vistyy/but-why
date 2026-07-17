@@ -102,7 +102,7 @@ const inspectRecordedWorktree = (
   const expectedPath = canonicalPathIfPresent(start.worktreePath);
   const listedAtPath = worktrees.find((entry) => entry.path === expectedPath);
   const listedForBranch = worktrees.find((entry) => entry.branchRef === start.branchRef);
-  if (!existsSync(start.worktreePath)) {
+  if (!pathEntryExists(start.worktreePath)) {
     return listedAtPath === undefined && listedForBranch === undefined
       ? "missing"
       : { ok: false, code: "task_start_conflict" };
@@ -165,6 +165,15 @@ const parseWorktrees = (source: string): readonly WorktreeEntry[] =>
 
 const canonicalPathIfPresent = (path: string): string =>
   existsSync(path) ? realpathSync(path) : path;
+
+const pathEntryExists = (path: string): boolean => {
+  try {
+    lstatSync(path);
+    return true;
+  } catch {
+    return false;
+  }
+};
 
 type GitResult =
   | { readonly ok: true; readonly stdout: string }

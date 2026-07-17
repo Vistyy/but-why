@@ -82,6 +82,10 @@
   "boundaries": {
     "zones": [
       {
+        "name": "tool-config",
+        "patterns": ["vitest.config.ts"]
+      },
+      {
         "name": "cli-entry",
         "patterns": ["src/main.ts"]
       },
@@ -274,6 +278,10 @@
       }
     ],
     "rules": [
+      {
+        "from": "tool-config",
+        "allow": []
+      },
       {
         "from": "cli-entry",
         "allow": ["cli-command-edge", "output-serializers"]
