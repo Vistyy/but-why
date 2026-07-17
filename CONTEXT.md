@@ -19,6 +19,10 @@ _Avoid_: Deleted Change, merged branch
 One Git repository identity shared by its main checkout and linked worktrees.
 _Avoid_: Current working directory, GitHub repository
 
+**Git Common Directory**:
+The canonical Git-controlled directory shared by every worktree of one Local Repository.
+_Avoid_: Worktree root, Repo Config location, per-worktree Git directory
+
 **Repository Branch**:
 The canonical local branch reference durably owned by one open Change.
 _Avoid_: Worktree path, remote branch, Candidate

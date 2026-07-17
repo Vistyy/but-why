@@ -311,6 +311,14 @@ const routeInit = (args: readonly string[], environment: CliEnvironment): CliRes
           details: { path: initResult.error.path },
           help: ["Move the conflicting path aside before running init again."],
         });
+      case "shared_state_identity_conflict":
+        return runtimeError({
+          code: "shared_state_identity_conflict",
+          message: "Shared But Why? state belongs to a different Git repository.",
+          help: [
+            "Restore the repository's own shared state, then run `by init --task-prefix <prefix>`.",
+          ],
+        });
     }
   }
 

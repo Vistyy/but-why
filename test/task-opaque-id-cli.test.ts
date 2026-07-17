@@ -24,7 +24,7 @@ describe("opaque Task ID CLI parsing", () => {
   it("rejects remote-style Task IDs in comments before requiring local state", () => {
     const root = initializedRepo();
     writeFileSync(join(root, "valid.md"), "Valid comment");
-    rmSync(join(root, ".but-why/state.sqlite"));
+    rmSync(join(root, ".git", "but-why", "state.sqlite"));
 
     const result = runByInProcess(root, [
       "task",

@@ -685,7 +685,7 @@ tasks[1]{id,title,state,createdAt,updatedAt}:
   ])("rejects non-local Task IDs before state access in %s", (command) => {
     const root = initializedRepo();
 
-    rmSync(join(root, ".but-why/state.sqlite"));
+    rmSync(sharedStatePath(root));
     const result = runByInProcess(root, ["task", command, "ZZ-1"]);
 
     expect(result.status).toBe(1);
@@ -897,15 +897,15 @@ help[1]: Run \`by init --task-prefix BY\` in the repository root.`);
   it("prints state_store_unavailable when repo state cannot be opened", () => {
     const root = initializedRepo();
 
-    writeFileSync(join(root, ".but-why/state.sqlite"), "not sqlite");
+    writeFileSync(sharedStatePath(root), "not sqlite");
     const result = runByInProcess(root, ["task", "list"]);
 
     expect(result.status).toBe(1);
     expect(result.stderr).toBe("");
     expect(result.stdout).toBe(`error:
   code: state_store_unavailable
-  message: Repo-local But Why? state is unavailable.
-help[1]: "Move or restore .but-why/state.sqlite, then run \`by init --task-prefix BY\`."`);
+  message: Shared But Why? state is unavailable.
+help[1]: "Restore <git-common-dir>/but-why/state.sqlite, then run \`by init --task-prefix BY\`."`);
   });
 });
 
@@ -919,9 +919,11 @@ const initializedRepo = (): string => {
   return root;
 };
 
+const sharedStatePath = (root: string): string => join(root, ".git", "but-why", "state.sqlite");
+
 const taskStore = (root: string) =>
   openSqliteTaskStore({
-    statePath: join(root, ".but-why/state.sqlite"),
+    statePath: sharedStatePath(root),
     taskPrefix: "BY",
     migrationTimestamp: () => firstNow,
   });

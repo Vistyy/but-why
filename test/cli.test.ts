@@ -21,6 +21,7 @@ const expectedBin = collapseHome(join(repoRoot, "bin/by"));
 const expectedConfigDoc = join(repoRoot, "docs/public/config.md");
 const expectedSetupDoc = join(repoRoot, "docs/public/setup.md");
 const managedGitignoreBlock = `${butWhyGitignoreBlock}\n`;
+const sharedStatePath = (root: string): string => join(root, ".git", "but-why", "state.sqlite");
 
 afterEach(cleanupTempRoots);
 
@@ -266,7 +267,7 @@ help[1]: Run \`by --help\``);
   status: initialized
   root: ${root}
   taskPrefix: BY
-created[3]: .but-why/config.json,.but-why/state.sqlite,.but-why/reviewers/
+created[3]: .but-why/config.json,<git-common-dir>/but-why/state.sqlite,.but-why/reviewers/
 updated[1]: .gitignore
 validationSetup:
   policyFile: .but-why/config.json
@@ -280,7 +281,7 @@ validationSetup:
     expect(JSON.parse(readFileSync(join(root, ".but-why/config.json"), "utf8"))).toEqual({
       taskPrefix: "BY",
     });
-    expect(existsSync(join(root, ".but-why/state.sqlite"))).toBe(true);
+    expect(existsSync(sharedStatePath(root))).toBe(true);
     expect(readdirSync(join(root, ".but-why/reviewers"))).toEqual([]);
     expect(readFileSync(join(root, ".gitignore"), "utf8")).toBe(managedGitignoreBlock);
   });
@@ -304,7 +305,7 @@ validationSetup:
 
     expect(runBy(root, "init", "--task-prefix", "BY").status).toBe(0);
 
-    const database = new DatabaseSync(join(root, ".but-why/state.sqlite"));
+    const database = new DatabaseSync(sharedStatePath(root));
 
     try {
       expect(database.prepare("SELECT name FROM schema_migrations").all()).toEqual([
@@ -324,6 +325,7 @@ validationSetup:
         { name: "014_task_context_snapshots" },
         { name: "015_changes_and_candidates" },
         { name: "016_change_base_ref" },
+        { name: "017_shared_state_identity" },
       ]);
       expect(
         database
@@ -335,6 +337,7 @@ validationSetup:
         { name: "candidates" },
         { name: "changes" },
         { name: "schema_migrations" },
+        { name: "shared_state_identity" },
         { name: "task_comments" },
         { name: "tasks" },
         { name: "validation_run_artifacts" },
@@ -408,7 +411,7 @@ validationSetup:
     const root = createGitRepo();
 
     expect(runBy(root, "init", "--task-prefix", "BY").status).toBe(0);
-    rmSync(join(root, ".but-why/state.sqlite"));
+    rmSync(sharedStatePath(root));
     rmSync(join(root, ".gitignore"));
     const result = runBy(root, "init", "--task-prefix", "BY");
 
@@ -418,7 +421,7 @@ validationSetup:
   status: repaired
   root: ${root}
   taskPrefix: BY
-created[1]: .but-why/state.sqlite
+created[1]: <git-common-dir>/but-why/state.sqlite
 updated[1]: .gitignore
 validationSetup:
   policyFile: .but-why/config.json

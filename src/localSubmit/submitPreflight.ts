@@ -75,13 +75,15 @@ export const loadLocalSubmitPreflight = (
     readonly migrationTimestamp: () => string;
   },
 ): LoadLocalSubmitPreflightResult => {
-  const repoContext = loadRepoLocalContext(cwd);
+  const repoContext = loadRepoLocalContext(cwd, input.migrationTimestamp);
 
   if (!repoContext.ok) {
     switch (repoContext.error.code) {
       case "invalid_repo_config":
         return { ok: false, error: repoContext.error.error };
       case "not_initialized":
+      case "shared_state_identity_conflict":
+      case "state_store_unavailable":
         return { ok: false, error: repoContext.error };
     }
   }
@@ -186,7 +188,7 @@ const createValidationWorkspaceForValidationRun = (
               validationRunId: input.validationRunId,
               prepare: validationConfig.prepare,
               sandbox: workspace.sandbox,
-              repoRoot: context.root,
+              artifactsRoot: context.paths.artifactsPath,
               commandCwd: workspace.worktreePath,
               now: input.now,
               recordPrepareRound: (prepareRoundInput) => {
@@ -224,7 +226,7 @@ const createValidationWorkspaceForValidationRun = (
             validationRunId: input.validationRunId,
             checks: validationConfig.checks,
             sandbox: workspace.sandbox,
-            repoRoot: context.root,
+            artifactsRoot: context.paths.artifactsPath,
             commandCwd: workspace.worktreePath,
             now: input.now,
             recordCheckRound: (checkRoundInput) => {

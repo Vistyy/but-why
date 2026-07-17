@@ -359,14 +359,16 @@ const recordToolingFailure = (root: string, validationRunId: string, now: string
   }
 };
 
+const sharedStatePath = (root: string): string => join(root, ".git", "but-why", "state.sqlite");
+
 const validationRuns = (root: string) =>
   openSqliteValidationRuns({
-    statePath: join(root, ".but-why/state.sqlite"),
+    statePath: sharedStatePath(root),
     migrationTimestamp: () => firstNow,
   });
 
 const validationRunsStore = (root: string) =>
   openSqliteValidationRunStore({
-    statePath: join(root, ".but-why/state.sqlite"),
+    statePath: sharedStatePath(root),
     migrationTimestamp: () => firstNow,
   });

@@ -16,7 +16,7 @@ describe("check round Findings", () => {
       runCheckPhase({
         validationRunId: "by-1.v1",
         checks: [{ id: "quality", command: "sleep 10", timeoutSeconds: 1 }],
-        repoRoot: createTempRoot(),
+        artifactsRoot: createTempRoot(),
         now,
         sandbox: {
           exec: async (command) => {

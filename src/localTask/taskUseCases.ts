@@ -28,7 +28,7 @@ export type LoadTaskUseCasesError =
     };
 
 export const loadTaskUseCases = (input: LoadTaskUseCasesInput): LoadTaskUseCasesResult => {
-  const repoContext = loadRepoLocalContext(input.cwd);
+  const repoContext = loadRepoLocalContext(input.cwd, input.migrationTimestamp);
 
   if (!repoContext.ok) {
     return repoContext;

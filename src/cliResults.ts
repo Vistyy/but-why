@@ -57,6 +57,8 @@ export const repoStateLoadError = (error: RepoStateLoadError): CliResult => {
       return invalidRepoConfig(error.error);
     case "state_store_unavailable":
       return stateStoreUnavailable(error.taskPrefix);
+    case "shared_state_identity_conflict":
+      return sharedStateIdentityConflict();
   }
 };
 
@@ -83,10 +85,17 @@ const invalidRepoConfig = (
 export const stateStoreUnavailable = (taskPrefix: string | undefined): CliResult =>
   runtimeError({
     code: "state_store_unavailable",
-    message: "Repo-local But Why? state is unavailable.",
+    message: "Shared But Why? state is unavailable.",
     help: [
       taskPrefix === undefined
-        ? "Move or restore .but-why/state.sqlite, then run `by init --task-prefix <prefix>`."
-        : `Move or restore .but-why/state.sqlite, then run \`by init --task-prefix ${taskPrefix}\`.`,
+        ? "Restore <git-common-dir>/but-why/state.sqlite, then run `by init --task-prefix <prefix>`."
+        : `Restore <git-common-dir>/but-why/state.sqlite, then run \`by init --task-prefix ${taskPrefix}\`.`,
     ],
+  });
+
+const sharedStateIdentityConflict = (): CliResult =>
+  runtimeError({
+    code: "shared_state_identity_conflict",
+    message: "Shared But Why? state belongs to a different Git repository.",
+    help: ["Restore the repository's own shared state, then run `by init --task-prefix <prefix>`."],
   });

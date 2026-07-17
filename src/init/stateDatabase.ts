@@ -3,6 +3,15 @@ import { DatabaseSync } from "node:sqlite";
 
 export type StateDatabaseChange = "created" | "updated" | "unchanged";
 
+export class SharedStateIdentityConflictError extends Error {
+  constructor(
+    readonly expectedCommonDirectory: string,
+    readonly actualCommonDirectory: string,
+  ) {
+    super("Shared But Why state belongs to a different Git repository");
+  }
+}
+
 export const stateDatabaseTimeoutMs = 30_000;
 
 type Migration = {
@@ -686,11 +695,21 @@ const migrations: readonly Migration[] = [
       ALTER TABLE changes ADD COLUMN base_ref TEXT
     `,
   },
+  {
+    name: "017_shared_state_identity",
+    apply: `
+      CREATE TABLE shared_state_identity (
+        id INTEGER PRIMARY KEY CHECK (id = 1),
+        common_directory TEXT NOT NULL
+      )
+    `,
+  },
 ];
 
 export const ensureStateDatabase = (
   path: string,
   migrationTimestamp: () => string,
+  commonDirectory?: string,
 ): StateDatabaseChange => {
   const existed = existsSync(path);
   const database = new DatabaseSync(path, { timeout: stateDatabaseTimeoutMs });
@@ -715,6 +734,10 @@ export const ensureStateDatabase = (
       }
     }
 
+    if (commonDirectory !== undefined) {
+      ensureSharedStateIdentity(database, commonDirectory);
+    }
+
     if (!existed) {
       return "created";
     }
@@ -722,6 +745,23 @@ export const ensureStateDatabase = (
     return updated ? "updated" : "unchanged";
   } finally {
     database.close();
+  }
+};
+
+const ensureSharedStateIdentity = (database: DatabaseSync, commonDirectory: string): void => {
+  const identity = database
+    .prepare("SELECT common_directory AS commonDirectory FROM shared_state_identity WHERE id = 1")
+    .get() as { readonly commonDirectory: string } | undefined;
+
+  if (identity === undefined) {
+    database
+      .prepare("INSERT INTO shared_state_identity (id, common_directory) VALUES (1, ?)")
+      .run(commonDirectory);
+    return;
+  }
+
+  if (identity.commonDirectory !== commonDirectory) {
+    throw new SharedStateIdentityConflictError(commonDirectory, identity.commonDirectory);
   }
 };
 

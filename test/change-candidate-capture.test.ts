@@ -361,7 +361,7 @@ const git = (cwd: string, ...args: readonly string[]): string => {
 };
 
 const sqliteInput = (root: string) => ({
-  statePath: join(root, ".but-why/state.sqlite"),
+  statePath: join(commonDirectory(root), "but-why", "state.sqlite"),
   migrationTimestamp: () => now,
 });
 

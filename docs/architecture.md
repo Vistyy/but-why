@@ -293,15 +293,15 @@ A role without an explicit selection uses `defaultAgentProfile`, resolved from G
 
 ## State and IDs
 
-V1 state is repo-local.
+V1 operational state is shared by every linked worktree of one Local Repository.
 
-The local database lives at:
+The SQLite database and Artifacts live at:
 
 ```text
-.but-why/state.sqlite
+<git-common-dir>/but-why/
 ```
 
-`by init` adds local state paths to `.gitignore`.
+`by init` keeps tracked Repo Config at `.but-why/config.json` in each worktree.
 
 Task IDs use the init-time prefix:
 
@@ -332,7 +332,7 @@ artifact:<validation-run-id>/<phase>/<producer>/<filename>
 
 Artifacts are durable validation output records.
 
-V1 stores artifact contents as local files under But Why repo-local state.
+V1 stores artifact contents as local files under shared But Why operational state.
 
 SQLite stores artifact metadata and refs.
 

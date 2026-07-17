@@ -6,6 +6,7 @@ import { ensureStateDatabase, stateDatabaseTimeoutMs } from "../init/stateDataba
 export type SqliteStoreInput = {
   readonly statePath: string;
   readonly migrationTimestamp: () => string;
+  readonly commonDirectory?: string;
 };
 
 class SqliteStateUnavailableError extends Error {
@@ -22,7 +23,7 @@ export const withStateDatabase = <Result>(
     throw new SqliteStateUnavailableError();
   }
 
-  ensureStateDatabase(input.statePath, input.migrationTimestamp);
+  ensureStateDatabase(input.statePath, input.migrationTimestamp, input.commonDirectory);
   const database = new DatabaseSync(input.statePath, { timeout: stateDatabaseTimeoutMs });
 
   try {

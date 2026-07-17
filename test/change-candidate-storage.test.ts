@@ -156,7 +156,7 @@ describe("Change and Candidate schema migration", () => {
   it("expands an existing repository without changing Task-owned records", () => {
     const root = initializedRepo();
     const task = taskStore(root).createTask({ title: "Existing", description: "Task", now });
-    const statePath = join(root, ".but-why/state.sqlite");
+    const statePath = sharedStatePath(root);
     const database = new DatabaseSync(statePath);
     database.exec(`
       DROP TABLE candidates;
@@ -186,7 +186,7 @@ describe("Change and Candidate schema migration", () => {
     });
     expect(candidate.ok).toBe(true);
     if (!candidate.ok) return;
-    const database = new DatabaseSync(join(root, ".but-why/state.sqlite"));
+    const database = new DatabaseSync(sharedStatePath(root));
     database.exec(`
       ALTER TABLE changes DROP COLUMN base_ref;
       DELETE FROM schema_migrations WHERE name = '016_change_base_ref';
@@ -205,7 +205,7 @@ describe("Change and Candidate schema migration", () => {
 
   it("rejects invalid Change lifecycle rows in a newly initialized repository", () => {
     const root = initializedRepo();
-    const database = new DatabaseSync(join(root, ".but-why/state.sqlite"));
+    const database = new DatabaseSync(sharedStatePath(root));
 
     try {
       expect(() =>
@@ -356,8 +356,10 @@ const initializedRepo = (): string => {
   return root;
 };
 
+const sharedStatePath = (root: string): string => join(root, ".git", "but-why", "state.sqlite");
+
 const sqliteInput = (root: string) => ({
-  statePath: join(root, ".but-why/state.sqlite"),
+  statePath: sharedStatePath(root),
   migrationTimestamp: () => now,
 });
 

@@ -42,6 +42,7 @@ export const openRepoLocalStores = (
   const sqliteInput = {
     statePath: context.paths.statePath,
     migrationTimestamp,
+    commonDirectory: context.commonDirectory,
   };
 
   const validationRunStore = openSqliteValidationRunStore(sqliteInput);

@@ -5,12 +5,13 @@ import type { RepoConfig } from "../contracts/repoConfig.js";
 import { findGitRoot } from "./git.js";
 import { ensureGitignoreBlock } from "./gitignore.js";
 import { readRepoConfig, writeRepoConfig } from "./repoConfig.js";
-import { ensureStateDatabase } from "./stateDatabase.js";
+import { ensureStateDatabase, SharedStateIdentityConflictError } from "./stateDatabase.js";
 
 const taskPrefixPattern = /^[A-Z][A-Z0-9]{1,9}$/;
 
 export type RepoLocalPaths = {
   readonly butWhyDir: string;
+  readonly operationalDir: string;
   readonly configPath: string;
   readonly statePath: string;
   readonly reviewersPath: string;
@@ -20,6 +21,7 @@ export type RepoLocalPaths = {
 
 export type RepoLocalContext = {
   readonly root: string;
+  readonly commonDirectory: string;
   readonly taskPrefix: string;
   readonly config: RepoConfig;
   readonly paths: RepoLocalPaths;
@@ -66,6 +68,9 @@ export type InitRepoError =
       readonly code: "invalid_repo_state";
       readonly path: string;
       readonly expected: string;
+    }
+  | {
+      readonly code: "shared_state_identity_conflict";
     };
 
 export type LoadRepoLocalContextResult =
@@ -85,19 +90,28 @@ export type LoadRepoLocalContextError =
   | {
       readonly code: "invalid_repo_config";
       readonly error: import("../contracts/configErrors.js").RepoConfigValidationFailed;
+    }
+  | {
+      readonly code: "shared_state_identity_conflict";
+    }
+  | {
+      readonly code: "state_store_unavailable";
+      readonly taskPrefix: string;
     };
 
 const isValidTaskPrefix = (taskPrefix: string): boolean => taskPrefixPattern.test(taskPrefix);
 
-const repoLocalPaths = (root: string): RepoLocalPaths => {
+const repoLocalPaths = (root: string, commonDirectory: string): RepoLocalPaths => {
   const butWhyDir = join(root, ".but-why");
+  const operationalDir = join(commonDirectory, "but-why");
 
   return {
     butWhyDir,
+    operationalDir,
     configPath: join(butWhyDir, "config.json"),
-    statePath: join(butWhyDir, "state.sqlite"),
+    statePath: join(operationalDir, "state.sqlite"),
     reviewersPath: join(butWhyDir, "reviewers"),
-    artifactsPath: join(butWhyDir, "artifacts"),
+    artifactsPath: join(operationalDir, "artifacts"),
     gitignorePath: join(root, ".gitignore"),
   };
 };
@@ -119,41 +133,42 @@ export const initRepoLocalContext = (input: InitRepoInput): InitRepoResult => {
     return { ok: false, error: { code: "not_git_work_tree" } };
   }
 
-  const paths = repoLocalPaths(gitRoot.root);
-  const wasInitialized = existsSync(paths.configPath);
+  const paths = repoLocalPaths(gitRoot.root, gitRoot.commonDirectory);
   const created: string[] = [];
   const updated: string[] = [];
 
   mkdirSync(paths.butWhyDir, { recursive: true });
+  mkdirSync(paths.operationalDir, { recursive: true });
 
-  if (wasInitialized) {
-    const config = readRepoConfig(paths.configPath);
+  const configResult = ensureRepoConfig(paths.configPath, input.taskPrefix);
 
-    if (!config.ok) {
-      return { ok: false, error: { code: "invalid_repo_config", error: config.error } };
-    }
+  if (!configResult.ok) {
+    return { ok: false, error: configResult.error };
+  }
 
-    if (config.config.taskPrefix !== input.taskPrefix) {
-      return {
-        ok: false,
-        error: {
-          code: "task_prefix_conflict",
-          existingTaskPrefix: config.config.taskPrefix,
-          requestedTaskPrefix: input.taskPrefix,
-        },
-      };
-    }
-  } else {
-    writeRepoConfig(paths.configPath, input.taskPrefix);
+  if (configResult.created) {
     created.push(".but-why/config.json");
   }
 
-  const stateChange = ensureStateDatabase(paths.statePath, input.migrationTimestamp);
+  let stateChange: ReturnType<typeof ensureStateDatabase>;
+
+  try {
+    stateChange = ensureStateDatabase(
+      paths.statePath,
+      input.migrationTimestamp,
+      gitRoot.commonDirectory,
+    );
+  } catch (error) {
+    if (error instanceof SharedStateIdentityConflictError) {
+      return { ok: false, error: { code: "shared_state_identity_conflict" } };
+    }
+    throw error;
+  }
 
   if (stateChange === "created") {
-    created.push(".but-why/state.sqlite");
+    created.push("<git-common-dir>/but-why/state.sqlite");
   } else if (stateChange === "updated") {
-    updated.push(".but-why/state.sqlite");
+    updated.push("<git-common-dir>/but-why/state.sqlite");
   }
 
   const reviewersRepair = ensureReviewersPath(paths.reviewersPath);
@@ -170,11 +185,11 @@ export const initRepoLocalContext = (input: InitRepoInput): InitRepoResult => {
     updated.push(".gitignore");
   }
 
-  const status = wasInitialized
-    ? created.length > 0 || updated.length > 0
+  const status = configResult.created
+    ? "initialized"
+    : created.length > 0 || updated.length > 0
       ? "repaired"
-      : "unchanged"
-    : "initialized";
+      : "unchanged";
 
   return {
     ok: true,
@@ -186,14 +201,17 @@ export const initRepoLocalContext = (input: InitRepoInput): InitRepoResult => {
   };
 };
 
-export const loadRepoLocalContext = (cwd: string): LoadRepoLocalContextResult => {
+export const loadRepoLocalContext = (
+  cwd: string,
+  migrationTimestamp: () => string,
+): LoadRepoLocalContextResult => {
   const gitRoot = findGitRoot(cwd);
 
   if (!gitRoot.ok) {
     return { ok: false, error: { code: "not_initialized" } };
   }
 
-  const paths = repoLocalPaths(gitRoot.root);
+  const paths = repoLocalPaths(gitRoot.root, gitRoot.commonDirectory);
 
   if (!existsSync(paths.configPath)) {
     return { ok: false, error: { code: "not_initialized" } };
@@ -205,15 +223,60 @@ export const loadRepoLocalContext = (cwd: string): LoadRepoLocalContextResult =>
     return { ok: false, error: { code: "invalid_repo_config", error: repoConfig.error } };
   }
 
+  if (existsSync(paths.statePath)) {
+    try {
+      ensureStateDatabase(paths.statePath, migrationTimestamp, gitRoot.commonDirectory);
+    } catch (error) {
+      if (error instanceof SharedStateIdentityConflictError) {
+        return { ok: false, error: { code: "shared_state_identity_conflict" } };
+      }
+      return {
+        ok: false,
+        error: { code: "state_store_unavailable", taskPrefix: repoConfig.config.taskPrefix },
+      };
+    }
+  }
+
   return {
     ok: true,
     context: {
       root: gitRoot.root,
+      commonDirectory: gitRoot.commonDirectory,
       paths,
       taskPrefix: repoConfig.config.taskPrefix,
       config: repoConfig.config,
     },
   };
+};
+
+type RepoConfigEnsureResult =
+  | { readonly ok: true; readonly created: boolean }
+  | { readonly ok: false; readonly error: InitRepoError };
+
+const ensureRepoConfig = (configPath: string, taskPrefix: string): RepoConfigEnsureResult => {
+  if (!existsSync(configPath)) {
+    writeRepoConfig(configPath, taskPrefix);
+    return { ok: true, created: true };
+  }
+
+  const config = readRepoConfig(configPath);
+
+  if (!config.ok) {
+    return { ok: false, error: { code: "invalid_repo_config", error: config.error } };
+  }
+
+  if (config.config.taskPrefix !== taskPrefix) {
+    return {
+      ok: false,
+      error: {
+        code: "task_prefix_conflict",
+        existingTaskPrefix: config.config.taskPrefix,
+        requestedTaskPrefix: taskPrefix,
+      },
+    };
+  }
+
+  return { ok: true, created: false };
 };
 
 type ReviewersPathRepairResult =

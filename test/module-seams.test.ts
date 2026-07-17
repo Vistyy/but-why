@@ -88,9 +88,11 @@ describe("module seams", () => {
       stdout: {
         error: {
           code: "state_store_unavailable",
-          message: "Repo-local But Why? state is unavailable.",
+          message: "Shared But Why? state is unavailable.",
         },
-        help: ["Move or restore .but-why/state.sqlite, then run `by init --task-prefix BY`."],
+        help: [
+          "Restore <git-common-dir>/but-why/state.sqlite, then run `by init --task-prefix BY`.",
+        ],
       },
     });
   });
@@ -624,21 +626,23 @@ const initializedRepo = (): string => {
   return root;
 };
 
+const sharedStatePath = (root: string): string => join(root, ".git", "but-why", "state.sqlite");
+
 const sqliteTaskStore = (root: string) =>
   openSqliteTaskStore({
-    statePath: join(root, ".but-why/state.sqlite"),
+    statePath: sharedStatePath(root),
     taskPrefix: "BY",
     migrationTimestamp: () => firstNow,
   });
 
 const sqliteValidationRunStore = (root: string) =>
   openSqliteValidationRunStore({
-    statePath: join(root, ".but-why/state.sqlite"),
+    statePath: sharedStatePath(root),
     migrationTimestamp: () => firstNow,
   });
 
 const sqliteValidationRuns = (root: string) =>
   openSqliteValidationRuns({
-    statePath: join(root, ".but-why/state.sqlite"),
+    statePath: sharedStatePath(root),
     migrationTimestamp: () => firstNow,
   });

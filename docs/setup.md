@@ -55,20 +55,17 @@ Use `docs/config.md` for configuration details.
 
 ## What init creates
 
-`by init` creates repo-local But Why files:
+`by init` creates tracked worktree files:
 
 ```text
 .but-why/config.json
-.but-why/state.sqlite
 .but-why/reviewers/
 ```
 
-It also updates `.gitignore` for local state:
+It creates SQLite state and Artifacts in the Git common directory shared by every linked worktree:
 
 ```text
-.but-why/state.sqlite
-.but-why/logs/
-.but-why/worktrees/
+<git-common-dir>/but-why/
 ```
 
 Config and reviewer instructions are not ignored by default.

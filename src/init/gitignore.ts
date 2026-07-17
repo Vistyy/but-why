@@ -1,6 +1,6 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 
-export const butWhyGitignoreBlock = `# But Why?\n.but-why/state.sqlite\n.but-why/state.sqlite-*\n.but-why/artifacts/\n.sandcastle/worktrees/\n.sandcastle/logs/\n.sandcastle/patches/\n.sandcastle/.env`;
+export const butWhyGitignoreBlock = `# But Why?\n.sandcastle/worktrees/\n.sandcastle/logs/\n.sandcastle/patches/\n.sandcastle/.env`;
 
 export const ensureGitignoreBlock = (path: string): boolean => {
   const original = existsSync(path) ? readFileSync(path, "utf8") : "";

@@ -184,13 +184,13 @@ describe("by submit CLI", () => {
     for (const artifact of validationRunStore(root).listValidationRunArtifacts(
       firstTaskValidationRunId,
     )) {
-      expect(existsSync(join(root, artifact.path))).toBe(true);
+      expect(existsSync(join(root, ".git", "but-why", "artifacts", artifact.path))).toBe(true);
     }
   });
 
   it("records a typed tooling failure when Task Context Snapshot creation fails", () => {
     const root = preparedRepoOnBranch("feature/by-1");
-    const database = new DatabaseSync(join(root, ".but-why/state.sqlite"));
+    const database = new DatabaseSync(sharedStatePath(root));
 
     database.exec(`
       CREATE TRIGGER reject_task_context_snapshot_save
@@ -802,7 +802,7 @@ help[1]: Run \`by task list --all\` to see known Tasks.`);
 
   it("rejects remote-style Task IDs before requiring local state", () => {
     const root = initializedRepo();
-    rmSync(join(root, ".but-why/state.sqlite"));
+    rmSync(sharedStatePath(root));
 
     const result = runSubmit(root, ["linear/ENG-123:acceptance"], thirdNow);
 
@@ -1151,21 +1151,23 @@ const taskState = (root: string, taskId: string): string => {
 const taskHasNoValidationRuns = (root: string, taskId: string): boolean =>
   validationRunStore(root).getLatestValidationRunIdForTask(publicTaskId(taskId)) === null;
 
+const sharedStatePath = (root: string): string => join(root, ".git", "but-why", "state.sqlite");
+
 const taskStore = (root: string) =>
   openSqliteTaskStore({
-    statePath: join(root, ".but-why/state.sqlite"),
+    statePath: sharedStatePath(root),
     taskPrefix: "BY",
     migrationTimestamp: () => firstNow,
   });
 
 const validationRuns = (root: string) =>
   openSqliteValidationRuns({
-    statePath: join(root, ".but-why/state.sqlite"),
+    statePath: sharedStatePath(root),
     migrationTimestamp: () => firstNow,
   });
 
 const validationRunStore = (root: string) =>
   openSqliteValidationRunStore({
-    statePath: join(root, ".but-why/state.sqlite"),
+    statePath: sharedStatePath(root),
     migrationTimestamp: () => firstNow,
   });

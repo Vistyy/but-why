@@ -14,7 +14,7 @@ export type RunCheckPhaseInput = {
   readonly validationRunId: string;
   readonly checks: readonly SubmitCheckConfig[];
   readonly sandbox: Pick<Sandbox, "exec">;
-  readonly repoRoot: string;
+  readonly artifactsRoot: string;
   readonly commandCwd?: string;
   readonly now: string;
   readonly recordCheckRound: (input: RecordValidationRunCheckRoundInput) => void;
@@ -90,7 +90,7 @@ const runSingleCheck = (
       check,
       commandResult,
       timedOut,
-      repoRoot: input.repoRoot,
+      artifactsRoot: input.artifactsRoot,
       now: input.now,
     });
     const failed = commandResult.exitCode !== 0;
@@ -210,7 +210,7 @@ const writeCheckArtifacts = (input: {
   readonly check: SubmitCheckConfig;
   readonly commandResult: CommandResult;
   readonly timedOut: boolean;
-  readonly repoRoot: string;
+  readonly artifactsRoot: string;
   readonly now: string;
 }): Effect.Effect<
   readonly RecordValidationRunCheckRoundInput["artifactRecords"][number][],
@@ -239,7 +239,7 @@ const writeCheckArtifacts = (input: {
 
       return artifacts.map((artifact) => {
         const path = writeValidationRunArtifactFile({
-          repoRoot: input.repoRoot,
+          artifactsRoot: input.artifactsRoot,
           validationRunId: input.validationRunId,
           phase: "checks",
           producer: input.check.id,

@@ -14,7 +14,7 @@ export type RunPreparePhaseInput = {
   readonly validationRunId: string;
   readonly prepare: SubmitPrepareConfig;
   readonly sandbox: Pick<Sandbox, "exec">;
-  readonly repoRoot: string;
+  readonly artifactsRoot: string;
   readonly commandCwd?: string;
   readonly now: string;
   readonly recordPrepareRound: (input: RecordValidationRunPrepareRoundInput) => void;
@@ -63,7 +63,7 @@ export const runPreparePhase = (
       prepare: input.prepare,
       commandResult,
       timedOut,
-      repoRoot: input.repoRoot,
+      artifactsRoot: input.artifactsRoot,
       now: input.now,
     });
     const failed = commandResult.exitCode !== 0;
@@ -178,7 +178,7 @@ const writePrepareArtifacts = (input: {
   readonly prepare: SubmitPrepareConfig;
   readonly commandResult: CommandResult;
   readonly timedOut: boolean;
-  readonly repoRoot: string;
+  readonly artifactsRoot: string;
   readonly now: string;
 }): Effect.Effect<
   readonly RecordValidationRunPrepareRoundInput["artifactRecords"][number][],
@@ -207,7 +207,7 @@ const writePrepareArtifacts = (input: {
 
       return artifacts.map((artifact) => {
         const path = writeValidationRunArtifactFile({
-          repoRoot: input.repoRoot,
+          artifactsRoot: input.artifactsRoot,
           validationRunId: input.validationRunId,
           phase: "prepare",
           producer: prepareProducer,

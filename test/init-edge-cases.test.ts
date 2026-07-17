@@ -12,6 +12,7 @@ import {
 } from "./support/by-cli.js";
 
 const managedGitignoreBlock = `${butWhyGitignoreBlock}\n`;
+const sharedStatePath = (root: string): string => join(root, ".git", "but-why", "state.sqlite");
 
 const writeConfig = (root: string, taskPrefix = "BY") => {
   mkdirSync(join(root, ".but-why"), { recursive: true });
@@ -135,7 +136,8 @@ help[1]: Move the conflicting path aside before running init again.`);
     const root = createGitRepo();
 
     writeConfig(root);
-    const database = new DatabaseSync(join(root, ".but-why/state.sqlite"));
+    mkdirSync(join(root, ".git", "but-why"), { recursive: true });
+    const database = new DatabaseSync(sharedStatePath(root));
     database.exec(`
       CREATE TABLE schema_migrations (
         name TEXT PRIMARY KEY,
@@ -149,9 +151,9 @@ help[1]: Move the conflicting path aside before running init again.`);
     expect(result.status).toBe(0);
     expect(result.stderr).toBe("");
     expect(result.stdout).toContain("status: repaired");
-    expect(result.stdout).toContain("updated[2]: .but-why/state.sqlite,.gitignore");
+    expect(result.stdout).toContain("updated[2]: <git-common-dir>/but-why/state.sqlite,.gitignore");
 
-    const repairedDatabase = new DatabaseSync(join(root, ".but-why/state.sqlite"));
+    const repairedDatabase = new DatabaseSync(sharedStatePath(root));
 
     try {
       expect(repairedDatabase.prepare("SELECT name FROM schema_migrations").all()).toEqual([
@@ -171,6 +173,7 @@ help[1]: Move the conflicting path aside before running init again.`);
         { name: "014_task_context_snapshots" },
         { name: "015_changes_and_candidates" },
         { name: "016_change_base_ref" },
+        { name: "017_shared_state_identity" },
       ]);
     } finally {
       repairedDatabase.close();
@@ -185,7 +188,7 @@ help[1]: Move the conflicting path aside before running init again.`);
     expect(result.status).toBe(0);
     expect(result.stderr).toBe("");
 
-    const database = new DatabaseSync(join(root, ".but-why/state.sqlite"));
+    const database = new DatabaseSync(sharedStatePath(root));
 
     try {
       expect(

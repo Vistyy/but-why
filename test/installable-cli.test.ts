@@ -156,6 +156,6 @@ describe("installable by CLI package", () => {
     expect(JSON.parse(readFileSync(join(consumerRepo, ".but-why/config.json"), "utf8"))).toEqual({
       taskPrefix: "BY",
     });
-    expect(existsSync(join(consumerRepo, ".but-why/state.sqlite"))).toBe(true);
+    expect(existsSync(join(consumerRepo, ".git", "but-why", "state.sqlite"))).toBe(true);
   }, 120_000);
 });
