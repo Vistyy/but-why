@@ -8,6 +8,7 @@ import type { SubmitCheckConfig, SubmitPrepareConfig } from "../submit/submitRep
 import { createValidationWorkspace } from "../validation/createValidationWorkspace.js";
 import { runCheckPhase } from "../validation/runCheckRound.js";
 import { runPreparePhase } from "../validation/runPreparePhase.js";
+import { maxValidationArtifactBytes } from "../validationRun/artifactFiles.js";
 import {
   ValidationWorkspaceSetupFailed,
   validationToolingFailureRecord,
@@ -88,8 +89,10 @@ const validateCandidate = (
               prepare: input.policy.prepare,
               sandbox: activeWorkspace.sandbox,
               artifactsRoot: dependencies.artifactsRoot,
+              artifactMaxBytes: maxValidationArtifactBytes,
               commandCwd: activeWorkspace.worktreePath,
               expectedHeadSha: input.headSha,
+              allowedUntrackedFiles: input.policy.copyFiles,
               now: input.now,
               recordPrepareRound: dependencies.runStore.recordPrepareRound,
             });
@@ -100,8 +103,10 @@ const validateCandidate = (
             checks: input.policy.checks,
             sandbox: activeWorkspace.sandbox,
             artifactsRoot: dependencies.artifactsRoot,
+            artifactMaxBytes: maxValidationArtifactBytes,
             commandCwd: activeWorkspace.worktreePath,
             expectedHeadSha: input.headSha,
+            allowedUntrackedFiles: input.policy.copyFiles,
             now: input.now,
             continueAfterFinding: true,
             recordCheckRound: dependencies.runStore.recordCheckRound,

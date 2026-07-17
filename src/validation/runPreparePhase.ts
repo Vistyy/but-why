@@ -16,8 +16,10 @@ export type RunPreparePhaseInput = {
   readonly prepare: SubmitPrepareConfig;
   readonly sandbox: Pick<Sandbox, "exec">;
   readonly artifactsRoot: string;
+  readonly artifactMaxBytes?: number;
   readonly commandCwd?: string;
   readonly expectedHeadSha?: string;
+  readonly allowedUntrackedFiles?: readonly string[];
   readonly now: string;
   readonly recordPrepareRound: (input: RecordValidationRunPrepareRoundInput) => void;
 };
@@ -57,6 +59,7 @@ export const runPreparePhase = (
       input.prepare,
       input.commandCwd,
       input.expectedHeadSha,
+      input.allowedUntrackedFiles,
     );
     const artifactRefs = artifactFileNames.map((fileName) =>
       prepareArtifactRef(input.validationRunId, fileName),
@@ -67,6 +70,7 @@ export const runPreparePhase = (
       commandResult,
       timedOut,
       artifactsRoot: input.artifactsRoot,
+      ...(input.artifactMaxBytes === undefined ? {} : { artifactMaxBytes: input.artifactMaxBytes }),
       now: input.now,
     });
     const failed = commandResult.exitCode !== 0;
@@ -103,10 +107,11 @@ const runPrepareCommand = (
   prepare: SubmitPrepareConfig,
   commandCwd: string | undefined,
   expectedHeadSha: string | undefined,
+  allowedUntrackedFiles: readonly string[] | undefined,
 ): Effect.Effect<PrepareCommandResult, ValidationToolingFailure> =>
   Effect.tryPromise({
     try: async () => {
-      await ensureCandidateIntegrity(sandbox, commandCwd, expectedHeadSha);
+      await ensureCandidateIntegrity(sandbox, commandCwd, expectedHeadSha, allowedUntrackedFiles);
       await ensureTimeoutCommandAvailable(sandbox);
 
       const marker = prepareCompletionMarker();
@@ -115,7 +120,7 @@ const runPrepareCommand = (
         commandCwd === undefined ? undefined : { cwd: commandCwd },
       );
       const parsed = parsePrepareCompletionMarker(result.stderr, marker);
-      await ensureCandidateIntegrity(sandbox, commandCwd, expectedHeadSha);
+      await ensureCandidateIntegrity(sandbox, commandCwd, expectedHeadSha, allowedUntrackedFiles);
 
       return {
         commandResult: {
@@ -138,13 +143,19 @@ const ensureCandidateIntegrity = async (
   sandbox: Pick<Sandbox, "exec">,
   commandCwd: string | undefined,
   expectedHeadSha: string | undefined,
+  allowedUntrackedFiles: readonly string[] | undefined,
 ): Promise<void> => {
   if (expectedHeadSha === undefined) return;
   const result = await sandbox.exec(
-    "git rev-parse HEAD && git diff --quiet && git diff --cached --quiet",
+    "git rev-parse HEAD && git diff --quiet && git diff --cached --quiet && git status --porcelain --untracked-files=all",
     commandCwd === undefined ? undefined : { cwd: commandCwd },
   );
-  if (result.exitCode !== 0 || result.stdout.trim() !== expectedHeadSha) {
+  const [head, ...status] = result.stdout.trimEnd().split("\n");
+  if (
+    result.exitCode !== 0 ||
+    head !== expectedHeadSha ||
+    !status.every((line) => allowedUntrackedFiles?.includes(line.slice(3)) === true)
+  ) {
     throw new GitToolingFailed({
       operationName: "verify_candidate_head",
       message: "Validation workspace no longer matches the Candidate.",
@@ -203,6 +214,7 @@ const writePrepareArtifacts = (input: {
   readonly commandResult: CommandResult;
   readonly timedOut: boolean;
   readonly artifactsRoot: string;
+  readonly artifactMaxBytes?: number;
   readonly now: string;
 }): Effect.Effect<
   readonly RecordValidationRunPrepareRoundInput["artifactRecords"][number][],
@@ -237,6 +249,7 @@ const writePrepareArtifacts = (input: {
           producer: prepareProducer,
           fileName: artifact.fileName,
           content: artifact.content,
+          ...(input.artifactMaxBytes === undefined ? {} : { maxBytes: input.artifactMaxBytes }),
         });
 
         return {

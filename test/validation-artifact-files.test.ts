@@ -19,6 +19,7 @@ describe("Validation Run artifacts", () => {
       producer: "check",
       fileName: "stdout.txt",
       content: "x".repeat(maxValidationArtifactBytes + 1),
+      maxBytes: maxValidationArtifactBytes,
     });
 
     expect(Buffer.byteLength(readFileSync(`${root}/${artifact.path}`, "utf8"))).toBe(

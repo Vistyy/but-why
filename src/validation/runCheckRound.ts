@@ -16,8 +16,10 @@ export type RunCheckPhaseInput = {
   readonly checks: readonly SubmitCheckConfig[];
   readonly sandbox: Pick<Sandbox, "exec">;
   readonly artifactsRoot: string;
+  readonly artifactMaxBytes?: number;
   readonly commandCwd?: string;
   readonly expectedHeadSha?: string;
+  readonly allowedUntrackedFiles?: readonly string[];
   readonly now: string;
   readonly continueAfterFinding?: boolean;
   readonly recordCheckRound: (input: RecordValidationRunCheckRoundInput) => void;
@@ -92,6 +94,7 @@ const runSingleCheck = (
       check,
       input.commandCwd,
       input.expectedHeadSha,
+      input.allowedUntrackedFiles,
     );
     const artifactRefs = artifactFileNames.map((fileName) =>
       checkArtifactRef(input.validationRunId, check.id, fileName),
@@ -102,6 +105,7 @@ const runSingleCheck = (
       commandResult,
       timedOut,
       artifactsRoot: input.artifactsRoot,
+      ...(input.artifactMaxBytes === undefined ? {} : { artifactMaxBytes: input.artifactMaxBytes }),
       now: input.now,
     });
     const failed = commandResult.exitCode !== 0;
@@ -185,10 +189,11 @@ const runCheckCommand = (
   check: SubmitCheckConfig,
   commandCwd: string | undefined,
   expectedHeadSha: string | undefined,
+  allowedUntrackedFiles: readonly string[] | undefined,
 ): Effect.Effect<CheckCommandResult, ValidationToolingFailure> =>
   Effect.tryPromise({
     try: async () => {
-      await ensureCandidateIntegrity(sandbox, commandCwd, expectedHeadSha);
+      await ensureCandidateIntegrity(sandbox, commandCwd, expectedHeadSha, allowedUntrackedFiles);
       await ensureTimeoutCommandAvailable(sandbox, check);
 
       const marker = checkCompletionMarker(check.id);
@@ -197,7 +202,7 @@ const runCheckCommand = (
         commandCwd === undefined ? undefined : { cwd: commandCwd },
       );
       const parsed = parseCheckCompletionMarker(result.stderr, marker);
-      await ensureCandidateIntegrity(sandbox, commandCwd, expectedHeadSha);
+      await ensureCandidateIntegrity(sandbox, commandCwd, expectedHeadSha, allowedUntrackedFiles);
 
       return {
         commandResult: {
@@ -220,13 +225,19 @@ const ensureCandidateIntegrity = async (
   sandbox: Pick<Sandbox, "exec">,
   commandCwd: string | undefined,
   expectedHeadSha: string | undefined,
+  allowedUntrackedFiles: readonly string[] | undefined,
 ): Promise<void> => {
   if (expectedHeadSha === undefined) return;
   const result = await sandbox.exec(
-    "git rev-parse HEAD && git diff --quiet && git diff --cached --quiet",
+    "git rev-parse HEAD && git diff --quiet && git diff --cached --quiet && git status --porcelain --untracked-files=all",
     commandCwd === undefined ? undefined : { cwd: commandCwd },
   );
-  if (result.exitCode !== 0 || result.stdout.trim() !== expectedHeadSha) {
+  const [head, ...status] = result.stdout.trimEnd().split("\n");
+  if (
+    result.exitCode !== 0 ||
+    head !== expectedHeadSha ||
+    !status.every((line) => allowedUntrackedFiles?.includes(line.slice(3)) === true)
+  ) {
     throw new GitToolingFailed({
       operationName: "verify_candidate_head",
       message: "Validation workspace no longer matches the Candidate.",
@@ -251,6 +262,7 @@ const writeCheckArtifacts = (input: {
   readonly commandResult: CommandResult;
   readonly timedOut: boolean;
   readonly artifactsRoot: string;
+  readonly artifactMaxBytes?: number;
   readonly now: string;
 }): Effect.Effect<
   readonly RecordValidationRunCheckRoundInput["artifactRecords"][number][],
@@ -285,6 +297,7 @@ const writeCheckArtifacts = (input: {
           producer: input.check.id,
           fileName: artifact.fileName,
           content: artifact.content,
+          ...(input.artifactMaxBytes === undefined ? {} : { maxBytes: input.artifactMaxBytes }),
         });
 
         return {
