@@ -45,6 +45,7 @@ Retrying the same commit also creates a new Validation Run.
 V1 Task states are:
 
 ```text
+new
 todo
 implementing
 validating
@@ -53,7 +54,9 @@ ready
 done
 ```
 
-Task creation starts in `todo`.
+Task creation starts in `new`.
+
+`by task approve <task-id>` permanently approves Task intent and moves `new` to `todo`.
 
 `by task start <task-id>` moves `todo` to `implementing`.
 

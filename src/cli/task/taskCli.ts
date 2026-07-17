@@ -2,6 +2,7 @@ import type { CliResult } from "../../cliResults.js";
 import { success, usageError } from "../../cliResults.js";
 import { withGlobalHelpFlags } from "../../cliHelp.js";
 import type { StructuredObject } from "../../output/structured.js";
+import { runApproveCommand } from "./commands/approve.js";
 import { runCommentCommand } from "./commands/comment.js";
 import { runContextCommand } from "./commands/context.js";
 import { runCreateCommand } from "./commands/create.js";
@@ -53,6 +54,10 @@ export const routeTask = (
     return runValidationRunsCommand(args.slice(1), environment);
   }
 
+  if (subcommand === "approve") {
+    return runApproveCommand(args.slice(1), environment);
+  }
+
   if (subcommand === "start") {
     return runStartCommand(args.slice(1), environment);
   }
@@ -94,6 +99,10 @@ const taskHelpView = (): StructuredObject => ({
     {
       command: "by task show <task-id>",
       description: "Show compact Task metadata",
+    },
+    {
+      command: "by task approve <task-id>",
+      description: "Permanently approve Task intent",
     },
     {
       command: "by task start <task-id>",

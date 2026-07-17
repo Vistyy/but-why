@@ -8,6 +8,7 @@ import { canSubmitFrom, type SubmitEligibleState } from "../src/task/submitPolic
 describe("Task lifecycle", () => {
   it("owns the canonical Task state vocabulary and legal transitions", () => {
     expect(taskStates).toEqual([
+      "new",
       "todo",
       "implementing",
       "validating",
@@ -17,6 +18,7 @@ describe("Task lifecycle", () => {
     ]);
 
     const expectedTransitions = new Map<TaskState, readonly TaskState[]>([
+      ["new", ["todo"]],
       ["todo", ["implementing"]],
       ["implementing", ["validating"]],
       ["validating", ["needs_input", "ready"]],
@@ -35,6 +37,7 @@ describe("Task lifecycle", () => {
   });
 
   it("recognizes Task states at boundaries", () => {
+    expect(isTaskState("new")).toBe(true);
     expect(isTaskState("todo")).toBe(true);
     expect(isTaskState("unknown")).toBe(false);
   });
@@ -58,16 +61,11 @@ describe("Task lifecycle", () => {
 
   it("keeps the durable Task state constraint in sync with Task states", () => {
     const stateDatabaseSource = readFileSync("src/init/stateDatabase.ts", "utf8");
-    const match = stateDatabaseSource.match(/state IN \(([^)]+)\)/);
-
-    if (match === null) {
-      throw new Error("Task state SQL constraint was not found");
-    }
-
-    const stateList = match[1];
+    const matches = [...stateDatabaseSource.matchAll(/state IN \(([^)]+)\)/g)];
+    const stateList = matches.at(-1)?.[1];
 
     if (stateList === undefined) {
-      throw new Error("Task state SQL constraint did not include any states");
+      throw new Error("Task state SQL constraint was not found");
     }
 
     const durableStates = stateList.split(",").map((state) => state.trim().replaceAll("'", ""));

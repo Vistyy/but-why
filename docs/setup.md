@@ -104,6 +104,12 @@ Create a task:
 by task create --title "Fix login redirect" --description-file task.md
 ```
 
+Approve the task intent:
+
+```bash
+by task approve BY-1
+```
+
 Start the task:
 
 ```bash

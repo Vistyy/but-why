@@ -29,7 +29,7 @@ const concurrentWriterCount = 4;
 afterEach(cleanupTempRoots);
 
 describe("by task CLI", () => {
-  it("creates a todo Task with trimmed title, exact description, configured prefix, and summary output", () => {
+  it("creates a new Task with trimmed title, exact description, configured prefix, and summary output", () => {
     const root = initializedRepo();
     writeFileSync(join(root, "task.md"), "  Preserve me exactly.\n\n");
 
@@ -44,7 +44,7 @@ describe("by task CLI", () => {
     expect(result.stdout).toBe(`task:
   id: BY-1
   title: Add   login
-  state: todo
+  state: new
   createdAt: "${firstNow}"
   updatedAt: "${firstNow}"
 help[1]: Run \`by task list\` to see open tasks.`);
@@ -53,11 +53,61 @@ help[1]: Run \`by task list\` to see open tasks.`);
       id: "BY-1",
       title: "Add   login",
       description: "  Preserve me exactly.\n\n",
-      state: "todo",
+      state: "new",
       createdAt: firstNow,
       updatedAt: firstNow,
       branch: null,
     });
+  });
+
+  it("approves Task intent durably and reports repeated approval as an unchanged success", () => {
+    const root = initializedRepo();
+
+    createTask(root, firstNow, "Approve intent");
+
+    const firstApproval = runByInProcess(root, ["task", "approve", "BY-1"], secondNow);
+    const repeatedApproval = runByInProcess(root, ["task", "approve", "BY-1"], thirdNow);
+
+    expect(firstApproval.status).toBe(0);
+    expect(firstApproval.stderr).toBe("");
+    expect(firstApproval.stdout).toBe(`task:
+  id: BY-1
+  state: todo
+  changed: true
+  updatedAt: "${secondNow}"`);
+    expect(repeatedApproval.status).toBe(0);
+    expect(repeatedApproval.stderr).toBe("");
+    expect(repeatedApproval.stdout).toBe(`task:
+  id: BY-1
+  state: todo
+  changed: false
+  updatedAt: "${secondNow}"`);
+    expect(taskStore(root).getTaskById(publicTaskId("BY-1"))).toMatchObject({
+      state: "todo",
+      updatedAt: secondNow,
+    });
+  });
+
+  it.each([
+    ["implementing", "Continue implementation, then run by submit BY-1."],
+    ["validating", "Wait for validation to finish."],
+    ["needs_input", "Address the Findings, then run by submit BY-1."],
+    ["ready", "Review and merge the pull request."],
+    ["done", "Task is already done."],
+  ] as const)("rejects approval in %s with the legal action", (state, help) => {
+    const root = initializedRepo();
+
+    createTask(root, firstNow, "Already started");
+    transitionTaskState(root, "BY-1", state, secondNow);
+
+    const result = runByInProcess(root, ["task", "approve", "BY-1"], thirdNow);
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toBe("");
+    expect(result.stdout).toContain("code: invalid_task_state");
+    expect(result.stdout).toContain(`Cannot approve task BY-1 from state ${state}`);
+    expect(result.stdout).toContain(help);
+    expect(taskStore(root).getTaskById(publicTaskId("BY-1"))?.updatedAt).toBe(secondNow);
   });
 
   it("resolves description files relative to cwd and allows files outside the repo", () => {
@@ -109,7 +159,7 @@ help[1]: Run \`by task list\` to see open tasks.`);
     expect(result.stderr).toBe("");
     expect(result.stdout).toBe(`count: 2
 tasks[2]{id,title,state,createdAt,updatedAt}:
-  BY-1,First,todo,"${firstNow}","${firstNow}"
+  BY-1,First,new,"${firstNow}","${firstNow}"
   BY-2,Second,needs_input,"${secondNow}","${thirdNow}"`);
   });
 
@@ -132,7 +182,7 @@ tasks[2]{id,title,state,createdAt,updatedAt}:
         {
           id: "BY-1",
           title: "First",
-          state: "todo",
+          state: "new",
           createdAt: firstNow,
           updatedAt: firstNow,
         },
@@ -155,8 +205,22 @@ tasks[2]{id,title,state,createdAt,updatedAt}:
 
     expect(runByInProcess(root, ["task", "list"]).stdout).toBe(`count: 2
 tasks[2]{id,title,state,createdAt,updatedAt}:
-  BY-1,First,todo,"${firstNow}","${firstNow}"
-  BY-2,Second,todo,"${firstNow}","${firstNow}"`);
+  BY-1,First,new,"${firstNow}","${firstNow}"
+  BY-2,Second,new,"${firstNow}","${firstNow}"`);
+  });
+
+  it("rejects starting new Tasks with approval guidance", () => {
+    const root = initializedRepo();
+
+    createTask(root, firstNow, "Unapproved task");
+
+    const result = runByInProcess(root, ["task", "start", "BY-1"], secondNow);
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toBe("");
+    expect(result.stdout).toContain("code: invalid_task_state");
+    expect(result.stdout).toContain("Cannot start task BY-1 from state new");
+    expect(result.stdout).toContain("Approve the Task first with by task approve BY-1.");
   });
 
   it("starts todo Tasks through the Task module idempotently", () => {
@@ -173,6 +237,7 @@ tasks[2]{id,title,state,createdAt,updatedAt}:
       throw new Error(`Could not load Tasks: ${tasksLoad.error.code}`);
     }
 
+    expect(tasksLoad.tasks.approveTask(publicTaskId("BY-1"), secondNow).ok).toBe(true);
     const firstStart = tasksLoad.tasks.startTask(publicTaskId("BY-1"), secondNow);
     const secondStart = tasksLoad.tasks.startTask(publicTaskId("BY-1"), thirdNow);
 
@@ -217,6 +282,7 @@ tasks[2]{id,title,state,createdAt,updatedAt}:
     const root = initializedRepo();
 
     createTask(root, firstNow, "CLI start");
+    expect(runByInProcess(root, ["task", "approve", "BY-1"], firstNow).status).toBe(0);
 
     const result = runByInProcess(root, ["task", "start", "BY-1"], secondNow);
 
@@ -258,6 +324,7 @@ next: ${firstTaskStartNextToon}`);
     const root = initializedRepo();
 
     createTask(root, firstNow, "JSON start");
+    expect(runByInProcess(root, ["task", "approve", "BY-1"], firstNow).status).toBe(0);
 
     const result = runByInProcess(root, ["task", "start", "BY-1", "--output", "json"], secondNow);
 
@@ -326,10 +393,21 @@ help[1]: ${toonHelp}`);
     );
   });
 
+  it("shows new Tasks on the dashboard so they can be approved", () => {
+    const root = initializedRepo();
+
+    createTask(root, firstNow, "Needs approval");
+
+    expect(runByInProcess(root, []).stdout).toContain(
+      `BY-1,Needs approval,new,"${firstNow}","${firstNow}"`,
+    );
+  });
+
   it("removes started Tasks from the default dashboard", () => {
     const root = initializedRepo();
 
     createTask(root, firstNow, "Started");
+    expect(runByInProcess(root, ["task", "approve", "BY-1"], firstNow).status).toBe(0);
     expect(runByInProcess(root, ["task", "start", "BY-1"], secondNow).status).toBe(0);
 
     expect(runByInProcess(root, []).stdout).toBe(`bin: ${expectedBin}
@@ -362,11 +440,11 @@ help[1]: "Run \`by task create --title \\"...\\" --description-file <file>\` to 
     ).toEqual({
       ok: false,
       code: "invalid_task_state_transition",
-      from: "todo",
+      from: "new",
       to: "ready",
     });
     expect(runByInProcess(root, ["task", "show", "BY-1"]).stdout).toContain(
-      `state: todo\n  createdAt: "${firstNow}"\n  updatedAt: "${firstNow}"`,
+      `state: new\n  createdAt: "${firstNow}"\n  updatedAt: "${firstNow}"`,
     );
   });
 
@@ -379,12 +457,12 @@ help[1]: "Run \`by task create --title \\"...\\" --description-file <file>\` to 
 
     expect(runByInProcess(root, ["task", "list"]).stdout).toBe(`count: 1
 tasks[1]{id,title,state,createdAt,updatedAt}:
-  BY-2,Second,todo,"${secondNow}","${secondNow}"`);
+  BY-2,Second,new,"${secondNow}","${secondNow}"`);
 
     expect(runByInProcess(root, ["task", "list", "--all"]).stdout).toBe(`count: 2
 tasks[2]{id,title,state,createdAt,updatedAt}:
   BY-1,First,done,"${firstNow}","${thirdNow}"
-  BY-2,Second,todo,"${secondNow}","${secondNow}"`);
+  BY-2,Second,new,"${secondNow}","${secondNow}"`);
 
     expect(runByInProcess(root, ["task", "list", "--state", "done"]).stdout).toBe(`count: 1
 tasks[1]{id,title,state,createdAt,updatedAt}:
@@ -515,7 +593,7 @@ tasks[1]{id,title,state,createdAt,updatedAt}:
         id: "BY-1",
         title: "Updated title",
         description: "Updated description\n\n",
-        state: "todo",
+        state: "new",
         updatedAt: secondNow,
       },
     });
@@ -607,11 +685,10 @@ tasks[1]{id,title,state,createdAt,updatedAt}:
     );
   });
 
-  it("appends Task comments as ordered raw Task Context without changing state", () => {
+  it("appends Task comments as ordered raw Task Context before Start without changing state", () => {
     const root = initializedRepo();
 
     createTask(root, firstNow, "Commented task");
-    transitionTaskState(root, "BY-1", "needs_input", secondNow);
     writeFileSync(join(root, "comment-1.md"), "First comment\n\nWith Markdown.\n");
     writeFileSync(join(root, "comment-2.md"), "First comment\n\nWith Markdown.\n");
 
@@ -620,6 +697,7 @@ tasks[1]{id,title,state,createdAt,updatedAt}:
       ["task", "comment", "BY-1", "--file", "comment-1.md"],
       thirdNow,
     );
+    expect(runByInProcess(root, ["task", "approve", "BY-1"], thirdNow).status).toBe(0);
     const duplicateResult = runByInProcess(
       root,
       ["task", "comment", "BY-1", "--file", "comment-2.md"],
@@ -639,7 +717,7 @@ tasks[1]{id,title,state,createdAt,updatedAt}:
     expect(runByInProcess(root, ["task", "show", "BY-1"]).stdout).toBe(`task:
   id: BY-1
   title: Commented task
-  state: needs_input
+  state: todo
   createdAt: "${firstNow}"
   updatedAt: "2026-06-30T12:15:00.000Z"
   branch: null
@@ -651,6 +729,35 @@ tasks[1]{id,title,state,createdAt,updatedAt}:
   title: Commented task
   description: Description for Commented task
   comments[2]: "First comment\\n\\nWith Markdown.\\n","First comment\\n\\nWith Markdown.\\n"`);
+  });
+
+  it.each([
+    "implementing",
+    "validating",
+    "needs_input",
+    "ready",
+    "done",
+  ] as const)("rejects Task comments in %s without changing Task Context", (state) => {
+    const root = initializedRepo();
+
+    createTask(root, firstNow, "Started comments");
+    transitionTaskState(root, "BY-1", state, secondNow);
+    writeFileSync(join(root, "comment.md"), "Too late");
+
+    const result = runByInProcess(
+      root,
+      ["task", "comment", "BY-1", "--file", "comment.md"],
+      thirdNow,
+    );
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toBe("");
+    expect(result.stdout).toContain("code: invalid_task_state");
+    expect(result.stdout).toContain(
+      `Cannot append a Task comment to task BY-1 from state ${state}`,
+    );
+    expect(taskStore(root).getTaskContextById(publicTaskId("BY-1"))?.comments).toEqual([]);
+    expect(taskStore(root).getTaskById(publicTaskId("BY-1"))?.updatedAt).toBe(secondNow);
   });
 
   it("preserves a leading UTF-8 BOM in Task comment content", () => {
@@ -824,6 +931,7 @@ tasks[1]{id,title,state,createdAt,updatedAt}:
     "show",
     "context",
     "comment",
+    "approve",
     "start",
   ])("validates Task ID arguments before %s lookup", (command) => {
     const root = createGitRepo();
@@ -849,6 +957,7 @@ tasks[1]{id,title,state,createdAt,updatedAt}:
   it.each([
     "show",
     "context",
+    "approve",
     "start",
   ])("rejects non-local Task IDs before state access in %s", (command) => {
     const root = initializedRepo();
@@ -865,6 +974,7 @@ tasks[1]{id,title,state,createdAt,updatedAt}:
   it.each([
     "show",
     "context",
+    "approve",
     "start",
   ])("prints task_not_found for unknown Task IDs in %s", (command) => {
     const root = initializedRepo();
@@ -894,6 +1004,7 @@ help[1]: "Run \`by task create --title \\"...\\" --description-file <file>\` to 
     const root = initializedRepo();
 
     createTask(root, firstNow, "Todo old");
+    expect(runByInProcess(root, ["task", "approve", "BY-1"], firstNow).status).toBe(0);
     createTask(root, secondNow, "Ready");
     createTask(root, thirdNow, "Input");
     transitionTaskState(root, "BY-2", "ready", secondNow);
@@ -901,6 +1012,7 @@ help[1]: "Run \`by task create --title \\"...\\" --description-file <file>\` to 
     createTask(root, firstNow, "Implementing");
     transitionTaskState(root, "BY-4", "implementing", thirdNow);
     createTask(root, firstNow, "Todo new");
+    expect(runByInProcess(root, ["task", "approve", "BY-5"], firstNow).status).toBe(0);
     writeFileSync(join(root, "todo-new-comment.md"), "Bump updated time");
     expect(
       runByInProcess(root, ["task", "comment", "BY-5", "--file", "todo-new-comment.md"], thirdNow)
@@ -944,7 +1056,7 @@ help[1]: "Run \`by task create --title \\"...\\" --description-file <file>\` to 
   code: invalid_task_state
   message: Unknown task state blocked.
   state: blocked
-help[1]: "Use one of: todo, implementing, validating, needs_input, ready, done."`);
+help[1]: "Use one of: new, todo, implementing, validating, needs_input, ready, done."`);
   });
 
   it("rejects Task titles containing line breaks", () => {

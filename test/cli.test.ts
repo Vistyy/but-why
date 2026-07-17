@@ -327,6 +327,7 @@ validationSetup:
         { name: "016_change_base_ref" },
         { name: "017_shared_state_identity" },
         { name: "018_candidate_validation_runs" },
+        { name: "019_task_approval" },
       ]);
       expect(
         database

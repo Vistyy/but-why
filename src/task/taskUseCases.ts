@@ -19,7 +19,12 @@ import type { TaskState } from "./lifecycle.js";
 import type { TaskContext, TaskRecord, TaskSummary } from "./task.js";
 import { resolveRepoTaskId, type RepoTaskIdResolution } from "./repoTaskIds.js";
 import type { PublicTaskId } from "./taskId.js";
-import type { AppendTaskCommentResult, StoredTaskRecord, TaskStore } from "./taskStore.js";
+import type {
+  AppendTaskCommentResult,
+  StoredTaskRecord,
+  TaskApprovalResult,
+  TaskStore,
+} from "./taskStore.js";
 
 /**
  * Task lifecycle commands should enter through this module.
@@ -42,9 +47,8 @@ export type TaskUseCases = {
   readonly applyTaskContextDraft: (
     input: ApplyTaskContextDraftInput,
   ) => ApplyTaskContextDraftResult;
-  readonly appendTaskComment: (
-    input: AppendTaskCommentInput,
-  ) => AppendTaskCommentResult | undefined;
+  readonly approveTask: (taskId: PublicTaskId, now: string) => RepoTaskApprovalResult;
+  readonly appendTaskComment: (input: AppendTaskCommentInput) => AppendTaskCommentResult;
   readonly startTask: (taskId: PublicTaskId, now: string) => StartTaskResult;
   readonly transitionTaskState: (input: TransitionTaskStateInput) => RepoTaskStateTransitionResult;
 };
@@ -135,6 +139,14 @@ export type RepoTaskStateTransitionResult =
       readonly to: TaskState;
     };
 
+export type RepoTaskApprovalResult =
+  | {
+      readonly ok: true;
+      readonly changed: boolean;
+      readonly task: TaskRecord;
+    }
+  | Exclude<TaskApprovalResult, { readonly ok: true }>;
+
 export type StartTaskResult =
   | {
       readonly ok: true;
@@ -173,6 +185,8 @@ export const openTaskUseCases = (
     createTaskContextDraft: (taskId) => createTaskContextDraft(context, stores.taskStore, taskId),
     applyTaskContextDraft: (input) =>
       applyTaskContextDraft(context, stores.taskStore, stores.validationRunStore, input),
+    approveTask: (taskId, now) =>
+      approveTask(stores.taskStore, stores.validationRunStore, taskId, now),
     appendTaskComment: stores.taskStore.appendTaskComment,
     startTask: (taskId, now) => startTask(stores.taskStore, stores.validationRunStore, taskId, now),
     transitionTaskState: (input) =>
@@ -317,6 +331,27 @@ const transitionTaskState = (
     task: withLatestValidationRun(
       result.task,
       validationRunStore.getLatestValidationRunIdForTask(input.taskId),
+    ),
+  };
+};
+
+const approveTask = (
+  taskStore: TaskStore,
+  validationRunStore: ValidationRunStore,
+  taskId: PublicTaskId,
+  now: string,
+): RepoTaskApprovalResult => {
+  const result = taskStore.approveTask({ taskId, now });
+
+  if (!result.ok) {
+    return result;
+  }
+
+  return {
+    ...result,
+    task: withLatestValidationRun(
+      result.task,
+      validationRunStore.getLatestValidationRunIdForTask(taskId),
     ),
   };
 };

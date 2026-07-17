@@ -2,9 +2,9 @@ import { canTransition, taskStates, type TaskState } from "../../src/task/lifecy
 
 export const taskStateTransitionPath = (target: TaskState): readonly TaskState[] => {
   const queue: { readonly state: TaskState; readonly path: readonly TaskState[] }[] = [
-    { state: "todo", path: [] },
+    { state: "new", path: [] },
   ];
-  const seen = new Set<TaskState>(["todo"]);
+  const seen = new Set<TaskState>(["new"]);
 
   for (const current of queue) {
     if (current.state === target) {

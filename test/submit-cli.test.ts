@@ -30,18 +30,11 @@ afterEach(cleanupTempRoots);
 
 describe("by submit CLI", () => {
   it("creates a commit-bound active Validation Run and moves an implementing Task to validating", () => {
-    const root = preparedRepoOnBranch("feature/by-1");
+    const root = preparedRepoOnBranch("feature/by-1", [
+      "Approved first comment",
+      "Approved second comment",
+    ]);
     const commitSha = currentCommitSha(root);
-    taskStore(root).appendTaskComment({
-      taskId: publicTaskId("BY-1"),
-      content: "Approved first comment",
-      now: () => secondNow,
-    });
-    taskStore(root).appendTaskComment({
-      taskId: publicTaskId("BY-1"),
-      content: "Approved second comment",
-      now: () => secondNow,
-    });
 
     const branchBeforeSubmit = currentBranch(root);
     const statusBeforeSubmit = gitStatus(root);
@@ -92,11 +85,13 @@ describe("by submit CLI", () => {
       description: "Description for Submit task",
       comments: ["Approved first comment", "Approved second comment"],
     });
-    taskStore(root).appendTaskComment({
-      taskId: publicTaskId("BY-1"),
-      content: "Later comment",
-      now: () => thirdNow,
-    });
+    expect(
+      taskStore(root).appendTaskComment({
+        taskId: publicTaskId("BY-1"),
+        content: "Later comment",
+        now: () => thirdNow,
+      }),
+    ).toEqual({ ok: false, code: "invalid_task_state", state: "validating" });
     expect(validationRunStore(root).getTaskContextSnapshot(firstTaskValidationRunId)).toEqual({
       version: 1,
       title: "Submit task",
@@ -939,10 +934,19 @@ const initializedRepo = (): string => {
   return root;
 };
 
-const preparedRepoOnBranch = (branch: string): string => {
+const preparedRepoOnBranch = (branch: string, comments: readonly string[] = []): string => {
   const root = initializedRepo();
 
   createTask(root, "Submit task");
+  for (const content of comments) {
+    const result = taskStore(root).appendTaskComment({
+      taskId: publicTaskId("BY-1"),
+      content,
+      now: () => secondNow,
+    });
+
+    expect(result.ok).toBe(true);
+  }
   spawnGit(root, "remote", "add", "origin", "https://github.com/acme/widgets.git");
   spawnGit(root, "add", ".");
   spawnGit(root, "commit", "-m", "Initialize task repo");

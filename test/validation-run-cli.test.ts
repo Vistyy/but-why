@@ -36,7 +36,7 @@ describe("Validation Run inspection CLI", () => {
       task: {
         id: "BY-1",
         title: "No history",
-        state: "todo",
+        state: "new",
       },
       validationRun: null,
       findings: [],
@@ -266,6 +266,7 @@ const createTask = (root: string, title: string): void => {
 };
 
 const startTask = (root: string, id: string, now: string): void => {
+  expect(runByInProcess(root, ["task", "approve", id], now).status).toBe(0);
   const result = runByInProcess(root, ["task", "start", id], now);
 
   expect(result.status).toBe(0);

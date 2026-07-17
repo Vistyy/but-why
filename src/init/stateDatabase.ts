@@ -17,6 +17,7 @@ export const stateDatabaseTimeoutMs = 30_000;
 type Migration = {
   readonly name: string;
   readonly apply: string;
+  readonly rebuildsReferencedTable?: boolean;
 };
 
 const validationPhaseSql =
@@ -779,6 +780,50 @@ const migrations: readonly Migration[] = [
       )
     `,
   },
+  {
+    name: "019_task_approval",
+    rebuildsReferencedTable: true,
+    apply: `
+      CREATE TABLE tasks_new (
+        id TEXT NOT NULL UNIQUE,
+        numeric_id INTEGER NOT NULL UNIQUE,
+        title TEXT NOT NULL,
+        description TEXT NOT NULL,
+        state TEXT NOT NULL CHECK (state IN ('new', 'todo', 'implementing', 'validating', 'needs_input', 'ready', 'done')),
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        branch TEXT
+      );
+
+      INSERT INTO tasks_new (
+        id,
+        numeric_id,
+        title,
+        description,
+        state,
+        created_at,
+        updated_at,
+        branch
+      )
+      SELECT
+        id,
+        numeric_id,
+        title,
+        description,
+        state,
+        created_at,
+        updated_at,
+        branch
+      FROM tasks;
+
+      DROP TABLE tasks;
+      ALTER TABLE tasks_new RENAME TO tasks;
+
+      CREATE UNIQUE INDEX tasks_branch_unique_idx
+      ON tasks (branch)
+      WHERE branch IS NOT NULL
+    `,
+  },
 ];
 
 export const ensureStateDatabase = (
@@ -845,11 +890,22 @@ const applyMigration = (
   migration: Migration,
   migrationTimestamp: () => string,
 ): void => {
+  if (migration.rebuildsReferencedTable === true) {
+    database.exec("PRAGMA foreign_keys = OFF");
+  }
+
   database.exec("BEGIN");
 
   try {
     if (migration.apply.length > 0) {
       database.exec(migration.apply);
+    }
+
+    if (
+      migration.rebuildsReferencedTable === true &&
+      database.prepare("PRAGMA foreign_key_check").get() !== undefined
+    ) {
+      throw new Error(`Migration ${migration.name} left an invalid foreign key`);
     }
 
     database
@@ -859,5 +915,9 @@ const applyMigration = (
   } catch (error) {
     database.exec("ROLLBACK");
     throw error;
+  } finally {
+    if (migration.rebuildsReferencedTable === true) {
+      database.exec("PRAGMA foreign_keys = ON");
+    }
   }
 };

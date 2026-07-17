@@ -9,11 +9,13 @@ import type { PublicTaskId } from "../task/taskId.js";
 import type {
   AppendTaskCommentInput,
   AppendTaskCommentResult,
+  ApproveTaskInput,
   CreateTaskInput,
   ListTasksInput,
   StoredTaskRecord,
   UpdateTaskContextInput,
   UpdateTaskContextResult,
+  TaskApprovalResult,
   TaskStateTransitionResult,
   TaskStore,
 } from "../task/taskStore.js";
@@ -42,6 +44,8 @@ export const openSqliteTaskStore = (input: SqliteTaskStoreInput): TaskStore => (
   getTaskById: (taskId) => withStateDatabase(input, (database) => getTaskById(database, taskId)),
   getTaskContextById: (taskId) =>
     withStateDatabase(input, (database) => getTaskContextById(database, taskId)),
+  approveTask: (taskInput) =>
+    withStateDatabase(input, (database) => approveTask(database, taskInput)),
   appendTaskComment: (taskInput) =>
     withStateDatabase(input, (database) => appendTaskComment(database, taskInput)),
   updateTaskContext: (taskInput) =>
@@ -66,14 +70,14 @@ const createTask = (
         INSERT INTO tasks (id, numeric_id, title, description, state, created_at, updated_at)
         VALUES (?, ?, ?, ?, ?, ?, ?)
       `)
-      .run(id, numericId, input.title, input.description, "todo", input.now, input.now);
+      .run(id, numericId, input.title, input.description, "new", input.now, input.now);
 
     database.exec("COMMIT");
 
     return {
       id,
       title: input.title,
-      state: "todo",
+      state: "new",
       createdAt: input.now,
       updatedAt: input.now,
     };
@@ -123,12 +127,13 @@ const listActionableTasks = (database: DatabaseSync): readonly TaskSummary[] =>
     `
       SELECT ${taskSummaryColumns}
       FROM tasks
-      WHERE state IN ('todo', 'needs_input', 'ready')
+      WHERE state IN ('new', 'todo', 'needs_input', 'ready')
       ORDER BY
         CASE state
           WHEN 'needs_input' THEN 0
           WHEN 'ready' THEN 1
-          WHEN 'todo' THEN 2
+          WHEN 'new' THEN 2
+          WHEN 'todo' THEN 3
         END ASC,
         updated_at DESC,
         numeric_id ASC
@@ -198,18 +203,62 @@ const getTaskContextById = (
   }
 };
 
-const appendTaskComment = (
-  database: DatabaseSync,
-  input: AppendTaskCommentInput,
-): AppendTaskCommentResult | undefined => {
+const approveTask = (database: DatabaseSync, input: ApproveTaskInput): TaskApprovalResult => {
   database.exec("BEGIN IMMEDIATE");
 
   try {
-    const task = database.prepare("SELECT id FROM tasks WHERE id = ?").get(input.taskId);
+    const current = getTaskById(database, input.taskId);
+
+    if (current === undefined) {
+      database.exec("ROLLBACK");
+      return { ok: false, code: "task_not_found" };
+    }
+
+    if (current.state === "todo") {
+      database.exec("COMMIT");
+      return { ok: true, changed: false, task: current };
+    }
+
+    if (current.state !== "new") {
+      database.exec("ROLLBACK");
+      return { ok: false, code: "invalid_task_state", state: current.state };
+    }
+
+    database
+      .prepare("UPDATE tasks SET state = 'todo', updated_at = ? WHERE id = ?")
+      .run(input.now, input.taskId);
+
+    const updated = getTaskById(database, input.taskId);
+
+    if (updated === undefined) {
+      throw new Error("Task disappeared during approval");
+    }
+
+    database.exec("COMMIT");
+    return { ok: true, changed: true, task: updated };
+  } catch (error) {
+    rollbackIfOpen(database);
+    throw error;
+  }
+};
+
+const appendTaskComment = (
+  database: DatabaseSync,
+  input: AppendTaskCommentInput,
+): AppendTaskCommentResult => {
+  database.exec("BEGIN IMMEDIATE");
+
+  try {
+    const task = getTaskById(database, input.taskId);
 
     if (task === undefined) {
       database.exec("ROLLBACK");
-      return undefined;
+      return { ok: false, code: "task_not_found" };
+    }
+
+    if (task.state !== "new" && task.state !== "todo") {
+      database.exec("ROLLBACK");
+      return { ok: false, code: "invalid_task_state", state: task.state };
     }
 
     const now = input.now();
@@ -227,7 +276,7 @@ const appendTaskComment = (
 
     database.exec("COMMIT");
 
-    return { taskId: input.taskId, commentCount: count };
+    return { ok: true, taskId: input.taskId, commentCount: count };
   } catch (error) {
     rollbackIfOpen(database);
     throw error;
@@ -248,7 +297,7 @@ const updateTaskContext = (
       return { ok: false, code: "task_not_found" };
     }
 
-    if (current.state !== "todo") {
+    if (current.state !== "new" && current.state !== "todo") {
       database.exec("ROLLBACK");
       return { ok: false, code: "invalid_task_state", state: current.state };
     }

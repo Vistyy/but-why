@@ -89,8 +89,12 @@ export const runCommentCommand = (
       now: () => environment.now().toISOString(),
     });
 
-    if (result === undefined) {
-      return taskNotFound(taskId.taskId);
+    if (!result.ok) {
+      if (result.code === "task_not_found") {
+        return taskNotFound(taskId.taskId);
+      }
+
+      return invalidTaskCommentState(taskId.taskId, result.state);
     }
 
     return success({
@@ -175,6 +179,14 @@ const parseTaskCommentArgs = (args: readonly string[]): TaskCommentArgsParseResu
 
   return { ok: true, taskId: parsedTaskId.taskId, commentFile };
 };
+
+const invalidTaskCommentState = (taskId: PublicTaskId, state: string): CliResult =>
+  runtimeError({
+    code: "invalid_task_state",
+    message: `Cannot append a Task comment to task ${taskId} from state ${state}`,
+    details: { taskId, state },
+    help: ["Task comments may be appended before starting the Task."],
+  });
 
 const commentFileError = (error: CommentFileReadError): CliResult => {
   switch (error.code) {

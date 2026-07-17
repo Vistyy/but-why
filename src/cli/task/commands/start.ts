@@ -63,6 +63,7 @@ const invalidTaskStart = (taskId: PublicTaskId, state: StartIneligibleState): Cl
   });
 
 const invalidTaskStartHelpByState = {
+  new: (taskId: PublicTaskId) => `Approve the Task first with by task approve ${taskId}.`,
   validating: () => "Wait for validation to finish.",
   needs_input: (taskId: PublicTaskId) =>
     `Address findings or add Task Context, then run by submit ${taskId}.`,

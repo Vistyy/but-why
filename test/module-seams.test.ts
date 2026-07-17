@@ -198,6 +198,7 @@ describe("module seams", () => {
     });
     const taskId = publicTaskId(task.id);
 
+    expect(taskStore.approveTask({ taskId, now: secondNow })).toMatchObject({ ok: true });
     expect(
       taskStore.transitionTaskState({ taskId, to: "implementing", now: secondNow }),
     ).toMatchObject({ ok: true, changed: true });
@@ -265,6 +266,7 @@ describe("module seams", () => {
       comments: ["First comment", "Second comment"],
     };
 
+    expect(taskStore.approveTask({ taskId, now: secondNow })).toMatchObject({ ok: true });
     expect(
       taskStore.transitionTaskState({ taskId, to: "implementing", now: secondNow }),
     ).toMatchObject({ ok: true });
@@ -313,6 +315,7 @@ describe("module seams", () => {
       now: firstNow,
     });
     const taskId = publicTaskId(task.id);
+    expect(taskStore.approveTask({ taskId, now: secondNow })).toMatchObject({ ok: true });
     const failure = new ValidationWorkspaceSetupFailed({
       operationName: "copy_allowlisted_file",
       tempRefName: `refs/but-why/validation-runs/${firstTaskValidationRunId}/validation`,
@@ -393,6 +396,7 @@ describe("module seams", () => {
     });
     const taskId = publicTaskId(task.id);
 
+    expect(taskStore.approveTask({ taskId, now: secondNow })).toMatchObject({ ok: true });
     expect(
       taskStore.transitionTaskState({ taskId, to: "implementing", now: secondNow }),
     ).toMatchObject({ ok: true });
@@ -456,9 +460,10 @@ describe("module seams", () => {
         prTarget,
         now: secondNow,
       }),
-    ).toEqual({ ok: false, code: "TASK_STATE_NOT_SUBMITTABLE", state: "todo" });
+    ).toEqual({ ok: false, code: "TASK_STATE_NOT_SUBMITTABLE", state: "new" });
     expect(validationRunStore.getLatestValidationRunIdForTask(taskId)).toBeNull();
 
+    expect(taskStore.approveTask({ taskId, now: secondNow })).toMatchObject({ ok: true });
     expect(
       taskStore.transitionTaskState({ taskId, to: "implementing", now: secondNow }),
     ).toMatchObject({ ok: true });
@@ -598,10 +603,10 @@ describe("module seams", () => {
       kind: "preflight_rejection",
       code: "TASK_STATE_NOT_SUBMITTABLE",
       taskId: "BY-1",
-      state: "todo",
+      state: "new",
     });
     expect(taskStore.getTaskById(publicTaskId(task.id))).toMatchObject({
-      state: "todo",
+      state: "new",
       branch: null,
     });
     expect(validationRunStore.getLatestValidationRunIdForTask(publicTaskId(task.id))).toBeNull();
