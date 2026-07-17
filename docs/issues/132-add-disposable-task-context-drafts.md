@@ -14,9 +14,11 @@
 ## What to build
 
 Add non-interactive Task Context Draft commands that let an agent edit Task intent as a managed Markdown file.
-`by task context draft <task-id>` creates the Task's one stable managed draft from its current title and description, replacing any prior draft.
-The draft uses its first `# ` heading as the title and its remaining body as the description.
-`by task context apply <task-id>` applies the draft atomically before Task Start and removes it after a successful apply.
+`by task context draft <task-id>` creates the Task's one stable managed draft from its current title and description, replacing any prior draft and returning its path.
+A valid draft starts with a first-line `# ` heading whose title is non-empty after trimming.
+Its remaining body is non-empty after trimming and becomes the description exactly, excluding the one blank-line separator after the heading.
+`by task context apply <task-id>` applies the draft atomically only while the Task is `todo`, before Task Start, and removes it after a successful apply.
+It commits the Task update before removing the draft, so a failed cleanup retains the draft rather than losing it.
 Comments remain append-only Task Context through `by task comment`.
 
 ## Primary verification seam
