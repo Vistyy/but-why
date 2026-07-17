@@ -10,11 +10,6 @@ It ends when But Why? completes one real SQLite-tracked dogfood Task and publish
 - Task 083: Start a Task in a managed worktree.
 - Task 087: Inspect a Candidate-owned Validation Run.
 
-## Completed
-
-- Task 077: Approve Task intent (`2c5e93b`).
-- Task 079: Manage direct Task dependencies (`179bbba`).
-
 ## Dependency graph
 
 | Task | Capability | Blocked by |
