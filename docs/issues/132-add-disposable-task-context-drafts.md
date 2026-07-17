@@ -27,12 +27,18 @@ Task lifecycle CLI test in a temporary repository.
 
 ## Acceptance criteria
 
-- [ ] `by task context draft <task-id>` creates a stable managed Markdown draft containing the Task's title and description.
-- [ ] Repeating Draft replaces the prior managed draft with the Task's current title and description.
-- [ ] `by task context apply <task-id>` updates title and description from a valid draft before Task Start.
-- [ ] Apply rejects an invalid draft or a started or terminal Task without changing the Task Context, and retains the draft.
-- [ ] Successful Apply removes the managed draft and exposes the Task's current state through structured output.
-- [ ] Task Context Draft storage is shared across linked worktrees and is not tracked repository content.
+- [x] `by task context draft <task-id>` creates a stable managed Markdown draft containing the Task's title and description.
+- [x] Repeating Draft replaces the prior managed draft with the Task's current title and description.
+- [x] `by task context apply <task-id>` updates title and description from a valid draft before Task Start.
+- [x] Apply rejects an invalid draft or a started or terminal Task without changing the Task Context, and retains the draft.
+- [x] Successful Apply removes the managed draft and exposes the Task's current state through structured output.
+- [x] Task Context Draft storage is shared across linked worktrees and is not tracked repository content.
+
+## Completion
+
+Implemented in `b2bf566d307e64a136c0704bfc61d8ab0693d900` with follow-up corrections in `65dfbabce3704b51eac5bb8c1bcc44fbe9104089` and `11252fa6d476ce7a13a4166a5600c2896328e93a`.
+Spec review: Approved.
+Standards review: Approved.
 
 ## Blocked by
 
