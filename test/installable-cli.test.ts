@@ -1,7 +1,7 @@
 import { spawnSync, type SpawnSyncReturns } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { delimiter, join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { cleanupTempRoots, createGitRepo, createTempRoot, repoRoot } from "./support/by-cli.js";
 
@@ -11,6 +11,13 @@ type PackedPackage = {
 };
 
 type CommandResult = SpawnSyncReturns<string>;
+
+type InstallableCliFixture = {
+  readonly packed: ReturnType<typeof packPackage>;
+  readonly localConsumerRepo: string;
+  readonly globalPrefix: string;
+  readonly globalConsumerRepo: string;
+};
 
 const commandEnv = {
   ...process.env,
@@ -68,15 +75,6 @@ const installPackage = (cwd: string, tarballPath: string) => {
   expectSuccessfulCommand(runCommandSync("npm", ["install", tarballPath], cwd));
 };
 
-const installPackedCliInConsumerRepo = () => {
-  const packed = packPackage();
-  const consumerRepo = createGitRepo();
-
-  installPackage(consumerRepo, packed.tarballPath);
-
-  return consumerRepo;
-};
-
 const localInstalledBy = (cwd: string) => join(cwd, "node_modules/.bin/by");
 
 const expectInstalledHelp = (result: CommandResult) => {
@@ -91,71 +89,76 @@ const expectInstalledHelp = (result: CommandResult) => {
   expect(result.stdout).not.toContain(join(repoRoot, "bin/by"));
 };
 
-afterEach(cleanupTempRoots);
+let fixture: InstallableCliFixture;
+
+beforeAll(() => {
+  const packed = packPackage();
+  const localConsumerRepo = createGitRepo();
+  const globalPrefix = createTempRoot();
+  const globalConsumerRepo = createGitRepo();
+
+  installPackage(localConsumerRepo, packed.tarballPath);
+  expectSuccessfulCommand(
+    runCommandSync(
+      "npm",
+      ["install", "--global", "--prefix", globalPrefix, packed.tarballPath],
+      globalConsumerRepo,
+    ),
+  );
+
+  fixture = { packed, localConsumerRepo, globalPrefix, globalConsumerRepo };
+}, 120_000);
+
+afterAll(cleanupTempRoots);
 
 describe("installable by CLI package", () => {
   it("packs built CLI output and user-facing package metadata only", () => {
-    const packed = packPackage();
+    expect(fixture.packed.files).toContain("dist/main.js");
+    expect(fixture.packed.files).toContain("package.json");
+    expect(fixture.packed.files).toContain("README.md");
+    expect(fixture.packed.files).toContain("docs/public/config.md");
+    expect(fixture.packed.files).toContain("docs/public/setup.md");
+    expect(fixture.packed.files).toContain("docs/public/skills/but-why/SKILL.md");
+    expect(fixture.packed.files.some((path) => path.startsWith("src/"))).toBe(false);
+    expect(fixture.packed.files.some((path) => path.startsWith("test/"))).toBe(false);
+    expect(fixture.packed.files.some((path) => path.startsWith("spikes/"))).toBe(false);
+    expect(fixture.packed.files.some((path) => path.startsWith("docs/issues/"))).toBe(false);
+    expect(fixture.packed.files.some((path) => path.startsWith("docs/prds/"))).toBe(false);
+    expect(fixture.packed.files.some((path) => path.startsWith("docs/adr/"))).toBe(false);
+    expect(fixture.packed.files.some((path) => path.startsWith("docs/spikes/"))).toBe(false);
+    expect(fixture.packed.files).not.toContain("docs/open-questions.md");
+    expect(fixture.packed.files).not.toContain("bin/by");
+    expect(fixture.packed.files).not.toContain("justfile");
+  });
 
-    expect(packed.files).toContain("dist/main.js");
-    expect(packed.files).toContain("package.json");
-    expect(packed.files).toContain("README.md");
-    expect(packed.files).toContain("docs/public/config.md");
-    expect(packed.files).toContain("docs/public/setup.md");
-    expect(packed.files).toContain("docs/public/skills/but-why/SKILL.md");
-    expect(packed.files.some((path) => path.startsWith("src/"))).toBe(false);
-    expect(packed.files.some((path) => path.startsWith("test/"))).toBe(false);
-    expect(packed.files.some((path) => path.startsWith("spikes/"))).toBe(false);
-    expect(packed.files.some((path) => path.startsWith("docs/issues/"))).toBe(false);
-    expect(packed.files.some((path) => path.startsWith("docs/prds/"))).toBe(false);
-    expect(packed.files.some((path) => path.startsWith("docs/adr/"))).toBe(false);
-    expect(packed.files.some((path) => path.startsWith("docs/spikes/"))).toBe(false);
-    expect(packed.files).not.toContain("docs/open-questions.md");
-    expect(packed.files).not.toContain("bin/by");
-    expect(packed.files).not.toContain("justfile");
-  }, 120_000);
-
-  it("runs help from a project-local tarball install in another Git repo", () => {
-    const consumerRepo = installPackedCliInConsumerRepo();
-
-    expectInstalledHelp(runCommandSync(localInstalledBy(consumerRepo), ["--help"], consumerRepo));
-  }, 120_000);
-
-  it("runs help from the same tarball installed under a temp global prefix", () => {
-    const packed = packPackage();
-    const prefix = createTempRoot();
-    const consumerRepo = createGitRepo();
-
-    expectSuccessfulCommand(
-      runCommandSync(
-        "npm",
-        ["install", "--global", "--prefix", prefix, packed.tarballPath],
-        consumerRepo,
-      ),
-    );
+  it("runs help and init from one project-local tarball install in another Git repo", () => {
+    const { localConsumerRepo } = fixture;
 
     expectInstalledHelp(
-      runCommandSync("by", ["--help"], consumerRepo, {
-        // biome-ignore lint/complexity/useLiteralKeys: NodeJS.ProcessEnv has an index signature.
-        PATH: `${join(prefix, "bin")}${delimiter}${process.env["PATH"] ?? ""}`,
-      }),
+      runCommandSync(localInstalledBy(localConsumerRepo), ["--help"], localConsumerRepo),
     );
-  }, 120_000);
 
-  it("runs init from a project-local tarball install in another Git repo", () => {
-    const consumerRepo = installPackedCliInConsumerRepo();
     const result = runCommandSync(
-      localInstalledBy(consumerRepo),
+      localInstalledBy(localConsumerRepo),
       ["init", "--task-prefix", "BY"],
-      consumerRepo,
+      localConsumerRepo,
     );
 
     expectCleanSuccessfulCommand(result);
     expect(result.stdout).toContain("status: initialized");
     expect(result.stdout).toContain("taskPrefix: BY");
-    expect(JSON.parse(readFileSync(join(consumerRepo, ".but-why/config.json"), "utf8"))).toEqual({
-      taskPrefix: "BY",
-    });
-    expect(existsSync(join(consumerRepo, ".git", "but-why", "state.sqlite"))).toBe(true);
-  }, 120_000);
+    expect(
+      JSON.parse(readFileSync(join(localConsumerRepo, ".but-why/config.json"), "utf8")),
+    ).toEqual({ taskPrefix: "BY" });
+    expect(existsSync(join(localConsumerRepo, ".git", "but-why", "state.sqlite"))).toBe(true);
+  });
+
+  it("runs help from the same tarball installed under a temp global prefix", () => {
+    expectInstalledHelp(
+      runCommandSync("by", ["--help"], fixture.globalConsumerRepo, {
+        // biome-ignore lint/complexity/useLiteralKeys: NodeJS.ProcessEnv has an index signature.
+        PATH: `${join(fixture.globalPrefix, "bin")}${delimiter}${process.env["PATH"] ?? ""}`,
+      }),
+    );
+  });
 });

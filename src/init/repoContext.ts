@@ -2,12 +2,12 @@ import { existsSync, mkdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 
 import type { RepoConfig } from "../contracts/repoConfig.js";
+import { isTaskPrefix } from "../contracts/taskPrefix.js";
 import { findGitRoot } from "./git.js";
 import { ensureGitignoreBlock } from "./gitignore.js";
 import { readRepoConfig, writeRepoConfig } from "./repoConfig.js";
+import { prepareStateDatabaseSession, type StateDatabaseSession } from "./stateDatabase.js";
 import { ensureStateDatabase, SharedStateIdentityConflictError } from "./stateDatabase.js";
-
-const taskPrefixPattern = /^[A-Z][A-Z0-9]{1,9}$/;
 
 export type RepoLocalPaths = {
   readonly butWhyDir: string;
@@ -26,6 +26,7 @@ export type RepoLocalContext = {
   readonly taskPrefix: string;
   readonly config: RepoConfig;
   readonly paths: RepoLocalPaths;
+  readonly stateDatabase: StateDatabaseSession;
 };
 
 export type InitRepoInput = {
@@ -100,8 +101,6 @@ export type LoadRepoLocalContextError =
       readonly taskPrefix: string;
     };
 
-const isValidTaskPrefix = (taskPrefix: string): boolean => taskPrefixPattern.test(taskPrefix);
-
 const repoLocalPaths = (root: string, commonDirectory: string): RepoLocalPaths => {
   const butWhyDir = join(root, ".but-why");
   const operationalDir = join(commonDirectory, "but-why");
@@ -119,7 +118,7 @@ const repoLocalPaths = (root: string, commonDirectory: string): RepoLocalPaths =
 };
 
 export const initRepoLocalContext = (input: InitRepoInput): InitRepoResult => {
-  if (!isValidTaskPrefix(input.taskPrefix)) {
+  if (!isTaskPrefix(input.taskPrefix)) {
     return {
       ok: false,
       error: {
@@ -225,18 +224,22 @@ export const loadRepoLocalContext = (
     return { ok: false, error: { code: "invalid_repo_config", error: repoConfig.error } };
   }
 
-  if (existsSync(paths.statePath)) {
-    try {
-      ensureStateDatabase(paths.statePath, migrationTimestamp, gitRoot.commonDirectory);
-    } catch (error) {
-      if (error instanceof SharedStateIdentityConflictError) {
-        return { ok: false, error: { code: "shared_state_identity_conflict" } };
-      }
-      return {
-        ok: false,
-        error: { code: "state_store_unavailable", taskPrefix: repoConfig.config.taskPrefix },
-      };
+  let stateDatabase: StateDatabaseSession;
+
+  try {
+    stateDatabase = prepareStateDatabaseSession({
+      statePath: paths.statePath,
+      migrationTimestamp,
+      commonDirectory: gitRoot.commonDirectory,
+    });
+  } catch (error) {
+    if (error instanceof SharedStateIdentityConflictError) {
+      return { ok: false, error: { code: "shared_state_identity_conflict" } };
     }
+    return {
+      ok: false,
+      error: { code: "state_store_unavailable", taskPrefix: repoConfig.config.taskPrefix },
+    };
   }
 
   return {
@@ -247,6 +250,7 @@ export const loadRepoLocalContext = (
       paths,
       taskPrefix: repoConfig.config.taskPrefix,
       config: repoConfig.config,
+      stateDatabase,
     },
   };
 };

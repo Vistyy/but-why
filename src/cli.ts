@@ -13,6 +13,8 @@ import { routeSubmit } from "./submit/submitCli.js";
 import { dashboard } from "./cli/task/dashboard.js";
 import { routeTask } from "./cli/task/taskCli.js";
 import { routeValidationRun } from "./cli/validationRun/validationRunCli.js";
+import type { LocalSubmitPreflight } from "./localSubmit/submitPreflight.js";
+import type { TaskUseCases } from "./task/taskUseCases.js";
 
 export type { CliResult } from "./cliResults.js";
 
@@ -21,6 +23,8 @@ export type CliEnvironment = {
   readonly cwd: string;
   readonly globalConfigPath: string;
   readonly now: () => Date;
+  readonly taskUseCases?: TaskUseCases;
+  readonly submitPreflight?: LocalSubmitPreflight;
 };
 
 const description = "Validate completed code changes against approved human intent.";

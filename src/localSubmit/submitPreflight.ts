@@ -45,6 +45,7 @@ export type LocalSubmitPreflight = {
 export type LoadLocalSubmitPreflightResult =
   | {
       readonly ok: true;
+      readonly context: RepoLocalContext;
       readonly submit: LocalSubmitPreflight;
     }
   | {
@@ -67,13 +68,14 @@ export type CreateLocalValidationWorkspaceForValidationRunInput = {
   readonly now: string;
 };
 
+type OpenLocalSubmitPreflightInput = {
+  readonly globalConfigPath: string;
+  readonly requireState?: boolean;
+};
+
 export const loadLocalSubmitPreflight = (
   cwd: string,
-  input: {
-    readonly globalConfigPath: string;
-    readonly requireState?: boolean;
-    readonly migrationTimestamp: () => string;
-  },
+  input: OpenLocalSubmitPreflightInput & { readonly migrationTimestamp: () => string },
 ): LoadLocalSubmitPreflightResult => {
   const repoContext = loadRepoLocalContext(cwd, input.migrationTimestamp);
 
@@ -88,12 +90,19 @@ export const loadLocalSubmitPreflight = (
     }
   }
 
-  if (input.requireState !== false && !existsSync(repoContext.context.paths.statePath)) {
+  return openLocalSubmitPreflight(repoContext.context, input);
+};
+
+export const openLocalSubmitPreflight = (
+  context: RepoLocalContext,
+  input: OpenLocalSubmitPreflightInput,
+): LoadLocalSubmitPreflightResult => {
+  if (input.requireState !== false && !existsSync(context.paths.statePath)) {
     return {
       ok: false,
       error: {
         code: "state_store_unavailable",
-        taskPrefix: repoContext.context.taskPrefix,
+        taskPrefix: context.taskPrefix,
       },
     };
   }
@@ -108,7 +117,7 @@ export const loadLocalSubmitPreflight = (
   const validationConfig =
     input.requireState === false
       ? undefined
-      : submitRepoConfig(repoContext.context.config, globalConfig?.config ?? {});
+      : submitRepoConfig(context.config, globalConfig?.config ?? {});
 
   if (validationConfig !== undefined && !validationConfig.ok) {
     return { ok: false, error: validationConfig.error };
@@ -116,23 +125,17 @@ export const loadLocalSubmitPreflight = (
 
   return {
     ok: true,
-    submit: localSubmitPreflight(
-      repoContext.context,
-      input.migrationTimestamp,
-      validationConfig?.config,
-    ),
+    context,
+    submit: localSubmitPreflight(context, validationConfig?.config),
   };
 };
 
 const localSubmitPreflight = (
   context: RepoLocalContext,
-  migrationTimestamp: () => string,
   validationConfig: SubmitRepoConfig | undefined,
 ): LocalSubmitPreflight => {
-  const { taskStore, validationRuns, recordValidationWorkspaceSetup } = openRepoLocalStores(
-    context,
-    migrationTimestamp,
-  );
+  const { taskStore, validationRuns, recordValidationWorkspaceSetup } =
+    openRepoLocalStores(context);
   const taskAuthority = localTaskAuthority({ context, taskStore, validationRuns });
   const submissionEnvironment = localSubmissionEnvironment({ context });
   const submitPreflight = openSubmitPreflight({ taskAuthority, submissionEnvironment });

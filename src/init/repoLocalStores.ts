@@ -48,21 +48,14 @@ export const openChangeCandidateCaptureStores = (input: {
   return {
     ok: true,
     stores: {
-      captureStore: openSqliteChangeCandidateCaptureStore(input),
-      changeStore: openSqliteChangeStore(input),
+      captureStore: openSqliteChangeCandidateCaptureStore(stateValidation.session),
+      changeStore: openSqliteChangeStore(stateValidation.session),
     },
   };
 };
 
-export const openRepoLocalStores = (
-  context: RepoLocalContext,
-  migrationTimestamp: () => string,
-): RepoLocalStores => {
-  const sqliteInput = {
-    statePath: context.paths.statePath,
-    migrationTimestamp,
-    commonDirectory: context.commonDirectory,
-  };
+export const openRepoLocalStores = (context: RepoLocalContext): RepoLocalStores => {
+  const sqliteInput = context.stateDatabase;
 
   const validationRunStore = openSqliteValidationRunStore(sqliteInput);
 

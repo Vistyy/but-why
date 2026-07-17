@@ -46,7 +46,6 @@ export const loadTaskUseCases = (input: LoadTaskUseCasesInput): LoadTaskUseCases
 
   const { taskStore, taskStartStore, validationRunStore } = openRepoLocalStores(
     repoContext.context,
-    input.migrationTimestamp,
   );
 
   return {

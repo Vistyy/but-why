@@ -4,9 +4,10 @@ import { Either, Schema } from "effect";
 
 import { agentProfileSchema, configNameSchema, nonBlankStringSchema } from "./agentConfig.js";
 import { contractDiagnostics, formatContractDiagnostics } from "./contractDiagnostics.js";
+import { taskPrefixPattern } from "./taskPrefix.js";
 import { RepoConfigValidationFailed } from "./configErrors.js";
 
-const taskPrefixSchema = Schema.String.pipe(Schema.pattern(/^[A-Z][A-Z0-9]{1,9}$/u));
+const taskPrefixSchema = Schema.String.pipe(Schema.pattern(taskPrefixPattern));
 const checkIdSchema = Schema.String.pipe(Schema.pattern(/^[a-z0-9][a-z0-9_-]*$/u));
 const timeoutSecondsSchema = Schema.Number.pipe(Schema.int(), Schema.positive());
 export const repoRelativePathSchema = Schema.String.pipe(

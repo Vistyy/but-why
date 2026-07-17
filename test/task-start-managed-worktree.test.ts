@@ -14,12 +14,8 @@ import { afterEach, describe, expect, it } from "vitest";
 import { openRepoLocalStores } from "../src/init/repoLocalStores.js";
 import { loadRepoLocalContext } from "../src/init/repoContext.js";
 import { taskSlugForId, publicTaskId } from "../src/task/taskId.js";
-import {
-  cleanupTempRoots,
-  createGitRepo,
-  createTempRoot,
-  runByInProcess,
-} from "./support/by-cli.js";
+import { cleanupTempRoots, createTempRoot, runByInProcess } from "./support/by-cli.js";
+import { createInitializedRepo } from "./support/initializedRepo.js";
 
 const now = "2026-06-30T12:00:00.000Z";
 
@@ -99,7 +95,7 @@ describe("by task start managed worktree", () => {
     expect(runByInProcess(root, ["task", "start", "BY-1"], now).status).toBe(0);
     const context = loadRepoLocalContext(root, () => now);
     if (!context.ok) throw new Error(`Could not load repository: ${context.error.code}`);
-    const taskStore = openRepoLocalStores(context.context, () => now).taskStore;
+    const taskStore = openRepoLocalStores(context.context).taskStore;
 
     for (const state of ["validating", "ready", "done"] as const) {
       expect(
@@ -182,9 +178,8 @@ describe("by task start managed worktree", () => {
     const context = loadRepoLocalContext(linked, () => now);
     if (!context.ok) throw new Error(`Could not load linked repository: ${context.error.code}`);
     expect(
-      openRepoLocalStores(context.context, () => now).taskStartStore.getByTaskId(
-        publicTaskId("BY-1"),
-      )?.acceptanceContext,
+      openRepoLocalStores(context.context).taskStartStore.getByTaskId(publicTaskId("BY-1"))
+        ?.acceptanceContext,
     ).toEqual({
       version: 1,
       title: "Managed worktree",
@@ -239,7 +234,7 @@ describe("by task start managed worktree", () => {
 
     const context = loadRepoLocalContext(root, () => now);
     if (!context.ok) throw new Error(`Could not load repository: ${context.error.code}`);
-    const start = openRepoLocalStores(context.context, () => now).taskStartStore.getByTaskId(
+    const start = openRepoLocalStores(context.context).taskStartStore.getByTaskId(
       publicTaskId("BY-1"),
     );
     expect(start?.acceptanceContext).toEqual({
@@ -254,9 +249,8 @@ describe("by task start managed worktree", () => {
       1,
     );
     expect(
-      openRepoLocalStores(context.context, () => now).taskStartStore.getByTaskId(
-        publicTaskId("BY-1"),
-      )?.acceptanceContext,
+      openRepoLocalStores(context.context).taskStartStore.getByTaskId(publicTaskId("BY-1"))
+        ?.acceptanceContext,
     ).toEqual(start?.acceptanceContext);
   });
 
@@ -323,12 +317,11 @@ describe("by task start managed worktree", () => {
 });
 
 const initializedRepository = (commitConfig = true): string => {
-  const root = createGitRepo();
+  const root = createInitializedRepo();
   git(root, "config", "user.name", "But Why Test");
   git(root, "config", "user.email", "but-why@example.test");
   git(root, "branch", "-M", "main");
 
-  expect(runByInProcess(root, ["init", "--task-prefix", "BY"], now).status).toBe(0);
   writeFileSync(join(root, "README.md"), "# Test repository\n");
   git(root, "add", "README.md", ".gitignore");
   if (commitConfig) git(root, "add", ".but-why/config.json");
@@ -340,18 +333,16 @@ const initializedRepository = (commitConfig = true): string => {
 };
 
 const createApprovedTask = (root: string): void => {
-  writeFileSync(join(root, "task.md"), "Implement the managed worktree boundary.\n");
-  expect(
-    runByInProcess(root, [
-      "task",
-      "create",
-      "--title",
-      "Managed worktree",
-      "--description-file",
-      "task.md",
-    ]).status,
-  ).toBe(0);
-  expect(runByInProcess(root, ["task", "approve", "BY-1"], now).status).toBe(0);
+  const context = loadRepoLocalContext(root, () => now);
+  if (!context.ok) throw new Error(context.error.code);
+  const store = openRepoLocalStores(context.context).taskStore;
+  const task = store.createTask({
+    title: "Managed worktree",
+    description: "Implement the managed worktree boundary.\n",
+    now,
+  });
+
+  expect(store.approveTask({ taskId: publicTaskId(task.id), now }).ok).toBe(true);
 };
 
 const git = (cwd: string, ...args: readonly string[]): string =>

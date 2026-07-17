@@ -50,7 +50,7 @@ export const loadValidationRunUseCases = (
     };
   }
 
-  const { validationRunStore } = openRepoLocalStores(repoContext.context, input.migrationTimestamp);
+  const { validationRunStore } = openRepoLocalStores(repoContext.context);
 
   return {
     ok: true,

@@ -1,5 +1,5 @@
 import { Effect, Fiber } from "effect";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { createValidationWorkspace as createValidationWorkspaceType } from "../src/validation/createValidationWorkspace.js";
 
@@ -14,6 +14,11 @@ const input = {
 const tempRefName = "refs/but-why/validation-runs/by-1-test.1/validation";
 const expectedWorktreePath =
   "/repo/.sandcastle/worktrees/refs-but-why-validation-runs-by-1-test.1-validation";
+
+afterEach(() => {
+  vi.doUnmock("@ai-hero/sandcastle");
+  vi.resetModules();
+});
 
 describe("Validation Workspace scoped lifecycle", () => {
   it("cleans up a successful workspace in reverse acquisition order", async () => {

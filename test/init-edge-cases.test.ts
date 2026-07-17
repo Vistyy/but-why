@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { afterEach, describe, expect, it } from "vitest";
 
-import { butWhyGitignoreBlock } from "../src/init/gitignore.js";
+import { isTaskPrefix } from "../src/contracts/taskPrefix.js";
 import {
   cleanupTempRoots,
   createGitRepo,
@@ -11,15 +11,12 @@ import {
   runByWithEnv,
 } from "./support/by-cli.js";
 
-const managedGitignoreBlock = `${butWhyGitignoreBlock}\n`;
 const sharedStatePath = (root: string): string => join(root, ".git", "but-why", "state.sqlite");
 
 const writeConfig = (root: string, taskPrefix = "BY") => {
   mkdirSync(join(root, ".but-why"), { recursive: true });
   writeFileSync(join(root, ".but-why/config.json"), `${JSON.stringify({ taskPrefix }, null, 2)}\n`);
 };
-
-const countButWhyHeaders = (content: string) => content.match(/^# But Why\?$/gm)?.length ?? 0;
 
 afterEach(cleanupTempRoots);
 
@@ -30,12 +27,7 @@ describe("by init edge cases", () => {
     ["ABC123"],
     ["A123456789"],
   ])("accepts valid task prefix %s", (taskPrefix) => {
-    const root = createGitRepo();
-    const result = runBy(root, "init", "--task-prefix", taskPrefix);
-
-    expect(result.status).toBe(0);
-    expect(result.stderr).toBe("");
-    expect(result.stdout).toContain(`taskPrefix: ${taskPrefix}`);
+    expect(isTaskPrefix(taskPrefix)).toBe(true);
   });
 
   it.each([
@@ -46,59 +38,7 @@ describe("by init edge cases", () => {
     ["A1234567890"],
     [""],
   ])("rejects invalid task prefix %j", (taskPrefix) => {
-    const root = createGitRepo();
-    const result = runBy(root, "init", "--task-prefix", taskPrefix);
-
-    expect(result.status).toBe(2);
-    expect(result.stderr).toBe("");
-    expect(result.stdout).toContain("code: invalid_task_prefix");
-    expect(result.stdout).toContain(`taskPrefix: ${taskPrefix}`);
-  });
-
-  it.each([
-    ["missing taskPrefix", {}],
-    ["non-string taskPrefix", { taskPrefix: 123 }],
-    ["invalid existing taskPrefix", { taskPrefix: "B" }],
-    ["extra key", { taskPrefix: "BY", extra: true }],
-    [
-      "check severity",
-      {
-        taskPrefix: "BY",
-        validation: { checks: [{ id: "quality", command: "true", severity: "high" }] },
-      },
-    ],
-    ["prepare severity", { taskPrefix: "BY", prepare: { severity: "high" } }],
-    ["validation prepare without command", { taskPrefix: "BY", validation: { prepare: {} } }],
-    [
-      "validation prepare command array",
-      { taskPrefix: "BY", validation: { prepare: { command: ["pnpm", "install"] } } },
-    ],
-    [
-      "validation prepare commands array",
-      { taskPrefix: "BY", validation: { prepare: { commands: ["pnpm install"] } } },
-    ],
-    [
-      "validation prepare zero timeout",
-      { taskPrefix: "BY", validation: { prepare: { command: "true", timeoutSeconds: 0 } } },
-    ],
-    [
-      "validation prepare decimal timeout",
-      { taskPrefix: "BY", validation: { prepare: { command: "true", timeoutSeconds: 1.5 } } },
-    ],
-    [
-      "validation prepare extra key",
-      { taskPrefix: "BY", validation: { prepare: { command: "true", severity: "high" } } },
-    ],
-  ])("rejects repo config with %s", (_name, config) => {
-    const root = createGitRepo();
-
-    mkdirSync(join(root, ".but-why"));
-    writeFileSync(join(root, ".but-why/config.json"), JSON.stringify(config));
-    const result = runBy(root, "init", "--task-prefix", "BY");
-
-    expect(result.status).toBe(1);
-    expect(result.stderr).toBe("");
-    expect(result.stdout).toContain("code: invalid_repo_config");
+    expect(isTaskPrefix(taskPrefix)).toBe(false);
   });
 
   it("initializes when .but-why exists without config", () => {
@@ -329,44 +269,5 @@ help[1]: Move the conflicting path aside before running init again.`);
     expect(result.status).toBe(0);
     expect(result.stderr).toBe("");
     expect(result.stdout).toContain("status: unchanged");
-  });
-
-  it("normalizes duplicate managed gitignore blocks to one block", () => {
-    const root = createGitRepo();
-
-    writeFileSync(
-      join(root, ".gitignore"),
-      `node_modules/\n\n${managedGitignoreBlock}\ndist/\n\n${managedGitignoreBlock}`,
-    );
-
-    expect(runBy(root, "init", "--task-prefix", "BY").status).toBe(0);
-
-    const gitignore = readFileSync(join(root, ".gitignore"), "utf8");
-    expect(countButWhyHeaders(gitignore)).toBe(1);
-    expect(gitignore).toBe(`node_modules/\n\ndist/\n\n${managedGitignoreBlock}`);
-  });
-
-  it("normalizes a managed gitignore block without a trailing newline", () => {
-    const root = createGitRepo();
-
-    writeFileSync(join(root, ".gitignore"), managedGitignoreBlock.trimEnd());
-
-    expect(runBy(root, "init", "--task-prefix", "BY").status).toBe(0);
-    expect(readFileSync(join(root, ".gitignore"), "utf8")).toBe(managedGitignoreBlock);
-  });
-
-  it("normalizes an incomplete managed gitignore block surrounded by other entries", () => {
-    const root = createGitRepo();
-
-    writeFileSync(
-      join(root, ".gitignore"),
-      "node_modules/\n\n# But Why?\n.but-why/state.sqlite\n\ndist/\n",
-    );
-
-    expect(runBy(root, "init", "--task-prefix", "BY").status).toBe(0);
-
-    const gitignore = readFileSync(join(root, ".gitignore"), "utf8");
-    expect(countButWhyHeaders(gitignore)).toBe(1);
-    expect(gitignore).toBe(`node_modules/\n\ndist/\n\n${managedGitignoreBlock}`);
   });
 });

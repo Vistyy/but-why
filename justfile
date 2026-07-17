@@ -6,12 +6,29 @@ default:
 
 # Run all quality checks.
 quality:
-    just format-check
-    just lint
-    just ast-grep-check
-    just typecheck
-    just test
-    just fallow-check
+    #!/usr/bin/env bash
+    set -uo pipefail
+    just quality-static & static_pid=$!
+    just test & test_pid=$!
+    status=0
+    wait "$static_pid" || status=1
+    wait "$test_pid" || status=1
+    exit "$status"
+
+# Run independent static checks in parallel.
+quality-static:
+    #!/usr/bin/env bash
+    set -uo pipefail
+    just format-check & format_pid=$!
+    just lint & lint_pid=$!
+    just ast-grep-check & ast_grep_pid=$!
+    just typecheck & typecheck_pid=$!
+    just fallow-check & fallow_pid=$!
+    status=0
+    for pid in "$format_pid" "$lint_pid" "$ast_grep_pid" "$typecheck_pid" "$fallow_pid"; do
+        wait "$pid" || status=1
+    done
+    exit "$status"
 
 # Check structural code rules.
 ast-grep-check:

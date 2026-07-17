@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { repoStateLoadError, runtimeError, success, usageError } from "../src/cliResults.js";
 import { decodeReviewerOutputContract } from "../src/contracts/reviewerOutput.js";
 import type { GitHubPrTarget } from "../src/validationRun/validationRun.js";
+import { prepareStateDatabaseSession } from "../src/init/stateDatabase.js";
 import { openSqliteValidationRunStore } from "../src/sqlite/sqliteValidationRunStore.js";
 import { openSqliteTaskStore } from "../src/sqlite/sqliteTaskStore.js";
 import { openSqliteValidationRuns } from "../src/sqlite/sqliteValidationRuns.js";
@@ -42,7 +43,8 @@ import {
 import { unsupportedValidationRuns } from "../src/validation/validationRuns.js";
 import { loadLocalSubmitPreflight } from "../src/localSubmit/submitPreflight.js";
 import { publicTaskId } from "../src/task/taskId.js";
-import { cleanupTempRoots, createGitRepo, runByInProcess } from "./support/by-cli.js";
+import { cleanupTempRoots } from "./support/by-cli.js";
+import { createInitializedRepo } from "./support/initializedRepo.js";
 
 const firstNow = "2026-06-30T12:00:00.000Z";
 const secondNow = "2026-06-30T12:05:00.000Z";
@@ -614,11 +616,8 @@ describe("module seams", () => {
 });
 
 const initializedRepo = (): string => {
-  const root = createGitRepo();
-  const result = runByInProcess(root, ["init", "--task-prefix", "BY"]);
+  const root = createInitializedRepo();
 
-  expect(result.status).toBe(0);
-  expect(result.stderr).toBe("");
   writeFileSync(
     join(root, ".but-why/config.json"),
     `${JSON.stringify(
@@ -633,21 +632,16 @@ const initializedRepo = (): string => {
 
 const sharedStatePath = (root: string): string => join(root, ".git", "but-why", "state.sqlite");
 
-const sqliteTaskStore = (root: string) =>
-  openSqliteTaskStore({
+const stateDatabase = (root: string) =>
+  prepareStateDatabaseSession({
     statePath: sharedStatePath(root),
-    taskPrefix: "BY",
     migrationTimestamp: () => firstNow,
   });
+
+const sqliteTaskStore = (root: string) =>
+  openSqliteTaskStore({ ...stateDatabase(root), taskPrefix: "BY" });
 
 const sqliteValidationRunStore = (root: string) =>
-  openSqliteValidationRunStore({
-    statePath: sharedStatePath(root),
-    migrationTimestamp: () => firstNow,
-  });
+  openSqliteValidationRunStore(stateDatabase(root));
 
-const sqliteValidationRuns = (root: string) =>
-  openSqliteValidationRuns({
-    statePath: sharedStatePath(root),
-    migrationTimestamp: () => firstNow,
-  });
+const sqliteValidationRuns = (root: string) => openSqliteValidationRuns(stateDatabase(root));

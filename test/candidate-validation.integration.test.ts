@@ -6,8 +6,10 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import { captureLocalCandidate } from "../src/changeCandidateCapture/captureLocalCandidate.js";
 import { openCandidateValidation } from "../src/candidateValidation/validateCandidate.js";
+import { prepareStateDatabaseSession } from "../src/init/stateDatabase.js";
 import { openSqliteCandidateValidationRunStore } from "../src/sqlite/sqliteCandidateValidationRunStore.js";
-import { cleanupTempRoots, createGitRepo, runByInProcessArgs as runBy } from "./support/by-cli.js";
+import { cleanupTempRoots } from "./support/by-cli.js";
+import { createInitializedRepo } from "./support/initializedRepo.js";
 
 const now = "2026-07-15T10:00:00.000Z";
 
@@ -178,7 +180,7 @@ describe("Candidate validation", () => {
 });
 
 const candidateReadyRepo = (): string => {
-  const root = createGitRepo();
+  const root = createInitializedRepo();
   git(root, "config", "user.email", "test@example.com");
   git(root, "config", "user.name", "Test User");
   git(root, "checkout", "-b", "main");
@@ -186,7 +188,6 @@ const candidateReadyRepo = (): string => {
   git(root, "remote", "add", "origin", "https://example.com/origin.git");
   git(root, "update-ref", "refs/remotes/origin/main", "refs/heads/main");
   git(root, "symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/main");
-  expect(runBy(root, "init", "--task-prefix", "BY").status).toBe(0);
   git(root, "add", ".gitignore", ".but-why/config.json");
   git(root, "commit", "-m", "initialize but why");
   git(root, "checkout", "-b", "feature");
@@ -203,7 +204,8 @@ const git = (cwd: string, ...args: readonly string[]): string => {
 const commonDirectory = (root: string): string =>
   git(root, "rev-parse", "--path-format=absolute", "--git-common-dir");
 
-const sqliteInput = (root: string) => ({
-  statePath: join(commonDirectory(root), "but-why", "state.sqlite"),
-  migrationTimestamp: () => now,
-});
+const sqliteInput = (root: string) =>
+  prepareStateDatabaseSession({
+    statePath: join(commonDirectory(root), "but-why", "state.sqlite"),
+    migrationTimestamp: () => now,
+  });

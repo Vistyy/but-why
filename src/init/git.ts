@@ -12,23 +12,30 @@ export type GitRootResult =
     };
 
 export const findGitRoot = (cwd: string): GitRootResult => {
-  const root = gitPath(cwd, ["rev-parse", "--path-format=absolute", "--show-toplevel"]);
-  const commonDirectory = gitPath(cwd, ["rev-parse", "--path-format=absolute", "--git-common-dir"]);
+  const result = spawnSync(
+    "git",
+    ["rev-parse", "--path-format=absolute", "--show-toplevel", "--git-common-dir"],
+    {
+      cwd,
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+    },
+  );
 
-  if (root === undefined || commonDirectory === undefined) {
+  if (result.status !== 0) {
+    return { ok: false };
+  }
+
+  const [root, commonDirectory] = result.stdout.trim().split("\n");
+
+  if (
+    root === undefined ||
+    root.length === 0 ||
+    commonDirectory === undefined ||
+    commonDirectory.length === 0
+  ) {
     return { ok: false };
   }
 
   return { ok: true, root, commonDirectory: realpathSync(commonDirectory) };
-};
-
-const gitPath = (cwd: string, args: readonly string[]): string | undefined => {
-  const result = spawnSync("git", args, {
-    cwd,
-    encoding: "utf8",
-    stdio: ["ignore", "pipe", "ignore"],
-  });
-  const path = result.stdout.trim();
-
-  return result.status === 0 && path.length > 0 ? path : undefined;
 };

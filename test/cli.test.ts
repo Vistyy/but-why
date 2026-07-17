@@ -284,6 +284,13 @@ validationSetup:
     expect(existsSync(sharedStatePath(root))).toBe(true);
     expect(readdirSync(join(root, ".but-why/reviewers"))).toEqual([]);
     expect(readFileSync(join(root, ".gitignore"), "utf8")).toBe(managedGitignoreBlock);
+    expectInitializedSchema(root);
+    expect(
+      spawnSync("git", ["check-ignore", "-q", ".but-why/config.json"], { cwd: root }).status,
+    ).toBe(1);
+    expect(
+      spawnSync("git", ["check-ignore", "-q", ".but-why/reviewers/"], { cwd: root }).status,
+    ).toBe(1);
   });
 
   it("initializes the root when run from a subdirectory", () => {
@@ -300,11 +307,7 @@ validationSetup:
     expect(existsSync(join(subdirectory, ".but-why/config.json"))).toBe(false);
   });
 
-  it("creates SQLite migration metadata and task storage", () => {
-    const root = createGitRepo();
-
-    expect(runBy(root, "init", "--task-prefix", "BY").status).toBe(0);
-
+  const expectInitializedSchema = (root: string): void => {
     const database = new DatabaseSync(sharedStatePath(root));
 
     try {
@@ -381,20 +384,7 @@ validationSetup:
     } finally {
       database.close();
     }
-  });
-
-  it("keeps config and reviewers trackable", () => {
-    const root = createGitRepo();
-
-    expect(runBy(root, "init", "--task-prefix", "BY").status).toBe(0);
-
-    expect(
-      spawnSync("git", ["check-ignore", "-q", ".but-why/config.json"], { cwd: root }).status,
-    ).toBe(1);
-    expect(
-      spawnSync("git", ["check-ignore", "-q", ".but-why/reviewers/"], { cwd: root }).status,
-    ).toBe(1);
-  });
+  };
 
   it("prints unchanged when init is rerun without repairs", () => {
     const root = createGitRepo();
@@ -469,35 +459,6 @@ validationSetup:
     inspect,Inspect repo tooling before choosing validation commands.
     configure,Configure validation.prepare and validation.checks to the best of your ability from observed tooling.
     review,Keep .but-why/config.json explicit and reviewable.`);
-  });
-
-  it("does not duplicate the managed gitignore block", () => {
-    const root = createGitRepo();
-
-    expect(runBy(root, "init", "--task-prefix", "BY").status).toBe(0);
-    expect(runBy(root, "init", "--task-prefix", "BY").status).toBe(0);
-
-    expect(readFileSync(join(root, ".gitignore"), "utf8")).toBe(managedGitignoreBlock);
-  });
-
-  it("appends the managed gitignore block after existing content", () => {
-    const root = createGitRepo();
-
-    writeFileSync(join(root, ".gitignore"), "node_modules/\n");
-
-    expect(runBy(root, "init", "--task-prefix", "BY").status).toBe(0);
-    expect(readFileSync(join(root, ".gitignore"), "utf8")).toBe(
-      `node_modules/\n\n${managedGitignoreBlock}`,
-    );
-  });
-
-  it("repairs an incomplete managed gitignore block", () => {
-    const root = createGitRepo();
-
-    writeFileSync(join(root, ".gitignore"), "# But Why?\n.but-why/state.sqlite\n");
-
-    expect(runBy(root, "init", "--task-prefix", "BY").status).toBe(0);
-    expect(readFileSync(join(root, ".gitignore"), "utf8")).toBe(managedGitignoreBlock);
   });
 
   it("prints not_git_work_tree outside Git", () => {

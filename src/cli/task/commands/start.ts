@@ -4,6 +4,7 @@ import { withGlobalHelpFlags } from "../../../cliHelp.js";
 import type { TaskState } from "../../../task/lifecycle.js";
 import type { PublicTaskId } from "../../../task/taskId.js";
 import { resolveTaskIdArg, taskNotFound, type TaskCommandEnvironment } from "../taskCliSupport.js";
+import { taskStartStateHelpFor } from "../taskStateHelp.js";
 
 export const runStartCommand = (
   args: readonly string[],
@@ -79,22 +80,8 @@ const invalidTaskStart = (taskId: PublicTaskId, state: TaskState): CliResult =>
     code: "invalid_task_state",
     message: `Cannot start task ${taskId} from state ${state}`,
     details: { taskId, state },
-    help: [invalidTaskStartHelp(taskId, state)],
+    help: [taskStartStateHelpFor(taskId, state)],
   });
-
-const invalidTaskStartHelpByState = {
-  new: (taskId: PublicTaskId) => `Approve the Task first with by task approve ${taskId}.`,
-  todo: () => "Run the Task Start command again.",
-  implementing: () => "Use the existing Task Start binding or inspect the Task state.",
-  validating: () => "Wait for validation to finish.",
-  needs_input: (taskId: PublicTaskId) =>
-    `Address findings or add Task Context, then run by submit ${taskId}.`,
-  ready: () => "Review and merge the pull request.",
-  done: () => "Task is already done.",
-} satisfies Record<TaskState, (taskId: PublicTaskId) => string>;
-
-const invalidTaskStartHelp = (taskId: PublicTaskId, state: TaskState): string =>
-  invalidTaskStartHelpByState[state](taskId);
 
 const taskStartOperationalError = (
   taskId: PublicTaskId,

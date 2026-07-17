@@ -12,6 +12,7 @@ import type { TaskUseCases } from "../../task/taskUseCases.js";
 export type TaskCommandEnvironment = {
   readonly cwd: string;
   readonly now: () => Date;
+  readonly taskUseCases?: TaskUseCases;
 };
 
 export type TasksLoadResult =
@@ -28,6 +29,10 @@ export const loadTasks = (
   environment: TaskCommandEnvironment,
   requireState: boolean,
 ): TasksLoadResult => {
+  if (environment.taskUseCases !== undefined) {
+    return { ok: true, tasks: environment.taskUseCases };
+  }
+
   const result = loadTaskUseCases({
     cwd: environment.cwd,
     requireState,

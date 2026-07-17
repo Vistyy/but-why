@@ -147,6 +147,54 @@ describe("configuration contracts", () => {
   });
 });
 
+describe("repository configuration rejection matrix", () => {
+  it.each([
+    ["missing taskPrefix", {}],
+    ["non-string taskPrefix", { taskPrefix: 123 }],
+    ["invalid existing taskPrefix", { taskPrefix: "B" }],
+    ["extra key", { taskPrefix: "BY", extra: true }],
+    ["top-level checks", { taskPrefix: "BY", checks: [{ id: "quality", command: "true" }] }],
+    [
+      "check severity",
+      {
+        taskPrefix: "BY",
+        validation: { checks: [{ id: "quality", command: "true", severity: "high" }] },
+      },
+    ],
+    ["prepare severity", { taskPrefix: "BY", prepare: { severity: "high" } }],
+    ["validation prepare without command", { taskPrefix: "BY", validation: { prepare: {} } }],
+    [
+      "validation prepare empty command",
+      { taskPrefix: "BY", validation: { prepare: { command: "   " } } },
+    ],
+    [
+      "validation prepare command array",
+      { taskPrefix: "BY", validation: { prepare: { command: ["pnpm", "install"] } } },
+    ],
+    [
+      "validation prepare commands array",
+      { taskPrefix: "BY", validation: { prepare: { commands: ["pnpm install"] } } },
+    ],
+    [
+      "validation prepare zero timeout",
+      { taskPrefix: "BY", validation: { prepare: { command: "true", timeoutSeconds: 0 } } },
+    ],
+    [
+      "validation prepare decimal timeout",
+      { taskPrefix: "BY", validation: { prepare: { command: "true", timeoutSeconds: 1.5 } } },
+    ],
+    [
+      "validation prepare extra key",
+      { taskPrefix: "BY", validation: { prepare: { command: "true", severity: "high" } } },
+    ],
+  ])("rejects repo config with %s", (_name, input) => {
+    const error = left(decodeRepoConfig(input));
+
+    expect(error._tag).toBe("RepoConfigValidationFailed");
+    expect(error.diagnostics.length).toBeGreaterThan(0);
+  });
+});
+
 const right = <A, E>(result: Either.Either<A, E>): A => {
   if (Either.isLeft(result)) {
     throw new Error(`Expected Right, received ${String(result.left)}`);

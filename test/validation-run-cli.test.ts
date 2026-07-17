@@ -1,17 +1,14 @@
-import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
+import { prepareStateDatabaseSession } from "../src/init/stateDatabase.js";
+import { openSqliteTaskStore } from "../src/sqlite/sqliteTaskStore.js";
 import { openSqliteValidationRunStore } from "../src/sqlite/sqliteValidationRunStore.js";
 import { openSqliteValidationRuns } from "../src/sqlite/sqliteValidationRuns.js";
 import { publicTaskId } from "../src/task/taskId.js";
 import type { RecordValidationRunCheckRoundInput } from "../src/validationRun/validationRunStore.js";
-import {
-  cleanupTempRoots,
-  commitButWhyConfigAndRecordDefault,
-  createGitRepo,
-  runByInProcess,
-} from "./support/by-cli.js";
+import { cleanupTempRoots, runByInProcess } from "./support/by-cli.js";
+import { createInitializedRepo } from "./support/initializedRepo.js";
 
 const firstNow = "2026-06-30T12:00:00.000Z";
 const secondNow = "2026-06-30T12:05:00.000Z";
@@ -246,36 +243,21 @@ describe("Validation Run inspection CLI", () => {
   });
 });
 
-const initializedRepo = (): string => {
-  const root = createGitRepo();
-
-  expect(runByInProcess(root, ["init", "--task-prefix", "BY"])).toMatchObject({
-    status: 0,
-    stderr: "",
-  });
-  commitButWhyConfigAndRecordDefault(root);
-
-  return root;
-};
+const initializedRepo = (): string => createInitializedRepo();
 
 const createTask = (root: string, title: string): void => {
-  const descriptionPath = join(root, "task-description.md");
-
-  writeFileSync(descriptionPath, `Description for ${title}`);
-  expect(
-    runByInProcess(
-      root,
-      ["task", "create", "--title", title, "--description-file", descriptionPath],
-      firstNow,
-    ),
-  ).toMatchObject({ status: 0 });
+  taskStore(root).createTask({ title, description: `Description for ${title}`, now: firstNow });
 };
 
 const startTask = (root: string, id: string, now: string): void => {
-  expect(runByInProcess(root, ["task", "approve", id], now).status).toBe(0);
-  const result = runByInProcess(root, ["task", "start", id], now);
+  const store = taskStore(root);
+  const taskId = publicTaskId(id);
 
-  expect(result.status).toBe(0);
+  expect(store.approveTask({ taskId, now }).ok).toBe(true);
+  expect(store.transitionTaskState({ taskId, to: "implementing", now })).toMatchObject({
+    ok: true,
+    changed: true,
+  });
 };
 
 const startValidationRun = (
@@ -368,14 +350,15 @@ const recordToolingFailure = (root: string, validationRunId: string, now: string
 
 const sharedStatePath = (root: string): string => join(root, ".git", "but-why", "state.sqlite");
 
-const validationRuns = (root: string) =>
-  openSqliteValidationRuns({
+const stateDatabase = (root: string) =>
+  prepareStateDatabaseSession({
     statePath: sharedStatePath(root),
     migrationTimestamp: () => firstNow,
   });
 
-const validationRunsStore = (root: string) =>
-  openSqliteValidationRunStore({
-    statePath: sharedStatePath(root),
-    migrationTimestamp: () => firstNow,
-  });
+const taskStore = (root: string) =>
+  openSqliteTaskStore({ ...stateDatabase(root), taskPrefix: "BY" });
+
+const validationRuns = (root: string) => openSqliteValidationRuns(stateDatabase(root));
+
+const validationRunsStore = (root: string) => openSqliteValidationRunStore(stateDatabase(root));

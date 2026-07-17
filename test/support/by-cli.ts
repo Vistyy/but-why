@@ -7,7 +7,9 @@ import { fileURLToPath } from "node:url";
 import { expect } from "vitest";
 
 import { runCli, type CliResult } from "../../src/cli.js";
+import type { LocalSubmitPreflight } from "../../src/localSubmit/submitPreflight.js";
 import { serializeOutput } from "../../src/output/serialize.js";
+import type { TaskUseCases } from "../../src/task/taskUseCases.js";
 
 export const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 export const byExecutable = join(repoRoot, "bin/by");
@@ -53,6 +55,12 @@ type InProcessCliResult = {
   readonly stderr: string;
 };
 
+type InProcessCliOptions = {
+  readonly globalConfigPath?: string;
+  readonly taskUseCases?: TaskUseCases;
+  readonly submitPreflight?: LocalSubmitPreflight;
+};
+
 const cliResultToInProcessResult = (result: CliResult): InProcessCliResult => ({
   status: result.exitCode,
   stdout: serializeOutput(result.stdout, result.outputFormat ?? "toon"),
@@ -63,14 +71,19 @@ export const runByInProcess = (
   cwd: string,
   args: readonly string[],
   now = "2026-06-30T12:00:00.000Z",
+  options: InProcessCliOptions = {},
 ): InProcessCliResult =>
   cliResultToInProcessResult(
     Effect.runSync(
       runCli(args, {
         executablePath: byExecutable,
         cwd,
-        globalConfigPath: join(cwd, ".test-global-config.json"),
+        globalConfigPath: options.globalConfigPath ?? join(cwd, ".test-global-config.json"),
         now: () => new Date(now),
+        ...(options.taskUseCases === undefined ? {} : { taskUseCases: options.taskUseCases }),
+        ...(options.submitPreflight === undefined
+          ? {}
+          : { submitPreflight: options.submitPreflight }),
       }),
     ),
   );
@@ -79,14 +92,19 @@ export const runByInProcessAsync = async (
   cwd: string,
   args: readonly string[],
   now = "2026-06-30T12:00:00.000Z",
+  options: InProcessCliOptions = {},
 ): Promise<InProcessCliResult> =>
   cliResultToInProcessResult(
     await Effect.runPromise(
       runCli(args, {
         executablePath: byExecutable,
         cwd,
-        globalConfigPath: join(cwd, ".test-global-config.json"),
+        globalConfigPath: options.globalConfigPath ?? join(cwd, ".test-global-config.json"),
         now: () => new Date(now),
+        ...(options.taskUseCases === undefined ? {} : { taskUseCases: options.taskUseCases }),
+        ...(options.submitPreflight === undefined
+          ? {}
+          : { submitPreflight: options.submitPreflight }),
       }),
     ),
   );

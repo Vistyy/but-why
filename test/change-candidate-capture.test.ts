@@ -6,13 +6,10 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import { captureLocalCandidate } from "../src/changeCandidateCapture/captureLocalCandidate.js";
 import { openSqliteCandidateStore } from "../src/sqlite/sqliteCandidateStore.js";
+import { prepareStateDatabaseSession } from "../src/init/stateDatabase.js";
 import { openSqliteChangeStore } from "../src/sqlite/sqliteChangeStore.js";
-import {
-  cleanupTempRoots,
-  createGitRepo,
-  createTempRoot,
-  runByInProcessArgs as runBy,
-} from "./support/by-cli.js";
+import { cleanupTempRoots, createGitRepo, createTempRoot } from "./support/by-cli.js";
+import { createInitializedRepo } from "./support/initializedRepo.js";
 
 const now = "2026-07-12T10:00:00.000Z";
 
@@ -350,7 +347,7 @@ describe("automatic Change and Candidate capture", () => {
 });
 
 const captureReadyRepo = (): string => {
-  const root = createGitRepo();
+  const root = createInitializedRepo();
   git(root, "config", "user.email", "test@example.com");
   git(root, "config", "user.name", "Test User");
   git(root, "checkout", "-b", "main");
@@ -360,7 +357,6 @@ const captureReadyRepo = (): string => {
   git(root, "remote", "add", "origin", "https://example.com/origin.git");
   git(root, "update-ref", "refs/remotes/origin/main", "refs/heads/main");
   git(root, "symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/main");
-  expect(runBy(root, "init", "--task-prefix", "BY").status).toBe(0);
   git(root, "add", ".gitignore", ".but-why/config.json");
   git(root, "commit", "-m", "initialize but why");
   git(root, "checkout", "-b", "feature");
@@ -375,10 +371,11 @@ const git = (cwd: string, ...args: readonly string[]): string => {
   return result.stdout.trim();
 };
 
-const sqliteInput = (root: string) => ({
-  statePath: join(commonDirectory(root), "but-why", "state.sqlite"),
-  migrationTimestamp: () => now,
-});
+const sqliteInput = (root: string) =>
+  prepareStateDatabaseSession({
+    statePath: join(commonDirectory(root), "but-why", "state.sqlite"),
+    migrationTimestamp: () => now,
+  });
 
 const changeStore = (root: string) => openSqliteChangeStore(sqliteInput(root));
 

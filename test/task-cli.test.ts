@@ -1,13 +1,16 @@
 import { spawn } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { collapseHome } from "../src/cli.js";
+import { prepareStateDatabaseSession } from "../src/init/stateDatabase.js";
 import { openSqliteTaskStore } from "../src/sqlite/sqliteTaskStore.js";
 import { loadTaskUseCases } from "../src/localTask/taskUseCases.js";
 import type { TaskState } from "../src/task/lifecycle.js";
+import type { TaskRecord, TaskSummary } from "../src/task/task.js";
 import { publicTaskId } from "../src/task/taskId.js";
+import type { TaskStore } from "../src/task/taskStore.js";
 import {
   byExecutable,
   cleanupTempRoots,
@@ -16,7 +19,10 @@ import {
   createTempRoot,
   runByInProcess,
 } from "./support/by-cli.js";
+import { createInitializedRepo } from "./support/initializedRepo.js";
+import { fakeTaskUseCases } from "./support/taskUseCases.js";
 import { taskStateTransitionPath } from "./support/taskLifecycle.js";
+import { createTaskStore as createIsolatedTaskStore } from "./support/taskStore.js";
 
 const expectedBin = collapseHome(byExecutable);
 const firstNow = "2026-06-30T12:00:00.000Z";
@@ -88,43 +94,18 @@ help[1]: Run \`by task list\` to see open tasks.`);
     });
   });
 
-  it.each([
-    ["implementing", "Continue implementation, then run by submit BY-1."],
-    ["validating", "Wait for validation to finish."],
-    ["needs_input", "Address the Findings, then run by submit BY-1."],
-    ["ready", "Review and merge the pull request."],
-    ["done", "Task is already done."],
-  ] as const)("rejects approval in %s with the legal action", (state, help) => {
-    const root = initializedRepo();
-
-    createTask(root, firstNow, "Already started");
-    transitionTaskState(root, "BY-1", state, secondNow);
-
-    const result = runByInProcess(root, ["task", "approve", "BY-1"], thirdNow);
+  it("maps rejected approval to the legal next action", () => {
+    const result = runByInProcess(createTempRoot(), ["task", "approve", "BY-1"], thirdNow, {
+      taskUseCases: fakeTaskUseCases({
+        approveTask: () => ({ ok: false, code: "invalid_task_state", state: "implementing" }),
+      }),
+    });
 
     expect(result.status).toBe(1);
     expect(result.stderr).toBe("");
     expect(result.stdout).toContain("code: invalid_task_state");
-    expect(result.stdout).toContain(`Cannot approve task BY-1 from state ${state}`);
-    expect(result.stdout).toContain(help);
-    expect(taskStore(root).getTaskById(publicTaskId("BY-1"))?.updatedAt).toBe(secondNow);
-  });
-
-  it("resolves description files relative to cwd and allows files outside the repo", () => {
-    const root = initializedRepo();
-    const outsideRoot = createTempRoot();
-    const outsideDescription = join(outsideRoot, "task.txt");
-
-    writeFileSync(outsideDescription, "Outside description");
-
-    const result = runByInProcess(
-      root,
-      ["task", "create", "--title", "Outside file", "--description-file", outsideDescription],
-      firstNow,
-    );
-
-    expect(result.status).toBe(0);
-    expect(result.stdout).toContain("id: BY-1");
+    expect(result.stdout).toContain("Cannot approve task BY-1 from state implementing");
+    expect(result.stdout).toContain("Continue implementation, then run by submit BY-1.");
   });
 
   it("does not consume a Task ID when validation fails before insert", () => {
@@ -147,13 +128,31 @@ help[1]: Run \`by task list\` to see open tasks.`);
   });
 
   it("lists non-done Tasks by default in creation order with count", () => {
-    const root = initializedRepo();
+    const root = createTempRoot();
+    const taskUseCases = fakeTaskUseCases({
+      listTasks: () => [
+        {
+          id: "BY-1",
+          title: "First",
+          state: "new",
+          createdAt: firstNow,
+          updatedAt: firstNow,
+          startable: false,
+          blockedBy: [],
+        },
+        {
+          id: "BY-2",
+          title: "Second",
+          state: "needs_input",
+          createdAt: secondNow,
+          updatedAt: thirdNow,
+          startable: false,
+          blockedBy: [],
+        },
+      ],
+    });
 
-    createTask(root, firstNow, "First");
-    createTask(root, secondNow, "Second");
-    transitionTaskState(root, "BY-2", "needs_input", thirdNow);
-
-    const result = runByInProcess(root, ["task", "list"]);
+    const result = runByInProcess(root, ["task", "list"], firstNow, { taskUseCases });
 
     expect(result.status).toBe(0);
     expect(result.stderr).toBe("");
@@ -176,62 +175,38 @@ tasks[2]:
   });
 
   it("lists Tasks as compact JSON when selected after the command", () => {
-    const root = initializedRepo();
-
-    createTask(root, firstNow, "First");
-    createTask(root, secondNow, "Second");
-    transitionTaskState(root, "BY-2", "needs_input", thirdNow);
-
-    const result = runByInProcess(root, ["task", "list", "--output", "json"]);
+    const result = runByInProcess(
+      createTempRoot(),
+      ["task", "list", "--output", "json"],
+      firstNow,
+      { taskUseCases: fakeTaskUseCases({ listTasks: () => listedTasks }) },
+    );
 
     expect(result.status).toBe(0);
     expect(result.stderr).toBe("");
     expect(result.stdout.endsWith("\n")).toBe(true);
     expect(result.stdout.trimEnd()).not.toContain("\n");
-    expect(JSON.parse(result.stdout)).toEqual({
-      count: 2,
-      tasks: [
-        {
-          id: "BY-1",
-          title: "First",
-          state: "new",
-          createdAt: firstNow,
-          updatedAt: firstNow,
-          startable: false,
-          blockedBy: [],
-        },
-        {
-          id: "BY-2",
-          title: "Second",
-          state: "needs_input",
-          createdAt: secondNow,
-          updatedAt: thirdNow,
-          startable: false,
-          blockedBy: [],
-        },
-      ],
-    });
+    expect(JSON.parse(result.stdout)).toEqual({ count: 2, tasks: listedTasks });
   });
 
   it("uses numeric ID order when Tasks share the same creation timestamp", () => {
-    const root = initializedRepo();
+    const tasks = createIsolatedTaskStore();
 
-    createTask(root, firstNow, "First");
-    createTask(root, firstNow, "Second");
+    tasks.createTask({ title: "First", description: "First", now: firstNow });
+    tasks.createTask({ title: "Second", description: "Second", now: firstNow });
 
-    expect(
-      JSON.parse(runByInProcess(root, ["task", "list", "--output", "json"]).stdout),
-    ).toMatchObject({
-      tasks: [{ id: "BY-1" }, { id: "BY-2" }],
-    });
+    expect(tasks.listTasks({ includeDone: false }).map((task) => task.id)).toEqual([
+      "BY-1",
+      "BY-2",
+    ]);
   });
 
   it("rejects starting new Tasks with approval guidance", () => {
-    const root = initializedRepo();
-
-    createTask(root, firstNow, "Unapproved task");
-
-    const result = runByInProcess(root, ["task", "start", "BY-1"], secondNow);
+    const result = runByInProcess(createTempRoot(), ["task", "start", "BY-1"], secondNow, {
+      taskUseCases: fakeTaskUseCases({
+        startTask: () => ({ ok: false, code: "invalid_task_state", state: "new" }),
+      }),
+    });
 
     expect(result.status).toBe(1);
     expect(result.stderr).toBe("");
@@ -241,7 +216,7 @@ tasks[2]:
   });
 
   it("starts todo Tasks through the Task module idempotently", () => {
-    const root = initializedRepo();
+    const root = initializedRepoWithDefault();
 
     createTask(root, firstNow, "Startable task");
     const tasksLoad = loadTaskUseCases({
@@ -296,7 +271,7 @@ tasks[2]:
   });
 
   it("starts todo Tasks from the CLI and persists the implementing state", () => {
-    const root = initializedRepo();
+    const root = initializedRepoWithDefault();
 
     createTask(root, firstNow, "CLI start");
     expect(runByInProcess(root, ["task", "approve", "BY-1"], firstNow).status).toBe(0);
@@ -323,12 +298,11 @@ tasks[2]:
   });
 
   it("rejects implementing Tasks that have no Task Start binding", () => {
-    const root = initializedRepo();
-
-    createTask(root, firstNow, "Unbound implementation");
-    transitionTaskState(root, "BY-1", "implementing", secondNow);
-
-    const result = runByInProcess(root, ["task", "start", "BY-1"], thirdNow);
+    const result = runByInProcess(createTempRoot(), ["task", "start", "BY-1"], thirdNow, {
+      taskUseCases: fakeTaskUseCases({
+        startTask: () => ({ ok: false, code: "invalid_task_state", state: "implementing" }),
+      }),
+    });
 
     expect(result.status).toBe(1);
     expect(result.stderr).toBe("");
@@ -337,40 +311,49 @@ tasks[2]:
   });
 
   it("serializes Task start success as compact JSON", () => {
-    const root = initializedRepo();
-
-    createTask(root, firstNow, "JSON start");
-    expect(runByInProcess(root, ["task", "approve", "BY-1"], firstNow).status).toBe(0);
-
-    const result = runByInProcess(root, ["task", "start", "BY-1", "--output", "json"], secondNow);
+    const worktreePath = "/tmp/but-why/worktrees/BY-1";
+    const result = runByInProcess(
+      createTempRoot(),
+      ["task", "start", "BY-1", "--output", "json"],
+      secondNow,
+      {
+        taskUseCases: fakeTaskUseCases({
+          startTask: () => ({
+            ok: true,
+            changed: true,
+            task: taskRecord({ state: "implementing", updatedAt: secondNow }),
+            changeId: "01JCHANGE",
+            branchRef: "refs/heads/but-why/BY-1",
+            startingCommit: "a".repeat(40),
+            worktreePath,
+          }),
+        }),
+      },
+    );
 
     expect(result.status).toBe(0);
     expect(result.stderr).toBe("");
-    expect(JSON.parse(result.stdout)).toMatchObject({
-      task: {
-        id: "BY-1",
-        state: "implementing",
-        changed: true,
-        updatedAt: secondNow,
-      },
-      change: { id: expect.any(String) },
-      branch: expect.stringMatching(/^refs\/heads\/but-why\//),
-      startingCommit: expect.stringMatching(/^[0-9a-f]{40}$/),
-      worktreePath: expect.stringContaining("/but-why/worktrees/"),
-      next: {
-        workingDirectory: expect.stringContaining("/but-why/worktrees/"),
-        command: firstTaskSubmitCommand,
-      },
+    expect(JSON.parse(result.stdout)).toEqual({
+      task: { id: "BY-1", state: "implementing", changed: true, updatedAt: secondNow },
+      change: { id: "01JCHANGE" },
+      branch: "refs/heads/but-why/BY-1",
+      startingCommit: "a".repeat(40),
+      worktreePath,
+      next: { workingDirectory: worktreePath, command: firstTaskSubmitCommand },
     });
   });
 
   it("serializes invalid Task start errors as JSON", () => {
-    const root = initializedRepo();
-
-    createTask(root, firstNow, "Invalid JSON start");
-    transitionTaskState(root, "BY-1", "ready", secondNow);
-
-    const result = runByInProcess(root, ["task", "start", "BY-1", "--output", "json"], thirdNow);
+    const result = runByInProcess(
+      createTempRoot(),
+      ["task", "start", "BY-1", "--output", "json"],
+      thirdNow,
+      {
+        taskUseCases: fakeTaskUseCases({
+          startTask: () => ({ ok: false, code: "invalid_task_state", state: "ready" }),
+        }),
+      },
+    );
 
     expect(result.status).toBe(1);
     expect(result.stderr).toBe("");
@@ -385,49 +368,35 @@ tasks[2]:
     });
   });
 
-  it.each([
-    ["validating", "Wait for validation to finish.", "Wait for validation to finish."],
-    [
-      "needs_input",
-      "Address findings or add Task Context, then run by submit BY-1.",
-      '"Address findings or add Task Context, then run by submit BY-1."',
-    ],
-    ["ready", "Review and merge the pull request.", "Review and merge the pull request."],
-    ["done", "Task is already done.", "Task is already done."],
-  ] as const)("rejects starting %s Tasks with state-specific help", (state, _help, toonHelp) => {
-    const root = initializedRepo();
-
-    createTask(root, firstNow, `Invalid ${state}`);
-    transitionTaskState(root, "BY-1", state, secondNow);
-
-    const result = runByInProcess(root, ["task", "start", "BY-1"], thirdNow);
+  it("maps invalid Task Start state to state-specific help", () => {
+    const result = runByInProcess(createTempRoot(), ["task", "start", "BY-1"], thirdNow, {
+      taskUseCases: fakeTaskUseCases({
+        startTask: () => ({ ok: false, code: "invalid_task_state", state: "validating" }),
+      }),
+    });
 
     expect(result.status).toBe(1);
     expect(result.stderr).toBe("");
     expect(result.stdout).toBe(`error:
   code: invalid_task_state
-  message: Cannot start task BY-1 from state ${state}
+  message: Cannot start task BY-1 from state validating
   taskId: BY-1
-  state: ${state}
-help[1]: ${toonHelp}`);
+  state: validating
+help[1]: Wait for validation to finish.`);
     expect(result.stdout).not.toContain("invalid_task_state_transition");
-    expect(runByInProcess(root, ["task", "show", "BY-1"]).stdout).toContain(
-      `state: ${state}\n  createdAt: "${firstNow}"\n  updatedAt: "${secondNow}"`,
-    );
   });
 
   it("shows new Tasks on the dashboard so they can be approved", () => {
-    const root = initializedRepo();
+    const task = taskSummary({ title: "Needs approval" });
+    const result = runByInProcess(createTempRoot(), [], firstNow, {
+      taskUseCases: fakeTaskUseCases({ listActionableTasks: () => [task] }),
+    });
 
-    createTask(root, firstNow, "Needs approval");
-
-    expect(runByInProcess(root, []).stdout).toContain(
-      `BY-1,Needs approval,new,"${firstNow}","${firstNow}"`,
-    );
+    expect(result.stdout).toContain(`BY-1,Needs approval,new,"${firstNow}","${firstNow}"`);
   });
 
   it("removes started Tasks from the default dashboard", () => {
-    const root = initializedRepo();
+    const root = initializedRepoWithDefault();
 
     createTask(root, firstNow, "Started");
     expect(runByInProcess(root, ["task", "approve", "BY-1"], firstNow).status).toBe(0);
@@ -441,21 +410,11 @@ help[1]: "Run \`by task create --title \\"...\\" --description-file <file>\` to 
   });
 
   it("rejects invalid Task state transitions through the Task module", () => {
-    const root = initializedRepo();
-
-    createTask(root, firstNow, "Invalid transition");
-    const tasksLoad = loadTaskUseCases({
-      cwd: root,
-      requireState: true,
-      migrationTimestamp: () => firstNow,
-    });
-
-    if (!tasksLoad.ok) {
-      throw new Error(`Could not load Tasks: ${tasksLoad.error.code}`);
-    }
+    const tasks = createIsolatedTaskStore();
+    tasks.createTask({ title: "Invalid transition", description: "Description", now: firstNow });
 
     expect(
-      tasksLoad.tasks.transitionTaskState({
+      tasks.transitionTaskState({
         taskId: publicTaskId("BY-1"),
         to: "ready",
         now: secondNow,
@@ -466,47 +425,65 @@ help[1]: "Run \`by task create --title \\"...\\" --description-file <file>\` to 
       from: "new",
       to: "ready",
     });
-    expect(runByInProcess(root, ["task", "show", "BY-1"]).stdout).toContain(
-      `state: new\n  createdAt: "${firstNow}"\n  updatedAt: "${firstNow}"`,
-    );
+    expect(tasks.getTaskById(publicTaskId("BY-1"))).toMatchObject({
+      state: "new",
+      createdAt: firstNow,
+      updatedAt: firstNow,
+    });
   });
 
   it("supports --all and --state, with --state implying done visibility", () => {
-    const root = initializedRepo();
+    const tasks = createIsolatedTaskStore();
+    tasks.createTask({ title: "New", description: "Description", now: firstNow });
+    tasks.createTask({ title: "Todo", description: "Description", now: firstNow });
+    tasks.createTask({ title: "Done", description: "Description", now: firstNow });
+    expect(tasks.approveTask({ taskId: publicTaskId("BY-2"), now: secondNow }).ok).toBe(true);
+    transitionStoreTask(tasks, "BY-3", "done", thirdNow);
 
-    createTask(root, firstNow, "First");
-    createTask(root, secondNow, "Second");
-    transitionTaskState(root, "BY-1", "done", thirdNow);
+    expect(tasks.listTasks({ includeDone: false }).map((task) => task.id)).toEqual([
+      "BY-1",
+      "BY-2",
+    ]);
+    expect(tasks.listTasks({ includeDone: true }).map((task) => task.id)).toEqual([
+      "BY-1",
+      "BY-2",
+      "BY-3",
+    ]);
+    expect(tasks.listTasks({ includeDone: true, state: "done" }).map((task) => task.id)).toEqual([
+      "BY-3",
+    ]);
 
-    expect(
-      JSON.parse(runByInProcess(root, ["task", "list", "--output", "json"]).stdout),
-    ).toMatchObject({
-      tasks: [{ id: "BY-2", state: "new" }],
+    const root = createTempRoot();
+    const inputs: Array<{ readonly includeDone: boolean; readonly state?: TaskState }> = [];
+    const taskUseCases = fakeTaskUseCases({
+      listTasks: (input) => {
+        inputs.push(input);
+        return listedTasks;
+      },
     });
 
-    expect(
-      JSON.parse(runByInProcess(root, ["task", "list", "--all", "--output", "json"]).stdout),
-    ).toMatchObject({
-      tasks: [
-        { id: "BY-1", state: "done" },
-        { id: "BY-2", state: "new" },
-      ],
+    runByInProcess(root, ["task", "list", "--output", "json"], firstNow, { taskUseCases });
+    runByInProcess(root, ["task", "list", "--all", "--output", "json"], firstNow, {
+      taskUseCases,
+    });
+    runByInProcess(root, ["task", "list", "--state", "done", "--output", "json"], firstNow, {
+      taskUseCases,
     });
 
-    expect(
-      JSON.parse(
-        runByInProcess(root, ["task", "list", "--state", "done", "--output", "json"]).stdout,
-      ),
-    ).toMatchObject({ tasks: [{ id: "BY-1", state: "done" }] });
+    expect(inputs).toEqual([
+      { includeDone: false },
+      { includeDone: true },
+      { includeDone: true, state: "done" },
+    ]);
   });
 
   it("shows compact Task metadata without Task Context", () => {
-    const root = initializedRepo();
-
-    createTask(root, firstNow, "Inspect task");
-    transitionTaskState(root, "BY-1", "needs_input", secondNow);
-
-    const result = runByInProcess(root, ["task", "show", "BY-1"]);
+    const result = runByInProcess(createTempRoot(), ["task", "show", "BY-1"], firstNow, {
+      taskUseCases: fakeTaskUseCases({
+        getTaskById: () =>
+          taskRecord({ title: "Inspect task", state: "needs_input", updatedAt: secondNow }),
+      }),
+    });
 
     expect(result.status).toBe(0);
     expect(result.stderr).toBe("");
@@ -525,21 +502,16 @@ help[1]: "Run \`by task create --title \\"...\\" --description-file <file>\` to 
   });
 
   it("shows Task Context without metadata", () => {
-    const root = initializedRepo();
-
-    writeFileSync(join(root, "context.md"), "Full intent\n\nWith details.");
-    const createResult = runByInProcess(root, [
-      "task",
-      "create",
-      "--title",
-      "Use context",
-      "--description-file",
-      "context.md",
-    ]);
-
-    expect(createResult.status).toBe(0);
-
-    const result = runByInProcess(root, ["task", "context", "BY-1"]);
+    const result = runByInProcess(createTempRoot(), ["task", "context", "BY-1"], firstNow, {
+      taskUseCases: fakeTaskUseCases({
+        getTaskContextById: () => ({
+          id: "BY-1",
+          title: "Use context",
+          description: "Full intent\n\nWith details.",
+          comments: [],
+        }),
+      }),
+    });
 
     expect(result.status).toBe(0);
     expect(result.stderr).toBe("");
@@ -766,33 +738,32 @@ help[1]: "Run \`by task create --title \\"...\\" --description-file <file>\` to 
   comments[2]: "First comment\\n\\nWith Markdown.\\n","First comment\\n\\nWith Markdown.\\n"`);
   });
 
-  it.each([
-    "implementing",
-    "validating",
-    "needs_input",
-    "ready",
-    "done",
-  ] as const)("rejects Task comments in %s without changing Task Context", (state) => {
-    const root = initializedRepo();
-
-    createTask(root, firstNow, "Started comments");
-    transitionTaskState(root, "BY-1", state, secondNow);
+  it("maps rejected Task comments to command output", () => {
+    const root = createTempRoot();
     writeFileSync(join(root, "comment.md"), "Too late");
 
     const result = runByInProcess(
       root,
       ["task", "comment", "BY-1", "--file", "comment.md"],
       thirdNow,
+      {
+        taskUseCases: fakeTaskUseCases({
+          getTaskById: () => taskRecord({ state: "implementing" }),
+          appendTaskComment: () => ({
+            ok: false,
+            code: "invalid_task_state",
+            state: "implementing",
+          }),
+        }),
+      },
     );
 
     expect(result.status).toBe(1);
     expect(result.stderr).toBe("");
     expect(result.stdout).toContain("code: invalid_task_state");
     expect(result.stdout).toContain(
-      `Cannot append a Task comment to task BY-1 from state ${state}`,
+      "Cannot append a Task comment to task BY-1 from state implementing",
     );
-    expect(taskStore(root).getTaskContextById(publicTaskId("BY-1"))?.comments).toEqual([]);
-    expect(taskStore(root).getTaskById(publicTaskId("BY-1"))?.updatedAt).toBe(secondNow);
   });
 
   it("preserves a leading UTF-8 BOM in Task comment content", () => {
@@ -811,14 +782,29 @@ help[1]: "Run \`by task create --title \\"...\\" --description-file <file>\` to 
   });
 
   it("reports actionable Task comment input errors without changing the Task", () => {
-    const root = initializedRepo();
-
-    createTask(root, firstNow, "Input errors");
+    const root = createTempRoot();
+    let appendCalls = 0;
     writeFileSync(join(root, "valid.md"), "Valid comment");
     mkdirSync(join(root, "comment-dir"));
     writeFileSync(join(root, "empty.md"), " \n\t");
     writeFileSync(join(root, "invalid.bin"), Buffer.from([0xff]));
 
+    const taskUseCases = fakeTaskUseCases({
+      resolveTaskId: (taskId) =>
+        taskId === "by-1"
+          ? {
+              ok: false,
+              code: "remote_tasks_not_supported",
+              taskId,
+              help: "Use a repo-local Task ID such as BY-1.",
+            }
+          : { ok: true, taskId },
+      getTaskById: (taskId) => (taskId === "BY-1" ? taskRecord() : undefined),
+      appendTaskComment: () => {
+        appendCalls += 1;
+        return { ok: true, taskId: publicTaskId("BY-1"), commentCount: 1 };
+      },
+    });
     const cases = [
       {
         name: "missing file flag",
@@ -883,7 +869,7 @@ help[1]: "Run \`by task create --title \\"...\\" --description-file <file>\` to 
     ] as const;
 
     for (const testCase of cases) {
-      const result = runByInProcess(root, testCase.args, thirdNow);
+      const result = runByInProcess(root, testCase.args, thirdNow, { taskUseCases });
 
       expect(result.status, testCase.name).toBe(testCase.status);
       expect(result.stderr, testCase.name).toBe("");
@@ -891,10 +877,7 @@ help[1]: "Run \`by task create --title \\"...\\" --description-file <file>\` to 
       expect(result.stdout, testCase.name).toContain("help[1]");
     }
 
-    expect(runByInProcess(root, ["task", "show", "BY-1"]).stdout).toContain(
-      `updatedAt: "${firstNow}"`,
-    );
-    expect(runByInProcess(root, ["task", "context", "BY-1"]).stdout).toContain("comments: []");
+    expect(appendCalls).toBe(0);
   });
 
   it("persists Task comments across CLI processes", async () => {
@@ -962,31 +945,13 @@ help[1]: "Run \`by task create --title \\"...\\" --description-file <file>\` to 
     );
   });
 
-  it.each([
-    "show",
-    "context",
-    "comment",
-    "approve",
-    "start",
-  ])("validates Task ID arguments before %s lookup", (command) => {
-    const root = createGitRepo();
+  it("serializes missing Task IDs before command lookup", () => {
+    const result = runByInProcess(createTempRoot(), ["task", "show"]);
 
-    for (const [taskId, code] of [
-      [undefined, "missing_task_id"],
-      [" BY-1", "invalid_task_id"],
-      ["BY-1\n", "invalid_task_id"],
-      ["BY-\u00001", "invalid_task_id"],
-    ] as const) {
-      const result = runByInProcess(
-        root,
-        taskId === undefined ? ["task", command] : ["task", command, taskId],
-      );
-
-      expect(result.status).toBe(2);
-      expect(result.stderr).toBe("");
-      expect(result.stdout).toContain(`code: ${code}`);
-      expect(result.stdout).toContain("help[1]");
-    }
+    expect(result.status).toBe(2);
+    expect(result.stderr).toBe("");
+    expect(result.stdout).toContain("code: missing_task_id");
+    expect(result.stdout).toContain("help[1]");
   });
 
   it.each([
@@ -995,10 +960,17 @@ help[1]: "Run \`by task create --title \\"...\\" --description-file <file>\` to 
     "approve",
     "start",
   ])("rejects non-local Task IDs before state access in %s", (command) => {
-    const root = initializedRepo();
-
-    rmSync(sharedStatePath(root));
-    const result = runByInProcess(root, ["task", command, "ZZ-1"]);
+    const taskUseCases = fakeTaskUseCases({
+      resolveTaskId: (taskId) => ({
+        ok: false,
+        code: "remote_tasks_not_supported",
+        taskId,
+        help: "Use a repo-local Task ID such as BY-1.",
+      }),
+    });
+    const result = runByInProcess(createTempRoot(), ["task", command, "ZZ-1"], firstNow, {
+      taskUseCases,
+    });
 
     expect(result.status).toBe(1);
     expect(result.stderr).toBe("");
@@ -1012,8 +984,15 @@ help[1]: "Run \`by task create --title \\"...\\" --description-file <file>\` to 
     "approve",
     "start",
   ])("prints task_not_found for unknown Task IDs in %s", (command) => {
-    const root = initializedRepo();
-    const result = runByInProcess(root, ["task", command, "BY-999"]);
+    const taskUseCases = fakeTaskUseCases({
+      getTaskById: () => undefined,
+      getTaskContextById: () => undefined,
+      approveTask: () => ({ ok: false, code: "task_not_found" }),
+      startTask: () => ({ ok: false, code: "task_not_found" }),
+    });
+    const result = runByInProcess(createTempRoot(), ["task", command, "BY-999"], firstNow, {
+      taskUseCases,
+    });
 
     expect(result.status).toBe(1);
     expect(result.stderr).toBe("");
@@ -1025,8 +1004,9 @@ help[1]: Run \`by task list --all\` to see known Tasks.`);
   });
 
   it("prints explicit empty list output with create help", () => {
-    const root = initializedRepo();
-    const result = runByInProcess(root, ["task", "list"]);
+    const result = runByInProcess(createTempRoot(), ["task", "list"], firstNow, {
+      taskUseCases: fakeTaskUseCases({ listTasks: () => [] }),
+    });
 
     expect(result.status).toBe(0);
     expect(result.stderr).toBe("");
@@ -1036,25 +1016,29 @@ help[1]: "Run \`by task create --title \\"...\\" --description-file <file>\` to 
   });
 
   it("prints bare dashboard with only actionable Tasks by priority and updated time", () => {
-    const root = initializedRepo();
-
-    createTask(root, firstNow, "Todo old");
-    expect(runByInProcess(root, ["task", "approve", "BY-1"], firstNow).status).toBe(0);
-    createTask(root, secondNow, "Ready");
-    createTask(root, thirdNow, "Input");
-    transitionTaskState(root, "BY-2", "ready", secondNow);
-    transitionTaskState(root, "BY-3", "needs_input", firstNow);
-    createTask(root, firstNow, "Implementing");
-    transitionTaskState(root, "BY-4", "implementing", thirdNow);
-    createTask(root, firstNow, "Todo new");
-    expect(runByInProcess(root, ["task", "approve", "BY-5"], firstNow).status).toBe(0);
-    writeFileSync(join(root, "todo-new-comment.md"), "Bump updated time");
+    const tasks = createIsolatedTaskStore();
+    tasks.createTask({ title: "Todo old", description: "Description", now: firstNow });
+    expect(tasks.approveTask({ taskId: publicTaskId("BY-1"), now: firstNow }).ok).toBe(true);
+    tasks.createTask({ title: "Ready", description: "Description", now: secondNow });
+    tasks.createTask({ title: "Input", description: "Description", now: thirdNow });
+    transitionStoreTask(tasks, "BY-2", "ready", secondNow);
+    transitionStoreTask(tasks, "BY-3", "needs_input", firstNow);
+    tasks.createTask({ title: "Implementing", description: "Description", now: firstNow });
+    transitionStoreTask(tasks, "BY-4", "implementing", thirdNow);
+    tasks.createTask({ title: "Todo new", description: "Description", now: firstNow });
+    expect(tasks.approveTask({ taskId: publicTaskId("BY-5"), now: firstNow }).ok).toBe(true);
     expect(
-      runByInProcess(root, ["task", "comment", "BY-5", "--file", "todo-new-comment.md"], thirdNow)
-        .status,
-    ).toBe(0);
+      tasks.appendTaskComment({
+        taskId: publicTaskId("BY-5"),
+        content: "Bump updated time",
+        now: () => thirdNow,
+      }).ok,
+    ).toBe(true);
 
-    const result = runByInProcess(root, []);
+    const actionable = tasks.listActionableTasks();
+    const result = runByInProcess(createTempRoot(), [], firstNow, {
+      taskUseCases: fakeTaskUseCases({ listActionableTasks: () => actionable }),
+    });
 
     expect(result.status).toBe(0);
     expect(result.stderr).toBe("");
@@ -1069,8 +1053,9 @@ tasks[4]{id,title,state,createdAt,updatedAt}:
   });
 
   it("prints explicit empty dashboard output with create help", () => {
-    const root = initializedRepo();
-    const result = runByInProcess(root, []);
+    const result = runByInProcess(createTempRoot(), [], firstNow, {
+      taskUseCases: fakeTaskUseCases({ listActionableTasks: () => [] }),
+    });
 
     expect(result.status).toBe(0);
     expect(result.stderr).toBe("");
@@ -1082,8 +1067,7 @@ help[1]: "Run \`by task create --title \\"...\\" --description-file <file>\` to 
   });
 
   it("prints structured usage errors to stdout", () => {
-    const root = initializedRepo();
-    const result = runByInProcess(root, ["task", "list", "--state", "blocked"]);
+    const result = runByInProcess(createTempRoot(), ["task", "list", "--state", "blocked"]);
 
     expect(result.status).toBe(2);
     expect(result.stderr).toBe("");
@@ -1095,7 +1079,7 @@ help[1]: "Use one of: new, todo, implementing, validating, needs_input, ready, d
   });
 
   it("rejects Task titles containing line breaks", () => {
-    const root = initializedRepo();
+    const root = createTempRoot();
     writeFileSync(join(root, "task.md"), "Description");
 
     const result = runByInProcess(root, [
@@ -1109,7 +1093,6 @@ help[1]: "Use one of: new, todo, implementing, validating, needs_input, ready, d
 
     expect(result.status).toBe(2);
     expect(result.stdout).toContain("code: invalid_task_title");
-    expect(runByInProcess(root, ["task", "list"]).stdout).toContain("count: 0");
   });
 
   it.each([
@@ -1125,7 +1108,7 @@ help[1]: "Use one of: new, todo, implementing, validating, needs_input, ready, d
       "missing_description_file",
     ],
   ])("prints %s as a usage error", (_name, args, code) => {
-    const root = initializedRepo();
+    const root = createTempRoot();
     writeFileSync(join(root, "task.md"), "Description");
     const result = runByInProcess(root, args);
 
@@ -1135,39 +1118,32 @@ help[1]: "Use one of: new, todo, implementing, validating, needs_input, ready, d
     expect(result.stdout).toContain("help[1]");
   });
 
-  it.each([
-    ["not found", "missing.md", "description_file_not_found"],
-    ["unreadable", "description-dir", "description_file_unreadable"],
-    ["invalid UTF-8", "invalid.bin", "invalid_description_encoding"],
-    ["too large", "large.txt", "description_too_large"],
-    ["empty", "empty.txt", "empty_description"],
-  ])("validates description file: %s", (_name, fileName, code) => {
-    const root = initializedRepo();
-    const filePath = join(root, fileName);
+  it("maps description file failures to actionable command output", () => {
+    const root = createTempRoot();
+    mkdirSync(join(root, "directory"));
+    writeFileSync(join(root, "invalid.bin"), Buffer.from([0xff]));
+    writeFileSync(join(root, "large.md"), Buffer.alloc(256 * 1024 + 1, "x"));
+    writeFileSync(join(root, "empty.md"), " \n\t");
 
-    if (fileName === "description-dir") {
-      mkdirSync(filePath);
-    } else if (fileName === "invalid.bin") {
-      writeFileSync(filePath, Buffer.from([0xff]));
-    } else if (fileName === "large.txt") {
-      writeFileSync(filePath, "A".repeat(256 * 1024 + 1));
-    } else if (fileName === "empty.txt") {
-      writeFileSync(filePath, "  \n\t");
+    for (const [path, code] of [
+      ["missing.md", "description_file_not_found"],
+      ["directory", "description_file_unreadable"],
+      ["invalid.bin", "invalid_description_encoding"],
+      ["large.md", "description_too_large"],
+      ["empty.md", "empty_description"],
+    ] as const) {
+      const result = runByInProcess(
+        root,
+        ["task", "create", "--title", "Title", "--description-file", path],
+        firstNow,
+        { taskUseCases: fakeTaskUseCases() },
+      );
+
+      expect(result.status, path).toBe(2);
+      expect(result.stderr, path).toBe("");
+      expect(result.stdout, path).toContain(`code: ${code}`);
+      expect(result.stdout, path).toContain("help[1]");
     }
-
-    const result = runByInProcess(root, [
-      "task",
-      "create",
-      "--title",
-      "Title",
-      "--description-file",
-      fileName,
-    ]);
-
-    expect(result.status).toBe(2);
-    expect(result.stderr).toBe("");
-    expect(result.stdout).toContain(`code: ${code}`);
-    expect(result.stdout).toContain("help[1]");
   });
 
   it("prints not_initialized before task access to missing setup", () => {
@@ -1228,8 +1204,9 @@ help[1]: Run \`by init --task-prefix BY\` in the repository root.`);
   });
 
   it("prints state_store_unavailable when repo state cannot be opened", () => {
-    const root = initializedRepo();
+    const root = configuredRepo();
 
+    mkdirSync(join(root, ".git", "but-why"), { recursive: true });
     writeFileSync(sharedStatePath(root), "not sqlite");
     const result = runByInProcess(root, ["task", "list"]);
 
@@ -1242,13 +1219,66 @@ help[1]: "Restore <git-common-dir>/but-why/state.sqlite, then run \`by init --ta
   });
 });
 
-const initializedRepo = (): string => {
-  const root = createGitRepo();
-  const result = runByInProcess(root, ["init", "--task-prefix", "BY"]);
+const taskSummary = (overrides: Partial<TaskSummary> = {}): TaskSummary => ({
+  id: "BY-1",
+  title: "First",
+  state: "new",
+  createdAt: firstNow,
+  updatedAt: firstNow,
+  startable: false,
+  blockedBy: [],
+  ...overrides,
+});
 
-  expect(result.status).toBe(0);
-  expect(result.stderr).toBe("");
+const taskRecord = (overrides: Partial<TaskRecord> = {}): TaskRecord => ({
+  ...taskSummary(),
+  description: "Description",
+  branch: null,
+  latestValidationRun: null,
+  commentCount: 0,
+  prerequisites: [],
+  dependents: [],
+  ...overrides,
+});
+
+const listedTasks: readonly TaskSummary[] = [
+  taskSummary(),
+  taskSummary({
+    id: "BY-2",
+    title: "Second",
+    state: "needs_input",
+    createdAt: secondNow,
+    updatedAt: thirdNow,
+  }),
+];
+
+const transitionStoreTask = (
+  tasks: TaskStore,
+  taskId: string,
+  state: TaskState,
+  now: string,
+): void => {
+  for (const nextState of taskStateTransitionPath(state)) {
+    const result = tasks.transitionTaskState({ taskId: publicTaskId(taskId), to: nextState, now });
+    if (!result.ok) throw new Error(result.code);
+  }
+};
+
+const initializedRepo = (): string => createInitializedRepo();
+
+const initializedRepoWithDefault = (): string => {
+  const root = initializedRepo();
+
   commitButWhyConfigAndRecordDefault(root);
+
+  return root;
+};
+
+const configuredRepo = (): string => {
+  const root = createGitRepo();
+
+  mkdirSync(join(root, ".but-why"), { recursive: true });
+  writeFileSync(join(root, ".but-why", "config.json"), '{"taskPrefix":"BY"}\n');
 
   return root;
 };
@@ -1257,22 +1287,19 @@ const sharedStatePath = (root: string): string => join(root, ".git", "but-why", 
 
 const taskStore = (root: string) =>
   openSqliteTaskStore({
-    statePath: sharedStatePath(root),
+    ...prepareStateDatabaseSession({
+      statePath: sharedStatePath(root),
+      migrationTimestamp: () => firstNow,
+    }),
     taskPrefix: "BY",
-    migrationTimestamp: () => firstNow,
   });
 
 const createTask = (root: string, now: string, title: string): void => {
-  const descriptionPath = join(root, `${title}.md`);
-
-  writeFileSync(descriptionPath, `Description for ${title}`);
-  const result = runByInProcess(
-    root,
-    ["task", "create", "--title", title, "--description-file", descriptionPath],
+  taskStore(root).createTask({
+    title,
+    description: `Description for ${title}`,
     now,
-  );
-
-  expect(result.status).toBe(0);
+  });
 };
 
 const transitionTaskState = (

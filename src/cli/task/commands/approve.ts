@@ -2,6 +2,7 @@ import type { CliResult } from "../../../cliResults.js";
 import { runtimeError, stateStoreUnavailable, success } from "../../../cliResults.js";
 import { withGlobalHelpFlags } from "../../../cliHelp.js";
 import type { PublicTaskId } from "../../../task/taskId.js";
+import { taskApprovalStateHelp } from "../taskStateHelp.js";
 import { resolveTaskIdArg, taskNotFound, type TaskCommandEnvironment } from "../taskCliSupport.js";
 
 export const runApproveCommand = (
@@ -57,22 +58,5 @@ const invalidTaskApproval = (taskId: PublicTaskId, state: string): CliResult =>
     code: "invalid_task_state",
     message: `Cannot approve task ${taskId} from state ${state}`,
     details: { taskId, state },
-    help: [approvalHelpByState(taskId, state)],
+    help: [taskApprovalStateHelp(taskId, state)],
   });
-
-const approvalHelpByState = (taskId: PublicTaskId, state: string): string => {
-  switch (state) {
-    case "implementing":
-      return `Continue implementation, then run by submit ${taskId}.`;
-    case "validating":
-      return "Wait for validation to finish.";
-    case "needs_input":
-      return `Address the Findings, then run by submit ${taskId}.`;
-    case "ready":
-      return "Review and merge the pull request.";
-    case "done":
-      return "Task is already done.";
-    default:
-      return `Inspect Task ${taskId} with by task show ${taskId}.`;
-  }
-};

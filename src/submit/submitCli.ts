@@ -16,8 +16,10 @@ import {
 } from "../cliTaskId.js";
 import { structuredContractDiagnostics } from "../output/contractDiagnostics.js";
 import type { StructuredObject } from "../output/structured.js";
+import type { RepoLocalContext } from "../init/repoContext.js";
 import {
   loadLocalSubmitPreflight,
+  openLocalSubmitPreflight,
   type LocalSubmitPreflight,
   type SubmitTaskResult,
 } from "../localSubmit/submitPreflight.js";
@@ -53,7 +55,7 @@ export const routeSubmit = (
         return taskIdParse.result;
       }
 
-      const taskIdResolutionPreflight = loadSubmitPreflight(environment, false);
+      const taskIdResolutionPreflight = acquireSubmitPreflight(environment, false);
 
       if (!taskIdResolutionPreflight.ok) {
         return taskIdResolutionPreflight.result;
@@ -65,7 +67,11 @@ export const routeSubmit = (
         return taskIdResolutionError(taskId);
       }
 
-      const submitPreflight = loadSubmitPreflight(environment, true);
+      const submitPreflight = acquireSubmitPreflight(
+        environment,
+        true,
+        taskIdResolutionPreflight.context,
+      );
 
       if (!submitPreflight.ok) {
         return submitPreflight.result;
@@ -132,6 +138,7 @@ const parseSubmitTaskId = (args: readonly string[]): CliTaskIdParseResult =>
 type SubmitPreflightLoadResult =
   | {
       readonly ok: true;
+      readonly context?: RepoLocalContext;
       readonly submit: LocalSubmitPreflight;
     }
   | {
@@ -139,15 +146,31 @@ type SubmitPreflightLoadResult =
       readonly result: CliResult;
     };
 
+const acquireSubmitPreflight = (
+  environment: CliEnvironment,
+  requireState: boolean,
+  context?: RepoLocalContext,
+): SubmitPreflightLoadResult =>
+  environment.submitPreflight === undefined
+    ? loadSubmitPreflight(environment, requireState, context)
+    : { ok: true, submit: environment.submitPreflight };
+
 const loadSubmitPreflight = (
   environment: CliEnvironment,
   requireState: boolean,
+  context?: RepoLocalContext,
 ): SubmitPreflightLoadResult => {
-  const result = loadLocalSubmitPreflight(environment.cwd, {
+  const input = {
     globalConfigPath: environment.globalConfigPath,
     requireState,
-    migrationTimestamp: () => environment.now().toISOString(),
-  });
+  };
+  const result =
+    context === undefined
+      ? loadLocalSubmitPreflight(environment.cwd, {
+          ...input,
+          migrationTimestamp: () => environment.now().toISOString(),
+        })
+      : openLocalSubmitPreflight(context, input);
 
   if (result.ok) {
     return result;

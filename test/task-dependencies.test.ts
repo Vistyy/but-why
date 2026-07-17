@@ -2,14 +2,12 @@ import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
-import { loadTaskUseCases } from "../src/localTask/taskUseCases.js";
+import { TaskDependencyValidationError } from "../src/task/task.js";
 import { publicTaskId } from "../src/task/taskId.js";
-import {
-  cleanupTempRoots,
-  commitButWhyConfigAndRecordDefault,
-  createGitRepo,
-  runByInProcess,
-} from "./support/by-cli.js";
+import type { TaskStore } from "../src/task/taskStore.js";
+import { cleanupTempRoots, createTempRoot, runByInProcess } from "./support/by-cli.js";
+import { fakeTaskUseCases } from "./support/taskUseCases.js";
+import { createTaskStore } from "./support/taskStore.js";
 
 const firstNow = "2026-06-30T12:00:00.000Z";
 const secondNow = "2026-06-30T12:05:00.000Z";
@@ -17,60 +15,155 @@ const secondNow = "2026-06-30T12:05:00.000Z";
 afterEach(cleanupTempRoots);
 
 describe("Task dependency graph", () => {
-  it("creates a Task with repeated dependency options atomically", () => {
-    const root = initializedRepo();
-    createTask(root, "First");
-    createTask(root, "Second");
+  it("parses repeated dependency options and creates the Task atomically", () => {
+    const root = createTempRoot();
+    const descriptionPath = join(root, "Dependent.md");
+    let receivedDependencies: readonly string[] = [];
+    writeFileSync(descriptionPath, "Description for Dependent");
 
-    const result = createTask(root, "Dependent", ["BY-1", "BY-2"]);
+    const result = runByInProcess(
+      root,
+      [
+        "task",
+        "create",
+        "--title",
+        "Dependent",
+        "--description-file",
+        descriptionPath,
+        "--depends-on",
+        "BY-1",
+        "--depends-on",
+        "BY-2",
+        "--output",
+        "json",
+      ],
+      firstNow,
+      {
+        taskUseCases: fakeTaskUseCases({
+          createTask: (input) => {
+            receivedDependencies = input.dependsOn ?? [];
+            return {
+              id: "BY-3",
+              title: input.title,
+              state: "new",
+              createdAt: input.now,
+              updatedAt: input.now,
+              startable: false,
+              blockedBy: [],
+            };
+          },
+        }),
+      },
+    );
 
     expect(result.status).toBe(0);
-    expect(JSON.parse(show(root, "BY-3").stdout).task.prerequisites).toEqual([
+    expect(receivedDependencies).toEqual(["BY-1", "BY-2"]);
+
+    const tasks = createTaskStore();
+    createTask(tasks, "First");
+    createTask(tasks, "Second");
+    createTask(tasks, "Dependent", ["BY-1", "BY-2"]);
+
+    expect(tasks.getTaskById(publicTaskId("BY-3"))?.prerequisites).toEqual([
       { id: "BY-1", title: "First", state: "new" },
       { id: "BY-2", title: "Second", state: "new" },
     ]);
 
-    const failed = createTask(root, "Invalid", ["BY-404"]);
-    expect(failed.status).toBe(1);
-    expect(JSON.parse(failed.stdout).error.code).toBe("dependency_unknown_task");
+    expect(() => createTask(tasks, "Invalid", ["BY-404"])).toThrow(TaskDependencyValidationError);
+    expect(createTask(tasks, "Next").id).toBe("BY-4");
+  });
 
-    const next = createTask(root, "Next");
-    expect(JSON.parse(next.stdout).task.id).toBe("BY-4");
+  it("routes dependency replacement and maps dependency errors through the CLI", () => {
+    const root = createTempRoot();
+    let received: readonly string[] = [];
+    const task = {
+      id: "BY-3",
+      title: "Dependent",
+      description: "Description",
+      state: "new" as const,
+      createdAt: firstNow,
+      updatedAt: firstNow,
+      startable: false,
+      blockedBy: [],
+      branch: null,
+      latestValidationRun: null,
+      commentCount: 0,
+      prerequisites: [
+        { id: "BY-1", title: "First", state: "new" as const },
+        { id: "BY-2", title: "Second", state: "new" as const },
+      ],
+      dependents: [],
+    };
+    const success = runByInProcess(
+      root,
+      [
+        "task",
+        "dependencies",
+        "set",
+        "BY-3",
+        "--depends-on",
+        "BY-1",
+        "--depends-on",
+        "BY-2",
+        "--output",
+        "json",
+      ],
+      firstNow,
+      {
+        taskUseCases: fakeTaskUseCases({
+          replaceTaskDependencies: (_taskId, prerequisiteTaskIds) => {
+            received = prerequisiteTaskIds;
+            return { ok: true, task };
+          },
+        }),
+      },
+    );
+
+    expect(success.status).toBe(0);
+    expect(received).toEqual(["BY-1", "BY-2"]);
+    expect(JSON.parse(success.stdout)).toEqual({
+      task: { id: "BY-3", prerequisites: task.prerequisites },
+    });
+
+    const failure = runByInProcess(
+      root,
+      ["task", "dependencies", "set", "BY-3", "--depends-on", "BY-3"],
+      firstNow,
+      {
+        taskUseCases: fakeTaskUseCases({
+          replaceTaskDependencies: () => ({
+            ok: false,
+            code: "dependency_self",
+            taskId: publicTaskId("BY-3"),
+          }),
+        }),
+      },
+    );
+
+    expect(failure.status).toBe(1);
+    expect(failure.stdout).toContain("code: dependency_self");
+    expect(failure.stdout).toContain("Task BY-3 cannot depend on itself.");
   });
 
   it("replaces the complete direct dependency list and can clear it", () => {
-    const root = initializedRepo();
-    createTask(root, "First");
-    createTask(root, "Second");
-    createTask(root, "Dependent", ["BY-1"]);
+    const tasks = setupDependencyGraph();
 
-    const replaced = runByInProcess(root, [
-      "task",
-      "dependencies",
-      "set",
-      "BY-3",
-      "--depends-on",
-      "BY-2",
-      "--output",
-      "json",
-    ]);
+    const replaced = tasks.replaceTaskDependencies({
+      taskId: publicTaskId("BY-3"),
+      prerequisiteTaskIds: [publicTaskId("BY-2")],
+    });
 
-    expect(replaced.status).toBe(0);
-    expect(JSON.parse(replaced.stdout).task.prerequisites).toEqual([
-      { id: "BY-2", title: "Second", state: "new" },
-    ]);
-    expect(JSON.parse(show(root, "BY-1").stdout).task.dependents).toEqual([]);
+    expect(replaced).toMatchObject({
+      ok: true,
+      task: { prerequisites: [{ id: "BY-2", title: "Second", state: "new" }] },
+    });
+    expect(tasks.getTaskById(publicTaskId("BY-1"))?.dependents).toEqual([]);
 
-    const cleared = runByInProcess(root, [
-      "task",
-      "dependencies",
-      "set",
-      "BY-3",
-      "--output",
-      "json",
-    ]);
-    expect(cleared.status).toBe(0);
-    expect(JSON.parse(cleared.stdout).task.prerequisites).toEqual([]);
+    const cleared = tasks.replaceTaskDependencies({
+      taskId: publicTaskId("BY-3"),
+      prerequisiteTaskIds: [],
+    });
+    expect(cleared).toMatchObject({ ok: true, task: { prerequisites: [] } });
   });
 
   it.each([
@@ -78,142 +171,140 @@ describe("Task dependency graph", () => {
     ["self dependency", ["BY-3"], "dependency_self"],
     ["duplicate input", ["BY-1", "BY-1"], "dependency_duplicate"],
   ] as const)("rejects %s without changing the graph", (_name, dependencies, code) => {
-    const root = initializedRepo();
-    createTask(root, "First");
-    createTask(root, "Second");
-    createTask(root, "Dependent", ["BY-1"]);
+    const tasks = setupDependencyGraph();
 
-    const result = setDependencies(root, "BY-3", dependencies);
+    const result = tasks.replaceTaskDependencies({
+      taskId: publicTaskId("BY-3"),
+      prerequisiteTaskIds: dependencies.map(publicTaskId),
+    });
 
-    expect(result.status).toBe(1);
-    expect(JSON.parse(result.stdout).error.code).toBe(code);
-    expect(JSON.parse(show(root, "BY-3").stdout).task.prerequisites).toEqual([
+    expect(result).toMatchObject({ ok: false, code });
+    expect(tasks.getTaskById(publicTaskId("BY-3"))?.prerequisites).toEqual([
       { id: "BY-1", title: "First", state: "new" },
     ]);
   });
 
   it("rejects cycles without changing the graph", () => {
-    const root = initializedRepo();
-    createTask(root, "First");
-    createTask(root, "Second", ["BY-1"]);
-    createTask(root, "Third", ["BY-2"]);
+    const tasks = createTaskStore();
+    createTask(tasks, "First");
+    createTask(tasks, "Second", ["BY-1"]);
+    createTask(tasks, "Third", ["BY-2"]);
 
-    const result = setDependencies(root, "BY-1", ["BY-3"]);
+    const result = tasks.replaceTaskDependencies({
+      taskId: publicTaskId("BY-1"),
+      prerequisiteTaskIds: [publicTaskId("BY-3")],
+    });
 
-    expect(result.status).toBe(1);
-    expect(JSON.parse(result.stdout).error.code).toBe("dependency_cycle");
-    expect(JSON.parse(show(root, "BY-1").stdout).task.prerequisites).toEqual([]);
+    expect(result).toMatchObject({ ok: false, code: "dependency_cycle" });
+    expect(tasks.getTaskById(publicTaskId("BY-1"))?.prerequisites).toEqual([]);
   });
 
-  it("blocks Start until every direct prerequisite is done and locks dependencies after Start", () => {
-    const root = initializedRepo();
-    createTask(root, "Prerequisite");
-    createTask(root, "Dependent", ["BY-1"]);
-    approve(root, "BY-1");
-    approve(root, "BY-2");
+  it("blocks Start until every prerequisite is done and locks dependencies during implementation", () => {
+    const tasks = createTaskStore();
+    createTask(tasks, "Prerequisite");
+    createTask(tasks, "Dependent", ["BY-1"]);
+    expect(tasks.approveTask({ taskId: publicTaskId("BY-1"), now: secondNow }).ok).toBe(true);
+    expect(tasks.approveTask({ taskId: publicTaskId("BY-2"), now: secondNow }).ok).toBe(true);
 
-    const blocked = runByInProcess(root, ["task", "start", "BY-2", "--output", "json"]);
-    expect(blocked.status).toBe(1);
-    expect(JSON.parse(blocked.stdout).error).toMatchObject({
+    const blocked = tasks.transitionTaskState({
+      taskId: publicTaskId("BY-2"),
+      to: "implementing",
+      now: secondNow,
+    });
+    expect(blocked).toEqual({
+      ok: false,
+      code: "task_dependencies_unsatisfied",
+      blockedBy: [{ id: "BY-1", title: "Prerequisite", state: "todo" }],
+    });
+    if (blocked.ok || blocked.code !== "task_dependencies_unsatisfied") {
+      throw new Error("Expected Task dependency blockers");
+    }
+
+    const rendered = runByInProcess(
+      createTempRoot(),
+      ["task", "start", "BY-2", "--output", "json"],
+      firstNow,
+      {
+        taskUseCases: fakeTaskUseCases({ startTask: () => blocked }),
+      },
+    );
+    expect(rendered.status).toBe(1);
+    expect(JSON.parse(rendered.stdout).error).toMatchObject({
       code: "task_dependencies_unsatisfied",
       taskId: "BY-2",
       blockedBy: [{ id: "BY-1", title: "Prerequisite", state: "todo" }],
     });
 
-    transitionToDone(root, "BY-1");
-    expect(runByInProcess(root, ["task", "start", "BY-2"]).status).toBe(0);
+    transitionToDone(tasks, "BY-1");
+    expect(
+      tasks.transitionTaskState({
+        taskId: publicTaskId("BY-2"),
+        to: "implementing",
+        now: secondNow,
+      }),
+    ).toMatchObject({ ok: true, changed: true });
 
-    const locked = setDependencies(root, "BY-2", []);
-    expect(locked.status).toBe(1);
-    expect(JSON.parse(locked.stdout).error.code).toBe("dependencies_locked");
-    expect(JSON.parse(show(root, "BY-2").stdout).task.prerequisites).toEqual([
+    expect(
+      tasks.replaceTaskDependencies({
+        taskId: publicTaskId("BY-2"),
+        prerequisiteTaskIds: [],
+      }),
+    ).toMatchObject({ ok: false, code: "dependencies_locked" });
+    expect(tasks.getTaskById(publicTaskId("BY-2"))?.prerequisites).toEqual([
       { id: "BY-1", title: "Prerequisite", state: "done" },
     ]);
   });
 
-  it("shows direct graph facts and lists start eligibility with direct blockers", () => {
-    const root = initializedRepo();
-    createTask(root, "Done prerequisite");
-    createTask(root, "Open prerequisite");
-    createTask(root, "Dependent", ["BY-1", "BY-2"]);
-    approve(root, "BY-1");
-    approve(root, "BY-3");
-    transitionToDone(root, "BY-1");
+  it("returns direct graph facts and start eligibility with direct blockers", () => {
+    const tasks = createTaskStore();
+    createTask(tasks, "Done prerequisite");
+    createTask(tasks, "Open prerequisite");
+    createTask(tasks, "Dependent", ["BY-1", "BY-2"]);
+    expect(tasks.approveTask({ taskId: publicTaskId("BY-1"), now: secondNow }).ok).toBe(true);
+    expect(tasks.approveTask({ taskId: publicTaskId("BY-3"), now: secondNow }).ok).toBe(true);
+    transitionToDone(tasks, "BY-1");
 
-    const shown = JSON.parse(show(root, "BY-3").stdout).task;
-    expect(shown.prerequisites).toEqual([
+    expect(tasks.getTaskById(publicTaskId("BY-3"))?.prerequisites).toEqual([
       { id: "BY-1", title: "Done prerequisite", state: "done" },
       { id: "BY-2", title: "Open prerequisite", state: "new" },
     ]);
-    expect(JSON.parse(show(root, "BY-2").stdout).task.dependents).toEqual([
+    expect(tasks.getTaskById(publicTaskId("BY-2"))?.dependents).toEqual([
       { id: "BY-3", title: "Dependent", state: "todo" },
     ]);
 
-    const tasks = JSON.parse(
-      runByInProcess(root, ["task", "list", "--all", "--output", "json"]).stdout,
-    ).tasks;
-    expect(tasks.find((task: { id: string }) => task.id === "BY-3")).toMatchObject({
+    const summaries = tasks.listTasks({ includeDone: true });
+    expect(summaries.find((task) => task.id === "BY-3")).toMatchObject({
       startable: false,
       blockedBy: [{ id: "BY-2", title: "Open prerequisite", state: "new" }],
     });
-    expect(tasks.find((task: { id: string }) => task.id === "BY-1")).toMatchObject({
+    expect(summaries.find((task) => task.id === "BY-1")).toMatchObject({
       startable: false,
       blockedBy: [],
     });
   });
 });
 
-const initializedRepo = (): string => {
-  const root = createGitRepo();
-  expect(runByInProcess(root, ["init", "--task-prefix", "BY"]).status).toBe(0);
-  commitButWhyConfigAndRecordDefault(root);
-  return root;
+const setupDependencyGraph = (): TaskStore => {
+  const tasks = createTaskStore();
+
+  createTask(tasks, "First");
+  createTask(tasks, "Second");
+  createTask(tasks, "Dependent", ["BY-1"]);
+
+  return tasks;
 };
 
-const createTask = (root: string, title: string, dependencies: readonly string[] = []) => {
-  const descriptionPath = join(root, `${title}.md`);
-  writeFileSync(descriptionPath, `Description for ${title}`);
-  return runByInProcess(root, [
-    "task",
-    "create",
-    "--title",
+const createTask = (tasks: TaskStore, title: string, dependencies: readonly string[] = []) =>
+  tasks.createTask({
     title,
-    "--description-file",
-    descriptionPath,
-    ...dependencies.flatMap((dependency) => ["--depends-on", dependency]),
-    "--output",
-    "json",
-  ]);
-};
-
-const show = (root: string, taskId: string) =>
-  runByInProcess(root, ["task", "show", taskId, "--output", "json"]);
-
-const setDependencies = (root: string, taskId: string, dependencies: readonly string[]) =>
-  runByInProcess(root, [
-    "task",
-    "dependencies",
-    "set",
-    taskId,
-    ...dependencies.flatMap((dependency) => ["--depends-on", dependency]),
-    "--output",
-    "json",
-  ]);
-
-const approve = (root: string, taskId: string): void => {
-  expect(runByInProcess(root, ["task", "approve", taskId], secondNow).status).toBe(0);
-};
-
-const transitionToDone = (root: string, taskId: string): void => {
-  const loaded = loadTaskUseCases({
-    cwd: root,
-    requireState: true,
-    migrationTimestamp: () => firstNow,
+    description: `Description for ${title}`,
+    now: firstNow,
+    dependsOn: dependencies.map(publicTaskId),
   });
-  if (!loaded.ok) throw new Error(loaded.error.code);
 
+const transitionToDone = (tasks: TaskStore, taskId: string): void => {
   for (const state of ["implementing", "validating", "ready", "done"] as const) {
-    const result = loaded.tasks.transitionTaskState({
+    const result = tasks.transitionTaskState({
       taskId: publicTaskId(taskId),
       to: state,
       now: secondNow,

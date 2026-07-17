@@ -12,7 +12,7 @@ export class SharedStateIdentityConflictError extends Error {
   }
 }
 
-export const stateDatabaseTimeoutMs = 30_000;
+const stateDatabaseTimeoutMs = 30_000;
 
 type Migration = {
   readonly name: string;
@@ -899,6 +899,81 @@ export const ensureStateDatabase = (
     return updated ? "updated" : "unchanged";
   } finally {
     database.close();
+  }
+};
+
+export const bindStateDatabaseIdentity = (path: string, commonDirectory: string): void => {
+  const database = new DatabaseSync(path, { timeout: stateDatabaseTimeoutMs });
+
+  try {
+    ensureSharedStateIdentity(database, commonDirectory);
+  } finally {
+    database.close();
+  }
+};
+
+export type StateDatabaseInput = {
+  readonly statePath: string;
+  readonly migrationTimestamp: () => string;
+  readonly commonDirectory?: string;
+};
+
+export type StateDatabaseSession = {
+  readonly withDatabase: <Result>(work: (database: DatabaseSync) => Result) => Result;
+};
+
+class StateDatabaseUnavailableError extends Error {
+  constructor() {
+    super("Durable Task state is unavailable");
+  }
+}
+
+export const prepareStateDatabaseSession = (input: StateDatabaseInput): StateDatabaseSession => {
+  let prepared = false;
+
+  if (existsSync(input.statePath)) {
+    ensureStateDatabase(input.statePath, input.migrationTimestamp, input.commonDirectory);
+    prepared = true;
+  }
+
+  return {
+    withDatabase: (work) => {
+      if (!existsSync(input.statePath)) {
+        throw new StateDatabaseUnavailableError();
+      }
+
+      if (!prepared) {
+        ensureStateDatabase(input.statePath, input.migrationTimestamp, input.commonDirectory);
+        prepared = true;
+      }
+
+      const database = new DatabaseSync(input.statePath, { timeout: stateDatabaseTimeoutMs });
+
+      try {
+        if (input.commonDirectory !== undefined) {
+          ensureSharedStateIdentity(database, input.commonDirectory);
+        }
+
+        return work(database);
+      } finally {
+        database.close();
+      }
+    },
+  };
+};
+
+export const validateStateDatabase = (
+  input: StateDatabaseInput,
+):
+  | { readonly ok: true; readonly session: StateDatabaseSession }
+  | { readonly ok: false; readonly code: "shared_state_identity_conflict" } => {
+  try {
+    return { ok: true, session: prepareStateDatabaseSession(input) };
+  } catch (error) {
+    if (error instanceof SharedStateIdentityConflictError) {
+      return { ok: false, code: "shared_state_identity_conflict" };
+    }
+    throw error;
   }
 };
 

@@ -3,10 +3,12 @@ import { DatabaseSync } from "node:sqlite";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { openSqliteCandidateStore } from "../src/sqlite/sqliteCandidateStore.js";
+import { prepareStateDatabaseSession } from "../src/init/stateDatabase.js";
 import { openSqliteChangeStore } from "../src/sqlite/sqliteChangeStore.js";
 import { openSqliteTaskStore } from "../src/sqlite/sqliteTaskStore.js";
 import { publicTaskId } from "../src/task/taskId.js";
-import { cleanupTempRoots, createGitRepo, runByInProcessArgs as runBy } from "./support/by-cli.js";
+import { cleanupTempRoots, runByInProcessArgs as runBy } from "./support/by-cli.js";
+import { createInitializedRepo } from "./support/initializedRepo.js";
 
 const now = "2026-07-11T10:00:00.000Z";
 
@@ -350,18 +352,15 @@ describe("Candidate storage", () => {
   });
 });
 
-const initializedRepo = (): string => {
-  const root = createGitRepo();
-  expect(runBy(root, "init", "--task-prefix", "BY").status).toBe(0);
-  return root;
-};
+const initializedRepo = (): string => createInitializedRepo();
 
 const sharedStatePath = (root: string): string => join(root, ".git", "but-why", "state.sqlite");
 
-const sqliteInput = (root: string) => ({
-  statePath: sharedStatePath(root),
-  migrationTimestamp: () => now,
-});
+const sqliteInput = (root: string) =>
+  prepareStateDatabaseSession({
+    statePath: sharedStatePath(root),
+    migrationTimestamp: () => now,
+  });
 
 const changeStore = (root: string) => openSqliteChangeStore(sqliteInput(root));
 

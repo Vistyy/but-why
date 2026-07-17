@@ -2,7 +2,8 @@ import { rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
-import { cleanupTempRoots, createGitRepo, runByInProcess } from "./support/by-cli.js";
+import { cleanupTempRoots, runByInProcess } from "./support/by-cli.js";
+import { createInitializedRepo } from "./support/initializedRepo.js";
 
 afterEach(cleanupTempRoots);
 
@@ -41,12 +42,4 @@ describe("opaque Task ID CLI parsing", () => {
   });
 });
 
-const initializedRepo = (): string => {
-  const root = createGitRepo();
-  const result = runByInProcess(root, ["init", "--task-prefix", "BY"]);
-
-  expect(result.status).toBe(0);
-  expect(result.stderr).toBe("");
-
-  return root;
-};
+const initializedRepo = (): string => createInitializedRepo();
