@@ -7,15 +7,13 @@ It ends when But Why? completes one real SQLite-tracked dogfood Task and publish
 
 ## Can start immediately
 
-- Task 132: Add disposable Task Context drafts.
+- Task 077: Approve Task intent.
 - Task 084: Expand Candidate-owned validation through Checks.
 
 ## Dependency graph
 
 | Task | Capability | Blocked by |
 | --- | --- | --- |
-| 077 | Approve Task intent | 132 |
-| 132 | Add disposable Task Context drafts | None |
 | 079 | Manage direct Task dependencies | 077 |
 | 083 | Start a Task in a managed worktree | 077, 078, 079 |
 | 084 | Expand Candidate-owned validation through Checks | None |
