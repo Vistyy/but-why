@@ -12,7 +12,7 @@ It ends when But Why? completes one real SQLite-tracked dogfood Task and publish
 
 ## Completed
 
-- Task 083: Start a Task in a managed worktree (`3b465b8`).
+- Task 083: Start a Task in a managed worktree (`f009ab6`).
 
 ## Dependency graph
 
