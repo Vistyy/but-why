@@ -6,7 +6,12 @@ import { afterEach, describe, expect, it } from "vitest";
 import { openRepoLocalStores } from "../src/init/repoLocalStores.js";
 import { loadRepoLocalContext } from "../src/init/repoContext.js";
 import { taskSlugForId, publicTaskId } from "../src/task/taskId.js";
-import { cleanupTempRoots, createGitRepo, runByInProcess } from "./support/by-cli.js";
+import {
+  cleanupTempRoots,
+  createGitRepo,
+  createTempRoot,
+  runByInProcess,
+} from "./support/by-cli.js";
 
 const now = "2026-06-30T12:00:00.000Z";
 
@@ -97,6 +102,41 @@ describe("by task start managed worktree", () => {
       branch: first.branch,
       startingCommit: first.startingCommit,
       worktreePath: first.worktreePath,
+    });
+    expect(git(first.worktreePath, "symbolic-ref", "HEAD")).toBe(first.branch);
+  });
+
+  it("reuses the same Task Start when invoked from another linked worktree", () => {
+    const root = initializedRepository();
+    createApprovedTask(root);
+    const linked = join(createTempRoot(), "linked");
+    git(root, "worktree", "add", "-q", "-b", "caller", linked, "main");
+    const first = JSON.parse(
+      runByInProcess(root, ["task", "start", "BY-1", "--output", "json"], now).stdout,
+    );
+
+    const repeated = runByInProcess(linked, ["task", "start", "BY-1", "--output", "json"], now);
+
+    expect(repeated.status).toBe(0);
+    expect(JSON.parse(repeated.stdout)).toMatchObject({
+      task: { id: "BY-1", state: "implementing", changed: false },
+      change: first.change,
+      branch: first.branch,
+      startingCommit: first.startingCommit,
+      worktreePath: first.worktreePath,
+      next: { workingDirectory: first.worktreePath, command: "by submit BY-1" },
+    });
+    const context = loadRepoLocalContext(linked, () => now);
+    if (!context.ok) throw new Error(`Could not load linked repository: ${context.error.code}`);
+    expect(
+      openRepoLocalStores(context.context, () => now).taskStartStore.getByTaskId(
+        publicTaskId("BY-1"),
+      )?.acceptanceContext,
+    ).toEqual({
+      version: 1,
+      title: "Managed worktree",
+      description: "Implement the managed worktree boundary.\n",
+      comments: [],
     });
     expect(git(first.worktreePath, "symbolic-ref", "HEAD")).toBe(first.branch);
   });

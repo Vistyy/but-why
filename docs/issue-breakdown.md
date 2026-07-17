@@ -7,14 +7,17 @@ It ends when But Why? completes one real SQLite-tracked dogfood Task and publish
 
 ## Can start immediately
 
-- Task 083: Start a Task in a managed worktree.
 - Task 087: Inspect a Candidate-owned Validation Run.
+- Task 096: Run built-in Acceptance Review.
+
+## Completed
+
+- Task 083: Start a Task in a managed worktree (`3b465b8`).
 
 ## Dependency graph
 
 | Task | Capability | Blocked by |
 | --- | --- | --- |
-| 096 | Run built-in Acceptance Review | 083 |
 | 089 | Run configured Specialists | 096 |
 | 092 | Recheck reviewer Findings without anchoring | 089, 096 |
 | 098 | Publish one exact Candidate with recovery | 089, 092, 096 |

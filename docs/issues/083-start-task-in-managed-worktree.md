@@ -1,5 +1,9 @@
 # Start a Task in a managed worktree
 
+## Status
+
+Done.
+
 ## Specification
 
 - `docs/prds/change-centered-validation-prd.md`
@@ -22,14 +26,20 @@ Temporary Git repository test covering Task Start from the main checkout and lin
 
 ## Acceptance criteria
 
-- [ ] Start requires an approved, dependency-unblocked Todo Task.
-- [ ] Start resolves the local default branch and records its exact starting commit.
-- [ ] Start creates a canonical But Why-owned Task branch and persistent Git worktree.
-- [ ] Start atomically binds the Task, Change, branch intent, starting commit, and Acceptance Context before recoverable worktree provisioning.
-- [ ] Repeated Start creates no second Change, branch, worktree, or Acceptance Context.
-- [ ] A missing recorded worktree is recreated only after branch and repository ownership are verified.
-- [ ] An unexpected branch or worktree conflict is preserved and returned as an actionable error.
-- [ ] Success output includes Task, Change, branch, starting commit, worktree path, and next Submit command.
+- [x] Start requires an approved, dependency-unblocked Todo Task.
+- [x] Start resolves the local default branch and records its exact starting commit.
+- [x] Start creates a canonical But Why-owned Task branch and persistent Git worktree.
+- [x] Start atomically binds the Task, Change, branch intent, starting commit, and Acceptance Context before recoverable worktree provisioning.
+- [x] Repeated Start creates no second Change, branch, worktree, or Acceptance Context.
+- [x] A missing recorded worktree is recreated only after branch and repository ownership are verified.
+- [x] An unexpected branch or worktree conflict is preserved and returned as an actionable error.
+- [x] Success output includes Task, Change, branch, starting commit, worktree path, and next Submit command.
+
+## Completion
+
+Implemented in `3b465b8`.
+Review corrections are pending.
+Quality passed with 286 tests.
 
 ## Blocked by
 
