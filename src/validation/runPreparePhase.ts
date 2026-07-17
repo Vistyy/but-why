@@ -132,11 +132,13 @@ const runPrepareCommand = (
       };
     },
     catch: (error) =>
-      new PrepareCommandExecutionToolingFailed({
-        operationName: "run_prepare_command",
-        command: prepare.command,
-        message: errorMessage(error),
-      }),
+      error instanceof GitToolingFailed
+        ? error
+        : new PrepareCommandExecutionToolingFailed({
+            operationName: "run_prepare_command",
+            command: prepare.command,
+            message: errorMessage(error),
+          }),
   });
 
 const ensureCandidateIntegrity = async (

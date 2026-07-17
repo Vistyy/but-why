@@ -214,11 +214,13 @@ const runCheckCommand = (
       };
     },
     catch: (error) =>
-      new CheckCommandExecutionToolingFailed({
-        operationName: "run_check_command",
-        command: check.command,
-        message: errorMessage(error),
-      }),
+      error instanceof GitToolingFailed
+        ? error
+        : new CheckCommandExecutionToolingFailed({
+            operationName: "run_check_command",
+            command: check.command,
+            message: errorMessage(error),
+          }),
   });
 
 const ensureCandidateIntegrity = async (
