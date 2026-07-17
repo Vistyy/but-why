@@ -7,14 +7,17 @@ It ends when But Why? completes one real SQLite-tracked dogfood Task and publish
 
 ## Can start immediately
 
-- Task 077: Approve Task intent.
+- Task 079: Manage direct Task dependencies.
 - Task 087: Inspect a Candidate-owned Validation Run.
+
+## Completed
+
+- Task 077: Approve Task intent (`2c5e93b`).
 
 ## Dependency graph
 
 | Task | Capability | Blocked by |
 | --- | --- | --- |
-| 079 | Manage direct Task dependencies | 077 |
 | 083 | Start a Task in a managed worktree | 077, 078, 079 |
 | 096 | Run built-in Acceptance Review | 083 |
 | 089 | Run configured Specialists | 096 |
