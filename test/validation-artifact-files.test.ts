@@ -12,7 +12,7 @@ afterEach(cleanupTempRoots);
 describe("Validation Run artifacts", () => {
   it("bounds stored artifact content", () => {
     const root = createTempRoot();
-    const path = writeValidationRunArtifactFile({
+    const artifact = writeValidationRunArtifactFile({
       artifactsRoot: root,
       validationRunId: "run",
       phase: "checks",
@@ -21,8 +21,13 @@ describe("Validation Run artifacts", () => {
       content: "x".repeat(maxValidationArtifactBytes + 1),
     });
 
-    expect(Buffer.byteLength(readFileSync(`${root}/${path}`, "utf8"))).toBe(
+    expect(Buffer.byteLength(readFileSync(`${root}/${artifact.path}`, "utf8"))).toBe(
       maxValidationArtifactBytes,
     );
+    expect(artifact).toMatchObject({
+      originalBytes: maxValidationArtifactBytes + 1,
+      storedBytes: maxValidationArtifactBytes,
+      truncated: true,
+    });
   });
 });

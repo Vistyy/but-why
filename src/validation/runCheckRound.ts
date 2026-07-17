@@ -188,7 +188,7 @@ const runCheckCommand = (
 ): Effect.Effect<CheckCommandResult, ValidationToolingFailure> =>
   Effect.tryPromise({
     try: async () => {
-      await ensureCandidateHead(sandbox, commandCwd, expectedHeadSha);
+      await ensureCandidateIntegrity(sandbox, commandCwd, expectedHeadSha);
       await ensureTimeoutCommandAvailable(sandbox, check);
 
       const marker = checkCompletionMarker(check.id);
@@ -197,7 +197,7 @@ const runCheckCommand = (
         commandCwd === undefined ? undefined : { cwd: commandCwd },
       );
       const parsed = parseCheckCompletionMarker(result.stderr, marker);
-      await ensureCandidateHead(sandbox, commandCwd, expectedHeadSha);
+      await ensureCandidateIntegrity(sandbox, commandCwd, expectedHeadSha);
 
       return {
         commandResult: {
@@ -216,20 +216,20 @@ const runCheckCommand = (
       }),
   });
 
-const ensureCandidateHead = async (
+const ensureCandidateIntegrity = async (
   sandbox: Pick<Sandbox, "exec">,
   commandCwd: string | undefined,
   expectedHeadSha: string | undefined,
 ): Promise<void> => {
   if (expectedHeadSha === undefined) return;
   const result = await sandbox.exec(
-    "git rev-parse HEAD",
+    "git rev-parse HEAD && git diff --quiet && git diff --cached --quiet",
     commandCwd === undefined ? undefined : { cwd: commandCwd },
   );
   if (result.exitCode !== 0 || result.stdout.trim() !== expectedHeadSha) {
     throw new GitToolingFailed({
       operationName: "verify_candidate_head",
-      message: "Validation workspace HEAD no longer matches the Candidate.",
+      message: "Validation workspace no longer matches the Candidate.",
     });
   }
 };
@@ -278,7 +278,7 @@ const writeCheckArtifacts = (input: {
       ] as const;
 
       return artifacts.map((artifact) => {
-        const path = writeValidationRunArtifactFile({
+        const artifactFile = writeValidationRunArtifactFile({
           artifactsRoot: input.artifactsRoot,
           validationRunId: input.validationRunId,
           phase: "checks",
@@ -292,7 +292,7 @@ const writeCheckArtifacts = (input: {
           validationRunId: input.validationRunId,
           phase: "checks" as const,
           producer: input.check.id,
-          path,
+          ...artifactFile,
         };
       });
     },

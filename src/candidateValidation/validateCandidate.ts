@@ -27,6 +27,7 @@ export type CandidateValidation = {
   ) => Effect.Effect<ValidateCandidateResult>;
   readonly listRounds: CandidateValidationRunStore["listRounds"];
   readonly listFindings: CandidateValidationRunStore["listFindings"];
+  readonly listArtifacts: CandidateValidationRunStore["listArtifacts"];
 };
 
 export type ValidateCandidateInput = {
@@ -53,6 +54,7 @@ export const openCandidateValidation = (input: {
   validateCandidate: (validationInput) => validateCandidate(input, validationInput),
   listRounds: input.runStore.listRounds,
   listFindings: input.runStore.listFindings,
+  listArtifacts: input.runStore.listArtifacts,
 });
 
 const validateCandidate = (

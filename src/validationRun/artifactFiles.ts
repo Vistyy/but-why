@@ -12,19 +12,26 @@ export const writeValidationRunArtifactFile = (input: {
   readonly producer: string;
   readonly fileName: string;
   readonly content: string;
-}): string => {
+}): ValidationArtifactFile => {
   const path = join(input.validationRunId, input.phase, input.producer, input.fileName);
   const absolutePath = join(input.artifactsRoot, path);
 
   mkdirSync(dirname(absolutePath), { recursive: true });
-  writeFileSync(absolutePath, boundedArtifactContent(input.content));
+  const bytes = Buffer.from(input.content, "utf8");
+  const stored = bytes.subarray(0, maxValidationArtifactBytes);
+  writeFileSync(absolutePath, stored);
 
-  return path;
+  return {
+    path,
+    originalBytes: bytes.length,
+    storedBytes: stored.length,
+    truncated: bytes.length > stored.length,
+  };
 };
 
-const boundedArtifactContent = (content: string): Buffer => {
-  const bytes = Buffer.from(content, "utf8");
-  return bytes.length <= maxValidationArtifactBytes
-    ? bytes
-    : bytes.subarray(0, maxValidationArtifactBytes);
+export type ValidationArtifactFile = {
+  readonly path: string;
+  readonly originalBytes: number;
+  readonly storedBytes: number;
+  readonly truncated: boolean;
 };

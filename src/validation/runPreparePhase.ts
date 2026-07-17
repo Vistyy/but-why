@@ -106,7 +106,7 @@ const runPrepareCommand = (
 ): Effect.Effect<PrepareCommandResult, ValidationToolingFailure> =>
   Effect.tryPromise({
     try: async () => {
-      await ensureCandidateHead(sandbox, commandCwd, expectedHeadSha);
+      await ensureCandidateIntegrity(sandbox, commandCwd, expectedHeadSha);
       await ensureTimeoutCommandAvailable(sandbox);
 
       const marker = prepareCompletionMarker();
@@ -115,7 +115,7 @@ const runPrepareCommand = (
         commandCwd === undefined ? undefined : { cwd: commandCwd },
       );
       const parsed = parsePrepareCompletionMarker(result.stderr, marker);
-      await ensureCandidateHead(sandbox, commandCwd, expectedHeadSha);
+      await ensureCandidateIntegrity(sandbox, commandCwd, expectedHeadSha);
 
       return {
         commandResult: {
@@ -134,20 +134,20 @@ const runPrepareCommand = (
       }),
   });
 
-const ensureCandidateHead = async (
+const ensureCandidateIntegrity = async (
   sandbox: Pick<Sandbox, "exec">,
   commandCwd: string | undefined,
   expectedHeadSha: string | undefined,
 ): Promise<void> => {
   if (expectedHeadSha === undefined) return;
   const result = await sandbox.exec(
-    "git rev-parse HEAD",
+    "git rev-parse HEAD && git diff --quiet && git diff --cached --quiet",
     commandCwd === undefined ? undefined : { cwd: commandCwd },
   );
   if (result.exitCode !== 0 || result.stdout.trim() !== expectedHeadSha) {
     throw new GitToolingFailed({
       operationName: "verify_candidate_head",
-      message: "Validation workspace HEAD no longer matches the Candidate.",
+      message: "Validation workspace no longer matches the Candidate.",
     });
   }
 };
@@ -230,7 +230,7 @@ const writePrepareArtifacts = (input: {
       ] as const;
 
       return artifacts.map((artifact) => {
-        const path = writeValidationRunArtifactFile({
+        const artifactFile = writeValidationRunArtifactFile({
           artifactsRoot: input.artifactsRoot,
           validationRunId: input.validationRunId,
           phase: "prepare",
@@ -244,7 +244,7 @@ const writePrepareArtifacts = (input: {
           validationRunId: input.validationRunId,
           phase: "prepare" as const,
           producer: prepareProducer,
-          path,
+          ...artifactFile,
         };
       });
     },

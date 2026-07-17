@@ -17,6 +17,7 @@ export type CandidateValidationRunStore = {
   readonly recordCheckRound: (input: RecordValidationRunCheckRoundInput) => void;
   readonly listRounds: (validationRunId: string) => readonly CandidateValidationRound[];
   readonly listFindings: (validationRunId: string) => readonly CandidateValidationFinding[];
+  readonly listArtifacts: (validationRunId: string) => readonly CandidateValidationArtifact[];
 };
 
 export type CandidateValidationPolicySnapshot = {
@@ -70,4 +71,11 @@ export type CandidateValidationRound = {
 export type CandidateValidationFinding = {
   readonly id: string;
   readonly producer: string;
+};
+
+export type CandidateValidationArtifact = {
+  readonly ref: string;
+  readonly originalBytes: number;
+  readonly storedBytes: number;
+  readonly truncated: boolean;
 };

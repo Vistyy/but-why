@@ -5,6 +5,7 @@ import { rollbackIfOpen, withStateDatabase, type SqliteStoreInput } from "./conn
 import { encodeSqliteCandidateValidationPolicy } from "./sqliteCandidateValidationPolicy.js";
 import { recordValidationEvidenceMutation } from "./sqliteValidationEvidence.js";
 import type {
+  CandidateValidationArtifact,
   CandidateValidationFinding,
   CandidateValidationRound,
   CandidateValidationRunStore,
@@ -36,6 +37,8 @@ export const openSqliteCandidateValidationRunStore = (
     withStateDatabase(input, (database) => listRounds(database, validationRunId)),
   listFindings: (validationRunId) =>
     withStateDatabase(input, (database) => listFindings(database, validationRunId)),
+  listArtifacts: (validationRunId) =>
+    withStateDatabase(input, (database) => listArtifacts(database, validationRunId)),
 });
 
 const startOrReuse = (
@@ -137,6 +140,20 @@ const recordRound = (database: DatabaseSync, input: RecordValidationRunCommandRo
       artifacts: "candidate_validation_artifacts",
       findings: "candidate_validation_findings",
     });
+    for (const artifact of input.artifactRecords) {
+      database
+        .prepare(
+          `UPDATE candidate_validation_artifacts
+           SET original_bytes = ?, stored_bytes = ?, truncated = ?
+           WHERE ref = ?`,
+        )
+        .run(
+          artifact.originalBytes ?? 0,
+          artifact.storedBytes ?? 0,
+          artifact.truncated === true ? 1 : 0,
+          artifact.ref,
+        );
+    }
     database.exec("COMMIT");
   } catch (error) {
     rollbackIfOpen(database);
@@ -163,3 +180,21 @@ const listFindings = (
       "SELECT id, producer FROM candidate_validation_findings WHERE validation_run_id = ? ORDER BY id",
     )
     .all(validationRunId) as CandidateValidationFinding[];
+
+const listArtifacts = (
+  database: DatabaseSync,
+  validationRunId: string,
+): readonly CandidateValidationArtifact[] =>
+  (
+    database
+      .prepare(
+        `SELECT ref, original_bytes AS originalBytes, stored_bytes AS storedBytes, truncated
+       FROM candidate_validation_artifacts WHERE validation_run_id = ? ORDER BY ref`,
+      )
+      .all(validationRunId) as unknown as readonly (Omit<
+      CandidateValidationArtifact,
+      "truncated"
+    > & {
+      readonly truncated: number;
+    })[]
+  ).map((artifact) => ({ ...artifact, truncated: artifact.truncated === 1 }));

@@ -771,6 +771,9 @@ const migrations: readonly Migration[] = [
         phase TEXT NOT NULL,
         producer TEXT NOT NULL,
         path TEXT NOT NULL,
+        original_bytes INTEGER NOT NULL DEFAULT 0,
+        stored_bytes INTEGER NOT NULL DEFAULT 0,
+        truncated INTEGER NOT NULL DEFAULT 0 CHECK (truncated IN (0, 1)),
         created_at TEXT NOT NULL,
         FOREIGN KEY (validation_run_id) REFERENCES candidate_validation_runs(id)
       )

@@ -61,6 +61,9 @@ describe("Candidate validation", () => {
     );
     expect(passing).toMatchObject({ ok: true, reused: false, outcome: "passed" });
     if (!passing.ok) return;
+    expect(validation.listArtifacts(passing.validationRunId)).toContainEqual(
+      expect.objectContaining({ truncated: false, originalBytes: expect.any(Number) }),
+    );
 
     await expect(
       Effect.runPromise(
@@ -129,7 +132,13 @@ describe("Candidate validation", () => {
           headSha: captured.headSha,
           policy: {
             sandboxMode: "none",
-            checks: [{ id: "mutates-head", command: "git reset --hard HEAD~", timeoutSeconds: 1 }],
+            checks: [
+              {
+                id: "mutates-worktree",
+                command: "printf changed > .but-why/config.json",
+                timeoutSeconds: 1,
+              },
+            ],
             copyFiles: [],
           },
           now,

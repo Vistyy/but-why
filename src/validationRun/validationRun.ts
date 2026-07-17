@@ -86,5 +86,8 @@ export type ValidationRunArtifactRecord = {
   readonly phase: ValidationPhase;
   readonly producer: string;
   readonly path: string;
+  readonly originalBytes?: number;
+  readonly storedBytes?: number;
+  readonly truncated?: boolean;
   readonly createdAt: string;
 };
