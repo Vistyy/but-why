@@ -14,8 +14,9 @@ import type {
   ValidationRunSummaryRecord,
   ValidationRunToolingErrorRecord,
 } from "../validationRun/validationRunStore.js";
-import { canStartFrom, type StartIneligibleState } from "./startPolicy.js";
 import type { TaskState } from "./lifecycle.js";
+import { provisionTaskWorktree, resolveTaskStartGitIntent } from "../taskStart/taskStartGit.js";
+import type { TaskStartStore } from "../taskStart/taskStartStore.js";
 import type { TaskContext, TaskRecord, TaskSummary } from "./task.js";
 import { resolveRepoTaskId, type RepoTaskIdResolution } from "./repoTaskIds.js";
 import type { PublicTaskId } from "./taskId.js";
@@ -165,25 +166,38 @@ export type StartTaskResult =
       readonly ok: true;
       readonly changed: boolean;
       readonly task: TaskRecord;
+      readonly changeId: string;
+      readonly branchRef: string;
+      readonly startingCommit: string;
+      readonly worktreePath: string;
     }
-  | {
-      readonly ok: false;
-      readonly code: "task_not_found";
-    }
-  | {
-      readonly ok: false;
-      readonly code: "invalid_task_state";
-      readonly state: StartIneligibleState;
-    }
+  | { readonly ok: false; readonly code: "task_not_found" }
+  | { readonly ok: false; readonly code: "invalid_task_state"; readonly state: TaskState }
   | Extract<
       ReturnType<TaskStore["transitionTaskState"]>,
       { readonly code: "task_dependencies_unsatisfied" }
-    >;
+    >
+  | {
+      readonly ok: false;
+      readonly code:
+        | "local_default_branch_missing"
+        | "local_default_branch_ambiguous"
+        | "local_default_branch_unavailable"
+        | "committed_repo_config_missing"
+        | "committed_repo_config_invalid"
+        | "task_start_conflict"
+        | "git_tooling_error";
+      readonly changeId?: string;
+      readonly branchRef?: string;
+      readonly startingCommit?: string;
+      readonly worktreePath?: string;
+    };
 
 export const openTaskUseCases = (
   context: RepoLocalContext,
   stores: {
     readonly taskStore: TaskStore;
+    readonly taskStartStore: TaskStartStore;
     readonly validationRunStore: ValidationRunStore;
   },
 ): TaskUseCases => {
@@ -217,7 +231,15 @@ export const openTaskUseCases = (
     approveTask: (taskId, now) =>
       approveTask(stores.taskStore, stores.validationRunStore, taskId, now),
     appendTaskComment: stores.taskStore.appendTaskComment,
-    startTask: (taskId, now) => startTask(stores.taskStore, stores.validationRunStore, taskId, now),
+    startTask: (taskId, now) =>
+      startTask(
+        context,
+        stores.taskStore,
+        stores.taskStartStore,
+        stores.validationRunStore,
+        taskId,
+        now,
+      ),
     transitionTaskState: (input) =>
       transitionTaskState(stores.taskStore, stores.validationRunStore, input),
   };
@@ -394,36 +416,67 @@ const withLatestValidationRun = (
 });
 
 const startTask = (
+  context: RepoLocalContext,
   taskStore: TaskStore,
+  taskStartStore: TaskStartStore,
   validationRunStore: ValidationRunStore,
   taskId: PublicTaskId,
   now: string,
 ): StartTaskResult => {
-  const result = transitionTaskState(taskStore, validationRunStore, {
-    taskId,
-    to: "implementing",
-    now,
-  });
+  const existing = taskStartStore.getByTaskId(taskId);
+  let changed = false;
+  let start = existing;
 
-  if (result.ok) {
-    return result;
-  }
-
-  if (result.code === "task_dependencies_unsatisfied") {
-    return result;
-  }
-
-  if (result.code === "invalid_task_state_transition") {
-    if (canStartFrom(result.from)) {
-      throw new Error(`Unexpected invalid Task start from ${result.from}`);
+  if (start === undefined) {
+    const task = taskStore.getTaskById(taskId);
+    if (task === undefined) return { ok: false, code: "task_not_found" };
+    if (task.state !== "todo") {
+      return { ok: false, code: "invalid_task_state", state: task.state };
+    }
+    if (task.blockedBy.length > 0) {
+      return { ok: false, code: "task_dependencies_unsatisfied", blockedBy: task.blockedBy };
     }
 
-    return {
-      ok: false,
-      code: "invalid_task_state",
-      state: result.from,
-    };
+    const gitIntent = resolveTaskStartGitIntent(context, taskId);
+    if (!gitIntent.ok) return gitIntent;
+
+    const bound = taskStartStore.bind({
+      taskId,
+      ...gitIntent.intent,
+      now,
+    });
+    if (!bound.ok) return bound;
+    changed = bound.changed;
+    start = bound.start;
   }
 
-  return result;
+  const provisioned = provisionTaskWorktree(
+    context.root,
+    start,
+    existing !== undefined || !changed,
+  );
+  if (!provisioned.ok) {
+    return {
+      ...provisioned,
+      changeId: start.changeId,
+      branchRef: start.branchRef,
+      startingCommit: start.startingCommit,
+      worktreePath: start.worktreePath,
+    };
+  }
+  if (start.provisioningState !== "ready") {
+    start = taskStartStore.markReady(taskId, now);
+  }
+
+  const task = getTaskById(taskStore, validationRunStore, taskId);
+  if (task === undefined) throw new Error("Started Task was not found");
+  return {
+    ok: true,
+    changed,
+    task,
+    changeId: start.changeId,
+    branchRef: start.branchRef,
+    startingCommit: start.startingCommit,
+    worktreePath: start.worktreePath,
+  };
 };

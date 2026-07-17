@@ -839,6 +839,25 @@ const migrations: readonly Migration[] = [
       ON task_dependencies (prerequisite_task_id, dependent_task_id)
     `,
   },
+  {
+    name: "021_task_starts",
+    apply: `
+      CREATE TABLE task_starts (
+        task_id TEXT PRIMARY KEY,
+        change_id TEXT NOT NULL UNIQUE,
+        branch_ref TEXT NOT NULL UNIQUE,
+        base_ref TEXT NOT NULL,
+        starting_commit TEXT NOT NULL,
+        worktree_path TEXT NOT NULL UNIQUE,
+        acceptance_context TEXT NOT NULL,
+        provisioning_state TEXT NOT NULL CHECK (provisioning_state IN ('pending', 'ready')),
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        FOREIGN KEY (task_id) REFERENCES tasks(id),
+        FOREIGN KEY (change_id) REFERENCES changes(id)
+      )
+    `,
+  },
 ];
 
 export const ensureStateDatabase = (

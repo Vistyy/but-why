@@ -68,6 +68,33 @@ export const readRepoConfig = (
       }),
   );
 
+export const decodeRepoConfigSource = (
+  source: string,
+  path = ".but-why/config.json",
+): ConfigReadResult<RepoConfig, RepoConfigValidationFailed> => {
+  let value: unknown;
+  try {
+    value = JSON.parse(source);
+  } catch (error) {
+    return configReadFailure(
+      path,
+      jsonErrorMessage(error),
+      "valid JSON",
+      source,
+      (sourcePath, diagnostics) =>
+        new RepoConfigValidationFailed({
+          path: sourcePath,
+          diagnostics,
+          message: formatContractDiagnostics(diagnostics),
+        }),
+    );
+  }
+  const result = decodeRepoConfig(value, path);
+  return Either.isRight(result)
+    ? { ok: true, config: result.right }
+    : { ok: false, error: result.left };
+};
+
 export const writeRepoConfig = (path: string, taskPrefix: string): void => {
   writeFileSync(path, `${JSON.stringify({ taskPrefix }, null, 2)}\n`);
 };

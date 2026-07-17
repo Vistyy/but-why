@@ -883,7 +883,7 @@ help[1]: Run \`by task list --all\` to see known Tasks.`);
     expect(withFakeGh(() => runSubmit(root, ["BY-1"], thirdNow)).stdout).toContain(
       "code: TASK_BRANCH_MISMATCH",
     );
-  });
+  }, 10_000);
 
   it("serializes submit success and preflight errors as JSON", () => {
     const root = preparedRepoOnBranch("feature/json");

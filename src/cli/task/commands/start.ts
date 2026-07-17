@@ -1,7 +1,7 @@
 import type { CliResult } from "../../../cliResults.js";
 import { runtimeError, stateStoreUnavailable, success } from "../../../cliResults.js";
 import { withGlobalHelpFlags } from "../../../cliHelp.js";
-import type { StartIneligibleState } from "../../../task/startPolicy.js";
+import type { TaskState } from "../../../task/lifecycle.js";
 import type { PublicTaskId } from "../../../task/taskId.js";
 import { resolveTaskIdArg, taskNotFound, type TaskCommandEnvironment } from "../taskCliSupport.js";
 
@@ -46,7 +46,11 @@ export const runStartCommand = (
         });
       }
 
-      return invalidTaskStart(taskId.taskId, result.state);
+      if (result.code === "invalid_task_state") {
+        return invalidTaskStart(taskId.taskId, result.state);
+      }
+
+      return taskStartOperationalError(taskId.taskId, result.code, result);
     }
 
     return success({
@@ -56,14 +60,21 @@ export const runStartCommand = (
         changed: result.changed,
         updatedAt: result.task.updatedAt,
       },
-      next: startTaskNextAction(result.task.id),
+      change: { id: result.changeId },
+      branch: result.branchRef,
+      startingCommit: result.startingCommit,
+      worktreePath: result.worktreePath,
+      next: {
+        workingDirectory: result.worktreePath,
+        command: `by submit ${result.task.id}`,
+      },
     });
   } catch {
     return stateStoreUnavailable(taskId.tasks.taskPrefix);
   }
 };
 
-const invalidTaskStart = (taskId: PublicTaskId, state: StartIneligibleState): CliResult =>
+const invalidTaskStart = (taskId: PublicTaskId, state: TaskState): CliResult =>
   runtimeError({
     code: "invalid_task_state",
     message: `Cannot start task ${taskId} from state ${state}`,
@@ -73,15 +84,72 @@ const invalidTaskStart = (taskId: PublicTaskId, state: StartIneligibleState): Cl
 
 const invalidTaskStartHelpByState = {
   new: (taskId: PublicTaskId) => `Approve the Task first with by task approve ${taskId}.`,
+  todo: () => "Run the Task Start command again.",
+  implementing: () => "Use the existing Task Start binding or inspect the Task state.",
   validating: () => "Wait for validation to finish.",
   needs_input: (taskId: PublicTaskId) =>
     `Address findings or add Task Context, then run by submit ${taskId}.`,
   ready: () => "Review and merge the pull request.",
   done: () => "Task is already done.",
-} satisfies Record<StartIneligibleState, (taskId: PublicTaskId) => string>;
+} satisfies Record<TaskState, (taskId: PublicTaskId) => string>;
 
-const invalidTaskStartHelp = (taskId: PublicTaskId, state: StartIneligibleState): string =>
+const invalidTaskStartHelp = (taskId: PublicTaskId, state: TaskState): string =>
   invalidTaskStartHelpByState[state](taskId);
 
-const startTaskNextAction = (taskId: string): string =>
-  `Implement the task, then run by submit ${taskId}`;
+const taskStartOperationalError = (
+  taskId: PublicTaskId,
+  code: string,
+  details: {
+    readonly changeId?: string;
+    readonly branchRef?: string;
+    readonly startingCommit?: string;
+    readonly worktreePath?: string;
+  },
+): CliResult => {
+  const errors: Record<string, { readonly message: string; readonly help: string }> = {
+    local_default_branch_missing: {
+      message: "Local Git does not record a default branch.",
+      help: "Set a remote HEAD to the repository default branch, then run Task Start again.",
+    },
+    local_default_branch_ambiguous: {
+      message: "Local Git records more than one default branch.",
+      help: "Make the recorded remote default branches agree, then run Task Start again.",
+    },
+    local_default_branch_unavailable: {
+      message: "The recorded local default branch is unavailable.",
+      help: "Create the recorded default branch locally, then run Task Start again.",
+    },
+    committed_repo_config_missing: {
+      message: "The default branch does not contain .but-why/config.json.",
+      help: "Commit .but-why/config.json to the default branch, then run Task Start again.",
+    },
+    committed_repo_config_invalid: {
+      message: "The default branch contains an invalid .but-why/config.json.",
+      help: "Fix and commit .but-why/config.json on the default branch, then run Task Start again.",
+    },
+    task_start_conflict: {
+      message: "The Task branch or worktree conflicts with the recorded Task Start.",
+      help: "Inspect the recorded branch and worktree path without deleting or overwriting them.",
+    },
+    git_tooling_error: {
+      message: "Git could not provision the managed Task worktree.",
+      help: "Fix the Git or filesystem error, then run Task Start again to recover.",
+    },
+  };
+  const error = errors[code];
+  if (error === undefined) throw new Error(`Unknown Task Start error: ${code}`);
+  return runtimeError({
+    code,
+    message: error.message,
+    details: {
+      taskId,
+      ...(typeof details.changeId === "string" ? { changeId: details.changeId } : {}),
+      ...(typeof details.branchRef === "string" ? { branch: details.branchRef } : {}),
+      ...(typeof details.startingCommit === "string"
+        ? { startingCommit: details.startingCommit }
+        : {}),
+      ...(typeof details.worktreePath === "string" ? { worktreePath: details.worktreePath } : {}),
+    },
+    help: [error.help],
+  });
+};

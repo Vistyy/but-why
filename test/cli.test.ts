@@ -329,6 +329,7 @@ validationSetup:
         { name: "018_candidate_validation_runs" },
         { name: "019_task_approval" },
         { name: "020_task_dependencies" },
+        { name: "021_task_starts" },
       ]);
       expect(
         database
@@ -349,6 +350,7 @@ validationSetup:
         { name: "shared_state_identity" },
         { name: "task_comments" },
         { name: "task_dependencies" },
+        { name: "task_starts" },
         { name: "tasks" },
         { name: "validation_run_artifacts" },
         { name: "validation_run_findings" },

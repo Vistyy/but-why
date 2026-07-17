@@ -4,7 +4,12 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import { loadTaskUseCases } from "../src/localTask/taskUseCases.js";
 import { publicTaskId } from "../src/task/taskId.js";
-import { cleanupTempRoots, createGitRepo, runByInProcess } from "./support/by-cli.js";
+import {
+  cleanupTempRoots,
+  commitButWhyConfigAndRecordDefault,
+  createGitRepo,
+  runByInProcess,
+} from "./support/by-cli.js";
 
 const firstNow = "2026-06-30T12:00:00.000Z";
 const secondNow = "2026-06-30T12:05:00.000Z";
@@ -161,6 +166,7 @@ describe("Task dependency graph", () => {
 const initializedRepo = (): string => {
   const root = createGitRepo();
   expect(runByInProcess(root, ["init", "--task-prefix", "BY"]).status).toBe(0);
+  commitButWhyConfigAndRecordDefault(root);
   return root;
 };
 

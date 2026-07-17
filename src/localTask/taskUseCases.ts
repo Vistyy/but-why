@@ -44,13 +44,17 @@ export const loadTaskUseCases = (input: LoadTaskUseCasesInput): LoadTaskUseCases
     };
   }
 
-  const { taskStore, validationRunStore } = openRepoLocalStores(
+  const { taskStore, taskStartStore, validationRunStore } = openRepoLocalStores(
     repoContext.context,
     input.migrationTimestamp,
   );
 
   return {
     ok: true,
-    tasks: openTaskUseCases(repoContext.context, { taskStore, validationRunStore }),
+    tasks: openTaskUseCases(repoContext.context, {
+      taskStore,
+      taskStartStore,
+      validationRunStore,
+    }),
   };
 };

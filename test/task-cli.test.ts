@@ -11,6 +11,7 @@ import { publicTaskId } from "../src/task/taskId.js";
 import {
   byExecutable,
   cleanupTempRoots,
+  commitButWhyConfigAndRecordDefault,
   createGitRepo,
   createTempRoot,
   runByInProcess,
@@ -21,8 +22,7 @@ const expectedBin = collapseHome(byExecutable);
 const firstNow = "2026-06-30T12:00:00.000Z";
 const secondNow = "2026-06-30T12:05:00.000Z";
 const thirdNow = "2026-06-30T12:10:00.000Z";
-const firstTaskStartNext = "Implement the task, then run by submit BY-1";
-const firstTaskStartNextToon = `"${firstTaskStartNext}"`;
+const firstTaskSubmitCommand = "by submit BY-1";
 // Four workers exercise overlapping SQLite writers while keeping subprocess tests fast.
 const concurrentWriterCount = 4;
 
@@ -305,36 +305,35 @@ tasks[2]:
 
     expect(result.status).toBe(0);
     expect(result.stderr).toBe("");
-    expect(result.stdout).toBe(`task:
+    expect(result.stdout).toContain(`task:
   id: BY-1
   state: implementing
   changed: true
-  updatedAt: "${secondNow}"
-next: ${firstTaskStartNextToon}`);
+  updatedAt: "${secondNow}"`);
+    expect(result.stdout).toContain("change:\n  id:");
+    expect(result.stdout).toContain("branch: refs/heads/but-why/");
+    expect(result.stdout).toContain("startingCommit:");
+    expect(result.stdout).toContain("worktreePath:");
+    expect(result.stdout).toContain("next:");
+    expect(result.stdout).toContain("workingDirectory:");
+    expect(result.stdout).toContain(firstTaskSubmitCommand);
     expect(runByInProcess(root, ["task", "show", "BY-1"]).stdout).toContain(
       `state: implementing\n  createdAt: "${firstNow}"\n  updatedAt: "${secondNow}"`,
     );
   });
 
-  it("reports already implementing Task starts as no-ops without updating updatedAt", () => {
+  it("rejects implementing Tasks that have no Task Start binding", () => {
     const root = initializedRepo();
 
-    createTask(root, firstNow, "No-op start");
+    createTask(root, firstNow, "Unbound implementation");
     transitionTaskState(root, "BY-1", "implementing", secondNow);
 
     const result = runByInProcess(root, ["task", "start", "BY-1"], thirdNow);
 
-    expect(result.status).toBe(0);
+    expect(result.status).toBe(1);
     expect(result.stderr).toBe("");
-    expect(result.stdout).toBe(`task:
-  id: BY-1
-  state: implementing
-  changed: false
-  updatedAt: "${secondNow}"
-next: ${firstTaskStartNextToon}`);
-    expect(runByInProcess(root, ["task", "show", "BY-1"]).stdout).toContain(
-      `state: implementing\n  createdAt: "${firstNow}"\n  updatedAt: "${secondNow}"`,
-    );
+    expect(result.stdout).toContain("code: invalid_task_state");
+    expect(result.stdout).toContain("Cannot start task BY-1 from state implementing");
   });
 
   it("serializes Task start success as compact JSON", () => {
@@ -347,14 +346,21 @@ next: ${firstTaskStartNextToon}`);
 
     expect(result.status).toBe(0);
     expect(result.stderr).toBe("");
-    expect(JSON.parse(result.stdout)).toEqual({
+    expect(JSON.parse(result.stdout)).toMatchObject({
       task: {
         id: "BY-1",
         state: "implementing",
         changed: true,
         updatedAt: secondNow,
       },
-      next: firstTaskStartNext,
+      change: { id: expect.any(String) },
+      branch: expect.stringMatching(/^refs\/heads\/but-why\//),
+      startingCommit: expect.stringMatching(/^[0-9a-f]{40}$/),
+      worktreePath: expect.stringContaining("/but-why/worktrees/"),
+      next: {
+        workingDirectory: expect.stringContaining("/but-why/worktrees/"),
+        command: firstTaskSubmitCommand,
+      },
     });
   });
 
@@ -1242,6 +1248,7 @@ const initializedRepo = (): string => {
 
   expect(result.status).toBe(0);
   expect(result.stderr).toBe("");
+  commitButWhyConfigAndRecordDefault(root);
 
   return root;
 };

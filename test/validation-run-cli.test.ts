@@ -6,7 +6,12 @@ import { openSqliteValidationRunStore } from "../src/sqlite/sqliteValidationRunS
 import { openSqliteValidationRuns } from "../src/sqlite/sqliteValidationRuns.js";
 import { publicTaskId } from "../src/task/taskId.js";
 import type { RecordValidationRunCheckRoundInput } from "../src/validationRun/validationRunStore.js";
-import { cleanupTempRoots, createGitRepo, runByInProcess } from "./support/by-cli.js";
+import {
+  cleanupTempRoots,
+  commitButWhyConfigAndRecordDefault,
+  createGitRepo,
+  runByInProcess,
+} from "./support/by-cli.js";
 
 const firstNow = "2026-06-30T12:00:00.000Z";
 const secondNow = "2026-06-30T12:05:00.000Z";
@@ -248,6 +253,7 @@ const initializedRepo = (): string => {
     status: 0,
     stderr: "",
   });
+  commitButWhyConfigAndRecordDefault(root);
 
   return root;
 };

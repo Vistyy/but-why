@@ -119,8 +119,8 @@
           "src/candidate/candidate.ts",
           "src/change/change.ts",
           "src/task/lifecycle.ts",
-          "src/task/startPolicy.ts",
           "src/task/submitPolicy.ts",
+          "src/taskStart/taskStart.ts",
           "src/task/task.ts",
           "src/task/taskId.ts"
         ]
@@ -148,6 +148,14 @@
       {
         "name": "task-store",
         "patterns": ["src/task/taskStore.ts"]
+      },
+      {
+        "name": "task-start-store",
+        "patterns": ["src/taskStart/taskStartStore.ts"]
+      },
+      {
+        "name": "task-start-adapter",
+        "patterns": ["src/taskStart/taskStartGit.ts"]
       },
       {
         "name": "validation-run-store",
@@ -242,6 +250,7 @@
           "src/sqlite/sqliteChangeCandidateCaptureStore.ts",
           "src/sqlite/sqliteChangeStore.ts",
           "src/sqlite/sqliteTaskStore.ts",
+          "src/sqlite/sqliteTaskStartStore.ts",
           "src/sqlite/sqliteValidationRuns.ts"
         ]
       },
@@ -339,6 +348,14 @@
         "allow": ["domain"]
       },
       {
+        "from": "task-start-store",
+        "allow": ["domain"]
+      },
+      {
+        "from": "task-start-adapter",
+        "allow": ["domain", "local-git-candidate-adapter", "repo-init"]
+      },
+      {
         "from": "validation-run-store",
         "allow": ["domain", "validation-tooling-failures"]
       },
@@ -381,6 +398,8 @@
           "submission-environment-port",
           "task-adapter",
           "task-authority-port",
+          "task-start-adapter",
+          "task-start-store",
           "task-store",
           "submit-rejection-errors"
         ],
@@ -433,6 +452,7 @@
           "change-store",
           "domain",
           "sqlite-core",
+          "task-start-store",
           "task-store",
           "validation-tooling-failures",
           "validation-run-store",
@@ -455,6 +475,7 @@
           "change-store",
           "repo-init",
           "sqlite-concrete-stores",
+          "task-start-store",
           "task-store",
           "validation-run-store",
           "validation-runs"

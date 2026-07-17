@@ -2,7 +2,6 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 import { taskStates, canTransition, isTaskState, type TaskState } from "../src/task/lifecycle.js";
-import { canStartFrom } from "../src/task/startPolicy.js";
 import { canSubmitFrom, type SubmitEligibleState } from "../src/task/submitPolicy.js";
 
 describe("Task lifecycle", () => {
@@ -42,27 +41,16 @@ describe("Task lifecycle", () => {
     expect(isTaskState("unknown")).toBe(false);
   });
 
-  it("keeps command no-ops out of lifecycle transitions", () => {
-    expect(canStartFrom("implementing")).toBe(true);
-    expect(canTransition("implementing", "implementing")).toBe(false);
-  });
-
   it("owns submit eligibility as a type guard", () => {
     const submitEligibleStates: SubmitEligibleState[] = taskStates.filter(canSubmitFrom);
 
     expect(submitEligibleStates).toEqual(["implementing", "needs_input"]);
   });
 
-  it("owns start eligibility policy", () => {
-    const startEligibleStates = taskStates.filter(canStartFrom);
-
-    expect(startEligibleStates).toEqual(["todo", "implementing"]);
-  });
-
   it("keeps the durable Task state constraint in sync with Task states", () => {
     const stateDatabaseSource = readFileSync("src/init/stateDatabase.ts", "utf8");
     const matches = [...stateDatabaseSource.matchAll(/state IN \(([^)]+)\)/g)];
-    const stateList = matches.at(-1)?.[1];
+    const stateList = matches.map((match) => match[1]).find((states) => states?.includes("'new'"));
 
     if (stateList === undefined) {
       throw new Error("Task state SQL constraint was not found");
