@@ -16,7 +16,7 @@ It ends when But Why? completes one real SQLite-tracked dogfood Task and publish
 | --- | --- | --- |
 | 079 | Manage direct Task dependencies | 077 |
 | 083 | Start a Task in a managed worktree | 077, 078, 079 |
-| 096 | Run built-in Acceptance Review | 083, 084 |
+| 096 | Run built-in Acceptance Review | 083 |
 | 089 | Run configured Specialists | 096 |
 | 092 | Recheck reviewer Findings without anchoring | 089, 096 |
 | 098 | Publish one exact Candidate with recovery | 089, 092, 096 |
