@@ -191,6 +191,10 @@ _Avoid_: Finding, cancellation reason, implementation decision
 The current Task title, description, and ordered comments before Start.
 _Avoid_: Acceptance Context, operational metadata
 
+**Task Context Draft**:
+A disposable editable copy of Task Context prepared before its proposed changes are applied.
+_Avoid_: Task Worktree, durable Task Context, Artifact
+
 **Task Context Snapshot**:
 The immutable stored copy of Task Context captured as Acceptance Context at Start.
 _Avoid_: Live Task text, prompt transcript

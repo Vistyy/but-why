@@ -7,7 +7,6 @@ It ends when But Why? completes one real SQLite-tracked dogfood Task and publish
 
 ## Can start immediately
 
-- Task 077: Approve Task intent.
 - Task 078: Share SQLite state across linked worktrees.
 - Task 084: Expand Candidate-owned validation through Checks.
 
@@ -15,8 +14,9 @@ It ends when But Why? completes one real SQLite-tracked dogfood Task and publish
 
 | Task | Capability | Blocked by |
 | --- | --- | --- |
-| 077 | Approve Task intent | None |
+| 077 | Approve Task intent | 132 |
 | 078 | Share SQLite state across linked worktrees | None |
+| 132 | Add disposable Task Context drafts | 078 |
 | 079 | Manage direct Task dependencies | 077 |
 | 083 | Start a Task in a managed worktree | 077, 078, 079 |
 | 084 | Expand Candidate-owned validation through Checks | None |
@@ -65,6 +65,6 @@ The first evaluation Tasks should cover one Acceptance fixture, one calibrated r
 
 ## Planning status
 
-- These 21 drafts have approved v1 boundaries.
+- These 22 drafts have approved v1 boundaries.
 - Exact interfaces, errors, limits, and edge cases are refined when each Task becomes ready to implement.
 - Local and reversible implementation choices remain with execution.
