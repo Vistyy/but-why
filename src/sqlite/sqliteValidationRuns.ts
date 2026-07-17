@@ -2,7 +2,7 @@ import type { DatabaseSync } from "node:sqlite";
 
 import { rollbackIfOpen, withStateDatabase, type SqliteStoreInput } from "./connection.js";
 import { queryOne } from "./query.js";
-import { encodeSqliteJsonStringArray } from "./sqliteJsonStringArray.js";
+import { recordValidationEvidenceMutation } from "./sqliteValidationEvidence.js";
 import {
   recordValidationRunToolingErrorMutation,
   validationRunExists,
@@ -396,62 +396,12 @@ const recordCommandRound = (
       now: input.now,
     });
 
-    for (const artifact of input.artifactRecords) {
-      database
-        .prepare(`
-          INSERT INTO validation_run_artifacts (
-            ref,
-            validation_run_id,
-            phase,
-            producer,
-            path,
-            created_at
-          )
-          VALUES (?, ?, ?, ?, ?, ?)
-        `)
-        .run(
-          artifact.ref,
-          artifact.validationRunId,
-          artifact.phase,
-          artifact.producer,
-          artifact.path,
-          input.now,
-        );
-    }
+    recordValidationEvidenceMutation(database, input, {
+      artifacts: "validation_run_artifacts",
+      findings: "validation_run_findings",
+    });
 
     if (input.finding !== undefined) {
-      database
-        .prepare(`
-          INSERT INTO validation_run_findings (
-            id,
-            validation_run_id,
-            phase,
-            producer,
-            title,
-            description,
-            severity,
-            evidence,
-            files,
-            artifact_refs,
-            created_at,
-            updated_at
-          )
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `)
-        .run(
-          input.finding.id,
-          input.finding.validationRunId,
-          input.finding.phase,
-          input.finding.producer,
-          input.finding.title,
-          input.finding.description,
-          input.finding.severity ?? null,
-          input.finding.evidence,
-          encodeSqliteJsonStringArray(input.finding.files),
-          encodeSqliteJsonStringArray(input.finding.artifactRefs),
-          input.now,
-          input.now,
-        );
       database
         .prepare("UPDATE validation_runs SET status = 'failed', updated_at = ? WHERE id = ?")
         .run(input.now, input.validationRunId);

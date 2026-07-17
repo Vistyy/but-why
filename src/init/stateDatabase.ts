@@ -704,6 +704,78 @@ const migrations: readonly Migration[] = [
       )
     `,
   },
+  {
+    name: "018_candidate_validation_runs",
+    apply: `
+      CREATE TABLE candidate_validation_runs (
+        id TEXT PRIMARY KEY,
+        candidate_id TEXT NOT NULL,
+        policy_snapshot TEXT NOT NULL,
+        state TEXT NOT NULL CHECK (state IN ('running', 'complete')),
+        outcome TEXT CHECK (outcome IS NULL OR outcome IN ('passed', 'blocked', 'tooling_failed')),
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        FOREIGN KEY (candidate_id) REFERENCES candidates(id),
+        CHECK ((state = 'running' AND outcome IS NULL) OR (state = 'complete' AND outcome IS NOT NULL))
+      );
+      CREATE UNIQUE INDEX candidate_validation_runs_reuse_idx
+      ON candidate_validation_runs (candidate_id, policy_snapshot)
+      WHERE outcome = 'passed';
+      CREATE TABLE candidate_validation_workspace_setups (
+        validation_run_id TEXT PRIMARY KEY,
+        temp_ref_name TEXT NOT NULL,
+        submitted_sha TEXT NOT NULL,
+        worktree_head TEXT NOT NULL,
+        cleanup_worktree TEXT NOT NULL,
+        cleanup_temp_ref TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        FOREIGN KEY (validation_run_id) REFERENCES candidate_validation_runs(id)
+      );
+      CREATE TABLE candidate_validation_tooling_failures (
+        sequence INTEGER PRIMARY KEY AUTOINCREMENT,
+        validation_run_id TEXT NOT NULL,
+        error_kind TEXT NOT NULL,
+        operation_name TEXT NOT NULL,
+        error_message TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        FOREIGN KEY (validation_run_id) REFERENCES candidate_validation_runs(id)
+      );
+      CREATE TABLE candidate_validation_rounds (
+        validation_run_id TEXT NOT NULL,
+        phase TEXT NOT NULL,
+        producer TEXT NOT NULL,
+        round_number INTEGER NOT NULL,
+        status TEXT NOT NULL CHECK (status IN ('passed', 'failed')),
+        created_at TEXT NOT NULL,
+        PRIMARY KEY (validation_run_id, phase, producer, round_number),
+        FOREIGN KEY (validation_run_id) REFERENCES candidate_validation_runs(id)
+      );
+      CREATE TABLE candidate_validation_findings (
+        id TEXT PRIMARY KEY,
+        validation_run_id TEXT NOT NULL,
+        phase TEXT NOT NULL,
+        producer TEXT NOT NULL,
+        title TEXT NOT NULL,
+        description TEXT NOT NULL,
+        severity TEXT CHECK (severity IS NULL OR severity IN ('critical', 'high', 'medium', 'low')),
+        evidence TEXT NOT NULL,
+        files TEXT NOT NULL,
+        artifact_refs TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        FOREIGN KEY (validation_run_id) REFERENCES candidate_validation_runs(id)
+      );
+      CREATE TABLE candidate_validation_artifacts (
+        ref TEXT PRIMARY KEY,
+        validation_run_id TEXT NOT NULL,
+        phase TEXT NOT NULL,
+        producer TEXT NOT NULL,
+        path TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        FOREIGN KEY (validation_run_id) REFERENCES candidate_validation_runs(id)
+      )
+    `,
+  },
 ];
 
 export const ensureStateDatabase = (

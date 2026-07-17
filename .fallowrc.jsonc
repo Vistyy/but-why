@@ -151,7 +151,10 @@
       },
       {
         "name": "validation-run-store",
-        "patterns": ["src/validationRun/validationRunStore.ts"]
+        "patterns": [
+          "src/candidateValidation/candidateValidationRunStore.ts",
+          "src/validationRun/validationRunStore.ts"
+        ]
       },
       {
         "name": "validation-runs",
@@ -201,6 +204,7 @@
           "src/localSubmit/**",
           "src/localTask/**",
           "src/localValidationRun/**",
+          "src/candidateValidation/validateCandidate.ts",
           "src/submissionEnvironment/localSubmissionEnvironment.ts",
           "src/taskAuthority/localTaskAuthority.ts"
         ]
@@ -222,14 +226,17 @@
         "patterns": [
           "src/sqlite/connection.ts",
           "src/sqlite/query.ts",
+          "src/sqlite/sqliteCandidateValidationPolicy.ts",
           "src/sqlite/sqliteJsonStringArray.ts",
           "src/sqlite/sqliteTaskContextSnapshot.ts",
+          "src/sqlite/sqliteValidationEvidence.ts",
           "src/sqlite/sqliteValidationRunInternals.ts"
         ]
       },
       {
         "name": "sqlite-concrete-stores",
         "patterns": [
+          "src/sqlite/sqliteCandidateValidationRunStore.ts",
           "src/sqlite/sqliteValidationRunStore.ts",
           "src/sqlite/sqliteCandidateStore.ts",
           "src/sqlite/sqliteChangeCandidateCaptureStore.ts",
@@ -333,7 +340,7 @@
       },
       {
         "from": "validation-run-store",
-        "allow": ["domain"]
+        "allow": ["domain", "validation-tooling-failures"]
       },
       {
         "from": "validation-runs",
@@ -398,6 +405,7 @@
           "task-store",
           "use-cases",
           "validation-tooling-failures",
+          "validation-run-store",
           "validation-runs"
         ],
         "allowTypeOnly": ["validation-workspace"]

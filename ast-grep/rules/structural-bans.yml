@@ -459,6 +459,7 @@ files:
 ignores:
   - src/init/repoConfig.ts
   - src/output/json.ts
+  - src/sqlite/sqliteCandidateValidationPolicy.ts
   - src/sqlite/sqliteTaskContextSnapshot.ts
 rule:
   pattern: JSON.stringify($$$ARGS)

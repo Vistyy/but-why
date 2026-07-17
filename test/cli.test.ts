@@ -326,6 +326,7 @@ validationSetup:
         { name: "015_changes_and_candidates" },
         { name: "016_change_base_ref" },
         { name: "017_shared_state_identity" },
+        { name: "018_candidate_validation_runs" },
       ]);
       expect(
         database
@@ -334,6 +335,12 @@ validationSetup:
           )
           .all(),
       ).toEqual([
+        { name: "candidate_validation_artifacts" },
+        { name: "candidate_validation_findings" },
+        { name: "candidate_validation_rounds" },
+        { name: "candidate_validation_runs" },
+        { name: "candidate_validation_tooling_failures" },
+        { name: "candidate_validation_workspace_setups" },
         { name: "candidates" },
         { name: "changes" },
         { name: "schema_migrations" },

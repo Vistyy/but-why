@@ -1,4 +1,4 @@
-import { existsSync } from "node:fs";
+import { lstatSync } from "node:fs";
 import { join } from "node:path";
 
 import { createSandbox, type Sandbox, type SandboxProvider } from "@ai-hero/sandcastle";
@@ -64,7 +64,7 @@ type ValidationWorkspaceAdapters = {
     repoRoot: string,
     tempRefName: string,
   ) => ValidationWorkspaceCleanupResult["tempRef"];
-  readonly allowlistedFileExists: (repoRoot: string, path: string) => boolean;
+  readonly allowlistedFileIsRegular: (repoRoot: string, path: string) => boolean;
   readonly inspectExistingWorktree: (worktreePath: string) => ExistingWorktree;
   readonly removeWorktree: (repoRoot: string, worktreePath: string) => CleanupAttempt;
   readonly createSandcastleWorktree: (input: {
@@ -339,7 +339,7 @@ const validateAllowlistedCopyFiles = (
   adapters: ValidationWorkspaceAdapters,
 ): { readonly ok: true } | WorkspaceSetupFailure => {
   for (const path of input.copyFiles) {
-    if (!adapters.allowlistedFileExists(input.repoRoot, path)) {
+    if (!adapters.allowlistedFileIsRegular(input.repoRoot, path)) {
       return setupFailed(
         "copy_allowlisted_file",
         `Allowlisted validation workspace file is missing: ${path}`,
@@ -474,7 +474,13 @@ const productionValidationWorkspaceAdapters: ValidationWorkspaceAdapters = {
   createTempRef: (repoRoot, tempRefName, submittedSha) =>
     Effect.sync(() => ensureValidationTempRef(repoRoot, tempRefName, submittedSha)),
   deleteTempRef: (repoRoot, tempRefName) => deleteValidationTempRef(repoRoot, tempRefName),
-  allowlistedFileExists: (repoRoot, path) => existsSync(join(repoRoot, path)),
+  allowlistedFileIsRegular: (repoRoot, path) => {
+    try {
+      return lstatSync(join(repoRoot, path)).isFile();
+    } catch {
+      return false;
+    }
+  },
   inspectExistingWorktree,
   removeWorktree: (repoRoot, worktreePath) =>
     removeValidationWorktree(repoRoot, worktreePath)

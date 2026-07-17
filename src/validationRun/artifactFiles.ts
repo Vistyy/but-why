@@ -3,6 +3,8 @@ import { dirname, join } from "node:path";
 
 import type { ValidationPhase } from "./validationRun.js";
 
+export const maxValidationArtifactBytes = 1_048_576;
+
 export const writeValidationRunArtifactFile = (input: {
   readonly artifactsRoot: string;
   readonly validationRunId: string;
@@ -15,7 +17,14 @@ export const writeValidationRunArtifactFile = (input: {
   const absolutePath = join(input.artifactsRoot, path);
 
   mkdirSync(dirname(absolutePath), { recursive: true });
-  writeFileSync(absolutePath, input.content);
+  writeFileSync(absolutePath, boundedArtifactContent(input.content));
 
   return path;
+};
+
+const boundedArtifactContent = (content: string): Buffer => {
+  const bytes = Buffer.from(content, "utf8");
+  return bytes.length <= maxValidationArtifactBytes
+    ? bytes
+    : bytes.subarray(0, maxValidationArtifactBytes);
 };

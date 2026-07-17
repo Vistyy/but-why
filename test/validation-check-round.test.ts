@@ -10,6 +10,45 @@ const now = "2026-06-30T12:00:00.000Z";
 afterEach(cleanupTempRoots);
 
 describe("check round Findings", () => {
+  it("records every configured Check after failures when continuation is enabled", async () => {
+    const recordedRounds: RecordValidationRunCheckRoundInput[] = [];
+    const commands: string[] = [];
+    const result = await Effect.runPromise(
+      runCheckPhase({
+        validationRunId: "candidate-run",
+        continueAfterFinding: true,
+        checks: [
+          { id: "first", command: "exit 1", timeoutSeconds: 1 },
+          { id: "later", command: "exit 0", timeoutSeconds: 1 },
+        ],
+        artifactsRoot: createTempRoot(),
+        now,
+        sandbox: {
+          exec: async (command) => {
+            commands.push(command);
+            if (command === "command -v timeout >/dev/null 2>&1") {
+              return { exitCode: 0, stdout: "", stderr: "" };
+            }
+
+            return command.includes("exit 1")
+              ? { exitCode: 1, stdout: "", stderr: "\n__BUTWHY_CHECK_COMPLETED_first__:1\n" }
+              : { exitCode: 0, stdout: "", stderr: "\n__BUTWHY_CHECK_COMPLETED_later__:0\n" };
+          },
+        },
+        recordCheckRound: (input) => recordedRounds.push(input),
+      }),
+    );
+
+    expect(result).toEqual({ ok: true, findings: 1, validationRunId: "candidate-run" });
+    expect(commands).toHaveLength(4);
+    expect(recordedRounds).toHaveLength(2);
+    expect(recordedRounds.map((round) => round.phaseStatus)).toEqual(["failed", "failed"]);
+    expect(recordedRounds.map((round) => round.finding?.id)).toEqual([
+      "candidate-run-F1",
+      undefined,
+    ]);
+  });
+
   it("records timed-out check Findings without severity", async () => {
     const recordedRounds: RecordValidationRunCheckRoundInput[] = [];
     const result = await Effect.runPromise(

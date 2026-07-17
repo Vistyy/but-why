@@ -17,6 +17,7 @@ export type RunCheckPhaseInput = {
   readonly artifactsRoot: string;
   readonly commandCwd?: string;
   readonly now: string;
+  readonly continueAfterFinding?: boolean;
   readonly recordCheckRound: (input: RecordValidationRunCheckRoundInput) => void;
 };
 
@@ -47,6 +48,7 @@ type CheckRound = {
   readonly roundNumber: number;
   readonly failed: boolean;
   readonly lastCheck: boolean;
+  readonly priorFailure: boolean;
   readonly artifactRecords: RecordValidationRunCheckRoundInput["artifactRecords"];
   readonly finding?: NonNullable<RecordValidationRunCheckRoundInput["finding"]>;
 };
@@ -58,23 +60,29 @@ export const runCheckPhase = (
   input: RunCheckPhaseInput,
 ): Effect.Effect<RunCheckPhaseResult, ValidationToolingFailure> =>
   Effect.gen(function* () {
+    let foundFailure = false;
+
     for (const [index, check] of input.checks.entries()) {
-      const checkRound = yield* runSingleCheck(input, check, index);
+      const checkRound: CheckRound = yield* runSingleCheck(input, check, index, foundFailure);
 
       yield* recordCheckRound(input, checkRound);
+      foundFailure ||= checkRound.failed;
 
-      if (checkRound.failed) {
+      if (checkRound.failed && input.continueAfterFinding !== true) {
         return { ok: true, findings: 1, validationRunId: input.validationRunId };
       }
     }
 
-    return { ok: true, findings: 0 };
+    return foundFailure
+      ? { ok: true, findings: 1, validationRunId: input.validationRunId }
+      : { ok: true, findings: 0 };
   });
 
 const runSingleCheck = (
   input: RunCheckPhaseInput,
   check: SubmitCheckConfig,
   index: number,
+  priorFailure: boolean,
 ): Effect.Effect<CheckRound, ValidationToolingFailure> =>
   Effect.gen(function* () {
     const { commandResult, timedOut } = yield* runCheckCommand(
@@ -100,11 +108,13 @@ const runSingleCheck = (
       roundNumber: index + 1,
       failed,
       lastCheck: index === input.checks.length - 1,
+      priorFailure,
       artifactRecords,
       ...(failed
         ? {
             finding: checkFinding(
               input.validationRunId,
+              index + 1,
               check,
               commandResult,
               timedOut,
@@ -126,7 +136,12 @@ const recordCheckRound = (
         producer: checkRound.producer,
         roundNumber: checkRound.roundNumber,
         roundStatus: checkRound.failed ? "failed" : "passed",
-        phaseStatus: checkRound.failed ? "failed" : checkRound.lastCheck ? "passed" : "active",
+        phaseStatus:
+          checkRound.failed || (checkRound.lastCheck && checkRound.priorFailure)
+            ? "failed"
+            : checkRound.lastCheck
+              ? "passed"
+              : "active",
         artifactRecords: checkRound.artifactRecords,
         ...(checkRound.finding === undefined ? {} : { finding: checkRound.finding }),
         now: input.now,
@@ -141,12 +156,13 @@ const recordCheckRound = (
 
 const checkFinding = (
   validationRunId: string,
+  findingNumber: number,
   check: SubmitCheckConfig,
   commandResult: CommandResult,
   timedOut: boolean,
   artifactRefs: readonly string[],
 ): NonNullable<RecordValidationRunCheckRoundInput["finding"]> => ({
-  id: `${validationRunId}-F1`,
+  id: `${validationRunId}-F${findingNumber}`,
   validationRunId,
   phase: "checks",
   producer: check.id,
