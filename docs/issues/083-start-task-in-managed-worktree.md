@@ -39,7 +39,7 @@ Temporary Git repository test covering Task Start from the main checkout and lin
 
 Implemented in `3b465b8`.
 Review corrections are pending.
-Quality passed with 286 tests.
+Quality checks passed.
 
 ## Blocked by
 

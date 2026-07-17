@@ -93,6 +93,26 @@ describe("by task start managed worktree", () => {
     ).toEqual([firstOutput.branch]);
   });
 
+  it("rejects repeated Start after implementation has advanced", () => {
+    const root = initializedRepository();
+    createApprovedTask(root);
+    expect(runByInProcess(root, ["task", "start", "BY-1"], now).status).toBe(0);
+    const context = loadRepoLocalContext(root, () => now);
+    if (!context.ok) throw new Error(`Could not load repository: ${context.error.code}`);
+    const taskStore = openRepoLocalStores(context.context, () => now).taskStore;
+
+    for (const state of ["validating", "ready", "done"] as const) {
+      expect(
+        taskStore.transitionTaskState({ taskId: publicTaskId("BY-1"), to: state, now }).ok,
+      ).toBe(true);
+      const repeated = runByInProcess(root, ["task", "start", "BY-1", "--output", "json"], now);
+      expect(repeated.status).toBe(1);
+      expect(JSON.parse(repeated.stdout)).toMatchObject({
+        error: { code: "invalid_task_state", taskId: "BY-1", state },
+      });
+    }
+  });
+
   it("recreates a missing recorded worktree without creating another Change", () => {
     const root = initializedRepository();
     createApprovedTask(root);

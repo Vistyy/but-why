@@ -40,7 +40,13 @@ const prepare = (
   taskId: PublicTaskId,
 ): ReturnType<TaskStartStore["prepare"]> => {
   const existing = getByTaskId(database, taskId);
-  if (existing !== undefined) return { ok: true, existing };
+  if (existing !== undefined) {
+    const task = readTask(database, taskId);
+    if (task === undefined) return { ok: false, code: "task_not_found" };
+    return task.state === "implementing"
+      ? { ok: true, existing }
+      : { ok: false, code: "invalid_task_state", state: task.state };
+  }
   const eligibility = readEligibility(database, taskId);
   return eligibility.ok ? { ok: true, existing: undefined } : eligibility;
 };
@@ -131,11 +137,7 @@ const readEligibility = (
 ):
   | { readonly ok: true; readonly task: TaskRow }
   | Exclude<ReturnType<TaskStartStore["prepare"]>, { readonly ok: true }> => {
-  const task = queryOne<TaskRow>(
-    database,
-    "SELECT id, title, description, state FROM tasks WHERE id = ?",
-    [taskId],
-  );
+  const task = readTask(database, taskId);
   if (task === undefined) return { ok: false, code: "task_not_found" };
   if (task.state !== "todo") {
     return { ok: false, code: "invalid_task_state", state: task.state };
@@ -155,6 +157,11 @@ const readEligibility = (
     ? { ok: true, task }
     : { ok: false, code: "task_dependencies_unsatisfied", blockedBy };
 };
+
+const readTask = (database: DatabaseSync, taskId: PublicTaskId): TaskRow | undefined =>
+  queryOne<TaskRow>(database, "SELECT id, title, description, state FROM tasks WHERE id = ?", [
+    taskId,
+  ]);
 
 const markReady = (database: DatabaseSync, taskId: PublicTaskId, now: string): TaskStartRecord => {
   database.exec("BEGIN IMMEDIATE");
