@@ -7,18 +7,18 @@ It ends when But Why? completes one real SQLite-tracked dogfood Task and publish
 
 ## Can start immediately
 
-- Task 079: Manage direct Task dependencies.
+- Task 083: Start a Task in a managed worktree.
 - Task 087: Inspect a Candidate-owned Validation Run.
 
 ## Completed
 
 - Task 077: Approve Task intent (`2c5e93b`).
+- Task 079: Manage direct Task dependencies (`179bbba`).
 
 ## Dependency graph
 
 | Task | Capability | Blocked by |
 | --- | --- | --- |
-| 083 | Start a Task in a managed worktree | 077, 078, 079 |
 | 096 | Run built-in Acceptance Review | 083 |
 | 089 | Run configured Specialists | 096 |
 | 092 | Recheck reviewer Findings without anchoring | 089, 096 |
@@ -28,7 +28,7 @@ It ends when But Why? completes one real SQLite-tracked dogfood Task and publish
 | 129 | Submit a Task with no repository change | 096, 105 |
 | 106 | Migrate Task inspection to Change-owned facts | 087, 101, 105 |
 | 107 | Remove Task-owned validation and delivery | 105, 106 |
-| 117 | Cancel a Task and its owned PR | 079, 101, 105 |
+| 117 | Cancel a Task and its owned PR | 101, 105 |
 | 123 | Ship the manual Task workflow | 107, 117, 129 |
 | 130 | Launch a Task Implementer in Herdr | 083, 117, 123 |
 | 125 | Produce an installable v1 package | 130 |
