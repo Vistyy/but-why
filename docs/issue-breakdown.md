@@ -2,13 +2,16 @@
 
 ## Release boundary
 
-V1 is the manual Task workflow defined by `docs/prds/change-centered-validation-prd.md`.
-It ends when But Why? completes one real SQLite-tracked dogfood Task and publishes the verified npm package.
+V1 is the Change-centered workflow defined by `docs/specs/taskless-changes-and-worktree-handoff.md`.
+It ends when But Why? completes one real SQLite-tracked Task-backed Change and publishes the verified npm package.
 
 ## Can start immediately
 
-- Task 087: Inspect a Candidate-owned Validation Run.
-- Task 096: Run built-in Acceptance Review.
+- Task 084: Expand Candidate-owned validation through Checks.
+- Task 133: Start prepared Changes.
+- Task 134: Remove incidental Git setup from SQLite tests.
+
+Task 134 is low priority and does not block the product graph.
 
 ## Completed
 
@@ -18,34 +21,37 @@ It ends when But Why? completes one real SQLite-tracked dogfood Task and publish
 
 | Task | Capability | Blocked by |
 | --- | --- | --- |
+| 087 | Inspect a Candidate-owned Validation Run | 084 |
+| 096 | Run built-in Acceptance Review | 083, 084 |
 | 089 | Run configured Specialists | 096 |
 | 092 | Recheck reviewer Findings without anchoring | 089, 096 |
-| 098 | Publish one exact Candidate with recovery | 089, 092, 096 |
-| 101 | Reconcile an owned PR during Submit | 098 |
-| 105 | Compose and migrate Task Submit to Candidate ownership | 083, 087, 089, 092, 096, 098, 101 |
-| 129 | Submit a Task with no repository change | 096, 105 |
-| 106 | Migrate Task inspection to Change-owned facts | 087, 101, 105 |
-| 107 | Remove Task-owned validation and delivery | 105, 106 |
-| 117 | Cancel a Task and its owned PR | 101, 105 |
-| 123 | Ship the manual Task workflow | 107, 117, 129 |
-| 130 | Launch a Task Implementer in Herdr | 083, 117, 123 |
-| 125 | Produce an installable v1 package | 130 |
-| 131 | Dogfood the first SQLite-tracked Task | 125 |
+| 098 | Publish one exact Candidate with recovery | 089, 092, 096, 133 |
+| 101 | Reconcile owned PRs and clean completed Changes | 098, 133 |
+| 105 | Migrate Submit to Change ownership | 087, 089, 092, 096, 098, 101, 133 |
+| 129 | Submit a Task-backed Change with no repository change | 096, 105 |
+| 106 | Add Change inspection and migrate Task projections | 087, 101, 105, 133 |
+| 107 | Remove Task-owned implementation and delivery paths | 105, 106, 133 |
+| 117 | Cancel Task-backed and taskless Changes | 101, 105, 133 |
+| 130 | Launch a Change Implementer in Herdr | 133 |
+| 123 | Ship the Change-centered manual workflow | 107, 117, 129, 130 |
+| 125 | Produce an installable v1 package | 123 |
+| 131 | Dogfood the first SQLite-tracked Change workflow | 125 |
 | 126 | Publish But Why? to npm | 131 |
 
 ## Migration order
 
 1. Task 084 expands Candidate-owned validation beside the existing Task-owned path.
-2. Tasks 087, 096, 089, 092, 098, and 101 complete the new internal capabilities while the public command remains green.
-3. Task 105 composes those capabilities and migrates public Task Submit without dual writes.
-4. Task 106 migrates Task inspection.
-5. Task 107 removes the old writers, readers, routes, tables, and compatibility paths.
+2. Tasks 087, 096, 089, 092, 098, and 101 complete the Candidate-owned validation and delivery capabilities while Task 133 establishes prepared Change worktrees.
+3. Task 105 composes those capabilities behind Change Submit without dual writes.
+4. Task 106 migrates detailed inspection to Change commands and keeps Task projections concise.
+5. Task 107 removes the replaced Task-owned writers, readers, routes, tables, and compatibility paths.
+6. Tasks 117 and 130 complete cancellation, cleanup, Herdr launch, and handoff behavior before Task 123 ships the public workflow.
 
 ## Deferred
 
 The following are not v1 contracts:
 
-- Standalone validation.
+- Validation without a Change.
 - Automatic Fixers and AFK workers.
 - Needs Input, Hold, and Resume.
 - Supervisor services and background PR watching.
@@ -61,6 +67,6 @@ The first evaluation Tasks should cover one Acceptance fixture, one calibrated r
 
 ## Planning status
 
-- These 22 drafts have approved v1 boundaries.
+- The active drafts have approved v1 boundaries.
 - Exact interfaces, errors, limits, and edge cases are refined when each Task becomes ready to implement.
 - Local and reversible implementation choices remain with execution.

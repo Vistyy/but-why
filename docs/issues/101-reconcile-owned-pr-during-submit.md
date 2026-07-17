@@ -1,35 +1,41 @@
-# Reconcile an owned PR during Submit
+# Reconcile owned PRs and clean completed Changes
 
 ## Specification
 
 - `docs/prds/change-centered-validation-prd.md`
+- `docs/specs/taskless-changes-and-worktree-handoff.md`
 - `CONTEXT.md`
 - `docs/adr/0011-keep-v1-pr-heads-locally-owned.md`
 
 ## Behaviors owned
 
-- Repeated Submit reads authoritative facts for the Change's existing owned PR.
-- GitHub state changes Task progress only when exact ownership still matches.
+- Submit and `by change reconcile` read authoritative state for Change-owned PRs.
+- Merged PRs complete their Changes and trigger safe cleanup.
+- Reconciliation remains explicit and one-shot in v1.
 
 ## What to build
 
-Add one-shot PR reconciliation as an internal Submit capability without a public reconcile command or watcher.
+Provide one owned-PR reconciliation capability used internally by Submit and publicly through `by change reconcile [<change-id>]`, including safe cleanup of eligible terminal Change resources.
 
 ## Primary verification seam
 
-Repeated Submit test with a fake GitHub repository.
+Change reconciliation CLI tests with a fake GitHub repository and focused real-Git cleanup cases.
 
 ## Acceptance criteria
 
-- [ ] Submit finds the durable owned PR before considering new publication.
+- [ ] Repository-wide reconciliation checks only open Changes with recorded PRs and closed Changes with pending cleanup.
+- [ ] Targeted reconciliation checks exactly one Change.
 - [ ] An open PR at the expected validated head is returned without mutation.
-- [ ] A merged PR atomically marks the Task and Change completed.
+- [ ] A merged PR atomically completes the Change and its linked Task when present.
 - [ ] A closed unmerged PR remains closed and no replacement PR is created.
 - [ ] Unexpected repository, head branch, base target, or head SHA is rejected without adoption.
-- [ ] A new local committed head proceeds through Candidate validation before the same PR updates.
-- [ ] Reconciliation works from any checkout in the local repository.
-- [ ] The CLI states that local PR facts remain stale until Submit runs again.
+- [ ] Cleanup removes a worktree only when it has no uncommitted changes.
+- [ ] Cleanup deletes a branch only when its commits remain reachable through another ref.
+- [ ] Unsafe or failed cleanup remains pending and reports its blocking reason.
+- [ ] Reconciliation works from any checkout in the Local Repository and is idempotent.
+- [ ] V1 has no reconciliation daemon, webhook, or automatic polling requirement.
 
 ## Blocked by
 
 - `docs/issues/098-publish-one-exact-candidate-with-recovery.md`
+- `docs/issues/133-start-prepared-changes.md`

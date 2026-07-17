@@ -4,8 +4,16 @@ This glossary defines the canonical language for the reduced manual v1.
 Detailed behavior belongs in the active PRD, ADRs, and implementation Tasks.
 
 **Change**:
-The durable owner of one Task's code lineage, managed worktree, Candidates, Validation Runs, Findings, and owned PR.
+The durable owner of one code lineage, Managed Worktree, Candidates, Validation Runs, Findings, and owned PR, optionally linked to one Task.
 _Avoid_: Task, branch, pull request, generic workflow
+
+**Task-backed Change**:
+A Change linked to one Task and its Acceptance Context.
+_Avoid_: Task, Task Worktree
+
+**Taskless Change**:
+A Change with no linked Task or Acceptance Context that remains eligible for code-based validation and publication.
+_Avoid_: Ad hoc worktree, implicit Task
 
 **Open Change**:
 A Change whose implementation, validation, publication, or merge observation may still advance.
@@ -36,7 +44,7 @@ One immutable committed code state identified by an exact comparison base and he
 _Avoid_: Change, working tree, Submission, Validation Run
 
 **Current Candidate**:
-The latest Candidate selected from the Task Worktree for the open Change.
+The latest Candidate selected from the Managed Worktree for the open Change.
 _Avoid_: Latest historical Candidate, dirty workspace
 
 **Acceptance Context**:
@@ -73,10 +81,10 @@ _Avoid_: Display title, raw Task ID in process names
 
 **Task Approval**:
 The permanent confirmation that a New Task's intent is ready to become eligible for implementation.
-_Avoid_: Task Start, reviewer approval
+_Avoid_: Change Start, reviewer approval
 
-**Task Start**:
-The named operation that creates the Task's Change, Task Worktree, starting commit, and Acceptance Context.
+**Change Start**:
+The named operation that creates a Change, its Managed Worktree, and its starting commit, optionally linking an approved Task and capturing its Acceptance Context.
 _Avoid_: Agent launch alone, validation, arbitrary state assignment
 
 **Task Lifecycle**:
@@ -107,16 +115,16 @@ _Avoid_: Done Task, deleted Task
 SQLite and other local operational state resolved through Git's common directory so every linked worktree sees the same facts.
 _Avoid_: Copied state file, tracked Repo Config, per-worktree database
 
-**Task Worktree**:
-The persistent But Why-owned Git branch and linked worktree created for one started Task.
-_Avoid_: Validation Workspace, caller checkout, temporary agent worktree
+**Managed Worktree**:
+The persistent But Why-owned Git branch and linked worktree belonging to one open Change.
+_Avoid_: Validation Workspace, caller checkout, temporary agent worktree, Task Worktree
 
 **Interactive Session**:
-An optional visible external-agent process hosted in a Task Worktree, with Herdr as the temporary v1 integration.
+An optional visible external-agent process hosted in a Managed Worktree, with Herdr as the temporary v1 integration.
 _Avoid_: Task state, Validation Run, background Supervisor worker
 
 **Submission**:
-The act of asking But Why? to inspect a started Task's managed worktree, select its Candidate or no-change state, validate it, and publish when eligible.
+The act of asking But Why? to inspect a Change's Managed Worktree, select its Candidate or no-change state, validate it, and publish when eligible.
 _Avoid_: Push, Candidate, Validation Run
 
 **No-Change Submission**:
@@ -128,7 +136,7 @@ A failure that rejects Submission before a Candidate-owned Validation Run or no-
 _Avoid_: Finding, Validation Tooling Failure
 
 **Submission Environment**:
-The Task Worktree and repository facts from which Submit reads the committed code and local validation environment.
+The Managed Worktree and repository facts from which Submission reads the committed code and local validation environment.
 _Avoid_: Validation Workspace, current caller checkout
 
 **GitHub PR Target**:
@@ -136,15 +144,15 @@ The authenticated GitHub repository and base branch where But Why? may publish a
 _Avoid_: Git remote name, owned PR
 
 **Implementer**:
-The human or external interactive agent responsible for writing and committing Task work and addressing returned Findings.
+The human or external interactive agent responsible for writing and committing Change work and addressing returned Findings.
 _Avoid_: Acceptance Reviewer, Specialist Reviewer, But Why Fixer
 
 **Validation Gate**:
-The fixed read-only sequence that judges changed code through Prepare, Checks, Acceptance Review, and configured Specialists.
+The fixed read-only sequence that judges changed code through Repository Preparation, Checks, Acceptance Review for a Task-backed Change, and configured Specialists.
 _Avoid_: Generic pipeline language, publication, implementation
 
 **Acceptance Reviewer**:
-The always-enabled coding agent that judges a Candidate or no-change repository state against immutable Acceptance Context.
+The coding agent that judges a Task-backed Change's Candidate or no-change repository state against immutable Acceptance Context.
 _Avoid_: Specialist Reviewer, Implementer
 
 **Specialist Reviewer**:
@@ -175,9 +183,13 @@ _Avoid_: Tooling Failure, Task Comment, mutable issue
 A named subdivision of the Validation Gate that gives validation work, Findings, and Artifacts stable context.
 _Avoid_: Publication step, generic job
 
+**Repository Preparation**:
+The configured setup that establishes dependencies or tools in a new Managed Worktree or Validation Workspace.
+_Avoid_: Validation-only setup, package-manager-specific install stage
+
 **Prepare Phase**:
-The optional first phase that establishes dependencies or tools needed by later validation phases.
-_Avoid_: Check, package-manager-specific install stage
+The optional first Validation Run phase that applies Repository Preparation for later validation phases.
+_Avoid_: Check, implementation-worktree readiness
 
 **Producer**:
 The configured Check or Reviewer identity that produced validation evidence.

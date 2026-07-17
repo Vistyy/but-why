@@ -9,6 +9,7 @@
 - Domain language: `CONTEXT.md`.
 - Current v1 architecture: `docs/architecture.md`.
 - Current implementation order: `docs/issue-breakdown.md`.
+- Approved product specifications: `docs/specs/`.
 - Detailed implementation work: `docs/issues/` and `docs/prds/`; PRDs are context, not accepted architecture.
 - Development tooling: `docs/tooling.md`.
 - Accepted architecture decisions: `docs/adr/`.

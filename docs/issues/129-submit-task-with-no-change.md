@@ -1,23 +1,24 @@
-# Submit a Task with no repository change
+# Submit a Task-backed Change with no repository change
 
 ## Specification
 
 - `docs/prds/change-centered-validation-prd.md`
+- `docs/specs/taskless-changes-and-worktree-handoff.md`
 - `CONTEXT.md`
 - `docs/adr/0013-require-a-pr-or-verified-no-change-completion.md`
 
 ## Behaviors owned
 
-- Submit detects when the current tracked tree equals the Task's recorded starting tree.
+- Change Submit detects when a Task-backed Change's tracked tree equals its recorded starting tree.
 - Acceptance Review alone determines whether the existing repository already satisfies the Task.
 
 ## What to build
 
-Add the no-change branch to `by submit <task-id>` without another command, flag, reason, Checks, Specialists, or PR.
+Add the Task-backed no-change branch to `by change submit <change-id>` without another command, flag, reason, Checks, Specialists, or PR.
 
 ## Primary verification seam
 
-No-change Submit test with passing and blocking fake Acceptance reports.
+No-change Change Submit test with passing and blocking fake Acceptance reports.
 
 ## Acceptance criteria
 
@@ -25,9 +26,10 @@ No-change Submit test with passing and blocking fake Acceptance reports.
 - [ ] A real Candidate record references the existing starting commit without fabricating a commit.
 - [ ] One Candidate-owned Acceptance-only Validation Run stores the no-change judgment and Findings.
 - [ ] Only Acceptance Review runs and receives no Implementer explanation.
-- [ ] Passing Acceptance marks the Task Done with completion kind `no_change`.
+- [ ] Passing Acceptance marks the linked Task Done with completion kind `no_change`.
 - [ ] Acceptance Findings return the Task to implementing.
 - [ ] Prepare, Checks, Specialists, and publication do not run.
+- [ ] Taskless unchanged Changes remain owned by issue 105 and return `nothing_to_submit` instead.
 - [ ] Repeated successful no-change Submit returns the durable completion unchanged.
 
 ## Blocked by

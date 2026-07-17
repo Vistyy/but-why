@@ -1,39 +1,37 @@
-# Launch a Task Implementer in Herdr
+# Launch a Change Implementer in Herdr
 
 ## Specification
 
-- `docs/prds/change-centered-validation-prd.md`
+- `docs/specs/taskless-changes-and-worktree-handoff.md`
 - `CONTEXT.md`
 
 ## Behaviors owned
 
-- Global user configuration may ask Task Start to open a visible Herdr child workspace and fresh Pi Implementer.
-- Herdr remains presentation and process infrastructure rather than Task or Git authority.
+- Change Implement launches a visible Herdr child workspace and fresh Pi session in a ready Managed Worktree.
+- A user-invoked skill can hand the current work to that fresh session without copying the conversation.
 
 ## What to build
 
-Extend Task Start with one optional Herdr integration that opens the existing But Why-owned worktree and launches the installed implementation workflow.
+Add `by change implement <change-id> [--handoff-file <path>]` and ship the user-only `handoff-to-worktree` skill as one Herdr integration over existing Change-owned Git state.
 Do not build a generic session-provider framework.
 
 ## Primary verification seam
 
-Task Start integration test against a fake Herdr CLI or socket adapter, followed by one local Herdr smoke test.
+Change Implement tests against a fake Herdr adapter, a static skill contract test, and one local Herdr smoke test.
 
 ## Acceptance criteria
 
-- [ ] Disabled integration leaves Task Start behavior unchanged and returns the managed worktree path.
-- [ ] Enabled integration calls Herdr only after branch, worktree, Change, and Acceptance Context are durable.
-- [ ] Herdr opens the existing worktree as a child workspace rather than creating Git state.
-- [ ] A fresh Pi session starts in that worktree with the Task ID and installed implementation workflow.
-- [ ] The coordinator remains focused while success returns Herdr workspace, tab, pane, and Pi session facts.
-- [ ] Repeated Start never launches a duplicate active Implementer.
-- [ ] Herdr or Pi launch failure preserves the valid Task worktree and returns a retryable launch result.
-- [ ] Task inspection exposes the optional interactive session location and current observed status without treating it as Task truth.
-- [ ] Cancellation stops the recorded interactive session before its terminal result commits.
-- [ ] Herdr-specific documentation extends the installed core workflow with launch, inspection, intervention, and cancellation.
+- [ ] Change Implement accepts only a ready Change and uses its recorded Managed Worktree.
+- [ ] Herdr opens the existing worktree rather than creating or owning Git state.
+- [ ] A fresh Pi session starts in that worktree with the Change identity and optional handoff as its initial prompt.
+- [ ] `--handoff-file` is read through a bounded, actionable input contract.
+- [ ] Launch failure preserves the prepared Change and returns a retryable result.
+- [ ] Repeated launch does not create a duplicate active Implementer.
+- [ ] `handoff-to-worktree` is user-invoked only and contains its own compact handoff instructions.
+- [ ] The skill writes its handoff to the operating system temporary directory.
+- [ ] The skill calls Change Start and Change Implement with `--output json` and reports failures in the current session.
+- [ ] The integration does not copy, fork, or retarget the current Pi session.
 
 ## Blocked by
 
-- `docs/issues/083-start-task-in-managed-worktree.md`
-- `docs/issues/117-cancel-task-and-owned-pr.md`
-- `docs/issues/123-ship-manual-task-workflow.md`
+- `docs/issues/133-start-prepared-changes.md`
