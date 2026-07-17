@@ -6,6 +6,7 @@ import { writeValidationRunArtifactFile } from "../validationRun/artifactFiles.j
 import type { RecordValidationRunCheckRoundInput } from "../validationRun/validationRunStore.js";
 import {
   CheckCommandExecutionToolingFailed,
+  GitToolingFailed,
   InfrastructureToolingFailed,
   type ValidationToolingFailure,
 } from "./validationToolingFailures.js";
@@ -16,6 +17,7 @@ export type RunCheckPhaseInput = {
   readonly sandbox: Pick<Sandbox, "exec">;
   readonly artifactsRoot: string;
   readonly commandCwd?: string;
+  readonly expectedHeadSha?: string;
   readonly now: string;
   readonly continueAfterFinding?: boolean;
   readonly recordCheckRound: (input: RecordValidationRunCheckRoundInput) => void;
@@ -89,6 +91,7 @@ const runSingleCheck = (
       input.sandbox,
       check,
       input.commandCwd,
+      input.expectedHeadSha,
     );
     const artifactRefs = artifactFileNames.map((fileName) =>
       checkArtifactRef(input.validationRunId, check.id, fileName),
@@ -181,9 +184,11 @@ const runCheckCommand = (
   sandbox: Pick<Sandbox, "exec">,
   check: SubmitCheckConfig,
   commandCwd: string | undefined,
+  expectedHeadSha: string | undefined,
 ): Effect.Effect<CheckCommandResult, ValidationToolingFailure> =>
   Effect.tryPromise({
     try: async () => {
+      await ensureCandidateHead(sandbox, commandCwd, expectedHeadSha);
       await ensureTimeoutCommandAvailable(sandbox, check);
 
       const marker = checkCompletionMarker(check.id);
@@ -192,6 +197,7 @@ const runCheckCommand = (
         commandCwd === undefined ? undefined : { cwd: commandCwd },
       );
       const parsed = parseCheckCompletionMarker(result.stderr, marker);
+      await ensureCandidateHead(sandbox, commandCwd, expectedHeadSha);
 
       return {
         commandResult: {
@@ -209,6 +215,24 @@ const runCheckCommand = (
         message: errorMessage(error),
       }),
   });
+
+const ensureCandidateHead = async (
+  sandbox: Pick<Sandbox, "exec">,
+  commandCwd: string | undefined,
+  expectedHeadSha: string | undefined,
+): Promise<void> => {
+  if (expectedHeadSha === undefined) return;
+  const result = await sandbox.exec(
+    "git rev-parse HEAD",
+    commandCwd === undefined ? undefined : { cwd: commandCwd },
+  );
+  if (result.exitCode !== 0 || result.stdout.trim() !== expectedHeadSha) {
+    throw new GitToolingFailed({
+      operationName: "verify_candidate_head",
+      message: "Validation workspace HEAD no longer matches the Candidate.",
+    });
+  }
+};
 
 const ensureTimeoutCommandAvailable = async (
   sandbox: Pick<Sandbox, "exec">,

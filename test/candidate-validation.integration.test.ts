@@ -111,6 +111,33 @@ describe("Candidate validation", () => {
     ]);
   });
 
+  it("fails tooling when a Check changes the Candidate worktree head", async () => {
+    const repo = candidateReadyRepo();
+    const captured = captureLocalCandidate({ cwd: repo, now });
+    expect(captured.ok).toBe(true);
+    if (!captured.ok) return;
+    const validation = openCandidateValidation({
+      localRepositoryRoot: repo,
+      artifactsRoot: join(commonDirectory(repo), "but-why", "artifacts"),
+      runStore: openSqliteCandidateValidationRunStore(sqliteInput(repo)),
+    });
+
+    await expect(
+      Effect.runPromise(
+        validation.validateCandidate({
+          candidateId: captured.candidateId,
+          headSha: captured.headSha,
+          policy: {
+            sandboxMode: "none",
+            checks: [{ id: "mutates-head", command: "git reset --hard HEAD~", timeoutSeconds: 1 }],
+            copyFiles: [],
+          },
+          now,
+        }),
+      ),
+    ).resolves.toMatchObject({ ok: false, outcome: "tooling_failed" });
+  });
+
   it("copies a regular local validation file without changing Candidate identity", async () => {
     const repo = candidateReadyRepo();
     const captured = captureLocalCandidate({ cwd: repo, now });

@@ -87,6 +87,7 @@ const validateCandidate = (
               sandbox: activeWorkspace.sandbox,
               artifactsRoot: dependencies.artifactsRoot,
               commandCwd: activeWorkspace.worktreePath,
+              expectedHeadSha: input.headSha,
               now: input.now,
               recordPrepareRound: dependencies.runStore.recordPrepareRound,
             });
@@ -98,6 +99,7 @@ const validateCandidate = (
             sandbox: activeWorkspace.sandbox,
             artifactsRoot: dependencies.artifactsRoot,
             commandCwd: activeWorkspace.worktreePath,
+            expectedHeadSha: input.headSha,
             now: input.now,
             continueAfterFinding: true,
             recordCheckRound: dependencies.runStore.recordCheckRound,
