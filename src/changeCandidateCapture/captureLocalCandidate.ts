@@ -55,6 +55,7 @@ export type CaptureLocalCandidateResult =
         | "comparison_base_unavailable"
         | "candidate_provenance_conflict"
         | "capture_conflict"
+        | "shared_state_identity_conflict"
         | "git_tooling_error";
     };
 
@@ -79,8 +80,9 @@ export const captureLocalCandidate = (
     migrationTimestamp: () => input.now,
     commonDirectory: workspace.facts.repositoryCommonDirectory,
   };
-  const stores = openChangeCandidateCaptureStores(sqliteInput);
-  const changeSelection = selectChange(stores.changeStore, input, workspace.facts);
+  const storesResult = openChangeCandidateCaptureStores(sqliteInput);
+  if (!storesResult.ok) return storesResult;
+  const changeSelection = selectChange(storesResult.stores.changeStore, input, workspace.facts);
   if (!changeSelection.ok) return changeSelection;
 
   const base = selectBase(
@@ -100,7 +102,7 @@ export const captureLocalCandidate = (
     return { ok: false, code: "comparison_base_unavailable" };
   }
 
-  const committed = stores.captureStore.commitCapture({
+  const committed = storesResult.stores.captureStore.commitCapture({
     repositoryCommonDirectory: workspace.facts.repositoryCommonDirectory,
     branchRef: workspace.facts.branchRef,
     ...(changeSelection.selection.change === undefined

@@ -1,7 +1,11 @@
 import { existsSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 
-import { ensureStateDatabase, stateDatabaseTimeoutMs } from "../init/stateDatabase.js";
+import {
+  ensureStateDatabase,
+  SharedStateIdentityConflictError,
+  stateDatabaseTimeoutMs,
+} from "../init/stateDatabase.js";
 
 export type SqliteStoreInput = {
   readonly statePath: string;
@@ -14,6 +18,22 @@ class SqliteStateUnavailableError extends Error {
     super("Durable Task state is unavailable");
   }
 }
+
+export const validateStateDatabase = (
+  input: SqliteStoreInput,
+):
+  | { readonly ok: true }
+  | { readonly ok: false; readonly code: "shared_state_identity_conflict" } => {
+  try {
+    ensureStateDatabase(input.statePath, input.migrationTimestamp, input.commonDirectory);
+    return { ok: true };
+  } catch (error) {
+    if (error instanceof SharedStateIdentityConflictError) {
+      return { ok: false, code: "shared_state_identity_conflict" };
+    }
+    throw error;
+  }
+};
 
 export const withStateDatabase = <Result>(
   input: SqliteStoreInput,

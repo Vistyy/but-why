@@ -2,7 +2,10 @@ import type { CandidateStore } from "../candidate/candidateStore.js";
 import type { ChangeCandidateCaptureStore } from "../changeCandidateCapture/changeCandidateCaptureStore.js";
 import type { ChangeStore } from "../change/changeStore.js";
 import { openSqliteCandidateStore } from "../sqlite/sqliteCandidateStore.js";
-import { openSqliteChangeCandidateCaptureStore } from "../sqlite/sqliteChangeCandidateCaptureStore.js";
+import {
+  openSqliteChangeCandidateCaptureStore,
+  validateChangeCandidateCaptureState,
+} from "../sqlite/sqliteChangeCandidateCaptureStore.js";
 import { openSqliteChangeStore } from "../sqlite/sqliteChangeStore.js";
 import type { ValidationRunStore } from "../validationRun/validationRunStore.js";
 import { openSqliteValidationRunStore } from "../sqlite/sqliteValidationRunStore.js";
@@ -18,6 +21,10 @@ export type ChangeCandidateCaptureStores = {
   readonly changeStore: ChangeStore;
 };
 
+export type OpenChangeCandidateCaptureStoresResult =
+  | { readonly ok: true; readonly stores: ChangeCandidateCaptureStores }
+  | { readonly ok: false; readonly code: "shared_state_identity_conflict" };
+
 export type RepoLocalStores = {
   readonly candidateStore: CandidateStore;
   readonly changeStore: ChangeStore;
@@ -30,10 +37,19 @@ export type RepoLocalStores = {
 export const openChangeCandidateCaptureStores = (input: {
   readonly statePath: string;
   readonly migrationTimestamp: () => string;
-}): ChangeCandidateCaptureStores => ({
-  captureStore: openSqliteChangeCandidateCaptureStore(input),
-  changeStore: openSqliteChangeStore(input),
-});
+  readonly commonDirectory: string;
+}): OpenChangeCandidateCaptureStoresResult => {
+  const stateValidation = validateChangeCandidateCaptureState(input);
+  if (!stateValidation.ok) return stateValidation;
+
+  return {
+    ok: true,
+    stores: {
+      captureStore: openSqliteChangeCandidateCaptureStore(input),
+      changeStore: openSqliteChangeStore(input),
+    },
+  };
+};
 
 export const openRepoLocalStores = (
   context: RepoLocalContext,

@@ -1,6 +1,7 @@
 import { spawnSync } from "node:child_process";
 import { existsSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { captureLocalCandidate } from "../src/changeCandidateCapture/captureLocalCandidate.js";
@@ -311,6 +312,20 @@ describe("automatic Change and Candidate capture", () => {
     });
     expect(candidateStore(repo).getCandidateById(captured.candidateId)).toBeDefined();
     expect(existsSync(join(linked, ".but-why", "state.sqlite"))).toBe(false);
+  });
+
+  it("rejects Candidate capture when shared state belongs to another repository", () => {
+    const repo = captureReadyRepo();
+    const database = new DatabaseSync(join(commonDirectory(repo), "but-why", "state.sqlite"));
+    database
+      .prepare("UPDATE shared_state_identity SET common_directory = ? WHERE id = 1")
+      .run("/other/.git");
+    database.close();
+
+    expect(captureLocalCandidate({ cwd: repo, now })).toEqual({
+      ok: false,
+      code: "shared_state_identity_conflict",
+    });
   });
 
   it("rolls back the whole capture when existing Candidate provenance conflicts", () => {

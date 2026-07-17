@@ -25,13 +25,17 @@ Linked-worktree CLI test that creates a Task in one worktree and reads it from a
 
 ## Acceptance criteria
 
-- [ ] The main checkout and linked worktrees resolve one SQLite database and Artifact root.
-- [ ] New installations create shared state at `<git-common-dir>/but-why/` without a runtime migration path.
-- [ ] Repo Config remains at `<worktree-root>/.but-why/config.json`.
-- [ ] Commands reject repositories whose shared state identity conflicts with the current Git common directory.
-- [ ] An Artifact with a shared-Artifact-root-relative path written from one worktree is inspectable from every linked worktree.
-- [ ] Concurrent commands from separate worktrees retain current SQLite serialization guarantees.
-- [ ] Setup and internal documentation describe the supported shared-state path.
+- [x] The main checkout and linked worktrees resolve one SQLite database and Artifact root.
+- [x] New installations create shared state at `<git-common-dir>/but-why/` without a runtime migration path.
+- [x] Repo Config remains at `<worktree-root>/.but-why/config.json`.
+- [x] Commands reject repositories whose shared state identity conflicts with the current Git common directory.
+- [x] An Artifact with a shared-Artifact-root-relative path written from one worktree is inspectable from every linked worktree.
+- [x] Concurrent commands from separate worktrees retain current SQLite serialization guarantees.
+- [x] Setup and internal documentation describe the supported shared-state path.
+
+## Completion
+
+Implemented by `096dad12d7fdccf5c60f87bd1cf6d1020241575f` and corrected by the follow-up commit.
 
 ## Blocked by
 

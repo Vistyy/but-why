@@ -6,7 +6,12 @@ import type {
   CommitCandidateCaptureInput,
   CommitCandidateCaptureResult,
 } from "../changeCandidateCapture/changeCandidateCaptureStore.js";
-import { rollbackIfOpen, withStateDatabase, type SqliteStoreInput } from "./connection.js";
+import {
+  rollbackIfOpen,
+  validateStateDatabase,
+  withStateDatabase,
+  type SqliteStoreInput,
+} from "./connection.js";
 import { queryOne } from "./query.js";
 
 type StoredChange = {
@@ -24,6 +29,8 @@ type StoredCandidate = {
 };
 
 type CommitRejection = Extract<CommitCandidateCaptureResult, { readonly ok: false }>;
+
+export const validateChangeCandidateCaptureState = validateStateDatabase;
 
 export const openSqliteChangeCandidateCaptureStore = (
   input: SqliteStoreInput,
