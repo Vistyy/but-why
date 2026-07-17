@@ -34,4 +34,4 @@ Task lifecycle CLI test in a temporary repository.
 
 ## Blocked by
 
-- Task 078: Share SQLite state across linked worktrees.
+None - can start immediately.

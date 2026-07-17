@@ -34,5 +34,4 @@ Temporary Git repository test covering Task Start from the main checkout and lin
 ## Blocked by
 
 - `docs/issues/077-approve-task-intent.md`
-- `docs/issues/078-share-sqlite-state-across-linked-worktrees.md`
 - `docs/issues/079-manage-task-dependency-graph.md`
