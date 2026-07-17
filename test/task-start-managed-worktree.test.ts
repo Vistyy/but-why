@@ -114,6 +114,31 @@ describe("by task start managed worktree", () => {
     expect(git(first.worktreePath, "symbolic-ref", "HEAD")).toBe(first.branch);
   });
 
+  it("repairs a stale Git registration after the recorded worktree directory is deleted", () => {
+    const root = initializedRepository();
+    createApprovedTask(root);
+    const first = JSON.parse(
+      runByInProcess(root, ["task", "start", "BY-1", "--output", "json"], now).stdout,
+    );
+    rmSync(first.worktreePath, { recursive: true });
+    expect(git(root, "worktree", "list", "--porcelain")).toContain(
+      `worktree ${first.worktreePath}`,
+    );
+    expect(git(root, "worktree", "list", "--porcelain")).toContain("prunable");
+
+    const recovered = runByInProcess(root, ["task", "start", "BY-1", "--output", "json"], now);
+
+    expect(recovered.status).toBe(0);
+    expect(JSON.parse(recovered.stdout)).toMatchObject({
+      task: { changed: false },
+      change: first.change,
+      branch: first.branch,
+      startingCommit: first.startingCommit,
+      worktreePath: first.worktreePath,
+    });
+    expect(git(first.worktreePath, "symbolic-ref", "HEAD")).toBe(first.branch);
+  });
+
   it("reuses the same Task Start when invoked from another linked worktree", () => {
     const root = initializedRepository();
     createApprovedTask(root);

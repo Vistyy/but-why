@@ -88,23 +88,30 @@ export const provisionTaskWorktree = (
   if (!worktreesResult.ok) return { ok: false, code: "git_tooling_error" };
 
   const worktree = inspectRecordedWorktree(start, parseWorktrees(worktreesResult.stdout));
-  if (worktree !== "missing") return worktree;
+  if (worktree !== "missing" && worktree !== "stale") return worktree;
 
   const branch = ensureRecordedBranch(cwd, start, recovering);
   if (!branch.ok) return branch;
+  if (worktree === "stale") {
+    const removed = removeStaleWorktreeRegistration(cwd, start);
+    if (!removed.ok) return removed;
+  }
   return addRecordedWorktree(cwd, start);
 };
 
 const inspectRecordedWorktree = (
   start: TaskStartRecord,
   worktrees: readonly WorktreeEntry[],
-): ProvisionTaskWorktreeResult | "missing" => {
+): ProvisionTaskWorktreeResult | "missing" | "stale" => {
   const expectedPath = canonicalPathIfPresent(start.worktreePath);
   const listedAtPath = worktrees.find((entry) => entry.path === expectedPath);
   const listedForBranch = worktrees.find((entry) => entry.branchRef === start.branchRef);
   if (!pathEntryExists(start.worktreePath)) {
-    return listedAtPath === undefined && listedForBranch === undefined
-      ? "missing"
+    if (listedAtPath === undefined && listedForBranch === undefined) return "missing";
+    return listedAtPath?.branchRef === start.branchRef &&
+      listedAtPath.prunable &&
+      listedForBranch === listedAtPath
+      ? "stale"
       : { ok: false, code: "task_start_conflict" };
   }
   return listedAtPath?.branchRef === start.branchRef &&
@@ -134,6 +141,22 @@ const ensureRecordedBranch = (
   return create.ok ? { ok: true } : { ok: false, code: "git_tooling_error" };
 };
 
+const removeStaleWorktreeRegistration = (
+  cwd: string,
+  start: TaskStartRecord,
+): ProvisionTaskWorktreeResult => {
+  const removed = git(cwd, "worktree", "remove", "--force", "--", start.worktreePath);
+  if (!removed.ok) return { ok: false, code: "git_tooling_error" };
+  const listed = git(cwd, "worktree", "list", "--porcelain");
+  if (!listed.ok) return { ok: false, code: "git_tooling_error" };
+  const registrations = parseWorktrees(listed.stdout);
+  return registrations.some(
+    (entry) => entry.path === start.worktreePath || entry.branchRef === start.branchRef,
+  )
+    ? { ok: false, code: "task_start_conflict" }
+    : { ok: true };
+};
+
 const addRecordedWorktree = (cwd: string, start: TaskStartRecord): ProvisionTaskWorktreeResult => {
   try {
     mkdirSync(dirname(start.worktreePath), { recursive: true });
@@ -148,6 +171,7 @@ const addRecordedWorktree = (cwd: string, start: TaskStartRecord): ProvisionTask
 type WorktreeEntry = {
   readonly path: string;
   readonly branchRef?: string;
+  readonly prunable: boolean;
 };
 
 const parseWorktrees = (source: string): readonly WorktreeEntry[] =>
@@ -159,7 +183,11 @@ const parseWorktrees = (source: string): readonly WorktreeEntry[] =>
       const branchRef = lines.find((line) => line.startsWith("branch "))?.slice("branch ".length);
       return path === undefined
         ? undefined
-        : { path: canonicalPathIfPresent(path), ...(branchRef === undefined ? {} : { branchRef }) };
+        : {
+            path: canonicalPathIfPresent(path),
+            ...(branchRef === undefined ? {} : { branchRef }),
+            prunable: lines.some((line) => line.startsWith("prunable")),
+          };
     })
     .filter((entry): entry is WorktreeEntry => entry !== undefined);
 
