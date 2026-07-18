@@ -339,8 +339,8 @@ describe("by submit CLI", () => {
 
     writeRepoConfig(root, {
       taskPrefix: "BY",
+      prepare: { command: "printf prepared > prepared.txt" },
       validation: {
-        prepare: { command: "printf prepared > prepared.txt" },
         checks: [{ id: "quality", command: 'test "$(cat prepared.txt)" = prepared' }],
       },
     });
@@ -428,8 +428,8 @@ describe("by submit CLI", () => {
 
     writeRepoConfig(root, {
       taskPrefix: "BY",
+      prepare: { command: 'printf out && printf err >&2 && node -e "process.exit(7)"' },
       validation: {
-        prepare: { command: 'printf out && printf err >&2 && node -e "process.exit(7)"' },
         checks: [{ id: "quality", command: "true" }],
       },
     });
@@ -540,8 +540,8 @@ describe("by submit CLI", () => {
 
     writeRepoConfig(root, {
       taskPrefix: "BY",
+      prepare: { command: "sleep 10", timeoutSeconds: 1 },
       validation: {
-        prepare: { command: "sleep 10", timeoutSeconds: 1 },
         checks: [{ id: "quality", command: "true" }],
       },
     });

@@ -4,7 +4,7 @@ import type { GlobalConfig } from "../contracts/globalConfig.js";
 import type {
   RepoCheckConfig,
   RepoConfig,
-  RepoValidationPrepareConfig,
+  RepoPrepareConfig,
   ReviewerConfig,
 } from "../contracts/repoConfig.js";
 import type { ValidationSandboxMode } from "../validation/validationWorkspace.js";
@@ -30,7 +30,7 @@ export type SubmitReviewerConfig = AgentProfileConfig & {
   readonly instructionsFile: string;
 };
 
-export type SubmitPrepareConfig = RepoValidationPrepareConfig & {
+export type SubmitPrepareConfig = RepoPrepareConfig & {
   readonly timeoutSeconds: number;
 };
 
@@ -74,7 +74,7 @@ export const submitRepoConfig = (
     return reviewers;
   }
 
-  const prepare = config.validation?.prepare;
+  const prepare = config.prepare;
 
   return {
     ok: true,

@@ -8,12 +8,12 @@ Global config lives at `~/.config/but-why/config.json` and owns reusable Agent P
 ```json
 {
   "taskPrefix": "BY",
+  "prepare": {
+    "command": "pnpm install --frozen-lockfile --prefer-offline",
+    "timeoutSeconds": 1200
+  },
   "validation": {
     "sandbox": { "mode": "none" },
-    "prepare": {
-      "command": "pnpm install --frozen-lockfile --prefer-offline",
-      "timeoutSeconds": 1200
-    },
     "checks": [
       { "id": "quality", "command": "just quality", "timeoutSeconds": 1200 }
     ]
@@ -24,13 +24,13 @@ Global config lives at `~/.config/but-why/config.json` and owns reusable Agent P
 ## Post-init flow
 
 1. Inspect repository tooling before choosing commands.
-2. Put dependency install, restore, sync, or fetch work in `validation.prepare` when needed.
+2. Put dependency install, restore, sync, or fetch work in top-level `prepare` when needed.
 3. Put verification commands in `validation.checks`.
 4. Commit `.but-why/config.json` so reviewers can inspect the policy.
 
-## `validation.prepare`
+## `prepare`
 
-`validation.prepare` is optional and runs before checks inside the Validation Workspace.
+Top-level `prepare` is optional and runs in new Managed Worktrees and before checks inside Validation Workspaces.
 Its `command` is required when the section is present.
 `timeoutSeconds` is optional and defaults to 1200.
 

@@ -28,13 +28,13 @@ Example:
 ```json
 {
   "taskPrefix": "BY",
+  "prepare": {
+    "command": "pnpm install --frozen-lockfile",
+    "timeoutSeconds": 1200
+  },
   "validation": {
     "sandbox": {
       "mode": "none"
-    },
-    "prepare": {
-      "command": "pnpm install --frozen-lockfile",
-      "timeoutSeconds": 1200
     },
     "checks": [
       {
@@ -168,11 +168,11 @@ Validation commands run from the repository root of the disposable Validation Wo
 
 ## Prepare
 
-`validation.prepare` is optional.
+Top-level `prepare` is optional.
 It contains one non-empty shell command and an optional positive integer `timeoutSeconds`.
 The timeout defaults to 1200 seconds.
 
-Prepare runs once before Checks.
+Repository Preparation runs in each new Managed Worktree and once before Validation Checks.
 Non-zero exit or timeout creates a Prepare Finding and stops later phases.
 Inability to execute or observe Prepare is a Validation Tooling Failure.
 

@@ -1,0 +1,164 @@
+import { spawn } from "node:child_process";
+import { randomUUID } from "node:crypto";
+
+import type { RepoLocalContext } from "../init/repoContext.js";
+import {
+  runRepositoryPreparation,
+  type RepositoryPreparationExecutor,
+} from "../repositoryPreparation/runRepositoryPreparation.js";
+import { taskSlugForId, type PublicTaskId } from "../task/taskId.js";
+import type { ChangePrepareFailure } from "./change.js";
+import {
+  provisionChangeWorktree,
+  resolveChangeStartGitIntent,
+  type ProvisionChangeWorktreeResult,
+  type ResolveChangeStartGitResult,
+} from "./changeStartGit.js";
+import type {
+  ChangeStartEligibilityError,
+  ChangeStartRecord,
+  ChangeStartStore,
+} from "./changeStartStore.js";
+
+export type ChangeUseCases = {
+  readonly start: (input: { readonly taskId?: PublicTaskId; readonly now: string }) => Promise<ChangeStartResult>;
+  readonly prepare: (changeId: string, now: string) => Promise<ChangePrepareResult>;
+};
+
+export type ChangeStartResult =
+  | { readonly ok: true; readonly change: ChangeStartRecord }
+  | ChangeStartEligibilityError
+  | Exclude<ResolveChangeStartGitResult, { readonly ok: true }>
+  | Exclude<ProvisionChangeWorktreeResult, { readonly ok: true }>
+  | { readonly ok: false; readonly code: "prepare_failed"; readonly change: ChangeStartRecord };
+
+export type ChangePrepareResult =
+  | { readonly ok: true; readonly change: ChangeStartRecord }
+  | { readonly ok: false; readonly code: "change_not_found" }
+  | { readonly ok: false; readonly code: "change_not_open" }
+  | { readonly ok: false; readonly code: "prepare_failed"; readonly change: ChangeStartRecord };
+
+export const openChangeUseCases = (
+  context: RepoLocalContext,
+  store: ChangeStartStore,
+  executor: RepositoryPreparationExecutor = localExecutor,
+): ChangeUseCases => ({
+  start: (input) => startChange(context, store, executor, input),
+  prepare: (changeId, now) => prepareChange(store, executor, changeId, now),
+});
+
+const startChange = async (
+  context: RepoLocalContext,
+  store: ChangeStartStore,
+  executor: RepositoryPreparationExecutor,
+  input: { readonly taskId?: PublicTaskId; readonly now: string },
+): Promise<ChangeStartResult> => {
+  if (input.taskId !== undefined) {
+    const eligibility = store.prepareTask(input.taskId);
+    if (!eligibility.ok) return eligibility;
+    if (eligibility.existing !== undefined) {
+      const provisioned = provisionChangeWorktree(context.root, eligibility.existing, true);
+      if (!provisioned.ok) return provisioned;
+      return eligibility.existing.readiness === "pending"
+        ? prepareExisting(store, executor, eligibility.existing, input.now)
+        : readinessResult(eligibility.existing);
+    }
+  }
+
+  const id = randomUUID();
+  const slug = input.taskId === undefined ? `change-${id}` : taskSlugForId(input.taskId);
+  const gitIntent = resolveChangeStartGitIntent(context, slug);
+  if (!gitIntent.ok) return gitIntent;
+  const created = store.create({
+    id,
+    ...gitIntent.intent,
+    ...(input.taskId === undefined ? {} : { taskId: input.taskId }),
+    now: input.now,
+  });
+  if (!created.ok) return created;
+
+  const provisioned = provisionChangeWorktree(context.root, created.change, false);
+  if (!provisioned.ok) return provisioned;
+  return prepareExisting(store, executor, created.change, input.now);
+};
+
+const prepareChange = async (
+  store: ChangeStartStore,
+  executor: RepositoryPreparationExecutor,
+  changeId: string,
+  now: string,
+): Promise<ChangePrepareResult> => {
+  const change = store.getById(changeId);
+  if (change === undefined) return { ok: false, code: "change_not_found" };
+  if (change.state !== "open") return { ok: false, code: "change_not_open" };
+  if (change.readiness === "ready") return { ok: true, change };
+  return prepareExisting(store, executor, change, now);
+};
+
+type PreparationResult =
+  | { readonly ok: true; readonly change: ChangeStartRecord }
+  | { readonly ok: false; readonly code: "prepare_failed"; readonly change: ChangeStartRecord };
+
+const prepareExisting = async (
+  store: ChangeStartStore,
+  executor: RepositoryPreparationExecutor,
+  change: ChangeStartRecord,
+  now: string,
+): Promise<PreparationResult> => {
+  if (change.prepare === null) {
+    return { ok: true, change: store.markReady(change.id, now) };
+  }
+
+  let failure: ChangePrepareFailure;
+  try {
+    const result = await runRepositoryPreparation({
+      prepare: change.prepare,
+      exec: executor,
+      cwd: change.worktreePath,
+    });
+    if (result.exitCode === 0) {
+      return { ok: true, change: store.markReady(change.id, now) };
+    }
+    failure = result;
+  } catch (error) {
+    failure = {
+      command: change.prepare.command,
+      exitCode: 1,
+      timedOut: false,
+      stdout: "",
+      stderr: error instanceof Error ? error.message : String(error),
+    };
+  }
+  return {
+    ok: false,
+    code: "prepare_failed",
+    change: store.markPrepareFailed(change.id, failure, now),
+  };
+};
+
+const readinessResult = (change: ChangeStartRecord): ChangeStartResult =>
+  change.readiness === "prepare_failed"
+    ? { ok: false, code: "prepare_failed", change }
+    : { ok: true, change };
+
+const localExecutor: RepositoryPreparationExecutor = (command, options) =>
+  new Promise((resolve, reject) => {
+    const child = spawn("sh", ["-c", command], {
+      cwd: options?.cwd,
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    let stdout = "";
+    let stderr = "";
+    child.stdout.setEncoding("utf8");
+    child.stderr.setEncoding("utf8");
+    child.stdout.on("data", (chunk: string) => {
+      stdout += chunk;
+    });
+    child.stderr.on("data", (chunk: string) => {
+      stderr += chunk;
+    });
+    child.once("error", reject);
+    child.once("close", (code) => {
+      resolve({ exitCode: code ?? 1, stdout, stderr });
+    });
+  });

@@ -1,6 +1,7 @@
 import type { Sandbox } from "@ai-hero/sandcastle";
 import { Effect } from "effect";
 
+import { runRepositoryPreparation } from "../repositoryPreparation/runRepositoryPreparation.js";
 import type { SubmitPrepareConfig } from "../submit/submitRepoConfig.js";
 import { writeValidationRunArtifactFile } from "../validationRun/artifactFiles.js";
 import type { RecordValidationRunPrepareRoundInput } from "../validationRun/validationRunStore.js";
@@ -47,7 +48,6 @@ type PrepareCommandResult = {
 };
 
 const prepareProducer = "prepare";
-const timeoutExitCode = 124;
 const artifactFileNames = ["stdout.txt", "stderr.txt", "exit-code.json", "logs.txt"] as const;
 
 export const runPreparePhase = (
@@ -112,23 +112,19 @@ const runPrepareCommand = (
   Effect.tryPromise({
     try: async () => {
       await ensureCandidateIntegrity(sandbox, commandCwd, expectedHeadSha, allowedUntrackedFiles);
-      await ensureTimeoutCommandAvailable(sandbox);
-
-      const marker = prepareCompletionMarker();
-      const result = await sandbox.exec(
-        timeoutWrappedCommand(prepare, marker),
-        commandCwd === undefined ? undefined : { cwd: commandCwd },
-      );
-      const parsed = parsePrepareCompletionMarker(result.stderr, marker);
+      const result = await runRepositoryPreparation({
+        prepare,
+        exec: (command, options) => sandbox.exec(command, options),
+        ...(commandCwd === undefined ? {} : { cwd: commandCwd }),
+      });
       await ensureCandidateIntegrity(sandbox, commandCwd, expectedHeadSha, allowedUntrackedFiles);
-
       return {
         commandResult: {
-          exitCode: parsed.completed ? parsed.exitCode : timeoutExitCode,
+          exitCode: result.exitCode,
           stdout: result.stdout,
-          stderr: parsed.stderr,
+          stderr: result.stderr,
         },
-        timedOut: !parsed.completed,
+        timedOut: result.timedOut,
       };
     },
     catch: (error) =>
@@ -164,14 +160,6 @@ const ensureCandidateIntegrity = async (
       operationName: "verify_candidate_head",
       message: "Validation workspace no longer matches the Candidate.",
     });
-  }
-};
-
-const ensureTimeoutCommandAvailable = async (sandbox: Pick<Sandbox, "exec">): Promise<void> => {
-  const result = await sandbox.exec("command -v timeout >/dev/null 2>&1");
-
-  if (result.exitCode !== 0) {
-    throw new Error("Could not find timeout command for prepare.");
   }
 };
 
@@ -274,41 +262,6 @@ const writePrepareArtifacts = (input: {
 
 const prepareArtifactRef = (validationRunId: string, fileName: string): string =>
   `artifact:${validationRunId}/prepare/prepare/${fileName}`;
-
-const timeoutWrappedCommand = (prepare: SubmitPrepareConfig, marker: string): string =>
-  [
-    `timeout ${prepare.timeoutSeconds}s sh -c`,
-    shellQuote(`sh -c "$1"
-prepare_exit_code=$?
-printf '\n%s:%s\n' "$2" "$prepare_exit_code" >&2
-exit "$prepare_exit_code"`),
-    "_",
-    shellQuote(prepare.command),
-    shellQuote(marker),
-  ].join(" ");
-
-const parsePrepareCompletionMarker = (
-  stderr: string,
-  marker: string,
-):
-  | { readonly completed: true; readonly exitCode: number; readonly stderr: string }
-  | { readonly completed: false; readonly stderr: string } => {
-  const markerMatch = stderr.match(new RegExp(`\\n${marker}:(\\d+)\\n?$`));
-
-  if (markerMatch === null) {
-    return { completed: false, stderr };
-  }
-
-  return {
-    completed: true,
-    exitCode: Number(markerMatch[1]),
-    stderr: stderr.slice(0, markerMatch.index),
-  };
-};
-
-const prepareCompletionMarker = (): string => "__BUTWHY_PREPARE_COMPLETED_prepare__";
-
-const shellQuote = (value: string): string => `'${value.replaceAll("'", `'\\''`)}'`;
 
 const prepareLogContent = (
   prepare: SubmitPrepareConfig,

@@ -8,20 +8,19 @@ import {
   resolveLocalBranch,
 } from "../changeCandidateCapture/localGitCandidate.js";
 import type { RepoLocalContext } from "../init/repoContext.js";
-import type { PublicTaskId } from "../task/taskId.js";
-import { taskSlugForId } from "../task/taskId.js";
-import type { TaskStartRecord } from "./taskStart.js";
+import type { ChangeStartRecord } from "./changeStartStore.js";
 
-export type TaskStartGitIntent = {
+export type ChangeStartGitIntent = {
   readonly repositoryCommonDirectory: string;
   readonly baseRef: string;
   readonly branchRef: string;
   readonly startingCommit: string;
   readonly worktreePath: string;
+  readonly prepare?: { readonly command: string; readonly timeoutSeconds: number };
 };
 
-export type ResolveTaskStartGitResult =
-  | { readonly ok: true; readonly intent: TaskStartGitIntent }
+export type ResolveChangeStartGitResult =
+  | { readonly ok: true; readonly intent: ChangeStartGitIntent }
   | {
       readonly ok: false;
       readonly code:
@@ -30,17 +29,17 @@ export type ResolveTaskStartGitResult =
         | "local_default_branch_unavailable"
         | "committed_repo_config_missing"
         | "committed_repo_config_invalid"
-        | "task_start_conflict";
+        | "change_start_conflict";
     };
 
-export type ProvisionTaskWorktreeResult =
+export type ProvisionChangeWorktreeResult =
   | { readonly ok: true }
-  | { readonly ok: false; readonly code: "task_start_conflict" | "git_tooling_error" };
+  | { readonly ok: false; readonly code: "change_start_conflict" | "git_tooling_error" };
 
-export const resolveTaskStartGitIntent = (
+export const resolveChangeStartGitIntent = (
   context: RepoLocalContext,
-  taskId: PublicTaskId,
-): ResolveTaskStartGitResult => {
+  slug: string,
+): ResolveChangeStartGitResult => {
   const recorded = recordedRemoteDefaultLocalBranches(context.root);
   if (recorded === undefined) return { ok: false, code: "local_default_branch_unavailable" };
   const defaults = [...new Set(recorded)];
@@ -62,10 +61,9 @@ export const resolveTaskStartGitIntent = (
     return { ok: false, code: "committed_repo_config_invalid" };
   }
 
-  const slug = taskSlugForId(taskId);
   const branchRef = `refs/heads/but-why/${slug}`;
   if (resolveLocalBranch(context.root, branchRef) !== undefined) {
-    return { ok: false, code: "task_start_conflict" };
+    return { ok: false, code: "change_start_conflict" };
   }
   return {
     ok: true,
@@ -75,15 +73,23 @@ export const resolveTaskStartGitIntent = (
       branchRef,
       startingCommit,
       worktreePath: join(context.commonDirectory, "but-why", "worktrees", slug),
+      ...(config.config.prepare === undefined
+        ? {}
+        : {
+            prepare: {
+              command: config.config.prepare.command,
+              timeoutSeconds: config.config.prepare.timeoutSeconds ?? 1200,
+            },
+          }),
     },
   };
 };
 
-export const provisionTaskWorktree = (
+export const provisionChangeWorktree = (
   cwd: string,
-  start: TaskStartRecord,
+  start: ChangeStartRecord,
   recovering: boolean,
-): ProvisionTaskWorktreeResult => {
+): ProvisionChangeWorktreeResult => {
   const worktreesResult = git(cwd, "worktree", "list", "--porcelain");
   if (!worktreesResult.ok) return { ok: false, code: "git_tooling_error" };
 
@@ -100,9 +106,9 @@ export const provisionTaskWorktree = (
 };
 
 const inspectRecordedWorktree = (
-  start: TaskStartRecord,
+  start: ChangeStartRecord,
   worktrees: readonly WorktreeEntry[],
-): ProvisionTaskWorktreeResult | "missing" | "stale" => {
+): ProvisionChangeWorktreeResult | "missing" | "stale" => {
   const expectedPath = canonicalPathIfPresent(start.worktreePath);
   const listedAtPath = worktrees.find((entry) => entry.path === expectedPath);
   const listedForBranch = worktrees.find((entry) => entry.branchRef === start.branchRef);
@@ -112,29 +118,29 @@ const inspectRecordedWorktree = (
       listedAtPath.prunable &&
       listedForBranch === listedAtPath
       ? "stale"
-      : { ok: false, code: "task_start_conflict" };
+      : { ok: false, code: "change_start_conflict" };
   }
   return listedAtPath?.branchRef === start.branchRef &&
     listedForBranch?.path === expectedPath &&
     !lstatSync(start.worktreePath).isSymbolicLink()
     ? { ok: true }
-    : { ok: false, code: "task_start_conflict" };
+    : { ok: false, code: "change_start_conflict" };
 };
 
 const ensureRecordedBranch = (
   cwd: string,
-  start: TaskStartRecord,
+  start: ChangeStartRecord,
   recovering: boolean,
-): ProvisionTaskWorktreeResult => {
+): ProvisionChangeWorktreeResult => {
   const branchCommit = resolveLocalBranch(cwd, start.branchRef);
   if (branchCommit !== undefined) {
     return recovering &&
-      (start.provisioningState === "ready" || branchCommit === start.startingCommit)
+      (start.readiness === "ready" || branchCommit === start.startingCommit)
       ? { ok: true }
-      : { ok: false, code: "task_start_conflict" };
+      : { ok: false, code: "change_start_conflict" };
   }
-  if (recovering && start.provisioningState === "ready") {
-    return { ok: false, code: "task_start_conflict" };
+  if (recovering && start.readiness === "ready") {
+    return { ok: false, code: "change_start_conflict" };
   }
   const branchName = start.branchRef.slice("refs/heads/".length);
   const create = git(cwd, "branch", branchName, start.startingCommit);
@@ -143,8 +149,8 @@ const ensureRecordedBranch = (
 
 const removeStaleWorktreeRegistration = (
   cwd: string,
-  start: TaskStartRecord,
-): ProvisionTaskWorktreeResult => {
+  start: ChangeStartRecord,
+): ProvisionChangeWorktreeResult => {
   const removed = git(cwd, "worktree", "remove", "--force", "--", start.worktreePath);
   if (!removed.ok) return { ok: false, code: "git_tooling_error" };
   const listed = git(cwd, "worktree", "list", "--porcelain");
@@ -153,11 +159,11 @@ const removeStaleWorktreeRegistration = (
   return registrations.some(
     (entry) => entry.path === start.worktreePath || entry.branchRef === start.branchRef,
   )
-    ? { ok: false, code: "task_start_conflict" }
+    ? { ok: false, code: "change_start_conflict" }
     : { ok: true };
 };
 
-const addRecordedWorktree = (cwd: string, start: TaskStartRecord): ProvisionTaskWorktreeResult => {
+const addRecordedWorktree = (cwd: string, start: ChangeStartRecord): ProvisionChangeWorktreeResult => {
   try {
     mkdirSync(dirname(start.worktreePath), { recursive: true });
   } catch {

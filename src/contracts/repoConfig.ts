@@ -26,7 +26,7 @@ const repoValidationSandboxConfigSchema = Schema.Struct({
   mode: Schema.optional(Schema.Literal("none", "docker", "podman")),
 });
 
-const repoValidationPrepareConfigSchema = Schema.Struct({
+const repoPrepareConfigSchema = Schema.Struct({
   command: nonBlankStringSchema,
   timeoutSeconds: Schema.optional(timeoutSecondsSchema),
 });
@@ -43,7 +43,6 @@ const repoValidationWorkspaceConfigSchema = Schema.Struct({
 
 const repoValidationConfigSchema = Schema.Struct({
   sandbox: Schema.optional(repoValidationSandboxConfigSchema),
-  prepare: Schema.optional(repoValidationPrepareConfigSchema),
   checks: Schema.optional(Schema.NonEmptyArray(repoCheckConfigSchema)),
 });
 
@@ -63,6 +62,7 @@ const repoReviewConfigSchema = Schema.Struct({
 
 const repoConfigSchema = Schema.Struct({
   taskPrefix: taskPrefixSchema,
+  prepare: Schema.optional(repoPrepareConfigSchema),
   validation: Schema.optional(repoValidationConfigSchema),
   review: Schema.optional(repoReviewConfigSchema),
   reviewers: Schema.optional(Schema.Record({ key: configNameSchema, value: reviewerSchema })),
@@ -73,9 +73,7 @@ const repoConfigSchema = Schema.Struct({
 });
 
 export type RepoConfig = Schema.Schema.Type<typeof repoConfigSchema>;
-export type RepoValidationPrepareConfig = Schema.Schema.Type<
-  typeof repoValidationPrepareConfigSchema
->;
+export type RepoPrepareConfig = Schema.Schema.Type<typeof repoPrepareConfigSchema>;
 export type RepoCheckConfig = Schema.Schema.Type<typeof repoCheckConfigSchema>;
 export type ReviewerConfig = Schema.Schema.Type<typeof reviewerSchema>;
 

@@ -1,0 +1,53 @@
+import type { ChangePrepareFailure, ChangeRecord } from "./change.js";
+import type { TaskDependencyFact } from "../task/task.js";
+import type { PublicTaskId } from "../task/taskId.js";
+import type { TaskState } from "../task/lifecycle.js";
+
+export type ChangeStartRecord = ChangeRecord & {
+  readonly baseRef: string;
+  readonly startingCommit: string;
+  readonly worktreePath: string;
+  readonly readiness: "pending" | "ready" | "prepare_failed";
+};
+
+export type CreateChangeStartInput = {
+  readonly id: string;
+  readonly repositoryCommonDirectory: string;
+  readonly branchRef: string;
+  readonly baseRef: string;
+  readonly startingCommit: string;
+  readonly worktreePath: string;
+  readonly taskId?: PublicTaskId;
+  readonly prepare?: { readonly command: string; readonly timeoutSeconds: number };
+  readonly now: string;
+};
+
+export type ChangeStartEligibilityError =
+  | { readonly ok: false; readonly code: "task_not_found" }
+  | { readonly ok: false; readonly code: "invalid_task_state"; readonly state: TaskState }
+  | {
+      readonly ok: false;
+      readonly code: "task_dependencies_unsatisfied";
+      readonly blockedBy: readonly TaskDependencyFact[];
+    };
+
+export type ChangeStartStore = {
+  readonly prepareTask: (
+    taskId: PublicTaskId,
+  ) =>
+    | { readonly ok: true; readonly existing: ChangeStartRecord | undefined }
+    | ChangeStartEligibilityError;
+  readonly create: (
+    input: CreateChangeStartInput,
+  ) =>
+    | { readonly ok: true; readonly change: ChangeStartRecord }
+    | ChangeStartEligibilityError
+    | { readonly ok: false; readonly code: "change_start_conflict" };
+  readonly getById: (changeId: string) => ChangeStartRecord | undefined;
+  readonly markReady: (changeId: string, now: string) => ChangeStartRecord;
+  readonly markPrepareFailed: (
+    changeId: string,
+    failure: ChangePrepareFailure,
+    now: string,
+  ) => ChangeStartRecord;
+};

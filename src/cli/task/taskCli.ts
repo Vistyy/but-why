@@ -10,7 +10,6 @@ import { runDependenciesCommand } from "./commands/dependencies.js";
 import { runFindingsCommand } from "./commands/findings.js";
 import { runListCommand } from "./commands/list.js";
 import { runShowCommand } from "./commands/show.js";
-import { runStartCommand } from "./commands/start.js";
 import { runValidationRunsCommand } from "./commands/validationRuns.js";
 import { dashboard } from "./dashboard.js";
 import type { TaskCommandEnvironment } from "./taskCliSupport.js";
@@ -63,10 +62,6 @@ export const routeTask = (
     return runApproveCommand(args.slice(1), environment);
   }
 
-  if (subcommand === "start") {
-    return runStartCommand(args.slice(1), environment);
-  }
-
   if (subcommand === "context") {
     return runContextCommand(args.slice(1), environment);
   }
@@ -113,10 +108,6 @@ const taskHelpView = (): StructuredObject => ({
     {
       command: "by task approve <task-id>",
       description: "Permanently approve Task intent",
-    },
-    {
-      command: "by task start <task-id>",
-      description: "Mark implementation work as started",
     },
     {
       command: "by task findings <task-id>",

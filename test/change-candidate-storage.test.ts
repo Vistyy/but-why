@@ -37,6 +37,12 @@ describe("Change storage", () => {
       branchRef: "refs/heads/feature",
       baseRef: null,
       taskId: null,
+      startingCommit: null,
+      worktreePath: null,
+      acceptanceContext: null,
+      readiness: null,
+      prepare: null,
+      prepareFailure: null,
       state: "open",
       closeReason: null,
       createdAt: now,
@@ -44,39 +50,6 @@ describe("Change storage", () => {
       closedAt: null,
     });
     expect(store.getChangeById(result.change.id)).toEqual(result.change);
-  });
-
-  it("links one Task permanently to one Change", () => {
-    const state = createSqliteStateSession();
-    const store = changeStore(state);
-    const tasks = taskStore(state);
-    const firstTask = tasks.createTask({ title: "First", description: "Work", now });
-    const secondTask = tasks.createTask({ title: "Second", description: "Work", now });
-    const created = store.createChange({
-      repositoryCommonDirectory: "/repos/example/.git",
-      branchRef: "refs/heads/feature",
-      now,
-    });
-    expect(created.ok).toBe(true);
-    if (!created.ok) return;
-
-    expect(
-      store.linkTask({ changeId: created.change.id, taskId: firstTask.id, now }),
-    ).toMatchObject({
-      ok: true,
-      changed: true,
-      change: { taskId: firstTask.id },
-    });
-    expect(
-      store.linkTask({ changeId: created.change.id, taskId: firstTask.id, now }),
-    ).toMatchObject({
-      ok: true,
-      changed: false,
-    });
-    expect(store.linkTask({ changeId: created.change.id, taskId: secondTask.id, now })).toEqual({
-      ok: false,
-      code: "change_already_linked_to_task",
-    });
   });
 
   it("closes a Change permanently while preserving its branch binding", () => {
@@ -170,7 +143,12 @@ describe("Change and Candidate schema migration", () => {
       DROP TABLE candidates;
       DROP TABLE changes;
       DELETE FROM schema_migrations
-      WHERE name IN ('015_changes_and_candidates', '016_change_base_ref');
+      WHERE name IN (
+        '015_changes_and_candidates',
+        '016_change_base_ref',
+        '021_task_starts',
+        '022_change_owned_worktrees'
+      );
     `);
     database.close();
 

@@ -19,7 +19,6 @@ export const fakeTaskUseCases = (overrides: Partial<TaskUseCases> = {}): TaskUse
   applyTaskContextDraft: () => unexpected("applyTaskContextDraft"),
   approveTask: () => unexpected("approveTask"),
   appendTaskComment: () => unexpected("appendTaskComment"),
-  startTask: () => unexpected("startTask"),
   transitionTaskState: () => unexpected("transitionTaskState"),
   ...overrides,
 });

@@ -118,6 +118,7 @@ help[1]: Move the conflicting path aside before running init again.`);
         { name: "019_task_approval" },
         { name: "020_task_dependencies" },
         { name: "021_task_starts" },
+        { name: "022_change_owned_worktrees" },
       ]);
     } finally {
       repairedDatabase.close();

@@ -78,9 +78,9 @@ describe("configuration contracts", () => {
   it("decodes repo validation and reviewer policy", () => {
     const config = {
       taskPrefix: "BY",
+      prepare: { command: "pnpm install", timeoutSeconds: 60 },
       validation: {
         sandbox: { mode: "docker" },
-        prepare: { command: "pnpm install", timeoutSeconds: 60 },
         checks: [{ id: "quality", command: "just quality", timeoutSeconds: 120 }],
       },
       review: {
@@ -108,6 +108,20 @@ describe("configuration contracts", () => {
     };
 
     expect(right(decodeRepoConfig(config))).toEqual(config);
+  });
+
+  it("rejects validation-scoped preparation", () => {
+    const error = left(
+      decodeRepoConfig({
+        taskPrefix: "BY",
+        validation: { prepare: { command: "pnpm install" } },
+      }),
+    );
+
+    expect(error._tag).toBe("RepoConfigValidationFailed");
+    expect(error.diagnostics).toContainEqual(
+      expect.objectContaining({ path: ["validation", "prepare"] }),
+    );
   });
 
   it("reports actionable repo config diagnostics", () => {

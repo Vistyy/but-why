@@ -199,61 +199,6 @@ describe("Task dependency graph", () => {
     expect(tasks.getTaskById(publicTaskId("BY-1"))?.prerequisites).toEqual([]);
   });
 
-  it("blocks Start until every prerequisite is done and locks dependencies during implementation", () => {
-    const tasks = createTaskStore();
-    createTask(tasks, "Prerequisite");
-    createTask(tasks, "Dependent", ["BY-1"]);
-    expect(tasks.approveTask({ taskId: publicTaskId("BY-1"), now: secondNow }).ok).toBe(true);
-    expect(tasks.approveTask({ taskId: publicTaskId("BY-2"), now: secondNow }).ok).toBe(true);
-
-    const blocked = tasks.transitionTaskState({
-      taskId: publicTaskId("BY-2"),
-      to: "implementing",
-      now: secondNow,
-    });
-    expect(blocked).toEqual({
-      ok: false,
-      code: "task_dependencies_unsatisfied",
-      blockedBy: [{ id: "BY-1", title: "Prerequisite", state: "todo" }],
-    });
-    if (blocked.ok || blocked.code !== "task_dependencies_unsatisfied") {
-      throw new Error("Expected Task dependency blockers");
-    }
-
-    const rendered = runByInProcess(
-      createTempRoot(),
-      ["task", "start", "BY-2", "--output", "json"],
-      firstNow,
-      {
-        taskUseCases: fakeTaskUseCases({ startTask: () => blocked }),
-      },
-    );
-    expect(rendered.status).toBe(1);
-    expect(JSON.parse(rendered.stdout).error).toMatchObject({
-      code: "task_dependencies_unsatisfied",
-      taskId: "BY-2",
-      blockedBy: [{ id: "BY-1", title: "Prerequisite", state: "todo" }],
-    });
-
-    transitionToDone(tasks, "BY-1");
-    expect(
-      tasks.transitionTaskState({
-        taskId: publicTaskId("BY-2"),
-        to: "implementing",
-        now: secondNow,
-      }),
-    ).toMatchObject({ ok: true, changed: true });
-
-    expect(
-      tasks.replaceTaskDependencies({
-        taskId: publicTaskId("BY-2"),
-        prerequisiteTaskIds: [],
-      }),
-    ).toMatchObject({ ok: false, code: "dependencies_locked" });
-    expect(tasks.getTaskById(publicTaskId("BY-2"))?.prerequisites).toEqual([
-      { id: "BY-1", title: "Prerequisite", state: "done" },
-    ]);
-  });
 
   it("returns direct graph facts and start eligibility with direct blockers", () => {
     const tasks = createTaskStore();

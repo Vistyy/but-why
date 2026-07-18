@@ -15,8 +15,6 @@ import type {
   ValidationRunToolingErrorRecord,
 } from "../validationRun/validationRunStore.js";
 import type { TaskState } from "./lifecycle.js";
-import { provisionTaskWorktree, resolveTaskStartGitIntent } from "../taskStart/taskStartGit.js";
-import type { TaskStartStore } from "../taskStart/taskStartStore.js";
 import type { TaskContext, TaskRecord, TaskSummary } from "./task.js";
 import { resolveRepoTaskId, type RepoTaskIdResolution } from "./repoTaskIds.js";
 import type { PublicTaskId } from "./taskId.js";
@@ -54,7 +52,6 @@ export type TaskUseCases = {
   ) => ApplyTaskContextDraftResult;
   readonly approveTask: (taskId: PublicTaskId, now: string) => RepoTaskApprovalResult;
   readonly appendTaskComment: (input: AppendTaskCommentInput) => AppendTaskCommentResult;
-  readonly startTask: (taskId: PublicTaskId, now: string) => StartTaskResult;
   readonly transitionTaskState: (input: TransitionTaskStateInput) => RepoTaskStateTransitionResult;
 };
 
@@ -161,43 +158,10 @@ export type RepoReplaceTaskDependenciesResult =
   | { readonly ok: true; readonly task: TaskRecord }
   | Exclude<ReturnType<TaskStore["replaceTaskDependencies"]>, { readonly ok: true }>;
 
-export type StartTaskResult =
-  | {
-      readonly ok: true;
-      readonly changed: boolean;
-      readonly task: TaskRecord;
-      readonly changeId: string;
-      readonly branchRef: string;
-      readonly startingCommit: string;
-      readonly worktreePath: string;
-    }
-  | { readonly ok: false; readonly code: "task_not_found" }
-  | { readonly ok: false; readonly code: "invalid_task_state"; readonly state: TaskState }
-  | Extract<
-      ReturnType<TaskStore["transitionTaskState"]>,
-      { readonly code: "task_dependencies_unsatisfied" }
-    >
-  | {
-      readonly ok: false;
-      readonly code:
-        | "local_default_branch_missing"
-        | "local_default_branch_ambiguous"
-        | "local_default_branch_unavailable"
-        | "committed_repo_config_missing"
-        | "committed_repo_config_invalid"
-        | "task_start_conflict"
-        | "git_tooling_error";
-      readonly changeId?: string;
-      readonly branchRef?: string;
-      readonly startingCommit?: string;
-      readonly worktreePath?: string;
-    };
-
 export const openTaskUseCases = (
   context: RepoLocalContext,
   stores: {
     readonly taskStore: TaskStore;
-    readonly taskStartStore: TaskStartStore;
     readonly validationRunStore: ValidationRunStore;
   },
 ): TaskUseCases => {
@@ -231,15 +195,6 @@ export const openTaskUseCases = (
     approveTask: (taskId, now) =>
       approveTask(stores.taskStore, stores.validationRunStore, taskId, now),
     appendTaskComment: stores.taskStore.appendTaskComment,
-    startTask: (taskId, now) =>
-      startTask(
-        context,
-        stores.taskStore,
-        stores.taskStartStore,
-        stores.validationRunStore,
-        taskId,
-        now,
-      ),
     transitionTaskState: (input) =>
       transitionTaskState(stores.taskStore, stores.validationRunStore, input),
   };
@@ -415,61 +370,3 @@ const withLatestValidationRun = (
   latestValidationRun,
 });
 
-const startTask = (
-  context: RepoLocalContext,
-  taskStore: TaskStore,
-  taskStartStore: TaskStartStore,
-  validationRunStore: ValidationRunStore,
-  taskId: PublicTaskId,
-  now: string,
-): StartTaskResult => {
-  const prepared = taskStartStore.prepare(taskId);
-  if (!prepared.ok) return prepared;
-  const existing = prepared.existing;
-  let changed = false;
-  let start = existing;
-
-  if (start === undefined) {
-    const gitIntent = resolveTaskStartGitIntent(context, taskId);
-    if (!gitIntent.ok) return gitIntent;
-
-    const bound = taskStartStore.bind({
-      taskId,
-      ...gitIntent.intent,
-      now,
-    });
-    if (!bound.ok) return bound;
-    changed = bound.changed;
-    start = bound.start;
-  }
-
-  const provisioned = provisionTaskWorktree(
-    context.root,
-    start,
-    existing !== undefined || !changed,
-  );
-  if (!provisioned.ok) {
-    return {
-      ...provisioned,
-      changeId: start.changeId,
-      branchRef: start.branchRef,
-      startingCommit: start.startingCommit,
-      worktreePath: start.worktreePath,
-    };
-  }
-  if (start.provisioningState !== "ready") {
-    start = taskStartStore.markReady(taskId, now);
-  }
-
-  const task = getTaskById(taskStore, validationRunStore, taskId);
-  if (task === undefined) throw new Error("Started Task was not found");
-  return {
-    ok: true,
-    changed,
-    task,
-    changeId: start.changeId,
-    branchRef: start.branchRef,
-    startingCommit: start.startingCommit,
-    worktreePath: start.worktreePath,
-  };
-};

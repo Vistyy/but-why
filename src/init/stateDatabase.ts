@@ -858,6 +858,41 @@ const migrations: readonly Migration[] = [
       )
     `,
   },
+  {
+    name: "022_change_owned_worktrees",
+    apply: `
+      ALTER TABLE changes ADD COLUMN starting_commit TEXT;
+      ALTER TABLE changes ADD COLUMN worktree_path TEXT;
+      ALTER TABLE changes ADD COLUMN acceptance_context TEXT;
+      ALTER TABLE changes ADD COLUMN readiness TEXT
+      CHECK (readiness IS NULL OR readiness IN ('pending', 'ready', 'prepare_failed'));
+      ALTER TABLE changes ADD COLUMN prepare_command TEXT;
+      ALTER TABLE changes ADD COLUMN prepare_timeout_seconds INTEGER;
+      ALTER TABLE changes ADD COLUMN prepare_failure TEXT;
+
+      UPDATE changes
+      SET
+        starting_commit = (
+          SELECT starting_commit FROM task_starts WHERE task_starts.change_id = changes.id
+        ),
+        worktree_path = (
+          SELECT worktree_path FROM task_starts WHERE task_starts.change_id = changes.id
+        ),
+        acceptance_context = (
+          SELECT acceptance_context FROM task_starts WHERE task_starts.change_id = changes.id
+        ),
+        readiness = (
+          SELECT provisioning_state FROM task_starts WHERE task_starts.change_id = changes.id
+        )
+      WHERE EXISTS (SELECT 1 FROM task_starts WHERE task_starts.change_id = changes.id);
+
+      CREATE UNIQUE INDEX changes_worktree_path_unique_idx
+      ON changes (worktree_path)
+      WHERE worktree_path IS NOT NULL;
+
+      DROP TABLE task_starts
+    `,
+  },
 ];
 
 export const ensureStateDatabase = (

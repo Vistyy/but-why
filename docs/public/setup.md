@@ -35,7 +35,7 @@ The command is non-interactive.
 It creates `.but-why/config.json` and `.but-why/reviewers/` in the worktree.
 SQLite state and Artifacts live at `<git-common-dir>/but-why/`, shared by every linked worktree.
 
-Inspect repository tooling and configure `validation.prepare` and `validation.checks` explicitly in `.but-why/config.json`.
+Inspect repository tooling and configure top-level `prepare` and `validation.checks` explicitly in `.but-why/config.json`.
 See `config.md` in this directory.
 
 ## Choose the Default Agent Profile

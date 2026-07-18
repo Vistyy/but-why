@@ -8,8 +8,6 @@ import type {
   CloseChangeResult,
   CreateChangeInput,
   CreateChangeResult,
-  LinkTaskInput,
-  LinkTaskResult,
 } from "../change/changeStore.js";
 import { storedPublicTaskId } from "../task/taskId.js";
 import { rollbackIfOpen, withStateDatabase, type SqliteStoreInput } from "./connection.js";
@@ -21,6 +19,13 @@ const changeColumns = [
   "branch_ref AS branchRef",
   "base_ref AS baseRef",
   "task_id AS taskId",
+  "starting_commit AS startingCommit",
+  "worktree_path AS worktreePath",
+  "acceptance_context AS acceptanceContext",
+  "readiness",
+  "prepare_command AS prepareCommand",
+  "prepare_timeout_seconds AS prepareTimeoutSeconds",
+  "prepare_failure AS prepareFailure",
   "state",
   "close_reason AS closeReason",
   "created_at AS createdAt",
@@ -39,7 +44,6 @@ export const openSqliteChangeStore = (input: SqliteStoreInput): ChangeStore => (
     ),
   closeChange: (closeInput) =>
     withStateDatabase(input, (database) => closeChange(database, closeInput)),
-  linkTask: (linkInput) => withStateDatabase(input, (database) => linkTask(database, linkInput)),
 });
 
 const createChange = (database: DatabaseSync, input: CreateChangeInput): CreateChangeResult => {
@@ -147,55 +151,6 @@ const closeChange = (database: DatabaseSync, input: CloseChangeInput): CloseChan
   }
 };
 
-const linkTask = (database: DatabaseSync, input: LinkTaskInput): LinkTaskResult => {
-  database.exec("BEGIN IMMEDIATE");
-
-  try {
-    const change = getChangeById(database, input.changeId);
-    if (change === undefined) {
-      database.exec("ROLLBACK");
-      return { ok: false, code: "change_not_found" };
-    }
-    if (change.taskId === input.taskId) {
-      database.exec("COMMIT");
-      return { ok: true, changed: false, change };
-    }
-    if (change.taskId !== null) {
-      database.exec("ROLLBACK");
-      return { ok: false, code: "change_already_linked_to_task" };
-    }
-
-    const task = queryOne<{ readonly id: string }>(database, "SELECT id FROM tasks WHERE id = ?", [
-      input.taskId,
-    ]);
-    if (task === undefined) {
-      database.exec("ROLLBACK");
-      return { ok: false, code: "task_not_found" };
-    }
-    const existingLink = queryOne<{ readonly id: string }>(
-      database,
-      "SELECT id FROM changes WHERE task_id = ?",
-      [input.taskId],
-    );
-    if (existingLink !== undefined) {
-      database.exec("ROLLBACK");
-      return { ok: false, code: "task_already_linked" };
-    }
-
-    database
-      .prepare("UPDATE changes SET task_id = ?, updated_at = ? WHERE id = ?")
-      .run(input.taskId, input.now, input.changeId);
-    const updated = getChangeById(database, input.changeId);
-    if (updated === undefined) throw new Error("Change disappeared after Task link");
-
-    database.exec("COMMIT");
-    return { ok: true, changed: true, change: updated };
-  } catch (error) {
-    rollbackIfOpen(database);
-    throw error;
-  }
-};
-
 const getChangeById = (database: DatabaseSync, changeId: string): ChangeRecord | undefined =>
   mapChangeRow(
     queryOne<ChangeRow>(database, `SELECT ${changeColumns} FROM changes WHERE id = ?`, [changeId]),
@@ -218,10 +173,35 @@ const mapChangeRow = (row: ChangeRow | undefined): ChangeRecord | undefined =>
   row === undefined
     ? undefined
     : {
-        ...row,
+        id: row.id,
+        repositoryCommonDirectory: row.repositoryCommonDirectory,
+        branchRef: row.branchRef,
+        baseRef: row.baseRef,
         taskId: row.taskId === null ? null : storedPublicTaskId(row.taskId),
+        startingCommit: row.startingCommit,
+        worktreePath: row.worktreePath,
+        acceptanceContext:
+          row.acceptanceContext === null ? null : JSON.parse(row.acceptanceContext),
+        readiness: row.readiness,
+        prepare:
+          row.prepareCommand === null || row.prepareTimeoutSeconds === null
+            ? null
+            : { command: row.prepareCommand, timeoutSeconds: row.prepareTimeoutSeconds },
+        prepareFailure: row.prepareFailure === null ? null : JSON.parse(row.prepareFailure),
+        state: row.state,
+        closeReason: row.closeReason,
+        createdAt: row.createdAt,
+        updatedAt: row.updatedAt,
+        closedAt: row.closedAt,
       };
 
-type ChangeRow = Omit<ChangeRecord, "taskId"> & {
+type ChangeRow = Omit<
+  ChangeRecord,
+  "taskId" | "acceptanceContext" | "prepare" | "prepareFailure"
+> & {
   readonly taskId: string | null;
+  readonly acceptanceContext: string | null;
+  readonly prepareCommand: string | null;
+  readonly prepareTimeoutSeconds: number | null;
+  readonly prepareFailure: string | null;
 };

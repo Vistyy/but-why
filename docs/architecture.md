@@ -58,7 +58,11 @@ Task creation starts in `new`.
 
 `by task approve <task-id>` permanently approves Task intent and moves `new` to `todo`.
 
-`by task start <task-id>` moves `todo` to `implementing`.
+`by change start [--task <task-id>]` creates a Change-owned branch and Managed Worktree from the configured default branch.
+A Task-backed Change captures immutable Acceptance Context and moves its approved dependency-unblocked Task from `todo` to `implementing`.
+A taskless Change has no Task or Acceptance Context.
+Change Start runs top-level Repository Preparation and records the Change as `ready` or `prepare_failed`.
+`by change prepare <change-id>` retries failed preparation in the existing Managed Worktree.
 
 `by submit <task-id>` is allowed from `implementing` and `needs_input`.
 

@@ -110,13 +110,13 @@ Approve the task intent:
 by task approve BY-1
 ```
 
-Start the task:
+Start its prepared Change:
 
 ```bash
-by task start BY-1
+by change start --task BY-1
 ```
 
-Implement the change on a non-protected task branch.
+Implement the Change in the returned Managed Worktree.
 
 Commit the change.
 

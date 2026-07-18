@@ -45,11 +45,12 @@ help[1]: Run \`by init --task-prefix BY\` in the repository root.`);
     expect(result.stdout).toBe(`bin: ${expectedBin}
 description: Validate completed code changes against approved human intent.
 usage: "by [--output <format>] [command] [--help]"
-commands[6]{command,description}:
+commands[7]{command,description}:
   by,Show workspace task dashboard
   by init --task-prefix <prefix>,Create repo-local But Why? state
   by task create --title <title> --description-file <file>,Create a repo-local Task
   "by task list [--all] [--state <state>]",List repo-local Tasks
+  "by change start [--task <task-id>]",Create a prepared Change worktree
   by submit <task-id>,Create a Validation Run from submit preflight
   by validation-run show <validation-run-id>,Show full Validation Run details
 flags[3]{flag,description}:
@@ -79,7 +80,7 @@ docs[2]{name,path}:
         { name: "config", path: expectedConfigDoc },
       ],
     });
-    expect(parsed.commands).toHaveLength(6);
+    expect(parsed.commands).toHaveLength(7);
     expect(parsed.flags).toHaveLength(3);
   });
 
@@ -128,7 +129,7 @@ docs[2]{name,path}:
           {
             step: "configure",
             detail:
-              "Configure validation.prepare and validation.checks to the best of your ability from observed tooling.",
+              "Configure top-level prepare and validation.checks to the best of your ability from observed tooling.",
           },
           { step: "review", detail: "Keep .but-why/config.json explicit and reviewable." },
         ],
@@ -276,7 +277,7 @@ validationSetup:
   setupDoc: ${expectedSetupDoc}
   guidance[3]{step,detail}:
     inspect,Inspect repo tooling before choosing validation commands.
-    configure,Configure validation.prepare and validation.checks to the best of your ability from observed tooling.
+    configure,Configure top-level prepare and validation.checks to the best of your ability from observed tooling.
     review,Keep .but-why/config.json explicit and reviewable.`);
     expect(JSON.parse(readFileSync(join(root, ".but-why/config.json"), "utf8"))).toEqual({
       taskPrefix: "BY",
@@ -333,6 +334,7 @@ validationSetup:
         { name: "019_task_approval" },
         { name: "020_task_dependencies" },
         { name: "021_task_starts" },
+        { name: "022_change_owned_worktrees" },
       ]);
       expect(
         database
@@ -353,7 +355,6 @@ validationSetup:
         { name: "shared_state_identity" },
         { name: "task_comments" },
         { name: "task_dependencies" },
-        { name: "task_starts" },
         { name: "tasks" },
         { name: "validation_run_artifacts" },
         { name: "validation_run_findings" },
@@ -405,7 +406,7 @@ validationSetup:
   setupDoc: ${expectedSetupDoc}
   guidance[3]{step,detail}:
     inspect,Inspect repo tooling before choosing validation commands.
-    configure,Configure validation.prepare and validation.checks to the best of your ability from observed tooling.
+    configure,Configure top-level prepare and validation.checks to the best of your ability from observed tooling.
     review,Keep .but-why/config.json explicit and reviewable.`);
   });
 
@@ -432,7 +433,7 @@ validationSetup:
   setupDoc: ${expectedSetupDoc}
   guidance[3]{step,detail}:
     inspect,Inspect repo tooling before choosing validation commands.
-    configure,Configure validation.prepare and validation.checks to the best of your ability from observed tooling.
+    configure,Configure top-level prepare and validation.checks to the best of your ability from observed tooling.
     review,Keep .but-why/config.json explicit and reviewable.`);
   });
 
@@ -457,7 +458,7 @@ validationSetup:
   setupDoc: ${expectedSetupDoc}
   guidance[3]{step,detail}:
     inspect,Inspect repo tooling before choosing validation commands.
-    configure,Configure validation.prepare and validation.checks to the best of your ability from observed tooling.
+    configure,Configure top-level prepare and validation.checks to the best of your ability from observed tooling.
     review,Keep .but-why/config.json explicit and reviewable.`);
   });
 

@@ -143,7 +143,7 @@ const replaceError = (
     details,
     help: [
       result.code === "dependencies_locked"
-        ? "Dependency edits are available only before Task Start."
+        ? "Dependency edits are available only before Change Start."
         : "Use existing Tasks and keep the direct dependency graph acyclic.",
     ],
   });

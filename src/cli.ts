@@ -10,6 +10,7 @@ import { initRepoLocalContext } from "./init/repoContext.js";
 import { structuredContractDiagnostics } from "./output/contractDiagnostics.js";
 import type { OutputFormat, StructuredObject } from "./output/structured.js";
 import { routeSubmit } from "./submit/submitCli.js";
+import { routeChange } from "./cli/change/changeCli.js";
 import { dashboard } from "./cli/task/dashboard.js";
 import { routeTask } from "./cli/task/taskCli.js";
 import { routeValidationRun } from "./cli/validationRun/validationRunCli.js";
@@ -98,6 +99,10 @@ const routeCommandArgs = (
 
   if (firstArg === "task") {
     return Effect.succeed(routeTask(args.slice(1), environment, { bin, description }));
+  }
+
+  if (firstArg === "change") {
+    return routeChange(args.slice(1), environment);
   }
 
   if (firstArg === "submit") {
@@ -189,7 +194,7 @@ const validationSetupGuidance = (docs: PublicDocs) => ({
     {
       step: "configure",
       detail:
-        "Configure validation.prepare and validation.checks to the best of your ability from observed tooling.",
+        "Configure top-level prepare and validation.checks to the best of your ability from observed tooling."
     },
     { step: "review", detail: "Keep .but-why/config.json explicit and reviewable." },
   ],
@@ -216,6 +221,10 @@ const helpView = (bin: string, docs: PublicDocs): StructuredObject =>
       {
         command: "by task list [--all] [--state <state>]",
         description: "List repo-local Tasks",
+      },
+      {
+        command: "by change start [--task <task-id>]",
+        description: "Create a prepared Change worktree",
       },
       {
         command: "by submit <task-id>",
