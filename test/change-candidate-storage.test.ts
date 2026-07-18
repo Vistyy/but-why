@@ -3,12 +3,16 @@ import { DatabaseSync } from "node:sqlite";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { openSqliteCandidateStore } from "../src/sqlite/sqliteCandidateStore.js";
-import { prepareStateDatabaseSession } from "../src/init/stateDatabase.js";
+import {
+  prepareStateDatabaseSession,
+  type StateDatabaseSession,
+} from "../src/init/stateDatabase.js";
 import { openSqliteChangeStore } from "../src/sqlite/sqliteChangeStore.js";
 import { openSqliteTaskStore } from "../src/sqlite/sqliteTaskStore.js";
 import { publicTaskId } from "../src/task/taskId.js";
 import { cleanupTempRoots, runByInProcessArgs as runBy } from "./support/by-cli.js";
 import { createInitializedRepo } from "./support/initializedRepo.js";
+import { createSqliteStateSession } from "./support/sqliteState.js";
 
 const now = "2026-07-11T10:00:00.000Z";
 
@@ -16,8 +20,7 @@ afterEach(cleanupTempRoots);
 
 describe("Change storage", () => {
   it("creates and reads an open Change with durable repository identity", () => {
-    const root = initializedRepo();
-    const store = changeStore(root);
+    const store = changeStore(createSqliteStateSession());
 
     const result = store.createChange({
       repositoryCommonDirectory: "/repos/example/.git",
@@ -44,9 +47,9 @@ describe("Change storage", () => {
   });
 
   it("links one Task permanently to one Change", () => {
-    const root = initializedRepo();
-    const store = changeStore(root);
-    const tasks = taskStore(root);
+    const state = createSqliteStateSession();
+    const store = changeStore(state);
+    const tasks = taskStore(state);
     const firstTask = tasks.createTask({ title: "First", description: "Work", now });
     const secondTask = tasks.createTask({ title: "Second", description: "Work", now });
     const created = store.createChange({
@@ -77,8 +80,7 @@ describe("Change storage", () => {
   });
 
   it("closes a Change permanently while preserving its branch binding", () => {
-    const root = initializedRepo();
-    const store = changeStore(root);
+    const store = changeStore(createSqliteStateSession());
     const created = store.createChange({
       repositoryCommonDirectory: "/repos/example/.git",
       branchRef: "refs/heads/feature",
@@ -124,9 +126,9 @@ describe("Change storage", () => {
   });
 
   it("enforces permanent repository branch and Task bindings", () => {
-    const root = initializedRepo();
-    const store = changeStore(root);
-    const task = taskStore(root).createTask({ title: "Task", description: "Work", now });
+    const state = createSqliteStateSession();
+    const store = changeStore(state);
+    const task = taskStore(state).createTask({ title: "Task", description: "Work", now });
 
     const first = store.createChange({
       repositoryCommonDirectory: "/repos/example/.git",
@@ -157,7 +159,11 @@ describe("Change storage", () => {
 describe("Change and Candidate schema migration", () => {
   it("expands an existing repository without changing Task-owned records", () => {
     const root = initializedRepo();
-    const task = taskStore(root).createTask({ title: "Existing", description: "Task", now });
+    const task = taskStore(sqliteInput(root)).createTask({
+      title: "Existing",
+      description: "Task",
+      now,
+    });
     const statePath = sharedStatePath(root);
     const database = new DatabaseSync(statePath);
     database.exec(`
@@ -171,14 +177,16 @@ describe("Change and Candidate schema migration", () => {
     const result = runBy(root, "init", "--task-prefix", "BY");
     expect(result.status).toBe(0);
     expect(result.stdout).toContain("status: repaired");
-    expect(taskStore(root).getTaskById(publicTaskId(task.id))).toMatchObject({ id: task.id });
-    expect(createChange(root)).toMatchObject({ state: "open" });
+    expect(taskStore(sqliteInput(root)).getTaskById(publicTaskId(task.id))).toMatchObject({
+      id: task.id,
+    });
+    expect(createChange(sqliteInput(root))).toMatchObject({ state: "open" });
   });
 
   it("adds optional Change bases without changing existing Change or Candidate history", () => {
     const root = initializedRepo();
-    const change = createChange(root);
-    const candidate = candidateStore(root).captureCandidate({
+    const change = createChange(sqliteInput(root));
+    const candidate = candidateStore(sqliteInput(root)).captureCandidate({
       changeId: change.id,
       selectedBaseRef: "refs/heads/main",
       resolvedTargetSha: "1111111111111111111111111111111111111111",
@@ -196,20 +204,19 @@ describe("Change and Candidate schema migration", () => {
     database.close();
 
     expect(runBy(root, "init", "--task-prefix", "BY").status).toBe(0);
-    expect(changeStore(root).getChangeById(change.id)).toMatchObject({
+    expect(changeStore(sqliteInput(root)).getChangeById(change.id)).toMatchObject({
       id: change.id,
       baseRef: null,
     });
-    expect(candidateStore(root).getCandidateById(candidate.candidate.id)).toEqual(
+    expect(candidateStore(sqliteInput(root)).getCandidateById(candidate.candidate.id)).toEqual(
       candidate.candidate,
     );
   });
+});
 
-  it("rejects invalid Change lifecycle rows in a newly initialized repository", () => {
-    const root = initializedRepo();
-    const database = new DatabaseSync(sharedStatePath(root));
-
-    try {
+describe("Change schema constraints", () => {
+  it("rejects invalid Change lifecycle rows in a newly initialized database", () => {
+    createSqliteStateSession().withDatabase((database) => {
       expect(() =>
         database
           .prepare(`
@@ -232,17 +239,15 @@ describe("Change and Candidate schema migration", () => {
           `)
           .run(now, now),
       ).toThrow(/CHECK constraint failed/);
-    } finally {
-      database.close();
-    }
+    });
   });
 });
 
 describe("Candidate storage", () => {
   it("reuses matching identity and provenance but rejects conflicting provenance", () => {
-    const root = initializedRepo();
-    const change = createChange(root);
-    const store = candidateStore(root);
+    const state = createSqliteStateSession();
+    const change = createChange(state);
+    const store = candidateStore(state);
     const capture = {
       changeId: change.id,
       selectedBaseRef: "refs/heads/main",
@@ -276,9 +281,9 @@ describe("Candidate storage", () => {
   });
 
   it("keeps closed Change history readable and rejects every new capture request", () => {
-    const root = initializedRepo();
-    const change = createChange(root);
-    const store = candidateStore(root);
+    const state = createSqliteStateSession();
+    const change = createChange(state);
+    const store = candidateStore(state);
     const capture = {
       changeId: change.id,
       selectedBaseRef: "refs/heads/main",
@@ -291,7 +296,7 @@ describe("Candidate storage", () => {
     expect(candidate.ok).toBe(true);
     if (!candidate.ok) return;
     expect(
-      changeStore(root).closeChange({
+      changeStore(state).closeChange({
         changeId: change.id,
         reason: "completed",
         now: "2026-07-11T11:00:00.000Z",
@@ -309,9 +314,9 @@ describe("Candidate storage", () => {
   });
 
   it("captures and reads exact immutable code and base provenance", () => {
-    const root = initializedRepo();
-    const change = createChange(root);
-    const store = candidateStore(root);
+    const state = createSqliteStateSession();
+    const change = createChange(state);
+    const store = candidateStore(state);
 
     const result = store.captureCandidate({
       changeId: change.id,
@@ -336,7 +341,7 @@ describe("Candidate storage", () => {
     });
     expect(store.getCandidateById(result.candidate.id)).toEqual(result.candidate);
     expect(store.listCandidatesForChange(change.id)).toEqual([result.candidate]);
-    expect(changeStore(root).getChangeById(change.id)).toMatchObject({
+    expect(changeStore(state).getChangeById(change.id)).toMatchObject({
       baseRef: "refs/heads/main",
     });
     expect(
@@ -362,14 +367,15 @@ const sqliteInput = (root: string) =>
     migrationTimestamp: () => now,
   });
 
-const changeStore = (root: string) => openSqliteChangeStore(sqliteInput(root));
+const changeStore = (state: StateDatabaseSession) => openSqliteChangeStore(state);
 
-const taskStore = (root: string) => openSqliteTaskStore({ ...sqliteInput(root), taskPrefix: "BY" });
+const taskStore = (state: StateDatabaseSession) =>
+  openSqliteTaskStore({ ...state, taskPrefix: "BY" });
 
-const candidateStore = (root: string) => openSqliteCandidateStore(sqliteInput(root));
+const candidateStore = (state: StateDatabaseSession) => openSqliteCandidateStore(state);
 
-const createChange = (root: string) => {
-  const result = changeStore(root).createChange({
+const createChange = (state: StateDatabaseSession) => {
+  const result = changeStore(state).createChange({
     repositoryCommonDirectory: "/repos/example/.git",
     branchRef: "refs/heads/feature",
     now,
