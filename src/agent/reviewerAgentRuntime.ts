@@ -3,7 +3,11 @@ import { Effect } from "effect";
 
 import type { ResolvedPiAgentProfile } from "./agentProfiles.js";
 import { parseTaggedReviewerOutput, reviewerOutputTag } from "./reviewerOutputWire.js";
-import { decodeReviewerOutputContract, type ReviewerOutput } from "../contracts/reviewerOutput.js";
+import {
+  decodeReviewerOutputContract,
+  validateReviewerArtifactRefs,
+  type ReviewerOutput,
+} from "../contracts/reviewerOutput.js";
 import {
   type ReviewerOutputContractFailed,
   SandcastleToolingFailed,
@@ -17,6 +21,8 @@ export type ReviewerAgentRuntime = {
 export type ReviewerAgentInput = {
   readonly sandbox: Pick<Sandbox, "run">;
   readonly reviewer: string;
+  readonly validationRunId: string;
+  readonly availableArtifactRefs: readonly string[];
   readonly prompt: string;
   readonly profile: ResolvedPiAgentProfile;
 };
@@ -64,17 +70,29 @@ const reviewWithPi = (input: ReviewerAgentInput): Effect.Effect<ReviewerAgentRes
           output: parseTaggedReviewerOutput(stdout),
         }),
       );
-      if (decoded._tag === "Right") {
-        return { ok: true, report: decoded.right, attempts, stdout };
+      const validated =
+        decoded._tag === "Left"
+          ? decoded
+          : yield* Effect.either(
+              validateReviewerArtifactRefs({
+                reviewer: input.reviewer,
+                attempts,
+                validationRunId: input.validationRunId,
+                output: decoded.right,
+                availableArtifactRefs: input.availableArtifactRefs,
+              }),
+            );
+      if (validated._tag === "Right") {
+        return { ok: true, report: validated.right, attempts, stdout };
       }
       if (attempts >= maxReviewerAttempts || runResult.resume === undefined) {
-        return { ok: false, failure: decoded.left, attempts, stdout };
+        return { ok: false, failure: validated.left, attempts, stdout };
       }
 
       attempts += 1;
       const resume = runResult.resume;
       const resumed = yield* Effect.either(
-        runSandbox(() => resume(structuredOutputCorrectionPrompt(decoded.left))),
+        runSandbox(() => resume(structuredOutputCorrectionPrompt(validated.left))),
       );
       if (resumed._tag === "Left") return sandcastleFailure(resumed.left, attempts, stdout);
       runResult = resumed.right;

@@ -4,7 +4,6 @@ import { Effect } from "effect";
 import type { AcceptanceReviewPolicy } from "./acceptanceReviewConfig.js";
 import { acceptanceReviewPrompt } from "./acceptanceReviewPrompt.js";
 import type { ReviewerAgentRuntime } from "../agent/reviewerAgentRuntime.js";
-import { validateReviewerArtifactRefs } from "../contracts/reviewerOutput.js";
 import type { TaskContextSnapshotV1 } from "../validationRun/taskContextSnapshot.js";
 import { writeReviewerArtifacts } from "../validationRun/reviewerArtifacts.js";
 import type { RecordCandidateAcceptanceRoundInput } from "../candidateValidation/candidateValidationRunStore.js";
@@ -49,6 +48,8 @@ export const runAcceptanceReviewPhase = (
     const result = yield* input.runtime.review({
       sandbox: input.sandbox,
       reviewer: "acceptance",
+      validationRunId: input.validationRunId,
+      availableArtifactRefs,
       prompt: acceptanceReviewPrompt({
         instructions: input.policy.instructions,
         validationRunId: input.validationRunId,
@@ -67,43 +68,27 @@ export const runAcceptanceReviewPhase = (
       artifactsRoot: input.artifactsRoot,
       ...(input.artifactMaxBytes === undefined ? {} : { artifactMaxBytes: input.artifactMaxBytes }),
     });
-    const validated = result.ok
-      ? yield* Effect.either(
-          validateReviewerArtifactRefs({
-            reviewer: "acceptance",
-            attempts: result.attempts,
-            validationRunId: input.validationRunId,
-            output: result.report,
-            availableArtifactRefs: [
-              ...availableArtifactRefs,
-              ...artifacts.map((artifact) => artifact.ref),
-            ],
-          }),
-        )
-      : undefined;
-    const findings =
-      validated?._tag === "Right"
-        ? validated.right.findings.map((finding, index) => ({
-            id: `${input.validationRunId}-acceptance-F${index + 1}`,
-            validationRunId: input.validationRunId,
-            phase: "intent_review" as const,
-            producer: "acceptance",
-            ...finding,
-          }))
-        : [];
+    const findings = result.ok
+      ? result.report.findings.map((finding, index) => ({
+          id: `${input.validationRunId}-acceptance-F${index + 1}`,
+          validationRunId: input.validationRunId,
+          phase: "intent_review" as const,
+          producer: "acceptance",
+          ...finding,
+        }))
+      : [];
 
     yield* recordAcceptanceRound(input, {
       validationRunId: input.validationRunId,
       roundNumber: 1,
-      roundStatus: validated?._tag === "Right" && findings.length === 0 ? "passed" : "failed",
-      phaseStatus: validated?._tag === "Right" && findings.length === 0 ? "passed" : "failed",
+      roundStatus: result.ok && findings.length === 0 ? "passed" : "failed",
+      phaseStatus: result.ok && findings.length === 0 ? "passed" : "failed",
       artifactRecords: artifacts,
       findings,
       now: input.now,
     });
 
     if (!result.ok) return yield* Effect.fail(result.failure);
-    if (validated?._tag === "Left") return yield* Effect.fail(validated.left);
     return { findings: findings.length === 0 ? 0 : 1 };
   });
 

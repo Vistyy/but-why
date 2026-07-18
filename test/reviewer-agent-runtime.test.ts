@@ -22,6 +22,8 @@ describe("Pi reviewer agent runtime", () => {
       piReviewerAgentRuntime.review({
         sandbox: { run } as unknown as Pick<Sandbox, "run">,
         reviewer: "acceptance",
+        validationRunId: "123e4567-e89b-42d3-a456-426614174000",
+        availableArtifactRefs: [],
         prompt: "Judge only approved intent for the exact Candidate.",
         profile,
       }),
@@ -37,6 +39,31 @@ describe("Pi reviewer agent runtime", () => {
     expect(prompt).toContain("<reviewer-output>");
   });
 
+  it("retries a dangling Artifact reference and accepts the corrected report", async () => {
+    const corrected = runResult('<reviewer-output>{"findings":[]}</reviewer-output>');
+    const resume = vi.fn(() => Promise.resolve(corrected));
+    const dangling = runResult(
+      '<reviewer-output>{"findings":[{"title":"Mismatch","description":"Incomplete behavior.","severity":"high","evidence":"Missing output.","files":[],"artifactRefs":["artifact:123e4567-e89b-42d3-a456-426614174000/checks/missing/stdout.txt"]}]}</reviewer-output>',
+      resume,
+    );
+
+    const result = await Effect.runPromise(
+      piReviewerAgentRuntime.review({
+        sandbox: {
+          run: () => Promise.resolve(dangling),
+        } as unknown as Pick<Sandbox, "run">,
+        reviewer: "acceptance",
+        validationRunId: "123e4567-e89b-42d3-a456-426614174000",
+        availableArtifactRefs: [],
+        prompt: "Review the Candidate.",
+        profile,
+      }),
+    );
+
+    expect(result).toMatchObject({ ok: true, attempts: 2, report: { findings: [] } });
+    expect(resume).toHaveBeenCalledWith(expect.stringContaining("does not resolve"));
+  });
+
   it("exhausts bounded structured-output retries as a tooling failure", async () => {
     const fourth = runResult("must not run");
     const resumeAfterThird = vi.fn(() => Promise.resolve(fourth));
@@ -49,6 +76,8 @@ describe("Pi reviewer agent runtime", () => {
       piReviewerAgentRuntime.review({
         sandbox: { run } as unknown as Pick<Sandbox, "run">,
         reviewer: "acceptance",
+        validationRunId: "123e4567-e89b-42d3-a456-426614174000",
+        availableArtifactRefs: [],
         prompt: "Review the Candidate.",
         profile,
       }),
