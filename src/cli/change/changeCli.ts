@@ -186,11 +186,14 @@ const prepareResult = (
 ): CliResult => {
   if (result.ok) return success(changeView(result.change));
   if (result.code === "prepare_failed") return prepareFailure(result.change);
-  return runtimeError({
-    code: result.code,
-    message: result.code === "change_not_found" ? "Change was not found." : "Change is closed.",
-    help: ["Use an open Change ID returned by `by change start --output json`."],
-  });
+  if (result.code === "change_not_found" || result.code === "change_not_open") {
+    return runtimeError({
+      code: result.code,
+      message: result.code === "change_not_found" ? "Change was not found." : "Change is closed.",
+      help: ["Use an open Change ID returned by `by change start --output json`."],
+    });
+  }
+  return operationalError(result.code, result.change);
 };
 
 const changeView = (change: ChangeRecord) => ({

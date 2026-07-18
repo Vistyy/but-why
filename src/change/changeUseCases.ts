@@ -42,6 +42,11 @@ export type ChangePrepareResult =
   | { readonly ok: true; readonly change: ChangeStartRecord }
   | { readonly ok: false; readonly code: "change_not_found" }
   | { readonly ok: false; readonly code: "change_not_open" }
+  | {
+      readonly ok: false;
+      readonly code: Exclude<ProvisionChangeWorktreeResult, { readonly ok: true }>["code"];
+      readonly change: ChangeStartRecord;
+    }
   | { readonly ok: false; readonly code: "prepare_failed"; readonly change: ChangeStartRecord };
 
 export const openChangeUseCases = (
@@ -50,7 +55,7 @@ export const openChangeUseCases = (
   executor: RepositoryPreparationExecutor,
 ): ChangeUseCases => ({
   start: (input) => startChange(context, store, executor, input),
-  prepare: (changeId, now) => prepareChange(store, executor, changeId, now),
+  prepare: (changeId, now) => prepareChange(context, store, executor, changeId, now),
 });
 
 const startChange = async (
@@ -100,6 +105,7 @@ const resumeTaskChange = async (
 };
 
 const prepareChange = async (
+  context: RepoLocalContext,
   store: ChangeStartStore,
   executor: RepositoryPreparationExecutor,
   changeId: string,
@@ -108,6 +114,8 @@ const prepareChange = async (
   const change = store.getById(changeId);
   if (change === undefined) return { ok: false, code: "change_not_found" };
   if (change.state !== "open") return { ok: false, code: "change_not_open" };
+  const provisioned = provisionChangeWorktree(context.root, change, true);
+  if (!provisioned.ok) return { ...provisioned, change };
   if (change.readiness === "ready") return { ok: true, change };
   return prepareExisting(store, executor, change, now);
 };

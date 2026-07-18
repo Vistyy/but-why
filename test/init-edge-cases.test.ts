@@ -13,6 +13,15 @@ import {
 
 const sharedStatePath = (root: string): string => join(root, ".git", "but-why", "state.sqlite");
 
+const withDatabase = <Result>(path: string, work: (database: DatabaseSync) => Result): Result => {
+  const database = new DatabaseSync(path);
+  try {
+    return work(database);
+  } finally {
+    database.close();
+  }
+};
+
 const writeConfig = (root: string, taskPrefix = "BY") => {
   mkdirSync(join(root, ".but-why"), { recursive: true });
   writeFileSync(join(root, ".but-why/config.json"), `${JSON.stringify({ taskPrefix }, null, 2)}\n`);
@@ -129,8 +138,8 @@ help[1]: Move the conflicting path aside before running init again.`);
     const root = createGitRepo();
     writeConfig(root);
     expect(runBy(root, "init", "--task-prefix", "BY").status).toBe(0);
-    const database = new DatabaseSync(sharedStatePath(root));
-    database.exec(`
+    withDatabase(sharedStatePath(root), (database) =>
+      database.exec(`
       DROP INDEX changes_worktree_path_unique_idx;
       ALTER TABLE changes DROP COLUMN prepare_failure;
       ALTER TABLE changes DROP COLUMN prepare_timeout_seconds;
@@ -179,12 +188,11 @@ help[1]: Move the conflicting path aside before running init again.`);
         'ready', '2026-06-30T12:00:00.000Z', '2026-06-30T12:00:00.000Z'
       );
       DELETE FROM schema_migrations WHERE name = '022_change_owned_worktrees';
-    `);
-    database.close();
+    `),
+    );
 
     expect(runBy(root, "init", "--task-prefix", "BY").status).toBe(0);
-    const migrated = new DatabaseSync(sharedStatePath(root));
-    try {
+    withDatabase(sharedStatePath(root), (migrated) => {
       expect(
         migrated
           .prepare(`
@@ -203,9 +211,7 @@ help[1]: Move the conflicting path aside before running init again.`);
       expect(
         migrated.prepare("SELECT name FROM sqlite_master WHERE name = 'task_starts'").get(),
       ).toBeUndefined();
-    } finally {
-      migrated.close();
-    }
+    });
   });
 
   it("adds Task approval state without losing existing Task-owned records", () => {

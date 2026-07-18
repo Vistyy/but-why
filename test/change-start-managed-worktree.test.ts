@@ -185,6 +185,38 @@ describe("by change start managed worktree", () => {
     expect(JSON.parse(recovered.stdout)).toMatchObject({ worktreePath });
   });
 
+  it("recovers taskless provisioning through Change Prepare", async () => {
+    const root = initializedRepository();
+    const commonDirectory = git(root, "rev-parse", "--path-format=absolute", "--git-common-dir");
+    const worktreesDirectory = join(commonDirectory, "but-why", "worktrees");
+    writeFileSync(worktreesDirectory, "blocks worktree creation\n");
+
+    const started = await runByInProcessAsync(root, ["change", "start", "--output", "json"], now);
+
+    expect(started.status).toBe(1);
+    const failure = JSON.parse(started.stdout);
+    expect(failure).toMatchObject({
+      error: {
+        code: "git_tooling_error",
+        changeId: expect.any(String),
+        worktreePath: expect.any(String),
+      },
+    });
+
+    rmSync(worktreesDirectory);
+    const recovered = await runByInProcessAsync(
+      root,
+      ["change", "prepare", failure.error.changeId, "--output", "json"],
+      now,
+    );
+    expect(recovered.status).toBe(0);
+    expect(JSON.parse(recovered.stdout)).toMatchObject({
+      change: { id: failure.error.changeId, readiness: "ready" },
+      worktreePath: failure.error.worktreePath,
+    });
+    expect(existsSync(failure.error.worktreePath)).toBe(true);
+  });
+
   it("requires an approved dependency-unblocked Task", async () => {
     const root = initializedRepository();
     const context = loadRepoLocalContext(root, () => now);
