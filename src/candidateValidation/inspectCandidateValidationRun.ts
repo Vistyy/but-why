@@ -11,6 +11,7 @@ import type {
   CandidateValidationToolingFailure,
 } from "./candidateValidationRunStore.js";
 import { readValidationArtifactContent } from "../validationRun/artifactContent.js";
+import { validationPhase } from "../validationRun/validationRun.js";
 
 const candidateValidationArtifactPreviewBytes = 1_000;
 
@@ -92,9 +93,9 @@ const inspectRun = (
     validationRun,
     change,
     candidate,
-    prepareRounds: rounds.filter((round) => round.phase === "prepare"),
-    checkRounds: rounds.filter((round) => round.phase === "checks"),
-    acceptanceRounds: rounds.filter((round) => round.phase === "acceptance_review"),
+    prepareRounds: rounds.filter((round) => round.phase === validationPhase.prepare),
+    checkRounds: rounds.filter((round) => round.phase === validationPhase.checks),
+    acceptanceRounds: rounds.filter((round) => round.phase === validationPhase.acceptanceReview),
     findings: dependencies.runStore.listFindings(validationRunId),
     toolingFailures: dependencies.runStore.listToolingFailures(validationRunId),
     artifacts: dependencies.runStore.listArtifacts(validationRunId).map((artifact) => ({

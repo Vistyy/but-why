@@ -5,6 +5,7 @@ import type { AcceptanceReviewPolicy } from "./acceptanceReviewConfig.js";
 import type { ReviewerAgentRuntime } from "../agent/reviewerAgentRuntime.js";
 import { buildAcceptanceReviewerPrompt } from "../agent/reviewerPrompts.js";
 import type { TaskContextSnapshotV1 } from "../validationRun/taskContextSnapshot.js";
+import { validationPhase } from "../validationRun/validationRun.js";
 import { writeReviewerArtifacts } from "../validationRun/reviewerArtifacts.js";
 import type { RecordCandidateAcceptanceRoundInput } from "../candidateValidation/candidateValidationRunStore.js";
 import { ensureCandidateIntegrity } from "../validation/ensureCandidateIntegrity.js";
@@ -62,7 +63,7 @@ export const runAcceptanceReviewPhase = (
     yield* verifyIntegrity(input);
     const artifacts = yield* writeReviewerArtifacts({
       validationRunId: input.validationRunId,
-      phase: "acceptance_review",
+      phase: validationPhase.acceptanceReview,
       producer: "acceptance",
       result,
       artifactsRoot: input.artifactsRoot,
@@ -72,7 +73,7 @@ export const runAcceptanceReviewPhase = (
       ? result.report.findings.map((finding, index) => ({
           id: `${input.validationRunId}-acceptance-F${index + 1}`,
           validationRunId: input.validationRunId,
-          phase: "acceptance_review" as const,
+          phase: validationPhase.acceptanceReview,
           producer: "acceptance",
           ...finding,
         }))

@@ -8,9 +8,10 @@ import type {
 import type { ChangeRecord } from "../change/change.js";
 import type { StructuredObject } from "../output/structured.js";
 import type { TaskRecord } from "../task/task.js";
-import type {
-  ValidationRunFindingRecord,
-  ValidationRunRecord,
+import {
+  validationPhase,
+  type ValidationRunFindingRecord,
+  type ValidationRunRecord,
 } from "../validationRun/validationRun.js";
 
 export const taskBriefView = (task: TaskRecord): StructuredObject => ({
@@ -86,9 +87,9 @@ export const candidateValidationRunInspectionView = (
   candidate: candidateView(inspection.candidate),
   policy: inspection.validationRun.policy,
   phases: [
-    { phase: "prepare", rounds: inspection.prepareRounds },
-    { phase: "checks", rounds: inspection.checkRounds },
-    { phase: "acceptance_review", rounds: inspection.acceptanceRounds },
+    { phase: validationPhase.prepare, rounds: inspection.prepareRounds },
+    { phase: validationPhase.checks, rounds: inspection.checkRounds },
+    { phase: validationPhase.acceptanceReview, rounds: inspection.acceptanceRounds },
   ],
   findings: inspection.findings.map(validationRunFindingView),
   toolingFailures: inspection.toolingFailures,

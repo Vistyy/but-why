@@ -3,6 +3,7 @@ import { Effect } from "effect";
 
 import type { SubmitPrepareConfig } from "../submit/submitRepoConfig.js";
 import { writeValidationRunArtifactFile } from "../validationRun/artifactFiles.js";
+import { validationPhase } from "../validationRun/validationRun.js";
 import type { RecordValidationRunPrepareRoundInput } from "../validationRun/validationRunStore.js";
 import { ensureCandidateIntegrity } from "./ensureCandidateIntegrity.js";
 import {
@@ -188,7 +189,7 @@ const prepareFinding = (
 ): NonNullable<RecordValidationRunPrepareRoundInput["finding"]> => ({
   id: `${validationRunId}-F1`,
   validationRunId,
-  phase: "prepare",
+  phase: validationPhase.prepare,
   producer: prepareProducer,
   title: timedOut ? "Prepare timed out" : "Prepare failed",
   description: timedOut
@@ -238,7 +239,7 @@ const writePrepareArtifacts = (input: {
         const artifactFile = writeValidationRunArtifactFile({
           artifactsRoot: input.artifactsRoot,
           validationRunId: input.validationRunId,
-          phase: "prepare",
+          phase: validationPhase.prepare,
           producer: prepareProducer,
           fileName: artifact.fileName,
           content: artifact.content,
@@ -248,7 +249,7 @@ const writePrepareArtifacts = (input: {
         return {
           ref: prepareArtifactRef(input.validationRunId, artifact.fileName),
           validationRunId: input.validationRunId,
-          phase: "prepare" as const,
+          phase: validationPhase.prepare,
           producer: prepareProducer,
           ...artifactFile,
         };

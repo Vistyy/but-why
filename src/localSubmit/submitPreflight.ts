@@ -28,6 +28,7 @@ import { submitRepoConfig, type SubmitRepoConfig } from "../submit/submitRepoCon
 import type { SubmitRejectionError } from "../submit/submitRejectionErrors.js";
 import { runCheckPhase } from "../validation/runCheckRound.js";
 import { runPreparePhase } from "../validation/runPreparePhase.js";
+import { validationPhase } from "../validationRun/validationRun.js";
 import {
   ValidationWorkspaceSetupFailed,
   type ValidationToolingFailure,
@@ -181,7 +182,7 @@ const createValidationWorkspaceForValidationRun = (
           if (validationConfig.prepare === undefined) {
             recordPhaseStatus(taskAuthority, {
               validationRunId: input.validationRunId,
-              phase: "prepare",
+              phase: validationPhase.prepare,
               status: "skipped",
               errorMessage: "Prepare is not configured.",
               now: input.now,
@@ -207,7 +208,7 @@ const createValidationWorkspaceForValidationRun = (
                   Effect.sync(() => {
                     recordPhaseStatus(taskAuthority, {
                       validationRunId: input.validationRunId,
-                      phase: "prepare",
+                      phase: validationPhase.prepare,
                       status: "workflow_failed",
                       errorMessage: "Prepare command tooling failed.",
                       now: input.now,
@@ -267,11 +268,11 @@ const createValidationWorkspaceForValidationRun = (
   });
 
 const skippedPhasesAfterPrepareFailure = [
-  "checks",
-  "acceptance_review",
-  "quality_review",
-  "publish_pr",
-  "watch_pr",
+  validationPhase.checks,
+  validationPhase.acceptanceReview,
+  validationPhase.qualityReview,
+  validationPhase.publishPr,
+  validationPhase.watchPr,
 ] as const;
 
 const recordSkippedPhasesAfterPrepareFailure = (

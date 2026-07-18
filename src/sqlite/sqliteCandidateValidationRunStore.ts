@@ -22,6 +22,7 @@ import type {
   StartCandidateValidationRunInput,
   StartCandidateValidationRunResult,
 } from "../candidateValidation/candidateValidationRunStore.js";
+import { validationPhase } from "../validationRun/validationRun.js";
 import type { RecordValidationRunCommandRoundInput } from "../validationRun/validationRunStore.js";
 
 export const openSqliteCandidateValidationRunStore = (
@@ -38,13 +39,23 @@ export const openSqliteCandidateValidationRunStore = (
     withStateDatabase(input, (database) => recordToolingFailure(database, failure)),
   recordPrepareRound: (round) =>
     withStateDatabase(input, (database) =>
-      recordRound(database, { ...round, phase: "prepare", producer: "prepare" }),
+      recordRound(database, {
+        ...round,
+        phase: validationPhase.prepare,
+        producer: "prepare",
+      }),
     ),
   recordCheckRound: (round) =>
-    withStateDatabase(input, (database) => recordRound(database, { ...round, phase: "checks" })),
+    withStateDatabase(input, (database) =>
+      recordRound(database, { ...round, phase: validationPhase.checks }),
+    ),
   recordAcceptanceRound: (round) =>
     withStateDatabase(input, (database) =>
-      recordRound(database, { ...round, phase: "acceptance_review", producer: "acceptance" }),
+      recordRound(database, {
+        ...round,
+        phase: validationPhase.acceptanceReview,
+        producer: "acceptance",
+      }),
     ),
   listRounds: (validationRunId) =>
     withStateDatabase(input, (database) => listRounds(database, validationRunId)),

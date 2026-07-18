@@ -1,13 +1,13 @@
 const validationRunStatuses = ["active", "failed", "error"] as const;
-const validationPhases = [
-  "preflight",
-  "prepare",
-  "checks",
-  "acceptance_review",
-  "quality_review",
-  "publish_pr",
-  "watch_pr",
-] as const;
+export const validationPhase = {
+  preflight: "preflight",
+  prepare: "prepare",
+  checks: "checks",
+  acceptanceReview: "acceptance_review",
+  qualityReview: "quality_review",
+  publishPr: "publish_pr",
+  watchPr: "watch_pr",
+} as const;
 const validationPhaseStatuses = [
   "pending",
   "active",
@@ -18,7 +18,7 @@ const validationPhaseStatuses = [
 ] as const;
 
 export type ValidationRunStatus = (typeof validationRunStatuses)[number];
-export type ValidationPhase = (typeof validationPhases)[number];
+export type ValidationPhase = (typeof validationPhase)[keyof typeof validationPhase];
 export type ValidationPhaseStatus = (typeof validationPhaseStatuses)[number];
 export type FindingSeverity = "critical" | "high" | "medium" | "low";
 
