@@ -384,11 +384,12 @@ rule:
 id: no-raw-file-content-read-outside-seams
 language: TypeScript
 severity: error
-message: Read file contents only in repo config, gitignore, and Task file-input seams.
+message: Read file contents only in approved repo, Task input, and validation Artifact seams.
 files:
   - src/**/*.ts
 ignores:
   - src/init/repoConfig.ts
+  - src/validationRun/artifactContent.ts
   - src/init/gitignore.ts
   - src/task/files/descriptionFile.ts
   - src/task/files/commentFile.ts
@@ -449,6 +450,7 @@ files:
 ignores:
   - src/init/repoConfig.ts
   - src/submissionEnvironment/githubTarget.ts
+  - src/sqlite/sqliteCandidateValidationPolicy.ts
   - src/sqlite/sqliteTaskContextSnapshot.ts
   - src/sqlite/sqliteTaskStartStore.ts
 rule:

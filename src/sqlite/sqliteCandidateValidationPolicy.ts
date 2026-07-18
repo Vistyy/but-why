@@ -3,3 +3,7 @@ import type { CandidateValidationPolicySnapshot } from "../candidateValidation/c
 export const encodeSqliteCandidateValidationPolicy = (
   policy: CandidateValidationPolicySnapshot,
 ): string => JSON.stringify(policy);
+
+export const decodeSqliteCandidateValidationPolicy = (
+  value: string,
+): CandidateValidationPolicySnapshot => JSON.parse(value) as CandidateValidationPolicySnapshot;

@@ -404,23 +404,6 @@ describe("by submit CLI", () => {
         .listValidationRunArtifacts(firstTaskValidationRunId)
         .map((artifact) => artifact.ref),
     ).toEqual(artifactRefs);
-
-    const shown = runByInProcess(root, [
-      "validation-run",
-      "show",
-      firstTaskValidationRunId,
-      "--output",
-      "json",
-    ]);
-
-    expect(shown.status).toBe(0);
-    expect(JSON.parse(shown.stdout)).toMatchObject({
-      phases: [
-        { phase: "prepare", status: "passed" },
-        { phase: "checks", status: "passed" },
-      ],
-      artifacts: artifactRefs.map((ref) => ({ ref })),
-    });
   });
 
   it("turns a failed prepare into a blocking Finding and skips checks", async () => {

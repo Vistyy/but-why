@@ -2,13 +2,20 @@ import { randomUUID } from "node:crypto";
 import type { DatabaseSync } from "node:sqlite";
 
 import { rollbackIfOpen, withStateDatabase, type SqliteStoreInput } from "./connection.js";
-import { encodeSqliteCandidateValidationPolicy } from "./sqliteCandidateValidationPolicy.js";
+import {
+  decodeSqliteCandidateValidationPolicy,
+  encodeSqliteCandidateValidationPolicy,
+} from "./sqliteCandidateValidationPolicy.js";
+import { decodeSqliteJsonStringArray } from "./sqliteJsonStringArray.js";
+import { queryAll, queryOne } from "./query.js";
 import { recordValidationEvidenceMutation } from "./sqliteValidationEvidence.js";
 import type {
   CandidateValidationArtifact,
   CandidateValidationFinding,
   CandidateValidationRound,
+  CandidateValidationRunRecord,
   CandidateValidationRunStore,
+  CandidateValidationToolingFailure,
   CompleteCandidateValidationRunInput,
   RecordCandidateToolingFailureInput,
   RecordCandidateWorkspaceSetupInput,
@@ -23,6 +30,8 @@ export const openSqliteCandidateValidationRunStore = (
   startOrReuse: (runInput) =>
     withStateDatabase(input, (database) => startOrReuse(database, runInput)),
   complete: (runInput) => withStateDatabase(input, (database) => complete(database, runInput)),
+  getRunById: (validationRunId) =>
+    withStateDatabase(input, (database) => getRunById(database, validationRunId)),
   recordWorkspaceSetup: (setup) =>
     withStateDatabase(input, (database) => recordWorkspaceSetup(database, setup)),
   recordToolingFailure: (failure) =>
@@ -37,6 +46,8 @@ export const openSqliteCandidateValidationRunStore = (
     withStateDatabase(input, (database) => listRounds(database, validationRunId)),
   listFindings: (validationRunId) =>
     withStateDatabase(input, (database) => listFindings(database, validationRunId)),
+  listToolingFailures: (validationRunId) =>
+    withStateDatabase(input, (database) => listToolingFailures(database, validationRunId)),
   listArtifacts: (validationRunId) =>
     withStateDatabase(input, (database) => listArtifacts(database, validationRunId)),
 });
@@ -75,6 +86,28 @@ const startOrReuse = (
     rollbackIfOpen(database);
     throw error;
   }
+};
+
+const getRunById = (
+  database: DatabaseSync,
+  validationRunId: string,
+): CandidateValidationRunRecord | undefined => {
+  const row = queryOne<CandidateValidationRunRow>(
+    database,
+    `SELECT id, candidate_id AS candidateId, policy_snapshot AS policySnapshot,
+            state, outcome, created_at AS createdAt, updated_at AS updatedAt
+     FROM candidate_validation_runs
+     WHERE id = ?`,
+    [validationRunId],
+  );
+
+  return row === undefined
+    ? undefined
+    : { ...row, policy: decodeSqliteCandidateValidationPolicy(row.policySnapshot) };
+};
+
+type CandidateValidationRunRow = Omit<CandidateValidationRunRecord, "policy"> & {
+  readonly policySnapshot: string;
 };
 
 const complete = (database: DatabaseSync, input: CompleteCandidateValidationRunInput): void => {
@@ -161,40 +194,89 @@ const recordRound = (database: DatabaseSync, input: RecordValidationRunCommandRo
   }
 };
 
+const phaseOrderSql = "CASE phase WHEN 'prepare' THEN 0 WHEN 'checks' THEN 1 ELSE 2 END";
+
 const listRounds = (
   database: DatabaseSync,
   validationRunId: string,
 ): readonly CandidateValidationRound[] =>
-  database
-    .prepare(
-      "SELECT producer, status FROM candidate_validation_rounds WHERE validation_run_id = ? ORDER BY round_number",
-    )
-    .all(validationRunId) as CandidateValidationRound[];
+  queryAll<CandidateValidationRound>(
+    database,
+    `SELECT validation_run_id AS validationRunId, phase, producer,
+            round_number AS roundNumber, status, created_at AS createdAt
+     FROM candidate_validation_rounds
+     WHERE validation_run_id = ?
+     ORDER BY ${phaseOrderSql}, round_number, producer`,
+    [validationRunId],
+  );
 
 const listFindings = (
   database: DatabaseSync,
   validationRunId: string,
 ): readonly CandidateValidationFinding[] =>
-  database
-    .prepare(
-      "SELECT id, producer FROM candidate_validation_findings WHERE validation_run_id = ? ORDER BY id",
-    )
-    .all(validationRunId) as CandidateValidationFinding[];
+  queryAll<CandidateValidationFindingRow>(
+    database,
+    `SELECT id, validation_run_id AS validationRunId, phase, producer, title,
+            description, severity, evidence, files, artifact_refs AS artifactRefs,
+            created_at AS createdAt, updated_at AS updatedAt
+     FROM candidate_validation_findings
+     WHERE validation_run_id = ?
+     ORDER BY ${phaseOrderSql}, producer, id`,
+    [validationRunId],
+  ).map(({ severity, files, artifactRefs, ...finding }) => ({
+    ...finding,
+    ...(severity === null ? {} : { severity }),
+    files: decodeSqliteJsonStringArray(files),
+    artifactRefs: decodeSqliteJsonStringArray(artifactRefs),
+  }));
+
+type CandidateValidationFindingRow = Omit<
+  CandidateValidationFinding,
+  "severity" | "files" | "artifactRefs"
+> & {
+  readonly severity: Exclude<CandidateValidationFinding["severity"], undefined> | null;
+  readonly files: string;
+  readonly artifactRefs: string;
+};
+
+const listToolingFailures = (
+  database: DatabaseSync,
+  validationRunId: string,
+): readonly CandidateValidationToolingFailure[] =>
+  queryAll<CandidateValidationToolingFailure>(
+    database,
+    `SELECT sequence, validation_run_id AS validationRunId, error_kind AS errorKind,
+            operation_name AS operationName, error_message AS errorMessage,
+            created_at AS createdAt
+     FROM candidate_validation_tooling_failures
+     WHERE validation_run_id = ?
+     ORDER BY sequence`,
+    [validationRunId],
+  );
 
 const listArtifacts = (
   database: DatabaseSync,
   validationRunId: string,
 ): readonly CandidateValidationArtifact[] =>
-  (
-    database
-      .prepare(
-        `SELECT ref, original_bytes AS originalBytes, stored_bytes AS storedBytes, truncated
-       FROM candidate_validation_artifacts WHERE validation_run_id = ? ORDER BY ref`,
-      )
-      .all(validationRunId) as unknown as readonly (Omit<
-      CandidateValidationArtifact,
-      "truncated"
-    > & {
-      readonly truncated: number;
-    })[]
+  queryAll<CandidateValidationArtifactRow>(
+    database,
+    `SELECT ref, validation_run_id AS validationRunId, phase, producer, path,
+            original_bytes AS originalBytes, stored_bytes AS storedBytes, truncated,
+            created_at AS createdAt
+     FROM candidate_validation_artifacts
+     WHERE validation_run_id = ?
+     ORDER BY ${phaseOrderSql}, producer,
+       CASE
+         WHEN path LIKE '%/stdout.txt' THEN 0
+         WHEN path LIKE '%/stderr.txt' THEN 1
+         WHEN path LIKE '%/exit-code.json' THEN 2
+         WHEN path LIKE '%/logs.txt' THEN 3
+         ELSE 4
+       END,
+       ref`,
+    [validationRunId],
   ).map((artifact) => ({ ...artifact, truncated: artifact.truncated === 1 }));
+
+type CandidateValidationArtifactRow = Omit<CandidateValidationArtifact, "truncated"> & {
+  readonly truncated: number;
+};

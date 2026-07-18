@@ -1,8 +1,10 @@
 import type { CandidateStore } from "../candidate/candidateStore.js";
+import type { CandidateValidationRunStore } from "../candidateValidation/candidateValidationRunStore.js";
 import type { ChangeCandidateCaptureStore } from "../changeCandidateCapture/changeCandidateCaptureStore.js";
 import type { ChangeStore } from "../change/changeStore.js";
 import type { ChangeStartStore } from "../change/changeStartStore.js";
 import { openSqliteCandidateStore } from "../sqlite/sqliteCandidateStore.js";
+import { openSqliteCandidateValidationRunStore } from "../sqlite/sqliteCandidateValidationRunStore.js";
 import {
   openSqliteChangeCandidateCaptureStore,
   validateChangeCandidateCaptureState,
@@ -29,6 +31,7 @@ export type OpenChangeCandidateCaptureStoresResult =
 
 export type RepoLocalStores = {
   readonly candidateStore: CandidateStore;
+  readonly candidateValidationRunStore: CandidateValidationRunStore;
   readonly changeStore: ChangeStore;
   readonly changeStartStore: ChangeStartStore;
   readonly taskStore: TaskStore;
@@ -61,6 +64,7 @@ export const openRepoLocalStores = (context: RepoLocalContext): RepoLocalStores 
 
   return {
     candidateStore: openSqliteCandidateStore(sqliteInput),
+    candidateValidationRunStore: openSqliteCandidateValidationRunStore(sqliteInput),
     changeStore: openSqliteChangeStore(sqliteInput),
     changeStartStore: openSqliteChangeStartStore(sqliteInput),
     taskStore: openSqliteTaskStore({
