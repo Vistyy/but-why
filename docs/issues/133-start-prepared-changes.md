@@ -24,17 +24,22 @@ Change CLI tests against a real temporary Git repository and shared SQLite state
 
 ## Acceptance criteria
 
-- [ ] `by change start` creates a taskless Change without title, description, or Acceptance Context.
-- [ ] `by change start --task <task-id>` requires an approved dependency-unblocked Task and captures its Acceptance Context.
-- [ ] Both forms create from the configured default branch and durably record the branch, starting commit, and Managed Worktree on the Change.
-- [ ] Native Git provisioning preserves existing recovery and conflict safety.
-- [ ] Repo Config exposes top-level `prepare`, and validation continues to use the same preparation definition.
-- [ ] Successful implementation preparation marks the Change ready.
-- [ ] Failed preparation records `prepare_failed`, preserves the Change and worktree, and returns actionable structured evidence.
-- [ ] `by change prepare <change-id>` retries preparation without creating another Change or worktree.
-- [ ] Human output remains TOON by default, while `--output json` returns stable machine-readable Change and readiness facts.
-- [ ] `by task start` and its Task-owned worktree authority are removed without a compatibility alias.
+- [x] `by change start` creates a taskless Change without title, description, or Acceptance Context.
+- [x] `by change start --task <task-id>` requires an approved dependency-unblocked Task and captures its Acceptance Context.
+- [x] Both forms create from the configured default branch and durably record the branch, starting commit, and Managed Worktree on the Change.
+- [x] Native Git provisioning preserves existing recovery and conflict safety.
+- [x] Repo Config exposes top-level `prepare`, and validation continues to use the same preparation definition.
+- [x] Successful implementation preparation marks the Change ready.
+- [x] Failed preparation records `prepare_failed`, preserves the Change and worktree, and returns actionable structured evidence.
+- [x] `by change prepare <change-id>` retries preparation without creating another Change or worktree.
+- [x] Human output remains TOON by default, while `--output json` returns stable machine-readable Change and readiness facts.
+- [x] `by task start` and its Task-owned worktree authority are removed without a compatibility alias.
 
 ## Blocked by
 
 None - can start immediately.
+
+## Completion
+
+Implemented in `bdf6646`.
+Verified with `just quality`.
