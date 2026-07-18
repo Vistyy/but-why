@@ -88,6 +88,7 @@ export const candidateValidationRunInspectionView = (
   phases: [
     { phase: "prepare", rounds: inspection.prepareRounds },
     { phase: "checks", rounds: inspection.checkRounds },
+    { phase: "intent_review", rounds: inspection.acceptanceRounds },
   ],
   findings: inspection.findings.map(validationRunFindingView),
   toolingFailures: inspection.toolingFailures,

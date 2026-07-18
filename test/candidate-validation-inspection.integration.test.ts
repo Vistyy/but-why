@@ -153,6 +153,7 @@ describe("Candidate-owned Validation Run inspection", () => {
             },
           ],
         },
+        { phase: "intent_review", rounds: [] },
       ],
       findings: [
         {
@@ -253,6 +254,7 @@ describe("Candidate-owned Validation Run inspection", () => {
       phases: [
         { phase: "prepare", rounds: [] },
         { phase: "checks", rounds: [] },
+        { phase: "intent_review", rounds: [] },
       ],
       findings: [],
       toolingFailures: [],
@@ -285,6 +287,87 @@ describe("Candidate-owned Validation Run inspection", () => {
       reason: "content_unavailable",
       detailCommand: `by validation-run artifact ${unavailable.validationRunId} ${missing.ref}`,
     });
+  });
+
+  it.each([
+    { name: "passed", roundStatus: "passed", outcome: "passed", finding: false, tooling: false },
+    {
+      name: "Finding-blocked",
+      roundStatus: "failed",
+      outcome: "blocked",
+      finding: true,
+      tooling: false,
+    },
+    {
+      name: "tooling-failed",
+      roundStatus: "failed",
+      outcome: "tooling_failed",
+      finding: false,
+      tooling: true,
+    },
+  ] as const)("shows $name Acceptance Review evidence", ({
+    roundStatus,
+    outcome,
+    finding,
+    tooling,
+  }) => {
+    const fixture = candidateValidationFixture();
+    fixture.runStore.recordAcceptanceRound({
+      validationRunId: fixture.validationRunId,
+      roundNumber: 1,
+      roundStatus,
+      phaseStatus: roundStatus,
+      artifactRecords: [],
+      findings: finding
+        ? [
+            {
+              id: `${fixture.validationRunId}-acceptance-F1`,
+              validationRunId: fixture.validationRunId,
+              phase: "intent_review",
+              producer: "acceptance",
+              title: "Acceptance mismatch",
+              description: "The Candidate does not satisfy approved intent.",
+              severity: "high",
+              evidence: "Observed behavior differs from Acceptance Context.",
+              files: [],
+              artifactRefs: [],
+            },
+          ]
+        : [],
+      now,
+    });
+    if (tooling) {
+      fixture.runStore.recordToolingFailure({
+        validationRunId: fixture.validationRunId,
+        errorKind: "reviewer_output_contract_failed",
+        operationName: "decode_reviewer_output",
+        errorMessage: "Structured output retries exhausted.",
+        now,
+      });
+    }
+    fixture.runStore.complete({ validationRunId: fixture.validationRunId, outcome, now });
+
+    const result = runByInProcess(fixture.root, [
+      "validation-run",
+      "show",
+      fixture.validationRunId,
+      "--output",
+      "json",
+    ]);
+    const output = JSON.parse(result.stdout);
+    expect(result.status).toBe(0);
+    expect(output.phases).toContainEqual({
+      phase: "intent_review",
+      rounds: [
+        expect.objectContaining({
+          phase: "intent_review",
+          producer: "acceptance",
+          status: roundStatus,
+        }),
+      ],
+    });
+    expect(output.findings).toHaveLength(finding ? 1 : 0);
+    expect(output.toolingFailures).toHaveLength(tooling ? 1 : 0);
   });
 
   it("returns typed actionable errors for unknown Runs, Artifacts, and unavailable content", () => {
@@ -419,7 +502,7 @@ const candidateValidationFixture = () => {
   if (runResult.reused) throw new Error("Expected a new Validation Run");
 
   const artifact = (
-    phase: "prepare" | "checks",
+    phase: "prepare" | "checks" | "intent_review",
     producer: string,
     fileName: string,
     content: string,

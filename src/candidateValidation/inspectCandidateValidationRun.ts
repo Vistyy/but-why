@@ -22,6 +22,7 @@ export type CandidateValidationRunInspection = {
   readonly candidate: CandidateRecord;
   readonly prepareRounds: readonly CandidateValidationRound[];
   readonly checkRounds: readonly CandidateValidationRound[];
+  readonly acceptanceRounds: readonly CandidateValidationRound[];
   readonly findings: readonly CandidateValidationFinding[];
   readonly toolingFailures: readonly CandidateValidationToolingFailure[];
   readonly artifacts: readonly CandidateValidationArtifactInspection[];
@@ -93,6 +94,7 @@ const inspectRun = (
     candidate,
     prepareRounds: rounds.filter((round) => round.phase === "prepare"),
     checkRounds: rounds.filter((round) => round.phase === "checks"),
+    acceptanceRounds: rounds.filter((round) => round.phase === "intent_review"),
     findings: dependencies.runStore.listFindings(validationRunId),
     toolingFailures: dependencies.runStore.listToolingFailures(validationRunId),
     artifacts: dependencies.runStore.listArtifacts(validationRunId).map((artifact) => ({
