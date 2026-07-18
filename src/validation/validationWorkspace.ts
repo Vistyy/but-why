@@ -1,3 +1,5 @@
+import type { Sandbox } from "@ai-hero/sandcastle";
+
 import type { CleanupState } from "../validationRun/cleanup.js";
 
 export type ValidationSandboxMode = "none" | "docker" | "podman";
@@ -8,12 +10,7 @@ export type ValidationWorkspaceCleanupResult = {
 };
 
 export type ActiveValidationWorkspace = {
-  readonly sandbox: {
-    readonly exec: (
-      command: string,
-      options?: { readonly cwd?: string },
-    ) => Promise<{ readonly exitCode: number; readonly stdout: string; readonly stderr: string }>;
-  };
+  readonly sandbox: Pick<Sandbox, "exec" | "run">;
   readonly worktreePath: string;
 };
 

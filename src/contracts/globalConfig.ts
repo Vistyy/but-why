@@ -3,6 +3,12 @@ import { Either, Schema } from "effect";
 import { agentProfileSchema, configNameSchema } from "./agentConfig.js";
 import { contractDiagnostics, formatContractDiagnostics } from "./contractDiagnostics.js";
 import { GlobalConfigValidationFailed } from "./configErrors.js";
+import { repoRelativePathSchema } from "./repoConfig.js";
+
+const globalAcceptanceReviewConfigSchema = Schema.Struct({
+  agentProfile: Schema.optional(configNameSchema),
+  instructionsFile: Schema.optional(repoRelativePathSchema),
+});
 
 const globalConfigSchema = Schema.Struct({
   defaultAgentProfile: Schema.optional(configNameSchema),
@@ -10,6 +16,11 @@ const globalConfigSchema = Schema.Struct({
     Schema.Record({
       key: configNameSchema,
       value: agentProfileSchema,
+    }),
+  ),
+  review: Schema.optional(
+    Schema.Struct({
+      acceptance: Schema.optional(globalAcceptanceReviewConfigSchema),
     }),
   ),
 });

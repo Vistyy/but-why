@@ -389,6 +389,7 @@ files:
   - src/**/*.ts
 ignores:
   - src/init/repoConfig.ts
+  - src/init/acceptanceInstructions.ts
   - src/validationRun/artifactContent.ts
   - src/init/gitignore.ts
   - src/task/files/descriptionFile.ts
@@ -449,6 +450,7 @@ files:
   - src/**/*.ts
 ignores:
   - src/init/repoConfig.ts
+  - src/agent/reviewerOutputWire.ts
   - src/submissionEnvironment/githubTarget.ts
   - src/sqlite/sqliteCandidateValidationPolicy.ts
   - src/sqlite/sqliteTaskContextSnapshot.ts
@@ -464,6 +466,7 @@ files:
   - src/**/*.ts
 ignores:
   - src/init/repoConfig.ts
+  - src/agent/reviewerOutputWire.ts
   - src/output/json.ts
   - src/sqlite/sqliteCandidateValidationPolicy.ts
   - src/sqlite/sqliteTaskContextSnapshot.ts

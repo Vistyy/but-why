@@ -114,6 +114,7 @@ export type RecordValidationRunCommandRoundInput = {
   readonly phaseStatus: ValidationPhaseStatus;
   readonly artifactRecords: readonly Omit<ValidationRunArtifactRecord, "createdAt">[];
   readonly finding?: Omit<ValidationRunFindingRecord, "createdAt" | "updatedAt">;
+  readonly findings?: readonly Omit<ValidationRunFindingRecord, "createdAt" | "updatedAt">[];
   readonly now: string;
 };
 

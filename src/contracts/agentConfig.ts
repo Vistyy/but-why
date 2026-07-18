@@ -32,4 +32,5 @@ const nonPiAgentConfigSchema = Schema.Struct({
 
 export const agentProfileSchema = Schema.Union(piAgentConfigSchema, nonPiAgentConfigSchema);
 
+export type PiAgentProfileConfig = Schema.Schema.Type<typeof piAgentConfigSchema>;
 export type AgentProfileConfig = Schema.Schema.Type<typeof agentProfileSchema>;
