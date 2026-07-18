@@ -156,7 +156,9 @@ const ensureCandidateIntegrity = async (
   if (
     result.exitCode !== 0 ||
     head !== expectedHeadSha ||
-    !status.every((line) => allowedUntrackedFiles?.includes(line.slice(3)) === true)
+    !status.every(
+      (line) => line.startsWith("?? ") && allowedUntrackedFiles?.includes(line.slice(3)) === true,
+    )
   ) {
     throw new GitToolingFailed({
       operationName: "verify_candidate_head",

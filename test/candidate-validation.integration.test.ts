@@ -23,7 +23,7 @@ describe("Candidate validation", () => {
     if (!captured.ok) return;
 
     const validation = openCandidateValidation({
-      localRepositoryRoot: repo,
+      localRepositoryMainCheckoutRoot: repo,
       artifactsRoot: join(commonDirectory(repo), "but-why", "artifacts"),
       runStore: openSqliteCandidateValidationRunStore(sqliteInput(repo)),
     });
@@ -90,7 +90,7 @@ describe("Candidate validation", () => {
     expect(captured.ok).toBe(true);
     if (!captured.ok) return;
     const validation = openCandidateValidation({
-      localRepositoryRoot: repo,
+      localRepositoryMainCheckoutRoot: repo,
       artifactsRoot: join(commonDirectory(repo), "but-why", "artifacts"),
       runStore: openSqliteCandidateValidationRunStore(sqliteInput(repo)),
     });
@@ -122,7 +122,7 @@ describe("Candidate validation", () => {
     expect(captured.ok).toBe(true);
     if (!captured.ok) return;
     const validation = openCandidateValidation({
-      localRepositoryRoot: repo,
+      localRepositoryMainCheckoutRoot: repo,
       artifactsRoot: join(commonDirectory(repo), "but-why", "artifacts"),
       runStore: openSqliteCandidateValidationRunStore(sqliteInput(repo)),
     });
@@ -149,17 +149,52 @@ describe("Candidate validation", () => {
     ).resolves.toMatchObject({ ok: false, outcome: "tooling_failed" });
   });
 
-  it("copies a regular local validation file without changing Candidate identity", async () => {
+  it("rejects a copied local validation file tracked by the Candidate", async () => {
     const repo = candidateReadyRepo();
+    writeFileSync(join(repo, ".validation-env"), "candidate=true\n");
+    git(repo, "add", ".validation-env");
+    git(repo, "commit", "-m", "track validation environment");
     const captured = captureLocalCandidate({ cwd: repo, now });
     expect(captured.ok).toBe(true);
     if (!captured.ok) return;
-    writeFileSync(join(repo, ".validation-env"), "enabled=true\n");
+    writeFileSync(join(repo, ".validation-env"), "local=true\n");
 
     const validation = openCandidateValidation({
-      localRepositoryRoot: repo,
+      localRepositoryMainCheckoutRoot: repo,
       artifactsRoot: join(commonDirectory(repo), "but-why", "artifacts"),
       runStore: openSqliteCandidateValidationRunStore(sqliteInput(repo)),
+    });
+    const result = await Effect.runPromise(
+      validation.validateCandidate({
+        candidateId: captured.candidateId,
+        headSha: captured.headSha,
+        policy: {
+          sandboxMode: "none",
+          checks: [{ id: "must-not-run", command: "exit 0", timeoutSeconds: 1 }],
+          copyFiles: [".validation-env"],
+        },
+        now,
+      }),
+    );
+
+    expect(result).toMatchObject({ ok: false, outcome: "tooling_failed" });
+    expect(validation.listRounds(result.validationRunId)).toEqual([]);
+  });
+
+  it("copies a regular local validation file from the main checkout without changing Candidate identity", async () => {
+    const mainCheckout = candidateReadyRepo();
+    const candidateCheckout = join(commonDirectory(mainCheckout), "candidate-worktree");
+    git(mainCheckout, "worktree", "add", "-q", "-b", "linked-candidate", candidateCheckout, "HEAD");
+    const captured = captureLocalCandidate({ cwd: candidateCheckout, now });
+    expect(captured.ok).toBe(true);
+    if (!captured.ok) return;
+    writeFileSync(join(mainCheckout, ".validation-env"), "source=main\n");
+    writeFileSync(join(candidateCheckout, ".validation-env"), "source=candidate\n");
+
+    const validation = openCandidateValidation({
+      localRepositoryMainCheckoutRoot: mainCheckout,
+      artifactsRoot: join(commonDirectory(mainCheckout), "but-why", "artifacts"),
+      runStore: openSqliteCandidateValidationRunStore(sqliteInput(mainCheckout)),
     });
     await expect(
       Effect.runPromise(
@@ -168,14 +203,20 @@ describe("Candidate validation", () => {
           headSha: captured.headSha,
           policy: {
             sandboxMode: "none",
-            checks: [{ id: "reads-env", command: "test -f .validation-env", timeoutSeconds: 1 }],
+            checks: [
+              {
+                id: "reads-main-env",
+                command: "grep -qx 'source=main' .validation-env",
+                timeoutSeconds: 1,
+              },
+            ],
             copyFiles: [".validation-env"],
           },
           now,
         }),
       ),
     ).resolves.toMatchObject({ ok: true, outcome: "passed" });
-    expect(git(repo, "rev-parse", "HEAD")).toBe(captured.headSha);
+    expect(git(candidateCheckout, "rev-parse", "HEAD")).toBe(captured.headSha);
   });
 });
 

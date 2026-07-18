@@ -48,7 +48,7 @@ export type ValidateCandidateResult =
   | { readonly ok: false; readonly validationRunId: string; readonly outcome: "tooling_failed" };
 
 export const openCandidateValidation = (input: {
-  readonly localRepositoryRoot: string;
+  readonly localRepositoryMainCheckoutRoot: string;
   readonly artifactsRoot: string;
   readonly runStore: CandidateValidationRunStore;
 }): CandidateValidation => ({
@@ -60,7 +60,7 @@ export const openCandidateValidation = (input: {
 
 const validateCandidate = (
   dependencies: {
-    readonly localRepositoryRoot: string;
+    readonly localRepositoryMainCheckoutRoot: string;
     readonly artifactsRoot: string;
     readonly runStore: CandidateValidationRunStore;
   },
@@ -76,7 +76,7 @@ const validateCandidate = (
     if (started.reused) return { ok: true, ...started };
 
     const workspace = yield* createValidationWorkspace({
-      repoRoot: dependencies.localRepositoryRoot,
+      repoRoot: dependencies.localRepositoryMainCheckoutRoot,
       validationRunId: started.validationRunId,
       submittedSha: input.headSha,
       copyFiles: input.policy.copyFiles,

@@ -49,6 +49,34 @@ describe("check round Findings", () => {
     ]);
   });
 
+  it("rejects tracked Candidate changes even when their path is an allowed untracked input", async () => {
+    const commands: string[] = [];
+    const result = Effect.runPromise(
+      runCheckPhase({
+        validationRunId: "candidate-run",
+        checks: [{ id: "quality", command: "exit 0", timeoutSeconds: 1 }],
+        artifactsRoot: createTempRoot(),
+        expectedHeadSha: "abc123",
+        allowedUntrackedFiles: [".validation-env"],
+        now,
+        sandbox: {
+          exec: async (command) => {
+            commands.push(command);
+            return {
+              exitCode: 0,
+              stdout: "abc123\n M .validation-env\n",
+              stderr: "",
+            };
+          },
+        },
+        recordCheckRound: () => undefined,
+      }),
+    );
+
+    await expect(result).rejects.toThrow("Validation workspace no longer matches the Candidate.");
+    expect(commands).toHaveLength(1);
+  });
+
   it("records timed-out check Findings without severity", async () => {
     const recordedRounds: RecordValidationRunCheckRoundInput[] = [];
     const result = await Effect.runPromise(
