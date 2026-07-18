@@ -134,8 +134,7 @@ const ensureRecordedBranch = (
 ): ProvisionChangeWorktreeResult => {
   const branchCommit = resolveLocalBranch(cwd, start.branchRef);
   if (branchCommit !== undefined) {
-    return recovering &&
-      (start.readiness === "ready" || branchCommit === start.startingCommit)
+    return recovering && (start.readiness === "ready" || branchCommit === start.startingCommit)
       ? { ok: true }
       : { ok: false, code: "change_start_conflict" };
   }
@@ -163,7 +162,10 @@ const removeStaleWorktreeRegistration = (
     : { ok: true };
 };
 
-const addRecordedWorktree = (cwd: string, start: ChangeStartRecord): ProvisionChangeWorktreeResult => {
+const addRecordedWorktree = (
+  cwd: string,
+  start: ChangeStartRecord,
+): ProvisionChangeWorktreeResult => {
   try {
     mkdirSync(dirname(start.worktreePath), { recursive: true });
   } catch {

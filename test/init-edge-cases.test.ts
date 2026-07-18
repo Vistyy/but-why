@@ -125,6 +125,89 @@ help[1]: Move the conflicting path aside before running init again.`);
     }
   });
 
+  it("moves historical Task Start worktree facts onto the Change", () => {
+    const root = createGitRepo();
+    writeConfig(root);
+    expect(runBy(root, "init", "--task-prefix", "BY").status).toBe(0);
+    const database = new DatabaseSync(sharedStatePath(root));
+    database.exec(`
+      DROP INDEX changes_worktree_path_unique_idx;
+      ALTER TABLE changes DROP COLUMN prepare_failure;
+      ALTER TABLE changes DROP COLUMN prepare_timeout_seconds;
+      ALTER TABLE changes DROP COLUMN prepare_command;
+      ALTER TABLE changes DROP COLUMN readiness;
+      ALTER TABLE changes DROP COLUMN acceptance_context;
+      ALTER TABLE changes DROP COLUMN worktree_path;
+      ALTER TABLE changes DROP COLUMN starting_commit;
+
+      CREATE TABLE task_starts (
+        task_id TEXT PRIMARY KEY,
+        change_id TEXT NOT NULL UNIQUE,
+        branch_ref TEXT NOT NULL UNIQUE,
+        base_ref TEXT NOT NULL,
+        starting_commit TEXT NOT NULL,
+        worktree_path TEXT NOT NULL UNIQUE,
+        acceptance_context TEXT NOT NULL,
+        provisioning_state TEXT NOT NULL CHECK (provisioning_state IN ('pending', 'ready')),
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        FOREIGN KEY (task_id) REFERENCES tasks(id),
+        FOREIGN KEY (change_id) REFERENCES changes(id)
+      );
+
+      INSERT INTO tasks (
+        id, numeric_id, title, description, state, created_at, updated_at, branch
+      ) VALUES (
+        'BY-1', 1, 'Historical', 'Existing work', 'implementing',
+        '2026-06-30T12:00:00.000Z', '2026-06-30T12:00:00.000Z', NULL
+      );
+      INSERT INTO changes (
+        id, repository_common_directory, branch_ref, task_id, state,
+        close_reason, created_at, updated_at, closed_at, base_ref
+      ) VALUES (
+        'change-1', '/repo/.git', 'refs/heads/but-why/by-1', 'BY-1', 'open',
+        NULL, '2026-06-30T12:00:00.000Z', '2026-06-30T12:00:00.000Z', NULL,
+        'refs/heads/main'
+      );
+      INSERT INTO task_starts (
+        task_id, change_id, branch_ref, base_ref, starting_commit, worktree_path,
+        acceptance_context, provisioning_state, created_at, updated_at
+      ) VALUES (
+        'BY-1', 'change-1', 'refs/heads/but-why/by-1', 'refs/heads/main',
+        '1111111111111111111111111111111111111111', '/repo/worktree',
+        '{"version":1,"title":"Historical","description":"Existing work","comments":[]}',
+        'ready', '2026-06-30T12:00:00.000Z', '2026-06-30T12:00:00.000Z'
+      );
+      DELETE FROM schema_migrations WHERE name = '022_change_owned_worktrees';
+    `);
+    database.close();
+
+    expect(runBy(root, "init", "--task-prefix", "BY").status).toBe(0);
+    const migrated = new DatabaseSync(sharedStatePath(root));
+    try {
+      expect(
+        migrated
+          .prepare(`
+            SELECT starting_commit AS startingCommit, worktree_path AS worktreePath,
+                   acceptance_context AS acceptanceContext, readiness
+            FROM changes WHERE id = 'change-1'
+          `)
+          .get(),
+      ).toEqual({
+        startingCommit: "1111111111111111111111111111111111111111",
+        worktreePath: "/repo/worktree",
+        acceptanceContext:
+          '{"version":1,"title":"Historical","description":"Existing work","comments":[]}',
+        readiness: "ready",
+      });
+      expect(
+        migrated.prepare("SELECT name FROM sqlite_master WHERE name = 'task_starts'").get(),
+      ).toBeUndefined();
+    } finally {
+      migrated.close();
+    }
+  });
+
   it("adds Task approval state without losing existing Task-owned records", () => {
     const root = createGitRepo();
 

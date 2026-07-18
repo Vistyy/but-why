@@ -11,6 +11,8 @@ import type {
 } from "../change/changeStore.js";
 import { storedPublicTaskId } from "../task/taskId.js";
 import { rollbackIfOpen, withStateDatabase, type SqliteStoreInput } from "./connection.js";
+import { decodeSqliteChangePrepareFailure } from "./sqliteChangePreparation.js";
+import { decodeSqliteTaskContextSnapshot } from "./sqliteTaskContextSnapshot.js";
 import { queryOne } from "./query.js";
 
 const changeColumns = [
@@ -65,28 +67,6 @@ const createChange = (database: DatabaseSync, input: CreateChangeInput): CreateC
       return { ok: false, code: "repository_branch_already_linked" };
     }
 
-    if (input.taskId !== undefined) {
-      const task = queryOne<{ readonly id: string }>(
-        database,
-        "SELECT id FROM tasks WHERE id = ?",
-        [input.taskId],
-      );
-      if (task === undefined) {
-        database.exec("ROLLBACK");
-        return { ok: false, code: "task_not_found" };
-      }
-
-      const existingTaskLink = queryOne<{ readonly id: string }>(
-        database,
-        "SELECT id FROM changes WHERE task_id = ?",
-        [input.taskId],
-      );
-      if (existingTaskLink !== undefined) {
-        database.exec("ROLLBACK");
-        return { ok: false, code: "task_already_linked" };
-      }
-    }
-
     const id = randomUUID();
     database
       .prepare(`
@@ -95,14 +75,7 @@ const createChange = (database: DatabaseSync, input: CreateChangeInput): CreateC
           close_reason, created_at, updated_at, closed_at
         ) VALUES (?, ?, ?, ?, 'open', NULL, ?, ?, NULL)
       `)
-      .run(
-        id,
-        input.repositoryCommonDirectory,
-        input.branchRef,
-        input.taskId ?? null,
-        input.now,
-        input.now,
-      );
+      .run(id, input.repositoryCommonDirectory, input.branchRef, null, input.now, input.now);
 
     const change = getChangeById(database, id);
     if (change === undefined) throw new Error("Change disappeared after creation");
@@ -181,13 +154,16 @@ const mapChangeRow = (row: ChangeRow | undefined): ChangeRecord | undefined =>
         startingCommit: row.startingCommit,
         worktreePath: row.worktreePath,
         acceptanceContext:
-          row.acceptanceContext === null ? null : JSON.parse(row.acceptanceContext),
+          row.acceptanceContext === null
+            ? null
+            : decodeSqliteTaskContextSnapshot(row.acceptanceContext),
         readiness: row.readiness,
         prepare:
           row.prepareCommand === null || row.prepareTimeoutSeconds === null
             ? null
             : { command: row.prepareCommand, timeoutSeconds: row.prepareTimeoutSeconds },
-        prepareFailure: row.prepareFailure === null ? null : JSON.parse(row.prepareFailure),
+        prepareFailure:
+          row.prepareFailure === null ? null : decodeSqliteChangePrepareFailure(row.prepareFailure),
         state: row.state,
         closeReason: row.closeReason,
         createdAt: row.createdAt,

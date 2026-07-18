@@ -8,7 +8,10 @@ import { createInitializedRepo } from "./support/initializedRepo.js";
 afterEach(cleanupTempRoots);
 
 describe("opaque Task ID CLI parsing", () => {
-  it.each(["show", "context"])("rejects remote-style Task IDs after opaque parsing in task %s", (command) => {
+  it.each([
+    "show",
+    "context",
+  ])("rejects remote-style Task IDs after opaque parsing in task %s", (command) => {
     const root = initializedRepo();
     const result = runByInProcess(root, ["task", command, "linear/ENG-123:acceptance"]);
 

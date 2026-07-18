@@ -1,12 +1,17 @@
 import { execFileSync } from "node:child_process";
-import { existsSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { openRepoLocalStores } from "../src/init/repoLocalStores.js";
 import { loadRepoLocalContext } from "../src/init/repoContext.js";
-import { publicTaskId } from "../src/task/taskId.js";
-import { cleanupTempRoots, runByInProcess, runByInProcessAsync, runByWithEnv } from "./support/by-cli.js";
+import { publicTaskId, taskSlugForId } from "../src/task/taskId.js";
+import {
+  cleanupTempRoots,
+  runByInProcess,
+  runByInProcessAsync,
+  runByWithEnv,
+} from "./support/by-cli.js";
 import { createInitializedRepo } from "./support/initializedRepo.js";
 
 const now = "2026-06-30T12:00:00.000Z";
@@ -18,11 +23,7 @@ describe("by change start managed worktree", () => {
     const root = initializedRepository();
     writeFileSync(join(root, "dirty.txt"), "caller work is not part of Change Start\n");
 
-    const result = await runByInProcessAsync(
-      root,
-      ["change", "start", "--output", "json"],
-      now,
-    );
+    const result = await runByInProcessAsync(root, ["change", "start", "--output", "json"], now);
 
     expect(result.status).toBe(0);
     expect(result.stderr).toBe("");
@@ -55,13 +56,13 @@ describe("by change start managed worktree", () => {
     expect(result.status).toBe(0);
     const output = JSON.parse(result.stdout) as ChangeOutput;
     expect(output.change).toMatchObject({ taskId: "BY-1", readiness: "ready" });
-    expect(runByInProcess(root, ["task", "show", "BY-1"]).stdout).toContain(
-      "state: implementing",
-    );
+    expect(runByInProcess(root, ["task", "show", "BY-1"]).stdout).toContain("state: implementing");
 
     const context = loadRepoLocalContext(root, () => now);
     if (!context.ok) throw new Error(context.error.code);
-    expect(openRepoLocalStores(context.context).changeStartStore.getById(output.change.id)).toMatchObject({
+    expect(
+      openRepoLocalStores(context.context).changeStartStore.getById(output.change.id),
+    ).toMatchObject({
       acceptanceContext: {
         version: 1,
         title: "Prepared change",
@@ -76,11 +77,7 @@ describe("by change start managed worktree", () => {
       "if [ -f .prepare-attempted ]; then exit 0; else touch .prepare-attempted; printf failed >&2; exit 7; fi",
     );
 
-    const started = await runByInProcessAsync(
-      root,
-      ["change", "start", "--output", "json"],
-      now,
-    );
+    const started = await runByInProcessAsync(root, ["change", "start", "--output", "json"], now);
 
     expect(started.status).toBe(1);
     const failure = JSON.parse(started.stdout);
@@ -113,6 +110,120 @@ describe("by change start managed worktree", () => {
     });
   });
 
+  it("recovers a missing Task-backed worktree without creating another Change", async () => {
+    const root = initializedRepository();
+    createApprovedTask(root);
+    const first = JSON.parse(
+      (
+        await runByInProcessAsync(
+          root,
+          ["change", "start", "--task", "BY-1", "--output", "json"],
+          now,
+        )
+      ).stdout,
+    ) as ChangeOutput;
+    git(root, "worktree", "remove", first.worktreePath);
+
+    const recovered = await runByInProcessAsync(
+      root,
+      ["change", "start", "--task", "BY-1", "--output", "json"],
+      now,
+    );
+
+    expect(recovered.status).toBe(0);
+    expect(JSON.parse(recovered.stdout)).toMatchObject({
+      change: first.change,
+      branch: first.branch,
+      startingCommit: first.startingCommit,
+      worktreePath: first.worktreePath,
+    });
+    expect(git(first.worktreePath, "symbolic-ref", "HEAD")).toBe(first.branch);
+  });
+
+  it("preserves unexpected branches and occupied worktree paths", async () => {
+    const root = initializedRepository();
+    createApprovedTask(root);
+    const slug = taskSlugForId(publicTaskId("BY-1"));
+    git(root, "branch", `but-why/${slug}`, "refs/heads/main");
+
+    const branchConflict = await runByInProcessAsync(
+      root,
+      ["change", "start", "--task", "BY-1", "--output", "json"],
+      now,
+    );
+
+    expect(branchConflict.status).toBe(1);
+    expect(JSON.parse(branchConflict.stdout)).toMatchObject({
+      error: { code: "change_start_conflict" },
+    });
+    expect(runByInProcess(root, ["task", "show", "BY-1"]).stdout).toContain("state: todo");
+
+    git(root, "branch", "-D", `but-why/${slug}`);
+    const commonDirectory = git(root, "rev-parse", "--path-format=absolute", "--git-common-dir");
+    const worktreePath = join(commonDirectory, "but-why", "worktrees", slug);
+    mkdirSync(worktreePath, { recursive: true });
+    writeFileSync(join(worktreePath, "keep.txt"), "do not overwrite\n");
+
+    const pathConflict = await runByInProcessAsync(
+      root,
+      ["change", "start", "--task", "BY-1", "--output", "json"],
+      now,
+    );
+    expect(pathConflict.status).toBe(1);
+    expect(JSON.parse(pathConflict.stdout)).toMatchObject({
+      error: { code: "change_start_conflict" },
+    });
+    expect(existsSync(join(worktreePath, "keep.txt"))).toBe(true);
+
+    rmSync(worktreePath, { recursive: true });
+    const recovered = await runByInProcessAsync(
+      root,
+      ["change", "start", "--task", "BY-1", "--output", "json"],
+      now,
+    );
+    expect(recovered.status).toBe(0);
+    expect(JSON.parse(recovered.stdout)).toMatchObject({ worktreePath });
+  });
+
+  it("requires an approved dependency-unblocked Task", async () => {
+    const root = initializedRepository();
+    const context = loadRepoLocalContext(root, () => now);
+    if (!context.ok) throw new Error(context.error.code);
+    const store = openRepoLocalStores(context.context).taskStore;
+    const prerequisite = store.createTask({ title: "Prerequisite", description: "First", now });
+    const dependent = store.createTask({ title: "Dependent", description: "Second", now });
+    expect(
+      store.replaceTaskDependencies({
+        taskId: publicTaskId(dependent.id),
+        prerequisiteTaskIds: [publicTaskId(prerequisite.id)],
+      }).ok,
+    ).toBe(true);
+    expect(store.approveTask({ taskId: publicTaskId(dependent.id), now }).ok).toBe(true);
+
+    const blocked = await runByInProcessAsync(
+      root,
+      ["change", "start", "--task", dependent.id, "--output", "json"],
+      now,
+    );
+
+    expect(blocked.status).toBe(1);
+    expect(JSON.parse(blocked.stdout)).toMatchObject({
+      error: {
+        code: "task_dependencies_unsatisfied",
+        blockedBy: [{ id: prerequisite.id, state: "new" }],
+      },
+    });
+  });
+
+  it("returns TOON by default", async () => {
+    const result = await runByInProcessAsync(initializedRepository(), ["change", "start"], now);
+
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain("change:\n  id:");
+    expect(result.stdout).toContain("readiness: ready");
+    expect(result.stdout).toContain("worktreePath:");
+  });
+
   it("removes the Task Start route and supports executable JSON output", async () => {
     const root = initializedRepository();
     createApprovedTask(root);
@@ -139,7 +250,11 @@ describe("by change start managed worktree", () => {
 });
 
 type ChangeOutput = {
-  readonly change: { readonly id: string; readonly taskId: string | null; readonly readiness: string };
+  readonly change: {
+    readonly id: string;
+    readonly taskId: string | null;
+    readonly readiness: string;
+  };
   readonly branch: string;
   readonly baseRef: string;
   readonly startingCommit: string;

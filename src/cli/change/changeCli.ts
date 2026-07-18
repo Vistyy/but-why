@@ -1,10 +1,17 @@
 import { Effect } from "effect";
 
+import { parseCliTaskIdValue } from "../../cliTaskId.js";
 import { withGlobalHelpFlags } from "../../cliHelp.js";
-import { runtimeError, stateStoreUnavailable, success, usageError, type CliResult } from "../../cliResults.js";
+import {
+  runtimeError,
+  stateStoreUnavailable,
+  success,
+  usageError,
+  type CliResult,
+} from "../../cliResults.js";
 import { loadChangeUseCases } from "../../localChange/changeUseCases.js";
-import { parsePublicTaskId, type PublicTaskId } from "../../task/taskId.js";
-import type { ChangeStartRecord } from "../../change/changeStartStore.js";
+import type { PublicTaskId } from "../../task/taskId.js";
+import type { ChangeRecord } from "../../change/change.js";
 
 export type ChangeCommandEnvironment = {
   readonly cwd: string;
@@ -15,13 +22,19 @@ export const routeChange = (
   args: readonly string[],
   environment: ChangeCommandEnvironment,
 ): Effect.Effect<CliResult> => {
-  if (args.length === 1 && args[0] === "--help") {
+  if (args.length === 0 || (args.length === 1 && args[0] === "--help")) {
     return Effect.succeed(
       success({
         usage: "by change <command> [--help]",
         commands: [
-          { command: "by change start [--task <task-id>]", description: "Create a prepared Change worktree" },
-          { command: "by change prepare <change-id>", description: "Run or retry Repository Preparation" },
+          {
+            command: "by change start [--task <task-id>]",
+            description: "Create a prepared Change worktree",
+          },
+          {
+            command: "by change prepare <change-id>",
+            description: "Run or retry Repository Preparation",
+          },
         ],
         flags: withGlobalHelpFlags(),
       }),
@@ -53,7 +66,11 @@ const runStart = (
         flags: withGlobalHelpFlags([
           { flag: "--task <task-id>", description: "Link one approved dependency-unblocked Task" },
         ]),
-        examples: ["by change start", "by change start --task BY-1", "by change start --output json"],
+        examples: [
+          "by change start",
+          "by change start --task BY-1",
+          "by change start --output json",
+        ],
       }),
     );
   }
@@ -68,16 +85,8 @@ const runStart = (
         }),
       );
     }
-    const parsed = parsePublicTaskId(args[1]);
-    if (!parsed.ok) {
-      return Effect.succeed(
-        usageError({
-          code: "invalid_task_id",
-          message: `Invalid Task ID: ${args[1]}`,
-          help: ["Use a public Task ID such as BY-1."],
-        }),
-      );
-    }
+    const parsed = parseCliTaskIdValue(args[1]);
+    if (!parsed.ok) return Effect.succeed(parsed.result);
     taskId = parsed.taskId;
   }
 
@@ -154,6 +163,13 @@ const startResult = (
       help: ["Complete every prerequisite, then run Change Start again."],
     });
   }
+  if (result.code === "task_not_found") {
+    return runtimeError({
+      code: result.code,
+      message: "Task was not found.",
+      help: ["Run `by task list --all` to see known Tasks."],
+    });
+  }
   if (result.code === "invalid_task_state") {
     return runtimeError({
       code: result.code,
@@ -162,7 +178,7 @@ const startResult = (
       help: ["Approve the Task before starting its Change."],
     });
   }
-  return operationalError(result.code);
+  return operationalError(result.code, "change" in result ? result.change : undefined);
 };
 
 const prepareResult = (
@@ -177,7 +193,7 @@ const prepareResult = (
   });
 };
 
-const changeView = (change: ChangeStartRecord) => ({
+const changeView = (change: ChangeRecord) => ({
   change: { id: change.id, taskId: change.taskId, readiness: change.readiness },
   branch: change.branchRef,
   baseRef: change.baseRef,
@@ -185,7 +201,7 @@ const changeView = (change: ChangeStartRecord) => ({
   worktreePath: change.worktreePath,
 });
 
-const prepareFailure = (change: ChangeStartRecord): CliResult => {
+const prepareFailure = (change: ChangeRecord): CliResult => {
   const failure = change.prepareFailure;
   if (failure === null) throw new Error("Prepare-failed Change has no failure evidence");
   return runtimeError({
@@ -198,18 +214,35 @@ const prepareFailure = (change: ChangeStartRecord): CliResult => {
       command: failure.command,
       exitCode: failure.exitCode,
       timedOut: failure.timedOut,
-      stdout: failure.stdout,
-      stderr: failure.stderr,
+      stdout: boundedEvidence(failure.stdout),
+      stderr: boundedEvidence(failure.stderr),
     },
     help: [`Fix the preparation failure, then run \`by change prepare ${change.id}\`.`],
   });
 };
 
-const operationalError = (code: string): CliResult =>
+const boundedEvidence = (value: string): string =>
+  value.length <= 1000
+    ? value
+    : `${value.slice(0, 1000)}\n... (truncated, ${value.length} chars total)`;
+
+const operationalError = (code: string, change?: ChangeRecord): CliResult =>
   runtimeError({
     code,
     message: "Change Start could not create or recover the Managed Worktree.",
-    help: ["Inspect the default branch, committed Repo Config, branch, and worktree path, then retry."],
+    ...(change === undefined
+      ? {}
+      : {
+          details: {
+            changeId: change.id,
+            branch: change.branchRef,
+            startingCommit: change.startingCommit,
+            worktreePath: change.worktreePath,
+          },
+        }),
+    help: [
+      "Inspect the default branch, committed Repo Config, branch, and worktree path, then retry.",
+    ],
   });
 
 const loadError = (error: { readonly code: string; readonly taskPrefix?: string }): CliResult =>

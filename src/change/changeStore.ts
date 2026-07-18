@@ -13,7 +13,6 @@ export type ChangeStore = {
 export type CreateChangeInput = {
   readonly repositoryCommonDirectory: string;
   readonly branchRef: string;
-  readonly taskId?: string;
   readonly now: string;
 };
 
@@ -36,5 +35,5 @@ export type CreateChangeResult =
   | { readonly ok: true; readonly change: ChangeRecord }
   | {
       readonly ok: false;
-      readonly code: "repository_branch_already_linked" | "task_already_linked" | "task_not_found";
+      readonly code: "repository_branch_already_linked";
     };

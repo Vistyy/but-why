@@ -98,15 +98,12 @@ describe("Change storage", () => {
     ).toEqual({ ok: false, code: "repository_branch_already_linked" });
   });
 
-  it("enforces permanent repository branch and Task bindings", () => {
-    const state = createSqliteStateSession();
-    const store = changeStore(state);
-    const task = taskStore(state).createTask({ title: "Task", description: "Work", now });
+  it("enforces permanent repository branch bindings", () => {
+    const store = changeStore(createSqliteStateSession());
 
     const first = store.createChange({
       repositoryCommonDirectory: "/repos/example/.git",
       branchRef: "refs/heads/feature",
-      taskId: task.id,
       now,
     });
     expect(first.ok).toBe(true);
@@ -118,14 +115,6 @@ describe("Change storage", () => {
         now,
       }),
     ).toEqual({ ok: false, code: "repository_branch_already_linked" });
-    expect(
-      store.createChange({
-        repositoryCommonDirectory: "/repos/example/.git",
-        branchRef: "refs/heads/other",
-        taskId: task.id,
-        now,
-      }),
-    ).toEqual({ ok: false, code: "task_already_linked" });
   });
 });
 

@@ -199,7 +199,6 @@ describe("Task dependency graph", () => {
     expect(tasks.getTaskById(publicTaskId("BY-1"))?.prerequisites).toEqual([]);
   });
 
-
   it("returns direct graph facts and start eligibility with direct blockers", () => {
     const tasks = createTaskStore();
     createTask(tasks, "Done prerequisite");

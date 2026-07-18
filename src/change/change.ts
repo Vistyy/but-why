@@ -1,10 +1,14 @@
-import type { RepoPrepareConfig } from "../contracts/repoConfig.js";
 import type { PublicTaskId } from "../task/taskId.js";
 import type { TaskContextSnapshotV1 } from "../validationRun/taskContextSnapshot.js";
 
 export type ChangeState = "open" | "closed";
 export type ChangeCloseReason = "completed" | "cancelled";
 export type ChangeReadiness = "pending" | "ready" | "prepare_failed";
+
+export type ChangePrepareDefinition = {
+  readonly command: string;
+  readonly timeoutSeconds: number;
+};
 
 export type ChangePrepareFailure = {
   readonly command: string;
@@ -24,7 +28,7 @@ export type ChangeRecord = {
   readonly worktreePath: string | null;
   readonly acceptanceContext: TaskContextSnapshotV1 | null;
   readonly readiness: ChangeReadiness | null;
-  readonly prepare: (RepoPrepareConfig & { readonly timeoutSeconds: number }) | null;
+  readonly prepare: ChangePrepareDefinition | null;
   readonly prepareFailure: ChangePrepareFailure | null;
   readonly state: ChangeState;
   readonly closeReason: ChangeCloseReason | null;

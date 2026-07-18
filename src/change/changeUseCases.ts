@@ -1,4 +1,3 @@
-import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 
 import type { RepoLocalContext } from "../init/repoContext.js";
@@ -21,7 +20,10 @@ import type {
 } from "./changeStartStore.js";
 
 export type ChangeUseCases = {
-  readonly start: (input: { readonly taskId?: PublicTaskId; readonly now: string }) => Promise<ChangeStartResult>;
+  readonly start: (input: {
+    readonly taskId?: PublicTaskId;
+    readonly now: string;
+  }) => Promise<ChangeStartResult>;
   readonly prepare: (changeId: string, now: string) => Promise<ChangePrepareResult>;
 };
 
@@ -29,7 +31,11 @@ export type ChangeStartResult =
   | { readonly ok: true; readonly change: ChangeStartRecord }
   | ChangeStartEligibilityError
   | Exclude<ResolveChangeStartGitResult, { readonly ok: true }>
-  | Exclude<ProvisionChangeWorktreeResult, { readonly ok: true }>
+  | {
+      readonly ok: false;
+      readonly code: Exclude<ProvisionChangeWorktreeResult, { readonly ok: true }>["code"];
+      readonly change: ChangeStartRecord;
+    }
   | { readonly ok: false; readonly code: "prepare_failed"; readonly change: ChangeStartRecord };
 
 export type ChangePrepareResult =
@@ -41,7 +47,7 @@ export type ChangePrepareResult =
 export const openChangeUseCases = (
   context: RepoLocalContext,
   store: ChangeStartStore,
-  executor: RepositoryPreparationExecutor = localExecutor,
+  executor: RepositoryPreparationExecutor,
 ): ChangeUseCases => ({
   start: (input) => startChange(context, store, executor, input),
   prepare: (changeId, now) => prepareChange(store, executor, changeId, now),
@@ -54,15 +60,8 @@ const startChange = async (
   input: { readonly taskId?: PublicTaskId; readonly now: string },
 ): Promise<ChangeStartResult> => {
   if (input.taskId !== undefined) {
-    const eligibility = store.prepareTask(input.taskId);
-    if (!eligibility.ok) return eligibility;
-    if (eligibility.existing !== undefined) {
-      const provisioned = provisionChangeWorktree(context.root, eligibility.existing, true);
-      if (!provisioned.ok) return provisioned;
-      return eligibility.existing.readiness === "pending"
-        ? prepareExisting(store, executor, eligibility.existing, input.now)
-        : readinessResult(eligibility.existing);
-    }
+    const resumed = await resumeTaskChange(context, store, executor, input.taskId, input.now);
+    if (resumed !== undefined) return resumed;
   }
 
   const id = randomUUID();
@@ -78,8 +77,26 @@ const startChange = async (
   if (!created.ok) return created;
 
   const provisioned = provisionChangeWorktree(context.root, created.change, false);
-  if (!provisioned.ok) return provisioned;
+  if (!provisioned.ok) return { ...provisioned, change: created.change };
   return prepareExisting(store, executor, created.change, input.now);
+};
+
+const resumeTaskChange = async (
+  context: RepoLocalContext,
+  store: ChangeStartStore,
+  executor: RepositoryPreparationExecutor,
+  taskId: PublicTaskId,
+  now: string,
+): Promise<ChangeStartResult | undefined> => {
+  const eligibility = store.prepareTask(taskId);
+  if (!eligibility.ok) return eligibility;
+  if (eligibility.existing === undefined) return undefined;
+
+  const provisioned = provisionChangeWorktree(context.root, eligibility.existing, true);
+  if (!provisioned.ok) return { ...provisioned, change: eligibility.existing };
+  return eligibility.existing.readiness === "pending"
+    ? prepareExisting(store, executor, eligibility.existing, now)
+    : readinessResult(eligibility.existing);
 };
 
 const prepareChange = async (
@@ -140,25 +157,3 @@ const readinessResult = (change: ChangeStartRecord): ChangeStartResult =>
   change.readiness === "prepare_failed"
     ? { ok: false, code: "prepare_failed", change }
     : { ok: true, change };
-
-const localExecutor: RepositoryPreparationExecutor = (command, options) =>
-  new Promise((resolve, reject) => {
-    const child = spawn("sh", ["-c", command], {
-      cwd: options?.cwd,
-      stdio: ["ignore", "pipe", "pipe"],
-    });
-    let stdout = "";
-    let stderr = "";
-    child.stdout.setEncoding("utf8");
-    child.stderr.setEncoding("utf8");
-    child.stdout.on("data", (chunk: string) => {
-      stdout += chunk;
-    });
-    child.stderr.on("data", (chunk: string) => {
-      stderr += chunk;
-    });
-    child.once("error", reject);
-    child.once("close", (code) => {
-      resolve({ exitCode: code ?? 1, stdout, stderr });
-    });
-  });

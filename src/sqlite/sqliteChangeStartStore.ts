@@ -11,6 +11,14 @@ import type { TaskState } from "../task/lifecycle.js";
 import { storedPublicTaskId, type PublicTaskId } from "../task/taskId.js";
 import type { TaskContextSnapshotV1 } from "../validationRun/taskContextSnapshot.js";
 import { rollbackIfOpen, withStateDatabase, type SqliteStoreInput } from "./connection.js";
+import {
+  decodeSqliteChangePrepareFailure,
+  encodeSqliteChangePrepareFailure,
+} from "./sqliteChangePreparation.js";
+import {
+  decodeSqliteTaskContextSnapshot,
+  encodeSqliteTaskContextSnapshot,
+} from "./sqliteTaskContextSnapshot.js";
 import { queryAll, queryOne } from "./query.js";
 
 const columns = [
@@ -66,12 +74,11 @@ const create = (
   database.exec("BEGIN IMMEDIATE");
   try {
     if (
-      queryOne(database, "SELECT id FROM changes WHERE id = ? OR (repository_common_directory = ? AND branch_ref = ?) OR worktree_path = ?", [
-        input.id,
-        input.repositoryCommonDirectory,
-        input.branchRef,
-        input.worktreePath,
-      ]) !== undefined
+      queryOne(
+        database,
+        "SELECT id FROM changes WHERE id = ? OR (repository_common_directory = ? AND branch_ref = ?) OR worktree_path = ?",
+        [input.id, input.repositoryCommonDirectory, input.branchRef, input.worktreePath],
+      ) !== undefined
     ) {
       database.exec("ROLLBACK");
       return { ok: false, code: "change_start_conflict" };
@@ -118,7 +125,7 @@ const create = (
         input.taskId ?? null,
         input.startingCommit,
         input.worktreePath,
-        acceptanceContext === null ? null : JSON.stringify(acceptanceContext),
+        acceptanceContext === null ? null : encodeSqliteTaskContextSnapshot(acceptanceContext),
         input.prepare?.command ?? null,
         input.prepare?.timeoutSeconds ?? null,
         input.now,
@@ -173,7 +180,9 @@ const readTask = (database: DatabaseSync, taskId: PublicTaskId): TaskRow | undef
 
 const markReady = (database: DatabaseSync, changeId: string, now: string): ChangeStartRecord => {
   database
-    .prepare("UPDATE changes SET readiness = 'ready', prepare_failure = NULL, updated_at = ? WHERE id = ?")
+    .prepare(
+      "UPDATE changes SET readiness = 'ready', prepare_failure = NULL, updated_at = ? WHERE id = ?",
+    )
     .run(now, changeId);
   const change = getById(database, changeId);
   if (change === undefined) throw new Error("Change was not found while marking it ready");
@@ -187,8 +196,10 @@ const markPrepareFailed = (
   now: string,
 ): ChangeStartRecord => {
   database
-    .prepare("UPDATE changes SET readiness = 'prepare_failed', prepare_failure = ?, updated_at = ? WHERE id = ?")
-    .run(JSON.stringify(failure), now, changeId);
+    .prepare(
+      "UPDATE changes SET readiness = 'prepare_failed', prepare_failure = ?, updated_at = ? WHERE id = ?",
+    )
+    .run(encodeSqliteChangePrepareFailure(failure), now, changeId);
   const change = getById(database, changeId);
   if (change === undefined) throw new Error("Change was not found while recording preparation");
   return change;
@@ -196,7 +207,9 @@ const markPrepareFailed = (
 
 const getByTaskId = (database: DatabaseSync, taskId: PublicTaskId): ChangeStartRecord | undefined =>
   mapRow(
-    queryOne<ChangeStartRow>(database, `SELECT ${columns} FROM changes WHERE task_id = ?`, [taskId]),
+    queryOne<ChangeStartRow>(database, `SELECT ${columns} FROM changes WHERE task_id = ?`, [
+      taskId,
+    ]),
   );
 
 const getById = (database: DatabaseSync, changeId: string): ChangeStartRecord | undefined =>
@@ -225,16 +238,14 @@ const mapRow = (row: ChangeStartRow | undefined): ChangeStartRecord | undefined 
     acceptanceContext:
       row.acceptanceContext === null
         ? null
-        : (JSON.parse(row.acceptanceContext) as TaskContextSnapshotV1),
+        : decodeSqliteTaskContextSnapshot(row.acceptanceContext),
     readiness: row.readiness,
     prepare:
       row.prepareCommand === null || row.prepareTimeoutSeconds === null
         ? null
         : { command: row.prepareCommand, timeoutSeconds: row.prepareTimeoutSeconds },
     prepareFailure:
-      row.prepareFailure === null
-        ? null
-        : (JSON.parse(row.prepareFailure) as ChangePrepareFailure),
+      row.prepareFailure === null ? null : decodeSqliteChangePrepareFailure(row.prepareFailure),
     state: row.state,
     closeReason: row.closeReason,
     createdAt: row.createdAt,

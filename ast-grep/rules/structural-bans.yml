@@ -219,7 +219,8 @@ ignores:
   - src/submissionEnvironment/gitFacts.ts
   - src/submissionEnvironment/githubTarget.ts
   - src/validation/validationGitGlue.ts
-  - src/taskStart/taskStartGit.ts
+  - src/change/changeStartGit.ts
+  - src/repositoryPreparation/localRepositoryPreparation.ts
 rule:
   any:
     - pattern: spawn($$$ARGS)
@@ -242,7 +243,8 @@ ignores:
   - src/submissionEnvironment/gitFacts.ts
   - src/submissionEnvironment/githubTarget.ts
   - src/validation/validationGitGlue.ts
-  - src/taskStart/taskStartGit.ts
+  - src/change/changeStartGit.ts
+  - src/repositoryPreparation/localRepositoryPreparation.ts
 rule:
   all:
     - kind: import_statement
@@ -343,7 +345,7 @@ ignores:
   - src/init/gitignore.ts
   - src/validationRun/artifactFiles.ts
   - src/task/files/contextDraft.ts
-  - src/taskStart/taskStartGit.ts
+  - src/change/changeStartGit.ts
 rule:
   any:
     - pattern: writeFileSync($$$ARGS)
@@ -452,7 +454,7 @@ ignores:
   - src/submissionEnvironment/githubTarget.ts
   - src/sqlite/sqliteCandidateValidationPolicy.ts
   - src/sqlite/sqliteTaskContextSnapshot.ts
-  - src/sqlite/sqliteTaskStartStore.ts
+  - src/sqlite/sqliteChangePreparation.ts
 rule:
   pattern: JSON.parse($$$ARGS)
 ---
@@ -467,7 +469,7 @@ ignores:
   - src/output/json.ts
   - src/sqlite/sqliteCandidateValidationPolicy.ts
   - src/sqlite/sqliteTaskContextSnapshot.ts
-  - src/sqlite/sqliteTaskStartStore.ts
+  - src/sqlite/sqliteChangePreparation.ts
 rule:
   pattern: JSON.stringify($$$ARGS)
 ---

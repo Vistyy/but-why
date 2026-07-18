@@ -194,7 +194,7 @@ const validationSetupGuidance = (docs: PublicDocs) => ({
     {
       step: "configure",
       detail:
-        "Configure top-level prepare and validation.checks to the best of your ability from observed tooling."
+        "Configure top-level prepare and validation.checks to the best of your ability from observed tooling.",
     },
     { step: "review", detail: "Keep .but-why/config.json explicit and reviewable." },
   ],

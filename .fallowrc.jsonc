@@ -124,7 +124,6 @@
           "src/change/change.ts",
           "src/task/lifecycle.ts",
           "src/task/submitPolicy.ts",
-          "src/taskStart/taskStart.ts",
           "src/task/task.ts",
           "src/task/taskId.ts"
         ]
@@ -154,12 +153,12 @@
         "patterns": ["src/task/taskStore.ts"]
       },
       {
-        "name": "task-start-store",
-        "patterns": ["src/taskStart/taskStartStore.ts"]
+        "name": "change-start-store",
+        "patterns": ["src/change/changeStartStore.ts"]
       },
       {
-        "name": "task-start-adapter",
-        "patterns": ["src/taskStart/taskStartGit.ts"]
+        "name": "change-start-adapter",
+        "patterns": ["src/change/changeStartGit.ts"]
       },
       {
         "name": "validation-run-store",
@@ -174,6 +173,7 @@
           "src/validation/validationRuns.ts",
           "src/validation/runCheckRound.ts",
           "src/validation/runPreparePhase.ts",
+          "src/repositoryPreparation/runRepositoryPreparation.ts",
           "src/validationRun/artifactContent.ts",
           "src/validationRun/artifactFiles.ts"
         ]
@@ -202,6 +202,7 @@
         "name": "use-cases",
         "patterns": [
           "src/task/taskUseCases.ts",
+          "src/change/changeUseCases.ts",
           "src/candidateValidation/inspectCandidateValidationRun.ts",
           "src/submit/submitPreflight.ts",
           "src/submit/submitRepoConfig.ts"
@@ -216,6 +217,8 @@
         "patterns": [
           "src/localSubmit/**",
           "src/localTask/**",
+          "src/localChange/**",
+          "src/repositoryPreparation/localRepositoryPreparation.ts",
           "src/localValidationRun/**",
           "src/localCandidateValidation/**",
           "src/candidateValidation/validateCandidate.ts",
@@ -241,6 +244,7 @@
           "src/sqlite/connection.ts",
           "src/sqlite/query.ts",
           "src/sqlite/sqliteCandidateValidationPolicy.ts",
+          "src/sqlite/sqliteChangePreparation.ts",
           "src/sqlite/sqliteJsonStringArray.ts",
           "src/sqlite/sqliteTaskContextSnapshot.ts",
           "src/sqlite/sqliteValidationEvidence.ts",
@@ -255,8 +259,8 @@
           "src/sqlite/sqliteCandidateStore.ts",
           "src/sqlite/sqliteChangeCandidateCaptureStore.ts",
           "src/sqlite/sqliteChangeStore.ts",
+          "src/sqlite/sqliteChangeStartStore.ts",
           "src/sqlite/sqliteTaskStore.ts",
-          "src/sqlite/sqliteTaskStartStore.ts",
           "src/sqlite/sqliteValidationRuns.ts"
         ]
       },
@@ -358,12 +362,12 @@
         "allow": ["domain"]
       },
       {
-        "from": "task-start-store",
+        "from": "change-start-store",
         "allow": ["domain"]
       },
       {
-        "from": "task-start-adapter",
-        "allow": ["domain", "local-git-candidate-adapter", "repo-init"]
+        "from": "change-start-adapter",
+        "allow": ["change-start-store", "local-git-candidate-adapter", "repo-init"]
       },
       {
         "from": "validation-run-store",
@@ -411,8 +415,8 @@
           "submission-environment-port",
           "task-adapter",
           "task-authority-port",
-          "task-start-adapter",
-          "task-start-store",
+          "change-start-adapter",
+          "change-start-store",
           "task-store",
           "submit-rejection-errors"
         ],
@@ -436,6 +440,7 @@
           "task-authority-port",
           "task-store",
           "use-cases",
+          "validation-runs",
           "validation-tooling-failures",
           "validation-run-store",
           "validation-runs"
@@ -465,7 +470,7 @@
           "change-store",
           "domain",
           "sqlite-core",
-          "task-start-store",
+          "change-start-store",
           "task-store",
           "validation-tooling-failures",
           "validation-run-store",
@@ -488,7 +493,7 @@
           "change-store",
           "repo-init",
           "sqlite-concrete-stores",
-          "task-start-store",
+          "change-start-store",
           "task-store",
           "validation-run-store",
           "validation-runs"

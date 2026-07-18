@@ -2,6 +2,7 @@ import { existsSync } from "node:fs";
 
 import { openChangeUseCases, type ChangeUseCases } from "../change/changeUseCases.js";
 import { openRepoLocalStores } from "../init/repoLocalStores.js";
+import { executeLocalRepositoryPreparation } from "../repositoryPreparation/localRepositoryPreparation.js";
 import { loadRepoLocalContext, type LoadRepoLocalContextError } from "../init/repoContext.js";
 
 export type LoadChangeUseCasesResult =
@@ -28,6 +29,10 @@ export const loadChangeUseCases = (input: {
   const stores = openRepoLocalStores(repoContext.context);
   return {
     ok: true,
-    changes: openChangeUseCases(repoContext.context, stores.changeStartStore),
+    changes: openChangeUseCases(
+      repoContext.context,
+      stores.changeStartStore,
+      executeLocalRepositoryPreparation,
+    ),
   };
 };
