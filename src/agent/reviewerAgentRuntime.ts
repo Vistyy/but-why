@@ -35,7 +35,7 @@ export type ReviewerAgentResult =
       readonly stdout: string;
     };
 
-const maxStructuredOutputRetries = 2;
+const maxReviewerAttempts = 3;
 
 const reviewWithPi = (input: ReviewerAgentInput): Effect.Effect<ReviewerAgentResult> =>
   Effect.gen(function* () {
@@ -67,7 +67,7 @@ const reviewWithPi = (input: ReviewerAgentInput): Effect.Effect<ReviewerAgentRes
       if (decoded._tag === "Right") {
         return { ok: true, report: decoded.right, attempts, stdout };
       }
-      if (attempts > maxStructuredOutputRetries || runResult.resume === undefined) {
+      if (attempts >= maxReviewerAttempts || runResult.resume === undefined) {
         return { ok: false, failure: decoded.left, attempts, stdout };
       }
 

@@ -38,7 +38,9 @@ describe("Pi reviewer agent runtime", () => {
   });
 
   it("exhausts bounded structured-output retries as a tooling failure", async () => {
-    const third = runResult("still invalid");
+    const fourth = runResult("must not run");
+    const resumeAfterThird = vi.fn(() => Promise.resolve(fourth));
+    const third = runResult("still invalid", resumeAfterThird);
     const second = runResult("invalid again", () => Promise.resolve(third));
     const first = runResult("invalid", () => Promise.resolve(second));
     const run = vi.fn(() => Promise.resolve(first));
@@ -61,6 +63,7 @@ describe("Pi reviewer agent runtime", () => {
         attempts: 3,
       },
     });
+    expect(resumeAfterThird).not.toHaveBeenCalled();
   });
 });
 
