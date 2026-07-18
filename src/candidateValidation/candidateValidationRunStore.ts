@@ -3,6 +3,10 @@ import type {
   RecordValidationRunPrepareRoundInput,
 } from "../validationRun/validationRunStore.js";
 import type { ValidationToolingFailureRecordInput } from "../validation/validationToolingFailures.js";
+import type {
+  ValidationPhase,
+  ValidationRunFindingRecord,
+} from "../validationRun/validationRun.js";
 
 export type CandidateValidationOutcome = "passed" | "blocked" | "tooling_failed";
 
@@ -11,12 +15,16 @@ export type CandidateValidationRunStore = {
     input: StartCandidateValidationRunInput,
   ) => StartCandidateValidationRunResult;
   readonly complete: (input: CompleteCandidateValidationRunInput) => void;
+  readonly getRunById: (validationRunId: string) => CandidateValidationRunRecord | undefined;
   readonly recordWorkspaceSetup: (input: RecordCandidateWorkspaceSetupInput) => void;
   readonly recordToolingFailure: (input: RecordCandidateToolingFailureInput) => void;
   readonly recordPrepareRound: (input: RecordValidationRunPrepareRoundInput) => void;
   readonly recordCheckRound: (input: RecordValidationRunCheckRoundInput) => void;
   readonly listRounds: (validationRunId: string) => readonly CandidateValidationRound[];
   readonly listFindings: (validationRunId: string) => readonly CandidateValidationFinding[];
+  readonly listToolingFailures: (
+    validationRunId: string,
+  ) => readonly CandidateValidationToolingFailure[];
   readonly listArtifacts: (validationRunId: string) => readonly CandidateValidationArtifact[];
 };
 
@@ -63,19 +71,44 @@ export type RecordCandidateToolingFailureInput = ValidationToolingFailureRecordI
   readonly now: string;
 };
 
-export type CandidateValidationRound = {
-  readonly producer: string;
-  readonly status: "passed" | "failed";
+export type CandidateValidationRunRecord = {
+  readonly id: string;
+  readonly candidateId: string;
+  readonly policy: CandidateValidationPolicySnapshot;
+  readonly state: "running" | "complete";
+  readonly outcome: CandidateValidationOutcome | null;
+  readonly createdAt: string;
+  readonly updatedAt: string;
 };
 
-export type CandidateValidationFinding = {
-  readonly id: string;
+export type CandidateValidationRound = {
+  readonly validationRunId: string;
+  readonly phase: ValidationPhase;
   readonly producer: string;
+  readonly roundNumber: number;
+  readonly status: "passed" | "failed";
+  readonly createdAt: string;
+};
+
+export type CandidateValidationFinding = ValidationRunFindingRecord;
+
+export type CandidateValidationToolingFailure = {
+  readonly sequence: number;
+  readonly validationRunId: string;
+  readonly errorKind: string;
+  readonly operationName: string;
+  readonly errorMessage: string;
+  readonly createdAt: string;
 };
 
 export type CandidateValidationArtifact = {
   readonly ref: string;
+  readonly validationRunId: string;
+  readonly phase: ValidationPhase;
+  readonly producer: string;
+  readonly path: string;
   readonly originalBytes: number;
   readonly storedBytes: number;
   readonly truncated: boolean;
+  readonly createdAt: string;
 };

@@ -26,7 +26,9 @@ export type CandidateValidation = {
   readonly validateCandidate: (
     input: ValidateCandidateInput,
   ) => Effect.Effect<ValidateCandidateResult>;
-  readonly listRounds: CandidateValidationRunStore["listRounds"];
+  readonly listRounds: (
+    validationRunId: string,
+  ) => readonly { readonly producer: string; readonly status: "passed" | "failed" }[];
   readonly listFindings: CandidateValidationRunStore["listFindings"];
   readonly listArtifacts: CandidateValidationRunStore["listArtifacts"];
 };
@@ -53,7 +55,10 @@ export const openCandidateValidation = (input: {
   readonly runStore: CandidateValidationRunStore;
 }): CandidateValidation => ({
   validateCandidate: (validationInput) => validateCandidate(input, validationInput),
-  listRounds: input.runStore.listRounds,
+  listRounds: (validationRunId) =>
+    input.runStore
+      .listRounds(validationRunId)
+      .map(({ producer, status }) => ({ producer, status })),
   listFindings: input.runStore.listFindings,
   listArtifacts: input.runStore.listArtifacts,
 });

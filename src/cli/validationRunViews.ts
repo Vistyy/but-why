@@ -1,7 +1,14 @@
+import type { CandidateRecord } from "../candidate/candidate.js";
+import type {
+  CandidateValidationArtifactInspection,
+  CandidateValidationArtifactPreview,
+  CandidateValidationArtifactRecord,
+  CandidateValidationRunInspection,
+} from "../candidateValidation/inspectCandidateValidationRun.js";
+import type { ChangeRecord } from "../change/change.js";
 import type { StructuredObject } from "../output/structured.js";
 import type { TaskRecord } from "../task/task.js";
 import type {
-  ValidationRunArtifactRecord,
   ValidationRunFindingRecord,
   ValidationRunRecord,
 } from "../validationRun/validationRun.js";
@@ -14,17 +21,6 @@ export const taskBriefView = (task: TaskRecord): StructuredObject => ({
 
 export const validationRunBriefView = (run: ValidationRunRecord): StructuredObject => ({
   id: run.id,
-  taskValidationNumber: run.taskValidationNumber,
-  status: run.status,
-  branch: run.branch,
-  commit: run.commitSha,
-  createdAt: run.createdAt,
-  updatedAt: run.updatedAt,
-});
-
-export const validationRunDetailView = (run: ValidationRunRecord): StructuredObject => ({
-  id: run.id,
-  taskId: run.taskId,
   taskValidationNumber: run.taskValidationNumber,
   status: run.status,
   branch: run.branch,
@@ -75,13 +71,84 @@ export const validationRunFindingView = (
   updatedAt: finding.updatedAt,
 });
 
-export const validationRunArtifactView = (
-  artifact: ValidationRunArtifactRecord,
+export const candidateValidationRunInspectionView = (
+  inspection: CandidateValidationRunInspection,
+): StructuredObject => ({
+  validationRun: {
+    id: inspection.validationRun.id,
+    candidateId: inspection.validationRun.candidateId,
+    state: inspection.validationRun.state,
+    outcome: inspection.validationRun.outcome,
+    createdAt: inspection.validationRun.createdAt,
+    updatedAt: inspection.validationRun.updatedAt,
+  },
+  change: candidateValidationChangeView(inspection.change),
+  candidate: candidateView(inspection.candidate),
+  policy: inspection.validationRun.policy,
+  phases: [
+    { phase: "prepare", rounds: inspection.prepareRounds },
+    { phase: "checks", rounds: inspection.checkRounds },
+  ],
+  findings: inspection.findings.map(validationRunFindingView),
+  toolingFailures: inspection.toolingFailures,
+  artifacts: inspection.artifacts.map(candidateValidationArtifactView),
+});
+
+export const candidateValidationArtifactContentView = (
+  artifact: CandidateValidationArtifactRecord,
+  content: string,
+): StructuredObject => ({
+  artifact: candidateValidationArtifactMetadataView(artifact),
+  content,
+});
+
+const candidateValidationChangeView = (change: ChangeRecord): StructuredObject => ({
+  id: change.id,
+  branchRef: change.branchRef,
+  baseRef: change.baseRef,
+  taskId: change.taskId,
+  state: change.state,
+});
+
+const candidateView = (candidate: CandidateRecord): StructuredObject => ({
+  id: candidate.id,
+  changeId: candidate.changeId,
+  selectedBaseRef: candidate.selectedBaseRef,
+  resolvedTargetSha: candidate.resolvedTargetSha,
+  comparisonBaseSha: candidate.comparisonBaseSha,
+  headSha: candidate.headSha,
+  createdAt: candidate.createdAt,
+});
+
+const candidateValidationArtifactView = (
+  artifact: CandidateValidationArtifactInspection,
+): StructuredObject => ({
+  ...candidateValidationArtifactMetadataView(artifact),
+  preview: candidateValidationArtifactPreviewView(artifact, artifact.preview),
+});
+
+const candidateValidationArtifactMetadataView = (
+  artifact: CandidateValidationArtifactRecord,
 ): StructuredObject => ({
   ref: artifact.ref,
   validationRunId: artifact.validationRunId,
   phase: artifact.phase,
   producer: artifact.producer,
   path: artifact.path,
+  originalBytes: artifact.originalBytes,
+  storedBytes: artifact.storedBytes,
+  truncated: artifact.truncated,
   createdAt: artifact.createdAt,
 });
+
+const candidateValidationArtifactPreviewView = (
+  artifact: CandidateValidationArtifactRecord,
+  preview: CandidateValidationArtifactPreview,
+): StructuredObject => ({
+  ...preview,
+  detailCommand: candidateValidationArtifactDetailCommand(artifact),
+});
+
+const candidateValidationArtifactDetailCommand = (
+  artifact: Pick<CandidateValidationArtifactRecord, "validationRunId" | "ref">,
+): string => `by validation-run artifact ${artifact.validationRunId} ${artifact.ref}`;
