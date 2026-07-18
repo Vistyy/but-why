@@ -35,10 +35,10 @@ Task-backed Candidate review test with a fake Pi runtime.
 
 ## Completion
 
-Implemented in `8c2b58e`; review corrections completed through `e0cf0d1`.
-Spec review: Approved with required comments; all comments resolved.
+Implemented in `8c2b58e`; review corrections completed through `1eebf08`.
+Spec review: Approved.
 Standards review: Approved.
-Quality: Passed - formatting, lint, architecture checks, typecheck, 331 tests, and Fallow checks.
+Quality: Passed - formatting, lint, architecture checks, typecheck, 332 tests, and Fallow checks.
 
 ## Blocked by
 
