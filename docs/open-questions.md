@@ -13,6 +13,12 @@ After v1 dogfooding, create SQLite Tasks for:
 
 The suite should measure expected Finding detection, clean-result accuracy, and unsupported Findings without becoming a release blocker before the first manual workflow ships.
 
+## Sandcastle structured reviewer output
+
+V1 keeps one local output-correction resume because Sandcastle `Sandbox.run()` does not expose structured-output retry.
+Future work may upgrade or extend `Sandbox.run()` to support structured output and retry handling.
+But Why? can then remove the local correction path and delegate this behavior to Sandcastle.
+
 ## Agent usage and cost
 
 Sandcastle does not currently return trustworthy Pi token or monetary usage.

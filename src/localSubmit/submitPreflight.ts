@@ -268,7 +268,7 @@ const createValidationWorkspaceForValidationRun = (
 
 const skippedPhasesAfterPrepareFailure = [
   "checks",
-  "intent_review",
+  "acceptance_review",
   "quality_review",
   "publish_pr",
   "watch_pr",

@@ -94,7 +94,7 @@ const inspectRun = (
     candidate,
     prepareRounds: rounds.filter((round) => round.phase === "prepare"),
     checkRounds: rounds.filter((round) => round.phase === "checks"),
-    acceptanceRounds: rounds.filter((round) => round.phase === "intent_review"),
+    acceptanceRounds: rounds.filter((round) => round.phase === "acceptance_review"),
     findings: dependencies.runStore.listFindings(validationRunId),
     toolingFailures: dependencies.runStore.listToolingFailures(validationRunId),
     artifacts: dependencies.runStore.listArtifacts(validationRunId).map((artifact) => ({

@@ -153,7 +153,7 @@ describe("Candidate-owned Validation Run inspection", () => {
             },
           ],
         },
-        { phase: "intent_review", rounds: [] },
+        { phase: "acceptance_review", rounds: [] },
       ],
       findings: [
         {
@@ -254,7 +254,7 @@ describe("Candidate-owned Validation Run inspection", () => {
       phases: [
         { phase: "prepare", rounds: [] },
         { phase: "checks", rounds: [] },
-        { phase: "intent_review", rounds: [] },
+        { phase: "acceptance_review", rounds: [] },
       ],
       findings: [],
       toolingFailures: [],
@@ -323,7 +323,7 @@ describe("Candidate-owned Validation Run inspection", () => {
             {
               id: `${fixture.validationRunId}-acceptance-F1`,
               validationRunId: fixture.validationRunId,
-              phase: "intent_review",
+              phase: "acceptance_review",
               producer: "acceptance",
               title: "Acceptance mismatch",
               description: "The Candidate does not satisfy approved intent.",
@@ -357,10 +357,10 @@ describe("Candidate-owned Validation Run inspection", () => {
     const output = JSON.parse(result.stdout);
     expect(result.status).toBe(0);
     expect(output.phases).toContainEqual({
-      phase: "intent_review",
+      phase: "acceptance_review",
       rounds: [
         expect.objectContaining({
-          phase: "intent_review",
+          phase: "acceptance_review",
           producer: "acceptance",
           status: roundStatus,
         }),
@@ -502,7 +502,7 @@ const candidateValidationFixture = () => {
   if (runResult.reused) throw new Error("Expected a new Validation Run");
 
   const artifact = (
-    phase: "prepare" | "checks" | "intent_review",
+    phase: "prepare" | "checks" | "acceptance_review",
     producer: string,
     fileName: string,
     content: string,

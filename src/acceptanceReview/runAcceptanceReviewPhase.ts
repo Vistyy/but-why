@@ -2,8 +2,8 @@ import type { Sandbox } from "@ai-hero/sandcastle";
 import { Effect } from "effect";
 
 import type { AcceptanceReviewPolicy } from "./acceptanceReviewConfig.js";
-import { acceptanceReviewPrompt } from "./acceptanceReviewPrompt.js";
 import type { ReviewerAgentRuntime } from "../agent/reviewerAgentRuntime.js";
+import { buildAcceptanceReviewerPrompt } from "../agent/reviewerPrompts.js";
 import type { TaskContextSnapshotV1 } from "../validationRun/taskContextSnapshot.js";
 import { writeReviewerArtifacts } from "../validationRun/reviewerArtifacts.js";
 import type { RecordCandidateAcceptanceRoundInput } from "../candidateValidation/candidateValidationRunStore.js";
@@ -50,7 +50,7 @@ export const runAcceptanceReviewPhase = (
       reviewer: "acceptance",
       validationRunId: input.validationRunId,
       availableArtifactRefs,
-      prompt: acceptanceReviewPrompt({
+      prompt: buildAcceptanceReviewerPrompt({
         instructions: input.policy.instructions,
         validationRunId: input.validationRunId,
         availableArtifactRefs,
@@ -62,7 +62,7 @@ export const runAcceptanceReviewPhase = (
     yield* verifyIntegrity(input);
     const artifacts = yield* writeReviewerArtifacts({
       validationRunId: input.validationRunId,
-      phase: "intent_review",
+      phase: "acceptance_review",
       producer: "acceptance",
       result,
       artifactsRoot: input.artifactsRoot,
@@ -72,7 +72,7 @@ export const runAcceptanceReviewPhase = (
       ? result.report.findings.map((finding, index) => ({
           id: `${input.validationRunId}-acceptance-F${index + 1}`,
           validationRunId: input.validationRunId,
-          phase: "intent_review" as const,
+          phase: "acceptance_review" as const,
           producer: "acceptance",
           ...finding,
         }))

@@ -35,8 +35,7 @@ describe("Pi reviewer agent runtime", () => {
       attempts: 1,
       stdout: '<reviewer-output>{"findings":[]}</reviewer-output>',
     });
-    expect(prompt).toContain("Judge only approved intent for the exact Candidate.");
-    expect(prompt).toContain("<reviewer-output>");
+    expect(prompt).toBe("Judge only approved intent for the exact Candidate.");
   });
 
   it("retries a dangling Artifact reference and accepts the corrected report", async () => {
@@ -64,11 +63,10 @@ describe("Pi reviewer agent runtime", () => {
     expect(resume).toHaveBeenCalledWith(expect.stringContaining("does not resolve"));
   });
 
-  it("exhausts bounded structured-output retries as a tooling failure", async () => {
-    const fourth = runResult("must not run");
-    const resumeAfterThird = vi.fn(() => Promise.resolve(fourth));
-    const third = runResult("still invalid", resumeAfterThird);
-    const second = runResult("invalid again", () => Promise.resolve(third));
+  it("fails tooling after one output correction", async () => {
+    const third = runResult("must not run");
+    const resumeAfterCorrection = vi.fn(() => Promise.resolve(third));
+    const second = runResult("invalid again", resumeAfterCorrection);
     const first = runResult("invalid", () => Promise.resolve(second));
     const run = vi.fn(() => Promise.resolve(first));
 
@@ -85,14 +83,14 @@ describe("Pi reviewer agent runtime", () => {
 
     expect(result).toMatchObject({
       ok: false,
-      attempts: 3,
+      attempts: 2,
       failure: {
         _tag: "ReviewerOutputContractFailed",
         reviewer: "acceptance",
-        attempts: 3,
+        attempts: 2,
       },
     });
-    expect(resumeAfterThird).not.toHaveBeenCalled();
+    expect(resumeAfterCorrection).not.toHaveBeenCalled();
   });
 });
 

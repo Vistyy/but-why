@@ -11,7 +11,7 @@ describe("reviewer output contract", () => {
     const finding = reviewerFinding({
       files: ["src/cli.ts"],
       severity: "high",
-      artifactRefs: ["artifact:by-1-09224d806043.v1/intent_review/intent/output.json"],
+      artifactRefs: ["artifact:by-1-09224d806043.v1/acceptance_review/acceptance/output.json"],
     });
     const output = await Effect.runPromise(
       decodeReviewerOutputContract({

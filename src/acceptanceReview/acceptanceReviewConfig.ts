@@ -3,12 +3,12 @@ import { dirname, join } from "node:path";
 import { resolveAgentProfile, type ResolvedPiAgentProfile } from "../agent/agentProfiles.js";
 import type { GlobalConfig } from "../contracts/globalConfig.js";
 import type { RepoConfig } from "../contracts/repoConfig.js";
+import { defaultAcceptanceInstructions } from "../agent/reviewerPrompts.js";
 import { readAcceptanceInstructions } from "../init/acceptanceInstructions.js";
 import {
   InvalidReviewerConfig,
   type SubmitRejectionError,
 } from "../submit/submitRejectionErrors.js";
-import { builtInAcceptanceInstructions } from "./builtInAcceptanceInstructions.js";
 
 export type AcceptanceReviewPolicy = {
   readonly instructions: string;
@@ -97,7 +97,7 @@ const resolveInstructions = (input: {
     );
   }
 
-  return { ok: true, instructions: builtInAcceptanceInstructions, instructionsSource: "built_in" };
+  return { ok: true, instructions: defaultAcceptanceInstructions, instructionsSource: "built_in" };
 };
 
 const readInstructions = (

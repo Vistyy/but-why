@@ -2,14 +2,14 @@ import { pi, type Sandbox, type SandboxRunResult } from "@ai-hero/sandcastle";
 import { Effect } from "effect";
 
 import type { ResolvedPiAgentProfile } from "./agentProfiles.js";
-import { parseTaggedReviewerOutput, reviewerOutputTag } from "./reviewerOutputWire.js";
+import { parseTaggedReviewerOutput } from "./reviewerOutputWire.js";
+import { buildReviewerOutputCorrectionPrompt } from "./reviewerPrompts.js";
 import {
   decodeReviewerOutputContract,
   validateReviewerArtifactRefs,
   type ReviewerOutput,
 } from "../contracts/reviewerOutput.js";
 import {
-  type ReviewerOutputContractFailed,
   SandcastleToolingFailed,
   type ValidationToolingFailure,
 } from "../validation/validationToolingFailures.js";
@@ -41,8 +41,6 @@ export type ReviewerAgentResult =
       readonly stdout: string;
     };
 
-const maxReviewerAttempts = 3;
-
 const reviewWithPi = (input: ReviewerAgentInput): Effect.Effect<ReviewerAgentResult> =>
   Effect.gen(function* () {
     const initial = yield* Effect.either(
@@ -51,7 +49,7 @@ const reviewWithPi = (input: ReviewerAgentInput): Effect.Effect<ReviewerAgentRes
           agent: pi(input.profile.agentModel, {
             ...(input.profile.thinking === undefined ? {} : { thinking: input.profile.thinking }),
           }),
-          prompt: reviewerPrompt(input.prompt),
+          prompt: input.prompt,
           maxIterations: 1,
           name: `${input.reviewer} Review`,
         }),
@@ -59,50 +57,48 @@ const reviewWithPi = (input: ReviewerAgentInput): Effect.Effect<ReviewerAgentRes
     );
     if (initial._tag === "Left") return sandcastleFailure(initial.left, 1, "");
 
-    let runResult: SandboxRunResult = initial.right;
-    let attempts = 1;
-    let stdout = runResult.stdout;
-    while (true) {
-      const decoded = yield* Effect.either(
-        decodeReviewerOutputContract({
-          reviewer: input.reviewer,
-          attempts,
-          output: parseTaggedReviewerOutput(stdout),
-        }),
-      );
-      const validated =
-        decoded._tag === "Left"
-          ? decoded
-          : yield* Effect.either(
-              validateReviewerArtifactRefs({
-                reviewer: input.reviewer,
-                attempts,
-                validationRunId: input.validationRunId,
-                output: decoded.right,
-                availableArtifactRefs: input.availableArtifactRefs,
-              }),
-            );
-      if (validated._tag === "Right") {
-        return { ok: true, report: validated.right, attempts, stdout };
-      }
-      if (attempts >= maxReviewerAttempts || runResult.resume === undefined) {
-        return { ok: false, failure: validated.left, attempts, stdout };
-      }
-
-      attempts += 1;
-      const resume = runResult.resume;
-      const resumed = yield* Effect.either(
-        runSandbox(() => resume(structuredOutputCorrectionPrompt(validated.left))),
-      );
-      if (resumed._tag === "Left") return sandcastleFailure(resumed.left, attempts, stdout);
-      runResult = resumed.right;
-      stdout = runResult.stdout;
+    const first = yield* Effect.either(validateRunResult(input, initial.right, 1));
+    if (first._tag === "Right") {
+      return { ok: true, report: first.right, attempts: 1, stdout: initial.right.stdout };
     }
+    const resume = initial.right.resume;
+    if (resume === undefined) {
+      return { ok: false, failure: first.left, attempts: 1, stdout: initial.right.stdout };
+    }
+
+    const corrected = yield* Effect.either(
+      runSandbox(() => resume(buildReviewerOutputCorrectionPrompt(first.left))),
+    );
+    if (corrected._tag === "Left") {
+      return sandcastleFailure(corrected.left, 2, initial.right.stdout);
+    }
+
+    const second = yield* Effect.either(validateRunResult(input, corrected.right, 2));
+    return second._tag === "Right"
+      ? { ok: true, report: second.right, attempts: 2, stdout: corrected.right.stdout }
+      : { ok: false, failure: second.left, attempts: 2, stdout: corrected.right.stdout };
   });
 
 export const piReviewerAgentRuntime: ReviewerAgentRuntime = {
   review: reviewWithPi,
 };
+
+const validateRunResult = (input: ReviewerAgentInput, result: SandboxRunResult, attempts: number) =>
+  decodeReviewerOutputContract({
+    reviewer: input.reviewer,
+    attempts,
+    output: parseTaggedReviewerOutput(result.stdout),
+  }).pipe(
+    Effect.flatMap((output) =>
+      validateReviewerArtifactRefs({
+        reviewer: input.reviewer,
+        attempts,
+        validationRunId: input.validationRunId,
+        output,
+        availableArtifactRefs: input.availableArtifactRefs,
+      }),
+    ),
+  );
 
 const runSandbox = (
   run: () => Promise<SandboxRunResult>,
@@ -115,22 +111,6 @@ const runSandbox = (
         message: errorMessage(error),
       }),
   });
-
-const reviewerPrompt = (instructions: string): string =>
-  [
-    instructions,
-    "",
-    "Return exactly one JSON object inside this XML tag:",
-    `<${reviewerOutputTag}>{"findings":[]}</${reviewerOutputTag}>`,
-    "Each Finding must contain title, description, severity, evidence, files, and artifactRefs.",
-  ].join("\n");
-
-const structuredOutputCorrectionPrompt = (failure: ReviewerOutputContractFailed): string =>
-  [
-    "Your reviewer output did not match the required contract.",
-    failure.message,
-    `Return only the corrected JSON object inside <${reviewerOutputTag}>...</${reviewerOutputTag}>.`,
-  ].join("\n");
 
 const sandcastleFailure = (
   failure: SandcastleToolingFailed,

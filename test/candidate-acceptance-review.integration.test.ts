@@ -73,16 +73,18 @@ describe("Task-backed Candidate Acceptance Review", () => {
       }),
     );
     const prompt = review.mock.calls[0]?.[0].prompt;
+    expect(prompt).toContain(result.validationRunId);
     expect(prompt).toContain(captured.comparisonBaseSha);
     expect(prompt).toContain(acceptanceContext.description);
     expect(prompt).toContain(acceptancePolicy.instructions);
+    expect(prompt).toContain("<reviewer-output>");
     expect(validation.listRounds(result.validationRunId)).toEqual([
       { producer: "quality", status: "passed" },
       { producer: "acceptance", status: "passed" },
     ]);
     expect(validation.listArtifacts(result.validationRunId)).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ phase: "intent_review", producer: "acceptance" }),
+        expect.objectContaining({ phase: "acceptance_review", producer: "acceptance" }),
       ]),
     );
   });
@@ -160,12 +162,12 @@ describe("Task-backed Candidate Acceptance Review", () => {
     const failure = new ReviewerOutputContractFailed({
       operationName: "decode_reviewer_output",
       reviewer: "acceptance",
-      attempts: 3,
+      attempts: 2,
       diagnostics: [],
-      message: "Structured output retries exhausted.",
+      message: "Structured output correction failed.",
     });
     const ready = acceptanceReadyRepo({
-      review: () => Effect.succeed({ ok: false, failure, attempts: 3, stdout: "invalid output" }),
+      review: () => Effect.succeed({ ok: false, failure, attempts: 2, stdout: "invalid output" }),
     });
     const { validation } = ready;
 
@@ -177,7 +179,7 @@ describe("Task-backed Candidate Acceptance Review", () => {
       expect.objectContaining({ errorKind: "reviewer_output_contract_failed" }),
     ]);
     expect(validation.listArtifacts(result.validationRunId)).toContainEqual(
-      expect.objectContaining({ phase: "intent_review", producer: "acceptance" }),
+      expect.objectContaining({ phase: "acceptance_review", producer: "acceptance" }),
     );
   });
 });

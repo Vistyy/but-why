@@ -329,7 +329,7 @@
       },
       {
         "from": "agent-profiles",
-        "allow": ["contracts", "validation-tooling-failures"]
+        "allow": ["contracts", "domain", "validation-tooling-failures"]
       },
       {
         "from": "acceptance-review",

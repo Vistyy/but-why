@@ -21,7 +21,7 @@ type Migration = {
 };
 
 const validationPhaseSql =
-  "'preflight', 'prepare', 'checks', 'intent_review', 'quality_review', 'publish_pr', 'watch_pr'";
+  "'preflight', 'prepare', 'checks', 'acceptance_review', 'quality_review', 'publish_pr', 'watch_pr'";
 const validationRunStatusSql = "'active', 'failed', 'error'";
 const validationPhaseStatusSql =
   "'pending', 'active', 'passed', 'failed', 'skipped', 'workflow_failed'";

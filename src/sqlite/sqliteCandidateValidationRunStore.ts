@@ -44,7 +44,7 @@ export const openSqliteCandidateValidationRunStore = (
     withStateDatabase(input, (database) => recordRound(database, { ...round, phase: "checks" })),
   recordAcceptanceRound: (round) =>
     withStateDatabase(input, (database) =>
-      recordRound(database, { ...round, phase: "intent_review", producer: "acceptance" }),
+      recordRound(database, { ...round, phase: "acceptance_review", producer: "acceptance" }),
     ),
   listRounds: (validationRunId) =>
     withStateDatabase(input, (database) => listRounds(database, validationRunId)),
