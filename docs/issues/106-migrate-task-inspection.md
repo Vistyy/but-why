@@ -29,6 +29,7 @@ Change and Task inspection CLI tests across taskless, Task-backed, validating, r
 - [ ] Taskless Changes remain discoverable without a Task lookup.
 - [ ] Task show exposes intent, dependencies, lifecycle, and a compact linked-Change projection.
 - [ ] No inspection path reads legacy Task-owned validation or delivery tables.
+- [ ] Detailed inspection modules sit under Change ownership; Task retains only its compact linked-Change projection.
 - [ ] Empty and unavailable states are explicit in bounded structured output.
 
 ## Blocked by

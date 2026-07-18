@@ -31,7 +31,8 @@ It ends when But Why? completes one real SQLite-tracked Task-backed Change and p
 | 107 | Remove Task-owned implementation and delivery paths | 105, 106, 133 |
 | 117 | Cancel Task-backed and taskless Changes | 101, 105, 133 |
 | 130 | Launch a Change Implementer in Herdr | 133 |
-| 123 | Ship the Change-centered manual workflow | 107, 117, 129, 130 |
+| 135 | Consolidate the source hierarchy | 107 |
+| 123 | Ship the Change-centered manual workflow | 107, 117, 129, 130, 135 |
 | 125 | Produce an installable v1 package | 123 |
 | 131 | Dogfood the first SQLite-tracked Change workflow | 125 |
 | 126 | Publish But Why? to npm | 131 |
@@ -43,7 +44,8 @@ It ends when But Why? completes one real SQLite-tracked Task-backed Change and p
 3. Task 105 composes those capabilities behind Change Submit without dual writes.
 4. Task 106 migrates detailed inspection to Change commands and keeps Task projections concise.
 5. Task 107 removes the replaced Task-owned writers, readers, routes, tables, and compatibility paths.
-6. Tasks 117 and 130 complete cancellation, cleanup, Herdr launch, and handoff behavior before Task 123 ships the public workflow.
+6. Task 135 reorganizes the surviving modules so every top-level source folder has one domain owner or one clear shared role.
+7. Tasks 117 and 130 complete cancellation, cleanup, Herdr launch, and handoff behavior before Task 123 ships the public workflow.
 
 ## Deferred
 
