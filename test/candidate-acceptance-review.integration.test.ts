@@ -156,6 +156,41 @@ describe("Task-backed Candidate Acceptance Review", () => {
     );
   });
 
+  it("records dangling reviewer Artifact references as tooling failure", async () => {
+    const ready = acceptanceReadyRepo({
+      review: ({ prompt }) => {
+        const validationRunId = /"validationRunId": "([^"]+)"/u.exec(prompt)?.[1];
+        if (validationRunId === undefined) throw new Error("Missing Validation Run ID in prompt");
+        return Effect.succeed({
+          ok: true,
+          report: {
+            findings: [
+              {
+                title: "Unresolved evidence",
+                description: "The reported evidence does not exist.",
+                severity: "high",
+                evidence: "Referenced missing output.",
+                files: [],
+                artifactRefs: [`artifact:${validationRunId}/checks/missing/stdout.txt`],
+              },
+            ],
+          },
+          attempts: 1,
+          stdout: "review evidence",
+        });
+      },
+    });
+    const { validation } = ready;
+
+    const result = await runTaskBackedCandidate(ready);
+
+    expect(result).toMatchObject({ ok: false, outcome: "tooling_failed" });
+    expect(validation.listFindings(result.validationRunId)).toEqual([]);
+    expect(validation.listToolingFailures(result.validationRunId)).toEqual([
+      expect.objectContaining({ errorKind: "reviewer_output_contract_failed" }),
+    ]);
+  });
+
   it("records structured-output exhaustion as tooling failure without a Finding", async () => {
     const failure = new ReviewerOutputContractFailed({
       operationName: "decode_reviewer_output",

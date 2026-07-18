@@ -4,6 +4,7 @@ import { Effect } from "effect";
 import type { SubmitPrepareConfig } from "../submit/submitRepoConfig.js";
 import { writeValidationRunArtifactFile } from "../validationRun/artifactFiles.js";
 import type { RecordValidationRunPrepareRoundInput } from "../validationRun/validationRunStore.js";
+import { ensureCandidateIntegrity } from "./ensureCandidateIntegrity.js";
 import {
   GitToolingFailed,
   InfrastructureToolingFailed,
@@ -111,7 +112,14 @@ const runPrepareCommand = (
 ): Effect.Effect<PrepareCommandResult, ValidationToolingFailure> =>
   Effect.tryPromise({
     try: async () => {
-      await ensureCandidateIntegrity(sandbox, commandCwd, expectedHeadSha, allowedUntrackedFiles);
+      if (expectedHeadSha !== undefined) {
+        await ensureCandidateIntegrity({
+          sandbox,
+          ...(commandCwd === undefined ? {} : { commandCwd }),
+          expectedHeadSha,
+          allowedUntrackedFiles: allowedUntrackedFiles ?? [],
+        });
+      }
       await ensureTimeoutCommandAvailable(sandbox);
 
       const marker = prepareCompletionMarker();
@@ -120,7 +128,14 @@ const runPrepareCommand = (
         commandCwd === undefined ? undefined : { cwd: commandCwd },
       );
       const parsed = parsePrepareCompletionMarker(result.stderr, marker);
-      await ensureCandidateIntegrity(sandbox, commandCwd, expectedHeadSha, allowedUntrackedFiles);
+      if (expectedHeadSha !== undefined) {
+        await ensureCandidateIntegrity({
+          sandbox,
+          ...(commandCwd === undefined ? {} : { commandCwd }),
+          expectedHeadSha,
+          allowedUntrackedFiles: allowedUntrackedFiles ?? [],
+        });
+      }
 
       return {
         commandResult: {
@@ -140,32 +155,6 @@ const runPrepareCommand = (
             message: errorMessage(error),
           }),
   });
-
-const ensureCandidateIntegrity = async (
-  sandbox: Pick<Sandbox, "exec">,
-  commandCwd: string | undefined,
-  expectedHeadSha: string | undefined,
-  allowedUntrackedFiles: readonly string[] | undefined,
-): Promise<void> => {
-  if (expectedHeadSha === undefined) return;
-  const result = await sandbox.exec(
-    "git rev-parse HEAD && git diff --quiet && git diff --cached --quiet && git status --porcelain --untracked-files=all",
-    commandCwd === undefined ? undefined : { cwd: commandCwd },
-  );
-  const [head, ...status] = result.stdout.trimEnd().split("\n");
-  if (
-    result.exitCode !== 0 ||
-    head !== expectedHeadSha ||
-    !status.every(
-      (line) => line.startsWith("?? ") && allowedUntrackedFiles?.includes(line.slice(3)) === true,
-    )
-  ) {
-    throw new GitToolingFailed({
-      operationName: "verify_candidate_head",
-      message: "Validation workspace no longer matches the Candidate.",
-    });
-  }
-};
 
 const ensureTimeoutCommandAvailable = async (sandbox: Pick<Sandbox, "exec">): Promise<void> => {
   const result = await sandbox.exec("command -v timeout >/dev/null 2>&1");

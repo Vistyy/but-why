@@ -171,6 +171,7 @@ const validateCandidate = (
             commandCwd: activeWorkspace.worktreePath,
             allowedUntrackedFiles: input.policy.copyFiles,
             now: input.now,
+            listArtifacts: dependencies.runStore.listArtifacts,
             recordAcceptanceRound: dependencies.runStore.recordAcceptanceRound,
           });
           return { validationFindings: acceptance.findings };

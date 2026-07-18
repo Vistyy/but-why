@@ -3,6 +3,8 @@ import type { TaskContextSnapshotV1 } from "../validationRun/taskContextSnapshot
 
 export const acceptanceReviewPrompt = (input: {
   readonly instructions: string;
+  readonly validationRunId: string;
+  readonly availableArtifactRefs: readonly string[];
   readonly candidate: {
     readonly candidateId: string;
     readonly comparisonBaseSha: string;
@@ -12,6 +14,12 @@ export const acceptanceReviewPrompt = (input: {
 }): string =>
   [
     input.instructions,
+    "",
+    "Validation Run evidence:",
+    encodeReviewerWireValue({
+      validationRunId: input.validationRunId,
+      availableArtifactRefs: input.availableArtifactRefs,
+    }),
     "",
     "Candidate:",
     encodeReviewerWireValue(input.candidate),
