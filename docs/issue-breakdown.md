@@ -7,7 +7,6 @@ It ends when But Why? completes one real SQLite-tracked Task-backed Change and p
 
 ## Can start immediately
 
-- Task 087: Inspect a Candidate-owned Validation Run.
 - Task 096: Run built-in Acceptance Review.
 - Task 133: Start prepared Changes.
 
@@ -15,6 +14,7 @@ It ends when But Why? completes one real SQLite-tracked Task-backed Change and p
 
 - Task 083: Start a Task in a managed worktree (`f009ab6`).
 - Task 084: Expand Candidate-owned validation through Checks (`d462952`).
+- Task 087: Inspect a Candidate-owned Validation Run (`ad598c6`).
 - Task 134: Remove incidental Git setup from SQLite tests (`5306e28`).
 
 ## Dependency graph
@@ -25,9 +25,9 @@ It ends when But Why? completes one real SQLite-tracked Task-backed Change and p
 | 092 | Recheck reviewer Findings without anchoring | 089, 096 |
 | 098 | Publish one exact Candidate with recovery | 089, 092, 096, 133 |
 | 101 | Reconcile owned PRs and clean completed Changes | 098, 133 |
-| 105 | Migrate Submit to Change ownership | 087, 089, 092, 096, 098, 101, 133 |
+| 105 | Migrate Submit to Change ownership | 089, 092, 096, 098, 101, 133 |
 | 129 | Submit a Task-backed Change with no repository change | 096, 105 |
-| 106 | Add Change inspection and migrate Task projections | 087, 101, 105, 133 |
+| 106 | Add Change inspection and migrate Task projections | 101, 105, 133 |
 | 107 | Remove Task-owned implementation and delivery paths | 105, 106, 133 |
 | 117 | Cancel Task-backed and taskless Changes | 101, 105, 133 |
 | 130 | Launch a Change Implementer in Herdr | 133 |
