@@ -10,14 +10,12 @@ It ends when But Why? completes one real SQLite-tracked Task-backed Change and p
 - Task 087: Inspect a Candidate-owned Validation Run.
 - Task 096: Run built-in Acceptance Review.
 - Task 133: Start prepared Changes.
-- Task 134: Remove incidental Git setup from SQLite tests.
-
-Task 134 is low priority and does not block the product graph.
 
 ## Completed
 
 - Task 083: Start a Task in a managed worktree (`f009ab6`).
 - Task 084: Expand Candidate-owned validation through Checks (`d462952`).
+- Task 134: Remove incidental Git setup from SQLite tests (`5306e28`).
 
 ## Dependency graph
 
