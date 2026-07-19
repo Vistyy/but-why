@@ -92,7 +92,7 @@ describe("GitHub pull request gateway", () => {
         title: "Publish Candidate",
         body: "Validation facts",
       }),
-    ).toEqual({ ok: false });
+    ).toEqual({ ok: false, code: "local_head_mismatch" });
     expect(
       gateway.updatePullRequest({
         owner: "acme",
@@ -107,7 +107,7 @@ describe("GitHub pull request gateway", () => {
         title: "Publish Candidate",
         body: "Validation facts",
       }),
-    ).toEqual({ ok: false });
+    ).toEqual({ ok: false, code: "local_head_mismatch" });
     expect(gitCalls).toEqual([
       ["rev-parse", "--verify", "refs/heads/feature^{commit}"],
       ["rev-parse", "--verify", "refs/heads/feature^{commit}"],

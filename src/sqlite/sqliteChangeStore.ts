@@ -12,6 +12,7 @@ import type {
   CreateChangeResult,
   RecordPublishedPullRequestInput,
   RecordPublishedPullRequestResult,
+  ReleasePendingPublicationResult,
 } from "../change/changeStore.js";
 import { storedPublicTaskId } from "../task/taskId.js";
 import { rollbackIfOpen, withStateDatabase, type SqliteStoreInput } from "./connection.js";
@@ -66,6 +67,8 @@ export const openSqliteChangeStore = (input: SqliteStoreInput): ChangeStore => (
     withStateDatabase(input, (database) => closeChange(database, closeInput)),
   beginPublication: (publicationInput) =>
     withStateDatabase(input, (database) => beginPublication(database, publicationInput)),
+  releasePendingPublication: (publicationInput) =>
+    withStateDatabase(input, (database) => releasePendingPublication(database, publicationInput)),
   recordPublishedPullRequest: (publicationInput) =>
     withStateDatabase(input, (database) => recordPublishedPullRequest(database, publicationInput)),
 });
@@ -162,6 +165,52 @@ const beginPublication = (
     if (updated === undefined) throw new Error("Change disappeared while publication started");
     database.exec("COMMIT");
     return { ok: true, created: true, change: updated };
+  } catch (error) {
+    rollbackIfOpen(database);
+    throw error;
+  }
+};
+
+const releasePendingPublication = (
+  database: DatabaseSync,
+  input: BeginChangePublicationInput,
+): ReleasePendingPublicationResult => {
+  database.exec("BEGIN IMMEDIATE");
+
+  try {
+    const change = getChangeById(database, input.changeId);
+    if (change === undefined) return rollback(database, { ok: false, code: "change_not_found" });
+    if (change.state === changeState.closed) {
+      return rollback(database, { ok: false, code: "change_closed" });
+    }
+    const publication = change.publication;
+    if (
+      publication === null ||
+      publication.pullRequest !== null ||
+      publication.candidateId !== input.candidateId ||
+      publication.validationRunId !== input.validationRunId ||
+      !sameTarget(publication.target, input.target) ||
+      publication.headBranch !== input.headBranch ||
+      publication.expectedHeadSha !== input.expectedHeadSha
+    ) {
+      return rollback(database, { ok: false, code: "publication_state_conflict" });
+    }
+
+    database
+      .prepare(`
+        UPDATE changes
+        SET publication_candidate_id = NULL, publication_validation_run_id = NULL,
+            publication_owner = NULL, publication_repo = NULL, publication_base_branch = NULL,
+            publication_remote_name = NULL, publication_head_branch = NULL,
+            publication_expected_head_sha = NULL, publication_pr_number = NULL,
+            publication_pr_url = NULL, updated_at = ?
+        WHERE id = ?
+      `)
+      .run(input.now, input.changeId);
+    const updated = getChangeById(database, input.changeId);
+    if (updated === undefined) throw new Error("Change disappeared while publication released");
+    database.exec("COMMIT");
+    return { ok: true, change: updated };
   } catch (error) {
     rollbackIfOpen(database);
     throw error;

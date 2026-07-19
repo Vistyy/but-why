@@ -59,9 +59,10 @@ const createPullRequest = (
   runGh: PublicationCommandRunner,
   request: GitHubPullRequestRequest,
 ): ReturnType<GitHubPullRequestGateway["createPullRequest"]> => {
-  if (!hasExpectedLocalHead(runGit, request) || !pushExactHead(runGit, request)) {
-    return { ok: false };
+  if (!hasExpectedLocalHead(runGit, request)) {
+    return { ok: false, code: "local_head_mismatch" };
   }
+  if (!pushExactHead(runGit, request)) return { ok: false, code: "push_failed" };
   const result = runGh([
     "api",
     "--method",
@@ -76,9 +77,11 @@ const createPullRequest = (
     "-f",
     `body=${request.body}`,
   ]);
-  if (!result.ok) return { ok: false };
+  if (!result.ok) return { ok: false, code: "remote_response_lost" };
   const pullRequest = parsePullRequest(result.stdout);
-  return pullRequest === undefined ? { ok: false } : { ok: true, pullRequest };
+  return pullRequest === undefined
+    ? { ok: false, code: "remote_response_lost" }
+    : { ok: true, pullRequest };
 };
 
 const updatePullRequest = (
@@ -86,9 +89,10 @@ const updatePullRequest = (
   runGh: PublicationCommandRunner,
   request: Parameters<GitHubPullRequestGateway["updatePullRequest"]>[0],
 ): ReturnType<GitHubPullRequestGateway["updatePullRequest"]> => {
-  if (!hasExpectedLocalHead(runGit, request) || !pushExpectedHead(runGit, request)) {
-    return { ok: false };
+  if (!hasExpectedLocalHead(runGit, request)) {
+    return { ok: false, code: "local_head_mismatch" };
   }
+  if (!pushExpectedHead(runGit, request)) return { ok: false, code: "push_failed" };
   const result = runGh([
     "api",
     "--method",
@@ -99,9 +103,11 @@ const updatePullRequest = (
     "-f",
     `body=${request.body}`,
   ]);
-  if (!result.ok) return { ok: false };
+  if (!result.ok) return { ok: false, code: "remote_response_lost" };
   const pullRequest = parsePullRequest(result.stdout);
-  return pullRequest === undefined ? { ok: false } : { ok: true, pullRequest };
+  return pullRequest === undefined
+    ? { ok: false, code: "remote_response_lost" }
+    : { ok: true, pullRequest };
 };
 
 const hasExpectedLocalHead = (

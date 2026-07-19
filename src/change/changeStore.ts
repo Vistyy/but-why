@@ -14,6 +14,9 @@ export type ChangeStore = {
   ) => ChangeRecord | undefined;
   readonly closeChange: (input: CloseChangeInput) => CloseChangeResult;
   readonly beginPublication: (input: BeginChangePublicationInput) => BeginChangePublicationResult;
+  readonly releasePendingPublication: (
+    input: BeginChangePublicationInput,
+  ) => ReleasePendingPublicationResult;
   readonly recordPublishedPullRequest: (
     input: RecordPublishedPullRequestInput,
   ) => RecordPublishedPullRequestResult;
@@ -67,6 +70,13 @@ export type BeginChangePublicationResult =
   | {
       readonly ok: false;
       readonly code: "change_not_found" | "change_closed" | "publication_already_owned";
+    };
+
+export type ReleasePendingPublicationResult =
+  | { readonly ok: true; readonly change: ChangeRecord }
+  | {
+      readonly ok: false;
+      readonly code: "change_not_found" | "change_closed" | "publication_state_conflict";
     };
 
 export type RecordPublishedPullRequestResult =

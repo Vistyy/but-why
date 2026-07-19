@@ -30,6 +30,13 @@ export type GitHubPullRequestRequest = {
   readonly body: string;
 };
 
+export type GitHubPullRequestMutationResult =
+  | { readonly ok: true; readonly pullRequest: GitHubPullRequest }
+  | {
+      readonly ok: false;
+      readonly code: "local_head_mismatch" | "push_failed" | "remote_response_lost";
+    };
+
 export type GitHubPullRequestGateway = {
   readonly findPullRequests: (
     target: ChangePublicationTarget,
@@ -41,13 +48,13 @@ export type GitHubPullRequestGateway = {
   ) => GitHubPullRequest | undefined;
   readonly createPullRequest: (
     request: GitHubPullRequestRequest,
-  ) => { readonly ok: true; readonly pullRequest: GitHubPullRequest } | { readonly ok: false };
+  ) => GitHubPullRequestMutationResult;
   readonly updatePullRequest: (
     input: GitHubPullRequestRequest & {
       readonly number: number;
       readonly expectedCurrentHeadSha: string;
     },
-  ) => { readonly ok: true; readonly pullRequest: GitHubPullRequest } | { readonly ok: false };
+  ) => GitHubPullRequestMutationResult;
 };
 
 export type CandidatePublicationGit = {
@@ -172,10 +179,14 @@ const createPullRequest = (
   expectedHeadSha: string,
   metadata: PullRequestMetadata,
 ): PublishCandidateResult => {
-  const started = dependencies.changeStore.beginPublication({
+  if (!hasExpectedHead(dependencies.git, change.branchRef, expectedHeadSha)) {
+    return { ok: false, code: "current_head_mismatch" };
+  }
+  const pendingPublication = {
     ...publicationFacts(input, headBranch, expectedHeadSha),
     now: input.now,
-  });
+  };
+  const started = dependencies.changeStore.beginPublication(pendingPublication);
   if (!started.ok) return mapChangePublicationError(started.code);
   if (!started.created) {
     return recoverCreatedPullRequest(
@@ -187,7 +198,10 @@ const createPullRequest = (
     );
   }
   if (!hasExpectedHead(dependencies.git, change.branchRef, expectedHeadSha)) {
-    return { ok: false, code: "current_head_mismatch" };
+    const released = dependencies.changeStore.releasePendingPublication(pendingPublication);
+    return released.ok
+      ? { ok: false, code: "current_head_mismatch" }
+      : mapChangePublicationError(released.code);
   }
 
   const created = dependencies.github.createPullRequest({
@@ -195,13 +209,20 @@ const createPullRequest = (
     ...metadata,
   });
   if (!created.ok) {
-    return recoverCreatedPullRequest(
-      dependencies,
-      input,
-      started.change,
-      headBranch,
-      expectedHeadSha,
-    );
+    if (created.code === "remote_response_lost") {
+      return recoverCreatedPullRequest(
+        dependencies,
+        input,
+        started.change,
+        headBranch,
+        expectedHeadSha,
+      );
+    }
+    const released = dependencies.changeStore.releasePendingPublication(pendingPublication);
+    if (!released.ok) return mapChangePublicationError(released.code);
+    return created.code === "local_head_mismatch"
+      ? { ok: false, code: "current_head_mismatch" }
+      : { ok: false, code: "publication_tooling_failed" };
   }
   if (!matchesExpectedPullRequest(created.pullRequest, input.target, headBranch, expectedHeadSha)) {
     return { ok: false, code: "publication_remote_mismatch" };
@@ -287,7 +308,11 @@ const updateOrReusePullRequest = (
     number: owned.pullRequest.number,
     expectedCurrentHeadSha: owned.expectedHeadSha,
   });
-  if (!updated.ok) return { ok: false, code: "publication_tooling_failed" };
+  if (!updated.ok) {
+    return updated.code === "local_head_mismatch"
+      ? { ok: false, code: "current_head_mismatch" }
+      : { ok: false, code: "publication_tooling_failed" };
+  }
   if (!matchesExpectedPullRequest(updated.pullRequest, input.target, headBranch, expectedHeadSha)) {
     return { ok: false, code: "publication_remote_mismatch" };
   }

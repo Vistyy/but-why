@@ -129,7 +129,7 @@ describe("Candidate publication", () => {
             headBranch: request.headBranch,
             headSha: request.expectedHeadSha,
           });
-          return { ok: false };
+          return { ok: false, code: "remote_response_lost" };
         },
         updatePullRequest: () => {
           throw new Error("Unexpected PR update");
@@ -332,6 +332,36 @@ describe("Candidate publication", () => {
         now,
       }),
     ).toEqual({ ok: false, code: "current_head_mismatch" });
+    expect(fixture.changeStore.getChangeById(fixture.changeId)?.publication).toBeNull();
+  });
+
+  it("releases an unpushed reservation after an exact push failure", () => {
+    const fixture = publicationFixture();
+    const publication = openCandidatePublication({
+      changeStore: fixture.changeStore,
+      candidateStore: fixture.candidateStore,
+      validationRunStore: fixture.validationRunStore,
+      git: {
+        readBranchHead: () => fixture.candidate.headSha,
+        readFirstNonMergeCommitSubject: () => "Add taskless publication",
+      },
+      github: {
+        findPullRequests: () => {
+          throw new Error("Must not recover when GitHub was never called");
+        },
+        getPullRequest: () => undefined,
+        createPullRequest: () => ({ ok: false, code: "push_failed" }),
+        updatePullRequest: () => {
+          throw new Error("Unexpected PR update");
+        },
+      },
+    });
+
+    expect(publication.publish(publicationInput(fixture))).toEqual({
+      ok: false,
+      code: "publication_tooling_failed",
+    });
+    expect(fixture.changeStore.getChangeById(fixture.changeId)?.publication).toBeNull();
   });
 
   it("requires passing evidence for the exact resolved policy", () => {
