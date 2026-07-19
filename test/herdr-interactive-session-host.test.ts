@@ -161,6 +161,38 @@ describe("Herdr Interactive Session Host", () => {
     ]);
   });
 
+  it("interrupts Pi after a rename failure in an existing workspace", async () => {
+    const commands: string[][] = [];
+    const execute: HerdrCommandExecutor = async (args) => {
+      commands.push([...args]);
+      if (args[0] === "agent" && args[1] === "list") {
+        return { ok: true, stdout: '{"result":{"agents":[]}}' };
+      }
+      if (args[0] === "worktree") {
+        return {
+          ok: true,
+          stdout:
+            '{"result":{"workspace":{"workspace_id":"workspace-1"},"root_pane":{"pane_id":"workspace-1:pane-1"},"already_open":true}}',
+        };
+      }
+      if (args[0] === "agent" && args[1] === "rename") {
+        return { ok: false, message: "agent_name_taken" };
+      }
+      return { ok: true, stdout: "{}" };
+    };
+
+    await expect(
+      openHerdrInteractiveSessionHost(execute).launch({
+        changeId: "change-123",
+        repositoryPath: "/repository",
+        worktreePath: "/workspace/change-123",
+        initialPrompt: undefined,
+      }),
+    ).resolves.toMatchObject({ ok: false, code: "launch_failed" });
+    expect(commands).toContainEqual(["pane", "send-keys", "workspace-1:pane-1", "ctrl-c"]);
+    expect(commands).not.toContainEqual(["workspace", "close", "workspace-1"]);
+  });
+
   it("removes its workspace after a pane-run failure so a retry can start", async () => {
     let paneRuns = 0;
     const commands: string[][] = [];

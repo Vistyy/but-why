@@ -26,6 +26,8 @@ Do not add provider selection, registration, or generic provider machinery.
   Herdr runs as a persistent server and does not inherit the caller shell path.
 - Local: `handoff-to-worktree` is user-owned Pi configuration.
   But Why does not ship, install, or configure the skill.
+- Local: If Pi starts but agent naming fails, send `ctrl-c` to the root pane.
+  Herdr 0.7.3 has no process-specific stop command, so it cannot confirm that the Pi process exited.
 - Deferred: Herdr 0.7.3 has no atomic session-name claim across `pane run` and `agent rename`.
   A concurrent name collision returns a retryable launch failure.
   A concurrent-launch coordinator needs its own approved task.

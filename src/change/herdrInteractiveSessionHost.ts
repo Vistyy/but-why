@@ -83,6 +83,7 @@ const launchInOpenedWorktree = async (
     return { ok: true, host: "herdr", status: "started" };
   }
 
+  await execute(["pane", "send-keys", opened.rootPaneId, "ctrl-c"]);
   if (!opened.alreadyOpen) await closeWorkspace(execute, opened.workspaceId);
   return launchFailure(
     renamed.ok
