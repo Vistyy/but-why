@@ -1,39 +1,14 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { DatabaseSync } from "node:sqlite";
 import * as Migrator from "@effect/sql/Migrator";
 import * as SqlClient from "@effect/sql/SqlClient";
 import * as SqliteClient from "@effect/sql-sqlite-node/SqliteClient";
 import { afterAll, expect, layer } from "@effect/vitest";
 import { Context, Effect, Fiber, Layer, Option, TestClock } from "effect";
-import { ensureStateDatabase } from "../../src/init/stateDatabase.js";
 
 const temporaryDirectory = mkdtempSync(join(tmpdir(), "but-why-effect-first-path-"));
 const databasePath = join(temporaryDirectory, "state.sqlite");
-
-ensureStateDatabase(databasePath, () => "2026-07-19T00:00:00.000Z");
-
-const legacyDatabase = new DatabaseSync(databasePath);
-try {
-  legacyDatabase
-    .prepare(
-      `INSERT INTO tasks (
-        id, numeric_id, title, description, state, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-    )
-    .run(
-      "BY-1",
-      1,
-      "Preserved task",
-      "Existing state must survive the driver handoff.",
-      "new",
-      "2026-07-19T00:00:00.000Z",
-      "2026-07-19T00:00:00.000Z",
-    );
-} finally {
-  legacyDatabase.close();
-}
 
 afterAll(() => {
   rmSync(temporaryDirectory, { recursive: true, force: true });
@@ -41,9 +16,8 @@ afterAll(() => {
 
 type ProbeResult = {
   readonly committedValue: string;
-  readonly currentMigrationCount: number;
   readonly effectMigrationCount: number;
-  readonly preservedTaskTitle: string;
+  readonly taskTitle: string;
   readonly rolledBackCount: number;
 };
 
@@ -62,24 +36,39 @@ const StateProbeLive = Layer.effect(
   Effect.gen(function* () {
     const sql = yield* SqlClient.SqlClient;
 
-    const migrationCount = Effect.fn("StateProbe.migrationCount")(function* () {
+    const migrate = Migrator.make({})({
+      loader: Migrator.fromRecord({
+        "0001_baseline": Effect.gen(function* () {
+          yield* sql`
+            CREATE TABLE tasks (
+              id TEXT PRIMARY KEY,
+              title TEXT NOT NULL
+            )
+          `;
+          yield* sql`
+            CREATE TABLE effect_first_path_probe (
+              value TEXT NOT NULL
+            )
+          `;
+        }),
+      }),
+    }).pipe(Effect.provideService(SqlClient.SqlClient, sql));
+
+    const effectMigrationCount = Effect.fn("StateProbe.effectMigrationCount")(function* () {
       const rows = yield* sql<{ readonly count: number }>`
-        SELECT COUNT(*) AS count FROM schema_migrations
+        SELECT COUNT(*) AS count FROM effect_sql_migrations
       `;
       return rows[0]?.count ?? 0;
     });
 
     const run = Effect.fn("StateProbe.run")(function* () {
-      yield* Migrator.make({})({
-        loader: Migrator.fromRecord({
-          "1000_effect_first_path_probe": sql`
-            CREATE TABLE effect_first_path_probe (
-              value TEXT NOT NULL
-            )
-          `,
-        }),
-      }).pipe(Effect.provideService(SqlClient.SqlClient, sql));
+      yield* migrate;
+      yield* sql`DELETE FROM tasks`;
       yield* sql`DELETE FROM effect_first_path_probe`;
+      yield* sql`
+        INSERT INTO tasks (id, title)
+        VALUES (${"BY-1"}, ${"Effect-owned task"})
+      `;
 
       yield* sql.withTransaction(
         Effect.gen(function* () {
@@ -107,24 +96,21 @@ const StateProbeLive = Layer.effect(
       const committedRows = yield* sql<{ readonly value: string }>`
         SELECT value FROM effect_first_path_probe
       `;
-      const effectMigrationRows = yield* sql<{ readonly count: number }>`
-        SELECT COUNT(*) AS count FROM effect_sql_migrations
-      `;
-      const preservedTasks = yield* sql<{ readonly title: string }>`
+      const tasks = yield* sql<{ readonly title: string }>`
         SELECT title FROM tasks WHERE id = ${"BY-1"}
       `;
 
       return {
         committedValue: committedRows[0]?.value ?? "missing",
-        currentMigrationCount: yield* migrationCount(),
-        effectMigrationCount: effectMigrationRows[0]?.count ?? 0,
-        preservedTaskTitle: preservedTasks[0]?.title ?? "missing",
+        effectMigrationCount: yield* effectMigrationCount(),
+        taskTitle: tasks[0]?.title ?? "missing",
         rolledBackCount: rolledBackRows[0]?.count ?? -1,
       };
     });
 
-    const delayedMigrationCount = Effect.sleep("10 seconds").pipe(
-      Effect.andThen(migrationCount()),
+    const delayedMigrationCount = migrate.pipe(
+      Effect.andThen(Effect.sleep("10 seconds")),
+      Effect.andThen(effectMigrationCount()),
     );
 
     return { run: run(), delayedMigrationCount };
@@ -146,9 +132,8 @@ layer(AppLive)("Effect-first dependency path", (it) => {
 
       expect(result).toEqual({
         committedValue: "committed",
-        currentMigrationCount: 23,
         effectMigrationCount: 1,
-        preservedTaskTitle: "Preserved task",
+        taskTitle: "Effect-owned task",
         rolledBackCount: 0,
       });
     }),

@@ -15,11 +15,10 @@ It proves that:
 - A Context service receives dependencies through a Layer.
 - `Effect.timeoutOption` behaves deterministically under virtual time.
 - `@effect/sql-sqlite-node` builds successfully on the supported Node environment.
-- Effect SQL opens a database created by the current 23-migration path.
-- Existing Task data survives the handoff from the current driver to Effect SQL.
+- Effect Migrator creates a fresh SQLite database from one baseline migration.
 - Parameterized reads and writes work against that database.
 - Effect SQL commits successful transactions and rolls back failed transactions.
-- The Effect SQL migrator applies and records a new migration beside the existing migration history.
+- Effect Migrator records the baseline in its single migration ledger.
 - The scoped SQLite Layer closes cleanly.
 - No mixed Effect runtime warning occurs.
 
@@ -36,8 +35,8 @@ pnpm test
 
 The official SQLite adapter uses `better-sqlite3` rather than Node's built-in `node:sqlite`.
 Adoption therefore replaces the current driver instead of wrapping it.
-The existing migration history uses multi-statement `DatabaseSync.exec` migrations and its own `schema_migrations` table.
-Production migration must preserve upgrades for existing databases, establish an Effect SQL baseline for new databases, and then make Effect SQL the owner of future migrations.
+Because no deployed database requires upgrade compatibility, production migration can replace the historical migration chain with one Effect Migrator baseline after obsolete Task-owned tables are removed.
+Future schema changes then continue from that baseline through the same Effect migration ledger.
 
 The prototype removes the technical uncertainty.
-Porting the application and migration history remains implementation work.
+Porting the final application schema and dependencies remains implementation work.
