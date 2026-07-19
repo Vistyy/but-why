@@ -48,7 +48,13 @@ describe("GitHub pull request gateway", () => {
     });
     expect(gitCalls).toEqual([
       ["rev-parse", "--verify", "refs/heads/feature^{commit}"],
-      ["push", "origin", "candidate-sha:refs/heads/feature"],
+      ["ls-remote", "--heads", "origin", "refs/heads/feature"],
+      [
+        "push",
+        "--force-with-lease=refs/heads/feature:",
+        "origin",
+        "candidate-sha:refs/heads/feature",
+      ],
     ]);
     expect(ghCalls).toEqual([
       [
@@ -65,6 +71,40 @@ describe("GitHub pull request gateway", () => {
         "-f",
         "body=Validation facts",
       ],
+    ]);
+  });
+
+  it("rejects an existing remote head before initial publication", () => {
+    const gitCalls: (readonly string[])[] = [];
+    const gateway = localGitHubPullRequestGateway({
+      runGit: (args) => {
+        gitCalls.push(args);
+        return {
+          ok: true,
+          stdout: args[0] === "rev-parse" ? "candidate-sha\n" : "other-head\trefs/heads/feature\n",
+        };
+      },
+      runGh: () => {
+        throw new Error("Must not create a PR from an existing remote head");
+      },
+    });
+
+    expect(
+      gateway.createPullRequest({
+        owner: "acme",
+        repo: "widgets",
+        remoteName: "origin",
+        baseBranch: "main",
+        headBranch: "feature",
+        branchRef: "refs/heads/feature",
+        expectedHeadSha: "candidate-sha",
+        title: "Publish Candidate",
+        body: "Validation facts",
+      }),
+    ).toEqual({ ok: false, code: "remote_head_mismatch" });
+    expect(gitCalls).toEqual([
+      ["rev-parse", "--verify", "refs/heads/feature^{commit}"],
+      ["ls-remote", "--heads", "origin", "refs/heads/feature"],
     ]);
   });
 

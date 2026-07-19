@@ -62,6 +62,9 @@ const createPullRequest = (
   if (!hasExpectedLocalHead(runGit, request)) {
     return { ok: false, code: "local_head_mismatch" };
   }
+  const remoteHead = initialRemoteHeadState(runGit, request);
+  if (remoteHead === "present") return { ok: false, code: "remote_head_mismatch" };
+  if (remoteHead === "unknown") return { ok: false, code: "push_failed" };
   if (!pushExactHead(runGit, request)) return { ok: false, code: "push_failed" };
   const result = runGh([
     "api",
@@ -118,12 +121,27 @@ const hasExpectedLocalHead = (
   return currentHead.ok && currentHead.stdout.trim() === request.expectedHeadSha;
 };
 
+const initialRemoteHeadState = (
+  runGit: PublicationCommandRunner,
+  request: GitHubPullRequestRequest,
+): "missing" | "present" | "unknown" => {
+  const remoteHead = runGit([
+    "ls-remote",
+    "--heads",
+    requestRemote(request),
+    `refs/heads/${request.headBranch}`,
+  ]);
+  if (!remoteHead.ok) return "unknown";
+  return remoteHead.stdout.trim().length === 0 ? "missing" : "present";
+};
+
 const pushExactHead = (
   runGit: PublicationCommandRunner,
   request: GitHubPullRequestRequest,
 ): boolean =>
   runGit([
     "push",
+    `--force-with-lease=refs/heads/${request.headBranch}:`,
     requestRemote(request),
     `${request.expectedHeadSha}:refs/heads/${request.headBranch}`,
   ]).ok;
