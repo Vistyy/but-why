@@ -13,6 +13,11 @@ After v1 dogfooding, create SQLite Tasks for:
 
 The suite should measure expected Finding detection, clean-result accuracy, and unsupported Findings without becoming a release blocker before the first manual workflow ships.
 
+## Specialist scheduling
+
+Specialists run sequentially today.
+Parallel scheduling may be reconsidered after real-use evidence, with explicit design for workspace isolation, resource limits, failure collection, cancellation, and deterministic result ordering.
+
 ## Sandcastle structured reviewer output
 
 V1 keeps one local output-correction resume because Sandcastle `Sandbox.run()` does not expose structured-output retry.

@@ -38,6 +38,7 @@ It ends when But Why? completes one real SQLite-tracked Task-backed Change and p
 | 125 | Produce an installable v1 package | 123 |
 | 131 | Dogfood the first SQLite-tracked Change workflow | 125 |
 | 126 | Publish But Why? to npm | 131 |
+| 138 | Establish post-publication compatibility policy | 126 |
 
 ## Migration order
 
@@ -50,6 +51,7 @@ It ends when But Why? completes one real SQLite-tracked Task-backed Change and p
 7. Task 137 replaces surviving native SQLite storage and historical migrations with Effect SQL and one baseline.
 8. Task 135 reorganizes the surviving modules so every top-level source folder has one domain owner or one clear shared role.
 9. Tasks 117 and 130 complete cancellation, cleanup, Herdr launch, and handoff behavior before Task 123 ships the public workflow.
+10. After Task 126 publishes the package, Task 138 replaces the temporary unreleased-schema instruction with the post-publication compatibility policy.
 
 ## Deferred
 

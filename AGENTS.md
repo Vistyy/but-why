@@ -3,6 +3,9 @@
 - But Why? validates completed code changes against approved human intent.
 - But Why? is task-based.
 - `by` is an agent-first, non-interactive AXI CLI.
+- This repository is unreleased, and Task 137 will replace historical schema migrations with one Effect SQL baseline.
+  Keep internal code, storage, and documentation names aligned with current domain language by correcting misleading names now.
+  Treat historical migrations and planning documents as evidence of earlier decisions rather than naming precedent for current implementation.
 
 ## Pointers
 
