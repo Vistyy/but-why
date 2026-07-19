@@ -7,8 +7,9 @@ It ends when But Why? completes one real SQLite-tracked Task-backed Change and p
 
 ## Can start immediately
 
-- Task 092: Recheck reviewer Findings without anchoring.
+- Task 098: Publish one exact Candidate with recovery.
 - Task 130: Launch a Change Implementer in Herdr.
+- Task 136: Compose Candidate validation through Effect.
 
 ## Completed
 
@@ -16,6 +17,7 @@ It ends when But Why? completes one real SQLite-tracked Task-backed Change and p
 - Task 084: Expand Candidate-owned validation through Checks (`d462952`).
 - Task 087: Inspect a Candidate-owned Validation Run (`ad598c6`).
 - Task 089: Run configured Specialists (`18661e1`).
+- Task 092: Recheck reviewer Findings without anchoring (`ec01782`).
 - Task 096: Run built-in Acceptance Review (`1eebf08`).
 - Task 133: Start prepared Changes (`bdf6646`).
 - Task 134: Remove incidental Git setup from SQLite tests (`5306e28`).
@@ -24,10 +26,8 @@ It ends when But Why? completes one real SQLite-tracked Task-backed Change and p
 
 | Task | Capability | Blocked by |
 | --- | --- | --- |
-| 098 | Publish one exact Candidate with recovery | 092 |
 | 101 | Reconcile owned PRs and clean completed Changes | 098 |
-| 136 | Compose Candidate validation through Effect | 092 |
-| 105 | Migrate Submit to Change ownership | 092, 098, 101, 136 |
+| 105 | Migrate Submit to Change ownership | 098, 101, 136 |
 | 129 | Submit a Task-backed Change with no repository change | 105 |
 | 106 | Add Change inspection and migrate Task projections | 101, 105 |
 | 107 | Remove Task-owned implementation and delivery paths | 105, 106 |
