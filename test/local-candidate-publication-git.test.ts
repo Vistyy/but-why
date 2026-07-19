@@ -13,11 +13,23 @@ describe("local Candidate publication Git", () => {
       },
     });
 
-    expect(git.readFirstNonMergeCommitSubject("starting-sha", "candidate-sha")).toBe(
-      "First change",
-    );
+    expect(git.readFirstNonMergeCommitSubject("starting-sha", "candidate-sha")).toEqual({
+      ok: true,
+      subject: "First change",
+    });
     expect(calls).toEqual([
       ["log", "--reverse", "--format=%s", "--no-merges", "starting-sha..candidate-sha"],
     ]);
+  });
+
+  it("reports commit history tooling failure instead of an empty history", () => {
+    const git = localCandidatePublicationGit({
+      cwd: "/repo",
+      runGit: () => ({ ok: false }),
+    });
+
+    expect(git.readFirstNonMergeCommitSubject("starting-sha", "candidate-sha")).toEqual({
+      ok: false,
+    });
   });
 });

@@ -1,6 +1,6 @@
 import { spawnSync } from "node:child_process";
 
-import type { CandidatePublicationGit } from "./publishCandidate.js";
+import type { CandidatePublicationGit, CommitSubjectResult } from "./publishCandidate.js";
 
 export type PublicationGitCommandResult =
   | { readonly ok: true; readonly stdout: string }
@@ -38,17 +38,20 @@ const readFirstNonMergeCommitSubject = (
   cwd: string,
   startingCommit: string,
   headSha: string,
-): string | undefined => {
+): CommitSubjectResult => {
   const result = runGit(
     ["log", "--reverse", "--format=%s", "--no-merges", `${startingCommit}..${headSha}`],
     cwd,
   );
-  if (!result.ok) return undefined;
+  if (!result.ok) return { ok: false };
   const subject = result.stdout
     .split("\n")
     .find((line) => line.length > 0)
     ?.trim();
-  return subject === undefined || subject.length === 0 ? undefined : subject;
+  return {
+    ok: true,
+    subject: subject === undefined || subject.length === 0 ? undefined : subject,
+  };
 };
 
 const runGitCommand: PublicationGitCommandRunner = (args, cwd) => {

@@ -35,7 +35,7 @@ describe("Candidate publication", () => {
       validationRunStore: fixture.validationRunStore,
       git: {
         readBranchHead: () => fixture.candidate.headSha,
-        readFirstNonMergeCommitSubject: () => "Add taskless publication",
+        readFirstNonMergeCommitSubject: () => ({ ok: true, subject: "Add taskless publication" }),
       },
       github: {
         findPullRequests: () => [],
@@ -115,7 +115,7 @@ describe("Candidate publication", () => {
       validationRunStore: fixture.validationRunStore,
       git: {
         readBranchHead: () => fixture.candidate.headSha,
-        readFirstNonMergeCommitSubject: () => "Add taskless publication",
+        readFirstNonMergeCommitSubject: () => ({ ok: true, subject: "Add taskless publication" }),
       },
       github: {
         findPullRequests: () => remotePullRequests,
@@ -176,7 +176,7 @@ describe("Candidate publication", () => {
       validationRunStore: fixture.validationRunStore,
       git: {
         readBranchHead: () => branchHead,
-        readFirstNonMergeCommitSubject: () => "Add taskless publication",
+        readFirstNonMergeCommitSubject: () => ({ ok: true, subject: "Add taskless publication" }),
       },
       github: {
         findPullRequests: () => [],
@@ -193,7 +193,7 @@ describe("Candidate publication", () => {
         updatePullRequest: (request) => {
           updates.push(request);
           remote = { ...remote, headSha: request.expectedHeadSha };
-          return { ok: true, pullRequest: remote };
+          return { ok: false, code: "remote_response_lost" };
         },
       },
     });
@@ -234,7 +234,7 @@ describe("Candidate publication", () => {
       validationRunStore: fixture.validationRunStore,
       git: {
         readBranchHead: () => branchHead,
-        readFirstNonMergeCommitSubject: () => "Add taskless publication",
+        readFirstNonMergeCommitSubject: () => ({ ok: true, subject: "Add taskless publication" }),
       },
       github: {
         findPullRequests: () => [],
@@ -269,13 +269,35 @@ describe("Candidate publication", () => {
 
   it("falls back to the short Change ID when taskless commit history has no non-merge commit", () => {
     const fixture = publicationFixture();
-    const { publication, requests } = publicationWithSuccessfulCreate(fixture, () => undefined);
+    const { publication, requests } = publicationWithSuccessfulCreate(fixture, () => ({
+      ok: true,
+      subject: undefined,
+    }));
 
     expect(publication.publish(publicationInput(fixture))).toMatchObject({
       ok: true,
       created: true,
     });
     expect(requests).toEqual([expect.objectContaining({ title: "Change e9af559b" })]);
+  });
+
+  it("does not replace unavailable taskless commit history with a fallback title", () => {
+    const fixture = publicationFixture();
+    const publication = openCandidatePublication({
+      changeStore: fixture.changeStore,
+      candidateStore: fixture.candidateStore,
+      validationRunStore: fixture.validationRunStore,
+      git: {
+        readBranchHead: () => fixture.candidate.headSha,
+        readFirstNonMergeCommitSubject: () => ({ ok: false }),
+      },
+      github: noRemoteMutationGateway(),
+    });
+
+    expect(publication.publish(publicationInput(fixture))).toEqual({
+      ok: false,
+      code: "commit_history_unavailable",
+    });
   });
 
   it("generates Task-backed metadata from immutable Task and validation facts", () => {
@@ -304,7 +326,7 @@ describe("Candidate publication", () => {
       validationRunStore: fixture.validationRunStore,
       git: {
         readBranchHead: () => "newer-head",
-        readFirstNonMergeCommitSubject: () => "Add taskless publication",
+        readFirstNonMergeCommitSubject: () => ({ ok: true, subject: "Add taskless publication" }),
       },
       github: {
         findPullRequests: () => {
@@ -343,7 +365,7 @@ describe("Candidate publication", () => {
       validationRunStore: fixture.validationRunStore,
       git: {
         readBranchHead: () => fixture.candidate.headSha,
-        readFirstNonMergeCommitSubject: () => "Add taskless publication",
+        readFirstNonMergeCommitSubject: () => ({ ok: true, subject: "Add taskless publication" }),
       },
       github: {
         findPullRequests: () => {
@@ -372,7 +394,7 @@ describe("Candidate publication", () => {
       validationRunStore: fixture.validationRunStore,
       git: {
         readBranchHead: () => fixture.candidate.headSha,
-        readFirstNonMergeCommitSubject: () => "Add taskless publication",
+        readFirstNonMergeCommitSubject: () => ({ ok: true, subject: "Add taskless publication" }),
       },
       github: noRemoteMutationGateway(),
     });
@@ -456,7 +478,9 @@ const publicationInput = (fixture: ReturnType<typeof publicationFixture>) => ({
 
 const publicationWithSuccessfulCreate = (
   fixture: ReturnType<typeof publicationFixture>,
-  readFirstNonMergeCommitSubject: () => string | undefined,
+  readFirstNonMergeCommitSubject: () =>
+    | { readonly ok: true; readonly subject: string | undefined }
+    | { readonly ok: false },
 ) => {
   const requests: unknown[] = [];
   return {

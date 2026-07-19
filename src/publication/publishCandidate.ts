@@ -57,12 +57,16 @@ export type GitHubPullRequestGateway = {
   ) => GitHubPullRequestMutationResult;
 };
 
+export type CommitSubjectResult =
+  | { readonly ok: true; readonly subject: string | undefined }
+  | { readonly ok: false };
+
 export type CandidatePublicationGit = {
   readonly readBranchHead: (branchRef: string) => string | undefined;
   readonly readFirstNonMergeCommitSubject: (
     startingCommit: string,
     headSha: string,
-  ) => string | undefined;
+  ) => CommitSubjectResult;
 };
 
 export type CandidatePublication = {
@@ -309,9 +313,15 @@ const updateOrReusePullRequest = (
     expectedCurrentHeadSha: owned.expectedHeadSha,
   });
   if (!updated.ok) {
-    return updated.code === "local_head_mismatch"
-      ? { ok: false, code: "current_head_mismatch" }
-      : { ok: false, code: "publication_tooling_failed" };
+    return updateFailureResult(
+      dependencies,
+      input,
+      owned.expectedHeadSha,
+      owned.pullRequest.number,
+      headBranch,
+      expectedHeadSha,
+      updated.code,
+    );
   }
   if (!matchesExpectedPullRequest(updated.pullRequest, input.target, headBranch, expectedHeadSha)) {
     return { ok: false, code: "publication_remote_mismatch" };
@@ -323,6 +333,34 @@ const updateOrReusePullRequest = (
     expectedHeadSha,
     updated.pullRequest,
     owned.expectedHeadSha,
+  );
+};
+
+const updateFailureResult = (
+  dependencies: Parameters<typeof publishCandidate>[0],
+  input: PublishCandidateInput,
+  previousExpectedHeadSha: string,
+  pullRequestNumber: number,
+  headBranch: string,
+  expectedHeadSha: string,
+  failure: Exclude<GitHubPullRequestMutationResult, { readonly ok: true }>["code"],
+): PublishCandidateResult => {
+  if (failure === "local_head_mismatch") return { ok: false, code: "current_head_mismatch" };
+  if (failure !== "remote_response_lost") {
+    return { ok: false, code: "publication_tooling_failed" };
+  }
+  const recovered = dependencies.github.getPullRequest(input.target, pullRequestNumber);
+  if (recovered === undefined) return { ok: false, code: "publication_tooling_failed" };
+  if (!matchesExpectedPullRequest(recovered, input.target, headBranch, expectedHeadSha)) {
+    return { ok: false, code: "publication_remote_mismatch" };
+  }
+  return recordPullRequest(
+    dependencies.changeStore,
+    input,
+    headBranch,
+    expectedHeadSha,
+    recovered,
+    previousExpectedHeadSha,
   );
 };
 
@@ -344,8 +382,9 @@ const metadataFor = (
   }
   if (change.startingCommit === null) return { ok: false, code: "commit_history_unavailable" };
   const subject = git.readFirstNonMergeCommitSubject(change.startingCommit, headSha);
+  if (!subject.ok) return { ok: false, code: "commit_history_unavailable" };
   return {
-    title: subject ?? `Change ${change.id.slice(0, 8)}`,
+    title: subject.subject ?? `Change ${change.id.slice(0, 8)}`,
     body: `Change: ${change.id}\nCandidate: ${candidateId}\nValidation Run: ${validationRunId}`,
   };
 };
