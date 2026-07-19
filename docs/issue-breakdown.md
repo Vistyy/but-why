@@ -7,7 +7,6 @@ It ends when But Why? completes one real SQLite-tracked Task-backed Change and p
 
 ## Can start immediately
 
-- Task 101: Reconcile owned PRs and clean completed Changes.
 - Task 130: Launch a Change Implementer in Herdr.
 - Task 136: Compose Candidate validation through Effect.
 
@@ -20,6 +19,7 @@ It ends when But Why? completes one real SQLite-tracked Task-backed Change and p
 - Task 092: Recheck reviewer Findings without anchoring (`2d63871`).
 - Task 096: Run built-in Acceptance Review (`1eebf08`).
 - Task 098: Publish one exact Candidate with recovery (`4364a3b`).
+- Task 101: Reconcile owned PRs and clean completed Changes (`7a9c150`).
 - Task 133: Start prepared Changes (`bdf6646`).
 - Task 134: Remove incidental Git setup from SQLite tests (`5306e28`).
 
@@ -27,12 +27,12 @@ It ends when But Why? completes one real SQLite-tracked Task-backed Change and p
 
 | Task | Capability | Blocked by |
 | --- | --- | --- |
-| 105 | Migrate Submit to Change ownership | 098, 101, 136 |
+| 105 | Migrate Submit to Change ownership | 098, 136 |
 | 129 | Submit a Task-backed Change with no repository change | 105 |
-| 106 | Add Change inspection and migrate Task projections | 101, 105 |
+| 106 | Add Change inspection and migrate Task projections | 105 |
 | 107 | Remove Task-owned implementation and delivery paths | 105, 106 |
 | 137 | Move state storage to Effect SQL | 107 |
-| 117 | Cancel Task-backed and taskless Changes | 101, 105 |
+| 117 | Cancel Task-backed and taskless Changes | 105 |
 | 135 | Consolidate the source hierarchy | 137 |
 | 123 | Ship the Change-centered manual workflow | 107, 117, 129, 130, 135 |
 | 125 | Produce an installable v1 package | 123 |
