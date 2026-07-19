@@ -123,6 +123,15 @@ _Avoid_: Validation Workspace, caller checkout, temporary agent worktree, Task W
 An optional visible external-agent process hosted in a Managed Worktree, with Herdr as the temporary v1 integration.
 _Avoid_: Task state, Validation Run, background Supervisor worker
 
+**Interactive Session Host**:
+An external tool that opens and presents an Interactive Session in a supplied Managed Worktree.
+_Avoid_: Git worktree manager, validation runner, generic agent provider
+
+**Active Interactive Session**:
+The one running Interactive Session associated with an open Change.
+An open Change has at most one.
+_Avoid_: Active Implementer, current Validation Run
+
 **Submission**:
 The act of asking But Why? to inspect a Change's Managed Worktree, select its Candidate or no-change state, validate it, and publish when eligible.
 _Avoid_: Push, Candidate, Validation Run

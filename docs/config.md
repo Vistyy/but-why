@@ -102,8 +102,8 @@ Example:
 Instruction paths in Global Config are relative to the Global Config directory.
 Instruction paths in Repo Config are relative to the repository root.
 
-The optional Herdr interactive-session preference also belongs in Global Config.
-Task 130 owns its final key and exact schema because no other provider is implemented in v1.
+Interactive Session Host launch is not configured through Global Config in v1.
+Herdr must be installed and running when `by change implement` is invoked.
 
 ## Agent Profiles
 

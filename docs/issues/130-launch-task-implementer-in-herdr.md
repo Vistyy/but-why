@@ -12,24 +12,31 @@
 
 ## What to build
 
-Add `by change implement <change-id> [--handoff-file <path>]` and ship the user-only `handoff-to-worktree` skill as one Herdr integration over existing Change-owned Git state.
-Do not build a generic session-provider framework.
+Add `by change implement <change-id> [--handoff-file <path>]` and ship the user-only `handoff-to-worktree` skill over existing Change-owned Git state.
+Add a narrow Interactive Session Host interface and implement only its Herdr adapter.
+Do not add provider selection, registration, or generic provider machinery.
 
 ## Primary verification seam
 
-Change Implement tests against a fake Herdr adapter, a static skill contract test, and one local Herdr smoke test.
+Change Implement tests against a fake Interactive Session Host, a static skill contract test, and one local Herdr smoke test.
+The fake-host tests cover `started`, `already_active`, host-unavailable, and launch-failure results.
+File-contract tests cover regular non-empty UTF-8 input through 256 KiB.
+The smoke test verifies the stable session name and existing-worktree launch against an already-running Herdr host.
 
 ## Acceptance criteria
 
-- [ ] Change Implement accepts only a ready Change and uses its recorded Managed Worktree.
-- [ ] Herdr opens the existing worktree rather than creating or owning Git state.
+- [ ] Change Implement accepts only a ready Change and passes its recorded Managed Worktree to the Interactive Session Host as the working directory.
+- [ ] Herdr must already be installed and running, and its adapter opens the existing worktree rather than creating or owning Git state.
 - [ ] A fresh Pi session starts in that worktree with the Change identity and optional handoff as its initial prompt.
-- [ ] `--handoff-file` is read through a bounded, actionable input contract.
-- [ ] Launch failure preserves the prepared Change and returns a retryable result.
-- [ ] Repeated launch does not create a duplicate active Implementer.
+- [ ] Each Managed Worktree has one stable Herdr session name, and a repeated launch returns `already_active` without creating a duplicate Active Interactive Session.
+- [ ] But Why? does not persist Herdr workspace or session identifiers.
+- [ ] A successful JSON result reports the Change ID, worktree path, `herdr` host, and `started` or `already_active` status.
+- [ ] Host-unavailable and launch failures preserve the prepared Change and return actionable, retryable errors.
+- [ ] `--handoff-file` accepts only a regular, non-empty UTF-8 file of at most 256 KiB and does not accept standard input.
 - [ ] `handoff-to-worktree` is user-invoked only and contains its own compact handoff instructions.
-- [ ] The skill writes its handoff to the operating system temporary directory.
+- [ ] The skill creates its handoff in the operating system temporary directory and removes it after Change Implement returns.
 - [ ] The skill calls Change Start and Change Implement with `--output json` and reports failures in the current session.
+- [ ] Global Config has no Herdr setting, and `by init` does not check Herdr availability.
 - [ ] The integration does not copy, fork, or retarget the current Pi session.
 
 ## Blocked by

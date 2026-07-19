@@ -151,18 +151,30 @@ Task linkage does not affect cleanup policy.
 ### Herdr implementation handoff
 
 Preparation and implementer launch are separate operations.
-`by change implement` accepts only a ready Change and asks Herdr to start a fresh Pi session in its recorded Managed Worktree.
+`by change implement` accepts only a ready Change and launches an Interactive Session in its recorded Managed Worktree.
+A narrow Interactive Session Host interface receives that existing worktree as its working directory and receives the optional handoff as the initial prompt.
+Task 130 implements only the Herdr adapter and adds no provider selection, registration, or generic provider machinery.
+The adapter requires Herdr to be installed and running when Change Implement is invoked.
+Global Config does not configure Herdr, and `by init` does not check it.
 Herdr does not create, rename, recover, or clean Git state.
-A Herdr launch failure preserves the prepared Change and is retryable without recreating the worktree.
 
-`--handoff-file <path>` supplies a compact initial prompt for the fresh Pi session.
-The CLI reads the handoff and passes its content through the Herdr launch interface.
+The Herdr adapter uses one stable session name for each Managed Worktree.
+A launch starts a fresh Pi session when no session with that name is active and otherwise returns `already_active` without creating a duplicate.
+A successful Change Implement result reports the Change ID, worktree path, `herdr` host, and `started` or `already_active` status.
+But Why? does not persist Herdr workspace or session identifiers.
+A missing or stopped Herdr host and a Herdr launch failure preserve the prepared Change and return actionable, retryable errors.
+
+`--handoff-file <path>` supplies an optional compact initial prompt for the fresh Pi session.
+The path must identify a non-empty regular file containing valid UTF-8 and at most 256 KiB.
+The CLI does not accept the handoff through standard input.
+The CLI reads the handoff and passes its content unchanged through the Interactive Session Host interface.
 The handoff describes relevant decisions, references existing artifacts instead of copying them, states the next implementation goal, suggests relevant skills, and excludes sensitive information.
 
 The installed Pi integration is a user-invoked skill named `handoff-to-worktree`.
 It is marked `disable-model-invocation: true`, so it adds no model context and runs only when the user requests it.
 It contains its own concise handoff contract because another user-invoked skill cannot invoke the existing `handoff` skill.
 It writes the handoff to the operating system's temporary directory, runs Change Start with JSON output, and runs Change Implement with the resulting Change ID and handoff file.
+It removes the temporary handoff after Change Implement returns.
 It reports preparation or launch failures in the current session.
 
 The new Herdr session receives the compact handoff rather than a clone of the existing Pi session.
@@ -190,7 +202,7 @@ The existing managed-worktree integration coverage is migrated and reused rather
 At least one executable-process test verifies public command parsing, JSON output, and exit behavior.
 
 Pure domain and command tests cover optional Task linkage, lifecycle decisions, validation phase selection, no-change behavior, list ordering, preparation result mapping, and structured output construction.
-Module tests with fake public ports cover Change Start orchestration, preparation retry, Herdr handoff launch, launch failure, conditional Acceptance Review, and reconciliation eligibility.
+Module tests with fake public ports cover Change Start orchestration, preparation retry, Interactive Session Host launch, already-active behavior, host unavailability, launch failure, conditional Acceptance Review, and reconciliation eligibility.
 SQLite-only tests cover taskless Change persistence, optional Task linkage, branch ownership constraints, readiness state, terminal state, and oldest-first queries without creating Git repositories.
 Adapter tests cover native Git command mapping, Herdr invocation, GitHub PR reconciliation, and cleanup safety.
 The Pi skill receives a static contract test and a manual smoke test rather than an automated Pi TUI suite.
