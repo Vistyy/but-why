@@ -291,28 +291,31 @@ const listPreviousCandidateReviewerFindings = (
 ): readonly CandidateValidationFinding[] =>
   queryAll<CandidateValidationFindingRow>(
     database,
-    `SELECT id, validation_run_id AS validationRunId, phase, producer, title,
-            description, severity, evidence, files, artifact_refs AS artifactRefs,
-            created_at AS createdAt, updated_at AS updatedAt
-     FROM candidate_validation_findings
-     WHERE validation_run_id = (
+    `WITH immediately_preceding_candidate AS (
+       SELECT id
+       FROM candidates
+       WHERE change_id = (SELECT change_id FROM candidates WHERE id = ?)
+         AND rowid < (SELECT rowid FROM candidates WHERE id = ?)
+       ORDER BY rowid DESC
+       LIMIT 1
+     ), latest_reviewer_round AS (
        SELECT prior_round.validation_run_id
        FROM candidate_validation_rounds AS prior_round
        JOIN candidate_validation_runs AS prior_run
          ON prior_run.id = prior_round.validation_run_id
-       JOIN candidates AS prior_candidate
-         ON prior_candidate.id = prior_run.candidate_id
-       WHERE prior_candidate.change_id = (
-         SELECT change_id FROM candidates WHERE id = ?
+       WHERE prior_run.candidate_id = (
+         SELECT id FROM immediately_preceding_candidate
        )
-         AND prior_candidate.rowid < (
-           SELECT rowid FROM candidates WHERE id = ?
-         )
          AND prior_round.phase = ?
          AND prior_round.producer = ?
-       ORDER BY prior_candidate.rowid DESC, prior_run.rowid DESC
+       ORDER BY prior_run.rowid DESC
        LIMIT 1
      )
+     SELECT id, validation_run_id AS validationRunId, phase, producer, title,
+            description, severity, evidence, files, artifact_refs AS artifactRefs,
+            created_at AS createdAt, updated_at AS updatedAt
+     FROM candidate_validation_findings
+     WHERE validation_run_id = (SELECT validation_run_id FROM latest_reviewer_round)
        AND phase = ?
        AND producer = ?
      ORDER BY id`,

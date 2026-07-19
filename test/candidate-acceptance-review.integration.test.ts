@@ -159,6 +159,52 @@ describe("Task-backed Candidate Acceptance Review", () => {
     ).toEqual([earlierFinding.title]);
   });
 
+  it("does not carry Findings past the immediately preceding Candidate", async () => {
+    const earlierFinding = reviewerFinding("Earlier acceptance Finding");
+    const review = vi.fn<ReviewerAgentRuntime["review"]>(() =>
+      Effect.succeed({
+        ok: true,
+        report: { findings: [earlierFinding] },
+        attempts: 1,
+        stdout: "earlier acceptance report",
+      }),
+    );
+    const ready = acceptanceReadyRepo({ review });
+
+    const earlier = await runTaskBackedCandidate(ready);
+    expect(earlier).toMatchObject({ ok: true, outcome: "blocked" });
+    if (!earlier.ok) return;
+
+    git(ready.repo, "commit", "--allow-empty", "-m", "run failing checks");
+    const intermediate = captureLocalCandidate({ cwd: ready.repo, now });
+    expect(intermediate.ok).toBe(true);
+    if (!intermediate.ok) return;
+    await expect(
+      runTaskBackedCandidate(
+        ready,
+        {
+          ...passingValidationPolicy,
+          checks: [{ id: "fails", command: "false", timeoutSeconds: 1 }],
+        },
+        intermediate,
+      ),
+    ).resolves.toMatchObject({ ok: true, outcome: "blocked" });
+
+    git(ready.repo, "commit", "--allow-empty", "-m", "fix checks");
+    const successor = captureLocalCandidate({ cwd: ready.repo, now });
+    expect(successor.ok).toBe(true);
+    if (!successor.ok) return;
+    review.mockImplementationOnce(() =>
+      Effect.succeed({ ok: true, report: { findings: [] }, attempts: 1, stdout: "accepted" }),
+    );
+
+    const result = await runTaskBackedCandidate(ready, passingValidationPolicy, successor);
+
+    expect(result).toMatchObject({ ok: true, outcome: "passed" });
+    expect(review).toHaveBeenCalledTimes(2);
+    expect(review.mock.calls[1]?.[0].prompt).not.toContain(earlierFinding.title);
+  });
+
   it("records exhausted final Acceptance output correction as a Tooling Failure", async () => {
     const earlierFinding = reviewerFinding("Earlier acceptance Finding");
     const failure = new ReviewerOutputContractFailed({
