@@ -61,5 +61,5 @@ The smoke test verifies the stable session name and existing-worktree launch aga
 
 ## Completion
 
-Implemented in `c6ac058` and updated in this completion commit.
-Verified with `just quality` and the local Herdr smoke test.
+Implemented through `c988113`.
+Verified with `just quality`, the local one-pane Herdr smoke test, and the background-focus smoke test.
