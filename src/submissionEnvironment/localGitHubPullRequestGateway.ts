@@ -5,7 +5,7 @@ import type {
   GitHubPullRequest,
   GitHubPullRequestGateway,
   GitHubPullRequestRequest,
-} from "./publishCandidate.js";
+} from "../change/ownedPullRequestGateway.js";
 
 export type PublicationCommandResult =
   | { readonly ok: true; readonly stdout: string }
@@ -174,7 +174,12 @@ const runCommand = (command: string, args: readonly string[]): PublicationComman
 type GitHubPullRequestJson = {
   readonly number?: unknown;
   readonly url?: unknown;
-  readonly base?: { readonly ref?: unknown };
+  readonly state?: unknown;
+  readonly merged?: unknown;
+  readonly base?: {
+    readonly ref?: unknown;
+    readonly repo?: { readonly owner?: { readonly login?: unknown }; readonly name?: unknown };
+  };
   readonly head?: { readonly ref?: unknown; readonly sha?: unknown };
 };
 
@@ -193,20 +198,36 @@ const parsePullRequest = (value: string): GitHubPullRequest | undefined =>
 const parsePullRequestObject = (value: unknown): GitHubPullRequest | undefined => {
   if (typeof value !== "object" || value === null || Array.isArray(value)) return undefined;
   const pullRequest = value as GitHubPullRequestJson;
-  return typeof pullRequest.number === "number" &&
-    typeof pullRequest.url === "string" &&
-    typeof pullRequest.base?.ref === "string" &&
-    typeof pullRequest.head?.ref === "string" &&
-    typeof pullRequest.head?.sha === "string"
-    ? {
-        number: pullRequest.number,
-        url: pullRequest.url,
-        baseBranch: pullRequest.base.ref,
-        headBranch: pullRequest.head.ref,
-        headSha: pullRequest.head.sha,
-      }
-    : undefined;
+  if (
+    typeof pullRequest.number !== "number" ||
+    typeof pullRequest.url !== "string" ||
+    typeof pullRequest.base?.ref !== "string" ||
+    typeof pullRequest.head?.ref !== "string" ||
+    typeof pullRequest.head?.sha !== "string"
+  ) {
+    return undefined;
+  }
+  const repository = repositoryIdentity(pullRequest.base.repo);
+  const state =
+    pullRequest.state === "open" || pullRequest.state === "closed" ? pullRequest.state : undefined;
+  return {
+    number: pullRequest.number,
+    url: pullRequest.url,
+    baseBranch: pullRequest.base.ref,
+    headBranch: pullRequest.head.ref,
+    headSha: pullRequest.head.sha,
+    ...(state === undefined ? {} : { state }),
+    ...(typeof pullRequest.merged === "boolean" ? { merged: pullRequest.merged } : {}),
+    ...(repository === undefined ? {} : { repository }),
+  };
 };
+
+const repositoryIdentity = (
+  value: { readonly owner?: { readonly login?: unknown }; readonly name?: unknown } | undefined,
+): { readonly owner: string; readonly repo: string } | undefined =>
+  typeof value?.owner?.login === "string" && typeof value.name === "string"
+    ? { owner: value.owner.login, repo: value.name }
+    : undefined;
 
 const parseJson = (value: string): unknown => {
   try {

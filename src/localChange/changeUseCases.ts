@@ -1,9 +1,12 @@
 import { existsSync } from "node:fs";
 
+import { cleanupChangeResources } from "../change/localChangeCleanupGit.js";
+import { openChangeReconciliation } from "../change/reconcileChange.js";
 import { openChangeUseCases, type ChangeUseCases } from "../change/changeUseCases.js";
 import { openRepoLocalStores } from "../init/repoLocalStores.js";
 import { executeLocalRepositoryPreparation } from "../repositoryPreparation/localRepositoryPreparation.js";
 import { loadRepoLocalContext, type LoadRepoLocalContextError } from "../init/repoContext.js";
+import { localGitHubPullRequestGateway } from "../submissionEnvironment/localGitHubPullRequestGateway.js";
 
 export type LoadChangeUseCasesResult =
   | { readonly ok: true; readonly changes: ChangeUseCases }
@@ -33,6 +36,11 @@ export const loadChangeUseCases = (input: {
       repoContext.context,
       stores.changeStartStore,
       executeLocalRepositoryPreparation,
+      openChangeReconciliation({
+        changeStore: stores.changeStore,
+        github: localGitHubPullRequestGateway(),
+        cleanup: cleanupChangeResources,
+      }),
     ),
   };
 };

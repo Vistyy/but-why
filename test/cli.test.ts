@@ -45,12 +45,13 @@ help[1]: Run \`by init --task-prefix BY\` in the repository root.`);
     expect(result.stdout).toBe(`bin: ${expectedBin}
 description: Validate completed code changes against approved human intent.
 usage: "by [--output <format>] [command] [--help]"
-commands[7]{command,description}:
+commands[8]{command,description}:
   by,Show workspace task dashboard
   by init --task-prefix <prefix>,Create repo-local But Why? state
   by task create --title <title> --description-file <file>,Create a repo-local Task
   "by task list [--all] [--state <state>]",List repo-local Tasks
   "by change start [--task <task-id>]",Create a prepared Change worktree
+  "by change reconcile [<change-id>]",Read owned pull requests and clean terminal Changes
   by submit <task-id>,Create a Validation Run from submit preflight
   by validation-run show <validation-run-id>,Show full Validation Run details
 flags[3]{flag,description}:
@@ -80,7 +81,7 @@ docs[2]{name,path}:
         { name: "config", path: expectedConfigDoc },
       ],
     });
-    expect(parsed.commands).toHaveLength(7);
+    expect(parsed.commands).toHaveLength(8);
     expect(parsed.flags).toHaveLength(3);
   });
 
@@ -337,6 +338,7 @@ validationSetup:
         { name: "022_change_owned_worktrees" },
         { name: "023_align_reviewer_phase_names" },
         { name: "024_change_owned_pull_requests" },
+        { name: "025_change_cleanup" },
       ]);
       expect(
         database

@@ -1,4 +1,5 @@
 import type {
+  ChangeCleanup,
   ChangeCloseReason,
   ChangeOwnedPullRequest,
   ChangePublicationTarget,
@@ -12,7 +13,12 @@ export type ChangeStore = {
     repositoryCommonDirectory: string,
     branchRef: string,
   ) => ChangeRecord | undefined;
+  readonly listChangesForReconciliation: (
+    repositoryCommonDirectory: string,
+  ) => readonly ChangeRecord[];
   readonly closeChange: (input: CloseChangeInput) => CloseChangeResult;
+  readonly completeMergedChange: (input: CompleteMergedChangeInput) => CompleteMergedChangeResult;
+  readonly recordCleanup: (input: RecordChangeCleanupInput) => RecordChangeCleanupResult;
   readonly beginPublication: (input: BeginChangePublicationInput) => BeginChangePublicationResult;
   readonly releasePendingPublication: (
     input: BeginChangePublicationInput,
@@ -31,6 +37,17 @@ export type CreateChangeInput = {
 export type CloseChangeInput = {
   readonly changeId: string;
   readonly reason: ChangeCloseReason;
+  readonly now: string;
+};
+
+export type CompleteMergedChangeInput = {
+  readonly changeId: string;
+  readonly now: string;
+};
+
+export type RecordChangeCleanupInput = {
+  readonly changeId: string;
+  readonly cleanup: ChangeCleanup;
   readonly now: string;
 };
 
@@ -66,6 +83,14 @@ export type CreateChangeResult =
       readonly ok: false;
       readonly code: "repository_branch_already_linked";
     };
+
+export type CompleteMergedChangeResult =
+  | { readonly ok: true; readonly changed: boolean; readonly change: ChangeRecord }
+  | { readonly ok: false; readonly code: "change_not_found" | "change_already_closed" };
+
+export type RecordChangeCleanupResult =
+  | { readonly ok: true; readonly changed: boolean; readonly change: ChangeRecord }
+  | { readonly ok: false; readonly code: "change_not_found" | "change_not_closed" };
 
 export type BeginChangePublicationResult =
   | { readonly ok: true; readonly created: boolean; readonly change: ChangeRecord }

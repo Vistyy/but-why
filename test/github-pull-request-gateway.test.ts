@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { localGitHubPullRequestGateway } from "../src/publication/localGitHubPullRequestGateway.js";
+import { localGitHubPullRequestGateway } from "../src/submissionEnvironment/localGitHubPullRequestGateway.js";
 
 describe("GitHub pull request gateway", () => {
   it("pushes the exact Candidate SHA before creating the pull request", () => {
@@ -72,6 +72,32 @@ describe("GitHub pull request gateway", () => {
         "body=Validation facts",
       ],
     ]);
+  });
+
+  it("reads authoritative repository and lifecycle facts for an owned pull request", () => {
+    const gateway = localGitHubPullRequestGateway({
+      runGh: () => ({
+        ok: true,
+        stdout:
+          '{"number":42,"url":"https://github.com/acme/widgets/pull/42","state":"closed","merged":true,"base":{"ref":"main","repo":{"owner":{"login":"acme"},"name":"widgets"}},"head":{"ref":"feature","sha":"candidate-sha"}}',
+      }),
+    });
+
+    expect(
+      gateway.getPullRequest(
+        { owner: "acme", repo: "widgets", baseBranch: "main", remoteName: "origin" },
+        42,
+      ),
+    ).toEqual({
+      number: 42,
+      url: "https://github.com/acme/widgets/pull/42",
+      state: "closed",
+      merged: true,
+      repository: { owner: "acme", repo: "widgets" },
+      baseBranch: "main",
+      headBranch: "feature",
+      headSha: "candidate-sha",
+    });
   });
 
   it("rejects an existing remote head before initial publication", () => {

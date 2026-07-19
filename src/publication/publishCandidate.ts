@@ -11,55 +11,12 @@ import type {
   ChangeRecord,
 } from "../change/change.js";
 import type { ChangeStore } from "../change/changeStore.js";
-
-export type GitHubPullRequest = ChangeOwnedPullRequest & {
-  readonly baseBranch: string;
-  readonly headBranch: string;
-  readonly headSha: string;
-};
-
-export type GitHubPullRequestRequest = {
-  readonly owner: string;
-  readonly repo: string;
-  readonly remoteName: string;
-  readonly baseBranch: string;
-  readonly headBranch: string;
-  readonly branchRef: string;
-  readonly expectedHeadSha: string;
-  readonly title: string;
-  readonly body: string;
-};
-
-export type GitHubPullRequestMutationResult =
-  | { readonly ok: true; readonly pullRequest: GitHubPullRequest }
-  | {
-      readonly ok: false;
-      readonly code:
-        | "local_head_mismatch"
-        | "remote_head_mismatch"
-        | "push_failed"
-        | "remote_response_lost";
-    };
-
-export type GitHubPullRequestGateway = {
-  readonly findPullRequests: (
-    target: ChangePublicationTarget,
-    headBranch: string,
-  ) => readonly GitHubPullRequest[] | undefined;
-  readonly getPullRequest: (
-    target: ChangePublicationTarget,
-    number: number,
-  ) => GitHubPullRequest | undefined;
-  readonly createPullRequest: (
-    request: GitHubPullRequestRequest,
-  ) => GitHubPullRequestMutationResult;
-  readonly updatePullRequest: (
-    input: GitHubPullRequestRequest & {
-      readonly number: number;
-      readonly expectedCurrentHeadSha: string;
-    },
-  ) => GitHubPullRequestMutationResult;
-};
+import type {
+  GitHubPullRequest,
+  GitHubPullRequestGateway,
+  GitHubPullRequestMutationResult,
+  GitHubPullRequestRequest,
+} from "../change/ownedPullRequestGateway.js";
 
 export type CommitSubjectResult =
   | { readonly ok: true; readonly subject: string | undefined }

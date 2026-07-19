@@ -48,6 +48,8 @@ const columns = [
   "publication_expected_head_sha AS publicationExpectedHeadSha",
   "publication_pr_number AS publicationPrNumber",
   "publication_pr_url AS publicationPrUrl",
+  "cleanup_state AS cleanupState",
+  "cleanup_blocking_reason AS cleanupBlockingReason",
   "state",
   "close_reason AS closeReason",
   "created_at AS createdAt",
@@ -261,6 +263,7 @@ const mapRow = (row: ChangeStartRow | undefined): ChangeStartRecord | undefined 
     prepareFailure:
       row.prepareFailure === null ? null : decodeSqliteChangePrepareFailure(row.prepareFailure),
     publication: decodeSqliteChangePublication(row),
+    cleanup: { state: row.cleanupState, blockingReason: row.cleanupBlockingReason },
     state: row.state,
     closeReason: row.closeReason,
     createdAt: row.createdAt,
@@ -289,6 +292,8 @@ type ChangeStartRow = {
   readonly prepareCommand: string | null;
   readonly prepareTimeoutSeconds: number | null;
   readonly prepareFailure: string | null;
+  readonly cleanupState: ChangeStartRecord["cleanup"]["state"];
+  readonly cleanupBlockingReason: string | null;
   readonly state: ChangeStartRecord["state"];
   readonly closeReason: ChangeStartRecord["closeReason"];
   readonly createdAt: string;

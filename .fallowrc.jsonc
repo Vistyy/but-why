@@ -145,6 +145,10 @@
         "patterns": ["src/change/changeStore.ts"]
       },
       {
+        "name": "owned-pull-request-gateway",
+        "patterns": ["src/change/ownedPullRequestGateway.ts"]
+      },
+      {
         "name": "change-candidate-capture-store",
         "patterns": ["src/changeCandidateCapture/changeCandidateCaptureStore.ts"]
       },
@@ -167,6 +171,10 @@
       {
         "name": "change-start-adapter",
         "patterns": ["src/change/changeStartGit.ts"]
+      },
+      {
+        "name": "change-cleanup-adapter",
+        "patterns": ["src/change/localChangeCleanupGit.ts"]
       },
       {
         "name": "validation-run-store",
@@ -223,6 +231,10 @@
         "patterns": ["src/publication/publishCandidate.ts"]
       },
       {
+        "name": "change-reconciliation",
+        "patterns": ["src/change/reconcileChange.ts"]
+      },
+      {
         "name": "task-adapter",
         "patterns": ["src/task/repoTaskIds.ts", "src/task/files/**"]
       },
@@ -245,16 +257,13 @@
         "patterns": [
           "src/submissionEnvironment/gitFacts.ts",
           "src/submissionEnvironment/githubTarget.ts",
+          "src/submissionEnvironment/localGitHubPullRequestGateway.ts",
           "src/validation/validationGitGlue.ts"
         ]
       },
       {
         "name": "publication-git-adapter",
         "patterns": ["src/publication/localCandidatePublicationGit.ts"]
-      },
-      {
-        "name": "publication-github-adapter",
-        "patterns": ["src/publication/localGitHubPullRequestGateway.ts"]
       },
       {
         "name": "sandcastle-adapter",
@@ -391,6 +400,10 @@
         "allow": ["domain"]
       },
       {
+        "from": "owned-pull-request-gateway",
+        "allow": ["domain"]
+      },
+      {
         "from": "change-candidate-capture-store",
         "allow": []
       },
@@ -418,6 +431,10 @@
       {
         "from": "change-start-adapter",
         "allow": ["change-start-store", "domain", "local-git-candidate-adapter", "repo-init"]
+      },
+      {
+        "from": "change-cleanup-adapter",
+        "allow": []
       },
       {
         "from": "validation-run-store",
@@ -457,6 +474,7 @@
         "allow": [
           "agent-profiles",
           "candidate-store",
+          "change-reconciliation",
           "change-store",
           "contracts",
           "domain",
@@ -479,16 +497,22 @@
           "candidate-store",
           "change-store",
           "domain",
+          "owned-pull-request-gateway",
           "validation-run-store"
+        ]
+      },
+      {
+        "from": "change-reconciliation",
+        "allow": [
+          "change-cleanup-adapter",
+          "change-store",
+          "domain",
+          "owned-pull-request-gateway"
         ]
       },
       {
         "from": "publication-git-adapter",
         "allowTypeOnly": ["publication-use-case"]
-      },
-      {
-        "from": "publication-github-adapter",
-        "allowTypeOnly": ["domain", "publication-use-case"]
       },
       {
         "from": "task-adapter",
@@ -500,6 +524,8 @@
           "acceptance-review",
           "specialist-review",
           "agent-profiles",
+          "change-cleanup-adapter",
+          "change-reconciliation",
           "domain",
           "github-adapter",
           "repo-init",
@@ -521,7 +547,7 @@
       {
         "from": "github-adapter",
         "allow": ["domain"],
-        "allowTypeOnly": ["validation-workspace"]
+        "allowTypeOnly": ["owned-pull-request-gateway", "validation-workspace"]
       },
       {
         "from": "sandcastle-adapter",

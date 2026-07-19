@@ -46,6 +46,11 @@ export type ChangeOwnedPullRequest = {
   readonly url: string;
 };
 
+export type ChangeCleanup = {
+  readonly state: "complete" | "pending";
+  readonly blockingReason: string | null;
+};
+
 export type ChangePublication = {
   readonly candidateId: string;
   readonly validationRunId: string;
@@ -68,6 +73,7 @@ export type ChangeRecord = {
   readonly prepare: ChangePrepareDefinition | null;
   readonly prepareFailure: ChangePrepareFailure | null;
   readonly publication: ChangePublication | null;
+  readonly cleanup: ChangeCleanup;
   readonly state: ChangeState;
   readonly closeReason: ChangeCloseReason | null;
   readonly createdAt: string;

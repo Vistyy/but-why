@@ -1,15 +1,24 @@
 import { randomUUID } from "node:crypto";
 import type { DatabaseSync } from "node:sqlite";
 
-import { changeState, type ChangePublication, type ChangeRecord } from "../change/change.js";
+import {
+  changeState,
+  type ChangeCleanup,
+  type ChangePublication,
+  type ChangeRecord,
+} from "../change/change.js";
 import type {
   ChangeStore,
   BeginChangePublicationInput,
   BeginChangePublicationResult,
+  CompleteMergedChangeInput,
+  CompleteMergedChangeResult,
   CloseChangeInput,
   CloseChangeResult,
   CreateChangeInput,
   CreateChangeResult,
+  RecordChangeCleanupInput,
+  RecordChangeCleanupResult,
   RecordPublishedPullRequestInput,
   RecordPublishedPullRequestResult,
   ReleasePendingPublicationResult,
@@ -22,7 +31,7 @@ import {
   type SqliteChangePublicationRow,
 } from "./sqliteChangePublication.js";
 import { decodeSqliteTaskContextSnapshot } from "./sqliteTaskContextSnapshot.js";
-import { queryOne } from "./query.js";
+import { queryAll, queryOne } from "./query.js";
 
 const changeColumns = [
   "id",
@@ -47,6 +56,8 @@ const changeColumns = [
   "publication_expected_head_sha AS publicationExpectedHeadSha",
   "publication_pr_number AS publicationPrNumber",
   "publication_pr_url AS publicationPrUrl",
+  "cleanup_state AS cleanupState",
+  "cleanup_blocking_reason AS cleanupBlockingReason",
   "state",
   "close_reason AS closeReason",
   "created_at AS createdAt",
@@ -63,8 +74,16 @@ export const openSqliteChangeStore = (input: SqliteStoreInput): ChangeStore => (
     withStateDatabase(input, (database) =>
       getChangeByRepositoryBranch(database, repositoryCommonDirectory, branchRef),
     ),
+  listChangesForReconciliation: (repositoryCommonDirectory) =>
+    withStateDatabase(input, (database) =>
+      listChangesForReconciliation(database, repositoryCommonDirectory),
+    ),
   closeChange: (closeInput) =>
     withStateDatabase(input, (database) => closeChange(database, closeInput)),
+  completeMergedChange: (completeInput) =>
+    withStateDatabase(input, (database) => completeMergedChange(database, completeInput)),
+  recordCleanup: (cleanupInput) =>
+    withStateDatabase(input, (database) => recordCleanup(database, cleanupInput)),
   beginPublication: (publicationInput) =>
     withStateDatabase(input, (database) => beginPublication(database, publicationInput)),
   releasePendingPublication: (publicationInput) =>
@@ -289,6 +308,80 @@ const canRecordPublishedPullRequest = (
   );
 };
 
+const completeMergedChange = (
+  database: DatabaseSync,
+  input: CompleteMergedChangeInput,
+): CompleteMergedChangeResult => {
+  database.exec("BEGIN IMMEDIATE");
+
+  try {
+    const change = getChangeById(database, input.changeId);
+    if (change === undefined) return rollback(database, { ok: false, code: "change_not_found" });
+    if (change.state === changeState.closed) {
+      if (change.closeReason !== "completed") {
+        return rollback(database, { ok: false, code: "change_already_closed" });
+      }
+      database.exec("COMMIT");
+      return { ok: true, changed: false, change };
+    }
+
+    database
+      .prepare(`
+        UPDATE changes
+        SET state = 'closed', close_reason = 'completed', cleanup_state = 'pending',
+            cleanup_blocking_reason = NULL, updated_at = ?, closed_at = ?
+        WHERE id = ? AND state = 'open'
+      `)
+      .run(input.now, input.now, input.changeId);
+    if (change.taskId !== null) {
+      database
+        .prepare("UPDATE tasks SET state = 'done', updated_at = ? WHERE id = ?")
+        .run(input.now, change.taskId);
+    }
+    const updated = getChangeById(database, input.changeId);
+    if (updated === undefined) throw new Error("Change disappeared after merged completion");
+    database.exec("COMMIT");
+    return { ok: true, changed: true, change: updated };
+  } catch (error) {
+    rollbackIfOpen(database);
+    throw error;
+  }
+};
+
+const recordCleanup = (
+  database: DatabaseSync,
+  input: RecordChangeCleanupInput,
+): RecordChangeCleanupResult => {
+  database.exec("BEGIN IMMEDIATE");
+
+  try {
+    const change = getChangeById(database, input.changeId);
+    if (change === undefined) return rollback(database, { ok: false, code: "change_not_found" });
+    if (change.state !== changeState.closed) {
+      return rollback(database, { ok: false, code: "change_not_closed" });
+    }
+    const changed =
+      change.cleanup.state !== input.cleanup.state ||
+      change.cleanup.blockingReason !== input.cleanup.blockingReason;
+    if (changed) {
+      database
+        .prepare(`
+          UPDATE changes
+          SET cleanup_state = ?, cleanup_blocking_reason = ?, updated_at = ?
+          WHERE id = ?
+        `)
+        .run(input.cleanup.state, input.cleanup.blockingReason, input.now, input.changeId);
+    }
+    const updated = changed ? getChangeById(database, input.changeId) : change;
+    if (updated === undefined) throw new Error("Change disappeared while recording cleanup");
+    database.exec("COMMIT");
+    return { ok: true, changed, change: updated };
+  } catch (error) {
+    rollbackIfOpen(database);
+    throw error;
+  }
+};
+
 const closeChange = (database: DatabaseSync, input: CloseChangeInput): CloseChangeResult => {
   database.exec("BEGIN IMMEDIATE");
 
@@ -310,7 +403,8 @@ const closeChange = (database: DatabaseSync, input: CloseChangeInput): CloseChan
     database
       .prepare(`
         UPDATE changes
-        SET state = 'closed', close_reason = ?, updated_at = ?, closed_at = ?
+        SET state = 'closed', close_reason = ?, cleanup_state = 'pending',
+            cleanup_blocking_reason = NULL, updated_at = ?, closed_at = ?
         WHERE id = ? AND state = 'open'
       `)
       .run(input.reason, input.now, input.now, input.changeId);
@@ -343,6 +437,27 @@ const getChangeByRepositoryBranch = (
     ),
   );
 
+const listChangesForReconciliation = (
+  database: DatabaseSync,
+  repositoryCommonDirectory: string,
+): readonly ChangeRecord[] =>
+  queryAll<ChangeRow>(
+    database,
+    `
+      SELECT ${changeColumns}
+      FROM changes
+      WHERE repository_common_directory = ?
+        AND (
+          (state = 'open' AND publication_pr_number IS NOT NULL)
+          OR (state = 'closed' AND cleanup_state = 'pending')
+        )
+      ORDER BY created_at ASC, id ASC
+    `,
+    [repositoryCommonDirectory],
+  )
+    .map(mapChangeRow)
+    .filter((change): change is ChangeRecord => change !== undefined);
+
 const mapChangeRow = (row: ChangeRow | undefined): ChangeRecord | undefined =>
   row === undefined
     ? undefined
@@ -366,6 +481,7 @@ const mapChangeRow = (row: ChangeRow | undefined): ChangeRecord | undefined =>
         prepareFailure:
           row.prepareFailure === null ? null : decodeSqliteChangePrepareFailure(row.prepareFailure),
         publication: decodeSqliteChangePublication(row),
+        cleanup: { state: row.cleanupState, blockingReason: row.cleanupBlockingReason },
         state: row.state,
         closeReason: row.closeReason,
         createdAt: row.createdAt,
@@ -382,6 +498,8 @@ type ChangeRow = Omit<
   readonly prepareCommand: string | null;
   readonly prepareTimeoutSeconds: number | null;
   readonly prepareFailure: string | null;
+  readonly cleanupState: ChangeCleanup["state"];
+  readonly cleanupBlockingReason: string | null;
 } & SqliteChangePublicationRow;
 
 const sameTarget = (

@@ -35,6 +35,10 @@ export const routeChange = (
             command: "by change prepare <change-id>",
             description: "Run or retry Repository Preparation",
           },
+          {
+            command: "by change reconcile [<change-id>]",
+            description: "Read owned pull requests and clean terminal Changes",
+          },
         ],
         flags: withGlobalHelpFlags(),
       }),
@@ -43,6 +47,7 @@ export const routeChange = (
   const subcommand = args[0];
   if (subcommand === "start") return runStart(args.slice(1), environment);
   if (subcommand === "prepare") return runPrepare(args.slice(1), environment);
+  if (subcommand === "reconcile") return runReconcile(args.slice(1), environment);
   return Effect.succeed(
     usageError({
       code: subcommand?.startsWith("-") === true ? "unknown_flag" : "unknown_command",
@@ -144,6 +149,70 @@ const runPrepare = (
         environment.now().toISOString(),
       );
       return prepareResult(result);
+    } catch {
+      return stateStoreUnavailable("repository");
+    }
+  });
+};
+
+const runReconcile = (
+  args: readonly string[],
+  environment: ChangeCommandEnvironment,
+): Effect.Effect<CliResult> => {
+  if (args.length === 1 && args[0] === "--help") {
+    return Effect.succeed(
+      success({
+        usage: "by change reconcile [<change-id>]",
+        arguments: [
+          {
+            argument: "<change-id>",
+            description: "Optional Change ID. Without one, reconcile eligible Changes.",
+          },
+        ],
+        flags: withGlobalHelpFlags(),
+        examples: [
+          "by change reconcile",
+          "by change reconcile <change-id>",
+          "by change reconcile --output json",
+        ],
+      }),
+    );
+  }
+  if (args.length > 1 || args[0]?.startsWith("-") === true) {
+    return Effect.succeed(
+      usageError({
+        code: "invalid_arguments",
+        message: "Change Reconcile accepts at most one Change ID.",
+        help: ["Run `by change reconcile [<change-id>]`."],
+      }),
+    );
+  }
+  const changeId = args[0];
+  const loaded = loadChangeUseCases({
+    cwd: environment.cwd,
+    migrationTimestamp: () => environment.now().toISOString(),
+  });
+  if (!loaded.ok) return Effect.succeed(loadError(loaded.error));
+  return Effect.promise(async () => {
+    try {
+      const result = loaded.changes.reconcile(changeId, environment.now().toISOString());
+      if (changeId !== undefined && result.changes.length === 0) {
+        return runtimeError({
+          code: "change_not_found",
+          message: "Change was not found.",
+          help: ["Use a Change ID returned by `by change start --output json`."],
+        });
+      }
+      return result.rejected
+        ? runtimeError({
+            code: "reconciliation_rejected",
+            message: "An owned pull request did not match its recorded Change facts.",
+            details: { changes: result.changes },
+            help: [
+              "Inspect the reported Change and resolve the remote mismatch without adopting it.",
+            ],
+          })
+        : success({ changes: result.changes });
     } catch {
       return stateStoreUnavailable("repository");
     }

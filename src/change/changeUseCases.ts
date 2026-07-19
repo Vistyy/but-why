@@ -7,6 +7,7 @@ import {
 } from "../repositoryPreparation/runRepositoryPreparation.js";
 import { taskSlugForId, type PublicTaskId } from "../task/taskId.js";
 import { changeReadiness, changeState, type ChangePrepareFailure } from "./change.js";
+import type { ChangeReconciliation, ChangeReconciliationResult } from "./reconcileChange.js";
 import {
   provisionChangeWorktree,
   resolveChangeStartGitIntent,
@@ -25,6 +26,7 @@ export type ChangeUseCases = {
     readonly now: string;
   }) => Promise<ChangeStartResult>;
   readonly prepare: (changeId: string, now: string) => Promise<ChangePrepareResult>;
+  readonly reconcile: (changeId: string | undefined, now: string) => ChangeReconciliationResult;
 };
 
 export type ChangeStartResult =
@@ -53,9 +55,16 @@ export const openChangeUseCases = (
   context: RepoLocalContext,
   store: ChangeStartStore,
   executor: RepositoryPreparationExecutor,
+  reconciliation: ChangeReconciliation,
 ): ChangeUseCases => ({
   start: (input) => startChange(context, store, executor, input),
   prepare: (changeId, now) => prepareChange(context, store, executor, changeId, now),
+  reconcile: (changeId, now) =>
+    reconciliation.reconcile({
+      repositoryCommonDirectory: context.commonDirectory,
+      ...(changeId === undefined ? {} : { changeId }),
+      now,
+    }),
 });
 
 const startChange = async (

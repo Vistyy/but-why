@@ -1101,6 +1101,17 @@ const migrations: readonly Migration[] = [
       ALTER TABLE changes ADD COLUMN publication_pr_url TEXT;
     `,
   },
+  {
+    name: "025_change_cleanup",
+    apply: `
+      ALTER TABLE changes ADD COLUMN cleanup_state TEXT NOT NULL DEFAULT 'complete'
+      CHECK (cleanup_state IN ('complete', 'pending'));
+      ALTER TABLE changes ADD COLUMN cleanup_blocking_reason TEXT;
+      UPDATE changes
+      SET cleanup_state = 'pending'
+      WHERE state = 'closed';
+    `,
+  },
 ];
 
 export const ensureStateDatabase = (

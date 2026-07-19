@@ -44,6 +44,7 @@ describe("Change storage", () => {
       prepare: null,
       prepareFailure: null,
       publication: null,
+      cleanup: { state: "complete", blockingReason: null },
       state: "open",
       closeReason: null,
       createdAt: now,
@@ -73,6 +74,7 @@ describe("Change storage", () => {
         ...created.change,
         state: "closed",
         closeReason: "completed",
+        cleanup: { state: "pending", blockingReason: null },
         updatedAt: closedAt,
         closedAt,
       },
@@ -97,6 +99,66 @@ describe("Change storage", () => {
         now: closedAt,
       }),
     ).toEqual({ ok: false, code: "repository_branch_already_linked" });
+  });
+
+  it("lists only open Changes with recorded PRs and closed Changes with pending cleanup", () => {
+    const store = changeStore(createSqliteStateSession());
+    const ignored = store.createChange({
+      repositoryCommonDirectory: "/repos/example/.git",
+      branchRef: "refs/heads/ignored",
+      now,
+    });
+    const published = store.createChange({
+      repositoryCommonDirectory: "/repos/example/.git",
+      branchRef: "refs/heads/published",
+      now,
+    });
+    const closed = store.createChange({
+      repositoryCommonDirectory: "/repos/example/.git",
+      branchRef: "refs/heads/closed",
+      now,
+    });
+    expect(ignored.ok && published.ok && closed.ok).toBe(true);
+    if (!published.ok || !closed.ok) return;
+    const target = { owner: "acme", repo: "widgets", baseBranch: "main", remoteName: "origin" };
+    expect(
+      store.beginPublication({
+        changeId: published.change.id,
+        candidateId: "candidate-1",
+        validationRunId: "validation-run-1",
+        target,
+        headBranch: "published",
+        expectedHeadSha: "expected-head",
+        now,
+      }).ok,
+    ).toBe(true);
+    expect(
+      store.recordPublishedPullRequest({
+        changeId: published.change.id,
+        candidateId: "candidate-1",
+        validationRunId: "validation-run-1",
+        target,
+        headBranch: "published",
+        expectedHeadSha: "expected-head",
+        pullRequest: { number: 42, url: "https://github.com/acme/widgets/pull/42" },
+        now,
+      }).ok,
+    ).toBe(true);
+    expect(store.closeChange({ changeId: closed.change.id, reason: "cancelled", now }).ok).toBe(
+      true,
+    );
+
+    expect(store.listChangesForReconciliation("/repos/example/.git")).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: published.change.id, state: "open" }),
+        expect.objectContaining({
+          id: closed.change.id,
+          state: "closed",
+          cleanup: { state: "pending", blockingReason: null },
+        }),
+      ]),
+    );
+    expect(store.listChangesForReconciliation("/repos/example/.git")).toHaveLength(2);
   });
 
   it("enforces permanent repository branch bindings", () => {
@@ -138,7 +200,8 @@ describe("Change and Candidate schema migration", () => {
         '016_change_base_ref',
         '021_task_starts',
         '022_change_owned_worktrees',
-        '024_change_owned_pull_requests'
+        '024_change_owned_pull_requests',
+        '025_change_cleanup'
       );
     `);
     database.close();
