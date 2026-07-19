@@ -17,7 +17,7 @@ It ends when But Why? completes one real SQLite-tracked Task-backed Change and p
 - Task 084: Expand Candidate-owned validation through Checks (`d462952`).
 - Task 087: Inspect a Candidate-owned Validation Run (`ad598c6`).
 - Task 089: Run configured Specialists (`18661e1`).
-- Task 092: Recheck reviewer Findings without anchoring (`ec01782`).
+- Task 092: Recheck reviewer Findings without anchoring (`2d63871`).
 - Task 096: Run built-in Acceptance Review (`1eebf08`).
 - Task 133: Start prepared Changes (`bdf6646`).
 - Task 134: Remove incidental Git setup from SQLite tests (`5306e28`).
