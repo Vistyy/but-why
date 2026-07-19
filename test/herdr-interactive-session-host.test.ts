@@ -55,6 +55,8 @@ describe("Herdr Interactive Session Host", () => {
         "agent",
         "start",
         sessionName,
+        "--cwd",
+        "/workspace/change-123",
         "--workspace",
         "workspace-1",
         "--no-focus",
@@ -72,7 +74,7 @@ describe("Herdr Interactive Session Host", () => {
   it("returns already active without creating another workspace", async () => {
     const execute: HerdrCommandExecutor = async () => ({
       ok: true,
-      stdout: `{"result":{"agents":[{"agent":"pi","name":"${herdrSessionName("change-123")}"}]}}`,
+      stdout: `{"id":"cli:agent:list","result":{"agents":[{"agent":"${herdrSessionName("change-123")}","agent_status":"working"}],"type":"agent_list"}}`,
     });
 
     await expect(

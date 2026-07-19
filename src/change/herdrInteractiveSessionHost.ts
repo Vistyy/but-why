@@ -58,6 +58,8 @@ const launchHerdrSession = async (
     "agent",
     "start",
     sessionName,
+    "--cwd",
+    input.worktreePath,
     "--workspace",
     workspaceId,
     "--no-focus",
@@ -99,7 +101,9 @@ const activeAgentNames = (source: string): readonly string[] => {
 const agentNames = (agents: readonly unknown[]): readonly string[] =>
   agents.flatMap((agent) => {
     const name = isRecord(agent) ? recordValue(agent, "name") : undefined;
-    return typeof name === "string" ? [name] : [];
+    if (typeof name === "string") return [name];
+    const kind = isRecord(agent) ? recordValue(agent, "agent") : undefined;
+    return typeof kind === "string" ? [kind] : [];
   });
 
 const workspaceIdentifier = (source: string): string | undefined => {
