@@ -43,6 +43,7 @@ describe("Change storage", () => {
       readiness: null,
       prepare: null,
       prepareFailure: null,
+      publication: null,
       state: "open",
       closeReason: null,
       createdAt: now,
@@ -136,7 +137,8 @@ describe("Change and Candidate schema migration", () => {
         '015_changes_and_candidates',
         '016_change_base_ref',
         '021_task_starts',
-        '022_change_owned_worktrees'
+        '022_change_owned_worktrees',
+        '024_change_owned_pull_requests'
       );
     `);
     database.close();

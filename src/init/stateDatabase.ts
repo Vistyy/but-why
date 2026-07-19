@@ -1086,6 +1086,21 @@ const migrations: readonly Migration[] = [
       DROP TABLE task_starts
     `,
   },
+  {
+    name: "024_change_owned_pull_requests",
+    apply: `
+      ALTER TABLE changes ADD COLUMN publication_candidate_id TEXT;
+      ALTER TABLE changes ADD COLUMN publication_validation_run_id TEXT;
+      ALTER TABLE changes ADD COLUMN publication_owner TEXT;
+      ALTER TABLE changes ADD COLUMN publication_repo TEXT;
+      ALTER TABLE changes ADD COLUMN publication_base_branch TEXT;
+      ALTER TABLE changes ADD COLUMN publication_remote_name TEXT;
+      ALTER TABLE changes ADD COLUMN publication_head_branch TEXT;
+      ALTER TABLE changes ADD COLUMN publication_expected_head_sha TEXT;
+      ALTER TABLE changes ADD COLUMN publication_pr_number INTEGER;
+      ALTER TABLE changes ADD COLUMN publication_pr_url TEXT;
+    `,
+  },
 ];
 
 export const ensureStateDatabase = (

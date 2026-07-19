@@ -1,4 +1,9 @@
-import type { ChangeCloseReason, ChangeRecord } from "./change.js";
+import type {
+  ChangeCloseReason,
+  ChangeOwnedPullRequest,
+  ChangePublicationTarget,
+  ChangeRecord,
+} from "./change.js";
 
 export type ChangeStore = {
   readonly createChange: (input: CreateChangeInput) => CreateChangeResult;
@@ -8,6 +13,10 @@ export type ChangeStore = {
     branchRef: string,
   ) => ChangeRecord | undefined;
   readonly closeChange: (input: CloseChangeInput) => CloseChangeResult;
+  readonly beginPublication: (input: BeginChangePublicationInput) => BeginChangePublicationResult;
+  readonly recordPublishedPullRequest: (
+    input: RecordPublishedPullRequestInput,
+  ) => RecordPublishedPullRequestResult;
 };
 
 export type CreateChangeInput = {
@@ -20,6 +29,21 @@ export type CloseChangeInput = {
   readonly changeId: string;
   readonly reason: ChangeCloseReason;
   readonly now: string;
+};
+
+export type BeginChangePublicationInput = {
+  readonly changeId: string;
+  readonly candidateId: string;
+  readonly validationRunId: string;
+  readonly target: ChangePublicationTarget;
+  readonly headBranch: string;
+  readonly expectedHeadSha: string;
+  readonly now: string;
+};
+
+export type RecordPublishedPullRequestInput = BeginChangePublicationInput & {
+  readonly pullRequest: ChangeOwnedPullRequest;
+  readonly previousExpectedHeadSha?: string;
 };
 
 export type CloseChangeResult =
@@ -36,4 +60,18 @@ export type CreateChangeResult =
   | {
       readonly ok: false;
       readonly code: "repository_branch_already_linked";
+    };
+
+export type BeginChangePublicationResult =
+  | { readonly ok: true; readonly created: boolean; readonly change: ChangeRecord }
+  | {
+      readonly ok: false;
+      readonly code: "change_not_found" | "change_closed" | "publication_already_owned";
+    };
+
+export type RecordPublishedPullRequestResult =
+  | { readonly ok: true; readonly change: ChangeRecord }
+  | {
+      readonly ok: false;
+      readonly code: "change_not_found" | "change_closed" | "publication_state_conflict";
     };

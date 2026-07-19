@@ -34,6 +34,27 @@ export type ChangePrepareFailure = {
   readonly stderr: string;
 };
 
+export type ChangePublicationTarget = {
+  readonly owner: string;
+  readonly repo: string;
+  readonly baseBranch: string;
+  readonly remoteName: string;
+};
+
+export type ChangeOwnedPullRequest = {
+  readonly number: number;
+  readonly url: string;
+};
+
+export type ChangePublication = {
+  readonly candidateId: string;
+  readonly validationRunId: string;
+  readonly target: ChangePublicationTarget;
+  readonly headBranch: string;
+  readonly expectedHeadSha: string;
+  readonly pullRequest: ChangeOwnedPullRequest | null;
+};
+
 export type ChangeRecord = {
   readonly id: string;
   readonly repositoryCommonDirectory: string;
@@ -46,6 +67,7 @@ export type ChangeRecord = {
   readonly readiness: ChangeReadiness | null;
   readonly prepare: ChangePrepareDefinition | null;
   readonly prepareFailure: ChangePrepareFailure | null;
+  readonly publication: ChangePublication | null;
   readonly state: ChangeState;
   readonly closeReason: ChangeCloseReason | null;
   readonly createdAt: string;

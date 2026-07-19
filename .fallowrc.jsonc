@@ -219,6 +219,10 @@
         ]
       },
       {
+        "name": "publication-use-case",
+        "patterns": ["src/publication/publishCandidate.ts"]
+      },
+      {
         "name": "task-adapter",
         "patterns": ["src/task/repoTaskIds.ts", "src/task/files/**"]
       },
@@ -245,6 +249,14 @@
         ]
       },
       {
+        "name": "publication-git-adapter",
+        "patterns": ["src/publication/localCandidatePublicationGit.ts"]
+      },
+      {
+        "name": "publication-github-adapter",
+        "patterns": ["src/publication/localGitHubPullRequestGateway.ts"]
+      },
+      {
         "name": "sandcastle-adapter",
         "patterns": ["src/validation/createValidationWorkspace.ts"]
       },
@@ -255,6 +267,7 @@
           "src/sqlite/query.ts",
           "src/sqlite/sqliteCandidateValidationPolicy.ts",
           "src/sqlite/sqliteChangePreparation.ts",
+          "src/sqlite/sqliteChangePublication.ts",
           "src/sqlite/sqliteJsonStringArray.ts",
           "src/sqlite/sqliteTaskContextSnapshot.ts",
           "src/sqlite/sqliteValidationEvidence.ts",
@@ -459,6 +472,23 @@
           "submit-rejection-errors"
         ],
         "allowTypeOnly": ["validation-workspace"]
+      },
+      {
+        "from": "publication-use-case",
+        "allow": [
+          "candidate-store",
+          "change-store",
+          "domain",
+          "validation-run-store"
+        ]
+      },
+      {
+        "from": "publication-git-adapter",
+        "allowTypeOnly": ["publication-use-case"]
+      },
+      {
+        "from": "publication-github-adapter",
+        "allowTypeOnly": ["domain", "publication-use-case"]
       },
       {
         "from": "task-adapter",

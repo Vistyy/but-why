@@ -336,6 +336,7 @@ validationSetup:
         { name: "021_task_starts" },
         { name: "022_change_owned_worktrees" },
         { name: "023_align_reviewer_phase_names" },
+        { name: "024_change_owned_pull_requests" },
       ]);
       expect(
         database

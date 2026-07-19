@@ -19,6 +19,10 @@ import {
   decodeSqliteTaskContextSnapshot,
   encodeSqliteTaskContextSnapshot,
 } from "./sqliteTaskContextSnapshot.js";
+import {
+  decodeSqliteChangePublication,
+  type SqliteChangePublicationRow,
+} from "./sqliteChangePublication.js";
 import { queryAll, queryOne } from "./query.js";
 
 const columns = [
@@ -34,6 +38,16 @@ const columns = [
   "prepare_command AS prepareCommand",
   "prepare_timeout_seconds AS prepareTimeoutSeconds",
   "prepare_failure AS prepareFailure",
+  "publication_candidate_id AS publicationCandidateId",
+  "publication_validation_run_id AS publicationValidationRunId",
+  "publication_owner AS publicationOwner",
+  "publication_repo AS publicationRepo",
+  "publication_base_branch AS publicationBaseBranch",
+  "publication_remote_name AS publicationRemoteName",
+  "publication_head_branch AS publicationHeadBranch",
+  "publication_expected_head_sha AS publicationExpectedHeadSha",
+  "publication_pr_number AS publicationPrNumber",
+  "publication_pr_url AS publicationPrUrl",
   "state",
   "close_reason AS closeReason",
   "created_at AS createdAt",
@@ -246,6 +260,7 @@ const mapRow = (row: ChangeStartRow | undefined): ChangeStartRecord | undefined 
         : { command: row.prepareCommand, timeoutSeconds: row.prepareTimeoutSeconds },
     prepareFailure:
       row.prepareFailure === null ? null : decodeSqliteChangePrepareFailure(row.prepareFailure),
+    publication: decodeSqliteChangePublication(row),
     state: row.state,
     closeReason: row.closeReason,
     createdAt: row.createdAt,
@@ -279,4 +294,4 @@ type ChangeStartRow = {
   readonly createdAt: string;
   readonly updatedAt: string;
   readonly closedAt: string | null;
-};
+} & SqliteChangePublicationRow;
