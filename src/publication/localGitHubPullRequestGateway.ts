@@ -59,7 +59,9 @@ const createPullRequest = (
   runGh: PublicationCommandRunner,
   request: GitHubPullRequestRequest,
 ): ReturnType<GitHubPullRequestGateway["createPullRequest"]> => {
-  if (!pushExactHead(runGit, request)) return { ok: false };
+  if (!hasExpectedLocalHead(runGit, request) || !pushExactHead(runGit, request)) {
+    return { ok: false };
+  }
   const result = runGh([
     "api",
     "--method",
@@ -84,7 +86,9 @@ const updatePullRequest = (
   runGh: PublicationCommandRunner,
   request: Parameters<GitHubPullRequestGateway["updatePullRequest"]>[0],
 ): ReturnType<GitHubPullRequestGateway["updatePullRequest"]> => {
-  if (!pushExpectedHead(runGit, request)) return { ok: false };
+  if (!hasExpectedLocalHead(runGit, request) || !pushExpectedHead(runGit, request)) {
+    return { ok: false };
+  }
   const result = runGh([
     "api",
     "--method",
@@ -98,6 +102,14 @@ const updatePullRequest = (
   if (!result.ok) return { ok: false };
   const pullRequest = parsePullRequest(result.stdout);
   return pullRequest === undefined ? { ok: false } : { ok: true, pullRequest };
+};
+
+const hasExpectedLocalHead = (
+  runGit: PublicationCommandRunner,
+  request: GitHubPullRequestRequest,
+): boolean => {
+  const currentHead = runGit(["rev-parse", "--verify", `${request.branchRef}^{commit}`]);
+  return currentHead.ok && currentHead.stdout.trim() === request.expectedHeadSha;
 };
 
 const pushExactHead = (

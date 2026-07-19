@@ -24,6 +24,7 @@ export type GitHubPullRequestRequest = {
   readonly remoteName: string;
   readonly baseBranch: string;
   readonly headBranch: string;
+  readonly branchRef: string;
   readonly expectedHeadSha: string;
   readonly title: string;
   readonly body: string;
@@ -190,7 +191,7 @@ const createPullRequest = (
   }
 
   const created = dependencies.github.createPullRequest({
-    ...requestFacts(input.target, headBranch, expectedHeadSha),
+    ...requestFacts(input.target, change.branchRef, headBranch, expectedHeadSha),
     ...metadata,
   });
   if (!created.ok) {
@@ -281,7 +282,7 @@ const updateOrReusePullRequest = (
     return { ok: false, code: "current_head_mismatch" };
   }
   const updated = dependencies.github.updatePullRequest({
-    ...requestFacts(input.target, headBranch, expectedHeadSha),
+    ...requestFacts(input.target, change.branchRef, headBranch, expectedHeadSha),
     ...metadata,
     number: owned.pullRequest.number,
     expectedCurrentHeadSha: owned.expectedHeadSha,
@@ -339,6 +340,7 @@ const publicationFacts = (
 
 const requestFacts = (
   target: ChangePublicationTarget,
+  branchRef: string,
   headBranch: string,
   expectedHeadSha: string,
 ): Omit<GitHubPullRequestRequest, "title" | "body"> => ({
@@ -347,6 +349,7 @@ const requestFacts = (
   remoteName: target.remoteName,
   baseBranch: target.baseBranch,
   headBranch,
+  branchRef,
   expectedHeadSha,
 });
 

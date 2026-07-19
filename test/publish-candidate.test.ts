@@ -83,6 +83,7 @@ describe("Candidate publication", () => {
         remoteName: "origin",
         baseBranch: "main",
         headBranch: "feature",
+        branchRef: "refs/heads/feature",
         expectedHeadSha: fixture.candidate.headSha,
         title: "Add taskless publication",
         body: `Change: ${fixture.changeId}\nCandidate: ${fixture.candidate.id}\nValidation Run: ${fixture.validationRunId}`,
