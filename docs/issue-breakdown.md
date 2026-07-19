@@ -11,7 +11,7 @@ It ends when But Why? completes one real SQLite-tracked Task-backed Change and p
 
 ## Completed
 
-- Task 130: Launch a Change Implementer in Herdr (`c988113`).
+- Task 130: Launch a Change Implementer in Herdr (`39e7056`).
 
 - Task 083: Start a Task in a managed worktree (`f009ab6`).
 - Task 084: Expand Candidate-owned validation through Checks (`d462952`).

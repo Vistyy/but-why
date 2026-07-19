@@ -58,5 +58,5 @@ The smoke test verifies the stable session name and existing-worktree launch aga
 
 ## Completion
 
-Implemented through `c988113`.
+Implemented through `39e7056`.
 Verified with `just quality`, the local one-pane Herdr smoke test, and the background-focus smoke test.
