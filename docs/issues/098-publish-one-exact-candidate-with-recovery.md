@@ -23,16 +23,21 @@ Fake GitHub publication tests covering Task-backed and taskless success plus a l
 
 ## Acceptance criteria
 
-- [ ] Publication requires passing evidence for the exact current Candidate and policy.
-- [ ] Immediately before remote mutation, the Change branch still equals the validated head.
-- [ ] Repository, base target, head branch, and expected SHA are explicit publication facts.
-- [ ] Task-backed PR metadata is generated deterministically from Task and validation facts.
-- [ ] A taskless PR title uses the first non-merge commit subject after the starting commit and falls back to `Change <short-change-id>`.
-- [ ] A taskless PR body is generated from Change, Candidate, and Validation Run facts.
-- [ ] Durable markers and lookup recover a successful remote creation whose response was lost.
-- [ ] Repeated publication reuses the Change-owned PR and never creates a second one.
-- [ ] A newer validated Candidate updates only the expected owned head.
-- [ ] But Why? never approves or merges the PR.
+- [x] Publication requires passing evidence for the exact current Candidate and policy.
+- [x] Immediately before remote mutation, the Change branch still equals the validated head.
+- [x] Repository, base target, head branch, and expected SHA are explicit publication facts.
+- [x] Task-backed PR metadata is generated deterministically from Task and validation facts.
+- [x] A taskless PR title uses the first non-merge commit subject after the starting commit and falls back to `Change <short-change-id>`.
+- [x] A taskless PR body is generated from Change, Candidate, and Validation Run facts.
+- [x] Durable markers and lookup recover a successful remote creation whose response was lost.
+- [x] Repeated publication reuses the Change-owned PR and never creates a second one.
+- [x] A newer validated Candidate updates only the expected owned head.
+- [x] But Why? never approves or merges the PR.
+
+## Completion evidence
+
+- Implementation: `b0dc6a8`, `94b604b`.
+- Verification: `just quality`.
 
 ## Blocked by
 

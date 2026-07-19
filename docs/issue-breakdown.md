@@ -7,7 +7,7 @@ It ends when But Why? completes one real SQLite-tracked Task-backed Change and p
 
 ## Can start immediately
 
-- Task 098: Publish one exact Candidate with recovery.
+- Task 101: Reconcile owned PRs and clean completed Changes.
 - Task 130: Launch a Change Implementer in Herdr.
 - Task 136: Compose Candidate validation through Effect.
 
@@ -19,6 +19,7 @@ It ends when But Why? completes one real SQLite-tracked Task-backed Change and p
 - Task 089: Run configured Specialists (`18661e1`).
 - Task 092: Recheck reviewer Findings without anchoring (`2d63871`).
 - Task 096: Run built-in Acceptance Review (`1eebf08`).
+- Task 098: Publish one exact Candidate with recovery (`94b604b`).
 - Task 133: Start prepared Changes (`bdf6646`).
 - Task 134: Remove incidental Git setup from SQLite tests (`5306e28`).
 
@@ -26,7 +27,6 @@ It ends when But Why? completes one real SQLite-tracked Task-backed Change and p
 
 | Task | Capability | Blocked by |
 | --- | --- | --- |
-| 101 | Reconcile owned PRs and clean completed Changes | 098 |
 | 105 | Migrate Submit to Change ownership | 098, 101, 136 |
 | 129 | Submit a Task-backed Change with no repository change | 105 |
 | 106 | Add Change inspection and migrate Task projections | 101, 105 |
