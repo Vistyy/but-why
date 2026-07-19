@@ -7,7 +7,6 @@ It ends when But Why? completes one real SQLite-tracked Task-backed Change and p
 
 ## Can start immediately
 
-- Task 130: Launch a Change Implementer in Herdr.
 - Task 136: Compose Candidate validation through Effect.
 
 ## Completed
