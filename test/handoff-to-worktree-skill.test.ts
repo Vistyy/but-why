@@ -13,7 +13,11 @@ describe("handoff-to-worktree skill", () => {
       readonly pi?: { readonly skills?: readonly string[] };
     };
 
+    const setup = readFileSync(join(repoRoot, "docs/public/setup.md"), "utf8");
+
     expect(packageManifest.pi?.skills).toEqual(["./skills"]);
+    expect(setup).toContain("skills/handoff-to-worktree/SKILL.md");
+    expect(setup).toContain("pi install npm:but-why");
     expect(skill).toContain("name: handoff-to-worktree");
     expect(skill).toContain("disable-model-invocation: true");
     expect(skill).toContain("but-why-handoff.XXXXXX.md");

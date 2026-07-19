@@ -81,6 +81,15 @@ Example:
 The setup flow does not prove that the selected harness can execute.
 But Why reports a typed actionable launch failure when an agent operation first attempts to use it.
 
+## Pi worktree handoff skill
+
+The packaged Pi skill is `skills/handoff-to-worktree/SKILL.md`.
+After But Why is published, run `pi install npm:but-why` to enable it for the user.
+For a source checkout, run `pi install /absolute/path/to/but-why`.
+Pi then provides `/skill:handoff-to-worktree` as a user-invoked command.
+
+`by init` does not install or configure Pi packages.
+
 ## Optional agent skill installation
 
 The packaged skill is `docs/public/skills/but-why/SKILL.md`.
