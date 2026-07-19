@@ -185,7 +185,6 @@ const validateCandidate = (
           const specialists = yield* runSpecialistReviewPhase({
             validationRunId: started.validationRunId,
             candidate: {
-              candidateId: input.candidateId,
               comparisonBaseSha: input.comparisonBaseSha,
               headSha: input.headSha,
             },
@@ -197,7 +196,6 @@ const validateCandidate = (
             commandCwd: activeWorkspace.worktreePath,
             allowedUntrackedFiles: input.policy.copyFiles,
             now: input.now,
-            listArtifacts: dependencies.runStore.listArtifacts,
             recordSpecialistRound: dependencies.runStore.recordSpecialistRound,
           });
           return {

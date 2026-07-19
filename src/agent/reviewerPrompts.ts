@@ -44,9 +44,7 @@ export const buildSpecialistReviewerPrompt = (input: {
   readonly specialist: string;
   readonly instructions: string;
   readonly validationRunId: string;
-  readonly availableArtifactRefs: readonly string[];
   readonly candidate: {
-    readonly candidateId: string;
     readonly comparisonBaseSha: string;
     readonly headSha: string;
   };
@@ -58,11 +56,8 @@ export const buildSpecialistReviewerPrompt = (input: {
     "Judge the exact Candidate only for this configured concern.",
     "Inspect the repository and Candidate diff before deciding.",
     "",
-    "Validation Run evidence:",
-    encodeReviewerWireValue({
-      validationRunId: input.validationRunId,
-      availableArtifactRefs: input.availableArtifactRefs,
-    }),
+    "Validation Run:",
+    encodeReviewerWireValue({ validationRunId: input.validationRunId }),
     "",
     "Candidate:",
     encodeReviewerWireValue(input.candidate),

@@ -59,7 +59,7 @@ export const openSqliteCandidateValidationRunStore = (
     ),
   recordSpecialistRound: (round) =>
     withStateDatabase(input, (database) =>
-      recordRound(database, { ...round, phase: validationPhase.qualityReview }),
+      recordRound(database, { ...round, phase: validationPhase.specialistReview }),
     ),
   listRounds: (validationRunId) =>
     withStateDatabase(input, (database) => listRounds(database, validationRunId)),

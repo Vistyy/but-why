@@ -226,8 +226,12 @@ describe("Task-backed Candidate Acceptance Review", () => {
       "alpha",
     ]);
     for (const [input] of review.mock.calls.slice(1)) {
+      expect(input.availableArtifactRefs).toEqual([]);
+      expect(input.prompt).toContain(ready.captured.comparisonBaseSha);
       expect(input.prompt).toContain(ready.captured.headSha);
       expect(input.prompt).toContain(`${input.reviewer} review instructions`);
+      expect(input.prompt).not.toContain(ready.captured.candidateId);
+      expect(input.prompt).not.toContain("availableArtifactRefs");
       expect(input.prompt).not.toContain(acceptanceContext.description);
     }
     expect(ready.validation.listFindings(result.validationRunId).map((item) => item.title)).toEqual(
@@ -243,6 +247,13 @@ describe("Task-backed Candidate Acceptance Review", () => {
     expect(ready.validation.listToolingFailures(result.validationRunId)).toEqual([
       expect.objectContaining({ errorKind: "reviewer_output_contract_failed" }),
     ]);
+    expect(ready.validation.listArtifacts(result.validationRunId)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ phase: "specialist_review", producer: "zeta" }),
+        expect.objectContaining({ phase: "specialist_review", producer: "broken" }),
+        expect.objectContaining({ phase: "specialist_review", producer: "alpha" }),
+      ]),
+    );
   });
 
   it("blocks the Candidate on a Specialist Finding", async () => {

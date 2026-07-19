@@ -11,12 +11,11 @@ import {
   type ValidationToolingFailure,
 } from "../validation/validationToolingFailures.js";
 import { writeReviewerArtifacts } from "../validationRun/reviewerArtifacts.js";
-import { validationPhase, type ValidationPhase } from "../validationRun/validationRun.js";
+import { validationPhase } from "../validationRun/validationRun.js";
 
 export type RunSpecialistReviewPhaseInput = {
   readonly validationRunId: string;
   readonly candidate: {
-    readonly candidateId: string;
     readonly comparisonBaseSha: string;
     readonly headSha: string;
   };
@@ -28,9 +27,6 @@ export type RunSpecialistReviewPhaseInput = {
   readonly commandCwd: string;
   readonly allowedUntrackedFiles: readonly string[];
   readonly now: string;
-  readonly listArtifacts: (
-    validationRunId: string,
-  ) => readonly { readonly ref: string; readonly phase: ValidationPhase }[];
   readonly recordSpecialistRound: (input: RecordCandidateSpecialistRoundInput) => void;
 };
 
@@ -65,17 +61,15 @@ const runSpecialist = (
 > =>
   Effect.gen(function* () {
     yield* verifyIntegrity(input);
-    const availableArtifactRefs = repositoryEvidenceRefs(input);
     const result = yield* input.runtime.review({
       sandbox: input.sandbox,
       reviewer: policy.id,
       validationRunId: input.validationRunId,
-      availableArtifactRefs,
+      availableArtifactRefs: [],
       prompt: buildSpecialistReviewerPrompt({
         specialist: policy.id,
         instructions: policy.instructions,
         validationRunId: input.validationRunId,
-        availableArtifactRefs,
         candidate: input.candidate,
       }),
       profile: policy.profile,
@@ -83,7 +77,7 @@ const runSpecialist = (
     yield* verifyIntegrity(input);
     const artifacts = yield* writeReviewerArtifacts({
       validationRunId: input.validationRunId,
-      phase: validationPhase.qualityReview,
+      phase: validationPhase.specialistReview,
       producer: policy.id,
       result,
       artifactsRoot: input.artifactsRoot,
@@ -93,7 +87,7 @@ const runSpecialist = (
       ? result.report.findings.map((finding, findingIndex) => ({
           id: `${input.validationRunId}-${policy.id}-F${findingIndex + 1}`,
           validationRunId: input.validationRunId,
-          phase: validationPhase.qualityReview,
+          phase: validationPhase.specialistReview,
           producer: policy.id,
           ...finding,
         }))
@@ -116,15 +110,6 @@ const runSpecialist = (
       ...(result.ok ? {} : { toolingFailure: result.failure }),
     };
   });
-
-const repositoryEvidenceRefs = (input: RunSpecialistReviewPhaseInput): readonly string[] =>
-  input
-    .listArtifacts(input.validationRunId)
-    .filter(
-      (artifact) =>
-        artifact.phase === validationPhase.prepare || artifact.phase === validationPhase.checks,
-    )
-    .map((artifact) => artifact.ref);
 
 const verifyIntegrity = (
   input: RunSpecialistReviewPhaseInput,

@@ -97,7 +97,7 @@ const inspectRun = (
     prepareRounds: rounds.filter((round) => round.phase === validationPhase.prepare),
     checkRounds: rounds.filter((round) => round.phase === validationPhase.checks),
     acceptanceRounds: rounds.filter((round) => round.phase === validationPhase.acceptanceReview),
-    specialistRounds: rounds.filter((round) => round.phase === validationPhase.qualityReview),
+    specialistRounds: rounds.filter((round) => round.phase === validationPhase.specialistReview),
     findings: dependencies.runStore.listFindings(validationRunId),
     toolingFailures: dependencies.runStore.listToolingFailures(validationRunId),
     artifacts: dependencies.runStore.listArtifacts(validationRunId).map((artifact) => ({

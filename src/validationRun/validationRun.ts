@@ -4,6 +4,7 @@ export const validationPhase = {
   prepare: "prepare",
   checks: "checks",
   acceptanceReview: "acceptance_review",
+  specialistReview: "specialist_review",
   qualityReview: "quality_review",
   publishPr: "publish_pr",
   watchPr: "watch_pr",
