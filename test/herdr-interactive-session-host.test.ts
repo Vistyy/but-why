@@ -75,7 +75,7 @@ describe("Herdr Interactive Session Host", () => {
     ]);
   });
 
-  it("removes its new workspace when a concurrent launch claims the session name", async () => {
+  it("returns a retryable failure when a concurrent launch claims the session name", async () => {
     const commands: string[][] = [];
     const sessionName = herdrSessionName("change-123");
     const execute: HerdrCommandExecutor = async (args) => {
@@ -109,7 +109,7 @@ describe("Herdr Interactive Session Host", () => {
         worktreePath: "/workspace/change-123",
         initialPrompt: undefined,
       }),
-    ).resolves.toEqual({ ok: true, host: "herdr", status: "already_active" });
+    ).resolves.toMatchObject({ ok: false, code: "launch_failed" });
     expect(commands).toContainEqual(["workspace", "close", "workspace-1"]);
   });
 

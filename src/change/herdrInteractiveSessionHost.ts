@@ -84,12 +84,6 @@ const launchInOpenedWorktree = async (
   }
 
   if (!opened.alreadyOpen) await closeWorkspace(execute, opened.workspaceId);
-  if (!renamed.ok && renamed.message.includes("agent_name_taken")) {
-    const retriedAgents = await execute(["agent", "list"]);
-    if (retriedAgents.ok && hasActiveSession(retriedAgents.stdout, input, sessionName)) {
-      return { ok: true, host: "herdr", status: "already_active" };
-    }
-  }
   return launchFailure(
     renamed.ok
       ? "Herdr did not confirm the named Pi session in the worktree root pane."
