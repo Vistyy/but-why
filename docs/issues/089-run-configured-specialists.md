@@ -31,7 +31,7 @@ Multi-Specialist Candidate review test with fake Pi sessions.
 - [x] The active list resolves from Repo Config when present and otherwise Global Config.
 - [x] Definitions resolve Repo Config before Global Config and require instructions.
 - [x] Each Specialist resolves an Agent Profile through the shared profile rules.
-- [x] Specialists receive Candidate and repository evidence but never Acceptance Context.
+- [x] Specialists receive the exact comparison base, head, and repository workspace, but no earlier phase artifacts or Acceptance Context.
 - [x] Every configured Specialist runs once for the Candidate.
 - [x] Trustworthy reports appear in configured order regardless of internal scheduling.
 - [x] Any Specialist Finding blocks the Candidate.
@@ -39,7 +39,8 @@ Multi-Specialist Candidate review test with fake Pi sessions.
 
 ## Completion
 
-Implemented in `18661e1`; review corrections completed through `eebef21`.
+Implemented in `18661e1`; initial review corrections completed through `eebef21`.
+Specialist phase naming and review inputs were aligned in `bafea95`.
 Spec review: Approved with required comments.
 Standards review: Approved.
 Quality: Passed - 317 tests, formatting, lint, typecheck, ast-grep, and Fallow checks.
