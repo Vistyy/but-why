@@ -372,7 +372,7 @@ const updateFailureResult = (
   failure: Exclude<GitHubPullRequestMutationResult, { readonly ok: true }>["code"],
 ): PublishCandidateResult => {
   if (failure === "local_head_mismatch") return { ok: false, code: "current_head_mismatch" };
-  if (failure !== "remote_response_lost") {
+  if (failure !== "remote_response_lost" && failure !== "push_failed") {
     return { ok: false, code: "publication_tooling_failed" };
   }
   const recovered = dependencies.github.getPullRequest(input.target, pullRequestNumber);

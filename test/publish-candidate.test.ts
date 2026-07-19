@@ -193,7 +193,7 @@ describe("Candidate publication", () => {
         updatePullRequest: (request) => {
           updates.push(request);
           remote = { ...remote, headSha: request.expectedHeadSha };
-          return { ok: false, code: "remote_response_lost" };
+          return { ok: false, code: "push_failed" };
         },
       },
     });
