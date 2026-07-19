@@ -1,5 +1,9 @@
 # Run configured Specialists
 
+## Status
+
+Done.
+
 ## Specification
 
 - `docs/prds/change-centered-validation-prd.md`
@@ -23,15 +27,22 @@ Multi-Specialist Candidate review test with fake Pi sessions.
 
 ## Acceptance criteria
 
-- [ ] No Specialist is enabled by But Why? by default.
-- [ ] The active list resolves from Repo Config when present and otherwise Global Config.
-- [ ] Definitions resolve Repo Config before Global Config and require instructions.
-- [ ] Each Specialist resolves an Agent Profile through the shared profile rules.
-- [ ] Specialists receive Candidate and repository evidence but never Acceptance Context.
-- [ ] Every configured Specialist runs once for the Candidate.
-- [ ] Trustworthy reports appear in configured order regardless of internal scheduling.
-- [ ] Any Specialist Finding blocks the Candidate.
-- [ ] Tooling failure is reported without inventing a reviewer verdict.
+- [x] No Specialist is enabled by But Why? by default.
+- [x] The active list resolves from Repo Config when present and otherwise Global Config.
+- [x] Definitions resolve Repo Config before Global Config and require instructions.
+- [x] Each Specialist resolves an Agent Profile through the shared profile rules.
+- [x] Specialists receive Candidate and repository evidence but never Acceptance Context.
+- [x] Every configured Specialist runs once for the Candidate.
+- [x] Trustworthy reports appear in configured order regardless of internal scheduling.
+- [x] Any Specialist Finding blocks the Candidate.
+- [x] Tooling failure is reported without inventing a reviewer verdict.
+
+## Completion
+
+Implemented in `18661e1`; review corrections completed through `eebef21`.
+Spec review: Approved with required comments.
+Standards review: Approved.
+Quality: Passed - 317 tests, formatting, lint, typecheck, ast-grep, and Fallow checks.
 
 ## Blocked by
 
