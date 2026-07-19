@@ -9,13 +9,16 @@ import {
   usageError,
   type CliResult,
 } from "../../cliResults.js";
+import { readHandoffFile, type HandoffFileReadError } from "../../change/handoffFile.js";
 import { loadChangeUseCases } from "../../localChange/changeUseCases.js";
+import type { InteractiveSessionHost } from "../../change/interactiveSessionHost.js";
 import type { PublicTaskId } from "../../task/taskId.js";
 import type { ChangeRecord } from "../../change/change.js";
 
 export type ChangeCommandEnvironment = {
   readonly cwd: string;
   readonly now: () => Date;
+  readonly interactiveSessionHost?: InteractiveSessionHost;
 };
 
 export const routeChange = (
@@ -39,6 +42,10 @@ export const routeChange = (
             command: "by change reconcile [<change-id>]",
             description: "Read owned pull requests and clean terminal Changes",
           },
+          {
+            command: "by change implement <change-id> [--handoff-file <path>]",
+            description: "Launch a fresh Interactive Session in a ready Change worktree",
+          },
         ],
         flags: withGlobalHelpFlags(),
       }),
@@ -47,6 +54,7 @@ export const routeChange = (
   const subcommand = args[0];
   if (subcommand === "start") return runStart(args.slice(1), environment);
   if (subcommand === "prepare") return runPrepare(args.slice(1), environment);
+  if (subcommand === "implement") return runImplement(args.slice(1), environment);
   if (subcommand === "reconcile") return runReconcile(args.slice(1), environment);
   return Effect.succeed(
     usageError({
@@ -155,6 +163,141 @@ const runPrepare = (
   });
 };
 
+const runImplement = (
+  args: readonly string[],
+  environment: ChangeCommandEnvironment,
+): Effect.Effect<CliResult> => {
+  if (args.length === 1 && args[0] === "--help") {
+    return Effect.succeed(
+      success({
+        usage: "by change implement <change-id> [--handoff-file <path>]",
+        arguments: [
+          { argument: "<change-id>", description: "Ready Change ID returned by Change Start" },
+        ],
+        flags: withGlobalHelpFlags([
+          { flag: "--handoff-file <path>", description: "Optional compact handoff file" },
+        ]),
+        examples: [
+          "by change implement <change-id>",
+          "by change implement <change-id> --handoff-file /tmp/handoff.md --output json",
+        ],
+      }),
+    );
+  }
+  const parsed = parseImplementArgs(args);
+  if (!parsed.ok) return Effect.succeed(parsed.result);
+  if (parsed.handoffFile === "-") {
+    return Effect.succeed(
+      usageError({
+        code: "unsupported_stdin_handoff_file",
+        message: "Reading a Change handoff from standard input is not supported.",
+        help: [
+          "Write the handoff to a file, then rerun Change Implement with --handoff-file <path>.",
+        ],
+      }),
+    );
+  }
+  const handoff =
+    parsed.handoffFile === undefined
+      ? undefined
+      : readHandoffFile(environment.cwd, parsed.handoffFile);
+  if (handoff !== undefined && !handoff.ok) return Effect.succeed(handoffFileError(handoff.error));
+  const loaded = loadChangeUseCases({
+    cwd: environment.cwd,
+    migrationTimestamp: () => environment.now().toISOString(),
+    ...(environment.interactiveSessionHost === undefined
+      ? {}
+      : { interactiveSessionHost: environment.interactiveSessionHost }),
+  });
+  if (!loaded.ok) return Effect.succeed(loadError(loaded.error));
+  return Effect.promise(async () => {
+    try {
+      return implementResult(
+        await loaded.changes.implement(
+          parsed.changeId,
+          handoff === undefined ? undefined : handoff.content,
+        ),
+      );
+    } catch {
+      return runtimeError({
+        code: "launch_failed",
+        message: "But Why? could not launch the Interactive Session.",
+        help: ["Confirm Herdr is running, then retry Change Implement."],
+      });
+    }
+  });
+};
+
+type ImplementArgsParseResult =
+  | { readonly ok: true; readonly changeId: string; readonly handoffFile: string | undefined }
+  | { readonly ok: false; readonly result: CliResult };
+
+const parseImplementArgs = (args: readonly string[]): ImplementArgsParseResult => {
+  const changeId = args[0];
+  if (changeId === undefined || changeId.startsWith("-")) {
+    return {
+      ok: false,
+      result: usageError({
+        code: "invalid_arguments",
+        message: "Change Implement requires one Change ID.",
+        help: ["Run `by change implement <change-id> [--handoff-file <path>]`."],
+      }),
+    };
+  }
+  if (args.length === 1) return { ok: true, changeId, handoffFile: undefined };
+  if (args.length === 3 && args[1] === "--handoff-file" && args[2] !== undefined) {
+    return { ok: true, changeId, handoffFile: args[2] };
+  }
+  return {
+    ok: false,
+    result: usageError({
+      code: "invalid_arguments",
+      message: "Change Implement accepts one Change ID and an optional --handoff-file <path>.",
+      help: ["Run `by change implement <change-id> [--handoff-file <path>]`."],
+    }),
+  };
+};
+
+const handoffFileError = (error: HandoffFileReadError): CliResult => {
+  switch (error.code) {
+    case "handoff_file_not_found":
+      return usageError({
+        code: error.code,
+        message: "Change handoff file was not found.",
+        details: { path: error.path },
+        help: ["Create the handoff file, then rerun Change Implement."],
+      });
+    case "handoff_file_unreadable":
+      return usageError({
+        code: error.code,
+        message: "Change handoff must be a readable regular file.",
+        details: { path: error.path },
+        help: ["Use a readable regular file for --handoff-file."],
+      });
+    case "handoff_file_too_large":
+      return usageError({
+        code: error.code,
+        message: "Change handoff file is larger than 256 KiB.",
+        details: { path: error.path, maxBytes: error.maxBytes },
+        help: ["Shorten the handoff file to 256 KiB or less."],
+      });
+    case "invalid_handoff_encoding":
+      return usageError({
+        code: error.code,
+        message: "Change handoff file must be valid UTF-8.",
+        details: { path: error.path },
+        help: ["Rewrite the handoff file as UTF-8, then retry Change Implement."],
+      });
+    case "empty_handoff_file":
+      return usageError({
+        code: error.code,
+        message: "Change handoff file must not be empty.",
+        details: { path: error.path },
+        help: ["Write a non-empty handoff file, then retry Change Implement."],
+      });
+  }
+};
+
 const runReconcile = (
   args: readonly string[],
   environment: ChangeCommandEnvironment,
@@ -217,6 +360,47 @@ const runReconcile = (
       return stateStoreUnavailable("repository");
     }
   });
+};
+
+const implementResult = (
+  result: Awaited<ReturnType<import("../../change/changeUseCases.js").ChangeUseCases["implement"]>>,
+): CliResult => {
+  if (result.ok) {
+    return success({
+      changeId: result.change.id,
+      worktreePath: result.change.worktreePath,
+      host: result.host,
+      status: result.status,
+    });
+  }
+  if (result.code === "change_not_found" || result.code === "change_not_open") {
+    return runtimeError({
+      code: result.code,
+      message: result.code === "change_not_found" ? "Change was not found." : "Change is closed.",
+      help: ["Use an open ready Change ID returned by `by change start --output json`."],
+    });
+  }
+  if (result.code === "change_not_ready") {
+    return runtimeError({
+      code: result.code,
+      message: "Change is not ready for an Interactive Session.",
+      details: { changeId: result.change.id, readiness: result.change.readiness },
+      help: [`Run \`by change prepare ${result.change.id}\`, then retry Change Implement.`],
+    });
+  }
+  if ("message" in result) {
+    return runtimeError({
+      code: result.code,
+      message: result.message,
+      details: {
+        changeId: result.change.id,
+        worktreePath: result.change.worktreePath,
+        host: "herdr",
+      },
+      help: ["Confirm Herdr is installed and running, then retry Change Implement."],
+    });
+  }
+  throw new Error("Unhandled Change Implement result");
 };
 
 const startResult = (

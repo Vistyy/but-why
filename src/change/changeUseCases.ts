@@ -7,6 +7,7 @@ import {
 } from "../repositoryPreparation/runRepositoryPreparation.js";
 import { taskSlugForId, type PublicTaskId } from "../task/taskId.js";
 import { changeReadiness, changeState, type ChangePrepareFailure } from "./change.js";
+import type { InteractiveSessionHost } from "./interactiveSessionHost.js";
 import type { ChangeReconciliation, ChangeReconciliationResult } from "./reconcileChange.js";
 import {
   provisionChangeWorktree,
@@ -26,6 +27,10 @@ export type ChangeUseCases = {
     readonly now: string;
   }) => Promise<ChangeStartResult>;
   readonly prepare: (changeId: string, now: string) => Promise<ChangePrepareResult>;
+  readonly implement: (
+    changeId: string,
+    initialPrompt: string | undefined,
+  ) => Promise<ChangeImplementResult>;
   readonly reconcile: (changeId: string | undefined, now: string) => ChangeReconciliationResult;
 };
 
@@ -39,6 +44,22 @@ export type ChangeStartResult =
       readonly change: ChangeStartRecord;
     }
   | { readonly ok: false; readonly code: "prepare_failed"; readonly change: ChangeStartRecord };
+
+export type ChangeImplementResult =
+  | {
+      readonly ok: true;
+      readonly change: ChangeStartRecord;
+      readonly host: "herdr";
+      readonly status: "started" | "already_active";
+    }
+  | {
+      readonly ok: false;
+      readonly change: ChangeStartRecord;
+      readonly code: "host_unavailable" | "launch_failed";
+      readonly message: string;
+    }
+  | { readonly ok: false; readonly code: "change_not_found" | "change_not_open" }
+  | { readonly ok: false; readonly code: "change_not_ready"; readonly change: ChangeStartRecord };
 
 export type ChangePrepareResult =
   | { readonly ok: true; readonly change: ChangeStartRecord }
@@ -56,9 +77,12 @@ export const openChangeUseCases = (
   store: ChangeStartStore,
   executor: RepositoryPreparationExecutor,
   reconciliation: ChangeReconciliation,
+  interactiveSessionHost: InteractiveSessionHost,
 ): ChangeUseCases => ({
   start: (input) => startChange(context, store, executor, input),
   prepare: (changeId, now) => prepareChange(context, store, executor, changeId, now),
+  implement: (changeId, initialPrompt) =>
+    implementChange(store, interactiveSessionHost, changeId, initialPrompt),
   reconcile: (changeId, now) =>
     reconciliation.reconcile({
       repositoryCommonDirectory: context.commonDirectory,
@@ -127,6 +151,26 @@ const prepareChange = async (
   if (!provisioned.ok) return { ...provisioned, change };
   if (change.readiness === changeReadiness.ready) return { ok: true, change };
   return prepareExisting(store, executor, change, now);
+};
+
+const implementChange = async (
+  store: ChangeStartStore,
+  interactiveSessionHost: InteractiveSessionHost,
+  changeId: string,
+  initialPrompt: string | undefined,
+): Promise<ChangeImplementResult> => {
+  const change = store.getById(changeId);
+  if (change === undefined) return { ok: false, code: "change_not_found" };
+  if (change.state !== changeState.open) return { ok: false, code: "change_not_open" };
+  if (change.readiness !== changeReadiness.ready) {
+    return { ok: false, code: "change_not_ready", change };
+  }
+  const launched = await interactiveSessionHost.launch({
+    changeId: change.id,
+    worktreePath: change.worktreePath,
+    initialPrompt,
+  });
+  return { change, ...launched };
 };
 
 type PreparationResult =

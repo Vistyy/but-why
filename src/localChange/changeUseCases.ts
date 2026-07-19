@@ -1,5 +1,7 @@
 import { existsSync } from "node:fs";
 
+import { openHerdrInteractiveSessionHost } from "../change/herdrInteractiveSessionHost.js";
+import type { InteractiveSessionHost } from "../change/interactiveSessionHost.js";
 import { cleanupChangeResources } from "../change/localChangeCleanupGit.js";
 import { openChangeReconciliation } from "../change/reconcileChange.js";
 import { openChangeUseCases, type ChangeUseCases } from "../change/changeUseCases.js";
@@ -20,6 +22,7 @@ export type LoadChangeUseCasesResult =
 export const loadChangeUseCases = (input: {
   readonly cwd: string;
   readonly migrationTimestamp: () => string;
+  readonly interactiveSessionHost?: InteractiveSessionHost;
 }): LoadChangeUseCasesResult => {
   const repoContext = loadRepoLocalContext(input.cwd, input.migrationTimestamp);
   if (!repoContext.ok) return repoContext;
@@ -41,6 +44,7 @@ export const loadChangeUseCases = (input: {
         github: localGitHubPullRequestGateway(),
         cleanup: cleanupChangeResources,
       }),
+      input.interactiveSessionHost ?? openHerdrInteractiveSessionHost(),
     ),
   };
 };

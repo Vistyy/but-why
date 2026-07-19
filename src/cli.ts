@@ -14,6 +14,7 @@ import { routeChange } from "./cli/change/changeCli.js";
 import { dashboard } from "./cli/task/dashboard.js";
 import { routeTask } from "./cli/task/taskCli.js";
 import { routeValidationRun } from "./cli/validationRun/validationRunCli.js";
+import type { InteractiveSessionHost } from "./change/interactiveSessionHost.js";
 import type { LocalSubmitPreflight } from "./localSubmit/submitPreflight.js";
 import type { TaskUseCases } from "./task/taskUseCases.js";
 
@@ -26,6 +27,7 @@ export type CliEnvironment = {
   readonly now: () => Date;
   readonly taskUseCases?: TaskUseCases;
   readonly submitPreflight?: LocalSubmitPreflight;
+  readonly interactiveSessionHost?: InteractiveSessionHost;
 };
 
 const description = "Validate completed code changes against approved human intent.";
@@ -229,6 +231,10 @@ const helpView = (bin: string, docs: PublicDocs): StructuredObject =>
       {
         command: "by change reconcile [<change-id>]",
         description: "Read owned pull requests and clean terminal Changes",
+      },
+      {
+        command: "by change implement <change-id> [--handoff-file <path>]",
+        description: "Launch a fresh Interactive Session in a ready Change worktree",
       },
       {
         command: "by submit <task-id>",

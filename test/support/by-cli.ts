@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url";
 import { expect } from "vitest";
 
 import { runCli, type CliResult } from "../../src/cli.js";
+import type { InteractiveSessionHost } from "../../src/change/interactiveSessionHost.js";
 import type { LocalSubmitPreflight } from "../../src/localSubmit/submitPreflight.js";
 import { serializeOutput } from "../../src/output/serialize.js";
 import type { TaskUseCases } from "../../src/task/taskUseCases.js";
@@ -59,6 +60,7 @@ type InProcessCliOptions = {
   readonly globalConfigPath?: string;
   readonly taskUseCases?: TaskUseCases;
   readonly submitPreflight?: LocalSubmitPreflight;
+  readonly interactiveSessionHost?: InteractiveSessionHost;
 };
 
 const cliResultToInProcessResult = (result: CliResult): InProcessCliResult => ({
@@ -84,6 +86,9 @@ export const runByInProcess = (
         ...(options.submitPreflight === undefined
           ? {}
           : { submitPreflight: options.submitPreflight }),
+        ...(options.interactiveSessionHost === undefined
+          ? {}
+          : { interactiveSessionHost: options.interactiveSessionHost }),
       }),
     ),
   );
@@ -105,6 +110,9 @@ export const runByInProcessAsync = async (
         ...(options.submitPreflight === undefined
           ? {}
           : { submitPreflight: options.submitPreflight }),
+        ...(options.interactiveSessionHost === undefined
+          ? {}
+          : { interactiveSessionHost: options.interactiveSessionHost }),
       }),
     ),
   );

@@ -173,6 +173,18 @@
         "patterns": ["src/change/changeStartGit.ts"]
       },
       {
+        "name": "interactive-session-port",
+        "patterns": ["src/change/interactiveSessionHost.ts"]
+      },
+      {
+        "name": "change-file-input",
+        "patterns": ["src/change/handoffFile.ts"]
+      },
+      {
+        "name": "herdr-adapter",
+        "patterns": ["src/change/herdrInteractiveSessionHost.ts"]
+      },
+      {
         "name": "change-cleanup-adapter",
         "patterns": ["src/change/localChangeCleanupGit.ts"]
       },
@@ -336,10 +348,15 @@
           "repo-init",
           "submit-rejection-errors",
           "task-adapter",
+          "change-file-input",
           "use-cases",
           "validation-tooling-failures"
         ],
-        "allowTypeOnly": ["submission-environment-port", "validation-workspace"]
+        "allowTypeOnly": [
+          "interactive-session-port",
+          "submission-environment-port",
+          "validation-workspace"
+        ]
       },
       {
         "from": "output-types",
@@ -433,6 +450,19 @@
         "allow": ["change-start-store", "domain", "local-git-candidate-adapter", "repo-init"]
       },
       {
+        "from": "interactive-session-port",
+        "allow": []
+      },
+      {
+        "from": "change-file-input",
+        "allow": []
+      },
+      {
+        "from": "herdr-adapter",
+        "allow": [],
+        "allowTypeOnly": ["interactive-session-port"]
+      },
+      {
         "from": "change-cleanup-adapter",
         "allow": []
       },
@@ -486,6 +516,7 @@
           "task-authority-port",
           "change-start-adapter",
           "change-start-store",
+          "interactive-session-port",
           "task-store",
           "submit-rejection-errors"
         ],
@@ -528,6 +559,7 @@
           "change-reconciliation",
           "domain",
           "github-adapter",
+          "herdr-adapter",
           "repo-init",
           "repo-local-storage-wiring",
           "sandcastle-adapter",
@@ -542,7 +574,7 @@
           "validation-run-store",
           "validation-runs"
         ],
-        "allowTypeOnly": ["validation-workspace"]
+        "allowTypeOnly": ["interactive-session-port", "validation-workspace"]
       },
       {
         "from": "github-adapter",

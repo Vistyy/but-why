@@ -224,6 +224,7 @@ ignores:
   - src/repositoryPreparation/localRepositoryPreparation.ts
   - src/publication/localCandidatePublicationGit.ts
   - src/submissionEnvironment/localGitHubPullRequestGateway.ts
+  - src/change/herdrInteractiveSessionHost.ts
 rule:
   any:
     - pattern: spawn($$$ARGS)
@@ -251,6 +252,7 @@ ignores:
   - src/repositoryPreparation/localRepositoryPreparation.ts
   - src/publication/localCandidatePublicationGit.ts
   - src/submissionEnvironment/localGitHubPullRequestGateway.ts
+  - src/change/herdrInteractiveSessionHost.ts
 rule:
   all:
     - kind: import_statement
@@ -403,6 +405,7 @@ ignores:
   - src/task/files/descriptionFile.ts
   - src/task/files/commentFile.ts
   - src/task/files/contextDraft.ts
+  - src/change/handoffFile.ts
 rule:
   any:
     - pattern: readFileSync($$$ARGS)
@@ -420,6 +423,7 @@ ignores:
   - src/task/files/descriptionFile.ts
   - src/task/files/commentFile.ts
   - src/task/files/contextDraft.ts
+  - src/change/handoffFile.ts
 rule:
   any:
     - pattern: statSync($$$ARGS)
@@ -464,6 +468,7 @@ ignores:
   - src/sqlite/sqliteTaskContextSnapshot.ts
   - src/sqlite/sqliteChangePreparation.ts
   - src/submissionEnvironment/localGitHubPullRequestGateway.ts
+  - src/change/herdrInteractiveSessionHost.ts
 rule:
   pattern: JSON.parse($$$ARGS)
 ---
