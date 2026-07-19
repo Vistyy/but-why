@@ -24,8 +24,19 @@ describe("Herdr Interactive Session Host", () => {
       if (args[0] === "agent" && args[1] === "list") {
         return { ok: true, stdout: '{"result":{"agents":[]}}' };
       }
-      if (args[0] === "workspace") {
-        return { ok: true, stdout: '{"result":{"workspace":{"workspace_id":"workspace-1"}}}' };
+      if (args[0] === "worktree") {
+        return {
+          ok: true,
+          stdout:
+            '{"result":{"workspace":{"workspace_id":"workspace-1"},"root_pane":{"pane_id":"workspace-1:pane-1"}}}',
+        };
+      }
+      if (args[0] === "agent" && args[1] === "rename") {
+        return {
+          ok: true,
+          stdout:
+            '{"result":{"agent":{"name":"but-why-change-123","pane_id":"workspace-1:pane-1","cwd":"/workspace/change-123"}}}',
+        };
       }
       return { ok: true, stdout: "{}" };
     };
@@ -35,6 +46,7 @@ describe("Herdr Interactive Session Host", () => {
       path: "/usr/local/bin:/opt/pi/bin",
     }).launch({
       changeId: "change-123",
+      repositoryPath: "/repository",
       worktreePath: "/workspace/change-123",
       initialPrompt: "Continue from the recorded decision.",
     });
@@ -43,43 +55,36 @@ describe("Herdr Interactive Session Host", () => {
     expect(commands).toEqual([
       ["agent", "list"],
       [
-        "workspace",
-        "create",
+        "worktree",
+        "open",
         "--cwd",
+        "/repository",
+        "--path",
         "/workspace/change-123",
         "--label",
         sessionName,
-        "--no-focus",
+        "--focus",
       ],
       [
-        "agent",
-        "start",
-        sessionName,
-        "--cwd",
-        "/workspace/change-123",
-        "--workspace",
-        "workspace-1",
-        "--no-focus",
-        "--env",
-        "PATH=/usr/local/bin:/opt/pi/bin",
-        "--",
-        "pi",
-        "--name",
-        sessionName,
-        "Implement Change change-123 in this Managed Worktree.\n\nContinue from the recorded decision.",
+        "pane",
+        "run",
+        "workspace-1:pane-1",
+        "PATH='/usr/local/bin:/opt/pi/bin' exec pi --name 'but-why-change-123' 'Implement Change change-123 in this Managed Worktree.\n\nContinue from the recorded decision.'",
       ],
+      ["agent", "rename", "workspace-1:pane-1", sessionName],
     ]);
   });
 
   it("returns already active without creating another workspace", async () => {
     const execute: HerdrCommandExecutor = async () => ({
       ok: true,
-      stdout: `{"id":"cli:agent:list","result":{"agents":[{"agent":"${herdrSessionName("change-123")}","agent_status":"working"}],"type":"agent_list"}}`,
+      stdout: `{"id":"cli:agent:list","result":{"agents":[{"name":"${herdrSessionName("change-123")}","cwd":"/workspace/change-123","agent_status":"working"}],"type":"agent_list"}}`,
     });
 
     await expect(
       openHerdrInteractiveSessionHost(execute).launch({
         changeId: "change-123",
+        repositoryPath: "/repository",
         worktreePath: "/workspace/change-123",
         initialPrompt: undefined,
       }),
@@ -88,11 +93,12 @@ describe("Herdr Interactive Session Host", () => {
 
   it.each([
     ["cannot reach Herdr", unavailableHerdr, "host_unavailable"],
-    ["cannot create the workspace", workspaceFailure, "launch_failed"],
+    ["cannot open the worktree", workspaceFailure, "launch_failed"],
   ] as const)("returns retryable failure when it %s", async (_name, execute, code) => {
     await expect(
       openHerdrInteractiveSessionHost(execute).launch({
         changeId: "change-123",
+        repositoryPath: "/repository",
         worktreePath: "/workspace/change-123",
         initialPrompt: undefined,
       }),

@@ -47,6 +47,7 @@ describe("by change implement", () => {
     expect(launches).toEqual([
       {
         changeId: change.change.id,
+        repositoryPath: root,
         worktreePath: change.worktreePath,
         initialPrompt: undefined,
       },

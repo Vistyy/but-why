@@ -10,9 +10,11 @@ import {
 const smokeWorktree = process.env["HERDR_SMOKE_WORKTREE"];
 const smokeChangeId = "herdr-smoke-change";
 // biome-ignore lint/complexity/useLiteralKeys: NodeJS.ProcessEnv has an index signature.
+const smokeRepository = process.env["HERDR_SMOKE_REPOSITORY"];
+// biome-ignore lint/complexity/useLiteralKeys: NodeJS.ProcessEnv has an index signature.
 const smokePath = process.env["HERDR_SMOKE_PATH"];
 
-const smoke = smokeWorktree === undefined ? it.skip : it;
+const smoke = smokeWorktree === undefined || smokeRepository === undefined ? it.skip : it;
 
 describe("Herdr smoke", () => {
   smoke(
@@ -23,16 +25,18 @@ describe("Herdr smoke", () => {
       });
       const first = await host.launch({
         changeId: smokeChangeId,
+        repositoryPath: smokeRepository as string,
         worktreePath: smokeWorktree as string,
         initialPrompt: "Verify the Herdr Change Implement smoke test, then stop.",
       });
       const second = await host.launch({
         changeId: smokeChangeId,
+        repositoryPath: smokeRepository as string,
         worktreePath: smokeWorktree as string,
         initialPrompt: undefined,
       });
 
-      expect(first).toMatchObject({ ok: true, host: "herdr" });
+      expect(first, JSON.stringify(first)).toMatchObject({ ok: true, host: "herdr" });
       expect(second).toEqual({ ok: true, host: "herdr", status: "already_active" });
       expect(herdrSessionName(smokeChangeId)).toBe("but-why-herdr-smoke-change");
     },

@@ -82,7 +82,7 @@ export const openChangeUseCases = (
   start: (input) => startChange(context, store, executor, input),
   prepare: (changeId, now) => prepareChange(context, store, executor, changeId, now),
   implement: (changeId, initialPrompt) =>
-    implementChange(store, interactiveSessionHost, changeId, initialPrompt),
+    implementChange(context, store, interactiveSessionHost, changeId, initialPrompt),
   reconcile: (changeId, now) =>
     reconciliation.reconcile({
       repositoryCommonDirectory: context.commonDirectory,
@@ -154,6 +154,7 @@ const prepareChange = async (
 };
 
 const implementChange = async (
+  context: RepoLocalContext,
   store: ChangeStartStore,
   interactiveSessionHost: InteractiveSessionHost,
   changeId: string,
@@ -167,6 +168,7 @@ const implementChange = async (
   }
   const launched = await interactiveSessionHost.launch({
     changeId: change.id,
+    repositoryPath: context.root,
     worktreePath: change.worktreePath,
     initialPrompt,
   });

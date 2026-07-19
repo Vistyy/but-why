@@ -16,6 +16,22 @@ Add `by change implement <change-id> [--handoff-file <path>]` and ship the user-
 Add a narrow Interactive Session Host interface and implement only its Herdr adapter.
 Do not add provider selection, registration, or generic provider machinery.
 
+## Implementation decision ledger
+
+- Local: Use `but-why-<change-id>` as the stable Herdr session name.
+  Change IDs have a one-to-one relationship with Managed Worktrees.
+- Local: Open the recorded worktree with `herdr worktree open`.
+  Run Pi in the returned root pane with `herdr pane run`.
+  Name that pane with `herdr agent rename`.
+- Local: Pass the caller `PATH` to `pane run`.
+  Herdr runs as a persistent server and does not inherit the caller shell path.
+- Local: Ship `handoff-to-worktree` in the package `skills/` directory.
+  Pi loads it when the user enables the But Why package with `pi install`.
+  `by init` does not install or configure Pi packages.
+- Deferred: Herdr 0.7.3 has no atomic session-name claim across `pane run` and `agent rename`.
+  A concurrent name collision returns a retryable launch failure.
+  A concurrent-launch coordinator needs its own approved task.
+
 ## Primary verification seam
 
 Change Implement tests against a fake Interactive Session Host, a static skill contract test, and one local Herdr smoke test.

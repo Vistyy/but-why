@@ -6,6 +6,7 @@ export type InteractiveSessionHost = {
 
 export type InteractiveSessionLaunchInput = {
   readonly changeId: string;
+  readonly repositoryPath: string;
   readonly worktreePath: string;
   readonly initialPrompt: string | undefined;
 };

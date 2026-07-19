@@ -35,49 +35,35 @@ const launchHerdrSession = async (
       message: `Herdr must be installed and running before launching ${sessionName}: ${agents.message}`,
     };
   }
-  if (activeAgentNames(agents.stdout).includes(sessionName)) {
+  if (hasActiveSession(agents.stdout, input, sessionName)) {
     return { ok: true, host: "herdr", status: "already_active" };
   }
 
-  const workspace = await execute([
-    "workspace",
-    "create",
+  const worktree = await execute([
+    "worktree",
+    "open",
     "--cwd",
+    input.repositoryPath,
+    "--path",
     input.worktreePath,
     "--label",
     sessionName,
-    "--no-focus",
+    "--focus",
   ]);
-  if (!workspace.ok) return launchFailure(workspace.message);
-  const workspaceId = workspaceIdentifier(workspace.stdout);
-  if (workspaceId === undefined) {
-    return launchFailure("Herdr did not return a workspace ID.");
+  if (!worktree.ok) return launchFailure(worktree.message);
+  const opened = openedWorktree(worktree.stdout);
+  if (opened === undefined) {
+    return launchFailure("Herdr did not return the worktree root pane.");
   }
 
-  const launched = await execute([
-    "agent",
-    "start",
-    sessionName,
-    "--cwd",
-    input.worktreePath,
-    "--workspace",
-    workspaceId,
-    "--no-focus",
-    ...(path === undefined ? [] : ["--env", `PATH=${path}`]),
-    "--",
-    "pi",
-    "--name",
-    sessionName,
-    piPrompt(input),
-  ]);
-  if (launched.ok) return { ok: true, host: "herdr", status: "started" };
-  if (launched.message.includes("agent_name_taken")) {
-    const retriedAgents = await execute(["agent", "list"]);
-    if (retriedAgents.ok && activeAgentNames(retriedAgents.stdout).includes(sessionName)) {
-      return { ok: true, host: "herdr", status: "already_active" };
-    }
-  }
-  return launchFailure(launched.message);
+  const launched = await execute(["pane", "run", opened.rootPaneId, piCommand(input, path)]);
+  if (!launched.ok) return launchFailure(launched.message);
+
+  const renamed = await execute(["agent", "rename", opened.rootPaneId, sessionName]);
+  if (!renamed.ok) return launchFailure(renamed.message);
+  return renamedSession(renamed.stdout, input, sessionName, opened.rootPaneId)
+    ? { ok: true, host: "herdr", status: "started" }
+    : launchFailure("Herdr did not confirm the named Pi session in the worktree root pane.");
 };
 
 const launchFailure = (message: string): InteractiveSessionLaunchResult => ({
@@ -86,32 +72,66 @@ const launchFailure = (message: string): InteractiveSessionLaunchResult => ({
   message: `Herdr could not launch the Interactive Session. ${message}`,
 });
 
-const piPrompt = (input: InteractiveSessionLaunchInput): string =>
+const piCommand = (input: InteractiveSessionLaunchInput, path: string | undefined): string =>
   [
-    `Implement Change ${input.changeId} in this Managed Worktree.`,
-    ...(input.initialPrompt === undefined ? [] : [input.initialPrompt]),
-  ].join("\n\n");
+    ...(path === undefined ? [] : [`PATH=${shellQuote(path)}`]),
+    "exec pi",
+    "--name",
+    shellQuote(herdrSessionName(input.changeId)),
+    shellQuote(
+      [
+        `Implement Change ${input.changeId} in this Managed Worktree.`,
+        ...(input.initialPrompt === undefined ? [] : [input.initialPrompt]),
+      ].join("\n\n"),
+    ),
+  ].join(" ");
 
-const activeAgentNames = (source: string): readonly string[] => {
+const hasActiveSession = (
+  source: string,
+  input: InteractiveSessionLaunchInput,
+  sessionName: string,
+): boolean => {
   const result = herdrResult(source);
   const agents = result === undefined ? undefined : recordValue(result, "agents");
-  return Array.isArray(agents) ? agentNames(agents) : [];
+  return Array.isArray(agents) && agents.some((agent) => matchesSession(agent, input, sessionName));
 };
 
-const agentNames = (agents: readonly unknown[]): readonly string[] =>
-  agents.flatMap((agent) => {
-    const name = isRecord(agent) ? recordValue(agent, "name") : undefined;
-    if (typeof name === "string") return [name];
-    const kind = isRecord(agent) ? recordValue(agent, "agent") : undefined;
-    return typeof kind === "string" ? [kind] : [];
-  });
-
-const workspaceIdentifier = (source: string): string | undefined => {
+const renamedSession = (
+  source: string,
+  input: InteractiveSessionLaunchInput,
+  sessionName: string,
+  rootPaneId: string,
+): boolean => {
   const result = herdrResult(source);
-  const workspace = result === undefined ? undefined : recordValue(result, "workspace");
-  const workspaceId = isRecord(workspace) ? recordValue(workspace, "workspace_id") : undefined;
-  return typeof workspaceId === "string" ? workspaceId : undefined;
+  const agent = result === undefined ? undefined : recordValue(result, "agent");
+  return matchesSession(agent, input, sessionName, rootPaneId);
 };
+
+const matchesSession = (
+  value: unknown,
+  input: InteractiveSessionLaunchInput,
+  sessionName: string,
+  paneId?: string,
+): boolean => {
+  if (!isRecord(value)) return false;
+  const name = recordValue(value, "name");
+  const cwd = recordValue(value, "cwd");
+  const reportedPaneId = recordValue(value, "pane_id");
+  return (
+    name === sessionName &&
+    cwd === input.worktreePath &&
+    (paneId === undefined || reportedPaneId === paneId)
+  );
+};
+
+const openedWorktree = (source: string): { readonly rootPaneId: string } | undefined => {
+  const result = herdrResult(source);
+  const rootPane = result === undefined ? undefined : recordValue(result, "root_pane");
+  const rootPaneId = isRecord(rootPane) ? recordValue(rootPane, "pane_id") : undefined;
+  return typeof rootPaneId === "string" ? { rootPaneId } : undefined;
+};
+
+const shellQuote = (value: string): string => `'${value.replaceAll("'", "'\\''")}'`;
 
 const herdrResult = (source: string): Record<string, unknown> | undefined => {
   const response = parseJson(source);
