@@ -1,12 +1,12 @@
 {
   "taskPrefix": "BY",
+  "prepare": {
+    "command": "pnpm install --frozen-lockfile --prefer-offline",
+    "timeoutSeconds": 1200
+  },
   "validation": {
     "sandbox": {
       "mode": "none"
-    },
-    "prepare": {
-      "command": "pnpm install --frozen-lockfile --prefer-offline",
-      "timeoutSeconds": 1200
     },
     "checks": [
       {
