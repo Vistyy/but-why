@@ -55,15 +55,26 @@ const launchHerdrSession = async (
   if (opened === undefined) {
     return launchFailure("Herdr did not return the worktree root pane.");
   }
-  if (opened.alreadyOpen) {
+  return launchInOpenedWorktree(execute, input, path, sessionName, agents.stdout, opened);
+};
+
+const launchInOpenedWorktree = async (
+  execute: HerdrCommandExecutor,
+  input: InteractiveSessionLaunchInput,
+  path: string | undefined,
+  sessionName: string,
+  listedAgents: string,
+  opened: OpenedWorktree,
+): Promise<InteractiveSessionLaunchResult> => {
+  if (opened.alreadyOpen && hasActiveAgentInWorktree(listedAgents, input)) {
     return launchFailure(
-      "Herdr already has this worktree open without the named Interactive Session.",
+      "Herdr already has a different active Interactive Session in this worktree.",
     );
   }
 
   const launched = await execute(["pane", "run", opened.rootPaneId, piCommand(input, path)]);
   if (!launched.ok) {
-    await closeWorkspace(execute, opened.workspaceId);
+    if (!opened.alreadyOpen) await closeWorkspace(execute, opened.workspaceId);
     return launchFailure(launched.message);
   }
 
@@ -72,7 +83,7 @@ const launchHerdrSession = async (
     return { ok: true, host: "herdr", status: "started" };
   }
 
-  await closeWorkspace(execute, opened.workspaceId);
+  if (!opened.alreadyOpen) await closeWorkspace(execute, opened.workspaceId);
   if (!renamed.ok && renamed.message.includes("agent_name_taken")) {
     const retriedAgents = await execute(["agent", "list"]);
     if (retriedAgents.ok && hasActiveSession(retriedAgents.stdout, input, sessionName)) {
@@ -119,6 +130,23 @@ const hasActiveSession = (
   );
 };
 
+const hasActiveAgentInWorktree = (
+  source: string,
+  input: InteractiveSessionLaunchInput,
+): boolean => {
+  const result = herdrResult(source);
+  const agents = result === undefined ? undefined : recordValue(result, "agents");
+  return (
+    Array.isArray(agents) &&
+    agents.some(
+      (agent) =>
+        isRecord(agent) &&
+        recordValue(agent, "cwd") === input.worktreePath &&
+        isActiveAgentStatus(recordValue(agent, "agent_status")),
+    )
+  );
+};
+
 const renamedSession = (
   source: string,
   input: InteractiveSessionLaunchInput,
@@ -161,11 +189,13 @@ const closeWorkspace = async (
   await execute(["workspace", "close", workspaceId]);
 };
 
-const openedWorktree = (
-  source: string,
-):
-  | { readonly workspaceId: string; readonly rootPaneId: string; readonly alreadyOpen: boolean }
-  | undefined => {
+type OpenedWorktree = {
+  readonly workspaceId: string;
+  readonly rootPaneId: string;
+  readonly alreadyOpen: boolean;
+};
+
+const openedWorktree = (source: string): OpenedWorktree | undefined => {
   const result = herdrResult(source);
   const workspace = result === undefined ? undefined : recordValue(result, "workspace");
   const rootPane = result === undefined ? undefined : recordValue(result, "root_pane");

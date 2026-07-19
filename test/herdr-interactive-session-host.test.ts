@@ -113,7 +113,7 @@ describe("Herdr Interactive Session Host", () => {
     expect(commands).toContainEqual(["workspace", "close", "workspace-1"]);
   });
 
-  it("does not treat a done Herdr agent as an active Interactive Session", async () => {
+  it("reuses an idle Herdr workspace after a done Interactive Session", async () => {
     const commands: string[][] = [];
     const execute: HerdrCommandExecutor = async (args) => {
       commands.push([...args]);
@@ -127,7 +127,7 @@ describe("Herdr Interactive Session Host", () => {
         return {
           ok: true,
           stdout:
-            '{"result":{"workspace":{"workspace_id":"workspace-1"},"root_pane":{"pane_id":"workspace-1:pane-1"},"already_open":false}}',
+            '{"result":{"workspace":{"workspace_id":"workspace-1"},"root_pane":{"pane_id":"workspace-1:pane-1"},"already_open":true}}',
         };
       }
       if (args[0] === "agent" && args[1] === "rename") {
