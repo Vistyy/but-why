@@ -115,10 +115,11 @@ const matchesSession = (
 ): boolean => {
   if (!isRecord(value)) return false;
   const name = recordValue(value, "name");
+  const agent = recordValue(value, "agent");
   const cwd = recordValue(value, "cwd");
   const reportedPaneId = recordValue(value, "pane_id");
   return (
-    name === sessionName &&
+    (name === sessionName || agent === sessionName) &&
     cwd === input.worktreePath &&
     (paneId === undefined || reportedPaneId === paneId)
   );
