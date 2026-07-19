@@ -36,7 +36,7 @@ Fake GitHub publication tests covering Task-backed and taskless success plus a l
 
 ## Completion evidence
 
-- Implementation: `b0dc6a8`, `94b604b`.
+- Implementation: `b0dc6a8` through `4364a3b`.
 - Verification: `just quality`.
 
 ## Blocked by

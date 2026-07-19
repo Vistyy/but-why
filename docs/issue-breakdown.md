@@ -19,7 +19,7 @@ It ends when But Why? completes one real SQLite-tracked Task-backed Change and p
 - Task 089: Run configured Specialists (`18661e1`).
 - Task 092: Recheck reviewer Findings without anchoring (`2d63871`).
 - Task 096: Run built-in Acceptance Review (`1eebf08`).
-- Task 098: Publish one exact Candidate with recovery (`94b604b`).
+- Task 098: Publish one exact Candidate with recovery (`4364a3b`).
 - Task 133: Start prepared Changes (`bdf6646`).
 - Task 134: Remove incidental Git setup from SQLite tests (`5306e28`).
 
