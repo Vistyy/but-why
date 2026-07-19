@@ -13,7 +13,7 @@ const unavailableHerdr: HerdrCommandExecutor = async () => ({
 
 const workspaceFailure: HerdrCommandExecutor = async (args) =>
   args[0] === "agent"
-    ? { ok: true, stdout: '{"agents":[]}' }
+    ? { ok: true, stdout: '{"result":{"agents":[]}}' }
     : { ok: false, message: "workspace unavailable" };
 
 describe("Herdr Interactive Session Host", () => {
@@ -21,9 +21,12 @@ describe("Herdr Interactive Session Host", () => {
     const commands: readonly string[][] = [];
     const execute: HerdrCommandExecutor = async (args) => {
       (commands as string[][]).push([...args]);
-      if (args[0] === "agent" && args[1] === "list") return { ok: true, stdout: '{"agents":[]}' };
-      if (args[0] === "workspace")
-        return { ok: true, stdout: '{"workspace":{"id":"workspace-1"}}' };
+      if (args[0] === "agent" && args[1] === "list") {
+        return { ok: true, stdout: '{"result":{"agents":[]}}' };
+      }
+      if (args[0] === "workspace") {
+        return { ok: true, stdout: '{"result":{"workspace":{"workspace_id":"workspace-1"}}}' };
+      }
       return { ok: true, stdout: "{}" };
     };
     const sessionName = herdrSessionName("change-123");
@@ -65,7 +68,7 @@ describe("Herdr Interactive Session Host", () => {
   it("returns already active without creating another workspace", async () => {
     const execute: HerdrCommandExecutor = async () => ({
       ok: true,
-      stdout: `{"agents":[{"name":"${herdrSessionName("change-123")}"}]}`,
+      stdout: `{"result":{"agents":[{"agent":"${herdrSessionName("change-123")}"}]}}`,
     });
 
     await expect(

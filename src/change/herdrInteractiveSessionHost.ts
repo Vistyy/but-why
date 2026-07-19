@@ -88,28 +88,28 @@ const piPrompt = (input: InteractiveSessionLaunchInput): string =>
   ].join("\n\n");
 
 const activeAgentNames = (source: string): readonly string[] => {
-  const parsed = parseJson(source);
-  if (Array.isArray(parsed)) return namesIn(parsed);
-  const agents = isRecord(parsed) ? recordValue(parsed, "agents") : undefined;
-  if (Array.isArray(agents)) return namesIn(agents);
-  return [];
+  const result = herdrResult(source);
+  const agents = result === undefined ? undefined : recordValue(result, "agents");
+  return Array.isArray(agents) ? agentNames(agents) : [];
 };
 
-const namesIn = (agents: readonly unknown[]): readonly string[] =>
+const agentNames = (agents: readonly unknown[]): readonly string[] =>
   agents.flatMap((agent) => {
-    const name = isRecord(agent) ? recordValue(agent, "name") : undefined;
+    const name = isRecord(agent) ? recordValue(agent, "agent") : undefined;
     return typeof name === "string" ? [name] : [];
   });
 
 const workspaceIdentifier = (source: string): string | undefined => {
-  const parsed = parseJson(source);
-  if (!isRecord(parsed)) return undefined;
-  const workspaceId = recordValue(parsed, "workspace_id");
-  if (typeof workspaceId === "string") return workspaceId;
-  const workspace = recordValue(parsed, "workspace");
-  const nestedWorkspaceId = isRecord(workspace) ? recordValue(workspace, "id") : undefined;
-  if (typeof nestedWorkspaceId === "string") return nestedWorkspaceId;
-  return undefined;
+  const result = herdrResult(source);
+  const workspace = result === undefined ? undefined : recordValue(result, "workspace");
+  const workspaceId = isRecord(workspace) ? recordValue(workspace, "workspace_id") : undefined;
+  return typeof workspaceId === "string" ? workspaceId : undefined;
+};
+
+const herdrResult = (source: string): Record<string, unknown> | undefined => {
+  const response = parseJson(source);
+  const result = isRecord(response) ? recordValue(response, "result") : undefined;
+  return isRecord(result) ? result : undefined;
 };
 
 const parseJson = (source: string): unknown => {
