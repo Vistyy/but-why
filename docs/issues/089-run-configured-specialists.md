@@ -40,7 +40,8 @@ Multi-Specialist Candidate review test with fake Pi sessions.
 ## Completion
 
 Implemented in `18661e1`; initial review corrections completed through `eebef21`.
-Specialist phase naming and review inputs were aligned in `bafea95`.
+Specialist phase naming and review inputs were aligned in `bafea95`, with storage corrections through `ddc5b29`.
+The Spec review comment requesting production Change Submit wiring is routed to Task 105, which owns that composition.
 Spec review: Approved with required comments.
 Standards review: Approved.
 Quality: Passed - 317 tests, formatting, lint, typecheck, ast-grep, and Fallow checks.
