@@ -26,12 +26,14 @@ It ends when But Why? completes one real SQLite-tracked Task-backed Change and p
 | 092 | Recheck reviewer Findings without anchoring | 089 |
 | 098 | Publish one exact Candidate with recovery | 089, 092 |
 | 101 | Reconcile owned PRs and clean completed Changes | 098 |
-| 105 | Migrate Submit to Change ownership | 089, 092, 098, 101 |
+| 136 | Compose Candidate validation through Effect | 089, 092 |
+| 105 | Migrate Submit to Change ownership | 089, 092, 098, 101, 136 |
 | 129 | Submit a Task-backed Change with no repository change | 105 |
 | 106 | Add Change inspection and migrate Task projections | 101, 105 |
 | 107 | Remove Task-owned implementation and delivery paths | 105, 106 |
+| 137 | Move state storage to Effect SQL | 107 |
 | 117 | Cancel Task-backed and taskless Changes | 101, 105 |
-| 135 | Consolidate the source hierarchy | 107 |
+| 135 | Consolidate the source hierarchy | 137 |
 | 123 | Ship the Change-centered manual workflow | 107, 117, 129, 130, 135 |
 | 125 | Produce an installable v1 package | 123 |
 | 131 | Dogfood the first SQLite-tracked Change workflow | 125 |
@@ -41,11 +43,13 @@ It ends when But Why? completes one real SQLite-tracked Task-backed Change and p
 
 1. Task 084 expands Candidate-owned validation beside the existing Task-owned path.
 2. Tasks 087, 096, 089, 092, 098, and 101 complete the Candidate-owned validation and delivery capabilities while Task 133 establishes prepared Change worktrees.
-3. Task 105 composes those capabilities behind Change Submit without dual writes.
-4. Task 106 migrates detailed inspection to Change commands and keeps Task projections concise.
-5. Task 107 removes the replaced Task-owned writers, readers, routes, tables, and compatibility paths.
-6. Task 135 reorganizes the surviving modules so every top-level source folder has one domain owner or one clear shared role.
-7. Tasks 117 and 130 complete cancellation, cleanup, Herdr launch, and handoff behavior before Task 123 ships the public workflow.
+3. Task 136 moves Candidate validation onto one Effect dependency graph before Task 105 composes it behind Change Submit.
+4. Task 105 composes those capabilities behind Change Submit without dual writes.
+5. Task 106 migrates detailed inspection to Change commands and keeps Task projections concise.
+6. Task 107 removes the replaced Task-owned writers, readers, routes, tables, and compatibility paths.
+7. Task 137 replaces surviving native SQLite storage and historical migrations with Effect SQL and one baseline.
+8. Task 135 reorganizes the surviving modules so every top-level source folder has one domain owner or one clear shared role.
+9. Tasks 117 and 130 complete cancellation, cleanup, Herdr launch, and handoff behavior before Task 123 ships the public workflow.
 
 ## Deferred
 

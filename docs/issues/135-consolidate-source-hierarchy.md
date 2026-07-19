@@ -37,4 +37,4 @@ The full repository suite plus structural checks of the final source directory m
 
 ## Blocked by
 
-- `docs/issues/107-remove-task-owned-validation.md`
+- `docs/issues/137-move-state-storage-to-effect-sql.md`

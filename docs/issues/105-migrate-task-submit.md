@@ -45,3 +45,4 @@ Public `by change submit <change-id>` CLI tests covering blocked and passing Tas
 - `docs/issues/098-publish-one-exact-candidate-with-recovery.md`
 - `docs/issues/101-reconcile-owned-pr-during-submit.md`
 - `docs/issues/133-start-prepared-changes.md`
+- `docs/issues/136-compose-candidate-validation-through-effect.md`
