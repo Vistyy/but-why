@@ -23,6 +23,7 @@ export const loadChangeUseCases = (input: {
   readonly cwd: string;
   readonly migrationTimestamp: () => string;
   readonly interactiveSessionHost?: InteractiveSessionHost;
+  readonly interactiveSessionPath?: string;
 }): LoadChangeUseCasesResult => {
   const repoContext = loadRepoLocalContext(input.cwd, input.migrationTimestamp);
   if (!repoContext.ok) return repoContext;
@@ -44,7 +45,12 @@ export const loadChangeUseCases = (input: {
         github: localGitHubPullRequestGateway(),
         cleanup: cleanupChangeResources,
       }),
-      input.interactiveSessionHost ?? openHerdrInteractiveSessionHost(),
+      input.interactiveSessionHost ??
+        openHerdrInteractiveSessionHost(undefined, {
+          ...(input.interactiveSessionPath === undefined
+            ? {}
+            : { path: input.interactiveSessionPath }),
+        }),
     ),
   };
 };

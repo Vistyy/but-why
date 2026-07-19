@@ -15,12 +15,19 @@ const args = process.argv.slice(2);
 // biome-ignore lint/complexity/useLiteralKeys: TS index signature
 const fixedNow = process.env["BUT_WHY_NOW"];
 
+const interactiveSessionPath = () => {
+  // biome-ignore lint/complexity/useLiteralKeys: NodeJS.ProcessEnv has an index signature.
+  const path = process.env["PATH"];
+  return path === undefined ? {} : { interactiveSessionPath: path };
+};
+
 Effect.runPromise(
   runCli(args, {
     executablePath,
     cwd: process.cwd(),
     globalConfigPath: join(homedir(), ".config/but-why/config.json"),
     now: fixedNow === undefined ? () => new Date() : () => new Date(fixedNow),
+    ...interactiveSessionPath(),
   }),
 )
   .then((result) => {

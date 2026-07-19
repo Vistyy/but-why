@@ -19,6 +19,7 @@ export type ChangeCommandEnvironment = {
   readonly cwd: string;
   readonly now: () => Date;
   readonly interactiveSessionHost?: InteractiveSessionHost;
+  readonly interactiveSessionPath?: string;
 };
 
 export const routeChange = (
@@ -208,6 +209,9 @@ const runImplement = (
     ...(environment.interactiveSessionHost === undefined
       ? {}
       : { interactiveSessionHost: environment.interactiveSessionHost }),
+    ...(environment.interactiveSessionPath === undefined
+      ? {}
+      : { interactiveSessionPath: environment.interactiveSessionPath }),
   });
   if (!loaded.ok) return Effect.succeed(loadError(loaded.error));
   return Effect.promise(async () => {

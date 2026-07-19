@@ -28,6 +28,7 @@ export type CliEnvironment = {
   readonly taskUseCases?: TaskUseCases;
   readonly submitPreflight?: LocalSubmitPreflight;
   readonly interactiveSessionHost?: InteractiveSessionHost;
+  readonly interactiveSessionPath?: string;
 };
 
 const description = "Validate completed code changes against approved human intent.";

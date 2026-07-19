@@ -14,8 +14,9 @@ export type HerdrCommandExecutor = (
 
 export const openHerdrInteractiveSessionHost = (
   execute: HerdrCommandExecutor = executeHerdr,
+  environment: { readonly path?: string } = {},
 ): InteractiveSessionHost => ({
-  launch: async (input) => launchHerdrSession(execute, input),
+  launch: async (input) => launchHerdrSession(execute, input, environment.path),
 });
 
 export const herdrSessionName = (changeId: string): string => `but-why-${changeId}`;
@@ -23,6 +24,7 @@ export const herdrSessionName = (changeId: string): string => `but-why-${changeI
 const launchHerdrSession = async (
   execute: HerdrCommandExecutor,
   input: InteractiveSessionLaunchInput,
+  path: string | undefined,
 ): Promise<InteractiveSessionLaunchResult> => {
   const sessionName = herdrSessionName(input.changeId);
   const agents = await execute(["agent", "list"]);
@@ -59,6 +61,7 @@ const launchHerdrSession = async (
     "--workspace",
     workspaceId,
     "--no-focus",
+    ...(path === undefined ? [] : ["--env", `PATH=${path}`]),
     "--",
     "pi",
     "--name",
@@ -95,7 +98,7 @@ const activeAgentNames = (source: string): readonly string[] => {
 
 const agentNames = (agents: readonly unknown[]): readonly string[] =>
   agents.flatMap((agent) => {
-    const name = isRecord(agent) ? recordValue(agent, "agent") : undefined;
+    const name = isRecord(agent) ? recordValue(agent, "name") : undefined;
     return typeof name === "string" ? [name] : [];
   });
 

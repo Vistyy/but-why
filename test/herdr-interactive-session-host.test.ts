@@ -31,7 +31,9 @@ describe("Herdr Interactive Session Host", () => {
     };
     const sessionName = herdrSessionName("change-123");
 
-    const result = await openHerdrInteractiveSessionHost(execute).launch({
+    const result = await openHerdrInteractiveSessionHost(execute, {
+      path: "/usr/local/bin:/opt/pi/bin",
+    }).launch({
       changeId: "change-123",
       worktreePath: "/workspace/change-123",
       initialPrompt: "Continue from the recorded decision.",
@@ -56,6 +58,8 @@ describe("Herdr Interactive Session Host", () => {
         "--workspace",
         "workspace-1",
         "--no-focus",
+        "--env",
+        "PATH=/usr/local/bin:/opt/pi/bin",
         "--",
         "pi",
         "--name",
@@ -68,7 +72,7 @@ describe("Herdr Interactive Session Host", () => {
   it("returns already active without creating another workspace", async () => {
     const execute: HerdrCommandExecutor = async () => ({
       ok: true,
-      stdout: `{"result":{"agents":[{"agent":"${herdrSessionName("change-123")}"}]}}`,
+      stdout: `{"result":{"agents":[{"agent":"pi","name":"${herdrSessionName("change-123")}"}]}}`,
     });
 
     await expect(

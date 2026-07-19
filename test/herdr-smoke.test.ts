@@ -9,6 +9,8 @@ import {
 // biome-ignore lint/complexity/useLiteralKeys: NodeJS.ProcessEnv has an index signature.
 const smokeWorktree = process.env["HERDR_SMOKE_WORKTREE"];
 const smokeChangeId = "herdr-smoke-change";
+// biome-ignore lint/complexity/useLiteralKeys: NodeJS.ProcessEnv has an index signature.
+const smokePath = process.env["HERDR_SMOKE_PATH"];
 
 const smoke = smokeWorktree === undefined ? it.skip : it;
 
@@ -16,7 +18,9 @@ describe("Herdr smoke", () => {
   smoke(
     "opens an existing worktree once under its stable session name",
     async () => {
-      const host = openHerdrInteractiveSessionHost();
+      const host = openHerdrInteractiveSessionHost(undefined, {
+        ...(smokePath === undefined ? {} : { path: smokePath }),
+      });
       const first = await host.launch({
         changeId: smokeChangeId,
         worktreePath: smokeWorktree as string,
