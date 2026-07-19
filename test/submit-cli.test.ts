@@ -457,7 +457,7 @@ describe("by submit CLI", () => {
       },
       {
         validationRunId: firstTaskValidationRunId,
-        phase: "quality_review",
+        phase: "specialist_review",
         status: "skipped",
         errorMessage: "Prepare did not pass.",
         createdAt: thirdNow,

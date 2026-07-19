@@ -167,7 +167,7 @@ help[1]: Move the conflicting path aside before running init again.`);
         { name: "020_task_dependencies" },
         { name: "021_task_starts" },
         { name: "022_change_owned_worktrees" },
-        { name: "022_rename_acceptance_review_phase" },
+        { name: "023_align_reviewer_phase_names" },
       ]);
     } finally {
       repairedDatabase.close();
@@ -363,7 +363,7 @@ help[1]: Move the conflicting path aside before running init again.`);
     expect(runBy(root, "init", "--task-prefix", "BY").stdout).toContain("status: unchanged");
   });
 
-  it("renames legacy Acceptance Review phase storage", () => {
+  it("aligns legacy reviewer phase storage", () => {
     const root = createGitRepo();
     expect(runBy(root, "init", "--task-prefix", "BY").status).toBe(0);
     const statePath = sharedStatePath(root);
@@ -371,7 +371,7 @@ help[1]: Move the conflicting path aside before running init again.`);
 
     database.exec("PRAGMA foreign_keys = OFF");
     database.exec(`
-      DELETE FROM schema_migrations WHERE name = '022_rename_acceptance_review_phase';
+      DELETE FROM schema_migrations WHERE name = '023_align_reviewer_phase_names';
       CREATE TABLE validation_run_phase_statuses_legacy (
         validation_run_id TEXT NOT NULL,
         phase TEXT NOT NULL CHECK (phase IN ('preflight', 'prepare', 'checks', 'intent_review', 'quality_review', 'publish_pr', 'watch_pr')),
@@ -396,6 +396,8 @@ help[1]: Move the conflicting path aside before running init again.`);
     database.exec(`
       INSERT INTO validation_run_phase_statuses
       VALUES ('by-1.v1', 'intent_review', 'passed', NULL, 'now', 'now');
+      INSERT INTO validation_run_phase_statuses
+      VALUES ('by-1.v1', 'quality_review', 'passed', NULL, 'now', 'now');
 
       INSERT INTO changes (
         id, repository_common_directory, branch_ref, state, created_at, updated_at
@@ -409,12 +411,21 @@ help[1]: Move the conflicting path aside before running init again.`);
       ) VALUES ('candidate-run', 'candidate-1', '{}', 'running', 'now', 'now');
       INSERT INTO candidate_validation_rounds
       VALUES ('candidate-run', 'intent_review', 'acceptance', 1, 'passed', 'now');
+      INSERT INTO candidate_validation_rounds
+      VALUES ('candidate-run', 'quality_review', 'standards', 1, 'passed', 'now');
       INSERT INTO candidate_validation_artifacts (
         ref, validation_run_id, phase, producer, path, created_at
       ) VALUES (
         'artifact:candidate-run/intent_review/acceptance/stdout.txt',
         'candidate-run', 'intent_review', 'acceptance',
         'candidate-run/intent_review/acceptance/stdout.txt', 'now'
+      );
+      INSERT INTO candidate_validation_artifacts (
+        ref, validation_run_id, phase, producer, path, created_at
+      ) VALUES (
+        'artifact:candidate-run/quality_review/standards/stdout.txt',
+        'candidate-run', 'quality_review', 'standards',
+        'candidate-run/quality_review/standards/stdout.txt', 'now'
       );
       INSERT INTO candidate_validation_findings (
         id, validation_run_id, phase, producer, title, description, severity,
@@ -424,6 +435,14 @@ help[1]: Move the conflicting path aside before running init again.`);
         'Legacy', 'low', 'Legacy', '[]',
         '["artifact:candidate-run/intent_review/acceptance/stdout.txt"]', 'now', 'now'
       );
+      INSERT INTO candidate_validation_findings (
+        id, validation_run_id, phase, producer, title, description, severity,
+        evidence, files, artifact_refs, created_at, updated_at
+      ) VALUES (
+        'finding-2', 'candidate-run', 'quality_review', 'standards', 'Legacy',
+        'Legacy', 'low', 'Legacy', '[]',
+        '["artifact:candidate-run/quality_review/standards/stdout.txt"]', 'now', 'now'
+      );
     `);
     database.exec("PRAGMA foreign_keys = ON");
     database.close();
@@ -432,27 +451,44 @@ help[1]: Move the conflicting path aside before running init again.`);
     const migrated = new DatabaseSync(statePath);
 
     try {
-      expect(migrated.prepare("SELECT phase FROM validation_run_phase_statuses").get()).toEqual({
-        phase: "acceptance_review",
-      });
-      expect(migrated.prepare("SELECT phase FROM candidate_validation_rounds").get()).toEqual({
-        phase: "acceptance_review",
-      });
       expect(
-        migrated.prepare("SELECT phase, ref, path FROM candidate_validation_artifacts").get(),
-      ).toEqual({
-        phase: "acceptance_review",
-        ref: "artifact:candidate-run/acceptance_review/acceptance/stdout.txt",
-        path: "candidate-run/acceptance_review/acceptance/stdout.txt",
-      });
+        migrated.prepare("SELECT phase FROM validation_run_phase_statuses ORDER BY phase").all(),
+      ).toEqual([{ phase: "acceptance_review" }, { phase: "specialist_review" }]);
+      expect(
+        migrated.prepare("SELECT phase FROM candidate_validation_rounds ORDER BY phase").all(),
+      ).toEqual([{ phase: "acceptance_review" }, { phase: "specialist_review" }]);
       expect(
         migrated
-          .prepare("SELECT phase, artifact_refs AS artifactRefs FROM candidate_validation_findings")
-          .get(),
-      ).toEqual({
-        phase: "acceptance_review",
-        artifactRefs: '["artifact:candidate-run/acceptance_review/acceptance/stdout.txt"]',
-      });
+          .prepare("SELECT phase, ref, path FROM candidate_validation_artifacts ORDER BY phase")
+          .all(),
+      ).toEqual([
+        {
+          phase: "acceptance_review",
+          ref: "artifact:candidate-run/acceptance_review/acceptance/stdout.txt",
+          path: "candidate-run/acceptance_review/acceptance/stdout.txt",
+        },
+        {
+          phase: "specialist_review",
+          ref: "artifact:candidate-run/specialist_review/standards/stdout.txt",
+          path: "candidate-run/specialist_review/standards/stdout.txt",
+        },
+      ]);
+      expect(
+        migrated
+          .prepare(
+            "SELECT phase, artifact_refs AS artifactRefs FROM candidate_validation_findings ORDER BY phase",
+          )
+          .all(),
+      ).toEqual([
+        {
+          phase: "acceptance_review",
+          artifactRefs: '["artifact:candidate-run/acceptance_review/acceptance/stdout.txt"]',
+        },
+        {
+          phase: "specialist_review",
+          artifactRefs: '["artifact:candidate-run/specialist_review/standards/stdout.txt"]',
+        },
+      ]);
       expect(
         migrated
           .prepare(

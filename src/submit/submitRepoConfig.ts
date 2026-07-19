@@ -19,7 +19,7 @@ export type SubmitRepoConfig = {
   readonly prepare?: SubmitPrepareConfig;
   readonly checks: readonly SubmitCheckConfig[];
   readonly intentReviewer?: SubmitReviewerConfig;
-  readonly qualityReview?: {
+  readonly specialistReview?: {
     readonly mode: "sequential" | "parallel";
     readonly reviewers: readonly SubmitReviewerConfig[];
   };
@@ -92,14 +92,16 @@ export const submitRepoConfig = (
       ...(reviewers.intentReviewer === undefined
         ? {}
         : { intentReviewer: reviewers.intentReviewer }),
-      ...(reviewers.qualityReview === undefined ? {} : { qualityReview: reviewers.qualityReview }),
+      ...(reviewers.specialistReview === undefined
+        ? {}
+        : { specialistReview: reviewers.specialistReview }),
     },
   };
 };
 
 type ResolvedReviewers = {
   readonly intentReviewer?: SubmitReviewerConfig;
-  readonly qualityReview?: {
+  readonly specialistReview?: {
     readonly mode: "sequential" | "parallel";
     readonly reviewers: readonly SubmitReviewerConfig[];
   };
@@ -122,7 +124,7 @@ const resolveSelectedReviewers = (
   }
 
   const quality = config.review?.quality;
-  const qualityReviewers: SubmitReviewerConfig[] = [];
+  const specialistReviewers: SubmitReviewerConfig[] = [];
 
   if (quality !== undefined) {
     for (const reviewerId of quality.reviewers) {
@@ -132,7 +134,7 @@ const resolveSelectedReviewers = (
         return reviewer;
       }
 
-      qualityReviewers.push(reviewer.reviewer);
+      specialistReviewers.push(reviewer.reviewer);
     }
   }
 
@@ -141,7 +143,7 @@ const resolveSelectedReviewers = (
     ...(intentReviewer === undefined ? {} : { intentReviewer: intentReviewer.reviewer }),
     ...(quality === undefined
       ? {}
-      : { qualityReview: { mode: quality.mode, reviewers: qualityReviewers } }),
+      : { specialistReview: { mode: quality.mode, reviewers: specialistReviewers } }),
   };
 };
 

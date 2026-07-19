@@ -97,7 +97,7 @@ preflight
 prepare
 checks
 acceptance_review
-quality_review
+specialist_review
 publish_pr
 watch_pr
 ```
@@ -116,7 +116,7 @@ V1 checks run sequentially and stop on first failure.
 
 A failed check creates a blocking Finding.
 
-Acceptance Review is mandatory and runs before Quality Review.
+Acceptance Review is mandatory and runs before Specialist Review.
 
 The Acceptance Reviewer judges whether the submission achieves the intended result in the Task Context Snapshot fully and correctly.
 
@@ -126,7 +126,7 @@ Repo config can directly override its Agent Profile or replace its prompt.
 Acceptance Reviewer output contains only Findings.
 An empty Findings list passes Acceptance Review.
 
-Quality Reviewer roles are configurable.
+Specialist Reviewer roles are configurable.
 
 V1 has no auto-fix or repair phase.
 

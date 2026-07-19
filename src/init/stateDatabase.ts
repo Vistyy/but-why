@@ -23,7 +23,7 @@ type Migration = {
 const validationPhaseSql =
   "'preflight', 'prepare', 'checks', 'intent_review', 'quality_review', 'publish_pr', 'watch_pr'";
 const acceptanceValidationPhaseSql =
-  "'preflight', 'prepare', 'checks', 'acceptance_review', 'quality_review', 'publish_pr', 'watch_pr'";
+  "'preflight', 'prepare', 'checks', 'acceptance_review', 'specialist_review', 'publish_pr', 'watch_pr'";
 const validationRunStatusSql = "'active', 'failed', 'error'";
 const validationPhaseStatusSql =
   "'pending', 'active', 'passed', 'failed', 'skipped', 'workflow_failed'";
@@ -861,7 +861,7 @@ const migrations: readonly Migration[] = [
     `,
   },
   {
-    name: "022_rename_acceptance_review_phase",
+    name: "023_align_reviewer_phase_names",
     apply: `
       CREATE TABLE validation_run_phase_statuses_new (
         validation_run_id TEXT NOT NULL,
@@ -875,7 +875,11 @@ const migrations: readonly Migration[] = [
       );
       INSERT INTO validation_run_phase_statuses_new
       SELECT validation_run_id,
-        CASE phase WHEN 'intent_review' THEN 'acceptance_review' ELSE phase END,
+        CASE phase
+          WHEN 'intent_review' THEN 'acceptance_review'
+          WHEN 'quality_review' THEN 'specialist_review'
+          ELSE phase
+        END,
         status, error_message, created_at, updated_at
       FROM validation_run_phase_statuses;
       DROP TABLE validation_run_phase_statuses;
@@ -894,7 +898,11 @@ const migrations: readonly Migration[] = [
       );
       INSERT INTO validation_run_rounds_new
       SELECT validation_run_id,
-        CASE phase WHEN 'intent_review' THEN 'acceptance_review' ELSE phase END,
+        CASE phase
+          WHEN 'intent_review' THEN 'acceptance_review'
+          WHEN 'quality_review' THEN 'specialist_review'
+          ELSE phase
+        END,
         producer, round_number, status, created_at, updated_at
       FROM validation_run_rounds;
       DROP TABLE validation_run_rounds;
@@ -917,9 +925,16 @@ const migrations: readonly Migration[] = [
       );
       INSERT INTO validation_run_findings_new
       SELECT id, validation_run_id, title, description, severity, evidence, files,
-        replace(artifact_refs, '/intent_review/', '/acceptance_review/'),
+        replace(
+          replace(artifact_refs, '/intent_review/', '/acceptance_review/'),
+          '/quality_review/', '/specialist_review/'
+        ),
         created_at, updated_at,
-        CASE phase WHEN 'intent_review' THEN 'acceptance_review' ELSE phase END,
+        CASE phase
+          WHEN 'intent_review' THEN 'acceptance_review'
+          WHEN 'quality_review' THEN 'specialist_review'
+          ELSE phase
+        END,
         producer
       FROM validation_run_findings;
       DROP TABLE validation_run_findings;
@@ -935,9 +950,19 @@ const migrations: readonly Migration[] = [
         FOREIGN KEY (validation_run_id) REFERENCES validation_runs(id)
       );
       INSERT INTO validation_run_artifacts_new
-      SELECT replace(ref, '/intent_review/', '/acceptance_review/'), validation_run_id,
-        CASE phase WHEN 'intent_review' THEN 'acceptance_review' ELSE phase END,
-        producer, replace(path, '/intent_review/', '/acceptance_review/'), created_at
+      SELECT replace(
+          replace(ref, '/intent_review/', '/acceptance_review/'),
+          '/quality_review/', '/specialist_review/'
+        ), validation_run_id,
+        CASE phase
+          WHEN 'intent_review' THEN 'acceptance_review'
+          WHEN 'quality_review' THEN 'specialist_review'
+          ELSE phase
+        END,
+        producer, replace(
+          replace(path, '/intent_review/', '/acceptance_review/'),
+          '/quality_review/', '/specialist_review/'
+        ), created_at
       FROM validation_run_artifacts;
       DROP TABLE validation_run_artifacts;
       ALTER TABLE validation_run_artifacts_new RENAME TO validation_run_artifacts;
@@ -953,7 +978,11 @@ const migrations: readonly Migration[] = [
       );
       INSERT INTO validation_run_logs_new
       SELECT id, validation_run_id,
-        CASE phase WHEN 'intent_review' THEN 'acceptance_review' ELSE phase END,
+        CASE phase
+          WHEN 'intent_review' THEN 'acceptance_review'
+          WHEN 'quality_review' THEN 'specialist_review'
+          ELSE phase
+        END,
         producer, content, created_at
       FROM validation_run_logs;
       DROP TABLE validation_run_logs;
@@ -971,24 +1000,55 @@ const migrations: readonly Migration[] = [
       );
       INSERT INTO validation_run_token_usage_new
       SELECT validation_run_id,
-        CASE phase WHEN 'intent_review' THEN 'acceptance_review' ELSE phase END,
+        CASE phase
+          WHEN 'intent_review' THEN 'acceptance_review'
+          WHEN 'quality_review' THEN 'specialist_review'
+          ELSE phase
+        END,
         producer, input_tokens, output_tokens, created_at
       FROM validation_run_token_usage;
       DROP TABLE validation_run_token_usage;
       ALTER TABLE validation_run_token_usage_new RENAME TO validation_run_token_usage;
 
       UPDATE candidate_validation_rounds
-      SET phase = 'acceptance_review'
-      WHERE phase = 'intent_review';
+      SET phase = CASE phase
+        WHEN 'intent_review' THEN 'acceptance_review'
+        WHEN 'quality_review' THEN 'specialist_review'
+        ELSE phase
+      END
+      WHERE phase IN ('intent_review', 'quality_review');
       UPDATE candidate_validation_findings
-      SET phase = CASE phase WHEN 'intent_review' THEN 'acceptance_review' ELSE phase END,
-        artifact_refs = replace(artifact_refs, '/intent_review/', '/acceptance_review/')
-      WHERE phase = 'intent_review' OR artifact_refs LIKE '%/intent_review/%';
+      SET phase = CASE phase
+          WHEN 'intent_review' THEN 'acceptance_review'
+          WHEN 'quality_review' THEN 'specialist_review'
+          ELSE phase
+        END,
+        artifact_refs = replace(
+          replace(artifact_refs, '/intent_review/', '/acceptance_review/'),
+          '/quality_review/', '/specialist_review/'
+        )
+      WHERE phase IN ('intent_review', 'quality_review')
+        OR artifact_refs LIKE '%/intent_review/%'
+        OR artifact_refs LIKE '%/quality_review/%';
       UPDATE candidate_validation_artifacts
-      SET phase = CASE phase WHEN 'intent_review' THEN 'acceptance_review' ELSE phase END,
-        ref = replace(ref, '/intent_review/', '/acceptance_review/'),
-        path = replace(path, '/intent_review/', '/acceptance_review/')
-      WHERE phase = 'intent_review' OR ref LIKE '%/intent_review/%' OR path LIKE '%/intent_review/%'
+      SET phase = CASE phase
+          WHEN 'intent_review' THEN 'acceptance_review'
+          WHEN 'quality_review' THEN 'specialist_review'
+          ELSE phase
+        END,
+        ref = replace(
+          replace(ref, '/intent_review/', '/acceptance_review/'),
+          '/quality_review/', '/specialist_review/'
+        ),
+        path = replace(
+          replace(path, '/intent_review/', '/acceptance_review/'),
+          '/quality_review/', '/specialist_review/'
+        )
+      WHERE phase IN ('intent_review', 'quality_review')
+        OR ref LIKE '%/intent_review/%'
+        OR ref LIKE '%/quality_review/%'
+        OR path LIKE '%/intent_review/%'
+        OR path LIKE '%/quality_review/%'
     `,
   },
   {

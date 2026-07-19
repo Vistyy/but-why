@@ -270,7 +270,7 @@ const createValidationWorkspaceForValidationRun = (
 const skippedPhasesAfterPrepareFailure = [
   validationPhase.checks,
   validationPhase.acceptanceReview,
-  validationPhase.qualityReview,
+  validationPhase.specialistReview,
   validationPhase.publishPr,
   validationPhase.watchPr,
 ] as const;

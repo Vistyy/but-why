@@ -6,7 +6,7 @@ import { contractDiagnostics, formatContractDiagnostics } from "./contractDiagno
 import { repoRelativePathSchema } from "./repoConfig.js";
 
 const artifactRefPattern =
-  /^artifact:(?:[a-z0-9][a-z0-9-]*-[0-9a-f]{12}\.v[1-9][0-9]*|[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})\/(preflight|prepare|checks|acceptance_review|specialist_review|quality_review|publish_pr|watch_pr)\/[A-Za-z0-9][A-Za-z0-9._-]*\/[A-Za-z0-9][A-Za-z0-9._-]*$/u;
+  /^artifact:(?:[a-z0-9][a-z0-9-]*-[0-9a-f]{12}\.v[1-9][0-9]*|[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})\/(preflight|prepare|checks|acceptance_review|specialist_review|publish_pr|watch_pr)\/[A-Za-z0-9][A-Za-z0-9._-]*\/[A-Za-z0-9][A-Za-z0-9._-]*$/u;
 
 const artifactRefSchema = Schema.String.pipe(
   Schema.filter((value) => artifactRefPattern.test(value), {
