@@ -19,6 +19,7 @@ import {
   candidateReadyRepo,
   candidateSqliteInput,
   commonDirectory,
+  git,
 } from "./support/candidateReadyRepo.js";
 
 const now = "2026-07-15T10:00:00.000Z";
@@ -102,6 +103,111 @@ describe("Task-backed Candidate Acceptance Review", () => {
     );
   });
 
+  it("rechecks earlier Acceptance Findings only after a blind successor Candidate review", async () => {
+    const earlierFinding = reviewerFinding("Earlier acceptance Finding");
+    const review = vi.fn<ReviewerAgentRuntime["review"]>(() =>
+      Effect.succeed({
+        ok: true,
+        report: { findings: [earlierFinding] },
+        attempts: 1,
+        stdout: "earlier acceptance report",
+      }),
+    );
+    const ready = acceptanceReadyRepo({ review });
+
+    const earlier = await runTaskBackedCandidate(ready);
+    expect(earlier).toMatchObject({ ok: true, outcome: "blocked" });
+    if (!earlier.ok) return;
+
+    git(ready.repo, "commit", "--allow-empty", "-m", "address acceptance Finding");
+    const successor = captureLocalCandidate({ cwd: ready.repo, now });
+    expect(successor.ok).toBe(true);
+    if (!successor.ok) return;
+
+    review.mockImplementationOnce(() =>
+      Effect.succeed({
+        ok: true,
+        report: { findings: [reviewerFinding("Provisional new Finding")] },
+        attempts: 1,
+        stdout: "provisional acceptance report",
+      }),
+    );
+    review.mockImplementationOnce(() =>
+      Effect.succeed({
+        ok: true,
+        report: { findings: [reviewerFinding("Unresolved earlier Finding")] },
+        attempts: 1,
+        stdout: "final acceptance report",
+      }),
+    );
+
+    const final = await runTaskBackedCandidate(ready, passingValidationPolicy, successor);
+
+    expect(final).toMatchObject({ ok: true, outcome: "blocked" });
+    expect(review).toHaveBeenCalledTimes(3);
+    const blindPrompt = review.mock.calls[1]?.[0].prompt;
+    expect(blindPrompt).not.toContain(earlierFinding.title);
+    const finalPrompt = review.mock.calls[2]?.[0].prompt;
+    expect(finalPrompt).toContain("Provisional new Finding");
+    expect(finalPrompt).toContain(earlierFinding.title);
+    expect(finalPrompt).not.toContain(earlier.validationRunId);
+    expect(
+      ready.validation.listFindings(final.validationRunId).map((finding) => finding.title),
+    ).toEqual(["Unresolved earlier Finding"]);
+    expect(
+      ready.validation.listFindings(earlier.validationRunId).map((finding) => finding.title),
+    ).toEqual([earlierFinding.title]);
+  });
+
+  it("records exhausted final Acceptance output correction as a Tooling Failure", async () => {
+    const earlierFinding = reviewerFinding("Earlier acceptance Finding");
+    const failure = new ReviewerOutputContractFailed({
+      operationName: "decode_reviewer_output",
+      reviewer: "acceptance",
+      attempts: 2,
+      diagnostics: [],
+      message: "Final output correction failed.",
+    });
+    const review = vi.fn<ReviewerAgentRuntime["review"]>(() =>
+      Effect.succeed({
+        ok: true,
+        report: { findings: [earlierFinding] },
+        attempts: 1,
+        stdout: "earlier acceptance report",
+      }),
+    );
+    const ready = acceptanceReadyRepo({ review });
+    const earlier = await runTaskBackedCandidate(ready);
+    expect(earlier).toMatchObject({ ok: true, outcome: "blocked" });
+    if (!earlier.ok) return;
+
+    git(ready.repo, "commit", "--allow-empty", "-m", "address acceptance Finding");
+    const successor = captureLocalCandidate({ cwd: ready.repo, now });
+    expect(successor.ok).toBe(true);
+    if (!successor.ok) return;
+
+    review.mockImplementationOnce(() =>
+      Effect.succeed({
+        ok: true,
+        report: { findings: [] },
+        attempts: 1,
+        stdout: "provisional acceptance report",
+      }),
+    );
+    review.mockImplementationOnce(() =>
+      Effect.succeed({ ok: false, failure, attempts: 2, stdout: "invalid final output" }),
+    );
+
+    const final = await runTaskBackedCandidate(ready, passingValidationPolicy, successor);
+
+    expect(final).toMatchObject({ ok: false, outcome: "tooling_failed" });
+    expect(review).toHaveBeenCalledTimes(3);
+    expect(ready.validation.listFindings(final.validationRunId)).toEqual([]);
+    expect(ready.validation.listToolingFailures(final.validationRunId)).toEqual([
+      expect.objectContaining({ errorKind: "reviewer_output_contract_failed" }),
+    ]);
+  });
+
   it("does not start Acceptance after a Prepare or Check Finding", async () => {
     const review = vi.fn<ReviewerAgentRuntime["review"]>(() =>
       Effect.succeed({ ok: true as const, report: { findings: [] }, attempts: 1, stdout: "" }),
@@ -169,6 +275,75 @@ describe("Task-backed Candidate Acceptance Review", () => {
         expect.objectContaining({ path: expect.stringContaining("reviewer-output.json") }),
       ]),
     );
+  });
+
+  it("rechecks earlier Specialist Findings only after a blind successor Candidate review", async () => {
+    const earlierFinding = reviewerFinding("Earlier specialist Finding");
+    const reports: readonly ReviewerAgentResult[] = [
+      { ok: true, report: { findings: [] }, attempts: 1, stdout: "accepted" },
+      {
+        ok: true,
+        report: { findings: [earlierFinding] },
+        attempts: 1,
+        stdout: "earlier standards",
+      },
+      { ok: true, report: { findings: [] }, attempts: 1, stdout: "accepted successor" },
+      {
+        ok: true,
+        report: { findings: [reviewerFinding("Provisional specialist Finding")] },
+        attempts: 1,
+        stdout: "provisional standards",
+      },
+      {
+        ok: true,
+        report: { findings: [reviewerFinding("Final specialist Finding")] },
+        attempts: 1,
+        stdout: "final standards",
+      },
+    ];
+    let reportIndex = 0;
+    const review = vi.fn<ReviewerAgentRuntime["review"]>(() => {
+      const report = reports[reportIndex++];
+      if (report === undefined) throw new Error("Unexpected review request.");
+      return Effect.succeed(report);
+    });
+    const ready = acceptanceReadyRepo({ review });
+    const policy = {
+      ...passingValidationPolicy,
+      specialistReviews: [specialistPolicy("standards")],
+    };
+
+    const earlier = await runTaskBackedCandidate(ready, policy);
+    expect(earlier).toMatchObject({ ok: true, outcome: "blocked" });
+    if (!earlier.ok) return;
+
+    git(ready.repo, "commit", "--allow-empty", "-m", "address specialist Finding");
+    const successor = captureLocalCandidate({ cwd: ready.repo, now });
+    expect(successor.ok).toBe(true);
+    if (!successor.ok) return;
+
+    const final = await runTaskBackedCandidate(ready, policy, successor);
+
+    expect(final).toMatchObject({ ok: true, outcome: "blocked" });
+    expect(review.mock.calls.map(([input]) => input.reviewer)).toEqual([
+      "acceptance",
+      "standards",
+      "acceptance",
+      "standards",
+      "standards",
+    ]);
+    const blindPrompt = review.mock.calls[3]?.[0].prompt;
+    expect(blindPrompt).not.toContain(earlierFinding.title);
+    const finalPrompt = review.mock.calls[4]?.[0].prompt;
+    expect(finalPrompt).toContain("Provisional specialist Finding");
+    expect(finalPrompt).toContain(earlierFinding.title);
+    expect(finalPrompt).not.toContain(earlier.validationRunId);
+    expect(
+      ready.validation.listFindings(final.validationRunId).map((finding) => finding.title),
+    ).toEqual(["Final specialist Finding"]);
+    expect(
+      ready.validation.listFindings(earlier.validationRunId).map((finding) => finding.title),
+    ).toEqual([earlierFinding.title]);
   });
 
   it("runs configured Specialists once and keeps trustworthy results in configured order", async () => {
@@ -319,12 +494,13 @@ describe("Task-backed Candidate Acceptance Review", () => {
 const runTaskBackedCandidate = (
   ready: ReturnType<typeof acceptanceReadyRepo>,
   policy: TaskBackedCandidateValidationPolicy = passingValidationPolicy,
+  captured = ready.captured,
 ) =>
   Effect.runPromise(
     ready.validation.validateTaskBackedCandidate({
-      candidateId: ready.captured.candidateId,
-      comparisonBaseSha: ready.captured.comparisonBaseSha,
-      headSha: ready.captured.headSha,
+      candidateId: captured.candidateId,
+      comparisonBaseSha: captured.comparisonBaseSha,
+      headSha: captured.headSha,
       acceptanceContext,
       policy,
       now,
@@ -341,7 +517,16 @@ const acceptanceReadyRepo = (reviewerAgentRuntime: ReviewerAgentRuntime) => {
     runStore: openSqliteCandidateValidationRunStore(sqliteInput(repo)),
     reviewerAgentRuntime,
   });
-  return { captured, validation };
+  return { repo, captured, validation };
 };
+
+const reviewerFinding = (title: string) => ({
+  title,
+  description: `${title} description`,
+  severity: "high" as const,
+  evidence: `${title} evidence`,
+  files: [],
+  artifactRefs: [],
+});
 
 const sqliteInput = (root: string) => candidateSqliteInput(root, now);

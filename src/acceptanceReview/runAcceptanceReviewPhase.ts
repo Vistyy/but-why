@@ -3,7 +3,11 @@ import { Effect } from "effect";
 
 import type { AcceptanceReviewPolicy } from "./acceptanceReviewConfig.js";
 import type { ReviewerAgentRuntime } from "../agent/reviewerAgentRuntime.js";
-import { buildAcceptanceReviewerPrompt } from "../agent/reviewerPrompts.js";
+import {
+  buildAcceptanceReviewerPrompt,
+  buildReviewerRevisionPrompt,
+  reviewerFindingHistory,
+} from "../agent/reviewerPrompts.js";
 import type { TaskContextSnapshotV1 } from "../validationRun/taskContextSnapshot.js";
 import { validationPhase } from "../validationRun/validationRun.js";
 import { writeReviewerArtifacts } from "../validationRun/reviewerArtifacts.js";
@@ -31,6 +35,18 @@ export type RunAcceptanceReviewPhaseInput = {
   readonly allowedUntrackedFiles: readonly string[];
   readonly now: string;
   readonly listArtifacts: (validationRunId: string) => readonly { readonly ref: string }[];
+  readonly listPreviousCandidateReviewerFindings: (input: {
+    readonly candidateId: string;
+    readonly phase: "acceptance_review";
+    readonly producer: "acceptance";
+  }) => readonly {
+    readonly title: string;
+    readonly description: string;
+    readonly severity?: "critical" | "high" | "medium" | "low";
+    readonly evidence: string;
+    readonly files: readonly string[];
+    readonly artifactRefs: readonly string[];
+  }[];
   readonly recordAcceptanceRound: (input: RecordCandidateAcceptanceRoundInput) => void;
 };
 
@@ -46,21 +62,45 @@ export const runAcceptanceReviewPhase = (
     const availableArtifactRefs = input
       .listArtifacts(input.validationRunId)
       .map((artifact) => artifact.ref);
-    const result = yield* input.runtime.review({
+    const prompt = buildAcceptanceReviewerPrompt({
+      instructions: input.policy.instructions,
+      validationRunId: input.validationRunId,
+      availableArtifactRefs,
+      candidate: input.candidate,
+      acceptanceContext: input.acceptanceContext,
+    });
+    const earlierFindings = reviewerFindingHistory(
+      input.listPreviousCandidateReviewerFindings({
+        candidateId: input.candidate.candidateId,
+        phase: validationPhase.acceptanceReview,
+        producer: "acceptance",
+      }),
+    );
+    const provisional = yield* input.runtime.review({
       sandbox: input.sandbox,
       reviewer: "acceptance",
       validationRunId: input.validationRunId,
       availableArtifactRefs,
-      prompt: buildAcceptanceReviewerPrompt({
-        instructions: input.policy.instructions,
-        validationRunId: input.validationRunId,
-        availableArtifactRefs,
-        candidate: input.candidate,
-        acceptanceContext: input.acceptanceContext,
-      }),
+      prompt,
       profile: input.policy.profile,
     });
     yield* verifyIntegrity(input);
+    const result =
+      provisional.ok && earlierFindings.length > 0
+        ? yield* input.runtime.review({
+            sandbox: input.sandbox,
+            reviewer: "acceptance",
+            validationRunId: input.validationRunId,
+            availableArtifactRefs,
+            prompt: buildReviewerRevisionPrompt({
+              reviewPrompt: prompt,
+              provisionalReport: provisional.report,
+              earlierFindings,
+            }),
+            profile: input.policy.profile,
+          })
+        : provisional;
+    if (result !== provisional) yield* verifyIntegrity(input);
     const artifacts = yield* writeReviewerArtifacts({
       validationRunId: input.validationRunId,
       phase: validationPhase.acceptanceReview,

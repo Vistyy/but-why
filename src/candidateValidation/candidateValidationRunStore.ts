@@ -26,6 +26,11 @@ export type CandidateValidationRunStore = {
   readonly recordSpecialistRound: (input: RecordCandidateSpecialistRoundInput) => void;
   readonly listRounds: (validationRunId: string) => readonly CandidateValidationRound[];
   readonly listFindings: (validationRunId: string) => readonly CandidateValidationFinding[];
+  readonly listPreviousCandidateReviewerFindings: (input: {
+    readonly candidateId: string;
+    readonly phase: ValidationPhase;
+    readonly producer: string;
+  }) => readonly CandidateValidationFinding[];
   readonly listToolingFailures: (
     validationRunId: string,
   ) => readonly CandidateValidationToolingFailure[];

@@ -3,7 +3,11 @@ import { Effect } from "effect";
 
 import type { SpecialistReviewPolicy } from "./specialistReviewConfig.js";
 import type { ReviewerAgentRuntime } from "../agent/reviewerAgentRuntime.js";
-import { buildSpecialistReviewerPrompt } from "../agent/reviewerPrompts.js";
+import {
+  buildReviewerRevisionPrompt,
+  buildSpecialistReviewerPrompt,
+  reviewerFindingHistory,
+} from "../agent/reviewerPrompts.js";
 import type { RecordCandidateSpecialistRoundInput } from "../candidateValidation/candidateValidationRunStore.js";
 import { ensureCandidateIntegrity } from "../validation/ensureCandidateIntegrity.js";
 import {
@@ -16,6 +20,7 @@ import { validationPhase } from "../validationRun/validationRun.js";
 export type RunSpecialistReviewPhaseInput = {
   readonly validationRunId: string;
   readonly candidate: {
+    readonly candidateId: string;
     readonly comparisonBaseSha: string;
     readonly headSha: string;
   };
@@ -27,6 +32,18 @@ export type RunSpecialistReviewPhaseInput = {
   readonly commandCwd: string;
   readonly allowedUntrackedFiles: readonly string[];
   readonly now: string;
+  readonly listPreviousCandidateReviewerFindings: (input: {
+    readonly candidateId: string;
+    readonly phase: "specialist_review";
+    readonly producer: string;
+  }) => readonly {
+    readonly title: string;
+    readonly description: string;
+    readonly severity?: "critical" | "high" | "medium" | "low";
+    readonly evidence: string;
+    readonly files: readonly string[];
+    readonly artifactRefs: readonly string[];
+  }[];
   readonly recordSpecialistRound: (input: RecordCandidateSpecialistRoundInput) => void;
 };
 
@@ -61,20 +78,47 @@ const runSpecialist = (
 > =>
   Effect.gen(function* () {
     yield* verifyIntegrity(input);
-    const result = yield* input.runtime.review({
+    const prompt = buildSpecialistReviewerPrompt({
+      specialist: policy.id,
+      instructions: policy.instructions,
+      validationRunId: input.validationRunId,
+      candidate: {
+        comparisonBaseSha: input.candidate.comparisonBaseSha,
+        headSha: input.candidate.headSha,
+      },
+    });
+    const earlierFindings = reviewerFindingHistory(
+      input.listPreviousCandidateReviewerFindings({
+        candidateId: input.candidate.candidateId,
+        phase: validationPhase.specialistReview,
+        producer: policy.id,
+      }),
+    );
+    const provisional = yield* input.runtime.review({
       sandbox: input.sandbox,
       reviewer: policy.id,
       validationRunId: input.validationRunId,
       availableArtifactRefs: [],
-      prompt: buildSpecialistReviewerPrompt({
-        specialist: policy.id,
-        instructions: policy.instructions,
-        validationRunId: input.validationRunId,
-        candidate: input.candidate,
-      }),
+      prompt,
       profile: policy.profile,
     });
     yield* verifyIntegrity(input);
+    const result =
+      provisional.ok && earlierFindings.length > 0
+        ? yield* input.runtime.review({
+            sandbox: input.sandbox,
+            reviewer: policy.id,
+            validationRunId: input.validationRunId,
+            availableArtifactRefs: [],
+            prompt: buildReviewerRevisionPrompt({
+              reviewPrompt: prompt,
+              provisionalReport: provisional.report,
+              earlierFindings,
+            }),
+            profile: policy.profile,
+          })
+        : provisional;
+    if (result !== provisional) yield* verifyIntegrity(input);
     const artifacts = yield* writeReviewerArtifacts({
       validationRunId: input.validationRunId,
       phase: validationPhase.specialistReview,

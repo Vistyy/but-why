@@ -1,5 +1,6 @@
 import { encodeReviewerWireValue, reviewerOutputTag } from "./reviewerOutputWire.js";
 import type { ReviewerOutputContractFailed } from "../validation/validationToolingFailures.js";
+import type { ReviewerOutput } from "../contracts/reviewerOutput.js";
 import type { TaskContextSnapshotV1 } from "../validationRun/taskContextSnapshot.js";
 
 export const defaultAcceptanceInstructions = [
@@ -65,6 +66,45 @@ export const buildSpecialistReviewerPrompt = (input: {
     "Return exactly one JSON object inside this XML tag:",
     `<${reviewerOutputTag}>{"findings":[]}</${reviewerOutputTag}>`,
     "Each Finding must contain title, description, severity, evidence, files, and artifactRefs.",
+  ].join("\n");
+
+export type ReviewerFindingHistory = {
+  readonly title: string;
+  readonly description: string;
+  readonly severity?: "critical" | "high" | "medium" | "low";
+  readonly evidence: string;
+  readonly files: readonly string[];
+  readonly artifactRefs: readonly string[];
+};
+
+export const reviewerFindingHistory = (
+  findings: readonly ReviewerFindingHistory[],
+): readonly ReviewerFindingHistory[] =>
+  findings.map(({ title, description, severity, evidence, files, artifactRefs }) => ({
+    title,
+    description,
+    ...(severity === undefined ? {} : { severity }),
+    evidence,
+    files,
+    artifactRefs,
+  }));
+
+export const buildReviewerRevisionPrompt = (input: {
+  readonly reviewPrompt: string;
+  readonly provisionalReport: ReviewerOutput;
+  readonly earlierFindings: readonly ReviewerFindingHistory[];
+}): string =>
+  [
+    input.reviewPrompt,
+    "",
+    "Blind provisional report:",
+    encodeReviewerWireValue(input.provisionalReport),
+    "",
+    "Earlier Findings from your review of the immediately preceding Candidate:",
+    encodeReviewerWireValue({ findings: input.earlierFindings }),
+    "",
+    "Recheck the Candidate against the applicable instructions.",
+    "Verify whether each earlier Finding remains open, then return one final report containing every open earlier Finding and every new Finding.",
   ].join("\n");
 
 export const buildReviewerOutputCorrectionPrompt = (

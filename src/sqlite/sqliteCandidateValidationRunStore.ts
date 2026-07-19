@@ -65,6 +65,10 @@ export const openSqliteCandidateValidationRunStore = (
     withStateDatabase(input, (database) => listRounds(database, validationRunId)),
   listFindings: (validationRunId) =>
     withStateDatabase(input, (database) => listFindings(database, validationRunId)),
+  listPreviousCandidateReviewerFindings: (historyInput) =>
+    withStateDatabase(input, (database) =>
+      listPreviousCandidateReviewerFindings(database, historyInput),
+    ),
   listToolingFailures: (validationRunId) =>
     withStateDatabase(input, (database) => listToolingFailures(database, validationRunId)),
   listArtifacts: (validationRunId) =>
@@ -276,6 +280,56 @@ type CandidateValidationFindingRow = Omit<
   readonly files: string;
   readonly artifactRefs: string;
 };
+
+const listPreviousCandidateReviewerFindings = (
+  database: DatabaseSync,
+  input: {
+    readonly candidateId: string;
+    readonly phase: CandidateValidationFinding["phase"];
+    readonly producer: string;
+  },
+): readonly CandidateValidationFinding[] =>
+  queryAll<CandidateValidationFindingRow>(
+    database,
+    `SELECT id, validation_run_id AS validationRunId, phase, producer, title,
+            description, severity, evidence, files, artifact_refs AS artifactRefs,
+            created_at AS createdAt, updated_at AS updatedAt
+     FROM candidate_validation_findings
+     WHERE validation_run_id = (
+       SELECT prior_round.validation_run_id
+       FROM candidate_validation_rounds AS prior_round
+       JOIN candidate_validation_runs AS prior_run
+         ON prior_run.id = prior_round.validation_run_id
+       JOIN candidates AS prior_candidate
+         ON prior_candidate.id = prior_run.candidate_id
+       WHERE prior_candidate.change_id = (
+         SELECT change_id FROM candidates WHERE id = ?
+       )
+         AND prior_candidate.rowid < (
+           SELECT rowid FROM candidates WHERE id = ?
+         )
+         AND prior_round.phase = ?
+         AND prior_round.producer = ?
+       ORDER BY prior_candidate.rowid DESC, prior_run.rowid DESC
+       LIMIT 1
+     )
+       AND phase = ?
+       AND producer = ?
+     ORDER BY id`,
+    [
+      input.candidateId,
+      input.candidateId,
+      input.phase,
+      input.producer,
+      input.phase,
+      input.producer,
+    ],
+  ).map(({ severity, files, artifactRefs, ...finding }) => ({
+    ...finding,
+    ...(severity === null ? {} : { severity }),
+    files: decodeSqliteJsonStringArray(files),
+    artifactRefs: decodeSqliteJsonStringArray(artifactRefs),
+  }));
 
 const listToolingFailures = (
   database: DatabaseSync,

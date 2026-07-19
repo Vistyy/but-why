@@ -177,6 +177,8 @@ const validateCandidate = (
               allowedUntrackedFiles: input.policy.copyFiles,
               now: input.now,
               listArtifacts: dependencies.runStore.listArtifacts,
+              listPreviousCandidateReviewerFindings:
+                dependencies.runStore.listPreviousCandidateReviewerFindings,
               recordAcceptanceRound: dependencies.runStore.recordAcceptanceRound,
             });
             if (acceptance.findings === 1) return { validationFindings: 1 as const };
@@ -185,6 +187,7 @@ const validateCandidate = (
           const specialists = yield* runSpecialistReviewPhase({
             validationRunId: started.validationRunId,
             candidate: {
+              candidateId: input.candidateId,
               comparisonBaseSha: input.comparisonBaseSha,
               headSha: input.headSha,
             },
@@ -196,6 +199,8 @@ const validateCandidate = (
             commandCwd: activeWorkspace.worktreePath,
             allowedUntrackedFiles: input.policy.copyFiles,
             now: input.now,
+            listPreviousCandidateReviewerFindings:
+              dependencies.runStore.listPreviousCandidateReviewerFindings,
             recordSpecialistRound: dependencies.runStore.recordSpecialistRound,
           });
           return {
