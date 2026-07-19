@@ -87,7 +87,7 @@ type ValidationWorkspaceAdapters = {
   readonly readWorktreeHead: (sandbox: SandboxLike) => Effect.Effect<CommandResult>;
 };
 
-type SandboxLike = Pick<Sandbox, "close" | "exec" | "worktreePath">;
+type SandboxLike = Pick<Sandbox, "close" | "exec" | "run" | "worktreePath">;
 
 type CommandResult = {
   readonly exitCode: number;

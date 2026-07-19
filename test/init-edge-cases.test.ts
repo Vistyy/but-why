@@ -22,6 +22,45 @@ const withDatabase = <Result>(path: string, work: (database: DatabaseSync) => Re
   }
 };
 
+const insertTaskValidationRun = (
+  database: DatabaseSync,
+  input: {
+    readonly title: string;
+    readonly description: string;
+    readonly state: "new" | "todo";
+    readonly branch: string;
+    readonly createdAt: string;
+    readonly updatedAt: string;
+  },
+): void => {
+  database
+    .prepare(
+      `INSERT INTO tasks (
+        id, numeric_id, title, description, state, created_at, updated_at, branch
+      ) VALUES ('BY-1', 1, ?, ?, ?, ?, ?, ?)`,
+    )
+    .run(
+      input.title,
+      input.description,
+      input.state,
+      input.createdAt,
+      input.updatedAt,
+      input.branch,
+    );
+  database
+    .prepare(
+      `INSERT INTO validation_runs (
+        id, task_id, task_validation_number, status, branch, commit_sha,
+        github_owner, github_repo, github_base_branch, github_remote_name,
+        github_remote_url, created_at, updated_at
+      ) VALUES (
+        'by-1.v1', 'BY-1', 1, 'active', ?, 'abc123',
+        'acme', 'widgets', 'main', 'origin', 'https://github.com/acme/widgets.git', ?, ?
+      )`,
+    )
+    .run(input.branch, input.updatedAt, input.updatedAt);
+};
+
 const writeConfig = (root: string, taskPrefix = "BY") => {
   mkdirSync(join(root, ".but-why"), { recursive: true });
   writeFileSync(join(root, ".but-why/config.json"), `${JSON.stringify({ taskPrefix }, null, 2)}\n`);
@@ -128,6 +167,7 @@ help[1]: Move the conflicting path aside before running init again.`);
         { name: "020_task_dependencies" },
         { name: "021_task_starts" },
         { name: "022_change_owned_worktrees" },
+        { name: "022_rename_acceptance_review_phase" },
       ]);
     } finally {
       repairedDatabase.close();
@@ -222,13 +262,15 @@ help[1]: Move the conflicting path aside before running init again.`);
     const database = new DatabaseSync(statePath);
 
     database.exec("PRAGMA foreign_keys = OFF");
+    insertTaskValidationRun(database, {
+      title: "Existing task",
+      description: "Existing description",
+      state: "todo",
+      branch: "feature/by-1",
+      createdAt: "2026-07-01T00:00:00.000Z",
+      updatedAt: "2026-07-02T00:00:00.000Z",
+    });
     database.exec(`
-      INSERT INTO tasks (
-        id, numeric_id, title, description, state, created_at, updated_at, branch
-      ) VALUES (
-        'BY-1', 1, 'Existing task', 'Existing description', 'todo',
-        '2026-07-01T00:00:00.000Z', '2026-07-02T00:00:00.000Z', 'feature/by-1'
-      );
       INSERT INTO task_comments (id, task_id, created_at, content)
       VALUES ('comment-1', 'BY-1', '2026-07-02T00:00:00.000Z', 'Existing comment');
       INSERT INTO changes (
@@ -237,16 +279,6 @@ help[1]: Move the conflicting path aside before running init again.`);
         'change-1', '/repo/.git', 'refs/heads/feature/by-1', 'BY-1', 'open',
         '2026-07-02T00:00:00.000Z', '2026-07-02T00:00:00.000Z'
       );
-      INSERT INTO validation_runs (
-        id, task_id, task_validation_number, status, branch, commit_sha,
-        github_owner, github_repo, github_base_branch, github_remote_name,
-        github_remote_url, created_at, updated_at
-      ) VALUES (
-        'by-1.v1', 'BY-1', 1, 'active', 'feature/by-1', 'abc123',
-        'acme', 'widgets', 'main', 'origin', 'https://github.com/acme/widgets.git',
-        '2026-07-02T00:00:00.000Z', '2026-07-02T00:00:00.000Z'
-      );
-
       DELETE FROM schema_migrations WHERE name = '019_task_approval';
       DROP INDEX tasks_branch_unique_idx;
       CREATE TABLE tasks_old (
@@ -329,6 +361,109 @@ help[1]: Move the conflicting path aside before running init again.`);
     }
 
     expect(runBy(root, "init", "--task-prefix", "BY").stdout).toContain("status: unchanged");
+  });
+
+  it("renames legacy Acceptance Review phase storage", () => {
+    const root = createGitRepo();
+    expect(runBy(root, "init", "--task-prefix", "BY").status).toBe(0);
+    const statePath = sharedStatePath(root);
+    const database = new DatabaseSync(statePath);
+
+    database.exec("PRAGMA foreign_keys = OFF");
+    database.exec(`
+      DELETE FROM schema_migrations WHERE name = '022_rename_acceptance_review_phase';
+      CREATE TABLE validation_run_phase_statuses_legacy (
+        validation_run_id TEXT NOT NULL,
+        phase TEXT NOT NULL CHECK (phase IN ('preflight', 'prepare', 'checks', 'intent_review', 'quality_review', 'publish_pr', 'watch_pr')),
+        status TEXT NOT NULL CHECK (status IN ('pending', 'active', 'passed', 'failed', 'skipped', 'workflow_failed')),
+        error_message TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        PRIMARY KEY (validation_run_id, phase),
+        FOREIGN KEY (validation_run_id) REFERENCES validation_runs(id)
+      );
+      DROP TABLE validation_run_phase_statuses;
+      ALTER TABLE validation_run_phase_statuses_legacy RENAME TO validation_run_phase_statuses;
+    `);
+    insertTaskValidationRun(database, {
+      title: "Legacy review",
+      description: "Legacy review",
+      state: "new",
+      branch: "feature/by-1",
+      createdAt: "now",
+      updatedAt: "now",
+    });
+    database.exec(`
+      INSERT INTO validation_run_phase_statuses
+      VALUES ('by-1.v1', 'intent_review', 'passed', NULL, 'now', 'now');
+
+      INSERT INTO changes (
+        id, repository_common_directory, branch_ref, state, created_at, updated_at
+      ) VALUES ('change-1', '/repo/.git', 'refs/heads/feature', 'open', 'now', 'now');
+      INSERT INTO candidates (
+        id, change_id, selected_base_ref, resolved_target_sha,
+        comparison_base_sha, head_sha, created_at
+      ) VALUES ('candidate-1', 'change-1', 'refs/heads/main', 'base', 'base', 'head', 'now');
+      INSERT INTO candidate_validation_runs (
+        id, candidate_id, policy_snapshot, state, created_at, updated_at
+      ) VALUES ('candidate-run', 'candidate-1', '{}', 'running', 'now', 'now');
+      INSERT INTO candidate_validation_rounds
+      VALUES ('candidate-run', 'intent_review', 'acceptance', 1, 'passed', 'now');
+      INSERT INTO candidate_validation_artifacts (
+        ref, validation_run_id, phase, producer, path, created_at
+      ) VALUES (
+        'artifact:candidate-run/intent_review/acceptance/stdout.txt',
+        'candidate-run', 'intent_review', 'acceptance',
+        'candidate-run/intent_review/acceptance/stdout.txt', 'now'
+      );
+      INSERT INTO candidate_validation_findings (
+        id, validation_run_id, phase, producer, title, description, severity,
+        evidence, files, artifact_refs, created_at, updated_at
+      ) VALUES (
+        'finding-1', 'candidate-run', 'intent_review', 'acceptance', 'Legacy',
+        'Legacy', 'low', 'Legacy', '[]',
+        '["artifact:candidate-run/intent_review/acceptance/stdout.txt"]', 'now', 'now'
+      );
+    `);
+    database.exec("PRAGMA foreign_keys = ON");
+    database.close();
+
+    expect(runBy(root, "init", "--task-prefix", "BY").status).toBe(0);
+    const migrated = new DatabaseSync(statePath);
+
+    try {
+      expect(migrated.prepare("SELECT phase FROM validation_run_phase_statuses").get()).toEqual({
+        phase: "acceptance_review",
+      });
+      expect(migrated.prepare("SELECT phase FROM candidate_validation_rounds").get()).toEqual({
+        phase: "acceptance_review",
+      });
+      expect(
+        migrated.prepare("SELECT phase, ref, path FROM candidate_validation_artifacts").get(),
+      ).toEqual({
+        phase: "acceptance_review",
+        ref: "artifact:candidate-run/acceptance_review/acceptance/stdout.txt",
+        path: "candidate-run/acceptance_review/acceptance/stdout.txt",
+      });
+      expect(
+        migrated
+          .prepare("SELECT phase, artifact_refs AS artifactRefs FROM candidate_validation_findings")
+          .get(),
+      ).toEqual({
+        phase: "acceptance_review",
+        artifactRefs: '["artifact:candidate-run/acceptance_review/acceptance/stdout.txt"]',
+      });
+      expect(
+        migrated
+          .prepare(
+            "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'validation_run_phase_statuses'",
+          )
+          .get(),
+      ).toMatchObject({ sql: expect.stringContaining("'acceptance_review'") });
+      expect(migrated.prepare("PRAGMA foreign_key_check").all()).toEqual([]);
+    } finally {
+      migrated.close();
+    }
   });
 
   it("records migration timestamps from BUT_WHY_NOW", () => {

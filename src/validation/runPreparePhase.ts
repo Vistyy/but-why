@@ -4,8 +4,9 @@ import { Effect } from "effect";
 import { runRepositoryPreparation } from "../repositoryPreparation/runRepositoryPreparation.js";
 import type { SubmitPrepareConfig } from "../submit/submitRepoConfig.js";
 import { writeValidationRunArtifactFile } from "../validationRun/artifactFiles.js";
+import { validationPhase } from "../validationRun/validationRun.js";
 import type { RecordValidationRunPrepareRoundInput } from "../validationRun/validationRunStore.js";
-import { ensureCandidateIntegrity } from "./candidateIntegrity.js";
+import { ensureCandidateIntegrity } from "./ensureCandidateIntegrity.js";
 import {
   GitToolingFailed,
   InfrastructureToolingFailed,
@@ -112,13 +113,28 @@ const runPrepareCommand = (
 ): Effect.Effect<PrepareCommandResult, ValidationToolingFailure> =>
   Effect.tryPromise({
     try: async () => {
-      await ensureCandidateIntegrity(sandbox, commandCwd, expectedHeadSha, allowedUntrackedFiles);
+      if (expectedHeadSha !== undefined) {
+        await ensureCandidateIntegrity({
+          sandbox,
+          ...(commandCwd === undefined ? {} : { commandCwd }),
+          expectedHeadSha,
+          allowedUntrackedFiles: allowedUntrackedFiles ?? [],
+        });
+      }
       const result = await runRepositoryPreparation({
         prepare,
         exec: (command, options) => sandbox.exec(command, options),
         ...(commandCwd === undefined ? {} : { cwd: commandCwd }),
       });
-      await ensureCandidateIntegrity(sandbox, commandCwd, expectedHeadSha, allowedUntrackedFiles);
+      if (expectedHeadSha !== undefined) {
+        await ensureCandidateIntegrity({
+          sandbox,
+          ...(commandCwd === undefined ? {} : { commandCwd }),
+          expectedHeadSha,
+          allowedUntrackedFiles: allowedUntrackedFiles ?? [],
+        });
+      }
+
       return {
         commandResult: {
           exitCode: result.exitCode,
@@ -162,7 +178,7 @@ const prepareFinding = (
 ): NonNullable<RecordValidationRunPrepareRoundInput["finding"]> => ({
   id: `${validationRunId}-F1`,
   validationRunId,
-  phase: "prepare",
+  phase: validationPhase.prepare,
   producer: prepareProducer,
   title: timedOut ? "Prepare timed out" : "Prepare failed",
   description: timedOut
@@ -212,7 +228,7 @@ const writePrepareArtifacts = (input: {
         const artifactFile = writeValidationRunArtifactFile({
           artifactsRoot: input.artifactsRoot,
           validationRunId: input.validationRunId,
-          phase: "prepare",
+          phase: validationPhase.prepare,
           producer: prepareProducer,
           fileName: artifact.fileName,
           content: artifact.content,
@@ -222,7 +238,7 @@ const writePrepareArtifacts = (input: {
         return {
           ref: prepareArtifactRef(input.validationRunId, artifact.fileName),
           validationRunId: input.validationRunId,
-          phase: "prepare" as const,
+          phase: validationPhase.prepare,
           producer: prepareProducer,
           ...artifactFile,
         };

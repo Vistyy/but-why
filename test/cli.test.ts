@@ -335,6 +335,7 @@ validationSetup:
         { name: "020_task_dependencies" },
         { name: "021_task_starts" },
         { name: "022_change_owned_worktrees" },
+        { name: "022_rename_acceptance_review_phase" },
       ]);
       expect(
         database

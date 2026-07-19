@@ -46,7 +46,13 @@ const repoValidationConfigSchema = Schema.Struct({
   checks: Schema.optional(Schema.NonEmptyArray(repoCheckConfigSchema)),
 });
 
+const acceptanceReviewConfigSchema = Schema.Struct({
+  agentProfile: Schema.optional(configNameSchema),
+  instructionsFile: Schema.optional(repoRelativePathSchema),
+});
+
 const repoReviewConfigSchema = Schema.Struct({
+  acceptance: Schema.optional(acceptanceReviewConfigSchema),
   intent: Schema.optional(
     Schema.Struct({
       reviewer: configNameSchema,

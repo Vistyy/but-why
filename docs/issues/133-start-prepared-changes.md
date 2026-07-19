@@ -34,6 +34,7 @@ Change CLI tests against a real temporary Git repository and shared SQLite state
 - [x] `by change prepare <change-id>` retries preparation without creating another Change or worktree.
 - [x] Human output remains TOON by default, while `--output json` returns stable machine-readable Change and readiness facts.
 - [x] `by task start` and its Task-owned worktree authority are removed without a compatibility alias.
+- [x] Change owns the surviving implementation-start modules; no separate top-level Task Start workflow remains.
 
 ## Blocked by
 

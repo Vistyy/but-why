@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { DatabaseSync } from "node:sqlite";
 
+import { changeState, type ChangeState } from "../change/change.js";
 import type {
   ChangeCandidateCaptureStore,
   CommitCandidateCaptureInput,
@@ -19,7 +20,7 @@ type StoredChange = {
   readonly repositoryCommonDirectory: string;
   readonly branchRef: string;
   readonly baseRef: string | null;
-  readonly state: "open" | "closed";
+  readonly state: ChangeState;
 };
 
 type StoredCandidate = {
@@ -104,7 +105,7 @@ const selectExpectedChange = (
 ): { readonly ok: true; readonly change: StoredChange } | CommitRejection => {
   const expected = getChangeById(database, expectedChangeId);
   if (expected === undefined) return { ok: false, code: "change_not_found" };
-  if (expected.state === "closed") return { ok: false, code: "change_closed" };
+  if (expected.state === changeState.closed) return { ok: false, code: "change_closed" };
   if (expected.repositoryCommonDirectory !== input.repositoryCommonDirectory) {
     return { ok: false, code: "change_binding_conflict" };
   }

@@ -108,7 +108,7 @@ const validationPhaseOrderSql = `
     WHEN 'preflight' THEN 1
     WHEN 'prepare' THEN 2
     WHEN 'checks' THEN 3
-    WHEN 'intent_review' THEN 4
+    WHEN 'acceptance_review' THEN 4
     WHEN 'quality_review' THEN 5
     WHEN 'publish_pr' THEN 6
     WHEN 'watch_pr' THEN 7

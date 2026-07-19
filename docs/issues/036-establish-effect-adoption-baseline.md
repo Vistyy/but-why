@@ -22,7 +22,7 @@ Sandcastle remains the execution engine for worktrees, commands, agents, logs, s
 
 ## Acceptance criteria
 
-- [x] The `effect` dependency is upgraded to `3.21.4` after checking release notes, and `pnpm-lock.yaml` is refreshed.
+- [x] The `effect` dependency is pinned to `3.20.0` so application Effects share the runtime bundled by Sandcastle `0.12.0`, and `pnpm-lock.yaml` records that version.
 - [x] Architecture docs state that Effect belongs at validation workflow, adapter, resource, retry, concurrency, and schema-validation seams.
 - [x] Architecture docs state that pure Task, Validation Run, Finding, and policy modules should not expose Effect types.
 - [x] Architecture docs preserve the distinction between Findings and Validation Tooling Failures.

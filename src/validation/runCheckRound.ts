@@ -2,9 +2,10 @@ import type { Sandbox } from "@ai-hero/sandcastle";
 import { Effect } from "effect";
 
 import type { SubmitCheckConfig } from "../submit/submitRepoConfig.js";
+import { ensureCandidateIntegrity } from "./ensureCandidateIntegrity.js";
 import { writeValidationRunArtifactFile } from "../validationRun/artifactFiles.js";
+import { validationPhase } from "../validationRun/validationRun.js";
 import type { RecordValidationRunCheckRoundInput } from "../validationRun/validationRunStore.js";
-import { ensureCandidateIntegrity } from "./candidateIntegrity.js";
 import {
   CheckCommandExecutionToolingFailed,
   GitToolingFailed,
@@ -172,7 +173,7 @@ const checkFinding = (
 ): NonNullable<RecordValidationRunCheckRoundInput["finding"]> => ({
   id: `${validationRunId}-F${findingNumber}`,
   validationRunId,
-  phase: "checks",
+  phase: validationPhase.checks,
   producer: check.id,
   title: timedOut ? `Check timed out: ${check.id}` : `Check failed: ${check.id}`,
   description: timedOut
@@ -194,7 +195,14 @@ const runCheckCommand = (
 ): Effect.Effect<CheckCommandResult, ValidationToolingFailure> =>
   Effect.tryPromise({
     try: async () => {
-      await ensureCandidateIntegrity(sandbox, commandCwd, expectedHeadSha, allowedUntrackedFiles);
+      if (expectedHeadSha !== undefined) {
+        await ensureCandidateIntegrity({
+          sandbox,
+          ...(commandCwd === undefined ? {} : { commandCwd }),
+          expectedHeadSha,
+          allowedUntrackedFiles: allowedUntrackedFiles ?? [],
+        });
+      }
       await ensureTimeoutCommandAvailable(sandbox, check);
 
       const marker = checkCompletionMarker(check.id);
@@ -203,7 +211,14 @@ const runCheckCommand = (
         commandCwd === undefined ? undefined : { cwd: commandCwd },
       );
       const parsed = parseCheckCompletionMarker(result.stderr, marker);
-      await ensureCandidateIntegrity(sandbox, commandCwd, expectedHeadSha, allowedUntrackedFiles);
+      if (expectedHeadSha !== undefined) {
+        await ensureCandidateIntegrity({
+          sandbox,
+          ...(commandCwd === undefined ? {} : { commandCwd }),
+          expectedHeadSha,
+          allowedUntrackedFiles: allowedUntrackedFiles ?? [],
+        });
+      }
 
       return {
         commandResult: {
@@ -272,7 +287,7 @@ const writeCheckArtifacts = (input: {
         const artifactFile = writeValidationRunArtifactFile({
           artifactsRoot: input.artifactsRoot,
           validationRunId: input.validationRunId,
-          phase: "checks",
+          phase: validationPhase.checks,
           producer: input.check.id,
           fileName: artifact.fileName,
           content: artifact.content,
@@ -282,7 +297,7 @@ const writeCheckArtifacts = (input: {
         return {
           ref: checkArtifactRef(input.validationRunId, input.check.id, artifact.fileName),
           validationRunId: input.validationRunId,
-          phase: "checks" as const,
+          phase: validationPhase.checks,
           producer: input.check.id,
           ...artifactFile,
         };

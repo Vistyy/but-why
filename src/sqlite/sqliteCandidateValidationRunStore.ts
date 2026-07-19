@@ -22,6 +22,7 @@ import type {
   StartCandidateValidationRunInput,
   StartCandidateValidationRunResult,
 } from "../candidateValidation/candidateValidationRunStore.js";
+import { validationPhase } from "../validationRun/validationRun.js";
 import type { RecordValidationRunCommandRoundInput } from "../validationRun/validationRunStore.js";
 
 export const openSqliteCandidateValidationRunStore = (
@@ -38,10 +39,24 @@ export const openSqliteCandidateValidationRunStore = (
     withStateDatabase(input, (database) => recordToolingFailure(database, failure)),
   recordPrepareRound: (round) =>
     withStateDatabase(input, (database) =>
-      recordRound(database, { ...round, phase: "prepare", producer: "prepare" }),
+      recordRound(database, {
+        ...round,
+        phase: validationPhase.prepare,
+        producer: "prepare",
+      }),
     ),
   recordCheckRound: (round) =>
-    withStateDatabase(input, (database) => recordRound(database, { ...round, phase: "checks" })),
+    withStateDatabase(input, (database) =>
+      recordRound(database, { ...round, phase: validationPhase.checks }),
+    ),
+  recordAcceptanceRound: (round) =>
+    withStateDatabase(input, (database) =>
+      recordRound(database, {
+        ...round,
+        phase: validationPhase.acceptanceReview,
+        producer: "acceptance",
+      }),
+    ),
   listRounds: (validationRunId) =>
     withStateDatabase(input, (database) => listRounds(database, validationRunId)),
   listFindings: (validationRunId) =>
@@ -59,10 +74,19 @@ const startOrReuse = (
   database.exec("BEGIN IMMEDIATE");
   try {
     const candidate = database
-      .prepare("SELECT head_sha AS headSha FROM candidates WHERE id = ?")
-      .get(input.candidateId) as { readonly headSha: string } | undefined;
-    if (candidate === undefined || candidate.headSha !== input.headSha) {
-      throw new Error("Candidate validation requires the exact stored Candidate head.");
+      .prepare(
+        "SELECT head_sha AS headSha, comparison_base_sha AS comparisonBaseSha FROM candidates WHERE id = ?",
+      )
+      .get(input.candidateId) as
+      | { readonly headSha: string; readonly comparisonBaseSha: string }
+      | undefined;
+    if (
+      candidate === undefined ||
+      candidate.headSha !== input.headSha ||
+      (input.comparisonBaseSha !== undefined &&
+        candidate.comparisonBaseSha !== input.comparisonBaseSha)
+    ) {
+      throw new Error("Candidate validation requires the exact stored Candidate identity.");
     }
     const policySnapshot = encodeSqliteCandidateValidationPolicy(input.policy);
     const reusable = database

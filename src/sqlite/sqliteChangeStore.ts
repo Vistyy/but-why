@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { DatabaseSync } from "node:sqlite";
 
-import type { ChangeRecord } from "../change/change.js";
+import { changeState, type ChangeRecord } from "../change/change.js";
 import type {
   ChangeStore,
   CloseChangeInput,
@@ -97,7 +97,7 @@ const closeChange = (database: DatabaseSync, input: CloseChangeInput): CloseChan
       database.exec("ROLLBACK");
       return { ok: false, code: "change_not_found" };
     }
-    if (change.state === "closed") {
+    if (change.state === changeState.closed) {
       database.exec("COMMIT");
       if (change.closeReason === input.reason) {
         return { ok: true, changed: false, change };

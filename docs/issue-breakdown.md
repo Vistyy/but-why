@@ -7,7 +7,7 @@ It ends when But Why? completes one real SQLite-tracked Task-backed Change and p
 
 ## Can start immediately
 
-- Task 096: Run built-in Acceptance Review.
+- Task 089: Run configured Specialists.
 - Task 130: Launch a Change Implementer in Herdr.
 
 ## Completed
@@ -15,6 +15,7 @@ It ends when But Why? completes one real SQLite-tracked Task-backed Change and p
 - Task 083: Start a Task in a managed worktree (`f009ab6`).
 - Task 084: Expand Candidate-owned validation through Checks (`d462952`).
 - Task 087: Inspect a Candidate-owned Validation Run (`ad598c6`).
+- Task 096: Run built-in Acceptance Review (`1eebf08`).
 - Task 133: Start prepared Changes (`bdf6646`).
 - Task 134: Remove incidental Git setup from SQLite tests (`5306e28`).
 
@@ -22,16 +23,16 @@ It ends when But Why? completes one real SQLite-tracked Task-backed Change and p
 
 | Task | Capability | Blocked by |
 | --- | --- | --- |
-| 089 | Run configured Specialists | 096 |
-| 092 | Recheck reviewer Findings without anchoring | 089, 096 |
-| 098 | Publish one exact Candidate with recovery | 089, 092, 096 |
+| 092 | Recheck reviewer Findings without anchoring | 089 |
+| 098 | Publish one exact Candidate with recovery | 089, 092 |
 | 101 | Reconcile owned PRs and clean completed Changes | 098 |
-| 105 | Migrate Submit to Change ownership | 089, 092, 096, 098, 101 |
-| 129 | Submit a Task-backed Change with no repository change | 096, 105 |
+| 105 | Migrate Submit to Change ownership | 089, 092, 098, 101 |
+| 129 | Submit a Task-backed Change with no repository change | 105 |
 | 106 | Add Change inspection and migrate Task projections | 101, 105 |
 | 107 | Remove Task-owned implementation and delivery paths | 105, 106 |
 | 117 | Cancel Task-backed and taskless Changes | 101, 105 |
-| 123 | Ship the Change-centered manual workflow | 107, 117, 129, 130 |
+| 135 | Consolidate the source hierarchy | 107 |
+| 123 | Ship the Change-centered manual workflow | 107, 117, 129, 130, 135 |
 | 125 | Produce an installable v1 package | 123 |
 | 131 | Dogfood the first SQLite-tracked Change workflow | 125 |
 | 126 | Publish But Why? to npm | 131 |
@@ -43,7 +44,8 @@ It ends when But Why? completes one real SQLite-tracked Task-backed Change and p
 3. Task 105 composes those capabilities behind Change Submit without dual writes.
 4. Task 106 migrates detailed inspection to Change commands and keeps Task projections concise.
 5. Task 107 removes the replaced Task-owned writers, readers, routes, tables, and compatibility paths.
-6. Tasks 117 and 130 complete cancellation, cleanup, Herdr launch, and handoff behavior before Task 123 ships the public workflow.
+6. Task 135 reorganizes the surviving modules so every top-level source folder has one domain owner or one clear shared role.
+7. Tasks 117 and 130 complete cancellation, cleanup, Herdr launch, and handoff behavior before Task 123 ships the public workflow.
 
 ## Deferred
 

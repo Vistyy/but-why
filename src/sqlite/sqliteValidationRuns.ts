@@ -14,6 +14,7 @@ import {
   TaskContextSnapshotFailed,
   validationToolingFailureRecord,
 } from "../validation/validationToolingFailures.js";
+import { validationPhase } from "../validationRun/validationRun.js";
 import type {
   RecordValidationRunCheckRoundInput,
   RecordValidationRunCommandRoundInput,
@@ -346,13 +347,17 @@ const recordPrepareRound = (
   database: DatabaseSync,
   input: RecordValidationRunPrepareRoundInput,
 ): RecordValidationCommandRoundResult =>
-  recordCommandRound(database, { ...input, phase: "prepare", producer: "prepare" });
+  recordCommandRound(database, {
+    ...input,
+    phase: validationPhase.prepare,
+    producer: "prepare",
+  });
 
 const recordCheckRound = (
   database: DatabaseSync,
   input: RecordValidationRunCheckRoundInput,
 ): RecordValidationCommandRoundResult =>
-  recordCommandRound(database, { ...input, phase: "checks" });
+  recordCommandRound(database, { ...input, phase: validationPhase.checks });
 
 const recordCommandRound = (
   database: DatabaseSync,

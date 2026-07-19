@@ -27,6 +27,7 @@ Full repository suite plus structural searches for removed Task-owned paths.
 - [ ] Legacy Task-owned validation and delivery use cases and stores are removed.
 - [ ] Superseded tables and migrations are contracted through the supported greenfield schema path.
 - [ ] No caller performs dual writes or fallback reads.
+- [ ] Migration-only modules and top-level folders are removed rather than retained as forwarding paths.
 - [ ] Task commands own intent and Task lifecycle, while Change commands own implementation and delivery.
 - [ ] Current Change Submit, validation, publication, and inspection tests use only Change and Candidate ownership.
 - [ ] Architecture and configuration references describe the implemented v1.

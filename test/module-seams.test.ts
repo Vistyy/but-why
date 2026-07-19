@@ -149,7 +149,7 @@ describe("module seams", () => {
         message: "spawn failed",
       }),
       new ReviewerOutputContractFailed({
-        operationName: "intent_review",
+        operationName: "acceptance_review",
         reviewer: "intent",
         attempts: 3,
         diagnostics: [],

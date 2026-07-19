@@ -22,22 +22,23 @@ export const recordValidationEvidenceMutation = (
         input.now,
       );
   }
-  if (input.finding !== undefined) {
+  const findings = input.findings ?? (input.finding === undefined ? [] : [input.finding]);
+  for (const finding of findings) {
     database
       .prepare(
         `INSERT INTO ${tables.findings} (id, validation_run_id, phase, producer, title, description, severity, evidence, files, artifact_refs, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
-        input.finding.id,
-        input.finding.validationRunId,
-        input.finding.phase,
-        input.finding.producer,
-        input.finding.title,
-        input.finding.description,
-        input.finding.severity ?? null,
-        input.finding.evidence,
-        encodeSqliteJsonStringArray(input.finding.files),
-        encodeSqliteJsonStringArray(input.finding.artifactRefs),
+        finding.id,
+        finding.validationRunId,
+        finding.phase,
+        finding.producer,
+        finding.title,
+        finding.description,
+        finding.severity ?? null,
+        finding.evidence,
+        encodeSqliteJsonStringArray(finding.files),
+        encodeSqliteJsonStringArray(finding.artifactRefs),
         input.now,
         input.now,
       );

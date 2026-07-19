@@ -114,6 +114,10 @@
         "patterns": ["src/agent/**"]
       },
       {
+        "name": "acceptance-review",
+        "patterns": ["src/acceptanceReview/**"]
+      },
+      {
         "name": "domain",
         "patterns": [
           "src/validationRun/cleanup.ts",
@@ -171,12 +175,13 @@
         "name": "validation-runs",
         "patterns": [
           "src/validation/validationRuns.ts",
-          "src/validation/candidateIntegrity.ts",
           "src/validation/runCheckRound.ts",
           "src/validation/runPreparePhase.ts",
           "src/repositoryPreparation/runRepositoryPreparation.ts",
+          "src/validation/ensureCandidateIntegrity.ts",
           "src/validationRun/artifactContent.ts",
-          "src/validationRun/artifactFiles.ts"
+          "src/validationRun/artifactFiles.ts",
+          "src/validationRun/reviewerArtifacts.ts"
         ]
       },
       {
@@ -272,6 +277,7 @@
       {
         "name": "repo-init",
         "patterns": [
+          "src/init/acceptanceInstructions.ts",
           "src/init/git.ts",
           "src/init/gitignore.ts",
           "src/init/globalConfig.ts",
@@ -327,7 +333,20 @@
       },
       {
         "from": "agent-profiles",
-        "allow": ["contracts"]
+        "allow": ["contracts", "domain", "validation-tooling-failures"]
+      },
+      {
+        "from": "acceptance-review",
+        "allow": [
+          "agent-profiles",
+          "contracts",
+          "domain",
+          "repo-init",
+          "submit-rejection-errors",
+          "validation-run-store",
+          "validation-runs",
+          "validation-tooling-failures"
+        ]
       },
       {
         "from": "domain",
@@ -368,15 +387,16 @@
       },
       {
         "from": "change-start-adapter",
-        "allow": ["change-start-store", "local-git-candidate-adapter", "repo-init"]
+        "allow": ["change-start-store", "domain", "local-git-candidate-adapter", "repo-init"]
       },
       {
         "from": "validation-run-store",
-        "allow": ["domain", "validation-tooling-failures"]
+        "allow": ["domain", "validation-tooling-failures"],
+        "allowTypeOnly": ["agent-profiles"]
       },
       {
         "from": "validation-runs",
-        "allow": ["domain", "validation-tooling-failures"],
+        "allow": ["agent-profiles", "domain", "validation-tooling-failures"],
         "allowTypeOnly": ["use-cases", "validation-run-store"]
       },
       {
@@ -430,6 +450,8 @@
       {
         "from": "local-orchestration",
         "allow": [
+          "acceptance-review",
+          "agent-profiles",
           "domain",
           "github-adapter",
           "repo-init",

@@ -8,6 +8,7 @@ import {
   resolveLocalBranch,
 } from "../changeCandidateCapture/localGitCandidate.js";
 import type { RepoLocalContext } from "../init/repoContext.js";
+import { changeReadiness } from "./change.js";
 import type { ChangeStartRecord } from "./changeStartStore.js";
 
 export type ChangeStartGitIntent = {
@@ -134,11 +135,12 @@ const ensureRecordedBranch = (
 ): ProvisionChangeWorktreeResult => {
   const branchCommit = resolveLocalBranch(cwd, start.branchRef);
   if (branchCommit !== undefined) {
-    return recovering && (start.readiness === "ready" || branchCommit === start.startingCommit)
+    return recovering &&
+      (start.readiness === changeReadiness.ready || branchCommit === start.startingCommit)
       ? { ok: true }
       : { ok: false, code: "change_start_conflict" };
   }
-  if (recovering && start.readiness === "ready") {
+  if (recovering && start.readiness === changeReadiness.ready) {
     return { ok: false, code: "change_start_conflict" };
   }
   const branchName = start.branchRef.slice("refs/heads/".length);

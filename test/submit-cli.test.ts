@@ -449,7 +449,7 @@ describe("by submit CLI", () => {
       },
       {
         validationRunId: firstTaskValidationRunId,
-        phase: "intent_review",
+        phase: "acceptance_review",
         status: "skipped",
         errorMessage: "Prepare did not pass.",
         createdAt: thirdNow,

@@ -33,6 +33,7 @@ Public `by change submit <change-id>` CLI tests covering blocked and passing Tas
 - [ ] An unchanged taskless Change returns `nothing_to_submit`, remains open, and suggests explicit cancellation.
 - [ ] Repeated Submit is idempotent and performs one-shot PR reconciliation.
 - [ ] Task-owned validation writers are no longer called.
+- [ ] Change owns the new Submit composition; the migration does not add another top-level Submit workflow.
 - [ ] Human output remains TOON by default, while programmatic callers can request JSON.
 
 ## Blocked by

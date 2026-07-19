@@ -24,7 +24,7 @@ describe("state database session", () => {
       session.withDatabase((database) =>
         database.prepare("SELECT COUNT(*) AS count FROM schema_migrations").get(),
       ),
-    ).toEqual({ count: 22 });
+    ).toEqual({ count: 23 });
     expect(
       session.withDatabase((database) =>
         database.prepare("SELECT common_directory FROM shared_state_identity WHERE id = 1").get(),

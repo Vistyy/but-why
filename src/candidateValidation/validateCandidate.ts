@@ -4,6 +4,12 @@ import type {
   CandidateValidationRunStore,
   CandidateValidationOutcome,
 } from "./candidateValidationRunStore.js";
+import type { AcceptanceReviewPolicy } from "../acceptanceReview/acceptanceReviewConfig.js";
+import {
+  piReviewerAgentRuntime,
+  type ReviewerAgentRuntime,
+} from "../agent/reviewerAgentRuntime.js";
+import { runAcceptanceReviewPhase } from "../acceptanceReview/runAcceptanceReviewPhase.js";
 import type { SubmitCheckConfig, SubmitPrepareConfig } from "../submit/submitRepoConfig.js";
 import { createValidationWorkspace } from "../validation/createValidationWorkspace.js";
 import { runCheckPhase } from "../validation/runCheckRound.js";
@@ -14,6 +20,7 @@ import {
   validationToolingFailureRecord,
 } from "../validation/validationToolingFailures.js";
 import type { ValidationSandboxMode } from "../validation/validationWorkspace.js";
+import type { TaskContextSnapshotV1 } from "../validationRun/taskContextSnapshot.js";
 
 export type CandidateValidationPolicy = {
   readonly sandboxMode: ValidationSandboxMode;
@@ -22,21 +29,38 @@ export type CandidateValidationPolicy = {
   readonly copyFiles: readonly string[];
 };
 
+export type TaskBackedCandidateValidationPolicy = CandidateValidationPolicy & {
+  readonly acceptanceReview: AcceptanceReviewPolicy;
+};
+
 export type CandidateValidation = {
   readonly validateCandidate: (
     input: ValidateCandidateInput,
+  ) => Effect.Effect<ValidateCandidateResult>;
+  readonly validateTaskBackedCandidate: (
+    input: ValidateTaskBackedCandidateInput,
   ) => Effect.Effect<ValidateCandidateResult>;
   readonly listRounds: (
     validationRunId: string,
   ) => readonly { readonly producer: string; readonly status: "passed" | "failed" }[];
   readonly listFindings: CandidateValidationRunStore["listFindings"];
   readonly listArtifacts: CandidateValidationRunStore["listArtifacts"];
+  readonly listToolingFailures: CandidateValidationRunStore["listToolingFailures"];
 };
 
 export type ValidateCandidateInput = {
   readonly candidateId: string;
   readonly headSha: string;
   readonly policy: CandidateValidationPolicy;
+  readonly now: string;
+};
+
+export type ValidateTaskBackedCandidateInput = {
+  readonly candidateId: string;
+  readonly comparisonBaseSha: string;
+  readonly headSha: string;
+  readonly acceptanceContext: TaskContextSnapshotV1;
+  readonly policy: TaskBackedCandidateValidationPolicy;
   readonly now: string;
 };
 
@@ -53,28 +77,40 @@ export const openCandidateValidation = (input: {
   readonly localRepositoryMainCheckoutRoot: string;
   readonly artifactsRoot: string;
   readonly runStore: CandidateValidationRunStore;
-}): CandidateValidation => ({
-  validateCandidate: (validationInput) => validateCandidate(input, validationInput),
-  listRounds: (validationRunId) =>
-    input.runStore
-      .listRounds(validationRunId)
-      .map(({ producer, status }) => ({ producer, status })),
-  listFindings: input.runStore.listFindings,
-  listArtifacts: input.runStore.listArtifacts,
-});
+  readonly reviewerAgentRuntime?: ReviewerAgentRuntime;
+}): CandidateValidation => {
+  const dependencies = {
+    ...input,
+    reviewerAgentRuntime: input.reviewerAgentRuntime ?? piReviewerAgentRuntime,
+  };
+  return {
+    validateCandidate: (validationInput) => validateCandidate(dependencies, validationInput),
+    validateTaskBackedCandidate: (validationInput) =>
+      validateCandidate(dependencies, validationInput),
+    listRounds: (validationRunId) =>
+      input.runStore
+        .listRounds(validationRunId)
+        .map(({ producer, status }) => ({ producer, status })),
+    listFindings: input.runStore.listFindings,
+    listArtifacts: input.runStore.listArtifacts,
+    listToolingFailures: input.runStore.listToolingFailures,
+  };
+};
 
 const validateCandidate = (
   dependencies: {
     readonly localRepositoryMainCheckoutRoot: string;
     readonly artifactsRoot: string;
     readonly runStore: CandidateValidationRunStore;
+    readonly reviewerAgentRuntime: ReviewerAgentRuntime;
   },
-  input: ValidateCandidateInput,
+  input: ValidateCandidateInput | ValidateTaskBackedCandidateInput,
 ): Effect.Effect<ValidateCandidateResult> =>
   Effect.gen(function* () {
     const started = dependencies.runStore.startOrReuse({
       candidateId: input.candidateId,
       headSha: input.headSha,
+      ...("comparisonBaseSha" in input ? { comparisonBaseSha: input.comparisonBaseSha } : {}),
       policy: input.policy,
       now: input.now,
     });
@@ -116,7 +152,29 @@ const validateCandidate = (
             continueAfterFinding: true,
             recordCheckRound: dependencies.runStore.recordCheckRound,
           });
-          return { validationFindings: checks.findings };
+          if (checks.findings === 1 || !("acceptanceContext" in input)) {
+            return { validationFindings: checks.findings };
+          }
+          const acceptance = yield* runAcceptanceReviewPhase({
+            validationRunId: started.validationRunId,
+            candidate: {
+              candidateId: input.candidateId,
+              comparisonBaseSha: input.comparisonBaseSha,
+              headSha: input.headSha,
+            },
+            acceptanceContext: input.acceptanceContext,
+            policy: input.policy.acceptanceReview,
+            runtime: dependencies.reviewerAgentRuntime,
+            sandbox: activeWorkspace.sandbox,
+            artifactsRoot: dependencies.artifactsRoot,
+            artifactMaxBytes: maxValidationArtifactBytes,
+            commandCwd: activeWorkspace.worktreePath,
+            allowedUntrackedFiles: input.policy.copyFiles,
+            now: input.now,
+            listArtifacts: dependencies.runStore.listArtifacts,
+            recordAcceptanceRound: dependencies.runStore.recordAcceptanceRound,
+          });
+          return { validationFindings: acceptance.findings };
         }),
     });
 

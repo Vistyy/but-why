@@ -1,9 +1,25 @@
 import type { PublicTaskId } from "../task/taskId.js";
 import type { TaskContextSnapshotV1 } from "../validationRun/taskContextSnapshot.js";
 
-export type ChangeState = "open" | "closed";
-export type ChangeCloseReason = "completed" | "cancelled";
-export type ChangeReadiness = "pending" | "ready" | "prepare_failed";
+export const changeState = {
+  open: "open",
+  closed: "closed",
+} as const;
+
+const changeCloseReason = {
+  completed: "completed",
+  cancelled: "cancelled",
+} as const;
+
+export const changeReadiness = {
+  pending: "pending",
+  ready: "ready",
+  prepareFailed: "prepare_failed",
+} as const;
+
+export type ChangeState = (typeof changeState)[keyof typeof changeState];
+export type ChangeCloseReason = (typeof changeCloseReason)[keyof typeof changeCloseReason];
+export type ChangeReadiness = (typeof changeReadiness)[keyof typeof changeReadiness];
 
 export type ChangePrepareDefinition = {
   readonly command: string;

@@ -6,7 +6,7 @@ import {
   type RepositoryPreparationExecutor,
 } from "../repositoryPreparation/runRepositoryPreparation.js";
 import { taskSlugForId, type PublicTaskId } from "../task/taskId.js";
-import type { ChangePrepareFailure } from "./change.js";
+import { changeReadiness, changeState, type ChangePrepareFailure } from "./change.js";
 import {
   provisionChangeWorktree,
   resolveChangeStartGitIntent,
@@ -99,7 +99,7 @@ const resumeTaskChange = async (
 
   const provisioned = provisionChangeWorktree(context.root, eligibility.existing, true);
   if (!provisioned.ok) return { ...provisioned, change: eligibility.existing };
-  return eligibility.existing.readiness === "pending"
+  return eligibility.existing.readiness === changeReadiness.pending
     ? prepareExisting(store, executor, eligibility.existing, now)
     : readinessResult(eligibility.existing);
 };
@@ -113,10 +113,10 @@ const prepareChange = async (
 ): Promise<ChangePrepareResult> => {
   const change = store.getById(changeId);
   if (change === undefined) return { ok: false, code: "change_not_found" };
-  if (change.state !== "open") return { ok: false, code: "change_not_open" };
+  if (change.state !== changeState.open) return { ok: false, code: "change_not_open" };
   const provisioned = provisionChangeWorktree(context.root, change, true);
   if (!provisioned.ok) return { ...provisioned, change };
-  if (change.readiness === "ready") return { ok: true, change };
+  if (change.readiness === changeReadiness.ready) return { ok: true, change };
   return prepareExisting(store, executor, change, now);
 };
 
@@ -162,6 +162,6 @@ const prepareExisting = async (
 };
 
 const readinessResult = (change: ChangeStartRecord): ChangeStartResult =>
-  change.readiness === "prepare_failed"
+  change.readiness === changeReadiness.prepareFailed
     ? { ok: false, code: "prepare_failed", change }
     : { ok: true, change };

@@ -1,14 +1,17 @@
 import { Effect } from "effect";
 import { describe, expect, it } from "vitest";
 
-import { decodeReviewerOutputContract } from "../src/contracts/reviewerOutput.js";
+import {
+  decodeReviewerOutputContract,
+  validateReviewerArtifactRefs,
+} from "../src/contracts/reviewerOutput.js";
 
 describe("reviewer output contract", () => {
   it("accepts reviewer Findings with severity", async () => {
     const finding = reviewerFinding({
       files: ["src/cli.ts"],
       severity: "high",
-      artifactRefs: ["artifact:by-1-09224d806043.v1/intent_review/intent/output.json"],
+      artifactRefs: ["artifact:by-1-09224d806043.v1/acceptance_review/acceptance/output.json"],
     });
     const output = await Effect.runPromise(
       decodeReviewerOutputContract({
@@ -19,6 +22,60 @@ describe("reviewer output contract", () => {
     );
 
     expect(output).toEqual({ findings: [finding] });
+  });
+
+  it("accepts Candidate-owned Validation Run artifact references", async () => {
+    const artifactRef = "artifact:123e4567-e89b-42d3-a456-426614174000/checks/quality/stdout.txt";
+    const finding = reviewerFinding({ severity: "low", artifactRefs: [artifactRef] });
+
+    await expect(
+      Effect.runPromise(
+        decodeReviewerOutputContract({
+          reviewer: "acceptance",
+          attempts: 1,
+          output: { findings: [finding] },
+        }),
+      ),
+    ).resolves.toEqual({ findings: [finding] });
+  });
+
+  it("rejects artifact references that do not resolve within the Validation Run", async () => {
+    const dangling = "artifact:123e4567-e89b-42d3-a456-426614174000/checks/quality/stdout.txt";
+    const output = {
+      findings: [
+        {
+          title: "Task intent is not satisfied",
+          description: "The submitted code does not implement the requested behavior.",
+          severity: "high" as const,
+          evidence: "The changed command still returns the old output.",
+          files: [],
+          artifactRefs: [dangling],
+        },
+      ],
+    };
+
+    const error = await Effect.runPromise(
+      Effect.flip(
+        validateReviewerArtifactRefs({
+          reviewer: "acceptance",
+          attempts: 1,
+          validationRunId: "123e4567-e89b-42d3-a456-426614174000",
+          output,
+          availableArtifactRefs: [],
+        }),
+      ),
+    );
+
+    expect(error).toMatchObject({
+      _tag: "ReviewerOutputContractFailed",
+      operationName: "resolve_reviewer_artifact_refs",
+      diagnostics: [
+        expect.objectContaining({
+          path: ["findings", 0, "artifactRefs", 0],
+          actual: dangling,
+        }),
+      ],
+    });
   });
 
   it.each([

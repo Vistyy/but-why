@@ -1,5 +1,7 @@
+import type { ResolvedPiAgentProfile } from "../agent/agentProfiles.js";
 import type {
   RecordValidationRunCheckRoundInput,
+  RecordValidationRunCommandRoundInput,
   RecordValidationRunPrepareRoundInput,
 } from "../validationRun/validationRunStore.js";
 import type { ValidationToolingFailureRecordInput } from "../validation/validationToolingFailures.js";
@@ -20,6 +22,7 @@ export type CandidateValidationRunStore = {
   readonly recordToolingFailure: (input: RecordCandidateToolingFailureInput) => void;
   readonly recordPrepareRound: (input: RecordValidationRunPrepareRoundInput) => void;
   readonly recordCheckRound: (input: RecordValidationRunCheckRoundInput) => void;
+  readonly recordAcceptanceRound: (input: RecordCandidateAcceptanceRoundInput) => void;
   readonly listRounds: (validationRunId: string) => readonly CandidateValidationRound[];
   readonly listFindings: (validationRunId: string) => readonly CandidateValidationFinding[];
   readonly listToolingFailures: (
@@ -37,11 +40,19 @@ export type CandidateValidationPolicySnapshot = {
     readonly timeoutSeconds: number;
   }[];
   readonly copyFiles: readonly string[];
+  readonly acceptanceReview?: {
+    readonly instructions: string;
+    readonly instructionsSource: "repo" | "global" | "built_in";
+    readonly agentProfile: string;
+    readonly profileSource: "repo" | "global";
+    readonly profile: ResolvedPiAgentProfile;
+  };
 };
 
 export type StartCandidateValidationRunInput = {
   readonly candidateId: string;
   readonly headSha: string;
+  readonly comparisonBaseSha?: string;
   readonly policy: CandidateValidationPolicySnapshot;
   readonly now: string;
 };
@@ -54,6 +65,13 @@ export type CompleteCandidateValidationRunInput = {
   readonly validationRunId: string;
   readonly outcome: CandidateValidationOutcome;
   readonly now: string;
+};
+
+export type RecordCandidateAcceptanceRoundInput = Omit<
+  RecordValidationRunCommandRoundInput,
+  "phase" | "producer" | "finding"
+> & {
+  readonly findings: NonNullable<RecordValidationRunCommandRoundInput["findings"]>;
 };
 
 export type RecordCandidateWorkspaceSetupInput = {

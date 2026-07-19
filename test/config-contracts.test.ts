@@ -56,6 +56,19 @@ describe("configuration contracts", () => {
     expect(right(decodeGlobalConfig(config))).toEqual(config);
   });
 
+  it("decodes global Acceptance overrides", () => {
+    const config = {
+      review: {
+        acceptance: {
+          instructionsFile: "reviewers/acceptance.md",
+          agentProfile: "strict",
+        },
+      },
+    };
+
+    expect(right(decodeGlobalConfig(config))).toEqual(config);
+  });
+
   it("reports invalid global Agent Profiles with actionable diagnostics", () => {
     const error = left(
       decodeGlobalConfig({
@@ -124,6 +137,20 @@ describe("configuration contracts", () => {
     );
   });
 
+  it("decodes repository Acceptance overrides", () => {
+    const config = {
+      taskPrefix: "BY",
+      review: {
+        acceptance: {
+          instructionsFile: ".but-why/reviewers/acceptance.md",
+          agentProfile: "strict",
+        },
+      },
+    };
+
+    expect(right(decodeRepoConfig(config))).toEqual(config);
+  });
+
   it("reports actionable repo config diagnostics", () => {
     const error = left(
       decodeRepoConfig({
@@ -176,6 +203,10 @@ describe("repository configuration rejection matrix", () => {
       },
     ],
     ["prepare severity", { taskPrefix: "BY", prepare: { severity: "high" } }],
+    [
+      "disabled Acceptance Review",
+      { taskPrefix: "BY", review: { acceptance: { enabled: false } } },
+    ],
     ["validation prepare without command", { taskPrefix: "BY", validation: { prepare: {} } }],
     [
       "validation prepare empty command",

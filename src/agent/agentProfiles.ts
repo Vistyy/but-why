@@ -1,4 +1,4 @@
-import type { AgentProfileConfig } from "../contracts/agentConfig.js";
+import type { AgentProfileConfig, PiAgentProfileConfig } from "../contracts/agentConfig.js";
 import type { GlobalConfig } from "../contracts/globalConfig.js";
 import {
   MissingAgentModel,
@@ -7,6 +7,11 @@ import {
   type AgentProfileResolutionError,
 } from "./agentProfileErrors.js";
 import { agentRuntimeAdapters, isSupportedAgentRuntime } from "./runtimeAdapters.js";
+
+export type ResolvedPiAgentProfile = Omit<PiAgentProfileConfig, "agentModel" | "thinking"> & {
+  readonly agentModel: string;
+  readonly thinking?: Exclude<PiAgentProfileConfig["thinking"], undefined>;
+};
 
 export type ResolvedAgentProfile = {
   readonly agentProfile: string;
