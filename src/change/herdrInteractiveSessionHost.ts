@@ -48,7 +48,7 @@ const launchHerdrSession = async (
     input.worktreePath,
     "--label",
     sessionName,
-    "--focus",
+    "--no-focus",
   ]);
   if (!worktree.ok) return launchFailure(worktree.message);
   const opened = openedWorktree(worktree.stdout);
@@ -62,7 +62,10 @@ const launchHerdrSession = async (
   }
 
   const launched = await execute(["pane", "run", opened.rootPaneId, piCommand(input, path)]);
-  if (!launched.ok) return launchFailure(launched.message);
+  if (!launched.ok) {
+    await closeWorkspace(execute, opened.workspaceId);
+    return launchFailure(launched.message);
+  }
 
   const renamed = await execute(["agent", "rename", opened.rootPaneId, sessionName]);
   if (renamed.ok && renamedSession(renamed.stdout, input, sessionName, opened.rootPaneId)) {
@@ -110,7 +113,10 @@ const hasActiveSession = (
 ): boolean => {
   const result = herdrResult(source);
   const agents = result === undefined ? undefined : recordValue(result, "agents");
-  return Array.isArray(agents) && agents.some((agent) => matchesSession(agent, input, sessionName));
+  return (
+    Array.isArray(agents) &&
+    agents.some((agent) => matchesSession(agent, input, sessionName, undefined, true))
+  );
 };
 
 const renamedSession = (
@@ -121,26 +127,32 @@ const renamedSession = (
 ): boolean => {
   const result = herdrResult(source);
   const agent = result === undefined ? undefined : recordValue(result, "agent");
-  return matchesSession(agent, input, sessionName, rootPaneId);
+  return matchesSession(agent, input, sessionName, rootPaneId, false);
 };
 
 const matchesSession = (
   value: unknown,
   input: InteractiveSessionLaunchInput,
   sessionName: string,
-  paneId?: string,
+  paneId: string | undefined,
+  requireActive: boolean,
 ): boolean => {
   if (!isRecord(value)) return false;
   const name = recordValue(value, "name");
   const agent = recordValue(value, "agent");
   const cwd = recordValue(value, "cwd");
   const reportedPaneId = recordValue(value, "pane_id");
+  const status = recordValue(value, "agent_status");
   return (
     (name === sessionName || agent === sessionName) &&
     cwd === input.worktreePath &&
-    (paneId === undefined || reportedPaneId === paneId)
+    (paneId === undefined || reportedPaneId === paneId) &&
+    (!requireActive || isActiveAgentStatus(status))
   );
 };
+
+const isActiveAgentStatus = (status: unknown): boolean =>
+  status === "idle" || status === "working" || status === "blocked" || status === "unknown";
 
 const closeWorkspace = async (
   execute: HerdrCommandExecutor,

@@ -63,7 +63,7 @@ describe("Herdr Interactive Session Host", () => {
         "/workspace/change-123",
         "--label",
         sessionName,
-        "--focus",
+        "--no-focus",
       ],
       [
         "pane",
@@ -96,7 +96,7 @@ describe("Herdr Interactive Session Host", () => {
       if (args[0] === "agent" && args[1] === "list") {
         return {
           ok: true,
-          stdout: `{"result":{"agents":[{"agent":"${sessionName}","cwd":"/workspace/change-123"}]}}`,
+          stdout: `{"result":{"agents":[{"agent":"${sessionName}","cwd":"/workspace/change-123","agent_status":"working"}]}}`,
         };
       }
       return { ok: true, stdout: "{}" };
@@ -110,6 +110,101 @@ describe("Herdr Interactive Session Host", () => {
         initialPrompt: undefined,
       }),
     ).resolves.toEqual({ ok: true, host: "herdr", status: "already_active" });
+    expect(commands).toContainEqual(["workspace", "close", "workspace-1"]);
+  });
+
+  it("does not treat a done Herdr agent as an active Interactive Session", async () => {
+    const commands: string[][] = [];
+    const execute: HerdrCommandExecutor = async (args) => {
+      commands.push([...args]);
+      if (args[0] === "agent" && args[1] === "list") {
+        return {
+          ok: true,
+          stdout: `{"result":{"agents":[{"agent":"${herdrSessionName("change-123")}","cwd":"/workspace/change-123","agent_status":"done"}]}}`,
+        };
+      }
+      if (args[0] === "worktree") {
+        return {
+          ok: true,
+          stdout:
+            '{"result":{"workspace":{"workspace_id":"workspace-1"},"root_pane":{"pane_id":"workspace-1:pane-1"},"already_open":false}}',
+        };
+      }
+      if (args[0] === "agent" && args[1] === "rename") {
+        return {
+          ok: true,
+          stdout:
+            '{"result":{"agent":{"name":"but-why-change-123","pane_id":"workspace-1:pane-1","cwd":"/workspace/change-123"}}}',
+        };
+      }
+      return { ok: true, stdout: "{}" };
+    };
+
+    await expect(
+      openHerdrInteractiveSessionHost(execute).launch({
+        changeId: "change-123",
+        repositoryPath: "/repository",
+        worktreePath: "/workspace/change-123",
+        initialPrompt: undefined,
+      }),
+    ).resolves.toEqual({ ok: true, host: "herdr", status: "started" });
+    expect(commands).toContainEqual([
+      "worktree",
+      "open",
+      "--cwd",
+      "/repository",
+      "--path",
+      "/workspace/change-123",
+      "--label",
+      herdrSessionName("change-123"),
+      "--no-focus",
+    ]);
+  });
+
+  it("removes its workspace after a pane-run failure so a retry can start", async () => {
+    let paneRuns = 0;
+    const commands: string[][] = [];
+    const execute: HerdrCommandExecutor = async (args) => {
+      commands.push([...args]);
+      if (args[0] === "agent" && args[1] === "list") {
+        return { ok: true, stdout: '{"result":{"agents":[]}}' };
+      }
+      if (args[0] === "worktree") {
+        return {
+          ok: true,
+          stdout:
+            '{"result":{"workspace":{"workspace_id":"workspace-1"},"root_pane":{"pane_id":"workspace-1:pane-1"},"already_open":false}}',
+        };
+      }
+      if (args[0] === "pane") {
+        paneRuns += 1;
+        return paneRuns === 1
+          ? { ok: false, message: "pane unavailable" }
+          : { ok: true, stdout: "{}" };
+      }
+      if (args[0] === "agent" && args[1] === "rename") {
+        return {
+          ok: true,
+          stdout:
+            '{"result":{"agent":{"name":"but-why-change-123","pane_id":"workspace-1:pane-1","cwd":"/workspace/change-123"}}}',
+        };
+      }
+      return { ok: true, stdout: "{}" };
+    };
+    const host = openHerdrInteractiveSessionHost(execute);
+    const input = {
+      changeId: "change-123",
+      repositoryPath: "/repository",
+      worktreePath: "/workspace/change-123",
+      initialPrompt: undefined,
+    } as const;
+
+    await expect(host.launch(input)).resolves.toMatchObject({ ok: false, code: "launch_failed" });
+    await expect(host.launch(input)).resolves.toEqual({
+      ok: true,
+      host: "herdr",
+      status: "started",
+    });
     expect(commands).toContainEqual(["workspace", "close", "workspace-1"]);
   });
 
