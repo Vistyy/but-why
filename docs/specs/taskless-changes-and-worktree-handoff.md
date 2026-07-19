@@ -20,7 +20,7 @@ Taskless Changes run code-based validation and publication without requiring art
 Change Start will create a branch from the default branch, create the persistent Managed Worktree through native Git, run shared Repository Preparation, and return the Change identity and readiness state.
 Preparation and agent launch remain separate operations.
 Herdr can start a fresh Pi session in a ready Managed Worktree and seed it from a compact handoff file.
-A manually invoked Pi skill will create that handoff and orchestrate the CLI commands without copying the full Pi session or invalidating its prompt cache.
+A user-owned manually invoked Pi skill can create that handoff and orchestrate the CLI commands without copying the full Pi session or invalidating its prompt cache.
 
 ## User Stories
 
@@ -170,13 +170,6 @@ The CLI does not accept the handoff through standard input.
 The CLI reads the handoff and passes its content unchanged through the Interactive Session Host interface.
 The handoff describes relevant decisions, references existing artifacts instead of copying them, states the next implementation goal, suggests relevant skills, and excludes sensitive information.
 
-The installed Pi integration is a user-invoked skill named `handoff-to-worktree`.
-It is marked `disable-model-invocation: true`, so it adds no model context and runs only when the user requests it.
-It contains its own concise handoff contract because another user-invoked skill cannot invoke the existing `handoff` skill.
-It writes the handoff to the operating system's temporary directory, runs Change Start with JSON output, and runs Change Implement with the resulting Change ID and handoff file.
-It removes the temporary handoff after Change Implement returns.
-It reports preparation or launch failures in the current session.
-
 The new Herdr session receives the compact handoff rather than a clone of the existing Pi session.
 The current Pi session remains open.
 This preserves the current session's provider cache and avoids sending its full conversation as fresh input to the new session.
@@ -185,7 +178,7 @@ This preserves the current session's provider cache and avoids sending its full 
 
 Completed Task Start and Change storage issues remain historical records and are not rewritten.
 A new Change Start and Repository Preparation slice follows the completed managed-worktree work.
-Change-centered Submit, inspection, route removal, cancellation, reconciliation, Herdr launch, and the handoff skill depend on that shared capability where applicable.
+Change-centered Submit, inspection, route removal, cancellation, reconciliation, and Herdr launch depend on that shared capability where applicable.
 Herdr implementation work is blocked by ready Managed Worktrees.
 The manual v1 workflow and dogfood documentation migrate to Change commands.
 The taskless Change capability is part of the current v1 path rather than post-v1 work.
@@ -205,7 +198,6 @@ Pure domain and command tests cover optional Task linkage, lifecycle decisions, 
 Module tests with fake public ports cover Change Start orchestration, preparation retry, Interactive Session Host launch, already-active behavior, host unavailability, launch failure, conditional Acceptance Review, and reconciliation eligibility.
 SQLite-only tests cover taskless Change persistence, optional Task linkage, branch ownership constraints, readiness state, terminal state, and oldest-first queries without creating Git repositories.
 Adapter tests cover native Git command mapping, Herdr invocation, GitHub PR reconciliation, and cleanup safety.
-The Pi skill receives a static contract test and a manual smoke test rather than an automated Pi TUI suite.
 
 Repository precedent already uses in-process CLI execution, a shared SQLite schema template, real temporary Git repositories for Git-owned behavior, fake GitHub executables, and fake lifecycle adapters.
 The current suite broadly follows layered seams.
@@ -236,9 +228,6 @@ That task is not a blocker for this specification and is expected to improve sea
 The experimental `worktree-switch` Pi extension proved that Pi can fork a conversation into another worktree, but the new session changes the absolute cwd in the system prompt and receives a new provider cache identity.
 That approach was rejected because a long conversation could lose prompt-cache reuse and be processed as fresh input.
 The extension was removed after the experiment.
-
-The existing `handoff` skill is user-invoked and cannot be invoked by another skill.
-`handoff-to-worktree` therefore adopts the same compact-document principles directly while owning a distinct creation-and-launch workflow.
 
 The current test suite has roughly 300 tests and completes in about 18 to 20 seconds under four workers when the environment permits its normal setup.
 That runtime is reasonable for its deliberate real-Git coverage.

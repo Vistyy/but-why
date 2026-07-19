@@ -7,12 +7,11 @@
 
 ## Behaviors owned
 
-- Change Implement launches a visible Herdr child workspace and fresh Pi session in a ready Managed Worktree.
-- A user-invoked skill can hand the current work to that fresh session without copying the conversation.
+- Change Implement launches a visible Herdr workspace and fresh Pi session in a ready Managed Worktree.
 
 ## What to build
 
-Add `by change implement <change-id> [--handoff-file <path>]` and ship the user-only `handoff-to-worktree` skill over existing Change-owned Git state.
+Add `by change implement <change-id> [--handoff-file <path>]` over existing Change-owned Git state.
 Add a narrow Interactive Session Host interface and implement only its Herdr adapter.
 Do not add provider selection, registration, or generic provider machinery.
 
@@ -25,16 +24,15 @@ Do not add provider selection, registration, or generic provider machinery.
   Name that pane with `herdr agent rename`.
 - Local: Pass the caller `PATH` to `pane run`.
   Herdr runs as a persistent server and does not inherit the caller shell path.
-- Local: Ship `handoff-to-worktree` in the package `skills/` directory.
-  Pi loads it when the user enables the But Why package with `pi install`.
-  `by init` does not install or configure Pi packages.
+- Local: `handoff-to-worktree` is user-owned Pi configuration.
+  But Why does not ship, install, or configure the skill.
 - Deferred: Herdr 0.7.3 has no atomic session-name claim across `pane run` and `agent rename`.
   A concurrent name collision returns a retryable launch failure.
   A concurrent-launch coordinator needs its own approved task.
 
 ## Primary verification seam
 
-Change Implement tests against a fake Interactive Session Host, a static skill contract test, and one local Herdr smoke test.
+Change Implement tests against a fake Interactive Session Host and one local Herdr smoke test.
 The fake-host tests cover `started`, `already_active`, host-unavailable, and launch-failure results.
 File-contract tests cover regular non-empty UTF-8 input through 256 KiB.
 The smoke test verifies the stable session name and existing-worktree launch against an already-running Herdr host.
@@ -49,9 +47,6 @@ The smoke test verifies the stable session name and existing-worktree launch aga
 - [x] A successful JSON result reports the Change ID, worktree path, `herdr` host, and `started` or `already_active` status.
 - [x] Host-unavailable and launch failures preserve the prepared Change and return actionable, retryable errors.
 - [x] `--handoff-file` accepts only a regular, non-empty UTF-8 file of at most 256 KiB and does not accept standard input.
-- [x] `handoff-to-worktree` is user-invoked only and contains its own compact handoff instructions.
-- [x] The skill creates its handoff in the operating system temporary directory and removes it after Change Implement returns.
-- [x] The skill calls Change Start and Change Implement with `--output json` and reports failures in the current session.
 - [x] Global Config has no Herdr setting, and `by init` does not check Herdr availability.
 - [x] The integration does not copy, fork, or retarget the current Pi session.
 

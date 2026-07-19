@@ -119,7 +119,7 @@ describe("installable by CLI package", () => {
     expect(fixture.packed.files).toContain("docs/public/config.md");
     expect(fixture.packed.files).toContain("docs/public/setup.md");
     expect(fixture.packed.files).toContain("docs/public/skills/but-why/SKILL.md");
-    expect(fixture.packed.files).toContain("skills/handoff-to-worktree/SKILL.md");
+    expect(fixture.packed.files.some((path) => path.startsWith("skills/"))).toBe(false);
     expect(fixture.packed.files.some((path) => path.startsWith("src/"))).toBe(false);
     expect(fixture.packed.files.some((path) => path.startsWith("test/"))).toBe(false);
     expect(fixture.packed.files.some((path) => path.startsWith("spikes/"))).toBe(false);

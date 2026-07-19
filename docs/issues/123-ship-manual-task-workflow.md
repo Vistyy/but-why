@@ -13,11 +13,11 @@
 
 ## What to build
 
-Update CLI help, public setup and configuration docs, and the installed But Why skills to teach Task-backed and taskless Change workflows from preparation through reconciliation and cancellation.
+Update CLI help, public setup and configuration docs to teach Task-backed and taskless Change workflows from preparation through reconciliation and cancellation.
 
 ## Primary verification seam
 
-Installed-package workflow test plus review of the packaged skills from an external repository.
+Installed-package workflow test plus review of the public workflow documentation from an external repository.
 
 ## Acceptance criteria
 
@@ -25,9 +25,9 @@ Installed-package workflow test plus review of the packaged skills from an exter
 - [ ] Task-backed and taskless Change Start are documented with their different Acceptance Review behavior.
 - [ ] Top-level Repository Preparation and explicit preparation retry are documented with valid examples.
 - [ ] Direct manual Managed Worktree use is documented as the portable implementation path.
-- [ ] Change Implement and the user-only `handoff-to-worktree` skill are documented without session-copying claims.
+- [ ] Change Implement is documented without session-copying claims.
 - [ ] Programmatic examples request JSON, while human examples retain default TOON output.
-- [ ] The implementation skill uses the Managed Worktree and repeated Change Submit instead of `/code-review`.
+- [ ] User-owned implementation guidance uses the Managed Worktree and repeated Change Submit instead of `/code-review`.
 - [ ] The workflow stops when the PR is ready for human merge and never merges it.
 - [ ] Deferred AFK, Fixer, Final Review, PR Writer, Supervisor, and PR-remediation capabilities are absent.
 - [ ] Every command template matches installed `--help` and structured output.
