@@ -40,6 +40,38 @@ export const buildAcceptanceReviewerPrompt = (input: {
     "Each Finding must contain title, description, severity, evidence, files, and artifactRefs.",
   ].join("\n");
 
+export const buildSpecialistReviewerPrompt = (input: {
+  readonly specialist: string;
+  readonly instructions: string;
+  readonly validationRunId: string;
+  readonly availableArtifactRefs: readonly string[];
+  readonly candidate: {
+    readonly candidateId: string;
+    readonly comparisonBaseSha: string;
+    readonly headSha: string;
+  };
+}): string =>
+  [
+    input.instructions,
+    "",
+    `Specialist: ${input.specialist}`,
+    "Judge the exact Candidate only for this configured concern.",
+    "Inspect the repository and Candidate diff before deciding.",
+    "",
+    "Validation Run evidence:",
+    encodeReviewerWireValue({
+      validationRunId: input.validationRunId,
+      availableArtifactRefs: input.availableArtifactRefs,
+    }),
+    "",
+    "Candidate:",
+    encodeReviewerWireValue(input.candidate),
+    "",
+    "Return exactly one JSON object inside this XML tag:",
+    `<${reviewerOutputTag}>{"findings":[]}</${reviewerOutputTag}>`,
+    "Each Finding must contain title, description, severity, evidence, files, and artifactRefs.",
+  ].join("\n");
+
 export const buildReviewerOutputCorrectionPrompt = (
   failure: ReviewerOutputContractFailed,
 ): string =>

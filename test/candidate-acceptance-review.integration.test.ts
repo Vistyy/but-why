@@ -2,7 +2,10 @@ import { join } from "node:path";
 import { Effect } from "effect";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import type { ReviewerAgentRuntime } from "../src/agent/reviewerAgentRuntime.js";
+import type {
+  ReviewerAgentResult,
+  ReviewerAgentRuntime,
+} from "../src/agent/reviewerAgentRuntime.js";
 import { captureLocalCandidate } from "../src/changeCandidateCapture/captureLocalCandidate.js";
 import {
   openCandidateValidation,
@@ -38,11 +41,21 @@ const acceptancePolicy = {
   },
 };
 
+const specialistPolicy = (id: string) => ({
+  id,
+  instructions: `${id} review instructions`,
+  instructionsSource: "repo" as const,
+  agentProfile: "strict",
+  profileSource: "repo" as const,
+  profile: acceptancePolicy.profile,
+});
+
 const passingValidationPolicy = {
   sandboxMode: "none" as const,
   checks: [{ id: "quality", command: "true", timeoutSeconds: 1 }],
   copyFiles: [],
   acceptanceReview: acceptancePolicy,
+  specialistReviews: [],
 };
 
 afterEach(cleanupTempRoots);
@@ -156,6 +169,114 @@ describe("Task-backed Candidate Acceptance Review", () => {
         expect.objectContaining({ path: expect.stringContaining("reviewer-output.json") }),
       ]),
     );
+  });
+
+  it("runs configured Specialists once and keeps trustworthy results in configured order", async () => {
+    const finding = (title: string): ReviewerAgentResult => ({
+      ok: true,
+      report: {
+        findings: [
+          {
+            title,
+            description: `${title} description`,
+            severity: "high",
+            evidence: `${title} evidence`,
+            files: [],
+            artifactRefs: [],
+          },
+        ],
+      },
+      attempts: 1,
+      stdout: `${title} output`,
+    });
+    const failure = new ReviewerOutputContractFailed({
+      operationName: "decode_reviewer_output",
+      reviewer: "broken",
+      attempts: 2,
+      diagnostics: [],
+      message: "Broken Specialist output.",
+    });
+    const review = vi.fn<ReviewerAgentRuntime["review"]>((input) => {
+      const results: Record<string, ReviewerAgentResult> = {
+        acceptance: { ok: true, report: { findings: [] }, attempts: 1, stdout: "accepted" },
+        zeta: finding("Zeta Finding"),
+        broken: { ok: false, failure, attempts: 2, stdout: "invalid" },
+        alpha: finding("Alpha Finding"),
+      };
+      const result = results[input.reviewer];
+      if (result === undefined) throw new Error(`Unexpected reviewer: ${input.reviewer}`);
+      return Effect.succeed(result);
+    });
+    const ready = acceptanceReadyRepo({ review });
+
+    const result = await runTaskBackedCandidate(ready, {
+      ...passingValidationPolicy,
+      specialistReviews: [
+        specialistPolicy("zeta"),
+        specialistPolicy("broken"),
+        specialistPolicy("alpha"),
+      ],
+    });
+
+    expect(result).toMatchObject({ ok: false, outcome: "tooling_failed" });
+    expect(review.mock.calls.map(([input]) => input.reviewer)).toEqual([
+      "acceptance",
+      "zeta",
+      "broken",
+      "alpha",
+    ]);
+    for (const [input] of review.mock.calls.slice(1)) {
+      expect(input.prompt).toContain(ready.captured.headSha);
+      expect(input.prompt).toContain(`${input.reviewer} review instructions`);
+      expect(input.prompt).not.toContain(acceptanceContext.description);
+    }
+    expect(ready.validation.listFindings(result.validationRunId).map((item) => item.title)).toEqual(
+      ["Zeta Finding", "Alpha Finding"],
+    );
+    expect(ready.validation.listRounds(result.validationRunId)).toEqual([
+      { producer: "quality", status: "passed" },
+      { producer: "acceptance", status: "passed" },
+      { producer: "zeta", status: "failed" },
+      { producer: "broken", status: "failed" },
+      { producer: "alpha", status: "failed" },
+    ]);
+    expect(ready.validation.listToolingFailures(result.validationRunId)).toEqual([
+      expect.objectContaining({ errorKind: "reviewer_output_contract_failed" }),
+    ]);
+  });
+
+  it("blocks the Candidate on a Specialist Finding", async () => {
+    const ready = acceptanceReadyRepo({
+      review: (input) =>
+        Effect.succeed(
+          input.reviewer === "acceptance"
+            ? { ok: true, report: { findings: [] }, attempts: 1, stdout: "" }
+            : {
+                ok: true,
+                report: {
+                  findings: [
+                    {
+                      title: "Specialist Finding",
+                      description: "A configured concern failed.",
+                      severity: "low",
+                      evidence: "Specialist evidence.",
+                      files: [],
+                      artifactRefs: [],
+                    },
+                  ],
+                },
+                attempts: 1,
+                stdout: "",
+              },
+        ),
+    });
+
+    await expect(
+      runTaskBackedCandidate(ready, {
+        ...passingValidationPolicy,
+        specialistReviews: [specialistPolicy("standards")],
+      }),
+    ).resolves.toMatchObject({ ok: true, outcome: "blocked" });
   });
 
   it("records structured-output exhaustion as tooling failure without a Finding", async () => {

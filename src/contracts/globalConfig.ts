@@ -10,6 +10,11 @@ const globalAcceptanceReviewConfigSchema = Schema.Struct({
   instructionsFile: Schema.optional(repoRelativePathSchema),
 });
 
+const globalReviewerSchema = Schema.Struct({
+  agentProfile: Schema.optional(configNameSchema),
+  instructionsFile: repoRelativePathSchema,
+});
+
 const globalConfigSchema = Schema.Struct({
   defaultAgentProfile: Schema.optional(configNameSchema),
   agentProfiles: Schema.optional(
@@ -21,6 +26,13 @@ const globalConfigSchema = Schema.Struct({
   review: Schema.optional(
     Schema.Struct({
       acceptance: Schema.optional(globalAcceptanceReviewConfigSchema),
+      specialists: Schema.optional(Schema.Array(configNameSchema)),
+    }),
+  ),
+  reviewers: Schema.optional(
+    Schema.Record({
+      key: configNameSchema,
+      value: globalReviewerSchema,
     }),
   ),
 });

@@ -69,6 +69,20 @@ describe("configuration contracts", () => {
     expect(right(decodeGlobalConfig(config))).toEqual(config);
   });
 
+  it("decodes reusable Global Specialists", () => {
+    const config = {
+      review: { specialists: ["standards"] },
+      reviewers: {
+        standards: {
+          instructionsFile: "reviewers/standards.md",
+          agentProfile: "strict",
+        },
+      },
+    };
+
+    expect(right(decodeGlobalConfig(config))).toEqual(config);
+  });
+
   it("reports invalid global Agent Profiles with actionable diagnostics", () => {
     const error = left(
       decodeGlobalConfig({
@@ -149,6 +163,29 @@ describe("configuration contracts", () => {
     };
 
     expect(right(decodeRepoConfig(config))).toEqual(config);
+  });
+
+  it("decodes an empty Repo Specialist list that disables inherited Specialists", () => {
+    const config = {
+      taskPrefix: "BY",
+      review: { specialists: [] },
+    };
+
+    expect(right(decodeRepoConfig(config))).toEqual(config);
+  });
+
+  it("requires instructions in Global Specialist definitions", () => {
+    const error = left(
+      decodeGlobalConfig({
+        review: { specialists: ["standards"] },
+        reviewers: { standards: { agentProfile: "strict" } },
+      }),
+    );
+
+    expect(error._tag).toBe("GlobalConfigValidationFailed");
+    expect(error.diagnostics).toContainEqual(
+      expect.objectContaining({ path: ["reviewers", "standards", "instructionsFile"] }),
+    );
   });
 
   it("reports actionable repo config diagnostics", () => {

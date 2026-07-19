@@ -1,8 +1,9 @@
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { Effect } from "effect";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
+import type { ReviewerAgentRuntime } from "../src/agent/reviewerAgentRuntime.js";
 import { captureLocalCandidate } from "../src/changeCandidateCapture/captureLocalCandidate.js";
 import { openCandidateValidation } from "../src/candidateValidation/validateCandidate.js";
 import { openSqliteCandidateValidationRunStore } from "../src/sqlite/sqliteCandidateValidationRunStore.js";
@@ -37,11 +38,13 @@ describe("Candidate validation", () => {
         { id: "later", command: "git rev-parse --verify HEAD", timeoutSeconds: 1 },
       ],
       copyFiles: [],
+      specialistReviews: [],
     };
 
     const first = await Effect.runPromise(
       validation.validateCandidate({
         candidateId: captured.candidateId,
+        comparisonBaseSha: captured.comparisonBaseSha,
         headSha: captured.headSha,
         policy,
         now,
@@ -59,6 +62,7 @@ describe("Candidate validation", () => {
     const passing = await Effect.runPromise(
       validation.validateCandidate({
         candidateId: captured.candidateId,
+        comparisonBaseSha: captured.comparisonBaseSha,
         headSha: captured.headSha,
         policy: passingPolicy,
         now,
@@ -74,6 +78,7 @@ describe("Candidate validation", () => {
       Effect.runPromise(
         validation.validateCandidate({
           candidateId: captured.candidateId,
+          comparisonBaseSha: captured.comparisonBaseSha,
           headSha: captured.headSha,
           policy: passingPolicy,
           now,
@@ -101,12 +106,14 @@ describe("Candidate validation", () => {
     const result = await Effect.runPromise(
       validation.validateCandidate({
         candidateId: captured.candidateId,
+        comparisonBaseSha: captured.comparisonBaseSha,
         headSha: captured.headSha,
         policy: {
           sandboxMode: "none",
           prepare: { command: "exit 1", timeoutSeconds: 1 },
           checks: [{ id: "skipped", command: "exit 1", timeoutSeconds: 1 }],
           copyFiles: [],
+          specialistReviews: [],
         },
         now,
       }),
@@ -134,6 +141,7 @@ describe("Candidate validation", () => {
       Effect.runPromise(
         validation.validateCandidate({
           candidateId: captured.candidateId,
+          comparisonBaseSha: captured.comparisonBaseSha,
           headSha: captured.headSha,
           policy: {
             sandboxMode: "none",
@@ -145,6 +153,7 @@ describe("Candidate validation", () => {
               },
             ],
             copyFiles: [],
+            specialistReviews: [],
           },
           now,
         }),
@@ -170,11 +179,13 @@ describe("Candidate validation", () => {
     const result = await Effect.runPromise(
       validation.validateCandidate({
         candidateId: captured.candidateId,
+        comparisonBaseSha: captured.comparisonBaseSha,
         headSha: captured.headSha,
         policy: {
           sandboxMode: "none",
           checks: [{ id: "must-not-run", command: "exit 0", timeoutSeconds: 1 }],
           copyFiles: [".validation-env"],
+          specialistReviews: [],
         },
         now,
       }),
@@ -182,6 +193,58 @@ describe("Candidate validation", () => {
 
     expect(result).toMatchObject({ ok: false, outcome: "tooling_failed" });
     expect(validation.listRounds(result.validationRunId)).toEqual([]);
+  });
+
+  it("runs configured Specialists for a taskless changed-code Candidate", async () => {
+    const repo = candidateReadyRepo();
+    const captured = captureLocalCandidate({ cwd: repo, now });
+    expect(captured.ok).toBe(true);
+    if (!captured.ok) return;
+    const review = vi.fn<ReviewerAgentRuntime["review"]>(() =>
+      Effect.succeed({ ok: true, report: { findings: [] }, attempts: 1, stdout: "" }),
+    );
+    const validation = openCandidateValidation({
+      localRepositoryMainCheckoutRoot: repo,
+      artifactsRoot: join(commonDirectory(repo), "but-why", "artifacts"),
+      runStore: openSqliteCandidateValidationRunStore(sqliteInput(repo)),
+      reviewerAgentRuntime: { review },
+    });
+
+    await expect(
+      Effect.runPromise(
+        validation.validateCandidate({
+          candidateId: captured.candidateId,
+          comparisonBaseSha: captured.comparisonBaseSha,
+          headSha: captured.headSha,
+          policy: {
+            sandboxMode: "none",
+            checks: [{ id: "quality", command: "true", timeoutSeconds: 1 }],
+            copyFiles: [],
+            specialistReviews: [
+              {
+                id: "standards",
+                instructions: "Review repository standards.",
+                instructionsSource: "global",
+                agentProfile: "default",
+                profileSource: "global",
+                profile: {
+                  agentRuntime: "pi",
+                  agentModel: "openai-codex/gpt-5.5",
+                },
+              },
+            ],
+          },
+          now,
+        }),
+      ),
+    ).resolves.toMatchObject({ ok: true, outcome: "passed" });
+    expect(review).toHaveBeenCalledOnce();
+    expect(review).toHaveBeenCalledWith(
+      expect.objectContaining({
+        reviewer: "standards",
+        prompt: expect.stringContaining(captured.headSha),
+      }),
+    );
   });
 
   it("copies a regular local validation file from the main checkout without changing Candidate identity", async () => {
@@ -203,6 +266,7 @@ describe("Candidate validation", () => {
       Effect.runPromise(
         validation.validateCandidate({
           candidateId: captured.candidateId,
+          comparisonBaseSha: captured.comparisonBaseSha,
           headSha: captured.headSha,
           policy: {
             sandboxMode: "none",
@@ -214,6 +278,7 @@ describe("Candidate validation", () => {
               },
             ],
             copyFiles: [".validation-env"],
+            specialistReviews: [],
           },
           now,
         }),

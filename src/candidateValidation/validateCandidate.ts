@@ -10,6 +10,8 @@ import {
   type ReviewerAgentRuntime,
 } from "../agent/reviewerAgentRuntime.js";
 import { runAcceptanceReviewPhase } from "../acceptanceReview/runAcceptanceReviewPhase.js";
+import type { SpecialistReviewPolicy } from "../specialistReview/specialistReviewConfig.js";
+import { runSpecialistReviewPhase } from "../specialistReview/runSpecialistReviewPhase.js";
 import type { SubmitCheckConfig, SubmitPrepareConfig } from "../submit/submitRepoConfig.js";
 import { createValidationWorkspace } from "../validation/createValidationWorkspace.js";
 import { runCheckPhase } from "../validation/runCheckRound.js";
@@ -18,6 +20,7 @@ import { maxValidationArtifactBytes } from "../validationRun/artifactFiles.js";
 import {
   ValidationWorkspaceSetupFailed,
   validationToolingFailureRecord,
+  type ValidationToolingFailure,
 } from "../validation/validationToolingFailures.js";
 import type { ValidationSandboxMode } from "../validation/validationWorkspace.js";
 import type { TaskContextSnapshotV1 } from "../validationRun/taskContextSnapshot.js";
@@ -27,6 +30,7 @@ export type CandidateValidationPolicy = {
   readonly prepare?: SubmitPrepareConfig;
   readonly checks: readonly SubmitCheckConfig[];
   readonly copyFiles: readonly string[];
+  readonly specialistReviews: readonly SpecialistReviewPolicy[];
 };
 
 export type TaskBackedCandidateValidationPolicy = CandidateValidationPolicy & {
@@ -50,6 +54,7 @@ export type CandidateValidation = {
 
 export type ValidateCandidateInput = {
   readonly candidateId: string;
+  readonly comparisonBaseSha: string;
   readonly headSha: string;
   readonly policy: CandidateValidationPolicy;
   readonly now: string;
@@ -110,7 +115,7 @@ const validateCandidate = (
     const started = dependencies.runStore.startOrReuse({
       candidateId: input.candidateId,
       headSha: input.headSha,
-      ...("comparisonBaseSha" in input ? { comparisonBaseSha: input.comparisonBaseSha } : {}),
+      comparisonBaseSha: input.comparisonBaseSha,
       policy: input.policy,
       now: input.now,
     });
@@ -152,18 +157,39 @@ const validateCandidate = (
             continueAfterFinding: true,
             recordCheckRound: dependencies.runStore.recordCheckRound,
           });
-          if (checks.findings === 1 || !("acceptanceContext" in input)) {
-            return { validationFindings: checks.findings };
+          if (checks.findings === 1) return { validationFindings: 1 as const };
+
+          if ("acceptanceContext" in input) {
+            const acceptance = yield* runAcceptanceReviewPhase({
+              validationRunId: started.validationRunId,
+              candidate: {
+                candidateId: input.candidateId,
+                comparisonBaseSha: input.comparisonBaseSha,
+                headSha: input.headSha,
+              },
+              acceptanceContext: input.acceptanceContext,
+              policy: input.policy.acceptanceReview,
+              runtime: dependencies.reviewerAgentRuntime,
+              sandbox: activeWorkspace.sandbox,
+              artifactsRoot: dependencies.artifactsRoot,
+              artifactMaxBytes: maxValidationArtifactBytes,
+              commandCwd: activeWorkspace.worktreePath,
+              allowedUntrackedFiles: input.policy.copyFiles,
+              now: input.now,
+              listArtifacts: dependencies.runStore.listArtifacts,
+              recordAcceptanceRound: dependencies.runStore.recordAcceptanceRound,
+            });
+            if (acceptance.findings === 1) return { validationFindings: 1 as const };
           }
-          const acceptance = yield* runAcceptanceReviewPhase({
+
+          const specialists = yield* runSpecialistReviewPhase({
             validationRunId: started.validationRunId,
             candidate: {
               candidateId: input.candidateId,
               comparisonBaseSha: input.comparisonBaseSha,
               headSha: input.headSha,
             },
-            acceptanceContext: input.acceptanceContext,
-            policy: input.policy.acceptanceReview,
+            policies: input.policy.specialistReviews,
             runtime: dependencies.reviewerAgentRuntime,
             sandbox: activeWorkspace.sandbox,
             artifactsRoot: dependencies.artifactsRoot,
@@ -172,9 +198,12 @@ const validateCandidate = (
             allowedUntrackedFiles: input.policy.copyFiles,
             now: input.now,
             listArtifacts: dependencies.runStore.listArtifacts,
-            recordAcceptanceRound: dependencies.runStore.recordAcceptanceRound,
+            recordSpecialistRound: dependencies.runStore.recordSpecialistRound,
           });
-          return { validationFindings: acceptance.findings };
+          return {
+            validationFindings: specialists.findings,
+            toolingFailures: specialists.toolingFailures,
+          };
         }),
     });
 
@@ -216,12 +245,32 @@ const validateCandidate = (
       cleanupTempRef: workspace.setup.cleanupResult.tempRef,
       now: input.now,
     });
+    const activeResult = workspace.activeWorkspaceResult;
+    const toolingFailures =
+      (
+        activeResult as
+          | { readonly toolingFailures?: readonly ValidationToolingFailure[] }
+          | undefined
+      )?.toolingFailures ?? [];
+    for (const toolingFailure of toolingFailures) {
+      dependencies.runStore.recordToolingFailure({
+        validationRunId: started.validationRunId,
+        ...validationToolingFailureRecord(toolingFailure),
+        now: input.now,
+      });
+    }
     const outcome: CandidateValidationOutcome =
-      workspace.activeWorkspaceResult?.validationFindings === 1 ? "blocked" : "passed";
+      toolingFailures.length > 0
+        ? "tooling_failed"
+        : activeResult?.validationFindings === 1
+          ? "blocked"
+          : "passed";
     dependencies.runStore.complete({
       validationRunId: started.validationRunId,
       outcome,
       now: input.now,
     });
-    return { ok: true, reused: false, validationRunId: started.validationRunId, outcome };
+    return outcome === "tooling_failed"
+      ? { ok: false, validationRunId: started.validationRunId, outcome }
+      : { ok: true, reused: false, validationRunId: started.validationRunId, outcome };
   });

@@ -154,6 +154,7 @@ describe("Candidate-owned Validation Run inspection", () => {
           ],
         },
         { phase: "acceptance_review", rounds: [] },
+        { phase: "quality_review", rounds: [] },
       ],
       findings: [
         {
@@ -255,6 +256,7 @@ describe("Candidate-owned Validation Run inspection", () => {
         { phase: "prepare", rounds: [] },
         { phase: "checks", rounds: [] },
         { phase: "acceptance_review", rounds: [] },
+        { phase: "quality_review", rounds: [] },
       ],
       findings: [],
       toolingFailures: [],

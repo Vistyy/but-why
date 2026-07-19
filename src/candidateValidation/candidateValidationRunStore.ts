@@ -23,6 +23,7 @@ export type CandidateValidationRunStore = {
   readonly recordPrepareRound: (input: RecordValidationRunPrepareRoundInput) => void;
   readonly recordCheckRound: (input: RecordValidationRunCheckRoundInput) => void;
   readonly recordAcceptanceRound: (input: RecordCandidateAcceptanceRoundInput) => void;
+  readonly recordSpecialistRound: (input: RecordCandidateSpecialistRoundInput) => void;
   readonly listRounds: (validationRunId: string) => readonly CandidateValidationRound[];
   readonly listFindings: (validationRunId: string) => readonly CandidateValidationFinding[];
   readonly listToolingFailures: (
@@ -47,6 +48,14 @@ export type CandidateValidationPolicySnapshot = {
     readonly profileSource: "repo" | "global";
     readonly profile: ResolvedPiAgentProfile;
   };
+  readonly specialistReviews?: readonly {
+    readonly id: string;
+    readonly instructions: string;
+    readonly instructionsSource: "repo" | "global";
+    readonly agentProfile: string;
+    readonly profileSource: "repo" | "global";
+    readonly profile: ResolvedPiAgentProfile;
+  }[];
 };
 
 export type StartCandidateValidationRunInput = {
@@ -70,6 +79,13 @@ export type CompleteCandidateValidationRunInput = {
 export type RecordCandidateAcceptanceRoundInput = Omit<
   RecordValidationRunCommandRoundInput,
   "phase" | "producer" | "finding"
+> & {
+  readonly findings: NonNullable<RecordValidationRunCommandRoundInput["findings"]>;
+};
+
+export type RecordCandidateSpecialistRoundInput = Omit<
+  RecordValidationRunCommandRoundInput,
+  "phase" | "finding"
 > & {
   readonly findings: NonNullable<RecordValidationRunCommandRoundInput["findings"]>;
 };

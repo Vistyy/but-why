@@ -118,6 +118,10 @@
         "patterns": ["src/acceptanceReview/**"]
       },
       {
+        "name": "specialist-review",
+        "patterns": ["src/specialistReview/**"]
+      },
+      {
         "name": "domain",
         "patterns": [
           "src/validationRun/cleanup.ts",
@@ -349,6 +353,19 @@
         ]
       },
       {
+        "from": "specialist-review",
+        "allow": [
+          "agent-profiles",
+          "contracts",
+          "domain",
+          "repo-init",
+          "submit-rejection-errors",
+          "validation-run-store",
+          "validation-runs",
+          "validation-tooling-failures"
+        ]
+      },
+      {
         "from": "domain",
         "allow": []
       },
@@ -451,6 +468,7 @@
         "from": "local-orchestration",
         "allow": [
           "acceptance-review",
+          "specialist-review",
           "agent-profiles",
           "domain",
           "github-adapter",

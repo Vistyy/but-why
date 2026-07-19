@@ -57,6 +57,10 @@ export const openSqliteCandidateValidationRunStore = (
         producer: "acceptance",
       }),
     ),
+  recordSpecialistRound: (round) =>
+    withStateDatabase(input, (database) =>
+      recordRound(database, { ...round, phase: validationPhase.qualityReview }),
+    ),
   listRounds: (validationRunId) =>
     withStateDatabase(input, (database) => listRounds(database, validationRunId)),
   listFindings: (validationRunId) =>
@@ -218,7 +222,8 @@ const recordRound = (database: DatabaseSync, input: RecordValidationRunCommandRo
   }
 };
 
-const phaseOrderSql = "CASE phase WHEN 'prepare' THEN 0 WHEN 'checks' THEN 1 ELSE 2 END";
+const phaseOrderSql =
+  "CASE phase WHEN 'prepare' THEN 0 WHEN 'checks' THEN 1 WHEN 'acceptance_review' THEN 2 ELSE 3 END";
 
 const listRounds = (
   database: DatabaseSync,
@@ -243,9 +248,18 @@ const listFindings = (
     `SELECT id, validation_run_id AS validationRunId, phase, producer, title,
             description, severity, evidence, files, artifact_refs AS artifactRefs,
             created_at AS createdAt, updated_at AS updatedAt
-     FROM candidate_validation_findings
+     FROM candidate_validation_findings AS finding
      WHERE validation_run_id = ?
-     ORDER BY ${phaseOrderSql}, producer, id`,
+     ORDER BY ${phaseOrderSql},
+       COALESCE((
+         SELECT round_number
+         FROM candidate_validation_rounds AS round
+         WHERE round.validation_run_id = finding.validation_run_id
+           AND round.phase = finding.phase
+           AND round.producer = finding.producer
+         LIMIT 1
+       ), 0),
+       id`,
     [validationRunId],
   ).map(({ severity, files, artifactRefs, ...finding }) => ({
     ...finding,
