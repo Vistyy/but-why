@@ -233,8 +233,7 @@ const recordPublishedPullRequest = (
       change.publication === null ||
       !sameTarget(change.publication.target, input.target) ||
       change.publication.headBranch !== input.headBranch ||
-      (input.previousExpectedHeadSha !== undefined &&
-        change.publication.expectedHeadSha !== input.previousExpectedHeadSha)
+      !canRecordPublishedPullRequest(change.publication, input)
     ) {
       return rollback(database, { ok: false, code: "publication_state_conflict" });
     }
@@ -264,6 +263,30 @@ const recordPublishedPullRequest = (
     rollbackIfOpen(database);
     throw error;
   }
+};
+
+const canRecordPublishedPullRequest = (
+  publication: ChangePublication,
+  input: RecordPublishedPullRequestInput,
+): boolean => {
+  if (input.previousExpectedHeadSha === undefined) {
+    return (
+      input.previousCandidateId === undefined &&
+      input.previousValidationRunId === undefined &&
+      publication.pullRequest === null &&
+      publication.candidateId === input.candidateId &&
+      publication.validationRunId === input.validationRunId
+    );
+  }
+  return (
+    input.previousCandidateId !== undefined &&
+    input.previousValidationRunId !== undefined &&
+    publication.pullRequest !== null &&
+    publication.pullRequest.number === input.pullRequest.number &&
+    publication.expectedHeadSha === input.previousExpectedHeadSha &&
+    publication.candidateId === input.previousCandidateId &&
+    publication.validationRunId === input.previousValidationRunId
+  );
 };
 
 const closeChange = (database: DatabaseSync, input: CloseChangeInput): CloseChangeResult => {

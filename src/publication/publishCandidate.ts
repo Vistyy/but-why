@@ -343,13 +343,18 @@ const updateOrReusePullRequest = (
       dependencies,
       input,
       owned.expectedHeadSha,
+      owned.candidateId,
+      owned.validationRunId,
       owned.pullRequest.number,
       headBranch,
       expectedHeadSha,
       updated.code,
     );
   }
-  if (!matchesExpectedPullRequest(updated.pullRequest, input.target, headBranch, expectedHeadSha)) {
+  if (
+    updated.pullRequest.number !== owned.pullRequest.number ||
+    !matchesExpectedPullRequest(updated.pullRequest, input.target, headBranch, expectedHeadSha)
+  ) {
     return { ok: false, code: "publication_remote_mismatch" };
   }
   return recordPullRequest(
@@ -359,6 +364,8 @@ const updateOrReusePullRequest = (
     expectedHeadSha,
     updated.pullRequest,
     owned.expectedHeadSha,
+    owned.candidateId,
+    owned.validationRunId,
   );
 };
 
@@ -366,6 +373,8 @@ const updateFailureResult = (
   dependencies: Parameters<typeof publishCandidate>[0],
   input: PublishCandidateInput,
   previousExpectedHeadSha: string,
+  previousCandidateId: string,
+  previousValidationRunId: string,
   pullRequestNumber: number,
   headBranch: string,
   expectedHeadSha: string,
@@ -377,7 +386,10 @@ const updateFailureResult = (
   }
   const recovered = dependencies.github.getPullRequest(input.target, pullRequestNumber);
   if (recovered === undefined) return { ok: false, code: "publication_tooling_failed" };
-  if (!matchesExpectedPullRequest(recovered, input.target, headBranch, expectedHeadSha)) {
+  if (
+    recovered.number !== pullRequestNumber ||
+    !matchesExpectedPullRequest(recovered, input.target, headBranch, expectedHeadSha)
+  ) {
     return { ok: false, code: "publication_remote_mismatch" };
   }
   return recordPullRequest(
@@ -387,6 +399,8 @@ const updateFailureResult = (
     expectedHeadSha,
     recovered,
     previousExpectedHeadSha,
+    previousCandidateId,
+    previousValidationRunId,
   );
 };
 
@@ -450,11 +464,21 @@ const recordPullRequest = (
   expectedHeadSha: string,
   pullRequest: GitHubPullRequest,
   previousExpectedHeadSha?: string,
+  previousCandidateId?: string,
+  previousValidationRunId?: string,
 ): PublishCandidateResult => {
+  const previousPublication =
+    previousExpectedHeadSha === undefined
+      ? {}
+      : previousCandidateId === undefined || previousValidationRunId === undefined
+        ? (() => {
+            throw new Error("Published pull request update lacks prior Candidate evidence");
+          })()
+        : { previousExpectedHeadSha, previousCandidateId, previousValidationRunId };
   const recorded = changeStore.recordPublishedPullRequest({
     ...publicationFacts(input, headBranch, expectedHeadSha),
     pullRequest: { number: pullRequest.number, url: pullRequest.url },
-    ...(previousExpectedHeadSha === undefined ? {} : { previousExpectedHeadSha }),
+    ...previousPublication,
     now: input.now,
   });
   if (!recorded.ok) return mapChangePublicationError(recorded.code);

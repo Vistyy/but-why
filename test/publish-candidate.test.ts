@@ -193,7 +193,9 @@ describe("Candidate publication", () => {
         updatePullRequest: (request) => {
           updates.push(request);
           remote = { ...remote, headSha: request.expectedHeadSha };
-          return { ok: false, code: "push_failed" };
+          return updates.length === 1
+            ? { ok: false, code: "push_failed" }
+            : { ok: true, pullRequest: { ...remote, number: 43 } };
         },
       },
     });
@@ -215,6 +217,20 @@ describe("Candidate publication", () => {
         expectedHeadSha: next.candidate.headSha,
       }),
     ]);
+
+    const third = capturePassingCandidate(fixture, "third-head", "2026-07-22T10:10:00.000Z");
+    branchHead = third.candidate.headSha;
+    expect(
+      publication.publish({
+        ...initial,
+        candidateId: third.candidate.id,
+        validationRunId: third.validationRunId,
+      }),
+    ).toEqual({ ok: false, code: "publication_remote_mismatch" });
+    expect(fixture.changeStore.getChangeById(fixture.changeId)?.publication).toMatchObject({
+      pullRequest: { number: 42 },
+      expectedHeadSha: next.candidate.headSha,
+    });
   });
 
   it("does not update an owned PR whose remote head is no longer expected", () => {

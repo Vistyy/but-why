@@ -47,6 +47,8 @@ export type BeginChangePublicationInput = {
 export type RecordPublishedPullRequestInput = BeginChangePublicationInput & {
   readonly pullRequest: ChangeOwnedPullRequest;
   readonly previousExpectedHeadSha?: string;
+  readonly previousCandidateId?: string;
+  readonly previousValidationRunId?: string;
 };
 
 export type CloseChangeResult =
