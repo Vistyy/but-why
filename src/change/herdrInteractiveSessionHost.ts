@@ -55,15 +55,32 @@ const launchHerdrSession = async (
   if (opened === undefined) {
     return launchFailure("Herdr did not return the worktree root pane.");
   }
+  if (opened.alreadyOpen) {
+    return launchFailure(
+      "Herdr already has this worktree open without the named Interactive Session.",
+    );
+  }
 
   const launched = await execute(["pane", "run", opened.rootPaneId, piCommand(input, path)]);
   if (!launched.ok) return launchFailure(launched.message);
 
   const renamed = await execute(["agent", "rename", opened.rootPaneId, sessionName]);
-  if (!renamed.ok) return launchFailure(renamed.message);
-  return renamedSession(renamed.stdout, input, sessionName, opened.rootPaneId)
-    ? { ok: true, host: "herdr", status: "started" }
-    : launchFailure("Herdr did not confirm the named Pi session in the worktree root pane.");
+  if (renamed.ok && renamedSession(renamed.stdout, input, sessionName, opened.rootPaneId)) {
+    return { ok: true, host: "herdr", status: "started" };
+  }
+
+  await closeWorkspace(execute, opened.workspaceId);
+  if (!renamed.ok && renamed.message.includes("agent_name_taken")) {
+    const retriedAgents = await execute(["agent", "list"]);
+    if (retriedAgents.ok && hasActiveSession(retriedAgents.stdout, input, sessionName)) {
+      return { ok: true, host: "herdr", status: "already_active" };
+    }
+  }
+  return launchFailure(
+    renamed.ok
+      ? "Herdr did not confirm the named Pi session in the worktree root pane."
+      : renamed.message,
+  );
 };
 
 const launchFailure = (message: string): InteractiveSessionLaunchResult => ({
@@ -125,11 +142,29 @@ const matchesSession = (
   );
 };
 
-const openedWorktree = (source: string): { readonly rootPaneId: string } | undefined => {
+const closeWorkspace = async (
+  execute: HerdrCommandExecutor,
+  workspaceId: string,
+): Promise<void> => {
+  await execute(["workspace", "close", workspaceId]);
+};
+
+const openedWorktree = (
+  source: string,
+):
+  | { readonly workspaceId: string; readonly rootPaneId: string; readonly alreadyOpen: boolean }
+  | undefined => {
   const result = herdrResult(source);
+  const workspace = result === undefined ? undefined : recordValue(result, "workspace");
   const rootPane = result === undefined ? undefined : recordValue(result, "root_pane");
+  const workspaceId = isRecord(workspace) ? recordValue(workspace, "workspace_id") : undefined;
   const rootPaneId = isRecord(rootPane) ? recordValue(rootPane, "pane_id") : undefined;
-  return typeof rootPaneId === "string" ? { rootPaneId } : undefined;
+  const alreadyOpen = result === undefined ? undefined : recordValue(result, "already_open");
+  return typeof workspaceId === "string" &&
+    typeof rootPaneId === "string" &&
+    typeof alreadyOpen === "boolean"
+    ? { workspaceId, rootPaneId, alreadyOpen }
+    : undefined;
 };
 
 const shellQuote = (value: string): string => `'${value.replaceAll("'", "'\\''")}'`;
