@@ -8,12 +8,14 @@ It ends when But Why? completes one real SQLite-tracked Task-backed Change and p
 ## Can start immediately
 
 - Task 105: Migrate Submit to Change ownership.
-- Task 139: Migrate Candidate validation Effect tests.
+- Task 142: Migrate remaining non-CLI Effect tests.
+- Task 144: Migrate CLI Effect test helpers.
 
 ## Completed
 
 - Task 130: Launch a Change Implementer in Herdr (`39e7056`).
 - Task 136: Compose Candidate validation through Effect (`e139f6e`).
+- Task 139: Migrate Candidate validation Effect tests (`2b88f95`).
 
 - Task 083: Start a Task in a managed worktree (`f009ab6`).
 - Task 084: Expand Candidate-owned validation through Checks (`d462952`).
@@ -41,8 +43,6 @@ It ends when But Why? completes one real SQLite-tracked Task-backed Change and p
 | 131 | Dogfood the first SQLite-tracked Change workflow | 125 |
 | 126 | Publish But Why? to npm | 131 |
 | 138 | Establish post-publication compatibility policy | 126 |
-| 142 | Migrate remaining non-CLI Effect tests | 139 |
-| 144 | Migrate CLI Effect test helpers | 139 |
 | 143 | Enforce Effect test execution | 142, 144 |
 
 ## Migration order

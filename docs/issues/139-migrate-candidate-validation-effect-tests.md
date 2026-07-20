@@ -1,5 +1,14 @@
 # Migrate Candidate validation Effect tests
 
+## Status
+
+Done.
+
+## Completion
+
+- Implementation: `be3f39a0d242ce318ddd82b871c7188df5686570`
+- Review corrections: `2b88f95bab2ad0fd1dee91b5fa7c47113dfa445f`
+
 ## Specification
 
 - `docs/issues/036-establish-effect-adoption-baseline.md`
