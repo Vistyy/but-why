@@ -78,7 +78,7 @@ The migration-ledger test must inspect `migration_id` and `name` in `effect_sql_
 - `cd spikes/effect-first-path && pnpm install --frozen-lockfile && pnpm run typecheck && pnpm test` passed.
 - The migration ledger integration tests passed for fresh and repeated initialization.
 - The Spec Reviewer returned `APPROVED`.
-- The Standards Reviewer returned `APPROVED WITH REQUIRED COMMENTS` with one documentation correction, which this evidence records.
+- The Standards Reviewer returned `APPROVED` with no findings.
 
 ## Blocked by
 
