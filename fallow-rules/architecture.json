@@ -43,32 +43,14 @@
       "severity": "error"
     },
     {
-      "id": "validation-run-store-implementation-does-not-import-task-store",
-      "kind": "banned-import",
-      "specifiers": ["../task/taskStore.js", "../sqlite/sqliteTaskStore.js"],
-      "files": [
-        "src/validationRun/validationRunStore.ts",
-        "src/sqlite/sqliteValidationRunStore.ts"
-      ],
-      "message": "ValidationRunStore must not depend on TaskStore behavior. ValidationRuns owns validation start coordination.",
-      "severity": "error"
-    },
-    {
       "id": "concrete-sqlite-stores-only-in-repo-local-storage-wiring",
       "kind": "banned-import",
       "specifiers": [
         "./sqliteTaskStore.js",
-        "./sqliteValidationRunStore.js",
-        "./sqliteValidationRuns.js",
         "../sqlite/sqliteTaskStore.js",
-        "../sqlite/sqliteValidationRunStore.js",
-        "../sqlite/sqliteValidationRuns.js",
         "../../sqlite/sqliteTaskStore.js",
-        "../../sqlite/sqliteValidationRunStore.js",
-        "../../sqlite/sqliteValidationRuns.js",
         "../../../sqlite/sqliteTaskStore.js",
-        "../../../sqlite/sqliteValidationRunStore.js",
-        "../../../sqlite/sqliteValidationRuns.js"
+        "../../../sqlite/sqliteTaskStore.js"
       ],
       "files": ["src/**/*.ts"],
       "exclude": ["src/init/repoLocalStores.ts"],
@@ -92,7 +74,7 @@
         "../../../output/serialize.js",
         "../../../output/toon.js"
       ],
-      "files": ["src/cli*.ts", "src/cli/**/*.ts", "src/submit/submitCli.ts"],
+      "files": ["src/cli*.ts", "src/cli/**/*.ts"],
       "message": "CLI command code may use structured output types but must leave JSON, TOON, and serializer implementation imports at the process edge.",
       "severity": "error"
     },

@@ -14,7 +14,7 @@ describe("Task state command guidance", () => {
     ["validating", "Wait for validation to finish."],
     [
       "needs_input",
-      "Address the Findings on the linked Change, then run by change submit <change-id>.",
+      "Inspect the linked Change with by task show BY-1, address its Findings, then run by change submit <change-id>.",
     ],
     ["ready", "Review and merge the pull request."],
     ["done", "Task is already done."],
