@@ -1,5 +1,13 @@
 # Migrate remaining non-CLI Effect tests
 
+## Status
+
+Done.
+
+## Completion
+
+- Implementation: `532bd53a28563ee3bfc7388d04d82b526bd94398`
+
 ## Specification
 
 - `docs/issues/036-establish-effect-adoption-baseline.md`
@@ -22,10 +30,10 @@ Each migrated public adapter, decoder, or module-seam test executes through `it.
 
 ## Acceptance criteria
 
-- [ ] Reviewer runtime tests use `@effect/vitest`.
-- [ ] Reviewer output contract tests use `@effect/vitest`.
-- [ ] Token usage and module-seam Effect tests use `@effect/vitest`.
-- [ ] Existing success and typed-error assertions remain unchanged.
+- [x] Reviewer runtime tests use `@effect/vitest`.
+- [x] Reviewer output contract tests use `@effect/vitest`.
+- [x] Token usage and module-seam Effect tests use `@effect/vitest`.
+- [x] Existing success and typed-error assertions remain unchanged.
 
 ## Blocked by
 

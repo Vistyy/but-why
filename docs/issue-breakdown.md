@@ -8,7 +8,6 @@ It ends when But Why? completes one real SQLite-tracked Task-backed Change and p
 ## Can start immediately
 
 - Task 105: Migrate Submit to Change ownership.
-- Task 142: Migrate remaining non-CLI Effect tests.
 - Task 144: Migrate CLI Effect test helpers.
 
 ## Completed
@@ -16,6 +15,7 @@ It ends when But Why? completes one real SQLite-tracked Task-backed Change and p
 - Task 130: Launch a Change Implementer in Herdr (`39e7056`).
 - Task 136: Compose Candidate validation through Effect (`e139f6e`).
 - Task 139: Migrate Candidate validation Effect tests (`2b88f95`).
+- Task 142: Migrate remaining non-CLI Effect tests (`532bd53`).
 
 - Task 083: Start a Task in a managed worktree (`f009ab6`).
 - Task 084: Expand Candidate-owned validation through Checks (`d462952`).
