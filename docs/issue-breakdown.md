@@ -8,7 +8,6 @@ It ends when But Why? completes one real SQLite-tracked Task-backed Change and p
 ## Can start immediately
 
 - Task 105: Migrate Submit to Change ownership.
-- Task 145: Own temporary test workspace lifecycles.
 
 ## Completed
 
@@ -17,6 +16,7 @@ It ends when But Why? completes one real SQLite-tracked Task-backed Change and p
 - Task 139: Migrate Candidate validation Effect tests (`2b88f95`).
 - Task 142: Migrate remaining non-CLI Effect tests (`532bd53`).
 - Task 144: Establish the in-process CLI Effect test harness (`d1f7f17`).
+- Task 145: Own temporary test workspace lifecycles (`102c7ee`).
 - Task 143: Enforce Effect test execution (`bdf66cd`).
 
 - Task 083: Start a Task in a managed worktree (`f009ab6`).
@@ -64,7 +64,7 @@ It ends when But Why? completes one real SQLite-tracked Task-backed Change and p
 Task 139 established framework-owned Effect execution through the complete Candidate validation test suite.
 Tasks 142 and 144 completed the Effect test migration.
 Task 143 enforces framework-owned Effect test execution.
-Task 145 can now replace global temporary-root cleanup through the established Effect test seam.
+Task 145 replaced global temporary-root cleanup through the established Effect test seam.
 This workstream does not block Task 105.
 
 ## Deferred
