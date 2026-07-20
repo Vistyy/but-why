@@ -169,6 +169,7 @@ export const ensureStateDatabase = (
 ): StateDatabaseChange => {
   const existed = existsSync(path);
   const database = new DatabaseSync(path, { timeout: stateDatabaseTimeoutMs });
+  let initialized = false;
 
   try {
     const table = database
@@ -177,10 +178,12 @@ export const ensureStateDatabase = (
 
     if (table === undefined) {
       database.exec(baselineSchema);
+      initialized = true;
     }
 
     if (commonDirectory !== undefined) ensureSharedStateIdentity(database, commonDirectory);
-    return existed ? "unchanged" : "created";
+    if (!existed) return "created";
+    return initialized ? "updated" : "unchanged";
   } finally {
     database.close();
   }

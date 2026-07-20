@@ -1,4 +1,4 @@
-import { copyFileSync, mkdirSync } from "node:fs";
+import { copyFileSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
@@ -28,6 +28,17 @@ describe("state database session", () => {
         database.prepare("SELECT common_directory FROM shared_state_identity WHERE id = 1").get(),
       ),
     ).toEqual({ common_directory: gitRoot(root).commonDirectory });
+  });
+
+  it("reports an updated baseline when an existing state file is empty", () => {
+    const root = createGitRepo();
+    const statePath = join(gitRoot(root).commonDirectory, "but-why", "state.sqlite");
+    mkdirSync(join(gitRoot(root).commonDirectory, "but-why"), { recursive: true });
+    writeFileSync(statePath, "");
+
+    expect(ensureStateDatabase(statePath, () => now, gitRoot(root).commonDirectory)).toBe(
+      "updated",
+    );
   });
 
   it("rejects a database replaced with another repository identity", () => {
