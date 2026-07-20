@@ -235,6 +235,7 @@ export type StateDatabase = {
 };
 
 type StateDatabaseRuntime = ReturnType<typeof ManagedRuntime.make>;
+const openStateDatabases = new Set<StateDatabase>();
 
 const runRuntimeSync = <A, E, R>(
   runtime: StateDatabaseRuntime,
@@ -269,7 +270,8 @@ const createStateDatabase = (
     }
   };
 
-  return {
+  let closed = false;
+  const database: StateDatabase = {
     statePath,
     ...(commonDirectory === undefined ? {} : { commonDirectory }),
     runSync,
@@ -305,8 +307,15 @@ const createStateDatabase = (
         ),
       );
     },
-    close: () => runtime.dispose(),
+    close: async () => {
+      if (closed) return;
+      closed = true;
+      openStateDatabases.delete(database);
+      await runtime.dispose();
+    },
   };
+  openStateDatabases.add(database);
+  return database;
 };
 
 export const initializeStateDatabase = (input: {
@@ -340,6 +349,10 @@ export const prepareStateDatabase = (input: {
 
 export const bindStateDatabaseIdentity = (path: string, commonDirectory: string): void => {
   initializeStateDatabase({ statePath: path, commonDirectory });
+};
+
+export const closeAllStateDatabases = async (): Promise<void> => {
+  await Promise.all(Array.from(openStateDatabases, (database) => database.close()));
 };
 
 export const validateStateDatabase = (input: {
