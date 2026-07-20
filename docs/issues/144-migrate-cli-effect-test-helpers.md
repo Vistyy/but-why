@@ -1,5 +1,14 @@
 # Establish the in-process CLI Effect test harness
 
+## Status
+
+Done.
+
+## Completion
+
+- Implementation: `f777a7f`.
+- Review corrections: `d1f7f17`.
+
 ## Specification
 
 - `docs/issues/036-establish-effect-adoption-baseline.md`
@@ -32,13 +41,13 @@ The test observes the same command result without a direct `Effect.run*` call or
 
 ## Acceptance criteria
 
-- [ ] The in-process CLI test harness exposes one Effect-returning execution interface.
-- [ ] The in-process CLI test harness contains no direct `Effect.run*` call.
-- [ ] The separate synchronous and asynchronous in-process helper implementations are removed.
-- [ ] Every in-process CLI harness consumer executes through `it.effect` or `it.scoped`.
-- [ ] Process-backed CLI tests remain ordinary Vitest tests when process behavior is part of the contract.
-- [ ] Existing command arguments, output assertions, error assertions, state assertions, and exit-code assertions remain behaviorally unchanged.
-- [ ] The focused in-process CLI suites pass through the shared execution interface.
+- [x] The in-process CLI test harness exposes one Effect-returning execution interface.
+- [x] The in-process CLI test harness contains no direct `Effect.run*` call.
+- [x] The separate synchronous and asynchronous in-process helper implementations are removed.
+- [x] Every in-process CLI harness consumer executes through `it.effect` or `it.scoped`.
+- [x] Process-backed CLI tests remain ordinary Vitest tests when process behavior is part of the contract.
+- [x] Existing command arguments, output assertions, error assertions, state assertions, and exit-code assertions remain behaviorally unchanged.
+- [x] The focused in-process CLI suites pass through the shared execution interface.
 
 ## Blocked by
 

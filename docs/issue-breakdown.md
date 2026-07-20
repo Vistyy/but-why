@@ -8,7 +8,8 @@ It ends when But Why? completes one real SQLite-tracked Task-backed Change and p
 ## Can start immediately
 
 - Task 105: Migrate Submit to Change ownership.
-- Task 144: Migrate CLI Effect test helpers.
+- Task 143: Enforce Effect test execution.
+- Task 145: Own temporary test workspace lifecycles.
 
 ## Completed
 
@@ -16,6 +17,7 @@ It ends when But Why? completes one real SQLite-tracked Task-backed Change and p
 - Task 136: Compose Candidate validation through Effect (`e139f6e`).
 - Task 139: Migrate Candidate validation Effect tests (`2b88f95`).
 - Task 142: Migrate remaining non-CLI Effect tests (`532bd53`).
+- Task 144: Establish the in-process CLI Effect test harness (`d1f7f17`).
 
 - Task 083: Start a Task in a managed worktree (`f009ab6`).
 - Task 084: Expand Candidate-owned validation through Checks (`d462952`).
@@ -43,8 +45,6 @@ It ends when But Why? completes one real SQLite-tracked Task-backed Change and p
 | 131 | Dogfood the first SQLite-tracked Change workflow | 125 |
 | 126 | Publish But Why? to npm | 131 |
 | 138 | Establish post-publication compatibility policy | 126 |
-| 143 | Enforce Effect test execution | 142, 144 |
-| 145 | Own temporary test workspace lifecycles | 144 |
 
 ## Migration order
 
@@ -61,11 +61,10 @@ It ends when But Why? completes one real SQLite-tracked Task-backed Change and p
 
 ## Independent test-execution workstream
 
-Task 139 establishes framework-owned Effect execution through the complete Candidate validation test suite.
-Tasks 142 and 144 can run in parallel after Task 139.
-Task 144 establishes one Effect-native in-process CLI test harness.
-Task 143 enforces the completed Effect execution migration after Tasks 142 and 144.
-Task 145 replaces global temporary-root cleanup after Task 144 establishes the Effect test seam.
+Task 139 established framework-owned Effect execution through the complete Candidate validation test suite.
+Tasks 142 and 144 completed the Effect test migration.
+Task 143 can now enforce framework-owned Effect test execution.
+Task 145 can now replace global temporary-root cleanup through the established Effect test seam.
 This workstream does not block Task 105.
 
 ## Deferred
