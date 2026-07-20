@@ -128,16 +128,9 @@ message: Execute test Effects through @effect/vitest using it.effect or it.scope
 files:
   - test/**/*.ts
 rule:
-  any:
-    - all:
-        - kind: import_statement
-        - regex: '[\s\S]*(runPromise|runPromiseExit|runSync|runSyncExit|runFork|runCallback)[\s\S]*(effect|Effect)[\s\S]*'
-    - all:
-        - kind: import_statement
-        - regex: '[\s\S]*import\s+\*[\s\S]*from\s+["`][^"`]*effect[^"`]*Effect["`][\s\S]*'
-    - all:
-        - kind: import_statement
-        - regex: '[\s\S]*import\s+[A-Za-z_$][A-Za-z0-9_$]*\s+from\s+["`][^"`]*effect[^"`]*Effect["`][\s\S]*'
+  all:
+    - kind: import_statement
+    - regex: '[\s\S]*import\s*\{[\s\S]*(runPromise|runPromiseExit|runSync|runSyncExit|runFork|runCallback)[\s\S]*\}\s*from\s+["`][^"`]*effect[^"`]*Effect["`][\s\S]*'
 ---
 id: no-serialize-output-outside-main
 language: TypeScript
