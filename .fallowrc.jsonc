@@ -215,7 +215,6 @@
           "src/change/changeUseCases.ts",
           "src/candidateValidation/inspectCandidateValidationRun.ts",
           "src/change/inspectChange.ts",
-          "src/submit/submitPreflight.ts",
           "src/submit/submitRepoConfig.ts"
         ]
       },
