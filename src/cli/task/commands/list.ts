@@ -50,7 +50,6 @@ export const runListCommand = (
       environment.taskUseCases === undefined
         ? loadChangeInspection({
             cwd: environment.cwd,
-            migrationTimestamp: () => environment.now().toISOString(),
           })
         : undefined;
     if (changeInspection !== undefined && !changeInspection.ok) {

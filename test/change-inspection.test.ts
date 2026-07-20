@@ -24,7 +24,6 @@ describe("Change inspection CLI", () => {
       const store = openSqliteChangeStore(
         prepareStateDatabaseSession({
           statePath: join(root, ".git", "but-why", "state.sqlite"),
-          migrationTimestamp: () => firstNow,
         }),
       );
       const repositoryCommonDirectory = join(root, ".git");
@@ -74,7 +73,6 @@ describe("Change inspection CLI", () => {
       const store = openSqliteChangeStore(
         prepareStateDatabaseSession({
           statePath: join(root, ".git", "but-why", "state.sqlite"),
-          migrationTimestamp: () => firstNow,
         }),
       );
       const created = store.createChange({
@@ -123,7 +121,6 @@ describe("Change inspection CLI", () => {
       const store = openSqliteChangeStore(
         prepareStateDatabaseSession({
           statePath: join(root, ".git", "but-why", "state.sqlite"),
-          migrationTimestamp: () => firstNow,
         }),
       );
       const created = store.createChange({
@@ -171,7 +168,6 @@ describe("Change inspection CLI", () => {
       const root = createInitializedRepo();
       const database = prepareStateDatabaseSession({
         statePath: join(root, ".git", "but-why", "state.sqlite"),
-        migrationTimestamp: () => firstNow,
       });
       const changeStore = openSqliteChangeStore(database);
       const candidateStore = openSqliteCandidateStore(database);
@@ -254,7 +250,6 @@ describe("Change inspection CLI", () => {
       const taskStore = openSqliteTaskStore({
         ...prepareStateDatabaseSession({
           statePath: join(root, ".git", "but-why", "state.sqlite"),
-          migrationTimestamp: () => firstNow,
         }),
         taskPrefix: "BY",
       });
@@ -267,7 +262,6 @@ describe("Change inspection CLI", () => {
       const changeStore = openSqliteChangeStore(
         prepareStateDatabaseSession({
           statePath: join(root, ".git", "but-why", "state.sqlite"),
-          migrationTimestamp: () => firstNow,
         }),
       );
 
@@ -351,7 +345,6 @@ describe("Change inspection CLI", () => {
       const root = createInitializedRepo();
       const database = prepareStateDatabaseSession({
         statePath: join(root, ".git", "but-why", "state.sqlite"),
-        migrationTimestamp: () => firstNow,
       });
       const changeStore = openSqliteChangeStore(database);
       const candidateStore = openSqliteCandidateStore(database);

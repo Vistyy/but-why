@@ -11,8 +11,6 @@ import {
 import { createGitRepo } from "./support/by-cli.js";
 import { createInitializedRepo } from "./support/initializedRepo.js";
 
-const now = "2026-06-30T12:00:00.000Z";
-
 describe("state database session", () => {
   it("serves repeated operations through one prepared repository identity", () => {
     const root = createInitializedRepo();
@@ -46,12 +44,11 @@ describe("state database session", () => {
     const path = statePath(root);
     const session = prepareStateDatabaseSession({
       statePath: path,
-      migrationTimestamp: () => now,
       commonDirectory: resolved.commonDirectory,
     });
 
     mkdirSync(join(resolved.commonDirectory, "but-why"), { recursive: true });
-    ensureStateDatabase(path, () => now);
+    ensureStateDatabase(path);
 
     expect(
       session.withDatabase((database) =>
@@ -74,7 +71,6 @@ const sessionFor = (root: string) => {
   const resolved = gitRoot(root);
   return prepareStateDatabaseSession({
     statePath: statePath(root),
-    migrationTimestamp: () => now,
     commonDirectory: resolved.commonDirectory,
   });
 };

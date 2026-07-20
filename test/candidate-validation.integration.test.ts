@@ -308,4 +308,4 @@ const validateCandidate = (
     return yield* service.validateCandidate(input);
   }).pipe(Effect.provide(validation.layer));
 
-const sqliteInput = (root: string) => candidateSqliteInput(root, now);
+const sqliteInput = (root: string) => candidateSqliteInput(root);

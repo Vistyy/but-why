@@ -34,7 +34,6 @@ export type RepoLocalStores = {
 
 export const openChangeCandidateCaptureStores = (input: {
   readonly statePath: string;
-  readonly migrationTimestamp: () => string;
   readonly commonDirectory: string;
 }): OpenChangeCandidateCaptureStoresResult => {
   const stateValidation = validateChangeCandidateCaptureState(input);

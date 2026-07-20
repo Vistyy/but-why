@@ -29,8 +29,7 @@ export const git = (cwd: string, ...args: readonly string[]): string => {
 export const commonDirectory = (root: string): string =>
   git(root, "rev-parse", "--path-format=absolute", "--git-common-dir");
 
-export const candidateSqliteInput = (root: string, now: string) =>
+export const candidateSqliteInput = (root: string) =>
   prepareStateDatabaseSession({
     statePath: join(commonDirectory(root), "but-why", "state.sqlite"),
-    migrationTimestamp: () => now,
   });

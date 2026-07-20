@@ -63,7 +63,7 @@ describe("by change start managed worktree", () => {
         "state: implementing",
       );
 
-      const context = loadRepoLocalContext(root, () => now);
+      const context = loadRepoLocalContext(root);
       if (!context.ok) throw new Error(context.error.code);
       expect(
         openRepoLocalStores(context.context).changeStartStore.getById(output.change.id),
@@ -242,7 +242,7 @@ describe("by change start managed worktree", () => {
   it.effect("requires an approved dependency-unblocked Task", () =>
     Effect.gen(function* () {
       const root = initializedRepository();
-      const context = loadRepoLocalContext(root, () => now);
+      const context = loadRepoLocalContext(root);
       if (!context.ok) throw new Error(context.error.code);
       const store = openRepoLocalStores(context.context).taskStore;
       const prerequisite = store.createTask({ title: "Prerequisite", description: "First", now });
@@ -354,7 +354,7 @@ const initializedRepository = (prepare?: string): string => {
 };
 
 const createApprovedTask = (root: string): void => {
-  const context = loadRepoLocalContext(root, () => now);
+  const context = loadRepoLocalContext(root);
   if (!context.ok) throw new Error(context.error.code);
   const store = openRepoLocalStores(context.context).taskStore;
   const task = store.createTask({

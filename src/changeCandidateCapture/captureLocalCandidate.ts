@@ -77,7 +77,6 @@ export const captureLocalCandidate = (
   if (!workspace.ok) return workspace;
   const sqliteInput = {
     statePath: join(workspace.facts.repositoryCommonDirectory, "but-why", "state.sqlite"),
-    migrationTimestamp: () => input.now,
     commonDirectory: workspace.facts.repositoryCommonDirectory,
   };
   const storesResult = openChangeCandidateCaptureStores(sqliteInput);

@@ -39,7 +39,6 @@ export const runShowCommand = (
       environment.taskUseCases === undefined
         ? loadChangeInspection({
             cwd: environment.cwd,
-            migrationTimestamp: () => environment.now().toISOString(),
           })
         : undefined;
     if (change !== undefined && !change.ok) return stateStoreUnavailable(taskId.tasks.taskPrefix);

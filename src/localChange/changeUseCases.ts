@@ -21,11 +21,10 @@ export type LoadChangeUseCasesResult =
 
 export const loadChangeUseCases = (input: {
   readonly cwd: string;
-  readonly migrationTimestamp: () => string;
   readonly interactiveSessionHost?: InteractiveSessionHost;
   readonly interactiveSessionPath?: string;
 }): LoadChangeUseCasesResult => {
-  const repoContext = loadRepoLocalContext(input.cwd, input.migrationTimestamp);
+  const repoContext = loadRepoLocalContext(input.cwd);
   if (!repoContext.ok) return repoContext;
   if (!existsSync(repoContext.context.paths.statePath)) {
     return {

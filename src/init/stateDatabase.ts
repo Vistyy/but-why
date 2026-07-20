@@ -164,7 +164,6 @@ const baselineSchema = `
 
 export const ensureStateDatabase = (
   path: string,
-  _migrationTimestamp: () => string,
   commonDirectory?: string,
 ): StateDatabaseChange => {
   const existed = existsSync(path);
@@ -191,7 +190,6 @@ export const bindStateDatabaseIdentity = (path: string, commonDirectory: string)
 
 export type StateDatabaseInput = {
   readonly statePath: string;
-  readonly migrationTimestamp: () => string;
   readonly commonDirectory?: string;
 };
 
@@ -208,14 +206,14 @@ class StateDatabaseUnavailableError extends Error {
 export const prepareStateDatabaseSession = (input: StateDatabaseInput): StateDatabaseSession => {
   let prepared = false;
   if (existsSync(input.statePath)) {
-    ensureStateDatabase(input.statePath, input.migrationTimestamp, input.commonDirectory);
+    ensureStateDatabase(input.statePath, input.commonDirectory);
     prepared = true;
   }
   return {
     withDatabase: (work) => {
       if (!existsSync(input.statePath)) throw new StateDatabaseUnavailableError();
       if (!prepared) {
-        ensureStateDatabase(input.statePath, input.migrationTimestamp, input.commonDirectory);
+        ensureStateDatabase(input.statePath, input.commonDirectory);
         prepared = true;
       }
       const database = new DatabaseSync(input.statePath, { timeout: stateDatabaseTimeoutMs });

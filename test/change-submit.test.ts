@@ -124,7 +124,7 @@ describe("by change submit", () => {
             agentProfiles: { test: { agentRuntime: "pi", agentModel: "test/model" } },
           })}\n`,
         );
-        const tasks = openSqliteTaskStore({ ...candidateSqliteInput(root, now), taskPrefix: "BY" });
+        const tasks = openSqliteTaskStore({ ...candidateSqliteInput(root), taskPrefix: "BY" });
         const task = tasks.createTask({ title: "Approved task", description: "Deliver it", now });
         const taskId = publicTaskId(task.id);
         expect(tasks.approveTask({ taskId, now }).ok).toBe(true);
@@ -232,7 +232,7 @@ describe("by change submit", () => {
           agentProfiles: { test: { agentRuntime: "pi", agentModel: "test/model" } },
         })}\n`,
       );
-      const tasks = openSqliteTaskStore({ ...candidateSqliteInput(root, now), taskPrefix: "BY" });
+      const tasks = openSqliteTaskStore({ ...candidateSqliteInput(root), taskPrefix: "BY" });
       const task = tasks.createTask({ title: "Approved task", description: "Deliver it", now });
       const taskId = publicTaskId(task.id);
       const approved = tasks.approveTask({ taskId, now });

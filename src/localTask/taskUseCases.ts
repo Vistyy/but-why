@@ -7,7 +7,6 @@ import { openTaskUseCases, type TaskUseCases } from "../task/taskUseCases.js";
 export type LoadTaskUseCasesInput = {
   readonly cwd: string;
   readonly requireState: boolean;
-  readonly migrationTimestamp: () => string;
 };
 
 export type LoadTaskUseCasesResult =
@@ -28,7 +27,7 @@ export type LoadTaskUseCasesError =
     };
 
 export const loadTaskUseCases = (input: LoadTaskUseCasesInput): LoadTaskUseCasesResult => {
-  const repoContext = loadRepoLocalContext(input.cwd, input.migrationTimestamp);
+  const repoContext = loadRepoLocalContext(input.cwd);
 
   if (!repoContext.ok) {
     return repoContext;

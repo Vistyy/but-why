@@ -599,4 +599,4 @@ const reviewerFinding = (title: string) => ({
   artifactRefs: [],
 });
 
-const sqliteInput = (root: string) => candidateSqliteInput(root, now);
+const sqliteInput = (root: string) => candidateSqliteInput(root);

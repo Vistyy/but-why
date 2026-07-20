@@ -517,5 +517,4 @@ const candidateValidationFixture = () => {
 const sqliteInput = (root: string) =>
   prepareStateDatabaseSession({
     statePath: join(root, ".git", "but-why", "state.sqlite"),
-    migrationTimestamp: () => now,
   });

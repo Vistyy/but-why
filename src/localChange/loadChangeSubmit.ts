@@ -31,10 +31,9 @@ export type LoadChangeSubmitResult =
 export const loadChangeSubmit = (input: {
   readonly cwd: string;
   readonly globalConfigPath: string;
-  readonly migrationTimestamp: () => string;
   readonly reviewerAgentRuntime?: ReviewerAgentRuntime;
 }): LoadChangeSubmitResult => {
-  const repoContext = loadRepoLocalContext(input.cwd, input.migrationTimestamp);
+  const repoContext = loadRepoLocalContext(input.cwd);
   if (!repoContext.ok) return repoContext;
   const context = repoContext.context;
   if (!existsSync(context.paths.statePath)) {

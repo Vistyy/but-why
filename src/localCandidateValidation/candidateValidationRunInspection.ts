@@ -17,9 +17,8 @@ export type LoadCandidateValidationRunInspectionResult =
 
 export const loadCandidateValidationRunInspection = (input: {
   readonly cwd: string;
-  readonly migrationTimestamp: () => string;
 }): LoadCandidateValidationRunInspectionResult => {
-  const repoContext = loadRepoLocalContext(input.cwd, input.migrationTimestamp);
+  const repoContext = loadRepoLocalContext(input.cwd);
   if (!repoContext.ok) return repoContext;
   if (!existsSync(repoContext.context.paths.statePath)) {
     return {

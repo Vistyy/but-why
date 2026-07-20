@@ -129,7 +129,6 @@ const runArtifactCommand = (
 const loadInspection = (environment: ValidationRunCommandEnvironment) =>
   loadCandidateValidationRunInspection({
     cwd: environment.cwd,
-    migrationTimestamp: () => environment.now().toISOString(),
   });
 
 const validationRunHelpView = (): StructuredObject => ({

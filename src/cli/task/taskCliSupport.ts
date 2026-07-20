@@ -36,7 +36,6 @@ export const loadTasks = (
   const result = loadTaskUseCases({
     cwd: environment.cwd,
     requireState,
-    migrationTimestamp: () => environment.now().toISOString(),
   });
 
   if (result.ok) {

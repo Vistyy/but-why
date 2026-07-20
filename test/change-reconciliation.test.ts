@@ -23,7 +23,7 @@ describe("by change reconcile", () => {
       readonly worktreePath: string;
     };
     const headSha = git(change.worktreePath, "rev-parse", "HEAD");
-    const context = loadRepoLocalContext(repository, () => now);
+    const context = loadRepoLocalContext(repository);
     if (!context.ok) throw new Error(context.error.code);
     const store = openRepoLocalStores(context.context).changeStore;
     const target = { owner: "acme", repo: "widgets", baseBranch: "main", remoteName: "origin" };
@@ -84,7 +84,7 @@ describe("by change reconcile", () => {
 
   it("atomically completes a merged Change and its linked Task before cleanup", () => {
     const repository = initializedRepository();
-    const context = loadRepoLocalContext(repository, () => now);
+    const context = loadRepoLocalContext(repository);
     if (!context.ok) throw new Error(context.error.code);
     const stores = openRepoLocalStores(context.context);
     const task = stores.taskStore.createTask({
@@ -161,7 +161,7 @@ describe("by change reconcile", () => {
     };
     const headSha = git(change.worktreePath, "rev-parse", "HEAD");
     writeFileSync(join(change.worktreePath, "uncommitted.txt"), "preserve this work\n");
-    const context = loadRepoLocalContext(repository, () => now);
+    const context = loadRepoLocalContext(repository);
     if (!context.ok) throw new Error(context.error.code);
     const store = openRepoLocalStores(context.context).changeStore;
     const target = { owner: "acme", repo: "widgets", baseBranch: "main", remoteName: "origin" };

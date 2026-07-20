@@ -14,9 +14,8 @@ export type LoadChangeInspectionResult =
 
 export const loadChangeInspection = (input: {
   readonly cwd: string;
-  readonly migrationTimestamp: () => string;
 }): LoadChangeInspectionResult => {
-  const repoContext = loadRepoLocalContext(input.cwd, input.migrationTimestamp);
+  const repoContext = loadRepoLocalContext(input.cwd);
   if (!repoContext.ok) return repoContext;
   if (!existsSync(repoContext.context.paths.statePath)) {
     return {

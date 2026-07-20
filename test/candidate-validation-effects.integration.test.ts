@@ -50,7 +50,7 @@ layer(Layer.empty)("Candidate validation Effect composition", (it) => {
     const repo = candidateReadyRepo();
     const captured = captureLocalCandidate({ cwd: repo, now });
     if (!captured.ok) throw new Error(`Candidate capture failed: ${captured.code}`);
-    const runStore = openSqliteCandidateValidationRunStore(candidateSqliteInput(repo, now));
+    const runStore = openSqliteCandidateValidationRunStore(candidateSqliteInput(repo));
 
     return Effect.gen(function* () {
       const validation = yield* CandidateValidation;

@@ -1270,7 +1270,6 @@ const taskStore = (root: string) =>
   openSqliteTaskStore({
     ...prepareStateDatabaseSession({
       statePath: sharedStatePath(root),
-      migrationTimestamp: () => firstNow,
     }),
     taskPrefix: "BY",
   });
@@ -1292,7 +1291,6 @@ const transitionTaskState = (
   const tasksLoad = loadTaskUseCases({
     cwd: root,
     requireState: true,
-    migrationTimestamp: () => firstNow,
   });
 
   if (!tasksLoad.ok) {

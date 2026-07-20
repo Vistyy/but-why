@@ -427,7 +427,7 @@ describe("Candidate publication", () => {
 
 const publicationFixture = (options: { readonly taskBacked?: boolean } = {}) => {
   const root = candidateReadyRepo();
-  const database = candidateSqliteInput(root, now);
+  const database = candidateSqliteInput(root);
   const changeStartStore = openSqliteChangeStartStore(database);
   const changeStore = openSqliteChangeStore(database);
   const taskStore = openSqliteTaskStore({ ...database, taskPrefix: "BY" });

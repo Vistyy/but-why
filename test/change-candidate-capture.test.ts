@@ -373,7 +373,6 @@ const git = (cwd: string, ...args: readonly string[]): string => {
 const sqliteInput = (root: string) =>
   prepareStateDatabaseSession({
     statePath: join(commonDirectory(root), "but-why", "state.sqlite"),
-    migrationTimestamp: () => now,
   });
 
 const changeStore = (root: string) => openSqliteChangeStore(sqliteInput(root));

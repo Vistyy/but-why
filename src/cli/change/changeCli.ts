@@ -140,7 +140,6 @@ const runStart = (
 
   const loaded = loadChangeUseCases({
     cwd: environment.cwd,
-    migrationTimestamp: () => environment.now().toISOString(),
   });
   if (!loaded.ok) return Effect.succeed(loadError(loaded.error));
 
@@ -181,7 +180,6 @@ const runList = (
   }
   const loaded = loadChangeInspection({
     cwd: environment.cwd,
-    migrationTimestamp: () => environment.now().toISOString(),
   });
   if (!loaded.ok) return Effect.succeed(loadError(loaded.error));
   try {
@@ -236,7 +234,6 @@ const runShow = (
   }
   const loaded = loadChangeInspection({
     cwd: environment.cwd,
-    migrationTimestamp: () => environment.now().toISOString(),
   });
   if (!loaded.ok) return Effect.succeed(loadError(loaded.error));
   try {
@@ -287,7 +284,6 @@ const runFindings = (
   if (!changeId.ok) return Effect.succeed(changeId.result);
   const loaded = loadChangeInspection({
     cwd: environment.cwd,
-    migrationTimestamp: () => environment.now().toISOString(),
   });
   if (!loaded.ok) return Effect.succeed(loadError(loaded.error));
   try {
@@ -316,7 +312,6 @@ const runValidationRuns = (
   if (!changeId.ok) return Effect.succeed(changeId.result);
   const loaded = loadChangeInspection({
     cwd: environment.cwd,
-    migrationTimestamp: () => environment.now().toISOString(),
   });
   if (!loaded.ok) return Effect.succeed(loadError(loaded.error));
   try {
@@ -388,7 +383,6 @@ const runPrepare = (
   }
   const loaded = loadChangeUseCases({
     cwd: environment.cwd,
-    migrationTimestamp: () => environment.now().toISOString(),
   });
   if (!loaded.ok) return Effect.succeed(loadError(loaded.error));
   return Effect.promise(async () => {
@@ -445,7 +439,6 @@ const runImplement = (
   if (handoff !== undefined && !handoff.ok) return Effect.succeed(handoffFileError(handoff.error));
   const loaded = loadChangeUseCases({
     cwd: environment.cwd,
-    migrationTimestamp: () => environment.now().toISOString(),
     ...(environment.interactiveSessionHost === undefined
       ? {}
       : { interactiveSessionHost: environment.interactiveSessionHost }),
@@ -568,7 +561,6 @@ const runSubmit = (
   const loaded = loadChangeSubmit({
     cwd: environment.cwd,
     globalConfigPath: environment.globalConfigPath,
-    migrationTimestamp: () => environment.now().toISOString(),
     ...(environment.reviewerAgentRuntime === undefined
       ? {}
       : { reviewerAgentRuntime: environment.reviewerAgentRuntime }),
@@ -698,7 +690,6 @@ const runReconcile = (
   const changeId = args[0];
   const loaded = loadChangeUseCases({
     cwd: environment.cwd,
-    migrationTimestamp: () => environment.now().toISOString(),
   });
   if (!loaded.ok) return Effect.succeed(loadError(loaded.error));
   return Effect.promise(async () => {

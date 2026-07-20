@@ -32,7 +32,6 @@ export type RepoLocalContext = {
 export type InitRepoInput = {
   readonly cwd: string;
   readonly taskPrefix: string;
-  readonly migrationTimestamp: () => string;
 };
 
 export type InitRepoResult =
@@ -154,11 +153,7 @@ export const initRepoLocalContext = (input: InitRepoInput): InitRepoResult => {
   let stateChange: ReturnType<typeof ensureStateDatabase>;
 
   try {
-    stateChange = ensureStateDatabase(
-      paths.statePath,
-      input.migrationTimestamp,
-      gitRoot.commonDirectory,
-    );
+    stateChange = ensureStateDatabase(paths.statePath, gitRoot.commonDirectory);
   } catch (error) {
     if (error instanceof SharedStateIdentityConflictError) {
       return { ok: false, error: { code: "shared_state_identity_conflict" } };
@@ -202,10 +197,7 @@ export const initRepoLocalContext = (input: InitRepoInput): InitRepoResult => {
   };
 };
 
-export const loadRepoLocalContext = (
-  cwd: string,
-  migrationTimestamp: () => string,
-): LoadRepoLocalContextResult => {
+export const loadRepoLocalContext = (cwd: string): LoadRepoLocalContextResult => {
   const gitRoot = findGitRoot(cwd);
 
   if (!gitRoot.ok) {
@@ -229,7 +221,6 @@ export const loadRepoLocalContext = (
   try {
     stateDatabase = prepareStateDatabaseSession({
       statePath: paths.statePath,
-      migrationTimestamp,
       commonDirectory: gitRoot.commonDirectory,
     });
   } catch (error) {
