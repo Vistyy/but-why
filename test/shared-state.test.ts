@@ -1,12 +1,13 @@
 import { spawnSync } from "node:child_process";
 import { existsSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { DatabaseSync } from "node:sqlite";
 
 import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
 import { describe } from "vitest";
 
+import { prepareStateDatabase } from "../src/init/stateDatabase.js";
+import { withStateDatabase } from "../src/sqlite/connection.js";
 import { createGitRepo, runByInProcessEffect } from "./support/by-cli.js";
 import { createTestWorkspace } from "./support/testWorkspace.js";
 
@@ -98,11 +99,12 @@ describe("shared repository state", () => {
   it.effect("rejects shared state that belongs to another Git common directory", () =>
     Effect.gen(function* () {
       const root = yield* initializedRepo();
-      const database = new DatabaseSync(sharedStatePath(root));
-      database
-        .prepare("UPDATE shared_state_identity SET common_directory = ? WHERE id = 1")
-        .run("/other/.git");
-      database.close();
+      const state = prepareStateDatabase({ statePath: sharedStatePath(root) });
+      withStateDatabase(state, (database) =>
+        database
+          .prepare("UPDATE shared_state_identity SET common_directory = ? WHERE id = 1")
+          .run("/other/.git"),
+      );
 
       const result = yield* runByInProcessEffect(root, ["task", "list"]);
 

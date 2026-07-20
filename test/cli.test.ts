@@ -2,7 +2,6 @@ import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { DatabaseSync } from "node:sqlite";
 
 import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
@@ -10,6 +9,8 @@ import { describe, it as ordinaryIt } from "vitest";
 
 import { collapseHome, mapRuntimeError } from "../src/cli.js";
 import { butWhyGitignoreBlock } from "../src/init/gitignore.js";
+import { prepareStateDatabase } from "../src/init/stateDatabase.js";
+import { withStateDatabase } from "../src/sqlite/connection.js";
 import { encodeToon } from "../src/output/toon.js";
 import { createGitRepo, repoRoot, runByInProcessEffect, runJustBy } from "./support/by-cli.js";
 import { createTestWorkspace } from "./support/testWorkspace.js";
@@ -356,32 +357,30 @@ validationSetup:
   );
 
   const expectInitializedSchema = (root: string): void => {
-    const database = new DatabaseSync(sharedStatePath(root));
-
-    try {
-      expect(
-        database
+    const database = prepareStateDatabase({ statePath: sharedStatePath(root) });
+    expect(
+      withStateDatabase(database, (connection) =>
+        connection
           .prepare(
             "SELECT name FROM sqlite_schema WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name",
           )
           .all(),
-      ).toEqual([
-        { name: "candidate_validation_artifacts" },
-        { name: "candidate_validation_findings" },
-        { name: "candidate_validation_rounds" },
-        { name: "candidate_validation_runs" },
-        { name: "candidate_validation_tooling_failures" },
-        { name: "candidate_validation_workspace_setups" },
-        { name: "candidates" },
-        { name: "changes" },
-        { name: "shared_state_identity" },
-        { name: "task_comments" },
-        { name: "task_dependencies" },
-        { name: "tasks" },
-      ]);
-    } finally {
-      database.close();
-    }
+      ).map((row) => row as { readonly name: string }),
+    ).toEqual([
+      { name: "candidate_validation_artifacts" },
+      { name: "candidate_validation_findings" },
+      { name: "candidate_validation_rounds" },
+      { name: "candidate_validation_runs" },
+      { name: "candidate_validation_tooling_failures" },
+      { name: "candidate_validation_workspace_setups" },
+      { name: "candidates" },
+      { name: "changes" },
+      { name: "effect_sql_migrations" },
+      { name: "shared_state_identity" },
+      { name: "task_comments" },
+      { name: "task_dependencies" },
+      { name: "tasks" },
+    ]);
   };
 
   it.effect("prints unchanged when init is rerun without repairs", () =>

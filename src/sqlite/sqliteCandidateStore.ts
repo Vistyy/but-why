@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { DatabaseSync } from "node:sqlite";
+import type { SqliteDatabase } from "./connection.js";
 
 import type { CandidateRecord } from "../candidate/candidate.js";
 import type {
@@ -30,7 +30,7 @@ export const openSqliteCandidateStore = (input: SqliteStoreInput): CandidateStor
 });
 
 const captureCandidate = (
-  database: DatabaseSync,
+  database: SqliteDatabase,
   input: CaptureCandidateInput,
 ): CaptureCandidateResult => {
   database.exec("BEGIN IMMEDIATE");
@@ -106,7 +106,7 @@ const captureCandidate = (
 };
 
 const assignInitialBase = (
-  database: DatabaseSync,
+  database: SqliteDatabase,
   changeId: string,
   currentBaseRef: string | null,
   selectedBaseRef: string,
@@ -120,7 +120,7 @@ const assignInitialBase = (
 };
 
 const getCandidateById = (
-  database: DatabaseSync,
+  database: SqliteDatabase,
   candidateId: string,
 ): CandidateRecord | undefined =>
   queryOne<CandidateRecord>(database, `SELECT ${candidateColumns} FROM candidates WHERE id = ?`, [
@@ -128,7 +128,7 @@ const getCandidateById = (
   ]);
 
 const listCandidatesForChange = (
-  database: DatabaseSync,
+  database: SqliteDatabase,
   changeId: string,
 ): readonly CandidateRecord[] =>
   queryAll<CandidateRecord>(

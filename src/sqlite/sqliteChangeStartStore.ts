@@ -1,4 +1,4 @@
-import type { DatabaseSync } from "node:sqlite";
+import type { SqliteDatabase } from "./connection.js";
 
 import type { ChangePrepareFailure } from "../change/change.js";
 import type {
@@ -68,7 +68,7 @@ export const openSqliteChangeStartStore = (input: SqliteStoreInput): ChangeStart
 });
 
 const prepareTask = (
-  database: DatabaseSync,
+  database: SqliteDatabase,
   taskId: PublicTaskId,
 ): ReturnType<ChangeStartStore["prepareTask"]> => {
   const existing = getByTaskId(database, taskId);
@@ -84,7 +84,7 @@ const prepareTask = (
 };
 
 const create = (
-  database: DatabaseSync,
+  database: SqliteDatabase,
   input: CreateChangeStartInput,
 ): ReturnType<ChangeStartStore["create"]> => {
   database.exec("BEGIN IMMEDIATE");
@@ -163,7 +163,7 @@ const create = (
 };
 
 const readEligibility = (
-  database: DatabaseSync,
+  database: SqliteDatabase,
   taskId: PublicTaskId,
 ):
   | { readonly ok: true; readonly task: TaskRow }
@@ -189,12 +189,12 @@ const readEligibility = (
     : { ok: false, code: "task_dependencies_unsatisfied", blockedBy };
 };
 
-const readTask = (database: DatabaseSync, taskId: PublicTaskId): TaskRow | undefined =>
+const readTask = (database: SqliteDatabase, taskId: PublicTaskId): TaskRow | undefined =>
   queryOne<TaskRow>(database, "SELECT id, title, description, state FROM tasks WHERE id = ?", [
     taskId,
   ]);
 
-const markReady = (database: DatabaseSync, changeId: string, now: string): ChangeStartRecord => {
+const markReady = (database: SqliteDatabase, changeId: string, now: string): ChangeStartRecord => {
   database
     .prepare(
       "UPDATE changes SET readiness = 'ready', prepare_failure = NULL, updated_at = ? WHERE id = ?",
@@ -206,7 +206,7 @@ const markReady = (database: DatabaseSync, changeId: string, now: string): Chang
 };
 
 const markPrepareFailed = (
-  database: DatabaseSync,
+  database: SqliteDatabase,
   changeId: string,
   failure: ChangePrepareFailure,
   now: string,
@@ -221,14 +221,17 @@ const markPrepareFailed = (
   return change;
 };
 
-const getByTaskId = (database: DatabaseSync, taskId: PublicTaskId): ChangeStartRecord | undefined =>
+const getByTaskId = (
+  database: SqliteDatabase,
+  taskId: PublicTaskId,
+): ChangeStartRecord | undefined =>
   mapRow(
     queryOne<ChangeStartRow>(database, `SELECT ${columns} FROM changes WHERE task_id = ?`, [
       taskId,
     ]),
   );
 
-const getById = (database: DatabaseSync, changeId: string): ChangeStartRecord | undefined =>
+const getById = (database: SqliteDatabase, changeId: string): ChangeStartRecord | undefined =>
   mapRow(
     queryOne<ChangeStartRow>(database, `SELECT ${columns} FROM changes WHERE id = ?`, [changeId]),
   );

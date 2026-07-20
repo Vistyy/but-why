@@ -17,7 +17,7 @@ The project uses:
 - TypeScript for strict type checking
 - Fallow for dead code, duplication, dependency, and architecture checks
 - ast-grep for blocking structural rules over active TypeScript source
-- `node:sqlite` for SQLite access
+- Effect SQL with the `@effect/sql-sqlite-node` adapter for SQLite access
 
 ## CLI output boundary
 

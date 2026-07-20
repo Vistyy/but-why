@@ -7,7 +7,7 @@ import { Effect } from "effect";
 import { describe, it as ordinaryIt } from "vitest";
 
 import { collapseHome } from "../src/cli.js";
-import { prepareStateDatabaseSession } from "../src/init/stateDatabase.js";
+import { prepareStateDatabase } from "../src/init/stateDatabase.js";
 import { openSqliteTaskStore } from "../src/sqlite/sqliteTaskStore.js";
 import { loadTaskUseCases } from "../src/localTask/taskUseCases.js";
 import type { TaskState } from "../src/task/lifecycle.js";
@@ -1268,7 +1268,7 @@ const sharedStatePath = (root: string): string => join(root, ".git", "but-why", 
 
 const taskStore = (root: string) =>
   openSqliteTaskStore({
-    ...prepareStateDatabaseSession({
+    ...prepareStateDatabase({
       statePath: sharedStatePath(root),
     }),
     taskPrefix: "BY",

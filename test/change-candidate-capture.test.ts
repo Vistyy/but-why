@@ -1,12 +1,12 @@
 import { spawnSync } from "node:child_process";
 import { existsSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { DatabaseSync } from "node:sqlite";
 import { describe, expect, it } from "vitest";
 
 import { captureLocalCandidate } from "../src/changeCandidateCapture/captureLocalCandidate.js";
 import { openSqliteCandidateStore } from "../src/sqlite/sqliteCandidateStore.js";
-import { prepareStateDatabaseSession } from "../src/init/stateDatabase.js";
+import { withStateDatabase } from "../src/sqlite/connection.js";
+import { prepareStateDatabase } from "../src/init/stateDatabase.js";
 import { openSqliteChangeStore } from "../src/sqlite/sqliteChangeStore.js";
 import { createGitRepo } from "./support/by-cli.js";
 import { createTestWorkspace } from "./support/testWorkspace.js";
@@ -312,11 +312,14 @@ describe("automatic Change and Candidate capture", () => {
 
   it("rejects Candidate capture when shared state belongs to another repository", () => {
     const repo = captureReadyRepo();
-    const database = new DatabaseSync(join(commonDirectory(repo), "but-why", "state.sqlite"));
-    database
-      .prepare("UPDATE shared_state_identity SET common_directory = ? WHERE id = 1")
-      .run("/other/.git");
-    database.close();
+    const state = prepareStateDatabase({
+      statePath: join(commonDirectory(repo), "but-why", "state.sqlite"),
+    });
+    withStateDatabase(state, (database) =>
+      database
+        .prepare("UPDATE shared_state_identity SET common_directory = ? WHERE id = 1")
+        .run("/other/.git"),
+    );
 
     expect(captureLocalCandidate({ cwd: repo, now })).toEqual({
       ok: false,
@@ -371,7 +374,7 @@ const git = (cwd: string, ...args: readonly string[]): string => {
 };
 
 const sqliteInput = (root: string) =>
-  prepareStateDatabaseSession({
+  prepareStateDatabase({
     statePath: join(commonDirectory(root), "but-why", "state.sqlite"),
   });
 

@@ -579,6 +579,7 @@
           "change-candidate-capture-store",
           "change-store",
           "repo-init",
+          "sqlite-core",
           "sqlite-concrete-stores",
           "change-start-store",
           "task-store",

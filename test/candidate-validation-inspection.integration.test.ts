@@ -5,7 +5,7 @@ import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
 import { describe } from "vitest";
 
-import { prepareStateDatabaseSession } from "../src/init/stateDatabase.js";
+import { prepareStateDatabase } from "../src/init/stateDatabase.js";
 import { openSqliteCandidateStore } from "../src/sqlite/sqliteCandidateStore.js";
 import { openSqliteCandidateValidationRunStore } from "../src/sqlite/sqliteCandidateValidationRunStore.js";
 import { openSqliteChangeStore } from "../src/sqlite/sqliteChangeStore.js";
@@ -515,6 +515,6 @@ const candidateValidationFixture = () => {
 };
 
 const sqliteInput = (root: string) =>
-  prepareStateDatabaseSession({
+  prepareStateDatabase({
     statePath: join(root, ".git", "but-why", "state.sqlite"),
   });

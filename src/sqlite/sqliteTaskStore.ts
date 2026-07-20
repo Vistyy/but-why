@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { DatabaseSync } from "node:sqlite";
+import type { SqliteDatabase } from "./connection.js";
 
 import { rollbackIfOpen, withStateDatabase, type SqliteStoreInput } from "./connection.js";
 import { queryAll, queryOne } from "./query.js";
@@ -63,7 +63,7 @@ export const openSqliteTaskStore = (input: SqliteTaskStoreInput): TaskStore => (
 });
 
 const createTask = (
-  database: DatabaseSync,
+  database: SqliteDatabase,
   taskPrefix: string,
   input: CreateTaskInput,
 ): TaskSummary => {
@@ -99,7 +99,7 @@ const createTask = (
 };
 
 const replaceTaskDependencies = (
-  database: DatabaseSync,
+  database: SqliteDatabase,
   input: ReplaceTaskDependenciesInput,
 ): ReplaceTaskDependenciesResult => {
   database.exec("BEGIN IMMEDIATE");
@@ -141,7 +141,7 @@ const replaceTaskDependencies = (
   }
 };
 
-const listTasks = (database: DatabaseSync, input: ListTasksInput): readonly TaskSummary[] => {
+const listTasks = (database: SqliteDatabase, input: ListTasksInput): readonly TaskSummary[] => {
   const rows = input.state
     ? queryAll<TaskSummaryRow>(
         database,
@@ -175,7 +175,7 @@ const listTasks = (database: DatabaseSync, input: ListTasksInput): readonly Task
   return rows.map((row) => rowToTaskSummary(database, row));
 };
 
-const listActionableTasks = (database: DatabaseSync): readonly TaskSummary[] =>
+const listActionableTasks = (database: SqliteDatabase): readonly TaskSummary[] =>
   queryAll<TaskSummaryRow>(
     database,
     `
@@ -194,7 +194,7 @@ const listActionableTasks = (database: DatabaseSync): readonly TaskSummary[] =>
   ).map((row) => rowToTaskSummary(database, row));
 
 const getTaskById = (
-  database: DatabaseSync,
+  database: SqliteDatabase,
   taskId: PublicTaskId,
 ): StoredTaskRecord | undefined => {
   const row = queryOne<StoredTaskRecordRow>(
@@ -215,7 +215,7 @@ const getTaskById = (
 };
 
 const getTaskContextById = (
-  database: DatabaseSync,
+  database: SqliteDatabase,
   taskId: PublicTaskId,
 ): TaskContext | undefined => {
   database.exec("BEGIN");
@@ -256,7 +256,7 @@ const getTaskContextById = (
   }
 };
 
-const approveTask = (database: DatabaseSync, input: ApproveTaskInput): TaskApprovalResult => {
+const approveTask = (database: SqliteDatabase, input: ApproveTaskInput): TaskApprovalResult => {
   database.exec("BEGIN IMMEDIATE");
 
   try {
@@ -296,7 +296,7 @@ const approveTask = (database: DatabaseSync, input: ApproveTaskInput): TaskAppro
 };
 
 const appendTaskComment = (
-  database: DatabaseSync,
+  database: SqliteDatabase,
   input: AppendTaskCommentInput,
 ): AppendTaskCommentResult => {
   database.exec("BEGIN IMMEDIATE");
@@ -337,7 +337,7 @@ const appendTaskComment = (
 };
 
 const updateTaskContext = (
-  database: DatabaseSync,
+  database: SqliteDatabase,
   input: UpdateTaskContextInput,
 ): UpdateTaskContextResult => {
   database.exec("BEGIN IMMEDIATE");
@@ -374,7 +374,7 @@ const updateTaskContext = (
 };
 
 const transitionTaskState = (
-  database: DatabaseSync,
+  database: SqliteDatabase,
   input: Parameters<TaskStore["transitionTaskState"]>[0],
 ): TaskStateTransitionResult => {
   database.exec("BEGIN IMMEDIATE");
@@ -442,7 +442,7 @@ const transitionTaskState = (
 };
 
 const validateDependencies = (
-  database: DatabaseSync,
+  database: SqliteDatabase,
   dependentTaskId: PublicTaskId,
   prerequisiteTaskIds: readonly PublicTaskId[],
   dependentExists: boolean,
@@ -470,7 +470,7 @@ const validateDependencies = (
 };
 
 const dependencyPathExists = (
-  database: DatabaseSync,
+  database: SqliteDatabase,
   fromTaskId: PublicTaskId,
   targetTaskId: PublicTaskId,
 ): boolean =>
@@ -491,7 +491,7 @@ const dependencyPathExists = (
   ) !== undefined;
 
 const insertDependencies = (
-  database: DatabaseSync,
+  database: SqliteDatabase,
   dependentTaskId: PublicTaskId,
   prerequisiteTaskIds: readonly PublicTaskId[],
 ): void => {
@@ -505,7 +505,7 @@ const insertDependencies = (
 };
 
 const dependencyFacts = (
-  database: DatabaseSync,
+  database: SqliteDatabase,
   taskId: string,
   direction: "prerequisites" | "dependents",
 ): readonly TaskDependencyFact[] =>
@@ -533,7 +533,7 @@ const dependencyFacts = (
         [taskId],
       );
 
-const nextTaskNumericId = (database: DatabaseSync): number => {
+const nextTaskNumericId = (database: SqliteDatabase): number => {
   const row = queryOne<NumericIdRow>(
     database,
     "SELECT COALESCE(MAX(numeric_id), 0) + 1 AS numericId FROM tasks",
@@ -546,7 +546,7 @@ const nextTaskNumericId = (database: DatabaseSync): number => {
   return Number(row.numericId);
 };
 
-const rowToTaskSummary = (database: DatabaseSync, row: TaskSummaryRow): TaskSummary => {
+const rowToTaskSummary = (database: SqliteDatabase, row: TaskSummaryRow): TaskSummary => {
   const blockedBy = dependencyFacts(database, row.id, "prerequisites").filter(
     (dependency) => dependency.state !== "done",
   );
@@ -563,7 +563,7 @@ const rowToTaskSummary = (database: DatabaseSync, row: TaskSummaryRow): TaskSumm
 };
 
 const rowToStoredTaskRecord = (
-  database: DatabaseSync,
+  database: SqliteDatabase,
   row: StoredTaskRecordRow,
 ): StoredTaskRecord => ({
   ...rowToTaskSummary(database, row),
@@ -581,7 +581,7 @@ const rowToTaskContextHeader = (row: TaskContextHeaderRow): Omit<TaskContext, "c
 
 const rowToCommentContent = (row: CommentContentRow): string => row.content;
 
-const commentCountForTask = (database: DatabaseSync, taskId: PublicTaskId): number => {
+const commentCountForTask = (database: SqliteDatabase, taskId: PublicTaskId): number => {
   const row = queryOne<CommentCountRow>(
     database,
     "SELECT COUNT(*) AS commentCount FROM task_comments WHERE task_id = ?",

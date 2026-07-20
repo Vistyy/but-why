@@ -5,12 +5,10 @@ import type { ChangeStore } from "../change/changeStore.js";
 import type { ChangeStartStore } from "../change/changeStartStore.js";
 import { openSqliteCandidateStore } from "../sqlite/sqliteCandidateStore.js";
 import { openSqliteCandidateValidationRunStore } from "../sqlite/sqliteCandidateValidationRunStore.js";
-import {
-  openSqliteChangeCandidateCaptureStore,
-  validateChangeCandidateCaptureState,
-} from "../sqlite/sqliteChangeCandidateCaptureStore.js";
+import { openSqliteChangeCandidateCaptureStore } from "../sqlite/sqliteChangeCandidateCaptureStore.js";
 import { openSqliteChangeStore } from "../sqlite/sqliteChangeStore.js";
 import { openSqliteChangeStartStore } from "../sqlite/sqliteChangeStartStore.js";
+import { validateSqliteStateDatabase } from "../sqlite/connection.js";
 import { openSqliteTaskStore } from "../sqlite/sqliteTaskStore.js";
 import type { TaskStore } from "../task/taskStore.js";
 import type { RepoLocalContext } from "./repoContext.js";
@@ -36,14 +34,14 @@ export const openChangeCandidateCaptureStores = (input: {
   readonly statePath: string;
   readonly commonDirectory: string;
 }): OpenChangeCandidateCaptureStoresResult => {
-  const stateValidation = validateChangeCandidateCaptureState(input);
+  const stateValidation = validateSqliteStateDatabase(input);
   if (!stateValidation.ok) return stateValidation;
 
   return {
     ok: true,
     stores: {
-      captureStore: openSqliteChangeCandidateCaptureStore(stateValidation.session),
-      changeStore: openSqliteChangeStore(stateValidation.session),
+      captureStore: openSqliteChangeCandidateCaptureStore(stateValidation.database),
+      changeStore: openSqliteChangeStore(stateValidation.database),
     },
   };
 };

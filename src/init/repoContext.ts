@@ -6,8 +6,12 @@ import { isTaskPrefix } from "../contracts/taskPrefix.js";
 import { findGitRoot } from "./git.js";
 import { ensureGitignoreBlock } from "./gitignore.js";
 import { readRepoConfig, writeRepoConfig } from "./repoConfig.js";
-import { prepareStateDatabaseSession, type StateDatabaseSession } from "./stateDatabase.js";
-import { ensureStateDatabase, SharedStateIdentityConflictError } from "./stateDatabase.js";
+import {
+  initializeStateDatabase,
+  prepareStateDatabase,
+  SharedStateIdentityConflictError,
+  type StateDatabase,
+} from "./stateDatabase.js";
 
 export type RepoLocalPaths = {
   readonly butWhyDir: string;
@@ -26,7 +30,7 @@ export type RepoLocalContext = {
   readonly taskPrefix: string;
   readonly config: RepoConfig;
   readonly paths: RepoLocalPaths;
-  readonly stateDatabase: StateDatabaseSession;
+  readonly stateDatabase: StateDatabase;
 };
 
 export type InitRepoInput = {
@@ -150,10 +154,13 @@ export const initRepoLocalContext = (input: InitRepoInput): InitRepoResult => {
     created.push(".but-why/config.json");
   }
 
-  let stateChange: ReturnType<typeof ensureStateDatabase>;
+  let stateChange: ReturnType<typeof initializeStateDatabase>;
 
   try {
-    stateChange = ensureStateDatabase(paths.statePath, gitRoot.commonDirectory);
+    stateChange = initializeStateDatabase({
+      statePath: paths.statePath,
+      commonDirectory: gitRoot.commonDirectory,
+    });
   } catch (error) {
     if (error instanceof SharedStateIdentityConflictError) {
       return { ok: false, error: { code: "shared_state_identity_conflict" } };
@@ -161,7 +168,7 @@ export const initRepoLocalContext = (input: InitRepoInput): InitRepoResult => {
     throw error;
   }
 
-  if (stateChange === "created") {
+  if (stateChange.change === "created") {
     created.push("<git-common-dir>/but-why/state.sqlite");
   }
 
@@ -214,13 +221,18 @@ export const loadRepoLocalContext = (cwd: string): LoadRepoLocalContextResult =>
     return { ok: false, error: { code: "invalid_repo_config", error: repoConfig.error } };
   }
 
-  let stateDatabase: StateDatabaseSession;
+  let stateDatabase: StateDatabase;
 
   try {
-    stateDatabase = prepareStateDatabaseSession({
-      statePath: paths.statePath,
-      commonDirectory: gitRoot.commonDirectory,
-    });
+    stateDatabase = existsSync(paths.statePath)
+      ? initializeStateDatabase({
+          statePath: paths.statePath,
+          commonDirectory: gitRoot.commonDirectory,
+        }).database
+      : prepareStateDatabase({
+          statePath: paths.statePath,
+          commonDirectory: gitRoot.commonDirectory,
+        });
   } catch (error) {
     if (error instanceof SharedStateIdentityConflictError) {
       return { ok: false, error: { code: "shared_state_identity_conflict" } };

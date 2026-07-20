@@ -77,6 +77,8 @@ files:
   - src/**/*.ts
 ignores:
   - src/main.ts
+  - src/init/stateDatabase.ts
+  - src/sqlite/connection.ts
 rule:
   any:
     - pattern: $EFFECT.runPromise($$$ARGS)
@@ -376,6 +378,7 @@ files:
 ignores:
   - src/init/repoContext.ts
   - src/init/repoConfig.ts
+  - src/init/stateDatabase.ts
   - src/init/gitignore.ts
   - src/validationRun/artifactFiles.ts
   - src/task/files/contextDraft.ts

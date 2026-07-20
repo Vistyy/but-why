@@ -1,15 +1,16 @@
 import { expect, it } from "@effect/vitest";
 import { describe } from "vitest";
-import type { StateDatabaseSession } from "../src/init/stateDatabase.js";
+import type { StateDatabase } from "../src/init/stateDatabase.js";
+import { withStateDatabase } from "../src/sqlite/connection.js";
 import { openSqliteCandidateStore } from "../src/sqlite/sqliteCandidateStore.js";
 import { openSqliteChangeStore } from "../src/sqlite/sqliteChangeStore.js";
-import { createSqliteStateSession } from "./support/sqliteState.js";
+import { createSqliteState } from "./support/sqliteState.js";
 
 const now = "2026-07-11T10:00:00.000Z";
 
 describe("Change storage", () => {
   it("creates and reads an open Change with durable repository identity", () => {
-    const store = changeStore(createSqliteStateSession());
+    const store = changeStore(createSqliteState());
 
     const result = store.createChange({
       repositoryCommonDirectory: "/repos/example/.git",
@@ -44,7 +45,7 @@ describe("Change storage", () => {
   });
 
   it("closes a Change permanently while preserving its branch binding", () => {
-    const store = changeStore(createSqliteStateSession());
+    const store = changeStore(createSqliteState());
     const created = store.createChange({
       repositoryCommonDirectory: "/repos/example/.git",
       branchRef: "refs/heads/feature",
@@ -91,7 +92,7 @@ describe("Change storage", () => {
   });
 
   it("lists only open Changes with recorded PRs and closed Changes with pending cleanup", () => {
-    const store = changeStore(createSqliteStateSession());
+    const store = changeStore(createSqliteState());
     const ignored = store.createChange({
       repositoryCommonDirectory: "/repos/example/.git",
       branchRef: "refs/heads/ignored",
@@ -151,7 +152,7 @@ describe("Change storage", () => {
   });
 
   it("enforces permanent repository branch bindings", () => {
-    const store = changeStore(createSqliteStateSession());
+    const store = changeStore(createSqliteState());
 
     const first = store.createChange({
       repositoryCommonDirectory: "/repos/example/.git",
@@ -172,7 +173,7 @@ describe("Change storage", () => {
 
 describe("Change schema constraints", () => {
   it("rejects invalid Change lifecycle rows in a newly initialized database", () => {
-    createSqliteStateSession().withDatabase((database) => {
+    withStateDatabase(createSqliteState(), (database) => {
       expect(() =>
         database
           .prepare(`
@@ -201,7 +202,7 @@ describe("Change schema constraints", () => {
 
 describe("Candidate storage", () => {
   it("reuses matching identity and provenance but rejects conflicting provenance", () => {
-    const state = createSqliteStateSession();
+    const state = createSqliteState();
     const change = createChange(state);
     const store = candidateStore(state);
     const capture = {
@@ -237,7 +238,7 @@ describe("Candidate storage", () => {
   });
 
   it("keeps closed Change history readable and rejects every new capture request", () => {
-    const state = createSqliteStateSession();
+    const state = createSqliteState();
     const change = createChange(state);
     const store = candidateStore(state);
     const capture = {
@@ -270,7 +271,7 @@ describe("Candidate storage", () => {
   });
 
   it("captures and reads exact immutable code and base provenance", () => {
-    const state = createSqliteStateSession();
+    const state = createSqliteState();
     const change = createChange(state);
     const store = candidateStore(state);
 
@@ -313,11 +314,11 @@ describe("Candidate storage", () => {
   });
 });
 
-const changeStore = (state: StateDatabaseSession) => openSqliteChangeStore(state);
+const changeStore = (state: StateDatabase) => openSqliteChangeStore(state);
 
-const candidateStore = (state: StateDatabaseSession) => openSqliteCandidateStore(state);
+const candidateStore = (state: StateDatabase) => openSqliteCandidateStore(state);
 
-const createChange = (state: StateDatabaseSession) => {
+const createChange = (state: StateDatabase) => {
   const result = changeStore(state).createChange({
     repositoryCommonDirectory: "/repos/example/.git",
     branchRef: "refs/heads/feature",

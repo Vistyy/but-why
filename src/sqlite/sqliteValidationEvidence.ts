@@ -1,10 +1,10 @@
-import type { DatabaseSync } from "node:sqlite";
+import type { SqliteDatabase } from "./connection.js";
 
 import { encodeSqliteJsonStringArray } from "./sqliteJsonStringArray.js";
 import type { RecordCandidateValidationCommandRoundInput } from "../candidateValidation/candidateValidationRunStore.js";
 
 export const recordValidationEvidenceMutation = (
-  database: DatabaseSync,
+  database: SqliteDatabase,
   input: RecordCandidateValidationCommandRoundInput,
   tables: { readonly artifacts: string; readonly findings: string },
 ): void => {

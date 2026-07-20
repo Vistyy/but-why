@@ -7,7 +7,7 @@ import type {
   GitHubPullRequestGateway,
 } from "../src/change/ownedPullRequestGateway.js";
 import { openSqliteChangeStore } from "../src/sqlite/sqliteChangeStore.js";
-import { createSqliteStateSession } from "./support/sqliteState.js";
+import { createSqliteState } from "./support/sqliteState.js";
 
 const now = "2026-07-24T10:00:00.000Z";
 const target = { owner: "acme", repo: "widgets", baseBranch: "main", remoteName: "origin" };
@@ -71,7 +71,7 @@ describe("Change reconciliation", () => {
 });
 
 const publishedChange = () => {
-  const store = openSqliteChangeStore(createSqliteStateSession());
+  const store = openSqliteChangeStore(createSqliteState());
   const created = store.createChange({
     repositoryCommonDirectory: "/repos/example/.git",
     branchRef: "refs/heads/feature",

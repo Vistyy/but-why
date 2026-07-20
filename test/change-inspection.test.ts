@@ -4,7 +4,7 @@ import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
 import { describe } from "vitest";
 
-import { prepareStateDatabaseSession } from "../src/init/stateDatabase.js";
+import { prepareStateDatabase } from "../src/init/stateDatabase.js";
 import { publicTaskId } from "../src/task/taskId.js";
 import { openSqliteTaskStore } from "../src/sqlite/sqliteTaskStore.js";
 import { openSqliteCandidateStore } from "../src/sqlite/sqliteCandidateStore.js";
@@ -22,7 +22,7 @@ describe("Change inspection CLI", () => {
     Effect.gen(function* () {
       const root = createInitializedRepo();
       const store = openSqliteChangeStore(
-        prepareStateDatabaseSession({
+        prepareStateDatabase({
           statePath: join(root, ".git", "but-why", "state.sqlite"),
         }),
       );
@@ -71,7 +71,7 @@ describe("Change inspection CLI", () => {
     Effect.gen(function* () {
       const root = createInitializedRepo();
       const store = openSqliteChangeStore(
-        prepareStateDatabaseSession({
+        prepareStateDatabase({
           statePath: join(root, ".git", "but-why", "state.sqlite"),
         }),
       );
@@ -119,7 +119,7 @@ describe("Change inspection CLI", () => {
     Effect.gen(function* () {
       const root = createInitializedRepo();
       const store = openSqliteChangeStore(
-        prepareStateDatabaseSession({
+        prepareStateDatabase({
           statePath: join(root, ".git", "but-why", "state.sqlite"),
         }),
       );
@@ -166,7 +166,7 @@ describe("Change inspection CLI", () => {
   it.effect("orders Validation Run History by run creation across Candidates", () =>
     Effect.gen(function* () {
       const root = createInitializedRepo();
-      const database = prepareStateDatabaseSession({
+      const database = prepareStateDatabase({
         statePath: join(root, ".git", "but-why", "state.sqlite"),
       });
       const changeStore = openSqliteChangeStore(database);
@@ -248,7 +248,7 @@ describe("Change inspection CLI", () => {
       const root = createInitializedRepo();
       commitButWhyConfigAndRecordDefault(root);
       const taskStore = openSqliteTaskStore({
-        ...prepareStateDatabaseSession({
+        ...prepareStateDatabase({
           statePath: join(root, ".git", "but-why", "state.sqlite"),
         }),
         taskPrefix: "BY",
@@ -260,7 +260,7 @@ describe("Change inspection CLI", () => {
       });
       taskStore.approveTask({ taskId: publicTaskId("BY-1"), now: secondNow });
       const changeStore = openSqliteChangeStore(
-        prepareStateDatabaseSession({
+        prepareStateDatabase({
           statePath: join(root, ".git", "but-why", "state.sqlite"),
         }),
       );
@@ -343,7 +343,7 @@ describe("Change inspection CLI", () => {
   it.effect("inspects Findings and Validation Run History through the current Candidate", () =>
     Effect.gen(function* () {
       const root = createInitializedRepo();
-      const database = prepareStateDatabaseSession({
+      const database = prepareStateDatabase({
         statePath: join(root, ".git", "but-why", "state.sqlite"),
       });
       const changeStore = openSqliteChangeStore(database);

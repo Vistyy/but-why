@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { DatabaseSync } from "node:sqlite";
+import type { SqliteDatabase } from "./connection.js";
 
 import { changeState, type ChangeState } from "../change/change.js";
 import type {
@@ -7,12 +7,7 @@ import type {
   CommitCandidateCaptureInput,
   CommitCandidateCaptureResult,
 } from "../changeCandidateCapture/changeCandidateCaptureStore.js";
-import {
-  rollbackIfOpen,
-  validateStateDatabase,
-  withStateDatabase,
-  type SqliteStoreInput,
-} from "./connection.js";
+import { rollbackIfOpen, withStateDatabase, type SqliteStoreInput } from "./connection.js";
 import { queryOne } from "./query.js";
 
 type StoredChange = {
@@ -31,8 +26,6 @@ type StoredCandidate = {
 
 type CommitRejection = Extract<CommitCandidateCaptureResult, { readonly ok: false }>;
 
-export const validateChangeCandidateCaptureState = validateStateDatabase;
-
 export const openSqliteChangeCandidateCaptureStore = (
   input: SqliteStoreInput,
 ): ChangeCandidateCaptureStore => ({
@@ -41,7 +34,7 @@ export const openSqliteChangeCandidateCaptureStore = (
 });
 
 const commitCapture = (
-  database: DatabaseSync,
+  database: SqliteDatabase,
   input: CommitCandidateCaptureInput,
 ): CommitCandidateCaptureResult => {
   database.exec("BEGIN IMMEDIATE");
@@ -68,7 +61,7 @@ const commitCapture = (
 };
 
 const selectStoredChange = (
-  database: DatabaseSync,
+  database: SqliteDatabase,
   input: CommitCandidateCaptureInput,
 ): { readonly ok: true; readonly change: StoredChange } | CommitRejection => {
   const destination = getChangeByBranch(database, input.repositoryCommonDirectory, input.branchRef);
@@ -78,7 +71,7 @@ const selectStoredChange = (
 };
 
 const createStoredChange = (
-  database: DatabaseSync,
+  database: SqliteDatabase,
   input: CommitCandidateCaptureInput,
   destination: StoredChange | undefined,
 ): { readonly ok: true; readonly change: StoredChange } | CommitRejection => {
@@ -98,7 +91,7 @@ const createStoredChange = (
 };
 
 const selectExpectedChange = (
-  database: DatabaseSync,
+  database: SqliteDatabase,
   expectedChangeId: string,
   input: CommitCandidateCaptureInput,
   destination: StoredChange | undefined,
@@ -128,7 +121,7 @@ const selectExpectedChange = (
 };
 
 const assignBase = (
-  database: DatabaseSync,
+  database: SqliteDatabase,
   change: StoredChange,
   input: CommitCandidateCaptureInput,
 ): { readonly ok: true } | CommitRejection => {
@@ -144,7 +137,7 @@ const assignBase = (
 };
 
 const captureStoredCandidate = (
-  database: DatabaseSync,
+  database: SqliteDatabase,
   changeId: string,
   input: CommitCandidateCaptureInput,
 ):
@@ -191,12 +184,12 @@ const reuseStoredCandidate = (
     ? { ok: true, candidateId: existing.id, reused: true }
     : { ok: false, code: "candidate_provenance_conflict" };
 
-const rollback = (database: DatabaseSync, rejection: CommitRejection): CommitRejection => {
+const rollback = (database: SqliteDatabase, rejection: CommitRejection): CommitRejection => {
   database.exec("ROLLBACK");
   return rejection;
 };
 
-const getChangeById = (database: DatabaseSync, changeId: string): StoredChange | undefined =>
+const getChangeById = (database: SqliteDatabase, changeId: string): StoredChange | undefined =>
   queryOne<StoredChange>(
     database,
     `
@@ -209,7 +202,7 @@ const getChangeById = (database: DatabaseSync, changeId: string): StoredChange |
   );
 
 const getChangeByBranch = (
-  database: DatabaseSync,
+  database: SqliteDatabase,
   repositoryCommonDirectory: string,
   branchRef: string,
 ): StoredChange | undefined =>

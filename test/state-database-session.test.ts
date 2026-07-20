@@ -4,10 +4,11 @@ import { describe, expect, it } from "vitest";
 
 import { findGitRoot } from "../src/init/git.js";
 import {
-  ensureStateDatabase,
-  prepareStateDatabaseSession,
+  initializeStateDatabase,
+  prepareStateDatabase,
   SharedStateIdentityConflictError,
 } from "../src/init/stateDatabase.js";
+import { withStateDatabase } from "../src/sqlite/connection.js";
 import { createGitRepo } from "./support/by-cli.js";
 import { createInitializedRepo } from "./support/initializedRepo.js";
 
@@ -17,12 +18,12 @@ describe("state database session", () => {
     const session = sessionFor(root);
 
     expect(
-      session.withDatabase((database) =>
+      withStateDatabase(session, (database) =>
         database.prepare("SELECT COUNT(*) AS count FROM sqlite_master WHERE type = 'table'").get(),
       ),
-    ).toEqual({ count: 13 });
+    ).toEqual({ count: 14 });
     expect(
-      session.withDatabase((database) =>
+      withStateDatabase(session, (database) =>
         database.prepare("SELECT common_directory FROM shared_state_identity WHERE id = 1").get(),
       ),
     ).toEqual({ common_directory: gitRoot(root).commonDirectory });
@@ -35,23 +36,25 @@ describe("state database session", () => {
 
     copyFileSync(statePath(second), statePath(first));
 
-    expect(() => session.withDatabase(() => undefined)).toThrow(SharedStateIdentityConflictError);
+    expect(() => withStateDatabase(session, () => undefined)).toThrow(
+      SharedStateIdentityConflictError,
+    );
   });
 
   it("prepares state that appears after repository context loading", () => {
     const root = createGitRepo();
     const resolved = gitRoot(root);
     const path = statePath(root);
-    const session = prepareStateDatabaseSession({
+    const session = prepareStateDatabase({
       statePath: path,
       commonDirectory: resolved.commonDirectory,
     });
 
     mkdirSync(join(resolved.commonDirectory, "but-why"), { recursive: true });
-    ensureStateDatabase(path);
+    initializeStateDatabase({ statePath: path });
 
     expect(
-      session.withDatabase((database) =>
+      withStateDatabase(session, (database) =>
         database.prepare("SELECT common_directory FROM shared_state_identity WHERE id = 1").get(),
       ),
     ).toEqual({ common_directory: resolved.commonDirectory });
@@ -69,7 +72,7 @@ const statePath = (root: string): string =>
 
 const sessionFor = (root: string) => {
   const resolved = gitRoot(root);
-  return prepareStateDatabaseSession({
+  return prepareStateDatabase({
     statePath: statePath(root),
     commonDirectory: resolved.commonDirectory,
   });

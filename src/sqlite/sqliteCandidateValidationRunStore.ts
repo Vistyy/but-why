@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { DatabaseSync } from "node:sqlite";
+import type { SqliteDatabase } from "./connection.js";
 
 import { rollbackIfOpen, withStateDatabase, type SqliteStoreInput } from "./connection.js";
 import {
@@ -78,7 +78,7 @@ export const openSqliteCandidateValidationRunStore = (
 });
 
 const startOrReuse = (
-  database: DatabaseSync,
+  database: SqliteDatabase,
   input: StartCandidateValidationRunInput,
 ): StartCandidateValidationRunResult => {
   database.exec("BEGIN IMMEDIATE");
@@ -123,7 +123,7 @@ const startOrReuse = (
 };
 
 const getRunById = (
-  database: DatabaseSync,
+  database: SqliteDatabase,
   validationRunId: string,
 ): CandidateValidationRunRecord | undefined => {
   const row = queryOne<CandidateValidationRunRow>(
@@ -141,7 +141,7 @@ const getRunById = (
 };
 
 const listRunsForCandidate = (
-  database: DatabaseSync,
+  database: SqliteDatabase,
   candidateId: string,
 ): readonly CandidateValidationRunRecord[] =>
   queryAll<CandidateValidationRunRow>(
@@ -158,7 +158,7 @@ type CandidateValidationRunRow = Omit<CandidateValidationRunRecord, "policy"> & 
   readonly policySnapshot: string;
 };
 
-const complete = (database: DatabaseSync, input: CompleteCandidateValidationRunInput): void => {
+const complete = (database: SqliteDatabase, input: CompleteCandidateValidationRunInput): void => {
   database
     .prepare(
       "UPDATE candidate_validation_runs SET state = 'complete', outcome = ?, updated_at = ? WHERE id = ?",
@@ -167,7 +167,7 @@ const complete = (database: DatabaseSync, input: CompleteCandidateValidationRunI
 };
 
 const recordWorkspaceSetup = (
-  database: DatabaseSync,
+  database: SqliteDatabase,
   input: RecordCandidateWorkspaceSetupInput,
 ): void => {
   database
@@ -186,7 +186,7 @@ const recordWorkspaceSetup = (
 };
 
 const recordToolingFailure = (
-  database: DatabaseSync,
+  database: SqliteDatabase,
   input: RecordCandidateToolingFailureInput,
 ): void => {
   database
@@ -203,7 +203,7 @@ const recordToolingFailure = (
 };
 
 const recordRound = (
-  database: DatabaseSync,
+  database: SqliteDatabase,
   input: RecordCandidateValidationCommandRoundInput,
 ): void => {
   database.exec("BEGIN IMMEDIATE");
@@ -249,7 +249,7 @@ const phaseOrderSql =
   "CASE phase WHEN 'prepare' THEN 0 WHEN 'checks' THEN 1 WHEN 'acceptance_review' THEN 2 ELSE 3 END";
 
 const listRounds = (
-  database: DatabaseSync,
+  database: SqliteDatabase,
   validationRunId: string,
 ): readonly CandidateValidationRound[] =>
   queryAll<CandidateValidationRound>(
@@ -263,7 +263,7 @@ const listRounds = (
   );
 
 const listFindings = (
-  database: DatabaseSync,
+  database: SqliteDatabase,
   validationRunId: string,
 ): readonly CandidateValidationFinding[] =>
   queryAll<CandidateValidationFindingRow>(
@@ -301,7 +301,7 @@ type CandidateValidationFindingRow = Omit<
 };
 
 const listPreviousCandidateReviewerFindings = (
-  database: DatabaseSync,
+  database: SqliteDatabase,
   input: {
     readonly candidateId: string;
     readonly phase: CandidateValidationFinding["phase"];
@@ -354,7 +354,7 @@ const listPreviousCandidateReviewerFindings = (
   }));
 
 const listToolingFailures = (
-  database: DatabaseSync,
+  database: SqliteDatabase,
   validationRunId: string,
 ): readonly CandidateValidationToolingFailure[] =>
   queryAll<CandidateValidationToolingFailure>(
@@ -369,7 +369,7 @@ const listToolingFailures = (
   );
 
 const listArtifacts = (
-  database: DatabaseSync,
+  database: SqliteDatabase,
   validationRunId: string,
 ): readonly CandidateValidationArtifact[] =>
   queryAll<CandidateValidationArtifactRow>(

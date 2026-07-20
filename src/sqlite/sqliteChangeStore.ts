@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { DatabaseSync } from "node:sqlite";
+import type { SqliteDatabase } from "./connection.js";
 
 import {
   changeState,
@@ -96,7 +96,7 @@ export const openSqliteChangeStore = (input: SqliteStoreInput): ChangeStore => (
     withStateDatabase(input, (database) => recordPublishedPullRequest(database, publicationInput)),
 });
 
-const createChange = (database: DatabaseSync, input: CreateChangeInput): CreateChangeResult => {
+const createChange = (database: SqliteDatabase, input: CreateChangeInput): CreateChangeResult => {
   database.exec("BEGIN IMMEDIATE");
 
   try {
@@ -137,7 +137,7 @@ const createChange = (database: DatabaseSync, input: CreateChangeInput): CreateC
 };
 
 const beginPublication = (
-  database: DatabaseSync,
+  database: SqliteDatabase,
   input: BeginChangePublicationInput,
 ): BeginChangePublicationResult => {
   database.exec("BEGIN IMMEDIATE");
@@ -195,7 +195,7 @@ const beginPublication = (
 };
 
 const releasePendingPublication = (
-  database: DatabaseSync,
+  database: SqliteDatabase,
   input: BeginChangePublicationInput,
 ): ReleasePendingPublicationResult => {
   database.exec("BEGIN IMMEDIATE");
@@ -241,7 +241,7 @@ const releasePendingPublication = (
 };
 
 const recordPublishedPullRequest = (
-  database: DatabaseSync,
+  database: SqliteDatabase,
   input: RecordPublishedPullRequestInput,
 ): RecordPublishedPullRequestResult => {
   database.exec("BEGIN IMMEDIATE");
@@ -313,7 +313,7 @@ const canRecordPublishedPullRequest = (
 };
 
 const completeMergedChange = (
-  database: DatabaseSync,
+  database: SqliteDatabase,
   input: CompleteMergedChangeInput,
 ): CompleteMergedChangeResult => {
   database.exec("BEGIN IMMEDIATE");
@@ -353,7 +353,7 @@ const completeMergedChange = (
 };
 
 const recordCleanup = (
-  database: DatabaseSync,
+  database: SqliteDatabase,
   input: RecordChangeCleanupInput,
 ): RecordChangeCleanupResult => {
   database.exec("BEGIN IMMEDIATE");
@@ -386,7 +386,7 @@ const recordCleanup = (
   }
 };
 
-const closeChange = (database: DatabaseSync, input: CloseChangeInput): CloseChangeResult => {
+const closeChange = (database: SqliteDatabase, input: CloseChangeInput): CloseChangeResult => {
   database.exec("BEGIN IMMEDIATE");
 
   try {
@@ -423,12 +423,12 @@ const closeChange = (database: DatabaseSync, input: CloseChangeInput): CloseChan
   }
 };
 
-const getChangeById = (database: DatabaseSync, changeId: string): ChangeRecord | undefined =>
+const getChangeById = (database: SqliteDatabase, changeId: string): ChangeRecord | undefined =>
   mapChangeRow(
     queryOne<ChangeRow>(database, `SELECT ${changeColumns} FROM changes WHERE id = ?`, [changeId]),
   );
 
-const getChangeByTaskId = (database: DatabaseSync, taskId: string): ChangeRecord | undefined =>
+const getChangeByTaskId = (database: SqliteDatabase, taskId: string): ChangeRecord | undefined =>
   mapChangeRow(
     queryOne<ChangeRow>(database, `SELECT ${changeColumns} FROM changes WHERE task_id = ?`, [
       taskId,
@@ -436,7 +436,7 @@ const getChangeByTaskId = (database: DatabaseSync, taskId: string): ChangeRecord
   );
 
 const getChangeByRepositoryBranch = (
-  database: DatabaseSync,
+  database: SqliteDatabase,
   repositoryCommonDirectory: string,
   branchRef: string,
 ): ChangeRecord | undefined =>
@@ -449,7 +449,7 @@ const getChangeByRepositoryBranch = (
   );
 
 const listChanges = (
-  database: DatabaseSync,
+  database: SqliteDatabase,
   input: import("../change/changeStore.js").ListChangesInput,
 ): readonly ChangeRecord[] =>
   queryAll<ChangeRow>(
@@ -467,7 +467,7 @@ const listChanges = (
     .filter((change): change is ChangeRecord => change !== undefined);
 
 const listChangesForReconciliation = (
-  database: DatabaseSync,
+  database: SqliteDatabase,
   repositoryCommonDirectory: string,
 ): readonly ChangeRecord[] =>
   queryAll<ChangeRow>(
@@ -540,7 +540,7 @@ const sameTarget = (
   left.baseBranch === right.baseBranch &&
   left.remoteName === right.remoteName;
 
-const rollback = <Result>(database: DatabaseSync, result: Result): Result => {
+const rollback = <Result>(database: SqliteDatabase, result: Result): Result => {
   database.exec("ROLLBACK");
   return result;
 };
