@@ -163,8 +163,6 @@ export const initRepoLocalContext = (input: InitRepoInput): InitRepoResult => {
 
   if (stateChange === "created") {
     created.push("<git-common-dir>/but-why/state.sqlite");
-  } else if (stateChange === "updated") {
-    updated.push("<git-common-dir>/but-why/state.sqlite");
   }
 
   const reviewersRepair = ensureReviewersPath(paths.reviewersPath);

@@ -1,7 +1,7 @@
 import { existsSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 
-export type StateDatabaseChange = "created" | "updated" | "unchanged";
+export type StateDatabaseChange = "created" | "unchanged";
 
 export class SharedStateIdentityConflictError extends Error {
   constructor(
