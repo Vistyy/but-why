@@ -258,11 +258,12 @@ const createStateDatabase = (
   const runtime = ManagedRuntime.make(
     SqliteClient.layer({ filename: statePath, disableWAL: true }),
   ) as StateDatabaseRuntime;
-  void runtime.runPromise(Effect.void);
+  let initializationError: unknown;
   const run: <A>(effect: Effect.Effect<A, unknown, never>) => A = (effect) =>
     runRuntimeSync(runtime, effect);
   const runSync: StateDatabaseRunSync = (effect) => {
     try {
+      if (initializationError !== undefined) throw initializationError;
       return runRuntimeSync(runtime, effect);
     } catch (error) {
       if (error instanceof SharedStateIdentityConflictError) throw error;
@@ -323,6 +324,16 @@ const createStateDatabase = (
     closeSync,
   };
   openStateDatabases.add(database);
+  const initializationFiber = runtime.runFork(Effect.void);
+  initializationFiber.addObserver((exit) => {
+    Exit.match(exit, {
+      onFailure: (cause) => {
+        initializationError = Cause.squash(cause);
+        void database.close().catch(() => undefined);
+      },
+      onSuccess: () => undefined,
+    });
+  });
   return database;
 };
 
