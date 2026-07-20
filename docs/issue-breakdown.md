@@ -8,6 +8,7 @@ It ends when But Why? completes one real SQLite-tracked Task-backed Change and p
 ## Can start immediately
 
 - Task 105: Migrate Submit to Change ownership.
+- Task 139: Establish Effect test execution.
 
 ## Completed
 
@@ -40,6 +41,10 @@ It ends when But Why? completes one real SQLite-tracked Task-backed Change and p
 | 131 | Dogfood the first SQLite-tracked Change workflow | 125 |
 | 126 | Publish But Why? to npm | 131 |
 | 138 | Establish post-publication compatibility policy | 126 |
+| 140 | Migrate lifecycle-sensitive Effect tests | 139 |
+| 141 | Migrate Candidate workflow Effect tests | 139 |
+| 142 | Migrate adapter and value Effect tests | 139 |
+| 143 | Enforce Effect test execution | 140, 141, 142 |
 
 ## Migration order
 
@@ -53,6 +58,13 @@ It ends when But Why? completes one real SQLite-tracked Task-backed Change and p
 8. Task 135 reorganizes the surviving modules so every top-level source folder has one domain owner or one clear shared role.
 9. Task 117 completes cancellation and cleanup before Task 123 ships the public workflow.
 10. After Task 126 publishes the package, Task 138 replaces the temporary unreleased-schema instruction with the post-publication compatibility policy.
+
+## Independent test-execution workstream
+
+Task 139 can start immediately.
+Tasks 140, 141, and 142 can run in parallel after Task 139.
+Task 143 enforces the completed migration after Tasks 140, 141, and 142.
+This workstream does not block Task 105.
 
 ## Deferred
 
