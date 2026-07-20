@@ -16,8 +16,11 @@
 ## What to build
 
 Reorganize the surviving source modules after the Change-centered migration.
-Group workflow code under its owning domain and group genuinely shared code by its clear role.
-Move files, update imports, tests, and architecture documentation without redesigning interfaces or changing public behavior.
+Group workflow code under its owning domain.
+Group shared code by its documented adapter role.
+Move files and update imports, tests, and architecture documentation.
+Do not redesign public or internal interfaces.
+Preserve public commands and persisted data.
 
 ## Primary verification seam
 
@@ -25,13 +28,14 @@ The full repository suite plus structural checks of the final source directory m
 
 ## Acceptance criteria
 
-- [ ] Every top-level source folder has one documented domain owner or one clearly named shared role.
+- [ ] Every top-level `src/` folder has one documented domain owner or shared adapter role.
 - [ ] Task-owned code covers Task intent and Task lifecycle.
 - [ ] Change-owned code covers implementation, Candidates, submission, validation ownership, and delivery.
 - [ ] Cross-domain workflows live under one primary owner and call other modules through their existing interfaces.
 - [ ] CLI, persistence, repository, execution, and output adapters are grouped by clear shared roles.
 - [ ] No migration-only folder or forwarding module remains.
-- [ ] The reorganization does not add interfaces, alter command behavior, or change persisted behavior.
+- [ ] The reorganization does not redesign public or internal interfaces.
+- [ ] The reorganization preserves public commands and persisted data.
 - [ ] Imports, tests, structural checks, and architecture documentation describe the final hierarchy.
 - [ ] The full repository suite passes after the move.
 

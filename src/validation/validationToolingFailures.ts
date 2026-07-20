@@ -176,19 +176,19 @@ export const validationToolingFailureRecord = (
       return {
         errorKind: "prepare_command_execution_tooling_failed",
         operationName: failure.operationName,
-        errorMessage: `${failure.message}: ${failure.command}`,
+        errorMessage: `${failure.message} Command: ${failure.command}.`,
       };
     case "CheckCommandExecutionToolingFailed":
       return {
         errorKind: "check_command_execution_tooling_failed",
         operationName: failure.operationName,
-        errorMessage: `${failure.message}: ${failure.command}`,
+        errorMessage: `${failure.message} Command: ${failure.command}.`,
       };
     case "ReviewerOutputContractFailed":
       return {
         errorKind: "reviewer_output_contract_failed",
         operationName: failure.operationName,
-        errorMessage: `${failure.message}: ${failure.reviewer} after ${failure.attempts} attempts`,
+        errorMessage: `${failure.message} Reviewer: ${failure.reviewer}. Attempts: ${failure.attempts}.`,
       };
     case "TokenUsageContractFailed":
       return {

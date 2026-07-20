@@ -19,12 +19,12 @@ Clean-repository installation from npm followed by the installed CLI smoke suite
 
 ## Acceptance criteria
 
-- [ ] Trusted publishing uses the verified source and package candidate without a long-lived npm token.
+- [ ] Trusted publishing publishes the exact tarball verified by Task 125 without a long-lived npm token.
 - [ ] npm provenance identifies the release source and workflow.
 - [ ] The public package name, version, executable, files, and metadata match the verified candidate.
 - [ ] A clean local and global installation can run help, init, and the documented Change-centered setup path.
 - [ ] Release notes describe Task-backed and taskless Changes without presenting deferred capabilities as v1.
-- [ ] Publication failure is recoverable without publishing a different artifact under the same version.
+- [ ] If publication fails, recovery does not publish a different artifact under the same version.
 
 ## Blocked by
 

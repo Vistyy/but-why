@@ -6,8 +6,8 @@ import type { TaskContextSnapshotV1 } from "../validationRun/taskContextSnapshot
 export const defaultAcceptanceInstructions = [
   "Review the exact Candidate against the supplied immutable Acceptance Context.",
   "Inspect the repository and Candidate diff before deciding.",
-  "Report each material mismatch between the Candidate and the approved Task intent as a Finding.",
-  "Return an empty findings array when the Candidate fully satisfies the approved intent.",
+  "Report each material mismatch with the approved Task intent as a Finding.",
+  "Return an empty findings array when the Candidate satisfies the approved intent.",
 ].join("\n");
 
 export const buildAcceptanceReviewerPrompt = (input: {
@@ -24,7 +24,7 @@ export const buildAcceptanceReviewerPrompt = (input: {
   [
     input.instructions,
     "",
-    "Validation Run evidence:",
+    "Available Validation Run evidence:",
     encodeReviewerWireValue({
       validationRunId: input.validationRunId,
       availableArtifactRefs: input.availableArtifactRefs,
@@ -38,7 +38,7 @@ export const buildAcceptanceReviewerPrompt = (input: {
     "",
     "Return exactly one JSON object inside this XML tag:",
     `<${reviewerOutputTag}>{"findings":[]}</${reviewerOutputTag}>`,
-    "Each Finding must contain title, description, severity, evidence, files, and artifactRefs.",
+    "Each Finding must include title, description, severity, evidence, files, and artifactRefs.",
   ].join("\n");
 
 export const buildSpecialistReviewerPrompt = (input: {
@@ -54,7 +54,7 @@ export const buildSpecialistReviewerPrompt = (input: {
     input.instructions,
     "",
     `Specialist: ${input.specialist}`,
-    "Judge the exact Candidate only for this configured concern.",
+    "Review the exact Candidate only for the configured concern.",
     "Inspect the repository and Candidate diff before deciding.",
     "",
     "Validation Run:",
@@ -100,18 +100,19 @@ export const buildReviewerRevisionPrompt = (input: {
     "Blind provisional report:",
     encodeReviewerWireValue(input.provisionalReport),
     "",
-    "Earlier Findings from your review of the immediately preceding Candidate:",
+    "Findings from the immediately preceding Candidate:",
     encodeReviewerWireValue({ findings: input.earlierFindings }),
     "",
     "Recheck the Candidate against the applicable instructions.",
-    "Verify whether each earlier Finding remains open, then return one final report containing every open earlier Finding and every new Finding.",
+    "Confirm whether each earlier Finding remains open.",
+    "Return one final report with every open earlier Finding and every new Finding.",
   ].join("\n");
 
 export const buildReviewerOutputCorrectionPrompt = (
   failure: ReviewerOutputContractFailed,
 ): string =>
   [
-    "Your reviewer output did not match the required contract.",
+    "Your reviewer output did not satisfy the required contract.",
     failure.message,
     `Return only the corrected JSON object inside <${reviewerOutputTag}>...</${reviewerOutputTag}>.`,
   ].join("\n");

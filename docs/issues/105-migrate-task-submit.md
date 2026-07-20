@@ -26,15 +26,16 @@ Public `by change submit <change-id>` CLI tests covering blocked and passing Tas
 
 ## Acceptance criteria
 
-- [ ] Submit accepts an open ready Change and resolves its optional linked Task.
+- [ ] Submit accepts only an open Change in the `ready` state and resolves its optional linked Task.
 - [ ] Dirty Git-visible state is rejected before Candidate or Validation Run creation.
 - [ ] Task-backed submission runs Prepare, Checks, Acceptance Review, and configured Specialists in order.
 - [ ] Taskless submission runs Prepare, Checks, and configured Specialists without Acceptance Review.
 - [ ] Passing changed work publishes only the exact Candidate through deterministic PR recovery.
-- [ ] Existing owned PRs reconcile before any new Candidate or remote mutation is selected.
-- [ ] Findings and Tooling Failures return structured evidence and update linked Task progress when present.
+- [ ] Submit reconciles an existing owned PR before it selects a new Candidate or mutates the remote.
+- [ ] Findings and Tooling Failures return structured evidence.
+- [ ] A Finding or Tooling Failure moves a linked Task to `implementing`.
 - [ ] An unchanged taskless Change returns `nothing_to_submit`, remains open, and suggests explicit cancellation.
-- [ ] Repeated Submit is idempotent and performs one-shot PR reconciliation.
+- [ ] Repeated Submit is idempotent and reconciles the owned PR once per invocation.
 - [ ] Task-owned validation writers are no longer called.
 - [ ] Change owns the new Submit composition; the migration does not add another top-level Submit workflow.
 - [ ] Human output remains TOON by default, while programmatic callers can request JSON.

@@ -63,9 +63,9 @@ commands[9]{command,description}:
   by submit <task-id>,Create a Validation Run from submit preflight
   by validation-run show <validation-run-id>,Show full Validation Run details
 flags[3]{flag,description}:
-  "--output <format>","Set stdout format: toon or json. Default: toon."
-  "-o <format>","Alias for --output <format>. Valid values: toon, json."
-  "--help",Show this help
+  "--output <format>",Set the stdout format to toon or json. The default is toon.
+  "-o <format>","Alias for --output <format>. Valid formats: toon, json."
+  "--help",Show help for this command.
 docs[2]{name,path}:
   setup,${expectedSetupDoc}
   config,${expectedConfigDoc}`);
@@ -109,13 +109,13 @@ docs[2]{name,path}:
           { flag: "--task-prefix <prefix>", description: "Required task ID prefix such as BY" },
           {
             flag: "--output <format>",
-            description: "Set stdout format: toon or json. Default: toon.",
+            description: "Set the stdout format to toon or json. The default is toon.",
           },
           {
             flag: "-o <format>",
-            description: "Alias for --output <format>. Valid values: toon, json.",
+            description: "Alias for --output <format>. Valid formats: toon, json.",
           },
-          { flag: "--help", description: "Show this help" },
+          { flag: "--help", description: "Show help for this command." },
         ],
         examples: ["by init --task-prefix BY"],
         docs: [
@@ -273,9 +273,9 @@ help[1]: "Use either --output <format> or -o <format>, not both."`);
 description: Create repo policy files and then guide validation setup.
 flags[4]{flag,description}:
   "--task-prefix <prefix>",Required task ID prefix such as BY
-  "--output <format>","Set stdout format: toon or json. Default: toon."
-  "-o <format>","Alias for --output <format>. Valid values: toon, json."
-  "--help",Show this help
+  "--output <format>",Set the stdout format to toon or json. The default is toon.
+  "-o <format>","Alias for --output <format>. Valid formats: toon, json."
+  "--help",Show help for this command.
 examples[1]: by init --task-prefix BY
 docs[2]{name,path}:
   setup,${expectedSetupDoc}

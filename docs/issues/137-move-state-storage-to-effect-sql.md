@@ -15,7 +15,7 @@
 
 ## What to build
 
-After obsolete Task-owned storage is removed, replace native SQLite storage with the proven Effect SQL SQLite adapter.
+After Task 107 removes obsolete Task-owned storage, use the Effect SQL SQLite adapter validated in `spikes/effect-first-path/README.md`.
 Flatten the historical migration chain into one Effect Migrator baseline for the surviving schema and use that migration path for every future schema change.
 Migrate all surviving stores and remove the old driver, migration runner, synchronous session, and duplicate storage composition.
 
@@ -26,11 +26,11 @@ A public CLI integration path that initializes fresh repository state, persists 
 ## Acceptance criteria
 
 - [ ] Effect SQL package versions are pinned to releases compatible with Effect `3.20.0`.
-- [ ] Fresh initialization applies one Effect Migrator baseline containing the final surviving schema.
+- [ ] Fresh initialization applies one Effect Migrator baseline containing the schema that remains after Task 107.
 - [ ] Future schema changes use the same Effect migration ledger and runner.
 - [ ] The historical migration chain and its upgrade-only tests are removed.
 - [ ] Every surviving store executes through the scoped Effect SQL service.
-- [ ] Store failures use precise Effect error channels at the storage seam.
+- [ ] Store boundaries map each storage failure category to a precise typed Effect error channel.
 - [ ] Transactions preserve current atomicity and rollback behavior.
 - [ ] Repository identity and linked-worktree state sharing remain intact.
 - [ ] Public Task and Change persistence behavior remains unchanged.

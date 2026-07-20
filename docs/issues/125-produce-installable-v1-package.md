@@ -25,9 +25,10 @@ Tarball installation and Change-centered workflow smoke tests in clean repositor
 - [ ] Fake Pi and GitHub seams verify Task-backed, taskless, and no-change Submit through publication and reconciliation.
 - [ ] Change cancellation and safe cleanup are represented in installed help and smoke coverage.
 - [ ] Change Implement uses the fake Herdr seam.
-- [ ] Retired Task-centered implementation routes are absent.
-- [ ] Optional Herdr integration fails clearly when unavailable and passes one local smoke test when enabled.
-- [ ] Package version, provenance inputs, and release notes identify the exact source commit.
+- [ ] The package does not expose `by task start` or top-level `by submit`.
+- [ ] When Herdr is unavailable, the optional integration reports a clear unavailable result.
+- [ ] When Herdr is enabled, one local smoke test passes.
+- [ ] The package version, provenance metadata, and release notes identify the exact source commit.
 - [ ] The repository is green before the package candidate is accepted.
 
 ## Blocked by

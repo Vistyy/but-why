@@ -25,9 +25,9 @@ Full repository suite plus structural searches for removed Task-owned paths.
 - [ ] Top-level `by submit` is removed without a compatibility alias.
 - [ ] `by task findings` and `by task validation-runs` are removed without compatibility aliases.
 - [ ] Legacy Task-owned validation and delivery use cases and stores are removed.
-- [ ] Superseded tables and migrations are contracted through the supported greenfield schema path.
+- [ ] Remove superseded tables and migration code from the greenfield schema path.
 - [ ] No caller performs dual writes or fallback reads.
-- [ ] Migration-only modules and top-level folders are removed rather than retained as forwarding paths.
+- [ ] Remove every module and top-level folder that exists only for migration or forwarding.
 - [ ] Task commands own intent and Task lifecycle, while Change commands own implementation and delivery.
 - [ ] Current Change Submit, validation, publication, and inspection tests use only Change and Candidate ownership.
 - [ ] Architecture and configuration references describe the implemented v1.

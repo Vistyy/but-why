@@ -33,19 +33,19 @@ export const routeChange = (
         commands: [
           {
             command: "by change start [--task <task-id>]",
-            description: "Create a prepared Change worktree",
+            description: "Create a prepared Change worktree.",
           },
           {
             command: "by change prepare <change-id>",
-            description: "Run or retry Repository Preparation",
+            description: "Run or retry Repository Preparation.",
           },
           {
             command: "by change reconcile [<change-id>]",
-            description: "Read owned pull requests and clean terminal Changes",
+            description: "Read owned pull requests and clean up terminal Changes.",
           },
           {
             command: "by change implement <change-id> [--handoff-file <path>]",
-            description: "Launch a fresh Interactive Session in a ready Change worktree",
+            description: "Launch an Interactive Session in a ready Change worktree.",
           },
         ],
         flags: withGlobalHelpFlags(),
@@ -78,7 +78,10 @@ const runStart = (
       success({
         usage: "by change start [--task <task-id>]",
         flags: withGlobalHelpFlags([
-          { flag: "--task <task-id>", description: "Link one approved dependency-unblocked Task" },
+          {
+            flag: "--task <task-id>",
+            description: "Link one approved Task with satisfied prerequisites.",
+          },
         ]),
         examples: [
           "by change start",
@@ -313,7 +316,7 @@ const runReconcile = (
         arguments: [
           {
             argument: "<change-id>",
-            description: "Optional Change ID. Without one, reconcile eligible Changes.",
+            description: "Optional Change ID. Without one, reconcile all eligible Changes.",
           },
         ],
         flags: withGlobalHelpFlags(),
@@ -353,10 +356,10 @@ const runReconcile = (
       return result.rejected
         ? runtimeError({
             code: "reconciliation_rejected",
-            message: "An owned pull request did not match its recorded Change facts.",
+            message: "The owned pull request does not match the recorded Change facts.",
             details: { changes: result.changes },
             help: [
-              "Inspect the reported Change and resolve the remote mismatch without adopting it.",
+              "Inspect the Change and resolve the remote mismatch. Do not adopt the pull request.",
             ],
           })
         : success({ changes: result.changes });

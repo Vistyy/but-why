@@ -1,9 +1,15 @@
-# But Why config
+# But Why Config
 
-Repo config lives at `.but-why/config.json` and is tracked repo policy.
-Global config lives at `~/.config/but-why/config.json` and owns reusable Agent Profiles plus the Default Agent Profile selection.
+## Config files
 
-## Minimal validation config
+Repo Config lives at `.but-why/config.json` and contains tracked repository policy.
+Global Config lives at `~/.config/but-why/config.json` and contains reusable Agent Profiles and the Default Agent Profile selection.
+
+## Example Repo Config
+
+Replace the example commands with commands from the repository's tooling.
+Top-level `prepare` is optional.
+`validation.checks` is required for Submission and must contain at least one check.
 
 ```json
 {
@@ -21,36 +27,45 @@ Global config lives at `~/.config/but-why/config.json` and owns reusable Agent P
 }
 ```
 
-## Post-init flow
+After `by init`:
 
-1. Inspect repository tooling before choosing commands.
-2. Put dependency install, restore, sync, or fetch work in top-level `prepare` when needed.
+1. Inspect the repository tooling.
+2. Put dependency installation, restore, sync, or fetch work in top-level `prepare` when required.
 3. Put verification commands in `validation.checks`.
 4. Commit `.but-why/config.json` so reviewers can inspect the policy.
 
 ## `prepare`
 
-Top-level `prepare` is optional and runs in new Managed Worktrees and before checks inside Validation Workspaces.
-Its `command` is required when the section is present.
+Top-level `prepare` runs in new Managed Worktrees and before Checks in Validation Workspaces.
+When `prepare` is present, it must contain `command`.
 `timeoutSeconds` is optional and defaults to 1200.
 
 ## `validation.checks`
 
-`validation.checks` is required for submit and must contain at least one check.
-Top-level `checks` is not valid config.
-Each check needs an `id` and `command`.
-Check IDs use lowercase letters, numbers, `-`, and `_`.
+`validation.checks` must contain at least one Check before Submission.
+Top-level `checks` is invalid.
+Each Check must contain an `id` and a `command`.
+Check IDs may contain lowercase letters, numbers, `-`, and `_`.
 `timeoutSeconds` is optional and defaults to 1200.
 
 ## Agent Profiles
 
-Supported `agentRuntime` values are `pi`, `claude-code`, `codex`, `cursor`, `opencode`, and `copilot`.
-An Agent Profile keeps `agentRuntime`, optional `agentModel`, and optional `thinking` together.
+Supported `agentRuntime` values:
+
+- `pi`
+- `claude-code`
+- `codex`
+- `cursor`
+- `opencode`
+- `copilot`
+
+An Agent Profile contains `agentRuntime`, optional `agentModel`, and optional `thinking`.
 All current adapters require `agentModel` when an agent operation resolves the profile.
-For Pi, `thinking` is `off`, `minimal`, `low`, `medium`, `high`, or `xhigh`.
+
+For Pi, `thinking` must be `off`, `minimal`, `low`, `medium`, `high`, or `xhigh`.
 Other runtimes accept a non-empty runtime-defined value.
 
-Global config selects its default by name:
+Global Config selects the Default Agent Profile by name:
 
 ```json
 {
@@ -65,7 +80,7 @@ Global config selects its default by name:
 }
 ```
 
-A reviewer may explicitly select a profile:
+A reviewer may select an Agent Profile explicitly:
 
 ```json
 {
@@ -92,10 +107,11 @@ A reviewer may explicitly select a profile:
 }
 ```
 
-An explicit `agentProfile` resolves Repo Config first, then Global Config.
-A reviewer without `agentProfile` uses `defaultAgentProfile` and resolves that profile from Global Config only.
-Profiles are validated when an operation needs to run an agent, so unrelated commands remain usable.
-Unsupported runtimes, missing profiles, and required missing models produce typed errors with setup actions.
-A harness launch failure is reported when But Why first attempts to use the harness.
+When a reviewer names an `agentProfile`, But Why searches Repo Config first and Global Config second.
+When a reviewer does not name an `agentProfile`, But Why uses `defaultAgentProfile` and searches Global Config only.
+But Why validates profiles when an operation needs an agent, so unrelated commands remain available.
+Unsupported runtimes, missing profiles, and missing required models produce typed errors with setup actions.
+But Why reports a harness launch failure when it first tries to use the harness.
 
-Config rejects unknown keys, including `ignorePatterns`.
+Use only documented keys.
+Config rejects unknown keys; `ignorePatterns` is not supported.

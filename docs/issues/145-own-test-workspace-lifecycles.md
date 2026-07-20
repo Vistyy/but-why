@@ -13,8 +13,8 @@
 
 ## What to build
 
-Provide one test workspace module that owns temporary workspace creation and release.
-The interface must support tests that run through `@effect/vitest` and tests that verify process-backed behavior.
+Provide one test workspace module that acquires and releases temporary workspaces.
+The module must support `@effect/vitest` tests and ordinary process-backed Vitest tests.
 
 Migrate temporary directory and test repository consumers to the test-owned lifecycle.
 Remove the global temporary-root registry and its repeated cleanup hooks after every consumer uses the new interface.
@@ -28,10 +28,10 @@ Lifecycle tests acquire a temporary test workspace and verify its release after 
 
 ## Acceptance criteria
 
-- [ ] Each temporary test workspace has one explicit test owner.
-- [ ] Temporary workspace cleanup runs after successful test execution.
-- [ ] Temporary workspace cleanup runs after failed test execution.
-- [ ] Temporary workspace cleanup runs after interrupted Effect test execution.
+- [ ] Each test that creates a temporary workspace acquires and releases it through the shared test workspace module.
+- [ ] The module releases temporary workspaces after successful test execution.
+- [ ] The module releases temporary workspaces after failed test execution.
+- [ ] The module releases temporary workspaces after interrupted Effect test execution.
 - [ ] Effect-driven and process-backed tests use the supported test workspace lifecycle.
 - [ ] The global temporary-root registry and repeated cleanup hooks are removed after migration.
 - [ ] Production cleanup assertions retain their current behavior and coverage.

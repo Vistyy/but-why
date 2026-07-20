@@ -14,7 +14,9 @@
 
 ## What to build
 
-Keep `by task cancel <task-id> --reason <reason>` for Task-backed Changes and add `by change cancel <change-id>` for taskless Changes, coordinating owned PR closure, durable terminal state, and safe cleanup.
+Keep `by task cancel <task-id> --reason <reason>` for Task-backed Changes.
+Add `by change cancel <change-id>` for taskless Changes.
+Both commands must coordinate owned PR closure, terminal state, and safe cleanup.
 
 ## Primary verification seam
 
@@ -25,12 +27,13 @@ Task and Change cancellation CLI tests with a fake GitHub boundary and focused r
 - [ ] Task cancellation requires a non-empty reason and an unfinished Task.
 - [ ] `by change cancel` accepts only an open taskless Change.
 - [ ] Direct Change cancellation of a Task-backed Change is rejected with the supported Task command.
-- [ ] An owned open PR is closed before local cancellation commits.
+- [ ] Cancellation closes an owned open PR before it records local cancellation.
 - [ ] A GitHub closure failure leaves the lifecycle open and returns an actionable error.
 - [ ] An observed merged PR completes the Change and linked Task instead of cancelling them.
 - [ ] Cancellation permanently closes the applicable Change and Task while preserving history.
-- [ ] Cancellation attempts the same safe cleanup policy used after merge.
-- [ ] Unsafe cleanup leaves resources pending and reports the reason without reopening lifecycle state.
+- [ ] Cancellation applies the cleanup policy for merged Changes.
+- [ ] If cleanup is unsafe, resources remain pending and the command reports the reason.
+- [ ] Pending cleanup does not reopen the Change lifecycle.
 - [ ] Repeated cancellation returns the durable result unchanged.
 
 ## Blocked by

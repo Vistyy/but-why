@@ -1,7 +1,8 @@
 # But Why? Domain Context
 
-This glossary defines the canonical language for the reduced manual v1.
-Detailed behavior belongs in the active PRD, ADRs, and implementation Tasks.
+This glossary defines canonical language for the Change-centered v1 target.
+`docs/architecture.md` documents the current implementation.
+Detailed behavior belongs in approved specifications, accepted ADRs, and implementation Tasks.
 
 **Change**:
 The durable owner of one code lineage, Managed Worktree, Candidates, Validation Runs, Findings, and owned PR, optionally linked to one Task.
@@ -56,11 +57,11 @@ One durable execution and judgment of one Candidate under one resolved validatio
 _Avoid_: Candidate, retry Attempt, generic job
 
 **Validation Run State**:
-Whether a Validation Run is running or complete.
+The state of a Validation Run: running or complete.
 _Avoid_: Task state, phase result
 
 **Validation Run Outcome**:
-The completed result of a Validation Run: passed, blocked by Findings, or failed by tooling.
+The completed result of a Validation Run: passed, blocked by Findings, or failed because of tooling.
 _Avoid_: Needs Input, reviewer status, Task state
 
 **Validation Run History**:
@@ -80,11 +81,12 @@ The canonical filesystem-safe operational name derived from a Task ID.
 _Avoid_: Display title, raw Task ID in process names
 
 **Task Approval**:
-The permanent confirmation that a New Task's intent is ready to become eligible for implementation.
+The permanent confirmation that a New Task's intent is approved for implementation.
 _Avoid_: Change Start, reviewer approval
 
 **Change Start**:
-The named operation that creates a Change, its Managed Worktree, and its starting commit, optionally linking an approved Task and capturing its Acceptance Context.
+The operation that creates a Change, its Managed Worktree, and its starting commit.
+It may link an approved Task and capture its Acceptance Context.
 _Avoid_: Agent launch alone, validation, arbitrary state assignment
 
 **Task Lifecycle**:

@@ -5,4 +5,4 @@ description: Use when running `by` commands or setting up But Why in a repositor
 
 Use `by` for But Why tasks and validation in the current repository.
 
-For setup, follow `docs/public/setup.md` from the installed But Why package or this repository before adding workflow guidance.
+Before giving setup or workflow guidance, follow `docs/public/setup.md` from the installed But Why package or repository.

@@ -23,9 +23,10 @@ Installed-package workflow test plus review of the public workflow documentation
 
 - [ ] The workflow teaches Task create, context, approval, and dependencies separately from Change Start, implementation, Submit, inspection, reconciliation, and cancellation.
 - [ ] Task-backed and taskless Change Start are documented with their different Acceptance Review behavior.
-- [ ] Top-level Repository Preparation and explicit preparation retry are documented with valid examples.
+- [ ] The workflow documents top-level Repository Preparation.
+- [ ] The workflow documents `by change prepare <change-id>` with successful and failed examples.
 - [ ] Direct manual Managed Worktree use is documented as the portable implementation path.
-- [ ] Change Implement is documented without session-copying claims.
+- [ ] The workflow documents Change Implement as launching work in the recorded Managed Worktree.
 - [ ] Programmatic examples request JSON, while human examples retain default TOON output.
 - [ ] User-owned implementation guidance uses the Managed Worktree and repeated Change Submit instead of `/code-review`.
 - [ ] The workflow stops when the PR is ready for human merge and never merges it.

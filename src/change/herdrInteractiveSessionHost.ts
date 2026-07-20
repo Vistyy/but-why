@@ -32,7 +32,7 @@ const launchHerdrSession = async (
     return {
       ok: false,
       code: "host_unavailable",
-      message: `Herdr must be installed and running before launching ${sessionName}: ${agents.message}`,
+      message: `Start Herdr before launching ${sessionName}: ${agents.message}`,
     };
   }
   if (hasActiveSession(agents.stdout, input, sessionName)) {
@@ -53,7 +53,7 @@ const launchHerdrSession = async (
   if (!worktree.ok) return launchFailure(worktree.message);
   const opened = openedWorktree(worktree.stdout);
   if (opened === undefined) {
-    return launchFailure("Herdr did not return the worktree root pane.");
+    return launchFailure("Herdr did not return a worktree root pane.");
   }
   return launchInOpenedWorktree(execute, input, path, sessionName, agents.stdout, opened);
 };
@@ -67,9 +67,7 @@ const launchInOpenedWorktree = async (
   opened: OpenedWorktree,
 ): Promise<InteractiveSessionLaunchResult> => {
   if (opened.alreadyOpen && hasActiveAgentInWorktree(listedAgents, input)) {
-    return launchFailure(
-      "Herdr already has a different active Interactive Session in this worktree.",
-    );
+    return launchFailure("Another Interactive Session is already active in this worktree.");
   }
 
   const launched = await execute(["pane", "run", opened.rootPaneId, piCommand(input, path)]);
@@ -95,7 +93,7 @@ const launchInOpenedWorktree = async (
 const launchFailure = (message: string): InteractiveSessionLaunchResult => ({
   ok: false,
   code: "launch_failed",
-  message: `Herdr could not launch the Interactive Session. ${message}`,
+  message: `Herdr could not launch the Interactive Session: ${message}`,
 });
 
 const piCommand = (input: InteractiveSessionLaunchInput, path: string | undefined): string =>

@@ -1,15 +1,18 @@
 ## Always-on facts
 
-- But Why? validates completed code changes against approved human intent.
+- But Why? validates submitted code against approved human intent.
 - But Why? is task-based.
 - `by` is an agent-first, non-interactive AXI CLI.
-- This repository is unreleased, and Task 137 will replace historical schema migrations with one Effect SQL baseline.
-  Keep internal code, storage, and documentation names aligned with current domain language by correcting misleading names now.
-  Treat historical migrations and planning documents as evidence of earlier decisions rather than naming precedent for current implementation.
+- This repository is unreleased.
+- Task 137 targets one Effect SQL baseline instead of historical schema migrations.
+- Use current domain terms in code, storage, and documentation.
+  Correct misleading names now.
+- Treat historical migrations and planning documents as historical evidence.
+  Do not use them as naming precedent for current implementation.
 
 ## Pointers
 
-- Domain language: `CONTEXT.md`.
+- Canonical domain language: `CONTEXT.md`.
 - Current v1 architecture: `docs/architecture.md`.
 - Current implementation order: `docs/issue-breakdown.md`.
 - Approved product specifications: `docs/specs/`.
@@ -23,8 +26,9 @@
 
 ## Issue completion
 
-After completing an issue from `docs/issues/`, update `docs/issue-breakdown.md` in the same commit.
-Remove the completed issue from the dependency graph and move each newly unblocked issue into `Can start immediately`.
+When completing an issue from `docs/issues/`, update `docs/issue-breakdown.md` in the same commit.
+Remove the completed issue from the dependency graph.
+Move each newly unblocked issue to `Can start immediately`.
 
 ## Code map
 

@@ -7,12 +7,12 @@
 
 ## Behaviors owned
 
-- But Why? proves its complete Change-centered workflow on its own next real work item.
+- But Why? proves its complete Change-centered workflow on one approved repository change.
 - Successful dogfooding moves active Task tracking from new Markdown drafts to SQLite.
 
 ## What to build
 
-Use the installed v1 candidate to create and complete one useful Task-backed Change through the public CLI, exercising the same Change interface available to taskless work.
+Use the installed v1 candidate to create and complete one approved Task-backed Change through the public CLI.
 
 ## Primary verification seam
 
@@ -29,7 +29,7 @@ One real Task and linked Change progressing from approved intent through an owne
 - [ ] Main and Managed Worktrees observe the same shared SQLite facts.
 - [ ] Contributor and agent instructions declare SQLite Tasks as the source of truth for new active work.
 - [ ] Existing Markdown issue files remain historical planning records rather than being deleted.
-- [ ] The remaining npm publication work is created as a SQLite Task linked to its historical specification before Task 131 completes.
+- [ ] Before Task 131 completes, create the npm publication Task in SQLite and link its historical specification.
 
 ## Blocked by
 

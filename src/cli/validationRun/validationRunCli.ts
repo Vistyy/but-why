@@ -56,7 +56,7 @@ const runShowCommand = (
       arguments: [
         {
           argument: "<validation-run-id>",
-          description: "Candidate-owned Validation Run ID",
+          description: "Validation Run ID owned by a Candidate.",
         },
       ],
       flags: withGlobalHelpFlags(),
@@ -88,8 +88,11 @@ const runArtifactCommand = (
     return success({
       usage: "by validation-run artifact <validation-run-id> <artifact-ref>",
       arguments: [
-        { argument: "<validation-run-id>", description: "Candidate-owned Validation Run ID" },
-        { argument: "<artifact-ref>", description: "Artifact reference from Run inspection" },
+        { argument: "<validation-run-id>", description: "Validation Run ID owned by a Candidate." },
+        {
+          argument: "<artifact-ref>",
+          description: "Artifact reference returned by Validation Run inspection.",
+        },
       ],
       flags: withGlobalHelpFlags(),
       examples: [
@@ -134,11 +137,11 @@ const validationRunHelpView = (): StructuredObject => ({
   commands: [
     {
       command: "by validation-run show <validation-run-id>",
-      description: "Show one Candidate-owned Validation Run and its evidence",
+      description: "Show one Candidate-owned Validation Run and its evidence.",
     },
     {
       command: "by validation-run artifact <validation-run-id> <artifact-ref>",
-      description: "Show stored Artifact content",
+      description: "Show stored Artifact content.",
     },
   ],
   flags: withGlobalHelpFlags(),
@@ -205,7 +208,7 @@ const artifactNotFound = (validationRunId: string, artifactRef: string): CliResu
 const artifactContentUnavailable = (validationRunId: string, artifactRef: string): CliResult =>
   runtimeError({
     code: "artifact_content_unavailable",
-    message: `Artifact metadata exists, but stored content is unavailable: ${artifactRef}`,
+    message: `Artifact metadata exists, but its stored content is unavailable: ${artifactRef}`,
     details: { validationRunId, artifactRef },
     help: [`Run \`by validation-run show ${validationRunId}\` to inspect the recorded metadata.`],
   });

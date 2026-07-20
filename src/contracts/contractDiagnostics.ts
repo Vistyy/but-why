@@ -49,7 +49,7 @@ export const formatContractDiagnostics = (diagnostics: readonly ContractDiagnost
   diagnostics
     .map((diagnostic) => {
       const path = diagnostic.path.length === 0 ? "$" : diagnostic.path.join(".");
-      return `${path}: ${diagnostic.message} Expected ${diagnostic.expected}; actual ${formatActual(diagnostic.actual)}.`;
+      return `${path}: ${diagnostic.message} Expected ${diagnostic.expected}. Received ${formatActual(diagnostic.actual)}.`;
     })
     .join(" ");
 

@@ -14,7 +14,7 @@
 
 ## What to build
 
-Replace the temporary pre-publication schema guidance with a durable compatibility policy for persisted state and public interfaces.
+After the first public npm publication succeeds, replace the temporary schema guidance with a compatibility policy for persisted state and public interfaces.
 Keep current domain language as the naming standard while requiring an explicit migration, deprecation, or release decision for breaking published contracts.
 
 ## Primary verification seam
@@ -24,7 +24,7 @@ Documentation consistency audit after the published package installs successfull
 ## Acceptance criteria
 
 - [ ] `AGENTS.md` no longer describes the repository as unreleased or names Task 137 as future work.
-- [ ] Contributor guidance identifies published persisted state and public interfaces as compatibility boundaries.
+- [ ] Contributor guidance identifies persisted data and installed CLI interfaces as compatibility boundaries.
 - [ ] Internal code, storage, and documentation continue to use current domain language.
 - [ ] Breaking a published contract requires an explicit migration, deprecation, or release decision.
 - [ ] Historical planning documents remain historical evidence rather than current compatibility obligations.

@@ -11,17 +11,17 @@ export type HelpFlagView = {
 const globalOutputFlags = [
   {
     flag: "--output <format>",
-    description: `Set stdout format: ${outputFormatPair}. Default: toon.`,
+    description: `Set the stdout format to ${outputFormatPair}. The default is toon.`,
   },
   {
     flag: "-o <format>",
-    description: `Alias for --output <format>. Valid values: ${outputFormatList}.`,
+    description: `Alias for --output <format>. Valid formats: ${outputFormatList}.`,
   },
 ] as const satisfies readonly HelpFlagView[];
 
 const helpFlag = {
   flag: "--help",
-  description: "Show this help",
+  description: "Show help for this command.",
 } as const satisfies HelpFlagView;
 
 const globalHelpFlags = [...globalOutputFlags, helpFlag] as const;

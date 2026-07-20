@@ -22,10 +22,12 @@ No-change Change Submit test with passing and blocking fake Acceptance reports.
 
 ## Acceptance criteria
 
-- [ ] No-change detection compares tracked trees and requires clean staged and non-ignored untracked state.
+- [ ] No-change detection compares the tracked tree with the Change's starting commit.
+- [ ] No-change completion requires no staged changes or non-ignored untracked files.
 - [ ] A real Candidate record references the existing starting commit without fabricating a commit.
 - [ ] One Candidate-owned Acceptance-only Validation Run stores the no-change judgment and Findings.
-- [ ] Only Acceptance Review runs and receives no Implementer explanation.
+- [ ] Exactly one Acceptance Review runs against the existing starting commit.
+- [ ] Acceptance Review receives no Implementer explanation.
 - [ ] Passing Acceptance marks the linked Task Done with completion kind `no_change`.
 - [ ] Acceptance Findings return the Task to implementing.
 - [ ] Prepare, Checks, Specialists, and publication do not run.

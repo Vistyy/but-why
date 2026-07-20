@@ -2,25 +2,44 @@
 
 Use this guide to install But Why for one repository and configure its Default Agent Profile.
 
-## Copyable prompt for an agent
+## Copyable prompt
 
 ```text
 Install But Why for this repository.
 Follow docs/public/setup.md in this repository.
-Identify your current agent harness from your execution context and ask whether I want to use it or another supported harness.
+Identify your current agent harness from your execution context.
+Ask whether I want to use that harness or another supported harness.
 Do not scan my machine for harnesses.
-Before installing the agent skill, detect my existing skill conventions and ask where to place it.
+Detect my existing skill conventions before proposing a skill location.
+Ask where to install the skill.
 ```
 
 ## Install But Why
 
-But Why is not available from the npm registry until the package is published.
-Use the current public tarball install path.
+But Why requires Node.js 24.
+The package is not available from the npm registry yet.
 
-From the But Why source checkout, build a tarball with `just pack`.
-Install it in the target repository with `npm install /path/to/but-why-0.0.0.tgz`, or globally with `npm install --global /path/to/but-why-0.0.0.tgz`.
-Verify the Installed CLI with `npx by --help` or `by --help`.
-Use an existing working installation when available.
+From the But Why source checkout, build a tarball:
+
+```bash
+just pack
+```
+
+Install the tarball in the target repository:
+
+```bash
+npm install /path/to/but-why-0.0.0.tgz
+npx by --help
+```
+
+Alternatively, install the tarball globally:
+
+```bash
+npm install --global /path/to/but-why-0.0.0.tgz
+by --help
+```
+
+Use an existing working installation when one is available.
 
 ## Initialize the repository
 
@@ -30,19 +49,20 @@ From the target repository root, run:
 by init --task-prefix BY
 ```
 
-Choose a repository-specific uppercase task prefix.
-The command is non-interactive.
-It creates `.but-why/config.json` and `.but-why/reviewers/` in the worktree.
-SQLite state and Artifacts live at `<git-common-dir>/but-why/`, shared by every linked worktree.
+Replace `BY` with a repository-specific uppercase Task prefix.
+The command creates `.but-why/config.json` and `.but-why/reviewers/` in the worktree.
+It stores SQLite state and Artifacts under `<git-common-dir>/but-why/` so every linked worktree shares them.
 
-Inspect repository tooling and configure top-level `prepare` and `validation.checks` explicitly in `.but-why/config.json`.
-See `config.md` in this directory.
+Inspect the repository tooling before you edit `.but-why/config.json`.
+Add `validation.checks`.
+Configure top-level `prepare` when the repository needs dependency installation or other setup.
+See [config.md](config.md) for the schema and Agent Profile rules.
 
 ## Choose the Default Agent Profile
 
-The setup agent identifies its current harness from its own execution context.
-It asks whether to use that harness or another supported harness.
-It presents these choices directly and does not scan, detect, verify, or configure installed harnesses:
+The setup agent must identify its current harness from its execution context.
+It must ask whether to use that harness or another supported runtime.
+It must not scan the machine for installed harnesses.
 
 <!-- supported-agent-runtimes:start -->
 - `pi`
@@ -53,15 +73,17 @@ It presents these choices directly and does not scan, detect, verify, or configu
 - `copilot`
 <!-- supported-agent-runtimes:end -->
 
-If the setup agent knows its current model, it suggests that model.
-Otherwise it asks for a model.
+See [Agent Profiles](config.md#agent-profiles) for runtime configuration.
+
+If the setup agent knows its current model, it should suggest that model.
+Otherwise, it must ask for a model.
 All current adapters require `agentModel`.
 
-The setup agent reads `~/.config/but-why/config.json`, preserving every existing setting and Agent Profile.
-It reuses an existing profile whose `agentRuntime` and `agentModel` match the selection.
-If none matches, it creates a profile named after the runtime.
-If that name already has different settings, it asks the user for another profile name.
-It sets `defaultAgentProfile` to the selected profile name.
+The setup agent must preserve every existing setting and Agent Profile in `~/.config/but-why/config.json`.
+It should reuse a profile whose `agentRuntime` and `agentModel` match the selection.
+If no profile matches, it must create a profile named after the runtime.
+If that name has different settings, it must ask the user for another profile name.
+It must set `defaultAgentProfile` to the selected profile name.
 
 Example:
 
@@ -78,27 +100,28 @@ Example:
 }
 ```
 
-The setup flow does not prove that the selected harness can execute.
-But Why reports a typed actionable launch failure when an agent operation first attempts to use it.
+Setup does not verify that the selected harness can run.
+If a launch fails, But Why reports a typed error with a recovery action.
 
-## Optional agent skill installation
+## Install the optional agent skill
 
 The packaged skill is `docs/public/skills/but-why/SKILL.md`.
-Installation is optional.
 
-Before copying it, detect the user's existing project and user skill-location conventions from project docs, repo config, user agent config, and existing skill locations.
-Show the detected conventions and ask the user to choose project scope, user scope, or skip installation.
-Do not use a fixed preferred destination list.
+1. Inspect project documentation, repository configuration, user agent configuration, and existing skill locations for skill conventions.
+2. Show the detected conventions.
+3. Ask the user to choose project scope, user scope, or no installation.
+4. Show the source, destination, and a short summary.
+5. Ask for confirmation.
+6. Copy the skill after the user confirms.
 
-Preserve this shape under the chosen skill root:
+Preserve this path under the chosen skill root:
 
 ```text
 <chosen-skill-root>/but-why/SKILL.md
 ```
 
-Show the source, destination, and a short summary before copying.
-Ask for explicit confirmation.
-If the destination exists, show a diff or concise overwrite summary and ask before overwriting.
+If the destination exists, show a diff or concise overwrite summary.
+Overwrite the destination only after the user confirms.
 
 `by init` does not install the skill.
-There is no `by` command for skill or harness configuration.
+But Why does not provide a command for skill or harness configuration.

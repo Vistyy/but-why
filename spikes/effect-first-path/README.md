@@ -1,28 +1,32 @@
 # Effect-first dependency path
 
-## Decision
+## Question
 
-The Effect-first path is viable for But Why?.
-Future implementation should converge on one Effect dependency graph rather than preserve explicit orchestration and native SQLite as parallel architectural defaults.
+Can But Why? use one Effect dependency graph for orchestration and SQLite storage?
 
-## Proven
+## Environment
 
-The executable test uses versions compatible with the project's pinned Effect `3.20.0` runtime.
-It proves that:
+The proof uses dependencies compatible with Effect `3.20.0` and the supported Node.js environment.
+The SQLite adapter uses `better-sqlite3` instead of `node:sqlite`.
+
+## Verified results
+
+The proof verifies that:
 
 - `@effect/vitest` runs Effect tests with `TestClock`.
 - `Effect.fn` names reusable operations.
 - A Context service receives dependencies through a Layer.
 - `Effect.timeoutOption` behaves deterministically under virtual time.
-- `@effect/sql-sqlite-node` builds successfully on the supported Node environment.
+- `@effect/sql-sqlite-node` builds successfully.
 - Effect Migrator creates a fresh SQLite database from one baseline migration.
-- Parameterized reads and writes work against that database.
-- Effect SQL commits successful transactions and rolls back failed transactions.
-- Effect Migrator records the baseline in its single migration ledger.
+- Parameterized reads and writes work.
+- Successful transactions commit.
+- Failed transactions roll back.
+- Effect Migrator records the baseline in one migration ledger.
 - The scoped SQLite Layer closes cleanly.
-- No mixed Effect runtime warning occurs.
+- The proof produces no mixed Effect runtime warning.
 
-Run the proof with:
+Run the proof:
 
 ```sh
 cd spikes/effect-first-path
@@ -31,12 +35,15 @@ pnpm run typecheck
 pnpm test
 ```
 
+All commands must pass.
+
 ## Consequences
 
-The official SQLite adapter uses `better-sqlite3` rather than Node's built-in `node:sqlite`.
-Adoption therefore replaces the current driver instead of wrapping it.
-Because no deployed database requires upgrade compatibility, production migration can replace the historical migration chain with one Effect Migrator baseline after obsolete Task-owned tables are removed.
-Future schema changes then continue from that baseline through the same Effect migration ledger.
+Effect SQL adoption replaces the current SQLite driver instead of wrapping it.
+Because no deployed database requires upgrade compatibility, Task 137 can replace historical migrations with one baseline after Task 107 removes obsolete tables.
+Future schema changes must use the same Effect migration ledger.
 
-The prototype removes the technical uncertainty.
-Porting the final application schema and dependencies remains implementation work.
+## Remaining work
+
+The proof does not port the application schema or application dependencies.
+Task 137 owns that implementation work.

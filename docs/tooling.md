@@ -1,38 +1,30 @@
 # Tooling
 
-This document describes development tooling for this repository.
-
-## Runtime and environment
+## Runtime
 
 The repository uses ESM TypeScript on Node.js 24.x.
 
-Nix provides the blessed reproducible development environment.
-
-Nix is optional for development.
-
-A non-Nix environment may run the project if it provides Node.js 24.x, pnpm, Just, and installed project dependencies.
-
-Corepack is not part of the repo toolchain.
+Nix provides the supported reproducible development environment.
+A non-Nix environment may be used when it provides Node.js 24.x, pnpm, Just, and installed project dependencies.
+Corepack is not part of the repository toolchain.
 
 ## Quality tools
 
 The project uses:
 
-- Vitest for tests.
-- Biome for formatting and linting.
-- TypeScript strict typechecking.
-- Fallow for codebase health, dead code, duplication, dependency, and architecture boundary checks.
-- ast-grep for blocking structural bans over active production TypeScript source.
-- `node:sqlite` for SQLite access.
+- Vitest for tests
+- Biome for formatting and linting
+- TypeScript for strict type checking
+- Fallow for dead code, duplication, dependency, and architecture checks
+- ast-grep for blocking structural rules over active TypeScript source
+- `node:sqlite` for SQLite access
 
 ## CLI output boundary
 
-CLI output is converted to TOON-style text only at the stdout boundary.
-
-Internal command logic uses typed JSON-like objects.
+Command logic returns typed JSON-like objects.
+The CLI converts those objects to TOON-style text only at the stdout boundary.
 
 ## Commands
 
-Run `just` with no arguments to list available recipes.
-
-Agents should use Just recipes instead of invoking pnpm directly.
+Run `just` to list available recipes.
+Use Just recipes because they define the repository's supported toolchain.
