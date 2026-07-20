@@ -3,10 +3,9 @@
 ## Specification
 
 - `docs/issues/036-establish-effect-adoption-baseline.md`
-- `docs/issues/139-establish-effect-test-execution.md`
-- `docs/issues/140-migrate-lifecycle-sensitive-effect-tests.md`
-- `docs/issues/141-migrate-candidate-workflow-effect-tests.md`
-- `docs/issues/142-migrate-adapter-and-value-effect-tests.md`
+- `docs/issues/139-migrate-candidate-validation-effect-tests.md`
+- `docs/issues/142-migrate-remaining-effect-tests.md`
+- `docs/issues/144-migrate-cli-effect-test-helpers.md`
 
 ## Behaviors owned
 
@@ -32,6 +31,5 @@ The structural check fails for a direct `Effect.run*` call in test code and pass
 
 ## Blocked by
 
-- `docs/issues/140-migrate-lifecycle-sensitive-effect-tests.md`
-- `docs/issues/141-migrate-candidate-workflow-effect-tests.md`
-- `docs/issues/142-migrate-adapter-and-value-effect-tests.md`
+- `docs/issues/142-migrate-remaining-effect-tests.md`
+- `docs/issues/144-migrate-cli-effect-test-helpers.md`
