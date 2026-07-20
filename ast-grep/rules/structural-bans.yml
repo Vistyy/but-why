@@ -121,6 +121,24 @@ rule:
     - pattern: $EFFECT.runFork($$$ARGS)
     - pattern: $EFFECT.runCallback($$$ARGS)
 ---
+id: no-effect-runner-import-in-tests
+language: TypeScript
+severity: error
+message: Execute test Effects through @effect/vitest using it.effect or it.scoped.
+files:
+  - test/**/*.ts
+rule:
+  any:
+    - all:
+        - kind: import_statement
+        - regex: '[\s\S]*(runPromise|runPromiseExit|runSync|runSyncExit|runFork|runCallback)[\s\S]*(effect|Effect)[\s\S]*'
+    - all:
+        - kind: import_statement
+        - regex: '[\s\S]*import\s+\*[\s\S]*from\s+["`][^"`]*effect[^"`]*Effect["`][\s\S]*'
+    - all:
+        - kind: import_statement
+        - regex: '[\s\S]*import\s+[A-Za-z_$][A-Za-z0-9_$]*\s+from\s+["`][^"`]*effect[^"`]*Effect["`][\s\S]*'
+---
 id: no-serialize-output-outside-main
 language: TypeScript
 severity: error

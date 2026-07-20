@@ -227,3 +227,11 @@ invalid:
   - Fx.runSyncExit(work)
   - Effect.runFork(work)
   - Fx.runCallback(work)
+---
+id: no-effect-runner-import-in-tests
+valid:
+  - import { Effect } from "effect"
+invalid:
+  - import { runPromise } from "effect/Effect"
+  - import * as Fx from "effect/Effect"
+  - import Effect from "effect/Effect"
