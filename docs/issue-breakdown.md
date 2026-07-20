@@ -7,7 +7,7 @@ It ends when But Why? completes one real SQLite-tracked Task-backed Change and p
 
 ## Can start immediately
 
-- Task 107: Remove Task-owned implementation and delivery paths.
+- Task 137: Move state storage to Effect SQL.
 - Task 117: Cancel Task-backed and taskless Changes.
 - Task 129: Submit a Task-backed Change with no repository change.
 
@@ -15,8 +15,6 @@ It ends when But Why? completes one real SQLite-tracked Task-backed Change and p
 
 | Task | Capability | Blocked by |
 | --- | --- | --- |
-| 107 | Remove Task-owned implementation and delivery paths | 106 |
-| 137 | Move state storage to Effect SQL | 107 |
 | 135 | Consolidate the source hierarchy | 137 |
 | 123 | Ship the Change-centered manual workflow | 107, 117, 129, 135 |
 | 125 | Produce an installable v1 package | 123 |
@@ -31,7 +29,7 @@ It ends when But Why? completes one real SQLite-tracked Task-backed Change and p
 3. Task 136 defines the Candidate validation service composition and production Layer graph before Task 105 composes it behind Change Submit.
 4. Task 105 provides that graph to live Change Submit and consumes Candidate validation without dual writes.
 5. Task 106 migrates detailed inspection to Change commands and keeps Task projections concise.
-6. Task 107 removes the replaced Task-owned writers, readers, routes, tables, and compatibility paths.
+6. Task 107 removed the replaced Task-owned writers, readers, routes, and compatibility paths in commits `16a6153`, `9e454b9`, `89f6090`, and `2bd8107`.
 7. Task 137 replaces surviving native SQLite storage and historical migrations with Effect SQL and one baseline.
 8. Task 135 reorganizes the surviving modules so every top-level source folder has one domain owner or one clear shared role.
 9. Task 117 completes cancellation and cleanup before Task 123 ships the public workflow.

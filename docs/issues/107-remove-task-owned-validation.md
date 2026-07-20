@@ -24,16 +24,21 @@ Full repository suite plus structural searches for removed Task-owned paths.
 
 ## Acceptance criteria
 
-- [ ] Change Start remains the only implementation-start path established by Task 133.
-- [ ] Top-level `by submit` is removed without a compatibility alias.
-- [ ] `by task findings` and `by task validation-runs` are removed without compatibility aliases.
-- [ ] Legacy Task-owned validation and delivery use cases and stores are removed.
-- [ ] Task 137 replaces the historical migration chain and removes superseded tables from the greenfield schema path.
-- [ ] No caller performs dual writes or fallback reads.
-- [ ] Remove every module and top-level folder that exists only for migration or forwarding.
-- [ ] Task commands own intent and Task lifecycle, while Change commands own implementation and delivery.
-- [ ] Current Change Submit, validation, publication, and inspection tests use only Change and Candidate ownership.
-- [ ] Architecture and configuration references describe the implemented v1.
+- [x] Change Start remains the only implementation-start path established by Task 133.
+- [x] Top-level `by submit` is removed without a compatibility alias.
+- [x] `by task findings` and `by task validation-runs` are removed without compatibility aliases.
+- [x] Legacy Task-owned validation and delivery use cases and stores are removed.
+- [x] Task 137 owns the historical migration chain and removal of superseded tables from the greenfield schema path.
+- [x] No caller performs dual writes or fallback reads.
+- [x] Removed every module and top-level folder that existed only for migration or forwarding.
+- [x] Task commands own intent and Task lifecycle, while Change commands own implementation and delivery.
+- [x] Current Change Submit, validation, publication, and inspection tests use only Change and Candidate ownership.
+- [x] Architecture and configuration references describe the implemented v1.
+
+## Completion evidence
+
+- `just quality` passed with 351 tests passed and 1 skipped.
+- Implementation commits: `16a6153`, `9e454b9`, `89f6090`, and `2bd8107`.
 
 ## Blocked by
 

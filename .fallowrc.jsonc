@@ -187,7 +187,6 @@
       {
         "name": "validation-runs",
         "patterns": [
-          "src/validation/validationRuns.ts",
           "src/validation/runCheckRound.ts",
           "src/validation/runPreparePhase.ts",
           "src/repositoryPreparation/runRepositoryPreparation.ts",

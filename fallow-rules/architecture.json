@@ -32,17 +32,6 @@
       "severity": "error"
     },
     {
-      "id": "task-store-implementation-does-not-import-validation-run-store",
-      "kind": "banned-import",
-      "specifiers": [
-        "../validationRun/validationRunStore.js",
-        "../sqlite/sqliteValidationRunStore.js"
-      ],
-      "files": ["src/task/taskStore.ts", "src/sqlite/sqliteTaskStore.ts"],
-      "message": "TaskStore must not read ValidationRunStore data. Compose Task and Validation Run views outside the TaskStore implementation.",
-      "severity": "error"
-    },
-    {
       "id": "concrete-sqlite-stores-only-in-repo-local-storage-wiring",
       "kind": "banned-import",
       "specifiers": [
@@ -76,19 +65,6 @@
       ],
       "files": ["src/cli*.ts", "src/cli/**/*.ts"],
       "message": "CLI command code may use structured output types but must leave JSON, TOON, and serializer implementation imports at the process edge.",
-      "severity": "error"
-    },
-    {
-      "id": "submit-and-validation-do-not-bypass-validation-runs",
-      "kind": "banned-import",
-      "specifiers": [
-        "./sqliteValidationRuns.js",
-        "../sqlite/sqliteValidationRuns.js",
-        "../../sqlite/sqliteValidationRuns.js",
-        "../../../sqlite/sqliteValidationRuns.js"
-      ],
-      "files": ["src/submit/**/*.ts", "src/localSubmit/**/*.ts", "src/validation/**/*.ts"],
-      "message": "Submit and validation flow must start validation through the ValidationRuns seam, not by importing the SQLite implementation directly.",
       "severity": "error"
     }
   ]
