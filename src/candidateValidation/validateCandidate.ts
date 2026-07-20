@@ -6,10 +6,7 @@ import type {
   CandidateValidationOutcome,
 } from "./candidateValidationRunStore.js";
 import type { AcceptanceReviewPolicy } from "../acceptanceReview/acceptanceReviewConfig.js";
-import {
-  piReviewerAgentRuntime,
-  type ReviewerAgentRuntime,
-} from "../agent/reviewerAgentRuntime.js";
+import type { ReviewerAgentRuntime } from "../agent/reviewerAgentRuntime.js";
 import { runAcceptanceReviewPhase } from "../acceptanceReview/runAcceptanceReviewPhase.js";
 import type { SpecialistReviewPolicy } from "../specialistReview/specialistReviewConfig.js";
 import { runSpecialistReviewPhase } from "../specialistReview/runSpecialistReviewPhase.js";
@@ -114,24 +111,6 @@ export const CandidateValidationLive = Layer.effect(
     return makeCandidateValidation({ ...paths, runStore, reviewerAgentRuntime });
   }),
 );
-
-export const CandidateValidationProduction = (input: {
-  readonly localRepositoryMainCheckoutRoot: string;
-  readonly artifactsRoot: string;
-  readonly runStore: CandidateValidationRunStorePort;
-}): Layer.Layer<CandidateValidation, never, never> =>
-  CandidateValidationLive.pipe(
-    Layer.provideMerge(
-      Layer.mergeAll(
-        Layer.succeed(CandidateValidationPaths, {
-          localRepositoryMainCheckoutRoot: input.localRepositoryMainCheckoutRoot,
-          artifactsRoot: input.artifactsRoot,
-        }),
-        Layer.succeed(CandidateValidationRunStore, input.runStore),
-        Layer.succeed(CandidateReviewerAgentRuntime, piReviewerAgentRuntime),
-      ),
-    ),
-  );
 
 const makeCandidateValidation = (dependencies: {
   readonly localRepositoryMainCheckoutRoot: string;
