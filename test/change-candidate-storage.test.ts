@@ -1,20 +1,8 @@
-import { join } from "node:path";
-import { DatabaseSync } from "node:sqlite";
-
 import { expect, it } from "@effect/vitest";
-import { Effect } from "effect";
 import { describe } from "vitest";
-
+import type { StateDatabaseSession } from "../src/init/stateDatabase.js";
 import { openSqliteCandidateStore } from "../src/sqlite/sqliteCandidateStore.js";
-import {
-  prepareStateDatabaseSession,
-  type StateDatabaseSession,
-} from "../src/init/stateDatabase.js";
 import { openSqliteChangeStore } from "../src/sqlite/sqliteChangeStore.js";
-import { openSqliteTaskStore } from "../src/sqlite/sqliteTaskStore.js";
-import { publicTaskId } from "../src/task/taskId.js";
-import { runByInProcessEffect as runBy } from "./support/by-cli.js";
-import { createInitializedRepo } from "./support/initializedRepo.js";
 import { createSqliteStateSession } from "./support/sqliteState.js";
 
 const now = "2026-07-11T10:00:00.000Z";
@@ -182,77 +170,6 @@ describe("Change storage", () => {
   });
 });
 
-describe("Change and Candidate schema migration", () => {
-  it.effect("expands an existing repository without changing Task-owned records", () =>
-    Effect.gen(function* () {
-      const root = initializedRepo();
-      const task = taskStore(sqliteInput(root)).createTask({
-        title: "Existing",
-        description: "Task",
-        now,
-      });
-      const statePath = sharedStatePath(root);
-      const database = new DatabaseSync(statePath);
-      database.exec(`
-      DROP TABLE candidates;
-      DROP TABLE changes;
-      DELETE FROM schema_migrations
-      WHERE name IN (
-        '015_changes_and_candidates',
-        '016_change_base_ref',
-        '021_task_starts',
-        '022_change_owned_worktrees',
-        '024_change_owned_pull_requests',
-        '025_change_cleanup'
-      );
-    `);
-      database.close();
-
-      const result = yield* runBy(root, ["init", "--task-prefix", "BY"]);
-      expect(result.status).toBe(0);
-      expect(result.stdout).toContain("status: repaired");
-      expect(taskStore(sqliteInput(root)).getTaskById(publicTaskId(task.id))).toMatchObject({
-        id: task.id,
-      });
-      expect(createChange(sqliteInput(root))).toMatchObject({ state: "open" });
-    }),
-  );
-
-  it.effect(
-    "adds optional Change bases without changing existing Change or Candidate history",
-    () =>
-      Effect.gen(function* () {
-        const root = initializedRepo();
-        const change = createChange(sqliteInput(root));
-        const candidate = candidateStore(sqliteInput(root)).captureCandidate({
-          changeId: change.id,
-          selectedBaseRef: "refs/heads/main",
-          resolvedTargetSha: "1111111111111111111111111111111111111111",
-          comparisonBaseSha: "2222222222222222222222222222222222222222",
-          headSha: "3333333333333333333333333333333333333333",
-          now,
-        });
-        expect(candidate.ok).toBe(true);
-        if (!candidate.ok) return;
-        const database = new DatabaseSync(sharedStatePath(root));
-        database.exec(`
-      ALTER TABLE changes DROP COLUMN base_ref;
-      DELETE FROM schema_migrations WHERE name = '016_change_base_ref';
-    `);
-        database.close();
-
-        expect((yield* runBy(root, ["init", "--task-prefix", "BY"])).status).toBe(0);
-        expect(changeStore(sqliteInput(root)).getChangeById(change.id)).toMatchObject({
-          id: change.id,
-          baseRef: null,
-        });
-        expect(candidateStore(sqliteInput(root)).getCandidateById(candidate.candidate.id)).toEqual(
-          candidate.candidate,
-        );
-      }),
-  );
-});
-
 describe("Change schema constraints", () => {
   it("rejects invalid Change lifecycle rows in a newly initialized database", () => {
     createSqliteStateSession().withDatabase((database) => {
@@ -396,20 +313,7 @@ describe("Candidate storage", () => {
   });
 });
 
-const initializedRepo = (): string => createInitializedRepo();
-
-const sharedStatePath = (root: string): string => join(root, ".git", "but-why", "state.sqlite");
-
-const sqliteInput = (root: string) =>
-  prepareStateDatabaseSession({
-    statePath: sharedStatePath(root),
-    migrationTimestamp: () => now,
-  });
-
 const changeStore = (state: StateDatabaseSession) => openSqliteChangeStore(state);
-
-const taskStore = (state: StateDatabaseSession) =>
-  openSqliteTaskStore({ ...state, taskPrefix: "BY" });
 
 const candidateStore = (state: StateDatabaseSession) => openSqliteCandidateStore(state);
 

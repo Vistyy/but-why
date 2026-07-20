@@ -5,9 +5,9 @@ import { describe, expect, it } from "vitest";
 import { findGitRoot } from "../src/init/git.js";
 import {
   ensureStateDatabase,
+  prepareStateDatabaseSession,
   SharedStateIdentityConflictError,
 } from "../src/init/stateDatabase.js";
-import { prepareStateDatabaseSession } from "../src/init/stateDatabase.js";
 import { createGitRepo } from "./support/by-cli.js";
 import { createInitializedRepo } from "./support/initializedRepo.js";
 
@@ -20,9 +20,9 @@ describe("state database session", () => {
 
     expect(
       session.withDatabase((database) =>
-        database.prepare("SELECT COUNT(*) AS count FROM schema_migrations").get(),
+        database.prepare("SELECT COUNT(*) AS count FROM sqlite_master WHERE type = 'table'").get(),
       ),
-    ).toEqual({ count: 25 });
+    ).toEqual({ count: 13 });
     expect(
       session.withDatabase((database) =>
         database.prepare("SELECT common_directory FROM shared_state_identity WHERE id = 1").get(),

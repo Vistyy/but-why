@@ -359,33 +359,6 @@ validationSetup:
     const database = new DatabaseSync(sharedStatePath(root));
 
     try {
-      expect(database.prepare("SELECT name FROM schema_migrations").all()).toEqual([
-        { name: "001_init" },
-        { name: "002_tasks" },
-        { name: "003_task_comments" },
-        { name: "004_submit_preflight" },
-        { name: "005_validation_workspace_setup" },
-        { name: "006_validation_runs" },
-        { name: "007_general_validation_tooling_errors" },
-        { name: "008_drop_durable_validation_workspace_path" },
-        { name: "009_failed_validation_run_status" },
-        { name: "010_validation_finding_phase" },
-        { name: "011_validation_finding_producer" },
-        { name: "012_optional_finding_severity" },
-        { name: "013_validation_prepare_phase" },
-        { name: "014_task_context_snapshots" },
-        { name: "015_changes_and_candidates" },
-        { name: "016_change_base_ref" },
-        { name: "017_shared_state_identity" },
-        { name: "018_candidate_validation_runs" },
-        { name: "019_task_approval" },
-        { name: "020_task_dependencies" },
-        { name: "021_task_starts" },
-        { name: "022_change_owned_worktrees" },
-        { name: "023_align_reviewer_phase_names" },
-        { name: "024_change_owned_pull_requests" },
-        { name: "025_change_cleanup" },
-      ]);
       expect(
         database
           .prepare(
@@ -401,37 +374,11 @@ validationSetup:
         { name: "candidate_validation_workspace_setups" },
         { name: "candidates" },
         { name: "changes" },
-        { name: "schema_migrations" },
         { name: "shared_state_identity" },
         { name: "task_comments" },
         { name: "task_dependencies" },
         { name: "tasks" },
-        { name: "validation_run_artifacts" },
-        { name: "validation_run_findings" },
-        { name: "validation_run_logs" },
-        { name: "validation_run_phase_statuses" },
-        { name: "validation_run_rounds" },
-        { name: "validation_run_token_usage" },
-        { name: "validation_run_tooling_errors" },
-        { name: "validation_runs" },
-        { name: "validation_workspace_setups" },
       ]);
-      expect(
-        database
-          .prepare(
-            "SELECT sql FROM sqlite_schema WHERE type = 'table' AND name = 'validation_run_phase_statuses'",
-          )
-          .get(),
-      ).toEqual({
-        sql: expect.stringContaining("'workflow_failed'"),
-      });
-      expect(
-        database
-          .prepare(
-            "SELECT name FROM pragma_table_info('validation_run_tooling_errors') WHERE name = 'error_kind'",
-          )
-          .get(),
-      ).toEqual({ name: "error_kind" });
     } finally {
       database.close();
     }
