@@ -5,11 +5,6 @@ import type { CleanupState } from "../validationRun/cleanup.js";
 import type { ValidationToolingFailureKind } from "../validationRun/toolingErrorKind.js";
 import type { ValidationWorkspaceCleanupResult } from "./validationWorkspace.js";
 
-class TaskContextSnapshotFailed extends Data.TaggedError("TaskContextSnapshotFailed")<{
-  readonly operationName: string;
-  readonly message: string;
-}> {}
-
 export class ValidationWorkspaceSetupFailed extends Data.TaggedError(
   "ValidationWorkspaceSetupFailed",
 )<{
@@ -32,18 +27,6 @@ export class GitToolingFailed extends Data.TaggedError("GitToolingFailed")<{
 }> {}
 
 export class SandcastleToolingFailed extends Data.TaggedError("SandcastleToolingFailed")<{
-  readonly operationName: string;
-  readonly message: string;
-}> {}
-
-class AgentHarnessLaunchFailed extends Data.TaggedError("AgentHarnessLaunchFailed")<{
-  readonly operationName: "launch_agent_harness";
-  readonly profileName: string;
-  readonly agentRuntime: string;
-  readonly message: string;
-}> {}
-
-class SandboxingUnavailable extends Data.TaggedError("SandboxingUnavailable")<{
   readonly operationName: string;
   readonly message: string;
 }> {}
@@ -78,30 +61,15 @@ export class TokenUsageContractFailed extends Data.TaggedError("TokenUsageContra
   readonly message: string;
 }> {}
 
-class GitHubPublishingToolingFailed extends Data.TaggedError("GitHubPublishingToolingFailed")<{
-  readonly operationName: string;
-  readonly message: string;
-}> {}
-
-class GitHubPollingToolingFailed extends Data.TaggedError("GitHubPollingToolingFailed")<{
-  readonly operationName: string;
-  readonly message: string;
-}> {}
-
 export type ValidationToolingFailure =
-  | TaskContextSnapshotFailed
   | ValidationWorkspaceSetupFailed
   | InfrastructureToolingFailed
   | GitToolingFailed
   | SandcastleToolingFailed
-  | AgentHarnessLaunchFailed
-  | SandboxingUnavailable
   | PrepareCommandExecutionToolingFailed
   | CheckCommandExecutionToolingFailed
   | ReviewerOutputContractFailed
-  | TokenUsageContractFailed
-  | GitHubPublishingToolingFailed
-  | GitHubPollingToolingFailed;
+  | TokenUsageContractFailed;
 
 export type ValidationToolingFailureRecordInput = {
   readonly errorKind: ValidationToolingFailureKind;
@@ -118,12 +86,6 @@ export const validationToolingFailureRecord = (
   failure: ValidationToolingFailure,
 ): ValidationToolingFailureRecordInput => {
   switch (failure._tag) {
-    case "TaskContextSnapshotFailed":
-      return {
-        errorKind: "task_context_snapshot_failed",
-        operationName: failure.operationName,
-        errorMessage: failure.message,
-      };
     case "ValidationWorkspaceSetupFailed":
       return {
         errorKind: "validation_workspace_setup_failed",
@@ -153,18 +115,6 @@ export const validationToolingFailureRecord = (
         operationName: failure.operationName,
         errorMessage: failure.message,
       };
-    case "AgentHarnessLaunchFailed":
-      return {
-        errorKind: "agent_harness_launch_failed",
-        operationName: failure.operationName,
-        errorMessage: `${failure.message}. Run Agent-Assisted Setup and choose a working ${failure.agentRuntime} profile instead of ${failure.profileName}.`,
-      };
-    case "SandboxingUnavailable":
-      return {
-        errorKind: "sandboxing_unavailable",
-        operationName: failure.operationName,
-        errorMessage: failure.message,
-      };
     case "PrepareCommandExecutionToolingFailed":
       return {
         errorKind: "prepare_command_execution_tooling_failed",
@@ -186,18 +136,6 @@ export const validationToolingFailureRecord = (
     case "TokenUsageContractFailed":
       return {
         errorKind: "token_usage_contract_failed",
-        operationName: failure.operationName,
-        errorMessage: failure.message,
-      };
-    case "GitHubPublishingToolingFailed":
-      return {
-        errorKind: "github_publishing_tooling_failed",
-        operationName: failure.operationName,
-        errorMessage: failure.message,
-      };
-    case "GitHubPollingToolingFailed":
-      return {
-        errorKind: "github_polling_tooling_failed",
         operationName: failure.operationName,
         errorMessage: failure.message,
       };
