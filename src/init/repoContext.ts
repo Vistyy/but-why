@@ -7,9 +7,11 @@ import { findGitRoot } from "./git.js";
 import { ensureGitignoreBlock } from "./gitignore.js";
 import { readRepoConfig, writeRepoConfig } from "./repoConfig.js";
 import {
+  closeStateDatabasesOpenedAfterForCli as closeStateDatabasesOpenedAfterImpl,
   initializeStateDatabase,
   prepareStateDatabase,
   SharedStateIdentityConflictError,
+  snapshotStateDatabasesForCli as snapshotStateDatabasesImpl,
   type StateDatabase,
 } from "./stateDatabase.js";
 
@@ -32,6 +34,9 @@ export type RepoLocalContext = {
   readonly paths: RepoLocalPaths;
   readonly stateDatabase: StateDatabase;
 };
+
+export const closeStateDatabasesOpenedAfter = closeStateDatabasesOpenedAfterImpl;
+export const snapshotStateDatabases = snapshotStateDatabasesImpl;
 
 export type InitRepoInput = {
   readonly cwd: string;

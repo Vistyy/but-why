@@ -232,6 +232,7 @@ export type StateDatabase = {
   readonly runSync: StateDatabaseRunSync;
   readonly withConnection: <Result>(work: StateDatabaseConnectionWork<Result>) => Result;
   readonly close: () => Promise<void>;
+  readonly closeSync: () => void;
 };
 
 type StateDatabaseRuntime = ReturnType<typeof ManagedRuntime.make>;
@@ -271,6 +272,12 @@ const createStateDatabase = (
   };
 
   let closed = false;
+  const closeSync = (): void => {
+    if (closed) return;
+    closed = true;
+    openStateDatabases.delete(database);
+    runRuntimeSync(runtime, runtime.disposeEffect);
+  };
   const database: StateDatabase = {
     statePath,
     ...(commonDirectory === undefined ? {} : { commonDirectory }),
@@ -313,6 +320,7 @@ const createStateDatabase = (
       openStateDatabases.delete(database);
       await runtime.dispose();
     },
+    closeSync,
   };
   openStateDatabases.add(database);
   return database;
@@ -329,11 +337,17 @@ export const initializeStateDatabase = (input: {
   try {
     database.runSync(migrate);
   } catch (error) {
+    database.closeSync();
     throw new StateDatabaseMigrationError(error);
   }
 
-  if (input.commonDirectory !== undefined) {
-    ensureSharedStateIdentity(database, input.commonDirectory);
+  try {
+    if (input.commonDirectory !== undefined) {
+      ensureSharedStateIdentity(database, input.commonDirectory);
+    }
+  } catch (error) {
+    database.closeSync();
+    throw error;
   }
 
   return { change: existed ? "unchanged" : "created", database };
@@ -348,11 +362,26 @@ export const prepareStateDatabase = (input: {
 };
 
 export const bindStateDatabaseIdentity = (path: string, commonDirectory: string): void => {
-  initializeStateDatabase({ statePath: path, commonDirectory });
+  const database = initializeStateDatabase({ statePath: path, commonDirectory }).database;
+  database.closeSync();
+};
+
+export const snapshotStateDatabasesForCli = (): readonly StateDatabase[] =>
+  Array.from(openStateDatabases);
+
+export const closeStateDatabasesOpenedAfterForCli = async (
+  existing: readonly StateDatabase[],
+): Promise<void> => {
+  const existingDatabases = new Set(existing);
+  await Promise.all(
+    Array.from(openStateDatabases)
+      .filter((database) => !existingDatabases.has(database))
+      .map((database) => database.close()),
+  );
 };
 
 export const closeAllStateDatabases = async (): Promise<void> => {
-  await Promise.all(Array.from(openStateDatabases, (database) => database.close()));
+  await closeStateDatabasesOpenedAfterForCli([]);
 };
 
 export const validateStateDatabase = (input: {

@@ -6,8 +6,11 @@ import { Effect, Schema } from "effect";
 import { withGlobalHelpFlags } from "./cliHelp.js";
 import { selectOutput } from "./cliOutputSelection.js";
 import { runtimeError, success, type CliResult, usageError } from "./cliResults.js";
-import { initRepoLocalContext } from "./init/repoContext.js";
-import { closeAllStateDatabases } from "./init/stateDatabase.js";
+import {
+  closeStateDatabasesOpenedAfter,
+  initRepoLocalContext,
+  snapshotStateDatabases,
+} from "./init/repoContext.js";
 import { structuredContractDiagnostics } from "./output/contractDiagnostics.js";
 import type { OutputFormat, StructuredObject } from "./output/structured.js";
 import { routeChange } from "./cli/change/changeCli.js";
@@ -62,8 +65,13 @@ const helpViewSchema = Schema.Struct({
 export const runCli = (
   args: readonly string[],
   environment: CliEnvironment,
-): Effect.Effect<CliResult> =>
-  Effect.ensuring(routeArgs(args, environment), Effect.promise(closeAllStateDatabases));
+): Effect.Effect<CliResult> => {
+  const existingStateDatabases = snapshotStateDatabases();
+  return Effect.ensuring(
+    routeArgs(args, environment),
+    Effect.promise(() => closeStateDatabasesOpenedAfter(existingStateDatabases)),
+  );
+};
 
 const routeArgs = (
   args: readonly string[],
