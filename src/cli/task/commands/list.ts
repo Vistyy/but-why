@@ -1,6 +1,7 @@
 import type { CliResult } from "../../../cliResults.js";
 import { stateStoreUnavailable, success, usageError } from "../../../cliResults.js";
 import { withGlobalHelpFlags } from "../../../cliHelp.js";
+import { loadChangeInspection } from "../../../localChange/loadChangeInspection.js";
 import type { StructuredValue } from "../../../output/structured.js";
 import { isTaskState, taskStates, type TaskState } from "../../../task/lifecycle.js";
 import type { TaskSummary } from "../../../task/task.js";
@@ -45,9 +46,25 @@ export const runListCommand = (
       ...(parseResult.state === undefined ? {} : { state: parseResult.state }),
     });
 
+    const changeInspection =
+      environment.taskUseCases === undefined
+        ? loadChangeInspection({
+            cwd: environment.cwd,
+            migrationTimestamp: () => environment.now().toISOString(),
+          })
+        : undefined;
+    if (changeInspection !== undefined && !changeInspection.ok) {
+      return stateStoreUnavailable(tasksLoad.tasks.taskPrefix);
+    }
+
     return success({
       count: tasks.length,
-      tasks: taskSummaryRows(tasks),
+      tasks: taskSummaryRows(
+        tasks,
+        changeInspection === undefined
+          ? () => null
+          : changeInspection.inspection.inspectTaskProjection,
+      ),
       ...(tasks.length === 0 ? { help: [createTaskHelp] } : {}),
     });
   } catch {
@@ -128,7 +145,10 @@ const invalidTaskState = (state: string): TaskListArgsParseResult => ({
   }),
 });
 
-const taskSummaryRows = (tasks: readonly TaskSummary[]): readonly StructuredValue[] =>
+const taskSummaryRows = (
+  tasks: readonly TaskSummary[],
+  changeProjection: (taskId: TaskSummary["id"]) => StructuredValue,
+): readonly StructuredValue[] =>
   tasks.map((task) => ({
     id: task.id,
     title: task.title,
@@ -137,6 +157,7 @@ const taskSummaryRows = (tasks: readonly TaskSummary[]): readonly StructuredValu
     updatedAt: task.updatedAt,
     startable: task.startable,
     blockedBy: task.blockedBy,
+    change: changeProjection(task.id),
   }));
 
 const createTaskHelp =

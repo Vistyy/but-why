@@ -293,6 +293,16 @@ describe("Change inspection CLI", () => {
           change: { id: changeId, state: "open", readiness: "ready" },
         },
       });
+      expect(
+        JSON.parse(
+          (yield* runByInProcessEffect(root, ["task", "list", "--all", "--output", "json"])).stdout,
+        ).tasks,
+      ).toContainEqual(
+        expect.objectContaining({
+          id: "BY-1",
+          change: { id: changeId, state: "open", readiness: "ready" },
+        }),
+      );
 
       taskStore.transitionTaskState({
         taskId: publicTaskId("BY-1"),

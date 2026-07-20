@@ -6,7 +6,6 @@ import type {
   CandidateValidationRunStore,
   CandidateValidationToolingFailure,
 } from "../candidateValidation/candidateValidationRunStore.js";
-import type { PublicTaskId } from "../task/taskId.js";
 import type { ChangeRecord } from "./change.js";
 import type { ChangeStore } from "./changeStore.js";
 
@@ -16,7 +15,7 @@ export type ChangeInspection = {
     readonly includeClosed: boolean;
   }) => readonly ChangeRecord[];
   readonly inspect: (changeId: string) => ChangeDetail | undefined;
-  readonly inspectTaskProjection: (taskId: PublicTaskId) => ChangeTaskProjection | null;
+  readonly inspectTaskProjection: (taskId: string) => ChangeTaskProjection | null;
   readonly findings: (changeId: string) => ChangeFindings | undefined;
   readonly validationRuns: (changeId: string) => ChangeValidationRunHistory | undefined;
 };

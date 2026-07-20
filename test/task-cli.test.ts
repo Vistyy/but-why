@@ -198,13 +198,15 @@ tasks[2]:
     updatedAt: "${firstNow}"
     startable: false
     blockedBy: []
+    change: null
   - id: BY-2
     title: Second
     state: needs_input
     createdAt: "${secondNow}"
     updatedAt: "${thirdNow}"
     startable: false
-    blockedBy: []`);
+    blockedBy: []
+    change: null`);
     }),
   );
 
@@ -221,7 +223,10 @@ tasks[2]:
       expect(result.stderr).toBe("");
       expect(result.stdout.endsWith("\n")).toBe(true);
       expect(result.stdout.trimEnd()).not.toContain("\n");
-      expect(JSON.parse(result.stdout)).toEqual({ count: 2, tasks: listedTasks });
+      expect(JSON.parse(result.stdout)).toEqual({
+        count: 2,
+        tasks: listedTasks.map((task) => ({ ...task, change: null })),
+      });
     }),
   );
 
