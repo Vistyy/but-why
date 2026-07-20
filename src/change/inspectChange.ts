@@ -121,7 +121,11 @@ const inspectValidationRuns = (
     change,
     validationRuns: dependencies.candidateStore
       .listCandidatesForChange(changeId)
-      .flatMap((candidate) => dependencies.runStore.listRunsForCandidate(candidate.id)),
+      .flatMap((candidate) => dependencies.runStore.listRunsForCandidate(candidate.id))
+      .toSorted(
+        (left, right) =>
+          left.createdAt.localeCompare(right.createdAt) || left.id.localeCompare(right.id),
+      ),
   };
 };
 

@@ -262,6 +262,7 @@ const changeInspectionView = (change: ChangeRecord) => ({
   id: change.id,
   taskId: change.taskId,
   state: change.state,
+  closeReason: change.closeReason,
   readiness: change.readiness,
   branchRef: change.branchRef,
   baseRef: change.baseRef,

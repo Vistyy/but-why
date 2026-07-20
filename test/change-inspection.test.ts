@@ -98,10 +98,21 @@ describe("Change inspection CLI", () => {
         "--output",
         "json",
       ]);
+      const shown = yield* runByInProcessEffect(root, [
+        "change",
+        "show",
+        created.change.id,
+        "--output",
+        "json",
+      ]);
 
       expect(JSON.parse(defaultResult.stdout)).toEqual({ changes: [] });
       expect(JSON.parse(allResult.stdout)).toEqual({
         changes: [{ id: created.change.id, taskId: null, state: "closed", createdAt: firstNow }],
+      });
+      expect(JSON.parse(shown.stdout)).toMatchObject({
+        change: { state: "closed", closeReason: "cancelled" },
+        cleanup: { state: "pending", blockingReason: null },
       });
     }),
   );
@@ -136,6 +147,7 @@ describe("Change inspection CLI", () => {
           id: created.change.id,
           taskId: null,
           state: "open",
+          closeReason: null,
           readiness: null,
           branchRef: "refs/heads/taskless",
           baseRef: null,
@@ -151,6 +163,69 @@ describe("Change inspection CLI", () => {
         pullRequest: null,
         cleanup: { state: "complete", blockingReason: null },
       });
+    }),
+  );
+
+  it.effect("orders Validation Run History by run creation across Candidates", () =>
+    Effect.gen(function* () {
+      const root = createInitializedRepo();
+      const database = prepareStateDatabaseSession({
+        statePath: join(root, ".git", "but-why", "state.sqlite"),
+        migrationTimestamp: () => firstNow,
+      });
+      const changeStore = openSqliteChangeStore(database);
+      const candidateStore = openSqliteCandidateStore(database);
+      const runStore = openSqliteCandidateValidationRunStore(database);
+      const change = changeStore.createChange({
+        repositoryCommonDirectory: join(root, ".git"),
+        branchRef: "refs/heads/history",
+        now: firstNow,
+      });
+      if (!change.ok) throw new Error("Could not create Change");
+      const firstCandidate = candidateStore.captureCandidate({
+        changeId: change.change.id,
+        selectedBaseRef: "refs/remotes/origin/main",
+        resolvedTargetSha: "target-sha",
+        comparisonBaseSha: "base-sha",
+        headSha: "first-head",
+        now: firstNow,
+      });
+      const secondCandidate = candidateStore.captureCandidate({
+        changeId: change.change.id,
+        selectedBaseRef: "refs/remotes/origin/main",
+        resolvedTargetSha: "target-sha",
+        comparisonBaseSha: "base-sha",
+        headSha: "second-head",
+        now: secondNow,
+      });
+      if (!firstCandidate.ok || !secondCandidate.ok)
+        throw new Error("Could not capture Candidates");
+      const newerRun = runStore.startOrReuse({
+        candidateId: secondCandidate.candidate.id,
+        headSha: secondCandidate.candidate.headSha,
+        policy: { sandboxMode: "none", checks: [], copyFiles: [] },
+        now: secondNow,
+      });
+      const olderCandidateRun = runStore.startOrReuse({
+        candidateId: firstCandidate.candidate.id,
+        headSha: firstCandidate.candidate.headSha,
+        policy: { sandboxMode: "none", checks: [], copyFiles: [] },
+        now: commandNow,
+      });
+      if (newerRun.reused || olderCandidateRun.reused)
+        throw new Error("Expected new Validation Runs");
+
+      const history = yield* runByInProcessEffect(root, [
+        "change",
+        "validation-runs",
+        change.change.id,
+        "--output",
+        "json",
+      ]);
+
+      expect(
+        JSON.parse(history.stdout).validationRuns.map((run: { id: string }) => run.id),
+      ).toEqual([newerRun.validationRunId, olderCandidateRun.validationRunId]);
     }),
   );
 
@@ -189,6 +264,12 @@ describe("Change inspection CLI", () => {
         now: firstNow,
       });
       taskStore.approveTask({ taskId: publicTaskId("BY-1"), now: secondNow });
+      const changeStore = openSqliteChangeStore(
+        prepareStateDatabaseSession({
+          statePath: join(root, ".git", "but-why", "state.sqlite"),
+          migrationTimestamp: () => firstNow,
+        }),
+      );
 
       const started = yield* runByInProcessEffect(root, [
         "change",
@@ -212,6 +293,46 @@ describe("Change inspection CLI", () => {
           change: { id: changeId, state: "open", readiness: "ready" },
         },
       });
+
+      taskStore.transitionTaskState({
+        taskId: publicTaskId("BY-1"),
+        to: "validating",
+        now: commandNow,
+      });
+      expect(
+        JSON.parse(
+          (yield* runByInProcessEffect(root, ["task", "show", "BY-1", "--output", "json"])).stdout,
+        ).task.state,
+      ).toBe("validating");
+
+      taskStore.transitionTaskState({
+        taskId: publicTaskId("BY-1"),
+        to: "ready",
+        now: commandNow,
+      });
+      expect(
+        JSON.parse(
+          (yield* runByInProcessEffect(root, ["task", "show", "BY-1", "--output", "json"])).stdout,
+        ).task.state,
+      ).toBe("ready");
+
+      changeStore.completeMergedChange({ changeId, now: commandNow });
+      const completed = yield* runByInProcessEffect(root, [
+        "change",
+        "show",
+        changeId,
+        "--output",
+        "json",
+      ]);
+      expect(JSON.parse(completed.stdout)).toMatchObject({
+        change: { state: "closed", closeReason: "completed" },
+        cleanup: { state: "pending", blockingReason: null },
+      });
+      expect(
+        JSON.parse(
+          (yield* runByInProcessEffect(root, ["task", "show", "BY-1", "--output", "json"])).stdout,
+        ).task.state,
+      ).toBe("done");
     }),
   );
 
@@ -247,9 +368,36 @@ describe("Change inspection CLI", () => {
         now: secondNow,
       });
       if (run.reused) throw new Error("Expected a new Validation Run");
+      runStore.recordCheckRound({
+        validationRunId: run.validationRunId,
+        producer: "types",
+        roundNumber: 1,
+        roundStatus: "failed",
+        phaseStatus: "failed",
+        artifactRecords: [],
+        finding: {
+          id: `${run.validationRunId}-F1`,
+          validationRunId: run.validationRunId,
+          phase: "checks",
+          producer: "types",
+          title: "Check failed: types",
+          description: "Type checking failed.",
+          evidence: "exitCode: 1",
+          files: ["src/main.ts"],
+          artifactRefs: [],
+        },
+        now: commandNow,
+      });
+      runStore.recordToolingFailure({
+        validationRunId: run.validationRunId,
+        errorKind: "validation_workspace_setup_failed",
+        operationName: "cleanup_validation_worktree",
+        errorMessage: "Could not remove worktree.",
+        now: commandNow,
+      });
       runStore.complete({
         validationRunId: run.validationRunId,
-        outcome: "passed",
+        outcome: "blocked",
         now: commandNow,
       });
 
@@ -272,10 +420,15 @@ describe("Change inspection CLI", () => {
       expect(JSON.parse(findings.stdout)).toMatchObject({
         change: { id: changeResult.change.id },
         candidate: { id: candidateResult.candidate.id },
-        validationRun: { id: run.validationRunId, outcome: "passed" },
-        findings: [],
-        toolingFailures: [],
-        count: 0,
+        validationRun: { id: run.validationRunId, outcome: "blocked" },
+        findings: [
+          {
+            id: `${run.validationRunId}-F1`,
+            files: ["src/main.ts"],
+          },
+        ],
+        toolingFailures: [{ operationName: "cleanup_validation_worktree" }],
+        count: 1,
       });
       expect(history.status).toBe(0);
       expect(JSON.parse(history.stdout)).toMatchObject({
