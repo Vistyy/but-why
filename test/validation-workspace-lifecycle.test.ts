@@ -1,5 +1,6 @@
-import { Effect, Fiber } from "effect";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { expect, it } from "@effect/vitest";
+import { Effect, Exit, Fiber } from "effect";
+import { afterEach, describe, vi } from "vitest";
 
 import type { createValidationWorkspace as createValidationWorkspaceType } from "../src/validation/createValidationWorkspace.js";
 
@@ -21,176 +22,201 @@ afterEach(() => {
 });
 
 describe("Validation Workspace scoped lifecycle", () => {
-  it("cleans up a successful workspace in reverse acquisition order", async () => {
-    const events: string[] = [];
-    const createValidationWorkspace = await loadCreateValidationWorkspace(events);
+  it.scoped("cleans up a successful workspace in reverse acquisition order", () =>
+    Effect.gen(function* () {
+      const events: string[] = [];
+      const createValidationWorkspace = yield* Effect.promise(() =>
+        loadCreateValidationWorkspace(events),
+      );
 
-    const result = await Effect.runPromise(createValidationWorkspace(input));
+      const result = yield* createValidationWorkspace(input);
 
-    expect(result).toMatchObject({
-      ok: true,
-      setup: {
-        validationRunId: input.validationRunId,
-        submittedSha: input.submittedSha,
-        worktreeHead: input.submittedSha,
-        cleanupResult: {
-          worktree: "removed",
-          tempRef: "removed",
+      expect(result).toMatchObject({
+        ok: true,
+        setup: {
+          validationRunId: input.validationRunId,
+          submittedSha: input.submittedSha,
+          worktreeHead: input.submittedSha,
+          cleanupResult: {
+            worktree: "removed",
+            tempRef: "removed",
+          },
         },
-      },
-    });
-    expect(events).toEqual([
-      "acquire:temp_ref",
-      "acquire:worktree",
-      "read:worktree_head",
-      "close:worktree",
-      "remove:worktree",
-      "release:temp_ref",
-    ]);
-  });
+      });
+      expect(events).toEqual([
+        "acquire:temp_ref",
+        "acquire:worktree",
+        "read:worktree_head",
+        "close:worktree",
+        "remove:worktree",
+        "release:temp_ref",
+      ]);
+    }),
+  );
 
-  it("does not clean up when temp ref acquisition fails", async () => {
-    const events: string[] = [];
-    const createValidationWorkspace = await loadCreateValidationWorkspace(events, {
-      tempRefFailure: "bad ref",
-    });
-
-    const result = await Effect.runPromise(createValidationWorkspace(input));
-
-    expect(result).toMatchObject({
-      ok: false,
-      toolingError: {
-        operationName: "create_temp_ref",
-        errorMessage: "bad ref",
-        cleanupResult: {
-          worktree: "not_created",
-          tempRef: "not_created",
-        },
-      },
-    });
-    expect(events).toEqual(["acquire:temp_ref"]);
-  });
-
-  it("cleans up the temp ref and partial worktree when worktree creation fails", async () => {
-    const events: string[] = [];
-    const createValidationWorkspace = await loadCreateValidationWorkspace(events, {
-      worktreeCreationFailure: "sandcastle failed",
-    });
-
-    const result = await Effect.runPromise(createValidationWorkspace(input));
-
-    expect(result).toMatchObject({
-      ok: false,
-      toolingError: {
-        operationName: "create_sandcastle_workspace",
-        errorMessage: "sandcastle failed",
-        cleanupResult: {
-          worktree: "removed",
-          tempRef: "removed",
-        },
-      },
-    });
-    expect(events).toEqual([
-      "acquire:temp_ref",
-      "acquire:worktree",
-      "remove:worktree",
-      "release:temp_ref",
-    ]);
-  });
-
-  it("keeps setup failure primary when cleanup also fails", async () => {
-    const events: string[] = [];
-    const createValidationWorkspace = await loadCreateValidationWorkspace(events, {
-      worktreeCreationFailure: "sandcastle failed",
-      worktreeCleanup: "failed",
-      tempRefCleanup: "failed",
-    });
-
-    const result = await Effect.runPromise(createValidationWorkspace(input));
-
-    expect(result).toMatchObject({
-      ok: false,
-      toolingError: {
-        operationName: "create_sandcastle_workspace",
-        errorMessage: "sandcastle failed",
-        cleanupResult: {
-          worktree: "failed",
-          tempRef: "failed",
-        },
-      },
-    });
-    expect(events).toEqual([
-      "acquire:temp_ref",
-      "acquire:worktree",
-      "remove:worktree",
-      "release:temp_ref",
-    ]);
-  });
-
-  it("runs acquired-resource cleanup when interrupted", async () => {
-    const events: string[] = [];
-    const recordedCleanupResults: unknown[] = [];
-    const createValidationWorkspace = await loadCreateValidationWorkspace(events, {
-      neverFinishWorktreeCreation: true,
-    });
-
-    const program = Effect.gen(function* () {
-      const fiber = yield* Effect.fork(
-        createValidationWorkspace({
-          ...input,
-          recordInterruptedCleanupResult: (toolingError) =>
-            Effect.sync(() => {
-              recordedCleanupResults.push(toolingError.cleanupResult);
-            }),
+  it.scoped("does not clean up when temp ref acquisition fails", () =>
+    Effect.gen(function* () {
+      const events: string[] = [];
+      const createValidationWorkspace = yield* Effect.promise(() =>
+        loadCreateValidationWorkspace(events, {
+          tempRefFailure: "bad ref",
         }),
       );
-      yield* Effect.promise(() => waitUntil(() => events.includes("acquire:worktree")));
-      yield* Fiber.interrupt(fiber);
-    });
 
-    await Effect.runPromise(program);
+      const result = yield* createValidationWorkspace(input);
 
-    expect(events).toEqual([
-      "acquire:temp_ref",
-      "acquire:worktree",
-      "remove:worktree",
-      "release:temp_ref",
-    ]);
-    expect(recordedCleanupResults).toEqual([{ worktree: "removed", tempRef: "removed" }]);
-  });
+      expect(result).toMatchObject({
+        ok: false,
+        toolingError: {
+          operationName: "create_temp_ref",
+          errorMessage: "bad ref",
+          cleanupResult: {
+            worktree: "not_created",
+            tempRef: "not_created",
+          },
+        },
+      });
+      expect(events).toEqual(["acquire:temp_ref"]);
+    }),
+  );
 
-  it("runs acquired-resource cleanup when the workflow defects", async () => {
-    const events: string[] = [];
-    const createValidationWorkspace = await loadCreateValidationWorkspace(events, {
-      worktreeHeadFailure: true,
-    });
+  it.scoped("cleans up the temp ref and partial worktree when worktree creation fails", () =>
+    Effect.gen(function* () {
+      const events: string[] = [];
+      const createValidationWorkspace = yield* Effect.promise(() =>
+        loadCreateValidationWorkspace(events, {
+          worktreeCreationFailure: "sandcastle failed",
+        }),
+      );
 
-    await expect(Effect.runPromise(createValidationWorkspace(input))).rejects.toThrow();
+      const result = yield* createValidationWorkspace(input);
 
-    expect(events).toEqual([
-      "acquire:temp_ref",
-      "acquire:worktree",
-      "read:worktree_head",
-      "close:worktree",
-      "remove:worktree",
-      "release:temp_ref",
-    ]);
-  });
+      expect(result).toMatchObject({
+        ok: false,
+        toolingError: {
+          operationName: "create_sandcastle_workspace",
+          errorMessage: "sandcastle failed",
+          cleanupResult: {
+            worktree: "removed",
+            tempRef: "removed",
+          },
+        },
+      });
+      expect(events).toEqual([
+        "acquire:temp_ref",
+        "acquire:worktree",
+        "remove:worktree",
+        "release:temp_ref",
+      ]);
+    }),
+  );
+
+  it.scoped("keeps setup failure primary when cleanup also fails", () =>
+    Effect.gen(function* () {
+      const events: string[] = [];
+      const createValidationWorkspace = yield* Effect.promise(() =>
+        loadCreateValidationWorkspace(events, {
+          worktreeCreationFailure: "sandcastle failed",
+          worktreeCleanup: "failed",
+          tempRefCleanup: "failed",
+        }),
+      );
+
+      const result = yield* createValidationWorkspace(input);
+
+      expect(result).toMatchObject({
+        ok: false,
+        toolingError: {
+          operationName: "create_sandcastle_workspace",
+          errorMessage: "sandcastle failed",
+          cleanupResult: {
+            worktree: "failed",
+            tempRef: "failed",
+          },
+        },
+      });
+      expect(events).toEqual([
+        "acquire:temp_ref",
+        "acquire:worktree",
+        "remove:worktree",
+        "release:temp_ref",
+      ]);
+    }),
+  );
+
+  it.scoped("runs acquired-resource cleanup when interrupted", () =>
+    Effect.gen(function* () {
+      const events: string[] = [];
+      const recordedCleanupResults: unknown[] = [];
+      let resolveWorktreeAcquired: () => void = () => {};
+      const worktreeAcquired = new Promise<void>((resolve) => {
+        resolveWorktreeAcquired = resolve;
+      });
+      const createValidationWorkspace = yield* Effect.promise(() =>
+        loadCreateValidationWorkspace(events, {
+          neverFinishWorktreeCreation: true,
+          onWorktreeAcquired: resolveWorktreeAcquired,
+        }),
+      );
+
+      const program = Effect.gen(function* () {
+        const fiber = yield* Effect.fork(
+          createValidationWorkspace({
+            ...input,
+            recordInterruptedCleanupResult: (toolingError) =>
+              Effect.sync(() => {
+                recordedCleanupResults.push(toolingError.cleanupResult);
+              }),
+          }),
+        );
+        yield* Effect.promise(() => worktreeAcquired);
+        yield* Fiber.interrupt(fiber);
+      });
+
+      yield* program;
+
+      expect(events).toEqual([
+        "acquire:temp_ref",
+        "acquire:worktree",
+        "remove:worktree",
+        "release:temp_ref",
+      ]);
+      expect(recordedCleanupResults).toEqual([{ worktree: "removed", tempRef: "removed" }]);
+    }),
+  );
+
+  it.scoped("runs acquired-resource cleanup when the workflow defects", () =>
+    Effect.gen(function* () {
+      const events: string[] = [];
+      const createValidationWorkspace = yield* Effect.promise(() =>
+        loadCreateValidationWorkspace(events, {
+          worktreeHeadFailure: true,
+        }),
+      );
+
+      const exit = yield* Effect.exit(createValidationWorkspace(input));
+      expect(Exit.isFailure(exit)).toBe(true);
+
+      expect(events).toEqual([
+        "acquire:temp_ref",
+        "acquire:worktree",
+        "read:worktree_head",
+        "close:worktree",
+        "remove:worktree",
+        "release:temp_ref",
+      ]);
+    }),
+  );
 });
 
 type FakeOptions = {
   readonly tempRefFailure?: string;
   readonly worktreeCreationFailure?: string;
   readonly neverFinishWorktreeCreation?: boolean;
+  readonly onWorktreeAcquired?: () => void;
   readonly worktreeHeadFailure?: boolean;
   readonly worktreeCleanup?: "removed" | "failed";
   readonly tempRefCleanup?: "removed" | "failed";
-};
-
-const waitUntil = async (condition: () => boolean): Promise<void> => {
-  while (!condition()) {
-    await new Promise((resolve) => setTimeout(resolve, 1));
-  }
 };
 
 const loadCreateValidationWorkspace = async (
@@ -204,6 +230,7 @@ const loadCreateValidationWorkspace = async (
     createSandbox: async () => {
       events.push("acquire:worktree");
       worktreeExists = true;
+      options.onWorktreeAcquired?.();
 
       if (options.neverFinishWorktreeCreation) {
         await new Promise(() => {});

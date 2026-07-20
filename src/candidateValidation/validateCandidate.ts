@@ -43,7 +43,7 @@ export type ValidateCandidateInput = {
   readonly now: string;
 };
 
-export type ValidateTaskBackedCandidateInput = {
+type ValidateTaskBackedCandidateInput = {
   readonly candidateId: string;
   readonly comparisonBaseSha: string;
   readonly headSha: string;
@@ -52,7 +52,7 @@ export type ValidateTaskBackedCandidateInput = {
   readonly now: string;
 };
 
-export type ValidateCandidateResult =
+type ValidateCandidateResult =
   | {
       readonly ok: true;
       readonly reused: boolean;
@@ -81,7 +81,7 @@ export class CandidateReviewerAgentRuntime extends Context.Tag("CandidateReviewe
   ReviewerAgentRuntime
 >() {}
 
-export type CandidateValidationService = {
+type CandidateValidationService = {
   readonly validateCandidate: (
     input: ValidateCandidateInput,
   ) => Effect.Effect<ValidateCandidateResult, never>;
