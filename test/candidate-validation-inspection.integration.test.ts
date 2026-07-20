@@ -1,12 +1,15 @@
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+
+import { expect, it } from "@effect/vitest";
+import { Effect } from "effect";
+import { afterEach, describe } from "vitest";
 
 import { prepareStateDatabaseSession } from "../src/init/stateDatabase.js";
 import { openSqliteCandidateStore } from "../src/sqlite/sqliteCandidateStore.js";
 import { openSqliteCandidateValidationRunStore } from "../src/sqlite/sqliteCandidateValidationRunStore.js";
 import { openSqliteChangeStore } from "../src/sqlite/sqliteChangeStore.js";
-import { cleanupTempRoots, runByInProcess } from "./support/by-cli.js";
+import { cleanupTempRoots, runByInProcessEffect } from "./support/by-cli.js";
 import { createInitializedRepo } from "./support/initializedRepo.js";
 
 const now = "2026-07-18T10:00:00.000Z";
@@ -25,273 +28,277 @@ const policy = {
 afterEach(cleanupTempRoots);
 
 describe("Candidate-owned Validation Run inspection", () => {
-  it("shows the Candidate judgment and ordered evidence with bounded previews", () => {
-    const fixture = candidateValidationFixture();
-    const longContent = "x".repeat(1_200);
+  it.effect("shows the Candidate judgment and ordered evidence with bounded previews", () =>
+    Effect.gen(function* () {
+      const fixture = candidateValidationFixture();
+      const longContent = "x".repeat(1_200);
 
-    fixture.runStore.recordPrepareRound({
-      validationRunId: fixture.validationRunId,
-      roundNumber: 1,
-      roundStatus: "passed",
-      phaseStatus: "passed",
-      artifactRecords: [fixture.artifact("prepare", "prepare", "logs.txt", "prepare complete\n")],
-      now,
-    });
-    fixture.runStore.recordCheckRound({
-      validationRunId: fixture.validationRunId,
-      producer: "types",
-      roundNumber: 1,
-      roundStatus: "failed",
-      phaseStatus: "active",
-      artifactRecords: [
-        fixture.artifact("checks", "types", "logs.txt", "types failed\n"),
-        fixture.artifact("checks", "types", "stdout.txt", longContent),
-      ],
-      finding: {
-        id: `${fixture.validationRunId}-F1`,
+      fixture.runStore.recordPrepareRound({
         validationRunId: fixture.validationRunId,
-        phase: "checks",
+        roundNumber: 1,
+        roundStatus: "passed",
+        phaseStatus: "passed",
+        artifactRecords: [fixture.artifact("prepare", "prepare", "logs.txt", "prepare complete\n")],
+        now,
+      });
+      fixture.runStore.recordCheckRound({
+        validationRunId: fixture.validationRunId,
         producer: "types",
-        title: "Check failed: types",
-        description: "Configured check types exited with code 1.",
-        severity: "high",
-        evidence: "command: pnpm typecheck\nexitCode: 1",
-        files: ["src/main.ts"],
-        artifactRefs: [`artifact:${fixture.validationRunId}/checks/types/stdout.txt`],
-      },
-      now,
-    });
-    fixture.runStore.recordCheckRound({
-      validationRunId: fixture.validationRunId,
-      producer: "tests",
-      roundNumber: 2,
-      roundStatus: "passed",
-      phaseStatus: "failed",
-      artifactRecords: [fixture.artifact("checks", "tests", "stderr.txt", "")],
-      now,
-    });
-    fixture.runStore.recordToolingFailure({
-      validationRunId: fixture.validationRunId,
-      errorKind: "validation_workspace_setup_failed",
-      operationName: "cleanup_validation_worktree",
-      errorMessage: "Could not remove worktree.",
-      now: later,
-    });
-    fixture.runStore.complete({
-      validationRunId: fixture.validationRunId,
-      outcome: "tooling_failed",
-      now: later,
-    });
-
-    const result = runByInProcess(fixture.root, [
-      "validation-run",
-      "show",
-      fixture.validationRunId,
-      "--output",
-      "json",
-    ]);
-
-    expect(result.status).toBe(0);
-    expect(JSON.parse(result.stdout)).toEqual({
-      validationRun: {
-        id: fixture.validationRunId,
-        candidateId: fixture.candidateId,
-        state: "complete",
-        outcome: "tooling_failed",
-        createdAt: now,
-        updatedAt: later,
-      },
-      change: {
-        id: fixture.changeId,
-        branchRef: "refs/heads/feature",
-        baseRef: "refs/remotes/origin/main",
-        taskId: null,
-        state: "open",
-      },
-      candidate: {
-        id: fixture.candidateId,
-        changeId: fixture.changeId,
-        selectedBaseRef: "refs/remotes/origin/main",
-        resolvedTargetSha: "target-sha",
-        comparisonBaseSha: "base-sha",
-        headSha: "head-sha",
-        createdAt: now,
-      },
-      policy,
-      phases: [
-        {
-          phase: "prepare",
-          rounds: [
-            {
-              validationRunId: fixture.validationRunId,
-              phase: "prepare",
-              producer: "prepare",
-              roundNumber: 1,
-              status: "passed",
-              createdAt: now,
-            },
-          ],
-        },
-        {
-          phase: "checks",
-          rounds: [
-            {
-              validationRunId: fixture.validationRunId,
-              phase: "checks",
-              producer: "types",
-              roundNumber: 1,
-              status: "failed",
-              createdAt: now,
-            },
-            {
-              validationRunId: fixture.validationRunId,
-              phase: "checks",
-              producer: "tests",
-              roundNumber: 2,
-              status: "passed",
-              createdAt: now,
-            },
-          ],
-        },
-        { phase: "acceptance_review", rounds: [] },
-        { phase: "specialist_review", rounds: [] },
-      ],
-      findings: [
-        {
+        roundNumber: 1,
+        roundStatus: "failed",
+        phaseStatus: "active",
+        artifactRecords: [
+          fixture.artifact("checks", "types", "logs.txt", "types failed\n"),
+          fixture.artifact("checks", "types", "stdout.txt", longContent),
+        ],
+        finding: {
           id: `${fixture.validationRunId}-F1`,
           validationRunId: fixture.validationRunId,
           phase: "checks",
           producer: "types",
-          source: "checks/types",
           title: "Check failed: types",
           description: "Configured check types exited with code 1.",
           severity: "high",
           evidence: "command: pnpm typecheck\nexitCode: 1",
           files: ["src/main.ts"],
           artifactRefs: [`artifact:${fixture.validationRunId}/checks/types/stdout.txt`],
+        },
+        now,
+      });
+      fixture.runStore.recordCheckRound({
+        validationRunId: fixture.validationRunId,
+        producer: "tests",
+        roundNumber: 2,
+        roundStatus: "passed",
+        phaseStatus: "failed",
+        artifactRecords: [fixture.artifact("checks", "tests", "stderr.txt", "")],
+        now,
+      });
+      fixture.runStore.recordToolingFailure({
+        validationRunId: fixture.validationRunId,
+        errorKind: "validation_workspace_setup_failed",
+        operationName: "cleanup_validation_worktree",
+        errorMessage: "Could not remove worktree.",
+        now: later,
+      });
+      fixture.runStore.complete({
+        validationRunId: fixture.validationRunId,
+        outcome: "tooling_failed",
+        now: later,
+      });
+
+      const result = yield* runByInProcessEffect(fixture.root, [
+        "validation-run",
+        "show",
+        fixture.validationRunId,
+        "--output",
+        "json",
+      ]);
+
+      expect(result.status).toBe(0);
+      expect(JSON.parse(result.stdout)).toEqual({
+        validationRun: {
+          id: fixture.validationRunId,
+          candidateId: fixture.candidateId,
+          state: "complete",
+          outcome: "tooling_failed",
           createdAt: now,
-          updatedAt: now,
+          updatedAt: later,
         },
-      ],
-      toolingFailures: [
-        {
-          sequence: 1,
-          validationRunId: fixture.validationRunId,
-          errorKind: "validation_workspace_setup_failed",
-          operationName: "cleanup_validation_worktree",
-          errorMessage: "Could not remove worktree.",
-          createdAt: later,
+        change: {
+          id: fixture.changeId,
+          branchRef: "refs/heads/feature",
+          baseRef: "refs/remotes/origin/main",
+          taskId: null,
+          state: "open",
         },
-      ],
-      artifacts: [
-        expect.objectContaining({
-          ref: `artifact:${fixture.validationRunId}/prepare/prepare/logs.txt`,
-          phase: "prepare",
-          producer: "prepare",
-          preview: {
-            status: "available",
-            content: "prepare complete\n",
-            bytes: 17,
-            storedBytes: 17,
-            truncated: false,
-            detailCommand: `by validation-run artifact ${fixture.validationRunId} artifact:${fixture.validationRunId}/prepare/prepare/logs.txt`,
+        candidate: {
+          id: fixture.candidateId,
+          changeId: fixture.changeId,
+          selectedBaseRef: "refs/remotes/origin/main",
+          resolvedTargetSha: "target-sha",
+          comparisonBaseSha: "base-sha",
+          headSha: "head-sha",
+          createdAt: now,
+        },
+        policy,
+        phases: [
+          {
+            phase: "prepare",
+            rounds: [
+              {
+                validationRunId: fixture.validationRunId,
+                phase: "prepare",
+                producer: "prepare",
+                roundNumber: 1,
+                status: "passed",
+                createdAt: now,
+              },
+            ],
           },
-        }),
-        expect.objectContaining({
-          ref: `artifact:${fixture.validationRunId}/checks/tests/stderr.txt`,
-          phase: "checks",
-          producer: "tests",
-        }),
-        expect.objectContaining({
-          ref: `artifact:${fixture.validationRunId}/checks/types/stdout.txt`,
-          phase: "checks",
-          producer: "types",
-          preview: {
-            status: "available",
-            content: "x".repeat(1_000),
-            bytes: 1_000,
-            storedBytes: 1_200,
-            truncated: true,
-            detailCommand: `by validation-run artifact ${fixture.validationRunId} artifact:${fixture.validationRunId}/checks/types/stdout.txt`,
+          {
+            phase: "checks",
+            rounds: [
+              {
+                validationRunId: fixture.validationRunId,
+                phase: "checks",
+                producer: "types",
+                roundNumber: 1,
+                status: "failed",
+                createdAt: now,
+              },
+              {
+                validationRunId: fixture.validationRunId,
+                phase: "checks",
+                producer: "tests",
+                roundNumber: 2,
+                status: "passed",
+                createdAt: now,
+              },
+            ],
           },
-        }),
-        expect.objectContaining({
-          ref: `artifact:${fixture.validationRunId}/checks/types/logs.txt`,
-          phase: "checks",
-          producer: "types",
-        }),
-      ],
-    });
+          { phase: "acceptance_review", rounds: [] },
+          { phase: "specialist_review", rounds: [] },
+        ],
+        findings: [
+          {
+            id: `${fixture.validationRunId}-F1`,
+            validationRunId: fixture.validationRunId,
+            phase: "checks",
+            producer: "types",
+            source: "checks/types",
+            title: "Check failed: types",
+            description: "Configured check types exited with code 1.",
+            severity: "high",
+            evidence: "command: pnpm typecheck\nexitCode: 1",
+            files: ["src/main.ts"],
+            artifactRefs: [`artifact:${fixture.validationRunId}/checks/types/stdout.txt`],
+            createdAt: now,
+            updatedAt: now,
+          },
+        ],
+        toolingFailures: [
+          {
+            sequence: 1,
+            validationRunId: fixture.validationRunId,
+            errorKind: "validation_workspace_setup_failed",
+            operationName: "cleanup_validation_worktree",
+            errorMessage: "Could not remove worktree.",
+            createdAt: later,
+          },
+        ],
+        artifacts: [
+          expect.objectContaining({
+            ref: `artifact:${fixture.validationRunId}/prepare/prepare/logs.txt`,
+            phase: "prepare",
+            producer: "prepare",
+            preview: {
+              status: "available",
+              content: "prepare complete\n",
+              bytes: 17,
+              storedBytes: 17,
+              truncated: false,
+              detailCommand: `by validation-run artifact ${fixture.validationRunId} artifact:${fixture.validationRunId}/prepare/prepare/logs.txt`,
+            },
+          }),
+          expect.objectContaining({
+            ref: `artifact:${fixture.validationRunId}/checks/tests/stderr.txt`,
+            phase: "checks",
+            producer: "tests",
+          }),
+          expect.objectContaining({
+            ref: `artifact:${fixture.validationRunId}/checks/types/stdout.txt`,
+            phase: "checks",
+            producer: "types",
+            preview: {
+              status: "available",
+              content: "x".repeat(1_000),
+              bytes: 1_000,
+              storedBytes: 1_200,
+              truncated: true,
+              detailCommand: `by validation-run artifact ${fixture.validationRunId} artifact:${fixture.validationRunId}/checks/types/stdout.txt`,
+            },
+          }),
+          expect.objectContaining({
+            ref: `artifact:${fixture.validationRunId}/checks/types/logs.txt`,
+            phase: "checks",
+            producer: "types",
+          }),
+        ],
+      });
 
-    const artifactRef = `artifact:${fixture.validationRunId}/checks/types/stdout.txt`;
-    const detail = runByInProcess(fixture.root, [
-      "validation-run",
-      "artifact",
-      fixture.validationRunId,
-      artifactRef,
-      "--output",
-      "json",
-    ]);
-    expect(detail.status).toBe(0);
-    expect(JSON.parse(detail.stdout)).toMatchObject({
-      artifact: { ref: artifactRef, storedBytes: 1_200 },
-      content: longContent,
-    });
-  });
+      const artifactRef = `artifact:${fixture.validationRunId}/checks/types/stdout.txt`;
+      const detail = yield* runByInProcessEffect(fixture.root, [
+        "validation-run",
+        "artifact",
+        fixture.validationRunId,
+        artifactRef,
+        "--output",
+        "json",
+      ]);
+      expect(detail.status).toBe(0);
+      expect(JSON.parse(detail.stdout)).toMatchObject({
+        artifact: { ref: artifactRef, storedBytes: 1_200 },
+        content: longContent,
+      });
+    }),
+  );
 
-  it("keeps empty evidence distinct from unavailable artifact content", () => {
-    const empty = candidateValidationFixture();
-    empty.runStore.complete({ validationRunId: empty.validationRunId, outcome: "passed", now });
+  it.effect("keeps empty evidence distinct from unavailable artifact content", () =>
+    Effect.gen(function* () {
+      const empty = candidateValidationFixture();
+      empty.runStore.complete({ validationRunId: empty.validationRunId, outcome: "passed", now });
 
-    const emptyResult = runByInProcess(empty.root, [
-      "validation-run",
-      "show",
-      empty.validationRunId,
-      "--output",
-      "json",
-    ]);
-    expect(emptyResult.status).toBe(0);
-    expect(JSON.parse(emptyResult.stdout)).toMatchObject({
-      phases: [
-        { phase: "prepare", rounds: [] },
-        { phase: "checks", rounds: [] },
-        { phase: "acceptance_review", rounds: [] },
-        { phase: "specialist_review", rounds: [] },
-      ],
-      findings: [],
-      toolingFailures: [],
-      artifacts: [],
-    });
+      const emptyResult = yield* runByInProcessEffect(empty.root, [
+        "validation-run",
+        "show",
+        empty.validationRunId,
+        "--output",
+        "json",
+      ]);
+      expect(emptyResult.status).toBe(0);
+      expect(JSON.parse(emptyResult.stdout)).toMatchObject({
+        phases: [
+          { phase: "prepare", rounds: [] },
+          { phase: "checks", rounds: [] },
+          { phase: "acceptance_review", rounds: [] },
+          { phase: "specialist_review", rounds: [] },
+        ],
+        findings: [],
+        toolingFailures: [],
+        artifacts: [],
+      });
 
-    const unavailable = candidateValidationFixture();
-    const missing = unavailable.artifact("checks", "types", "stdout.txt", "missing");
-    unavailable.runStore.recordCheckRound({
-      validationRunId: unavailable.validationRunId,
-      producer: "types",
-      roundNumber: 1,
-      roundStatus: "passed",
-      phaseStatus: "passed",
-      artifactRecords: [missing],
-      now,
-    });
-    rmSync(join(unavailable.artifactsRoot, missing.path));
+      const unavailable = candidateValidationFixture();
+      const missing = unavailable.artifact("checks", "types", "stdout.txt", "missing");
+      unavailable.runStore.recordCheckRound({
+        validationRunId: unavailable.validationRunId,
+        producer: "types",
+        roundNumber: 1,
+        roundStatus: "passed",
+        phaseStatus: "passed",
+        artifactRecords: [missing],
+        now,
+      });
+      rmSync(join(unavailable.artifactsRoot, missing.path));
 
-    const unavailableResult = runByInProcess(unavailable.root, [
-      "validation-run",
-      "show",
-      unavailable.validationRunId,
-      "--output",
-      "json",
-    ]);
-    expect(unavailableResult.status).toBe(0);
-    expect(JSON.parse(unavailableResult.stdout).artifacts[0].preview).toEqual({
-      status: "unavailable",
-      reason: "content_unavailable",
-      detailCommand: `by validation-run artifact ${unavailable.validationRunId} ${missing.ref}`,
-    });
-  });
+      const unavailableResult = yield* runByInProcessEffect(unavailable.root, [
+        "validation-run",
+        "show",
+        unavailable.validationRunId,
+        "--output",
+        "json",
+      ]);
+      expect(unavailableResult.status).toBe(0);
+      expect(JSON.parse(unavailableResult.stdout).artifacts[0].preview).toEqual({
+        status: "unavailable",
+        reason: "content_unavailable",
+        detailCommand: `by validation-run artifact ${unavailable.validationRunId} ${missing.ref}`,
+      });
+    }),
+  );
 
-  it.each([
+  it.effect.each([
     { name: "passed", roundStatus: "passed", outcome: "passed", finding: false, tooling: false },
     {
       name: "Finding-blocked",
@@ -307,169 +314,178 @@ describe("Candidate-owned Validation Run inspection", () => {
       finding: false,
       tooling: true,
     },
-  ] as const)("shows $name Acceptance Review evidence", ({
-    roundStatus,
-    outcome,
-    finding,
-    tooling,
-  }) => {
-    const fixture = candidateValidationFixture();
-    fixture.runStore.recordAcceptanceRound({
-      validationRunId: fixture.validationRunId,
-      roundNumber: 1,
-      roundStatus,
-      phaseStatus: roundStatus,
-      artifactRecords: [],
-      findings: finding
-        ? [
-            {
-              id: `${fixture.validationRunId}-acceptance-F1`,
-              validationRunId: fixture.validationRunId,
+  ] as const)(
+    "shows $name Acceptance Review evidence",
+    ({ roundStatus, outcome, finding, tooling }) =>
+      Effect.gen(function* () {
+        const fixture = candidateValidationFixture();
+        fixture.runStore.recordAcceptanceRound({
+          validationRunId: fixture.validationRunId,
+          roundNumber: 1,
+          roundStatus,
+          phaseStatus: roundStatus,
+          artifactRecords: [],
+          findings: finding
+            ? [
+                {
+                  id: `${fixture.validationRunId}-acceptance-F1`,
+                  validationRunId: fixture.validationRunId,
+                  phase: "acceptance_review",
+                  producer: "acceptance",
+                  title: "Acceptance mismatch",
+                  description: "The Candidate does not satisfy approved intent.",
+                  severity: "high",
+                  evidence: "Observed behavior differs from Acceptance Context.",
+                  files: [],
+                  artifactRefs: [],
+                },
+              ]
+            : [],
+          now,
+        });
+        if (tooling) {
+          fixture.runStore.recordToolingFailure({
+            validationRunId: fixture.validationRunId,
+            errorKind: "reviewer_output_contract_failed",
+            operationName: "decode_reviewer_output",
+            errorMessage: "Structured output retries exhausted.",
+            now,
+          });
+        }
+        fixture.runStore.complete({ validationRunId: fixture.validationRunId, outcome, now });
+
+        const result = yield* runByInProcessEffect(fixture.root, [
+          "validation-run",
+          "show",
+          fixture.validationRunId,
+          "--output",
+          "json",
+        ]);
+        const output = JSON.parse(result.stdout);
+        expect(result.status).toBe(0);
+        expect(output.phases).toContainEqual({
+          phase: "acceptance_review",
+          rounds: [
+            expect.objectContaining({
               phase: "acceptance_review",
               producer: "acceptance",
-              title: "Acceptance mismatch",
-              description: "The Candidate does not satisfy approved intent.",
-              severity: "high",
-              evidence: "Observed behavior differs from Acceptance Context.",
-              files: [],
-              artifactRefs: [],
-            },
-          ]
-        : [],
-      now,
-    });
-    if (tooling) {
-      fixture.runStore.recordToolingFailure({
-        validationRunId: fixture.validationRunId,
-        errorKind: "reviewer_output_contract_failed",
-        operationName: "decode_reviewer_output",
-        errorMessage: "Structured output retries exhausted.",
-        now,
+              status: roundStatus,
+            }),
+          ],
+        });
+        expect(output.findings).toHaveLength(finding ? 1 : 0);
+        expect(output.toolingFailures).toHaveLength(tooling ? 1 : 0);
+      }),
+  );
+
+  it.effect(
+    "returns typed actionable errors for unknown Runs, Artifacts, and unavailable content",
+    () =>
+      Effect.gen(function* () {
+        const fixture = candidateValidationFixture();
+        const missing = fixture.artifact("checks", "types", "stdout.txt", "missing");
+        fixture.runStore.recordCheckRound({
+          validationRunId: fixture.validationRunId,
+          producer: "types",
+          roundNumber: 1,
+          roundStatus: "passed",
+          phaseStatus: "passed",
+          artifactRecords: [missing],
+          now,
+        });
+        rmSync(join(fixture.artifactsRoot, missing.path));
+
+        const unknownRun = yield* runByInProcessEffect(fixture.root, [
+          "validation-run",
+          "show",
+          "missing-run",
+          "--output",
+          "json",
+        ]);
+        const unknownArtifact = yield* runByInProcessEffect(fixture.root, [
+          "validation-run",
+          "artifact",
+          fixture.validationRunId,
+          "missing-artifact",
+          "--output",
+          "json",
+        ]);
+        const unavailableContent = yield* runByInProcessEffect(fixture.root, [
+          "validation-run",
+          "artifact",
+          fixture.validationRunId,
+          missing.ref,
+          "--output",
+          "json",
+        ]);
+
+        expect(unknownRun.status).toBe(1);
+        expect(JSON.parse(unknownRun.stdout)).toMatchObject({
+          error: { code: "validation_run_not_found", validationRunId: "missing-run" },
+          help: [
+            "Run `by change show <change-id>` to inspect known Candidates and Validation Runs.",
+          ],
+        });
+        expect(unknownArtifact.status).toBe(1);
+        expect(JSON.parse(unknownArtifact.stdout)).toMatchObject({
+          error: {
+            code: "artifact_not_found",
+            validationRunId: fixture.validationRunId,
+            artifactRef: "missing-artifact",
+          },
+          help: [
+            `Run \`by validation-run show ${fixture.validationRunId}\` to list known Artifacts.`,
+          ],
+        });
+        expect(unavailableContent.status).toBe(1);
+        expect(JSON.parse(unavailableContent.stdout)).toMatchObject({
+          error: {
+            code: "artifact_content_unavailable",
+            validationRunId: fixture.validationRunId,
+            artifactRef: missing.ref,
+          },
+          help: [
+            `Run \`by validation-run show ${fixture.validationRunId}\` to inspect the recorded metadata.`,
+          ],
+        });
+      }),
+  );
+
+  it.effect("does not inspect a Task-owned Validation Run with the same ID", () =>
+    Effect.gen(function* () {
+      const root = createInitializedRepo();
+      const database = sqliteInput(root);
+      database.withDatabase((connection) => {
+        connection
+          .prepare(
+            `INSERT INTO tasks (id, numeric_id, title, description, state, created_at, updated_at)
+         VALUES ('1', 1, 'Legacy', 'Legacy task', 'new', ?, ?)`,
+          )
+          .run(now, now);
+        connection
+          .prepare(
+            `INSERT INTO validation_runs (
+           id, task_id, task_validation_number, status, branch, commit_sha,
+           github_owner, github_repo, github_base_branch,
+           github_remote_name, github_remote_url, created_at, updated_at
+         ) VALUES ('shared-id', '1', 1, 'active', 'feature', 'head',
+           'acme', 'widgets', 'main', 'origin', 'https://example.com', ?, ?)`,
+          )
+          .run(now, now);
       });
-    }
-    fixture.runStore.complete({ validationRunId: fixture.validationRunId, outcome, now });
 
-    const result = runByInProcess(fixture.root, [
-      "validation-run",
-      "show",
-      fixture.validationRunId,
-      "--output",
-      "json",
-    ]);
-    const output = JSON.parse(result.stdout);
-    expect(result.status).toBe(0);
-    expect(output.phases).toContainEqual({
-      phase: "acceptance_review",
-      rounds: [
-        expect.objectContaining({
-          phase: "acceptance_review",
-          producer: "acceptance",
-          status: roundStatus,
-        }),
-      ],
-    });
-    expect(output.findings).toHaveLength(finding ? 1 : 0);
-    expect(output.toolingFailures).toHaveLength(tooling ? 1 : 0);
-  });
+      const result = yield* runByInProcessEffect(root, [
+        "validation-run",
+        "show",
+        "shared-id",
+        "--output",
+        "json",
+      ]);
 
-  it("returns typed actionable errors for unknown Runs, Artifacts, and unavailable content", () => {
-    const fixture = candidateValidationFixture();
-    const missing = fixture.artifact("checks", "types", "stdout.txt", "missing");
-    fixture.runStore.recordCheckRound({
-      validationRunId: fixture.validationRunId,
-      producer: "types",
-      roundNumber: 1,
-      roundStatus: "passed",
-      phaseStatus: "passed",
-      artifactRecords: [missing],
-      now,
-    });
-    rmSync(join(fixture.artifactsRoot, missing.path));
-
-    const unknownRun = runByInProcess(fixture.root, [
-      "validation-run",
-      "show",
-      "missing-run",
-      "--output",
-      "json",
-    ]);
-    const unknownArtifact = runByInProcess(fixture.root, [
-      "validation-run",
-      "artifact",
-      fixture.validationRunId,
-      "missing-artifact",
-      "--output",
-      "json",
-    ]);
-    const unavailableContent = runByInProcess(fixture.root, [
-      "validation-run",
-      "artifact",
-      fixture.validationRunId,
-      missing.ref,
-      "--output",
-      "json",
-    ]);
-
-    expect(unknownRun.status).toBe(1);
-    expect(JSON.parse(unknownRun.stdout)).toMatchObject({
-      error: { code: "validation_run_not_found", validationRunId: "missing-run" },
-      help: ["Run `by change show <change-id>` to inspect known Candidates and Validation Runs."],
-    });
-    expect(unknownArtifact.status).toBe(1);
-    expect(JSON.parse(unknownArtifact.stdout)).toMatchObject({
-      error: {
-        code: "artifact_not_found",
-        validationRunId: fixture.validationRunId,
-        artifactRef: "missing-artifact",
-      },
-      help: [`Run \`by validation-run show ${fixture.validationRunId}\` to list known Artifacts.`],
-    });
-    expect(unavailableContent.status).toBe(1);
-    expect(JSON.parse(unavailableContent.stdout)).toMatchObject({
-      error: {
-        code: "artifact_content_unavailable",
-        validationRunId: fixture.validationRunId,
-        artifactRef: missing.ref,
-      },
-      help: [
-        `Run \`by validation-run show ${fixture.validationRunId}\` to inspect the recorded metadata.`,
-      ],
-    });
-  });
-
-  it("does not inspect a Task-owned Validation Run with the same ID", () => {
-    const root = createInitializedRepo();
-    const database = sqliteInput(root);
-    database.withDatabase((connection) => {
-      connection
-        .prepare(
-          `INSERT INTO tasks (id, numeric_id, title, description, state, created_at, updated_at)
-           VALUES ('1', 1, 'Legacy', 'Legacy task', 'new', ?, ?)`,
-        )
-        .run(now, now);
-      connection
-        .prepare(
-          `INSERT INTO validation_runs (
-             id, task_id, task_validation_number, status, branch, commit_sha,
-             github_owner, github_repo, github_base_branch,
-             github_remote_name, github_remote_url, created_at, updated_at
-           ) VALUES ('shared-id', '1', 1, 'active', 'feature', 'head',
-             'acme', 'widgets', 'main', 'origin', 'https://example.com', ?, ?)`,
-        )
-        .run(now, now);
-    });
-
-    const result = runByInProcess(root, [
-      "validation-run",
-      "show",
-      "shared-id",
-      "--output",
-      "json",
-    ]);
-
-    expect(result.status).toBe(1);
-    expect(JSON.parse(result.stdout).error.code).toBe("validation_run_not_found");
-  });
+      expect(result.status).toBe(1);
+      expect(JSON.parse(result.stdout).error.code).toBe("validation_run_not_found");
+    }),
+  );
 });
 
 const candidateValidationFixture = () => {

@@ -69,56 +69,23 @@ const cliResultToInProcessResult = (result: CliResult): InProcessCliResult => ({
   stderr: "",
 });
 
-export const runByInProcess = (
+export const runByInProcessEffect = (
   cwd: string,
   args: readonly string[],
   now = "2026-06-30T12:00:00.000Z",
   options: InProcessCliOptions = {},
-): InProcessCliResult =>
-  cliResultToInProcessResult(
-    Effect.runSync(
-      runCli(args, {
-        executablePath: byExecutable,
-        cwd,
-        globalConfigPath: options.globalConfigPath ?? join(cwd, ".test-global-config.json"),
-        now: () => new Date(now),
-        ...(options.taskUseCases === undefined ? {} : { taskUseCases: options.taskUseCases }),
-        ...(options.submitPreflight === undefined
-          ? {}
-          : { submitPreflight: options.submitPreflight }),
-        ...(options.interactiveSessionHost === undefined
-          ? {}
-          : { interactiveSessionHost: options.interactiveSessionHost }),
-      }),
-    ),
-  );
-
-export const runByInProcessAsync = async (
-  cwd: string,
-  args: readonly string[],
-  now = "2026-06-30T12:00:00.000Z",
-  options: InProcessCliOptions = {},
-): Promise<InProcessCliResult> =>
-  cliResultToInProcessResult(
-    await Effect.runPromise(
-      runCli(args, {
-        executablePath: byExecutable,
-        cwd,
-        globalConfigPath: options.globalConfigPath ?? join(cwd, ".test-global-config.json"),
-        now: () => new Date(now),
-        ...(options.taskUseCases === undefined ? {} : { taskUseCases: options.taskUseCases }),
-        ...(options.submitPreflight === undefined
-          ? {}
-          : { submitPreflight: options.submitPreflight }),
-        ...(options.interactiveSessionHost === undefined
-          ? {}
-          : { interactiveSessionHost: options.interactiveSessionHost }),
-      }),
-    ),
-  );
-
-export const runByInProcessArgs = (cwd: string, ...args: readonly string[]): InProcessCliResult =>
-  runByInProcess(cwd, args);
+): Effect.Effect<InProcessCliResult> =>
+  runCli(args, {
+    executablePath: byExecutable,
+    cwd,
+    globalConfigPath: options.globalConfigPath ?? join(cwd, ".test-global-config.json"),
+    now: () => new Date(now),
+    ...(options.taskUseCases === undefined ? {} : { taskUseCases: options.taskUseCases }),
+    ...(options.submitPreflight === undefined ? {} : { submitPreflight: options.submitPreflight }),
+    ...(options.interactiveSessionHost === undefined
+      ? {}
+      : { interactiveSessionHost: options.interactiveSessionHost }),
+  }).pipe(Effect.map(cliResultToInProcessResult));
 
 export const createTempRoot = () => {
   const root = mkdtempSync(join(tmpdir(), "but-why-test-"));

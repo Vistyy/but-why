@@ -1,5 +1,8 @@
 import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+
+import { expect, it } from "@effect/vitest";
+import { Effect } from "effect";
+import { afterEach, describe } from "vitest";
 
 import { prepareStateDatabaseSession } from "../src/init/stateDatabase.js";
 import { openSqliteTaskStore } from "../src/sqlite/sqliteTaskStore.js";
@@ -7,7 +10,7 @@ import { openSqliteValidationRunStore } from "../src/sqlite/sqliteValidationRunS
 import { openSqliteValidationRuns } from "../src/sqlite/sqliteValidationRuns.js";
 import { publicTaskId } from "../src/task/taskId.js";
 import type { RecordValidationRunCheckRoundInput } from "../src/validationRun/validationRunStore.js";
-import { cleanupTempRoots, runByInProcess } from "./support/by-cli.js";
+import { cleanupTempRoots, runByInProcessEffect } from "./support/by-cli.js";
 import { createInitializedRepo } from "./support/initializedRepo.js";
 
 const firstNow = "2026-06-30T12:00:00.000Z";
@@ -26,125 +29,161 @@ const prTarget = {
 afterEach(cleanupTempRoots);
 
 describe("Validation Run inspection CLI", () => {
-  it("returns an empty latest findings read for a known Task with no Validation Run History", () => {
-    const root = initializedRepo();
+  it.effect(
+    "returns an empty latest findings read for a known Task with no Validation Run History",
+    () =>
+      Effect.gen(function* () {
+        const root = initializedRepo();
 
-    createTask(root, "No history");
+        createTask(root, "No history");
 
-    const result = runByInProcess(root, ["task", "findings", "BY-1", "--output", "json"]);
+        const result = yield* runByInProcessEffect(root, [
+          "task",
+          "findings",
+          "BY-1",
+          "--output",
+          "json",
+        ]);
 
-    expect(result.status).toBe(0);
-    expect(JSON.parse(result.stdout)).toEqual({
-      task: {
-        id: "BY-1",
-        title: "No history",
-        state: "new",
-      },
-      validationRun: null,
-      findings: [],
-      toolingFailures: [],
-      count: 0,
-    });
-  });
+        expect(result.status).toBe(0);
+        expect(JSON.parse(result.stdout)).toEqual({
+          task: {
+            id: "BY-1",
+            title: "No history",
+            state: "new",
+          },
+          validationRun: null,
+          findings: [],
+          toolingFailures: [],
+          count: 0,
+        });
+      }),
+  );
 
-  it("shows latest Task findings without falling back and includes only latest tooling failures", () => {
-    const root = initializedRepo();
+  it.effect(
+    "shows latest Task findings without falling back and includes only latest tooling failures",
+    () =>
+      Effect.gen(function* () {
+        const root = initializedRepo();
 
-    createTask(root, "Inspect findings");
-    startTask(root, "BY-1", secondNow);
-    const olderRunId = startValidationRun(root, "BY-1", "aaa111", thirdNow);
-    recordFailedCheckRound(root, olderRunId, "quality", thirdNow);
-    const latestRunId = startValidationRun(root, "BY-1", "bbb222", fourthNow);
-    recordToolingFailure(root, latestRunId, fourthNow);
+        createTask(root, "Inspect findings");
+        startTask(root, "BY-1", secondNow);
+        const olderRunId = startValidationRun(root, "BY-1", "aaa111", thirdNow);
+        recordFailedCheckRound(root, olderRunId, "quality", thirdNow);
+        const latestRunId = startValidationRun(root, "BY-1", "bbb222", fourthNow);
+        recordToolingFailure(root, latestRunId, fourthNow);
 
-    const result = runByInProcess(root, ["task", "findings", "BY-1", "--output", "json"]);
+        const result = yield* runByInProcessEffect(root, [
+          "task",
+          "findings",
+          "BY-1",
+          "--output",
+          "json",
+        ]);
 
-    expect(result.status).toBe(0);
-    expect(JSON.parse(result.stdout)).toEqual({
-      task: {
-        id: "BY-1",
-        title: "Inspect findings",
-        state: "validating",
-      },
-      validationRun: {
-        id: latestRunId,
-        taskValidationNumber: 2,
-        status: "error",
-        branch: "feature/BY-1",
-        commit: "bbb222",
-        createdAt: fourthNow,
-        updatedAt: fourthNow,
-      },
-      findings: [],
-      toolingFailures: [
-        expect.objectContaining({
-          validationRunId: latestRunId,
-          errorKind: "validation_workspace_setup_failed",
-          operationName: "copy_allowlisted_file",
-        }),
-      ],
-      count: 0,
-    });
-  });
+        expect(result.status).toBe(0);
+        expect(JSON.parse(result.stdout)).toEqual({
+          task: {
+            id: "BY-1",
+            title: "Inspect findings",
+            state: "validating",
+          },
+          validationRun: {
+            id: latestRunId,
+            taskValidationNumber: 2,
+            status: "error",
+            branch: "feature/BY-1",
+            commit: "bbb222",
+            createdAt: fourthNow,
+            updatedAt: fourthNow,
+          },
+          findings: [],
+          toolingFailures: [
+            expect.objectContaining({
+              validationRunId: latestRunId,
+              errorKind: "validation_workspace_setup_failed",
+              operationName: "copy_allowlisted_file",
+            }),
+          ],
+          count: 0,
+        });
+      }),
+  );
 
-  it("lists Task Validation Run History newest first with summary counts", () => {
-    const root = initializedRepo();
+  it.effect("lists Task Validation Run History newest first with summary counts", () =>
+    Effect.gen(function* () {
+      const root = initializedRepo();
 
-    createTask(root, "Run history");
-    startTask(root, "BY-1", secondNow);
-    const olderRunId = startValidationRun(root, "BY-1", "aaa111", thirdNow);
-    recordFailedCheckRound(root, olderRunId, "quality", thirdNow);
-    const latestRunId = startValidationRun(root, "BY-1", "bbb222", fourthNow);
-    recordToolingFailure(root, latestRunId, fourthNow);
+      createTask(root, "Run history");
+      startTask(root, "BY-1", secondNow);
+      const olderRunId = startValidationRun(root, "BY-1", "aaa111", thirdNow);
+      recordFailedCheckRound(root, olderRunId, "quality", thirdNow);
+      const latestRunId = startValidationRun(root, "BY-1", "bbb222", fourthNow);
+      recordToolingFailure(root, latestRunId, fourthNow);
 
-    const result = runByInProcess(root, ["task", "validation-runs", "BY-1", "--output", "json"]);
+      const result = yield* runByInProcessEffect(root, [
+        "task",
+        "validation-runs",
+        "BY-1",
+        "--output",
+        "json",
+      ]);
 
-    expect(result.status).toBe(0);
-    expect(JSON.parse(result.stdout)).toEqual({
-      validationRuns: [
-        {
-          id: latestRunId,
-          taskValidationNumber: 2,
-          status: "error",
-          branch: "feature/BY-1",
-          commit: "bbb222",
-          findingCount: 0,
-          toolingFailureCount: 1,
-          createdAt: fourthNow,
-          updatedAt: fourthNow,
-        },
-        {
-          id: olderRunId,
-          taskValidationNumber: 1,
-          status: "failed",
-          branch: "feature/BY-1",
-          commit: "aaa111",
-          findingCount: 1,
-          toolingFailureCount: 0,
-          createdAt: thirdNow,
-          updatedAt: thirdNow,
-        },
-      ],
-    });
-  });
+      expect(result.status).toBe(0);
+      expect(JSON.parse(result.stdout)).toEqual({
+        validationRuns: [
+          {
+            id: latestRunId,
+            taskValidationNumber: 2,
+            status: "error",
+            branch: "feature/BY-1",
+            commit: "bbb222",
+            findingCount: 0,
+            toolingFailureCount: 1,
+            createdAt: fourthNow,
+            updatedAt: fourthNow,
+          },
+          {
+            id: olderRunId,
+            taskValidationNumber: 1,
+            status: "failed",
+            branch: "feature/BY-1",
+            commit: "aaa111",
+            findingCount: 1,
+            toolingFailureCount: 0,
+            createdAt: thirdNow,
+            updatedAt: thirdNow,
+          },
+        ],
+      });
+    }),
+  );
 
-  it("reports unknown Task IDs and unknown Validation Run IDs as command errors", () => {
-    const root = initializedRepo();
+  it.effect("reports unknown Task IDs and unknown Validation Run IDs as command errors", () =>
+    Effect.gen(function* () {
+      const root = initializedRepo();
 
-    const unknownTask = runByInProcess(root, ["task", "findings", "BY-999", "--output", "json"]);
-    const unknownRun = runByInProcess(root, [
-      "validation-run",
-      "show",
-      "missing-run",
-      "--output",
-      "json",
-    ]);
+      const unknownTask = yield* runByInProcessEffect(root, [
+        "task",
+        "findings",
+        "BY-999",
+        "--output",
+        "json",
+      ]);
+      const unknownRun = yield* runByInProcessEffect(root, [
+        "validation-run",
+        "show",
+        "missing-run",
+        "--output",
+        "json",
+      ]);
 
-    expect(unknownTask.status).toBe(1);
-    expect(JSON.parse(unknownTask.stdout).error.code).toBe("task_not_found");
-    expect(unknownRun.status).toBe(1);
-    expect(JSON.parse(unknownRun.stdout).error.code).toBe("validation_run_not_found");
-  });
+      expect(unknownTask.status).toBe(1);
+      expect(JSON.parse(unknownTask.stdout).error.code).toBe("task_not_found");
+      expect(unknownRun.status).toBe(1);
+      expect(JSON.parse(unknownRun.stdout).error.code).toBe("validation_run_not_found");
+    }),
+  );
 });
 
 const initializedRepo = (): string => createInitializedRepo();

@@ -1,6 +1,9 @@
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import { afterEach, describe, expect, it } from "vitest";
+
+import { expect, it } from "@effect/vitest";
+import { Effect } from "effect";
+import { afterEach, describe } from "vitest";
 
 import { openSqliteCandidateStore } from "../src/sqlite/sqliteCandidateStore.js";
 import {
@@ -10,7 +13,7 @@ import {
 import { openSqliteChangeStore } from "../src/sqlite/sqliteChangeStore.js";
 import { openSqliteTaskStore } from "../src/sqlite/sqliteTaskStore.js";
 import { publicTaskId } from "../src/task/taskId.js";
-import { cleanupTempRoots, runByInProcessArgs as runBy } from "./support/by-cli.js";
+import { cleanupTempRoots, runByInProcessEffect as runBy } from "./support/by-cli.js";
 import { createInitializedRepo } from "./support/initializedRepo.js";
 import { createSqliteStateSession } from "./support/sqliteState.js";
 
@@ -182,16 +185,17 @@ describe("Change storage", () => {
 });
 
 describe("Change and Candidate schema migration", () => {
-  it("expands an existing repository without changing Task-owned records", () => {
-    const root = initializedRepo();
-    const task = taskStore(sqliteInput(root)).createTask({
-      title: "Existing",
-      description: "Task",
-      now,
-    });
-    const statePath = sharedStatePath(root);
-    const database = new DatabaseSync(statePath);
-    database.exec(`
+  it.effect("expands an existing repository without changing Task-owned records", () =>
+    Effect.gen(function* () {
+      const root = initializedRepo();
+      const task = taskStore(sqliteInput(root)).createTask({
+        title: "Existing",
+        description: "Task",
+        now,
+      });
+      const statePath = sharedStatePath(root);
+      const database = new DatabaseSync(statePath);
+      database.exec(`
       DROP TABLE candidates;
       DROP TABLE changes;
       DELETE FROM schema_migrations
@@ -204,46 +208,51 @@ describe("Change and Candidate schema migration", () => {
         '025_change_cleanup'
       );
     `);
-    database.close();
+      database.close();
 
-    const result = runBy(root, "init", "--task-prefix", "BY");
-    expect(result.status).toBe(0);
-    expect(result.stdout).toContain("status: repaired");
-    expect(taskStore(sqliteInput(root)).getTaskById(publicTaskId(task.id))).toMatchObject({
-      id: task.id,
-    });
-    expect(createChange(sqliteInput(root))).toMatchObject({ state: "open" });
-  });
+      const result = yield* runBy(root, ["init", "--task-prefix", "BY"]);
+      expect(result.status).toBe(0);
+      expect(result.stdout).toContain("status: repaired");
+      expect(taskStore(sqliteInput(root)).getTaskById(publicTaskId(task.id))).toMatchObject({
+        id: task.id,
+      });
+      expect(createChange(sqliteInput(root))).toMatchObject({ state: "open" });
+    }),
+  );
 
-  it("adds optional Change bases without changing existing Change or Candidate history", () => {
-    const root = initializedRepo();
-    const change = createChange(sqliteInput(root));
-    const candidate = candidateStore(sqliteInput(root)).captureCandidate({
-      changeId: change.id,
-      selectedBaseRef: "refs/heads/main",
-      resolvedTargetSha: "1111111111111111111111111111111111111111",
-      comparisonBaseSha: "2222222222222222222222222222222222222222",
-      headSha: "3333333333333333333333333333333333333333",
-      now,
-    });
-    expect(candidate.ok).toBe(true);
-    if (!candidate.ok) return;
-    const database = new DatabaseSync(sharedStatePath(root));
-    database.exec(`
+  it.effect(
+    "adds optional Change bases without changing existing Change or Candidate history",
+    () =>
+      Effect.gen(function* () {
+        const root = initializedRepo();
+        const change = createChange(sqliteInput(root));
+        const candidate = candidateStore(sqliteInput(root)).captureCandidate({
+          changeId: change.id,
+          selectedBaseRef: "refs/heads/main",
+          resolvedTargetSha: "1111111111111111111111111111111111111111",
+          comparisonBaseSha: "2222222222222222222222222222222222222222",
+          headSha: "3333333333333333333333333333333333333333",
+          now,
+        });
+        expect(candidate.ok).toBe(true);
+        if (!candidate.ok) return;
+        const database = new DatabaseSync(sharedStatePath(root));
+        database.exec(`
       ALTER TABLE changes DROP COLUMN base_ref;
       DELETE FROM schema_migrations WHERE name = '016_change_base_ref';
     `);
-    database.close();
+        database.close();
 
-    expect(runBy(root, "init", "--task-prefix", "BY").status).toBe(0);
-    expect(changeStore(sqliteInput(root)).getChangeById(change.id)).toMatchObject({
-      id: change.id,
-      baseRef: null,
-    });
-    expect(candidateStore(sqliteInput(root)).getCandidateById(candidate.candidate.id)).toEqual(
-      candidate.candidate,
-    );
-  });
+        expect((yield* runBy(root, ["init", "--task-prefix", "BY"])).status).toBe(0);
+        expect(changeStore(sqliteInput(root)).getChangeById(change.id)).toMatchObject({
+          id: change.id,
+          baseRef: null,
+        });
+        expect(candidateStore(sqliteInput(root)).getCandidateById(candidate.candidate.id)).toEqual(
+          candidate.candidate,
+        );
+      }),
+  );
 });
 
 describe("Change schema constraints", () => {

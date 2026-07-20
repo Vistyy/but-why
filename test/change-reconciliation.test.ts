@@ -1,7 +1,10 @@
 import { execFileSync } from "node:child_process";
 import { chmodSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+
+import { expect, it } from "@effect/vitest";
+import { Effect } from "effect";
+import { afterEach, describe } from "vitest";
 
 import { openRepoLocalStores } from "../src/init/repoLocalStores.js";
 import { loadRepoLocalContext } from "../src/init/repoContext.js";
@@ -9,7 +12,7 @@ import { publicTaskId } from "../src/task/taskId.js";
 import {
   cleanupTempRoots,
   createTempRoot,
-  runByInProcessAsync,
+  runByInProcessEffect,
   runByWithEnv,
 } from "./support/by-cli.js";
 import { createInitializedRepo } from "./support/initializedRepo.js";
@@ -20,215 +23,223 @@ const pathEnvironmentVariable = "PATH";
 afterEach(cleanupTempRoots);
 
 describe("by change reconcile", () => {
-  it("returns an open owned PR at its expected head without mutation", async () => {
-    const repository = initializedRepository();
-    const started = await runByInProcessAsync(
-      repository,
-      ["change", "start", "--output", "json"],
-      now,
-    );
-    const change = JSON.parse(started.stdout) as {
-      readonly change: { readonly id: string };
-      readonly branch: string;
-      readonly worktreePath: string;
-    };
-    const headSha = git(change.worktreePath, "rev-parse", "HEAD");
-    const context = loadRepoLocalContext(repository, () => now);
-    if (!context.ok) throw new Error(context.error.code);
-    const store = openRepoLocalStores(context.context).changeStore;
-    const target = { owner: "acme", repo: "widgets", baseBranch: "main", remoteName: "origin" };
-    const headBranch = change.branch.slice("refs/heads/".length);
-    expect(
-      store.beginPublication({
-        changeId: change.change.id,
-        candidateId: "candidate-1",
-        validationRunId: "validation-run-1",
-        target,
-        headBranch,
-        expectedHeadSha: headSha,
+  it.effect("returns an open owned PR at its expected head without mutation", () =>
+    Effect.gen(function* () {
+      const repository = initializedRepository();
+      const started = yield* runByInProcessEffect(
+        repository,
+        ["change", "start", "--output", "json"],
         now,
-      }).ok,
-    ).toBe(true);
-    expect(
-      store.recordPublishedPullRequest({
-        changeId: change.change.id,
-        candidateId: "candidate-1",
-        validationRunId: "validation-run-1",
-        target,
-        headBranch,
-        expectedHeadSha: headSha,
-        pullRequest: { number: 42, url: "https://github.com/acme/widgets/pull/42" },
-        now,
-      }).ok,
-    ).toBe(true);
-
-    const ghDirectory = createTempRoot();
-    writeFileSync(
-      join(ghDirectory, "gh"),
-      `#!/bin/sh\nprintf '%s\\n' '${JSON.stringify(openPullRequest(target, headBranch, headSha))}'\n`,
-    );
-    chmodSync(join(ghDirectory, "gh"), 0o755);
-
-    const result = runByWithEnv(
-      change.worktreePath,
-      { PATH: `${ghDirectory}:${process.env[pathEnvironmentVariable] ?? ""}` },
-      "change",
-      "reconcile",
-      change.change.id,
-      "--output",
-      "json",
-    );
-
-    expect(result.status).toBe(0);
-    expect(JSON.parse(result.stdout)).toEqual({
-      changes: [
-        {
+      );
+      const change = JSON.parse(started.stdout) as {
+        readonly change: { readonly id: string };
+        readonly branch: string;
+        readonly worktreePath: string;
+      };
+      const headSha = git(change.worktreePath, "rev-parse", "HEAD");
+      const context = loadRepoLocalContext(repository, () => now);
+      if (!context.ok) throw new Error(context.error.code);
+      const store = openRepoLocalStores(context.context).changeStore;
+      const target = { owner: "acme", repo: "widgets", baseBranch: "main", remoteName: "origin" };
+      const headBranch = change.branch.slice("refs/heads/".length);
+      expect(
+        store.beginPublication({
           changeId: change.change.id,
-          status: "open",
+          candidateId: "candidate-1",
+          validationRunId: "validation-run-1",
+          target,
+          headBranch,
+          expectedHeadSha: headSha,
+          now,
+        }).ok,
+      ).toBe(true);
+      expect(
+        store.recordPublishedPullRequest({
+          changeId: change.change.id,
+          candidateId: "candidate-1",
+          validationRunId: "validation-run-1",
+          target,
+          headBranch,
+          expectedHeadSha: headSha,
           pullRequest: { number: 42, url: "https://github.com/acme/widgets/pull/42" },
-        },
-      ],
-    });
-    expect(store.getChangeById(change.change.id)).toMatchObject({ state: "open" });
-  });
+          now,
+        }).ok,
+      ).toBe(true);
 
-  it("atomically completes a merged Change and its linked Task before cleanup", async () => {
-    const repository = initializedRepository();
-    const context = loadRepoLocalContext(repository, () => now);
-    if (!context.ok) throw new Error(context.error.code);
-    const stores = openRepoLocalStores(context.context);
-    const task = stores.taskStore.createTask({
-      title: "Merged Change",
-      description: "Complete me",
-      now,
-    });
-    const taskId = publicTaskId(task.id);
-    expect(stores.taskStore.approveTask({ taskId, now }).ok).toBe(true);
-    const started = await runByInProcessAsync(
-      repository,
-      ["change", "start", "--task", taskId, "--output", "json"],
-      now,
-    );
-    const change = JSON.parse(started.stdout) as {
-      readonly change: { readonly id: string };
-      readonly branch: string;
-      readonly worktreePath: string;
-    };
-    const headSha = git(change.worktreePath, "rev-parse", "HEAD");
-    const target = { owner: "acme", repo: "widgets", baseBranch: "main", remoteName: "origin" };
-    const headBranch = change.branch.slice("refs/heads/".length);
-    expect(
-      stores.changeStore.beginPublication({
-        changeId: change.change.id,
-        candidateId: "candidate-1",
-        validationRunId: "validation-run-1",
-        target,
-        headBranch,
-        expectedHeadSha: headSha,
+      const ghDirectory = createTempRoot();
+      writeFileSync(
+        join(ghDirectory, "gh"),
+        `#!/bin/sh\nprintf '%s\\n' '${JSON.stringify(openPullRequest(target, headBranch, headSha))}'\n`,
+      );
+      chmodSync(join(ghDirectory, "gh"), 0o755);
+
+      const result = runByWithEnv(
+        change.worktreePath,
+        { PATH: `${ghDirectory}:${process.env[pathEnvironmentVariable] ?? ""}` },
+        "change",
+        "reconcile",
+        change.change.id,
+        "--output",
+        "json",
+      );
+
+      expect(result.status).toBe(0);
+      expect(JSON.parse(result.stdout)).toEqual({
+        changes: [
+          {
+            changeId: change.change.id,
+            status: "open",
+            pullRequest: { number: 42, url: "https://github.com/acme/widgets/pull/42" },
+          },
+        ],
+      });
+      expect(store.getChangeById(change.change.id)).toMatchObject({ state: "open" });
+    }),
+  );
+
+  it.effect("atomically completes a merged Change and its linked Task before cleanup", () =>
+    Effect.gen(function* () {
+      const repository = initializedRepository();
+      const context = loadRepoLocalContext(repository, () => now);
+      if (!context.ok) throw new Error(context.error.code);
+      const stores = openRepoLocalStores(context.context);
+      const task = stores.taskStore.createTask({
+        title: "Merged Change",
+        description: "Complete me",
         now,
-      }).ok,
-    ).toBe(true);
-    expect(
-      stores.changeStore.recordPublishedPullRequest({
-        changeId: change.change.id,
-        candidateId: "candidate-1",
-        validationRunId: "validation-run-1",
-        target,
-        headBranch,
-        expectedHeadSha: headSha,
-        pullRequest: { number: 42, url: "https://github.com/acme/widgets/pull/42" },
+      });
+      const taskId = publicTaskId(task.id);
+      expect(stores.taskStore.approveTask({ taskId, now }).ok).toBe(true);
+      const started = yield* runByInProcessEffect(
+        repository,
+        ["change", "start", "--task", taskId, "--output", "json"],
         now,
-      }).ok,
-    ).toBe(true);
-
-    const result = reconcileWithPullRequest(
-      repository,
-      mergedPullRequest(target, headBranch, headSha),
-      change.change.id,
-    );
-
-    expect(result.status).toBe(0);
-    expect(JSON.parse(result.stdout)).toMatchObject({
-      changes: [
-        {
+      );
+      const change = JSON.parse(started.stdout) as {
+        readonly change: { readonly id: string };
+        readonly branch: string;
+        readonly worktreePath: string;
+      };
+      const headSha = git(change.worktreePath, "rev-parse", "HEAD");
+      const target = { owner: "acme", repo: "widgets", baseBranch: "main", remoteName: "origin" };
+      const headBranch = change.branch.slice("refs/heads/".length);
+      expect(
+        stores.changeStore.beginPublication({
           changeId: change.change.id,
-          status: "completed",
-          cleanup: { state: "complete", blockingReason: null },
-        },
-      ],
-    });
-    expect(stores.changeStore.getChangeById(change.change.id)).toMatchObject({
-      state: "closed",
-      closeReason: "completed",
-      cleanup: { state: "complete", blockingReason: null },
-    });
-    expect(stores.taskStore.getTaskById(taskId)).toMatchObject({ state: "done" });
-  });
-
-  it("retains unsafe cleanup with its blocking reason after completing a merged Change", async () => {
-    const repository = initializedRepository();
-    const started = await runByInProcessAsync(
-      repository,
-      ["change", "start", "--output", "json"],
-      now,
-    );
-    const change = JSON.parse(started.stdout) as {
-      readonly change: { readonly id: string };
-      readonly branch: string;
-      readonly worktreePath: string;
-    };
-    const headSha = git(change.worktreePath, "rev-parse", "HEAD");
-    writeFileSync(join(change.worktreePath, "uncommitted.txt"), "preserve this work\n");
-    const context = loadRepoLocalContext(repository, () => now);
-    if (!context.ok) throw new Error(context.error.code);
-    const store = openRepoLocalStores(context.context).changeStore;
-    const target = { owner: "acme", repo: "widgets", baseBranch: "main", remoteName: "origin" };
-    const headBranch = change.branch.slice("refs/heads/".length);
-    expect(
-      store.beginPublication({
-        changeId: change.change.id,
-        candidateId: "candidate-1",
-        validationRunId: "validation-run-1",
-        target,
-        headBranch,
-        expectedHeadSha: headSha,
-        now,
-      }).ok,
-    ).toBe(true);
-    expect(
-      store.recordPublishedPullRequest({
-        changeId: change.change.id,
-        candidateId: "candidate-1",
-        validationRunId: "validation-run-1",
-        target,
-        headBranch,
-        expectedHeadSha: headSha,
-        pullRequest: { number: 42, url: "https://github.com/acme/widgets/pull/42" },
-        now,
-      }).ok,
-    ).toBe(true);
-
-    const result = reconcileWithPullRequest(
-      repository,
-      mergedPullRequest(target, headBranch, headSha),
-      change.change.id,
-    );
-
-    expect(result.status).toBe(0);
-    expect(JSON.parse(result.stdout)).toMatchObject({
-      changes: [
-        {
+          candidateId: "candidate-1",
+          validationRunId: "validation-run-1",
+          target,
+          headBranch,
+          expectedHeadSha: headSha,
+          now,
+        }).ok,
+      ).toBe(true);
+      expect(
+        stores.changeStore.recordPublishedPullRequest({
           changeId: change.change.id,
-          status: "completed",
+          candidateId: "candidate-1",
+          validationRunId: "validation-run-1",
+          target,
+          headBranch,
+          expectedHeadSha: headSha,
+          pullRequest: { number: 42, url: "https://github.com/acme/widgets/pull/42" },
+          now,
+        }).ok,
+      ).toBe(true);
+
+      const result = reconcileWithPullRequest(
+        repository,
+        mergedPullRequest(target, headBranch, headSha),
+        change.change.id,
+      );
+
+      expect(result.status).toBe(0);
+      expect(JSON.parse(result.stdout)).toMatchObject({
+        changes: [
+          {
+            changeId: change.change.id,
+            status: "completed",
+            cleanup: { state: "complete", blockingReason: null },
+          },
+        ],
+      });
+      expect(stores.changeStore.getChangeById(change.change.id)).toMatchObject({
+        state: "closed",
+        closeReason: "completed",
+        cleanup: { state: "complete", blockingReason: null },
+      });
+      expect(stores.taskStore.getTaskById(taskId)).toMatchObject({ state: "done" });
+    }),
+  );
+
+  it.effect(
+    "retains unsafe cleanup with its blocking reason after completing a merged Change",
+    () =>
+      Effect.gen(function* () {
+        const repository = initializedRepository();
+        const started = yield* runByInProcessEffect(
+          repository,
+          ["change", "start", "--output", "json"],
+          now,
+        );
+        const change = JSON.parse(started.stdout) as {
+          readonly change: { readonly id: string };
+          readonly branch: string;
+          readonly worktreePath: string;
+        };
+        const headSha = git(change.worktreePath, "rev-parse", "HEAD");
+        writeFileSync(join(change.worktreePath, "uncommitted.txt"), "preserve this work\n");
+        const context = loadRepoLocalContext(repository, () => now);
+        if (!context.ok) throw new Error(context.error.code);
+        const store = openRepoLocalStores(context.context).changeStore;
+        const target = { owner: "acme", repo: "widgets", baseBranch: "main", remoteName: "origin" };
+        const headBranch = change.branch.slice("refs/heads/".length);
+        expect(
+          store.beginPublication({
+            changeId: change.change.id,
+            candidateId: "candidate-1",
+            validationRunId: "validation-run-1",
+            target,
+            headBranch,
+            expectedHeadSha: headSha,
+            now,
+          }).ok,
+        ).toBe(true);
+        expect(
+          store.recordPublishedPullRequest({
+            changeId: change.change.id,
+            candidateId: "candidate-1",
+            validationRunId: "validation-run-1",
+            target,
+            headBranch,
+            expectedHeadSha: headSha,
+            pullRequest: { number: 42, url: "https://github.com/acme/widgets/pull/42" },
+            now,
+          }).ok,
+        ).toBe(true);
+
+        const result = reconcileWithPullRequest(
+          repository,
+          mergedPullRequest(target, headBranch, headSha),
+          change.change.id,
+        );
+
+        expect(result.status).toBe(0);
+        expect(JSON.parse(result.stdout)).toMatchObject({
+          changes: [
+            {
+              changeId: change.change.id,
+              status: "completed",
+              cleanup: { state: "pending", blockingReason: "worktree_has_uncommitted_changes" },
+            },
+          ],
+        });
+        expect(store.getChangeById(change.change.id)).toMatchObject({
+          state: "closed",
           cleanup: { state: "pending", blockingReason: "worktree_has_uncommitted_changes" },
-        },
-      ],
-    });
-    expect(store.getChangeById(change.change.id)).toMatchObject({
-      state: "closed",
-      cleanup: { state: "pending", blockingReason: "worktree_has_uncommitted_changes" },
-    });
-  });
+        });
+      }),
+  );
 });
 
 const reconcileWithPullRequest = (repository: string, pullRequest: object, changeId: string) => {
