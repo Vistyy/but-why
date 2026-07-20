@@ -44,6 +44,7 @@ It ends when But Why? completes one real SQLite-tracked Task-backed Change and p
 | 126 | Publish But Why? to npm | 131 |
 | 138 | Establish post-publication compatibility policy | 126 |
 | 143 | Enforce Effect test execution | 142, 144 |
+| 145 | Own temporary test workspace lifecycles | 144 |
 
 ## Migration order
 
@@ -62,7 +63,9 @@ It ends when But Why? completes one real SQLite-tracked Task-backed Change and p
 
 Task 139 establishes framework-owned Effect execution through the complete Candidate validation test suite.
 Tasks 142 and 144 can run in parallel after Task 139.
-Task 143 enforces the completed migration after Tasks 142 and 144.
+Task 144 establishes one Effect-native in-process CLI test harness.
+Task 143 enforces the completed Effect execution migration after Tasks 142 and 144.
+Task 145 replaces global temporary-root cleanup after Task 144 establishes the Effect test seam.
 This workstream does not block Task 105.
 
 ## Deferred
