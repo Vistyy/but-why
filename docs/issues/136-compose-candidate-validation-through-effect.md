@@ -1,5 +1,14 @@
 # Compose Candidate validation through Effect
 
+## Status
+
+Done.
+
+## Completion
+
+- Implementation: `65606faec507c363b9bc87d96f547ba34c09a259`
+- Review correction: `e139f6e1831e2e5f6ad54fb52703d1da8e616525`
+
 ## Specification
 
 - `spikes/effect-first-path/README.md`

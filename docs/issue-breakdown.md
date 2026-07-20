@@ -7,11 +7,12 @@ It ends when But Why? completes one real SQLite-tracked Task-backed Change and p
 
 ## Can start immediately
 
-- Task 136: Compose Candidate validation through Effect.
+- Task 105: Migrate Submit to Change ownership.
 
 ## Completed
 
 - Task 130: Launch a Change Implementer in Herdr (`39e7056`).
+- Task 136: Compose Candidate validation through Effect (`e139f6e`).
 
 - Task 083: Start a Task in a managed worktree (`f009ab6`).
 - Task 084: Expand Candidate-owned validation through Checks (`d462952`).
@@ -28,7 +29,6 @@ It ends when But Why? completes one real SQLite-tracked Task-backed Change and p
 
 | Task | Capability | Blocked by |
 | --- | --- | --- |
-| 105 | Migrate Submit to Change ownership | 098, 136 |
 | 129 | Submit a Task-backed Change with no repository change | 105 |
 | 106 | Add Change inspection and migrate Task projections | 105 |
 | 107 | Remove Task-owned implementation and delivery paths | 105, 106 |
