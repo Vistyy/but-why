@@ -18,7 +18,12 @@ import type {
 import type { GitHubTargetResult } from "../submissionEnvironment/githubTarget.js";
 import type { TaskState } from "../task/lifecycle.js";
 import type { TaskStore } from "../task/taskStore.js";
-import { changeReadiness, changeState, type ChangeRecord } from "./change.js";
+import {
+  changeReadiness,
+  changeState,
+  type ChangePublicationTarget,
+  type ChangeRecord,
+} from "./change.js";
 import type { ChangeReconciliation, ReconciledChange } from "./reconcileChange.js";
 import type { ChangeStore } from "./changeStore.js";
 
@@ -135,7 +140,9 @@ const submitChange = (
       }
       return publishedResult(change, candidate, false);
     }
-    return yield* validateAndPublish(dependencies, change, candidate, input.now);
+    const target = detectPublicationTarget(dependencies, change, candidate);
+    if (!target.ok) return githubTargetFailure(target);
+    return yield* validateAndPublish(dependencies, change, candidate, target.target, input.now);
   });
 
 const reconcileBeforeSubmission = (
@@ -178,6 +185,7 @@ const validateAndPublish = (
   dependencies: Parameters<typeof openChangeSubmit>[0],
   change: ReadyChange,
   candidate: CapturedCandidate,
+  target: ChangePublicationTarget,
   now: string,
 ): Effect.Effect<ChangeSubmitResult, never, CandidateValidation> =>
   Effect.gen(function* () {
@@ -223,16 +231,12 @@ const validateAndPublish = (
       );
     }
 
-    const target = detectPublicationTarget(dependencies, change, candidate);
-    if (!target.ok) {
-      return restoreImplementationThen(dependencies, change, githubTargetFailure(target), now);
-    }
     const publication = dependencies.publicationFor(change.worktreePath).publish({
       changeId: change.id,
       candidateId: candidate.candidateId,
       validationRunId: validationResult.validationRunId,
       policy: policy.resolved.policy,
-      target: target.target,
+      target,
       now,
     });
     if (!publication.ok) {

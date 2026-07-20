@@ -192,10 +192,9 @@ describe("by change submit", () => {
         "Change code",
       );
 
-      const result = yield* runByInProcessEffect(
-        root,
-        ["change", "submit", change.change.id, "--output", "json"],
-        now,
+      git(root, "remote", "set-url", "origin", "https://github.com/acme/repo.git");
+      const result = yield* withPublicationTools(() =>
+        runByInProcessEffect(root, ["change", "submit", change.change.id, "--output", "json"], now),
       );
       const output = JSON.parse(result.stdout) as {
         readonly error: {
@@ -261,10 +260,9 @@ describe("by change submit", () => {
         "Implement approved task",
       );
 
-      const result = yield* runByInProcessEffect(
-        root,
-        ["change", "submit", change.change.id, "--output", "json"],
-        now,
+      git(root, "remote", "set-url", "origin", "https://github.com/acme/repo.git");
+      const result = yield* withPublicationTools(() =>
+        runByInProcessEffect(root, ["change", "submit", change.change.id, "--output", "json"], now),
       );
 
       expect(result.status).toBe(1);

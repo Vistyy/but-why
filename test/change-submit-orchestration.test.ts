@@ -81,7 +81,13 @@ describe("Change Submit orchestration", () => {
           created: true,
           pullRequest: { number: 42, url: "https://github.test/acme/repo/pull/42" },
         });
-        expect(events).toEqual(["reconcile", "capture", "validate_taskless", "publish"]);
+        expect(events).toEqual([
+          "reconcile",
+          "capture",
+          "detect_target",
+          "validate_taskless",
+          "publish",
+        ]);
       }),
   );
 
@@ -122,7 +128,13 @@ describe("Change Submit orchestration", () => {
         .pipe(Effect.provide(validationLayer));
 
       expect(result.ok).toBe(true);
-      expect(events).toEqual(["reconcile", "capture", "validate_task_backed", "publish"]);
+      expect(events).toEqual([
+        "reconcile",
+        "capture",
+        "detect_target",
+        "validate_task_backed",
+        "publish",
+      ]);
       expect(transitions).toEqual(["validating", "ready"]);
     }),
   );
@@ -167,6 +179,32 @@ describe("Change Submit orchestration", () => {
         expect(result).toMatchObject({ ok: true, status: "published", created: false });
         expect(events).toEqual(["reconcile", "capture"]);
       }),
+  );
+
+  it.effect("rejects a missing GitHub target before Candidate validation starts", () =>
+    Effect.gen(function* () {
+      const events: string[] = [];
+      const submit = openChangeSubmit(
+        dependencies({
+          events,
+          change: readyChange(),
+          targetResult: { ok: false, code: "PR_TARGET_NOT_FOUND" },
+        }),
+      );
+      const validationLayer = Layer.succeed(CandidateValidation, {
+        validateCandidate: () => Effect.die("Validation must not start without a GitHub target"),
+        validateTaskBackedCandidate: () =>
+          Effect.die("Validation must not start without a GitHub target"),
+        listRounds: () => [],
+      });
+
+      const result = yield* submit
+        .submit({ changeId: "change-1", now })
+        .pipe(Effect.provide(validationLayer));
+
+      expect(result).toEqual({ ok: false, code: "github_target_not_found" });
+      expect(events).toEqual(["reconcile", "capture", "detect_target"]);
+    }),
   );
 
   it.effect("returns Findings and moves a linked Task back to implementing", () =>
@@ -262,6 +300,18 @@ const dependencies = (input: {
   readonly toolingFailures?: readonly (typeof toolingFailure)[];
   readonly publication?: CandidatePublication;
   readonly reconciliationStatus?: "not_owned" | "open";
+  readonly targetResult?:
+    | { readonly ok: false; readonly code: "PR_TARGET_NOT_FOUND" }
+    | {
+        readonly ok: true;
+        readonly target: {
+          readonly owner: string;
+          readonly repo: string;
+          readonly baseBranch: string;
+          readonly remoteName: string;
+          readonly remoteUrl: string;
+        };
+      };
 }) => {
   const events = input.events ?? [];
   let taskState = "implementing";
@@ -329,17 +379,21 @@ const dependencies = (input: {
           };
         },
       },
-    detectTarget: () =>
-      ({
-        ok: true,
-        target: {
-          owner: "acme",
-          repo: "repo",
-          baseBranch: "main",
-          remoteName: "origin",
-          remoteUrl: "https://github.test/acme/repo.git",
-        },
-      }) as const,
+    detectTarget: () => {
+      events.push("detect_target");
+      return (
+        input.targetResult ?? {
+          ok: true,
+          target: {
+            owner: "acme",
+            repo: "repo",
+            baseBranch: "main",
+            remoteName: "origin",
+            remoteUrl: "https://github.test/acme/repo.git",
+          },
+        }
+      );
+    },
     captureCandidate: () => {
       events.push("capture");
       return candidate;
