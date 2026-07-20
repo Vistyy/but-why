@@ -7,7 +7,8 @@ Done.
 ## Completion
 
 - Implementation: `65606faec507c363b9bc87d96f547ba34c09a259`
-- Review correction: `e139f6e1831e2e5f6ad54fb52703d1da8e616525`
+- Review corrections: `e139f6e1831e2e5f6ad54fb52703d1da8e616525`, `1c0f89d1e39755c5c6602e8fa5d110c9655d68f2`
+- Task boundary clarification: `c4417c9ea47743a7799536414e625d6686be6c91`
 
 ## Specification
 
