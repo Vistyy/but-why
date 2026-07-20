@@ -15,7 +15,7 @@ export class SharedStateIdentityConflictError extends Error {
 const stateDatabaseTimeoutMs = 30_000;
 
 const baselineSchema = `
-  CREATE TABLE tasks (
+  CREATE TABLE IF NOT EXISTS tasks (
     id TEXT NOT NULL UNIQUE,
     numeric_id INTEGER NOT NULL UNIQUE,
     title TEXT NOT NULL,
@@ -24,7 +24,7 @@ const baselineSchema = `
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
   );
-  CREATE TABLE task_comments (
+  CREATE TABLE IF NOT EXISTS task_comments (
     sequence INTEGER PRIMARY KEY AUTOINCREMENT,
     id TEXT NOT NULL UNIQUE,
     task_id TEXT NOT NULL,
@@ -32,16 +32,16 @@ const baselineSchema = `
     content TEXT NOT NULL,
     FOREIGN KEY (task_id) REFERENCES tasks(id)
   );
-  CREATE INDEX task_comments_task_id_sequence_idx ON task_comments (task_id, sequence);
-  CREATE TABLE task_dependencies (
+  CREATE INDEX IF NOT EXISTS task_comments_task_id_sequence_idx ON task_comments (task_id, sequence);
+  CREATE TABLE IF NOT EXISTS task_dependencies (
     dependent_task_id TEXT NOT NULL,
     prerequisite_task_id TEXT NOT NULL,
     PRIMARY KEY (dependent_task_id, prerequisite_task_id),
     FOREIGN KEY (dependent_task_id) REFERENCES tasks(id),
     FOREIGN KEY (prerequisite_task_id) REFERENCES tasks(id)
   );
-  CREATE INDEX task_dependencies_prerequisite_idx ON task_dependencies (prerequisite_task_id, dependent_task_id);
-  CREATE TABLE changes (
+  CREATE INDEX IF NOT EXISTS task_dependencies_prerequisite_idx ON task_dependencies (prerequisite_task_id, dependent_task_id);
+  CREATE TABLE IF NOT EXISTS changes (
     id TEXT PRIMARY KEY,
     repository_common_directory TEXT NOT NULL,
     branch_ref TEXT NOT NULL,
@@ -75,8 +75,8 @@ const baselineSchema = `
     UNIQUE (repository_common_directory, branch_ref),
     CHECK ((state = 'open' AND close_reason IS NULL AND closed_at IS NULL) OR (state = 'closed' AND close_reason IS NOT NULL AND closed_at IS NOT NULL))
   );
-  CREATE UNIQUE INDEX changes_worktree_path_unique_idx ON changes (worktree_path) WHERE worktree_path IS NOT NULL;
-  CREATE TABLE candidates (
+  CREATE UNIQUE INDEX IF NOT EXISTS changes_worktree_path_unique_idx ON changes (worktree_path) WHERE worktree_path IS NOT NULL;
+  CREATE TABLE IF NOT EXISTS candidates (
     id TEXT PRIMARY KEY,
     change_id TEXT NOT NULL,
     selected_base_ref TEXT NOT NULL,
@@ -87,8 +87,8 @@ const baselineSchema = `
     FOREIGN KEY (change_id) REFERENCES changes(id),
     UNIQUE (change_id, comparison_base_sha, head_sha)
   );
-  CREATE INDEX candidates_change_id_created_at_idx ON candidates (change_id, created_at);
-  CREATE TABLE candidate_validation_runs (
+  CREATE INDEX IF NOT EXISTS candidates_change_id_created_at_idx ON candidates (change_id, created_at);
+  CREATE TABLE IF NOT EXISTS candidate_validation_runs (
     id TEXT PRIMARY KEY,
     candidate_id TEXT NOT NULL,
     policy_snapshot TEXT NOT NULL,
@@ -99,8 +99,8 @@ const baselineSchema = `
     FOREIGN KEY (candidate_id) REFERENCES candidates(id),
     CHECK ((state = 'running' AND outcome IS NULL) OR (state = 'complete' AND outcome IS NOT NULL))
   );
-  CREATE UNIQUE INDEX candidate_validation_runs_reuse_idx ON candidate_validation_runs (candidate_id, policy_snapshot) WHERE outcome = 'passed';
-  CREATE TABLE candidate_validation_workspace_setups (
+  CREATE UNIQUE INDEX IF NOT EXISTS candidate_validation_runs_reuse_idx ON candidate_validation_runs (candidate_id, policy_snapshot) WHERE outcome = 'passed';
+  CREATE TABLE IF NOT EXISTS candidate_validation_workspace_setups (
     validation_run_id TEXT PRIMARY KEY,
     temp_ref_name TEXT NOT NULL,
     submitted_sha TEXT NOT NULL,
@@ -110,7 +110,7 @@ const baselineSchema = `
     created_at TEXT NOT NULL,
     FOREIGN KEY (validation_run_id) REFERENCES candidate_validation_runs(id)
   );
-  CREATE TABLE candidate_validation_tooling_failures (
+  CREATE TABLE IF NOT EXISTS candidate_validation_tooling_failures (
     sequence INTEGER PRIMARY KEY AUTOINCREMENT,
     validation_run_id TEXT NOT NULL,
     error_kind TEXT NOT NULL,
@@ -119,7 +119,7 @@ const baselineSchema = `
     created_at TEXT NOT NULL,
     FOREIGN KEY (validation_run_id) REFERENCES candidate_validation_runs(id)
   );
-  CREATE TABLE candidate_validation_rounds (
+  CREATE TABLE IF NOT EXISTS candidate_validation_rounds (
     validation_run_id TEXT NOT NULL,
     phase TEXT NOT NULL,
     producer TEXT NOT NULL,
@@ -129,7 +129,7 @@ const baselineSchema = `
     PRIMARY KEY (validation_run_id, phase, producer, round_number),
     FOREIGN KEY (validation_run_id) REFERENCES candidate_validation_runs(id)
   );
-  CREATE TABLE candidate_validation_findings (
+  CREATE TABLE IF NOT EXISTS candidate_validation_findings (
     id TEXT PRIMARY KEY,
     validation_run_id TEXT NOT NULL,
     phase TEXT NOT NULL,
@@ -144,7 +144,7 @@ const baselineSchema = `
     updated_at TEXT NOT NULL,
     FOREIGN KEY (validation_run_id) REFERENCES candidate_validation_runs(id)
   );
-  CREATE TABLE candidate_validation_artifacts (
+  CREATE TABLE IF NOT EXISTS candidate_validation_artifacts (
     ref TEXT PRIMARY KEY,
     validation_run_id TEXT NOT NULL,
     phase TEXT NOT NULL,
@@ -156,7 +156,7 @@ const baselineSchema = `
     created_at TEXT NOT NULL,
     FOREIGN KEY (validation_run_id) REFERENCES candidate_validation_runs(id)
   );
-  CREATE TABLE shared_state_identity (
+  CREATE TABLE IF NOT EXISTS shared_state_identity (
     id INTEGER PRIMARY KEY CHECK (id = 1),
     common_directory TEXT NOT NULL
   );
@@ -169,20 +169,12 @@ export const ensureStateDatabase = (
 ): StateDatabaseChange => {
   const existed = existsSync(path);
   const database = new DatabaseSync(path, { timeout: stateDatabaseTimeoutMs });
-  let initialized = false;
-
   try {
-    const table = database
-      .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'tasks'")
-      .get();
-    if (table === undefined) {
-      database.exec(baselineSchema);
-      initialized = true;
-    }
+    database.exec(baselineSchema);
 
     if (commonDirectory !== undefined) ensureSharedStateIdentity(database, commonDirectory);
     if (!existed) return "created";
-    return initialized ? "updated" : "unchanged";
+    return "unchanged";
   } finally {
     database.close();
   }
