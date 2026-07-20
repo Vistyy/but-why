@@ -215,3 +215,15 @@ valid:
 invalid:
   - new Date()
   - Date.now()
+---
+id: no-effect-runtime-in-tests
+valid:
+  - it.effect("executes work", () => Effect.map(work, done))
+  - it.scoped("executes scoped work", () => work)
+invalid:
+  - Effect.runPromise(work)
+  - Fx.runPromiseExit(work)
+  - Effect.runSync(work)
+  - Fx.runSyncExit(work)
+  - Effect.runFork(work)
+  - Fx.runCallback(work)

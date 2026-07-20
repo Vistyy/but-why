@@ -106,6 +106,21 @@ rule:
         - kind: import_statement
         - regex: '[\s\S]*import\s+[A-Za-z_$][A-Za-z0-9_$]*\s+from\s+["`][^"`]*effect[^"`]*Effect["`][\s\S]*'
 ---
+id: no-effect-runtime-in-tests
+language: TypeScript
+severity: error
+message: Execute test Effects through @effect/vitest using it.effect or it.scoped.
+files:
+  - test/**/*.ts
+rule:
+  any:
+    - pattern: $EFFECT.runPromise($$$ARGS)
+    - pattern: $EFFECT.runPromiseExit($$$ARGS)
+    - pattern: $EFFECT.runSync($$$ARGS)
+    - pattern: $EFFECT.runSyncExit($$$ARGS)
+    - pattern: $EFFECT.runFork($$$ARGS)
+    - pattern: $EFFECT.runCallback($$$ARGS)
+---
 id: no-serialize-output-outside-main
 language: TypeScript
 severity: error
