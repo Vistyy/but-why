@@ -18,6 +18,7 @@ export type CandidateValidationRunStore = {
   ) => StartCandidateValidationRunResult;
   readonly complete: (input: CompleteCandidateValidationRunInput) => void;
   readonly getRunById: (validationRunId: string) => CandidateValidationRunRecord | undefined;
+  readonly listRunsForCandidate: (candidateId: string) => readonly CandidateValidationRunRecord[];
   readonly recordWorkspaceSetup: (input: RecordCandidateWorkspaceSetupInput) => void;
   readonly recordToolingFailure: (input: RecordCandidateToolingFailureInput) => void;
   readonly recordPrepareRound: (input: RecordValidationRunPrepareRoundInput) => void;

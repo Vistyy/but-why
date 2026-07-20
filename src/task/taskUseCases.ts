@@ -5,15 +5,7 @@ import {
   writeTaskContextDraft,
   type TaskContextDraftReadError,
 } from "./files/contextDraft.js";
-import type {
-  ValidationRunFindingRecord,
-  ValidationRunRecord,
-} from "../validationRun/validationRun.js";
-import type {
-  ValidationRunStore,
-  ValidationRunSummaryRecord,
-  ValidationRunToolingErrorRecord,
-} from "../validationRun/validationRunStore.js";
+import type { ValidationRunStore } from "../validationRun/validationRunStore.js";
 import type { TaskState } from "./lifecycle.js";
 import type { TaskContext, TaskRecord, TaskSummary } from "./task.js";
 import { resolveRepoTaskId, type RepoTaskIdResolution } from "./repoTaskIds.js";
@@ -41,10 +33,7 @@ export type TaskUseCases = {
   readonly listTasks: (input: ListTasksInput) => readonly TaskSummary[];
   readonly listActionableTasks: () => readonly TaskSummary[];
   readonly getTaskById: (taskId: PublicTaskId) => TaskRecord | undefined;
-  readonly getLatestTaskValidationFindings: (
-    taskId: PublicTaskId,
-  ) => TaskLatestValidationFindings | undefined;
-  readonly listTaskValidationRuns: (taskId: PublicTaskId) => TaskValidationRunHistory | undefined;
+  readonly getTaskForInspection: (taskId: PublicTaskId) => StoredTaskRecord | undefined;
   readonly getTaskContextById: (taskId: PublicTaskId) => TaskContext | undefined;
   readonly createTaskContextDraft: (taskId: PublicTaskId) => TaskContextDraft | undefined;
   readonly applyTaskContextDraft: (
@@ -113,18 +102,6 @@ export type ApplyTaskContextDraftResult =
       readonly path: string;
     };
 
-export type TaskLatestValidationFindings = {
-  readonly task: TaskRecord;
-  readonly validationRun: ValidationRunRecord | null;
-  readonly findings: readonly ValidationRunFindingRecord[];
-  readonly toolingFailures: readonly ValidationRunToolingErrorRecord[];
-};
-
-export type TaskValidationRunHistory = {
-  readonly task: TaskRecord;
-  readonly validationRuns: readonly ValidationRunSummaryRecord[];
-};
-
 export type RepoTaskStateTransitionResult =
   | {
       readonly ok: true;
@@ -184,10 +161,7 @@ export const openTaskUseCases = (
     listTasks: stores.taskStore.listTasks,
     listActionableTasks: stores.taskStore.listActionableTasks,
     getTaskById: (taskId) => getTaskById(stores.taskStore, stores.validationRunStore, taskId),
-    getLatestTaskValidationFindings: (taskId) =>
-      getLatestTaskValidationFindings(stores.taskStore, stores.validationRunStore, taskId),
-    listTaskValidationRuns: (taskId) =>
-      listTaskValidationRuns(stores.taskStore, stores.validationRunStore, taskId),
+    getTaskForInspection: stores.taskStore.getTaskById,
     getTaskContextById: stores.taskStore.getTaskContextById,
     createTaskContextDraft: (taskId) => createTaskContextDraft(context, stores.taskStore, taskId),
     applyTaskContextDraft: (input) =>
@@ -268,57 +242,6 @@ const getTaskById = (
   }
 
   return withLatestValidationRun(task, validationRunStore.getLatestValidationRunIdForTask(taskId));
-};
-
-const getLatestTaskValidationFindings = (
-  taskStore: TaskStore,
-  validationRunStore: ValidationRunStore,
-  taskId: PublicTaskId,
-): TaskLatestValidationFindings | undefined => {
-  const task = getTaskById(taskStore, validationRunStore, taskId);
-
-  if (task === undefined) {
-    return undefined;
-  }
-
-  if (task.latestValidationRun === null) {
-    return {
-      task,
-      validationRun: null,
-      findings: [],
-      toolingFailures: [],
-    };
-  }
-
-  const validationRun = validationRunStore.getValidationRunById(task.latestValidationRun);
-
-  if (validationRun === undefined) {
-    throw new Error(`Latest Validation Run was not found: ${task.latestValidationRun}`);
-  }
-
-  return {
-    task,
-    validationRun,
-    findings: validationRunStore.listValidationRunFindings(validationRun.id),
-    toolingFailures: validationRunStore.listValidationRunToolingErrors(validationRun.id),
-  };
-};
-
-const listTaskValidationRuns = (
-  taskStore: TaskStore,
-  validationRunStore: ValidationRunStore,
-  taskId: PublicTaskId,
-): TaskValidationRunHistory | undefined => {
-  const task = getTaskById(taskStore, validationRunStore, taskId);
-
-  if (task === undefined) {
-    return undefined;
-  }
-
-  return {
-    task,
-    validationRuns: validationRunStore.listValidationRunSummariesForTask(taskId),
-  };
 };
 
 const transitionTaskState = (

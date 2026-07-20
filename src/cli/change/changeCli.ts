@@ -10,6 +10,7 @@ import {
   type CliResult,
 } from "../../cliResults.js";
 import { readHandoffFile, type HandoffFileReadError } from "../../change/handoffFile.js";
+import { loadChangeInspection } from "../../localChange/loadChangeInspection.js";
 import { loadChangeUseCases } from "../../localChange/changeUseCases.js";
 import { loadChangeSubmit } from "../../localChange/loadChangeSubmit.js";
 import type { InteractiveSessionHost } from "../../change/interactiveSessionHost.js";
@@ -45,6 +46,22 @@ export const routeChange = (
             description: "Run or retry Repository Preparation.",
           },
           {
+            command: "by change list [--all]",
+            description: "List Changes oldest first.",
+          },
+          {
+            command: "by change show <change-id>",
+            description: "Show Change implementation, validation, and delivery facts.",
+          },
+          {
+            command: "by change findings <change-id>",
+            description: "Show Findings for the current Change Candidate.",
+          },
+          {
+            command: "by change validation-runs <change-id>",
+            description: "List Validation Run History for a Change.",
+          },
+          {
             command: "by change submit <change-id>",
             description: "Validate and publish a ready Change.",
           },
@@ -64,6 +81,10 @@ export const routeChange = (
   const subcommand = args[0];
   if (subcommand === "start") return runStart(args.slice(1), environment);
   if (subcommand === "prepare") return runPrepare(args.slice(1), environment);
+  if (subcommand === "list") return runList(args.slice(1), environment);
+  if (subcommand === "show") return runShow(args.slice(1), environment);
+  if (subcommand === "findings") return runFindings(args.slice(1), environment);
+  if (subcommand === "validation-runs") return runValidationRuns(args.slice(1), environment);
   if (subcommand === "implement") return runImplement(args.slice(1), environment);
   if (subcommand === "submit") return runSubmit(args.slice(1), environment);
   if (subcommand === "reconcile") return runReconcile(args.slice(1), environment);
@@ -134,6 +155,211 @@ const runStart = (
       return stateStoreUnavailable("repository");
     }
   });
+};
+
+const runList = (
+  args: readonly string[],
+  environment: ChangeCommandEnvironment,
+): Effect.Effect<CliResult> => {
+  if (args.length === 1 && args[0] === "--help") {
+    return Effect.succeed(
+      success({
+        usage: "by change list [--all]",
+        flags: withGlobalHelpFlags([{ flag: "--all", description: "Include closed Changes." }]),
+        examples: ["by change list", "by change list --all", "by change list --output json"],
+      }),
+    );
+  }
+  if (args.length > 1 || (args.length === 1 && args[0] !== "--all")) {
+    return Effect.succeed(
+      usageError({
+        code: "invalid_arguments",
+        message: "Change List accepts only an optional --all flag.",
+        help: ["Run `by change list [--all]`."],
+      }),
+    );
+  }
+  const loaded = loadChangeInspection({
+    cwd: environment.cwd,
+    migrationTimestamp: () => environment.now().toISOString(),
+  });
+  if (!loaded.ok) return Effect.succeed(loadError(loaded.error));
+  try {
+    const now = environment.now().getTime();
+    return Effect.succeed(
+      success({
+        changes: loaded.inspection
+          .list({
+            repositoryCommonDirectory: loaded.commonDirectory,
+            includeClosed: args[0] === "--all",
+          })
+          .map((change) => ({
+            id: change.id,
+            taskId: change.taskId,
+            state: change.state,
+            createdAt: change.createdAt,
+            ...(change.state === "open"
+              ? {
+                  ageSeconds: Math.max(0, Math.floor((now - Date.parse(change.createdAt)) / 1_000)),
+                }
+              : {}),
+          })),
+      }),
+    );
+  } catch {
+    return Effect.succeed(stateStoreUnavailable("repository"));
+  }
+};
+
+const runShow = (
+  args: readonly string[],
+  environment: ChangeCommandEnvironment,
+): Effect.Effect<CliResult> => {
+  if (args.length === 1 && args[0] === "--help") {
+    return Effect.succeed(
+      success({
+        usage: "by change show <change-id>",
+        arguments: [{ argument: "<change-id>", description: "Change ID returned by Change Start" }],
+        flags: withGlobalHelpFlags(),
+        examples: ["by change show <change-id>", "by change show <change-id> --output json"],
+      }),
+    );
+  }
+  if (args.length !== 1 || args[0] === undefined || args[0].startsWith("-")) {
+    return Effect.succeed(
+      usageError({
+        code: "invalid_arguments",
+        message: "Change Show requires one Change ID.",
+        help: ["Run `by change show <change-id>`."],
+      }),
+    );
+  }
+  const loaded = loadChangeInspection({
+    cwd: environment.cwd,
+    migrationTimestamp: () => environment.now().toISOString(),
+  });
+  if (!loaded.ok) return Effect.succeed(loadError(loaded.error));
+  try {
+    const detail = loaded.inspection.inspect(args[0]);
+    if (detail === undefined) return Effect.succeed(changeNotFound());
+    return Effect.succeed(
+      success({
+        change: changeInspectionView(detail.change),
+        currentCandidate: detail.currentCandidate,
+        currentValidationRun: detail.currentValidationRun,
+        findings: detail.findings,
+        toolingFailures: detail.toolingFailures,
+        pullRequest: detail.change.publication?.pullRequest ?? null,
+        cleanup: detail.change.cleanup,
+      }),
+    );
+  } catch {
+    return Effect.succeed(stateStoreUnavailable("repository"));
+  }
+};
+
+const changeInspectionView = (change: ChangeRecord) => ({
+  id: change.id,
+  taskId: change.taskId,
+  state: change.state,
+  readiness: change.readiness,
+  branchRef: change.branchRef,
+  baseRef: change.baseRef,
+  worktreePath: change.worktreePath,
+  startingCommit: change.startingCommit,
+  createdAt: change.createdAt,
+  closedAt: change.closedAt,
+});
+
+const changeNotFound = (): CliResult =>
+  runtimeError({
+    code: "change_not_found",
+    message: "Change was not found.",
+    help: ["Use a Change ID returned by `by change list --all --output json`."],
+  });
+
+const runFindings = (
+  args: readonly string[],
+  environment: ChangeCommandEnvironment,
+): Effect.Effect<CliResult> => {
+  const changeId = changeIdArgument(args, "findings");
+  if (!changeId.ok) return Effect.succeed(changeId.result);
+  const loaded = loadChangeInspection({
+    cwd: environment.cwd,
+    migrationTimestamp: () => environment.now().toISOString(),
+  });
+  if (!loaded.ok) return Effect.succeed(loadError(loaded.error));
+  try {
+    const result = loaded.inspection.findings(changeId.changeId);
+    if (result === undefined) return Effect.succeed(changeNotFound());
+    return Effect.succeed(
+      success({
+        change: changeInspectionView(result.change),
+        candidate: result.candidate,
+        validationRun: result.validationRun,
+        findings: result.findings,
+        toolingFailures: result.toolingFailures,
+        count: result.findings.length,
+      }),
+    );
+  } catch {
+    return Effect.succeed(stateStoreUnavailable("repository"));
+  }
+};
+
+const runValidationRuns = (
+  args: readonly string[],
+  environment: ChangeCommandEnvironment,
+): Effect.Effect<CliResult> => {
+  const changeId = changeIdArgument(args, "validation-runs");
+  if (!changeId.ok) return Effect.succeed(changeId.result);
+  const loaded = loadChangeInspection({
+    cwd: environment.cwd,
+    migrationTimestamp: () => environment.now().toISOString(),
+  });
+  if (!loaded.ok) return Effect.succeed(loadError(loaded.error));
+  try {
+    const result = loaded.inspection.validationRuns(changeId.changeId);
+    if (result === undefined) return Effect.succeed(changeNotFound());
+    return Effect.succeed(success({ validationRuns: result.validationRuns }));
+  } catch {
+    return Effect.succeed(stateStoreUnavailable("repository"));
+  }
+};
+
+type ChangeIdArgumentResult =
+  | { readonly ok: true; readonly changeId: string }
+  | { readonly ok: false; readonly result: CliResult };
+
+const changeIdArgument = (
+  args: readonly string[],
+  command: "findings" | "validation-runs",
+): ChangeIdArgumentResult => {
+  if (args.length === 1 && args[0] === "--help") {
+    return {
+      ok: false,
+      result: success({
+        usage: `by change ${command} <change-id>`,
+        arguments: [{ argument: "<change-id>", description: "Change ID returned by Change Start" }],
+        flags: withGlobalHelpFlags(),
+        examples: [
+          `by change ${command} <change-id>`,
+          `by change ${command} <change-id> --output json`,
+        ],
+      }),
+    };
+  }
+  if (args.length !== 1 || args[0] === undefined || args[0].startsWith("-")) {
+    return {
+      ok: false,
+      result: usageError({
+        code: "invalid_arguments",
+        message: `Change ${command === "findings" ? "Findings" : "Validation Runs"} requires one Change ID.`,
+        help: [`Run \`by change ${command} <change-id>\`.`],
+      }),
+    };
+  }
+  return { ok: true, changeId: args[0] };
 };
 
 const runPrepare = (

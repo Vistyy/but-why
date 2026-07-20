@@ -33,6 +33,8 @@ export const openSqliteCandidateValidationRunStore = (
   complete: (runInput) => withStateDatabase(input, (database) => complete(database, runInput)),
   getRunById: (validationRunId) =>
     withStateDatabase(input, (database) => getRunById(database, validationRunId)),
+  listRunsForCandidate: (candidateId) =>
+    withStateDatabase(input, (database) => listRunsForCandidate(database, candidateId)),
   recordWorkspaceSetup: (setup) =>
     withStateDatabase(input, (database) => recordWorkspaceSetup(database, setup)),
   recordToolingFailure: (failure) =>
@@ -137,6 +139,20 @@ const getRunById = (
     ? undefined
     : { ...row, policy: decodeSqliteCandidateValidationPolicy(row.policySnapshot) };
 };
+
+const listRunsForCandidate = (
+  database: DatabaseSync,
+  candidateId: string,
+): readonly CandidateValidationRunRecord[] =>
+  queryAll<CandidateValidationRunRow>(
+    database,
+    `SELECT id, candidate_id AS candidateId, policy_snapshot AS policySnapshot,
+            state, outcome, created_at AS createdAt, updated_at AS updatedAt
+     FROM candidate_validation_runs
+     WHERE candidate_id = ?
+     ORDER BY created_at ASC, id ASC`,
+    [candidateId],
+  ).map((row) => ({ ...row, policy: decodeSqliteCandidateValidationPolicy(row.policySnapshot) }));
 
 type CandidateValidationRunRow = Omit<CandidateValidationRunRecord, "policy"> & {
   readonly policySnapshot: string;

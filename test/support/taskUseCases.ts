@@ -12,8 +12,10 @@ export const fakeTaskUseCases = (overrides: Partial<TaskUseCases> = {}): TaskUse
   listTasks: () => unexpected("listTasks"),
   listActionableTasks: () => unexpected("listActionableTasks"),
   getTaskById: () => unexpected("getTaskById"),
-  getLatestTaskValidationFindings: () => unexpected("getLatestTaskValidationFindings"),
-  listTaskValidationRuns: () => unexpected("listTaskValidationRuns"),
+  getTaskForInspection: (taskId) => {
+    const supplied = overrides.getTaskForInspection ?? overrides.getTaskById;
+    return supplied === undefined ? unexpected("getTaskForInspection") : supplied(taskId);
+  },
   getTaskContextById: () => unexpected("getTaskContextById"),
   createTaskContextDraft: () => unexpected("createTaskContextDraft"),
   applyTaskContextDraft: () => unexpected("applyTaskContextDraft"),

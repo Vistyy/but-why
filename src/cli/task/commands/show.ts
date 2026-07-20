@@ -1,6 +1,7 @@
 import type { CliResult } from "../../../cliResults.js";
 import { stateStoreUnavailable, success } from "../../../cliResults.js";
 import { withGlobalHelpFlags } from "../../../cliHelp.js";
+import { loadChangeInspection } from "../../../localChange/loadChangeInspection.js";
 import { resolveTaskIdArg, taskNotFound, type TaskCommandEnvironment } from "../taskCliSupport.js";
 
 export const runShowCommand = (
@@ -28,25 +29,34 @@ export const runShowCommand = (
   }
 
   try {
-    const task = taskId.tasks.getTaskById(taskId.taskId);
+    const task = taskId.tasks.getTaskForInspection(taskId.taskId);
 
     if (task === undefined) {
       return taskNotFound(taskId.taskId);
     }
 
+    const change =
+      environment.taskUseCases === undefined
+        ? loadChangeInspection({
+            cwd: environment.cwd,
+            migrationTimestamp: () => environment.now().toISOString(),
+          })
+        : undefined;
+    if (change !== undefined && !change.ok) return stateStoreUnavailable(taskId.tasks.taskPrefix);
+
     return success({
       task: {
         id: task.id,
         title: task.title,
+        description: task.description,
         state: task.state,
         createdAt: task.createdAt,
         updatedAt: task.updatedAt,
-        branch: task.branch,
-        latestValidationRun: task.latestValidationRun,
-        tokenTotals: null,
         commentCount: task.commentCount,
         prerequisites: task.prerequisites,
         dependents: task.dependents,
+        change:
+          change === undefined ? null : change.inspection.inspectTaskProjection(taskId.taskId),
       },
     });
   } catch {

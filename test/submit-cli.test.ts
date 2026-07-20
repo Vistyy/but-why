@@ -103,7 +103,7 @@ describe("by submit CLI", () => {
         expect(readFileSync(join(root, ".gitignore"), "utf8")).toContain(".sandcastle/worktrees/");
 
         expect((yield* runByInProcessEffect(root, ["task", "show", "BY-1"])).stdout).toContain(
-          `state: validating\n  createdAt: "${firstNow}"\n  updatedAt: "${thirdNow}"\n  branch: feature/by-1\n  latestValidationRun: ${firstTaskValidationRunId}`,
+          `state: validating\n  createdAt: "${firstNow}"\n  updatedAt: "${thirdNow}"\n  commentCount: 2`,
         );
 
         expect(validationRunStore(root).getValidationRunById(firstTaskValidationRunId)).toEqual({

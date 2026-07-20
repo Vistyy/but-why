@@ -9,10 +9,12 @@ import type {
 export type ChangeStore = {
   readonly createChange: (input: CreateChangeInput) => CreateChangeResult;
   readonly getChangeById: (changeId: string) => ChangeRecord | undefined;
+  readonly getChangeByTaskId: (taskId: string) => ChangeRecord | undefined;
   readonly getChangeByRepositoryBranch: (
     repositoryCommonDirectory: string,
     branchRef: string,
   ) => ChangeRecord | undefined;
+  readonly listChanges: (input: ListChangesInput) => readonly ChangeRecord[];
   readonly listChangesForReconciliation: (
     repositoryCommonDirectory: string,
   ) => readonly ChangeRecord[];
@@ -32,6 +34,11 @@ export type CreateChangeInput = {
   readonly repositoryCommonDirectory: string;
   readonly branchRef: string;
   readonly now: string;
+};
+
+export type ListChangesInput = {
+  readonly repositoryCommonDirectory: string;
+  readonly includeClosed: boolean;
 };
 
 export type CloseChangeInput = {

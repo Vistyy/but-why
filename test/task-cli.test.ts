@@ -368,15 +368,14 @@ help[1]: "Run \`by task create --title \\"...\\" --description-file <file>\` to 
       expect(result.stdout).toBe(`task:
   id: BY-1
   title: Inspect task
+  description: Description
   state: needs_input
   createdAt: "${firstNow}"
   updatedAt: "${secondNow}"
-  branch: null
-  latestValidationRun: null
-  tokenTotals: null
   commentCount: 0
   prerequisites: []
-  dependents: []`);
+  dependents: []
+  change: null`);
     }),
   );
 
@@ -654,15 +653,14 @@ help[1]: "Run \`by task create --title \\"...\\" --description-file <file>\` to 
         expect((yield* runByInProcessEffect(root, ["task", "show", "BY-1"])).stdout).toBe(`task:
   id: BY-1
   title: Commented task
+  description: Description for Commented task
   state: todo
   createdAt: "${firstNow}"
   updatedAt: "2026-06-30T12:15:00.000Z"
-  branch: null
-  latestValidationRun: null
-  tokenTotals: null
   commentCount: 2
   prerequisites: []
-  dependents: []`);
+  dependents: []
+  change: null`);
         expect((yield* runByInProcessEffect(root, ["task", "context", "BY-1"])).stdout).toBe(`task:
   id: BY-1
   title: Commented task

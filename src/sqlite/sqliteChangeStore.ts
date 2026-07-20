@@ -70,10 +70,14 @@ export const openSqliteChangeStore = (input: SqliteStoreInput): ChangeStore => (
     withStateDatabase(input, (database) => createChange(database, changeInput)),
   getChangeById: (changeId) =>
     withStateDatabase(input, (database) => getChangeById(database, changeId)),
+  getChangeByTaskId: (taskId) =>
+    withStateDatabase(input, (database) => getChangeByTaskId(database, taskId)),
   getChangeByRepositoryBranch: (repositoryCommonDirectory, branchRef) =>
     withStateDatabase(input, (database) =>
       getChangeByRepositoryBranch(database, repositoryCommonDirectory, branchRef),
     ),
+  listChanges: (listInput) =>
+    withStateDatabase(input, (database) => listChanges(database, listInput)),
   listChangesForReconciliation: (repositoryCommonDirectory) =>
     withStateDatabase(input, (database) =>
       listChangesForReconciliation(database, repositoryCommonDirectory),
@@ -424,6 +428,13 @@ const getChangeById = (database: DatabaseSync, changeId: string): ChangeRecord |
     queryOne<ChangeRow>(database, `SELECT ${changeColumns} FROM changes WHERE id = ?`, [changeId]),
   );
 
+const getChangeByTaskId = (database: DatabaseSync, taskId: string): ChangeRecord | undefined =>
+  mapChangeRow(
+    queryOne<ChangeRow>(database, `SELECT ${changeColumns} FROM changes WHERE task_id = ?`, [
+      taskId,
+    ]),
+  );
+
 const getChangeByRepositoryBranch = (
   database: DatabaseSync,
   repositoryCommonDirectory: string,
@@ -436,6 +447,24 @@ const getChangeByRepositoryBranch = (
       [repositoryCommonDirectory, branchRef],
     ),
   );
+
+const listChanges = (
+  database: DatabaseSync,
+  input: import("../change/changeStore.js").ListChangesInput,
+): readonly ChangeRecord[] =>
+  queryAll<ChangeRow>(
+    database,
+    `
+      SELECT ${changeColumns}
+      FROM changes
+      WHERE repository_common_directory = ?
+        AND (? = 1 OR state = 'open')
+      ORDER BY created_at ASC, id ASC
+    `,
+    [input.repositoryCommonDirectory, input.includeClosed ? 1 : 0],
+  )
+    .map(mapChangeRow)
+    .filter((change): change is ChangeRecord => change !== undefined);
 
 const listChangesForReconciliation = (
   database: DatabaseSync,

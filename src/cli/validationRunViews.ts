@@ -7,56 +7,12 @@ import type {
 } from "../candidateValidation/inspectCandidateValidationRun.js";
 import type { ChangeRecord } from "../change/change.js";
 import type { StructuredObject } from "../output/structured.js";
-import type { TaskRecord } from "../task/task.js";
 import {
   validationPhase,
   type ValidationRunFindingRecord,
-  type ValidationRunRecord,
 } from "../validationRun/validationRun.js";
 
-export const taskBriefView = (task: TaskRecord): StructuredObject => ({
-  id: task.id,
-  title: task.title,
-  state: task.state,
-});
-
-export const validationRunBriefView = (run: ValidationRunRecord): StructuredObject => ({
-  id: run.id,
-  taskValidationNumber: run.taskValidationNumber,
-  status: run.status,
-  branch: run.branch,
-  commit: run.commitSha,
-  createdAt: run.createdAt,
-  updatedAt: run.updatedAt,
-});
-
-type ValidationRunSummaryViewInput = {
-  readonly id: string;
-  readonly taskValidationNumber: number;
-  readonly status: string;
-  readonly branch: string;
-  readonly commitSha: string;
-  readonly findingCount: number;
-  readonly toolingFailureCount: number;
-  readonly createdAt: string;
-  readonly updatedAt: string;
-};
-
-export const validationRunSummaryView = (run: ValidationRunSummaryViewInput): StructuredObject => ({
-  id: run.id,
-  taskValidationNumber: run.taskValidationNumber,
-  status: run.status,
-  branch: run.branch,
-  commit: run.commitSha,
-  findingCount: run.findingCount,
-  toolingFailureCount: run.toolingFailureCount,
-  createdAt: run.createdAt,
-  updatedAt: run.updatedAt,
-});
-
-export const validationRunFindingView = (
-  finding: ValidationRunFindingRecord,
-): StructuredObject => ({
+const validationRunFindingView = (finding: ValidationRunFindingRecord): StructuredObject => ({
   id: finding.id,
   validationRunId: finding.validationRunId,
   phase: finding.phase,
