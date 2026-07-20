@@ -33,12 +33,12 @@ Candidate validation integration tests execute Prepare, Checks, Acceptance Revie
 
 ## Acceptance criteria
 
-- [ ] Candidate validation test helpers expose Effect programs or Layers without direct `Effect.run*` calls.
-- [ ] Candidate validation, Task-backed Acceptance Review, and Check tests use `it.effect` or `it.scoped`.
-- [ ] Validation Workspace lifecycle tests execute through `it.scoped` and preserve cleanup and interruption assertions.
-- [ ] Candidate validation Layer tests provide dependencies through test Layers.
-- [ ] Virtual-time tests use `TestClock` rather than wall-clock waiting.
-- [ ] Existing Candidate validation outcomes, Findings, Tooling Failures, revision, cleanup, interruption, and timing assertions remain unchanged.
+- [x] Candidate validation test helpers expose Effect programs or Layers without direct `Effect.run*` calls.
+- [x] Candidate validation, Task-backed Acceptance Review, and Check tests use `it.effect` or `it.scoped`.
+- [x] Validation Workspace lifecycle tests execute through `it.scoped` and preserve cleanup and interruption assertions.
+- [x] Candidate validation Layer tests provide dependencies through test Layers.
+- [x] Virtual-time tests use `TestClock` rather than wall-clock waiting.
+- [x] Existing Candidate validation outcomes, Findings, Tooling Failures, revision, cleanup, interruption, and timing assertions remain unchanged.
 
 ## Blocked by
 
