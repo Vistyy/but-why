@@ -4,7 +4,7 @@ import { join } from "node:path";
 
 import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
-import { afterEach, describe } from "vitest";
+import { afterEach, describe, it as ordinaryIt } from "vitest";
 
 import { openRepoLocalStores } from "../src/init/repoLocalStores.js";
 import { loadRepoLocalContext } from "../src/init/repoContext.js";
@@ -284,7 +284,7 @@ describe("by change start managed worktree", () => {
     }),
   );
 
-  it.effect("removes the Task Start route and supports executable JSON output", () =>
+  it.effect("removes the Task Start route", () =>
     Effect.gen(function* () {
       const root = initializedRepository();
       createApprovedTask(root);
@@ -298,23 +298,28 @@ describe("by change start managed worktree", () => {
       ]);
       expect(retired.status).toBe(2);
       expect(JSON.parse(retired.stdout)).toMatchObject({ error: { code: "unknown_command" } });
-
-      const executable = runByWithEnv(
-        root,
-        { BUT_WHY_NOW: now },
-        "change",
-        "start",
-        "--task",
-        "BY-1",
-        "--output",
-        "json",
-      );
-      expect(executable.status).toBe(0);
-      expect(JSON.parse(executable.stdout)).toMatchObject({
-        change: { taskId: "BY-1", readiness: "ready" },
-      });
     }),
   );
+
+  ordinaryIt("supports executable JSON output for Change Start", () => {
+    const root = initializedRepository();
+    createApprovedTask(root);
+
+    const executable = runByWithEnv(
+      root,
+      { BUT_WHY_NOW: now },
+      "change",
+      "start",
+      "--task",
+      "BY-1",
+      "--output",
+      "json",
+    );
+    expect(executable.status).toBe(0);
+    expect(JSON.parse(executable.stdout)).toMatchObject({
+      change: { taskId: "BY-1", readiness: "ready" },
+    });
+  });
 });
 
 type ChangeOutput = {

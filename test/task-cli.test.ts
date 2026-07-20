@@ -826,14 +826,48 @@ help[1]: "Run \`by task create --title \\"...\\" --description-file <file>\` to 
     }),
   );
 
-  it.effect("persists Task comments across CLI processes", () =>
-    Effect.gen(function* () {
-      const root = initializedRepo();
+  ordinaryIt("persists Task comments across CLI processes", async () => {
+    const root = initializedRepo();
 
-      createTask(root, firstNow, "Persistent comments");
-      writeFileSync(join(root, "comment.md"), "Persist me exactly\n");
+    createTask(root, firstNow, "Persistent comments");
+    writeFileSync(join(root, "comment.md"), "Persist me exactly\n");
 
-      const appendResult = yield* Effect.promise(() =>
+    const appendResult = await runByAsync(
+      root,
+      { BUT_WHY_NOW: secondNow },
+      "task",
+      "comment",
+      "BY-1",
+      "--file",
+      "comment.md",
+    );
+
+    expect(appendResult.status).toBe(0);
+    expect(appendResult.stderr).toBe("");
+    expect(appendResult.stdout).toBe(`task:
+  id: BY-1
+  commentCount: 1`);
+
+    const contextResult = await runByAsync(root, {}, "task", "context", "BY-1");
+    expect(contextResult.stdout).toBe(`task:
+  id: BY-1
+  title: Persistent comments
+  description: Description for Persistent comments
+  comments[1]: "Persist me exactly\\n"`);
+  });
+
+  ordinaryIt("preserves all concurrent Task comment appends", async () => {
+    const root = initializedRepo();
+    const commentCount = concurrentWriterCount;
+
+    createTask(root, firstNow, "Concurrent comments");
+
+    for (let index = 0; index < commentCount; index += 1) {
+      writeFileSync(join(root, `comment-${index}.md`), `Comment ${index}`);
+    }
+
+    const results = await Promise.all(
+      Array.from({ length: commentCount }, (_value, index) =>
         runByAsync(
           root,
           { BUT_WHY_NOW: secondNow },
@@ -841,63 +875,23 @@ help[1]: "Run \`by task create --title \\"...\\" --description-file <file>\` to 
           "comment",
           "BY-1",
           "--file",
-          "comment.md",
+          `comment-${index}.md`,
         ),
-      );
+      ),
+    );
 
-      expect(appendResult.status).toBe(0);
-      expect(appendResult.stderr).toBe("");
-      expect(appendResult.stdout).toBe(`task:
-  id: BY-1
-  commentCount: 1`);
-      expect((yield* runByInProcessEffect(root, ["task", "context", "BY-1"])).stdout).toBe(`task:
-  id: BY-1
-  title: Persistent comments
-  description: Description for Persistent comments
-  comments[1]: "Persist me exactly\\n"`);
-    }),
-  );
+    expect(results.every((result) => result.status === 0)).toBe(true);
 
-  it.effect("preserves all concurrent Task comment appends", () =>
-    Effect.gen(function* () {
-      const root = initializedRepo();
-      const commentCount = concurrentWriterCount;
+    const comments = taskStore(root).getTaskContextById(publicTaskId("BY-1"))?.comments ?? [];
 
-      createTask(root, firstNow, "Concurrent comments");
+    expect(comments).toHaveLength(commentCount);
+    expect(new Set(comments)).toEqual(
+      new Set(Array.from({ length: commentCount }, (_value, index) => `Comment ${index}`)),
+    );
 
-      for (let index = 0; index < commentCount; index += 1) {
-        writeFileSync(join(root, `comment-${index}.md`), `Comment ${index}`);
-      }
-
-      const results = yield* Effect.promise(() =>
-        Promise.all(
-          Array.from({ length: commentCount }, (_value, index) =>
-            runByAsync(
-              root,
-              { BUT_WHY_NOW: secondNow },
-              "task",
-              "comment",
-              "BY-1",
-              "--file",
-              `comment-${index}.md`,
-            ),
-          ),
-        ),
-      );
-
-      expect(results.every((result) => result.status === 0)).toBe(true);
-
-      const comments = taskStore(root).getTaskContextById(publicTaskId("BY-1"))?.comments ?? [];
-
-      expect(comments).toHaveLength(commentCount);
-      expect(new Set(comments)).toEqual(
-        new Set(Array.from({ length: commentCount }, (_value, index) => `Comment ${index}`)),
-      );
-      expect((yield* runByInProcessEffect(root, ["task", "show", "BY-1"])).stdout).toContain(
-        `commentCount: ${commentCount}`,
-      );
-    }),
-  );
+    const showResult = await runByAsync(root, {}, "task", "show", "BY-1");
+    expect(showResult.stdout).toContain(`commentCount: ${commentCount}`);
+  });
 
   it.effect("serializes missing Task IDs before command lookup", () =>
     Effect.gen(function* () {
