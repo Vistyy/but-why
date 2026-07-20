@@ -1,5 +1,14 @@
 # Enforce Effect test execution
 
+## Status
+
+Done.
+
+## Completion
+
+- Implementation: `c87b2e1a7183df2df84fb9db418d49828ec0bde2`
+- Review corrections: `bdf66cdca38ec06287de8bfe91e76fdef010e89f`
+
 ## Specification
 
 - `docs/issues/036-establish-effect-adoption-baseline.md`
