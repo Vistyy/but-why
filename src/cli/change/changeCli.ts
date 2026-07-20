@@ -11,12 +11,15 @@ import {
 } from "../../cliResults.js";
 import { readHandoffFile, type HandoffFileReadError } from "../../change/handoffFile.js";
 import { loadChangeUseCases } from "../../localChange/changeUseCases.js";
+import { loadChangeSubmit } from "../../localChange/loadChangeSubmit.js";
 import type { InteractiveSessionHost } from "../../change/interactiveSessionHost.js";
 import type { PublicTaskId } from "../../task/taskId.js";
 import type { ChangeRecord } from "../../change/change.js";
+import type { ChangeSubmitResult } from "../../change/submitChange.js";
 
 export type ChangeCommandEnvironment = {
   readonly cwd: string;
+  readonly globalConfigPath: string;
   readonly now: () => Date;
   readonly interactiveSessionHost?: InteractiveSessionHost;
   readonly interactiveSessionPath?: string;
@@ -40,6 +43,10 @@ export const routeChange = (
             description: "Run or retry Repository Preparation.",
           },
           {
+            command: "by change submit <change-id>",
+            description: "Validate and publish a ready Change.",
+          },
+          {
             command: "by change reconcile [<change-id>]",
             description: "Read owned pull requests and clean up terminal Changes.",
           },
@@ -56,6 +63,7 @@ export const routeChange = (
   if (subcommand === "start") return runStart(args.slice(1), environment);
   if (subcommand === "prepare") return runPrepare(args.slice(1), environment);
   if (subcommand === "implement") return runImplement(args.slice(1), environment);
+  if (subcommand === "submit") return runSubmit(args.slice(1), environment);
   if (subcommand === "reconcile") return runReconcile(args.slice(1), environment);
   return Effect.succeed(
     usageError({
@@ -303,6 +311,124 @@ const handoffFileError = (error: HandoffFileReadError): CliResult => {
         help: ["Write a non-empty handoff file, then retry Change Implement."],
       });
   }
+};
+
+const runSubmit = (
+  args: readonly string[],
+  environment: ChangeCommandEnvironment,
+): Effect.Effect<CliResult> => {
+  if (args.length === 1 && args[0] === "--help") {
+    return Effect.succeed(
+      success({
+        usage: "by change submit <change-id>",
+        arguments: [{ argument: "<change-id>", description: "Ready Change ID" }],
+        flags: withGlobalHelpFlags(),
+        examples: ["by change submit <change-id>", "by change submit <change-id> --output json"],
+      }),
+    );
+  }
+  if (args.length !== 1 || args[0] === undefined || args[0].startsWith("-")) {
+    return Effect.succeed(
+      usageError({
+        code: "invalid_arguments",
+        message: "Change Submit requires one Change ID.",
+        help: ["Run `by change submit <change-id>`."],
+      }),
+    );
+  }
+  const loaded = loadChangeSubmit({
+    cwd: environment.cwd,
+    globalConfigPath: environment.globalConfigPath,
+    migrationTimestamp: () => environment.now().toISOString(),
+  });
+  if (!loaded.ok) return Effect.succeed(loadError(loaded.error));
+  return Effect.map(
+    loaded.submit.submit({ changeId: args[0], now: environment.now().toISOString() }),
+    submitResult,
+  );
+};
+
+const submitResult = (result: ChangeSubmitResult): CliResult => {
+  if (result.ok) {
+    if (result.status === "nothing_to_submit") {
+      return success({
+        changeId: result.changeId,
+        status: result.status,
+        help: [`Run \`by change cancel ${result.changeId}\` to cancel this unchanged Change.`],
+      });
+    }
+    if (result.status === "reconciled")
+      return success({ status: result.status, change: result.change });
+    return success({
+      changeId: result.changeId,
+      candidateId: result.candidateId,
+      validationRunId: result.validationRunId,
+      status: result.status,
+      created: result.created,
+      pullRequest: result.pullRequest,
+    });
+  }
+  if (result.code === "change_not_found" || result.code === "change_not_open") {
+    return runtimeError({
+      code: result.code,
+      message: result.code === "change_not_found" ? "Change was not found." : "Change is closed.",
+      help: ["Use a Change ID returned by `by change start --output json`."],
+    });
+  }
+  if (result.code === "change_not_ready") {
+    return runtimeError({
+      code: result.code,
+      message: "Change is not ready for Submission.",
+      details: { changeId: result.change.id, readiness: result.change.readiness },
+      help: [`Run \`by change prepare ${result.change.id}\`, then retry Change Submit.`],
+    });
+  }
+  if (result.code === "dirty_work") {
+    return runtimeError({
+      code: result.code,
+      message: "The Change Managed Worktree has uncommitted Git-visible state.",
+      help: ["Commit or remove the visible changes, then retry Change Submit."],
+    });
+  }
+  if (result.code === "validation_findings") {
+    return runtimeError({
+      code: result.code,
+      message: "Validation produced blocking Findings.",
+      details: {
+        changeId: result.changeId,
+        candidateId: result.candidateId,
+        validationRunId: result.validationRunId,
+        findings: result.findings,
+      },
+      help: ["Fix the Findings in the Managed Worktree, commit them, then retry Change Submit."],
+    });
+  }
+  if (result.code === "validation_tooling_failed") {
+    return runtimeError({
+      code: result.code,
+      message: "Candidate validation tooling failed.",
+      details: {
+        changeId: result.changeId,
+        candidateId: result.candidateId,
+        validationRunId: result.validationRunId,
+        toolingFailures: result.toolingFailures,
+      },
+      help: ["Fix the validation tooling failure, then retry Change Submit."],
+    });
+  }
+  if (result.code === "validation_policy_invalid") {
+    return runtimeError({
+      code: result.code,
+      message: result.message,
+      help: ["Fix Repo Config or Global Config, then retry Change Submit."],
+    });
+  }
+  return runtimeError({
+    code: result.code,
+    message: "Change Submit could not validate or publish the current Candidate.",
+    ...(result.code === "reconciliation_rejected" ? { details: { change: result.change } } : {}),
+    help: ["Inspect the Change, validation evidence, and owned pull request, then retry."],
+  });
 };
 
 const runReconcile = (

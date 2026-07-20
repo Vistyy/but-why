@@ -1,5 +1,7 @@
 import { spawnSync } from "node:child_process";
 
+import type { SpawnSyncOptionsWithStringEncoding } from "node:child_process";
+
 import type { ChangePublicationTarget } from "../change/change.js";
 import type {
   GitHubPullRequest,
@@ -15,12 +17,13 @@ export type PublicationCommandRunner = (args: readonly string[]) => PublicationC
 
 export const localGitHubPullRequestGateway = (
   input: {
+    readonly cwd?: string;
     readonly runGit?: PublicationCommandRunner;
     readonly runGh?: PublicationCommandRunner;
   } = {},
 ): GitHubPullRequestGateway => {
-  const runGit = input.runGit ?? runGitCommand;
-  const runGh = input.runGh ?? runGhCommand;
+  const runGit = input.runGit ?? ((args) => runCommand("git", args, input.cwd));
+  const runGh = input.runGh ?? ((args) => runCommand("gh", args, input.cwd));
 
   return {
     findPullRequests: (target, headBranch) => findPullRequests(runGh, target, headBranch),
@@ -160,14 +163,17 @@ const pushExpectedHead = (
 const requestRemote = (request: Pick<GitHubPullRequestRequest, "remoteName">): string =>
   request.remoteName;
 
-const runGitCommand: PublicationCommandRunner = (args) => runCommand("git", args);
-const runGhCommand: PublicationCommandRunner = (args) => runCommand("gh", args);
-
-const runCommand = (command: string, args: readonly string[]): PublicationCommandResult => {
-  const result = spawnSync(command, args, {
+const runCommand = (
+  command: string,
+  args: readonly string[],
+  cwd: string | undefined,
+): PublicationCommandResult => {
+  const options: SpawnSyncOptionsWithStringEncoding = {
     encoding: "utf8",
     stdio: ["ignore", "pipe", "ignore"],
-  });
+    ...(cwd === undefined ? {} : { cwd }),
+  };
+  const result = spawnSync(command, args, options);
   return result.status === 0 ? { ok: true, stdout: result.stdout } : { ok: false };
 };
 

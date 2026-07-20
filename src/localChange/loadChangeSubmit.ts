@@ -1,0 +1,86 @@
+import { existsSync } from "node:fs";
+
+import { Effect } from "effect";
+
+import { resolveCandidateValidationPolicy } from "../candidateValidation/resolveCandidateValidationPolicy.js";
+import { cleanupChangeResources } from "../change/localChangeCleanupGit.js";
+import { openChangeReconciliation } from "../change/reconcileChange.js";
+import {
+  openChangeSubmit,
+  type ChangeSubmit,
+  type ChangeSubmitResult,
+} from "../change/submitChange.js";
+import { openRepoLocalStores } from "../init/repoLocalStores.js";
+import { loadRepoLocalContext, type LoadRepoLocalContextError } from "../init/repoContext.js";
+import { localCandidateValidationLayer } from "../localCandidateValidation/localCandidateValidationLayer.js";
+import { localCandidatePublicationGit } from "../publication/localCandidatePublicationGit.js";
+import { openCandidatePublication } from "../publication/publishCandidate.js";
+import { detectGitHubPrTarget } from "../submissionEnvironment/githubTarget.js";
+import { localGitHubPullRequestGateway } from "../submissionEnvironment/localGitHubPullRequestGateway.js";
+
+export type LoadChangeSubmitResult =
+  | { readonly ok: true; readonly submit: ChangeSubmit }
+  | {
+      readonly ok: false;
+      readonly error:
+        | LoadRepoLocalContextError
+        | { readonly code: "state_store_unavailable"; readonly taskPrefix: string };
+    };
+
+export const loadChangeSubmit = (input: {
+  readonly cwd: string;
+  readonly globalConfigPath: string;
+  readonly migrationTimestamp: () => string;
+}): LoadChangeSubmitResult => {
+  const repoContext = loadRepoLocalContext(input.cwd, input.migrationTimestamp);
+  if (!repoContext.ok) return repoContext;
+  const context = repoContext.context;
+  if (!existsSync(context.paths.statePath)) {
+    return {
+      ok: false,
+      error: { code: "state_store_unavailable", taskPrefix: context.taskPrefix },
+    };
+  }
+
+  const stores = openRepoLocalStores(context);
+  const reconciliation = openChangeReconciliation({
+    changeStore: stores.changeStore,
+    github: localGitHubPullRequestGateway({ cwd: context.root }),
+    cleanup: cleanupChangeResources,
+  });
+  const program = openChangeSubmit({
+    repositoryCommonDirectory: context.commonDirectory,
+    changeStore: stores.changeStore,
+    taskStore: stores.taskStore,
+    validationRunStore: stores.candidateValidationRunStore,
+    reconciliation,
+    resolvePolicy: (taskBacked) =>
+      resolveCandidateValidationPolicy({
+        context,
+        globalConfigPath: input.globalConfigPath,
+        taskBacked,
+      }),
+    publicationFor: (cwd) =>
+      openCandidatePublication({
+        changeStore: stores.changeStore,
+        candidateStore: stores.candidateStore,
+        validationRunStore: stores.candidateValidationRunStore,
+        git: localCandidatePublicationGit({ cwd }),
+        github: localGitHubPullRequestGateway({ cwd }),
+      }),
+    detectTarget: detectGitHubPrTarget,
+  });
+  const layer = localCandidateValidationLayer({
+    localRepositoryMainCheckoutRoot: context.root,
+    artifactsRoot: context.paths.artifactsPath,
+    runStore: stores.candidateValidationRunStore,
+  });
+
+  return {
+    ok: true,
+    submit: {
+      submit: (submitInput): Effect.Effect<ChangeSubmitResult> =>
+        program.submit(submitInput).pipe(Effect.provide(layer)),
+    },
+  };
+};

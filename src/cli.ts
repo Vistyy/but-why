@@ -230,6 +230,10 @@ const helpView = (bin: string, docs: PublicDocs): StructuredObject =>
         description: "Create a prepared Change worktree",
       },
       {
+        command: "by change submit <change-id>",
+        description: "Validate and publish a ready Change",
+      },
+      {
         command: "by change reconcile [<change-id>]",
         description: "Read owned pull requests and clean terminal Changes",
       },

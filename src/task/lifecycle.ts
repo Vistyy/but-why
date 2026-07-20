@@ -16,9 +16,9 @@ const validTransitions: ReadonlyMap<TaskState, readonly TaskState[]> = new Map([
   ["new", ["todo"]],
   ["todo", ["implementing"]],
   ["implementing", ["validating"]],
-  ["validating", ["needs_input", "ready"]],
+  ["validating", ["implementing", "needs_input", "ready"]],
   ["needs_input", ["validating"]],
-  ["ready", ["done", "needs_input"]],
+  ["ready", ["validating", "done", "needs_input"]],
   ["done", []],
 ]);
 
