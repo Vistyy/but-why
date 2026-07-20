@@ -41,4 +41,4 @@ The full repository suite plus structural checks of the final source directory m
 
 ## Blocked by
 
-- `docs/issues/137-move-state-storage-to-effect-sql.md`
+- `docs/issues/147-remove-synchronous-state-storage-path.md`

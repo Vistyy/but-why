@@ -1,5 +1,4 @@
 import type * as SqlConnection from "@effect/sql/SqlConnection";
-import type { SqlClient } from "@effect/sql/SqlClient";
 import type { Effect as EffectType } from "effect/Effect";
 
 import {
@@ -21,12 +20,12 @@ export type SqliteDatabase = {
 };
 
 const connectionFor = (
-  input: SqliteStoreInput,
   connection: SqlConnection.Connection,
+  runEffect: <A>(effect: EffectType<A, unknown, never>) => A,
 ): SqliteDatabase => {
   const run = <A>(effect: EffectType<A, unknown, never>): A => {
     try {
-      return input.runSync(effect as EffectType<A, unknown, SqlClient>);
+      return runEffect(effect);
     } catch (error) {
       if (error instanceof SharedStateIdentityConflictError) throw error;
       if (error instanceof StateDatabaseSqlError) throw error;
@@ -55,7 +54,7 @@ export const validateSqliteStateDatabase = validateStateDatabaseInput;
 export const withStateDatabase = <Result>(
   input: SqliteStoreInput,
   work: (database: SqliteDatabase) => Result,
-): Result => input.withConnection((connection) => work(connectionFor(input, connection)));
+): Result => input.withConnection((connection, run) => work(connectionFor(connection, run)));
 
 export const rollbackIfOpen = (database: SqliteDatabase): void => {
   try {

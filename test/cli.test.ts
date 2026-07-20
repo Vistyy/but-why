@@ -405,6 +405,14 @@ validationSetup:
     inspect,Inspect repo tooling before choosing validation commands.
     configure,Configure top-level prepare and validation.checks to the best of your ability from observed tooling.
     review,Keep .but-why/config.json explicit and reviewable.`);
+      const database = prepareStateDatabase({ statePath: sharedStatePath(root) });
+      expect(
+        withStateDatabase(database, (connection) =>
+          connection
+            .prepare("SELECT migration_id, name FROM effect_sql_migrations ORDER BY migration_id")
+            .all(),
+        ),
+      ).toEqual([{ migration_id: 1, name: "baseline" }]);
     }),
   );
 

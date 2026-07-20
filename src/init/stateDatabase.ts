@@ -220,13 +220,18 @@ const migrate = Migrator.make({})({
   loader: Migrator.fromRecord({ "0001_baseline": baseline }),
 });
 
+type StateDatabaseRunSync = <A, E>(effect: Effect.Effect<A, E, SqlClient.SqlClient>) => A;
+type StateDatabaseConnectionWork<Result> = (
+  connection: SqlConnection.Connection,
+  run: <A>(effect: Effect.Effect<A, unknown, never>) => A,
+) => Result;
+
 export type StateDatabase = {
   readonly statePath: string;
   readonly commonDirectory?: string;
-  readonly runSync: <A, E>(effect: Effect.Effect<A, E, SqlClient.SqlClient>) => A;
-  readonly withConnection: <Result>(
-    work: (connection: SqlConnection.Connection) => Result,
-  ) => Result;
+  readonly runSync: StateDatabaseRunSync;
+  readonly withConnection: <Result>(work: StateDatabaseConnectionWork<Result>) => Result;
+  readonly close: () => Promise<void>;
 };
 
 type StateDatabaseRuntime = ReturnType<typeof ManagedRuntime.make>;
@@ -252,60 +257,56 @@ const createStateDatabase = (
     SqliteClient.layer({ filename: statePath, disableWAL: true }),
   ) as StateDatabaseRuntime;
   void runtime.runPromise(Effect.void);
-  const database: StateDatabase = {
+  const run: <A>(effect: Effect.Effect<A, unknown, never>) => A = (effect) =>
+    runRuntimeSync(runtime, effect);
+  const runSync: StateDatabaseRunSync = (effect) => {
+    try {
+      return runRuntimeSync(runtime, effect);
+    } catch (error) {
+      if (error instanceof SharedStateIdentityConflictError) throw error;
+      if (error instanceof StateDatabaseSqlError) throw error;
+      throw new StateDatabaseSqlError(error);
+    }
+  };
+
+  return {
     statePath,
     ...(commonDirectory === undefined ? {} : { commonDirectory }),
-    runSync: (effect) => {
-      try {
-        return runRuntimeSync(runtime, effect);
-      } catch (error) {
-        if (error instanceof SharedStateIdentityConflictError) throw error;
-        if (error instanceof StateDatabaseSqlError) throw error;
-        throw new StateDatabaseSqlError(error);
-      }
-    },
+    runSync,
     withConnection: (work) => {
-      const operationRuntime = ManagedRuntime.make(
-        SqliteClient.layer({ filename: statePath, disableWAL: true }),
-      ) as StateDatabaseRuntime;
-      void operationRuntime.runPromise(Effect.void);
-      try {
-        runRuntimeSync(operationRuntime, migrate);
-        return runRuntimeSync(
-          operationRuntime,
-          Effect.scoped(
-            Effect.gen(function* () {
-              const sql = yield* SqlClient.SqlClient;
-              const connection = yield* sql.reserve;
-              if (commonDirectory !== undefined) {
-                const rows = yield* connection.execute(
-                  "SELECT common_directory AS commonDirectory FROM shared_state_identity WHERE id = 1",
-                  [],
+      runRuntimeSync(runtime, migrate);
+      return runRuntimeSync(
+        runtime,
+        Effect.scoped(
+          Effect.gen(function* () {
+            const sql = yield* SqlClient.SqlClient;
+            const connection = yield* sql.reserve;
+            if (commonDirectory !== undefined) {
+              const rows = yield* connection.execute(
+                "SELECT common_directory AS commonDirectory FROM shared_state_identity WHERE id = 1",
+                [],
+                undefined,
+              );
+              const identity = rows[0] as { readonly commonDirectory: string } | undefined;
+              if (identity === undefined) {
+                yield* connection.execute(
+                  "INSERT INTO shared_state_identity (id, common_directory) VALUES (1, ?)",
+                  [commonDirectory],
                   undefined,
                 );
-                const identity = rows[0] as { readonly commonDirectory: string } | undefined;
-                if (identity === undefined) {
-                  yield* connection.execute(
-                    "INSERT INTO shared_state_identity (id, common_directory) VALUES (1, ?)",
-                    [commonDirectory],
-                    undefined,
-                  );
-                } else if (identity.commonDirectory !== commonDirectory) {
-                  return yield* Effect.fail(
-                    new SharedStateIdentityConflictError(commonDirectory, identity.commonDirectory),
-                  );
-                }
+              } else if (identity.commonDirectory !== commonDirectory) {
+                return yield* Effect.fail(
+                  new SharedStateIdentityConflictError(commonDirectory, identity.commonDirectory),
+                );
               }
-              return work(connection);
-            }),
-          ),
-        );
-      } finally {
-        void operationRuntime.dispose();
-      }
+            }
+            return work(connection, run);
+          }),
+        ),
+      );
     },
+    close: () => runtime.dispose(),
   };
-  return database;
 };
 
 export const initializeStateDatabase = (input: {
@@ -363,9 +364,7 @@ export const validateStateDatabase = (input: {
 };
 
 const ensureSharedStateIdentity = (database: StateDatabase, commonDirectory: string): void => {
-  database.withConnection((connection) => {
-    const run = <A>(effect: Effect.Effect<A, unknown, never>): A =>
-      database.runSync(effect as Effect.Effect<A, unknown, SqlClient.SqlClient>);
+  database.withConnection((connection, run) => {
     const rows = run(
       connection.execute(
         "SELECT common_directory AS commonDirectory FROM shared_state_identity WHERE id = 1",

@@ -7,7 +7,7 @@ It ends when But Why? completes one real SQLite-tracked Task-backed Change and p
 
 ## Can start immediately
 
-- Task 137: Move state storage to Effect SQL.
+- Task 146: Migrate state stores to Effect programs.
 - Task 117: Cancel Task-backed and taskless Changes.
 - Task 129: Submit a Task-backed Change with no repository change.
 

@@ -48,6 +48,12 @@ describe("state database session", () => {
     );
   });
 
+  it("closes the process-scoped database runtime when its owner finishes", async () => {
+    const session = sessionFor(createInitializedRepo());
+
+    await session.close();
+  });
+
   it("prepares state that appears after repository context loading", () => {
     const root = createGitRepo();
     const resolved = gitRoot(root);
