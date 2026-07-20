@@ -29,7 +29,7 @@ It ends when But Why? completes one real SQLite-tracked Task-backed Change and p
 3. Task 136 defines the Candidate validation service composition and production Layer graph before Task 105 composes it behind Change Submit.
 4. Task 105 provides that graph to live Change Submit and consumes Candidate validation without dual writes.
 5. Task 106 migrates detailed inspection to Change commands and keeps Task projections concise.
-6. Task 107 removed the replaced Task-owned writers, readers, routes, and compatibility paths in commits `16a6153`, `9e454b9`, `89f6090`, and `2bd8107`.
+6. Task 107 removed the replaced Task-owned writers, readers, routes, compatibility paths, and historical SQLite migration chain in the implementation diff from baseline `bc6a1819457f469903094c6b85871565ec602372`.
 7. Task 137 replaces surviving native SQLite storage with Effect SQL.
 8. Task 135 reorganizes the surviving modules so every top-level source folder has one domain owner or one clear shared role.
 9. Task 117 completes cancellation and cleanup before Task 123 ships the public workflow.

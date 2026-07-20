@@ -90,8 +90,6 @@ describe("Task dependency graph", () => {
         updatedAt: firstNow,
         startable: false,
         blockedBy: [],
-        branch: null,
-        latestValidationRun: null,
         commentCount: 0,
         prerequisites: [
           { id: "BY-1", title: "First", state: "new" as const },

@@ -9,15 +9,14 @@
 
 ## Behaviors owned
 
-- `spikes/effect-first-path/README.md`: Fresh repository state is created and evolved through one Effect SQL migration ledger.
-- `docs/issues/036-establish-effect-adoption-baseline.md`: Every surviving store uses the same scoped Effect SQL dependency path.
-- `spikes/effect-first-path/README.md`: Historical development migration compatibility is replaced by one baseline for the final v1 schema.
+- Fresh repository state uses Effect SQL storage through one Effect migration ledger.
+- Every surviving store uses the same scoped Effect SQL dependency path.
 
 ## What to build
 
-After Task 107 removes obsolete Task-owned storage, use the Effect SQL SQLite adapter validated in `spikes/effect-first-path/README.md`.
-Flatten the historical migration chain into one Effect Migrator baseline for the surviving schema and use that migration path for every future schema change.
-Migrate all surviving stores and remove the old driver, migration runner, synchronous session, and duplicate storage composition.
+Replace the current native SQLite storage implementation with the Effect SQL SQLite adapter validated in `spikes/effect-first-path/README.md`.
+Create one Effect Migrator baseline for the current schema established by Task 107, and use that migration path for future schema changes.
+Migrate all surviving stores and remove the native driver, synchronous session, and duplicate storage composition.
 
 ## Primary verification seam
 
@@ -28,7 +27,7 @@ A public CLI integration path that initializes fresh repository state, persists 
 - [ ] Effect SQL package versions are pinned to releases compatible with Effect `3.20.0`.
 - [ ] Fresh initialization applies one Effect Migrator baseline containing the schema that remains after Task 107.
 - [ ] Future schema changes use the same Effect migration ledger and runner.
-- [ ] The historical migration chain and its upgrade-only tests are removed.
+- [ ] Effect SQL replaces the current native SQLite baseline without adding a parallel storage path.
 - [ ] Every surviving store executes through the scoped Effect SQL service.
 - [ ] Store boundaries map each storage failure category to a precise typed Effect error channel.
 - [ ] Transactions preserve current atomicity and rollback behavior.

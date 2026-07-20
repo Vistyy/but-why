@@ -22,7 +22,7 @@ V1 creates Changes only for started Tasks, while the ownership model may support
 - A Candidate identifies one immutable comparison-base and head pair within its Change.
 - Validation Runs belong to Candidates and use Task-derived Acceptance Context.
 - The Validation Gate remains read-only.
-- `by submit <task-id>` validates and publishes the exact eligible Candidate.
+- `by change submit <change-id>` validates and publishes the exact eligible Candidate.
 - Task status projects approval and active Change facts rather than authorizing validation phases.
-- Existing Task-owned validation and delivery migrate through expand, migrate, and contract stages.
-- `docs/architecture.md` continues to describe the implemented system until that migration completes.
+- Change and Candidate ownership is the only supported validation and delivery path.
+- `docs/architecture.md` describes the implemented Change-owned system.

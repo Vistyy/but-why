@@ -69,7 +69,7 @@ help[1]: Move the conflicting path aside before running init again.`);
     }),
   );
 
-  it.effect("is unchanged when an existing state database already has the init migration", () =>
+  it.effect("is unchanged when the current state database already exists", () =>
     Effect.gen(function* () {
       const root = createGitRepo();
 

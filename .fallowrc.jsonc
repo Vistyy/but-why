@@ -62,14 +62,6 @@
     // Existing integration tests and orchestration seams intentionally use long scenario bodies.
     // Gate substantial new unit-size growth while keeping current source actionable through score and hotspot output.
     "maxUnitSize": 900,
-    "thresholdOverrides": [
-      {
-        "files": ["src/init/repoContext.ts"],
-        "functions": ["initRepoLocalContext"],
-        "maxCognitive": 18,
-        "reason": "Existing repo initialization flow handles config, paths, and storage setup in one command seam. Keep the current ceiling blocking."
-      }
-    ],
     "ignore": ["spikes/**"]
   },
   "boundaries": {
