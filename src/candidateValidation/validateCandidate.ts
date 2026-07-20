@@ -92,9 +92,6 @@ export type CandidateValidationService = {
     readonly producer: string;
     readonly status: "passed" | "failed";
   }[];
-  readonly listFindings: CandidateValidationRunStorePort["listFindings"];
-  readonly listArtifacts: CandidateValidationRunStorePort["listArtifacts"];
-  readonly listToolingFailures: CandidateValidationRunStorePort["listToolingFailures"];
 };
 
 export class CandidateValidation extends Context.Tag("CandidateValidation")<
@@ -219,9 +216,6 @@ const makeCandidateValidation = (dependencies: {
       dependencies.runStore
         .listRounds(validationRunId)
         .map(({ producer, status }) => ({ producer, status })),
-    listFindings: dependencies.runStore.listFindings,
-    listArtifacts: dependencies.runStore.listArtifacts,
-    listToolingFailures: dependencies.runStore.listToolingFailures,
   };
 };
 
