@@ -7,10 +7,13 @@ It ends when But Why? completes one real SQLite-tracked Task-backed Change and p
 
 ## Can start immediately
 
-- Task 105: Migrate Submit to Change ownership.
+- Task 106: Add Change inspection and migrate Task projections.
+- Task 117: Cancel Task-backed and taskless Changes.
+- Task 129: Submit a Task-backed Change with no repository change.
 
 ## Completed
 
+- Task 105: Migrate Submit to Change ownership (`30c965a`).
 - Task 130: Launch a Change Implementer in Herdr (`39e7056`).
 - Task 136: Compose Candidate validation through Effect (`e139f6e`).
 - Task 139: Migrate Candidate validation Effect tests (`2b88f95`).
@@ -34,11 +37,8 @@ It ends when But Why? completes one real SQLite-tracked Task-backed Change and p
 
 | Task | Capability | Blocked by |
 | --- | --- | --- |
-| 129 | Submit a Task-backed Change with no repository change | 105 |
-| 106 | Add Change inspection and migrate Task projections | 105 |
-| 107 | Remove Task-owned implementation and delivery paths | 105, 106 |
+| 107 | Remove Task-owned implementation and delivery paths | 106 |
 | 137 | Move state storage to Effect SQL | 107 |
-| 117 | Cancel Task-backed and taskless Changes | 105 |
 | 135 | Consolidate the source hierarchy | 137 |
 | 123 | Ship the Change-centered manual workflow | 107, 117, 129, 135 |
 | 125 | Produce an installable v1 package | 123 |

@@ -26,19 +26,19 @@ Public `by change submit <change-id>` CLI tests covering blocked and passing Tas
 
 ## Acceptance criteria
 
-- [ ] Submit accepts only an open Change in the `ready` state and resolves its optional linked Task.
-- [ ] Dirty Git-visible state is rejected before Candidate or Validation Run creation.
-- [ ] Task-backed submission runs Prepare, Checks, Acceptance Review, and configured Specialists in order.
-- [ ] Taskless submission runs Prepare, Checks, and configured Specialists without Acceptance Review.
-- [ ] Passing changed work publishes only the exact Candidate through deterministic PR recovery.
-- [ ] Submit reconciles an existing owned PR before it selects a new Candidate or mutates the remote.
-- [ ] Findings and Tooling Failures return structured evidence.
-- [ ] A Finding or Tooling Failure moves a linked Task to `implementing`.
-- [ ] An unchanged taskless Change returns `nothing_to_submit`, remains open, and suggests explicit cancellation.
-- [ ] Repeated Submit is idempotent and reconciles the owned PR once per invocation.
-- [ ] Task-owned validation writers are no longer called.
-- [ ] Change owns the new Submit composition; the migration does not add another top-level Submit workflow.
-- [ ] Human output remains TOON by default, while programmatic callers can request JSON.
+- [x] Submit accepts only an open Change in the `ready` state and resolves its optional linked Task.
+- [x] Dirty Git-visible state is rejected before Candidate or Validation Run creation.
+- [x] Task-backed submission runs Prepare, Checks, Acceptance Review, and configured Specialists in order.
+- [x] Taskless submission runs Prepare, Checks, and configured Specialists without Acceptance Review.
+- [x] Passing changed work publishes only the exact Candidate through deterministic PR recovery.
+- [x] Submit reconciles an existing owned PR before it selects a new Candidate or mutates the remote.
+- [x] Findings and Tooling Failures return structured evidence.
+- [x] A Finding or Tooling Failure moves a linked Task to `implementing`.
+- [x] An unchanged taskless Change returns `nothing_to_submit`, remains open, and suggests explicit cancellation.
+- [x] Repeated Submit is idempotent and reconciles the owned PR once per invocation.
+- [x] Task-owned validation writers are no longer called.
+- [x] Change owns the new Submit composition; the migration does not add another top-level Submit workflow.
+- [x] Human output remains TOON by default, while programmatic callers can request JSON.
 
 ## Blocked by
 
@@ -50,3 +50,11 @@ Public `by change submit <change-id>` CLI tests covering blocked and passing Tas
 - `docs/issues/101-reconcile-owned-pr-during-submit.md`
 - `docs/issues/133-start-prepared-changes.md`
 - `docs/issues/136-compose-candidate-validation-through-effect.md`
+
+## Completion
+
+Implemented in `42b8f1d`.
+Review corrections: `241c969`, `30c965a`.
+Verified with `just quality`: 389 tests passed, with one smoke test skipped.
+Spec review: approved.
+Standards review: approved.
