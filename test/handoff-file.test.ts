@@ -1,15 +1,13 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 
 import { maxHandoffBytes, readHandoffFile } from "../src/change/handoffFile.js";
-import { cleanupTempRoots, createTempRoot } from "./support/by-cli.js";
-
-afterEach(cleanupTempRoots);
+import { createTestWorkspace } from "./support/testWorkspace.js";
 
 describe("Change handoff files", () => {
   it("preserves a non-empty UTF-8 handoff through the 256 KiB limit", () => {
-    const root = createTempRoot();
+    const root = createTestWorkspace();
     const path = join(root, "handoff.md");
     const handoff = "x".repeat(maxHandoffBytes);
     writeFileSync(path, handoff);
@@ -24,7 +22,7 @@ describe("Change handoff files", () => {
     ["too large", "large.md", "handoff_file_too_large"],
     ["empty", "empty.md", "empty_handoff_file"],
   ] as const)("rejects %s handoff input", (_name, fileName, code) => {
-    const root = createTempRoot();
+    const root = createTestWorkspace();
     const path = join(root, fileName);
 
     if (fileName === "handoff-dir") mkdirSync(path);

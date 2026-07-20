@@ -2,7 +2,7 @@ import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { it } from "@effect/vitest";
 import { Effect } from "effect";
-import { afterEach, describe, expect } from "vitest";
+import { describe, expect } from "vitest";
 
 import { repoStateLoadError, runtimeError, success, usageError } from "../src/cliResults.js";
 import { decodeReviewerOutputContract } from "../src/contracts/reviewerOutput.js";
@@ -44,7 +44,6 @@ import {
 import { unsupportedValidationRuns } from "../src/validation/validationRuns.js";
 import { loadLocalSubmitPreflight } from "../src/localSubmit/submitPreflight.js";
 import { publicTaskId } from "../src/task/taskId.js";
-import { cleanupTempRoots } from "./support/by-cli.js";
 import { createInitializedRepo } from "./support/initializedRepo.js";
 
 const firstNow = "2026-06-30T12:00:00.000Z";
@@ -59,8 +58,6 @@ const prTarget: GitHubPrTarget = {
   remoteName: "origin",
   remoteUrl: "https://github.com/acme/widgets.git",
 };
-
-afterEach(cleanupTempRoots);
 
 describe("module seams", () => {
   it("constructs shared CLI result objects without serialization concerns", () => {

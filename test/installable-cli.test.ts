@@ -1,9 +1,10 @@
 import { spawnSync, type SpawnSyncReturns } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { delimiter, join } from "node:path";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 
-import { cleanupTempRoots, createGitRepo, createTempRoot, repoRoot } from "./support/by-cli.js";
+import { createGitRepo, repoRoot } from "./support/by-cli.js";
+import { createTestWorkspace } from "./support/testWorkspace.js";
 
 type PackedPackage = {
   readonly filename: string;
@@ -11,13 +12,6 @@ type PackedPackage = {
 };
 
 type CommandResult = SpawnSyncReturns<string>;
-
-type InstallableCliFixture = {
-  readonly packed: ReturnType<typeof packPackage>;
-  readonly localConsumerRepo: string;
-  readonly globalPrefix: string;
-  readonly globalConsumerRepo: string;
-};
 
 const commandEnv = {
   ...process.env,
@@ -48,7 +42,7 @@ const expectCleanSuccessfulCommand = (result: CommandResult) => {
 };
 
 const packPackage = () => {
-  const destination = createTempRoot();
+  const destination = createTestWorkspace();
   const result = runCommandSync(
     "npm",
     ["pack", "--json", "--pack-destination", destination],
@@ -89,51 +83,32 @@ const expectInstalledHelp = (result: CommandResult) => {
   expect(result.stdout).not.toContain(join(repoRoot, "bin/by"));
 };
 
-let fixture: InstallableCliFixture;
-
-beforeAll(() => {
-  const packed = packPackage();
-  const localConsumerRepo = createGitRepo();
-  const globalPrefix = createTempRoot();
-  const globalConsumerRepo = createGitRepo();
-
-  installPackage(localConsumerRepo, packed.tarballPath);
-  expectSuccessfulCommand(
-    runCommandSync(
-      "npm",
-      ["install", "--global", "--prefix", globalPrefix, packed.tarballPath],
-      globalConsumerRepo,
-    ),
-  );
-
-  fixture = { packed, localConsumerRepo, globalPrefix, globalConsumerRepo };
-}, 120_000);
-
-afterAll(cleanupTempRoots);
-
 describe("installable by CLI package", () => {
   it("packs built CLI output and user-facing package metadata only", () => {
-    expect(fixture.packed.files).toContain("dist/main.js");
-    expect(fixture.packed.files).toContain("package.json");
-    expect(fixture.packed.files).toContain("README.md");
-    expect(fixture.packed.files).toContain("docs/public/config.md");
-    expect(fixture.packed.files).toContain("docs/public/setup.md");
-    expect(fixture.packed.files).toContain("docs/public/skills/but-why/SKILL.md");
-    expect(fixture.packed.files.some((path) => path.startsWith("skills/"))).toBe(false);
-    expect(fixture.packed.files.some((path) => path.startsWith("src/"))).toBe(false);
-    expect(fixture.packed.files.some((path) => path.startsWith("test/"))).toBe(false);
-    expect(fixture.packed.files.some((path) => path.startsWith("spikes/"))).toBe(false);
-    expect(fixture.packed.files.some((path) => path.startsWith("docs/issues/"))).toBe(false);
-    expect(fixture.packed.files.some((path) => path.startsWith("docs/prds/"))).toBe(false);
-    expect(fixture.packed.files.some((path) => path.startsWith("docs/adr/"))).toBe(false);
-    expect(fixture.packed.files.some((path) => path.startsWith("docs/spikes/"))).toBe(false);
-    expect(fixture.packed.files).not.toContain("docs/open-questions.md");
-    expect(fixture.packed.files).not.toContain("bin/by");
-    expect(fixture.packed.files).not.toContain("justfile");
-  });
+    const { files } = packPackage();
+    expect(files).toContain("dist/main.js");
+    expect(files).toContain("package.json");
+    expect(files).toContain("README.md");
+    expect(files).toContain("docs/public/config.md");
+    expect(files).toContain("docs/public/setup.md");
+    expect(files).toContain("docs/public/skills/but-why/SKILL.md");
+    expect(files.some((path) => path.startsWith("skills/"))).toBe(false);
+    expect(files.some((path) => path.startsWith("src/"))).toBe(false);
+    expect(files.some((path) => path.startsWith("test/"))).toBe(false);
+    expect(files.some((path) => path.startsWith("spikes/"))).toBe(false);
+    expect(files.some((path) => path.startsWith("docs/issues/"))).toBe(false);
+    expect(files.some((path) => path.startsWith("docs/prds/"))).toBe(false);
+    expect(files.some((path) => path.startsWith("docs/adr/"))).toBe(false);
+    expect(files.some((path) => path.startsWith("docs/spikes/"))).toBe(false);
+    expect(files).not.toContain("docs/open-questions.md");
+    expect(files).not.toContain("bin/by");
+    expect(files).not.toContain("justfile");
+  }, 120_000);
 
   it("runs help and init from one project-local tarball install in another Git repo", () => {
-    const { localConsumerRepo } = fixture;
+    const packed = packPackage();
+    const localConsumerRepo = createGitRepo();
+    installPackage(localConsumerRepo, packed.tarballPath);
 
     expectInstalledHelp(
       runCommandSync(localInstalledBy(localConsumerRepo), ["--help"], localConsumerRepo),
@@ -152,14 +127,25 @@ describe("installable by CLI package", () => {
       JSON.parse(readFileSync(join(localConsumerRepo, ".but-why/config.json"), "utf8")),
     ).toEqual({ taskPrefix: "BY" });
     expect(existsSync(join(localConsumerRepo, ".git", "but-why", "state.sqlite"))).toBe(true);
-  });
+  }, 120_000);
 
   it("runs help from the same tarball installed under a temp global prefix", () => {
+    const packed = packPackage();
+    const globalPrefix = createTestWorkspace();
+    const globalConsumerRepo = createGitRepo();
+    expectSuccessfulCommand(
+      runCommandSync(
+        "npm",
+        ["install", "--global", "--prefix", globalPrefix, packed.tarballPath],
+        globalConsumerRepo,
+      ),
+    );
+
     expectInstalledHelp(
-      runCommandSync("by", ["--help"], fixture.globalConsumerRepo, {
+      runCommandSync("by", ["--help"], globalConsumerRepo, {
         // biome-ignore lint/complexity/useLiteralKeys: NodeJS.ProcessEnv has an index signature.
-        PATH: `${join(fixture.globalPrefix, "bin")}${delimiter}${process.env["PATH"] ?? ""}`,
+        PATH: `${join(globalPrefix, "bin")}${delimiter}${process.env["PATH"] ?? ""}`,
       }),
     );
-  });
+  }, 120_000);
 });

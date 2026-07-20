@@ -3,12 +3,10 @@ import { join } from "node:path";
 
 import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
-import { afterEach, describe } from "vitest";
+import { describe } from "vitest";
 
-import { cleanupTempRoots, runByInProcessEffect } from "./support/by-cli.js";
+import { runByInProcessEffect } from "./support/by-cli.js";
 import { createInitializedRepo } from "./support/initializedRepo.js";
-
-afterEach(cleanupTempRoots);
 
 describe("opaque Task ID CLI parsing", () => {
   it.effect.each(["show", "context"])(

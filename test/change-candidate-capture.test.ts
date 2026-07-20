@@ -2,18 +2,17 @@ import { spawnSync } from "node:child_process";
 import { existsSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import { afterEach, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 
 import { captureLocalCandidate } from "../src/changeCandidateCapture/captureLocalCandidate.js";
 import { openSqliteCandidateStore } from "../src/sqlite/sqliteCandidateStore.js";
 import { prepareStateDatabaseSession } from "../src/init/stateDatabase.js";
 import { openSqliteChangeStore } from "../src/sqlite/sqliteChangeStore.js";
-import { cleanupTempRoots, createGitRepo, createTempRoot } from "./support/by-cli.js";
+import { createGitRepo } from "./support/by-cli.js";
+import { createTestWorkspace } from "./support/testWorkspace.js";
 import { createInitializedRepo } from "./support/initializedRepo.js";
 
 const now = "2026-07-12T10:00:00.000Z";
-
-afterEach(cleanupTempRoots);
 
 describe("automatic Change and Candidate capture", () => {
   it("captures clean committed work against the locally recorded remote default", () => {
@@ -294,7 +293,7 @@ describe("automatic Change and Candidate capture", () => {
 
   it("shares repository identity and durable capture history across linked worktrees", () => {
     const repo = captureReadyRepo();
-    const linked = join(createTempRoot(), "linked");
+    const linked = join(createTestWorkspace(), "linked");
     git(repo, "worktree", "add", "-b", "linked-feature", linked, "main");
     writeFileSync(join(linked, "linked.txt"), "linked\n");
     git(linked, "add", "linked.txt");

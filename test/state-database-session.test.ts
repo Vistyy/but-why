@@ -1,6 +1,6 @@
 import { copyFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 
 import { findGitRoot } from "../src/init/git.js";
 import {
@@ -8,12 +8,10 @@ import {
   SharedStateIdentityConflictError,
 } from "../src/init/stateDatabase.js";
 import { prepareStateDatabaseSession } from "../src/init/stateDatabase.js";
-import { cleanupTempRoots, createGitRepo } from "./support/by-cli.js";
+import { createGitRepo } from "./support/by-cli.js";
 import { createInitializedRepo } from "./support/initializedRepo.js";
 
 const now = "2026-06-30T12:00:00.000Z";
-
-afterEach(cleanupTempRoots);
 
 describe("state database session", () => {
   it("serves repeated operations through one prepared repository identity", () => {

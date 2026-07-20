@@ -3,7 +3,7 @@ import { join } from "node:path";
 
 import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
-import { afterEach, describe, vi } from "vitest";
+import { describe, vi } from "vitest";
 
 import type { ReviewerAgentRuntime } from "../src/agent/reviewerAgentRuntime.js";
 import { captureLocalCandidate } from "../src/changeCandidateCapture/captureLocalCandidate.js";
@@ -13,7 +13,6 @@ import {
 } from "../src/candidateValidation/validateCandidate.js";
 import { openSqliteCandidateValidationRunStore } from "../src/sqlite/sqliteCandidateValidationRunStore.js";
 import { candidateValidationForTest } from "./support/candidateValidation.js";
-import { cleanupTempRoots } from "./support/by-cli.js";
 import {
   candidateReadyRepo,
   candidateSqliteInput,
@@ -22,8 +21,6 @@ import {
 } from "./support/candidateReadyRepo.js";
 
 const now = "2026-07-15T10:00:00.000Z";
-
-afterEach(cleanupTempRoots);
 
 describe("Candidate validation", () => {
   it.scoped(

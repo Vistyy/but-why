@@ -1,16 +1,14 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 
 import { readDescriptionFile } from "../src/task/files/descriptionFile.js";
-import { cleanupTempRoots, createTempRoot } from "./support/by-cli.js";
-
-afterEach(cleanupTempRoots);
+import { createTestWorkspace } from "./support/testWorkspace.js";
 
 describe("Task description files", () => {
   it("resolves files relative to the caller directory and preserves exact content", () => {
-    const root = createTempRoot();
-    const descriptions = createTempRoot();
+    const root = createTestWorkspace();
+    const descriptions = createTestWorkspace();
     const path = join(descriptions, "task.md");
     writeFileSync(path, "  Exact description.  \n");
 
@@ -27,7 +25,7 @@ describe("Task description files", () => {
     ["too large", "large.txt", "description_too_large"],
     ["empty", "empty.txt", "empty_description"],
   ] as const)("reports %s input", (_name, fileName, code) => {
-    const root = createTempRoot();
+    const root = createTestWorkspace();
     const path = join(root, fileName);
 
     if (fileName === "description-dir") {

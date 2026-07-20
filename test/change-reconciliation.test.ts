@@ -1,18 +1,17 @@
 import { execFileSync } from "node:child_process";
 import { chmodSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 
 import { openRepoLocalStores } from "../src/init/repoLocalStores.js";
 import { loadRepoLocalContext } from "../src/init/repoContext.js";
 import { publicTaskId } from "../src/task/taskId.js";
-import { cleanupTempRoots, createTempRoot, runByWithEnv } from "./support/by-cli.js";
+import { runByWithEnv } from "./support/by-cli.js";
+import { createTestWorkspace } from "./support/testWorkspace.js";
 import { createInitializedRepo } from "./support/initializedRepo.js";
 
 const now = "2026-07-24T10:00:00.000Z";
 const pathEnvironmentVariable = "PATH";
-
-afterEach(cleanupTempRoots);
 
 describe("by change reconcile", () => {
   it("returns an open owned PR at its expected head without mutation", () => {
@@ -53,7 +52,7 @@ describe("by change reconcile", () => {
       }).ok,
     ).toBe(true);
 
-    const ghDirectory = createTempRoot();
+    const ghDirectory = createTestWorkspace();
     writeFileSync(
       join(ghDirectory, "gh"),
       `#!/bin/sh\nprintf '%s\\n' '${JSON.stringify(openPullRequest(target, headBranch, headSha))}'\n`,
@@ -218,7 +217,7 @@ const startChangeProcess = (repository: string, ...args: readonly string[]) =>
   runByWithEnv(repository, { BUT_WHY_NOW: now }, "change", "start", ...args);
 
 const reconcileWithPullRequest = (repository: string, pullRequest: object, changeId: string) => {
-  const ghDirectory = createTempRoot();
+  const ghDirectory = createTestWorkspace();
   writeFileSync(
     join(ghDirectory, "gh"),
     `#!/bin/sh\nprintf '%s\\n' '${JSON.stringify(pullRequest)}'\n`,

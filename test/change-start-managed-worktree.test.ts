@@ -4,17 +4,15 @@ import { join } from "node:path";
 
 import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
-import { afterEach, describe, it as ordinaryIt } from "vitest";
+import { describe, it as ordinaryIt } from "vitest";
 
 import { openRepoLocalStores } from "../src/init/repoLocalStores.js";
 import { loadRepoLocalContext } from "../src/init/repoContext.js";
 import { publicTaskId, taskSlugForId } from "../src/task/taskId.js";
-import { cleanupTempRoots, runByInProcessEffect, runByWithEnv } from "./support/by-cli.js";
+import { runByInProcessEffect, runByWithEnv } from "./support/by-cli.js";
 import { createInitializedRepo } from "./support/initializedRepo.js";
 
 const now = "2026-06-30T12:00:00.000Z";
-
-afterEach(cleanupTempRoots);
 
 describe("by change start managed worktree", () => {
   it.effect("creates a ready taskless Change from the local default branch", () =>

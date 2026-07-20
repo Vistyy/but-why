@@ -1,11 +1,11 @@
-import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import { resolveSpecialistReviewPolicies } from "../src/specialistReview/specialistReviewConfig.js";
 import type { GlobalConfig } from "../src/contracts/globalConfig.js";
 import type { RepoConfig } from "../src/contracts/repoConfig.js";
+import { createTestWorkspace } from "./support/testWorkspace.js";
 
 const piProfile = (agentModel: string) => ({
   agentRuntime: "pi" as const,
@@ -116,7 +116,7 @@ describe("Specialist Review configuration", () => {
 });
 
 const configRoot = () => {
-  const root = mkdtempSync(join(tmpdir(), "but-why-specialists-"));
+  const root = createTestWorkspace();
   const repo = join(root, "repo");
   const global = join(root, "global");
   mkdirSync(repo, { recursive: true });

@@ -4,15 +4,10 @@ import { DatabaseSync } from "node:sqlite";
 
 import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
-import { afterEach, describe, it as ordinaryIt } from "vitest";
+import { describe, it as ordinaryIt } from "vitest";
 
 import { isTaskPrefix } from "../src/contracts/taskPrefix.js";
-import {
-  cleanupTempRoots,
-  createGitRepo,
-  runByInProcessEffect,
-  runByWithEnv,
-} from "./support/by-cli.js";
+import { createGitRepo, runByInProcessEffect, runByWithEnv } from "./support/by-cli.js";
 
 const sharedStatePath = (root: string): string => join(root, ".git", "but-why", "state.sqlite");
 
@@ -68,8 +63,6 @@ const writeConfig = (root: string, taskPrefix = "BY") => {
   mkdirSync(join(root, ".but-why"), { recursive: true });
   writeFileSync(join(root, ".but-why/config.json"), `${JSON.stringify({ taskPrefix }, null, 2)}\n`);
 };
-
-afterEach(cleanupTempRoots);
 
 describe("by init edge cases", () => {
   it.each([

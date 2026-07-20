@@ -3,7 +3,7 @@ import { DatabaseSync } from "node:sqlite";
 
 import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
-import { afterEach, describe } from "vitest";
+import { describe } from "vitest";
 
 import { openSqliteCandidateStore } from "../src/sqlite/sqliteCandidateStore.js";
 import {
@@ -13,13 +13,11 @@ import {
 import { openSqliteChangeStore } from "../src/sqlite/sqliteChangeStore.js";
 import { openSqliteTaskStore } from "../src/sqlite/sqliteTaskStore.js";
 import { publicTaskId } from "../src/task/taskId.js";
-import { cleanupTempRoots, runByInProcessEffect as runBy } from "./support/by-cli.js";
+import { runByInProcessEffect as runBy } from "./support/by-cli.js";
 import { createInitializedRepo } from "./support/initializedRepo.js";
 import { createSqliteStateSession } from "./support/sqliteState.js";
 
 const now = "2026-07-11T10:00:00.000Z";
-
-afterEach(cleanupTempRoots);
 
 describe("Change storage", () => {
   it("creates and reads an open Change with durable repository identity", () => {

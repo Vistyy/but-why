@@ -1,12 +1,10 @@
 import { execFileSync } from "node:child_process";
 import { existsSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 
 import { cleanupChangeResources } from "../src/change/localChangeCleanupGit.js";
-import { cleanupTempRoots, createTempRoot } from "./support/by-cli.js";
-
-afterEach(cleanupTempRoots);
+import { createTestWorkspace } from "./support/testWorkspace.js";
 
 describe("Change cleanup Git adapter", () => {
   it("preserves a dirty Managed Worktree and its branch", () => {
@@ -88,7 +86,7 @@ describe("Change cleanup Git adapter", () => {
 });
 
 const initializedRepository = (): string => {
-  const repository = createTempRoot();
+  const repository = createTestWorkspace();
   git(repository, "init", "-q");
   git(repository, "config", "user.name", "But Why Test");
   git(repository, "config", "user.email", "but-why@example.test");

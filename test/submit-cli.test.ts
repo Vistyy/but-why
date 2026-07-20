@@ -5,7 +5,7 @@ import { DatabaseSync } from "node:sqlite";
 
 import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
-import { afterEach, describe, it as ordinaryIt } from "vitest";
+import { describe, it as ordinaryIt } from "vitest";
 
 import { prepareStateDatabaseSession } from "../src/init/stateDatabase.js";
 import { openSqliteValidationRunStore } from "../src/sqlite/sqliteValidationRunStore.js";
@@ -14,12 +14,8 @@ import { openSqliteTaskStore } from "../src/sqlite/sqliteTaskStore.js";
 import { loadTaskUseCases } from "../src/localTask/taskUseCases.js";
 import type { TaskState } from "../src/task/lifecycle.js";
 import { publicTaskId } from "../src/task/taskId.js";
-import {
-  cleanupTempRoots,
-  createTempRoot,
-  runByInProcessEffect,
-  runByWithEnv,
-} from "./support/by-cli.js";
+import { runByInProcessEffect, runByWithEnv } from "./support/by-cli.js";
+import { createTestWorkspace } from "./support/testWorkspace.js";
 import { createInitializedRepo } from "./support/initializedRepo.js";
 import { fakeSubmitPreflight } from "./support/submitPreflight.js";
 import { taskStateTransitionPath } from "./support/taskLifecycle.js";
@@ -30,8 +26,6 @@ const thirdNow = "2026-06-30T12:10:00.000Z";
 const firstTaskValidationRunId = "by-1-09224d806043.v1";
 const secondTaskValidationRunId = "by-1-09224d806043.v2";
 const firstTaskValidationRef = `refs/but-why/validation-runs/${firstTaskValidationRunId}/validation`;
-
-afterEach(cleanupTempRoots);
 
 describe("by submit CLI", () => {
   it.effect(
@@ -711,17 +705,22 @@ describe("by submit CLI", () => {
 
   it.effect("rejects todo Tasks before Git checks", () =>
     Effect.gen(function* () {
-      const result = yield* runByInProcessEffect(createTempRoot(), ["submit", "BY-1"], thirdNow, {
-        submitPreflight: fakeSubmitPreflight({
-          submitTask: ({ taskId }) => ({
-            ok: false,
-            kind: "preflight_rejection",
-            code: "TASK_STATE_NOT_SUBMITTABLE",
-            taskId,
-            state: "todo",
+      const result = yield* runByInProcessEffect(
+        createTestWorkspace(),
+        ["submit", "BY-1"],
+        thirdNow,
+        {
+          submitPreflight: fakeSubmitPreflight({
+            submitTask: ({ taskId }) => ({
+              ok: false,
+              kind: "preflight_rejection",
+              code: "TASK_STATE_NOT_SUBMITTABLE",
+              taskId,
+              state: "todo",
+            }),
           }),
-        }),
-      });
+        },
+      );
 
       expect(result.status).toBe(1);
       expect(result.stderr).toBe("");
@@ -731,16 +730,21 @@ describe("by submit CLI", () => {
 
   it.effect("rejects unknown Tasks before Git checks", () =>
     Effect.gen(function* () {
-      const result = yield* runByInProcessEffect(createTempRoot(), ["submit", "BY-999"], thirdNow, {
-        submitPreflight: fakeSubmitPreflight({
-          submitTask: ({ taskId }) => ({
-            ok: false,
-            kind: "preflight_rejection",
-            code: "TASK_NOT_FOUND",
-            taskId,
+      const result = yield* runByInProcessEffect(
+        createTestWorkspace(),
+        ["submit", "BY-999"],
+        thirdNow,
+        {
+          submitPreflight: fakeSubmitPreflight({
+            submitTask: ({ taskId }) => ({
+              ok: false,
+              kind: "preflight_rejection",
+              code: "TASK_NOT_FOUND",
+              taskId,
+            }),
           }),
-        }),
-      });
+        },
+      );
 
       expect(result.status).toBe(1);
       expect(result.stdout).toBe(`error:
@@ -754,7 +758,7 @@ help[1]: Run \`by task list --all\` to see known Tasks.`);
   it.effect("rejects remote-style Task IDs after opaque parsing and before Git checks", () =>
     Effect.gen(function* () {
       const result = yield* runByInProcessEffect(
-        createTempRoot(),
+        createTestWorkspace(),
         ["submit", "linear/ENG-123:acceptance"],
         thirdNow,
         {
@@ -881,7 +885,7 @@ help[1]: Run \`by task list --all\` to see known Tasks.`);
 
   it.effect("serializes submit success and preflight errors as JSON", () =>
     Effect.gen(function* () {
-      const root = createTempRoot();
+      const root = createTestWorkspace();
       const commitSha = "a".repeat(40);
       const submitPreflight = fakeSubmitPreflight({
         submitTask: ({ taskId }) =>
@@ -1144,7 +1148,7 @@ const runSubmitProcess = (root: string, args: readonly string[], now: string) =>
 const installGhScript = (script: string): (() => void) => {
   // biome-ignore lint/complexity/useLiteralKeys: TS index signature
   const originalPath = process.env["PATH"];
-  const bin = createTempRoot();
+  const bin = createTestWorkspace();
   const ghPath = join(bin, "gh");
 
   writeFileSync(ghPath, script);

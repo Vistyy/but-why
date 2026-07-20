@@ -2,7 +2,7 @@ import { join } from "node:path";
 
 import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
-import { afterEach, describe } from "vitest";
+import { describe } from "vitest";
 
 import { prepareStateDatabaseSession } from "../src/init/stateDatabase.js";
 import { openSqliteTaskStore } from "../src/sqlite/sqliteTaskStore.js";
@@ -10,7 +10,7 @@ import { openSqliteValidationRunStore } from "../src/sqlite/sqliteValidationRunS
 import { openSqliteValidationRuns } from "../src/sqlite/sqliteValidationRuns.js";
 import { publicTaskId } from "../src/task/taskId.js";
 import type { RecordValidationRunCheckRoundInput } from "../src/validationRun/validationRunStore.js";
-import { cleanupTempRoots, runByInProcessEffect } from "./support/by-cli.js";
+import { runByInProcessEffect } from "./support/by-cli.js";
 import { createInitializedRepo } from "./support/initializedRepo.js";
 
 const firstNow = "2026-06-30T12:00:00.000Z";
@@ -25,8 +25,6 @@ const prTarget = {
   remoteName: "origin",
   remoteUrl: "https://github.com/acme/widgets.git",
 };
-
-afterEach(cleanupTempRoots);
 
 describe("Validation Run inspection CLI", () => {
   it.effect(

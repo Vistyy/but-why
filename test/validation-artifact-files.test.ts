@@ -1,17 +1,15 @@
 import { readFileSync } from "node:fs";
-import { afterEach, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 
 import {
   maxValidationArtifactBytes,
   writeValidationRunArtifactFile,
 } from "../src/validationRun/artifactFiles.js";
-import { cleanupTempRoots, createTempRoot } from "./support/by-cli.js";
-
-afterEach(cleanupTempRoots);
+import { createTestWorkspace } from "./support/testWorkspace.js";
 
 describe("Validation Run artifacts", () => {
   it("bounds stored artifact content", () => {
-    const root = createTempRoot();
+    const root = createTestWorkspace();
     const artifact = writeValidationRunArtifactFile({
       artifactsRoot: root,
       validationRunId: "run",

@@ -4,7 +4,7 @@ import { join } from "node:path";
 
 import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
-import { afterEach, describe, it as ordinaryIt } from "vitest";
+import { describe, it as ordinaryIt } from "vitest";
 
 import { collapseHome } from "../src/cli.js";
 import { prepareStateDatabaseSession } from "../src/init/stateDatabase.js";
@@ -16,12 +16,11 @@ import { publicTaskId } from "../src/task/taskId.js";
 import type { TaskStore } from "../src/task/taskStore.js";
 import {
   byExecutable,
-  cleanupTempRoots,
   commitButWhyConfigAndRecordDefault,
   createGitRepo,
-  createTempRoot,
   runByInProcessEffect,
 } from "./support/by-cli.js";
+import { createTestWorkspace } from "./support/testWorkspace.js";
 import { createInitializedRepo } from "./support/initializedRepo.js";
 import { fakeTaskUseCases } from "./support/taskUseCases.js";
 import { taskStateTransitionPath } from "./support/taskLifecycle.js";
@@ -33,8 +32,6 @@ const secondNow = "2026-06-30T12:05:00.000Z";
 const thirdNow = "2026-06-30T12:10:00.000Z";
 // Four workers exercise overlapping SQLite writers while keeping subprocess tests fast.
 const concurrentWriterCount = 4;
-
-afterEach(cleanupTempRoots);
 
 describe("by task CLI", () => {
   it.effect(
@@ -115,7 +112,7 @@ help[1]: Run \`by task list\` to see open tasks.`);
   it.effect("maps rejected approval to the legal next action", () =>
     Effect.gen(function* () {
       const result = yield* runByInProcessEffect(
-        createTempRoot(),
+        createTestWorkspace(),
         ["task", "approve", "BY-1"],
         thirdNow,
         {
@@ -162,7 +159,7 @@ help[1]: Run \`by task list\` to see open tasks.`);
 
   it.effect("lists non-done Tasks by default in creation order with count", () =>
     Effect.gen(function* () {
-      const root = createTempRoot();
+      const root = createTestWorkspace();
       const taskUseCases = fakeTaskUseCases({
         listTasks: () => [
           {
@@ -214,7 +211,7 @@ tasks[2]:
   it.effect("lists Tasks as compact JSON when selected after the command", () =>
     Effect.gen(function* () {
       const result = yield* runByInProcessEffect(
-        createTempRoot(),
+        createTestWorkspace(),
         ["task", "list", "--output", "json"],
         firstNow,
         { taskUseCases: fakeTaskUseCases({ listTasks: () => listedTasks }) },
@@ -243,7 +240,7 @@ tasks[2]:
   it.effect("shows new Tasks on the dashboard so they can be approved", () =>
     Effect.gen(function* () {
       const task = taskSummary({ title: "Needs approval" });
-      const result = yield* runByInProcessEffect(createTempRoot(), [], firstNow, {
+      const result = yield* runByInProcessEffect(createTestWorkspace(), [], firstNow, {
         taskUseCases: fakeTaskUseCases({ listActionableTasks: () => [task] }),
       });
 
@@ -320,7 +317,7 @@ help[1]: "Run \`by task create --title \\"...\\" --description-file <file>\` to 
         "BY-3",
       ]);
 
-      const root = createTempRoot();
+      const root = createTestWorkspace();
       const inputs: Array<{ readonly includeDone: boolean; readonly state?: TaskState }> = [];
       const taskUseCases = fakeTaskUseCases({
         listTasks: (input) => {
@@ -355,7 +352,7 @@ help[1]: "Run \`by task create --title \\"...\\" --description-file <file>\` to 
   it.effect("shows compact Task metadata without Task Context", () =>
     Effect.gen(function* () {
       const result = yield* runByInProcessEffect(
-        createTempRoot(),
+        createTestWorkspace(),
         ["task", "show", "BY-1"],
         firstNow,
         {
@@ -386,7 +383,7 @@ help[1]: "Run \`by task create --title \\"...\\" --description-file <file>\` to 
   it.effect("shows Task Context without metadata", () =>
     Effect.gen(function* () {
       const result = yield* runByInProcessEffect(
-        createTempRoot(),
+        createTestWorkspace(),
         ["task", "context", "BY-1"],
         firstNow,
         {
@@ -676,7 +673,7 @@ help[1]: "Run \`by task create --title \\"...\\" --description-file <file>\` to 
 
   it.effect("maps rejected Task comments to command output", () =>
     Effect.gen(function* () {
-      const root = createTempRoot();
+      const root = createTestWorkspace();
       writeFileSync(join(root, "comment.md"), "Too late");
 
       const result = yield* runByInProcessEffect(
@@ -727,7 +724,7 @@ help[1]: "Run \`by task create --title \\"...\\" --description-file <file>\` to 
 
   it.effect("reports actionable Task comment input errors without changing the Task", () =>
     Effect.gen(function* () {
-      const root = createTempRoot();
+      const root = createTestWorkspace();
       let appendCalls = 0;
       writeFileSync(join(root, "valid.md"), "Valid comment");
       mkdirSync(join(root, "comment-dir"));
@@ -895,7 +892,7 @@ help[1]: "Run \`by task create --title \\"...\\" --description-file <file>\` to 
 
   it.effect("serializes missing Task IDs before command lookup", () =>
     Effect.gen(function* () {
-      const result = yield* runByInProcessEffect(createTempRoot(), ["task", "show"]);
+      const result = yield* runByInProcessEffect(createTestWorkspace(), ["task", "show"]);
 
       expect(result.status).toBe(2);
       expect(result.stderr).toBe("");
@@ -917,7 +914,7 @@ help[1]: "Run \`by task create --title \\"...\\" --description-file <file>\` to 
           }),
         });
         const result = yield* runByInProcessEffect(
-          createTempRoot(),
+          createTestWorkspace(),
           ["task", command, "ZZ-1"],
           firstNow,
           {
@@ -942,7 +939,7 @@ help[1]: "Run \`by task create --title \\"...\\" --description-file <file>\` to 
           approveTask: () => ({ ok: false, code: "task_not_found" }),
         });
         const result = yield* runByInProcessEffect(
-          createTempRoot(),
+          createTestWorkspace(),
           ["task", command, "BY-999"],
           firstNow,
           {
@@ -962,9 +959,14 @@ help[1]: Run \`by task list --all\` to see known Tasks.`);
 
   it.effect("prints explicit empty list output with create help", () =>
     Effect.gen(function* () {
-      const result = yield* runByInProcessEffect(createTempRoot(), ["task", "list"], firstNow, {
-        taskUseCases: fakeTaskUseCases({ listTasks: () => [] }),
-      });
+      const result = yield* runByInProcessEffect(
+        createTestWorkspace(),
+        ["task", "list"],
+        firstNow,
+        {
+          taskUseCases: fakeTaskUseCases({ listTasks: () => [] }),
+        },
+      );
 
       expect(result.status).toBe(0);
       expect(result.stderr).toBe("");
@@ -996,7 +998,7 @@ help[1]: "Run \`by task create --title \\"...\\" --description-file <file>\` to 
       ).toBe(true);
 
       const actionable = tasks.listActionableTasks();
-      const result = yield* runByInProcessEffect(createTempRoot(), [], firstNow, {
+      const result = yield* runByInProcessEffect(createTestWorkspace(), [], firstNow, {
         taskUseCases: fakeTaskUseCases({ listActionableTasks: () => actionable }),
       });
 
@@ -1015,7 +1017,7 @@ tasks[4]{id,title,state,createdAt,updatedAt}:
 
   it.effect("prints explicit empty dashboard output with create help", () =>
     Effect.gen(function* () {
-      const result = yield* runByInProcessEffect(createTempRoot(), [], firstNow, {
+      const result = yield* runByInProcessEffect(createTestWorkspace(), [], firstNow, {
         taskUseCases: fakeTaskUseCases({ listActionableTasks: () => [] }),
       });
 
@@ -1031,7 +1033,7 @@ help[1]: "Run \`by task create --title \\"...\\" --description-file <file>\` to 
 
   it.effect("prints structured usage errors to stdout", () =>
     Effect.gen(function* () {
-      const result = yield* runByInProcessEffect(createTempRoot(), [
+      const result = yield* runByInProcessEffect(createTestWorkspace(), [
         "task",
         "list",
         "--state",
@@ -1050,7 +1052,7 @@ help[1]: "Use one of: new, todo, implementing, validating, needs_input, ready, d
 
   it.effect("rejects Task titles containing line breaks", () =>
     Effect.gen(function* () {
-      const root = createTempRoot();
+      const root = createTestWorkspace();
       writeFileSync(join(root, "task.md"), "Description");
 
       const result = yield* runByInProcessEffect(root, [
@@ -1081,7 +1083,7 @@ help[1]: "Use one of: new, todo, implementing, validating, needs_input, ready, d
     ],
   ] as const)("prints %s as a usage error", ([_name, args, code]) =>
     Effect.gen(function* () {
-      const root = createTempRoot();
+      const root = createTestWorkspace();
       writeFileSync(join(root, "task.md"), "Description");
       const result = yield* runByInProcessEffect(root, args);
 
@@ -1094,7 +1096,7 @@ help[1]: "Use one of: new, todo, implementing, validating, needs_input, ready, d
 
   it.effect("maps description file failures to actionable command output", () =>
     Effect.gen(function* () {
-      const root = createTempRoot();
+      const root = createTestWorkspace();
       mkdirSync(join(root, "directory"));
       writeFileSync(join(root, "invalid.bin"), Buffer.from([0xff]));
       writeFileSync(join(root, "large.md"), Buffer.alloc(256 * 1024 + 1, "x"));

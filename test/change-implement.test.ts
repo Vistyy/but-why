@@ -3,19 +3,13 @@ import { join } from "node:path";
 
 import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
-import { afterEach, describe } from "vitest";
+import { describe } from "vitest";
 
 import type { InteractiveSessionHost } from "../src/change/interactiveSessionHost.js";
-import {
-  cleanupTempRoots,
-  commitButWhyConfigAndRecordDefault,
-  runByInProcessEffect,
-} from "./support/by-cli.js";
+import { commitButWhyConfigAndRecordDefault, runByInProcessEffect } from "./support/by-cli.js";
 import { createInitializedRepo } from "./support/initializedRepo.js";
 
 const now = "2026-06-30T12:00:00.000Z";
-
-afterEach(cleanupTempRoots);
 
 describe("by change implement", () => {
   it.effect("launches a ready Change in its recorded Managed Worktree", () =>

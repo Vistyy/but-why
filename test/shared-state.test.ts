@@ -5,18 +5,12 @@ import { DatabaseSync } from "node:sqlite";
 
 import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
-import { afterEach, describe } from "vitest";
+import { describe } from "vitest";
 
-import {
-  cleanupTempRoots,
-  createGitRepo,
-  createTempRoot,
-  runByInProcessEffect,
-} from "./support/by-cli.js";
+import { createGitRepo, runByInProcessEffect } from "./support/by-cli.js";
+import { createTestWorkspace } from "./support/testWorkspace.js";
 
 const now = "2026-06-30T12:00:00.000Z";
-
-afterEach(cleanupTempRoots);
 
 describe("shared repository state", () => {
   it.effect("shares Tasks through Git common state across linked worktrees", () =>
@@ -26,7 +20,7 @@ describe("shared repository state", () => {
       git(root, "config", "user.name", "Test User");
       git(root, "add", ".but-why/config.json");
       git(root, "commit", "-m", "configure but why");
-      const linked = join(createTempRoot(), "linked");
+      const linked = join(createTestWorkspace(), "linked");
       git(root, "worktree", "add", "-b", "linked", linked);
       writeFileSync(join(root, "task.md"), "Shared Task");
 
@@ -59,7 +53,7 @@ describe("shared repository state", () => {
         git(root, "config", "user.name", "Test User");
         git(root, "add", ".but-why/config.json");
         git(root, "commit", "-m", "configure but why");
-        const linked = join(createTempRoot(), "linked");
+        const linked = join(createTestWorkspace(), "linked");
         git(root, "worktree", "add", "-b", "linked", linked);
         writeFileSync(join(root, "task.md"), "Shared Task");
         expect(

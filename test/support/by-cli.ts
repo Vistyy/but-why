@@ -1,10 +1,11 @@
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { writeFileSync } from "node:fs";
 import { Effect } from "effect";
-import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { expect } from "vitest";
+
+import { createTestWorkspace } from "./testWorkspace.js";
 
 import { runCli, type CliResult } from "../../src/cli.js";
 import type { InteractiveSessionHost } from "../../src/change/interactiveSessionHost.js";
@@ -14,8 +15,6 @@ import type { TaskUseCases } from "../../src/task/taskUseCases.js";
 
 export const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 export const byExecutable = join(repoRoot, "bin/by");
-
-export const tempRoots: string[] = [];
 
 export const runBy = (cwd: string, ...args: readonly string[]) => runByWithEnv(cwd, {}, ...args);
 
@@ -87,14 +86,8 @@ export const runByInProcessEffect = (
       : { interactiveSessionHost: options.interactiveSessionHost }),
   }).pipe(Effect.map(cliResultToInProcessResult));
 
-export const createTempRoot = () => {
-  const root = mkdtempSync(join(tmpdir(), "but-why-test-"));
-  tempRoots.push(root);
-  return root;
-};
-
 export const createGitRepo = () => {
-  const root = createTempRoot();
+  const root = createTestWorkspace();
   const result = spawnSync("git", ["init", "-q"], { cwd: root, encoding: "utf8" });
 
   expect(result.status).toBe(0);
@@ -117,10 +110,4 @@ export const commitButWhyConfigAndRecordDefault = (root: string): void => {
 const runGit = (cwd: string, ...args: readonly string[]): void => {
   const result = spawnSync("git", args, { cwd, encoding: "utf8" });
   expect(result.status, result.stderr).toBe(0);
-};
-
-export const cleanupTempRoots = () => {
-  for (const root of tempRoots.splice(0)) {
-    rmSync(root, { recursive: true, force: true });
-  }
 };

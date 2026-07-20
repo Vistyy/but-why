@@ -3,24 +3,23 @@ import { join } from "node:path";
 
 import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
-import { afterEach, describe } from "vitest";
+import { describe } from "vitest";
 
 import { TaskDependencyValidationError } from "../src/task/task.js";
 import { publicTaskId } from "../src/task/taskId.js";
 import type { TaskStore } from "../src/task/taskStore.js";
-import { cleanupTempRoots, createTempRoot, runByInProcessEffect } from "./support/by-cli.js";
+import { runByInProcessEffect } from "./support/by-cli.js";
+import { createTestWorkspace } from "./support/testWorkspace.js";
 import { fakeTaskUseCases } from "./support/taskUseCases.js";
 import { createTaskStore } from "./support/taskStore.js";
 
 const firstNow = "2026-06-30T12:00:00.000Z";
 const secondNow = "2026-06-30T12:05:00.000Z";
 
-afterEach(cleanupTempRoots);
-
 describe("Task dependency graph", () => {
   it.effect("parses repeated dependency options and creates the Task atomically", () =>
     Effect.gen(function* () {
-      const root = createTempRoot();
+      const root = createTestWorkspace();
       const descriptionPath = join(root, "Dependent.md");
       let receivedDependencies: readonly string[] = [];
       writeFileSync(descriptionPath, "Description for Dependent");
@@ -80,7 +79,7 @@ describe("Task dependency graph", () => {
 
   it.effect("routes dependency replacement and maps dependency errors through the CLI", () =>
     Effect.gen(function* () {
-      const root = createTempRoot();
+      const root = createTestWorkspace();
       let received: readonly string[] = [];
       const task = {
         id: "BY-3",

@@ -3,13 +3,13 @@ import { join } from "node:path";
 
 import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
-import { afterEach, describe } from "vitest";
+import { describe } from "vitest";
 
 import { prepareStateDatabaseSession } from "../src/init/stateDatabase.js";
 import { openSqliteCandidateStore } from "../src/sqlite/sqliteCandidateStore.js";
 import { openSqliteCandidateValidationRunStore } from "../src/sqlite/sqliteCandidateValidationRunStore.js";
 import { openSqliteChangeStore } from "../src/sqlite/sqliteChangeStore.js";
-import { cleanupTempRoots, runByInProcessEffect } from "./support/by-cli.js";
+import { runByInProcessEffect } from "./support/by-cli.js";
 import { createInitializedRepo } from "./support/initializedRepo.js";
 
 const now = "2026-07-18T10:00:00.000Z";
@@ -24,8 +24,6 @@ const policy = {
   ],
   copyFiles: [".env.test"],
 };
-
-afterEach(cleanupTempRoots);
 
 describe("Candidate-owned Validation Run inspection", () => {
   it.effect("shows the Candidate judgment and ordered evidence with bounded previews", () =>

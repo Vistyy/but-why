@@ -1,7 +1,7 @@
 import { join } from "node:path";
 import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
-import { afterEach, describe, vi } from "vitest";
+import { describe, vi } from "vitest";
 
 import type {
   ReviewerAgentResult,
@@ -16,7 +16,6 @@ import { candidateValidationForTest } from "./support/candidateValidation.js";
 import { openSqliteCandidateValidationRunStore } from "../src/sqlite/sqliteCandidateValidationRunStore.js";
 import { ReviewerOutputContractFailed } from "../src/validation/validationToolingFailures.js";
 import type { TaskContextSnapshotV1 } from "../src/validationRun/taskContextSnapshot.js";
-import { cleanupTempRoots } from "./support/by-cli.js";
 import {
   candidateReadyRepo,
   candidateSqliteInput,
@@ -60,8 +59,6 @@ const passingValidationPolicy = {
   acceptanceReview: acceptancePolicy,
   specialistReviews: [],
 };
-
-afterEach(cleanupTempRoots);
 
 describe("Task-backed Candidate Acceptance Review", () => {
   it.scoped(

@@ -4,10 +4,10 @@ import { join } from "node:path";
 import { inject, onTestFinished } from "vitest";
 
 import type { StateDatabaseSession } from "../../src/init/stateDatabase.js";
-import { createTempRoot } from "./by-cli.js";
+import { createTestWorkspace } from "./testWorkspace.js";
 
 export const createSqliteStateSession = (): StateDatabaseSession => {
-  const statePath = join(createTempRoot(), "state.sqlite");
+  const statePath = join(createTestWorkspace(), "state.sqlite");
 
   copyFileSync(inject("stateDatabaseTemplatePath"), statePath);
 

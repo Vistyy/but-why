@@ -6,27 +6,19 @@ import { DatabaseSync } from "node:sqlite";
 
 import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
-import { afterEach, describe, it as ordinaryIt } from "vitest";
+import { describe, it as ordinaryIt } from "vitest";
 
 import { collapseHome, mapRuntimeError } from "../src/cli.js";
 import { butWhyGitignoreBlock } from "../src/init/gitignore.js";
 import { encodeToon } from "../src/output/toon.js";
-import {
-  cleanupTempRoots,
-  createGitRepo,
-  createTempRoot,
-  repoRoot,
-  runByInProcessEffect,
-  runJustBy,
-} from "./support/by-cli.js";
+import { createGitRepo, repoRoot, runByInProcessEffect, runJustBy } from "./support/by-cli.js";
+import { createTestWorkspace } from "./support/testWorkspace.js";
 
 const expectedBin = collapseHome(join(repoRoot, "bin/by"));
 const expectedConfigDoc = join(repoRoot, "docs/public/config.md");
 const expectedSetupDoc = join(repoRoot, "docs/public/setup.md");
 const managedGitignoreBlock = `${butWhyGitignoreBlock}\n`;
 const sharedStatePath = (root: string): string => join(root, ".git", "but-why", "state.sqlite");
-
-afterEach(cleanupTempRoots);
 
 describe("by CLI", () => {
   ordinaryIt(
@@ -528,7 +520,7 @@ validationSetup:
 
   it.effect("prints not_git_work_tree outside Git", () =>
     Effect.gen(function* () {
-      const root = createTempRoot();
+      const root = createTestWorkspace();
       const result = yield* runByInProcessEffect(root, ["init", "--task-prefix", "BY"]);
 
       expect(result.status).toBe(1);

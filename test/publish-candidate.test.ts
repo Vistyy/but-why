@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { afterEach, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 
 import { openCandidatePublication } from "../src/publication/publishCandidate.js";
 import { openSqliteCandidateStore } from "../src/sqlite/sqliteCandidateStore.js";
@@ -8,7 +8,6 @@ import { openSqliteChangeStartStore } from "../src/sqlite/sqliteChangeStartStore
 import { openSqliteChangeStore } from "../src/sqlite/sqliteChangeStore.js";
 import { openSqliteTaskStore } from "../src/sqlite/sqliteTaskStore.js";
 import { publicTaskId } from "../src/task/taskId.js";
-import { cleanupTempRoots } from "./support/by-cli.js";
 import {
   candidateReadyRepo,
   candidateSqliteInput,
@@ -22,8 +21,6 @@ const policy = {
   copyFiles: [],
   specialistReviews: [],
 };
-
-afterEach(cleanupTempRoots);
 
 describe("Candidate publication", () => {
   it("publishes one passing taskless Candidate with deterministic metadata", () => {

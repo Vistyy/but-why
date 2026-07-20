@@ -1,11 +1,9 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 
 import { butWhyGitignoreBlock, ensureGitignoreBlock } from "../src/init/gitignore.js";
-import { cleanupTempRoots, createTempRoot } from "./support/by-cli.js";
-
-afterEach(cleanupTempRoots);
+import { createTestWorkspace } from "./support/testWorkspace.js";
 
 describe("managed Git ignore block", () => {
   it("creates the complete block with a trailing newline", () => {
@@ -50,7 +48,7 @@ describe("managed Git ignore block", () => {
 });
 
 const gitignorePath = (content?: string): string => {
-  const path = join(createTempRoot(), ".gitignore");
+  const path = join(createTestWorkspace(), ".gitignore");
 
   if (content !== undefined) writeFileSync(path, content);
 

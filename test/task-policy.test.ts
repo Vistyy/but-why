@@ -1,9 +1,8 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 
 import type { TaskState } from "../src/task/lifecycle.js";
 import { publicTaskId } from "../src/task/taskId.js";
 import type { TaskStore } from "../src/task/taskStore.js";
-import { cleanupTempRoots } from "./support/by-cli.js";
 import { taskStateTransitionPath } from "./support/taskLifecycle.js";
 import { createTaskStore } from "./support/taskStore.js";
 
@@ -11,8 +10,6 @@ const firstNow = "2026-06-30T12:00:00.000Z";
 const secondNow = "2026-06-30T12:05:00.000Z";
 const thirdNow = "2026-06-30T12:10:00.000Z";
 const closedStates = ["implementing", "validating", "needs_input", "ready", "done"] as const;
-
-afterEach(cleanupTempRoots);
 
 describe("Task command policy", () => {
   it.each(closedStates)("rejects approval in %s", (state) => {

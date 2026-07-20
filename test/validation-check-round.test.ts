@@ -1,14 +1,12 @@
 import { expect, it } from "@effect/vitest";
 import { Cause, Effect, Exit } from "effect";
-import { afterEach, describe } from "vitest";
+import { describe } from "vitest";
 
 import { runCheckPhase } from "../src/validation/runCheckRound.js";
 import type { RecordValidationRunCheckRoundInput } from "../src/validationRun/validationRunStore.js";
-import { cleanupTempRoots, createTempRoot } from "./support/by-cli.js";
+import { createTestWorkspace } from "./support/testWorkspace.js";
 
 const now = "2026-06-30T12:00:00.000Z";
-
-afterEach(cleanupTempRoots);
 
 describe("check round Findings", () => {
   it.effect("records every configured Check after failures when continuation is enabled", () =>
@@ -22,7 +20,7 @@ describe("check round Findings", () => {
           { id: "first", command: "exit 1", timeoutSeconds: 1 },
           { id: "later", command: "exit 0", timeoutSeconds: 1 },
         ],
-        artifactsRoot: createTempRoot(),
+        artifactsRoot: createTestWorkspace(),
         now,
         sandbox: {
           exec: async (command) => {
@@ -59,7 +57,7 @@ describe("check round Findings", () => {
           runCheckPhase({
             validationRunId: "candidate-run",
             checks: [{ id: "quality", command: "exit 0", timeoutSeconds: 1 }],
-            artifactsRoot: createTempRoot(),
+            artifactsRoot: createTestWorkspace(),
             expectedHeadSha: "abc123",
             allowedUntrackedFiles: [".validation-env"],
             now,
@@ -93,7 +91,7 @@ describe("check round Findings", () => {
       const result = yield* runCheckPhase({
         validationRunId: "by-1.v1",
         checks: [{ id: "quality", command: "sleep 10", timeoutSeconds: 1 }],
-        artifactsRoot: createTempRoot(),
+        artifactsRoot: createTestWorkspace(),
         now,
         sandbox: {
           exec: async (command) => {

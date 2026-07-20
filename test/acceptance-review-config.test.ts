@@ -1,11 +1,11 @@
-import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { tmpdir } from "node:os";
 import { describe, expect, it } from "vitest";
 
 import { resolveAcceptanceReviewPolicy } from "../src/acceptanceReview/acceptanceReviewConfig.js";
 import type { GlobalConfig } from "../src/contracts/globalConfig.js";
 import type { RepoConfig } from "../src/contracts/repoConfig.js";
+import { createTestWorkspace } from "./support/testWorkspace.js";
 
 const profile = {
   agentRuntime: "pi" as const,
@@ -32,7 +32,7 @@ const globalConfig = (instructionsFile?: string): GlobalConfig => ({
 
 describe("Acceptance Review configuration", () => {
   it("resolves repository, global, then built-in instructions", () => {
-    const root = mkdtempSync(join(tmpdir(), "but-why-acceptance-config-"));
+    const root = createTestWorkspace();
     const globalConfigPath = join(root, "global", "config.json");
     mkdirSync(join(root, "repo", ".but-why", "reviewers"), { recursive: true });
     mkdirSync(join(root, "global", "reviewers"), { recursive: true });
@@ -74,7 +74,7 @@ describe("Acceptance Review configuration", () => {
   });
 
   it("resolves repository, global, then default Agent Profile selection", () => {
-    const root = mkdtempSync(join(tmpdir(), "but-why-acceptance-profile-"));
+    const root = createTestWorkspace();
     const profiles = {
       repo: { ...profile, agentModel: "repo-model" },
       global: { ...profile, agentModel: "global-model" },
