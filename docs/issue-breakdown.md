@@ -15,7 +15,9 @@ It ends when But Why? completes one real SQLite-tracked Task-backed Change and p
 
 | Task | Capability | Blocked by |
 | --- | --- | --- |
-| 135 | Consolidate the source hierarchy | 137 |
+| 146 | Migrate state stores to Effect programs | 137 |
+| 147 | Remove the synchronous state storage path | 146 |
+| 135 | Consolidate the source hierarchy | 147 |
 | 123 | Ship the Change-centered manual workflow | 107, 117, 129, 135 |
 | 125 | Produce an installable v1 package | 123 |
 | 131 | Dogfood the first SQLite-tracked Change workflow | 125 |
@@ -30,10 +32,12 @@ It ends when But Why? completes one real SQLite-tracked Task-backed Change and p
 4. Task 105 provides that graph to live Change Submit and consumes Candidate validation without dual writes.
 5. Task 106 migrates detailed inspection to Change commands and keeps Task projections concise.
 6. Task 107 removed the replaced Task-owned writers, readers, routes, compatibility paths, and historical SQLite migration chain in the implementation diff from baseline `bc6a1819457f469903094c6b85871565ec602372`.
-7. Task 137 replaces surviving native SQLite storage with Effect SQL.
-8. Task 135 reorganizes the surviving modules so every top-level source folder has one domain owner or one clear shared role.
-9. Task 117 completes cancellation and cleanup before Task 123 ships the public workflow.
-10. After Task 126 publishes the package, Task 138 replaces the temporary unreleased-schema instruction with the post-publication compatibility policy.
+7. Task 137 establishes the Effect SQL baseline and shared repository state foundation.
+8. Task 146 migrates every surviving state store and caller to the Effect-native storage contract.
+9. Task 147 removes the temporary synchronous storage path and completes structural verification.
+10. Task 135 reorganizes the surviving modules so every top-level source folder has one domain owner or one clear shared role.
+11. Task 117 completes cancellation and cleanup before Task 123 ships the public workflow.
+12. After Task 126 publishes the package, Task 138 replaces the temporary unreleased-schema instruction with the post-publication compatibility policy.
 
 ## Independent test-execution workstream
 

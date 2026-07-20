@@ -27,6 +27,13 @@ describe("state database session", () => {
         database.prepare("SELECT common_directory FROM shared_state_identity WHERE id = 1").get(),
       ),
     ).toEqual({ common_directory: gitRoot(root).commonDirectory });
+    expect(
+      withStateDatabase(session, (database) =>
+        database
+          .prepare("SELECT migration_id, name FROM effect_sql_migrations ORDER BY migration_id")
+          .all(),
+      ),
+    ).toEqual([{ migration_id: 1, name: "baseline" }]);
   });
 
   it("rejects a database replaced with another repository identity", () => {
