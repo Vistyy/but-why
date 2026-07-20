@@ -18,12 +18,12 @@ import type {
   CandidateValidationToolingFailure,
   CompleteCandidateValidationRunInput,
   RecordCandidateToolingFailureInput,
+  RecordCandidateValidationCommandRoundInput,
   RecordCandidateWorkspaceSetupInput,
   StartCandidateValidationRunInput,
   StartCandidateValidationRunResult,
 } from "../candidateValidation/candidateValidationRunStore.js";
 import { validationPhase } from "../validationRun/validationRun.js";
-import type { RecordValidationRunCommandRoundInput } from "../validationRun/validationRunStore.js";
 
 export const openSqliteCandidateValidationRunStore = (
   input: SqliteStoreInput,
@@ -202,7 +202,10 @@ const recordToolingFailure = (
     );
 };
 
-const recordRound = (database: DatabaseSync, input: RecordValidationRunCommandRoundInput): void => {
+const recordRound = (
+  database: DatabaseSync,
+  input: RecordCandidateValidationCommandRoundInput,
+): void => {
   database.exec("BEGIN IMMEDIATE");
   try {
     database

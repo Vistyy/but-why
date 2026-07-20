@@ -4,12 +4,9 @@ But Why? is an unreleased, task-based validation system for agent-assisted code 
 
 CLI: `by`.
 
-The current direction is to:
+But Why? keeps Task intent and lifecycle separate from Change-owned implementation, validation, delivery, and pull request state.
+A Change can link to an approved Task or remain taskless.
 
-- manage repository-scoped tasks
-- validate submitted branches against approved Task intent
-- publish validated changes through GitHub pull requests
-- use Sandcastle for execution, agents, checks, logs, retries, and token usage
+It prepares Managed Worktrees, validates committed Candidates, and publishes eligible Changes through GitHub pull requests.
 
 Follow [`docs/public/setup.md`](docs/public/setup.md) for installation and setup.
-The guide includes a copyable prompt for agent-assisted setup.

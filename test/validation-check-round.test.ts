@@ -3,7 +3,7 @@ import { Cause, Effect, Exit } from "effect";
 import { describe } from "vitest";
 
 import { runCheckPhase } from "../src/validation/runCheckRound.js";
-import type { RecordValidationRunCheckRoundInput } from "../src/validationRun/validationRunStore.js";
+import type { RecordCandidateValidationCheckRoundInput } from "../src/candidateValidation/candidateValidationRunStore.js";
 import { createTestWorkspace } from "./support/testWorkspace.js";
 
 const now = "2026-06-30T12:00:00.000Z";
@@ -11,7 +11,7 @@ const now = "2026-06-30T12:00:00.000Z";
 describe("check round Findings", () => {
   it.effect("records every configured Check after failures when continuation is enabled", () =>
     Effect.gen(function* () {
-      const recordedRounds: RecordValidationRunCheckRoundInput[] = [];
+      const recordedRounds: RecordCandidateValidationCheckRoundInput[] = [];
       const commands: string[] = [];
       const result = yield* runCheckPhase({
         validationRunId: "candidate-run",
@@ -87,7 +87,7 @@ describe("check round Findings", () => {
 
   it.effect("records timed-out check Findings without severity", () =>
     Effect.gen(function* () {
-      const recordedRounds: RecordValidationRunCheckRoundInput[] = [];
+      const recordedRounds: RecordCandidateValidationCheckRoundInput[] = [];
       const result = yield* runCheckPhase({
         validationRunId: "by-1.v1",
         checks: [{ id: "quality", command: "sleep 10", timeoutSeconds: 1 }],

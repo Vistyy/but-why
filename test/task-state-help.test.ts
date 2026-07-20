@@ -7,9 +7,15 @@ const taskId = publicTaskId("BY-1");
 
 describe("Task state command guidance", () => {
   it.each([
-    ["implementing", "Continue implementation, then run by submit BY-1."],
+    [
+      "implementing",
+      "Inspect the linked Change with by task show BY-1, then submit it with by change submit <change-id>.",
+    ],
     ["validating", "Wait for validation to finish."],
-    ["needs_input", "Address the Findings, then run by submit BY-1."],
+    [
+      "needs_input",
+      "Address the Findings on the linked Change, then run by change submit <change-id>.",
+    ],
     ["ready", "Review and merge the pull request."],
     ["done", "Task is already done."],
   ] as const)("guides approval rejected in %s", (state, help) => {

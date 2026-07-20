@@ -1,16 +1,36 @@
 import type { ResolvedPiAgentProfile } from "../agent/agentProfiles.js";
-import type {
-  RecordValidationRunCheckRoundInput,
-  RecordValidationRunCommandRoundInput,
-  RecordValidationRunPrepareRoundInput,
-} from "../validationRun/validationRunStore.js";
 import type { ValidationToolingFailureRecordInput } from "../validation/validationToolingFailures.js";
 import type {
   ValidationPhase,
+  ValidationPhaseStatus,
+  ValidationRunArtifactRecord,
   ValidationRunFindingRecord,
 } from "../validationRun/validationRun.js";
 
 export type CandidateValidationOutcome = "passed" | "blocked" | "tooling_failed";
+
+export type RecordCandidateValidationCommandRoundInput = {
+  readonly validationRunId: string;
+  readonly phase: ValidationPhase;
+  readonly producer: string;
+  readonly roundNumber: number;
+  readonly roundStatus: ValidationPhaseStatus;
+  readonly phaseStatus: ValidationPhaseStatus;
+  readonly artifactRecords: readonly Omit<ValidationRunArtifactRecord, "createdAt">[];
+  readonly finding?: Omit<ValidationRunFindingRecord, "createdAt" | "updatedAt">;
+  readonly findings?: readonly Omit<ValidationRunFindingRecord, "createdAt" | "updatedAt">[];
+  readonly now: string;
+};
+
+export type RecordCandidateValidationCheckRoundInput = Omit<
+  RecordCandidateValidationCommandRoundInput,
+  "phase"
+>;
+
+export type RecordCandidateValidationPrepareRoundInput = Omit<
+  RecordCandidateValidationCommandRoundInput,
+  "phase" | "producer"
+>;
 
 export type CandidateValidationRunStore = {
   readonly startOrReuse: (
@@ -21,8 +41,8 @@ export type CandidateValidationRunStore = {
   readonly listRunsForCandidate: (candidateId: string) => readonly CandidateValidationRunRecord[];
   readonly recordWorkspaceSetup: (input: RecordCandidateWorkspaceSetupInput) => void;
   readonly recordToolingFailure: (input: RecordCandidateToolingFailureInput) => void;
-  readonly recordPrepareRound: (input: RecordValidationRunPrepareRoundInput) => void;
-  readonly recordCheckRound: (input: RecordValidationRunCheckRoundInput) => void;
+  readonly recordPrepareRound: (input: RecordCandidateValidationPrepareRoundInput) => void;
+  readonly recordCheckRound: (input: RecordCandidateValidationCheckRoundInput) => void;
   readonly recordAcceptanceRound: (input: RecordCandidateAcceptanceRoundInput) => void;
   readonly recordSpecialistRound: (input: RecordCandidateSpecialistRoundInput) => void;
   readonly listRounds: (validationRunId: string) => readonly CandidateValidationRound[];
@@ -83,17 +103,17 @@ export type CompleteCandidateValidationRunInput = {
 };
 
 export type RecordCandidateAcceptanceRoundInput = Omit<
-  RecordValidationRunCommandRoundInput,
+  RecordCandidateValidationCommandRoundInput,
   "phase" | "producer" | "finding"
 > & {
-  readonly findings: NonNullable<RecordValidationRunCommandRoundInput["findings"]>;
+  readonly findings: NonNullable<RecordCandidateValidationCommandRoundInput["findings"]>;
 };
 
 export type RecordCandidateSpecialistRoundInput = Omit<
-  RecordValidationRunCommandRoundInput,
+  RecordCandidateValidationCommandRoundInput,
   "phase" | "finding"
 > & {
-  readonly findings: NonNullable<RecordValidationRunCommandRoundInput["findings"]>;
+  readonly findings: NonNullable<RecordCandidateValidationCommandRoundInput["findings"]>;
 };
 
 export type RecordCandidateWorkspaceSetupInput = {

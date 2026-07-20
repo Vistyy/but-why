@@ -9,14 +9,12 @@ import { runtimeError, success, type CliResult, usageError } from "./cliResults.
 import { initRepoLocalContext } from "./init/repoContext.js";
 import { structuredContractDiagnostics } from "./output/contractDiagnostics.js";
 import type { OutputFormat, StructuredObject } from "./output/structured.js";
-import { routeSubmit } from "./submit/submitCli.js";
 import { routeChange } from "./cli/change/changeCli.js";
 import { dashboard } from "./cli/task/dashboard.js";
 import { routeTask } from "./cli/task/taskCli.js";
 import { routeValidationRun } from "./cli/validationRun/validationRunCli.js";
 import type { InteractiveSessionHost } from "./change/interactiveSessionHost.js";
 import type { ReviewerAgentRuntime } from "./agent/reviewerAgentRuntime.js";
-import type { LocalSubmitPreflight } from "./localSubmit/submitPreflight.js";
 import type { TaskUseCases } from "./task/taskUseCases.js";
 
 export type { CliResult } from "./cliResults.js";
@@ -27,7 +25,6 @@ export type CliEnvironment = {
   readonly globalConfigPath: string;
   readonly now: () => Date;
   readonly taskUseCases?: TaskUseCases;
-  readonly submitPreflight?: LocalSubmitPreflight;
   readonly reviewerAgentRuntime?: ReviewerAgentRuntime;
   readonly interactiveSessionHost?: InteractiveSessionHost;
   readonly interactiveSessionPath?: string;
@@ -108,10 +105,6 @@ const routeCommandArgs = (
 
   if (firstArg === "change") {
     return routeChange(args.slice(1), environment);
-  }
-
-  if (firstArg === "submit") {
-    return routeSubmit(args.slice(1), environment);
   }
 
   if (firstArg === "validation-run") {
@@ -242,10 +235,6 @@ const helpView = (bin: string, docs: PublicDocs): StructuredObject =>
       {
         command: "by change implement <change-id> [--handoff-file <path>]",
         description: "Launch a fresh Interactive Session in a ready Change worktree",
-      },
-      {
-        command: "by submit <task-id>",
-        description: "Create a Validation Run from submit preflight",
       },
       {
         command: "by validation-run show <validation-run-id>",

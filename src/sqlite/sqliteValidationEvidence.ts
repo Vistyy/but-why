@@ -1,11 +1,11 @@
 import type { DatabaseSync } from "node:sqlite";
 
 import { encodeSqliteJsonStringArray } from "./sqliteJsonStringArray.js";
-import type { RecordValidationRunCommandRoundInput } from "../validationRun/validationRunStore.js";
+import type { RecordCandidateValidationCommandRoundInput } from "../candidateValidation/candidateValidationRunStore.js";
 
 export const recordValidationEvidenceMutation = (
   database: DatabaseSync,
-  input: RecordValidationRunCommandRoundInput,
+  input: RecordCandidateValidationCommandRoundInput,
   tables: { readonly artifacts: string; readonly findings: string },
 ): void => {
   for (const artifact of input.artifactRecords) {

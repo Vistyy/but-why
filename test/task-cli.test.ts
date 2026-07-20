@@ -64,7 +64,6 @@ help[1]: Run \`by task list\` to see open tasks.`);
           state: "new",
           createdAt: firstNow,
           updatedAt: firstNow,
-          branch: null,
         });
       }),
   );
@@ -126,7 +125,7 @@ help[1]: Run \`by task list\` to see open tasks.`);
       expect(result.stderr).toBe("");
       expect(result.stdout).toContain("code: invalid_task_state");
       expect(result.stdout).toContain("Cannot approve task BY-1 from state implementing");
-      expect(result.stdout).toContain("Continue implementation, then run by submit BY-1.");
+      expect(result.stdout).toContain("by change submit <change-id>");
     }),
   );
 
@@ -1220,8 +1219,6 @@ const taskSummary = (overrides: Partial<TaskSummary> = {}): TaskSummary => ({
 const taskRecord = (overrides: Partial<TaskRecord> = {}): TaskRecord => ({
   ...taskSummary(),
   description: "Description",
-  branch: null,
-  latestValidationRun: null,
   commentCount: 0,
   prerequisites: [],
   dependents: [],

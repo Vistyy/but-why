@@ -39,7 +39,6 @@ const storedTaskRecordColumns = [
   "description",
   "state",
   ...taskTimestampColumns,
-  "branch",
   "(SELECT COUNT(*) FROM task_comments WHERE task_id = tasks.id) AS commentCount",
 ].join(", ");
 
@@ -570,7 +569,6 @@ const rowToStoredTaskRecord = (
 ): StoredTaskRecord => ({
   ...rowToTaskSummary(database, row),
   description: row.description,
-  branch: row.branch,
   commentCount: Number(row.commentCount),
   prerequisites: dependencyFacts(database, row.id, "prerequisites"),
   dependents: dependencyFacts(database, row.id, "dependents"),
@@ -606,7 +604,6 @@ type TaskSummaryRow = TaskSummary;
 
 type StoredTaskRecordRow = TaskSummary & {
   readonly description: string;
-  readonly branch: string | null;
   readonly commentCount: number | bigint;
 };
 

@@ -27,8 +27,6 @@ export type GhCommandResult =
 
 export type GhCommandRunner = (args: readonly string[], cwd: string) => GhCommandResult;
 
-export const protectedBranchNames = new Set(["main", "master", "develop", "trunk"]);
-
 const runGhCommand: GhCommandRunner = (args, cwd) => {
   const result = spawnSync("gh", [...args], {
     cwd,

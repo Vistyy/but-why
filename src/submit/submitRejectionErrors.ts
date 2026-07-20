@@ -5,12 +5,10 @@ import type {
   MissingAgentProfile,
   UnsupportedAgentRuntime,
 } from "../agent/agentProfileErrors.js";
-import {
-  GlobalConfigValidationFailed,
-  RepoConfigValidationFailed,
-} from "../contracts/configErrors.js";
+import { RepoConfigValidationFailed } from "../contracts/configErrors.js";
+import type { GlobalConfigValidationFailed } from "../contracts/configErrors.js";
 
-export { GlobalConfigValidationFailed, RepoConfigValidationFailed };
+export { RepoConfigValidationFailed };
 
 export class InvalidReviewerConfig extends Data.TaggedError("InvalidReviewerConfig")<{
   readonly profileName?: string;

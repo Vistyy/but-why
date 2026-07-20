@@ -1,7 +1,7 @@
 # Configuration
 
-This document specifies the reduced v1 target configuration.
-The public configuration docs continue to describe shipped behavior until the migration Tasks implement this contract.
+This document specifies the implemented Change-centered v1 configuration.
+Use `by change submit <change-id>` to apply this validation policy to a Change Candidate.
 
 ## Config files
 

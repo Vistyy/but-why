@@ -5,7 +5,7 @@ import { runRepositoryPreparation } from "../repositoryPreparation/runRepository
 import type { SubmitPrepareConfig } from "../submit/submitRepoConfig.js";
 import { writeValidationRunArtifactFile } from "../validationRun/artifactFiles.js";
 import { validationPhase } from "../validationRun/validationRun.js";
-import type { RecordValidationRunPrepareRoundInput } from "../validationRun/validationRunStore.js";
+import type { RecordCandidateValidationPrepareRoundInput } from "../candidateValidation/candidateValidationRunStore.js";
 import { ensureCandidateIntegrity } from "./ensureCandidateIntegrity.js";
 import {
   GitToolingFailed,
@@ -24,7 +24,7 @@ export type RunPreparePhaseInput = {
   readonly expectedHeadSha?: string;
   readonly allowedUntrackedFiles?: readonly string[];
   readonly now: string;
-  readonly recordPrepareRound: (input: RecordValidationRunPrepareRoundInput) => void;
+  readonly recordPrepareRound: (input: RecordCandidateValidationPrepareRoundInput) => void;
 };
 
 export type RunPreparePhaseResult =
@@ -156,7 +156,7 @@ const runPrepareCommand = (
 
 const recordPrepareRound = (
   input: RunPreparePhaseInput,
-  prepareRound: RecordValidationRunPrepareRoundInput,
+  prepareRound: RecordCandidateValidationPrepareRoundInput,
 ): Effect.Effect<void, ValidationToolingFailure> =>
   Effect.try({
     try: () => {
@@ -175,7 +175,7 @@ const prepareFinding = (
   commandResult: CommandResult,
   timedOut: boolean,
   artifactRefs: readonly string[],
-): NonNullable<RecordValidationRunPrepareRoundInput["finding"]> => ({
+): NonNullable<RecordCandidateValidationPrepareRoundInput["finding"]> => ({
   id: `${validationRunId}-F1`,
   validationRunId,
   phase: validationPhase.prepare,
@@ -200,7 +200,7 @@ const writePrepareArtifacts = (input: {
   readonly artifactMaxBytes?: number;
   readonly now: string;
 }): Effect.Effect<
-  readonly RecordValidationRunPrepareRoundInput["artifactRecords"][number][],
+  readonly RecordCandidateValidationPrepareRoundInput["artifactRecords"][number][],
   ValidationToolingFailure
 > =>
   Effect.try({

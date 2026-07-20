@@ -3,11 +3,10 @@ import { Data } from "effect";
 import type { ContractDiagnostic } from "../contracts/contractDiagnostics.js";
 import type { CleanupState } from "../validationRun/cleanup.js";
 import type { ValidationToolingFailureKind } from "../validationRun/toolingErrorKind.js";
-import type { TaskContextSnapshotOperationName } from "../validationRun/taskContextSnapshot.js";
 import type { ValidationWorkspaceCleanupResult } from "./validationWorkspace.js";
 
-export class TaskContextSnapshotFailed extends Data.TaggedError("TaskContextSnapshotFailed")<{
-  readonly operationName: TaskContextSnapshotOperationName;
+class TaskContextSnapshotFailed extends Data.TaggedError("TaskContextSnapshotFailed")<{
+  readonly operationName: string;
   readonly message: string;
 }> {}
 
@@ -37,14 +36,14 @@ export class SandcastleToolingFailed extends Data.TaggedError("SandcastleTooling
   readonly message: string;
 }> {}
 
-export class AgentHarnessLaunchFailed extends Data.TaggedError("AgentHarnessLaunchFailed")<{
+class AgentHarnessLaunchFailed extends Data.TaggedError("AgentHarnessLaunchFailed")<{
   readonly operationName: "launch_agent_harness";
   readonly profileName: string;
   readonly agentRuntime: string;
   readonly message: string;
 }> {}
 
-export class SandboxingUnavailable extends Data.TaggedError("SandboxingUnavailable")<{
+class SandboxingUnavailable extends Data.TaggedError("SandboxingUnavailable")<{
   readonly operationName: string;
   readonly message: string;
 }> {}
@@ -79,14 +78,12 @@ export class TokenUsageContractFailed extends Data.TaggedError("TokenUsageContra
   readonly message: string;
 }> {}
 
-export class GitHubPublishingToolingFailed extends Data.TaggedError(
-  "GitHubPublishingToolingFailed",
-)<{
+class GitHubPublishingToolingFailed extends Data.TaggedError("GitHubPublishingToolingFailed")<{
   readonly operationName: string;
   readonly message: string;
 }> {}
 
-export class GitHubPollingToolingFailed extends Data.TaggedError("GitHubPollingToolingFailed")<{
+class GitHubPollingToolingFailed extends Data.TaggedError("GitHubPollingToolingFailed")<{
   readonly operationName: string;
   readonly message: string;
 }> {}
@@ -116,10 +113,6 @@ export type ValidationToolingFailureRecordInput = {
   readonly cleanupWorktree?: CleanupState;
   readonly cleanupTempRef?: CleanupState;
 };
-
-export const validationToolingFailureKind = (
-  failure: ValidationToolingFailure,
-): ValidationToolingFailureKind => validationToolingFailureRecord(failure).errorKind;
 
 export const validationToolingFailureRecord = (
   failure: ValidationToolingFailure,

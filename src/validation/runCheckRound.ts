@@ -5,7 +5,7 @@ import type { SubmitCheckConfig } from "../submit/submitRepoConfig.js";
 import { ensureCandidateIntegrity } from "./ensureCandidateIntegrity.js";
 import { writeValidationRunArtifactFile } from "../validationRun/artifactFiles.js";
 import { validationPhase } from "../validationRun/validationRun.js";
-import type { RecordValidationRunCheckRoundInput } from "../validationRun/validationRunStore.js";
+import type { RecordCandidateValidationCheckRoundInput } from "../candidateValidation/candidateValidationRunStore.js";
 import {
   CheckCommandExecutionToolingFailed,
   GitToolingFailed,
@@ -24,7 +24,7 @@ export type RunCheckPhaseInput = {
   readonly allowedUntrackedFiles?: readonly string[];
   readonly now: string;
   readonly continueAfterFinding?: boolean;
-  readonly recordCheckRound: (input: RecordValidationRunCheckRoundInput) => void;
+  readonly recordCheckRound: (input: RecordCandidateValidationCheckRoundInput) => void;
 };
 
 export type RunCheckPhaseResult =
@@ -55,8 +55,8 @@ type CheckRound = {
   readonly failed: boolean;
   readonly lastCheck: boolean;
   readonly priorFailure: boolean;
-  readonly artifactRecords: RecordValidationRunCheckRoundInput["artifactRecords"];
-  readonly finding?: NonNullable<RecordValidationRunCheckRoundInput["finding"]>;
+  readonly artifactRecords: RecordCandidateValidationCheckRoundInput["artifactRecords"];
+  readonly finding?: NonNullable<RecordCandidateValidationCheckRoundInput["finding"]>;
 };
 
 const timeoutExitCode = 124;
@@ -170,7 +170,7 @@ const checkFinding = (
   commandResult: CommandResult,
   timedOut: boolean,
   artifactRefs: readonly string[],
-): NonNullable<RecordValidationRunCheckRoundInput["finding"]> => ({
+): NonNullable<RecordCandidateValidationCheckRoundInput["finding"]> => ({
   id: `${validationRunId}-F${findingNumber}`,
   validationRunId,
   phase: validationPhase.checks,
@@ -259,7 +259,7 @@ const writeCheckArtifacts = (input: {
   readonly artifactMaxBytes?: number;
   readonly now: string;
 }): Effect.Effect<
-  readonly RecordValidationRunCheckRoundInput["artifactRecords"][number][],
+  readonly RecordCandidateValidationCheckRoundInput["artifactRecords"][number][],
   ValidationToolingFailure
 > =>
   Effect.try({

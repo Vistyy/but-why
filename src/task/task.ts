@@ -19,8 +19,6 @@ export type TaskSummary = {
 
 export type TaskRecord = TaskSummary & {
   readonly description: string;
-  readonly branch: string | null;
-  readonly latestValidationRun: string | null;
   readonly commentCount: number;
   readonly prerequisites: readonly TaskDependencyFact[];
   readonly dependents: readonly TaskDependencyFact[];

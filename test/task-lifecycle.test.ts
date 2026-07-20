@@ -2,7 +2,6 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 import { taskStates, canTransition, isTaskState, type TaskState } from "../src/task/lifecycle.js";
-import { canSubmitFrom, type SubmitEligibleState } from "../src/task/submitPolicy.js";
 
 describe("Task lifecycle", () => {
   it("owns the canonical Task state vocabulary and legal transitions", () => {
@@ -39,12 +38,6 @@ describe("Task lifecycle", () => {
     expect(isTaskState("new")).toBe(true);
     expect(isTaskState("todo")).toBe(true);
     expect(isTaskState("unknown")).toBe(false);
-  });
-
-  it("owns submit eligibility as a type guard", () => {
-    const submitEligibleStates: SubmitEligibleState[] = taskStates.filter(canSubmitFrom);
-
-    expect(submitEligibleStates).toEqual(["implementing", "needs_input"]);
   });
 
   it("keeps the durable Task state constraint in sync with Task states", () => {

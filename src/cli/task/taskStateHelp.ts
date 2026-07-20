@@ -3,11 +3,11 @@ import type { PublicTaskId } from "../../task/taskId.js";
 export const taskApprovalStateHelp = (taskId: PublicTaskId, state: string): string => {
   switch (state) {
     case "implementing":
-      return `Continue implementation, then run by submit ${taskId}.`;
+      return `Inspect the linked Change with by task show ${taskId}, then submit it with by change submit <change-id>.`;
     case "validating":
       return "Wait for validation to finish.";
     case "needs_input":
-      return `Address the Findings, then run by submit ${taskId}.`;
+      return `Address the Findings on the linked Change, then run by change submit <change-id>.`;
     case "ready":
       return "Review and merge the pull request.";
     case "done":

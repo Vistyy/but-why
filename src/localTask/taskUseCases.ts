@@ -44,13 +44,10 @@ export const loadTaskUseCases = (input: LoadTaskUseCasesInput): LoadTaskUseCases
     };
   }
 
-  const { taskStore, validationRunStore } = openRepoLocalStores(repoContext.context);
+  const { taskStore } = openRepoLocalStores(repoContext.context);
 
   return {
     ok: true,
-    tasks: openTaskUseCases(repoContext.context, {
-      taskStore,
-      validationRunStore,
-    }),
+    tasks: openTaskUseCases(repoContext.context, { taskStore }),
   };
 };
