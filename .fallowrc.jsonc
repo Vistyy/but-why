@@ -64,13 +64,6 @@
     "maxUnitSize": 900,
     "thresholdOverrides": [
       {
-        "files": ["src/submit/submitCli.ts"],
-        "functions": ["submitPreflightError"],
-        "maxCyclomatic": 29,
-        "maxCognitive": 20,
-        "reason": "Existing exhaustive CLI error mapper. Keep the current ceiling blocking so any growth must split the mapper."
-      },
-      {
         "files": ["src/init/repoContext.ts"],
         "functions": ["initRepoLocalContext"],
         "maxCognitive": 18,
@@ -91,7 +84,7 @@
       },
       {
         "name": "cli-command-edge",
-        "patterns": ["src/cli.ts", "src/cli*.ts", "src/cli/**", "src/submit/submitCli.ts"]
+        "patterns": ["src/cli.ts", "src/cli*.ts", "src/cli/**"]
       },
       {
         "name": "output-types",
@@ -131,7 +124,6 @@
           "src/candidate/candidate.ts",
           "src/change/change.ts",
           "src/task/lifecycle.ts",
-          "src/task/submitPolicy.ts",
           "src/task/task.ts",
           "src/task/taskId.ts"
         ]
@@ -190,10 +182,7 @@
       },
       {
         "name": "validation-run-store",
-        "patterns": [
-          "src/candidateValidation/candidateValidationRunStore.ts",
-          "src/validationRun/validationRunStore.ts"
-        ]
+        "patterns": ["src/candidateValidation/candidateValidationRunStore.ts"]
       },
       {
         "name": "validation-runs",
@@ -215,14 +204,6 @@
       {
         "name": "validation-tooling-failures",
         "patterns": ["src/validation/validationToolingFailures.ts"]
-      },
-      {
-        "name": "task-authority-port",
-        "patterns": ["src/taskAuthority/taskAuthority.ts"]
-      },
-      {
-        "name": "submission-environment-port",
-        "patterns": ["src/submissionEnvironment/submissionEnvironment.ts"]
       },
       {
         "name": "validation-workspace",
@@ -254,7 +235,6 @@
       {
         "name": "local-orchestration",
         "patterns": [
-          "src/localSubmit/**",
           "src/localTask/**",
           "src/localChange/**",
           "src/repositoryPreparation/localRepositoryPreparation.ts",
@@ -263,8 +243,6 @@
           "src/candidateValidation/validateCandidate.ts",
           "src/candidateValidation/resolveCandidateValidationPolicy.ts",
           "src/change/submitChange.ts",
-          "src/submissionEnvironment/localSubmissionEnvironment.ts",
-          "src/taskAuthority/localTaskAuthority.ts"
         ]
       },
       {
@@ -294,21 +272,18 @@
           "src/sqlite/sqliteChangePublication.ts",
           "src/sqlite/sqliteJsonStringArray.ts",
           "src/sqlite/sqliteTaskContextSnapshot.ts",
-          "src/sqlite/sqliteValidationEvidence.ts",
-          "src/sqlite/sqliteValidationRunInternals.ts"
+          "src/sqlite/sqliteValidationEvidence.ts"
         ]
       },
       {
         "name": "sqlite-concrete-stores",
         "patterns": [
           "src/sqlite/sqliteCandidateValidationRunStore.ts",
-          "src/sqlite/sqliteValidationRunStore.ts",
           "src/sqlite/sqliteCandidateStore.ts",
           "src/sqlite/sqliteChangeCandidateCaptureStore.ts",
           "src/sqlite/sqliteChangeStore.ts",
           "src/sqlite/sqliteChangeStartStore.ts",
-          "src/sqlite/sqliteTaskStore.ts",
-          "src/sqlite/sqliteValidationRuns.ts"
+          "src/sqlite/sqliteTaskStore.ts"
         ]
       },
       {
@@ -357,7 +332,6 @@
         ],
         "allowTypeOnly": [
           "interactive-session-port",
-          "submission-environment-port",
           "validation-workspace"
         ]
       },
@@ -489,16 +463,6 @@
         "allowTypeOnly": ["contracts", "validation-workspace"]
       },
       {
-        "from": "task-authority-port",
-        "allow": ["domain", "validation-runs"],
-        "allowTypeOnly": ["validation-run-store"]
-      },
-      {
-        "from": "submission-environment-port",
-        "allow": ["domain"],
-        "allowTypeOnly": ["validation-tooling-failures", "validation-workspace"]
-      },
-      {
         "from": "validation-workspace",
         "allow": ["domain"]
       },
@@ -514,9 +478,7 @@
           "repo-init",
           "validation-run-store",
           "validation-runs",
-          "submission-environment-port",
           "task-adapter",
-          "task-authority-port",
           "change-start-adapter",
           "change-start-store",
           "interactive-session-port",
@@ -571,10 +533,8 @@
           "publication-git-adapter",
           "publication-use-case",
           "sandcastle-adapter",
-          "submission-environment-port",
           "task-adapter",
           "submit-rejection-errors",
-          "task-authority-port",
           "task-store",
           "use-cases",
           "validation-runs",
