@@ -74,11 +74,11 @@ The migration-ledger test must inspect `migration_id` and `name` in `effect_sql_
 
 ## Completion evidence
 
-- `just quality` passed with 343 tests passing and one intentionally skipped.
+- `just quality` passed with 344 tests passing and one intentionally skipped.
 - `cd spikes/effect-first-path && pnpm install --frozen-lockfile && pnpm run typecheck && pnpm test` passed.
 - The migration ledger integration tests passed for fresh and repeated initialization.
 - The Spec Reviewer returned `APPROVED`.
-- The Standards Reviewer review is pending the final lifecycle correction.
+- The Standards Reviewer returned `APPROVED WITH REQUIRED COMMENTS` with one documentation correction, which this evidence records.
 
 ## Blocked by
 
