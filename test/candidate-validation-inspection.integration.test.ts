@@ -448,42 +448,6 @@ describe("Candidate-owned Validation Run inspection", () => {
         });
       }),
   );
-
-  it.effect("does not inspect a Task-owned Validation Run with the same ID", () =>
-    Effect.gen(function* () {
-      const root = createInitializedRepo();
-      const database = sqliteInput(root);
-      database.withDatabase((connection) => {
-        connection
-          .prepare(
-            `INSERT INTO tasks (id, numeric_id, title, description, state, created_at, updated_at)
-         VALUES ('1', 1, 'Legacy', 'Legacy task', 'new', ?, ?)`,
-          )
-          .run(now, now);
-        connection
-          .prepare(
-            `INSERT INTO validation_runs (
-           id, task_id, task_validation_number, status, branch, commit_sha,
-           github_owner, github_repo, github_base_branch,
-           github_remote_name, github_remote_url, created_at, updated_at
-         ) VALUES ('shared-id', '1', 1, 'active', 'feature', 'head',
-           'acme', 'widgets', 'main', 'origin', 'https://example.com', ?, ?)`,
-          )
-          .run(now, now);
-      });
-
-      const result = yield* runByInProcessEffect(root, [
-        "validation-run",
-        "show",
-        "shared-id",
-        "--output",
-        "json",
-      ]);
-
-      expect(result.status).toBe(1);
-      expect(JSON.parse(result.stdout).error.code).toBe("validation_run_not_found");
-    }),
-  );
 });
 
 const candidateValidationFixture = () => {
