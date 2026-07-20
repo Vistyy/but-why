@@ -1,5 +1,6 @@
+import { it } from "@effect/vitest";
 import { Effect } from "effect";
-import { describe, expect, it } from "vitest";
+import { describe, expect } from "vitest";
 
 import {
   decodeReviewerOutputContract,
@@ -7,56 +8,56 @@ import {
 } from "../src/contracts/reviewerOutput.js";
 
 describe("reviewer output contract", () => {
-  it("accepts reviewer Findings with severity", async () => {
-    const finding = reviewerFinding({
-      files: ["src/cli.ts"],
-      severity: "high",
-      artifactRefs: ["artifact:by-1-09224d806043.v1/acceptance_review/acceptance/output.json"],
-    });
-    const output = await Effect.runPromise(
-      decodeReviewerOutputContract({
+  it.effect("accepts reviewer Findings with severity", () =>
+    Effect.gen(function* () {
+      const finding = reviewerFinding({
+        files: ["src/cli.ts"],
+        severity: "high",
+        artifactRefs: ["artifact:by-1-09224d806043.v1/acceptance_review/acceptance/output.json"],
+      });
+      const output = yield* decodeReviewerOutputContract({
         reviewer: "intent",
         attempts: 1,
         output: { findings: [finding] },
-      }),
-    );
+      });
 
-    expect(output).toEqual({ findings: [finding] });
-  });
+      expect(output).toEqual({ findings: [finding] });
+    }),
+  );
 
-  it("accepts Candidate-owned Validation Run artifact references", async () => {
-    const artifactRef =
-      "artifact:123e4567-e89b-42d3-a456-426614174000/specialist_review/standards/stdout.txt";
-    const finding = reviewerFinding({ severity: "low", artifactRefs: [artifactRef] });
+  it.effect("accepts Candidate-owned Validation Run artifact references", () =>
+    Effect.gen(function* () {
+      const artifactRef =
+        "artifact:123e4567-e89b-42d3-a456-426614174000/specialist_review/standards/stdout.txt";
+      const finding = reviewerFinding({ severity: "low", artifactRefs: [artifactRef] });
 
-    await expect(
-      Effect.runPromise(
-        decodeReviewerOutputContract({
-          reviewer: "acceptance",
-          attempts: 1,
-          output: { findings: [finding] },
-        }),
-      ),
-    ).resolves.toEqual({ findings: [finding] });
-  });
+      const output = yield* decodeReviewerOutputContract({
+        reviewer: "acceptance",
+        attempts: 1,
+        output: { findings: [finding] },
+      });
 
-  it("rejects artifact references that do not resolve within the Validation Run", async () => {
-    const dangling = "artifact:123e4567-e89b-42d3-a456-426614174000/checks/quality/stdout.txt";
-    const output = {
-      findings: [
-        {
-          title: "Task intent is not satisfied",
-          description: "The submitted code does not implement the requested behavior.",
-          severity: "high" as const,
-          evidence: "The changed command still returns the old output.",
-          files: [],
-          artifactRefs: [dangling],
-        },
-      ],
-    };
+      expect(output).toEqual({ findings: [finding] });
+    }),
+  );
 
-    const error = await Effect.runPromise(
-      Effect.flip(
+  it.effect("rejects artifact references that do not resolve within the Validation Run", () =>
+    Effect.gen(function* () {
+      const dangling = "artifact:123e4567-e89b-42d3-a456-426614174000/checks/quality/stdout.txt";
+      const output = {
+        findings: [
+          {
+            title: "Task intent is not satisfied",
+            description: "The submitted code does not implement the requested behavior.",
+            severity: "high" as const,
+            evidence: "The changed command still returns the old output.",
+            files: [],
+            artifactRefs: [dangling],
+          },
+        ],
+      };
+
+      const error = yield* Effect.flip(
         validateReviewerArtifactRefs({
           reviewer: "acceptance",
           attempts: 1,
@@ -64,44 +65,46 @@ describe("reviewer output contract", () => {
           output,
           availableArtifactRefs: [],
         }),
-      ),
-    );
+      );
 
-    expect(error).toMatchObject({
-      _tag: "ReviewerOutputContractFailed",
-      operationName: "resolve_reviewer_artifact_refs",
-      diagnostics: [
-        expect.objectContaining({
-          path: ["findings", 0, "artifactRefs", 0],
-          actual: dangling,
-        }),
-      ],
-    });
-  });
+      expect(error).toMatchObject({
+        _tag: "ReviewerOutputContractFailed",
+        operationName: "resolve_reviewer_artifact_refs",
+        diagnostics: [
+          expect.objectContaining({
+            path: ["findings", 0, "artifactRefs", 0],
+            actual: dangling,
+          }),
+        ],
+      });
+    }),
+  );
 
-  it.each([
+  const invalidSeverities: ReadonlyArray<readonly [name: string, severity: string | undefined]> = [
     ["missing", undefined],
     ["invalid", "warning"],
-  ])("rejects reviewer Findings with %s severity", async (_name, severity) => {
-    const finding = reviewerFinding(severity === undefined ? {} : { severity });
+  ];
+  for (const [name, severity] of invalidSeverities) {
+    it.effect(`rejects reviewer Findings with ${name} severity`, () =>
+      Effect.gen(function* () {
+        const finding = reviewerFinding(severity === undefined ? {} : { severity });
+        const error = yield* Effect.flip(
+          decodeReviewerOutputContract({
+            reviewer: "intent",
+            attempts: 2,
+            output: { findings: [finding] },
+          }),
+        );
 
-    const error = await Effect.runPromise(
-      Effect.flip(
-        decodeReviewerOutputContract({
-          reviewer: "intent",
-          attempts: 2,
-          output: { findings: [finding] },
-        }),
-      ),
+        expect(error._tag).toBe("ReviewerOutputContractFailed");
+        expect(error.reviewer).toBe("intent");
+        expect(error.attempts).toBe(2);
+        expect(error.message).toContain("severity");
+      }),
     );
+  }
 
-    expect(error._tag).toBe("ReviewerOutputContractFailed");
-    expect(error.reviewer).toBe("intent");
-    expect(error.attempts).toBe(2);
-    expect(error.message).toContain("severity");
-  });
-
-  it.each([
+  const invalidOutputs: ReadonlyArray<readonly [name: string, output: unknown, path: string]> = [
     ["a missing findings field", {}, "findings"],
     ["unknown top-level fields", { findings: [], summary: "done" }, "summary"],
     [
@@ -124,17 +127,24 @@ describe("reviewer output contract", () => {
       { findings: [reviewerFinding({ severity: "low", artifactRefs: ["logs.txt"] })] },
       "findings.0.artifactRefs.0",
     ],
-  ])("rejects %s", async (_name, output, path) => {
-    const error = await Effect.runPromise(
-      Effect.flip(decodeReviewerOutputContract({ reviewer: "quality", attempts: 3, output })),
-    );
+  ];
+  for (const [name, output, path] of invalidOutputs) {
+    it.effect(`rejects ${name}`, () =>
+      Effect.gen(function* () {
+        const error = yield* Effect.flip(
+          decodeReviewerOutputContract({ reviewer: "quality", attempts: 3, output }),
+        );
 
-    expect(error._tag).toBe("ReviewerOutputContractFailed");
-    expect(error.diagnostics).toEqual(
-      expect.arrayContaining([expect.objectContaining({ path: path.split(".").map(pathPart) })]),
+        expect(error._tag).toBe("ReviewerOutputContractFailed");
+        expect(error.diagnostics).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({ path: path.split(".").map(pathPart) }),
+          ]),
+        );
+        expect(error.message).toContain(path);
+      }),
     );
-    expect(error.message).toContain(path);
-  });
+  }
 });
 
 const pathPart = (value: string): string | number =>

@@ -1,7 +1,8 @@
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { it } from "@effect/vitest";
 import { Effect } from "effect";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect } from "vitest";
 
 import { repoStateLoadError, runtimeError, success, usageError } from "../src/cliResults.js";
 import { decodeReviewerOutputContract } from "../src/contracts/reviewerOutput.js";
@@ -386,61 +387,61 @@ describe("module seams", () => {
     });
   });
 
-  it("records exhausted reviewer output as tooling failure without Findings", () => {
-    const root = initializedRepo();
-    const taskStore = sqliteTaskStore(root);
-    const validationRunStore = sqliteValidationRunStore(root);
-    const validationRuns = sqliteValidationRuns(root);
-    const task = taskStore.createTask({
-      title: "Reject malformed reviewer output",
-      description: "Description",
-      now: firstNow,
-    });
-    const taskId = publicTaskId(task.id);
+  it.effect("records exhausted reviewer output as tooling failure without Findings", () =>
+    Effect.gen(function* () {
+      const root = initializedRepo();
+      const taskStore = sqliteTaskStore(root);
+      const validationRunStore = sqliteValidationRunStore(root);
+      const validationRuns = sqliteValidationRuns(root);
+      const task = taskStore.createTask({
+        title: "Reject malformed reviewer output",
+        description: "Description",
+        now: firstNow,
+      });
+      const taskId = publicTaskId(task.id);
 
-    expect(taskStore.approveTask({ taskId, now: secondNow })).toMatchObject({ ok: true });
-    expect(
-      taskStore.transitionTaskState({ taskId, to: "implementing", now: secondNow }),
-    ).toMatchObject({ ok: true });
-    expect(
-      validationRuns.start({
-        taskId,
-        branch: "feature/by-1",
-        commitSha: "abc123",
-        prTarget,
-        now: thirdNow,
-      }),
-    ).toMatchObject({ ok: true });
+      expect(taskStore.approveTask({ taskId, now: secondNow })).toMatchObject({ ok: true });
+      expect(
+        taskStore.transitionTaskState({ taskId, to: "implementing", now: secondNow }),
+      ).toMatchObject({ ok: true });
+      expect(
+        validationRuns.start({
+          taskId,
+          branch: "feature/by-1",
+          commitSha: "abc123",
+          prTarget,
+          now: thirdNow,
+        }),
+      ).toMatchObject({ ok: true });
 
-    const failure = Effect.runSync(
-      Effect.flip(
+      const failure = yield* Effect.flip(
         decodeReviewerOutputContract({
           reviewer: "intent",
           attempts: 3,
           output: { findings: [{ title: "Malformed" }] },
         }),
-      ),
-    );
+      );
 
-    expect(failure).toMatchObject({
-      _tag: "ReviewerOutputContractFailed",
-      reviewer: "intent",
-      attempts: 3,
-    });
-    expect(
-      validationRuns.recordToolingFailure({
-        validationRunId: firstTaskValidationRunId,
-        toolingFailure: failure,
-        taskRecoveryState: "implementing",
-        now: thirdNow,
-      }),
-    ).toEqual({ ok: true });
-    expect(validationRunStore.listValidationRunFindings(firstTaskValidationRunId)).toEqual([]);
-    expect(validationRunStore.listValidationRunToolingErrors(firstTaskValidationRunId)).toEqual([
-      expect.objectContaining({ errorKind: "reviewer_output_contract_failed" }),
-    ]);
-    expect(taskStore.getTaskById(taskId)).toMatchObject({ state: "implementing" });
-  });
+      expect(failure).toMatchObject({
+        _tag: "ReviewerOutputContractFailed",
+        reviewer: "intent",
+        attempts: 3,
+      });
+      expect(
+        validationRuns.recordToolingFailure({
+          validationRunId: firstTaskValidationRunId,
+          toolingFailure: failure,
+          taskRecoveryState: "implementing",
+          now: thirdNow,
+        }),
+      ).toEqual({ ok: true });
+      expect(validationRunStore.listValidationRunFindings(firstTaskValidationRunId)).toEqual([]);
+      expect(validationRunStore.listValidationRunToolingErrors(firstTaskValidationRunId)).toEqual([
+        expect.objectContaining({ errorKind: "reviewer_output_contract_failed" }),
+      ]);
+      expect(taskStore.getTaskById(taskId)).toMatchObject({ state: "implementing" });
+    }),
+  );
 
   it("rejects invalid local validation starts through the ValidationRuns seam", () => {
     const root = initializedRepo();
