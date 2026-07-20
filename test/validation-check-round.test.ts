@@ -1,5 +1,6 @@
-import { Effect } from "effect";
-import { afterEach, describe, expect, it } from "vitest";
+import { expect, it } from "@effect/vitest";
+import { Cause, Effect, Exit } from "effect";
+import { afterEach, describe } from "vitest";
 
 import { runCheckPhase } from "../src/validation/runCheckRound.js";
 import type { RecordValidationRunCheckRoundInput } from "../src/validationRun/validationRunStore.js";
@@ -10,11 +11,11 @@ const now = "2026-06-30T12:00:00.000Z";
 afterEach(cleanupTempRoots);
 
 describe("check round Findings", () => {
-  it("records every configured Check after failures when continuation is enabled", async () => {
-    const recordedRounds: RecordValidationRunCheckRoundInput[] = [];
-    const commands: string[] = [];
-    const result = await Effect.runPromise(
-      runCheckPhase({
+  it.effect("records every configured Check after failures when continuation is enabled", () =>
+    Effect.gen(function* () {
+      const recordedRounds: RecordValidationRunCheckRoundInput[] = [];
+      const commands: string[] = [];
+      const result = yield* runCheckPhase({
         validationRunId: "candidate-run",
         continueAfterFinding: true,
         checks: [
@@ -36,51 +37,60 @@ describe("check round Findings", () => {
           },
         },
         recordCheckRound: (input) => recordedRounds.push(input),
+      });
+
+      expect(result).toEqual({ ok: true, findings: 1, validationRunId: "candidate-run" });
+      expect(commands).toHaveLength(4);
+      expect(recordedRounds).toHaveLength(2);
+      expect(recordedRounds.map((round) => round.phaseStatus)).toEqual(["failed", "failed"]);
+      expect(recordedRounds.map((round) => round.finding?.id)).toEqual([
+        "candidate-run-F1",
+        undefined,
+      ]);
+    }),
+  );
+
+  it.effect(
+    "rejects tracked Candidate changes even when their path is an allowed untracked input",
+    () =>
+      Effect.gen(function* () {
+        const commands: string[] = [];
+        const exit = yield* Effect.exit(
+          runCheckPhase({
+            validationRunId: "candidate-run",
+            checks: [{ id: "quality", command: "exit 0", timeoutSeconds: 1 }],
+            artifactsRoot: createTempRoot(),
+            expectedHeadSha: "abc123",
+            allowedUntrackedFiles: [".validation-env"],
+            now,
+            sandbox: {
+              exec: async (command) => {
+                commands.push(command);
+                return {
+                  exitCode: 0,
+                  stdout: "abc123\n M .validation-env\n",
+                  stderr: "",
+                };
+              },
+            },
+            recordCheckRound: () => undefined,
+          }),
+        );
+
+        expect(Exit.isFailure(exit)).toBe(true);
+        if (Exit.isFailure(exit)) {
+          expect(Cause.pretty(exit.cause)).toContain(
+            "Validation workspace no longer matches the Candidate.",
+          );
+        }
+        expect(commands).toHaveLength(1);
       }),
-    );
+  );
 
-    expect(result).toEqual({ ok: true, findings: 1, validationRunId: "candidate-run" });
-    expect(commands).toHaveLength(4);
-    expect(recordedRounds).toHaveLength(2);
-    expect(recordedRounds.map((round) => round.phaseStatus)).toEqual(["failed", "failed"]);
-    expect(recordedRounds.map((round) => round.finding?.id)).toEqual([
-      "candidate-run-F1",
-      undefined,
-    ]);
-  });
-
-  it("rejects tracked Candidate changes even when their path is an allowed untracked input", async () => {
-    const commands: string[] = [];
-    const result = Effect.runPromise(
-      runCheckPhase({
-        validationRunId: "candidate-run",
-        checks: [{ id: "quality", command: "exit 0", timeoutSeconds: 1 }],
-        artifactsRoot: createTempRoot(),
-        expectedHeadSha: "abc123",
-        allowedUntrackedFiles: [".validation-env"],
-        now,
-        sandbox: {
-          exec: async (command) => {
-            commands.push(command);
-            return {
-              exitCode: 0,
-              stdout: "abc123\n M .validation-env\n",
-              stderr: "",
-            };
-          },
-        },
-        recordCheckRound: () => undefined,
-      }),
-    );
-
-    await expect(result).rejects.toThrow("Validation workspace no longer matches the Candidate.");
-    expect(commands).toHaveLength(1);
-  });
-
-  it("records timed-out check Findings without severity", async () => {
-    const recordedRounds: RecordValidationRunCheckRoundInput[] = [];
-    const result = await Effect.runPromise(
-      runCheckPhase({
+  it.effect("records timed-out check Findings without severity", () =>
+    Effect.gen(function* () {
+      const recordedRounds: RecordValidationRunCheckRoundInput[] = [];
+      const result = yield* runCheckPhase({
         validationRunId: "by-1.v1",
         checks: [{ id: "quality", command: "sleep 10", timeoutSeconds: 1 }],
         artifactsRoot: createTempRoot(),
@@ -95,27 +105,27 @@ describe("check round Findings", () => {
           },
         },
         recordCheckRound: (input) => recordedRounds.push(input),
-      }),
-    );
+      });
 
-    expect(result).toEqual({ ok: true, findings: 1, validationRunId: "by-1.v1" });
-    expect(recordedRounds).toHaveLength(1);
-    expect(recordedRounds[0]?.finding).toEqual({
-      id: "by-1.v1-F1",
-      validationRunId: "by-1.v1",
-      phase: "checks",
-      producer: "quality",
-      title: "Check timed out: quality",
-      description: "Configured check quality timed out after 1 seconds.",
-      evidence: "command: sleep 10\ntimeoutSeconds: 1",
-      files: [],
-      artifactRefs: [
-        "artifact:by-1.v1/checks/quality/stdout.txt",
-        "artifact:by-1.v1/checks/quality/stderr.txt",
-        "artifact:by-1.v1/checks/quality/exit-code.json",
-        "artifact:by-1.v1/checks/quality/logs.txt",
-      ],
-    });
-    expect(recordedRounds[0]?.finding).not.toHaveProperty("severity");
-  });
+      expect(result).toEqual({ ok: true, findings: 1, validationRunId: "by-1.v1" });
+      expect(recordedRounds).toHaveLength(1);
+      expect(recordedRounds[0]?.finding).toEqual({
+        id: "by-1.v1-F1",
+        validationRunId: "by-1.v1",
+        phase: "checks",
+        producer: "quality",
+        title: "Check timed out: quality",
+        description: "Configured check quality timed out after 1 seconds.",
+        evidence: "command: sleep 10\ntimeoutSeconds: 1",
+        files: [],
+        artifactRefs: [
+          "artifact:by-1.v1/checks/quality/stdout.txt",
+          "artifact:by-1.v1/checks/quality/stderr.txt",
+          "artifact:by-1.v1/checks/quality/exit-code.json",
+          "artifact:by-1.v1/checks/quality/logs.txt",
+        ],
+      });
+      expect(recordedRounds[0]?.finding).not.toHaveProperty("severity");
+    }),
+  );
 });
