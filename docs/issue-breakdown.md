@@ -11,29 +11,6 @@ It ends when But Why? completes one real SQLite-tracked Task-backed Change and p
 - Task 117: Cancel Task-backed and taskless Changes.
 - Task 129: Submit a Task-backed Change with no repository change.
 
-## Completed
-
-- Task 105: Migrate Submit to Change ownership (`30c965a`).
-- Task 106: Add Change inspection and migrate Task projections (`46823fa`).
-- Task 130: Launch a Change Implementer in Herdr (`39e7056`).
-- Task 136: Compose Candidate validation through Effect (`e139f6e`).
-- Task 139: Migrate Candidate validation Effect tests (`2b88f95`).
-- Task 142: Migrate remaining non-CLI Effect tests (`532bd53`).
-- Task 144: Establish the in-process CLI Effect test harness (`d1f7f17`).
-- Task 145: Own temporary test workspace lifecycles (`102c7ee`).
-- Task 143: Enforce Effect test execution (`bdf66cd`).
-
-- Task 083: Start a Task in a managed worktree (`f009ab6`).
-- Task 084: Expand Candidate-owned validation through Checks (`d462952`).
-- Task 087: Inspect a Candidate-owned Validation Run (`ad598c6`).
-- Task 089: Run configured Specialists (`18661e1`).
-- Task 092: Recheck reviewer Findings without anchoring (`2d63871`).
-- Task 096: Run built-in Acceptance Review (`1eebf08`).
-- Task 098: Publish one exact Candidate with recovery (`4364a3b`).
-- Task 101: Reconcile owned PRs and clean completed Changes (`7a9c150`).
-- Task 133: Start prepared Changes (`bdf6646`).
-- Task 134: Remove incidental Git setup from SQLite tests (`5306e28`).
-
 ## Dependency graph
 
 | Task | Capability | Blocked by |
