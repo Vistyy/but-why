@@ -329,7 +329,11 @@ const createStateDatabase = (
     Exit.match(exit, {
       onFailure: (cause) => {
         initializationError = Cause.squash(cause);
-        void database.close().catch(() => undefined);
+        try {
+          database.closeSync();
+        } catch (cleanupError) {
+          initializationError = cleanupError;
+        }
       },
       onSuccess: () => undefined,
     });
