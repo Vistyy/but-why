@@ -17,6 +17,9 @@
 
 Compose the Candidate-owned capabilities behind one Change Submit module and migrate the public command to Change identity without dual writes or a standalone validation command.
 
+This task owns providing the Candidate validation Layer graph to live Change Submit and consuming it for Task-backed and taskless submissions.
+Task 136 provides the graph definition and service composition contract.
+
 ## Primary verification seam
 
 Public `by change submit <change-id>` CLI tests covering blocked and passing Task-backed and taskless Candidates.

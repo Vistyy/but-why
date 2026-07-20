@@ -45,8 +45,8 @@ It ends when But Why? completes one real SQLite-tracked Task-backed Change and p
 
 1. Task 084 expands Candidate-owned validation beside the existing Task-owned path.
 2. Tasks 087, 096, 089, 092, 098, and 101 complete the Candidate-owned validation and delivery capabilities while Task 133 establishes prepared Change worktrees.
-3. Task 136 moves Candidate validation onto one Effect dependency graph before Task 105 composes it behind Change Submit.
-4. Task 105 composes those capabilities behind Change Submit without dual writes.
+3. Task 136 defines the Candidate validation service composition and production Layer graph before Task 105 composes it behind Change Submit.
+4. Task 105 provides that graph to live Change Submit and consumes Candidate validation without dual writes.
 5. Task 106 migrates detailed inspection to Change commands and keeps Task projections concise.
 6. Task 107 removes the replaced Task-owned writers, readers, routes, tables, and compatibility paths.
 7. Task 137 replaces surviving native SQLite storage and historical migrations with Effect SQL and one baseline.

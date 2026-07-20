@@ -28,6 +28,10 @@ Migrate the complete Candidate validation workflow to focused Effect Services an
 Use the proven Effect-first path for reusable operation identity, testing, timing, workspace lifecycle, and reviewer execution.
 Remove the replaced explicit dependency-threading path so the workflow has one composition model.
 
+This task owns the definition of the production Candidate validation Layer graph and its service interfaces.
+It does not wire that graph into the live Submit workflow.
+Task 105 owns live Submit composition and Candidate validation consumption.
+
 ## Primary verification seam
 
 Candidate validation integration tests that provide test Layers and exercise Prepare, Checks, Acceptance Review, and configured Specialists through the same workflow interface used by production composition.
