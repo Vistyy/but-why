@@ -1,4 +1,5 @@
-import { writeFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { chmodSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { expect, it } from "@effect/vitest";
@@ -6,10 +7,12 @@ import { Effect } from "effect";
 import { describe } from "vitest";
 
 import { commitButWhyConfigAndRecordDefault, runByInProcessEffect } from "./support/by-cli.js";
+import type { ReviewerAgentRuntime } from "../src/agent/reviewerAgentRuntime.js";
 import { openSqliteTaskStore } from "../src/sqlite/sqliteTaskStore.js";
 import { publicTaskId } from "../src/task/taskId.js";
 import { candidateSqliteInput, git } from "./support/candidateReadyRepo.js";
 import { createInitializedRepo } from "./support/initializedRepo.js";
+import { createTestWorkspace } from "./support/testWorkspace.js";
 
 const now = "2026-06-30T12:00:00.000Z";
 
@@ -75,6 +78,85 @@ describe("by change submit", () => {
         help: [`Run \`by change cancel ${change.change.id}\` to cancel this unchanged Change.`],
       });
     }),
+  );
+
+  it.effect("validates and publishes a passing taskless Candidate", () =>
+    withPublicationTools(() =>
+      Effect.gen(function* () {
+        const root = initializedSubmitRepository("true");
+        const started = yield* runByInProcessEffect(
+          root,
+          ["change", "start", "--output", "json"],
+          now,
+        );
+        const change = JSON.parse(started.stdout) as {
+          readonly change: { readonly id: string };
+          readonly worktreePath: string;
+        };
+        commitChangedWork(change.worktreePath, "Publish taskless work");
+        git(root, "remote", "set-url", "origin", "https://github.com/acme/repo.git");
+
+        const result = yield* runByInProcessEffect(
+          root,
+          ["change", "submit", change.change.id, "--output", "json"],
+          now,
+        );
+
+        expect(result.status).toBe(0);
+        expect(JSON.parse(result.stdout)).toMatchObject({
+          changeId: change.change.id,
+          status: "published",
+          created: true,
+          pullRequest: { number: 42, url: "https://github.test/acme/repo/pull/42" },
+        });
+      }),
+    ),
+  );
+
+  it.effect("validates and publishes a passing Task-backed Candidate", () =>
+    withPublicationTools(() =>
+      Effect.gen(function* () {
+        const root = initializedSubmitRepository("true");
+        writeFileSync(
+          join(root, ".test-global-config.json"),
+          `${JSON.stringify({
+            defaultAgentProfile: "test",
+            agentProfiles: { test: { agentRuntime: "pi", agentModel: "test/model" } },
+          })}\n`,
+        );
+        const tasks = openSqliteTaskStore({ ...candidateSqliteInput(root, now), taskPrefix: "BY" });
+        const task = tasks.createTask({ title: "Approved task", description: "Deliver it", now });
+        const taskId = publicTaskId(task.id);
+        expect(tasks.approveTask({ taskId, now }).ok).toBe(true);
+        const started = yield* runByInProcessEffect(
+          root,
+          ["change", "start", "--task", taskId, "--output", "json"],
+          now,
+        );
+        const change = JSON.parse(started.stdout) as {
+          readonly change: { readonly id: string };
+          readonly worktreePath: string;
+        };
+        commitChangedWork(change.worktreePath, "Publish approved work");
+        git(root, "remote", "set-url", "origin", "https://github.com/acme/repo.git");
+
+        const result = yield* runByInProcessEffect(
+          root,
+          ["change", "submit", change.change.id, "--output", "json"],
+          now,
+          { reviewerAgentRuntime: passingReviewer },
+        );
+
+        expect(result.status).toBe(0);
+        expect(JSON.parse(result.stdout)).toMatchObject({
+          changeId: change.change.id,
+          status: "published",
+          created: true,
+          pullRequest: { number: 42, url: "https://github.test/acme/repo/pull/42" },
+        });
+        expect(tasks.getTaskById(taskId)?.state).toBe("ready");
+      }),
+    ),
   );
 
   it.effect("returns structured Findings from live taskless Candidate validation", () =>
@@ -225,3 +307,113 @@ describe("by change submit", () => {
     }),
   );
 });
+
+const passingReviewer: ReviewerAgentRuntime = {
+  review: () =>
+    Effect.succeed({
+      ok: true,
+      report: { findings: [] },
+      attempts: 1,
+      stdout: "",
+    }),
+};
+
+const initializedSubmitRepository = (checkCommand: string): string => {
+  const root = createInitializedRepo();
+  writeFileSync(
+    join(root, ".but-why/config.json"),
+    `${JSON.stringify({
+      taskPrefix: "BY",
+      validation: { checks: [{ id: "quality", command: checkCommand }] },
+    })}\n`,
+  );
+  commitButWhyConfigAndRecordDefault(root);
+  return root;
+};
+
+const commitChangedWork = (worktreePath: string, subject: string): void => {
+  writeFileSync(join(worktreePath, "changed.txt"), "changed\n");
+  git(worktreePath, "add", "changed.txt");
+  git(
+    worktreePath,
+    "-c",
+    "user.name=But Why Test",
+    "-c",
+    "user.email=but-why@example.test",
+    "commit",
+    "-m",
+    subject,
+  );
+};
+
+const withPublicationTools = <Result, Error, Requirements>(
+  work: () => Effect.Effect<Result, Error, Requirements>,
+): Effect.Effect<Result, Error, Requirements> =>
+  Effect.acquireUseRelease(Effect.sync(installPublicationTools), work, (restore) =>
+    Effect.sync(restore),
+  );
+
+const installPublicationTools = (): (() => void) => {
+  // biome-ignore lint/complexity/useLiteralKeys: NodeJS.ProcessEnv has an index signature.
+  const originalPath = process.env["PATH"];
+  const realGit = spawnSync("sh", ["-c", "command -v git"], { encoding: "utf8" }).stdout.trim();
+  const bin = createTestWorkspace();
+  writeExecutable(
+    join(bin, "git"),
+    `#!/usr/bin/env sh
+set -eu
+if [ "$1" = "ls-remote" ] && [ "$2" = "--heads" ]; then
+  exit 0
+fi
+if [ "$1" = "push" ]; then
+  exit 0
+fi
+exec "${realGit}" "$@"
+`,
+  );
+  writeExecutable(
+    join(bin, "gh"),
+    `#!/usr/bin/env sh
+set -eu
+if [ "$1" = "pr" ] && [ "$2" = "view" ]; then
+  exit 1
+fi
+if [ "$1" = "repo" ] && [ "$2" = "view" ]; then
+  printf '{"defaultBranchRef":{"name":"main"}}\\n'
+  exit 0
+fi
+if [ "$1" = "api" ] && [ "$2" = "--method" ] && [ "$3" = "POST" ]; then
+  head_branch=""
+  for argument in "$@"; do
+    case "$argument" in
+      head=*) head_branch="\${argument#head=}" ;;
+    esac
+  done
+  head_sha=$("${realGit}" rev-parse "refs/heads/$head_branch")
+  printf '{"number":42,"url":"https://github.test/acme/repo/pull/42","base":{"ref":"main"},"head":{"ref":"%s","sha":"%s"}}\\n' "$head_branch" "$head_sha"
+  exit 0
+fi
+if [ "$1" = "api" ]; then
+  printf '[]\\n'
+  exit 0
+fi
+exit 1
+`,
+  );
+  // biome-ignore lint/complexity/useLiteralKeys: NodeJS.ProcessEnv has an index signature.
+  process.env["PATH"] = originalPath === undefined ? bin : `${bin}:${originalPath}`;
+  return () => {
+    if (originalPath === undefined) {
+      // biome-ignore lint/complexity/useLiteralKeys: NodeJS.ProcessEnv has an index signature.
+      delete process.env["PATH"];
+    } else {
+      // biome-ignore lint/complexity/useLiteralKeys: NodeJS.ProcessEnv has an index signature.
+      process.env["PATH"] = originalPath;
+    }
+  };
+};
+
+const writeExecutable = (path: string, content: string): void => {
+  writeFileSync(path, content);
+  chmodSync(path, 0o755);
+};

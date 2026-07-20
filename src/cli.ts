@@ -15,6 +15,7 @@ import { dashboard } from "./cli/task/dashboard.js";
 import { routeTask } from "./cli/task/taskCli.js";
 import { routeValidationRun } from "./cli/validationRun/validationRunCli.js";
 import type { InteractiveSessionHost } from "./change/interactiveSessionHost.js";
+import type { ReviewerAgentRuntime } from "./agent/reviewerAgentRuntime.js";
 import type { LocalSubmitPreflight } from "./localSubmit/submitPreflight.js";
 import type { TaskUseCases } from "./task/taskUseCases.js";
 
@@ -27,6 +28,7 @@ export type CliEnvironment = {
   readonly now: () => Date;
   readonly taskUseCases?: TaskUseCases;
   readonly submitPreflight?: LocalSubmitPreflight;
+  readonly reviewerAgentRuntime?: ReviewerAgentRuntime;
   readonly interactiveSessionHost?: InteractiveSessionHost;
   readonly interactiveSessionPath?: string;
 };

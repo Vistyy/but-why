@@ -2,6 +2,7 @@ import { existsSync } from "node:fs";
 
 import { Effect } from "effect";
 
+import type { ReviewerAgentRuntime } from "../agent/reviewerAgentRuntime.js";
 import { resolveCandidateValidationPolicy } from "../candidateValidation/resolveCandidateValidationPolicy.js";
 import { cleanupChangeResources } from "../change/localChangeCleanupGit.js";
 import { openChangeReconciliation } from "../change/reconcileChange.js";
@@ -31,6 +32,7 @@ export const loadChangeSubmit = (input: {
   readonly cwd: string;
   readonly globalConfigPath: string;
   readonly migrationTimestamp: () => string;
+  readonly reviewerAgentRuntime?: ReviewerAgentRuntime;
 }): LoadChangeSubmitResult => {
   const repoContext = loadRepoLocalContext(input.cwd, input.migrationTimestamp);
   if (!repoContext.ok) return repoContext;
@@ -74,6 +76,9 @@ export const loadChangeSubmit = (input: {
     localRepositoryMainCheckoutRoot: context.root,
     artifactsRoot: context.paths.artifactsPath,
     runStore: stores.candidateValidationRunStore,
+    ...(input.reviewerAgentRuntime === undefined
+      ? {}
+      : { reviewerAgentRuntime: input.reviewerAgentRuntime }),
   });
 
   return {

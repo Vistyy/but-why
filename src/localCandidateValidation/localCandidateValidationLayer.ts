@@ -8,12 +8,16 @@ import {
   CandidateReviewerAgentRuntime,
 } from "../candidateValidation/validateCandidate.js";
 import type { CandidateValidationRunStore as CandidateValidationRunStorePort } from "../candidateValidation/candidateValidationRunStore.js";
-import { piReviewerAgentRuntime } from "../agent/reviewerAgentRuntime.js";
+import {
+  piReviewerAgentRuntime,
+  type ReviewerAgentRuntime,
+} from "../agent/reviewerAgentRuntime.js";
 
 export const localCandidateValidationLayer = (input: {
   readonly localRepositoryMainCheckoutRoot: string;
   readonly artifactsRoot: string;
   readonly runStore: CandidateValidationRunStorePort;
+  readonly reviewerAgentRuntime?: ReviewerAgentRuntime;
 }): Layer.Layer<CandidateValidation, never, never> =>
   CandidateValidationLive.pipe(
     Layer.provideMerge(
@@ -23,7 +27,10 @@ export const localCandidateValidationLayer = (input: {
           artifactsRoot: input.artifactsRoot,
         }),
         Layer.succeed(CandidateValidationRunStore, input.runStore),
-        Layer.succeed(CandidateReviewerAgentRuntime, piReviewerAgentRuntime),
+        Layer.succeed(
+          CandidateReviewerAgentRuntime,
+          input.reviewerAgentRuntime ?? piReviewerAgentRuntime,
+        ),
       ),
     ),
   );

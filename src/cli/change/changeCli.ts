@@ -13,6 +13,7 @@ import { readHandoffFile, type HandoffFileReadError } from "../../change/handoff
 import { loadChangeUseCases } from "../../localChange/changeUseCases.js";
 import { loadChangeSubmit } from "../../localChange/loadChangeSubmit.js";
 import type { InteractiveSessionHost } from "../../change/interactiveSessionHost.js";
+import type { ReviewerAgentRuntime } from "../../agent/reviewerAgentRuntime.js";
 import type { PublicTaskId } from "../../task/taskId.js";
 import type { ChangeRecord } from "../../change/change.js";
 import type { ChangeSubmitResult } from "../../change/submitChange.js";
@@ -21,6 +22,7 @@ export type ChangeCommandEnvironment = {
   readonly cwd: string;
   readonly globalConfigPath: string;
   readonly now: () => Date;
+  readonly reviewerAgentRuntime?: ReviewerAgentRuntime;
   readonly interactiveSessionHost?: InteractiveSessionHost;
   readonly interactiveSessionPath?: string;
 };
@@ -340,6 +342,9 @@ const runSubmit = (
     cwd: environment.cwd,
     globalConfigPath: environment.globalConfigPath,
     migrationTimestamp: () => environment.now().toISOString(),
+    ...(environment.reviewerAgentRuntime === undefined
+      ? {}
+      : { reviewerAgentRuntime: environment.reviewerAgentRuntime }),
   });
   if (!loaded.ok) return Effect.succeed(loadError(loaded.error));
   return Effect.map(
