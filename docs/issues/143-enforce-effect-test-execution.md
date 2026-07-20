@@ -7,7 +7,8 @@ Done.
 ## Completion
 
 - Implementation: `c87b2e1a7183df2df84fb9db418d49828ec0bde2`
-- Review corrections: `bdf66cdca38ec06287de8bfe91e76fdef010e89f`
+- Review correction: `279c0c8e0c1067eaabf704bc3ce0dd2d97046953`
+- Review correction: `bdf66cdca38ec06287de8bfe91e76fdef010e89f`
 
 ## Specification
 
@@ -33,10 +34,10 @@ The structural check fails for a direct `Effect.run*` call in test code and pass
 
 ## Acceptance criteria
 
-- [ ] The structural rule scans `test/`, including `test/support/`.
-- [ ] The rule rejects direct `Effect.run*` calls in test code.
-- [ ] Rule tests demonstrate valid and invalid test examples.
-- [ ] The full test suite and structural checks pass without direct test runtime calls.
+- [x] The structural rule scans `test/`, including `test/support/`.
+- [x] The rule rejects direct `Effect.run*` calls in test code.
+- [x] Rule tests demonstrate valid and invalid test examples.
+- [x] The full test suite and structural checks pass without direct test runtime calls.
 
 ## Blocked by
 
