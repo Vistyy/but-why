@@ -172,15 +172,6 @@ export const ensureStateDatabase = (
   let initialized = false;
 
   try {
-    const historicalMigrations = database
-      .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'schema_migrations'")
-      .get();
-    if (historicalMigrations !== undefined) {
-      throw new Error(
-        "State database uses an unsupported historical schema. Delete it and run by init.",
-      );
-    }
-
     const table = database
       .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'tasks'")
       .get();

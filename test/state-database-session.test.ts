@@ -1,6 +1,5 @@
 import { copyFileSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { DatabaseSync } from "node:sqlite";
 import { describe, expect, it } from "vitest";
 
 import { findGitRoot } from "../src/init/git.js";
@@ -39,19 +38,6 @@ describe("state database session", () => {
 
     expect(ensureStateDatabase(statePath, () => now, gitRoot(root).commonDirectory)).toBe(
       "updated",
-    );
-  });
-
-  it("rejects a historical state database with reinitialization guidance", () => {
-    const root = createGitRepo();
-    const statePath = join(gitRoot(root).commonDirectory, "but-why", "state.sqlite");
-    mkdirSync(join(gitRoot(root).commonDirectory, "but-why"), { recursive: true });
-    const database = new DatabaseSync(statePath);
-    database.exec("CREATE TABLE tasks (id TEXT); CREATE TABLE schema_migrations (name TEXT);");
-    database.close();
-
-    expect(() => ensureStateDatabase(statePath, () => now, gitRoot(root).commonDirectory)).toThrow(
-      "State database uses an unsupported historical schema. Delete it and run by init.",
     );
   });
 
