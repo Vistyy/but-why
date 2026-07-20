@@ -5,7 +5,7 @@ import { createSandbox, type Sandbox, type SandboxProvider } from "@ai-hero/sand
 import { docker } from "@ai-hero/sandcastle/sandboxes/docker";
 import { noSandbox } from "@ai-hero/sandcastle/sandboxes/no-sandbox";
 import { podman } from "@ai-hero/sandcastle/sandboxes/podman";
-import { Effect, Ref, type Scope } from "effect";
+import { Effect, Option, Ref, type Scope } from "effect";
 
 import {
   deleteValidationTempRef,
@@ -545,20 +545,18 @@ const cleanupWorktree = (
 
   return Effect.gen(function* () {
     if (state.sandbox !== undefined) {
-      const closeResult: { readonly preservedWorktreePath?: string } | undefined =
-        yield* Effect.promise(async () => {
-          try {
-            return await withCleanupTimeout(() => state.sandbox?.close() ?? Promise.resolve({}));
-          } catch {
-            return undefined;
-          }
-        });
+      const closeResult = yield* Effect.tryPromise({
+        try: (): Promise<{ readonly preservedWorktreePath?: string }> =>
+          state.sandbox?.close() ?? Promise.resolve({}),
+        catch: () => undefined,
+      }).pipe(
+        Effect.timeoutOption(`${cleanupStepTimeoutMs} millis`),
+        Effect.catchAll(() => Effect.succeed(Option.none())),
+      );
 
-      if (closeResult === undefined) {
-        return "failed";
-      }
+      if (Option.isNone(closeResult)) return "failed";
 
-      const preservedPath = closeResult.preservedWorktreePath ?? state.worktreePath;
+      const preservedPath = closeResult.value.preservedWorktreePath ?? state.worktreePath;
 
       if (preservedPath === undefined || !adapters.inspectExistingWorktree(preservedPath).exists) {
         return "removed";
@@ -591,20 +589,3 @@ const releaseTempRef = (
 
 const errorMessage = (error: unknown): string =>
   error instanceof Error ? error.message : String(error);
-
-const withCleanupTimeout = async <Result>(
-  work: () => Promise<Result>,
-): Promise<Result | undefined> => {
-  let timeout: NodeJS.Timeout | undefined;
-  const timedOut = new Promise<undefined>((resolve) => {
-    timeout = setTimeout(() => resolve(undefined), cleanupStepTimeoutMs);
-  });
-
-  try {
-    return await Promise.race([work(), timedOut]);
-  } finally {
-    if (timeout !== undefined) {
-      clearTimeout(timeout);
-    }
-  }
-};

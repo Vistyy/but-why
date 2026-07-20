@@ -24,6 +24,9 @@ importers:
       '@biomejs/biome':
         specifier: ^2.2.0
         version: 2.5.1
+      '@effect/vitest':
+        specifier: 0.28.0
+        version: 0.28.0(effect@3.20.0)(vitest@3.2.6(@types/node@24.13.2)(tsx@4.22.4))
       '@types/node':
         specifier: ^24.0.0
         version: 24.13.2
@@ -161,6 +164,12 @@ packages:
   '@clack/prompts@1.6.0':
     resolution: {integrity: sha512-EYlRokl8szrP9Z25qT5aepMdBjzBvHF9ZEhzIiUBc9guz/T31EqRgvD0QSgZcpE93xiwrr+OkB4nz0BZyF6fSA==}
     engines: {node: '>= 20.12.0'}
+
+  '@effect/vitest@0.28.0':
+    resolution: {integrity: sha512-9vyJ1amuJmb8DeQpT/aadalQxWlRKS+qDp8MaYirpI6F6UyZZqDgdLrPs3qNviLkypNubrVc/yPkd6YNH4QKxw==}
+    peerDependencies:
+      effect: ^3.20.0
+      vitest: ^3.2.0
 
   '@esbuild/aix-ppc64@0.28.1':
     resolution: {integrity: sha512-Svl7tq8k/08+p6CXPpRjQ1fKX+1odH/BQbb48fV6fj3CWHhsoIOoY87w1oHXm0qEpkIK3ZfVgp0hed3XBXzXMQ==}
@@ -996,6 +1005,11 @@ snapshots:
       fast-string-width: 3.0.2
       fast-wrap-ansi: 0.2.2
       sisteransi: 1.0.5
+
+  '@effect/vitest@0.28.0(effect@3.20.0)(vitest@3.2.6(@types/node@24.13.2)(tsx@4.22.4))':
+    dependencies:
+      effect: 3.20.0
+      vitest: 3.2.6(@types/node@24.13.2)(tsx@4.22.4)
 
   '@esbuild/aix-ppc64@0.28.1':
     optional: true

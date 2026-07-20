@@ -1,7 +1,8 @@
-import { Effect } from "effect";
+import type { Sandbox } from "@ai-hero/sandcastle";
+import { Context, Effect, Layer } from "effect";
 
 import type {
-  CandidateValidationRunStore,
+  CandidateValidationRunStore as CandidateValidationRunStorePort,
   CandidateValidationOutcome,
 } from "./candidateValidationRunStore.js";
 import type { AcceptanceReviewPolicy } from "../acceptanceReview/acceptanceReviewConfig.js";
@@ -16,13 +17,13 @@ import type { SubmitCheckConfig, SubmitPrepareConfig } from "../submit/submitRep
 import { createValidationWorkspace } from "../validation/createValidationWorkspace.js";
 import { runCheckPhase } from "../validation/runCheckRound.js";
 import { runPreparePhase } from "../validation/runPreparePhase.js";
-import { maxValidationArtifactBytes } from "../validationRun/artifactFiles.js";
 import {
   ValidationWorkspaceSetupFailed,
   validationToolingFailureRecord,
   type ValidationToolingFailure,
 } from "../validation/validationToolingFailures.js";
 import type { ValidationSandboxMode } from "../validation/validationWorkspace.js";
+import { maxValidationArtifactBytes } from "../validationRun/artifactFiles.js";
 import type { TaskContextSnapshotV1 } from "../validationRun/taskContextSnapshot.js";
 
 export type CandidateValidationPolicy = {
@@ -35,21 +36,6 @@ export type CandidateValidationPolicy = {
 
 export type TaskBackedCandidateValidationPolicy = CandidateValidationPolicy & {
   readonly acceptanceReview: AcceptanceReviewPolicy;
-};
-
-export type CandidateValidation = {
-  readonly validateCandidate: (
-    input: ValidateCandidateInput,
-  ) => Effect.Effect<ValidateCandidateResult>;
-  readonly validateTaskBackedCandidate: (
-    input: ValidateTaskBackedCandidateInput,
-  ) => Effect.Effect<ValidateCandidateResult>;
-  readonly listRounds: (
-    validationRunId: string,
-  ) => readonly { readonly producer: string; readonly status: "passed" | "failed" }[];
-  readonly listFindings: CandidateValidationRunStore["listFindings"];
-  readonly listArtifacts: CandidateValidationRunStore["listArtifacts"];
-  readonly listToolingFailures: CandidateValidationRunStore["listToolingFailures"];
 };
 
 export type ValidateCandidateInput = {
@@ -78,40 +64,84 @@ export type ValidateCandidateResult =
     }
   | { readonly ok: false; readonly validationRunId: string; readonly outcome: "tooling_failed" };
 
-export const openCandidateValidation = (input: {
+type CandidateValidationPathsValue = {
   readonly localRepositoryMainCheckoutRoot: string;
   readonly artifactsRoot: string;
-  readonly runStore: CandidateValidationRunStore;
-  readonly reviewerAgentRuntime?: ReviewerAgentRuntime;
-}): CandidateValidation => {
-  const dependencies = {
-    ...input,
-    reviewerAgentRuntime: input.reviewerAgentRuntime ?? piReviewerAgentRuntime,
-  };
-  return {
-    validateCandidate: (validationInput) => validateCandidate(dependencies, validationInput),
-    validateTaskBackedCandidate: (validationInput) =>
-      validateCandidate(dependencies, validationInput),
-    listRounds: (validationRunId) =>
-      input.runStore
-        .listRounds(validationRunId)
-        .map(({ producer, status }) => ({ producer, status })),
-    listFindings: input.runStore.listFindings,
-    listArtifacts: input.runStore.listArtifacts,
-    listToolingFailures: input.runStore.listToolingFailures,
-  };
 };
 
-const validateCandidate = (
-  dependencies: {
-    readonly localRepositoryMainCheckoutRoot: string;
-    readonly artifactsRoot: string;
-    readonly runStore: CandidateValidationRunStore;
-    readonly reviewerAgentRuntime: ReviewerAgentRuntime;
-  },
-  input: ValidateCandidateInput | ValidateTaskBackedCandidateInput,
-): Effect.Effect<ValidateCandidateResult> =>
+export class CandidateValidationPaths extends Context.Tag("CandidateValidationPaths")<
+  CandidateValidationPaths,
+  CandidateValidationPathsValue
+>() {}
+
+export class CandidateValidationRunStore extends Context.Tag("CandidateValidationRunStore")<
+  CandidateValidationRunStore,
+  CandidateValidationRunStorePort
+>() {}
+
+export class CandidateReviewerAgentRuntime extends Context.Tag("CandidateReviewerAgentRuntime")<
+  CandidateReviewerAgentRuntime,
+  ReviewerAgentRuntime
+>() {}
+
+export type CandidateValidationService = {
+  readonly validateCandidate: (
+    input: ValidateCandidateInput,
+  ) => Effect.Effect<ValidateCandidateResult, never>;
+  readonly validateTaskBackedCandidate: (
+    input: ValidateTaskBackedCandidateInput,
+  ) => Effect.Effect<ValidateCandidateResult, never>;
+  readonly listRounds: (validationRunId: string) => readonly {
+    readonly producer: string;
+    readonly status: "passed" | "failed";
+  }[];
+  readonly listFindings: CandidateValidationRunStorePort["listFindings"];
+  readonly listArtifacts: CandidateValidationRunStorePort["listArtifacts"];
+  readonly listToolingFailures: CandidateValidationRunStorePort["listToolingFailures"];
+};
+
+export class CandidateValidation extends Context.Tag("CandidateValidation")<
+  CandidateValidation,
+  CandidateValidationService
+>() {}
+
+export const CandidateValidationLive = Layer.effect(
+  CandidateValidation,
   Effect.gen(function* () {
+    const paths = yield* CandidateValidationPaths;
+    const runStore = yield* CandidateValidationRunStore;
+    const reviewerAgentRuntime = yield* CandidateReviewerAgentRuntime;
+    return makeCandidateValidation({ ...paths, runStore, reviewerAgentRuntime });
+  }),
+);
+
+export const CandidateValidationProduction = (input: {
+  readonly localRepositoryMainCheckoutRoot: string;
+  readonly artifactsRoot: string;
+  readonly runStore: CandidateValidationRunStorePort;
+}): Layer.Layer<CandidateValidation, never, never> =>
+  CandidateValidationLive.pipe(
+    Layer.provideMerge(
+      Layer.mergeAll(
+        Layer.succeed(CandidateValidationPaths, {
+          localRepositoryMainCheckoutRoot: input.localRepositoryMainCheckoutRoot,
+          artifactsRoot: input.artifactsRoot,
+        }),
+        Layer.succeed(CandidateValidationRunStore, input.runStore),
+        Layer.succeed(CandidateReviewerAgentRuntime, piReviewerAgentRuntime),
+      ),
+    ),
+  );
+
+const makeCandidateValidation = (dependencies: {
+  readonly localRepositoryMainCheckoutRoot: string;
+  readonly artifactsRoot: string;
+  readonly runStore: CandidateValidationRunStorePort;
+  readonly reviewerAgentRuntime: ReviewerAgentRuntime;
+}): CandidateValidationService => {
+  const validate = Effect.fn("CandidateValidation.validate")(function* (
+    input: ValidateCandidateInput | ValidateTaskBackedCandidateInput,
+  ) {
     const started = dependencies.runStore.startOrReuse({
       candidateId: input.candidateId,
       headSha: input.headSha,
@@ -119,7 +149,7 @@ const validateCandidate = (
       policy: input.policy,
       now: input.now,
     });
-    if (started.reused) return { ok: true, ...started };
+    if (started.reused) return { ok: true, ...started } as const;
 
     const workspace = yield* createValidationWorkspace({
       repoRoot: dependencies.localRepositoryMainCheckoutRoot,
@@ -128,86 +158,7 @@ const validateCandidate = (
       copyFiles: input.policy.copyFiles,
       sandboxMode: input.policy.sandboxMode,
       runInWorkspace: (activeWorkspace) =>
-        Effect.gen(function* () {
-          if (input.policy.prepare !== undefined) {
-            const prepare = yield* runPreparePhase({
-              validationRunId: started.validationRunId,
-              prepare: input.policy.prepare,
-              sandbox: activeWorkspace.sandbox,
-              artifactsRoot: dependencies.artifactsRoot,
-              artifactMaxBytes: maxValidationArtifactBytes,
-              commandCwd: activeWorkspace.worktreePath,
-              expectedHeadSha: input.headSha,
-              allowedUntrackedFiles: input.policy.copyFiles,
-              now: input.now,
-              recordPrepareRound: dependencies.runStore.recordPrepareRound,
-            });
-            if (prepare.findings === 1) return { validationFindings: 1 as const };
-          }
-          const checks = yield* runCheckPhase({
-            validationRunId: started.validationRunId,
-            checks: input.policy.checks,
-            sandbox: activeWorkspace.sandbox,
-            artifactsRoot: dependencies.artifactsRoot,
-            artifactMaxBytes: maxValidationArtifactBytes,
-            commandCwd: activeWorkspace.worktreePath,
-            expectedHeadSha: input.headSha,
-            allowedUntrackedFiles: input.policy.copyFiles,
-            now: input.now,
-            continueAfterFinding: true,
-            recordCheckRound: dependencies.runStore.recordCheckRound,
-          });
-          if (checks.findings === 1) return { validationFindings: 1 as const };
-
-          if ("acceptanceContext" in input) {
-            const acceptance = yield* runAcceptanceReviewPhase({
-              validationRunId: started.validationRunId,
-              candidate: {
-                candidateId: input.candidateId,
-                comparisonBaseSha: input.comparisonBaseSha,
-                headSha: input.headSha,
-              },
-              acceptanceContext: input.acceptanceContext,
-              policy: input.policy.acceptanceReview,
-              runtime: dependencies.reviewerAgentRuntime,
-              sandbox: activeWorkspace.sandbox,
-              artifactsRoot: dependencies.artifactsRoot,
-              artifactMaxBytes: maxValidationArtifactBytes,
-              commandCwd: activeWorkspace.worktreePath,
-              allowedUntrackedFiles: input.policy.copyFiles,
-              now: input.now,
-              listArtifacts: dependencies.runStore.listArtifacts,
-              listPreviousCandidateReviewerFindings:
-                dependencies.runStore.listPreviousCandidateReviewerFindings,
-              recordAcceptanceRound: dependencies.runStore.recordAcceptanceRound,
-            });
-            if (acceptance.findings === 1) return { validationFindings: 1 as const };
-          }
-
-          const specialists = yield* runSpecialistReviewPhase({
-            validationRunId: started.validationRunId,
-            candidate: {
-              candidateId: input.candidateId,
-              comparisonBaseSha: input.comparisonBaseSha,
-              headSha: input.headSha,
-            },
-            policies: input.policy.specialistReviews,
-            runtime: dependencies.reviewerAgentRuntime,
-            sandbox: activeWorkspace.sandbox,
-            artifactsRoot: dependencies.artifactsRoot,
-            artifactMaxBytes: maxValidationArtifactBytes,
-            commandCwd: activeWorkspace.worktreePath,
-            allowedUntrackedFiles: input.policy.copyFiles,
-            now: input.now,
-            listPreviousCandidateReviewerFindings:
-              dependencies.runStore.listPreviousCandidateReviewerFindings,
-            recordSpecialistRound: dependencies.runStore.recordSpecialistRound,
-          });
-          return {
-            validationFindings: specialists.findings,
-            toolingFailures: specialists.toolingFailures,
-          };
-        }),
+        runCandidatePhases(dependencies, input, started.validationRunId, activeWorkspace),
     });
 
     if (!workspace.ok) {
@@ -236,7 +187,11 @@ const validateCandidate = (
         outcome: "tooling_failed",
         now: input.now,
       });
-      return { ok: false, validationRunId: started.validationRunId, outcome: "tooling_failed" };
+      return {
+        ok: false,
+        validationRunId: started.validationRunId,
+        outcome: "tooling_failed",
+      } as const;
     }
 
     dependencies.runStore.recordWorkspaceSetup({
@@ -274,6 +229,115 @@ const validateCandidate = (
       now: input.now,
     });
     return outcome === "tooling_failed"
-      ? { ok: false, validationRunId: started.validationRunId, outcome }
-      : { ok: true, reused: false, validationRunId: started.validationRunId, outcome };
+      ? ({ ok: false, validationRunId: started.validationRunId, outcome } as const)
+      : ({ ok: true, reused: false, validationRunId: started.validationRunId, outcome } as const);
   });
+
+  return {
+    validateCandidate: (input) => validate(input),
+    validateTaskBackedCandidate: (input) => validate(input),
+    listRounds: (validationRunId) =>
+      dependencies.runStore
+        .listRounds(validationRunId)
+        .map(({ producer, status }) => ({ producer, status })),
+    listFindings: dependencies.runStore.listFindings,
+    listArtifacts: dependencies.runStore.listArtifacts,
+    listToolingFailures: dependencies.runStore.listToolingFailures,
+  };
+};
+
+const runCandidatePhases = (
+  dependencies: {
+    readonly artifactsRoot: string;
+    readonly runStore: CandidateValidationRunStorePort;
+    readonly reviewerAgentRuntime: ReviewerAgentRuntime;
+  },
+  input: ValidateCandidateInput | ValidateTaskBackedCandidateInput,
+  validationRunId: string,
+  activeWorkspace: {
+    readonly sandbox: Pick<Sandbox, "exec" | "run">;
+    readonly worktreePath: string;
+  },
+): Effect.Effect<
+  {
+    readonly validationFindings: 0 | 1;
+    readonly toolingFailures?: readonly ValidationToolingFailure[];
+  },
+  ValidationToolingFailure
+> =>
+  Effect.fn("CandidateValidation.runPhases")(function* () {
+    if (input.policy.prepare !== undefined) {
+      const prepare = yield* runPreparePhase({
+        validationRunId,
+        prepare: input.policy.prepare,
+        sandbox: activeWorkspace.sandbox,
+        artifactsRoot: dependencies.artifactsRoot,
+        artifactMaxBytes: maxValidationArtifactBytes,
+        commandCwd: activeWorkspace.worktreePath,
+        expectedHeadSha: input.headSha,
+        allowedUntrackedFiles: input.policy.copyFiles,
+        now: input.now,
+        recordPrepareRound: dependencies.runStore.recordPrepareRound,
+      });
+      if (prepare.findings === 1) return { validationFindings: 1 as const };
+    }
+    const checks = yield* runCheckPhase({
+      validationRunId,
+      checks: input.policy.checks,
+      sandbox: activeWorkspace.sandbox,
+      artifactsRoot: dependencies.artifactsRoot,
+      artifactMaxBytes: maxValidationArtifactBytes,
+      commandCwd: activeWorkspace.worktreePath,
+      expectedHeadSha: input.headSha,
+      allowedUntrackedFiles: input.policy.copyFiles,
+      now: input.now,
+      continueAfterFinding: true,
+      recordCheckRound: dependencies.runStore.recordCheckRound,
+    });
+    if (checks.findings === 1) return { validationFindings: 1 as const };
+    if ("acceptanceContext" in input) {
+      const acceptance = yield* runAcceptanceReviewPhase({
+        validationRunId,
+        candidate: candidateIdentity(input),
+        acceptanceContext: input.acceptanceContext,
+        policy: input.policy.acceptanceReview,
+        runtime: dependencies.reviewerAgentRuntime,
+        sandbox: activeWorkspace.sandbox,
+        artifactsRoot: dependencies.artifactsRoot,
+        artifactMaxBytes: maxValidationArtifactBytes,
+        commandCwd: activeWorkspace.worktreePath,
+        allowedUntrackedFiles: input.policy.copyFiles,
+        now: input.now,
+        listArtifacts: dependencies.runStore.listArtifacts,
+        listPreviousCandidateReviewerFindings:
+          dependencies.runStore.listPreviousCandidateReviewerFindings,
+        recordAcceptanceRound: dependencies.runStore.recordAcceptanceRound,
+      });
+      if (acceptance.findings === 1) return { validationFindings: 1 as const };
+    }
+    const specialists = yield* runSpecialistReviewPhase({
+      validationRunId,
+      candidate: candidateIdentity(input),
+      policies: input.policy.specialistReviews,
+      runtime: dependencies.reviewerAgentRuntime,
+      sandbox: activeWorkspace.sandbox,
+      artifactsRoot: dependencies.artifactsRoot,
+      artifactMaxBytes: maxValidationArtifactBytes,
+      commandCwd: activeWorkspace.worktreePath,
+      allowedUntrackedFiles: input.policy.copyFiles,
+      now: input.now,
+      listPreviousCandidateReviewerFindings:
+        dependencies.runStore.listPreviousCandidateReviewerFindings,
+      recordSpecialistRound: dependencies.runStore.recordSpecialistRound,
+    });
+    return {
+      validationFindings: specialists.findings,
+      toolingFailures: specialists.toolingFailures,
+    };
+  })();
+
+const candidateIdentity = (input: ValidateCandidateInput | ValidateTaskBackedCandidateInput) => ({
+  candidateId: input.candidateId,
+  comparisonBaseSha: input.comparisonBaseSha,
+  headSha: input.headSha,
+});

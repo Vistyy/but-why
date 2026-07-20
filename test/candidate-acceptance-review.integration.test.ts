@@ -7,10 +7,8 @@ import type {
   ReviewerAgentRuntime,
 } from "../src/agent/reviewerAgentRuntime.js";
 import { captureLocalCandidate } from "../src/changeCandidateCapture/captureLocalCandidate.js";
-import {
-  openCandidateValidation,
-  type TaskBackedCandidateValidationPolicy,
-} from "../src/candidateValidation/validateCandidate.js";
+import type { TaskBackedCandidateValidationPolicy } from "../src/candidateValidation/validateCandidate.js";
+import { candidateValidationForTest } from "./support/candidateValidation.js";
 import { openSqliteCandidateValidationRunStore } from "../src/sqlite/sqliteCandidateValidationRunStore.js";
 import { ReviewerOutputContractFailed } from "../src/validation/validationToolingFailures.js";
 import type { TaskContextSnapshotV1 } from "../src/validationRun/taskContextSnapshot.js";
@@ -557,7 +555,7 @@ const acceptanceReadyRepo = (reviewerAgentRuntime: ReviewerAgentRuntime) => {
   const repo = candidateReadyRepo();
   const captured = captureLocalCandidate({ cwd: repo, now });
   if (!captured.ok) throw new Error(`Candidate capture failed: ${captured.code}`);
-  const validation = openCandidateValidation({
+  const validation = candidateValidationForTest({
     localRepositoryMainCheckoutRoot: repo,
     artifactsRoot: join(commonDirectory(repo), "but-why", "artifacts"),
     runStore: openSqliteCandidateValidationRunStore(sqliteInput(repo)),

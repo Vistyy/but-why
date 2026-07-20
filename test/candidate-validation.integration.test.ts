@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { ReviewerAgentRuntime } from "../src/agent/reviewerAgentRuntime.js";
 import { captureLocalCandidate } from "../src/changeCandidateCapture/captureLocalCandidate.js";
-import { openCandidateValidation } from "../src/candidateValidation/validateCandidate.js";
+import { candidateValidationForTest } from "./support/candidateValidation.js";
 import { openSqliteCandidateValidationRunStore } from "../src/sqlite/sqliteCandidateValidationRunStore.js";
 import { cleanupTempRoots } from "./support/by-cli.js";
 import {
@@ -26,7 +26,7 @@ describe("Candidate validation", () => {
     expect(captured.ok).toBe(true);
     if (!captured.ok) return;
 
-    const validation = openCandidateValidation({
+    const validation = candidateValidationForTest({
       localRepositoryMainCheckoutRoot: repo,
       artifactsRoot: join(commonDirectory(repo), "but-why", "artifacts"),
       runStore: openSqliteCandidateValidationRunStore(sqliteInput(repo)),
@@ -97,7 +97,7 @@ describe("Candidate validation", () => {
     const captured = captureLocalCandidate({ cwd: repo, now });
     expect(captured.ok).toBe(true);
     if (!captured.ok) return;
-    const validation = openCandidateValidation({
+    const validation = candidateValidationForTest({
       localRepositoryMainCheckoutRoot: repo,
       artifactsRoot: join(commonDirectory(repo), "but-why", "artifacts"),
       runStore: openSqliteCandidateValidationRunStore(sqliteInput(repo)),
@@ -131,7 +131,7 @@ describe("Candidate validation", () => {
     const captured = captureLocalCandidate({ cwd: repo, now });
     expect(captured.ok).toBe(true);
     if (!captured.ok) return;
-    const validation = openCandidateValidation({
+    const validation = candidateValidationForTest({
       localRepositoryMainCheckoutRoot: repo,
       artifactsRoot: join(commonDirectory(repo), "but-why", "artifacts"),
       runStore: openSqliteCandidateValidationRunStore(sqliteInput(repo)),
@@ -171,7 +171,7 @@ describe("Candidate validation", () => {
     if (!captured.ok) return;
     writeFileSync(join(repo, ".validation-env"), "local=true\n");
 
-    const validation = openCandidateValidation({
+    const validation = candidateValidationForTest({
       localRepositoryMainCheckoutRoot: repo,
       artifactsRoot: join(commonDirectory(repo), "but-why", "artifacts"),
       runStore: openSqliteCandidateValidationRunStore(sqliteInput(repo)),
@@ -203,7 +203,7 @@ describe("Candidate validation", () => {
     const review = vi.fn<ReviewerAgentRuntime["review"]>(() =>
       Effect.succeed({ ok: true, report: { findings: [] }, attempts: 1, stdout: "" }),
     );
-    const validation = openCandidateValidation({
+    const validation = candidateValidationForTest({
       localRepositoryMainCheckoutRoot: repo,
       artifactsRoot: join(commonDirectory(repo), "but-why", "artifacts"),
       runStore: openSqliteCandidateValidationRunStore(sqliteInput(repo)),
@@ -257,7 +257,7 @@ describe("Candidate validation", () => {
     writeFileSync(join(mainCheckout, ".validation-env"), "source=main\n");
     writeFileSync(join(candidateCheckout, ".validation-env"), "source=candidate\n");
 
-    const validation = openCandidateValidation({
+    const validation = candidateValidationForTest({
       localRepositoryMainCheckoutRoot: mainCheckout,
       artifactsRoot: join(commonDirectory(mainCheckout), "but-why", "artifacts"),
       runStore: openSqliteCandidateValidationRunStore(sqliteInput(mainCheckout)),
