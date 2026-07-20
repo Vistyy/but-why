@@ -36,10 +36,13 @@
       "kind": "banned-import",
       "specifiers": [
         "./sqliteTaskStore.js",
+        "./sqliteCandidateValidationRunStore.js",
         "../sqlite/sqliteTaskStore.js",
+        "../sqlite/sqliteCandidateValidationRunStore.js",
         "../../sqlite/sqliteTaskStore.js",
+        "../../sqlite/sqliteCandidateValidationRunStore.js",
         "../../../sqlite/sqliteTaskStore.js",
-        "../../../sqlite/sqliteTaskStore.js"
+        "../../../sqlite/sqliteCandidateValidationRunStore.js"
       ],
       "files": ["src/**/*.ts"],
       "exclude": ["src/init/repoLocalStores.ts"],

@@ -179,6 +179,17 @@ export const ensureStateDatabase = (
     if (table === undefined) {
       database.exec(baselineSchema);
       initialized = true;
+    } else {
+      const historicalMigrations = database
+        .prepare(
+          "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'schema_migrations'",
+        )
+        .get();
+      if (historicalMigrations !== undefined) {
+        throw new Error(
+          "State database uses an unsupported historical schema. Delete it and run by init.",
+        );
+      }
     }
 
     if (commonDirectory !== undefined) ensureSharedStateIdentity(database, commonDirectory);
