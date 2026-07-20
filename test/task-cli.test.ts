@@ -173,7 +173,7 @@ help[1]: Run \`by task list\` to see open tasks.`);
           {
             id: "BY-2",
             title: "Second",
-            state: "needs_input",
+            state: "ready",
             createdAt: secondNow,
             updatedAt: thirdNow,
             startable: false,
@@ -200,7 +200,7 @@ tasks[2]:
     change: null
   - id: BY-2
     title: Second
-    state: needs_input
+    state: ready
     createdAt: "${secondNow}"
     updatedAt: "${thirdNow}"
     startable: false
@@ -362,7 +362,7 @@ help[1]: "Run \`by task create --title \\"...\\" --description-file <file>\` to 
         {
           taskUseCases: fakeTaskUseCases({
             getTaskById: () =>
-              taskRecord({ title: "Inspect task", state: "needs_input", updatedAt: secondNow }),
+              taskRecord({ title: "Inspect task", state: "ready", updatedAt: secondNow }),
           }),
         },
       );
@@ -373,7 +373,7 @@ help[1]: "Run \`by task create --title \\"...\\" --description-file <file>\` to 
   id: BY-1
   title: Inspect task
   description: Description
-  state: needs_input
+  state: ready
   createdAt: "${firstNow}"
   updatedAt: "${secondNow}"
   commentCount: 0
@@ -984,16 +984,14 @@ help[1]: "Run \`by task create --title \\"...\\" --description-file <file>\` to 
       tasks.createTask({ title: "Todo old", description: "Description", now: firstNow });
       expect(tasks.approveTask({ taskId: publicTaskId("BY-1"), now: firstNow }).ok).toBe(true);
       tasks.createTask({ title: "Ready", description: "Description", now: secondNow });
-      tasks.createTask({ title: "Input", description: "Description", now: thirdNow });
       transitionStoreTask(tasks, "BY-2", "ready", secondNow);
-      transitionStoreTask(tasks, "BY-3", "needs_input", firstNow);
       tasks.createTask({ title: "Implementing", description: "Description", now: firstNow });
-      transitionStoreTask(tasks, "BY-4", "implementing", thirdNow);
+      transitionStoreTask(tasks, "BY-3", "implementing", thirdNow);
       tasks.createTask({ title: "Todo new", description: "Description", now: firstNow });
-      expect(tasks.approveTask({ taskId: publicTaskId("BY-5"), now: firstNow }).ok).toBe(true);
+      expect(tasks.approveTask({ taskId: publicTaskId("BY-4"), now: firstNow }).ok).toBe(true);
       expect(
         tasks.appendTaskComment({
-          taskId: publicTaskId("BY-5"),
+          taskId: publicTaskId("BY-4"),
           content: "Bump updated time",
           now: () => thirdNow,
         }).ok,
@@ -1008,11 +1006,10 @@ help[1]: "Run \`by task create --title \\"...\\" --description-file <file>\` to 
       expect(result.stderr).toBe("");
       expect(result.stdout).toBe(`bin: ${expectedBin}
 description: Validate completed code changes against approved human intent.
-count: 4
-tasks[4]{id,title,state,createdAt,updatedAt}:
-  BY-3,Input,needs_input,"${thirdNow}","${firstNow}"
+count: 3
+tasks[3]{id,title,state,createdAt,updatedAt}:
   BY-2,Ready,ready,"${secondNow}","${secondNow}"
-  BY-5,Todo new,todo,"${firstNow}","${thirdNow}"
+  BY-4,Todo new,todo,"${firstNow}","${thirdNow}"
   BY-1,Todo old,todo,"${firstNow}","${firstNow}"`);
     }),
   );
@@ -1048,7 +1045,7 @@ help[1]: "Run \`by task create --title \\"...\\" --description-file <file>\` to 
   code: invalid_task_state
   message: Unknown task state blocked.
   state: blocked
-help[1]: "Use one of: new, todo, implementing, validating, needs_input, ready, done."`);
+help[1]: "Use one of: new, todo, implementing, validating, ready, done."`);
     }),
   );
 
@@ -1230,7 +1227,7 @@ const listedTasks: readonly TaskSummary[] = [
   taskSummary({
     id: "BY-2",
     title: "Second",
-    state: "needs_input",
+    state: "ready",
     createdAt: secondNow,
     updatedAt: thirdNow,
   }),

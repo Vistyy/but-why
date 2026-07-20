@@ -9,7 +9,7 @@ import { createTaskStore } from "./support/taskStore.js";
 const firstNow = "2026-06-30T12:00:00.000Z";
 const secondNow = "2026-06-30T12:05:00.000Z";
 const thirdNow = "2026-06-30T12:10:00.000Z";
-const closedStates = ["implementing", "validating", "needs_input", "ready", "done"] as const;
+const closedStates = ["implementing", "validating", "ready", "done"] as const;
 
 describe("Task command policy", () => {
   it.each(closedStates)("rejects approval in %s", (state) => {

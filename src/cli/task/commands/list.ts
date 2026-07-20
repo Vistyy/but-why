@@ -24,7 +24,7 @@ export const runListCommand = (
           description: "Show only Tasks in one state",
         },
       ]),
-      examples: ["by task list", "by task list --all", "by task list --state needs_input"],
+      examples: ["by task list", "by task list --all", "by task list --state ready"],
     });
   }
 

@@ -6,8 +6,6 @@ export const taskApprovalStateHelp = (taskId: PublicTaskId, state: string): stri
       return `Inspect the linked Change with by task show ${taskId}, then submit it with by change submit <change-id>.`;
     case "validating":
       return "Wait for validation to finish.";
-    case "needs_input":
-      return `Inspect the linked Change with by task show ${taskId}, address its Findings, then run by change submit <change-id>.`;
     case "ready":
       return "Review and merge the pull request.";
     case "done":

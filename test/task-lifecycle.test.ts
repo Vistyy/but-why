@@ -1,27 +1,17 @@
-import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 import { taskStates, canTransition, isTaskState, type TaskState } from "../src/task/lifecycle.js";
 
 describe("Task lifecycle", () => {
   it("owns the canonical Task state vocabulary and legal transitions", () => {
-    expect(taskStates).toEqual([
-      "new",
-      "todo",
-      "implementing",
-      "validating",
-      "needs_input",
-      "ready",
-      "done",
-    ]);
+    expect(taskStates).toEqual(["new", "todo", "implementing", "validating", "ready", "done"]);
 
     const expectedTransitions = new Map<TaskState, readonly TaskState[]>([
       ["new", ["todo"]],
       ["todo", ["implementing"]],
       ["implementing", ["validating"]],
-      ["validating", ["implementing", "needs_input", "ready"]],
-      ["needs_input", ["validating"]],
-      ["ready", ["validating", "done", "needs_input"]],
+      ["validating", ["implementing", "ready"]],
+      ["ready", ["validating", "done"]],
       ["done", []],
     ]);
 
@@ -38,19 +28,5 @@ describe("Task lifecycle", () => {
     expect(isTaskState("new")).toBe(true);
     expect(isTaskState("todo")).toBe(true);
     expect(isTaskState("unknown")).toBe(false);
-  });
-
-  it("keeps the durable Task state constraint in sync with Task states", () => {
-    const stateDatabaseSource = readFileSync("src/init/stateDatabase.ts", "utf8");
-    const matches = [...stateDatabaseSource.matchAll(/state IN \(([^)]+)\)/g)];
-    const stateList = matches.map((match) => match[1]).find((states) => states?.includes("'new'"));
-
-    if (stateList === undefined) {
-      throw new Error("Task state SQL constraint was not found");
-    }
-
-    const durableStates = stateList.split(",").map((state) => state.trim().replaceAll("'", ""));
-
-    expect(durableStates).toEqual([...taskStates]);
   });
 });

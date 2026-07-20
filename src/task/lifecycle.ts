@@ -1,12 +1,4 @@
-export const taskStates = [
-  "new",
-  "todo",
-  "implementing",
-  "validating",
-  "needs_input",
-  "ready",
-  "done",
-] as const;
+export const taskStates = ["new", "todo", "implementing", "validating", "ready", "done"] as const;
 
 export type TaskState = (typeof taskStates)[number];
 
@@ -16,9 +8,8 @@ const validTransitions: ReadonlyMap<TaskState, readonly TaskState[]> = new Map([
   ["new", ["todo"]],
   ["todo", ["implementing"]],
   ["implementing", ["validating"]],
-  ["validating", ["implementing", "needs_input", "ready"]],
-  ["needs_input", ["validating"]],
-  ["ready", ["validating", "done", "needs_input"]],
+  ["validating", ["implementing", "ready"]],
+  ["ready", ["validating", "done"]],
   ["done", []],
 ]);
 

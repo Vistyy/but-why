@@ -181,13 +181,12 @@ const listActionableTasks = (database: DatabaseSync): readonly TaskSummary[] =>
     `
       SELECT ${taskSummaryColumns}
       FROM tasks
-      WHERE state IN ('new', 'todo', 'needs_input', 'ready')
+      WHERE state IN ('new', 'todo', 'ready')
       ORDER BY
         CASE state
-          WHEN 'needs_input' THEN 0
-          WHEN 'ready' THEN 1
-          WHEN 'new' THEN 2
-          WHEN 'todo' THEN 3
+          WHEN 'ready' THEN 0
+          WHEN 'new' THEN 1
+          WHEN 'todo' THEN 2
         END ASC,
         updated_at DESC,
         numeric_id ASC

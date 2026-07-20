@@ -12,10 +12,6 @@ describe("Task state command guidance", () => {
       "Inspect the linked Change with by task show BY-1, then submit it with by change submit <change-id>.",
     ],
     ["validating", "Wait for validation to finish."],
-    [
-      "needs_input",
-      "Inspect the linked Change with by task show BY-1, address its Findings, then run by change submit <change-id>.",
-    ],
     ["ready", "Review and merge the pull request."],
     ["done", "Task is already done."],
   ] as const)("guides approval rejected in %s", (state, help) => {
