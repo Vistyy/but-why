@@ -33,8 +33,8 @@ But Why stores operational state under `<git-common-dir>/but-why/`.
 Repo Config remains tracked at `.but-why/config.json` in each worktree.
 Shared state identifies the Local Repository by its Git common directory.
 
-The current SQLite migration chain remains supported for existing state.
-Task 137 owns replacement of that chain with the Effect SQL baseline.
+SQLite state uses one current baseline and does not support historical migration-chain upgrades.
+Task 137 owns replacement of SQLite storage with Effect SQL.
 
 ## CLI
 
