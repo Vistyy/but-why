@@ -2,13 +2,15 @@ import { expect, it } from "@effect/vitest";
 import { Effect, Layer } from "effect";
 import { describe } from "vitest";
 
-import type { CandidateValidationRunStore } from "../src/candidateValidation/candidateValidationRunStore.js";
 import { CandidateValidation } from "../src/candidateValidation/validateCandidate.js";
 import type { ChangeRecord } from "../src/change/change.js";
 import type { ChangeStore } from "../src/change/changeStore.js";
 import type { ChangeReconciliation } from "../src/change/reconcileChange.js";
 import { openChangeSubmit } from "../src/change/submitChange.js";
-import type { CandidatePublication } from "../src/publication/publishCandidate.js";
+import type {
+  CandidatePublication,
+  PublishCandidateInput,
+} from "../src/publication/publishCandidate.js";
 import type { TaskStore } from "../src/task/taskStore.js";
 import { publicTaskId } from "../src/task/taskId.js";
 
@@ -340,10 +342,6 @@ const dependencies = (input: {
         return { ok: true, changed: true, task: {} };
       },
     } as unknown as TaskStore,
-    validationRunStore: {
-      listFindings: () => input.findings ?? [],
-      listToolingFailures: () => input.toolingFailures ?? [],
-    } as unknown as CandidateValidationRunStore,
     reconciliation: {
       reconcile: () => {
         events.push("reconcile");
@@ -380,17 +378,24 @@ const dependencies = (input: {
             },
           } as const)
         : ({ ok: true, resolved: { taskBacked: false, policy: tasklessPolicy } } as const),
-    publicationFor: () =>
-      input.publication ?? {
-        publish: () => {
-          events.push("publish");
-          return {
-            ok: true,
-            created: true,
-            pullRequest: { number: 42, url: "https://github.test/acme/repo/pull/42" },
-          };
-        },
-      },
+    publicationFor: () => {
+      const publication =
+        input.publication ??
+        ({
+          publish: () => {
+            events.push("publish");
+            return {
+              ok: true,
+              created: true,
+              pullRequest: { number: 42, url: "https://github.test/acme/repo/pull/42" },
+            };
+          },
+        } satisfies CandidatePublication);
+      return {
+        publish: (publicationInput: PublishCandidateInput) =>
+          Effect.sync(() => publication.publish(publicationInput)),
+      };
+    },
     detectTarget: () => {
       events.push("detect_target");
       return (

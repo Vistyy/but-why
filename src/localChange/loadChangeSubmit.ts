@@ -23,7 +23,7 @@ import type { RepositoryStorageError } from "../repositoryStorageError.js";
 import { repositorySqlLayer } from "../sqlite/repositorySql.js";
 import { openSqliteChangeCandidateCapturePersistence } from "../sqlite/sqliteChangeCandidateCapturePersistence.js";
 import { openSqliteChangeValidationPersistence } from "../sqlite/sqliteChangeValidationPersistence.js";
-import { openCandidatePublication } from "../publication/publishCandidate.js";
+import { openEffectCandidatePublication } from "../publication/publishCandidate.js";
 import { detectGitHubPrTarget } from "../submissionEnvironment/githubTarget.js";
 import { localGitHubPullRequestGateway } from "../submissionEnvironment/localGitHubPullRequestGateway.js";
 
@@ -57,12 +57,14 @@ export const loadChangeSubmit = (input: {
     github: localGitHubPullRequestGateway({ cwd: context.root }),
     cleanup: cleanupChangeResources,
   });
-  const programFor = (persistence: ChangeCandidateCapturePersistence) =>
+  const programFor = (
+    capturePersistence: ChangeCandidateCapturePersistence,
+    validationPersistence: ChangeValidationPersistence,
+  ) =>
     openChangeSubmit({
       repositoryCommonDirectory: context.commonDirectory,
       changeStore: stores.changeStore,
       taskStore: stores.taskStore,
-      validationRunStore: stores.candidateValidationRunStore,
       reconciliation,
       resolvePolicy: (taskBacked) =>
         resolveCandidateValidationPolicy({
@@ -71,16 +73,16 @@ export const loadChangeSubmit = (input: {
           taskBacked,
         }),
       publicationFor: (cwd) =>
-        openCandidatePublication({
+        openEffectCandidatePublication({
           changeStore: stores.changeStore,
           candidateStore: stores.candidateStore,
-          validationRunStore: stores.candidateValidationRunStore,
+          validationPersistence,
           git: localCandidatePublicationGit({ cwd }),
           github: localGitHubPullRequestGateway({ cwd }),
         }),
       detectTarget: detectGitHubPrTarget,
       captureCandidate: openChangeCandidateCapture({
-        persistence,
+        persistence: capturePersistence,
         git: localChangeCandidateCaptureGit,
       }).capture,
     });
@@ -108,7 +110,7 @@ export const loadChangeSubmit = (input: {
           validation: openSqliteChangeValidationPersistence(),
         }).pipe(
           Effect.flatMap(({ capture, validation }) =>
-            programFor(capture)
+            programFor(capture, validation)
               .submit(submitInput)
               .pipe(Effect.provide(layerFor(validation))),
           ),

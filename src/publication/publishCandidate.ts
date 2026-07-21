@@ -1,10 +1,15 @@
 import { isDeepStrictEqual } from "node:util";
 
 import type { CandidateStore } from "../candidate/candidateStore.js";
+import { Effect } from "effect";
+
 import type {
   CandidateValidationPolicySnapshot,
+  CandidateValidationRunRecord,
   CandidateValidationRunStore,
 } from "../candidateValidation/candidateValidationRunStore.js";
+import type { ChangeValidationPersistence } from "../changeValidation/changeValidationPersistence.js";
+import type { RepositoryStorageError } from "../repositoryStorageError.js";
 import type {
   ChangeOwnedPullRequest,
   ChangePublicationTarget,
@@ -32,6 +37,12 @@ export type CandidatePublicationGit = {
 
 export type CandidatePublication = {
   readonly publish: (input: PublishCandidateInput) => PublishCandidateResult;
+};
+
+export type EffectCandidatePublication = {
+  readonly publish: (
+    input: PublishCandidateInput,
+  ) => Effect.Effect<PublishCandidateResult, RepositoryStorageError>;
 };
 
 export type PublishCandidateInput = {
@@ -71,18 +82,37 @@ export const openCandidatePublication = (input: {
   readonly git: CandidatePublicationGit;
   readonly github: GitHubPullRequestGateway;
 }): CandidatePublication => ({
-  publish: (publicationInput) => publishCandidate(input, publicationInput),
+  publish: (publicationInput) =>
+    publishCandidate(
+      input,
+      publicationInput,
+      input.validationRunStore.getRunById(publicationInput.validationRunId),
+    ),
+});
+
+export const openEffectCandidatePublication = (input: {
+  readonly changeStore: ChangeStore;
+  readonly candidateStore: CandidateStore;
+  readonly validationPersistence: Pick<ChangeValidationPersistence, "getRunById">;
+  readonly git: CandidatePublicationGit;
+  readonly github: GitHubPullRequestGateway;
+}): EffectCandidatePublication => ({
+  publish: (publicationInput) =>
+    Effect.map(
+      input.validationPersistence.getRunById(publicationInput.validationRunId),
+      (validationRun) => publishCandidate(input, publicationInput, validationRun),
+    ),
 });
 
 const publishCandidate = (
   dependencies: {
     readonly changeStore: ChangeStore;
     readonly candidateStore: CandidateStore;
-    readonly validationRunStore: CandidateValidationRunStore;
     readonly git: CandidatePublicationGit;
     readonly github: GitHubPullRequestGateway;
   },
   input: PublishCandidateInput,
+  validationRun: CandidateValidationRunRecord | undefined,
 ): PublishCandidateResult => {
   const change = dependencies.changeStore.getChangeById(input.changeId);
   if (change === undefined) return { ok: false, code: "change_not_found" };
@@ -91,7 +121,7 @@ const publishCandidate = (
   if (candidate === undefined) return { ok: false, code: "candidate_not_found" };
   if (candidate.changeId !== change.id)
     return { ok: false, code: "candidate_does_not_belong_to_change" };
-  if (!hasPassingEvidence(dependencies.validationRunStore, input, candidate.headSha)) {
+  if (!hasPassingEvidence(validationRun, input, candidate.headSha)) {
     return { ok: false, code: "validation_evidence_invalid" };
   }
   const headBranch = branchName(change.branchRef);
@@ -122,19 +152,15 @@ const publishCandidate = (
 };
 
 const hasPassingEvidence = (
-  validationRunStore: CandidateValidationRunStore,
+  validationRun: CandidateValidationRunRecord | undefined,
   input: PublishCandidateInput,
   headSha: string,
-): boolean => {
-  const run = validationRunStore.getRunById(input.validationRunId);
-  return (
-    run !== undefined &&
-    run.candidateId === input.candidateId &&
-    run.outcome === "passed" &&
-    isDeepStrictEqual(run.policy, input.policy) &&
-    headSha.length > 0
-  );
-};
+): boolean =>
+  validationRun !== undefined &&
+  validationRun.candidateId === input.candidateId &&
+  validationRun.outcome === "passed" &&
+  isDeepStrictEqual(validationRun.policy, input.policy) &&
+  headSha.length > 0;
 
 const createPullRequest = (
   dependencies: Parameters<typeof publishCandidate>[0],

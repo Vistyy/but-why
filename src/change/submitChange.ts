@@ -3,7 +3,6 @@ import { Effect } from "effect";
 import type { CandidateValidationPolicyResolution } from "../candidateValidation/resolveCandidateValidationPolicy.js";
 import type {
   CandidateValidationFinding,
-  CandidateValidationRunStore,
   CandidateValidationToolingFailure,
 } from "../candidateValidation/candidateValidationRunStore.js";
 import {
@@ -16,7 +15,7 @@ import type {
 } from "../changeCandidateCapture/captureLocalCandidate.js";
 import type { RepositoryStorageError } from "../repositoryStorageError.js";
 import type {
-  CandidatePublication,
+  EffectCandidatePublication,
   PublishCandidateResult,
 } from "../publication/publishCandidate.js";
 import type { GitHubTargetResult } from "../submissionEnvironment/githubTarget.js";
@@ -109,10 +108,9 @@ export const openChangeSubmit = (dependencies: {
   readonly repositoryCommonDirectory: string;
   readonly changeStore: ChangeStore;
   readonly taskStore: TaskStore;
-  readonly validationRunStore: CandidateValidationRunStore;
   readonly reconciliation: ChangeReconciliation;
   readonly resolvePolicy: (taskBacked: boolean) => CandidateValidationPolicyResolution;
-  readonly publicationFor: (cwd: string) => CandidatePublication;
+  readonly publicationFor: (cwd: string) => EffectCandidatePublication;
   readonly detectTarget: (cwd: string, branch: string) => GitHubTargetResult;
   readonly captureCandidate: CaptureCandidate;
 }): CandidateValidationChangeSubmit => ({
@@ -245,7 +243,7 @@ const validateAndPublish = (
       );
     }
 
-    const publication = dependencies.publicationFor(change.worktreePath).publish({
+    const publication = yield* dependencies.publicationFor(change.worktreePath).publish({
       changeId: change.id,
       candidateId: candidate.candidateId,
       validationRunId: validationResult.validationRunId,
