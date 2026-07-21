@@ -125,6 +125,35 @@ describe("by change implement", () => {
     }),
   );
 
+  it.effect("maps a rejected Interactive Session Host launch to launch_failed", () =>
+    Effect.gen(function* () {
+      const root = initializedRepository();
+      const started = yield* runByInProcessEffect(
+        root,
+        ["change", "start", "--output", "json"],
+        now,
+      );
+      const change = JSON.parse(started.stdout) as { readonly change: { readonly id: string } };
+      const host: InteractiveSessionHost = {
+        launch: async () => {
+          throw new Error("Pane creation rejected");
+        },
+      };
+
+      const result = yield* runByInProcessEffect(
+        root,
+        ["change", "implement", change.change.id, "--output", "json"],
+        now,
+        { interactiveSessionHost: host },
+      );
+
+      expect(result.status).toBe(1);
+      expect(JSON.parse(result.stdout)).toMatchObject({
+        error: { code: "launch_failed", message: "Pane creation rejected" },
+      });
+    }),
+  );
+
   it.effect("rejects standard input as a handoff source", () =>
     Effect.gen(function* () {
       const root = initializedRepository();

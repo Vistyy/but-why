@@ -427,11 +427,19 @@ const runImplement = (
       ? undefined
       : readHandoffFile(environment.cwd, parsed.handoffFile);
   if (handoff !== undefined && !handoff.ok) return Effect.succeed(handoffFileError(handoff.error));
-  return withChanges(environment, (changes) =>
-    Effect.map(
-      changes.implement(parsed.changeId, handoff === undefined ? undefined : handoff.content),
-      implementResult,
-    ),
+  return withChanges(
+    environment,
+    (changes) =>
+      Effect.map(
+        changes.implement(parsed.changeId, handoff === undefined ? undefined : handoff.content),
+        implementResult,
+      ),
+    () =>
+      runtimeError({
+        code: "launch_failed",
+        message: "But Why? could not launch the Interactive Session.",
+        help: ["Confirm Herdr is running, then retry Change Implement."],
+      }),
   );
 };
 
@@ -818,6 +826,7 @@ const operationalError = (code: string, change?: ChangeRecord): CliResult =>
 const withChanges = (
   environment: ChangeCommandEnvironment,
   use: (changes: ChangeUseCases) => Effect.Effect<CliResult, RepositoryStorageError>,
+  unexpectedFailure: () => CliResult = () => stateStoreUnavailable("repository"),
 ): Effect.Effect<CliResult> =>
   withChangeUseCases(
     {
@@ -833,6 +842,7 @@ const withChanges = (
   ).pipe(
     Effect.map((result) => (result.ok ? result.value : loadError(result.error))),
     Effect.catchAll((error) => Effect.succeed(repositoryStorageErrorResult(error))),
+    Effect.catchAllCause(() => Effect.succeed(unexpectedFailure())),
   );
 
 const loadError = (error: { readonly code: string; readonly taskPrefix?: string }): CliResult =>

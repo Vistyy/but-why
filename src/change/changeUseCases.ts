@@ -172,15 +172,24 @@ const implementChange = (
     if (change.readiness !== changeReadiness.ready) {
       return { ok: false, code: "change_not_ready", change };
     }
-    const launched = yield* Effect.promise(() =>
-      interactiveSessionHost.launch({
-        changeId: change.id,
-        repositoryPath: context.root,
-        worktreePath: change.worktreePath,
-        initialPrompt,
+    const launched = yield* Effect.tryPromise({
+      try: () =>
+        interactiveSessionHost.launch({
+          changeId: change.id,
+          repositoryPath: context.root,
+          worktreePath: change.worktreePath,
+          initialPrompt,
+        }),
+      catch: (error) => (error instanceof Error ? error.message : String(error)),
+    }).pipe(
+      Effect.match({
+        onFailure: (message) => ({ ok: false as const, message }),
+        onSuccess: (result) => ({ ok: true as const, result }),
       }),
     );
-    return { change, ...launched };
+    return launched.ok
+      ? { change, ...launched.result }
+      : { ok: false, code: "launch_failed", message: launched.message, change };
   });
 
 type PreparationResult =
