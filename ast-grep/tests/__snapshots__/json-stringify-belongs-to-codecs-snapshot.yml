@@ -1,0 +1,26 @@
+id: json-stringify-belongs-to-codecs
+snapshots:
+  JSON.stringify(value):
+    labels:
+    - source: JSON.stringify(value)
+      style: primary
+      start: 0
+      end: 21
+  JSON["stringify"](value):
+    labels:
+    - source: JSON["stringify"](value)
+      style: primary
+      start: 0
+      end: 24
+  globalThis.JSON.stringify(value):
+    labels:
+    - source: globalThis.JSON.stringify(value)
+      style: primary
+      start: 0
+      end: 32
+  globalThis.JSON["stringify"](value):
+    labels:
+    - source: globalThis.JSON["stringify"](value)
+      style: primary
+      start: 0
+      end: 35

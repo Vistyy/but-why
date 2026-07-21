@@ -3,6 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
+  "packageManager": "pnpm@10.28.0",
   "bin": {
     "by": "./dist/main.js"
   },
@@ -16,11 +17,12 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
-    "prepack": "npm run build",
+    "prepack": "just build",
+    "docs-check": "remark --frail --quiet",
     "format": "biome format --write .",
     "format-check": "biome format .",
     "lint": "biome lint .",
-    "ast-grep-check": "ast-grep test --skip-snapshot-tests && ast-grep scan",
+    "ast-grep-check": "ast-grep test && ast-grep scan",
     "test": "vitest run",
     "typecheck": "tsc --noEmit"
   },
@@ -36,7 +38,10 @@
     "@biomejs/biome": "^2.2.0",
     "@effect/vitest": "0.28.0",
     "@types/node": "^24.0.0",
+    "@vitest/coverage-istanbul": "3.2.6",
     "fallow": "^3.2.0",
+    "remark-cli": "^12.0.1",
+    "remark-validate-links": "^13.1.0",
     "tsx": "^4.20.3",
     "typescript": "^7.0.2",
     "vitest": "^3.2.4"

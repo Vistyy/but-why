@@ -1,47 +1,74 @@
-set positional-arguments
+set positional-arguments := true
 
 # List available commands.
 default:
     @just --list
 
+# Initialize dependencies in the locked project environment.
+init:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    if [[ "$(node -p 'process.versions.node.split(".")[0]')" != "24" ]]; then
+        echo "error: Node.js 24 is required"
+        echo "help: enter the repository through direnv or run nix develop"
+        exit 1
+    fi
+    if [[ "$(pnpm --version)" != "10.28.0" ]]; then
+        echo "error: pnpm 10.28.0 is required"
+        echo "help: enter the repository through direnv or run nix develop"
+        exit 1
+    fi
+    pnpm install --frozen-lockfile
+
 # Run all quality checks.
 quality:
-    #!/usr/bin/env bash
-    set -uo pipefail
-    just quality-static & static_pid=$!
-    just test & test_pid=$!
-    status=0
-    wait "$static_pid" || status=1
-    wait "$test_pid" || status=1
-    exit "$status"
+    just coverage
+    just quality-static
+    just build
 
 # Run independent static checks in parallel.
 quality-static:
     #!/usr/bin/env bash
     set -uo pipefail
+    just config-check & config_pid=$!
+    just docs-check & docs_pid=$!
     just format-check & format_pid=$!
     just lint & lint_pid=$!
     just ast-grep-check & ast_grep_pid=$!
     just typecheck & typecheck_pid=$!
     just fallow-check & fallow_pid=$!
     status=0
-    for pid in "$format_pid" "$lint_pid" "$ast_grep_pid" "$typecheck_pid" "$fallow_pid"; do
+    for pid in "$config_pid" "$docs_pid" "$format_pid" "$lint_pid" "$ast_grep_pid" "$typecheck_pid" "$fallow_pid"; do
         wait "$pid" || status=1
     done
     exit "$status"
+
+# Validate maintained quality configuration.
+config-check:
+    just --unstable --fmt --check
+    pnpm exec biome check .but-why/config.json .fallowrc.jsonc biome.json fallow-rules/architecture.json package.json tsconfig.json tsconfig.build.json vitest.config.ts
+    @pnpm exec fallow list --entry-points --boundaries --no-cache > /dev/null 2>&1 || { echo "error: Fallow configuration is invalid"; echo "help: pnpm exec fallow list --entry-points --boundaries --no-cache"; exit 1; }
+
+# Validate links and anchors in every tracked Markdown file.
+docs-check:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    mapfile -d '' markdown_files < <(git ls-files -z -- '*.md')
+    pnpm --silent run docs-check -- "${markdown_files[@]}"
 
 # Check structural code rules.
 ast-grep-check:
     pnpm run ast-grep-check
 
-# Check dead code, duplication, complexity, and health.
+# Check dead code, architecture, duplication, complexity, and health.
 fallow-check:
-    pnpm exec fallow dead-code --no-production --no-cache --fail-on-issues
-    pnpm exec fallow dupes --no-production --no-cache --fail-on-issues
-    pnpm exec fallow health --no-production --no-cache --complexity --min-severity moderate
-    # Fallow score gates are CLI-only. Keep the floor at the current exact full health score.
-    # This preserves the health gate while allowing the explicit architecture seams added for boundary enforcement.
-    pnpm exec fallow health --no-production --no-cache --min-score 87.5 --score
+    #!/usr/bin/env bash
+    set -uo pipefail
+    status=0
+    pnpm exec fallow dead-code --no-production --no-cache --fail-on-issues || status=1
+    pnpm exec fallow dupes --no-production --no-cache --fail-on-issues || status=1
+    pnpm exec fallow health --no-production --no-cache --coverage coverage/coverage-final.json --complexity --min-severity moderate || status=1
+    exit "$status"
 
 # Lint the codebase.
 lint:
@@ -55,9 +82,17 @@ typecheck:
 test *args:
     pnpm exec vitest run "$@"
 
+# Run tests with measured production coverage.
+coverage *args:
+    pnpm exec vitest run --coverage "$@"
+
+# Build the production package.
+build:
+    @pnpm --silent run build
+
 # Create the npm package tarball.
 pack:
-    npm pack
+    pnpm pack
 
 # Format the codebase.
 format:

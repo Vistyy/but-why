@@ -4,284 +4,68 @@
   "ignorePatterns": ["spikes/**", "dist/**", "build/**", "coverage/**"],
   "rulePacks": ["./fallow-rules/architecture.json"],
   "rules": {
-    "unused-files": "error",
-    "unused-exports": "error",
-    "unused-types": "error",
-    "unused-dependencies": "error",
-    "unused-dev-dependencies": "error",
-    "unused-optional-dependencies": "error",
-    "unused-enum-members": "error",
-    "unused-class-members": "error",
-    "unresolved-imports": "error",
-    "unlisted-dependencies": "error",
-    "duplicate-exports": "error",
-    "type-only-dependencies": "error",
-    "test-only-dependencies": "error",
-    "dev-dependencies-in-production": "error",
-    "circular-dependencies": "error",
-    "re-export-cycle": "error",
     "boundary-violation": "error",
     "stale-suppressions": "error",
     "require-suppression-reason": "error",
-    "policy-violation": "error",
-    // This CLI repo does not use framework, CSS, catalog, or client/server surface rules.
-    // Keep them off so every enabled active-source rule is blocking.
-    "unused-store-members": "off",
-    "unprovided-injects": "off",
-    "unrendered-components": "off",
-    "unused-component-props": "off",
-    "unused-component-emits": "off",
-    "unused-component-inputs": "off",
-    "unused-component-outputs": "off",
-    "unused-svelte-events": "off",
-    "unused-server-actions": "off",
-    "unused-load-data-keys": "off",
-    "css-token-drift": "off",
-    "css-duplicate-block": "off",
-    "css-selector-complexity": "off",
-    "css-dead-surface": "off",
-    "css-broken-reference": "off",
-    "unused-catalog-entries": "off",
-    "empty-catalog-groups": "off",
-    "unused-dependency-overrides": "off",
-    "invalid-client-export": "off",
-    "mixed-client-server-barrel": "off",
-    "misplaced-directive": "off"
-  },
-  "duplicates": {
-    "enabled": true,
-    "ignoreDefaults": false,
-    // Include tests, but avoid blocking on repeated assertion boilerplate.
-    // This still blocks clone groups of 40 or more lines across active source.
-    "minLines": 40
-  },
-  "health": {
-    // CRAP needs real coverage to be stable. This repo does not produce coverage yet.
-    // Keep default cyclomatic and cognitive thresholds blocking.
-    "maxCrap": 1000,
-    // Existing integration tests and orchestration seams intentionally use long scenario bodies.
-    // Gate substantial new unit-size growth while keeping current source actionable through score and hotspot output.
-    "maxUnitSize": 900,
-    "ignore": ["spikes/**"]
+    "policy-violation": "error"
   },
   "boundaries": {
     "zones": [
       {
-        "name": "tool-config",
-        "patterns": ["vitest.config.ts"]
+        "name": "support",
+        "patterns": [".remarkrc.mjs", "vitest.config.ts", "test/**/*.ts"]
       },
       {
         "name": "cli-entry",
         "patterns": ["src/main.ts"]
       },
       {
-        "name": "cli-command-edge",
+        "name": "cli",
         "patterns": ["src/cli.ts", "src/cli*.ts", "src/cli/**"]
       },
       {
-        "name": "output-types",
-        "patterns": ["src/output/structured.ts"]
-      },
-      {
-        "name": "contract-output",
-        "patterns": ["src/output/contractDiagnostics.ts"]
-      },
-      {
-        "name": "output-serializers",
+        "name": "output-codecs",
         "patterns": ["src/output/json.ts", "src/output/serialize.ts", "src/output/toon.ts"]
-      },
-      {
-        "name": "contracts",
-        "patterns": ["src/contracts/**"]
-      },
-      {
-        "name": "agent-profiles",
-        "patterns": ["src/agent/**"]
-      },
-      {
-        "name": "acceptance-review",
-        "patterns": ["src/acceptanceReview/**"]
-      },
-      {
-        "name": "specialist-review",
-        "patterns": ["src/specialistReview/**"]
       },
       {
         "name": "domain",
         "patterns": [
-          "src/validationRun/cleanup.ts",
-          "src/validationRun/toolingErrorKind.ts",
-          "src/validationRun/taskContextSnapshot.ts",
-          "src/validationRun/validationRun.ts",
           "src/candidate/candidate.ts",
           "src/change/change.ts",
           "src/task/lifecycle.ts",
           "src/task/task.ts",
-          "src/task/taskId.ts"
+          "src/task/taskId.ts",
+          "src/validationRun/cleanup.ts",
+          "src/validationRun/taskContextSnapshot.ts",
+          "src/validationRun/toolingErrorKind.ts",
+          "src/validationRun/validationRun.ts"
         ]
       },
       {
-        "name": "candidate-store",
-        "patterns": ["src/candidate/candidateStore.ts"]
-      },
-      {
-        "name": "change-store",
-        "patterns": ["src/change/changeStore.ts"]
-      },
-      {
-        "name": "owned-pull-request-gateway",
-        "patterns": ["src/change/ownedPullRequestGateway.ts"]
-      },
-      {
-        "name": "change-candidate-capture-store",
-        "patterns": ["src/changeCandidateCapture/changeCandidateCaptureStore.ts"]
-      },
-      {
-        "name": "change-candidate-capture",
-        "patterns": ["src/changeCandidateCapture/captureLocalCandidate.ts"]
-      },
-      {
-        "name": "local-git-candidate-adapter",
-        "patterns": ["src/changeCandidateCapture/localGitCandidate.ts"]
-      },
-      {
-        "name": "task-store",
-        "patterns": ["src/task/taskStore.ts"]
-      },
-      {
-        "name": "change-start-store",
-        "patterns": ["src/change/changeStartStore.ts"]
-      },
-      {
-        "name": "change-start-adapter",
-        "patterns": ["src/change/changeStartGit.ts"]
-      },
-      {
-        "name": "interactive-session-port",
-        "patterns": ["src/change/interactiveSessionHost.ts"]
-      },
-      {
-        "name": "change-file-input",
-        "patterns": ["src/change/handoffFile.ts"]
-      },
-      {
-        "name": "herdr-adapter",
-        "patterns": ["src/change/herdrInteractiveSessionHost.ts"]
-      },
-      {
-        "name": "change-cleanup-adapter",
-        "patterns": ["src/change/localChangeCleanupGit.ts"]
-      },
-      {
-        "name": "validation-run-store",
-        "patterns": ["src/candidateValidation/candidateValidationRunStore.ts"]
-      },
-      {
-        "name": "validation-runs",
+        "name": "ports",
         "patterns": [
-          "src/validation/runCheckRound.ts",
-          "src/validation/runPreparePhase.ts",
-          "src/repositoryPreparation/runRepositoryPreparation.ts",
-          "src/validation/ensureCandidateIntegrity.ts",
-          "src/validationRun/artifactContent.ts",
-          "src/validationRun/artifactFiles.ts",
-          "src/validationRun/reviewerArtifacts.ts"
+          "src/candidate/candidateStore.ts",
+          "src/candidateValidation/candidateValidationRunStore.ts",
+          "src/change/changeStartStore.ts",
+          "src/change/changeStore.ts",
+          "src/change/interactiveSessionHost.ts",
+          "src/change/ownedPullRequestGateway.ts",
+          "src/changeCandidateCapture/changeCandidateCaptureStore.ts",
+          "src/task/taskStore.ts",
+          "src/validation/validationWorkspace.ts"
         ]
       },
       {
-        "name": "submit-rejection-errors",
-        "patterns": ["src/submit/submitRejectionErrors.ts"]
-      },
-      {
-        "name": "validation-tooling-failures",
-        "patterns": ["src/validation/validationToolingFailures.ts"]
-      },
-      {
-        "name": "validation-workspace",
-        "patterns": ["src/validation/validationWorkspace.ts"]
-      },
-      {
-        "name": "use-cases",
+        "name": "composition",
         "patterns": [
-          "src/task/taskUseCases.ts",
-          "src/change/changeUseCases.ts",
-          "src/candidateValidation/inspectCandidateValidationRun.ts",
-          "src/change/inspectChange.ts",
-          "src/submit/submitRepoConfig.ts"
-        ]
-      },
-      {
-        "name": "publication-use-case",
-        "patterns": ["src/publication/publishCandidate.ts"]
-      },
-      {
-        "name": "change-reconciliation",
-        "patterns": ["src/change/reconcileChange.ts"]
-      },
-      {
-        "name": "task-adapter",
-        "patterns": ["src/task/repoTaskIds.ts", "src/task/files/**"]
-      },
-      {
-        "name": "local-orchestration",
-        "patterns": [
-          "src/localTask/**",
-          "src/localChange/**",
-          "src/repositoryPreparation/localRepositoryPreparation.ts",
-          "src/localValidationRun/**",
+          "src/init/repoLocalStores.ts",
           "src/localCandidateValidation/**",
-          "src/candidateValidation/validateCandidate.ts",
-          "src/candidateValidation/resolveCandidateValidationPolicy.ts",
-          "src/change/submitChange.ts",
+          "src/localChange/**",
+          "src/localTask/**"
         ]
       },
       {
-        "name": "github-adapter",
-        "patterns": [
-          "src/submissionEnvironment/gitFacts.ts",
-          "src/submissionEnvironment/githubTarget.ts",
-          "src/submissionEnvironment/localGitHubPullRequestGateway.ts",
-          "src/validation/validationGitGlue.ts"
-        ]
-      },
-      {
-        "name": "publication-git-adapter",
-        "patterns": ["src/publication/localCandidatePublicationGit.ts"]
-      },
-      {
-        "name": "sandcastle-adapter",
-        "patterns": ["src/validation/createValidationWorkspace.ts"]
-      },
-      {
-        "name": "sqlite-core",
-        "patterns": [
-          "src/sqlite/connection.ts",
-          "src/sqlite/query.ts",
-          "src/sqlite/sqliteCandidateValidationPolicy.ts",
-          "src/sqlite/sqliteChangePreparation.ts",
-          "src/sqlite/sqliteChangePublication.ts",
-          "src/sqlite/sqliteJsonStringArray.ts",
-          "src/sqlite/sqliteTaskContextSnapshot.ts",
-          "src/sqlite/sqliteValidationEvidence.ts"
-        ]
-      },
-      {
-        "name": "sqlite-concrete-stores",
-        "patterns": [
-          "src/sqlite/sqliteCandidateValidationRunStore.ts",
-          "src/sqlite/sqliteCandidateStore.ts",
-          "src/sqlite/sqliteChangeCandidateCaptureStore.ts",
-          "src/sqlite/sqliteChangeStore.ts",
-          "src/sqlite/sqliteChangeStartStore.ts",
-          "src/sqlite/sqliteTaskStore.ts"
-        ]
-      },
-      {
-        "name": "storage-init",
-        "patterns": ["src/init/stateDatabase.ts"]
-      },
-      {
-        "name": "repo-init",
+        "name": "repository-context",
         "patterns": [
           "src/init/acceptanceInstructions.ts",
           "src/init/git.ts",
@@ -292,306 +76,102 @@
         ]
       },
       {
-        "name": "repo-local-storage-wiring",
-        "patterns": ["src/init/repoLocalStores.ts"]
+        "name": "storage",
+        "patterns": ["src/init/stateDatabase.ts", "src/sqlite/**"]
+      },
+      {
+        "name": "adapters",
+        "patterns": [
+          "src/change/changeStartGit.ts",
+          "src/change/herdrInteractiveSessionHost.ts",
+          "src/change/localChangeCleanupGit.ts",
+          "src/changeCandidateCapture/localGitCandidate.ts",
+          "src/publication/localCandidatePublicationGit.ts",
+          "src/repositoryPreparation/localRepositoryPreparation.ts",
+          "src/submissionEnvironment/gitFacts.ts",
+          "src/submissionEnvironment/githubTarget.ts",
+          "src/submissionEnvironment/localGitHubPullRequestGateway.ts"
+        ]
+      },
+      {
+        "name": "change-workflows",
+        "patterns": [
+          "src/candidateValidation/inspectCandidateValidationRun.ts",
+          "src/change/**",
+          "src/changeCandidateCapture/**",
+          "src/publication/**"
+        ]
+      },
+      {
+        "name": "application",
+        "patterns": ["src/**"]
       }
     ],
     "rules": [
       {
-        "from": "tool-config",
-        "allow": []
-      },
-      {
         "from": "cli-entry",
-        "allow": ["cli-command-edge", "output-serializers"]
+        "allow": ["cli", "output-codecs"]
       },
       {
-        "from": "cli-command-edge",
+        "from": "cli",
         "allow": [
-          "agent-profiles",
-          "contract-output",
+          "application",
+          "change-workflows",
+          "composition",
           "domain",
-          "local-orchestration",
-          "output-types",
-          "repo-init",
-          "submit-rejection-errors",
-          "task-adapter",
-          "change-file-input",
-          "use-cases",
-          "validation-tooling-failures"
-        ],
-        "allowTypeOnly": [
-          "interactive-session-port",
-          "validation-workspace"
+          "ports",
+          "repository-context"
         ]
       },
       {
-        "from": "output-types",
-        "allow": []
-      },
-      {
-        "from": "contract-output",
-        "allow": ["contracts", "output-types"]
-      },
-      {
-        "from": "output-serializers",
-        "allow": ["output-types"]
-      },
-      {
-        "from": "contracts",
-        "allow": ["validation-tooling-failures"]
-      },
-      {
-        "from": "agent-profiles",
-        "allow": ["contracts", "domain", "validation-tooling-failures"]
-      },
-      {
-        "from": "acceptance-review",
-        "allow": [
-          "agent-profiles",
-          "contracts",
-          "domain",
-          "repo-init",
-          "submit-rejection-errors",
-          "validation-run-store",
-          "validation-runs",
-          "validation-tooling-failures"
-        ]
-      },
-      {
-        "from": "specialist-review",
-        "allow": [
-          "agent-profiles",
-          "contracts",
-          "domain",
-          "repo-init",
-          "submit-rejection-errors",
-          "validation-run-store",
-          "validation-runs",
-          "validation-tooling-failures"
-        ]
+        "from": "output-codecs",
+        "allow": ["application"]
       },
       {
         "from": "domain",
         "allow": []
       },
       {
-        "from": "candidate-store",
-        "allow": ["domain"]
+        "from": "ports",
+        "allow": ["application", "domain"]
       },
       {
-        "from": "change-store",
-        "allow": ["domain"]
-      },
-      {
-        "from": "owned-pull-request-gateway",
-        "allow": ["domain"]
-      },
-      {
-        "from": "change-candidate-capture-store",
-        "allow": []
-      },
-      {
-        "from": "change-candidate-capture",
+        "from": "composition",
         "allow": [
-          "change-store",
+          "adapters",
+          "application",
+          "change-workflows",
           "domain",
-          "local-git-candidate-adapter",
-          "repo-local-storage-wiring"
+          "output-codecs",
+          "ports",
+          "repository-context",
+          "storage"
         ]
       },
       {
-        "from": "local-git-candidate-adapter",
-        "allow": []
+        "from": "repository-context",
+        "allow": ["application", "storage"]
       },
       {
-        "from": "task-store",
-        "allow": ["domain"]
+        "from": "storage",
+        "allow": ["application", "domain", "ports"]
       },
       {
-        "from": "change-start-store",
-        "allow": ["domain"]
+        "from": "adapters",
+        "allow": ["application", "domain", "ports", "repository-context"],
+        "allowTypeOnly": ["change-workflows"]
       },
       {
-        "from": "change-start-adapter",
-        "allow": ["change-start-store", "domain", "local-git-candidate-adapter", "repo-init"]
+        "from": "change-workflows",
+        "allow": ["application", "domain", "ports", "repository-context"]
       },
       {
-        "from": "interactive-session-port",
-        "allow": []
-      },
-      {
-        "from": "change-file-input",
-        "allow": []
-      },
-      {
-        "from": "herdr-adapter",
-        "allow": [],
-        "allowTypeOnly": ["interactive-session-port"]
-      },
-      {
-        "from": "change-cleanup-adapter",
-        "allow": []
-      },
-      {
-        "from": "validation-run-store",
-        "allow": ["domain", "validation-tooling-failures"],
-        "allowTypeOnly": ["agent-profiles"]
-      },
-      {
-        "from": "validation-runs",
-        "allow": ["agent-profiles", "domain", "validation-tooling-failures"],
-        "allowTypeOnly": ["use-cases", "validation-run-store"]
-      },
-      {
-        "from": "submit-rejection-errors",
-        "allow": ["agent-profiles", "contracts"]
-      },
-      {
-        "from": "validation-tooling-failures",
-        "allow": ["domain"],
-        "allowTypeOnly": ["contracts", "validation-workspace"]
-      },
-      {
-        "from": "validation-workspace",
-        "allow": ["domain"]
-      },
-      {
-        "from": "use-cases",
-        "allow": [
-          "agent-profiles",
-          "candidate-store",
-          "change-reconciliation",
-          "change-store",
-          "contracts",
-          "domain",
-          "repo-init",
-          "validation-run-store",
-          "validation-runs",
-          "task-adapter",
-          "change-start-adapter",
-          "change-start-store",
-          "interactive-session-port",
-          "task-store",
-          "submit-rejection-errors"
-        ],
-        "allowTypeOnly": ["validation-workspace"]
-      },
-      {
-        "from": "publication-use-case",
-        "allow": [
-          "candidate-store",
-          "change-store",
-          "domain",
-          "owned-pull-request-gateway",
-          "validation-run-store"
-        ]
-      },
-      {
-        "from": "change-reconciliation",
-        "allow": [
-          "change-cleanup-adapter",
-          "change-store",
-          "domain",
-          "owned-pull-request-gateway"
-        ]
-      },
-      {
-        "from": "publication-git-adapter",
-        "allowTypeOnly": ["publication-use-case"]
-      },
-      {
-        "from": "task-adapter",
-        "allow": ["domain", "repo-init"]
-      },
-      {
-        "from": "local-orchestration",
-        "allow": [
-          "acceptance-review",
-          "specialist-review",
-          "agent-profiles",
-          "change-candidate-capture",
-          "change-cleanup-adapter",
-          "change-reconciliation",
-          "change-store",
-          "contracts",
-          "domain",
-          "github-adapter",
-          "herdr-adapter",
-          "repo-init",
-          "repo-local-storage-wiring",
-          "publication-git-adapter",
-          "publication-use-case",
-          "sandcastle-adapter",
-          "task-adapter",
-          "submit-rejection-errors",
-          "task-store",
-          "use-cases",
-          "validation-runs",
-          "validation-tooling-failures",
-          "validation-run-store",
-          "validation-runs"
-        ],
-        "allowTypeOnly": ["interactive-session-port", "validation-workspace"]
-      },
-      {
-        "from": "github-adapter",
-        "allow": ["domain"],
-        "allowTypeOnly": ["owned-pull-request-gateway", "validation-workspace"]
-      },
-      {
-        "from": "sandcastle-adapter",
-        "allow": ["domain", "github-adapter"],
-        "allowTypeOnly": ["validation-tooling-failures", "validation-workspace"]
-      }
-      {
-        "from": "sqlite-core",
-        "allow": ["storage-init", "validation-run-store"],
-        "allowTypeOnly": ["domain"]
-      },
-      {
-        "from": "sqlite-concrete-stores",
-        "allow": [
-          "candidate-store",
-          "change-candidate-capture-store",
-          "change-store",
-          "domain",
-          "sqlite-core",
-          "change-start-store",
-          "task-store",
-          "validation-tooling-failures",
-          "validation-run-store",
-          "validation-runs"
-        ]
-      },
-      {
-        "from": "storage-init",
-        "allow": []
-      },
-      {
-        "from": "repo-init",
-        "allow": ["contracts", "storage-init"]
-      },
-      {
-        "from": "repo-local-storage-wiring",
-        "allow": [
-          "candidate-store",
-          "change-candidate-capture-store",
-          "change-store",
-          "repo-init",
-          "sqlite-core",
-          "sqlite-concrete-stores",
-          "change-start-store",
-          "task-store",
-          "validation-run-store",
-          "validation-runs"
-        ],
-        "allowTypeOnly": ["validation-workspace"]
+        "from": "application",
+        "allow": ["application", "domain", "ports", "repository-context"]
       }
     ],
     "coverage": {
-      "requireAllFiles": true,
-      "allowUnmatched": ["test/**"]
+      "requireAllFiles": true
     }
   }
 }

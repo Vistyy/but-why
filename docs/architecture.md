@@ -11,6 +11,13 @@ A Change may link to one Task.
 
 Task commands manage intent and lifecycle.
 Change commands manage implementation, validation, delivery, and reconciliation.
+Submission executes the Validation Gate against a Candidate.
+The Validation Gate reports its results through Change-owned interfaces.
+
+Task and Change own their persistence interfaces.
+Repository storage composition owns database lifecycle and constructs SQLite adapters.
+Each workflow receives only the persistence operations it requires.
+See [ADR 0014](adr/0014-use-module-owned-storage-and-change-transactions.md).
 
 ## Change lifecycle
 
@@ -22,7 +29,7 @@ A taskless Change has no Acceptance Context.
 `by change submit <change-id>` selects the current Candidate from the Change Managed Worktree.
 It runs Repository Preparation, Checks, Acceptance Review for Task-backed Changes, configured Specialists, and publication policy.
 Validation Runs belong to Candidates.
-Findings and artifacts belong to Candidate Validation Runs.
+Findings and artifacts belong to the Validation Run for that Candidate.
 
 `by change reconcile [<change-id>]` observes owned pull requests.
 A merged owned pull request closes the Change and completes its linked Task.
@@ -58,6 +65,13 @@ by change reconcile [<change-id>]
 CLI commands return structured data on stdout.
 TOON is the default output format.
 Callers that parse output pass `--output json`.
+
+## Naming
+
+Public search anchors use a canonical domain term plus a clear operation or role.
+Search anchors include directories, files, public exports, public types, stores, gateways, hosts, and adapters.
+Generic public names such as `Manager`, `Service`, `Helper`, `Utils`, or plain `Store` do not identify sufficient ownership.
+Module-private helpers may use shorter names when their module provides the missing context.
 
 ## Configuration
 

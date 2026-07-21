@@ -9,6 +9,8 @@
 
 ## Behaviors owned
 
+- Baseline findings D6 and C3 belong to this task.
+
 - The Effect SQL storage path is the only production storage path.
 - Direct Effect runtime execution remains limited to `src/main.ts`.
 - Repository storage composition has one adapter, one migration ledger, and one scoped service.
@@ -43,4 +45,4 @@ Run the complete cross-process CLI workflow through initialization, Task-backed 
 
 ## Blocked by
 
-- `docs/issues/146-migrate-state-stores-to-effect-programs.md`
+- [Task 153](153-migrate-submit-publication-and-reconciliation.md)

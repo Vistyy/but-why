@@ -1,0 +1,26 @@
+id: json-parse-belongs-to-codecs
+snapshots:
+  JSON.parse(value):
+    labels:
+    - source: JSON.parse(value)
+      style: primary
+      start: 0
+      end: 17
+  JSON["parse"](value):
+    labels:
+    - source: JSON["parse"](value)
+      style: primary
+      start: 0
+      end: 20
+  globalThis.JSON.parse(value):
+    labels:
+    - source: globalThis.JSON.parse(value)
+      style: primary
+      start: 0
+      end: 28
+  globalThis.JSON["parse"](value):
+    labels:
+    - source: globalThis.JSON["parse"](value)
+      style: primary
+      start: 0
+      end: 31

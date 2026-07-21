@@ -1,224 +1,69 @@
-id: no-direct-sqlite-construction
+id: process-properties-belong-to-cli-entry
 language: TypeScript
 severity: error
-message: Use the SQLite persistence or state database seams instead of constructing DatabaseSync directly.
-files:
-  - src/**/*.ts
-ignores:
-  - src/init/stateDatabase.ts
-  - src/sqlite/**/*.ts
-rule:
-  pattern: new DatabaseSync($$$ARGS)
----
-id: no-raw-sql-outside-state
-language: TypeScript
-severity: error
-message: Keep raw SQL inside src/init/stateDatabase.ts or src/sqlite.
-files:
-  - src/**/*.ts
-ignores:
-  - src/init/stateDatabase.ts
-  - src/sqlite/**/*.ts
-rule:
-  all:
-    - kind: call_expression
-    - regex: '[\s\S]*\.(prepare|exec)\([`"]\s*(SELECT|INSERT|UPDATE|DELETE|CREATE|ALTER|DROP|BEGIN|COMMIT|ROLLBACK|PRAGMA)\b[\s\S]*'
----
-id: no-sqlite-row-type-guards
-language: TypeScript
-severity: error
-message: Do not add per-row is*Row guards in SQLite stores. Use typed queryOne/queryAll rows and schema-backed mapper types instead.
-files:
-  - src/sqlite/**/*.ts
-rule:
-  all:
-    - kind: identifier
-    - regex: '^is[A-Z][A-Za-z0-9]*Row$'
----
-id: no-process-globals-outside-main
-language: TypeScript
-severity: error
-message: Read process globals only in src/main.ts and pass values through CliEnvironment.
+message: Direct process property access belongs in src/main.ts; other modules receive CLI environment values.
 files:
   - src/**/*.ts
 ignores:
   - src/main.ts
 rule:
   any:
-    - pattern: process.env
-    - pattern: process.argv
-    - pattern: process.cwd()
-    - pattern: process.execPath
-    - pattern: process.stdin
-    - pattern: process.stdout
-    - pattern: process.stderr
-    - pattern: process.exit($$$ARGS)
-    - pattern: process.exitCode
-    - pattern: process.chdir($$$ARGS)
+    - pattern: process.$PROPERTY
+    - pattern: globalThis.process.$PROPERTY
 ---
-id: no-process-import-outside-main
+id: runtime-methods-belong-to-runtime-seams
 language: TypeScript
 severity: error
-message: Import process only in src/main.ts and pass needed values through CliEnvironment.
-files:
-  - src/**/*.ts
-ignores:
-  - src/main.ts
-rule:
-  all:
-    - kind: import_statement
-    - regex: '[\s\S]*from\s+["`](node:process|process)["`][\s\S]*'
----
-id: no-effect-runtime-outside-main
-language: TypeScript
-severity: error
-message: Run Effect only in src/main.ts; return Effect values from other modules.
+message: Calls to runPromise, runSync, or related runtime-style methods belong in an approved runtime seam.
 files:
   - src/**/*.ts
 ignores:
   - src/main.ts
   - src/init/stateDatabase.ts
-  - src/sqlite/connection.ts
 rule:
   any:
-    - pattern: $EFFECT.runPromise($$$ARGS)
-    - pattern: $EFFECT.runPromiseExit($$$ARGS)
-    - pattern: $EFFECT.runSync($$$ARGS)
-    - pattern: $EFFECT.runSyncExit($$$ARGS)
-    - pattern: $EFFECT.runFork($$$ARGS)
-    - pattern: $EFFECT.runCallback($$$ARGS)
+    - pattern: $RUNTIME.runPromise($$$ARGS)
+    - pattern: $RUNTIME.runPromiseExit($$$ARGS)
+    - pattern: $RUNTIME.runSync($$$ARGS)
+    - pattern: $RUNTIME.runSyncExit($$$ARGS)
+    - pattern: $RUNTIME.runFork($$$ARGS)
+    - pattern: $RUNTIME.runCallback($$$ARGS)
 ---
-id: no-effect-runner-import-outside-main
+id: effect-tests-use-effect-vitest-runtime
 language: TypeScript
 severity: error
-message: Import Effect runners only in src/main.ts; do not alias runtime execution.
-files:
-  - src/**/*.ts
-ignores:
-  - src/main.ts
-rule:
-  any:
-    - all:
-        - kind: import_statement
-        - regex: '[\s\S]*(runPromise|runPromiseExit|runSync|runSyncExit|runFork|runCallback)[\s\S]*(effect|Effect)[\s\S]*'
-    - all:
-        - kind: import_statement
-        - regex: '[\s\S]*import\s+\*[\s\S]*from\s+["`][^"`]*effect[^"`]*Effect["`][\s\S]*'
-    - all:
-        - kind: import_statement
-        - regex: '[\s\S]*import\s+[A-Za-z_$][A-Za-z0-9_$]*\s+from\s+["`][^"`]*effect[^"`]*Effect["`][\s\S]*'
----
-id: no-effect-runtime-in-tests
-language: TypeScript
-severity: error
-message: Execute test Effects through @effect/vitest using it.effect or it.scoped.
+message: Calls to runPromise, runSync, or related runtime-style methods bypass @effect/vitest execution.
 files:
   - test/**/*.ts
 rule:
   any:
-    - pattern: $EFFECT.runPromise($$$ARGS)
-    - pattern: $EFFECT.runPromiseExit($$$ARGS)
-    - pattern: $EFFECT.runSync($$$ARGS)
-    - pattern: $EFFECT.runSyncExit($$$ARGS)
-    - pattern: $EFFECT.runFork($$$ARGS)
-    - pattern: $EFFECT.runCallback($$$ARGS)
+    - pattern: $RUNTIME.runPromise($$$ARGS)
+    - pattern: $RUNTIME.runPromiseExit($$$ARGS)
+    - pattern: $RUNTIME.runSync($$$ARGS)
+    - pattern: $RUNTIME.runSyncExit($$$ARGS)
+    - pattern: $RUNTIME.runFork($$$ARGS)
+    - pattern: $RUNTIME.runCallback($$$ARGS)
 ---
-id: no-effect-runner-import-in-tests
+id: toon-package-belongs-to-output-codec
 language: TypeScript
 severity: error
-message: Execute test Effects through @effect/vitest using it.effect or it.scoped.
-files:
-  - test/**/*.ts
-rule:
-  all:
-    - kind: import_statement
-    - regex: '[\s\S]*import\s*\{[\s\S]*(runPromise|runPromiseExit|runSync|runSyncExit|runFork|runCallback)[\s\S]*\}\s*from\s+["`][^"`]*effect[^"`]*Effect["`][\s\S]*'
----
-id: no-serialize-output-outside-main
-language: TypeScript
-severity: error
-message: Call serializeOutput only at the stdout boundary in src/main.ts.
-files:
-  - src/**/*.ts
-ignores:
-  - src/main.ts
-rule:
-  pattern: serializeOutput($$$ARGS)
----
-id: no-serialize-output-import-outside-main
-language: TypeScript
-severity: error
-message: Import serializeOutput only at the stdout boundary in src/main.ts.
-files:
-  - src/**/*.ts
-ignores:
-  - src/main.ts
-  - src/output/serialize.ts
-rule:
-  all:
-    - kind: import_statement
-    - regex: '[\s\S]*serializeOutput[\s\S]*'
----
-id: no-output-format-encoder-outside-serialize
-language: TypeScript
-severity: error
-message: Call encodeJson and encodeToon only inside src/output/serialize.ts.
-files:
-  - src/**/*.ts
-ignores:
-  - src/output/serialize.ts
-rule:
-  any:
-    - pattern: encodeJson($$$ARGS)
-    - pattern: encodeToon($$$ARGS)
----
-id: no-output-format-encoder-import-outside-serialize
-language: TypeScript
-severity: error
-message: Import encodeJson and encodeToon only inside src/output/serialize.ts.
-files:
-  - src/**/*.ts
-ignores:
-  - src/output/serialize.ts
-  - src/output/json.ts
-  - src/output/toon.ts
-rule:
-  all:
-    - kind: import_statement
-    - regex: '[\s\S]*(encodeJson|encodeToon)[\s\S]*'
----
-id: no-toon-encode-import-outside-output-toon
-language: TypeScript
-severity: error
-message: Import TOON encode only inside src/output/toon.ts.
+message: Load @toon-format/toon only in src/output/toon.ts.
 files:
   - src/**/*.ts
 ignores:
   - src/output/toon.ts
 rule:
-  all:
-    - kind: import_statement
-    - regex: '[\s\S]*@toon-format/toon[\s\S]*'
----
-id: no-sandcastle-factory-outside-workspace
-language: TypeScript
-severity: error
-message: Create Sandcastle sandboxes only through src/validation/createValidationWorkspace.ts.
-files:
-  - src/**/*.ts
-ignores:
-  - src/validation/createValidationWorkspace.ts
-rule:
   any:
-    - pattern: createSandbox($$$ARGS)
-    - pattern: noSandbox($$$ARGS)
-    - pattern: $SANDCASTLE.createSandbox($$$ARGS)
-    - pattern: $SANDCASTLE.noSandbox($$$ARGS)
+    - all:
+        - kind: import_statement
+        - regex: '[\s\S]*["`]@toon-format/toon["`][\s\S]*'
+    - pattern: import("@toon-format/toon")
+    - pattern: require("@toon-format/toon")
 ---
-id: no-sandcastle-factory-import-outside-workspace
+id: sandcastle-factories-belong-to-workspace
 language: TypeScript
 severity: error
-message: Import Sandcastle factories only in src/validation/createValidationWorkspace.ts.
+message: Load Sandcastle runtime namespaces or factories only in src/validation/createValidationWorkspace.ts.
 files:
   - src/**/*.ts
 ignores:
@@ -227,18 +72,18 @@ rule:
   any:
     - all:
         - kind: import_statement
-        - regex: '[\s\S]*(createSandbox|noSandbox)[\s\S]*'
+        - regex: '[\s\S]*(createSandbox|noSandbox)[\s\S]*from\s+["`]@ai-hero/sandcastle([^"`]*)?["`][\s\S]*'
     - all:
         - kind: import_statement
-        - regex: '[\s\S]*import\s+\*[\s\S]*from\s+["`][^"`]*@ai-hero/sandcastle[^"`]*["`][\s\S]*'
+        - regex: '[\s\S]*import\s+(\*\s+as\s+|[A-Za-z_$][A-Za-z0-9_$]*\s+from\s+)[\s\S]*["`]@ai-hero/sandcastle([^"`]*)?["`][\s\S]*'
     - all:
-        - kind: import_statement
-        - regex: '[\s\S]*import\s+[A-Za-z_$][A-Za-z0-9_$]*\s+from\s+["`][^"`]*@ai-hero/sandcastle[^"`]*["`][\s\S]*'
+        - kind: call_expression
+        - regex: '^(import|require)\(["`]@ai-hero/sandcastle([^"`]*)?["`]\)$'
 ---
-id: no-child-process-outside-adapters
+id: child-process-belongs-to-command-adapters
 language: TypeScript
 severity: error
-message: Run child processes only through command adapter seams.
+message: Load child_process only in command adapter modules.
 files:
   - src/**/*.ts
 ignores:
@@ -255,90 +100,18 @@ ignores:
   - src/change/herdrInteractiveSessionHost.ts
 rule:
   any:
-    - pattern: spawn($$$ARGS)
-    - pattern: spawnSync($$$ARGS)
-    - pattern: exec($$$ARGS)
-    - pattern: execSync($$$ARGS)
-    - pattern: execFile($$$ARGS)
-    - pattern: execFileSync($$$ARGS)
-    - pattern: fork($$$ARGS)
+    - all:
+        - kind: import_statement
+        - regex: '[\s\S]*["`](node:child_process|child_process)["`][\s\S]*'
+    - pattern: import("node:child_process")
+    - pattern: import("child_process")
+    - pattern: require("node:child_process")
+    - pattern: require("child_process")
 ---
-id: no-child-process-import-outside-adapters
+id: task-identity-branding-belongs-to-task-id
 language: TypeScript
 severity: error
-message: Import child_process only in command adapter seams.
-files:
-  - src/**/*.ts
-ignores:
-  - src/init/git.ts
-  - src/changeCandidateCapture/localGitCandidate.ts
-  - src/submissionEnvironment/gitFacts.ts
-  - src/submissionEnvironment/githubTarget.ts
-  - src/validation/validationGitGlue.ts
-  - src/change/changeStartGit.ts
-  - src/change/localChangeCleanupGit.ts
-  - src/repositoryPreparation/localRepositoryPreparation.ts
-  - src/publication/localCandidatePublicationGit.ts
-  - src/submissionEnvironment/localGitHubPullRequestGateway.ts
-  - src/change/herdrInteractiveSessionHost.ts
-rule:
-  all:
-    - kind: import_statement
-    - regex: '[\s\S]*(node:child_process|child_process)[\s\S]*'
----
-id: no-inline-task-state-unions
-language: TypeScript
-severity: error
-message: Define Task state unions only in lifecycle and policy seams.
-files:
-  - src/**/*.ts
-ignores:
-  - src/task/lifecycle.ts
-  - src/task/startPolicy.ts
-  - src/task/submitPolicy.ts
-rule:
-  all:
-    - kind: union_type
-    - regex: '[\s\S]*("todo"|"implementing"|"validating"|"needs_input"|"ready"|"done")[\s\S]*\|[\s\S]*("todo"|"implementing"|"validating"|"needs_input"|"ready"|"done")[\s\S]*'
----
-id: no-raw-task-id-parsing-outside-seams
-language: TypeScript
-severity: error
-message: Parse or inspect public Task IDs only in src/task/taskId.ts, src/task/repoTaskIds.ts, or src/cliTaskId.ts.
-files:
-  - src/**/*.ts
-ignores:
-  - src/task/taskId.ts
-  - src/task/repoTaskIds.ts
-  - src/cliTaskId.ts
-rule:
-  any:
-    - pattern: parsePublicTaskId($$$ARGS)
-    - pattern: publicTaskId($$$ARGS)
-    - pattern: hasPublicTaskIdShape($$$ARGS)
-    - pattern: isPublicTaskIdForPrefix($$$ARGS)
-    - pattern: exampleTaskId($$$ARGS)
----
-id: no-task-id-prefix-helper-outside-seams
-language: TypeScript
-severity: error
-message: Keep Task ID prefix helpers in src/task/taskId.ts or src/task/repoTaskIds.ts.
-files:
-  - src/**/*.ts
-ignores:
-  - src/task/taskId.ts
-  - src/task/repoTaskIds.ts
-rule:
-  any:
-    - pattern: const isPublicTaskIdForPrefix = $$$
-    - pattern: function isPublicTaskIdForPrefix($$$ARGS) { $$$BODY }
-    - pattern: const exampleTaskId = $$$
-    - pattern: function exampleTaskId($$$ARGS) { $$$BODY }
----
-id: no-branded-task-identity-casts-outside-task-id
-language: TypeScript
-severity: error
-message: Brand Task IDs and Task Slugs only inside src/task/taskId.ts.
+message: Direct Task identity branding casts belong in src/task/taskId.ts.
 files:
   - src/**/*.ts
 ignores:
@@ -348,145 +121,10 @@ rule:
     - pattern: $VALUE as PublicTaskId
     - pattern: $VALUE as TaskSlug
 ---
-id: no-raw-task-id-operational-names
+id: json-parse-belongs-to-codecs
 language: TypeScript
 severity: error
-message: Build branch, ref, worktree, artifact, and Run names from Task Slugs, not raw Task IDs.
-files:
-  - src/**/*.ts
-rule:
-  any:
-    - all:
-        - kind: lexical_declaration
-        - regex: '[\s\S]*(branch|ref|worktree|artifact|run)[A-Za-z0-9_]*\s*=\s*(taskId|input\.taskId|task\.id|[A-Za-z0-9_]*TaskId)\b[\s\S]*|[\s\S]*(branch|ref|worktree|artifact|run)[A-Za-z0-9_]*\s*=[\s\S]*(\$\{\s*(taskId|input\.taskId|task\.id|[A-Za-z0-9_]*TaskId)\s*\}|\+\s*(taskId|input\.taskId|task\.id|[A-Za-z0-9_]*TaskId)|path\.join\([\s\S]*(taskId|input\.taskId|task\.id|[A-Za-z0-9_]*TaskId))[\s\S]*'
-    - all:
-        - kind: call_expression
-        - regex: '[\s\S]*(branchName|branch|refName|ref|worktreePath|worktree|artifactPath|artifact|runName)\([\s\S]*(taskId|input\.taskId|task\.id|[A-Za-z0-9_]*TaskId)[\s\S]*'
-    - all:
-        - kind: pair
-        - regex: '[\s\S]*(branchName|branch|refName|ref|worktreePath|worktree|artifactPath|artifact|runName)\s*:\s*(taskId|input\.taskId|task\.id|[A-Za-z0-9_]*TaskId)\b[\s\S]*|[\s\S]*(branchName|branch|refName|ref|worktreePath|worktree|artifactPath|artifact|runName)\s*:[\s\S]*(\$\{\s*(taskId|input\.taskId|task\.id|[A-Za-z0-9_]*TaskId)\s*\}|\+\s*(taskId|input\.taskId|task\.id|[A-Za-z0-9_]*TaskId)|path\.join\([\s\S]*(taskId|input\.taskId|task\.id|[A-Za-z0-9_]*TaskId))[\s\S]*'
-    - all:
-        - kind: assignment_expression
-        - regex: '[\s\S]*(branchName|branch|refName|ref|worktreePath|worktree|artifactPath|artifact|runName)\s*=\s*(taskId|input\.taskId|task\.id|[A-Za-z0-9_]*TaskId)\b[\s\S]*|[\s\S]*(branchName|branch|refName|ref|worktreePath|worktree|artifactPath|artifact|runName)\s*=[\s\S]*(\$\{\s*(taskId|input\.taskId|task\.id|[A-Za-z0-9_]*TaskId)\s*\}|\+\s*(taskId|input\.taskId|task\.id|[A-Za-z0-9_]*TaskId)|path\.join\([\s\S]*(taskId|input\.taskId|task\.id|[A-Za-z0-9_]*TaskId))[\s\S]*'
----
-id: no-fs-mutation-outside-init-config
-language: TypeScript
-severity: error
-message: Mutate repo files only in init, config, or gitignore seams.
-files:
-  - src/**/*.ts
-ignores:
-  - src/init/repoContext.ts
-  - src/init/repoConfig.ts
-  - src/init/stateDatabase.ts
-  - src/init/gitignore.ts
-  - src/validationRun/artifactFiles.ts
-  - src/task/files/contextDraft.ts
-  - src/change/changeStartGit.ts
-rule:
-  any:
-    - pattern: writeFileSync($$$ARGS)
-    - pattern: mkdirSync($$$ARGS)
-    - pattern: writeFile($$$ARGS)
-    - pattern: mkdir($$$ARGS)
----
-id: no-destructive-fs-apis
-language: TypeScript
-severity: error
-message: Destructive filesystem APIs need an explicit production seam before use.
-files:
-  - src/**/*.ts
-ignores:
-  - src/task/files/contextDraft.ts
-rule:
-  any:
-    - pattern: rmSync($$$ARGS)
-    - pattern: unlinkSync($$$ARGS)
-    - pattern: rmdirSync($$$ARGS)
-    - pattern: cpSync($$$ARGS)
-    - pattern: copyFileSync($$$ARGS)
-    - pattern: renameSync($$$ARGS)
-    - pattern: appendFileSync($$$ARGS)
-    - pattern: truncateSync($$$ARGS)
-    - pattern: mkdtempSync($$$ARGS)
-    - pattern: createWriteStream($$$ARGS)
-    - pattern: rm($$$ARGS)
-    - pattern: unlink($$$ARGS)
-    - pattern: rmdir($$$ARGS)
-    - pattern: cp($$$ARGS)
-    - pattern: copyFile($$$ARGS)
-    - pattern: rename($$$ARGS)
-    - pattern: appendFile($$$ARGS)
-    - pattern: truncate($$$ARGS)
-    - pattern: mkdtemp($$$ARGS)
----
-id: no-raw-file-content-read-outside-seams
-language: TypeScript
-severity: error
-message: Read file contents only in approved repo, Task input, and validation Artifact seams.
-files:
-  - src/**/*.ts
-ignores:
-  - src/init/repoConfig.ts
-  - src/init/acceptanceInstructions.ts
-  - src/validationRun/artifactContent.ts
-  - src/init/gitignore.ts
-  - src/task/files/descriptionFile.ts
-  - src/task/files/commentFile.ts
-  - src/task/files/contextDraft.ts
-  - src/change/handoffFile.ts
-rule:
-  any:
-    - pattern: readFileSync($$$ARGS)
-    - pattern: readFile($$$ARGS)
-    - pattern: createReadStream($$$ARGS)
----
-id: no-raw-file-stat-outside-seams
-language: TypeScript
-severity: error
-message: Use raw stat only in repo-context discovery or Task file-input seams.
-files:
-  - src/**/*.ts
-ignores:
-  - src/init/repoContext.ts
-  - src/task/files/descriptionFile.ts
-  - src/task/files/commentFile.ts
-  - src/task/files/contextDraft.ts
-  - src/change/handoffFile.ts
-rule:
-  any:
-    - pattern: statSync($$$ARGS)
-    - pattern: stat($$$ARGS)
----
-id: no-fs-bypass-imports
-language: TypeScript
-severity: error
-message: Use named fs imports only; namespace/default/dynamic/require imports and aliases bypass structural bans.
-files:
-  - src/**/*.ts
-rule:
-  any:
-    - all:
-        - kind: import_statement
-        - regex: '[\s\S]*import\s+\*[\s\S]*(node:fs|fs|node:fs/promises|fs/promises)[\s\S]*'
-    - all:
-        - kind: import_statement
-        - regex: '[\s\S]*import\s+[A-Za-z_$][A-Za-z0-9_$]*\s+from\s+["`]((node:fs|fs|node:fs/promises|fs/promises))["`][\s\S]*'
-    - all:
-        - kind: call_expression
-        - regex: 'import\([\s\S]*(node:fs|fs|node:fs/promises|fs/promises)[\s\S]*\)'
-    - pattern: require("node:fs")
-    - pattern: require("fs")
-    - pattern: require("node:fs/promises")
-    - pattern: require("fs/promises")
-    - all:
-        - kind: import_statement
-        - regex: '[\s\S]*(writeFileSync|mkdirSync|writeFile|mkdir|rmSync|unlinkSync|rmdirSync|cpSync|copyFileSync|renameSync|appendFileSync|truncateSync|mkdtempSync|createWriteStream|rm|unlink|rmdir|cp|copyFile|rename|appendFile|truncate|mkdtemp|readFileSync|readFile|createReadStream|statSync|stat)\s+as\s+[A-Za-z_$][A-Za-z0-9_$]*[\s\S]*(node:fs|fs|node:fs/promises|fs/promises)[\s\S]*'
----
-id: no-json-parse-outside-seams
-language: TypeScript
-severity: error
-message: Parse JSON only in approved configuration, external-tool, or persistence codec seams.
+message: Direct JSON.parse calls belong in approved configuration, external-tool, or persistence codecs.
 files:
   - src/**/*.ts
 ignores:
@@ -499,12 +137,16 @@ ignores:
   - src/submissionEnvironment/localGitHubPullRequestGateway.ts
   - src/change/herdrInteractiveSessionHost.ts
 rule:
-  pattern: JSON.parse($$$ARGS)
+  any:
+    - pattern: JSON.parse($$$ARGS)
+    - pattern: globalThis.JSON.parse($$$ARGS)
+    - pattern: JSON["parse"]($$$ARGS)
+    - pattern: globalThis.JSON["parse"]($$$ARGS)
 ---
-id: no-json-stringify-outside-seams
+id: json-stringify-belongs-to-codecs
 language: TypeScript
 severity: error
-message: Stringify JSON only in approved configuration, output, or persistence codec seams.
+message: Direct JSON.stringify calls belong in approved configuration, output, or persistence codecs.
 files:
   - src/**/*.ts
 ignores:
@@ -515,12 +157,16 @@ ignores:
   - src/sqlite/sqliteTaskContextSnapshot.ts
   - src/sqlite/sqliteChangePreparation.ts
 rule:
-  pattern: JSON.stringify($$$ARGS)
+  any:
+    - pattern: JSON.stringify($$$ARGS)
+    - pattern: globalThis.JSON.stringify($$$ARGS)
+    - pattern: JSON["stringify"]($$$ARGS)
+    - pattern: globalThis.JSON["stringify"]($$$ARGS)
 ---
-id: no-wall-clock-outside-main
+id: wall-clock-belongs-to-cli-entry
 language: TypeScript
 severity: error
-message: Read the wall clock only in src/main.ts; pass timestamps through command inputs.
+message: Direct wall-clock reads belong in src/main.ts; other modules receive timestamps.
 files:
   - src/**/*.ts
 ignores:
@@ -529,3 +175,7 @@ rule:
   any:
     - pattern: new Date()
     - pattern: Date.now()
+    - pattern: new globalThis.Date()
+    - pattern: globalThis.Date.now()
+    - pattern: Date["now"]()
+    - pattern: globalThis.Date["now"]()

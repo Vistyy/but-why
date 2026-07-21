@@ -1,6 +1,7 @@
 # ast-grep rule tests
 
-`structural-bans-test.yml` verifies that each structural ban catches representative violations.
+`structural-bans-test.yml` verifies the repository's closed TypeScript syntax rules.
+Each rule has valid examples, invalid examples, and reviewed diagnostic snapshots.
 
 Run the complete check:
 
@@ -8,9 +9,9 @@ Run the complete check:
 just ast-grep-check
 ```
 
-The command runs fixture tests and scans the paths selected by each rule.
+The command runs the native ast-grep tests and scans the paths selected by each rule.
 Production rules scan `src/**/*.ts`.
 The Effect test-execution rule scans `test/**/*.ts`, including `test/support/`.
 
-The production seam files contain the permitted SQLite, process, Effect, output, Sandcastle, child-process, Task ID, filesystem, JSON, and wall-clock shapes.
-The command fails when a rule allows the wrong path or finds a prohibited shape.
+These rules check only the syntax named by their diagnostics.
+Fallow owns project import boundaries, behavior tests own runtime contracts, and Standards review owns semantic naming and module ownership.

@@ -24,7 +24,8 @@ Preserve public commands and persisted data.
 
 ## Primary verification seam
 
-The full repository suite plus structural checks of the final source directory map and imports.
+The complete Task-backed Change workflow produces the same public CLI results before and after relocation.
+The full repository suite and Fallow import graph additionally verify the final source map.
 
 ## Acceptance criteria
 
@@ -41,4 +42,6 @@ The full repository suite plus structural checks of the final source directory m
 
 ## Blocked by
 
-- `docs/issues/147-remove-synchronous-state-storage-path.md`
+- [Task 147](147-remove-synchronous-state-storage-path.md)
+- [Task 154](154-share-local-process-result-handling.md)
+- [Task 155](155-share-configuration-diagnostic-handling.md)

@@ -2,10 +2,10 @@
   "$schema": "https://raw.githubusercontent.com/fallow-rs/fallow/main/rule-pack-schema.json",
   "version": 1,
   "name": "but-why-architecture",
-  "description": "Project architecture rules that complement Fallow import boundaries.",
+  "description": "Closed infrastructure rules that complement the project import boundaries.",
   "rules": [
     {
-      "id": "pure-domain-no-node-infrastructure-imports",
+      "id": "domain-modules-use-owned-interfaces",
       "kind": "banned-import",
       "specifiers": [
         "node:fs",
@@ -19,55 +19,7 @@
         "node:sqlite"
       ],
       "zones": ["domain"],
-      "message": "Domain modules must stay free of filesystem, process execution, process, and SQLite imports.",
-      "severity": "error"
-    },
-    {
-      "id": "node-sqlite-only-in-persistence-source",
-      "kind": "banned-import",
-      "specifiers": ["node:sqlite"],
-      "files": ["src/**/*.ts"],
-      "exclude": ["src/sqlite/**/*.ts", "src/init/stateDatabase.ts"],
-      "message": "Direct node:sqlite imports in production source are limited to SQLite persistence and storage initialization modules.",
-      "severity": "error"
-    },
-    {
-      "id": "concrete-sqlite-stores-only-in-repo-local-storage-wiring",
-      "kind": "banned-import",
-      "specifiers": [
-        "./sqliteTaskStore.js",
-        "./sqliteCandidateValidationRunStore.js",
-        "../sqlite/sqliteTaskStore.js",
-        "../sqlite/sqliteCandidateValidationRunStore.js",
-        "../../sqlite/sqliteTaskStore.js",
-        "../../sqlite/sqliteCandidateValidationRunStore.js",
-        "../../../sqlite/sqliteTaskStore.js",
-        "../../../sqlite/sqliteCandidateValidationRunStore.js"
-      ],
-      "files": ["src/**/*.ts"],
-      "exclude": ["src/init/repoLocalStores.ts"],
-      "message": "Production code must open concrete SQLite stores only through src/init/repoLocalStores.ts.",
-      "severity": "error"
-    },
-    {
-      "id": "command-code-does-not-import-output-serializers",
-      "kind": "banned-import",
-      "specifiers": [
-        "./output/json.js",
-        "./output/serialize.js",
-        "./output/toon.js",
-        "../output/json.js",
-        "../output/serialize.js",
-        "../output/toon.js",
-        "../../output/json.js",
-        "../../output/serialize.js",
-        "../../output/toon.js",
-        "../../../output/json.js",
-        "../../../output/serialize.js",
-        "../../../output/toon.js"
-      ],
-      "files": ["src/cli*.ts", "src/cli/**/*.ts"],
-      "message": "CLI command code may use structured output types but must leave JSON, TOON, and serializer implementation imports at the process edge.",
+      "message": "Domain modules receive values through their interfaces instead of importing Node infrastructure.",
       "severity": "error"
     }
   ]

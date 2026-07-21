@@ -1,0 +1,38 @@
+id: sandcastle-factories-belong-to-workspace
+snapshots:
+  import * as Sandcastle from "@ai-hero/sandcastle";:
+    labels:
+    - source: import * as Sandcastle from "@ai-hero/sandcastle";
+      style: primary
+      start: 0
+      end: 50
+  import Sandcastle from "@ai-hero/sandcastle";:
+    labels:
+    - source: import Sandcastle from "@ai-hero/sandcastle";
+      style: primary
+      start: 0
+      end: 45
+  import { createSandbox as makeSandbox } from "@ai-hero/sandcastle";:
+    labels:
+    - source: import { createSandbox as makeSandbox } from "@ai-hero/sandcastle";
+      style: primary
+      start: 0
+      end: 67
+  import { noSandbox as none } from "@ai-hero/sandcastle/sandboxes/no-sandbox";:
+    labels:
+    - source: import { noSandbox as none } from "@ai-hero/sandcastle/sandboxes/no-sandbox";
+      style: primary
+      start: 0
+      end: 77
+  import("@ai-hero/sandcastle"):
+    labels:
+    - source: import("@ai-hero/sandcastle")
+      style: primary
+      start: 0
+      end: 29
+  require("@ai-hero/sandcastle"):
+    labels:
+    - source: require("@ai-hero/sandcastle")
+      style: primary
+      start: 0
+      end: 30

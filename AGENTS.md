@@ -9,6 +9,9 @@
   Correct misleading names now.
 - Treat historical migrations and planning documents as historical evidence.
   Do not use them as naming precedent for current implementation.
+- Preserve the repository quality policy while unrelated work is in progress.
+  A task or approved architecture contract must own each quality-policy change.
+  Obtain Standards review approval for the change.
 
 ## Pointers
 
@@ -38,7 +41,6 @@ Move each newly unblocked issue to `Can start immediately`.
 - `src/task/`: task use cases.
 - `src/validationRun/`: Validation Run domain records and storage ports.
 - `src/submit/`: submit flow.
-- `src/repoSubmit/`: repo-backed submit flow.
 - `src/validation/`: validation gate.
 - `src/sqlite/`: SQLite internals.
 - `src/output/`: structured output helpers.
