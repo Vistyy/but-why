@@ -70,7 +70,9 @@ Candidate capture integration tests create, reuse, reject, and roll back Candida
 - Implementation: `ca3d7c31a5e69efdeaff2d2b285978386f913634`.
 - Verification: 368 tests passed with one intentional skip; type checking, linting, formatting, ast-grep, docs, Candidate capture orchestration, linked-worktree identity, provenance rollback, failed-write rollback, and Change Submit composition passed.
 - `nix develop -c just quality` remains nonzero only because the two pre-existing Task-149-approved Fallow boundary violations remain for Task 153.
+- Completion update: `4ceb806021fd104e3f614b6428de77add672ef61`.
 - Spec review: `APPROVED WITH REQUIRED COMMENTS`; the required completion and dependency-graph update is resolved.
+- Standards review: `APPROVED`.
 
 ## Blocked by
 
