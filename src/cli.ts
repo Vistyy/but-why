@@ -8,7 +8,7 @@ import { selectOutput } from "./cliOutputSelection.js";
 import { runtimeError, success, type CliResult, usageError } from "./cliResults.js";
 import {
   closeStateDatabasesOpenedAfter,
-  initRepoLocalContext,
+  initRepoLocalContextEffect,
   snapshotStateDatabases,
 } from "./init/repoContext.js";
 import { structuredContractDiagnostics } from "./output/contractDiagnostics.js";
@@ -106,7 +106,7 @@ const routeCommandArgs = (
   const firstArg = args[0];
 
   if (firstArg === "init") {
-    return Effect.succeed(routeInit(args.slice(1), environment));
+    return routeInit(args.slice(1), environment);
   }
 
   if (firstArg === "task") {
@@ -255,111 +255,122 @@ const helpView = (bin: string, docs: PublicDocs): StructuredObject =>
     docs: publicDocsList(docs),
   });
 
-const routeInit = (args: readonly string[], environment: CliEnvironment): CliResult => {
+const routeInit = (
+  args: readonly string[],
+  environment: CliEnvironment,
+): Effect.Effect<CliResult> => {
   const docs = publicDocs(environment);
 
   if (args.length === 1 && args[0] === "--help") {
-    return success({
-      usage: "by init --task-prefix <prefix>",
-      description: "Create repo policy files and then guide validation setup.",
-      flags: withGlobalHelpFlags([
-        {
-          flag: "--task-prefix <prefix>",
-          description: "Required task ID prefix such as BY",
-        },
-      ]),
-      examples: ["by init --task-prefix BY"],
-      docs: publicDocsList(docs),
-    });
+    return Effect.succeed(
+      success({
+        usage: "by init --task-prefix <prefix>",
+        description: "Create repo policy files and then guide validation setup.",
+        flags: withGlobalHelpFlags([
+          {
+            flag: "--task-prefix <prefix>",
+            description: "Required task ID prefix such as BY",
+          },
+        ]),
+        examples: ["by init --task-prefix BY"],
+        docs: publicDocsList(docs),
+      }),
+    );
   }
 
   const parseResult = parseInitArgs(args);
 
   if (!parseResult.ok) {
-    return parseResult.result;
+    return Effect.succeed(parseResult.result);
   }
 
   const taskPrefix = parseResult.taskPrefix;
 
   if (taskPrefix === undefined) {
-    return usageError({
-      code: "missing_task_prefix",
-      message: "--task-prefix is required in non-interactive init.",
-      help: ["Run by init --task-prefix BY."],
-    });
+    return Effect.succeed(
+      usageError({
+        code: "missing_task_prefix",
+        message: "--task-prefix is required in non-interactive init.",
+        help: ["Run by init --task-prefix BY."],
+      }),
+    );
   }
 
-  const initResult = initRepoLocalContext({
+  return initRepoLocalContextEffect({
     cwd: environment.cwd,
     taskPrefix,
-  });
+  }).pipe(
+    Effect.map((initResult) => {
+      if (!initResult.ok) {
+        switch (initResult.error.code) {
+          case "invalid_task_prefix":
+            return usageError({
+              code: "invalid_task_prefix",
+              message: "Task prefix must match ^[A-Z][A-Z0-9]{1,9}$.",
+              details: { taskPrefix: initResult.error.taskPrefix },
+              help: [
+                "Use 2 to 10 uppercase letters or digits, starting with a letter, such as BY.",
+              ],
+            });
+          case "not_git_work_tree":
+            return runtimeError({
+              code: "not_git_work_tree",
+              message: "by init must be run inside a Git work tree.",
+              help: ["Run git init first, or cd into an existing Git repository."],
+            });
+          case "invalid_repo_config":
+            return runtimeError({
+              code: "invalid_repo_config",
+              message: initResult.error.error.message,
+              details: {
+                path: initResult.error.error.path ?? ".but-why/config.json",
+                diagnostics: structuredContractDiagnostics(initResult.error.error.diagnostics),
+              },
+              help: ["Fix the JSON or move the file aside before running init again."],
+            });
+          case "task_prefix_conflict":
+            return runtimeError({
+              code: "task_prefix_conflict",
+              message: `Repository is already initialized with task prefix ${initResult.error.existingTaskPrefix}.`,
+              details: {
+                path: ".but-why/config.json",
+                existingTaskPrefix: initResult.error.existingTaskPrefix,
+                requestedTaskPrefix: initResult.error.requestedTaskPrefix,
+              },
+              help: [
+                `Keep using ${initResult.error.existingTaskPrefix}, or manually migrate .but-why/config.json before running init again.`,
+              ],
+            });
+          case "invalid_repo_state":
+            return runtimeError({
+              code: "invalid_repo_state",
+              message: `${initResult.error.path} must be a ${initResult.error.expected}.`,
+              details: { path: initResult.error.path },
+              help: ["Move the conflicting path aside before running init again."],
+            });
+          case "shared_state_identity_conflict":
+            return runtimeError({
+              code: "shared_state_identity_conflict",
+              message: "Shared But Why? state belongs to a different Git repository.",
+              help: [
+                "Restore the repository's own shared state, then run `by init --task-prefix <prefix>`.",
+              ],
+            });
+        }
+      }
 
-  if (!initResult.ok) {
-    switch (initResult.error.code) {
-      case "invalid_task_prefix":
-        return usageError({
-          code: "invalid_task_prefix",
-          message: "Task prefix must match ^[A-Z][A-Z0-9]{1,9}$.",
-          details: { taskPrefix: initResult.error.taskPrefix },
-          help: ["Use 2 to 10 uppercase letters or digits, starting with a letter, such as BY."],
-        });
-      case "not_git_work_tree":
-        return runtimeError({
-          code: "not_git_work_tree",
-          message: "by init must be run inside a Git work tree.",
-          help: ["Run git init first, or cd into an existing Git repository."],
-        });
-      case "invalid_repo_config":
-        return runtimeError({
-          code: "invalid_repo_config",
-          message: initResult.error.error.message,
-          details: {
-            path: initResult.error.error.path ?? ".but-why/config.json",
-            diagnostics: structuredContractDiagnostics(initResult.error.error.diagnostics),
-          },
-          help: ["Fix the JSON or move the file aside before running init again."],
-        });
-      case "task_prefix_conflict":
-        return runtimeError({
-          code: "task_prefix_conflict",
-          message: `Repository is already initialized with task prefix ${initResult.error.existingTaskPrefix}.`,
-          details: {
-            path: ".but-why/config.json",
-            existingTaskPrefix: initResult.error.existingTaskPrefix,
-            requestedTaskPrefix: initResult.error.requestedTaskPrefix,
-          },
-          help: [
-            `Keep using ${initResult.error.existingTaskPrefix}, or manually migrate .but-why/config.json before running init again.`,
-          ],
-        });
-      case "invalid_repo_state":
-        return runtimeError({
-          code: "invalid_repo_state",
-          message: `${initResult.error.path} must be a ${initResult.error.expected}.`,
-          details: { path: initResult.error.path },
-          help: ["Move the conflicting path aside before running init again."],
-        });
-      case "shared_state_identity_conflict":
-        return runtimeError({
-          code: "shared_state_identity_conflict",
-          message: "Shared But Why? state belongs to a different Git repository.",
-          help: [
-            "Restore the repository's own shared state, then run `by init --task-prefix <prefix>`.",
-          ],
-        });
-    }
-  }
-
-  return success({
-    init: {
-      status: initResult.status,
-      root: initResult.root,
-      taskPrefix: initResult.taskPrefix,
-    },
-    ...(initResult.created.length > 0 ? { created: initResult.created } : {}),
-    ...(initResult.updated.length > 0 ? { updated: initResult.updated } : {}),
-    validationSetup: validationSetupGuidance(docs),
-  });
+      return success({
+        init: {
+          status: initResult.status,
+          root: initResult.root,
+          taskPrefix: initResult.taskPrefix,
+        },
+        ...(initResult.created.length > 0 ? { created: initResult.created } : {}),
+        ...(initResult.updated.length > 0 ? { updated: initResult.updated } : {}),
+        validationSetup: validationSetupGuidance(docs),
+      });
+    }),
+  );
 };
 
 type InitArgsParseResult =

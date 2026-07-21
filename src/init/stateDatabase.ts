@@ -216,7 +216,7 @@ const baseline = Effect.gen(function* () {
   for (const statement of baselineStatements) yield* sql.unsafe(statement);
 });
 
-const migrate = Migrator.make({})({
+export const migrateStateDatabase = Migrator.make({})({
   loader: Migrator.fromRecord({ "0001_baseline": baseline }),
 });
 
@@ -284,7 +284,7 @@ const createStateDatabase = (
     ...(commonDirectory === undefined ? {} : { commonDirectory }),
     runSync,
     withConnection: (work) => {
-      runRuntimeSync(runtime, migrate);
+      runRuntimeSync(runtime, migrateStateDatabase);
       return runRuntimeSync(
         runtime,
         Effect.scoped(
@@ -350,7 +350,7 @@ export const initializeStateDatabase = (input: {
   const database = createStateDatabase(input.statePath, input.commonDirectory);
 
   try {
-    database.runSync(migrate);
+    database.runSync(migrateStateDatabase);
   } catch (error) {
     database.closeSync();
     throw new StateDatabaseMigrationError(error);

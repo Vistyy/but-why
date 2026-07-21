@@ -6,6 +6,7 @@ import { Effect } from "effect";
 import { describe } from "vitest";
 
 import { isTaskPrefix } from "../src/contracts/taskPrefix.js";
+import { initRepoLocalContextEffect, snapshotStateDatabases } from "../src/init/repoContext.js";
 import { createGitRepo, runByInProcessEffect } from "./support/by-cli.js";
 
 const writeConfig = (root: string, taskPrefix = "BY") => {
@@ -66,6 +67,17 @@ describe("by init edge cases", () => {
   path: .but-why/reviewers/
 help[1]: Move the conflicting path aside before running init again.`);
       expect(existsSync(join(root, ".but-why/reviewers"))).toBe(true);
+    }),
+  );
+
+  it.effect("initializes through the scoped repository SQL lifecycle", () =>
+    Effect.gen(function* () {
+      const root = createGitRepo();
+      const existingDatabases = snapshotStateDatabases();
+      const result = yield* initRepoLocalContextEffect({ cwd: root, taskPrefix: "BY" });
+
+      expect(result).toMatchObject({ ok: true, status: "initialized" });
+      expect(snapshotStateDatabases()).toEqual(existingDatabases);
     }),
   );
 

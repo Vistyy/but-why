@@ -1,7 +1,14 @@
 import { existsSync, mkdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 
+import { Effect } from "effect";
+
 import type { RepoConfig } from "../contracts/repoConfig.js";
+import {
+  RepositoryIdentityConflict,
+  RepositorySql,
+  repositorySqlLayer,
+} from "../sqlite/repositorySql.js";
 import { isTaskPrefix } from "../contracts/taskPrefix.js";
 import { findGitRoot } from "./git.js";
 import { ensureGitignoreBlock } from "./gitignore.js";
@@ -125,13 +132,28 @@ const repoLocalPaths = (root: string, commonDirectory: string): RepoLocalPaths =
   };
 };
 
-export const initRepoLocalContext = (input: InitRepoInput): InitRepoResult => {
+type PreparedRepoInitialization = {
+  readonly input: InitRepoInput;
+  readonly root: string;
+  readonly commonDirectory: string;
+  readonly paths: RepoLocalPaths;
+  readonly configCreated: boolean;
+};
+
+type PrepareRepoInitializationResult =
+  | { readonly ok: true; readonly prepared: PreparedRepoInitialization }
+  | { readonly ok: false; readonly result: InitRepoResult };
+
+const prepareRepoInitialization = (input: InitRepoInput): PrepareRepoInitializationResult => {
   if (!isTaskPrefix(input.taskPrefix)) {
     return {
       ok: false,
-      error: {
-        code: "invalid_task_prefix",
-        taskPrefix: input.taskPrefix,
+      result: {
+        ok: false,
+        error: {
+          code: "invalid_task_prefix",
+          taskPrefix: input.taskPrefix,
+        },
       },
     };
   }
@@ -139,59 +161,51 @@ export const initRepoLocalContext = (input: InitRepoInput): InitRepoResult => {
   const gitRoot = findGitRoot(input.cwd);
 
   if (!gitRoot.ok) {
-    return { ok: false, error: { code: "not_git_work_tree" } };
+    return { ok: false, result: { ok: false, error: { code: "not_git_work_tree" } } };
   }
 
   const paths = repoLocalPaths(gitRoot.root, gitRoot.commonDirectory);
-  const created: string[] = [];
-  const updated: string[] = [];
-
   mkdirSync(paths.butWhyDir, { recursive: true });
   mkdirSync(paths.operationalDir, { recursive: true });
 
   const configResult = ensureRepoConfig(paths.configPath, input.taskPrefix);
 
   if (!configResult.ok) {
-    return { ok: false, error: configResult.error };
+    return { ok: false, result: { ok: false, error: configResult.error } };
   }
 
-  if (configResult.created) {
-    created.push(".but-why/config.json");
-  }
-
-  let stateChange: ReturnType<typeof initializeStateDatabase>;
-
-  try {
-    stateChange = initializeStateDatabase({
-      statePath: paths.statePath,
+  return {
+    ok: true,
+    prepared: {
+      input,
+      root: gitRoot.root,
       commonDirectory: gitRoot.commonDirectory,
-    });
-  } catch (error) {
-    if (error instanceof SharedStateIdentityConflictError) {
-      return { ok: false, error: { code: "shared_state_identity_conflict" } };
-    }
-    throw error;
-  }
+      paths,
+      configCreated: configResult.created,
+    },
+  };
+};
 
-  if (stateChange.change === "created") {
-    created.push("<git-common-dir>/but-why/state.sqlite");
-  }
+const completeRepoInitialization = (
+  prepared: PreparedRepoInitialization,
+  stateChange: "created" | "unchanged",
+): InitRepoResult => {
+  const created: string[] = [];
+  const updated: string[] = [];
 
-  const reviewersRepair = ensureReviewersPath(paths.reviewersPath);
+  if (prepared.configCreated) created.push(".but-why/config.json");
+  if (stateChange === "created") created.push("<git-common-dir>/but-why/state.sqlite");
+
+  const reviewersRepair = ensureReviewersPath(prepared.paths.reviewersPath);
 
   if (!reviewersRepair.ok) {
     return { ok: false, error: reviewersRepair.error };
   }
 
-  if (reviewersRepair.created) {
-    created.push(".but-why/reviewers/");
-  }
+  if (reviewersRepair.created) created.push(".but-why/reviewers/");
+  if (ensureGitignoreBlock(prepared.paths.gitignorePath)) updated.push(".gitignore");
 
-  if (ensureGitignoreBlock(paths.gitignorePath)) {
-    updated.push(".gitignore");
-  }
-
-  const status = configResult.created
+  const status = prepared.configCreated
     ? "initialized"
     : created.length > 0 || updated.length > 0
       ? "repaired"
@@ -200,11 +214,40 @@ export const initRepoLocalContext = (input: InitRepoInput): InitRepoResult => {
   return {
     ok: true,
     status,
-    root: gitRoot.root,
-    taskPrefix: input.taskPrefix,
+    root: prepared.root,
+    taskPrefix: prepared.input.taskPrefix,
     created,
     updated,
   };
+};
+
+export const initRepoLocalContextEffect = (input: InitRepoInput): Effect.Effect<InitRepoResult> => {
+  const preparation = prepareRepoInitialization(input);
+  if (!preparation.ok) return Effect.succeed(preparation.result);
+
+  const prepared = preparation.prepared;
+  const stateChange = existsSync(prepared.paths.statePath) ? "unchanged" : "created";
+  const acquireRepositorySql = RepositorySql.pipe(
+    Effect.provide(
+      repositorySqlLayer({
+        statePath: prepared.paths.statePath,
+        commonDirectory: prepared.commonDirectory,
+      }),
+    ),
+  );
+
+  return Effect.scoped(acquireRepositorySql).pipe(
+    Effect.matchEffect({
+      onFailure: (error) =>
+        error instanceof RepositoryIdentityConflict
+          ? Effect.succeed<InitRepoResult>({
+              ok: false,
+              error: { code: "shared_state_identity_conflict" },
+            })
+          : Effect.die(error),
+      onSuccess: () => Effect.sync(() => completeRepoInitialization(prepared, stateChange)),
+    }),
+  );
 };
 
 export const loadRepoLocalContext = (cwd: string): LoadRepoLocalContextResult => {
