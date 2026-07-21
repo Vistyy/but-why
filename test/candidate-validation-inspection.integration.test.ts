@@ -5,9 +5,11 @@ import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
 import { describe } from "vitest";
 
+import type { ChangeValidationPersistence } from "../src/changeValidation/changeValidationPersistence.js";
 import { prepareStateDatabase } from "../src/init/stateDatabase.js";
 import { openSqliteCandidateStore } from "../src/sqlite/sqliteCandidateStore.js";
-import { openSqliteCandidateValidationRunStore } from "../src/sqlite/sqliteCandidateValidationRunStore.js";
+import { repositorySqlLayer } from "../src/sqlite/repositorySql.js";
+import { openSqliteChangeValidationPersistence } from "../src/sqlite/sqliteChangeValidationPersistence.js";
 import { openSqliteChangeStore } from "../src/sqlite/sqliteChangeStore.js";
 import { runByInProcessEffect } from "./support/by-cli.js";
 import { createInitializedRepo } from "./support/initializedRepo.js";
@@ -28,10 +30,10 @@ const policy = {
 describe("Candidate-owned Validation Run inspection", () => {
   it.effect("shows the Candidate judgment and ordered evidence with bounded previews", () =>
     Effect.gen(function* () {
-      const fixture = candidateValidationFixture();
+      const fixture = yield* candidateValidationFixture();
       const longContent = "x".repeat(1_200);
 
-      fixture.runStore.recordPrepareRound({
+      yield* fixture.runStore.recordPrepareRound({
         validationRunId: fixture.validationRunId,
         roundNumber: 1,
         roundStatus: "passed",
@@ -39,7 +41,7 @@ describe("Candidate-owned Validation Run inspection", () => {
         artifactRecords: [fixture.artifact("prepare", "prepare", "logs.txt", "prepare complete\n")],
         now,
       });
-      fixture.runStore.recordCheckRound({
+      yield* fixture.runStore.recordCheckRound({
         validationRunId: fixture.validationRunId,
         producer: "types",
         roundNumber: 1,
@@ -63,7 +65,7 @@ describe("Candidate-owned Validation Run inspection", () => {
         },
         now,
       });
-      fixture.runStore.recordCheckRound({
+      yield* fixture.runStore.recordCheckRound({
         validationRunId: fixture.validationRunId,
         producer: "tests",
         roundNumber: 2,
@@ -72,14 +74,14 @@ describe("Candidate-owned Validation Run inspection", () => {
         artifactRecords: [fixture.artifact("checks", "tests", "stderr.txt", "")],
         now,
       });
-      fixture.runStore.recordToolingFailure({
+      yield* fixture.runStore.recordToolingFailure({
         validationRunId: fixture.validationRunId,
         errorKind: "validation_workspace_setup_failed",
         operationName: "cleanup_validation_worktree",
         errorMessage: "Could not remove worktree.",
         now: later,
       });
-      fixture.runStore.complete({
+      yield* fixture.runStore.complete({
         validationRunId: fixture.validationRunId,
         outcome: "tooling_failed",
         now: later,
@@ -244,8 +246,12 @@ describe("Candidate-owned Validation Run inspection", () => {
 
   it.effect("keeps empty evidence distinct from unavailable artifact content", () =>
     Effect.gen(function* () {
-      const empty = candidateValidationFixture();
-      empty.runStore.complete({ validationRunId: empty.validationRunId, outcome: "passed", now });
+      const empty = yield* candidateValidationFixture();
+      yield* empty.runStore.complete({
+        validationRunId: empty.validationRunId,
+        outcome: "passed",
+        now,
+      });
 
       const emptyResult = yield* runByInProcessEffect(empty.root, [
         "validation-run",
@@ -267,9 +273,9 @@ describe("Candidate-owned Validation Run inspection", () => {
         artifacts: [],
       });
 
-      const unavailable = candidateValidationFixture();
+      const unavailable = yield* candidateValidationFixture();
       const missing = unavailable.artifact("checks", "types", "stdout.txt", "missing");
-      unavailable.runStore.recordCheckRound({
+      yield* unavailable.runStore.recordCheckRound({
         validationRunId: unavailable.validationRunId,
         producer: "types",
         roundNumber: 1,
@@ -316,8 +322,8 @@ describe("Candidate-owned Validation Run inspection", () => {
     "shows $name Acceptance Review evidence",
     ({ roundStatus, outcome, finding, tooling }) =>
       Effect.gen(function* () {
-        const fixture = candidateValidationFixture();
-        fixture.runStore.recordAcceptanceRound({
+        const fixture = yield* candidateValidationFixture();
+        yield* fixture.runStore.recordAcceptanceRound({
           validationRunId: fixture.validationRunId,
           roundNumber: 1,
           roundStatus,
@@ -342,7 +348,7 @@ describe("Candidate-owned Validation Run inspection", () => {
           now,
         });
         if (tooling) {
-          fixture.runStore.recordToolingFailure({
+          yield* fixture.runStore.recordToolingFailure({
             validationRunId: fixture.validationRunId,
             errorKind: "reviewer_output_contract_failed",
             operationName: "decode_reviewer_output",
@@ -350,7 +356,11 @@ describe("Candidate-owned Validation Run inspection", () => {
             now,
           });
         }
-        fixture.runStore.complete({ validationRunId: fixture.validationRunId, outcome, now });
+        yield* fixture.runStore.complete({
+          validationRunId: fixture.validationRunId,
+          outcome,
+          now,
+        });
 
         const result = yield* runByInProcessEffect(fixture.root, [
           "validation-run",
@@ -380,9 +390,9 @@ describe("Candidate-owned Validation Run inspection", () => {
     "returns typed actionable errors for unknown Runs, Artifacts, and unavailable content",
     () =>
       Effect.gen(function* () {
-        const fixture = candidateValidationFixture();
+        const fixture = yield* candidateValidationFixture();
         const missing = fixture.artifact("checks", "types", "stdout.txt", "missing");
-        fixture.runStore.recordCheckRound({
+        yield* fixture.runStore.recordCheckRound({
           validationRunId: fixture.validationRunId,
           producer: "types",
           roundNumber: 1,
@@ -455,9 +465,18 @@ const candidateValidationFixture = () => {
   const database = sqliteInput(root);
   const changeStore = openSqliteChangeStore(database);
   const candidateStore = openSqliteCandidateStore(database);
-  const runStore = openSqliteCandidateValidationRunStore(database);
   const commonDirectory = join(root, ".git");
   const artifactsRoot = join(commonDirectory, "but-why", "artifacts");
+  const repositoryLayer = repositorySqlLayer({
+    statePath: database.statePath,
+    commonDirectory,
+  });
+  const withPersistence = <A, E>(
+    use: (persistence: ChangeValidationPersistence) => Effect.Effect<A, E>,
+  ) =>
+    Effect.flatMap(openSqliteChangeValidationPersistence(), use).pipe(
+      Effect.provide(repositoryLayer),
+    );
   const changeResult = changeStore.createChange({
     repositoryCommonDirectory: commonDirectory,
     branchRef: "refs/heads/feature",
@@ -473,45 +492,67 @@ const candidateValidationFixture = () => {
     now,
   });
   if (!candidateResult.ok) throw new Error(candidateResult.code);
-  const runResult = runStore.startOrReuse({
-    candidateId: candidateResult.candidate.id,
-    headSha: candidateResult.candidate.headSha,
-    policy,
-    now,
-  });
-  if (runResult.reused) throw new Error("Expected a new Validation Run");
 
-  const artifact = (
-    phase: "prepare" | "checks" | "acceptance_review",
-    producer: string,
-    fileName: string,
-    content: string,
-  ) => {
-    const path = join(runResult.validationRunId, phase, producer, fileName);
-    mkdirSync(join(artifactsRoot, runResult.validationRunId, phase, producer), { recursive: true });
-    writeFileSync(join(artifactsRoot, path), content);
-    const bytes = Buffer.byteLength(content);
-    return {
-      ref: `artifact:${runResult.validationRunId}/${phase}/${producer}/${fileName}`,
-      validationRunId: runResult.validationRunId,
-      phase,
-      producer,
-      path,
-      originalBytes: bytes,
-      storedBytes: bytes,
-      truncated: false,
+  return Effect.gen(function* () {
+    const runResult = yield* withPersistence((persistence) =>
+      persistence.startOrReuse({
+        candidateId: candidateResult.candidate.id,
+        headSha: candidateResult.candidate.headSha,
+        policy,
+        now,
+      }),
+    );
+    if (runResult.reused) throw new Error("Expected a new Validation Run");
+
+    const artifact = (
+      phase: "prepare" | "checks" | "acceptance_review",
+      producer: string,
+      fileName: string,
+      content: string,
+    ) => {
+      const path = join(runResult.validationRunId, phase, producer, fileName);
+      mkdirSync(join(artifactsRoot, runResult.validationRunId, phase, producer), {
+        recursive: true,
+      });
+      writeFileSync(join(artifactsRoot, path), content);
+      const bytes = Buffer.byteLength(content);
+      return {
+        ref: `artifact:${runResult.validationRunId}/${phase}/${producer}/${fileName}`,
+        validationRunId: runResult.validationRunId,
+        phase,
+        producer,
+        path,
+        originalBytes: bytes,
+        storedBytes: bytes,
+        truncated: false,
+      };
     };
-  };
+    const runStore = {
+      recordPrepareRound: (
+        input: Parameters<ChangeValidationPersistence["recordPrepareRound"]>[0],
+      ) => withPersistence((persistence) => persistence.recordPrepareRound(input)),
+      recordCheckRound: (input: Parameters<ChangeValidationPersistence["recordCheckRound"]>[0]) =>
+        withPersistence((persistence) => persistence.recordCheckRound(input)),
+      recordAcceptanceRound: (
+        input: Parameters<ChangeValidationPersistence["recordAcceptanceRound"]>[0],
+      ) => withPersistence((persistence) => persistence.recordAcceptanceRound(input)),
+      recordToolingFailure: (
+        input: Parameters<ChangeValidationPersistence["recordToolingFailure"]>[0],
+      ) => withPersistence((persistence) => persistence.recordToolingFailure(input)),
+      complete: (input: Parameters<ChangeValidationPersistence["complete"]>[0]) =>
+        withPersistence((persistence) => persistence.complete(input)),
+    };
 
-  return {
-    root,
-    runStore,
-    artifactsRoot,
-    artifact,
-    validationRunId: runResult.validationRunId,
-    candidateId: candidateResult.candidate.id,
-    changeId: changeResult.change.id,
-  };
+    return {
+      root,
+      runStore,
+      artifactsRoot,
+      artifact,
+      validationRunId: runResult.validationRunId,
+      candidateId: candidateResult.candidate.id,
+      changeId: changeResult.change.id,
+    };
+  });
 };
 
 const sqliteInput = (root: string) =>

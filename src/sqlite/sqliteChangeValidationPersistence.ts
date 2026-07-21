@@ -153,7 +153,10 @@ const getCandidateById = (sql: SqlClient.SqlClient, candidateId: string) =>
 
 const listCandidatesForChange = (sql: SqlClient.SqlClient, changeId: string) =>
   sql.unsafe<CandidateRecord>(
-    `SELECT ${candidateColumns} FROM candidates WHERE change_id = ? ORDER BY rowid ASC`,
+    `SELECT ${candidateColumns}
+     FROM candidates
+     WHERE change_id = ?
+     ORDER BY created_at ASC, id ASC`,
     [changeId],
   );
 
@@ -323,12 +326,18 @@ const listPreviousCandidateReviewerFindings = (
   },
 ) =>
   sql.unsafe<CandidateValidationFindingRow>(
-    `WITH immediately_preceding_candidate AS (
-       SELECT id
+    `WITH current_candidate AS (
+       SELECT change_id, created_at, id
        FROM candidates
-       WHERE change_id = (SELECT change_id FROM candidates WHERE id = ?)
-         AND rowid < (SELECT rowid FROM candidates WHERE id = ?)
-       ORDER BY rowid DESC
+       WHERE id = ?
+     ), immediately_preceding_candidate AS (
+       SELECT candidate.id
+       FROM candidates AS candidate
+       JOIN current_candidate AS current
+         ON current.change_id = candidate.change_id
+       WHERE candidate.created_at < current.created_at
+          OR (candidate.created_at = current.created_at AND candidate.id < current.id)
+       ORDER BY candidate.created_at DESC, candidate.id DESC
        LIMIT 1
      ), latest_reviewer_round AS (
        SELECT prior_round.validation_run_id
@@ -338,7 +347,7 @@ const listPreviousCandidateReviewerFindings = (
        WHERE prior_run.candidate_id = (SELECT id FROM immediately_preceding_candidate)
          AND prior_round.phase = ?
          AND prior_round.producer = ?
-       ORDER BY prior_run.rowid DESC
+       ORDER BY prior_run.created_at DESC, prior_run.id DESC
        LIMIT 1
      )
      SELECT ${findingColumns}
@@ -347,14 +356,7 @@ const listPreviousCandidateReviewerFindings = (
        AND phase = ?
        AND producer = ?
      ORDER BY id`,
-    [
-      input.candidateId,
-      input.candidateId,
-      input.phase,
-      input.producer,
-      input.phase,
-      input.producer,
-    ],
+    [input.candidateId, input.phase, input.producer, input.phase, input.producer],
   );
 
 const listToolingFailures = (sql: SqlClient.SqlClient, validationRunId: string) =>

@@ -14,7 +14,6 @@ import {
   type TaskBackedCandidateValidationPolicy,
 } from "../src/candidateValidation/validateCandidate.js";
 import { candidateValidationForTest } from "./support/candidateValidation.js";
-import { openSqliteCandidateValidationRunStore } from "../src/sqlite/sqliteCandidateValidationRunStore.js";
 import type { RepositoryStorageError } from "../src/repositoryStorageError.js";
 import { ReviewerOutputContractFailed } from "../src/validation/validationToolingFailures.js";
 import type { TaskContextSnapshotV1 } from "../src/validationRun/taskContextSnapshot.js";
@@ -26,6 +25,8 @@ import {
 } from "./support/candidateReadyRepo.js";
 
 const now = "2026-07-15T10:00:00.000Z";
+const nextNow = "2026-07-15T10:01:00.000Z";
+const finalNow = "2026-07-15T10:02:00.000Z";
 const acceptanceContext = Object.freeze({
   version: 1 as const,
   title: "Keep the exact intent",
@@ -96,11 +97,11 @@ describe("Task-backed Candidate Acceptance Review", () => {
         expect(prompt).toContain(acceptanceContext.description);
         expect(prompt).toContain(acceptancePolicy.instructions);
         expect(prompt).toContain("<reviewer-output>");
-        expect(validation.listRounds(result.validationRunId)).toEqual([
+        expect(yield* validation.listRounds(result.validationRunId)).toEqual([
           { producer: "quality", status: "passed" },
           { producer: "acceptance", status: "passed" },
         ]);
-        expect(validation.listArtifacts(result.validationRunId)).toEqual(
+        expect(yield* validation.listArtifacts(result.validationRunId)).toEqual(
           expect.arrayContaining([
             expect.objectContaining({ phase: "acceptance_review", producer: "acceptance" }),
           ]),
@@ -128,7 +129,7 @@ describe("Task-backed Candidate Acceptance Review", () => {
         if (!earlier.ok) return;
 
         git(ready.repo, "commit", "--allow-empty", "-m", "address acceptance Finding");
-        const successor = yield* captureLocalCandidate({ cwd: ready.repo, now });
+        const successor = yield* captureLocalCandidate({ cwd: ready.repo, now: nextNow });
         expect(successor.ok).toBe(true);
         if (!successor.ok) return;
 
@@ -160,10 +161,14 @@ describe("Task-backed Candidate Acceptance Review", () => {
         expect(finalPrompt).toContain(earlierFinding.title);
         expect(finalPrompt).not.toContain(earlier.validationRunId);
         expect(
-          ready.validation.listFindings(final.validationRunId).map((finding) => finding.title),
+          (yield* ready.validation.listFindings(final.validationRunId)).map(
+            (finding) => finding.title,
+          ),
         ).toEqual(["Unresolved earlier Finding"]);
         expect(
-          ready.validation.listFindings(earlier.validationRunId).map((finding) => finding.title),
+          (yield* ready.validation.listFindings(earlier.validationRunId)).map(
+            (finding) => finding.title,
+          ),
         ).toEqual([earlierFinding.title]);
       }),
   );
@@ -186,7 +191,7 @@ describe("Task-backed Candidate Acceptance Review", () => {
       if (!earlier.ok) return;
 
       git(ready.repo, "commit", "--allow-empty", "-m", "run failing checks");
-      const intermediate = yield* captureLocalCandidate({ cwd: ready.repo, now });
+      const intermediate = yield* captureLocalCandidate({ cwd: ready.repo, now: nextNow });
       expect(intermediate.ok).toBe(true);
       if (!intermediate.ok) return;
       const intermediateResult = yield* runTaskBackedCandidate(
@@ -200,7 +205,7 @@ describe("Task-backed Candidate Acceptance Review", () => {
       expect(intermediateResult).toMatchObject({ ok: true, outcome: "blocked" });
 
       git(ready.repo, "commit", "--allow-empty", "-m", "fix checks");
-      const successor = yield* captureLocalCandidate({ cwd: ready.repo, now });
+      const successor = yield* captureLocalCandidate({ cwd: ready.repo, now: finalNow });
       expect(successor.ok).toBe(true);
       if (!successor.ok) return;
       review.mockImplementationOnce(() =>
@@ -239,7 +244,7 @@ describe("Task-backed Candidate Acceptance Review", () => {
       if (!earlier.ok) return;
 
       git(ready.repo, "commit", "--allow-empty", "-m", "address acceptance Finding");
-      const successor = yield* captureLocalCandidate({ cwd: ready.repo, now });
+      const successor = yield* captureLocalCandidate({ cwd: ready.repo, now: nextNow });
       expect(successor.ok).toBe(true);
       if (!successor.ok) return;
 
@@ -259,8 +264,8 @@ describe("Task-backed Candidate Acceptance Review", () => {
 
       expect(final).toMatchObject({ ok: false, outcome: "tooling_failed" });
       expect(review).toHaveBeenCalledTimes(3);
-      expect(ready.validation.listFindings(final.validationRunId)).toEqual([]);
-      expect(ready.validation.listToolingFailures(final.validationRunId)).toEqual([
+      expect(yield* ready.validation.listFindings(final.validationRunId)).toEqual([]);
+      expect(yield* ready.validation.listToolingFailures(final.validationRunId)).toEqual([
         expect.objectContaining({ errorKind: "reviewer_output_contract_failed" }),
       ]);
     }),
@@ -327,8 +332,8 @@ describe("Task-backed Candidate Acceptance Review", () => {
       const result = yield* runTaskBackedCandidate(ready);
 
       expect(result).toMatchObject({ ok: true, outcome: "blocked" });
-      expect(validation.listFindings(result.validationRunId)).toHaveLength(2);
-      expect(validation.listArtifacts(result.validationRunId)).toEqual(
+      expect(yield* validation.listFindings(result.validationRunId)).toHaveLength(2);
+      expect(yield* validation.listArtifacts(result.validationRunId)).toEqual(
         expect.arrayContaining([
           expect.objectContaining({ path: expect.stringContaining("stdout.txt") }),
           expect.objectContaining({ path: expect.stringContaining("reviewer-output.json") }),
@@ -381,7 +386,7 @@ describe("Task-backed Candidate Acceptance Review", () => {
         if (!earlier.ok) return;
 
         git(ready.repo, "commit", "--allow-empty", "-m", "address specialist Finding");
-        const successor = yield* captureLocalCandidate({ cwd: ready.repo, now });
+        const successor = yield* captureLocalCandidate({ cwd: ready.repo, now: nextNow });
         expect(successor.ok).toBe(true);
         if (!successor.ok) return;
 
@@ -402,10 +407,14 @@ describe("Task-backed Candidate Acceptance Review", () => {
         expect(finalPrompt).toContain(earlierFinding.title);
         expect(finalPrompt).not.toContain(earlier.validationRunId);
         expect(
-          ready.validation.listFindings(final.validationRunId).map((finding) => finding.title),
+          (yield* ready.validation.listFindings(final.validationRunId)).map(
+            (finding) => finding.title,
+          ),
         ).toEqual(["Final specialist Finding"]);
         expect(
-          ready.validation.listFindings(earlier.validationRunId).map((finding) => finding.title),
+          (yield* ready.validation.listFindings(earlier.validationRunId)).map(
+            (finding) => finding.title,
+          ),
         ).toEqual([earlierFinding.title]);
       }),
   );
@@ -477,19 +486,19 @@ describe("Task-backed Candidate Acceptance Review", () => {
           expect(input.prompt).not.toContain(acceptanceContext.description);
         }
         expect(
-          ready.validation.listFindings(result.validationRunId).map((item) => item.title),
+          (yield* ready.validation.listFindings(result.validationRunId)).map((item) => item.title),
         ).toEqual(["Zeta Finding", "Alpha Finding"]);
-        expect(ready.validation.listRounds(result.validationRunId)).toEqual([
+        expect(yield* ready.validation.listRounds(result.validationRunId)).toEqual([
           { producer: "quality", status: "passed" },
           { producer: "acceptance", status: "passed" },
           { producer: "zeta", status: "failed" },
           { producer: "broken", status: "failed" },
           { producer: "alpha", status: "failed" },
         ]);
-        expect(ready.validation.listToolingFailures(result.validationRunId)).toEqual([
+        expect(yield* ready.validation.listToolingFailures(result.validationRunId)).toEqual([
           expect.objectContaining({ errorKind: "reviewer_output_contract_failed" }),
         ]);
-        expect(ready.validation.listArtifacts(result.validationRunId)).toEqual(
+        expect(yield* ready.validation.listArtifacts(result.validationRunId)).toEqual(
           expect.arrayContaining([
             expect.objectContaining({ phase: "specialist_review", producer: "zeta" }),
             expect.objectContaining({ phase: "specialist_review", producer: "broken" }),
@@ -551,11 +560,11 @@ describe("Task-backed Candidate Acceptance Review", () => {
       const result = yield* runTaskBackedCandidate(ready);
 
       expect(result).toMatchObject({ ok: false, outcome: "tooling_failed" });
-      expect(validation.listFindings(result.validationRunId)).toEqual([]);
-      expect(validation.listToolingFailures(result.validationRunId)).toEqual([
+      expect(yield* validation.listFindings(result.validationRunId)).toEqual([]);
+      expect(yield* validation.listToolingFailures(result.validationRunId)).toEqual([
         expect.objectContaining({ errorKind: "reviewer_output_contract_failed" }),
       ]);
-      expect(validation.listArtifacts(result.validationRunId)).toContainEqual(
+      expect(yield* validation.listArtifacts(result.validationRunId)).toContainEqual(
         expect.objectContaining({ phase: "acceptance_review", producer: "acceptance" }),
       );
     }),
@@ -595,7 +604,7 @@ const acceptanceReadyRepo = (
     const validation = candidateValidationForTest({
       localRepositoryMainCheckoutRoot: repo,
       artifactsRoot: join(commonDirectory(repo), "but-why", "artifacts"),
-      runStore: openSqliteCandidateValidationRunStore(sqliteInput(repo)),
+      repository: repositoryConfig(repo),
       reviewerAgentRuntime,
     });
     return { repo, captured, validation };
@@ -610,4 +619,7 @@ const reviewerFinding = (title: string) => ({
   artifactRefs: [],
 });
 
-const sqliteInput = (root: string) => candidateSqliteInput(root);
+const repositoryConfig = (root: string) => ({
+  statePath: candidateSqliteInput(root).statePath,
+  commonDirectory: commonDirectory(root),
+});

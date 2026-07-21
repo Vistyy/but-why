@@ -126,4 +126,30 @@ describe("check round Findings", () => {
       expect(recordedRounds[0]?.finding).not.toHaveProperty("severity");
     }),
   );
+
+  it.effect("treats Check IDs as literal completion-marker text", () =>
+    Effect.gen(function* () {
+      const recordedRounds: RecordCandidateValidationCheckRoundInput[] = [];
+      const result = yield* runCheckPhase({
+        validationRunId: "candidate-run",
+        checks: [{ id: "[quality]", command: "true", timeoutSeconds: 1 }],
+        artifactsRoot: createTestWorkspace(),
+        now,
+        sandbox: {
+          exec: async (command) =>
+            command === "command -v timeout >/dev/null 2>&1"
+              ? { exitCode: 0, stdout: "", stderr: "" }
+              : {
+                  exitCode: 0,
+                  stdout: "",
+                  stderr: "\n__BUTWHY_CHECK_COMPLETED_[quality]__:0\n",
+                },
+        },
+        recordCheckRound: (input) => Effect.sync(() => void recordedRounds.push(input)),
+      });
+
+      expect(result).toEqual({ ok: true, findings: 0 });
+      expect(recordedRounds).toMatchObject([{ producer: "[quality]", roundStatus: "passed" }]);
+    }),
+  );
 });

@@ -11,7 +11,6 @@ import {
   CandidateValidation,
   type ValidateCandidateInput,
 } from "../src/candidateValidation/validateCandidate.js";
-import { openSqliteCandidateValidationRunStore } from "../src/sqlite/sqliteCandidateValidationRunStore.js";
 import { candidateValidationForTest } from "./support/candidateValidation.js";
 import {
   candidateReadyRepo,
@@ -35,7 +34,7 @@ describe("Candidate validation", () => {
         const validation = candidateValidationForTest({
           localRepositoryMainCheckoutRoot: repo,
           artifactsRoot: join(commonDirectory(repo), "but-why", "artifacts"),
-          runStore: openSqliteCandidateValidationRunStore(sqliteInput(repo)),
+          repository: repositoryConfig(repo),
         });
         const policy = {
           sandboxMode: "none" as const,
@@ -56,8 +55,8 @@ describe("Candidate validation", () => {
         });
         expect(first).toMatchObject({ ok: true, reused: false, outcome: "blocked" });
         if (!first.ok) return;
-        expect(validation.listRounds(first.validationRunId)).toHaveLength(2);
-        expect(validation.listFindings(first.validationRunId)).toHaveLength(1);
+        expect(yield* validation.listRounds(first.validationRunId)).toHaveLength(2);
+        expect(yield* validation.listFindings(first.validationRunId)).toHaveLength(1);
 
         const passingPolicy = {
           ...policy,
@@ -72,7 +71,7 @@ describe("Candidate validation", () => {
         });
         expect(passing).toMatchObject({ ok: true, reused: false, outcome: "passed" });
         if (!passing.ok) return;
-        expect(validation.listArtifacts(passing.validationRunId)).toContainEqual(
+        expect(yield* validation.listArtifacts(passing.validationRunId)).toContainEqual(
           expect.objectContaining({ truncated: false, originalBytes: expect.any(Number) }),
         );
 
@@ -101,7 +100,7 @@ describe("Candidate validation", () => {
       const validation = candidateValidationForTest({
         localRepositoryMainCheckoutRoot: repo,
         artifactsRoot: join(commonDirectory(repo), "but-why", "artifacts"),
-        runStore: openSqliteCandidateValidationRunStore(sqliteInput(repo)),
+        repository: repositoryConfig(repo),
       });
 
       const result = yield* validateCandidate(validation, {
@@ -120,7 +119,7 @@ describe("Candidate validation", () => {
 
       expect(result).toMatchObject({ ok: true, outcome: "blocked" });
       if (!result.ok) return;
-      expect(validation.listRounds(result.validationRunId)).toEqual([
+      expect(yield* validation.listRounds(result.validationRunId)).toEqual([
         { producer: "prepare", status: "failed" },
       ]);
     }),
@@ -135,7 +134,7 @@ describe("Candidate validation", () => {
       const validation = candidateValidationForTest({
         localRepositoryMainCheckoutRoot: repo,
         artifactsRoot: join(commonDirectory(repo), "but-why", "artifacts"),
-        runStore: openSqliteCandidateValidationRunStore(sqliteInput(repo)),
+        repository: repositoryConfig(repo),
       });
 
       const result = yield* validateCandidate(validation, {
@@ -175,7 +174,7 @@ describe("Candidate validation", () => {
       const validation = candidateValidationForTest({
         localRepositoryMainCheckoutRoot: repo,
         artifactsRoot: join(commonDirectory(repo), "but-why", "artifacts"),
-        runStore: openSqliteCandidateValidationRunStore(sqliteInput(repo)),
+        repository: repositoryConfig(repo),
       });
       const result = yield* validateCandidate(validation, {
         candidateId: captured.candidateId,
@@ -191,7 +190,7 @@ describe("Candidate validation", () => {
       });
 
       expect(result).toMatchObject({ ok: false, outcome: "tooling_failed" });
-      expect(validation.listRounds(result.validationRunId)).toEqual([]);
+      expect(yield* validation.listRounds(result.validationRunId)).toEqual([]);
     }),
   );
 
@@ -207,7 +206,7 @@ describe("Candidate validation", () => {
       const validation = candidateValidationForTest({
         localRepositoryMainCheckoutRoot: repo,
         artifactsRoot: join(commonDirectory(repo), "but-why", "artifacts"),
-        runStore: openSqliteCandidateValidationRunStore(sqliteInput(repo)),
+        repository: repositoryConfig(repo),
         reviewerAgentRuntime: { review },
       });
 
@@ -272,7 +271,7 @@ describe("Candidate validation", () => {
         const validation = candidateValidationForTest({
           localRepositoryMainCheckoutRoot: mainCheckout,
           artifactsRoot: join(commonDirectory(mainCheckout), "but-why", "artifacts"),
-          runStore: openSqliteCandidateValidationRunStore(sqliteInput(mainCheckout)),
+          repository: repositoryConfig(mainCheckout),
         });
         const result = yield* validateCandidate(validation, {
           candidateId: captured.candidateId,
@@ -308,4 +307,7 @@ const validateCandidate = (
     return yield* service.validateCandidate(input);
   }).pipe(Effect.provide(validation.layer));
 
-const sqliteInput = (root: string) => candidateSqliteInput(root);
+const repositoryConfig = (root: string) => ({
+  statePath: candidateSqliteInput(root).statePath,
+  commonDirectory: commonDirectory(root),
+});

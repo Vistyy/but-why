@@ -32,32 +32,6 @@ export type RecordCandidateValidationPrepareRoundInput = Omit<
   "phase" | "producer"
 >;
 
-export type CandidateValidationRunStore = {
-  readonly startOrReuse: (
-    input: StartCandidateValidationRunInput,
-  ) => StartCandidateValidationRunResult;
-  readonly complete: (input: CompleteCandidateValidationRunInput) => void;
-  readonly getRunById: (validationRunId: string) => CandidateValidationRunRecord | undefined;
-  readonly listRunsForCandidate: (candidateId: string) => readonly CandidateValidationRunRecord[];
-  readonly recordWorkspaceSetup: (input: RecordCandidateWorkspaceSetupInput) => void;
-  readonly recordToolingFailure: (input: RecordCandidateToolingFailureInput) => void;
-  readonly recordPrepareRound: (input: RecordCandidateValidationPrepareRoundInput) => void;
-  readonly recordCheckRound: (input: RecordCandidateValidationCheckRoundInput) => void;
-  readonly recordAcceptanceRound: (input: RecordCandidateAcceptanceRoundInput) => void;
-  readonly recordSpecialistRound: (input: RecordCandidateSpecialistRoundInput) => void;
-  readonly listRounds: (validationRunId: string) => readonly CandidateValidationRound[];
-  readonly listFindings: (validationRunId: string) => readonly CandidateValidationFinding[];
-  readonly listPreviousCandidateReviewerFindings: (input: {
-    readonly candidateId: string;
-    readonly phase: ValidationPhase;
-    readonly producer: string;
-  }) => readonly CandidateValidationFinding[];
-  readonly listToolingFailures: (
-    validationRunId: string,
-  ) => readonly CandidateValidationToolingFailure[];
-  readonly listArtifacts: (validationRunId: string) => readonly CandidateValidationArtifact[];
-};
-
 export type CandidateValidationPolicySnapshot = {
   readonly sandboxMode: string;
   readonly prepare?: { readonly command: string; readonly timeoutSeconds: number };

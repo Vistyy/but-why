@@ -54,7 +54,7 @@ const parseCompletionMarker = (
 ):
   | { readonly completed: true; readonly exitCode: number; readonly stderr: string }
   | { readonly completed: false; readonly stderr: string } => {
-  const markerMatch = stderr.match(new RegExp(`\\n${marker}:(\\d+)\\n?$`));
+  const markerMatch = stderr.match(new RegExp(`\\n${escapeRegExp(marker)}:(\\d+)\\n?$`));
   if (markerMatch === null) return { completed: false, stderr };
   return {
     completed: true,
@@ -62,5 +62,7 @@ const parseCompletionMarker = (
     stderr: stderr.slice(0, markerMatch.index),
   };
 };
+
+const escapeRegExp = (value: string): string => value.replaceAll(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 const shellQuote = (value: string): string => `'${value.replaceAll("'", `'\\''`)}'`;

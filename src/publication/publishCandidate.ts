@@ -6,7 +6,6 @@ import { Effect } from "effect";
 import type {
   CandidateValidationPolicySnapshot,
   CandidateValidationRunRecord,
-  CandidateValidationRunStore,
 } from "../candidateValidation/candidateValidationRunStore.js";
 import type { ChangeValidationPersistence } from "../changeValidation/changeValidationPersistence.js";
 import type { RepositoryStorageError } from "../repositoryStorageError.js";
@@ -78,7 +77,9 @@ export type PublishCandidateResult =
 export const openCandidatePublication = (input: {
   readonly changeStore: ChangeStore;
   readonly candidateStore: CandidateStore;
-  readonly validationRunStore: CandidateValidationRunStore;
+  readonly validationRunStore: {
+    readonly getRunById: (validationRunId: string) => CandidateValidationRunRecord | undefined;
+  };
   readonly git: CandidatePublicationGit;
   readonly github: GitHubPullRequestGateway;
 }): CandidatePublication => ({

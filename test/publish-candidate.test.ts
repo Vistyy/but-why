@@ -1,9 +1,13 @@
 import { spawnSync } from "node:child_process";
 import { describe, expect, it } from "vitest";
 
+import type {
+  CandidateValidationRunRecord,
+  CompleteCandidateValidationRunInput,
+  StartCandidateValidationRunInput,
+} from "../src/candidateValidation/candidateValidationRunStore.js";
 import { openCandidatePublication } from "../src/publication/publishCandidate.js";
 import { openSqliteCandidateStore } from "../src/sqlite/sqliteCandidateStore.js";
-import { openSqliteCandidateValidationRunStore } from "../src/sqlite/sqliteCandidateValidationRunStore.js";
 import { openSqliteChangeStartStore } from "../src/sqlite/sqliteChangeStartStore.js";
 import { openSqliteChangeStore } from "../src/sqlite/sqliteChangeStore.js";
 import { openSqliteTaskStore } from "../src/sqlite/sqliteTaskStore.js";
@@ -432,7 +436,7 @@ const publicationFixture = (options: { readonly taskBacked?: boolean } = {}) => 
   const changeStore = openSqliteChangeStore(database);
   const taskStore = openSqliteTaskStore({ ...database, taskPrefix: "BY" });
   const candidateStore = openSqliteCandidateStore(database);
-  const validationRunStore = openSqliteCandidateValidationRunStore(database);
+  const validationRunStore = inMemoryValidationRuns();
   const startingCommit = git(root, "rev-parse", "refs/heads/main");
   const headSha = git(root, "rev-parse", "refs/heads/feature");
   const changeId = "e9af559b-5d22-4f22-a965-03c6e7af0938";
@@ -557,6 +561,36 @@ const capturePassingCandidate = (
     now: candidateNow,
   });
   return { candidate: captured.candidate, validationRunId: started.validationRunId };
+};
+
+const inMemoryValidationRuns = () => {
+  const runs = new Map<string, CandidateValidationRunRecord>();
+  return {
+    startOrReuse: (input: StartCandidateValidationRunInput) => {
+      const validationRunId = `validation-run-${runs.size + 1}`;
+      runs.set(validationRunId, {
+        id: validationRunId,
+        candidateId: input.candidateId,
+        policy: input.policy,
+        state: "running",
+        outcome: null,
+        createdAt: input.now,
+        updatedAt: input.now,
+      });
+      return { reused: false as const, validationRunId };
+    },
+    complete: (input: CompleteCandidateValidationRunInput) => {
+      const run = runs.get(input.validationRunId);
+      if (run === undefined) throw new Error("Validation Run was not found");
+      runs.set(input.validationRunId, {
+        ...run,
+        state: "complete",
+        outcome: input.outcome,
+        updatedAt: input.now,
+      });
+    },
+    getRunById: (validationRunId: string) => runs.get(validationRunId),
+  };
 };
 
 const createApprovedTask = (taskStore: ReturnType<typeof openSqliteTaskStore>) => {

@@ -8,7 +8,9 @@ import { prepareStateDatabase } from "../src/init/stateDatabase.js";
 import { publicTaskId } from "../src/task/taskId.js";
 import { openSqliteTaskStore } from "../src/sqlite/sqliteTaskStore.js";
 import { openSqliteCandidateStore } from "../src/sqlite/sqliteCandidateStore.js";
-import { openSqliteCandidateValidationRunStore } from "../src/sqlite/sqliteCandidateValidationRunStore.js";
+import type { ChangeValidationPersistence } from "../src/changeValidation/changeValidationPersistence.js";
+import { repositorySqlLayer } from "../src/sqlite/repositorySql.js";
+import { openSqliteChangeValidationPersistence } from "../src/sqlite/sqliteChangeValidationPersistence.js";
 import { openSqliteChangeStore } from "../src/sqlite/sqliteChangeStore.js";
 import { commitButWhyConfigAndRecordDefault, runByInProcessEffect } from "./support/by-cli.js";
 import { createInitializedRepo } from "./support/initializedRepo.js";
@@ -171,7 +173,6 @@ describe("Change inspection CLI", () => {
       });
       const changeStore = openSqliteChangeStore(database);
       const candidateStore = openSqliteCandidateStore(database);
-      const runStore = openSqliteCandidateValidationRunStore(database);
       const change = changeStore.createChange({
         repositoryCommonDirectory: join(root, ".git"),
         branchRef: "refs/heads/history",
@@ -196,18 +197,22 @@ describe("Change inspection CLI", () => {
       });
       if (!firstCandidate.ok || !secondCandidate.ok)
         throw new Error("Could not capture Candidates");
-      const newerRun = runStore.startOrReuse({
-        candidateId: secondCandidate.candidate.id,
-        headSha: secondCandidate.candidate.headSha,
-        policy: { sandboxMode: "none", checks: [], copyFiles: [] },
-        now: secondNow,
-      });
-      const olderCandidateRun = runStore.startOrReuse({
-        candidateId: firstCandidate.candidate.id,
-        headSha: firstCandidate.candidate.headSha,
-        policy: { sandboxMode: "none", checks: [], copyFiles: [] },
-        now: commandNow,
-      });
+      const newerRun = yield* withValidationPersistence(root, (persistence) =>
+        persistence.startOrReuse({
+          candidateId: secondCandidate.candidate.id,
+          headSha: secondCandidate.candidate.headSha,
+          policy: { sandboxMode: "none", checks: [], copyFiles: [] },
+          now: secondNow,
+        }),
+      );
+      const olderCandidateRun = yield* withValidationPersistence(root, (persistence) =>
+        persistence.startOrReuse({
+          candidateId: firstCandidate.candidate.id,
+          headSha: firstCandidate.candidate.headSha,
+          policy: { sandboxMode: "none", checks: [], copyFiles: [] },
+          now: commandNow,
+        }),
+      );
       if (newerRun.reused || olderCandidateRun.reused)
         throw new Error("Expected new Validation Runs");
 
@@ -348,7 +353,6 @@ describe("Change inspection CLI", () => {
       });
       const changeStore = openSqliteChangeStore(database);
       const candidateStore = openSqliteCandidateStore(database);
-      const runStore = openSqliteCandidateValidationRunStore(database);
       const changeResult = changeStore.createChange({
         repositoryCommonDirectory: join(root, ".git"),
         branchRef: "refs/heads/validated",
@@ -364,45 +368,53 @@ describe("Change inspection CLI", () => {
         now: secondNow,
       });
       if (!candidateResult.ok) throw new Error("Could not capture Candidate");
-      const run = runStore.startOrReuse({
-        candidateId: candidateResult.candidate.id,
-        headSha: "head-sha",
-        policy: { sandboxMode: "none", checks: [], copyFiles: [] },
-        now: secondNow,
-      });
+      const run = yield* withValidationPersistence(root, (persistence) =>
+        persistence.startOrReuse({
+          candidateId: candidateResult.candidate.id,
+          headSha: "head-sha",
+          policy: { sandboxMode: "none", checks: [], copyFiles: [] },
+          now: secondNow,
+        }),
+      );
       if (run.reused) throw new Error("Expected a new Validation Run");
-      runStore.recordCheckRound({
-        validationRunId: run.validationRunId,
-        producer: "types",
-        roundNumber: 1,
-        roundStatus: "failed",
-        phaseStatus: "failed",
-        artifactRecords: [],
-        finding: {
-          id: `${run.validationRunId}-F1`,
+      yield* withValidationPersistence(root, (persistence) =>
+        persistence.recordCheckRound({
           validationRunId: run.validationRunId,
-          phase: "checks",
           producer: "types",
-          title: "Check failed: types",
-          description: "Type checking failed.",
-          evidence: "exitCode: 1",
-          files: ["src/main.ts"],
-          artifactRefs: [],
-        },
-        now: commandNow,
-      });
-      runStore.recordToolingFailure({
-        validationRunId: run.validationRunId,
-        errorKind: "validation_workspace_setup_failed",
-        operationName: "cleanup_validation_worktree",
-        errorMessage: "Could not remove worktree.",
-        now: commandNow,
-      });
-      runStore.complete({
-        validationRunId: run.validationRunId,
-        outcome: "blocked",
-        now: commandNow,
-      });
+          roundNumber: 1,
+          roundStatus: "failed",
+          phaseStatus: "failed",
+          artifactRecords: [],
+          finding: {
+            id: `${run.validationRunId}-F1`,
+            validationRunId: run.validationRunId,
+            phase: "checks",
+            producer: "types",
+            title: "Check failed: types",
+            description: "Type checking failed.",
+            evidence: "exitCode: 1",
+            files: ["src/main.ts"],
+            artifactRefs: [],
+          },
+          now: commandNow,
+        }),
+      );
+      yield* withValidationPersistence(root, (persistence) =>
+        persistence.recordToolingFailure({
+          validationRunId: run.validationRunId,
+          errorKind: "validation_workspace_setup_failed",
+          operationName: "cleanup_validation_worktree",
+          errorMessage: "Could not remove worktree.",
+          now: commandNow,
+        }),
+      );
+      yield* withValidationPersistence(root, (persistence) =>
+        persistence.complete({
+          validationRunId: run.validationRunId,
+          outcome: "blocked",
+          now: commandNow,
+        }),
+      );
 
       const findings = yield* runByInProcessEffect(root, [
         "change",
@@ -440,3 +452,16 @@ describe("Change inspection CLI", () => {
     }),
   );
 });
+
+const withValidationPersistence = <A, E>(
+  root: string,
+  use: (persistence: ChangeValidationPersistence) => Effect.Effect<A, E>,
+) =>
+  Effect.flatMap(openSqliteChangeValidationPersistence(), use).pipe(
+    Effect.provide(
+      repositorySqlLayer({
+        statePath: join(root, ".git", "but-why", "state.sqlite"),
+        commonDirectory: join(root, ".git"),
+      }),
+    ),
+  );
