@@ -19,6 +19,7 @@ import type {
   ListTasksInput,
   ReplaceTaskDependenciesInput,
   StoredTaskRecord,
+  TaskStateTransitionResult,
   TransitionTaskStateInput,
   UpdateTaskContextInput,
 } from "../task/taskStore.js";
@@ -76,11 +77,8 @@ const createTask = (sql: SqlClient.SqlClient, taskPrefix: string, input: CreateT
 
 const replaceTaskDependencies = (sql: SqlClient.SqlClient, input: ReplaceTaskDependenciesInput) =>
   Effect.gen(function* () {
-    const current = yield* getTaskById(sql, input.taskId);
-    if (current === undefined) return { ok: false as const, code: "task_not_found" as const };
-    if (current.state !== "new" && current.state !== "todo") {
-      return { ok: false as const, code: "dependencies_locked" as const, state: current.state };
-    }
+    const target = yield* taskDependencyReplacementTarget(sql, input.taskId);
+    if (!target.ok) return target;
 
     const dependencyError = yield* validateDependencies(
       sql,
@@ -219,38 +217,69 @@ const transitionTaskState = (sql: SqlClient.SqlClient, input: TransitionTaskStat
   Effect.gen(function* () {
     const current = yield* getTaskById(sql, input.taskId);
     if (current === undefined) return { ok: false as const, code: "task_not_found" as const };
-    if (current.state === input.to) {
-      return input.to === "implementing"
-        ? { ok: true as const, changed: false, task: current }
-        : {
-            ok: false as const,
-            code: "invalid_task_state_transition" as const,
-            from: current.state,
-            to: input.to,
-          };
-    }
-    if (!canTransition(current.state, input.to)) {
-      return {
-        ok: false as const,
-        code: "invalid_task_state_transition" as const,
+
+    const decision = taskTransitionDecision(current, input);
+    if (decision !== undefined) return decision;
+
+    const blocked = yield* blockedTaskTransition(sql, input);
+    if (blocked !== undefined) return blocked;
+
+    return yield* persistTaskTransition(sql, input);
+  });
+
+const taskTransitionDecision = (
+  current: StoredTaskRecord,
+  input: TransitionTaskStateInput,
+): TaskStateTransitionResult | undefined => {
+  if (current.state === input.to) {
+    return input.to === "implementing"
+      ? { ok: true, changed: false, task: current }
+      : {
+          ok: false,
+          code: "invalid_task_state_transition",
+          from: current.state,
+          to: input.to,
+        };
+  }
+  return canTransition(current.state, input.to)
+    ? undefined
+    : {
+        ok: false,
+        code: "invalid_task_state_transition",
         from: current.state,
         to: input.to,
       };
-    }
-    if (input.to === "implementing") {
-      const blockedBy = (yield* dependencyFacts(sql, input.taskId, "prerequisites")).filter(
-        (dependency) => dependency.state !== "done",
-      );
-      if (blockedBy.length > 0) {
-        return { ok: false as const, code: "task_dependencies_unsatisfied" as const, blockedBy };
-      }
-    }
+};
+
+const blockedTaskTransition = (sql: SqlClient.SqlClient, input: TransitionTaskStateInput) => {
+  if (input.to !== "implementing") return Effect.succeed(undefined);
+  return Effect.map(dependencyFacts(sql, input.taskId, "prerequisites"), (dependencies) => {
+    const blockedBy = dependencies.filter((dependency) => dependency.state !== "done");
+    return blockedBy.length === 0
+      ? undefined
+      : { ok: false as const, code: "task_dependencies_unsatisfied" as const, blockedBy };
+  });
+};
+
+const persistTaskTransition = (sql: SqlClient.SqlClient, input: TransitionTaskStateInput) =>
+  Effect.gen(function* () {
     yield* sql`
       UPDATE tasks SET state = ${input.to}, updated_at = ${input.now} WHERE id = ${input.taskId}
     `;
     const updated = yield* getTaskById(sql, input.taskId);
     if (updated === undefined) return yield* invalidData("transition Task", "Task disappeared");
     return { ok: true as const, changed: true, task: updated };
+  });
+
+const taskDependenciesAreEditable = (state: TaskState): boolean =>
+  state === "new" || state === "todo";
+
+const taskDependencyReplacementTarget = (sql: SqlClient.SqlClient, taskId: PublicTaskId) =>
+  Effect.map(getTaskById(sql, taskId), (current) => {
+    if (current === undefined) return { ok: false as const, code: "task_not_found" as const };
+    return taskDependenciesAreEditable(current.state)
+      ? { ok: true as const }
+      : { ok: false as const, code: "dependencies_locked" as const, state: current.state };
   });
 
 type DependencyValidationResult = {
@@ -271,24 +300,51 @@ const validateDependencies = (
   Effect.gen(function* () {
     const seen = new Set<string>();
     for (const prerequisiteTaskId of prerequisiteTaskIds) {
-      if (seen.has(prerequisiteTaskId)) {
-        return { ok: false, code: "dependency_duplicate", taskId: prerequisiteTaskId };
-      }
-      seen.add(prerequisiteTaskId);
-      if (prerequisiteTaskId === dependentTaskId) {
-        return { ok: false, code: "dependency_self", taskId: prerequisiteTaskId };
-      }
-      if ((yield* getTaskById(sql, prerequisiteTaskId)) === undefined) {
-        return { ok: false, code: "dependency_unknown_task", taskId: prerequisiteTaskId };
-      }
-      if (
-        dependentExists &&
-        (yield* dependencyPathExists(sql, prerequisiteTaskId, dependentTaskId))
-      ) {
-        return { ok: false, code: "dependency_cycle" };
-      }
+      const localError = validateDependencyIdentity(seen, dependentTaskId, prerequisiteTaskId);
+      if (localError !== undefined) return localError;
+      const storedError = yield* validateStoredDependency(
+        sql,
+        dependentTaskId,
+        prerequisiteTaskId,
+        dependentExists,
+      );
+      if (storedError !== undefined) return storedError;
     }
     return undefined;
+  });
+
+const validateDependencyIdentity = (
+  seen: Set<string>,
+  dependentTaskId: PublicTaskId,
+  prerequisiteTaskId: PublicTaskId,
+): DependencyValidationResult | undefined => {
+  if (seen.has(prerequisiteTaskId)) {
+    return { ok: false, code: "dependency_duplicate", taskId: prerequisiteTaskId };
+  }
+  seen.add(prerequisiteTaskId);
+  return prerequisiteTaskId === dependentTaskId
+    ? { ok: false, code: "dependency_self", taskId: prerequisiteTaskId }
+    : undefined;
+};
+
+const validateStoredDependency = (
+  sql: SqlClient.SqlClient,
+  dependentTaskId: PublicTaskId,
+  prerequisiteTaskId: PublicTaskId,
+  dependentExists: boolean,
+) =>
+  Effect.gen(function* () {
+    if ((yield* getTaskById(sql, prerequisiteTaskId)) === undefined) {
+      return {
+        ok: false as const,
+        code: "dependency_unknown_task" as const,
+        taskId: prerequisiteTaskId,
+      };
+    }
+    if (!dependentExists) return undefined;
+    return (yield* dependencyPathExists(sql, prerequisiteTaskId, dependentTaskId))
+      ? { ok: false as const, code: "dependency_cycle" as const }
+      : undefined;
   });
 
 const dependencyPathExists = (
