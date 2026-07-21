@@ -63,7 +63,7 @@ rule:
 id: sandcastle-factories-belong-to-workspace
 language: TypeScript
 severity: error
-message: Load Sandcastle runtime namespaces or factories only in src/validation/createValidationWorkspace.ts.
+message: Load Sandcastle workspace factories only in src/validation/createValidationWorkspace.ts.
 files:
   - src/**/*.ts
 ignores:

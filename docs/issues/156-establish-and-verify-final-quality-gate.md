@@ -2,7 +2,7 @@
 
 ## Specification
 
-- [Target quality policy](../tooling.md#target-quality-policy)
+- [Target quality policy](../tooling.md#quality-policy)
 - [Task 148 audited baseline](148-establish-audited-quality-baseline.md)
 - [Architecture](../architecture.md)
 
@@ -30,8 +30,8 @@ A disposable checkout runs `nix develop -c just init`, `nix develop -c just qual
 
 - [ ] Coverage includes every executable production module and meets the achieved statement, branch, function, and line floors.
 - [ ] Coverage boundary C1 is classified through the installable-package process seam without adding artificial in-process entrypoint behavior.
-- [ ] Fallow dead-code, ownership, duplication, and direct health checks pass.
-- [ ] ast-grep native tests, snapshots, and production scan pass.
+- [ ] Fallow dead-code, ownership, and direct health checks block regressions, and its duplication report has no findings.
+- [ ] ast-grep native valid and invalid fixtures and the production scan pass.
 - [ ] Biome, TypeScript, Vitest, Remark, configuration, build, and package checks pass through Just.
 - [ ] Existing tools enforce deterministic contracts, while architecture documentation and Standards review own semantic decisions.
 - [ ] `just init` and `just quality` pass in a disposable locked-Nix checkout.

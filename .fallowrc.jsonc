@@ -5,8 +5,14 @@
   "rulePacks": ["./fallow-rules/architecture.json"],
   "rules": {
     "boundary-violation": "error",
-    "stale-suppressions": "error",
+    "dev-dependencies-in-production": "error",
+    "re-export-cycle": "error",
     "require-suppression-reason": "error",
+    "stale-suppressions": "error",
+    "test-only-dependencies": "error",
+    "type-only-dependencies": "error",
+    "unused-dev-dependencies": "error",
+    "unused-optional-dependencies": "error",
     "policy-violation": "error"
   },
   "health": {
@@ -102,14 +108,32 @@
         "name": "change-workflows",
         "patterns": [
           "src/candidateValidation/inspectCandidateValidationRun.ts",
-          "src/change/**",
-          "src/changeCandidateCapture/**",
-          "src/publication/**"
+          "src/change/changeUseCases.ts",
+          "src/change/inspectChange.ts",
+          "src/change/reconcileChange.ts",
+          "src/change/submitChange.ts",
+          "src/changeCandidateCapture/captureLocalCandidate.ts",
+          "src/publication/publishCandidate.ts"
         ]
       },
       {
         "name": "application",
-        "patterns": ["src/**"]
+        "patterns": [
+          "src/acceptanceReview/**",
+          "src/agent/**",
+          "src/candidateValidation/**",
+          "src/change/handoffFile.ts",
+          "src/contracts/**",
+          "src/output/**",
+          "src/repositoryPreparation/runRepositoryPreparation.ts",
+          "src/specialistReview/**",
+          "src/submit/**",
+          "src/task/files/**",
+          "src/task/repoTaskIds.ts",
+          "src/task/taskUseCases.ts",
+          "src/validation/**",
+          "src/validationRun/**"
+        ]
       }
     ],
     "rules": [
@@ -172,7 +196,7 @@
       },
       {
         "from": "application",
-        "allow": ["application", "domain", "ports", "repository-context"]
+        "allow": ["domain", "ports", "repository-context"]
       }
     ],
     "coverage": {

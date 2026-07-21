@@ -20,7 +20,7 @@
 
 Remove `StateDatabase.runSync`, `StateDatabase.withConnection`, `ManagedRuntime` construction from repository storage, and the synchronous SQLite connection façade.
 
-Remove duplicate migration and store composition after every production caller uses the Effect-native contract from Task 146.
+Remove duplicate migration and store composition after Tasks 149 through 153 migrate every production caller to the Effect-native contract.
 
 Move any remaining Effect runtime execution to the executable boundary in `src/main.ts`.
 

@@ -41,6 +41,7 @@ invalid:
 id: sandcastle-factories-belong-to-workspace
 valid:
   - import type { Sandbox } from "@ai-hero/sandcastle";
+  - import { pi, type Sandbox } from "@ai-hero/sandcastle";
   - createValidationWorkspace(input)
 invalid:
   - import { createSandbox as makeSandbox } from "@ai-hero/sandcastle";

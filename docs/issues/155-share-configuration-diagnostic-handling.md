@@ -4,7 +4,7 @@
 
 - [Configuration reference](../config.md)
 - [Validate configuration and reviewer contracts](039-validate-config-and-reviewer-contracts-with-effect-schema.md)
-- [Target quality policy](../tooling.md#target-quality-policy)
+- [Target quality policy](../tooling.md#quality-policy)
 
 ## Behaviors owned
 

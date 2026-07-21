@@ -3,7 +3,7 @@
 ## Specification
 
 - [Codebase quality tooling PRD](../prds/codebase-quality-tooling-prd.md)
-- [Target quality policy](../tooling.md#target-quality-policy)
+- [Target quality policy](../tooling.md#quality-policy)
 - [Module-owned storage and Change transactions](../adr/0014-use-module-owned-storage-and-change-transactions.md)
 
 ## Behaviors owned
@@ -11,9 +11,9 @@
 - Just exposes the supported initialization, test, coverage, build, documentation, configuration, and quality commands.
 - The locked Nix environment provides Node.js 24, pnpm 10.28.0, and Just.
 - Coverage measures every executable production module through Istanbul and reports untested runtime code at zero.
-- The coverage configuration records declaration-only modules separately because TypeScript erases them before instrumentation.
-- Fallow enforces the approved ownership graph and direct health limits.
-- ast-grep enforces only current closed syntax contracts with native fixtures and reviewed snapshots.
+- TypeScript erases declaration-only modules before Istanbul instrumentation.
+- Fallow enforces named ownership seams and direct health limits and reports duplication evidence.
+- ast-grep enforces only current closed syntax contracts with native valid and invalid fixtures.
 - Biome, TypeScript, Vitest, Remark, and each owning tool validate their supported files without custom policy reimplementations.
 
 ## What to build
@@ -88,7 +88,7 @@ Sixteen declaration-only modules compile without measurable statements.
 | --- | --- | --- |
 | C1 | The process entry is measured at zero because installable-package tests execute it in child processes. | Task 156 |
 | C2 | Direct output-format selection lacks measured branch coverage. | Task 153 |
-| C3 | The temporary database shutdown helper has no production caller. | Task 147 |
+| C3 | `closeAllStateDatabases` in `src/init/stateDatabase.ts` is test-visible but has no production caller. | Task 147 |
 
 ## Primary verification seam
 
@@ -96,16 +96,17 @@ Run `just quality` in the locked Nix environment and compare its output with the
 
 ## Acceptance criteria
 
-- [ ] `just init` succeeds in the locked Nix environment and rejects unsupported Node.js or pnpm versions.
-- [ ] Tests pass with 344 passing tests and one conditional smoke-test skip.
-- [ ] Coverage reports every executable production module, including zero-covered modules, and records the sixteen declaration-only modules separately without artificial runtime statements.
-- [ ] Coverage reports 81.97% statements, 68.94% branches, 90.20% functions, and 84.79% lines before repairs.
-- [ ] Formatting, linting, type checking, documentation, configuration, ast-grep, and build checks pass.
-- [ ] ast-grep has ten approved syntax rules with native fixtures and reviewed diagnostic snapshots.
-- [ ] Fallow reports exactly five ownership violations, fifteen duplication groups, and thirteen direct CRAP findings.
-- [ ] Disposable probes confirm that Fallow blocks Change workflow imports from adapters or composition, CLI imports from storage, and domain imports from Node infrastructure.
-- [ ] Fallow reports large functions as review evidence without a custom size gate.
-- [ ] No custom quality script or exception manifest duplicates an owning tool or semantic review.
+- [x] `just init` succeeds in the locked Nix environment and rejects unsupported Node.js or pnpm versions.
+- [x] Tests pass with 344 passing tests and one conditional smoke-test skip.
+- [x] Coverage reports every executable production module, including zero-covered modules.
+- [x] The sixteen declaration-only modules remain naturally absent from executable coverage without artificial runtime statements or path exclusions.
+- [x] Coverage reports 81.97% statements, 68.94% branches, 90.20% functions, and 84.79% lines before repairs.
+- [x] Formatting, linting, type checking, documentation, configuration, ast-grep, and build checks pass.
+- [x] ast-grep has ten approved syntax rules with native valid and invalid fixtures.
+- [x] Fallow reports exactly five ownership violations, fifteen duplication groups, and thirteen direct CRAP findings.
+- [x] Disposable probes confirm that Fallow blocks Change workflow imports from Adapters or composition, CLI imports from storage, and domain imports from Node infrastructure.
+- [x] Fallow reports large functions as review evidence without a custom size gate.
+- [x] No custom quality script or exception manifest duplicates an owning tool or semantic review.
 
 ## Blocked by
 

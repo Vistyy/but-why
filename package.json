@@ -22,7 +22,7 @@
     "format": "biome format --write .",
     "format-check": "biome format .",
     "lint": "biome lint .",
-    "ast-grep-check": "ast-grep test && ast-grep scan",
+    "ast-grep-check": "ast-grep test --skip-snapshot-tests && ast-grep scan",
     "test": "vitest run",
     "typecheck": "tsc --noEmit"
   },

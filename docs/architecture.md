@@ -40,10 +40,7 @@ But Why stores operational state under `<git-common-dir>/but-why/`.
 Repo Config remains tracked at `.but-why/config.json` in each worktree.
 Shared state identifies the Local Repository by its Git common directory.
 
-SQLite state uses one current baseline and does not support historical migration-chain upgrades.
-Task 137 establishes the Effect SQL baseline and shared state foundation.
-Task 146 migrates surviving stores to Effect programs.
-Task 147 removes the temporary synchronous storage path.
+State databases initialize from one current schema baseline.
 
 ## CLI
 

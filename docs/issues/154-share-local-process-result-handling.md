@@ -2,7 +2,7 @@
 
 ## Specification
 
-- [Target quality policy](../tooling.md#target-quality-policy)
+- [Target quality policy](../tooling.md#quality-policy)
 - [Launch the Task implementer in Herdr](130-launch-task-implementer-in-herdr.md)
 - [Start prepared Changes](133-start-prepared-changes.md)
 

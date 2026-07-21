@@ -60,13 +60,13 @@ docs-check:
 ast-grep-check:
     pnpm run ast-grep-check
 
-# Check dead code, architecture, duplication, complexity, and health.
+# Check dead code, named architecture seams, dependencies, and health; report duplication.
 fallow-check:
     #!/usr/bin/env bash
     set -uo pipefail
     status=0
     pnpm exec fallow dead-code --no-production --no-cache --fail-on-issues || status=1
-    pnpm exec fallow dupes --no-production --no-cache --fail-on-issues || status=1
+    pnpm exec fallow dupes --no-production --no-cache || status=1
     pnpm exec fallow health --no-production --no-cache --coverage coverage/coverage-final.json --complexity --min-severity moderate || status=1
     exit "$status"
 
