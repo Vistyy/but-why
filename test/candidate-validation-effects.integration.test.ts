@@ -3,7 +3,10 @@ import { join } from "node:path";
 import { expect, layer } from "@effect/vitest";
 import { Effect, Fiber, Layer, Option, TestClock } from "effect";
 
-import { piReviewerAgentRuntime } from "../src/agent/reviewerAgentRuntime.js";
+import {
+  piReviewerAgentRuntime,
+  type ReviewerAgentRuntime,
+} from "../src/agent/reviewerAgentRuntime.js";
 import { captureLocalCandidate } from "./support/changeCandidateCapture.js";
 import {
   CandidateValidation,
@@ -55,6 +58,41 @@ const policy = {
   checks: [{ id: "quality", command: "true", timeoutSeconds: 1 }],
   copyFiles: [],
   specialistReviews: [],
+};
+
+const reviewerProfile = {
+  agentRuntime: "pi" as const,
+  agentModel: "test/model",
+};
+const completePolicy = {
+  ...policy,
+  prepare: { command: "true", timeoutSeconds: 1 },
+  acceptanceReview: {
+    instructions: "Review the Candidate against the approved intent.",
+    instructionsSource: "built_in" as const,
+    agentProfile: "test",
+    profileSource: "global" as const,
+    profile: reviewerProfile,
+  },
+  specialistReviews: [
+    {
+      id: "standards",
+      instructions: "Review repository standards.",
+      instructionsSource: "repo" as const,
+      agentProfile: "test",
+      profileSource: "global" as const,
+      profile: reviewerProfile,
+    },
+  ],
+};
+const passingReviewer: ReviewerAgentRuntime = {
+  review: () =>
+    Effect.succeed({
+      ok: true,
+      report: { findings: [] },
+      attempts: 1,
+      stdout: '<reviewer-output>{"findings":[]}</reviewer-output>',
+    }),
 };
 
 const toolingFailures = (): readonly ValidationToolingFailure[] => [
@@ -193,6 +231,100 @@ layer(Layer.empty)("Candidate validation Effect composition", (it) => {
           expect(productionResult).toMatchObject({ ok: true, reused: true, outcome: "passed" });
         }).pipe(Effect.provide(candidateValidationTestLayer(repo, persistence)));
       }).pipe(Effect.provide(repositoryLayer));
+    }),
+  );
+
+  it.scoped("persists and inspects the complete validation phase history", () =>
+    Effect.gen(function* () {
+      const repo = candidateReadyRepo();
+      const captured = yield* captureLocalCandidate({ cwd: repo, now });
+      if (!captured.ok) throw new Error(`Candidate capture failed: ${captured.code}`);
+      const sqliteInput = candidateSqliteInput(repo);
+      const repositoryLayer = repositorySqlLayer({
+        statePath: sqliteInput.statePath,
+        commonDirectory: sqliteInput.commonDirectory ?? commonDirectory(repo),
+      });
+
+      const validationRunId = yield* Effect.gen(function* () {
+        const persistence = yield* openSqliteChangeValidationPersistence();
+        return yield* Effect.gen(function* () {
+          const validation = yield* CandidateValidation;
+          const result = yield* validation.validateTaskBackedCandidate({
+            candidateId: captured.candidateId,
+            comparisonBaseSha: captured.comparisonBaseSha,
+            headSha: captured.headSha,
+            acceptanceContext: {
+              version: 1,
+              title: "Approved intent",
+              description: "Deliver the complete validation history.",
+              comments: [],
+            },
+            policy: completePolicy,
+            now,
+          });
+          if (!result.ok) throw new Error("Expected complete validation to pass");
+          return result.validationRunId;
+        }).pipe(
+          Effect.provide(
+            localCandidateValidationLayer({
+              localRepositoryMainCheckoutRoot: repo,
+              artifactsRoot: join(commonDirectory(repo), "but-why", "artifacts"),
+              persistence,
+              reviewerAgentRuntime: passingReviewer,
+            }),
+          ),
+        );
+      }).pipe(Effect.provide(repositoryLayer));
+
+      const validationRun = yield* runByInProcessEffect(repo, [
+        "validation-run",
+        "show",
+        validationRunId,
+        "--output",
+        "json",
+      ]);
+      expect(validationRun.status).toBe(0);
+      expect(JSON.parse(validationRun.stdout)).toMatchObject({
+        phases: [
+          { phase: "prepare", rounds: [{ producer: "prepare", status: "passed" }] },
+          { phase: "checks", rounds: [{ producer: "quality", status: "passed" }] },
+          {
+            phase: "acceptance_review",
+            rounds: [{ producer: "acceptance", status: "passed" }],
+          },
+          {
+            phase: "specialist_review",
+            rounds: [{ producer: "standards", status: "passed" }],
+          },
+        ],
+        findings: [],
+        toolingFailures: [],
+      });
+      const validationHistory = JSON.parse(validationRun.stdout) as {
+        readonly artifacts: readonly { readonly phase: string; readonly producer: string }[];
+      };
+      expect(validationHistory.artifacts).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ phase: "prepare", producer: "prepare" }),
+          expect.objectContaining({ phase: "checks", producer: "quality" }),
+          expect.objectContaining({ phase: "acceptance_review", producer: "acceptance" }),
+          expect.objectContaining({ phase: "specialist_review", producer: "standards" }),
+        ]),
+      );
+
+      const findings = yield* runByInProcessEffect(repo, [
+        "change",
+        "findings",
+        captured.changeId,
+        "--output",
+        "json",
+      ]);
+      expect(findings.status).toBe(0);
+      expect(JSON.parse(findings.stdout)).toMatchObject({
+        validationRun: { id: validationRunId, outcome: "passed" },
+        findings: [],
+        toolingFailures: [],
+      });
     }),
   );
 
