@@ -71,8 +71,11 @@ Focused storage integration tests additionally verify typed failures and rollbac
 ## Completion
 
 - Implementation: `627bb9892275d2c543c7ca395ede0968437d258e`.
-- Verification: 361 tests passed and one intentionally skipped; type checking, linting, formatting, ast-grep, coverage, dead-code checks, and dependency checks passed.
-- Approved baseline exception: the five pre-existing Fallow boundary violations remain unchanged for their owning migration tasks.
+- Verification: 361 tests passed and one intentionally skipped; type checking, linting, formatting, ast-grep, coverage, dead-code checks, and dependency checks reported no new failures.
+- `nix develop -c just quality` remained nonzero because the five user-approved, pre-existing Fallow boundary violations remain for their owning migration tasks.
+- The advisory health report contained 11 threshold findings, down from 12 at the baseline.
+- Spec review: `APPROVED WITH REQUIRED COMMENTS`; the required completion update is resolved.
+- Standards review: `APPROVED WITH REQUIRED COMMENTS`; the required verification wording is resolved.
 
 ## Blocked by
 
