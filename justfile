@@ -23,11 +23,11 @@ init:
 # Run all quality checks.
 quality:
     just coverage
-    just quality-static
+    just _quality-static
     just build
 
-# Run independent static checks in parallel.
-quality-static:
+# Run internal static checks after coverage is available.
+_quality-static:
     #!/usr/bin/env bash
     set -uo pipefail
     just docs-check & docs_pid=$!
