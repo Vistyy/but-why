@@ -65,6 +65,8 @@ describe("Change Submit orchestration", () => {
               } as const;
             }),
           validateTaskBackedCandidate: () => Effect.die("Acceptance Review was not expected"),
+          listFindings: () => Effect.succeed([]),
+          listToolingFailures: () => Effect.succeed([]),
           listRounds: () => Effect.succeed([]),
         });
 
@@ -120,6 +122,8 @@ describe("Change Submit orchestration", () => {
               outcome: "passed",
             } as const;
           }),
+        listFindings: () => Effect.succeed([]),
+        listToolingFailures: () => Effect.succeed([]),
         listRounds: () => Effect.succeed([]),
       });
 
@@ -169,6 +173,8 @@ describe("Change Submit orchestration", () => {
         const validationLayer = Layer.succeed(CandidateValidation, {
           validateCandidate: () => Effect.die("Duplicate validation"),
           validateTaskBackedCandidate: () => Effect.die("Duplicate validation"),
+          listFindings: () => Effect.succeed([]),
+          listToolingFailures: () => Effect.succeed([]),
           listRounds: () => Effect.succeed([]),
         });
 
@@ -195,6 +201,8 @@ describe("Change Submit orchestration", () => {
         validateCandidate: () => Effect.die("Validation must not start without a GitHub target"),
         validateTaskBackedCandidate: () =>
           Effect.die("Validation must not start without a GitHub target"),
+        listFindings: () => Effect.succeed([]),
+        listToolingFailures: () => Effect.succeed([]),
         listRounds: () => Effect.succeed([]),
       });
 
@@ -231,6 +239,8 @@ describe("Change Submit orchestration", () => {
             validationRunId: "run-1",
             outcome: "blocked",
           }),
+        listFindings: () => Effect.succeed([finding]),
+        listToolingFailures: () => Effect.succeed([]),
         listRounds: () => Effect.succeed([]),
       });
 
@@ -273,6 +283,8 @@ describe("Change Submit orchestration", () => {
             validationRunId: "run-1",
             outcome: "tooling_failed",
           }),
+        listFindings: () => Effect.succeed([]),
+        listToolingFailures: () => Effect.succeed([toolingFailure]),
         listRounds: () => Effect.succeed([]),
       });
 
@@ -434,11 +446,15 @@ const toolingFailure = {
 } as const;
 
 const finding = {
+  id: "finding-1",
   validationRunId: "run-1",
   phase: "checks",
   producer: "quality",
-  findingId: "finding-1",
   title: "Quality failed",
-  body: "Fix the quality check.",
+  description: "Fix the quality check.",
+  evidence: "quality exited with code 1",
+  files: [],
+  artifactRefs: [],
   createdAt: now,
+  updatedAt: now,
 } as const;

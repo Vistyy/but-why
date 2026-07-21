@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { chmodSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { expect, it } from "@effect/vitest";
@@ -116,7 +116,7 @@ describe("by change submit", () => {
   it.effect("validates and publishes a passing Task-backed Candidate", () =>
     withPublicationTools(() =>
       Effect.gen(function* () {
-        const root = initializedSubmitRepository("true");
+        const root = initializedFullValidationSubmitRepository();
         writeFileSync(
           join(root, ".test-global-config.json"),
           `${JSON.stringify({
@@ -148,11 +148,52 @@ describe("by change submit", () => {
         );
 
         expect(result.status).toBe(0);
-        expect(JSON.parse(result.stdout)).toMatchObject({
+        const submission = JSON.parse(result.stdout) as {
+          readonly validationRunId: string;
+        };
+        expect(submission).toMatchObject({
           changeId: change.change.id,
           status: "published",
           created: true,
           pullRequest: { number: 42, url: "https://github.test/acme/repo/pull/42" },
+        });
+
+        const validationRun = yield* runByInProcessEffect(root, [
+          "validation-run",
+          "show",
+          submission.validationRunId,
+          "--output",
+          "json",
+        ]);
+        expect(validationRun.status).toBe(0);
+        expect(JSON.parse(validationRun.stdout)).toMatchObject({
+          phases: [
+            { phase: "prepare", rounds: [{ producer: "prepare", status: "passed" }] },
+            { phase: "checks", rounds: [{ producer: "quality", status: "passed" }] },
+            {
+              phase: "acceptance_review",
+              rounds: [{ producer: "acceptance", status: "passed" }],
+            },
+            {
+              phase: "specialist_review",
+              rounds: [{ producer: "standards", status: "passed" }],
+            },
+          ],
+          findings: [],
+        });
+
+        const findings = yield* runByInProcessEffect(root, [
+          "change",
+          "findings",
+          change.change.id,
+          "--output",
+          "json",
+        ]);
+        expect(findings.status).toBe(0);
+        expect(JSON.parse(findings.stdout)).toMatchObject({
+          validationRun: { id: submission.validationRunId, outcome: "passed" },
+          findings: [],
+          toolingFailures: [],
         });
         expect(tasks.getTaskById(taskId)?.state).toBe("ready");
       }),
@@ -324,6 +365,32 @@ const initializedSubmitRepository = (checkCommand: string): string => {
       taskPrefix: "BY",
       validation: { checks: [{ id: "quality", command: checkCommand }] },
     })}\n`,
+  );
+  commitButWhyConfigAndRecordDefault(root);
+  return root;
+};
+
+const initializedFullValidationSubmitRepository = (): string => {
+  const root = createInitializedRepo();
+  writeFileSync(
+    join(root, ".but-why/config.json"),
+    `${JSON.stringify({
+      taskPrefix: "BY",
+      prepare: { command: "true" },
+      validation: { checks: [{ id: "quality", command: "true" }] },
+      review: { specialists: ["standards"] },
+      reviewers: {
+        standards: {
+          instructionsFile: ".but-why/reviewers/standards.md",
+          agentProfile: "test",
+        },
+      },
+    })}\n`,
+  );
+  mkdirSync(join(root, ".but-why/reviewers"), { recursive: true });
+  writeFileSync(
+    join(root, ".but-why/reviewers/standards.md"),
+    "Review the Candidate for repository standards.\n",
   );
   commitButWhyConfigAndRecordDefault(root);
   return root;

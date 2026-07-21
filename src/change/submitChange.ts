@@ -6,7 +6,10 @@ import type {
   CandidateValidationRunStore,
   CandidateValidationToolingFailure,
 } from "../candidateValidation/candidateValidationRunStore.js";
-import { CandidateValidation } from "../candidateValidation/validateCandidate.js";
+import {
+  CandidateValidation,
+  type CandidateValidationService,
+} from "../candidateValidation/validateCandidate.js";
 import type {
   CaptureLocalCandidateInput,
   CaptureLocalCandidateResult,
@@ -229,7 +232,8 @@ const validateAndPublish = (
             now,
           });
     if (validationResult.outcome !== "passed") {
-      return blockedValidationResult(
+      return yield* blockedValidationResult(
+        validation,
         dependencies,
         change,
         candidate,
@@ -267,38 +271,40 @@ const validateAndPublish = (
   });
 
 const blockedValidationResult = (
+  candidateValidation: CandidateValidationService,
   dependencies: Parameters<typeof openChangeSubmit>[0],
   change: ReadyChange,
   candidate: CapturedCandidate,
   validation: { readonly outcome: "blocked" | "tooling_failed"; readonly validationRunId: string },
   now: string,
-): ChangeSubmitResult => {
-  if (
-    change.taskId !== null &&
-    !transitionTask(dependencies.taskStore, change, "implementing", now)
-  ) {
-    return taskTransitionFailure(change);
-  }
-  return validation.outcome === "blocked"
-    ? {
-        ok: false,
-        code: "validation_findings",
-        changeId: change.id,
-        candidateId: candidate.candidateId,
-        validationRunId: validation.validationRunId,
-        findings: dependencies.validationRunStore.listFindings(validation.validationRunId),
-      }
-    : {
-        ok: false,
-        code: "validation_tooling_failed",
-        changeId: change.id,
-        candidateId: candidate.candidateId,
-        validationRunId: validation.validationRunId,
-        toolingFailures: dependencies.validationRunStore.listToolingFailures(
-          validation.validationRunId,
-        ),
-      };
-};
+): Effect.Effect<ChangeSubmitResult, RepositoryStorageError> =>
+  Effect.gen(function* () {
+    if (
+      change.taskId !== null &&
+      !transitionTask(dependencies.taskStore, change, "implementing", now)
+    ) {
+      return taskTransitionFailure(change);
+    }
+    return validation.outcome === "blocked"
+      ? {
+          ok: false,
+          code: "validation_findings",
+          changeId: change.id,
+          candidateId: candidate.candidateId,
+          validationRunId: validation.validationRunId,
+          findings: yield* candidateValidation.listFindings(validation.validationRunId),
+        }
+      : {
+          ok: false,
+          code: "validation_tooling_failed",
+          changeId: change.id,
+          candidateId: candidate.candidateId,
+          validationRunId: validation.validationRunId,
+          toolingFailures: yield* candidateValidation.listToolingFailures(
+            validation.validationRunId,
+          ),
+        };
+  });
 
 const restoreImplementationThen = (
   dependencies: Parameters<typeof openChangeSubmit>[0],

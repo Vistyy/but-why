@@ -80,13 +80,15 @@ export class CandidateReviewerAgentRuntime extends Context.Tag("CandidateReviewe
   ReviewerAgentRuntime
 >() {}
 
-type CandidateValidationService = {
+export type CandidateValidationService = {
   readonly validateCandidate: (
     input: ValidateCandidateInput,
   ) => Effect.Effect<ValidateCandidateResult, RepositoryStorageError>;
   readonly validateTaskBackedCandidate: (
     input: ValidateTaskBackedCandidateInput,
   ) => Effect.Effect<ValidateCandidateResult, RepositoryStorageError>;
+  readonly listFindings: ChangeValidationPersistence["listFindings"];
+  readonly listToolingFailures: ChangeValidationPersistence["listToolingFailures"];
   readonly listRounds: (validationRunId: string) => Effect.Effect<
     readonly {
       readonly producer: string;
@@ -214,6 +216,8 @@ const makeCandidateValidation = (dependencies: {
   return {
     validateCandidate: (input) => validate(input),
     validateTaskBackedCandidate: (input) => validate(input),
+    listFindings: dependencies.persistence.listFindings,
+    listToolingFailures: dependencies.persistence.listToolingFailures,
     listRounds: (validationRunId) =>
       Effect.map(dependencies.persistence.listRounds(validationRunId), (rounds) =>
         rounds.map(({ producer, status }) => ({ producer, status })),
