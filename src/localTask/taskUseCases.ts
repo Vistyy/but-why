@@ -1,23 +1,16 @@
 import { existsSync } from "node:fs";
+import { Effect } from "effect";
 
-import { openRepoLocalStores } from "../init/repoLocalStores.js";
-import { loadRepoLocalContext, type LoadRepoLocalContextError } from "../init/repoContext.js";
+import type { RepositoryStorageError } from "../repositoryStorageError.js";
+import { repositorySqlLayer } from "../sqlite/repositorySql.js";
+import { openSqliteTaskPersistence } from "../sqlite/sqliteTaskPersistence.js";
 import { openTaskUseCases, type TaskUseCases } from "../task/taskUseCases.js";
+import { loadRepoLocalContext, type LoadRepoLocalContextError } from "../init/repoContext.js";
 
 export type LoadTaskUseCasesInput = {
   readonly cwd: string;
   readonly requireState: boolean;
 };
-
-export type LoadTaskUseCasesResult =
-  | {
-      readonly ok: true;
-      readonly tasks: TaskUseCases;
-    }
-  | {
-      readonly ok: false;
-      readonly error: LoadTaskUseCasesError;
-    };
 
 export type LoadTaskUseCasesError =
   | LoadRepoLocalContextError
@@ -26,27 +19,35 @@ export type LoadTaskUseCasesError =
       readonly taskPrefix: string;
     };
 
-export const loadTaskUseCases = (input: LoadTaskUseCasesInput): LoadTaskUseCasesResult => {
-  const repoContext = loadRepoLocalContext(input.cwd);
+export type WithTaskUseCasesResult<A> =
+  | { readonly ok: true; readonly value: A }
+  | { readonly ok: false; readonly error: LoadTaskUseCasesError };
 
-  if (!repoContext.ok) {
-    return repoContext;
-  }
+export const withTaskUseCases = <A, E, R>(
+  input: LoadTaskUseCasesInput,
+  use: (tasks: TaskUseCases) => Effect.Effect<A, E, R>,
+): Effect.Effect<WithTaskUseCasesResult<A>, E | RepositoryStorageError, R> => {
+  const repoContext = loadRepoLocalContext(input.cwd);
+  if (!repoContext.ok) return Effect.succeed(repoContext);
 
   if (input.requireState && !existsSync(repoContext.context.paths.statePath)) {
-    return {
+    return Effect.succeed({
       ok: false,
       error: {
         code: "state_store_unavailable",
         taskPrefix: repoContext.context.taskPrefix,
       },
-    };
+    });
   }
 
-  const { taskStore } = openRepoLocalStores(repoContext.context);
-
-  return {
-    ok: true,
-    tasks: openTaskUseCases(repoContext.context, { taskStore }),
-  };
+  return openSqliteTaskPersistence(repoContext.context.taskPrefix).pipe(
+    Effect.flatMap((persistence) => use(openTaskUseCases(repoContext.context, persistence))),
+    Effect.map((value) => ({ ok: true as const, value })),
+    Effect.provide(
+      repositorySqlLayer({
+        statePath: repoContext.context.paths.statePath,
+        commonDirectory: repoContext.context.commonDirectory,
+      }),
+    ),
+  );
 };

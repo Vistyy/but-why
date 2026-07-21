@@ -1,12 +1,14 @@
+import { Effect } from "effect";
+
 import type { CliResult } from "../../../cliResults.js";
-import { runtimeError, stateStoreUnavailable, success, usageError } from "../../../cliResults.js";
+import { runtimeError, success, usageError } from "../../../cliResults.js";
 import { withGlobalHelpFlags } from "../../../cliHelp.js";
 import { parseCliTaskIdValue } from "../../../cliTaskId.js";
 import { readCommentFile, type CommentFileReadError } from "../../../task/files/commentFile.js";
 import type { PublicTaskId } from "../../../task/taskId.js";
 import {
-  loadTasks,
   resolveTaskId,
+  withTasks,
   taskNotFound,
   type TaskCommandEnvironment,
 } from "../taskCliSupport.js";
@@ -14,98 +16,78 @@ import {
 export const runCommentCommand = (
   args: readonly string[],
   environment: TaskCommandEnvironment,
-): CliResult => {
+): Effect.Effect<CliResult> => {
   if (args.length === 1 && args[0] === "--help") {
-    return success({
-      usage: "by task comment <task-id> --file <file>",
-      arguments: [
-        {
-          argument: "<task-id>",
-          description: "Public Task ID, such as BY-1",
-        },
-      ],
-      flags: withGlobalHelpFlags([
-        {
-          flag: "--file <file>",
-          description: "Required UTF-8 Markdown comment file. Stdin is not supported.",
-        },
-      ]),
-      examples: ["by task comment BY-1 --file comment.md"],
-    });
+    return Effect.succeed(
+      success({
+        usage: "by task comment <task-id> --file <file>",
+        arguments: [
+          {
+            argument: "<task-id>",
+            description: "Public Task ID, such as BY-1",
+          },
+        ],
+        flags: withGlobalHelpFlags([
+          {
+            flag: "--file <file>",
+            description: "Required UTF-8 Markdown comment file. Stdin is not supported.",
+          },
+        ]),
+        examples: ["by task comment BY-1 --file comment.md"],
+      }),
+    );
   }
 
   const parseResult = parseTaskCommentArgs(args);
 
-  if (!parseResult.ok) {
-    return parseResult.result;
-  }
+  if (!parseResult.ok) return Effect.succeed(parseResult.result);
 
   if (parseResult.commentFile === undefined) {
-    return usageError({
-      code: "missing_comment_file",
-      message: "--file is required.",
-      help: ["Run `by task comment <task-id> --file <file>` to append a Task comment."],
-    });
+    return Effect.succeed(
+      usageError({
+        code: "missing_comment_file",
+        message: "--file is required.",
+        help: ["Run `by task comment <task-id> --file <file>` to append a Task comment."],
+      }),
+    );
   }
 
-  const tasksLoad = loadTasks(environment, false);
-
-  if (!tasksLoad.ok) {
-    return tasksLoad.result;
-  }
-
-  const taskId = resolveTaskId(tasksLoad.tasks, parseResult.taskId);
-
-  if (!taskId.ok) {
-    return taskId.result;
-  }
-
-  try {
-    if (tasksLoad.tasks.getTaskById(taskId.taskId) === undefined) {
-      return taskNotFound(taskId.taskId);
-    }
-  } catch {
-    return stateStoreUnavailable(tasksLoad.tasks.taskPrefix);
-  }
-
-  if (parseResult.commentFile === "-") {
-    return runtimeError({
-      code: "unsupported_stdin_comment_file",
-      message: "Reading Task comments from stdin is not supported in v1.",
-      help: ["Write the comment to a file, then rerun `by task comment <task-id> --file <file>`."],
-    });
-  }
-
-  const comment = readCommentFile(environment.cwd, parseResult.commentFile);
-
-  if (!comment.ok) {
-    return commentFileError(comment.error);
-  }
-
-  try {
-    const result = tasksLoad.tasks.appendTaskComment({
-      taskId: taskId.taskId,
-      content: comment.content,
-      now: () => environment.now().toISOString(),
-    });
-
-    if (!result.ok) {
-      if (result.code === "task_not_found") {
-        return taskNotFound(taskId.taskId);
+  const commentFile = parseResult.commentFile;
+  return withTasks(environment, false, (tasks) => {
+    const taskId = resolveTaskId(tasks, parseResult.taskId);
+    if (!taskId.ok) return Effect.succeed(taskId.result);
+    return Effect.flatMap(tasks.getTaskById(taskId.taskId), (task) => {
+      if (task === undefined) return Effect.succeed(taskNotFound(taskId.taskId));
+      if (commentFile === "-") {
+        return Effect.succeed(
+          runtimeError({
+            code: "unsupported_stdin_comment_file",
+            message: "Reading Task comments from stdin is not supported in v1.",
+            help: [
+              "Write the comment to a file, then rerun `by task comment <task-id> --file <file>`.",
+            ],
+          }),
+        );
       }
-
-      return invalidTaskCommentState(taskId.taskId, result.state);
-    }
-
-    return success({
-      task: {
-        id: result.taskId,
-        commentCount: result.commentCount,
-      },
+      const comment = readCommentFile(environment.cwd, commentFile);
+      if (!comment.ok) return Effect.succeed(commentFileError(comment.error));
+      return Effect.map(
+        tasks.appendTaskComment({
+          taskId: taskId.taskId,
+          content: comment.content,
+          now: () => environment.now().toISOString(),
+        }),
+        (result) => {
+          if (!result.ok) {
+            return result.code === "task_not_found"
+              ? taskNotFound(taskId.taskId)
+              : invalidTaskCommentState(taskId.taskId, result.state);
+          }
+          return success({ task: { id: result.taskId, commentCount: result.commentCount } });
+        },
+      );
     });
-  } catch {
-    return stateStoreUnavailable(tasksLoad.tasks.taskPrefix);
-  }
+  });
 };
 
 type TaskCommentArgsParseResult =

@@ -1,4 +1,7 @@
+import { Effect } from "effect";
+
 import type { RepoLocalContext } from "../init/repoContext.js";
+import type { RepositoryStorageError } from "../repositoryStorageError.js";
 import {
   readTaskContextDraft,
   removeTaskContextDraft,
@@ -7,54 +10,59 @@ import {
 } from "./files/contextDraft.js";
 import type { TaskState } from "./lifecycle.js";
 import type { TaskContext, TaskRecord, TaskSummary } from "./task.js";
+import type { CreateTaskPersistenceResult, TaskPersistence } from "./taskPersistence.js";
 import { resolveRepoTaskId, type RepoTaskIdResolution } from "./repoTaskIds.js";
 import type { PublicTaskId } from "./taskId.js";
-import type { AppendTaskCommentResult, TaskApprovalResult, TaskStore } from "./taskStore.js";
+import type {
+  AppendTaskCommentInput,
+  AppendTaskCommentResult,
+  CreateTaskInput,
+  ListTasksInput,
+  ReplaceTaskDependenciesResult,
+  TaskApprovalResult,
+  TaskStateTransitionResult,
+  TransitionTaskStateInput,
+} from "./taskStore.js";
 
 export type TaskUseCases = {
   readonly taskPrefix: string;
   readonly resolveTaskId: (taskId: PublicTaskId) => RepoTaskIdResolution;
-  readonly createTask: (input: CreateTaskInput) => TaskSummary;
+  readonly createTask: (
+    input: CreateTaskInput,
+  ) => Effect.Effect<CreateTaskPersistenceResult, RepositoryStorageError>;
   readonly replaceTaskDependencies: (
     taskId: PublicTaskId,
     prerequisiteTaskIds: readonly PublicTaskId[],
-  ) => RepoReplaceTaskDependenciesResult;
-  readonly listTasks: (input: ListTasksInput) => readonly TaskSummary[];
-  readonly listActionableTasks: () => readonly TaskSummary[];
-  readonly getTaskById: (taskId: PublicTaskId) => TaskRecord | undefined;
-  readonly getTaskForInspection: (taskId: PublicTaskId) => TaskRecord | undefined;
-  readonly getTaskContextById: (taskId: PublicTaskId) => TaskContext | undefined;
-  readonly createTaskContextDraft: (taskId: PublicTaskId) => TaskContextDraft | undefined;
+  ) => Effect.Effect<RepoReplaceTaskDependenciesResult, RepositoryStorageError>;
+  readonly listTasks: (
+    input: ListTasksInput,
+  ) => Effect.Effect<readonly TaskSummary[], RepositoryStorageError>;
+  readonly listActionableTasks: () => Effect.Effect<readonly TaskSummary[], RepositoryStorageError>;
+  readonly getTaskById: (
+    taskId: PublicTaskId,
+  ) => Effect.Effect<TaskRecord | undefined, RepositoryStorageError>;
+  readonly getTaskForInspection: (
+    taskId: PublicTaskId,
+  ) => Effect.Effect<TaskRecord | undefined, RepositoryStorageError>;
+  readonly getTaskContextById: (
+    taskId: PublicTaskId,
+  ) => Effect.Effect<TaskContext | undefined, RepositoryStorageError>;
+  readonly createTaskContextDraft: (
+    taskId: PublicTaskId,
+  ) => Effect.Effect<TaskContextDraft | undefined, RepositoryStorageError>;
   readonly applyTaskContextDraft: (
     input: ApplyTaskContextDraftInput,
-  ) => ApplyTaskContextDraftResult;
-  readonly approveTask: (taskId: PublicTaskId, now: string) => RepoTaskApprovalResult;
-  readonly appendTaskComment: (input: AppendTaskCommentInput) => AppendTaskCommentResult;
-  readonly transitionTaskState: (input: TransitionTaskStateInput) => RepoTaskStateTransitionResult;
-};
-
-type CreateTaskInput = {
-  readonly title: string;
-  readonly description: string;
-  readonly now: string;
-  readonly dependsOn?: readonly PublicTaskId[];
-};
-
-type ListTasksInput = {
-  readonly includeDone: boolean;
-  readonly state?: TaskState;
-};
-
-type AppendTaskCommentInput = {
-  readonly taskId: PublicTaskId;
-  readonly content: string;
-  readonly now: () => string;
-};
-
-type TransitionTaskStateInput = {
-  readonly taskId: PublicTaskId;
-  readonly to: TaskState;
-  readonly now: string;
+  ) => Effect.Effect<ApplyTaskContextDraftResult, RepositoryStorageError>;
+  readonly approveTask: (
+    taskId: PublicTaskId,
+    now: string,
+  ) => Effect.Effect<RepoTaskApprovalResult, RepositoryStorageError>;
+  readonly appendTaskComment: (
+    input: AppendTaskCommentInput,
+  ) => Effect.Effect<AppendTaskCommentResult, RepositoryStorageError>;
+  readonly transitionTaskState: (
+    input: TransitionTaskStateInput,
+  ) => Effect.Effect<RepoTaskStateTransitionResult, RepositoryStorageError>;
 };
 
 export type TaskContextDraft = { readonly path: string };
@@ -76,66 +84,70 @@ export type ApplyTaskContextDraftResult =
       readonly path: string;
     };
 
-export type RepoTaskStateTransitionResult = ReturnType<TaskStore["transitionTaskState"]>;
+export type RepoTaskStateTransitionResult = TaskStateTransitionResult;
 export type RepoTaskApprovalResult = TaskApprovalResult;
-export type RepoReplaceTaskDependenciesResult = ReturnType<TaskStore["replaceTaskDependencies"]>;
+export type RepoReplaceTaskDependenciesResult = ReplaceTaskDependenciesResult;
 
 export const openTaskUseCases = (
   context: RepoLocalContext,
-  stores: { readonly taskStore: TaskStore },
+  tasks: TaskPersistence,
 ): TaskUseCases => ({
   taskPrefix: context.taskPrefix,
   resolveTaskId: (taskId) => resolveRepoTaskId(context, taskId),
-  createTask: stores.taskStore.createTask,
+  createTask: tasks.createTask,
   replaceTaskDependencies: (taskId, prerequisiteTaskIds) =>
-    stores.taskStore.replaceTaskDependencies({ taskId, prerequisiteTaskIds }),
-  listTasks: stores.taskStore.listTasks,
-  listActionableTasks: stores.taskStore.listActionableTasks,
-  getTaskById: stores.taskStore.getTaskById,
-  getTaskForInspection: stores.taskStore.getTaskById,
-  getTaskContextById: stores.taskStore.getTaskContextById,
-  createTaskContextDraft: (taskId) => createTaskContextDraft(context, stores.taskStore, taskId),
-  applyTaskContextDraft: (input) => applyTaskContextDraft(context, stores.taskStore, input),
-  approveTask: (taskId, now) => stores.taskStore.approveTask({ taskId, now }),
-  appendTaskComment: stores.taskStore.appendTaskComment,
-  transitionTaskState: stores.taskStore.transitionTaskState,
+    tasks.replaceTaskDependencies({ taskId, prerequisiteTaskIds }),
+  listTasks: tasks.listTasks,
+  listActionableTasks: tasks.listActionableTasks,
+  getTaskById: tasks.getTaskById,
+  getTaskForInspection: tasks.getTaskById,
+  getTaskContextById: tasks.getTaskContextById,
+  createTaskContextDraft: (taskId) => createTaskContextDraft(context, tasks, taskId),
+  applyTaskContextDraft: (input) => applyTaskContextDraft(context, tasks, input),
+  approveTask: (taskId, now) => tasks.approveTask({ taskId, now }),
+  appendTaskComment: tasks.appendTaskComment,
+  transitionTaskState: tasks.transitionTaskState,
 });
 
 const createTaskContextDraft = (
   context: RepoLocalContext,
-  taskStore: TaskStore,
+  tasks: TaskPersistence,
   taskId: PublicTaskId,
-): TaskContextDraft | undefined => {
-  const taskContext = taskStore.getTaskContextById(taskId);
-  return taskContext === undefined
-    ? undefined
-    : { path: writeTaskContextDraft(context.paths.taskContextDraftsPath, taskId, taskContext) };
-};
+): Effect.Effect<TaskContextDraft | undefined, RepositoryStorageError> =>
+  Effect.map(tasks.getTaskContextById(taskId), (taskContext) =>
+    taskContext === undefined
+      ? undefined
+      : {
+          path: writeTaskContextDraft(context.paths.taskContextDraftsPath, taskId, taskContext),
+        },
+  );
 
 const applyTaskContextDraft = (
   context: RepoLocalContext,
-  taskStore: TaskStore,
+  tasks: TaskPersistence,
   input: ApplyTaskContextDraftInput,
-): ApplyTaskContextDraftResult => {
+): Effect.Effect<ApplyTaskContextDraftResult, RepositoryStorageError> => {
   const draft = readTaskContextDraft(context.paths.taskContextDraftsPath, input.taskId);
-  if (!draft.ok) return { ok: false, error: draft.error };
+  if (!draft.ok) return Effect.succeed({ ok: false, error: draft.error });
 
-  const result = taskStore.updateTaskContext({
-    taskId: input.taskId,
-    title: draft.draft.title,
-    description: draft.draft.description,
-    now: input.now,
-  });
-  if (!result.ok) return result;
-
-  if (!removeTaskContextDraft(draft.draft.path)) {
-    return {
-      ok: false,
-      code: "task_context_draft_cleanup_failed",
-      task: result.task,
-      path: draft.draft.path,
-    };
-  }
-
-  return result;
+  return Effect.map(
+    tasks.updateTaskContext({
+      taskId: input.taskId,
+      title: draft.draft.title,
+      description: draft.draft.description,
+      now: input.now,
+    }),
+    (result): ApplyTaskContextDraftResult => {
+      if (!result.ok) return result;
+      if (!removeTaskContextDraft(draft.draft.path)) {
+        return {
+          ok: false,
+          code: "task_context_draft_cleanup_failed",
+          task: result.task,
+          path: draft.draft.path,
+        };
+      }
+      return result;
+    },
+  );
 };

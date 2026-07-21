@@ -1,3 +1,5 @@
+import { Effect } from "effect";
+
 import type { CliResult } from "../../cliResults.js";
 import { success, usageError } from "../../cliResults.js";
 import { withGlobalHelpFlags } from "../../cliHelp.js";
@@ -21,13 +23,13 @@ export const routeTask = (
   args: readonly string[],
   environment: TaskCommandEnvironment,
   metadata: TaskRouteMetadata,
-): CliResult => {
+): Effect.Effect<CliResult> => {
   if (args.length === 0) {
     return dashboard(metadata.bin, metadata.description, environment);
   }
 
   if (args.length === 1 && args[0] === "--help") {
-    return success(taskHelpView());
+    return Effect.succeed(success(taskHelpView()));
   }
 
   const subcommand = args[0];
@@ -61,18 +63,22 @@ export const routeTask = (
   }
 
   if (subcommand?.startsWith("-")) {
-    return usageError({
-      code: "unknown_flag",
-      message: `Unknown flag: ${subcommand}`,
-      help: ["Run `by task --help`."],
-    });
+    return Effect.succeed(
+      usageError({
+        code: "unknown_flag",
+        message: `Unknown flag: ${subcommand}`,
+        help: ["Run `by task --help`."],
+      }),
+    );
   }
 
-  return usageError({
-    code: "unknown_command",
-    message: `Unknown task command: ${subcommand ?? ""}`,
-    help: ["Run `by task --help`."],
-  });
+  return Effect.succeed(
+    usageError({
+      code: "unknown_command",
+      message: `Unknown task command: ${subcommand ?? ""}`,
+      help: ["Run `by task --help`."],
+    }),
+  );
 };
 
 const taskHelpView = (): StructuredObject => ({

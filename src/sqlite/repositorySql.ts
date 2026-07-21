@@ -1,44 +1,18 @@
 import * as SqlClient from "@effect/sql/SqlClient";
 import type { SqlError } from "@effect/sql/SqlError";
 import * as SqliteClient from "@effect/sql-sqlite-node/SqliteClient";
-import { Context, Data, Effect, Layer } from "effect";
+import { Context, Effect, Layer } from "effect";
 
 import { migrateStateDatabase } from "../init/stateDatabase.js";
+import {
+  RepositoryIdentityConflict,
+  RepositoryMigrationFailed,
+  RepositoryPersistedDataInvalid,
+  RepositorySqlOperationFailed,
+  RepositoryStateUnavailable,
+  type RepositoryStorageError,
+} from "../repositoryStorageError.js";
 import { decodeSqliteJsonStringArray } from "./sqliteJsonStringArray.js";
-
-export class RepositoryStateUnavailable extends Data.TaggedError("RepositoryStateUnavailable")<{
-  readonly statePath: string;
-  readonly cause: unknown;
-}> {}
-
-export class RepositoryIdentityConflict extends Data.TaggedError("RepositoryIdentityConflict")<{
-  readonly expectedCommonDirectory: string;
-  readonly actualCommonDirectory: string;
-}> {}
-
-export class RepositorySqlOperationFailed extends Data.TaggedError("RepositorySqlOperationFailed")<{
-  readonly operationName: string;
-  readonly cause: unknown;
-}> {}
-
-export class RepositoryMigrationFailed extends Data.TaggedError("RepositoryMigrationFailed")<{
-  readonly statePath: string;
-  readonly cause: unknown;
-}> {}
-
-export class RepositoryPersistedDataInvalid extends Data.TaggedError(
-  "RepositoryPersistedDataInvalid",
-)<{
-  readonly operationName: string;
-  readonly cause: unknown;
-}> {}
-
-export type RepositoryStorageError =
-  | RepositoryStateUnavailable
-  | RepositoryIdentityConflict
-  | RepositorySqlOperationFailed
-  | RepositoryMigrationFailed
-  | RepositoryPersistedDataInvalid;
 
 type RepositorySqlService = {
   readonly statePath: string;
@@ -49,8 +23,20 @@ type RepositorySqlService = {
   ) => Effect.Effect<A, RepositorySqlOperationFailed, R>;
   readonly transaction: <A, E, R>(
     operationName: string,
-    use: (sql: SqlClient.SqlClient) => Effect.Effect<A, E | SqlError, R>,
-  ) => Effect.Effect<A, E | RepositorySqlOperationFailed, R>;
+    use: (sql: SqlClient.SqlClient) => Effect.Effect<A, E, R>,
+  ) => Effect.Effect<
+    A,
+    Exclude<E, { readonly _tag: "SqlError" }> | RepositorySqlOperationFailed,
+    R
+  >;
+  readonly transactionImmediate: <A, E, R>(
+    operationName: string,
+    use: (sql: SqlClient.SqlClient) => Effect.Effect<A, E, R>,
+  ) => Effect.Effect<
+    A,
+    Exclude<E, { readonly _tag: "SqlError" }> | RepositorySqlOperationFailed,
+    R
+  >;
   readonly decodeStringArray: (
     operationName: string,
     value: string,
@@ -159,6 +145,28 @@ export const repositorySqlLayer = (
               ),
             ),
           ),
+        transactionImmediate: (operationName, use) =>
+          sql
+            .withTransaction(
+              Effect.zipRight(
+                sql`
+                  UPDATE shared_state_identity
+                  SET common_directory = common_directory
+                  WHERE id = 1
+                `,
+                use(sql),
+              ),
+            )
+            .pipe(
+              Effect.catchTag("SqlError", (cause) =>
+                Effect.fail(
+                  new RepositorySqlOperationFailed({
+                    operationName,
+                    cause,
+                  }),
+                ),
+              ),
+            ),
         decodeStringArray: (operationName, value) =>
           Effect.try({
             try: () => decodeSqliteJsonStringArray(value),

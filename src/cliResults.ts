@@ -1,4 +1,5 @@
 import type { LoadRepoLocalContextError } from "./init/repoContext.js";
+import type { RepositoryStorageError } from "./repositoryStorageError.js";
 import { structuredContractDiagnostics } from "./output/contractDiagnostics.js";
 import type { OutputFormat, StructuredObject } from "./output/structured.js";
 import { structuredError, type StructuredErrorInput } from "./cliError.js";
@@ -92,6 +93,11 @@ export const stateStoreUnavailable = (taskPrefix: string | undefined): CliResult
         : `Restore <git-common-dir>/but-why/state.sqlite, then run \`by init --task-prefix ${taskPrefix}\`.`,
     ],
   });
+
+export const repositoryStorageErrorResult = (error: RepositoryStorageError): CliResult =>
+  error._tag === "RepositoryIdentityConflict"
+    ? sharedStateIdentityConflict()
+    : stateStoreUnavailable(undefined);
 
 const sharedStateIdentityConflict = (): CliResult =>
   runtimeError({

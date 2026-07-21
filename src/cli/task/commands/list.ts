@@ -1,3 +1,5 @@
+import { Effect } from "effect";
+
 import type { CliResult } from "../../../cliResults.js";
 import { stateStoreUnavailable, success, usageError } from "../../../cliResults.js";
 import { withGlobalHelpFlags } from "../../../cliHelp.js";
@@ -5,70 +7,62 @@ import { loadChangeInspection } from "../../../localChange/loadChangeInspection.
 import type { StructuredValue } from "../../../output/structured.js";
 import { isTaskState, taskStates, type TaskState } from "../../../task/lifecycle.js";
 import type { TaskSummary } from "../../../task/task.js";
-import { loadTasks, type TaskCommandEnvironment } from "../taskCliSupport.js";
+import { withTasks, type TaskCommandEnvironment } from "../taskCliSupport.js";
 
 export const runListCommand = (
   args: readonly string[],
   environment: TaskCommandEnvironment,
-): CliResult => {
+): Effect.Effect<CliResult> => {
   if (args.length === 1 && args[0] === "--help") {
-    return success({
-      usage: "by task list [--all] [--state <state>]",
-      flags: withGlobalHelpFlags([
-        {
-          flag: "--all",
-          description: "Include done Tasks",
-        },
-        {
-          flag: "--state <state>",
-          description: "Show only Tasks in one state",
-        },
-      ]),
-      examples: ["by task list", "by task list --all", "by task list --state ready"],
-    });
+    return Effect.succeed(
+      success({
+        usage: "by task list [--all] [--state <state>]",
+        flags: withGlobalHelpFlags([
+          {
+            flag: "--all",
+            description: "Include done Tasks",
+          },
+          {
+            flag: "--state <state>",
+            description: "Show only Tasks in one state",
+          },
+        ]),
+        examples: ["by task list", "by task list --all", "by task list --state ready"],
+      }),
+    );
   }
 
   const parseResult = parseTaskListArgs(args);
 
-  if (!parseResult.ok) {
-    return parseResult.result;
-  }
+  if (!parseResult.ok) return Effect.succeed(parseResult.result);
 
-  const tasksLoad = loadTasks(environment, true);
-
-  if (!tasksLoad.ok) {
-    return tasksLoad.result;
-  }
-
-  try {
-    const tasks = tasksLoad.tasks.listTasks({
-      includeDone: parseResult.all || parseResult.state !== undefined,
-      ...(parseResult.state === undefined ? {} : { state: parseResult.state }),
-    });
-
-    const changeInspection =
-      environment.taskUseCases === undefined
-        ? loadChangeInspection({
-            cwd: environment.cwd,
-          })
-        : undefined;
-    if (changeInspection !== undefined && !changeInspection.ok) {
-      return stateStoreUnavailable(tasksLoad.tasks.taskPrefix);
-    }
-
-    return success({
-      count: tasks.length,
-      tasks: taskSummaryRows(
-        tasks,
-        changeInspection === undefined
-          ? () => null
-          : changeInspection.inspection.inspectTaskProjection,
-      ),
-      ...(tasks.length === 0 ? { help: [createTaskHelp] } : {}),
-    });
-  } catch {
-    return stateStoreUnavailable(tasksLoad.tasks.taskPrefix);
-  }
+  return withTasks(environment, true, (taskUseCases) =>
+    Effect.map(
+      taskUseCases.listTasks({
+        includeDone: parseResult.all || parseResult.state !== undefined,
+        ...(parseResult.state === undefined ? {} : { state: parseResult.state }),
+      }),
+      (tasks) => {
+        const changeInspection =
+          environment.taskUseCases === undefined
+            ? loadChangeInspection({ cwd: environment.cwd })
+            : undefined;
+        if (changeInspection !== undefined && !changeInspection.ok) {
+          return stateStoreUnavailable(taskUseCases.taskPrefix);
+        }
+        return success({
+          count: tasks.length,
+          tasks: taskSummaryRows(
+            tasks,
+            changeInspection === undefined
+              ? () => null
+              : changeInspection.inspection.inspectTaskProjection,
+          ),
+          ...(tasks.length === 0 ? { help: [createTaskHelp] } : {}),
+        });
+      },
+    ),
+  );
 };
 
 type TaskListArgsParseResult =

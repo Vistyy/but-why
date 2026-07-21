@@ -299,25 +299,66 @@ describe("by change start managed worktree", () => {
     }),
   );
 
-  ordinaryIt("supports executable JSON output for Change Start", () => {
-    const root = initializedRepository();
-    createApprovedTask(root);
+  ordinaryIt(
+    "persists Task-backed Change Start across executable CLI processes",
+    () => {
+      const root = initializedRepository();
+      writeFileSync(join(root, "task.md"), "Prepare this Change.\n");
 
-    const executable = runByWithEnv(
-      root,
-      { BUT_WHY_NOW: now },
-      "change",
-      "start",
-      "--task",
-      "BY-1",
-      "--output",
-      "json",
-    );
-    expect(executable.status).toBe(0);
-    expect(JSON.parse(executable.stdout)).toMatchObject({
-      change: { taskId: "BY-1", readiness: "ready" },
-    });
-  });
+      const created = runByWithEnv(
+        root,
+        { BUT_WHY_NOW: now },
+        "task",
+        "create",
+        "--title",
+        "Prepared change",
+        "--description-file",
+        "task.md",
+        "--output",
+        "json",
+      );
+      expect(created.status).toBe(0);
+      expect(runByWithEnv(root, { BUT_WHY_NOW: now }, "task", "approve", "BY-1").status).toBe(0);
+
+      const started = runByWithEnv(
+        root,
+        { BUT_WHY_NOW: now },
+        "change",
+        "start",
+        "--task",
+        "BY-1",
+        "--output",
+        "json",
+      );
+      expect(started.status).toBe(0);
+      const output = JSON.parse(started.stdout) as ChangeOutput;
+      expect(output.change).toMatchObject({ taskId: "BY-1", readiness: "ready" });
+
+      expect(
+        runByWithEnv(root, { BUT_WHY_NOW: now }, "change", "prepare", output.change.id).status,
+      ).toBe(0);
+      expect(runByWithEnv(root, {}, "task", "show", "BY-1").stdout).toContain(
+        "state: implementing",
+      );
+      expect(runByWithEnv(root, {}, "change", "show", output.change.id).stdout).toContain(
+        `id: ${output.change.id}`,
+      );
+
+      const context = loadRepoLocalContext(root);
+      if (!context.ok) throw new Error(context.error.code);
+      expect(
+        openRepoLocalStores(context.context).changeStartStore.getById(output.change.id),
+      ).toMatchObject({
+        acceptanceContext: {
+          version: 1,
+          title: "Prepared change",
+          description: "Prepare this Change.\n",
+          comments: [],
+        },
+      });
+    },
+    15_000,
+  );
 });
 
 type ChangeOutput = {

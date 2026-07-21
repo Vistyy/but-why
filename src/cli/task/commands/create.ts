@@ -1,119 +1,105 @@
+import { Effect } from "effect";
+
 import type { CliResult } from "../../../cliResults.js";
-import { runtimeError, stateStoreUnavailable, success, usageError } from "../../../cliResults.js";
+import { runtimeError, success, usageError } from "../../../cliResults.js";
 import { withGlobalHelpFlags } from "../../../cliHelp.js";
 import {
   readDescriptionFile,
   type DescriptionFileReadError,
 } from "../../../task/files/descriptionFile.js";
 import { parseCliTaskIdValue } from "../../../cliTaskId.js";
-import { TaskDependencyValidationError } from "../../../task/task.js";
+import type { DependencyValidationCode } from "../../../task/task.js";
 import type { PublicTaskId } from "../../../task/taskId.js";
-import { loadTasks, resolveTaskId, type TaskCommandEnvironment } from "../taskCliSupport.js";
+import { resolveTaskId, withTasks, type TaskCommandEnvironment } from "../taskCliSupport.js";
 
 export const runCreateCommand = (
   args: readonly string[],
   environment: TaskCommandEnvironment,
-): CliResult => {
+): Effect.Effect<CliResult> => {
   if (args.length === 1 && args[0] === "--help") {
-    return success({
-      usage: "by task create --title <title> --description-file <file> [--depends-on <task-id>]...",
-      flags: withGlobalHelpFlags([
-        {
-          flag: "--title <title>",
-          description: "Required Task title",
-        },
-        {
-          flag: "--description-file <file>",
-          description: "Required UTF-8 Task description file, max 256 KiB",
-        },
-        {
-          flag: "--depends-on <task-id>",
-          description: "Direct prerequisite; repeat for multiple Tasks",
-        },
-      ]),
-      examples: ['by task create --title "Add login" --description-file task.md'],
-    });
+    return Effect.succeed(
+      success({
+        usage:
+          "by task create --title <title> --description-file <file> [--depends-on <task-id>]...",
+        flags: withGlobalHelpFlags([
+          { flag: "--title <title>", description: "Required Task title" },
+          {
+            flag: "--description-file <file>",
+            description: "Required UTF-8 Task description file, max 256 KiB",
+          },
+          {
+            flag: "--depends-on <task-id>",
+            description: "Direct prerequisite; repeat for multiple Tasks",
+          },
+        ]),
+        examples: ['by task create --title "Add login" --description-file task.md'],
+      }),
+    );
   }
+  const parsed = parseTaskCreateArgs(args);
+  if (!parsed.ok) return Effect.succeed(parsed.result);
+  if (parsed.title === undefined)
+    return Effect.succeed(
+      usageError({
+        code: "missing_title",
+        message: "--title is required.",
+        help: ['Run `by task create --title "..." --description-file <file>` to create a task.'],
+      }),
+    );
+  const title = parsed.title.trim();
+  if (title.length === 0)
+    return Effect.succeed(
+      usageError({
+        code: "empty_title",
+        message: "Task title must not be empty.",
+        help: ['Provide a non-empty title with `--title "..."`.'],
+      }),
+    );
+  if (/[\r\n]/u.test(title))
+    return Effect.succeed(
+      usageError({
+        code: "invalid_task_title",
+        message: "Task title must be one line.",
+        help: ['Provide a one-line title with `--title "..."`.'],
+      }),
+    );
+  if (parsed.descriptionFile === undefined)
+    return Effect.succeed(
+      usageError({
+        code: "missing_description_file",
+        message: "--description-file is required.",
+        help: ['Run `by task create --title "..." --description-file <file>` to create a task.'],
+      }),
+    );
+  const description = readDescriptionFile(environment.cwd, parsed.descriptionFile);
+  if (!description.ok) return Effect.succeed(descriptionFileError(description.error));
 
-  const parseResult = parseTaskCreateArgs(args);
-
-  if (!parseResult.ok) {
-    return parseResult.result;
-  }
-
-  if (parseResult.title === undefined) {
-    return usageError({
-      code: "missing_title",
-      message: "--title is required.",
-      help: ['Run `by task create --title "..." --description-file <file>` to create a task.'],
-    });
-  }
-
-  const title = parseResult.title.trim();
-
-  if (title.length === 0) {
-    return usageError({
-      code: "empty_title",
-      message: "Task title must not be empty.",
-      help: ['Provide a non-empty title with `--title "..."`.'],
-    });
-  }
-
-  if (/[\r\n]/u.test(title)) {
-    return usageError({
-      code: "invalid_task_title",
-      message: "Task title must be one line.",
-      help: ['Provide a one-line title with `--title "..."`.'],
-    });
-  }
-
-  if (parseResult.descriptionFile === undefined) {
-    return usageError({
-      code: "missing_description_file",
-      message: "--description-file is required.",
-      help: ['Run `by task create --title "..." --description-file <file>` to create a task.'],
-    });
-  }
-
-  const tasksLoad = loadTasks(environment, true);
-
-  if (!tasksLoad.ok) {
-    return tasksLoad.result;
-  }
-
-  const description = readDescriptionFile(environment.cwd, parseResult.descriptionFile);
-
-  if (!description.ok) {
-    return descriptionFileError(description.error);
-  }
-
-  const dependencies = resolveDependencies(parseResult.dependsOn, tasksLoad.tasks);
-  if (!dependencies.ok) return dependencies.result;
-
-  try {
-    const task = tasksLoad.tasks.createTask({
-      title,
-      description: description.content,
-      now: environment.now().toISOString(),
-      dependsOn: dependencies.taskIds,
-    });
-
-    return success({
-      task: {
-        id: task.id,
-        title: task.title,
-        state: task.state,
-        createdAt: task.createdAt,
-        updatedAt: task.updatedAt,
+  return withTasks(environment, true, (tasks) => {
+    const dependencies = resolveDependencies(parsed.dependsOn, tasks);
+    if (!dependencies.ok) return Effect.succeed(dependencies.result);
+    return Effect.map(
+      tasks.createTask({
+        title,
+        description: description.content,
+        now: environment.now().toISOString(),
+        dependsOn: dependencies.taskIds,
+      }),
+      (result) => {
+        if (!result.ok) return dependencyError(result);
+        const task = result.task;
+        return success({
+          task: {
+            id: task.id,
+            title: task.title,
+            state: task.state,
+            createdAt: task.createdAt,
+            updatedAt: task.updatedAt,
+          },
+          help: ["Run `by task list` to see open tasks."],
+        });
       },
-      help: ["Run `by task list` to see open tasks."],
-    });
-  } catch (error) {
-    if (error instanceof TaskDependencyValidationError) {
-      return dependencyError(error);
-    }
-    return stateStoreUnavailable(tasksLoad.tasks.taskPrefix);
-  }
+    );
+  });
 };
 
 type ResolveDependenciesResult =
@@ -216,7 +202,10 @@ const unknownTaskCreateInput = (arg: string): TaskCreateArgsParseResult => ({
   }),
 });
 
-const dependencyError = (error: TaskDependencyValidationError): CliResult =>
+const dependencyError = (error: {
+  readonly code: DependencyValidationCode;
+  readonly taskId?: PublicTaskId;
+}): CliResult =>
   runtimeError({
     code: error.code,
     message: dependencyErrorMessage(error),
@@ -224,7 +213,10 @@ const dependencyError = (error: TaskDependencyValidationError): CliResult =>
     help: ["Use existing Tasks from `by task list --all` as direct prerequisites."],
   });
 
-const dependencyErrorMessage = (error: TaskDependencyValidationError): string => {
+const dependencyErrorMessage = (error: {
+  readonly code: DependencyValidationCode;
+  readonly taskId?: PublicTaskId;
+}): string => {
   switch (error.code) {
     case "dependency_unknown_task":
       return `Dependency Task was not found: ${error.taskId ?? ""}`;

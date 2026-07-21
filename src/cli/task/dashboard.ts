@@ -1,34 +1,27 @@
+import { Effect } from "effect";
+
 import type { CliResult } from "../../cliResults.js";
-import { stateStoreUnavailable, success } from "../../cliResults.js";
+import { success } from "../../cliResults.js";
 import type { StructuredValue } from "../../output/structured.js";
 import type { TaskSummary } from "../../task/task.js";
-import { loadTasks, type TaskCommandEnvironment } from "./taskCliSupport.js";
+import { withTasks, type TaskCommandEnvironment } from "./taskCliSupport.js";
 
 export const dashboard = (
   bin: string,
   description: string,
   environment: TaskCommandEnvironment,
-): CliResult => {
-  const tasksLoad = loadTasks(environment, true);
-
-  if (!tasksLoad.ok) {
-    return tasksLoad.result;
-  }
-
-  try {
-    const tasks = tasksLoad.tasks.listActionableTasks();
-
-    return success({
-      bin,
-      description,
-      count: tasks.length,
-      tasks: taskSummaryRows(tasks),
-      ...(tasks.length === 0 ? { help: [createTaskHelp] } : {}),
-    });
-  } catch {
-    return stateStoreUnavailable(tasksLoad.tasks.taskPrefix);
-  }
-};
+): Effect.Effect<CliResult> =>
+  withTasks(environment, true, (tasks) =>
+    Effect.map(tasks.listActionableTasks(), (actionable) =>
+      success({
+        bin,
+        description,
+        count: actionable.length,
+        tasks: taskSummaryRows(actionable),
+        ...(actionable.length === 0 ? { help: [createTaskHelp] } : {}),
+      }),
+    ),
+  );
 
 const taskSummaryRows = (tasks: readonly TaskSummary[]): readonly StructuredValue[] =>
   tasks.map((task) => ({

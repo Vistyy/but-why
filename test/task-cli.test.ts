@@ -9,7 +9,6 @@ import { describe, it as ordinaryIt } from "vitest";
 import { collapseHome } from "../src/cli.js";
 import { prepareStateDatabase } from "../src/init/stateDatabase.js";
 import { openSqliteTaskStore } from "../src/sqlite/sqliteTaskStore.js";
-import { loadTaskUseCases } from "../src/localTask/taskUseCases.js";
 import type { TaskState } from "../src/task/lifecycle.js";
 import type { TaskRecord, TaskSummary } from "../src/task/task.js";
 import { publicTaskId } from "../src/task/taskId.js";
@@ -892,6 +891,36 @@ help[1]: "Run \`by task create --title \\"...\\" --description-file <file>\` to 
     expect(showResult.stdout).toContain(`commentCount: ${commentCount}`);
   });
 
+  ordinaryIt("keeps concurrent Task dependency replacements atomic", async () => {
+    const root = initializedRepo();
+    createTask(root, firstNow, "First prerequisite");
+    createTask(root, firstNow, "Second prerequisite");
+    createTask(root, firstNow, "Third prerequisite");
+    createTask(root, firstNow, "Dependent Task");
+
+    const results = await Promise.all([
+      runByAsync(root, {}, "task", "dependencies", "set", "BY-4", "--depends-on", "BY-1"),
+      runByAsync(
+        root,
+        {},
+        "task",
+        "dependencies",
+        "set",
+        "BY-4",
+        "--depends-on",
+        "BY-2",
+        "--depends-on",
+        "BY-3",
+      ),
+    ]);
+
+    expect(results.every((result) => result.status === 0)).toBe(true);
+    const prerequisites = taskStore(root).getTaskById(publicTaskId("BY-4"))?.prerequisites;
+    expect(prerequisites?.map((task) => task.id)).toSatisfy(
+      (ids: readonly string[]) => ids.join(",") === "BY-1" || ids.join(",") === "BY-2,BY-3",
+    );
+  });
+
   it.effect("serializes missing Task IDs before command lookup", () =>
     Effect.gen(function* () {
       const result = yield* runByInProcessEffect(createTestWorkspace(), ["task", "show"]);
@@ -1288,17 +1317,10 @@ const transitionTaskState = (
   state: TaskState,
   updatedAt: string,
 ): void => {
-  const tasksLoad = loadTaskUseCases({
-    cwd: root,
-    requireState: true,
-  });
-
-  if (!tasksLoad.ok) {
-    throw new Error(`Could not load Tasks: ${tasksLoad.error.code}`);
-  }
+  const tasks = taskStore(root);
 
   for (const nextState of taskStateTransitionPath(state)) {
-    const result = tasksLoad.tasks.transitionTaskState({
+    const result = tasks.transitionTaskState({
       taskId: publicTaskId(id),
       to: nextState,
       now: updatedAt,

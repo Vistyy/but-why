@@ -1,12 +1,14 @@
+import { Effect } from "effect";
+
 import type { CliResult } from "../../../cliResults.js";
-import { runtimeError, stateStoreUnavailable, success, usageError } from "../../../cliResults.js";
+import { runtimeError, success, usageError } from "../../../cliResults.js";
 import { withGlobalHelpFlags } from "../../../cliHelp.js";
 import { parseCliTaskIdValue } from "../../../cliTaskId.js";
 import type { PublicTaskId } from "../../../task/taskId.js";
 import type { RepoReplaceTaskDependenciesResult } from "../../../task/taskUseCases.js";
 import {
-  loadTasks,
   resolveTaskId,
+  withTasks,
   taskNotFound,
   type TaskCommandEnvironment,
 } from "../taskCliSupport.js";
@@ -14,64 +16,59 @@ import {
 export const runDependenciesCommand = (
   args: readonly string[],
   environment: TaskCommandEnvironment,
-): CliResult => {
+): Effect.Effect<CliResult> => {
   if (args.length === 1 && args[0] === "--help") {
-    return success({
-      usage: "by task dependencies set <task-id> [--depends-on <task-id>]...",
-      flags: withGlobalHelpFlags([
-        {
-          flag: "--depends-on <task-id>",
-          description: "Direct prerequisite; repeat for multiple Tasks",
-        },
-      ]),
-      examples: [
-        "by task dependencies set BY-3 --depends-on BY-1 --depends-on BY-2",
-        "by task dependencies set BY-3",
-      ],
-    });
+    return Effect.succeed(
+      success({
+        usage: "by task dependencies set <task-id> [--depends-on <task-id>]...",
+        flags: withGlobalHelpFlags([
+          {
+            flag: "--depends-on <task-id>",
+            description: "Direct prerequisite; repeat for multiple Tasks",
+          },
+        ]),
+        examples: [
+          "by task dependencies set BY-3 --depends-on BY-1 --depends-on BY-2",
+          "by task dependencies set BY-3",
+        ],
+      }),
+    );
   }
 
   if (args[0] !== "set") {
-    return usageError({
-      code: "unknown_command",
-      message: `Unknown task dependencies command: ${args[0] ?? ""}`,
-      help: ["Run `by task dependencies --help`."],
-    });
+    return Effect.succeed(
+      usageError({
+        code: "unknown_command",
+        message: `Unknown task dependencies command: ${args[0] ?? ""}`,
+        help: ["Run `by task dependencies --help`."],
+      }),
+    );
   }
 
   const parsed = parseSetArgs(args.slice(1));
-  if (!parsed.ok) return parsed.result;
-
-  const loaded = loadTasks(environment, false);
-  if (!loaded.ok) return loaded.result;
-
+  if (!parsed.ok) return Effect.succeed(parsed.result);
   const parsedDependent = parseCliTaskIdValue(parsed.taskId);
-  if (!parsedDependent.ok) return parsedDependent.result;
-  const dependent = resolveTaskId(loaded.tasks, parsedDependent.taskId);
-  if (!dependent.ok) return dependent.result;
+  if (!parsedDependent.ok) return Effect.succeed(parsedDependent.result);
 
-  const prerequisiteTaskIds: PublicTaskId[] = [];
-  for (const value of parsed.dependsOn) {
-    const parsedPrerequisite = parseCliTaskIdValue(value);
-    if (!parsedPrerequisite.ok) return parsedPrerequisite.result;
-    const prerequisite = resolveTaskId(loaded.tasks, parsedPrerequisite.taskId);
-    if (!prerequisite.ok) return prerequisite.result;
-    prerequisiteTaskIds.push(prerequisite.taskId);
-  }
-
-  try {
-    const result = loaded.tasks.replaceTaskDependencies(dependent.taskId, prerequisiteTaskIds);
-    if (!result.ok) return replaceError(dependent.taskId, result);
-
-    return success({
-      task: {
-        id: result.task.id,
-        prerequisites: result.task.prerequisites,
-      },
-    });
-  } catch {
-    return stateStoreUnavailable(loaded.tasks.taskPrefix);
-  }
+  return withTasks(environment, false, (tasks) => {
+    const dependent = resolveTaskId(tasks, parsedDependent.taskId);
+    if (!dependent.ok) return Effect.succeed(dependent.result);
+    const prerequisiteTaskIds: PublicTaskId[] = [];
+    for (const value of parsed.dependsOn) {
+      const parsedPrerequisite = parseCliTaskIdValue(value);
+      if (!parsedPrerequisite.ok) return Effect.succeed(parsedPrerequisite.result);
+      const prerequisite = resolveTaskId(tasks, parsedPrerequisite.taskId);
+      if (!prerequisite.ok) return Effect.succeed(prerequisite.result);
+      prerequisiteTaskIds.push(prerequisite.taskId);
+    }
+    return Effect.map(
+      tasks.replaceTaskDependencies(dependent.taskId, prerequisiteTaskIds),
+      (result) =>
+        result.ok
+          ? success({ task: { id: result.task.id, prerequisites: result.task.prerequisites } })
+          : replaceError(dependent.taskId, result),
+    );
+  });
 };
 
 type ParseResult =

@@ -4,11 +4,8 @@ import { join } from "node:path";
 import { Effect } from "effect";
 
 import type { RepoConfig } from "../contracts/repoConfig.js";
-import {
-  RepositoryIdentityConflict,
-  RepositorySql,
-  repositorySqlLayer,
-} from "../sqlite/repositorySql.js";
+import { RepositoryIdentityConflict } from "../repositoryStorageError.js";
+import { RepositorySql, repositorySqlLayer } from "../sqlite/repositorySql.js";
 import { isTaskPrefix } from "../contracts/taskPrefix.js";
 import { findGitRoot } from "./git.js";
 import { ensureGitignoreBlock } from "./gitignore.js";

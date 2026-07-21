@@ -7,17 +7,19 @@ import { Effect } from "effect";
 import { describe } from "vitest";
 
 import { initializeStateDatabase } from "../src/init/stateDatabase.js";
+import { storedPublicTaskId } from "../src/task/taskId.js";
 import { withStateDatabase } from "../src/sqlite/connection.js";
+import { openSqliteChangeStartPersistence } from "../src/sqlite/sqliteChangeStartPersistence.js";
+import { openSqliteTaskPersistence } from "../src/sqlite/sqliteTaskPersistence.js";
 import {
   RepositoryIdentityConflict,
   RepositoryMigrationFailed,
   RepositoryPersistedDataInvalid,
-  RepositorySql,
   RepositorySqlOperationFailed,
   RepositoryStateUnavailable,
   type RepositoryStorageError,
-  repositorySqlLayer,
-} from "../src/sqlite/repositorySql.js";
+} from "../src/repositoryStorageError.js";
+import { RepositorySql, repositorySqlLayer } from "../src/sqlite/repositorySql.js";
 
 const withTemporaryState = <A, E>(
   use: (input: {
@@ -54,6 +56,74 @@ const migrationCount = Effect.gen(function* () {
 });
 
 describe("repository SQL storage", () => {
+  it.scoped("persists Tasks through the Effect-native Task interface", () =>
+    withTemporaryState(() =>
+      Effect.gen(function* () {
+        const tasks = yield* openSqliteTaskPersistence("BY");
+        const created = yield* tasks.createTask({
+          title: "Effect-native Task",
+          description: "Persist this Task through repository SQL.",
+          now: "2026-07-17T22:45:00.000Z",
+        });
+        expect(created.ok).toBe(true);
+        if (!created.ok) return;
+        const stored = yield* tasks.getTaskById(storedPublicTaskId(created.task.id));
+
+        expect(stored).toMatchObject({
+          id: "BY-1",
+          title: "Effect-native Task",
+          state: "new",
+        });
+      }),
+    ),
+  );
+
+  it.scoped("rolls back Task-backed Change Start when the Task transition fails", () =>
+    withTemporaryState((input) =>
+      Effect.gen(function* () {
+        const tasks = yield* openSqliteTaskPersistence("BY");
+        const changes = yield* openSqliteChangeStartPersistence();
+        const created = yield* tasks.createTask({
+          title: "Atomic Change Start",
+          description: "The Change and Task transition commit together.",
+          now: "2026-07-17T22:50:00.000Z",
+        });
+        if (!created.ok) return;
+        const taskId = storedPublicTaskId(created.task.id);
+        yield* tasks.approveTask({ taskId, now: "2026-07-17T22:51:00.000Z" });
+
+        const repository = yield* RepositorySql;
+        yield* repository.operation(
+          "install Task transition failure",
+          (sql) => sql`
+            CREATE TRIGGER reject_change_start_task_transition
+            BEFORE UPDATE OF state ON tasks
+            WHEN NEW.state = 'implementing'
+            BEGIN
+              SELECT RAISE(ABORT, 'deliberate Task transition failure');
+            END
+          `,
+        );
+
+        yield* changes
+          .create({
+            id: "change-atomic",
+            repositoryCommonDirectory: input.commonDirectory,
+            branchRef: "refs/heads/but-why/by-1",
+            baseRef: "main",
+            startingCommit: "1111111111111111111111111111111111111111",
+            worktreePath: join(input.commonDirectory, "worktrees", "by-1"),
+            taskId,
+            now: "2026-07-17T22:52:00.000Z",
+          })
+          .pipe(Effect.flip);
+
+        expect(yield* changes.getById("change-atomic")).toBeUndefined();
+        expect(yield* tasks.getTaskById(taskId)).toMatchObject({ state: "todo" });
+      }),
+    ),
+  );
+
   it.scoped("acquires migrated repository state through one scoped SQL service", () =>
     withTemporaryState(() =>
       Effect.gen(function* () {

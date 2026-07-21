@@ -3,6 +3,7 @@ import { Effect } from "effect";
 import { parseCliTaskIdValue } from "../../cliTaskId.js";
 import { withGlobalHelpFlags } from "../../cliHelp.js";
 import {
+  repositoryStorageErrorResult,
   runtimeError,
   stateStoreUnavailable,
   success,
@@ -11,13 +12,20 @@ import {
 } from "../../cliResults.js";
 import { readHandoffFile, type HandoffFileReadError } from "../../change/handoffFile.js";
 import { loadChangeInspection } from "../../localChange/loadChangeInspection.js";
-import { loadChangeUseCases } from "../../localChange/changeUseCases.js";
+import { withChangeUseCases } from "../../localChange/changeUseCases.js";
 import { loadChangeSubmit } from "../../localChange/loadChangeSubmit.js";
 import type { InteractiveSessionHost } from "../../change/interactiveSessionHost.js";
 import type { ReviewerAgentRuntime } from "../../agent/reviewerAgentRuntime.js";
 import type { PublicTaskId } from "../../task/taskId.js";
 import type { ChangeRecord } from "../../change/change.js";
 import type { ChangeSubmitResult } from "../../change/submitChange.js";
+import type {
+  ChangeImplementResult,
+  ChangePrepareResult,
+  ChangeStartResult,
+  ChangeUseCases,
+} from "../../change/changeUseCases.js";
+import type { RepositoryStorageError } from "../../repositoryStorageError.js";
 
 export type ChangeCommandEnvironment = {
   readonly cwd: string;
@@ -138,22 +146,15 @@ const runStart = (
     taskId = parsed.taskId;
   }
 
-  const loaded = loadChangeUseCases({
-    cwd: environment.cwd,
-  });
-  if (!loaded.ok) return Effect.succeed(loadError(loaded.error));
-
-  return Effect.promise(async () => {
-    try {
-      const result = await loaded.changes.start({
+  return withChanges(environment, (changes) =>
+    Effect.map(
+      changes.start({
         ...(taskId === undefined ? {} : { taskId }),
         now: environment.now().toISOString(),
-      });
-      return startResult(result);
-    } catch {
-      return stateStoreUnavailable("repository");
-    }
-  });
+      }),
+      startResult,
+    ),
+  );
 };
 
 const runList = (
@@ -381,21 +382,10 @@ const runPrepare = (
       }),
     );
   }
-  const loaded = loadChangeUseCases({
-    cwd: environment.cwd,
-  });
-  if (!loaded.ok) return Effect.succeed(loadError(loaded.error));
-  return Effect.promise(async () => {
-    try {
-      const result = await loaded.changes.prepare(
-        args[0] as string,
-        environment.now().toISOString(),
-      );
-      return prepareResult(result);
-    } catch {
-      return stateStoreUnavailable("repository");
-    }
-  });
+  const changeId = args[0];
+  return withChanges(environment, (changes) =>
+    Effect.map(changes.prepare(changeId, environment.now().toISOString()), prepareResult),
+  );
 };
 
 const runImplement = (
@@ -437,32 +427,12 @@ const runImplement = (
       ? undefined
       : readHandoffFile(environment.cwd, parsed.handoffFile);
   if (handoff !== undefined && !handoff.ok) return Effect.succeed(handoffFileError(handoff.error));
-  const loaded = loadChangeUseCases({
-    cwd: environment.cwd,
-    ...(environment.interactiveSessionHost === undefined
-      ? {}
-      : { interactiveSessionHost: environment.interactiveSessionHost }),
-    ...(environment.interactiveSessionPath === undefined
-      ? {}
-      : { interactiveSessionPath: environment.interactiveSessionPath }),
-  });
-  if (!loaded.ok) return Effect.succeed(loadError(loaded.error));
-  return Effect.promise(async () => {
-    try {
-      return implementResult(
-        await loaded.changes.implement(
-          parsed.changeId,
-          handoff === undefined ? undefined : handoff.content,
-        ),
-      );
-    } catch {
-      return runtimeError({
-        code: "launch_failed",
-        message: "But Why? could not launch the Interactive Session.",
-        help: ["Confirm Herdr is running, then retry Change Implement."],
-      });
-    }
-  });
+  return withChanges(environment, (changes) =>
+    Effect.map(
+      changes.implement(parsed.changeId, handoff === undefined ? undefined : handoff.content),
+      implementResult,
+    ),
+  );
 };
 
 type ImplementArgsParseResult =
@@ -688,13 +658,9 @@ const runReconcile = (
     );
   }
   const changeId = args[0];
-  const loaded = loadChangeUseCases({
-    cwd: environment.cwd,
-  });
-  if (!loaded.ok) return Effect.succeed(loadError(loaded.error));
-  return Effect.promise(async () => {
-    try {
-      const result = loaded.changes.reconcile(changeId, environment.now().toISOString());
+  return withChanges(environment, (changes) =>
+    Effect.sync(() => {
+      const result = changes.reconcile(changeId, environment.now().toISOString());
       if (changeId !== undefined && result.changes.length === 0) {
         return runtimeError({
           code: "change_not_found",
@@ -712,15 +678,11 @@ const runReconcile = (
             ],
           })
         : success({ changes: result.changes });
-    } catch {
-      return stateStoreUnavailable("repository");
-    }
-  });
+    }),
+  );
 };
 
-const implementResult = (
-  result: Awaited<ReturnType<import("../../change/changeUseCases.js").ChangeUseCases["implement"]>>,
-): CliResult => {
+const implementResult = (result: ChangeImplementResult): CliResult => {
   if (result.ok) {
     return success({
       changeId: result.change.id,
@@ -759,9 +721,7 @@ const implementResult = (
   throw new Error("Unhandled Change Implement result");
 };
 
-const startResult = (
-  result: Awaited<ReturnType<import("../../change/changeUseCases.js").ChangeUseCases["start"]>>,
-): CliResult => {
+const startResult = (result: ChangeStartResult): CliResult => {
   if (result.ok) return success(changeView(result.change));
   if (result.code === "prepare_failed") return prepareFailure(result.change);
   if (result.code === "task_dependencies_unsatisfied") {
@@ -790,9 +750,7 @@ const startResult = (
   return operationalError(result.code, "change" in result ? result.change : undefined);
 };
 
-const prepareResult = (
-  result: Awaited<ReturnType<import("../../change/changeUseCases.js").ChangeUseCases["prepare"]>>,
-): CliResult => {
+const prepareResult = (result: ChangePrepareResult): CliResult => {
   if (result.ok) return success(changeView(result.change));
   if (result.code === "prepare_failed") return prepareFailure(result.change);
   if (result.code === "change_not_found" || result.code === "change_not_open") {
@@ -856,6 +814,26 @@ const operationalError = (code: string, change?: ChangeRecord): CliResult =>
       "Inspect the default branch, committed Repo Config, branch, and worktree path, then retry.",
     ],
   });
+
+const withChanges = (
+  environment: ChangeCommandEnvironment,
+  use: (changes: ChangeUseCases) => Effect.Effect<CliResult, RepositoryStorageError>,
+): Effect.Effect<CliResult> =>
+  withChangeUseCases(
+    {
+      cwd: environment.cwd,
+      ...(environment.interactiveSessionHost === undefined
+        ? {}
+        : { interactiveSessionHost: environment.interactiveSessionHost }),
+      ...(environment.interactiveSessionPath === undefined
+        ? {}
+        : { interactiveSessionPath: environment.interactiveSessionPath }),
+    },
+    use,
+  ).pipe(
+    Effect.map((result) => (result.ok ? result.value : loadError(result.error))),
+    Effect.catchAll((error) => Effect.succeed(repositoryStorageErrorResult(error))),
+  );
 
 const loadError = (error: { readonly code: string; readonly taskPrefix?: string }): CliResult =>
   error.code === "state_store_unavailable"

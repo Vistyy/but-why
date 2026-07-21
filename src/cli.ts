@@ -96,7 +96,7 @@ const routeCommandArgs = (
   const bin = collapseHome(environment.executablePath);
 
   if (args.length === 0) {
-    return Effect.succeed(dashboard(bin, description, environment));
+    return dashboard(bin, description, environment);
   }
 
   if (args.length === 1 && args[0] === "--help") {
@@ -110,7 +110,7 @@ const routeCommandArgs = (
   }
 
   if (firstArg === "task") {
-    return Effect.succeed(routeTask(args.slice(1), environment, { bin, description }));
+    return routeTask(args.slice(1), environment, { bin, description });
   }
 
   if (firstArg === "change") {
