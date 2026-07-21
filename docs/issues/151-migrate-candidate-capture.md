@@ -1,5 +1,9 @@
 # Migrate Candidate capture
 
+## Status
+
+Done.
+
 ## Specification
 
 - [Source specification decomposed from Task 146](146-migrate-state-stores-to-effect-programs.md)
@@ -55,11 +59,18 @@ Candidate capture integration tests create, reuse, reject, and roll back Candida
 
 ## Acceptance criteria
 
-- [ ] Candidate and capture operations use Effect-native persistence.
-- [ ] Candidate capture receives persistence and Git operations through narrow interfaces.
-- [ ] Candidate reuse and repository identity behavior remain unchanged across processes and linked worktrees.
-- [ ] Provenance conflicts and failed writes roll back the complete capture.
-- [ ] Repository composition supplies Candidate capture persistence and Git operations.
+- [x] Candidate and capture operations use Effect-native persistence.
+- [x] Candidate capture receives persistence and Git operations through narrow interfaces.
+- [x] Candidate reuse and repository identity behavior remain unchanged across processes and linked worktrees.
+- [x] Provenance conflicts and failed writes roll back the complete capture.
+- [x] Repository composition supplies Candidate capture persistence and Git operations.
+
+## Completion
+
+- Implementation: `ca3d7c31a5e69efdeaff2d2b285978386f913634`.
+- Verification: 368 tests passed with one intentional skip; type checking, linting, formatting, ast-grep, docs, Candidate capture orchestration, linked-worktree identity, provenance rollback, failed-write rollback, and Change Submit composition passed.
+- `nix develop -c just quality` remains nonzero only because the two pre-existing Task-149-approved Fallow boundary violations remain for Task 153.
+- Spec review: `APPROVED WITH REQUIRED COMMENTS`; the required completion and dependency-graph update is resolved.
 
 ## Blocked by
 
