@@ -7,7 +7,8 @@ It ends when But Why? completes one real SQLite-tracked Task-backed Change and p
 
 ## Can start immediately
 
-- Task 149: Expand Effect-native storage.
+- Task 150: Migrate Task and Change Start storage.
+- Task 151: Migrate Candidate capture.
 - Task 117: Cancel Task-backed and taskless Changes.
 - Task 129: Submit a Task-backed Change with no repository change.
 
@@ -15,9 +16,8 @@ It ends when But Why? completes one real SQLite-tracked Task-backed Change and p
 
 | Task | Capability | Blocked by |
 | --- | --- | --- |
-| 149 | Expand Effect-native storage | None |
-| 150 | Migrate Task and Change Start storage | 149 |
-| 151 | Migrate Candidate capture | 149 |
+| 150 | Migrate Task and Change Start storage | None |
+| 151 | Migrate Candidate capture | None |
 | 152 | Migrate validation execution and history | 151 |
 | 153 | Migrate Submit, publication, and reconciliation | 150, 152 |
 | 147 | Remove the synchronous state storage path | 153 |

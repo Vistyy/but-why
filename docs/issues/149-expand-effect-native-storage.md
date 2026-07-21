@@ -1,5 +1,9 @@
 # Expand Effect-native storage
 
+## Status
+
+Done.
+
 ## Specification
 
 - [Source specification decomposed from Task 146](146-migrate-state-stores-to-effect-programs.md)
@@ -57,12 +61,18 @@ Focused storage integration tests additionally verify typed failures and rollbac
 
 ## Acceptance criteria
 
-- [ ] One scoped SQL service owns repository database lifecycle and migrations.
-- [ ] Effect-native storage operations return typed failures through the Effect error channel.
-- [ ] Domain rejection results remain successful domain result values.
-- [ ] Persisted string arrays round-trip quotes, escapes, whitespace, empty arrays, and malformed input as specified.
-- [ ] Failed operations roll back without changing durable state.
-- [ ] Existing synchronous callers and the full repository test suite continue to pass.
+- [x] One scoped SQL service owns repository database lifecycle and migrations.
+- [x] Effect-native storage operations return typed failures through the Effect error channel.
+- [x] Domain rejection results remain successful domain result values.
+- [x] Persisted string arrays round-trip quotes, escapes, whitespace, empty arrays, and malformed input as specified.
+- [x] Failed operations roll back without changing durable state.
+- [x] Existing synchronous callers and the full repository test suite continue to pass.
+
+## Completion
+
+- Implementation: `627bb9892275d2c543c7ca395ede0968437d258e`.
+- Verification: 361 tests passed and one intentionally skipped; type checking, linting, formatting, ast-grep, coverage, dead-code checks, and dependency checks passed.
+- Approved baseline exception: the five pre-existing Fallow boundary violations remain unchanged for their owning migration tasks.
 
 ## Blocked by
 
