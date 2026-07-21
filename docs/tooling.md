@@ -45,7 +45,9 @@ Unit-size, composite-score, and hotspot reports must remain visible review evide
 These reports must not replace direct blocking complexity findings.
 CRAP must use measured coverage.
 Tests must cover every public behavior and applicable external contract.
-Every production file must appear in coverage, including untested files at zero percent.
+Every executable production file must appear in coverage, including untested files at zero percent.
+Declaration-only TypeScript modules are recorded separately because TypeScript erases them before Istanbul instrumentation.
+They must not gain artificial runtime statements for coverage reporting.
 After uncovered behavior is resolved or classified as unreachable infrastructure, the quality gate must use the achieved coverage as its blocking floor.
 
 Fallow enforces import graphs, dependency ownership, dead code, duplication, and health.
@@ -53,6 +55,12 @@ ast-grep enforces exact structural patterns that it can determine reliably.
 Biome and TypeScript enforce language-level correctness.
 Vitest verifies product behavior.
 Configuration checks validate the shape and integrity of quality policy without deciding semantic architecture.
+
+`just ast-grep-check` runs native valid and invalid fixtures, reviewed diagnostic snapshots, and the production scan for every current syntax contract.
+`.fallowrc.jsonc` defines the role-based ownership graph, while `fallow-rules/architecture.json` protects domain modules from Node infrastructure.
+The accepted Fallow graph blocks Change workflows from concrete adapters and composition, blocks CLI modules from storage, and blocks domain modules from Node infrastructure.
+Task 148 verified those boundaries with disposable violation probes because Fallow has no native boundary-fixture format.
+Approved imports and complete zone coverage remain verified by the production Fallow scan.
 
 ## Continuous integration
 

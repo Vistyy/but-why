@@ -1,5 +1,6 @@
 import { defineConfig } from "vitest/config";
 
+// TypeScript erases these modules before Istanbul can instrument them.
 const declarationOnlyModules = [
   "src/agent/agentProfileErrors.ts",
   "src/candidate/candidate.ts",

@@ -10,7 +10,8 @@
 
 - Just exposes the supported initialization, test, coverage, build, documentation, configuration, and quality commands.
 - The locked Nix environment provides Node.js 24, pnpm 10.28.0, and Just.
-- Coverage measures every executable production module through Istanbul, reports untested runtime code at zero, and classifies declaration-only modules that compile without statements.
+- Coverage measures every executable production module through Istanbul and reports untested runtime code at zero.
+- The coverage configuration records declaration-only modules separately because TypeScript erases them before instrumentation.
 - Fallow enforces the approved ownership graph and direct health limits.
 - ast-grep enforces only current closed syntax contracts with native fixtures and reviewed snapshots.
 - Biome, TypeScript, Vitest, Remark, and each owning tool validate their supported files without custom policy reimplementations.
@@ -97,11 +98,12 @@ Run `just quality` in the locked Nix environment and compare its output with the
 
 - [ ] `just init` succeeds in the locked Nix environment and rejects unsupported Node.js or pnpm versions.
 - [ ] Tests pass with 344 passing tests and one conditional smoke-test skip.
-- [ ] Coverage reports every executable production module, including zero-covered modules, and classifies the sixteen declaration-only modules.
+- [ ] Coverage reports every executable production module, including zero-covered modules, and records the sixteen declaration-only modules separately without artificial runtime statements.
 - [ ] Coverage reports 81.97% statements, 68.94% branches, 90.20% functions, and 84.79% lines before repairs.
 - [ ] Formatting, linting, type checking, documentation, configuration, ast-grep, and build checks pass.
 - [ ] ast-grep has ten approved syntax rules with native fixtures and reviewed diagnostic snapshots.
 - [ ] Fallow reports exactly five ownership violations, fifteen duplication groups, and thirteen direct CRAP findings.
+- [ ] Disposable probes confirm that Fallow blocks Change workflow imports from adapters or composition, CLI imports from storage, and domain imports from Node infrastructure.
 - [ ] Fallow reports large functions as review evidence without a custom size gate.
 - [ ] No custom quality script or exception manifest duplicates an owning tool or semantic review.
 
