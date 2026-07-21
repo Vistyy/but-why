@@ -1,5 +1,9 @@
 # Migrate Task and Change Start storage
 
+## Status
+
+Done.
+
 ## Specification
 
 - [Source specification decomposed from Task 146](146-migrate-state-stores-to-effect-programs.md)
@@ -59,13 +63,23 @@ One CLI process creates and approves a Task, another starts and prepares its Cha
 
 ## Acceptance criteria
 
-- [ ] Task commands use Effect-native persistence without changing public output.
-- [ ] Change Start uses Effect-native persistence and injected Git operations.
-- [ ] Starting a Task-backed Change atomically creates the Change and transitions the Task.
-- [ ] Task comments and dependency replacement remain safe under concurrent CLI processes.
-- [ ] Task dependency errors are covered through their public CLI results.
-- [ ] Task approval and transition transactions use the Effect-native Task persistence contract.
-- [ ] Repository composition supplies the Change Start Git operations.
+- [x] Task commands use Effect-native persistence without changing public output.
+- [x] Change Start uses Effect-native persistence and injected Git operations.
+- [x] Starting a Task-backed Change atomically creates the Change and transitions the Task.
+- [x] Task comments and dependency replacement remain safe under concurrent CLI processes.
+- [x] Task dependency errors are covered through their public CLI results.
+- [x] Task approval and transition transactions use the Effect-native Task persistence contract.
+- [x] Repository composition supplies the Change Start Git operations.
+
+## Completion
+
+- Implementation: `98e4e206b0298db47897d6347e172a112e91ca2b`.
+- Review corrections: `59ab561`, `3f26f1c`, and `cfd8188`.
+- Dependency graph update: `d5513bc`.
+- Verification: 366 tests passed with one intentional skip; type checking, linting, formatting, ast-grep, docs, concurrency coverage, Change Start rollback coverage, and the cross-process primary seam passed.
+- `nix develop -c just quality` remains nonzero only because the four pre-existing Task-149-approved Fallow boundary violations remain for Tasks 151 through 153.
+- Spec review: `APPROVED WITH REQUIRED COMMENTS`; the required dependency-graph update is resolved.
+- Standards review: `APPROVED WITH REQUIRED COMMENTS`; the required failure mapping and complexity corrections are resolved.
 
 ## Blocked by
 
