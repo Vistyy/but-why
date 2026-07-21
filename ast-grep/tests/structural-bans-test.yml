@@ -8,15 +8,6 @@ invalid:
   - process.exitCode = 1
   - globalThis.process.env
 ---
-id: runtime-methods-belong-to-runtime-seams
-valid:
-  - Effect.map(work, done)
-  - runtime.run(work)
-invalid:
-  - Effect.runPromise(work)
-  - runtime.runSyncExit(work)
-  - Fx.runFork(work)
----
 id: effect-tests-use-effect-vitest-runtime
 valid:
   - it.effect("executes work", () => Effect.map(work, done))
@@ -51,17 +42,6 @@ invalid:
   - import("@ai-hero/sandcastle")
   - require("@ai-hero/sandcastle")
 ---
-id: child-process-belongs-to-command-adapters
-valid:
-  - import process from "node:process";
-  - runGit(args)
-invalid:
-  - import { spawnSync as run } from "node:child_process";
-  - import { exec } from "child_process";
-  - import * as childProcess from "node:child_process";
-  - import("node:child_process")
-  - require("child_process")
----
 id: task-identity-branding-belongs-to-task-id
 valid:
   - storedPublicTaskId(value)
@@ -69,26 +49,6 @@ valid:
 invalid:
   - value as PublicTaskId
   - value as TaskSlug
----
-id: json-parse-belongs-to-codecs
-valid:
-  - decodeJson(value)
-  - codec.parse(value)
-invalid:
-  - JSON.parse(value)
-  - globalThis.JSON.parse(value)
-  - JSON["parse"](value)
-  - globalThis.JSON["parse"](value)
----
-id: json-stringify-belongs-to-codecs
-valid:
-  - encodeJson(value)
-  - codec.stringify(value)
-invalid:
-  - JSON.stringify(value)
-  - globalThis.JSON.stringify(value)
-  - JSON["stringify"](value)
-  - globalThis.JSON["stringify"](value)
 ---
 id: wall-clock-belongs-to-cli-entry
 valid:

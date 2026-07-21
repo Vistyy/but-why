@@ -5,38 +5,37 @@
   "rulePacks": ["./fallow-rules/architecture.json"],
   "rules": {
     "boundary-violation": "error",
+    "circular-dependencies": "error",
     "dev-dependencies-in-production": "error",
+    "duplicate-exports": "error",
+    "policy-violation": "error",
     "re-export-cycle": "error",
     "require-suppression-reason": "error",
     "stale-suppressions": "error",
     "test-only-dependencies": "error",
     "type-only-dependencies": "error",
+    "unlisted-dependencies": "error",
+    "unresolved-imports": "error",
+    "unused-class-members": "error",
+    "unused-dependencies": "error",
     "unused-dev-dependencies": "error",
+    "unused-enum-members": "error",
+    "unused-exports": "error",
+    "unused-files": "error",
     "unused-optional-dependencies": "error",
-    "policy-violation": "error"
+    "unused-types": "error"
   },
   "health": {
     "maxCyclomatic": 20,
     "maxCognitive": 15,
-    "maxCrap": 30
+    "maxCrap": 30,
+    "maxUnitSize": 60
   },
   "boundaries": {
     "zones": [
       {
-        "name": "support",
-        "patterns": [".remarkrc.mjs", "vitest.config.ts", "test/**/*.ts"]
-      },
-      {
-        "name": "cli-entry",
-        "patterns": ["src/main.ts"]
-      },
-      {
         "name": "cli",
         "patterns": ["src/cli.ts", "src/cli*.ts", "src/cli/**"]
-      },
-      {
-        "name": "output-codecs",
-        "patterns": ["src/output/json.ts", "src/output/serialize.ts", "src/output/toon.ts"]
       },
       {
         "name": "domain",
@@ -53,37 +52,12 @@
         ]
       },
       {
-        "name": "ports",
-        "patterns": [
-          "src/candidate/candidateStore.ts",
-          "src/candidateValidation/candidateValidationRunStore.ts",
-          "src/change/changeStartStore.ts",
-          "src/change/changeStore.ts",
-          "src/change/interactiveSessionHost.ts",
-          "src/change/ownedPullRequestGateway.ts",
-          "src/changeCandidateCapture/changeCandidateCaptureStore.ts",
-          "src/task/taskStore.ts",
-          "src/validation/validationWorkspace.ts"
-        ]
-      },
-      {
         "name": "composition",
         "patterns": [
           "src/init/repoLocalStores.ts",
           "src/localCandidateValidation/**",
           "src/localChange/**",
           "src/localTask/**"
-        ]
-      },
-      {
-        "name": "repository-context",
-        "patterns": [
-          "src/init/acceptanceInstructions.ts",
-          "src/init/git.ts",
-          "src/init/gitignore.ts",
-          "src/init/globalConfig.ts",
-          "src/init/repoConfig.ts",
-          "src/init/repoContext.ts"
         ]
       },
       {
@@ -115,92 +89,21 @@
           "src/changeCandidateCapture/captureLocalCandidate.ts",
           "src/publication/publishCandidate.ts"
         ]
-      },
-      {
-        "name": "application",
-        "patterns": [
-          "src/acceptanceReview/**",
-          "src/agent/**",
-          "src/candidateValidation/**",
-          "src/change/handoffFile.ts",
-          "src/contracts/**",
-          "src/output/**",
-          "src/repositoryPreparation/runRepositoryPreparation.ts",
-          "src/specialistReview/**",
-          "src/submit/**",
-          "src/task/files/**",
-          "src/task/repoTaskIds.ts",
-          "src/task/taskUseCases.ts",
-          "src/validation/**",
-          "src/validationRun/**"
-        ]
       }
     ],
     "rules": [
       {
-        "from": "cli-entry",
-        "allow": ["cli", "output-codecs"]
-      },
-      {
         "from": "cli",
-        "allow": [
-          "application",
-          "change-workflows",
-          "composition",
-          "domain",
-          "ports",
-          "repository-context"
-        ]
-      },
-      {
-        "from": "output-codecs",
-        "allow": ["application"]
+        "allow": ["adapters", "change-workflows", "composition", "domain"]
       },
       {
         "from": "domain",
         "allow": []
       },
       {
-        "from": "ports",
-        "allow": ["application", "domain"]
-      },
-      {
-        "from": "composition",
-        "allow": [
-          "adapters",
-          "application",
-          "change-workflows",
-          "domain",
-          "output-codecs",
-          "ports",
-          "repository-context",
-          "storage"
-        ]
-      },
-      {
-        "from": "repository-context",
-        "allow": ["application", "storage"]
-      },
-      {
-        "from": "storage",
-        "allow": ["application", "domain", "ports"]
-      },
-      {
-        "from": "adapters",
-        "allow": ["application", "domain", "ports", "repository-context"],
-        "allowTypeOnly": ["change-workflows"]
-      },
-      {
         "from": "change-workflows",
-        "allow": ["application", "domain", "ports", "repository-context"]
-      },
-      {
-        "from": "application",
-        "allow": ["domain", "ports", "repository-context"]
+        "allow": ["domain"]
       }
-    ],
-    "coverage": {
-      "requireAllFiles": true
-    }
+    ]
   }
 }

@@ -13,7 +13,6 @@
 - Reconciliation completes merged Changes, transitions linked Tasks, and records cleanup outcomes atomically.
 - Submit and reconciliation receive GitHub target and cleanup operations through narrow injected interfaces.
 - Change CLI commands preserve their current argument, error, Finding, and result output.
-- Baseline findings A2, A3, D9, D10, D11, D12, H1, H2, H7, H10 through H13, and C2 belong to this task.
 
 ## What to build
 
@@ -35,11 +34,9 @@ A cross-process CLI workflow captures a Candidate, submits it, records publicati
 - [ ] Supported GitHub remote forms and malformed targets have explicit behavior coverage.
 - [ ] Change CLI output and operational error branches are covered.
 - [ ] Repository composition supplies GitHub target and cleanup operations to Change workflows.
-- [ ] Baseline findings A2, A3, D9, D10, D11, D12, H1, H2, H7, H10 through H13, and C2 are resolved.
 - [ ] Every production storage caller uses the Effect-native contract required before Task 147.
 
 ## Blocked by
 
 - [Task 150](150-migrate-task-and-change-start-storage.md)
-- [Task 151](151-migrate-candidate-capture.md)
 - [Task 152](152-migrate-validation-execution-and-history.md)

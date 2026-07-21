@@ -13,7 +13,6 @@
 - Change Start receives Git operations through an injected Change-owned interface.
 - Task dependency failures retain their current command results and diagnostics.
 - Task and Change Start transactions preserve current concurrency and rollback behavior.
-- Baseline findings A1, D3, D13, D14, H4, and H9 belong to this task.
 
 ## What to build
 
@@ -35,7 +34,6 @@ One CLI process creates and approves a Task, another starts and prepares its Cha
 - [ ] Task dependency errors are covered through their public CLI results.
 - [ ] Task approval and transition transactions use the Effect-native Task persistence contract.
 - [ ] Repository composition supplies the Change Start Git operations.
-- [ ] Baseline findings A1, D3, D13, D14, H4, and H9 are resolved.
 
 ## Blocked by
 

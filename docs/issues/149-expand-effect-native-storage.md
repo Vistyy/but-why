@@ -14,7 +14,6 @@
 - Storage failures use tagged error channels for unavailable state, identity conflicts, SQL failures, migrations, and persisted data.
 - Persisted string arrays round-trip through the current storage representation.
 - Transactions roll back when an Effect-native operation fails.
-- Baseline finding H6 belongs to this task.
 
 ## What to build
 
@@ -39,4 +38,4 @@ Focused storage integration tests additionally verify typed failures and rollbac
 
 ## Blocked by
 
-- [Task 148](148-establish-audited-quality-baseline.md)
+None - can start immediately.

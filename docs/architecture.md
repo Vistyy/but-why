@@ -63,13 +63,6 @@ CLI commands return structured data on stdout.
 TOON is the default output format.
 Callers that parse output pass `--output json`.
 
-## Naming
-
-Public search anchors use a canonical domain term plus a clear operation or role.
-Search anchors include directories, files, public exports, public types, stores, gateways, hosts, and adapters.
-Generic public names such as `Manager`, `Service`, `Helper`, `Utils`, or plain `Store` do not identify sufficient ownership.
-Module-private helpers may use shorter names when their module provides the missing context.
-
 ## Configuration
 
 Repo Config owns Repository Preparation, Checks, validation workspaces, and review policy.

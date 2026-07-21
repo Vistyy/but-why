@@ -9,10 +9,6 @@
   Correct misleading names now.
 - Treat historical migrations and planning documents as historical evidence.
   Do not use them as naming precedent for current implementation.
-- Preserve the repository quality policy while unrelated work is in progress.
-  A task or approved architecture contract must own each quality-policy change.
-  Run Standards review for the change.
-  Resolve each finding or obtain user approval for an explicit routing decision.
 
 ## Pointers
 

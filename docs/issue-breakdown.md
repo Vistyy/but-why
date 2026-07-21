@@ -8,8 +8,6 @@ It ends when But Why? completes one real SQLite-tracked Task-backed Change and p
 ## Can start immediately
 
 - Task 149: Expand Effect-native storage.
-- Task 154: Share local process result handling.
-- Task 155: Share configuration diagnostic handling.
 - Task 117: Cancel Task-backed and taskless Changes.
 - Task 129: Submit a Task-backed Change with no repository change.
 
@@ -19,13 +17,11 @@ It ends when But Why? completes one real SQLite-tracked Task-backed Change and p
 | --- | --- | --- |
 | 149 | Expand Effect-native storage | None |
 | 150 | Migrate Task and Change Start storage | 149 |
-| 151 | Migrate Candidate capture | 150 |
+| 151 | Migrate Candidate capture | 149 |
 | 152 | Migrate validation execution and history | 151 |
-| 153 | Migrate Submit, publication, and reconciliation | 150, 151, 152 |
-| 154 | Share local process result handling | None |
-| 155 | Share configuration diagnostic handling | None |
+| 153 | Migrate Submit, publication, and reconciliation | 150, 152 |
 | 147 | Remove the synchronous state storage path | 153 |
-| 135 | Consolidate the source hierarchy | 147, 154, 155 |
+| 135 | Consolidate the source hierarchy and names | 147 |
 | 156 | Establish and verify the final quality gate | 135 |
 | 123 | Ship the Change-centered manual workflow | 107, 117, 129, 135 |
 | 125 | Produce an installable v1 package | 123 |
@@ -42,15 +38,16 @@ It ends when But Why? completes one real SQLite-tracked Task-backed Change and p
 5. Task 106 migrates detailed inspection to Change commands and keeps Task projections concise.
 6. Task 107 removed the replaced Task-owned writers, readers, routes, compatibility paths, and historical SQLite migration chain in the implementation diff from baseline `bc6a1819457f469903094c6b85871565ec602372`.
 7. Task 137 establishes the Effect SQL baseline and shared repository state foundation.
-8. Task 148 established the audited quality baseline and recorded the exact repair inventory.
+8. Task 148 established the blocking quality policy and advisory health reports.
 9. Task 149 expands Effect-native storage beside the temporary synchronous contract.
-10. Tasks 150 through 153 migrate Task, Change Start, Candidate capture, validation history, Submit, publication, and reconciliation in dependency order.
-11. Tasks 154 and 155 repair independent process-result and configuration-diagnostic duplication after Task 148 and before source consolidation.
-12. Task 147 removes the temporary synchronous storage path after every production caller has migrated.
-13. Task 135 reorganizes the surviving modules so every top-level source folder has one domain owner or one clear shared role.
-14. Task 156 sets the achieved coverage floor and verifies the final gate from a disposable locked-Nix checkout.
-15. Task 117 completes cancellation and cleanup before Task 123 ships the public workflow.
-16. After Task 126 publishes the package, Task 138 replaces the temporary unreleased-schema instruction with the post-publication compatibility policy.
+10. Tasks 150 and 151 independently migrate Task and Change Start storage and Candidate capture after Task 149.
+11. Task 152 migrates validation execution and history after Candidate capture.
+12. Task 153 integrates Submit, publication, and reconciliation after Tasks 150 and 152.
+13. Task 147 removes the temporary synchronous storage path after every production caller has migrated.
+14. Task 135 reorganizes the surviving modules and applies canonical names to the final hierarchy.
+15. Task 156 sets the achieved coverage floor and verifies the final gate from a clean locked-Nix checkout.
+16. Task 117 completes cancellation and cleanup before Task 123 ships the public workflow.
+17. After Task 126 publishes the package, Task 138 replaces the temporary unreleased-schema instruction with the post-publication compatibility policy.
 
 ## Independent test-execution workstream
 

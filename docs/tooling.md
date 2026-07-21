@@ -20,40 +20,55 @@ The project uses:
 - Biome for formatting and linting.
 - TypeScript for strict type checking.
 - Fallow for dependencies, dead code, import boundaries, duplication, and code health.
-- ast-grep for exact structural rules over maintained TypeScript source.
+- ast-grep for six exact TypeScript syntax contracts.
 - Remark for Markdown link and anchor validation.
 - Effect SQL with the `@effect/sql-sqlite-node` Adapter for SQLite access.
 
-## Quality policy
+## Blocking quality policy
 
-Fallow enforces these direct health limits:
+`just quality` is the blocking acceptance command.
+It runs formatting, linting, type checking, tests, coverage, documentation validation, ast-grep, Fallow, and the production build.
+
+Fallow blocks dead code, dependency errors, cycles, invalid suppressions, and these direct health limits:
 
 - Maximum cyclomatic complexity: 20.
 - Maximum cognitive complexity: 15.
 - Maximum CRAP: 30.
 
-Fallow reports unit size, composite scores, and hotspots as review information.
-Fallow blocks direct complexity findings through the limits above.
-`just fallow-check` blocks dependency, dead-code, import-boundary, and direct health findings.
-The command reports duplication findings without treating the duplication report as a blocking result.
+Fallow enforces three architecture contracts:
+
+- Change workflows use ports instead of concrete Adapters or composition.
+- CLI modules do not import storage.
+- Domain modules do not import Node infrastructure.
+
+Files outside the named Fallow zones receive no architecture claim.
+
+ast-grep blocks these syntax contracts:
+
+- Process properties belong to the CLI entry point.
+- Effect tests use the Effect Vitest runtime.
+- TOON belongs to the output codec.
+- Sandcastle factories belong to workspace creation.
+- Task identity branding belongs to `taskId.ts`.
+- Wall-clock reads belong to the CLI entry point.
 
 Vitest measures executable statements in every `src/**/*.ts` module.
 Untested executable modules appear at zero coverage.
 TypeScript declaration-only modules have no executable output and therefore have no coverage measurement.
-Tests cover public behavior and applicable external contracts.
+The current coverage policy has no percentage threshold.
 
-ast-grep checks only the syntax named by each rule.
-Fallow enforces the import boundaries defined in `.fallowrc.jsonc` and `fallow-rules/architecture.json`.
-Biome checks formatting and lint rules.
-TypeScript checks types.
-Vitest checks product behavior and coverage.
-`just config-check` checks quality-tool configuration.
+## Advisory health reports
+
+`just health` runs coverage before producing Fallow health and duplication reports.
+The reports include CRAP, function size, composite scores, hotspots, and duplication.
+Advisory reports do not determine the `just quality` result.
+A report becomes implementation work only when repository evidence establishes a concrete defect or maintenance cost.
 
 ## Verification environment
 
 The locked Nix environment is authoritative for repository verification.
 Enter the environment through direnv, then run `just init` and `just quality`.
-Non-interactive automation can run `nix develop -c just <recipe>`.
+Non-interactive local automation can run `nix develop -c just <recipe>`.
 
 ## Commands
 

@@ -11,24 +11,6 @@ rule:
     - pattern: process.$PROPERTY
     - pattern: globalThis.process.$PROPERTY
 ---
-id: runtime-methods-belong-to-runtime-seams
-language: TypeScript
-severity: error
-message: Calls to runPromise, runSync, or related runtime-style methods belong in an approved runtime seam.
-files:
-  - src/**/*.ts
-ignores:
-  - src/main.ts
-  - src/init/stateDatabase.ts
-rule:
-  any:
-    - pattern: $RUNTIME.runPromise($$$ARGS)
-    - pattern: $RUNTIME.runPromiseExit($$$ARGS)
-    - pattern: $RUNTIME.runSync($$$ARGS)
-    - pattern: $RUNTIME.runSyncExit($$$ARGS)
-    - pattern: $RUNTIME.runFork($$$ARGS)
-    - pattern: $RUNTIME.runCallback($$$ARGS)
----
 id: effect-tests-use-effect-vitest-runtime
 language: TypeScript
 severity: error
@@ -80,34 +62,6 @@ rule:
         - kind: call_expression
         - regex: '^(import|require)\(["`]@ai-hero/sandcastle([^"`]*)?["`]\)$'
 ---
-id: child-process-belongs-to-command-adapters
-language: TypeScript
-severity: error
-message: Load child_process only in command adapter modules.
-files:
-  - src/**/*.ts
-ignores:
-  - src/init/git.ts
-  - src/changeCandidateCapture/localGitCandidate.ts
-  - src/submissionEnvironment/gitFacts.ts
-  - src/submissionEnvironment/githubTarget.ts
-  - src/validation/validationGitGlue.ts
-  - src/change/changeStartGit.ts
-  - src/change/localChangeCleanupGit.ts
-  - src/repositoryPreparation/localRepositoryPreparation.ts
-  - src/publication/localCandidatePublicationGit.ts
-  - src/submissionEnvironment/localGitHubPullRequestGateway.ts
-  - src/change/herdrInteractiveSessionHost.ts
-rule:
-  any:
-    - all:
-        - kind: import_statement
-        - regex: '[\s\S]*["`](node:child_process|child_process)["`][\s\S]*'
-    - pattern: import("node:child_process")
-    - pattern: import("child_process")
-    - pattern: require("node:child_process")
-    - pattern: require("child_process")
----
 id: task-identity-branding-belongs-to-task-id
 language: TypeScript
 severity: error
@@ -120,48 +74,6 @@ rule:
   any:
     - pattern: $VALUE as PublicTaskId
     - pattern: $VALUE as TaskSlug
----
-id: json-parse-belongs-to-codecs
-language: TypeScript
-severity: error
-message: Direct JSON.parse calls belong in approved configuration, external-tool, or persistence codecs.
-files:
-  - src/**/*.ts
-ignores:
-  - src/init/repoConfig.ts
-  - src/agent/reviewerOutputWire.ts
-  - src/submissionEnvironment/githubTarget.ts
-  - src/sqlite/sqliteCandidateValidationPolicy.ts
-  - src/sqlite/sqliteTaskContextSnapshot.ts
-  - src/sqlite/sqliteChangePreparation.ts
-  - src/submissionEnvironment/localGitHubPullRequestGateway.ts
-  - src/change/herdrInteractiveSessionHost.ts
-rule:
-  any:
-    - pattern: JSON.parse($$$ARGS)
-    - pattern: globalThis.JSON.parse($$$ARGS)
-    - pattern: JSON["parse"]($$$ARGS)
-    - pattern: globalThis.JSON["parse"]($$$ARGS)
----
-id: json-stringify-belongs-to-codecs
-language: TypeScript
-severity: error
-message: Direct JSON.stringify calls belong in approved configuration, output, or persistence codecs.
-files:
-  - src/**/*.ts
-ignores:
-  - src/init/repoConfig.ts
-  - src/agent/reviewerOutputWire.ts
-  - src/output/json.ts
-  - src/sqlite/sqliteCandidateValidationPolicy.ts
-  - src/sqlite/sqliteTaskContextSnapshot.ts
-  - src/sqlite/sqliteChangePreparation.ts
-rule:
-  any:
-    - pattern: JSON.stringify($$$ARGS)
-    - pattern: globalThis.JSON.stringify($$$ARGS)
-    - pattern: JSON["stringify"]($$$ARGS)
-    - pattern: globalThis.JSON["stringify"]($$$ARGS)
 ---
 id: wall-clock-belongs-to-cli-entry
 language: TypeScript

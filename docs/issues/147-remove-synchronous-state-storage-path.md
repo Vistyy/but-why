@@ -9,8 +9,6 @@
 
 ## Behaviors owned
 
-- Baseline findings D6 and C3 belong to this task.
-
 - The Effect SQL storage path is the only production storage path.
 - Direct Effect runtime execution remains limited to `src/main.ts`.
 - Repository storage composition has one adapter, one migration ledger, and one scoped service.

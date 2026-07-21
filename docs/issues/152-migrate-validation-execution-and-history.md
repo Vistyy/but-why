@@ -13,7 +13,6 @@
 - Prepare and Check phases interpret completion markers and record command evidence consistently.
 - Acceptance and Specialist Review enforce the same Candidate integrity precondition while retaining phase-specific diagnostics.
 - Validation workspace recovery and existing-worktree behavior remain covered.
-- Baseline findings D1, D4, D7, D8, D15, H3, and H5 belong to this task.
 
 ## What to build
 
@@ -34,7 +33,6 @@ Candidate validation runs through Prepare, Checks, Acceptance Review, and Specia
 - [ ] Acceptance and Specialist Review share Candidate integrity handling without losing phase-specific diagnostics.
 - [ ] Every Tooling Failure variant has stable persisted and displayed output coverage.
 - [ ] Existing-worktree preparation and cleanup outcomes are covered.
-- [ ] Baseline findings D1, D4, D7, D8, D15, H3, and H5 are resolved.
 
 ## Blocked by
 

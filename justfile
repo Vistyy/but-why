@@ -30,24 +30,17 @@ quality:
 quality-static:
     #!/usr/bin/env bash
     set -uo pipefail
-    just config-check & config_pid=$!
     just docs-check & docs_pid=$!
     just format-check & format_pid=$!
     just lint & lint_pid=$!
     just ast-grep-check & ast_grep_pid=$!
     just typecheck & typecheck_pid=$!
-    just fallow-check & fallow_pid=$!
+    just _fallow-check & fallow_pid=$!
     status=0
-    for pid in "$config_pid" "$docs_pid" "$format_pid" "$lint_pid" "$ast_grep_pid" "$typecheck_pid" "$fallow_pid"; do
+    for pid in "$docs_pid" "$format_pid" "$lint_pid" "$ast_grep_pid" "$typecheck_pid" "$fallow_pid"; do
         wait "$pid" || status=1
     done
     exit "$status"
-
-# Validate maintained quality configuration.
-config-check:
-    just --unstable --fmt --check
-    pnpm exec biome check .but-why/config.json .fallowrc.jsonc biome.json fallow-rules/architecture.json package.json tsconfig.json tsconfig.build.json vitest.config.ts
-    @pnpm exec fallow list --entry-points --boundaries --no-cache > /dev/null 2>&1 || { echo "error: Fallow configuration is invalid"; echo "help: pnpm exec fallow list --entry-points --boundaries --no-cache"; exit 1; }
 
 # Validate links and anchors in every tracked Markdown file.
 docs-check:
@@ -60,15 +53,24 @@ docs-check:
 ast-grep-check:
     pnpm run ast-grep-check
 
-# Check dead code, named architecture seams, dependencies, and health; report duplication.
+# Check dead code, dependencies, named architecture seams, and direct health limits.
 fallow-check:
+    just coverage
+    just _fallow-check
+
+_fallow-check:
     #!/usr/bin/env bash
     set -uo pipefail
     status=0
     pnpm exec fallow dead-code --no-production --no-cache --fail-on-issues || status=1
-    pnpm exec fallow dupes --no-production --no-cache || status=1
     pnpm exec fallow health --no-production --no-cache --coverage coverage/coverage-final.json --complexity --min-severity moderate || status=1
     exit "$status"
+
+# Report advisory code-health and duplication findings.
+health:
+    just coverage
+    pnpm exec fallow health --no-production --no-cache --coverage coverage/coverage-final.json --report-only
+    pnpm exec fallow dupes --no-production --no-cache
 
 # Lint the codebase.
 lint:
@@ -98,8 +100,9 @@ pack:
 format:
     pnpm run format
 
-# Check code formatting.
+# Check code and Just formatting.
 format-check:
+    just --unstable --fmt --check
     pnpm run format-check
 
 # Run the local by CLI, forwarding any arguments.

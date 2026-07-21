@@ -19,6 +19,7 @@ Reorganize the surviving source modules after the Change-centered migration.
 Group workflow code under its owning domain.
 Group shared code by its documented adapter role.
 Move files and update imports, tests, and architecture documentation.
+Apply the global search-anchor contract and the canonical terms in `CONTEXT.md` to every moved public or domain-facing name.
 Do not redesign public or internal interfaces.
 Preserve public commands and persisted data.
 
@@ -37,11 +38,10 @@ The full repository suite and Fallow import graph additionally verify the final 
 - [ ] No migration-only folder or forwarding module remains.
 - [ ] The reorganization does not redesign public or internal interfaces.
 - [ ] The reorganization preserves public commands and persisted data.
+- [ ] Public and domain-facing names use canonical project terms and remain precise search anchors.
 - [ ] Imports, tests, structural checks, and architecture documentation describe the final hierarchy.
 - [ ] The full repository suite passes after the move.
 
 ## Blocked by
 
 - [Task 147](147-remove-synchronous-state-storage-path.md)
-- [Task 154](154-share-local-process-result-handling.md)
-- [Task 155](155-share-configuration-diagnostic-handling.md)

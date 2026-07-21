@@ -12,7 +12,6 @@
 - Candidate capture receives only the Change persistence and Git operations it requires.
 - Candidate identity, base commit, head commit, repository identity, and Change ownership remain durable.
 - Existing Candidate reuse, branch movement, provenance conflicts, and rollback behavior remain unchanged.
-- Baseline findings A4 and A5 belong to this task.
 
 ## What to build
 
@@ -32,8 +31,7 @@ Candidate capture integration tests create, reuse, reject, and roll back Candida
 - [ ] Candidate reuse and repository identity behavior remain unchanged across processes and linked worktrees.
 - [ ] Provenance conflicts and failed writes roll back the complete capture.
 - [ ] Repository composition supplies Candidate capture persistence and Git operations.
-- [ ] Baseline findings A4 and A5 are resolved.
 
 ## Blocked by
 
-- [Task 150](150-migrate-task-and-change-start-storage.md)
+- [Task 149](149-expand-effect-native-storage.md)
