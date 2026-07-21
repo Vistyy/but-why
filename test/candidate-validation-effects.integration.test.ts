@@ -4,7 +4,7 @@ import { expect, layer } from "@effect/vitest";
 import { Effect, Fiber, Layer, Option, TestClock } from "effect";
 
 import { piReviewerAgentRuntime } from "../src/agent/reviewerAgentRuntime.js";
-import { captureLocalCandidate } from "../src/changeCandidateCapture/captureLocalCandidate.js";
+import { captureLocalCandidate } from "./support/changeCandidateCapture.js";
 import {
   CandidateValidation,
   CandidateValidationLive,
@@ -46,45 +46,47 @@ const policy = {
 };
 
 layer(Layer.empty)("Candidate validation Effect composition", (it) => {
-  it.scoped("runs Candidate validation through test-provided Layers", () => {
-    const repo = candidateReadyRepo();
-    const captured = captureLocalCandidate({ cwd: repo, now });
-    if (!captured.ok) throw new Error(`Candidate capture failed: ${captured.code}`);
-    const runStore = openSqliteCandidateValidationRunStore(candidateSqliteInput(repo));
+  it.scoped("runs Candidate validation through test-provided Layers", () =>
+    Effect.gen(function* () {
+      const repo = candidateReadyRepo();
+      const captured = yield* captureLocalCandidate({ cwd: repo, now });
+      if (!captured.ok) throw new Error(`Candidate capture failed: ${captured.code}`);
+      const runStore = openSqliteCandidateValidationRunStore(candidateSqliteInput(repo));
 
-    return Effect.gen(function* () {
-      const validation = yield* CandidateValidation;
-      const result = yield* validation.validateCandidate({
-        candidateId: captured.candidateId,
-        comparisonBaseSha: captured.comparisonBaseSha,
-        headSha: captured.headSha,
-        policy,
-        now,
-      });
-
-      expect(result).toMatchObject({ ok: true, outcome: "passed" });
-
-      const productionResult = yield* Effect.gen(function* () {
-        const productionValidation = yield* CandidateValidation;
-        return yield* productionValidation.validateCandidate({
+      yield* Effect.gen(function* () {
+        const validation = yield* CandidateValidation;
+        const result = yield* validation.validateCandidate({
           candidateId: captured.candidateId,
           comparisonBaseSha: captured.comparisonBaseSha,
           headSha: captured.headSha,
           policy,
           now,
         });
-      }).pipe(
-        Effect.provide(
-          localCandidateValidationLayer({
-            localRepositoryMainCheckoutRoot: repo,
-            artifactsRoot: join(commonDirectory(repo), "but-why", "artifacts"),
-            runStore,
-          }),
-        ),
-      );
-      expect(productionResult).toMatchObject({ ok: true, reused: true, outcome: "passed" });
-    }).pipe(Effect.provide(candidateValidationTestLayer(repo, runStore)));
-  });
+
+        expect(result).toMatchObject({ ok: true, outcome: "passed" });
+
+        const productionResult = yield* Effect.gen(function* () {
+          const productionValidation = yield* CandidateValidation;
+          return yield* productionValidation.validateCandidate({
+            candidateId: captured.candidateId,
+            comparisonBaseSha: captured.comparisonBaseSha,
+            headSha: captured.headSha,
+            policy,
+            now,
+          });
+        }).pipe(
+          Effect.provide(
+            localCandidateValidationLayer({
+              localRepositoryMainCheckoutRoot: repo,
+              artifactsRoot: join(commonDirectory(repo), "but-why", "artifacts"),
+              runStore,
+            }),
+          ),
+        );
+        expect(productionResult).toMatchObject({ ok: true, reused: true, outcome: "passed" });
+      }).pipe(Effect.provide(candidateValidationTestLayer(repo, runStore)));
+    }),
+  );
 });
 
 layer(Layer.empty)("Candidate validation Effect timing", (it) => {

@@ -7,13 +7,15 @@ import type {
   ReviewerAgentResult,
   ReviewerAgentRuntime,
 } from "../src/agent/reviewerAgentRuntime.js";
-import { captureLocalCandidate } from "../src/changeCandidateCapture/captureLocalCandidate.js";
+import type { CaptureLocalCandidateResult } from "../src/changeCandidateCapture/captureLocalCandidate.js";
+import { captureLocalCandidate } from "./support/changeCandidateCapture.js";
 import {
   CandidateValidation,
   type TaskBackedCandidateValidationPolicy,
 } from "../src/candidateValidation/validateCandidate.js";
 import { candidateValidationForTest } from "./support/candidateValidation.js";
 import { openSqliteCandidateValidationRunStore } from "../src/sqlite/sqliteCandidateValidationRunStore.js";
+import type { RepositoryStorageError } from "../src/repositoryStorageError.js";
 import { ReviewerOutputContractFailed } from "../src/validation/validationToolingFailures.js";
 import type { TaskContextSnapshotV1 } from "../src/validationRun/taskContextSnapshot.js";
 import {
@@ -73,7 +75,7 @@ describe("Task-backed Candidate Acceptance Review", () => {
             stdout: '<reviewer-output>{"findings":[]}</reviewer-output>',
           }),
         );
-        const ready = acceptanceReadyRepo({ review });
+        const ready = yield* acceptanceReadyRepo({ review });
         const { captured, validation } = ready;
 
         const result = yield* runTaskBackedCandidate(ready);
@@ -119,14 +121,14 @@ describe("Task-backed Candidate Acceptance Review", () => {
             stdout: "earlier acceptance report",
           }),
         );
-        const ready = acceptanceReadyRepo({ review });
+        const ready = yield* acceptanceReadyRepo({ review });
 
         const earlier = yield* runTaskBackedCandidate(ready);
         expect(earlier).toMatchObject({ ok: true, outcome: "blocked" });
         if (!earlier.ok) return;
 
         git(ready.repo, "commit", "--allow-empty", "-m", "address acceptance Finding");
-        const successor = captureLocalCandidate({ cwd: ready.repo, now });
+        const successor = yield* captureLocalCandidate({ cwd: ready.repo, now });
         expect(successor.ok).toBe(true);
         if (!successor.ok) return;
 
@@ -177,14 +179,14 @@ describe("Task-backed Candidate Acceptance Review", () => {
           stdout: "earlier acceptance report",
         }),
       );
-      const ready = acceptanceReadyRepo({ review });
+      const ready = yield* acceptanceReadyRepo({ review });
 
       const earlier = yield* runTaskBackedCandidate(ready);
       expect(earlier).toMatchObject({ ok: true, outcome: "blocked" });
       if (!earlier.ok) return;
 
       git(ready.repo, "commit", "--allow-empty", "-m", "run failing checks");
-      const intermediate = captureLocalCandidate({ cwd: ready.repo, now });
+      const intermediate = yield* captureLocalCandidate({ cwd: ready.repo, now });
       expect(intermediate.ok).toBe(true);
       if (!intermediate.ok) return;
       const intermediateResult = yield* runTaskBackedCandidate(
@@ -198,7 +200,7 @@ describe("Task-backed Candidate Acceptance Review", () => {
       expect(intermediateResult).toMatchObject({ ok: true, outcome: "blocked" });
 
       git(ready.repo, "commit", "--allow-empty", "-m", "fix checks");
-      const successor = captureLocalCandidate({ cwd: ready.repo, now });
+      const successor = yield* captureLocalCandidate({ cwd: ready.repo, now });
       expect(successor.ok).toBe(true);
       if (!successor.ok) return;
       review.mockImplementationOnce(() =>
@@ -231,13 +233,13 @@ describe("Task-backed Candidate Acceptance Review", () => {
           stdout: "earlier acceptance report",
         }),
       );
-      const ready = acceptanceReadyRepo({ review });
+      const ready = yield* acceptanceReadyRepo({ review });
       const earlier = yield* runTaskBackedCandidate(ready);
       expect(earlier).toMatchObject({ ok: true, outcome: "blocked" });
       if (!earlier.ok) return;
 
       git(ready.repo, "commit", "--allow-empty", "-m", "address acceptance Finding");
-      const successor = captureLocalCandidate({ cwd: ready.repo, now });
+      const successor = yield* captureLocalCandidate({ cwd: ready.repo, now });
       expect(successor.ok).toBe(true);
       if (!successor.ok) return;
 
@@ -281,7 +283,7 @@ describe("Task-backed Candidate Acceptance Review", () => {
           checks: [{ id: "fails", command: "false", timeoutSeconds: 1 }],
         },
       ]) {
-        const ready = acceptanceReadyRepo({ review });
+        const ready = yield* acceptanceReadyRepo({ review });
         const result = yield* runTaskBackedCandidate(ready, policy);
         expect(result).toMatchObject({ ok: true, outcome: "blocked" });
       }
@@ -292,7 +294,7 @@ describe("Task-backed Candidate Acceptance Review", () => {
 
   it.scoped("blocks on every Acceptance Finding and stores reviewer evidence", () =>
     Effect.gen(function* () {
-      const ready = acceptanceReadyRepo({
+      const ready = yield* acceptanceReadyRepo({
         review: () =>
           Effect.succeed({
             ok: true,
@@ -368,7 +370,7 @@ describe("Task-backed Candidate Acceptance Review", () => {
           if (report === undefined) throw new Error("Unexpected review request.");
           return Effect.succeed(report);
         });
-        const ready = acceptanceReadyRepo({ review });
+        const ready = yield* acceptanceReadyRepo({ review });
         const policy = {
           ...passingValidationPolicy,
           specialistReviews: [specialistPolicy("standards")],
@@ -379,7 +381,7 @@ describe("Task-backed Candidate Acceptance Review", () => {
         if (!earlier.ok) return;
 
         git(ready.repo, "commit", "--allow-empty", "-m", "address specialist Finding");
-        const successor = captureLocalCandidate({ cwd: ready.repo, now });
+        const successor = yield* captureLocalCandidate({ cwd: ready.repo, now });
         expect(successor.ok).toBe(true);
         if (!successor.ok) return;
 
@@ -447,7 +449,7 @@ describe("Task-backed Candidate Acceptance Review", () => {
           if (result === undefined) throw new Error(`Unexpected reviewer: ${input.reviewer}`);
           return Effect.succeed(result);
         });
-        const ready = acceptanceReadyRepo({ review });
+        const ready = yield* acceptanceReadyRepo({ review });
 
         const result = yield* runTaskBackedCandidate(ready, {
           ...passingValidationPolicy,
@@ -499,7 +501,7 @@ describe("Task-backed Candidate Acceptance Review", () => {
 
   it.scoped("blocks the Candidate on a Specialist Finding", () =>
     Effect.gen(function* () {
-      const ready = acceptanceReadyRepo({
+      const ready = yield* acceptanceReadyRepo({
         review: (input) =>
           Effect.succeed(
             input.reviewer === "acceptance"
@@ -541,7 +543,7 @@ describe("Task-backed Candidate Acceptance Review", () => {
         diagnostics: [],
         message: "Structured output correction failed.",
       });
-      const ready = acceptanceReadyRepo({
+      const ready = yield* acceptanceReadyRepo({
         review: () => Effect.succeed({ ok: false, failure, attempts: 2, stdout: "invalid output" }),
       });
       const { validation } = ready;
@@ -560,8 +562,14 @@ describe("Task-backed Candidate Acceptance Review", () => {
   );
 });
 
+type AcceptanceReadyRepo = {
+  readonly repo: string;
+  readonly captured: Extract<CaptureLocalCandidateResult, { readonly ok: true }>;
+  readonly validation: ReturnType<typeof candidateValidationForTest>;
+};
+
 const runTaskBackedCandidate = (
-  ready: ReturnType<typeof acceptanceReadyRepo>,
+  ready: AcceptanceReadyRepo,
   policy: TaskBackedCandidateValidationPolicy = passingValidationPolicy,
   captured = ready.captured,
 ) =>
@@ -577,18 +585,21 @@ const runTaskBackedCandidate = (
     });
   }).pipe(Effect.provide(ready.validation.layer));
 
-const acceptanceReadyRepo = (reviewerAgentRuntime: ReviewerAgentRuntime) => {
-  const repo = candidateReadyRepo();
-  const captured = captureLocalCandidate({ cwd: repo, now });
-  if (!captured.ok) throw new Error(`Candidate capture failed: ${captured.code}`);
-  const validation = candidateValidationForTest({
-    localRepositoryMainCheckoutRoot: repo,
-    artifactsRoot: join(commonDirectory(repo), "but-why", "artifacts"),
-    runStore: openSqliteCandidateValidationRunStore(sqliteInput(repo)),
-    reviewerAgentRuntime,
+const acceptanceReadyRepo = (
+  reviewerAgentRuntime: ReviewerAgentRuntime,
+): Effect.Effect<AcceptanceReadyRepo, RepositoryStorageError> =>
+  Effect.gen(function* () {
+    const repo = candidateReadyRepo();
+    const captured = yield* captureLocalCandidate({ cwd: repo, now });
+    if (!captured.ok) throw new Error(`Candidate capture failed: ${captured.code}`);
+    const validation = candidateValidationForTest({
+      localRepositoryMainCheckoutRoot: repo,
+      artifactsRoot: join(commonDirectory(repo), "but-why", "artifacts"),
+      runStore: openSqliteCandidateValidationRunStore(sqliteInput(repo)),
+      reviewerAgentRuntime,
+    });
+    return { repo, captured, validation };
   });
-  return { repo, captured, validation };
-};
 
 const reviewerFinding = (title: string) => ({
   title,

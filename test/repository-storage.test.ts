@@ -9,6 +9,7 @@ import { describe } from "vitest";
 import { initializeStateDatabase } from "../src/init/stateDatabase.js";
 import { storedPublicTaskId } from "../src/task/taskId.js";
 import { withStateDatabase } from "../src/sqlite/connection.js";
+import { openSqliteChangeCandidateCapturePersistence } from "../src/sqlite/sqliteChangeCandidateCapturePersistence.js";
 import { openSqliteChangeStartPersistence } from "../src/sqlite/sqliteChangeStartPersistence.js";
 import { openSqliteTaskPersistence } from "../src/sqlite/sqliteTaskPersistence.js";
 import {
@@ -120,6 +121,57 @@ describe("repository SQL storage", () => {
 
         expect(yield* changes.getById("change-atomic")).toBeUndefined();
         expect(yield* tasks.getTaskById(taskId)).toMatchObject({ state: "todo" });
+      }),
+    ),
+  );
+
+  it.scoped("rolls back the complete Candidate capture when its write fails", () =>
+    withTemporaryState((input) =>
+      Effect.gen(function* () {
+        const repository = yield* RepositorySql;
+        const capture = yield* openSqliteChangeCandidateCapturePersistence();
+        yield* repository.operation(
+          "prepare failed Candidate capture",
+          (sql) => sql`
+            INSERT INTO changes (
+              id, repository_common_directory, branch_ref, base_ref, task_id, state,
+              close_reason, created_at, updated_at, closed_at
+            ) VALUES (
+              'change-1', ${input.commonDirectory}, 'refs/heads/feature', NULL, NULL,
+              'open', NULL, '2026-07-17T23:00:00.000Z', '2026-07-17T23:00:00.000Z', NULL
+            )
+          `,
+        );
+        yield* repository.operation(
+          "install Candidate capture failure",
+          (sql) => sql`
+            CREATE TRIGGER reject_candidate_capture
+            BEFORE INSERT ON candidates
+            BEGIN
+              SELECT RAISE(ABORT, 'deliberate Candidate write failure');
+            END
+          `,
+        );
+
+        yield* capture
+          .commitCapture({
+            repositoryCommonDirectory: input.commonDirectory,
+            branchRef: "refs/heads/feature",
+            expectedChangeId: "change-1",
+            selectedBaseRef: "refs/heads/main",
+            resolvedTargetSha: "base",
+            comparisonBaseSha: "base",
+            headSha: "head",
+            now: "2026-07-17T23:01:00.000Z",
+          })
+          .pipe(Effect.flip);
+
+        expect(yield* capture.getChangeById("change-1")).toMatchObject({ baseRef: null });
+        const candidates = yield* repository.operation(
+          "read failed Candidate capture",
+          (sql) => sql<{ readonly count: number }>`SELECT COUNT(*) AS count FROM candidates`,
+        );
+        expect(candidates).toEqual([{ count: 0 }]);
       }),
     ),
   );

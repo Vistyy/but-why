@@ -7,10 +7,11 @@ import type {
   CandidateValidationToolingFailure,
 } from "../candidateValidation/candidateValidationRunStore.js";
 import { CandidateValidation } from "../candidateValidation/validateCandidate.js";
-import {
-  captureLocalCandidate,
-  type CaptureLocalCandidateResult,
+import type {
+  CaptureLocalCandidateInput,
+  CaptureLocalCandidateResult,
 } from "../changeCandidateCapture/captureLocalCandidate.js";
+import type { RepositoryStorageError } from "../repositoryStorageError.js";
 import type {
   CandidatePublication,
   PublishCandidateResult,
@@ -86,14 +87,20 @@ export type ChangeSubmitInput = {
 };
 
 export type ChangeSubmit = {
-  readonly submit: (input: ChangeSubmitInput) => Effect.Effect<ChangeSubmitResult>;
+  readonly submit: (
+    input: ChangeSubmitInput,
+  ) => Effect.Effect<ChangeSubmitResult, RepositoryStorageError>;
 };
 
 export type CandidateValidationChangeSubmit = {
   readonly submit: (
     input: ChangeSubmitInput,
-  ) => Effect.Effect<ChangeSubmitResult, never, CandidateValidation>;
+  ) => Effect.Effect<ChangeSubmitResult, RepositoryStorageError, CandidateValidation>;
 };
+
+type CaptureCandidate = (
+  input: CaptureLocalCandidateInput,
+) => Effect.Effect<CaptureLocalCandidateResult, RepositoryStorageError>;
 
 export const openChangeSubmit = (dependencies: {
   readonly repositoryCommonDirectory: string;
@@ -104,7 +111,7 @@ export const openChangeSubmit = (dependencies: {
   readonly resolvePolicy: (taskBacked: boolean) => CandidateValidationPolicyResolution;
   readonly publicationFor: (cwd: string) => CandidatePublication;
   readonly detectTarget: (cwd: string, branch: string) => GitHubTargetResult;
-  readonly captureCandidate?: typeof captureLocalCandidate;
+  readonly captureCandidate: CaptureCandidate;
 }): CandidateValidationChangeSubmit => ({
   submit: (input) => submitChange(dependencies, input),
 });
@@ -117,7 +124,7 @@ type ReconciliationDecision =
 const submitChange = (
   dependencies: Parameters<typeof openChangeSubmit>[0],
   input: ChangeSubmitInput,
-): Effect.Effect<ChangeSubmitResult, never, CandidateValidation> =>
+): Effect.Effect<ChangeSubmitResult, RepositoryStorageError, CandidateValidation> =>
   Effect.gen(function* () {
     const selected = selectReadyChange(dependencies.changeStore, input.changeId);
     if (!selected.ok) return selected;
@@ -125,8 +132,11 @@ const submitChange = (
     const reconciliation = reconcileBeforeSubmission(dependencies, change, input.now);
     if (!reconciliation.proceed) return reconciliation.result;
 
-    const capture = dependencies.captureCandidate ?? captureLocalCandidate;
-    const candidate = capture({ cwd: change.worktreePath, changeId: change.id, now: input.now });
+    const candidate = yield* dependencies.captureCandidate({
+      cwd: change.worktreePath,
+      changeId: change.id,
+      now: input.now,
+    });
     if (!candidate.ok) return candidate;
     if (change.taskId === null && candidate.headSha === candidate.comparisonBaseSha) {
       return { ok: true, status: "nothing_to_submit", changeId: change.id } as const;

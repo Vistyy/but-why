@@ -1,27 +1,23 @@
 import { spawnSync } from "node:child_process";
 import { realpathSync } from "node:fs";
+import { Effect } from "effect";
 
-export type LocalCandidateWorkspace = {
-  readonly repositoryCommonDirectory: string;
-  readonly primaryRoot: string;
-  readonly branchRef: string;
-  readonly headSha: string;
-  readonly renameFromRef?: string;
+import type {
+  ChangeCandidateCaptureGit,
+  LocalCandidateWorkspaceResult,
+} from "./changeCandidateCaptureGit.js";
+
+export const localChangeCandidateCaptureGit: ChangeCandidateCaptureGit = {
+  readWorkspace: (cwd) => Effect.sync(() => readLocalCandidateWorkspace(cwd)),
+  resolveLocalBranch: (cwd, ref) => Effect.sync(() => resolveLocalBranch(cwd, ref)),
+  findComparisonBase: (cwd, targetSha, headSha) =>
+    Effect.sync(() => findComparisonBase(cwd, targetSha, headSha)),
+  localBranchExists: (cwd, ref) => Effect.sync(() => localBranchExists(cwd, ref)),
+  recordedRemoteDefaultLocalBranches: (cwd) =>
+    Effect.sync(() => recordedRemoteDefaultLocalBranches(cwd)),
 };
 
-export type LocalCandidateWorkspaceResult =
-  | { readonly ok: true; readonly facts: LocalCandidateWorkspace }
-  | {
-      readonly ok: false;
-      readonly code:
-        | "detached_head"
-        | "unborn_branch"
-        | "dirty_work"
-        | "conflicting_branch_facts"
-        | "git_tooling_error";
-    };
-
-export const readLocalCandidateWorkspace = (cwd: string): LocalCandidateWorkspaceResult => {
+const readLocalCandidateWorkspace = (cwd: string): LocalCandidateWorkspaceResult => {
   const commonDirectory = git(cwd, "rev-parse", "--path-format=absolute", "--git-common-dir");
   const worktrees = git(cwd, "worktree", "list", "--porcelain");
   if (!commonDirectory.ok || !worktrees.ok) return { ok: false, code: "git_tooling_error" };
@@ -69,7 +65,7 @@ export const resolveLocalBranch = (cwd: string, ref: string): string | undefined
   return result.ok ? result.stdout : undefined;
 };
 
-export const findComparisonBase = (
+const findComparisonBase = (
   cwd: string,
   targetSha: string,
   headSha: string,
@@ -78,7 +74,7 @@ export const findComparisonBase = (
   return result.ok ? result.stdout : undefined;
 };
 
-export const localBranchExists = (cwd: string, ref: string): boolean =>
+const localBranchExists = (cwd: string, ref: string): boolean =>
   ref.startsWith("refs/heads/") && git(cwd, "show-ref", "--verify", "--quiet", ref).ok;
 
 export const recordedRemoteDefaultLocalBranches = (cwd: string): readonly string[] | undefined => {

@@ -6,7 +6,7 @@ import { Effect } from "effect";
 import { describe, vi } from "vitest";
 
 import type { ReviewerAgentRuntime } from "../src/agent/reviewerAgentRuntime.js";
-import { captureLocalCandidate } from "../src/changeCandidateCapture/captureLocalCandidate.js";
+import { captureLocalCandidate } from "./support/changeCandidateCapture.js";
 import {
   CandidateValidation,
   type ValidateCandidateInput,
@@ -28,7 +28,7 @@ describe("Candidate validation", () => {
     () =>
       Effect.gen(function* () {
         const repo = candidateReadyRepo();
-        const captured = captureLocalCandidate({ cwd: repo, now });
+        const captured = yield* captureLocalCandidate({ cwd: repo, now });
         expect(captured.ok).toBe(true);
         if (!captured.ok) return;
 
@@ -95,7 +95,7 @@ describe("Candidate validation", () => {
   it.scoped("stops Checks after a failed Prepare", () =>
     Effect.gen(function* () {
       const repo = candidateReadyRepo();
-      const captured = captureLocalCandidate({ cwd: repo, now });
+      const captured = yield* captureLocalCandidate({ cwd: repo, now });
       expect(captured.ok).toBe(true);
       if (!captured.ok) return;
       const validation = candidateValidationForTest({
@@ -129,7 +129,7 @@ describe("Candidate validation", () => {
   it.scoped("fails tooling when a Check changes the Candidate worktree head", () =>
     Effect.gen(function* () {
       const repo = candidateReadyRepo();
-      const captured = captureLocalCandidate({ cwd: repo, now });
+      const captured = yield* captureLocalCandidate({ cwd: repo, now });
       expect(captured.ok).toBe(true);
       if (!captured.ok) return;
       const validation = candidateValidationForTest({
@@ -167,7 +167,7 @@ describe("Candidate validation", () => {
       writeFileSync(join(repo, ".validation-env"), "candidate=true\n");
       git(repo, "add", ".validation-env");
       git(repo, "commit", "-m", "track validation environment");
-      const captured = captureLocalCandidate({ cwd: repo, now });
+      const captured = yield* captureLocalCandidate({ cwd: repo, now });
       expect(captured.ok).toBe(true);
       if (!captured.ok) return;
       writeFileSync(join(repo, ".validation-env"), "local=true\n");
@@ -198,7 +198,7 @@ describe("Candidate validation", () => {
   it.scoped("runs configured Specialists for a taskless changed-code Candidate", () =>
     Effect.gen(function* () {
       const repo = candidateReadyRepo();
-      const captured = captureLocalCandidate({ cwd: repo, now });
+      const captured = yield* captureLocalCandidate({ cwd: repo, now });
       expect(captured.ok).toBe(true);
       if (!captured.ok) return;
       const review = vi.fn<ReviewerAgentRuntime["review"]>(() =>
@@ -263,7 +263,7 @@ describe("Candidate validation", () => {
           candidateCheckout,
           "HEAD",
         );
-        const captured = captureLocalCandidate({ cwd: candidateCheckout, now });
+        const captured = yield* captureLocalCandidate({ cwd: candidateCheckout, now });
         expect(captured.ok).toBe(true);
         if (!captured.ok) return;
         writeFileSync(join(mainCheckout, ".validation-env"), "source=main\n");

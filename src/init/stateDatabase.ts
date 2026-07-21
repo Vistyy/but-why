@@ -399,27 +399,6 @@ export const closeAllStateDatabases = async (): Promise<void> => {
   await closeStateDatabasesOpenedAfterForCli([]);
 };
 
-export const validateStateDatabase = (input: {
-  readonly statePath: string;
-  readonly commonDirectory?: string;
-}):
-  | { readonly ok: true; readonly database: StateDatabase }
-  | { readonly ok: false; readonly code: "shared_state_identity_conflict" } => {
-  try {
-    return {
-      ok: true,
-      database: existsSync(input.statePath)
-        ? initializeStateDatabase(input).database
-        : prepareStateDatabase(input),
-    };
-  } catch (error) {
-    if (error instanceof SharedStateIdentityConflictError) {
-      return { ok: false, code: "shared_state_identity_conflict" };
-    }
-    throw error;
-  }
-};
-
 const ensureSharedStateIdentity = (database: StateDatabase, commonDirectory: string): void => {
   database.withConnection((connection, run) => {
     const rows = run(

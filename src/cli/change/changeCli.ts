@@ -544,9 +544,9 @@ const runSubmit = (
       : { reviewerAgentRuntime: environment.reviewerAgentRuntime }),
   });
   if (!loaded.ok) return Effect.succeed(loadError(loaded.error));
-  return Effect.map(
-    loaded.submit.submit({ changeId: args[0], now: environment.now().toISOString() }),
-    submitResult,
+  return loaded.submit.submit({ changeId: args[0], now: environment.now().toISOString() }).pipe(
+    Effect.map(submitResult),
+    Effect.catchAll((error) => Effect.succeed(repositoryStorageErrorResult(error))),
   );
 };
 

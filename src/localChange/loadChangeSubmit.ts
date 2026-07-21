@@ -4,6 +4,9 @@ import { Effect } from "effect";
 
 import type { ReviewerAgentRuntime } from "../agent/reviewerAgentRuntime.js";
 import { resolveCandidateValidationPolicy } from "../candidateValidation/resolveCandidateValidationPolicy.js";
+import { openChangeCandidateCapture } from "../changeCandidateCapture/captureLocalCandidate.js";
+import type { ChangeCandidateCapturePersistence } from "../changeCandidateCapture/changeCandidateCapturePersistence.js";
+import { localChangeCandidateCaptureGit } from "../changeCandidateCapture/localGitCandidate.js";
 import { cleanupChangeResources } from "../change/localChangeCleanupGit.js";
 import { openChangeReconciliation } from "../change/reconcileChange.js";
 import {
@@ -15,6 +18,9 @@ import { openRepoLocalStores } from "../init/repoLocalStores.js";
 import { loadRepoLocalContext, type LoadRepoLocalContextError } from "../init/repoContext.js";
 import { localCandidateValidationLayer } from "../localCandidateValidation/localCandidateValidationLayer.js";
 import { localCandidatePublicationGit } from "../publication/localCandidatePublicationGit.js";
+import type { RepositoryStorageError } from "../repositoryStorageError.js";
+import { repositorySqlLayer } from "../sqlite/repositorySql.js";
+import { openSqliteChangeCandidateCapturePersistence } from "../sqlite/sqliteChangeCandidateCapturePersistence.js";
 import { openCandidatePublication } from "../publication/publishCandidate.js";
 import { detectGitHubPrTarget } from "../submissionEnvironment/githubTarget.js";
 import { localGitHubPullRequestGateway } from "../submissionEnvironment/localGitHubPullRequestGateway.js";
@@ -49,28 +55,33 @@ export const loadChangeSubmit = (input: {
     github: localGitHubPullRequestGateway({ cwd: context.root }),
     cleanup: cleanupChangeResources,
   });
-  const program = openChangeSubmit({
-    repositoryCommonDirectory: context.commonDirectory,
-    changeStore: stores.changeStore,
-    taskStore: stores.taskStore,
-    validationRunStore: stores.candidateValidationRunStore,
-    reconciliation,
-    resolvePolicy: (taskBacked) =>
-      resolveCandidateValidationPolicy({
-        context,
-        globalConfigPath: input.globalConfigPath,
-        taskBacked,
-      }),
-    publicationFor: (cwd) =>
-      openCandidatePublication({
-        changeStore: stores.changeStore,
-        candidateStore: stores.candidateStore,
-        validationRunStore: stores.candidateValidationRunStore,
-        git: localCandidatePublicationGit({ cwd }),
-        github: localGitHubPullRequestGateway({ cwd }),
-      }),
-    detectTarget: detectGitHubPrTarget,
-  });
+  const programFor = (persistence: ChangeCandidateCapturePersistence) =>
+    openChangeSubmit({
+      repositoryCommonDirectory: context.commonDirectory,
+      changeStore: stores.changeStore,
+      taskStore: stores.taskStore,
+      validationRunStore: stores.candidateValidationRunStore,
+      reconciliation,
+      resolvePolicy: (taskBacked) =>
+        resolveCandidateValidationPolicy({
+          context,
+          globalConfigPath: input.globalConfigPath,
+          taskBacked,
+        }),
+      publicationFor: (cwd) =>
+        openCandidatePublication({
+          changeStore: stores.changeStore,
+          candidateStore: stores.candidateStore,
+          validationRunStore: stores.candidateValidationRunStore,
+          git: localCandidatePublicationGit({ cwd }),
+          github: localGitHubPullRequestGateway({ cwd }),
+        }),
+      detectTarget: detectGitHubPrTarget,
+      captureCandidate: openChangeCandidateCapture({
+        persistence,
+        git: localChangeCandidateCaptureGit,
+      }).capture,
+    });
   const layer = localCandidateValidationLayer({
     localRepositoryMainCheckoutRoot: context.root,
     artifactsRoot: context.paths.artifactsPath,
@@ -80,11 +91,18 @@ export const loadChangeSubmit = (input: {
       : { reviewerAgentRuntime: input.reviewerAgentRuntime }),
   });
 
+  const repositoryLayer = repositorySqlLayer({
+    statePath: context.paths.statePath,
+    commonDirectory: context.commonDirectory,
+  });
+
   return {
     ok: true,
     submit: {
-      submit: (submitInput): Effect.Effect<ChangeSubmitResult> =>
-        program.submit(submitInput).pipe(Effect.provide(layer)),
+      submit: (submitInput): Effect.Effect<ChangeSubmitResult, RepositoryStorageError> =>
+        Effect.flatMap(openSqliteChangeCandidateCapturePersistence(), (persistence) =>
+          programFor(persistence).submit(submitInput),
+        ).pipe(Effect.provide(layer), Effect.provide(repositoryLayer)),
     },
   };
 };

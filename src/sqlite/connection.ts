@@ -4,7 +4,6 @@ import type { Effect as EffectType } from "effect/Effect";
 import {
   SharedStateIdentityConflictError,
   StateDatabaseSqlError,
-  validateStateDatabase as validateStateDatabaseInput,
   type StateDatabase,
 } from "../init/stateDatabase.js";
 
@@ -48,8 +47,6 @@ const connectionFor = (
     }),
   };
 };
-
-export const validateSqliteStateDatabase = validateStateDatabaseInput;
 
 export const withStateDatabase = <Result>(
   input: SqliteStoreInput,

@@ -394,10 +394,11 @@ const dependencies = (input: {
         }
       );
     },
-    captureCandidate: () => {
-      events.push("capture");
-      return candidate;
-    },
+    captureCandidate: () =>
+      Effect.sync(() => {
+        events.push("capture");
+        return candidate;
+      }),
   };
 };
 
