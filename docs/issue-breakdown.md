@@ -7,7 +7,9 @@ It ends when But Why? completes one real SQLite-tracked Task-backed Change and p
 
 ## Can start immediately
 
-- Task 148: Establish the audited quality baseline.
+- Task 149: Expand Effect-native storage.
+- Task 154: Share local process result handling.
+- Task 155: Share configuration diagnostic handling.
 - Task 117: Cancel Task-backed and taskless Changes.
 - Task 129: Submit a Task-backed Change with no repository change.
 
@@ -15,14 +17,13 @@ It ends when But Why? completes one real SQLite-tracked Task-backed Change and p
 
 | Task | Capability | Blocked by |
 | --- | --- | --- |
-| 148 | Establish the audited quality baseline | None |
-| 149 | Expand Effect-native storage | 148 |
+| 149 | Expand Effect-native storage | None |
 | 150 | Migrate Task and Change Start storage | 149 |
 | 151 | Migrate Candidate capture | 150 |
 | 152 | Migrate validation execution and history | 151 |
 | 153 | Migrate Submit, publication, and reconciliation | 150, 151, 152 |
-| 154 | Share local process result handling | 148 |
-| 155 | Share configuration diagnostic handling | 148 |
+| 154 | Share local process result handling | None |
+| 155 | Share configuration diagnostic handling | None |
 | 147 | Remove the synchronous state storage path | 153 |
 | 135 | Consolidate the source hierarchy | 147, 154, 155 |
 | 156 | Establish and verify the final quality gate | 135 |
@@ -41,7 +42,7 @@ It ends when But Why? completes one real SQLite-tracked Task-backed Change and p
 5. Task 106 migrates detailed inspection to Change commands and keeps Task projections concise.
 6. Task 107 removed the replaced Task-owned writers, readers, routes, compatibility paths, and historical SQLite migration chain in the implementation diff from baseline `bc6a1819457f469903094c6b85871565ec602372`.
 7. Task 137 establishes the Effect SQL baseline and shared repository state foundation.
-8. Task 148 establishes the audited quality baseline and records the exact repair inventory.
+8. Task 148 established the audited quality baseline and recorded the exact repair inventory.
 9. Task 149 expands Effect-native storage beside the temporary synchronous contract.
 10. Tasks 150 through 153 migrate Task, Change Start, Candidate capture, validation history, Submit, publication, and reconciliation in dependency order.
 11. Tasks 154 and 155 repair independent process-result and configuration-diagnostic duplication after Task 148 and before source consolidation.
