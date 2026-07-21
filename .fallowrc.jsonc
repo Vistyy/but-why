@@ -9,6 +9,11 @@
     "require-suppression-reason": "error",
     "policy-violation": "error"
   },
+  "health": {
+    "maxCyclomatic": 20,
+    "maxCognitive": 15,
+    "maxCrap": 30
+  },
   "boundaries": {
     "zones": [
       {
