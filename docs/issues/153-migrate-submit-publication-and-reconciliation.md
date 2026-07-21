@@ -38,5 +38,4 @@ A cross-process CLI workflow captures a Candidate, submits it, records publicati
 
 ## Blocked by
 
-- [Task 150](150-migrate-task-and-change-start-storage.md)
 - [Task 152](152-migrate-validation-execution-and-history.md)

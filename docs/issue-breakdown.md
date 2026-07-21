@@ -7,7 +7,6 @@ It ends when But Why? completes one real SQLite-tracked Task-backed Change and p
 
 ## Can start immediately
 
-- Task 150: Migrate Task and Change Start storage.
 - Task 151: Migrate Candidate capture.
 - Task 117: Cancel Task-backed and taskless Changes.
 - Task 129: Submit a Task-backed Change with no repository change.
@@ -16,10 +15,9 @@ It ends when But Why? completes one real SQLite-tracked Task-backed Change and p
 
 | Task | Capability | Blocked by |
 | --- | --- | --- |
-| 150 | Migrate Task and Change Start storage | None |
 | 151 | Migrate Candidate capture | None |
 | 152 | Migrate validation execution and history | 151 |
-| 153 | Migrate Submit, publication, and reconciliation | 150, 152 |
+| 153 | Migrate Submit, publication, and reconciliation | 152 |
 | 147 | Remove the synchronous state storage path | 153 |
 | 135 | Consolidate the source hierarchy and names | 147 |
 | 156 | Establish and verify the final quality gate | 135 |
@@ -40,7 +38,7 @@ It ends when But Why? completes one real SQLite-tracked Task-backed Change and p
 7. Task 137 establishes the Effect SQL baseline and shared repository state foundation.
 8. Task 148 established the blocking quality policy and advisory health reports.
 9. Task 149 expands Effect-native storage beside the temporary synchronous contract.
-10. Tasks 150 and 151 independently migrate Task and Change Start storage and Candidate capture after Task 149.
+10. Task 150 migrated Task and Change Start storage, and Task 151 independently migrates Candidate capture after Task 149.
 11. Task 152 migrates validation execution and history after Candidate capture.
 12. Task 153 integrates Submit, publication, and reconciliation after Tasks 150 and 152.
 13. Task 147 removes the temporary synchronous storage path after every production caller has migrated.
