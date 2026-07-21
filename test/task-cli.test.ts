@@ -440,6 +440,28 @@ help[1]: "Run \`by task create --title \\"...\\" --description-file <file>\` to 
     }),
   );
 
+  it.effect("reports unavailable state when a Task Context draft cannot be written", () =>
+    Effect.gen(function* () {
+      const root = initializedRepo();
+      createTask(root, firstNow, "Blocked draft");
+      writeFileSync(join(root, ".git", "but-why", "task-context-drafts"), "not a directory");
+
+      const result = yield* runByInProcessEffect(root, [
+        "task",
+        "context",
+        "draft",
+        "BY-1",
+        "--output",
+        "json",
+      ]);
+
+      expect(result.status).toBe(1);
+      expect(JSON.parse(result.stdout)).toMatchObject({
+        error: { code: "state_store_unavailable" },
+      });
+    }),
+  );
+
   it.effect("replaces a prior Task Context draft with current Task Context", () =>
     Effect.gen(function* () {
       const root = initializedRepo();

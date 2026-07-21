@@ -1,7 +1,10 @@
 import { Effect } from "effect";
 
 import type { RepoLocalContext } from "../init/repoContext.js";
-import type { RepositoryStorageError } from "../repositoryStorageError.js";
+import {
+  RepositoryStateUnavailable,
+  type RepositoryStorageError,
+} from "../repositoryStorageError.js";
 import {
   readTaskContextDraft,
   removeTaskContextDraft,
@@ -114,12 +117,19 @@ const createTaskContextDraft = (
   tasks: TaskPersistence,
   taskId: PublicTaskId,
 ): Effect.Effect<TaskContextDraft | undefined, RepositoryStorageError> =>
-  Effect.map(tasks.getTaskContextById(taskId), (taskContext) =>
+  Effect.flatMap(tasks.getTaskContextById(taskId), (taskContext) =>
     taskContext === undefined
-      ? undefined
-      : {
-          path: writeTaskContextDraft(context.paths.taskContextDraftsPath, taskId, taskContext),
-        },
+      ? Effect.succeed(undefined)
+      : Effect.try({
+          try: () => ({
+            path: writeTaskContextDraft(context.paths.taskContextDraftsPath, taskId, taskContext),
+          }),
+          catch: (cause) =>
+            new RepositoryStateUnavailable({
+              statePath: context.paths.taskContextDraftsPath,
+              cause,
+            }),
+        }),
   );
 
 const applyTaskContextDraft = (
