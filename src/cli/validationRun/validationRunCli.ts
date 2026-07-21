@@ -1,7 +1,10 @@
+import { Effect } from "effect";
+
 import { withGlobalHelpFlags } from "../../cliHelp.js";
 import type { CliResult } from "../../cliResults.js";
 import {
   repoStateLoadError,
+  repositoryStorageErrorResult,
   runtimeError,
   stateStoreUnavailable,
   success,
@@ -22,9 +25,9 @@ export type ValidationRunCommandEnvironment = {
 export const routeValidationRun = (
   args: readonly string[],
   environment: ValidationRunCommandEnvironment,
-): CliResult => {
+): Effect.Effect<CliResult> => {
   if (args.length === 1 && args[0] === "--help") {
-    return success(validationRunHelpView());
+    return Effect.succeed(success(validationRunHelpView()));
   }
 
   const subcommand = args[0];
@@ -32,98 +35,104 @@ export const routeValidationRun = (
   if (subcommand === "artifact") return runArtifactCommand(args.slice(1), environment);
 
   if (subcommand?.startsWith("-")) {
-    return usageError({
-      code: "unknown_flag",
-      message: `Unknown flag: ${subcommand}`,
-      help: ["Run `by validation-run --help`."],
-    });
+    return Effect.succeed(
+      usageError({
+        code: "unknown_flag",
+        message: `Unknown flag: ${subcommand}`,
+        help: ["Run `by validation-run --help`."],
+      }),
+    );
   }
 
-  return usageError({
-    code: "unknown_command",
-    message: `Unknown validation-run command: ${subcommand ?? ""}`,
-    help: ["Run `by validation-run --help`."],
-  });
+  return Effect.succeed(
+    usageError({
+      code: "unknown_command",
+      message: `Unknown validation-run command: ${subcommand ?? ""}`,
+      help: ["Run `by validation-run --help`."],
+    }),
+  );
 };
 
 const runShowCommand = (
   args: readonly string[],
   environment: ValidationRunCommandEnvironment,
-): CliResult => {
+): Effect.Effect<CliResult> => {
   if (args.length === 1 && args[0] === "--help") {
-    return success({
-      usage: "by validation-run show <validation-run-id>",
-      arguments: [
-        {
-          argument: "<validation-run-id>",
-          description: "Validation Run ID owned by a Candidate.",
-        },
-      ],
-      flags: withGlobalHelpFlags(),
-      examples: ["by validation-run show <validation-run-id>"],
-    });
+    return Effect.succeed(
+      success({
+        usage: "by validation-run show <validation-run-id>",
+        arguments: [
+          {
+            argument: "<validation-run-id>",
+            description: "Validation Run ID owned by a Candidate.",
+          },
+        ],
+        flags: withGlobalHelpFlags(),
+        examples: ["by validation-run show <validation-run-id>"],
+      }),
+    );
   }
 
   const parseResult = parseExactArgs(args, ["validationRunId"]);
-  if (!parseResult.ok) return parseResult.result;
+  if (!parseResult.ok) return Effect.succeed(parseResult.result);
   const validationRunId = parseResult.values[0] ?? "";
   const inspectionLoad = loadInspection(environment);
-  if (!inspectionLoad.ok) return repoStateLoadError(inspectionLoad.error);
+  if (!inspectionLoad.ok) return Effect.succeed(repoStateLoadError(inspectionLoad.error));
 
-  try {
-    const inspection = inspectionLoad.inspection.inspectRun(validationRunId);
-    return inspection === undefined
-      ? validationRunNotFound(validationRunId)
-      : success(candidateValidationRunInspectionView(inspection));
-  } catch {
-    return stateStoreUnavailable(inspectionLoad.taskPrefix);
-  }
+  return inspectionLoad.inspection.inspectRun(validationRunId).pipe(
+    Effect.map((inspection) =>
+      inspection === undefined
+        ? validationRunNotFound(validationRunId)
+        : success(candidateValidationRunInspectionView(inspection)),
+    ),
+    Effect.catchAll((error) => Effect.succeed(repositoryStorageErrorResult(error))),
+    Effect.catchAllCause(() => Effect.succeed(stateStoreUnavailable(inspectionLoad.taskPrefix))),
+  );
 };
 
 const runArtifactCommand = (
   args: readonly string[],
   environment: ValidationRunCommandEnvironment,
-): CliResult => {
+): Effect.Effect<CliResult> => {
   if (args.length === 1 && args[0] === "--help") {
-    return success({
-      usage: "by validation-run artifact <validation-run-id> <artifact-ref>",
-      arguments: [
-        { argument: "<validation-run-id>", description: "Validation Run ID owned by a Candidate." },
-        {
-          argument: "<artifact-ref>",
-          description: "Artifact reference returned by Validation Run inspection.",
-        },
-      ],
-      flags: withGlobalHelpFlags(),
-      examples: [
-        "by validation-run artifact <validation-run-id> artifact:<validation-run-id>/checks/<check-id>/stdout.txt",
-      ],
-    });
+    return Effect.succeed(
+      success({
+        usage: "by validation-run artifact <validation-run-id> <artifact-ref>",
+        arguments: [
+          {
+            argument: "<validation-run-id>",
+            description: "Validation Run ID owned by a Candidate.",
+          },
+          {
+            argument: "<artifact-ref>",
+            description: "Artifact reference returned by Validation Run inspection.",
+          },
+        ],
+        flags: withGlobalHelpFlags(),
+        examples: [
+          "by validation-run artifact <validation-run-id> artifact:<validation-run-id>/checks/<check-id>/stdout.txt",
+        ],
+      }),
+    );
   }
 
   const parseResult = parseExactArgs(args, ["validationRunId", "artifactRef"]);
-  if (!parseResult.ok) return parseResult.result;
+  if (!parseResult.ok) return Effect.succeed(parseResult.result);
   const validationRunId = parseResult.values[0] ?? "";
   const artifactRef = parseResult.values[1] ?? "";
   const inspectionLoad = loadInspection(environment);
-  if (!inspectionLoad.ok) return repoStateLoadError(inspectionLoad.error);
+  if (!inspectionLoad.ok) return Effect.succeed(repoStateLoadError(inspectionLoad.error));
 
-  try {
-    const result = inspectionLoad.inspection.readArtifact(validationRunId, artifactRef);
-    if (result.ok)
-      return success(candidateValidationArtifactContentView(result.artifact, result.content));
+  return inspectionLoad.inspection.readArtifact(validationRunId, artifactRef).pipe(
+    Effect.map((result) => {
+      if (result.ok)
+        return success(candidateValidationArtifactContentView(result.artifact, result.content));
 
-    switch (result.code) {
-      case "validation_run_not_found":
-        return validationRunNotFound(validationRunId);
-      case "artifact_not_found":
-        return artifactNotFound(validationRunId, artifactRef);
-      case "artifact_content_unavailable":
-        return artifactContentUnavailable(validationRunId, artifactRef);
-    }
-  } catch {
-    return stateStoreUnavailable(inspectionLoad.taskPrefix);
-  }
+      return artifactReadFailure(result.code, validationRunId, artifactRef);
+    }),
+    Effect.catchAll((error) => Effect.succeed(repositoryStorageErrorResult(error))),
+    Effect.catchAllCause(() => Effect.succeed(stateStoreUnavailable(inspectionLoad.taskPrefix))),
+  );
 };
 
 const loadInspection = (environment: ValidationRunCommandEnvironment) =>
@@ -195,6 +204,17 @@ const validationRunNotFound = (validationRunId: string): CliResult =>
     details: { validationRunId },
     help: ["Run `by change show <change-id>` to inspect known Candidates and Validation Runs."],
   });
+
+const artifactReadFailure = (
+  code: "validation_run_not_found" | "artifact_not_found" | "artifact_content_unavailable",
+  validationRunId: string,
+  artifactRef: string,
+): CliResult =>
+  ({
+    validation_run_not_found: validationRunNotFound(validationRunId),
+    artifact_not_found: artifactNotFound(validationRunId, artifactRef),
+    artifact_content_unavailable: artifactContentUnavailable(validationRunId, artifactRef),
+  })[code];
 
 const artifactNotFound = (validationRunId: string, artifactRef: string): CliResult =>
   runtimeError({

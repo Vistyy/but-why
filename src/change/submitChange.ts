@@ -197,7 +197,7 @@ const validateAndPublish = (
   candidate: CapturedCandidate,
   target: ChangePublicationTarget,
   now: string,
-): Effect.Effect<ChangeSubmitResult, never, CandidateValidation> =>
+): Effect.Effect<ChangeSubmitResult, RepositoryStorageError, CandidateValidation> =>
   Effect.gen(function* () {
     const policy = dependencies.resolvePolicy(change.acceptanceContext !== null);
     if (!policy.ok) {

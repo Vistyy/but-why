@@ -1,11 +1,13 @@
+import { Effect } from "effect";
+
 import type { CandidateRecord } from "../candidate/candidate.js";
-import type { CandidateStore } from "../candidate/candidateStore.js";
 import type {
   CandidateValidationFinding,
   CandidateValidationRunRecord,
-  CandidateValidationRunStore,
   CandidateValidationToolingFailure,
 } from "../candidateValidation/candidateValidationRunStore.js";
+import type { ChangeValidationPersistence } from "../changeValidation/changeValidationPersistence.js";
+import type { RepositoryStorageError } from "../repositoryStorageError.js";
 import type { ChangeRecord } from "./change.js";
 import type { ChangeStore } from "./changeStore.js";
 
@@ -14,10 +16,16 @@ export type ChangeInspection = {
     readonly repositoryCommonDirectory: string;
     readonly includeClosed: boolean;
   }) => readonly ChangeRecord[];
-  readonly inspect: (changeId: string) => ChangeDetail | undefined;
+  readonly inspect: (
+    changeId: string,
+  ) => Effect.Effect<ChangeDetail | undefined, RepositoryStorageError>;
   readonly inspectTaskProjection: (taskId: string) => ChangeTaskProjection | null;
-  readonly findings: (changeId: string) => ChangeFindings | undefined;
-  readonly validationRuns: (changeId: string) => ChangeValidationRunHistory | undefined;
+  readonly findings: (
+    changeId: string,
+  ) => Effect.Effect<ChangeFindings | undefined, RepositoryStorageError>;
+  readonly validationRuns: (
+    changeId: string,
+  ) => Effect.Effect<ChangeValidationRunHistory | undefined, RepositoryStorageError>;
 };
 
 export type ChangeTaskProjection = {
@@ -49,8 +57,7 @@ export type ChangeValidationRunHistory = {
 
 export const openChangeInspection = (input: {
   readonly changeStore: ChangeStore;
-  readonly candidateStore: CandidateStore;
-  readonly runStore: CandidateValidationRunStore;
+  readonly persistence: ChangeValidationPersistence;
 }): ChangeInspection => ({
   list: input.changeStore.listChanges,
   inspect: (changeId) => inspectChange(input, changeId),
@@ -67,73 +74,88 @@ export const openChangeInspection = (input: {
 const inspectChange = (
   dependencies: {
     readonly changeStore: ChangeStore;
-    readonly candidateStore: CandidateStore;
-    readonly runStore: CandidateValidationRunStore;
+    readonly persistence: ChangeValidationPersistence;
   },
   changeId: string,
-): ChangeDetail | undefined => {
-  const change = dependencies.changeStore.getChangeById(changeId);
-  if (change === undefined) return undefined;
-  const candidate = currentCandidate(dependencies.candidateStore, changeId);
-  const validationRun =
-    candidate === null ? null : currentValidationRun(dependencies.runStore, candidate.id);
-  return {
-    change,
-    currentCandidate: candidate,
-    currentValidationRun: validationRun,
-    findings: validationRun === null ? [] : dependencies.runStore.listFindings(validationRun.id),
-    toolingFailures:
-      validationRun === null ? [] : dependencies.runStore.listToolingFailures(validationRun.id),
-  };
-};
+): Effect.Effect<ChangeDetail | undefined, RepositoryStorageError> =>
+  Effect.gen(function* () {
+    const change = dependencies.changeStore.getChangeById(changeId);
+    if (change === undefined) return undefined;
+    const candidate = yield* currentCandidate(dependencies.persistence, changeId);
+    const validationRun =
+      candidate === null
+        ? null
+        : yield* currentValidationRun(dependencies.persistence, candidate.id);
+    return {
+      change,
+      currentCandidate: candidate,
+      currentValidationRun: validationRun,
+      findings:
+        validationRun === null
+          ? []
+          : yield* dependencies.persistence.listFindings(validationRun.id),
+      toolingFailures:
+        validationRun === null
+          ? []
+          : yield* dependencies.persistence.listToolingFailures(validationRun.id),
+    };
+  });
 
 const inspectFindings = (
   dependencies: {
     readonly changeStore: ChangeStore;
-    readonly candidateStore: CandidateStore;
-    readonly runStore: CandidateValidationRunStore;
+    readonly persistence: ChangeValidationPersistence;
   },
   changeId: string,
-): ChangeFindings | undefined => {
-  const detail = inspectChange(dependencies, changeId);
-  if (detail === undefined) return undefined;
-  return {
-    change: detail.change,
-    candidate: detail.currentCandidate,
-    validationRun: detail.currentValidationRun,
-    findings: detail.findings,
-    toolingFailures: detail.toolingFailures,
-  };
-};
+): Effect.Effect<ChangeFindings | undefined, RepositoryStorageError> =>
+  Effect.map(inspectChange(dependencies, changeId), (detail) =>
+    detail === undefined
+      ? undefined
+      : {
+          change: detail.change,
+          candidate: detail.currentCandidate,
+          validationRun: detail.currentValidationRun,
+          findings: detail.findings,
+          toolingFailures: detail.toolingFailures,
+        },
+  );
 
 const inspectValidationRuns = (
   dependencies: {
     readonly changeStore: ChangeStore;
-    readonly candidateStore: CandidateStore;
-    readonly runStore: CandidateValidationRunStore;
+    readonly persistence: ChangeValidationPersistence;
   },
   changeId: string,
-): ChangeValidationRunHistory | undefined => {
-  const change = dependencies.changeStore.getChangeById(changeId);
-  if (change === undefined) return undefined;
-  return {
-    change,
-    validationRuns: dependencies.candidateStore
-      .listCandidatesForChange(changeId)
-      .flatMap((candidate) => dependencies.runStore.listRunsForCandidate(candidate.id))
-      .toSorted(
-        (left, right) =>
-          left.createdAt.localeCompare(right.createdAt) || left.id.localeCompare(right.id),
-      ),
-  };
-};
+): Effect.Effect<ChangeValidationRunHistory | undefined, RepositoryStorageError> =>
+  Effect.gen(function* () {
+    const change = dependencies.changeStore.getChangeById(changeId);
+    if (change === undefined) return undefined;
+    const candidates = yield* dependencies.persistence.listCandidatesForChange(changeId);
+    const validationRuns = yield* Effect.forEach(candidates, (candidate) =>
+      dependencies.persistence.listRunsForCandidate(candidate.id),
+    );
+    return {
+      change,
+      validationRuns: validationRuns
+        .flat()
+        .toSorted(
+          (left, right) =>
+            left.createdAt.localeCompare(right.createdAt) || left.id.localeCompare(right.id),
+        ),
+    };
+  });
 
 const currentCandidate = (
-  candidateStore: CandidateStore,
+  persistence: ChangeValidationPersistence,
   changeId: string,
-): CandidateRecord | null => candidateStore.listCandidatesForChange(changeId).at(-1) ?? null;
+): Effect.Effect<CandidateRecord | null, RepositoryStorageError> =>
+  Effect.map(
+    persistence.listCandidatesForChange(changeId),
+    (candidates) => candidates.at(-1) ?? null,
+  );
 
 const currentValidationRun = (
-  runStore: CandidateValidationRunStore,
+  persistence: ChangeValidationPersistence,
   candidateId: string,
-): CandidateValidationRunRecord | null => runStore.listRunsForCandidate(candidateId).at(-1) ?? null;
+): Effect.Effect<CandidateValidationRunRecord | null, RepositoryStorageError> =>
+  Effect.map(persistence.listRunsForCandidate(candidateId), (runs) => runs.at(-1) ?? null);

@@ -118,7 +118,7 @@ const routeCommandArgs = (
   }
 
   if (firstArg === "validation-run") {
-    return Effect.succeed(routeValidationRun(args.slice(1), environment));
+    return routeValidationRun(args.slice(1), environment);
   }
 
   if (firstArg?.startsWith("-")) {

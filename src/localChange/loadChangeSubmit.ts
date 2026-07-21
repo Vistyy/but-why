@@ -6,6 +6,7 @@ import type { ReviewerAgentRuntime } from "../agent/reviewerAgentRuntime.js";
 import { resolveCandidateValidationPolicy } from "../candidateValidation/resolveCandidateValidationPolicy.js";
 import { openChangeCandidateCapture } from "../changeCandidateCapture/captureLocalCandidate.js";
 import type { ChangeCandidateCapturePersistence } from "../changeCandidateCapture/changeCandidateCapturePersistence.js";
+import type { ChangeValidationPersistence } from "../changeValidation/changeValidationPersistence.js";
 import { localChangeCandidateCaptureGit } from "../changeCandidateCapture/localGitCandidate.js";
 import { cleanupChangeResources } from "../change/localChangeCleanupGit.js";
 import { openChangeReconciliation } from "../change/reconcileChange.js";
@@ -21,6 +22,7 @@ import { localCandidatePublicationGit } from "../publication/localCandidatePubli
 import type { RepositoryStorageError } from "../repositoryStorageError.js";
 import { repositorySqlLayer } from "../sqlite/repositorySql.js";
 import { openSqliteChangeCandidateCapturePersistence } from "../sqlite/sqliteChangeCandidateCapturePersistence.js";
+import { openSqliteChangeValidationPersistence } from "../sqlite/sqliteChangeValidationPersistence.js";
 import { openCandidatePublication } from "../publication/publishCandidate.js";
 import { detectGitHubPrTarget } from "../submissionEnvironment/githubTarget.js";
 import { localGitHubPullRequestGateway } from "../submissionEnvironment/localGitHubPullRequestGateway.js";
@@ -82,14 +84,15 @@ export const loadChangeSubmit = (input: {
         git: localChangeCandidateCaptureGit,
       }).capture,
     });
-  const layer = localCandidateValidationLayer({
-    localRepositoryMainCheckoutRoot: context.root,
-    artifactsRoot: context.paths.artifactsPath,
-    runStore: stores.candidateValidationRunStore,
-    ...(input.reviewerAgentRuntime === undefined
-      ? {}
-      : { reviewerAgentRuntime: input.reviewerAgentRuntime }),
-  });
+  const layerFor = (persistence: ChangeValidationPersistence) =>
+    localCandidateValidationLayer({
+      localRepositoryMainCheckoutRoot: context.root,
+      artifactsRoot: context.paths.artifactsPath,
+      persistence,
+      ...(input.reviewerAgentRuntime === undefined
+        ? {}
+        : { reviewerAgentRuntime: input.reviewerAgentRuntime }),
+    });
 
   const repositoryLayer = repositorySqlLayer({
     statePath: context.paths.statePath,
@@ -100,9 +103,17 @@ export const loadChangeSubmit = (input: {
     ok: true,
     submit: {
       submit: (submitInput): Effect.Effect<ChangeSubmitResult, RepositoryStorageError> =>
-        Effect.flatMap(openSqliteChangeCandidateCapturePersistence(), (persistence) =>
-          programFor(persistence).submit(submitInput),
-        ).pipe(Effect.provide(layer), Effect.provide(repositoryLayer)),
+        Effect.all({
+          capture: openSqliteChangeCandidateCapturePersistence(),
+          validation: openSqliteChangeValidationPersistence(),
+        }).pipe(
+          Effect.flatMap(({ capture, validation }) =>
+            programFor(capture)
+              .submit(submitInput)
+              .pipe(Effect.provide(layerFor(validation))),
+          ),
+          Effect.provide(repositoryLayer),
+        ),
     },
   };
 };

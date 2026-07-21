@@ -12,11 +12,9 @@ import type { TaskContextSnapshotV1 } from "../validationRun/taskContextSnapshot
 import { validationPhase } from "../validationRun/validationRun.js";
 import { writeReviewerArtifacts } from "../validationRun/reviewerArtifacts.js";
 import type { RecordCandidateAcceptanceRoundInput } from "../candidateValidation/candidateValidationRunStore.js";
-import { ensureCandidateIntegrity } from "../validation/ensureCandidateIntegrity.js";
-import {
-  InfrastructureToolingFailed,
-  type ValidationToolingFailure,
-} from "../validation/validationToolingFailures.js";
+import type { RepositoryStorageError } from "../repositoryStorageError.js";
+import type { ValidationToolingFailure } from "../validation/validationToolingFailures.js";
+import { verifyCandidateIntegrity } from "../validation/verifyCandidateIntegrity.js";
 
 export type RunAcceptanceReviewPhaseInput = {
   readonly validationRunId: string;
@@ -34,20 +32,27 @@ export type RunAcceptanceReviewPhaseInput = {
   readonly commandCwd: string;
   readonly allowedUntrackedFiles: readonly string[];
   readonly now: string;
-  readonly listArtifacts: (validationRunId: string) => readonly { readonly ref: string }[];
+  readonly listArtifacts: (
+    validationRunId: string,
+  ) => Effect.Effect<readonly { readonly ref: string }[], RepositoryStorageError>;
   readonly listPreviousCandidateReviewerFindings: (input: {
     readonly candidateId: string;
     readonly phase: "acceptance_review";
     readonly producer: "acceptance";
-  }) => readonly {
-    readonly title: string;
-    readonly description: string;
-    readonly severity?: "critical" | "high" | "medium" | "low";
-    readonly evidence: string;
-    readonly files: readonly string[];
-    readonly artifactRefs: readonly string[];
-  }[];
-  readonly recordAcceptanceRound: (input: RecordCandidateAcceptanceRoundInput) => void;
+  }) => Effect.Effect<
+    readonly {
+      readonly title: string;
+      readonly description: string;
+      readonly severity?: "critical" | "high" | "medium" | "low";
+      readonly evidence: string;
+      readonly files: readonly string[];
+      readonly artifactRefs: readonly string[];
+    }[],
+    RepositoryStorageError
+  >;
+  readonly recordAcceptanceRound: (
+    input: RecordCandidateAcceptanceRoundInput,
+  ) => Effect.Effect<void, RepositoryStorageError>;
 };
 
 export type RunAcceptanceReviewPhaseResult = {
@@ -56,12 +61,15 @@ export type RunAcceptanceReviewPhaseResult = {
 
 export const runAcceptanceReviewPhase = (
   input: RunAcceptanceReviewPhaseInput,
-): Effect.Effect<RunAcceptanceReviewPhaseResult, ValidationToolingFailure> =>
+): Effect.Effect<
+  RunAcceptanceReviewPhaseResult,
+  ValidationToolingFailure | RepositoryStorageError
+> =>
   Effect.gen(function* () {
     yield* verifyIntegrity(input);
-    const availableArtifactRefs = input
-      .listArtifacts(input.validationRunId)
-      .map((artifact) => artifact.ref);
+    const availableArtifactRefs = (yield* input.listArtifacts(input.validationRunId)).map(
+      (artifact) => artifact.ref,
+    );
     const prompt = buildAcceptanceReviewerPrompt({
       instructions: input.policy.instructions,
       validationRunId: input.validationRunId,
@@ -70,7 +78,7 @@ export const runAcceptanceReviewPhase = (
       acceptanceContext: input.acceptanceContext,
     });
     const earlierFindings = reviewerFindingHistory(
-      input.listPreviousCandidateReviewerFindings({
+      yield* input.listPreviousCandidateReviewerFindings({
         candidateId: input.candidate.candidateId,
         phase: validationPhase.acceptanceReview,
         producer: "acceptance",
@@ -136,35 +144,15 @@ export const runAcceptanceReviewPhase = (
 const verifyIntegrity = (
   input: RunAcceptanceReviewPhaseInput,
 ): Effect.Effect<void, ValidationToolingFailure> =>
-  Effect.tryPromise({
-    try: () =>
-      ensureCandidateIntegrity({
-        sandbox: input.sandbox,
-        commandCwd: input.commandCwd,
-        expectedHeadSha: input.candidate.headSha,
-        allowedUntrackedFiles: input.allowedUntrackedFiles,
-      }),
-    catch: (error) =>
-      error instanceof Error && "_tag" in error
-        ? (error as ValidationToolingFailure)
-        : new InfrastructureToolingFailed({
-            operationName: "verify_acceptance_candidate",
-            message: errorMessage(error),
-          }),
+  verifyCandidateIntegrity({
+    sandbox: input.sandbox,
+    commandCwd: input.commandCwd,
+    expectedHeadSha: input.candidate.headSha,
+    allowedUntrackedFiles: input.allowedUntrackedFiles,
+    operationName: "verify_acceptance_candidate",
   });
 
 const recordAcceptanceRound = (
   input: RunAcceptanceReviewPhaseInput,
   round: RecordCandidateAcceptanceRoundInput,
-): Effect.Effect<void, ValidationToolingFailure> =>
-  Effect.try({
-    try: () => input.recordAcceptanceRound(round),
-    catch: (error) =>
-      new InfrastructureToolingFailed({
-        operationName: "record_acceptance_round",
-        message: errorMessage(error),
-      }),
-  });
-
-const errorMessage = (error: unknown): string =>
-  error instanceof Error ? error.message : String(error);
+): Effect.Effect<void, RepositoryStorageError> => input.recordAcceptanceRound(round);

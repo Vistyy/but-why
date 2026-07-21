@@ -15,6 +15,7 @@ import {
   removeValidationWorktree,
   validationTempRefName,
 } from "./validationGitGlue.js";
+import type { RepositoryStorageError } from "../repositoryStorageError.js";
 import type { ValidationToolingFailure } from "./validationToolingFailures.js";
 import type {
   ActiveValidationWorkspace,
@@ -36,7 +37,10 @@ export type CreateValidationWorkspaceInput = {
   ) => Effect.Effect<void>;
   readonly runInWorkspace?: (
     workspace: ActiveValidationWorkspace,
-  ) => Effect.Effect<ActiveValidationWorkspaceResult, ValidationToolingFailure>;
+  ) => Effect.Effect<
+    ActiveValidationWorkspaceResult,
+    ValidationToolingFailure | RepositoryStorageError
+  >;
 };
 
 export type CreateValidationWorkspaceResult =
@@ -148,16 +152,30 @@ const validationSandboxProvider = (mode: ValidationSandboxMode): SandboxProvider
 
 export const createValidationWorkspace = (
   input: CreateValidationWorkspaceInput,
-): Effect.Effect<CreateValidationWorkspaceResult> =>
-  Effect.catchAll(
-    createValidationWorkspaceWithAdapters(input, productionValidationWorkspaceAdapters),
-    (toolingFailure) => Effect.succeed({ ok: false, toolingFailure }),
+): Effect.Effect<CreateValidationWorkspaceResult, RepositoryStorageError> =>
+  createValidationWorkspaceWithAdapters(input, productionValidationWorkspaceAdapters).pipe(
+    Effect.catchTags({
+      ValidationWorkspaceSetupFailed: toolingFailureResult,
+      InfrastructureToolingFailed: toolingFailureResult,
+      GitToolingFailed: toolingFailureResult,
+      SandcastleToolingFailed: toolingFailureResult,
+      PrepareCommandExecutionToolingFailed: toolingFailureResult,
+      CheckCommandExecutionToolingFailed: toolingFailureResult,
+      ReviewerOutputContractFailed: toolingFailureResult,
+      TokenUsageContractFailed: toolingFailureResult,
+    }),
   );
+
+const toolingFailureResult = (toolingFailure: ValidationToolingFailure) =>
+  Effect.succeed({ ok: false as const, toolingFailure });
 
 const createValidationWorkspaceWithAdapters = (
   input: CreateValidationWorkspaceInput,
   adapters: ValidationWorkspaceAdapters,
-): Effect.Effect<CreateValidationWorkspaceResult, ValidationToolingFailure> =>
+): Effect.Effect<
+  CreateValidationWorkspaceResult,
+  ValidationToolingFailure | RepositoryStorageError
+> =>
   Effect.gen(function* () {
     const tempRefName = validationTempRefName(input.validationRunId);
     const expectedWorktreePath = expectedSandcastleWorktreePath(input.repoRoot, tempRefName);
@@ -223,12 +241,15 @@ const createValidationWorkspaceWithAdapters = (
   });
 
 const withInterruptedCleanupRecording = (
-  scopedSetup: Effect.Effect<WorkspaceSetupAttempt, ValidationToolingFailure>,
+  scopedSetup: Effect.Effect<
+    WorkspaceSetupAttempt,
+    ValidationToolingFailure | RepositoryStorageError
+  >,
   input: CreateValidationWorkspaceInput,
   tempRefName: string,
   expectedWorktreePath: string,
   cleanupResult: Ref.Ref<ValidationWorkspaceCleanupResult>,
-): Effect.Effect<WorkspaceSetupAttempt, ValidationToolingFailure> => {
+): Effect.Effect<WorkspaceSetupAttempt, ValidationToolingFailure | RepositoryStorageError> => {
   const recordInterruptedCleanupResult = input.recordInterruptedCleanupResult;
 
   if (recordInterruptedCleanupResult === undefined) {
@@ -259,7 +280,11 @@ const setupValidationWorkspaceScope = (
   state: WorkspaceScopeState,
   adapters: ValidationWorkspaceAdapters,
   cleanupResult: Ref.Ref<ValidationWorkspaceCleanupResult>,
-): Effect.Effect<WorkspaceSetupAttempt, ValidationToolingFailure, Scope.Scope> =>
+): Effect.Effect<
+  WorkspaceSetupAttempt,
+  ValidationToolingFailure | RepositoryStorageError,
+  Scope.Scope
+> =>
   Effect.gen(function* () {
     const tempRefAttempt = yield* acquireTempRef(input, state, adapters, cleanupResult);
 

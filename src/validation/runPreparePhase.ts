@@ -3,9 +3,10 @@ import { Effect } from "effect";
 
 import { runRepositoryPreparation } from "../repositoryPreparation/runRepositoryPreparation.js";
 import type { SubmitPrepareConfig } from "../submit/submitRepoConfig.js";
-import { writeValidationRunArtifactFile } from "../validationRun/artifactFiles.js";
+import { writeCommandEvidence } from "./writeCommandEvidence.js";
 import { validationPhase } from "../validationRun/validationRun.js";
 import type { RecordCandidateValidationPrepareRoundInput } from "../candidateValidation/candidateValidationRunStore.js";
+import type { RepositoryStorageError } from "../repositoryStorageError.js";
 import { ensureCandidateIntegrity } from "./ensureCandidateIntegrity.js";
 import {
   GitToolingFailed,
@@ -24,7 +25,9 @@ export type RunPreparePhaseInput = {
   readonly expectedHeadSha?: string;
   readonly allowedUntrackedFiles?: readonly string[];
   readonly now: string;
-  readonly recordPrepareRound: (input: RecordCandidateValidationPrepareRoundInput) => void;
+  readonly recordPrepareRound: (
+    input: RecordCandidateValidationPrepareRoundInput,
+  ) => Effect.Effect<void, RepositoryStorageError>;
 };
 
 export type RunPreparePhaseResult =
@@ -50,11 +53,9 @@ type PrepareCommandResult = {
 };
 
 const prepareProducer = "prepare";
-const artifactFileNames = ["stdout.txt", "stderr.txt", "exit-code.json", "logs.txt"] as const;
-
 export const runPreparePhase = (
   input: RunPreparePhaseInput,
-): Effect.Effect<RunPreparePhaseResult, ValidationToolingFailure> =>
+): Effect.Effect<RunPreparePhaseResult, ValidationToolingFailure | RepositoryStorageError> =>
   Effect.gen(function* () {
     const { commandResult, timedOut } = yield* runPrepareCommand(
       input.sandbox,
@@ -63,10 +64,7 @@ export const runPreparePhase = (
       input.expectedHeadSha,
       input.allowedUntrackedFiles,
     );
-    const artifactRefs = artifactFileNames.map((fileName) =>
-      prepareArtifactRef(input.validationRunId, fileName),
-    );
-    const artifactRecords = yield* writePrepareArtifacts({
+    const { artifactRefs, artifactRecords } = yield* writePrepareArtifacts({
       validationRunId: input.validationRunId,
       prepare: input.prepare,
       commandResult,
@@ -157,17 +155,7 @@ const runPrepareCommand = (
 const recordPrepareRound = (
   input: RunPreparePhaseInput,
   prepareRound: RecordCandidateValidationPrepareRoundInput,
-): Effect.Effect<void, ValidationToolingFailure> =>
-  Effect.try({
-    try: () => {
-      input.recordPrepareRound(prepareRound);
-    },
-    catch: (error) =>
-      new InfrastructureToolingFailed({
-        operationName: "record_prepare_round",
-        message: errorMessage(error),
-      }),
-  });
+): Effect.Effect<void, RepositoryStorageError> => input.recordPrepareRound(prepareRound);
 
 const prepareFinding = (
   validationRunId: string,
@@ -199,74 +187,30 @@ const writePrepareArtifacts = (input: {
   readonly artifactsRoot: string;
   readonly artifactMaxBytes?: number;
   readonly now: string;
-}): Effect.Effect<
-  readonly RecordCandidateValidationPrepareRoundInput["artifactRecords"][number][],
-  ValidationToolingFailure
-> =>
+}): Effect.Effect<ReturnType<typeof writeCommandEvidence>, ValidationToolingFailure> =>
   Effect.try({
-    try: () => {
-      const artifacts = [
-        { fileName: "stdout.txt", content: input.commandResult.stdout },
-        { fileName: "stderr.txt", content: input.commandResult.stderr },
-        {
-          fileName: "exit-code.json",
-          content: [
-            "{",
-            `  "exitCode": ${input.commandResult.exitCode},`,
-            `  "timedOut": ${input.timedOut}`,
-            "}",
-            "",
-          ].join("\n"),
-        },
-        {
-          fileName: "logs.txt",
-          content: prepareLogContent(input.prepare, input.commandResult, input.timedOut),
-        },
-      ] as const;
-
-      return artifacts.map((artifact) => {
-        const artifactFile = writeValidationRunArtifactFile({
-          artifactsRoot: input.artifactsRoot,
-          validationRunId: input.validationRunId,
-          phase: validationPhase.prepare,
-          producer: prepareProducer,
-          fileName: artifact.fileName,
-          content: artifact.content,
-          ...(input.artifactMaxBytes === undefined ? {} : { maxBytes: input.artifactMaxBytes }),
-        });
-
-        return {
-          ref: prepareArtifactRef(input.validationRunId, artifact.fileName),
-          validationRunId: input.validationRunId,
-          phase: validationPhase.prepare,
-          producer: prepareProducer,
-          ...artifactFile,
-        };
-      });
-    },
+    try: () =>
+      writeCommandEvidence({
+        validationRunId: input.validationRunId,
+        phase: validationPhase.prepare,
+        producer: prepareProducer,
+        commandResult: { ...input.commandResult, timedOut: input.timedOut },
+        logFields: [
+          { name: "producer", value: prepareProducer },
+          { name: "command", value: input.prepare.command },
+          { name: "timeoutSeconds", value: input.prepare.timeoutSeconds },
+        ],
+        artifactsRoot: input.artifactsRoot,
+        ...(input.artifactMaxBytes === undefined
+          ? {}
+          : { artifactMaxBytes: input.artifactMaxBytes }),
+      }),
     catch: (error) =>
       new InfrastructureToolingFailed({
         operationName: "record_prepare_artifacts",
         message: errorMessage(error),
       }),
   });
-
-const prepareArtifactRef = (validationRunId: string, fileName: string): string =>
-  `artifact:${validationRunId}/prepare/prepare/${fileName}`;
-
-const prepareLogContent = (
-  prepare: SubmitPrepareConfig,
-  commandResult: CommandResult,
-  timedOut: boolean,
-): string =>
-  [
-    "producer: prepare",
-    `command: ${prepare.command}`,
-    `timeoutSeconds: ${prepare.timeoutSeconds}`,
-    `exitCode: ${commandResult.exitCode}`,
-    `timedOut: ${timedOut}`,
-    "",
-  ].join("\n");
 
 const errorMessage = (error: unknown): string =>
   error instanceof Error ? error.message : String(error);

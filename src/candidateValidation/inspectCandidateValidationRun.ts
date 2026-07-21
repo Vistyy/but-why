@@ -1,5 +1,6 @@
+import { Effect } from "effect";
+
 import type { CandidateRecord } from "../candidate/candidate.js";
-import type { CandidateStore } from "../candidate/candidateStore.js";
 import type { ChangeRecord } from "../change/change.js";
 import type { ChangeStore } from "../change/changeStore.js";
 import type {
@@ -7,9 +8,10 @@ import type {
   CandidateValidationFinding,
   CandidateValidationRound,
   CandidateValidationRunRecord,
-  CandidateValidationRunStore,
   CandidateValidationToolingFailure,
 } from "./candidateValidationRunStore.js";
+import type { ChangeValidationPersistence } from "../changeValidation/changeValidationPersistence.js";
+import type { RepositoryStorageError } from "../repositoryStorageError.js";
 import { readValidationArtifactContent } from "../validationRun/artifactContent.js";
 import { validationPhase } from "../validationRun/validationRun.js";
 
@@ -55,16 +57,17 @@ export type CandidateValidationArtifactContentResult =
   | { readonly ok: false; readonly code: "artifact_content_unavailable" };
 
 export type CandidateValidationRunInspectionUseCases = {
-  readonly inspectRun: (validationRunId: string) => CandidateValidationRunInspection | undefined;
+  readonly inspectRun: (
+    validationRunId: string,
+  ) => Effect.Effect<CandidateValidationRunInspection | undefined, RepositoryStorageError>;
   readonly readArtifact: (
     validationRunId: string,
     artifactRef: string,
-  ) => CandidateValidationArtifactContentResult;
+  ) => Effect.Effect<CandidateValidationArtifactContentResult, RepositoryStorageError>;
 };
 
 export const openCandidateValidationRunInspection = (input: {
-  readonly runStore: CandidateValidationRunStore;
-  readonly candidateStore: CandidateStore;
+  readonly persistence: ChangeValidationPersistence;
   readonly changeStore: ChangeStore;
   readonly artifactsRoot: string;
 }): CandidateValidationRunInspectionUseCases => ({
@@ -74,60 +77,64 @@ export const openCandidateValidationRunInspection = (input: {
 
 const inspectRun = (
   dependencies: {
-    readonly runStore: CandidateValidationRunStore;
-    readonly candidateStore: CandidateStore;
+    readonly persistence: ChangeValidationPersistence;
     readonly changeStore: ChangeStore;
     readonly artifactsRoot: string;
   },
   validationRunId: string,
-): CandidateValidationRunInspection | undefined => {
-  const validationRun = dependencies.runStore.getRunById(validationRunId);
-  if (validationRun === undefined) return undefined;
+): Effect.Effect<CandidateValidationRunInspection | undefined, RepositoryStorageError> =>
+  Effect.gen(function* () {
+    const validationRun = yield* dependencies.persistence.getRunById(validationRunId);
+    if (validationRun === undefined) return undefined;
 
-  const candidate = dependencies.candidateStore.getCandidateById(validationRun.candidateId);
-  if (candidate === undefined) throw new Error("Candidate-owned Validation Run has no Candidate");
-  const change = dependencies.changeStore.getChangeById(candidate.changeId);
-  if (change === undefined) throw new Error("Candidate-owned Validation Run has no Change");
-  const rounds = dependencies.runStore.listRounds(validationRunId);
+    const candidate = yield* dependencies.persistence.getCandidateById(validationRun.candidateId);
+    if (candidate === undefined) throw new Error("Candidate-owned Validation Run has no Candidate");
+    const change = dependencies.changeStore.getChangeById(candidate.changeId);
+    if (change === undefined) throw new Error("Candidate-owned Validation Run has no Change");
+    const rounds = yield* dependencies.persistence.listRounds(validationRunId);
+    const findings = yield* dependencies.persistence.listFindings(validationRunId);
+    const toolingFailures = yield* dependencies.persistence.listToolingFailures(validationRunId);
+    const artifacts = yield* dependencies.persistence.listArtifacts(validationRunId);
 
-  return {
-    validationRun,
-    change,
-    candidate,
-    prepareRounds: rounds.filter((round) => round.phase === validationPhase.prepare),
-    checkRounds: rounds.filter((round) => round.phase === validationPhase.checks),
-    acceptanceRounds: rounds.filter((round) => round.phase === validationPhase.acceptanceReview),
-    specialistRounds: rounds.filter((round) => round.phase === validationPhase.specialistReview),
-    findings: dependencies.runStore.listFindings(validationRunId),
-    toolingFailures: dependencies.runStore.listToolingFailures(validationRunId),
-    artifacts: dependencies.runStore.listArtifacts(validationRunId).map((artifact) => ({
-      ...artifact,
-      preview: readPreview(dependencies.artifactsRoot, artifact),
-    })),
-  };
-};
+    return {
+      validationRun,
+      change,
+      candidate,
+      prepareRounds: rounds.filter((round) => round.phase === validationPhase.prepare),
+      checkRounds: rounds.filter((round) => round.phase === validationPhase.checks),
+      acceptanceRounds: rounds.filter((round) => round.phase === validationPhase.acceptanceReview),
+      specialistRounds: rounds.filter((round) => round.phase === validationPhase.specialistReview),
+      findings,
+      toolingFailures,
+      artifacts: artifacts.map((artifact) => ({
+        ...artifact,
+        preview: readPreview(dependencies.artifactsRoot, artifact),
+      })),
+    };
+  });
 
 const readArtifact = (
   dependencies: {
-    readonly runStore: CandidateValidationRunStore;
+    readonly persistence: ChangeValidationPersistence;
     readonly artifactsRoot: string;
   },
   validationRunId: string,
   artifactRef: string,
-): CandidateValidationArtifactContentResult => {
-  if (dependencies.runStore.getRunById(validationRunId) === undefined) {
-    return { ok: false, code: "validation_run_not_found" };
-  }
-  const artifact = dependencies.runStore
-    .listArtifacts(validationRunId)
-    .find((candidate) => candidate.ref === artifactRef);
-  if (artifact === undefined) return { ok: false, code: "artifact_not_found" };
+): Effect.Effect<CandidateValidationArtifactContentResult, RepositoryStorageError> =>
+  Effect.gen(function* () {
+    if ((yield* dependencies.persistence.getRunById(validationRunId)) === undefined) {
+      return { ok: false, code: "validation_run_not_found" };
+    }
+    const artifact = (yield* dependencies.persistence.listArtifacts(validationRunId)).find(
+      (candidate) => candidate.ref === artifactRef,
+    );
+    if (artifact === undefined) return { ok: false, code: "artifact_not_found" };
 
-  const content = readValidationArtifactContent(dependencies.artifactsRoot, artifact.path);
-  return content === undefined
-    ? { ok: false, code: "artifact_content_unavailable" }
-    : { ok: true, artifact, content: content.toString("utf8") };
-};
+    const content = readValidationArtifactContent(dependencies.artifactsRoot, artifact.path);
+    return content === undefined
+      ? { ok: false, code: "artifact_content_unavailable" }
+      : { ok: true, artifact, content: content.toString("utf8") };
+  });
 
 const readPreview = (
   artifactsRoot: string,

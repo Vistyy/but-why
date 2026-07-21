@@ -237,23 +237,22 @@ const runShow = (
     cwd: environment.cwd,
   });
   if (!loaded.ok) return Effect.succeed(loadError(loaded.error));
-  try {
-    const detail = loaded.inspection.inspect(args[0]);
-    if (detail === undefined) return Effect.succeed(changeNotFound());
-    return Effect.succeed(
-      success({
-        change: changeInspectionView(detail.change),
-        currentCandidate: detail.currentCandidate,
-        currentValidationRun: detail.currentValidationRun,
-        findings: detail.findings,
-        toolingFailures: detail.toolingFailures,
-        pullRequest: detail.change.publication?.pullRequest ?? null,
-        cleanup: detail.change.cleanup,
-      }),
-    );
-  } catch {
-    return Effect.succeed(stateStoreUnavailable("repository"));
-  }
+  return loaded.inspection.inspect(args[0]).pipe(
+    Effect.map((detail) =>
+      detail === undefined
+        ? changeNotFound()
+        : success({
+            change: changeInspectionView(detail.change),
+            currentCandidate: detail.currentCandidate,
+            currentValidationRun: detail.currentValidationRun,
+            findings: detail.findings,
+            toolingFailures: detail.toolingFailures,
+            pullRequest: detail.change.publication?.pullRequest ?? null,
+            cleanup: detail.change.cleanup,
+          }),
+    ),
+    inspectionFailure,
+  );
 };
 
 const changeInspectionView = (change: ChangeRecord) => ({
@@ -287,22 +286,21 @@ const runFindings = (
     cwd: environment.cwd,
   });
   if (!loaded.ok) return Effect.succeed(loadError(loaded.error));
-  try {
-    const result = loaded.inspection.findings(changeId.changeId);
-    if (result === undefined) return Effect.succeed(changeNotFound());
-    return Effect.succeed(
-      success({
-        change: changeInspectionView(result.change),
-        candidate: result.candidate,
-        validationRun: result.validationRun,
-        findings: result.findings,
-        toolingFailures: result.toolingFailures,
-        count: result.findings.length,
-      }),
-    );
-  } catch {
-    return Effect.succeed(stateStoreUnavailable("repository"));
-  }
+  return loaded.inspection.findings(changeId.changeId).pipe(
+    Effect.map((result) =>
+      result === undefined
+        ? changeNotFound()
+        : success({
+            change: changeInspectionView(result.change),
+            candidate: result.candidate,
+            validationRun: result.validationRun,
+            findings: result.findings,
+            toolingFailures: result.toolingFailures,
+            count: result.findings.length,
+          }),
+    ),
+    inspectionFailure,
+  );
 };
 
 const runValidationRuns = (
@@ -315,14 +313,21 @@ const runValidationRuns = (
     cwd: environment.cwd,
   });
   if (!loaded.ok) return Effect.succeed(loadError(loaded.error));
-  try {
-    const result = loaded.inspection.validationRuns(changeId.changeId);
-    if (result === undefined) return Effect.succeed(changeNotFound());
-    return Effect.succeed(success({ validationRuns: result.validationRuns }));
-  } catch {
-    return Effect.succeed(stateStoreUnavailable("repository"));
-  }
+  return loaded.inspection.validationRuns(changeId.changeId).pipe(
+    Effect.map((result) =>
+      result === undefined ? changeNotFound() : success({ validationRuns: result.validationRuns }),
+    ),
+    inspectionFailure,
+  );
 };
+
+const inspectionFailure = <A>(
+  effect: Effect.Effect<A, RepositoryStorageError>,
+): Effect.Effect<A | CliResult> =>
+  effect.pipe(
+    Effect.catchAll((error) => Effect.succeed(repositoryStorageErrorResult(error))),
+    Effect.catchAllCause(() => Effect.succeed(stateStoreUnavailable("repository"))),
+  );
 
 type ChangeIdArgumentResult =
   | { readonly ok: true; readonly changeId: string }

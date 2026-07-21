@@ -65,7 +65,7 @@ describe("Change Submit orchestration", () => {
               } as const;
             }),
           validateTaskBackedCandidate: () => Effect.die("Acceptance Review was not expected"),
-          listRounds: () => [],
+          listRounds: () => Effect.succeed([]),
         });
 
         const result = yield* submit
@@ -120,7 +120,7 @@ describe("Change Submit orchestration", () => {
               outcome: "passed",
             } as const;
           }),
-        listRounds: () => [],
+        listRounds: () => Effect.succeed([]),
       });
 
       const result = yield* submit
@@ -169,7 +169,7 @@ describe("Change Submit orchestration", () => {
         const validationLayer = Layer.succeed(CandidateValidation, {
           validateCandidate: () => Effect.die("Duplicate validation"),
           validateTaskBackedCandidate: () => Effect.die("Duplicate validation"),
-          listRounds: () => [],
+          listRounds: () => Effect.succeed([]),
         });
 
         const result = yield* submit
@@ -195,7 +195,7 @@ describe("Change Submit orchestration", () => {
         validateCandidate: () => Effect.die("Validation must not start without a GitHub target"),
         validateTaskBackedCandidate: () =>
           Effect.die("Validation must not start without a GitHub target"),
-        listRounds: () => [],
+        listRounds: () => Effect.succeed([]),
       });
 
       const result = yield* submit
@@ -231,7 +231,7 @@ describe("Change Submit orchestration", () => {
             validationRunId: "run-1",
             outcome: "blocked",
           }),
-        listRounds: () => [],
+        listRounds: () => Effect.succeed([]),
       });
 
       const result = yield* submit
@@ -273,7 +273,7 @@ describe("Change Submit orchestration", () => {
             validationRunId: "run-1",
             outcome: "tooling_failed",
           }),
-        listRounds: () => [],
+        listRounds: () => Effect.succeed([]),
       });
 
       const result = yield* submit

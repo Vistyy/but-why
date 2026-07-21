@@ -1,10 +1,9 @@
 import type { Sandbox } from "@ai-hero/sandcastle";
 import { Context, Effect, Layer } from "effect";
 
-import type {
-  CandidateValidationRunStore as CandidateValidationRunStorePort,
-  CandidateValidationOutcome,
-} from "./candidateValidationRunStore.js";
+import type { CandidateValidationOutcome } from "./candidateValidationRunStore.js";
+import type { ChangeValidationPersistence } from "../changeValidation/changeValidationPersistence.js";
+import type { RepositoryStorageError } from "../repositoryStorageError.js";
 import type { AcceptanceReviewPolicy } from "../acceptanceReview/acceptanceReviewConfig.js";
 import type { ReviewerAgentRuntime } from "../agent/reviewerAgentRuntime.js";
 import { runAcceptanceReviewPhase } from "../acceptanceReview/runAcceptanceReviewPhase.js";
@@ -71,9 +70,9 @@ export class CandidateValidationPaths extends Context.Tag("CandidateValidationPa
   CandidateValidationPathsValue
 >() {}
 
-export class CandidateValidationRunStore extends Context.Tag("CandidateValidationRunStore")<
-  CandidateValidationRunStore,
-  CandidateValidationRunStorePort
+export class CandidateValidationPersistence extends Context.Tag("CandidateValidationPersistence")<
+  CandidateValidationPersistence,
+  ChangeValidationPersistence
 >() {}
 
 export class CandidateReviewerAgentRuntime extends Context.Tag("CandidateReviewerAgentRuntime")<
@@ -84,14 +83,17 @@ export class CandidateReviewerAgentRuntime extends Context.Tag("CandidateReviewe
 type CandidateValidationService = {
   readonly validateCandidate: (
     input: ValidateCandidateInput,
-  ) => Effect.Effect<ValidateCandidateResult, never>;
+  ) => Effect.Effect<ValidateCandidateResult, RepositoryStorageError>;
   readonly validateTaskBackedCandidate: (
     input: ValidateTaskBackedCandidateInput,
-  ) => Effect.Effect<ValidateCandidateResult, never>;
-  readonly listRounds: (validationRunId: string) => readonly {
-    readonly producer: string;
-    readonly status: "passed" | "failed";
-  }[];
+  ) => Effect.Effect<ValidateCandidateResult, RepositoryStorageError>;
+  readonly listRounds: (validationRunId: string) => Effect.Effect<
+    readonly {
+      readonly producer: string;
+      readonly status: "passed" | "failed";
+    }[],
+    RepositoryStorageError
+  >;
 };
 
 export class CandidateValidation extends Context.Tag("CandidateValidation")<
@@ -103,22 +105,22 @@ export const CandidateValidationLive = Layer.effect(
   CandidateValidation,
   Effect.gen(function* () {
     const paths = yield* CandidateValidationPaths;
-    const runStore = yield* CandidateValidationRunStore;
+    const persistence = yield* CandidateValidationPersistence;
     const reviewerAgentRuntime = yield* CandidateReviewerAgentRuntime;
-    return makeCandidateValidation({ ...paths, runStore, reviewerAgentRuntime });
+    return makeCandidateValidation({ ...paths, persistence, reviewerAgentRuntime });
   }),
 );
 
 const makeCandidateValidation = (dependencies: {
   readonly localRepositoryMainCheckoutRoot: string;
   readonly artifactsRoot: string;
-  readonly runStore: CandidateValidationRunStorePort;
+  readonly persistence: ChangeValidationPersistence;
   readonly reviewerAgentRuntime: ReviewerAgentRuntime;
 }): CandidateValidationService => {
   const validate = Effect.fn("CandidateValidation.validate")(function* (
     input: ValidateCandidateInput | ValidateTaskBackedCandidateInput,
   ) {
-    const started = dependencies.runStore.startOrReuse({
+    const started = yield* dependencies.persistence.startOrReuse({
       candidateId: input.candidateId,
       headSha: input.headSha,
       comparisonBaseSha: input.comparisonBaseSha,
@@ -153,12 +155,12 @@ const makeCandidateValidation = (dependencies: {
                 cleanupResult: workspace.toolingError.cleanupResult,
               }),
             );
-      dependencies.runStore.recordToolingFailure({
+      yield* dependencies.persistence.recordToolingFailure({
         validationRunId: started.validationRunId,
         ...failure,
         now: input.now,
       });
-      dependencies.runStore.complete({
+      yield* dependencies.persistence.complete({
         validationRunId: started.validationRunId,
         outcome: "tooling_failed",
         now: input.now,
@@ -170,7 +172,7 @@ const makeCandidateValidation = (dependencies: {
       } as const;
     }
 
-    dependencies.runStore.recordWorkspaceSetup({
+    yield* dependencies.persistence.recordWorkspaceSetup({
       validationRunId: started.validationRunId,
       tempRefName: workspace.setup.tempRefName,
       submittedSha: workspace.setup.submittedSha,
@@ -187,7 +189,7 @@ const makeCandidateValidation = (dependencies: {
           | undefined
       )?.toolingFailures ?? [];
     for (const toolingFailure of toolingFailures) {
-      dependencies.runStore.recordToolingFailure({
+      yield* dependencies.persistence.recordToolingFailure({
         validationRunId: started.validationRunId,
         ...validationToolingFailureRecord(toolingFailure),
         now: input.now,
@@ -199,7 +201,7 @@ const makeCandidateValidation = (dependencies: {
         : activeResult?.validationFindings === 1
           ? "blocked"
           : "passed";
-    dependencies.runStore.complete({
+    yield* dependencies.persistence.complete({
       validationRunId: started.validationRunId,
       outcome,
       now: input.now,
@@ -213,16 +215,16 @@ const makeCandidateValidation = (dependencies: {
     validateCandidate: (input) => validate(input),
     validateTaskBackedCandidate: (input) => validate(input),
     listRounds: (validationRunId) =>
-      dependencies.runStore
-        .listRounds(validationRunId)
-        .map(({ producer, status }) => ({ producer, status })),
+      Effect.map(dependencies.persistence.listRounds(validationRunId), (rounds) =>
+        rounds.map(({ producer, status }) => ({ producer, status })),
+      ),
   };
 };
 
 const runCandidatePhases = (
   dependencies: {
     readonly artifactsRoot: string;
-    readonly runStore: CandidateValidationRunStorePort;
+    readonly persistence: ChangeValidationPersistence;
     readonly reviewerAgentRuntime: ReviewerAgentRuntime;
   },
   input: ValidateCandidateInput | ValidateTaskBackedCandidateInput,
@@ -236,7 +238,7 @@ const runCandidatePhases = (
     readonly validationFindings: 0 | 1;
     readonly toolingFailures?: readonly ValidationToolingFailure[];
   },
-  ValidationToolingFailure
+  ValidationToolingFailure | RepositoryStorageError
 > =>
   Effect.fn("CandidateValidation.runPhases")(function* () {
     if (input.policy.prepare !== undefined) {
@@ -250,7 +252,7 @@ const runCandidatePhases = (
         expectedHeadSha: input.headSha,
         allowedUntrackedFiles: input.policy.copyFiles,
         now: input.now,
-        recordPrepareRound: dependencies.runStore.recordPrepareRound,
+        recordPrepareRound: dependencies.persistence.recordPrepareRound,
       });
       if (prepare.findings === 1) return { validationFindings: 1 as const };
     }
@@ -265,7 +267,7 @@ const runCandidatePhases = (
       allowedUntrackedFiles: input.policy.copyFiles,
       now: input.now,
       continueAfterFinding: true,
-      recordCheckRound: dependencies.runStore.recordCheckRound,
+      recordCheckRound: dependencies.persistence.recordCheckRound,
     });
     if (checks.findings === 1) return { validationFindings: 1 as const };
     if ("acceptanceContext" in input) {
@@ -281,10 +283,10 @@ const runCandidatePhases = (
         commandCwd: activeWorkspace.worktreePath,
         allowedUntrackedFiles: input.policy.copyFiles,
         now: input.now,
-        listArtifacts: dependencies.runStore.listArtifacts,
+        listArtifacts: dependencies.persistence.listArtifacts,
         listPreviousCandidateReviewerFindings:
-          dependencies.runStore.listPreviousCandidateReviewerFindings,
-        recordAcceptanceRound: dependencies.runStore.recordAcceptanceRound,
+          dependencies.persistence.listPreviousCandidateReviewerFindings,
+        recordAcceptanceRound: dependencies.persistence.recordAcceptanceRound,
       });
       if (acceptance.findings === 1) return { validationFindings: 1 as const };
     }
@@ -300,8 +302,8 @@ const runCandidatePhases = (
       allowedUntrackedFiles: input.policy.copyFiles,
       now: input.now,
       listPreviousCandidateReviewerFindings:
-        dependencies.runStore.listPreviousCandidateReviewerFindings,
-      recordSpecialistRound: dependencies.runStore.recordSpecialistRound,
+        dependencies.persistence.listPreviousCandidateReviewerFindings,
+      recordSpecialistRound: dependencies.persistence.recordSpecialistRound,
     });
     return {
       validationFindings: specialists.findings,

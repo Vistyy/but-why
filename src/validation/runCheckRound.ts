@@ -3,9 +3,11 @@ import { Effect } from "effect";
 
 import type { SubmitCheckConfig } from "../submit/submitRepoConfig.js";
 import { ensureCandidateIntegrity } from "./ensureCandidateIntegrity.js";
-import { writeValidationRunArtifactFile } from "../validationRun/artifactFiles.js";
+import { runValidationCommand } from "./runValidationCommand.js";
+import { writeCommandEvidence } from "./writeCommandEvidence.js";
 import { validationPhase } from "../validationRun/validationRun.js";
 import type { RecordCandidateValidationCheckRoundInput } from "../candidateValidation/candidateValidationRunStore.js";
+import type { RepositoryStorageError } from "../repositoryStorageError.js";
 import {
   CheckCommandExecutionToolingFailed,
   GitToolingFailed,
@@ -24,7 +26,9 @@ export type RunCheckPhaseInput = {
   readonly allowedUntrackedFiles?: readonly string[];
   readonly now: string;
   readonly continueAfterFinding?: boolean;
-  readonly recordCheckRound: (input: RecordCandidateValidationCheckRoundInput) => void;
+  readonly recordCheckRound: (
+    input: RecordCandidateValidationCheckRoundInput,
+  ) => Effect.Effect<void, RepositoryStorageError>;
 };
 
 export type RunCheckPhaseResult =
@@ -59,12 +63,9 @@ type CheckRound = {
   readonly finding?: NonNullable<RecordCandidateValidationCheckRoundInput["finding"]>;
 };
 
-const timeoutExitCode = 124;
-const artifactFileNames = ["stdout.txt", "stderr.txt", "exit-code.json", "logs.txt"] as const;
-
 export const runCheckPhase = (
   input: RunCheckPhaseInput,
-): Effect.Effect<RunCheckPhaseResult, ValidationToolingFailure> =>
+): Effect.Effect<RunCheckPhaseResult, ValidationToolingFailure | RepositoryStorageError> =>
   Effect.gen(function* () {
     let foundFailure = false;
 
@@ -98,10 +99,7 @@ const runSingleCheck = (
       input.expectedHeadSha,
       input.allowedUntrackedFiles,
     );
-    const artifactRefs = artifactFileNames.map((fileName) =>
-      checkArtifactRef(input.validationRunId, check.id, fileName),
-    );
-    const artifactRecords = yield* writeCheckArtifacts({
+    const { artifactRefs, artifactRecords } = yield* writeCheckArtifacts({
       validationRunId: input.validationRunId,
       check,
       commandResult,
@@ -137,30 +135,21 @@ const runSingleCheck = (
 const recordCheckRound = (
   input: RunCheckPhaseInput,
   checkRound: CheckRound,
-): Effect.Effect<void, ValidationToolingFailure> =>
-  Effect.try({
-    try: () => {
-      input.recordCheckRound({
-        validationRunId: input.validationRunId,
-        producer: checkRound.producer,
-        roundNumber: checkRound.roundNumber,
-        roundStatus: checkRound.failed ? "failed" : "passed",
-        phaseStatus:
-          checkRound.failed || (checkRound.lastCheck && checkRound.priorFailure)
-            ? "failed"
-            : checkRound.lastCheck
-              ? "passed"
-              : "active",
-        artifactRecords: checkRound.artifactRecords,
-        ...(checkRound.finding === undefined ? {} : { finding: checkRound.finding }),
-        now: input.now,
-      });
-    },
-    catch: (error) =>
-      new InfrastructureToolingFailed({
-        operationName: "record_check_round",
-        message: errorMessage(error),
-      }),
+): Effect.Effect<void, RepositoryStorageError> =>
+  input.recordCheckRound({
+    validationRunId: input.validationRunId,
+    producer: checkRound.producer,
+    roundNumber: checkRound.roundNumber,
+    roundStatus: checkRound.failed ? "failed" : "passed",
+    phaseStatus:
+      checkRound.failed || (checkRound.lastCheck && checkRound.priorFailure)
+        ? "failed"
+        : checkRound.lastCheck
+          ? "passed"
+          : "active",
+    artifactRecords: checkRound.artifactRecords,
+    ...(checkRound.finding === undefined ? {} : { finding: checkRound.finding }),
+    now: input.now,
   });
 
 const checkFinding = (
@@ -203,14 +192,14 @@ const runCheckCommand = (
           allowedUntrackedFiles: allowedUntrackedFiles ?? [],
         });
       }
-      await ensureTimeoutCommandAvailable(sandbox, check);
-
-      const marker = checkCompletionMarker(check.id);
-      const result = await sandbox.exec(
-        timeoutWrappedCommand(check, marker),
-        commandCwd === undefined ? undefined : { cwd: commandCwd },
-      );
-      const parsed = parseCheckCompletionMarker(result.stderr, marker);
+      const result = await runValidationCommand({
+        command: check.command,
+        timeoutSeconds: check.timeoutSeconds,
+        completionMarker: checkCompletionMarker(check.id),
+        missingTimeoutMessage: `Could not find timeout command for check ${check.id}.`,
+        exec: (command, options) => sandbox.exec(command, options),
+        ...(commandCwd === undefined ? {} : { cwd: commandCwd }),
+      });
       if (expectedHeadSha !== undefined) {
         await ensureCandidateIntegrity({
           sandbox,
@@ -222,11 +211,11 @@ const runCheckCommand = (
 
       return {
         commandResult: {
-          exitCode: parsed.completed ? parsed.exitCode : timeoutExitCode,
+          exitCode: result.exitCode,
           stdout: result.stdout,
-          stderr: parsed.stderr,
+          stderr: result.stderr,
         },
-        timedOut: !parsed.completed,
+        timedOut: result.timedOut,
       };
     },
     catch: (error) =>
@@ -239,17 +228,6 @@ const runCheckCommand = (
           }),
   });
 
-const ensureTimeoutCommandAvailable = async (
-  sandbox: Pick<Sandbox, "exec">,
-  check: SubmitCheckConfig,
-): Promise<void> => {
-  const result = await sandbox.exec("command -v timeout >/dev/null 2>&1");
-
-  if (result.exitCode !== 0) {
-    throw new Error(`Could not find timeout command for check ${check.id}.`);
-  }
-};
-
 const writeCheckArtifacts = (input: {
   readonly validationRunId: string;
   readonly check: SubmitCheckConfig;
@@ -258,51 +236,24 @@ const writeCheckArtifacts = (input: {
   readonly artifactsRoot: string;
   readonly artifactMaxBytes?: number;
   readonly now: string;
-}): Effect.Effect<
-  readonly RecordCandidateValidationCheckRoundInput["artifactRecords"][number][],
-  ValidationToolingFailure
-> =>
+}): Effect.Effect<ReturnType<typeof writeCommandEvidence>, ValidationToolingFailure> =>
   Effect.try({
-    try: () => {
-      const artifacts = [
-        { fileName: "stdout.txt", content: input.commandResult.stdout },
-        { fileName: "stderr.txt", content: input.commandResult.stderr },
-        {
-          fileName: "exit-code.json",
-          content: [
-            "{",
-            `  "exitCode": ${input.commandResult.exitCode},`,
-            `  "timedOut": ${input.timedOut}`,
-            "}",
-            "",
-          ].join("\n"),
-        },
-        {
-          fileName: "logs.txt",
-          content: checkLogContent(input.check, input.commandResult, input.timedOut),
-        },
-      ] as const;
-
-      return artifacts.map((artifact) => {
-        const artifactFile = writeValidationRunArtifactFile({
-          artifactsRoot: input.artifactsRoot,
-          validationRunId: input.validationRunId,
-          phase: validationPhase.checks,
-          producer: input.check.id,
-          fileName: artifact.fileName,
-          content: artifact.content,
-          ...(input.artifactMaxBytes === undefined ? {} : { maxBytes: input.artifactMaxBytes }),
-        });
-
-        return {
-          ref: checkArtifactRef(input.validationRunId, input.check.id, artifact.fileName),
-          validationRunId: input.validationRunId,
-          phase: validationPhase.checks,
-          producer: input.check.id,
-          ...artifactFile,
-        };
-      });
-    },
+    try: () =>
+      writeCommandEvidence({
+        validationRunId: input.validationRunId,
+        phase: validationPhase.checks,
+        producer: input.check.id,
+        commandResult: { ...input.commandResult, timedOut: input.timedOut },
+        logFields: [
+          { name: "checkId", value: input.check.id },
+          { name: "command", value: input.check.command },
+          { name: "timeoutSeconds", value: input.check.timeoutSeconds },
+        ],
+        artifactsRoot: input.artifactsRoot,
+        ...(input.artifactMaxBytes === undefined
+          ? {}
+          : { artifactMaxBytes: input.artifactMaxBytes }),
+      }),
     catch: (error) =>
       new InfrastructureToolingFailed({
         operationName: "record_check_artifacts",
@@ -310,57 +261,7 @@ const writeCheckArtifacts = (input: {
       }),
   });
 
-const checkArtifactRef = (validationRunId: string, checkId: string, fileName: string): string =>
-  `artifact:${validationRunId}/checks/${checkId}/${fileName}`;
-
-const timeoutWrappedCommand = (check: SubmitCheckConfig, marker: string): string =>
-  [
-    `timeout ${check.timeoutSeconds}s sh -c`,
-    shellQuote(`sh -c "$1"
-check_exit_code=$?
-printf '\n%s:%s\n' "$2" "$check_exit_code" >&2
-exit "$check_exit_code"`),
-    "_",
-    shellQuote(check.command),
-    shellQuote(marker),
-  ].join(" ");
-
-const parseCheckCompletionMarker = (
-  stderr: string,
-  marker: string,
-):
-  | { readonly completed: true; readonly exitCode: number; readonly stderr: string }
-  | { readonly completed: false; readonly stderr: string } => {
-  const markerMatch = stderr.match(new RegExp(`\\n${marker}:(\\d+)\\n?$`));
-
-  if (markerMatch === null) {
-    return { completed: false, stderr };
-  }
-
-  return {
-    completed: true,
-    exitCode: Number(markerMatch[1]),
-    stderr: stderr.slice(0, markerMatch.index),
-  };
-};
-
 const checkCompletionMarker = (checkId: string): string => `__BUTWHY_CHECK_COMPLETED_${checkId}__`;
-
-const shellQuote = (value: string): string => `'${value.replaceAll("'", `'\\''`)}'`;
-
-const checkLogContent = (
-  check: SubmitCheckConfig,
-  commandResult: CommandResult,
-  timedOut: boolean,
-): string =>
-  [
-    `checkId: ${check.id}`,
-    `command: ${check.command}`,
-    `timeoutSeconds: ${check.timeoutSeconds}`,
-    `exitCode: ${commandResult.exitCode}`,
-    `timedOut: ${timedOut}`,
-    "",
-  ].join("\n");
 
 const errorMessage = (error: unknown): string =>
   error instanceof Error ? error.message : String(error);

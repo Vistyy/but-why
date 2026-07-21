@@ -4,10 +4,10 @@ import {
   type CandidateValidation,
   CandidateValidationLive,
   CandidateValidationPaths,
-  CandidateValidationRunStore,
+  CandidateValidationPersistence,
   CandidateReviewerAgentRuntime,
 } from "../candidateValidation/validateCandidate.js";
-import type { CandidateValidationRunStore as CandidateValidationRunStorePort } from "../candidateValidation/candidateValidationRunStore.js";
+import type { ChangeValidationPersistence } from "../changeValidation/changeValidationPersistence.js";
 import {
   piReviewerAgentRuntime,
   type ReviewerAgentRuntime,
@@ -16,7 +16,7 @@ import {
 export const localCandidateValidationLayer = (input: {
   readonly localRepositoryMainCheckoutRoot: string;
   readonly artifactsRoot: string;
-  readonly runStore: CandidateValidationRunStorePort;
+  readonly persistence: ChangeValidationPersistence;
   readonly reviewerAgentRuntime?: ReviewerAgentRuntime;
 }): Layer.Layer<CandidateValidation, never, never> =>
   CandidateValidationLive.pipe(
@@ -26,7 +26,7 @@ export const localCandidateValidationLayer = (input: {
           localRepositoryMainCheckoutRoot: input.localRepositoryMainCheckoutRoot,
           artifactsRoot: input.artifactsRoot,
         }),
-        Layer.succeed(CandidateValidationRunStore, input.runStore),
+        Layer.succeed(CandidateValidationPersistence, input.persistence),
         Layer.succeed(
           CandidateReviewerAgentRuntime,
           input.reviewerAgentRuntime ?? piReviewerAgentRuntime,

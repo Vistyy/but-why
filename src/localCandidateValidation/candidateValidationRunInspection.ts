@@ -1,11 +1,15 @@
 import { existsSync } from "node:fs";
 
+import { Effect } from "effect";
+
 import {
   openCandidateValidationRunInspection,
   type CandidateValidationRunInspectionUseCases,
 } from "../candidateValidation/inspectCandidateValidationRun.js";
 import { loadRepoLocalContext, type LoadRepoLocalContextError } from "../init/repoContext.js";
 import { openRepoLocalStores } from "../init/repoLocalStores.js";
+import { repositorySqlLayer } from "../sqlite/repositorySql.js";
+import { openSqliteChangeValidationPersistence } from "../sqlite/sqliteChangeValidationPersistence.js";
 
 export type LoadCandidateValidationRunInspectionResult =
   | {
@@ -30,15 +34,31 @@ export const loadCandidateValidationRunInspection = (input: {
     };
   }
 
-  const stores = openRepoLocalStores(repoContext.context);
+  const context = repoContext.context;
+  const stores = openRepoLocalStores(context);
+  const repositoryLayer = repositorySqlLayer({
+    statePath: context.paths.statePath,
+    commonDirectory: context.commonDirectory,
+  });
+  const inspectionFor = Effect.map(openSqliteChangeValidationPersistence(), (persistence) =>
+    openCandidateValidationRunInspection({
+      persistence,
+      changeStore: stores.changeStore,
+      artifactsRoot: context.paths.artifactsPath,
+    }),
+  );
   return {
     ok: true,
-    taskPrefix: repoContext.context.taskPrefix,
-    inspection: openCandidateValidationRunInspection({
-      runStore: stores.candidateValidationRunStore,
-      candidateStore: stores.candidateStore,
-      changeStore: stores.changeStore,
-      artifactsRoot: repoContext.context.paths.artifactsPath,
-    }),
+    taskPrefix: context.taskPrefix,
+    inspection: {
+      inspectRun: (validationRunId) =>
+        Effect.flatMap(inspectionFor, (inspection) => inspection.inspectRun(validationRunId)).pipe(
+          Effect.provide(repositoryLayer),
+        ),
+      readArtifact: (validationRunId, artifactRef) =>
+        Effect.flatMap(inspectionFor, (inspection) =>
+          inspection.readArtifact(validationRunId, artifactRef),
+        ).pipe(Effect.provide(repositoryLayer)),
+    },
   };
 };

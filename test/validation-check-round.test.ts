@@ -34,7 +34,7 @@ describe("check round Findings", () => {
               : { exitCode: 0, stdout: "", stderr: "\n__BUTWHY_CHECK_COMPLETED_later__:0\n" };
           },
         },
-        recordCheckRound: (input) => recordedRounds.push(input),
+        recordCheckRound: (input) => Effect.sync(() => void recordedRounds.push(input)),
       });
 
       expect(result).toEqual({ ok: true, findings: 1, validationRunId: "candidate-run" });
@@ -71,7 +71,7 @@ describe("check round Findings", () => {
                 };
               },
             },
-            recordCheckRound: () => undefined,
+            recordCheckRound: () => Effect.void,
           }),
         );
 
@@ -102,7 +102,7 @@ describe("check round Findings", () => {
             return { exitCode: 124, stdout: "", stderr: "partial stderr" };
           },
         },
-        recordCheckRound: (input) => recordedRounds.push(input),
+        recordCheckRound: (input) => Effect.sync(() => void recordedRounds.push(input)),
       });
 
       expect(result).toEqual({ ok: true, findings: 1, validationRunId: "by-1.v1" });

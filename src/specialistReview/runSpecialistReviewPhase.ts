@@ -9,11 +9,9 @@ import {
   reviewerFindingHistory,
 } from "../agent/reviewerPrompts.js";
 import type { RecordCandidateSpecialistRoundInput } from "../candidateValidation/candidateValidationRunStore.js";
-import { ensureCandidateIntegrity } from "../validation/ensureCandidateIntegrity.js";
-import {
-  InfrastructureToolingFailed,
-  type ValidationToolingFailure,
-} from "../validation/validationToolingFailures.js";
+import type { RepositoryStorageError } from "../repositoryStorageError.js";
+import type { ValidationToolingFailure } from "../validation/validationToolingFailures.js";
+import { verifyCandidateIntegrity } from "../validation/verifyCandidateIntegrity.js";
 import { writeReviewerArtifacts } from "../validationRun/reviewerArtifacts.js";
 import { validationPhase } from "../validationRun/validationRun.js";
 
@@ -36,15 +34,20 @@ export type RunSpecialistReviewPhaseInput = {
     readonly candidateId: string;
     readonly phase: "specialist_review";
     readonly producer: string;
-  }) => readonly {
-    readonly title: string;
-    readonly description: string;
-    readonly severity?: "critical" | "high" | "medium" | "low";
-    readonly evidence: string;
-    readonly files: readonly string[];
-    readonly artifactRefs: readonly string[];
-  }[];
-  readonly recordSpecialistRound: (input: RecordCandidateSpecialistRoundInput) => void;
+  }) => Effect.Effect<
+    readonly {
+      readonly title: string;
+      readonly description: string;
+      readonly severity?: "critical" | "high" | "medium" | "low";
+      readonly evidence: string;
+      readonly files: readonly string[];
+      readonly artifactRefs: readonly string[];
+    }[],
+    RepositoryStorageError
+  >;
+  readonly recordSpecialistRound: (
+    input: RecordCandidateSpecialistRoundInput,
+  ) => Effect.Effect<void, RepositoryStorageError>;
 };
 
 export type RunSpecialistReviewPhaseResult = {
@@ -54,7 +57,10 @@ export type RunSpecialistReviewPhaseResult = {
 
 export const runSpecialistReviewPhase = (
   input: RunSpecialistReviewPhaseInput,
-): Effect.Effect<RunSpecialistReviewPhaseResult, ValidationToolingFailure> =>
+): Effect.Effect<
+  RunSpecialistReviewPhaseResult,
+  ValidationToolingFailure | RepositoryStorageError
+> =>
   Effect.gen(function* () {
     let hasFindings = false;
     const toolingFailures: ValidationToolingFailure[] = [];
@@ -74,7 +80,7 @@ const runSpecialist = (
   roundNumber: number,
 ): Effect.Effect<
   { readonly hasFindings: boolean; readonly toolingFailure?: ValidationToolingFailure },
-  ValidationToolingFailure
+  ValidationToolingFailure | RepositoryStorageError
 > =>
   Effect.gen(function* () {
     yield* verifyIntegrity(input);
@@ -88,7 +94,7 @@ const runSpecialist = (
       },
     });
     const earlierFindings = reviewerFindingHistory(
-      input.listPreviousCandidateReviewerFindings({
+      yield* input.listPreviousCandidateReviewerFindings({
         candidateId: input.candidate.candidateId,
         phase: validationPhase.specialistReview,
         producer: policy.id,
@@ -158,35 +164,15 @@ const runSpecialist = (
 const verifyIntegrity = (
   input: RunSpecialistReviewPhaseInput,
 ): Effect.Effect<void, ValidationToolingFailure> =>
-  Effect.tryPromise({
-    try: () =>
-      ensureCandidateIntegrity({
-        sandbox: input.sandbox,
-        commandCwd: input.commandCwd,
-        expectedHeadSha: input.candidate.headSha,
-        allowedUntrackedFiles: input.allowedUntrackedFiles,
-      }),
-    catch: (error) =>
-      error instanceof Error && "_tag" in error
-        ? (error as ValidationToolingFailure)
-        : new InfrastructureToolingFailed({
-            operationName: "verify_specialist_candidate",
-            message: errorMessage(error),
-          }),
+  verifyCandidateIntegrity({
+    sandbox: input.sandbox,
+    commandCwd: input.commandCwd,
+    expectedHeadSha: input.candidate.headSha,
+    allowedUntrackedFiles: input.allowedUntrackedFiles,
+    operationName: "verify_specialist_candidate",
   });
 
 const recordSpecialistRound = (
   input: RunSpecialistReviewPhaseInput,
   round: RecordCandidateSpecialistRoundInput,
-): Effect.Effect<void, ValidationToolingFailure> =>
-  Effect.try({
-    try: () => input.recordSpecialistRound(round),
-    catch: (error) =>
-      new InfrastructureToolingFailed({
-        operationName: "record_specialist_round",
-        message: errorMessage(error),
-      }),
-  });
-
-const errorMessage = (error: unknown): string =>
-  error instanceof Error ? error.message : String(error);
+): Effect.Effect<void, RepositoryStorageError> => input.recordSpecialistRound(round);
