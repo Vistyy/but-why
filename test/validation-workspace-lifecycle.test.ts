@@ -54,6 +54,207 @@ describe("Validation Workspace scoped lifecycle", () => {
     }),
   );
 
+  it.scoped("reuses a matching clean Validation Workspace", () =>
+    Effect.gen(function* () {
+      const events: string[] = [];
+      const createValidationWorkspace = yield* Effect.promise(() =>
+        loadCreateValidationWorkspace(events, {
+          existingWorktree: {
+            branch: tempRefName,
+            head: input.submittedSha,
+            dirty: false,
+          },
+        }),
+      );
+
+      const result = yield* createValidationWorkspace(input);
+
+      expect(result).toMatchObject({
+        ok: true,
+        setup: {
+          submittedSha: input.submittedSha,
+          worktreeHead: input.submittedSha,
+        },
+      });
+      expect(events).toEqual([
+        "acquire:temp_ref",
+        "acquire:worktree",
+        "read:worktree_head",
+        "close:worktree",
+        "remove:worktree",
+        "release:temp_ref",
+      ]);
+    }),
+  );
+
+  it.scoped("removes and recreates a matching dirty Validation Workspace", () =>
+    Effect.gen(function* () {
+      const events: string[] = [];
+      const createValidationWorkspace = yield* Effect.promise(() =>
+        loadCreateValidationWorkspace(events, {
+          existingWorktree: {
+            branch: tempRefName,
+            head: input.submittedSha,
+            dirty: true,
+          },
+        }),
+      );
+
+      const result = yield* createValidationWorkspace(input);
+
+      expect(result).toMatchObject({
+        ok: true,
+        setup: {
+          submittedSha: input.submittedSha,
+          worktreeHead: input.submittedSha,
+        },
+      });
+      expect(events).toEqual([
+        "acquire:temp_ref",
+        "remove:worktree",
+        "acquire:worktree",
+        "read:worktree_head",
+        "close:worktree",
+        "remove:worktree",
+        "release:temp_ref",
+      ]);
+    }),
+  );
+
+  it.scoped("rejects an existing Validation Workspace on another branch", () =>
+    Effect.gen(function* () {
+      const events: string[] = [];
+      const createValidationWorkspace = yield* Effect.promise(() =>
+        loadCreateValidationWorkspace(events, {
+          existingWorktree: {
+            branch: "refs/heads/other-run",
+            head: input.submittedSha,
+            dirty: false,
+          },
+        }),
+      );
+
+      const result = yield* createValidationWorkspace(input);
+
+      expect(result).toMatchObject({
+        ok: false,
+        toolingError: {
+          operationName: "create_sandcastle_workspace",
+          errorMessage:
+            "Validation worktree already exists for a different Validation Run: " +
+            expectedWorktreePath,
+          cleanupResult: {
+            worktree: "not_created",
+            tempRef: "removed",
+          },
+        },
+      });
+      expect(events).toEqual(["acquire:temp_ref", "release:temp_ref"]);
+    }),
+  );
+
+  it.scoped("rejects an existing Validation Workspace at another commit", () =>
+    Effect.gen(function* () {
+      const events: string[] = [];
+      const createValidationWorkspace = yield* Effect.promise(() =>
+        loadCreateValidationWorkspace(events, {
+          existingWorktree: {
+            branch: tempRefName,
+            head: "different-commit",
+            dirty: false,
+          },
+        }),
+      );
+
+      const result = yield* createValidationWorkspace(input);
+
+      expect(result).toMatchObject({
+        ok: false,
+        toolingError: {
+          operationName: "create_sandcastle_workspace",
+          errorMessage: `Validation worktree already exists for a different commit: ${expectedWorktreePath}`,
+          cleanupResult: {
+            worktree: "not_created",
+            tempRef: "removed",
+          },
+        },
+      });
+      expect(events).toEqual(["acquire:temp_ref", "release:temp_ref"]);
+    }),
+  );
+
+  it.scoped("fails when removing a dirty Validation Workspace leaves it present", () =>
+    Effect.gen(function* () {
+      const events: string[] = [];
+      const createValidationWorkspace = yield* Effect.promise(() =>
+        loadCreateValidationWorkspace(events, {
+          existingWorktree: {
+            branch: tempRefName,
+            head: input.submittedSha,
+            dirty: true,
+          },
+          worktreeCleanup: "failed",
+        }),
+      );
+
+      const result = yield* createValidationWorkspace(input);
+
+      expect(result).toMatchObject({
+        ok: false,
+        toolingError: {
+          operationName: "create_sandcastle_workspace",
+          errorMessage: `Validation worktree already exists with uncommitted changes: ${expectedWorktreePath}`,
+          worktreePath: expectedWorktreePath,
+          cleanupResult: {
+            worktree: "not_created",
+            tempRef: "removed",
+          },
+        },
+      });
+      expect(events).toEqual(["acquire:temp_ref", "remove:worktree", "release:temp_ref"]);
+    }),
+  );
+
+  it.scoped("recovers when failed removal proves the Validation Workspace disappeared", () =>
+    Effect.gen(function* () {
+      const events: string[] = [];
+      const createValidationWorkspace = yield* Effect.promise(() =>
+        loadCreateValidationWorkspace(events, {
+          existingWorktree: {
+            branch: tempRefName,
+            head: input.submittedSha,
+            dirty: true,
+          },
+          worktreeCleanup: "failed",
+          worktreeDisappearsAfterFailedRemoval: true,
+        }),
+      );
+
+      const result = yield* createValidationWorkspace(input);
+
+      expect(result).toMatchObject({
+        ok: true,
+        setup: {
+          submittedSha: input.submittedSha,
+          worktreeHead: input.submittedSha,
+          cleanupResult: {
+            worktree: "removed",
+            tempRef: "removed",
+          },
+        },
+      });
+      expect(events).toEqual([
+        "acquire:temp_ref",
+        "remove:worktree",
+        "acquire:worktree",
+        "read:worktree_head",
+        "close:worktree",
+        "remove:worktree",
+        "release:temp_ref",
+      ]);
+    }),
+  );
+
   it.scoped("does not clean up when temp ref acquisition fails", () =>
     Effect.gen(function* () {
       const events: string[] = [];
@@ -210,12 +411,18 @@ describe("Validation Workspace scoped lifecycle", () => {
 });
 
 type FakeOptions = {
+  readonly existingWorktree?: {
+    readonly branch: string | undefined;
+    readonly head: string | undefined;
+    readonly dirty: boolean;
+  };
   readonly tempRefFailure?: string;
   readonly worktreeCreationFailure?: string;
   readonly neverFinishWorktreeCreation?: boolean;
   readonly onWorktreeAcquired?: () => void;
   readonly worktreeHeadFailure?: boolean;
   readonly worktreeCleanup?: "removed" | "failed";
+  readonly worktreeDisappearsAfterFailedRemoval?: boolean;
   readonly tempRefCleanup?: "removed" | "failed";
 };
 
@@ -224,7 +431,9 @@ const loadCreateValidationWorkspace = async (
   options: FakeOptions = {},
 ): Promise<typeof createValidationWorkspaceType> => {
   vi.resetModules();
+  let existingWorktree = options.existingWorktree;
   let worktreeExists = false;
+  let removalCount = 0;
 
   vi.doMock("@ai-hero/sandcastle", () => ({
     createSandbox: async () => {
@@ -278,13 +487,24 @@ const loadCreateValidationWorkspace = async (
       return options.tempRefCleanup ?? "removed";
     },
     inspectExistingWorktree: () =>
-      worktreeExists
-        ? { exists: true, branch: undefined, head: input.submittedSha, dirty: false }
-        : { exists: false },
+      existingWorktree === undefined
+        ? worktreeExists
+          ? { exists: true, branch: undefined, head: input.submittedSha, dirty: false }
+          : { exists: false }
+        : { exists: true, ...existingWorktree },
     removeValidationWorktree: () => {
       events.push("remove:worktree");
-      worktreeExists = false;
-      return options.worktreeCleanup !== "failed";
+      removalCount += 1;
+      const removed =
+        options.worktreeCleanup !== "failed" ||
+        (options.worktreeDisappearsAfterFailedRemoval && removalCount > 1);
+
+      if (removed || options.worktreeDisappearsAfterFailedRemoval) {
+        existingWorktree = undefined;
+        worktreeExists = false;
+      }
+
+      return removed;
     },
   }));
 

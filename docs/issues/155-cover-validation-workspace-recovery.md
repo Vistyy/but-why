@@ -37,6 +37,32 @@ Validation Workspace lifecycle tests demonstrate reuse, safe replacement, and re
 - [ ] The Validation Workspace recovery health finding is resolved without new quality findings.
 - [ ] Focused lifecycle tests and the repository quality gate pass.
 
+## Scoped implementation record
+
+- Baseline: `c0613e1f2fbb9d7aea216beff08856f710ab468f`.
+- Spec review source: this task draft.
+- Normative traceability: Tasks 011, 038, and 152, plus `docs/specs/taskless-changes-and-worktree-handoff.md` and ADRs 0001 and 0002.
+- Primary seam: `test/validation-workspace-lifecycle.test.ts` through `createValidationWorkspace`.
+
+| Acceptance criterion | Implementation target | Public test seam | Verification target |
+| --- | --- | --- | --- |
+| Matching clean workspaces are reused | Existing-worktree preparation | Validation Workspace lifecycle test | No recovery removal before workspace acquisition |
+| Matching dirty workspaces are safely replaced | Existing-worktree preparation and removal adapter | Validation Workspace lifecycle test | Removal precedes recreation |
+| Other branches and commits are rejected | Existing-worktree preparation | Validation Workspace lifecycle tests | Validation Tooling Failure result and temp-ref cleanup |
+| Failed removal is safe | Existing-worktree preparation | Validation Workspace lifecycle tests | Remaining worktree fails; disappeared worktree recovers |
+| Cleanup and temporary-ref behavior remains unchanged | Scoped resource lifecycle | Existing lifecycle tests and recovery tests | Cleanup order and results remain unchanged |
+| Recovery health finding is resolved | Lifecycle coverage | Full coverage report and Fallow health check | `prepareExistingWorktree` is no longer above the CRAP threshold |
+| Validation and quality checks pass | Repository quality recipes | Focused lifecycle test and quality gate | `just test test/validation-workspace-lifecycle.test.ts`, `just typecheck`, and `just quality` |
+
+Required validation commands are `just test test/validation-workspace-lifecycle.test.ts`, `just typecheck`, `just format-check`, `just lint`, and `just quality`.
+The full quality gate is expected to retain the user-approved Task 157 `handoffFileError` health finding until Task 157 is completed.
+
+## Implementation decision ledger
+
+- User-approved: leave the independent Task 157 `handoffFileError` health finding to Task 157 while completing Task 155.
+- Local: add lifecycle coverage through the existing fake-adapter seam without changing production recovery behavior because the current implementation already satisfies the approved safety rules.
+- Deferred to Task 156: final clean-checkout quality-gate verification after the remaining pre-gate tasks are complete.
+
 ## Blocked by
 
 None - can start immediately.
