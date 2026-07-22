@@ -1,5 +1,9 @@
 # Migrate Submit, publication, and reconciliation
 
+## Status
+
+Done.
+
 ## Specification
 
 - [Source specification decomposed from Task 146](146-migrate-state-stores-to-effect-programs.md)
@@ -61,14 +65,24 @@ A cross-process CLI workflow captures a Candidate, submits it, records publicati
 
 ## Acceptance criteria
 
-- [ ] Submit, publication, and reconciliation use Effect-native persistence.
-- [ ] Task-backed and taskless Change behavior remains unchanged.
-- [ ] Publication retry, release, ownership, and expected-head protections remain unchanged.
-- [ ] Reconciliation atomically records merged Change, linked Task, pull-request, and cleanup state.
-- [ ] Supported GitHub remote forms and malformed targets have explicit behavior coverage.
-- [ ] Change CLI output and operational error branches are covered.
-- [ ] Repository composition supplies GitHub target and cleanup operations to Change workflows.
-- [ ] Every production storage caller uses the Effect-native contract required before Task 147.
+- [x] Submit, publication, and reconciliation use Effect-native persistence.
+- [x] Task-backed and taskless Change behavior remains unchanged.
+- [x] Publication retry, release, ownership, and expected-head protections remain unchanged.
+- [x] Reconciliation atomically records merged Change, linked Task, pull-request, and cleanup state.
+- [x] Supported GitHub remote forms and malformed targets have explicit behavior coverage.
+- [x] Change CLI output and operational error branches are covered.
+- [x] Repository composition supplies GitHub target and cleanup operations to Change workflows.
+- [x] Every production storage caller uses the Effect-native contract required before Task 147.
+
+## Completion
+
+- Implementation: `636d868ef1cf80e79d526a6442eb9c862531a553`.
+- Verification: 387 tests passed with one intentional skip.
+- Type checking, linting, formatting, ast-grep, documentation, build, focused delivery lifecycle checks, and Fallow architecture checks passed.
+- The user approved the seven remaining baseline Fallow health findings for Tasks 147, 154, 155, and 157.
+- Completion update: this administrative commit.
+- Spec review: `APPROVED`.
+- Standards review: `APPROVED`.
 
 ## Blocked by
 

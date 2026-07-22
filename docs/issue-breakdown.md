@@ -7,7 +7,7 @@ It ends when But Why? completes one real SQLite-tracked Task-backed Change and p
 
 ## Can start immediately
 
-- Task 153: Migrate Submit, publication, and reconciliation.
+- Task 147: Remove the synchronous state storage path.
 - Task 154: Cover Task dependency CLI errors.
 - Task 155: Cover Validation Workspace recovery.
 - Task 157: Cover Change Implement handoff errors.
@@ -18,8 +18,7 @@ It ends when But Why? completes one real SQLite-tracked Task-backed Change and p
 
 | Task | Capability | Blocked by |
 | --- | --- | --- |
-| 153 | Migrate Submit, publication, and reconciliation | None |
-| 147 | Remove the synchronous state storage path | 153 |
+| 147 | Remove the synchronous state storage path | None |
 | 135 | Consolidate the source hierarchy and names | 147 |
 | 154 | Cover Task dependency CLI errors | None |
 | 155 | Cover Validation Workspace recovery | None |
