@@ -1,5 +1,9 @@
 # Cover Validation Workspace recovery
 
+## Status
+
+Done.
+
 ## Specification
 
 - [Create Validation Workspaces through Sandcastle](011-create-validation-workspaces-through-sandcastle.md)
@@ -27,15 +31,15 @@ Validation Workspace lifecycle tests demonstrate reuse, safe replacement, and re
 
 ## Acceptance criteria
 
-- [ ] A matching clean Validation Workspace is reused.
-- [ ] A matching dirty Validation Workspace is removed and recreated.
-- [ ] A Validation Workspace on another branch produces a Validation Tooling Failure.
-- [ ] A Validation Workspace at another commit produces a Validation Tooling Failure.
-- [ ] Failed removal produces a failure when the worktree remains.
-- [ ] Failed removal permits recovery when later inspection proves that the worktree disappeared.
-- [ ] Existing cleanup and temporary-ref behavior remains unchanged.
-- [ ] The Validation Workspace recovery health finding is resolved without new quality findings.
-- [ ] Focused lifecycle tests and the repository quality gate pass.
+- [x] A matching clean Validation Workspace is reused.
+- [x] A matching dirty Validation Workspace is removed and recreated.
+- [x] A Validation Workspace on another branch produces a Validation Tooling Failure.
+- [x] A Validation Workspace at another commit produces a Validation Tooling Failure.
+- [x] Failed removal produces a failure when the worktree remains.
+- [x] Failed removal permits recovery when later inspection proves that the worktree disappeared.
+- [x] Existing cleanup and temporary-ref behavior remains unchanged.
+- [x] The Validation Workspace recovery health finding is resolved without new quality findings.
+- [x] Focused lifecycle tests and the repository quality gate pass.
 
 ## Scoped implementation record
 
@@ -62,6 +66,14 @@ The full quality gate is expected to retain the user-approved Task 157 `handoffF
 - User-approved: leave the independent Task 157 `handoffFileError` health finding to Task 157 while completing Task 155.
 - Local: add lifecycle coverage through the existing fake-adapter seam without changing production recovery behavior because the current implementation already satisfies the approved safety rules.
 - Deferred to Task 156: final clean-checkout quality-gate verification after the remaining pre-gate tasks are complete.
+
+## Completion
+
+- Implementation: `5dbda408708ca1726e4c42278c9c59bc162db24a`.
+- Verification: 373 tests passed with one intentional skip; focused Validation Workspace lifecycle tests passed with 12 tests; type checking, formatting, linting, and documentation checks passed.
+- Verification: `just quality` remains nonzero only for the user-approved Task 157 `handoffFileError` health finding.
+- Spec review: `APPROVED`.
+- Standards review: `APPROVED`.
 
 ## Blocked by
 
