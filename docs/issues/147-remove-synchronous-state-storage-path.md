@@ -59,8 +59,11 @@ Run the complete cross-process CLI workflow through initialization, Task-backed 
 
 ## Completion evidence
 
-- Implementation commit: `cf8b182619092f460df0bf1e22d35539b4743b75`.
+- Implementation commits: `cf8b182619092f460df0bf1e22d35539b4743b75` and `4c69bdf37956fdbe78efa6bee94cca519abaf99b`.
+- Review correction commits: `f21f5a9e4d44584a316b4708596933cf3433520d`, `bf20fb163f297d46cdd96fa45920101d00fe39d5`, `38a88708fd379efe9c0c4dff5666935937550583`, and `226c0d91aa21a43dda08ce8f3cea4869e194c9f0`.
+- Spec review: approved and latched.
+- Standards review: approved with required comments and latched; the required publication coverage is complete.
 - The cross-process storage workflow passes through initialization, Task-backed Change inspection, and final validation.
-- The full test suite and Effect-first spike checks pass.
+- The full test suite passes with 362 tests and the Effect-first spike checks pass.
 - Every `just quality` stage passes except the approved Fallow health findings owned by Tasks 154, 155, and 157.
 - Task 153 completed the prerequisite production-caller migration.
