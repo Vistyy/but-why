@@ -20,7 +20,7 @@ It ends when But Why? completes one real SQLite-tracked Task-backed Change and p
 | 135 | Consolidate the source hierarchy and names | None |
 | 155 | Cover Validation Workspace recovery | None |
 | 157 | Cover Change Implement handoff errors | None |
-| 156 | Establish and verify the final quality gate | 135, 154, 155, 157 |
+| 156 | Establish and verify the final quality gate | 135, 155, 157 |
 | 123 | Ship the Change-centered manual workflow | 107, 117, 129, 135 |
 | 125 | Produce an installable v1 package | 123 |
 | 131 | Dogfood the first SQLite-tracked Change workflow | 125 |

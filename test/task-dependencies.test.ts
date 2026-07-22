@@ -20,6 +20,8 @@ type TaskGraph = {
   readonly dependents: readonly unknown[];
 };
 
+type TaskGraphs = Readonly<Record<string, TaskGraph>>;
+
 const createTaskThroughCli = (
   root: string,
   title: string,
@@ -55,6 +57,26 @@ const readTaskGraph = (root: string, taskId: string): Effect.Effect<TaskGraph> =
     );
     expect(result.status).toBe(0);
     return (JSON.parse(result.stdout) as { readonly task: TaskGraph }).task;
+  });
+
+const readTaskGraphs = (root: string, taskIds: readonly string[]): Effect.Effect<TaskGraphs> =>
+  Effect.gen(function* () {
+    const graphs: Record<string, TaskGraph> = {};
+    for (const taskId of taskIds) graphs[taskId] = yield* readTaskGraph(root, taskId);
+    return graphs;
+  });
+
+const readTaskIds = (root: string): Effect.Effect<readonly string[]> =>
+  Effect.gen(function* () {
+    const result = yield* runByInProcessEffect(
+      root,
+      ["task", "list", "--all", "--output", "json"],
+      firstNow,
+    );
+    expect(result.status).toBe(0);
+    return (
+      JSON.parse(result.stdout) as { readonly tasks: readonly { readonly id: string }[] }
+    ).tasks.map((task) => task.id);
   });
 
 const expectJsonError = (
@@ -159,7 +181,7 @@ it.effect("reports Task creation dependency rejections without changing the grap
         firstNow,
       )).status,
     ).toBe(0);
-    const before = yield* readTaskGraph(root, "BY-1");
+    const before = yield* readTaskGraphs(root, ["BY-1"]);
 
     for (const testCase of [
       {
@@ -211,7 +233,8 @@ it.effect("reports Task creation dependency rejections without changing the grap
         error: testCase.error,
         help: ["Use existing Tasks from `by task list --all` as direct prerequisites."],
       });
-      expect(yield* readTaskGraph(root, "BY-1")).toEqual(before);
+      expect(yield* readTaskGraphs(root, ["BY-1"])).toEqual(before);
+      expect(yield* readTaskIds(root)).toEqual(["BY-1"]);
     }
   }),
 );
@@ -259,7 +282,7 @@ it.effect("reports dependency replacement rejections without changing the graph"
     yield* createTaskThroughCli(root, "First");
     yield* createTaskThroughCli(root, "Second");
     yield* createTaskThroughCli(root, "Dependent", ["BY-1"]);
-    const before = yield* readTaskGraph(root, "BY-3");
+    const before = yield* readTaskGraphs(root, ["BY-1", "BY-2", "BY-3"]);
 
     for (const testCase of [
       {
@@ -314,7 +337,7 @@ it.effect("reports dependency replacement rejections without changing the graph"
         error: testCase.error,
         help: ["Use existing Tasks and keep the direct dependency graph acyclic."],
       });
-      expect(yield* readTaskGraph(root, "BY-3")).toEqual(before);
+      expect(yield* readTaskGraphs(root, ["BY-1", "BY-2", "BY-3"])).toEqual(before);
     }
 
     const missingTask = yield* runByInProcessEffect(
@@ -330,7 +353,7 @@ it.effect("reports dependency replacement rejections without changing the graph"
       },
       help: ["Run `by task list --all` to see known Tasks."],
     });
-    expect(yield* readTaskGraph(root, "BY-3")).toEqual(before);
+    expect(yield* readTaskGraphs(root, ["BY-1", "BY-2", "BY-3"])).toEqual(before);
   }),
 );
 
@@ -340,7 +363,7 @@ it.effect("reports dependency cycles through replacement without changing the gr
     yield* createTaskThroughCli(root, "First");
     yield* createTaskThroughCli(root, "Second", ["BY-1"]);
     yield* createTaskThroughCli(root, "Third", ["BY-2"]);
-    const before = yield* readTaskGraph(root, "BY-1");
+    const before = yield* readTaskGraphs(root, ["BY-1", "BY-2", "BY-3"]);
 
     const result = yield* runByInProcessEffect(
       root,
@@ -356,7 +379,7 @@ it.effect("reports dependency cycles through replacement without changing the gr
       },
       help: ["Use existing Tasks and keep the direct dependency graph acyclic."],
     });
-    expect(yield* readTaskGraph(root, "BY-1")).toEqual(before);
+    expect(yield* readTaskGraphs(root, ["BY-1", "BY-2", "BY-3"])).toEqual(before);
   }),
 );
 
@@ -376,7 +399,7 @@ it.effect("rejects locked dependency replacement without changing the graph", ()
       firstNow,
     );
     expect(started.status).toBe(0);
-    const before = yield* readTaskGraph(root, "BY-1");
+    const before = yield* readTaskGraphs(root, ["BY-1"]);
 
     const result = yield* runByInProcessEffect(
       root,
@@ -393,7 +416,7 @@ it.effect("rejects locked dependency replacement without changing the graph", ()
       },
       help: ["Dependency edits are available only before Change Start."],
     });
-    expect(yield* readTaskGraph(root, "BY-1")).toEqual(before);
+    expect(yield* readTaskGraphs(root, ["BY-1"])).toEqual(before);
   }),
 );
 
