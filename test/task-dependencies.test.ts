@@ -354,6 +354,7 @@ it.effect("reports dependency replacement rejections without changing the graph"
       help: ["Run `by task list --all` to see known Tasks."],
     });
     expect(yield* readTaskGraphs(root, ["BY-1", "BY-2", "BY-3"])).toEqual(before);
+    expect(yield* readTaskIds(root)).toEqual(["BY-1", "BY-2", "BY-3"]);
   }),
 );
 

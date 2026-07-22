@@ -38,7 +38,7 @@ Simplify the error mapping only if public coverage does not remove the health fi
 | Dependency replacement reports every rejection | `src/cli/task/commands/dependencies.ts` | Real Task CLI JSON replacement results | Unknown, self, duplicate, cycle, locked, and missing Task results preserve their complete contract |
 | Rejected operations preserve the graph | Task dependency persistence and both Task CLI commands | `task show --output json` for every affected Task | Prerequisites, dependents, and Task existence remain unchanged after each rejection |
 | Task Dependency CLI health findings are resolved | CLI mapping coverage | Full coverage and Fallow health reports | The two Task Dependency mapping findings are absent and no new Task Dependency finding appears |
-| Focused tests and quality checks pass | Repository test and quality recipes | Just recipes | Focused tests, type checking, static checks, coverage, and build pass |
+| Focused tests and quality checks pass without new findings | Repository test and quality recipes | Just recipes | Focused tests, type checking, static checks, coverage, and build pass without new Task Dependency findings |
 
 ## Implementation decision ledger
 
@@ -60,13 +60,15 @@ The create command's unreachable dependency-cycle mapping is covered at the CLI 
 - [x] Every reachable rejection preserves its current error code, message, details, and help.
 - [x] Every reachable rejected operation leaves the Task Dependency graph unchanged.
 - [x] The two Task Dependency CLI health findings are resolved without new quality findings.
-- [x] Focused Task CLI tests and the repository quality gate pass.
+- [x] Focused Task CLI tests pass and repository quality checks introduce no new findings.
 
 ## Completion
 
-- Implementation commits: `e21fb456ccd5937a869e330a688cf3839df3afa5`, `b2e7960ff72494af162e55fd548e00e91fb4e64`, `36983d2fd2b2100688eb1db95dd93e8c9f5c832c`, and `969a10994534047fa4a3234befbbf2414a90fbd3`.
+- Implementation commits: `e21fb456ccd5937a869e330a688cf3839df3afa5`, `b2e7960ff72494af162e55fd548e00e91bfb4e64`, `36983d2fd2b2100688eb1db95dd93e8c9f5c832c`, and `969a10994534047fa4a3234befbbf2414a90fbd3`.
 - Verification: focused Task CLI tests, type checking, formatting, linting, AST-grep, and documentation checks passed.
-- Review: Spec approved and Standards review pending final correction validation.
+- Verification: full coverage passed 367 tests with one intentional skip.
+- Verification: the repository quality run reports only the two pre-existing Fallow findings deferred to Tasks 155 and 157.
+- Review: Spec and Standards approved with required comments resolved.
 
 ## Blocked by
 
