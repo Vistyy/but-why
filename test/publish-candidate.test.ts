@@ -1,7 +1,7 @@
 import { spawnSync } from "node:child_process";
 import { it as effectIt } from "@effect/vitest";
 import { Effect } from "effect";
-import { describe, expect, it } from "vitest";
+import { describe, expect } from "vitest";
 
 import type {
   CandidateValidationRunRecord,
@@ -9,10 +9,7 @@ import type {
   StartCandidateValidationRunInput,
 } from "../src/candidateValidation/candidateValidationRunStore.js";
 import type { ChangePersistence } from "../src/change/changePersistence.js";
-import {
-  openCandidatePublication,
-  openEffectCandidatePublication,
-} from "../src/publication/publishCandidate.js";
+import { openCandidatePublication as openPersistentCandidatePublication } from "../src/publication/candidatePublication.js";
 import { openSqliteCandidateStore } from "../src/sqlite/sqliteCandidateStore.js";
 import { openSqliteChangeStartStore } from "../src/sqlite/sqliteChangeStartStore.js";
 import { openSqliteChangeStore } from "../src/sqlite/sqliteChangeStore.js";
@@ -33,413 +30,447 @@ const policy = {
 };
 
 describe("Candidate publication", () => {
-  it("publishes one passing taskless Candidate with deterministic metadata", () => {
-    const fixture = publicationFixture();
-    const requests: unknown[] = [];
-    const publication = openCandidatePublication({
-      changeStore: fixture.changeStore,
-      candidateStore: fixture.candidateStore,
-      validationRunStore: fixture.validationRunStore,
-      git: {
-        readBranchHead: () => fixture.candidate.headSha,
-        readFirstNonMergeCommitSubject: () => ({ ok: true, subject: "Add taskless publication" }),
-      },
-      github: {
-        findPullRequests: () => [],
-        getPullRequest: () => undefined,
-        createPullRequest: (request) => {
-          requests.push(request);
-          return {
+  effectIt.effect("publishes one passing taskless Candidate with deterministic metadata", () =>
+    Effect.gen(function* () {
+      const fixture = publicationFixture();
+      const requests: unknown[] = [];
+      const publication = openCandidatePublication({
+        changeStore: fixture.changeStore,
+        candidateStore: fixture.candidateStore,
+        validationRunStore: fixture.validationRunStore,
+        git: {
+          readBranchHead: () => fixture.candidate.headSha,
+          readFirstNonMergeCommitSubject: () => ({ ok: true, subject: "Add taskless publication" }),
+        },
+        github: {
+          findPullRequests: () => [],
+          getPullRequest: () => undefined,
+          createPullRequest: (request) => {
+            requests.push(request);
+            return {
+              ok: true,
+              pullRequest: {
+                number: 42,
+                url: "https://github.com/acme/widgets/pull/42",
+                baseBranch: request.baseBranch,
+                headBranch: request.headBranch,
+                headSha: request.expectedHeadSha,
+              },
+            };
+          },
+          updatePullRequest: () => {
+            throw new Error("Unexpected PR update");
+          },
+        },
+      });
+
+      expect(
+        yield* publication.publish({
+          changeId: fixture.changeId,
+          candidateId: fixture.candidate.id,
+          validationRunId: fixture.validationRunId,
+          policy,
+          target: { owner: "acme", repo: "widgets", baseBranch: "main", remoteName: "origin" },
+          now,
+        }),
+      ).toEqual({
+        ok: true,
+        created: true,
+        pullRequest: {
+          number: 42,
+          url: "https://github.com/acme/widgets/pull/42",
+        },
+      });
+      expect(requests).toEqual([
+        {
+          owner: "acme",
+          repo: "widgets",
+          remoteName: "origin",
+          baseBranch: "main",
+          headBranch: "feature",
+          branchRef: "refs/heads/feature",
+          expectedHeadSha: fixture.candidate.headSha,
+          title: "Add taskless publication",
+          body: `Change: ${fixture.changeId}\nCandidate: ${fixture.candidate.id}\nValidation Run: ${fixture.validationRunId}`,
+        },
+      ]);
+      expect(fixture.changeStore.getChangeById(fixture.changeId)).toMatchObject({
+        publication: {
+          candidateId: fixture.candidate.id,
+          validationRunId: fixture.validationRunId,
+          expectedHeadSha: fixture.candidate.headSha,
+          pullRequest: { number: 42, url: "https://github.com/acme/widgets/pull/42" },
+        },
+      });
+    }),
+  );
+
+  effectIt.effect(
+    "recovers a PR created before its response was lost without creating a duplicate",
+    () =>
+      Effect.gen(function* () {
+        const fixture = publicationFixture();
+        const remotePullRequests: {
+          number: number;
+          url: string;
+          baseBranch: string;
+          headBranch: string;
+          headSha: string;
+        }[] = [];
+        let createCalls = 0;
+        const publication = openCandidatePublication({
+          changeStore: fixture.changeStore,
+          candidateStore: fixture.candidateStore,
+          validationRunStore: fixture.validationRunStore,
+          git: {
+            readBranchHead: () => fixture.candidate.headSha,
+            readFirstNonMergeCommitSubject: () => ({
+              ok: true,
+              subject: "Add taskless publication",
+            }),
+          },
+          github: {
+            findPullRequests: () => remotePullRequests,
+            getPullRequest: () => remotePullRequests[0],
+            createPullRequest: (request) => {
+              createCalls += 1;
+              remotePullRequests.push({
+                number: 42,
+                url: "https://github.com/acme/widgets/pull/42",
+                baseBranch: request.baseBranch,
+                headBranch: request.headBranch,
+                headSha: request.expectedHeadSha,
+              });
+              return { ok: false, code: "remote_response_lost" };
+            },
+            updatePullRequest: () => {
+              throw new Error("Unexpected PR update");
+            },
+          },
+        });
+        const input = {
+          changeId: fixture.changeId,
+          candidateId: fixture.candidate.id,
+          validationRunId: fixture.validationRunId,
+          policy,
+          target: { owner: "acme", repo: "widgets", baseBranch: "main", remoteName: "origin" },
+          now,
+        };
+
+        expect(yield* publication.publish(input)).toMatchObject({
+          ok: true,
+          created: true,
+          pullRequest: { number: 42 },
+        });
+        expect(yield* publication.publish(input)).toMatchObject({
+          ok: true,
+          created: false,
+          pullRequest: { number: 42 },
+        });
+        expect(createCalls).toBe(1);
+      }),
+  );
+
+  effectIt.effect(
+    "updates the owned PR only from its expected current head for a newer passing Candidate",
+    () =>
+      Effect.gen(function* () {
+        const fixture = publicationFixture();
+        const next = capturePassingCandidate(fixture, "newer-head", "2026-07-22T10:05:00.000Z");
+        let branchHead = fixture.candidate.headSha;
+        let remote = {
+          number: 42,
+          url: "https://github.com/acme/widgets/pull/42",
+          baseBranch: "main",
+          headBranch: "feature",
+          headSha: fixture.candidate.headSha,
+        };
+        const updates: unknown[] = [];
+        const publication = openCandidatePublication({
+          changeStore: fixture.changeStore,
+          candidateStore: fixture.candidateStore,
+          validationRunStore: fixture.validationRunStore,
+          git: {
+            readBranchHead: () => branchHead,
+            readFirstNonMergeCommitSubject: () => ({
+              ok: true,
+              subject: "Add taskless publication",
+            }),
+          },
+          github: {
+            findPullRequests: () => [],
+            getPullRequest: () => remote,
+            createPullRequest: (request) => ({
+              ok: true,
+              pullRequest: {
+                ...remote,
+                baseBranch: request.baseBranch,
+                headBranch: request.headBranch,
+                headSha: request.expectedHeadSha,
+              },
+            }),
+            updatePullRequest: (request) => {
+              updates.push(request);
+              remote = { ...remote, headSha: request.expectedHeadSha };
+              return updates.length === 1
+                ? { ok: false, code: "push_failed" }
+                : { ok: true, pullRequest: { ...remote, number: 43 } };
+            },
+          },
+        });
+        const initial = publicationInput(fixture);
+
+        expect(yield* publication.publish(initial)).toMatchObject({ ok: true, created: true });
+        branchHead = next.candidate.headSha;
+        expect(
+          yield* publication.publish({
+            ...initial,
+            candidateId: next.candidate.id,
+            validationRunId: next.validationRunId,
+          }),
+        ).toMatchObject({ ok: true, created: false, pullRequest: { number: 42 } });
+        expect(updates).toEqual([
+          expect.objectContaining({
+            number: 42,
+            expectedCurrentHeadSha: fixture.candidate.headSha,
+            expectedHeadSha: next.candidate.headSha,
+          }),
+        ]);
+
+        const third = capturePassingCandidate(fixture, "third-head", "2026-07-22T10:10:00.000Z");
+        branchHead = third.candidate.headSha;
+        expect(
+          yield* publication.publish({
+            ...initial,
+            candidateId: third.candidate.id,
+            validationRunId: third.validationRunId,
+          }),
+        ).toEqual({ ok: false, code: "publication_remote_mismatch" });
+        expect(fixture.changeStore.getChangeById(fixture.changeId)?.publication).toMatchObject({
+          pullRequest: { number: 42 },
+          expectedHeadSha: next.candidate.headSha,
+        });
+      }),
+  );
+
+  effectIt.effect("does not update an owned PR whose remote head is no longer expected", () =>
+    Effect.gen(function* () {
+      const fixture = publicationFixture();
+      const next = capturePassingCandidate(fixture, "newer-head", "2026-07-22T10:05:00.000Z");
+      let branchHead = fixture.candidate.headSha;
+      let remote = {
+        number: 42,
+        url: "https://github.com/acme/widgets/pull/42",
+        baseBranch: "main",
+        headBranch: "feature",
+        headSha: fixture.candidate.headSha,
+      };
+      const publication = openCandidatePublication({
+        changeStore: fixture.changeStore,
+        candidateStore: fixture.candidateStore,
+        validationRunStore: fixture.validationRunStore,
+        git: {
+          readBranchHead: () => branchHead,
+          readFirstNonMergeCommitSubject: () => ({ ok: true, subject: "Add taskless publication" }),
+        },
+        github: {
+          findPullRequests: () => [],
+          getPullRequest: () => remote,
+          createPullRequest: (request) => ({
             ok: true,
             pullRequest: {
-              number: 42,
-              url: "https://github.com/acme/widgets/pull/42",
+              ...remote,
               baseBranch: request.baseBranch,
               headBranch: request.headBranch,
               headSha: request.expectedHeadSha,
             },
-          };
-        },
-        updatePullRequest: () => {
-          throw new Error("Unexpected PR update");
-        },
-      },
-    });
-
-    expect(
-      publication.publish({
-        changeId: fixture.changeId,
-        candidateId: fixture.candidate.id,
-        validationRunId: fixture.validationRunId,
-        policy,
-        target: { owner: "acme", repo: "widgets", baseBranch: "main", remoteName: "origin" },
-        now,
-      }),
-    ).toEqual({
-      ok: true,
-      created: true,
-      pullRequest: {
-        number: 42,
-        url: "https://github.com/acme/widgets/pull/42",
-      },
-    });
-    expect(requests).toEqual([
-      {
-        owner: "acme",
-        repo: "widgets",
-        remoteName: "origin",
-        baseBranch: "main",
-        headBranch: "feature",
-        branchRef: "refs/heads/feature",
-        expectedHeadSha: fixture.candidate.headSha,
-        title: "Add taskless publication",
-        body: `Change: ${fixture.changeId}\nCandidate: ${fixture.candidate.id}\nValidation Run: ${fixture.validationRunId}`,
-      },
-    ]);
-    expect(fixture.changeStore.getChangeById(fixture.changeId)).toMatchObject({
-      publication: {
-        candidateId: fixture.candidate.id,
-        validationRunId: fixture.validationRunId,
-        expectedHeadSha: fixture.candidate.headSha,
-        pullRequest: { number: 42, url: "https://github.com/acme/widgets/pull/42" },
-      },
-    });
-  });
-
-  it("recovers a PR created before its response was lost without creating a duplicate", () => {
-    const fixture = publicationFixture();
-    const remotePullRequests: {
-      number: number;
-      url: string;
-      baseBranch: string;
-      headBranch: string;
-      headSha: string;
-    }[] = [];
-    let createCalls = 0;
-    const publication = openCandidatePublication({
-      changeStore: fixture.changeStore,
-      candidateStore: fixture.candidateStore,
-      validationRunStore: fixture.validationRunStore,
-      git: {
-        readBranchHead: () => fixture.candidate.headSha,
-        readFirstNonMergeCommitSubject: () => ({ ok: true, subject: "Add taskless publication" }),
-      },
-      github: {
-        findPullRequests: () => remotePullRequests,
-        getPullRequest: () => remotePullRequests[0],
-        createPullRequest: (request) => {
-          createCalls += 1;
-          remotePullRequests.push({
-            number: 42,
-            url: "https://github.com/acme/widgets/pull/42",
-            baseBranch: request.baseBranch,
-            headBranch: request.headBranch,
-            headSha: request.expectedHeadSha,
-          });
-          return { ok: false, code: "remote_response_lost" };
-        },
-        updatePullRequest: () => {
-          throw new Error("Unexpected PR update");
-        },
-      },
-    });
-    const input = {
-      changeId: fixture.changeId,
-      candidateId: fixture.candidate.id,
-      validationRunId: fixture.validationRunId,
-      policy,
-      target: { owner: "acme", repo: "widgets", baseBranch: "main", remoteName: "origin" },
-      now,
-    };
-
-    expect(publication.publish(input)).toMatchObject({
-      ok: true,
-      created: true,
-      pullRequest: { number: 42 },
-    });
-    expect(publication.publish(input)).toMatchObject({
-      ok: true,
-      created: false,
-      pullRequest: { number: 42 },
-    });
-    expect(createCalls).toBe(1);
-  });
-
-  it("updates the owned PR only from its expected current head for a newer passing Candidate", () => {
-    const fixture = publicationFixture();
-    const next = capturePassingCandidate(fixture, "newer-head", "2026-07-22T10:05:00.000Z");
-    let branchHead = fixture.candidate.headSha;
-    let remote = {
-      number: 42,
-      url: "https://github.com/acme/widgets/pull/42",
-      baseBranch: "main",
-      headBranch: "feature",
-      headSha: fixture.candidate.headSha,
-    };
-    const updates: unknown[] = [];
-    const publication = openCandidatePublication({
-      changeStore: fixture.changeStore,
-      candidateStore: fixture.candidateStore,
-      validationRunStore: fixture.validationRunStore,
-      git: {
-        readBranchHead: () => branchHead,
-        readFirstNonMergeCommitSubject: () => ({ ok: true, subject: "Add taskless publication" }),
-      },
-      github: {
-        findPullRequests: () => [],
-        getPullRequest: () => remote,
-        createPullRequest: (request) => ({
-          ok: true,
-          pullRequest: {
-            ...remote,
-            baseBranch: request.baseBranch,
-            headBranch: request.headBranch,
-            headSha: request.expectedHeadSha,
+          }),
+          updatePullRequest: () => {
+            throw new Error("Must not update an unexpected remote head");
           },
-        }),
-        updatePullRequest: (request) => {
-          updates.push(request);
-          remote = { ...remote, headSha: request.expectedHeadSha };
-          return updates.length === 1
-            ? { ok: false, code: "push_failed" }
-            : { ok: true, pullRequest: { ...remote, number: 43 } };
         },
-      },
-    });
-    const initial = publicationInput(fixture);
+      });
+      const initial = publicationInput(fixture);
 
-    expect(publication.publish(initial)).toMatchObject({ ok: true, created: true });
-    branchHead = next.candidate.headSha;
-    expect(
-      publication.publish({
-        ...initial,
-        candidateId: next.candidate.id,
-        validationRunId: next.validationRunId,
-      }),
-    ).toMatchObject({ ok: true, created: false, pullRequest: { number: 42 } });
-    expect(updates).toEqual([
-      expect.objectContaining({
-        number: 42,
-        expectedCurrentHeadSha: fixture.candidate.headSha,
-        expectedHeadSha: next.candidate.headSha,
-      }),
-    ]);
+      expect(yield* publication.publish(initial)).toMatchObject({ ok: true, created: true });
+      branchHead = next.candidate.headSha;
+      remote = { ...remote, headSha: "unowned-remote-head" };
+      expect(
+        yield* publication.publish({
+          ...initial,
+          candidateId: next.candidate.id,
+          validationRunId: next.validationRunId,
+        }),
+      ).toEqual({ ok: false, code: "publication_remote_mismatch" });
+    }),
+  );
 
-    const third = capturePassingCandidate(fixture, "third-head", "2026-07-22T10:10:00.000Z");
-    branchHead = third.candidate.headSha;
-    expect(
-      publication.publish({
-        ...initial,
-        candidateId: third.candidate.id,
-        validationRunId: third.validationRunId,
-      }),
-    ).toEqual({ ok: false, code: "publication_remote_mismatch" });
-    expect(fixture.changeStore.getChangeById(fixture.changeId)?.publication).toMatchObject({
-      pullRequest: { number: 42 },
-      expectedHeadSha: next.candidate.headSha,
-    });
-  });
-
-  it("does not update an owned PR whose remote head is no longer expected", () => {
-    const fixture = publicationFixture();
-    const next = capturePassingCandidate(fixture, "newer-head", "2026-07-22T10:05:00.000Z");
-    let branchHead = fixture.candidate.headSha;
-    let remote = {
-      number: 42,
-      url: "https://github.com/acme/widgets/pull/42",
-      baseBranch: "main",
-      headBranch: "feature",
-      headSha: fixture.candidate.headSha,
-    };
-    const publication = openCandidatePublication({
-      changeStore: fixture.changeStore,
-      candidateStore: fixture.candidateStore,
-      validationRunStore: fixture.validationRunStore,
-      git: {
-        readBranchHead: () => branchHead,
-        readFirstNonMergeCommitSubject: () => ({ ok: true, subject: "Add taskless publication" }),
-      },
-      github: {
-        findPullRequests: () => [],
-        getPullRequest: () => remote,
-        createPullRequest: (request) => ({
+  effectIt.effect(
+    "falls back to the short Change ID when taskless commit history has no non-merge commit",
+    () =>
+      Effect.gen(function* () {
+        const fixture = publicationFixture();
+        const { publication, requests } = publicationWithSuccessfulCreate(fixture, () => ({
           ok: true,
-          pullRequest: {
-            ...remote,
-            baseBranch: request.baseBranch,
-            headBranch: request.headBranch,
-            headSha: request.expectedHeadSha,
+          subject: undefined,
+        }));
+
+        expect(yield* publication.publish(publicationInput(fixture))).toMatchObject({
+          ok: true,
+          created: true,
+        });
+        expect(requests).toEqual([expect.objectContaining({ title: "Change e9af559b" })]);
+      }),
+  );
+
+  effectIt.effect(
+    "does not replace unavailable taskless commit history with a fallback title",
+    () =>
+      Effect.gen(function* () {
+        const fixture = publicationFixture();
+        const publication = openCandidatePublication({
+          changeStore: fixture.changeStore,
+          candidateStore: fixture.candidateStore,
+          validationRunStore: fixture.validationRunStore,
+          git: {
+            readBranchHead: () => fixture.candidate.headSha,
+            readFirstNonMergeCommitSubject: () => ({ ok: false }),
           },
+          github: noRemoteMutationGateway(),
+        });
+
+        expect(yield* publication.publish(publicationInput(fixture))).toEqual({
+          ok: false,
+          code: "commit_history_unavailable",
+        });
+      }),
+  );
+
+  effectIt.effect("generates Task-backed metadata from immutable Task and validation facts", () =>
+    Effect.gen(function* () {
+      const fixture = publicationFixture({ taskBacked: true });
+      const { publication, requests } = publicationWithSuccessfulCreate(fixture, () => {
+        throw new Error("Task-backed metadata must not read commit history");
+      });
+
+      expect(yield* publication.publish(publicationInput(fixture))).toMatchObject({
+        ok: true,
+        created: true,
+      });
+      expect(requests).toEqual([
+        expect.objectContaining({
+          title: "Publish exact Candidate",
+          body: `Task: BY-1\nCandidate: ${fixture.candidate.id}\nValidation Run: ${fixture.validationRunId}`,
         }),
-        updatePullRequest: () => {
-          throw new Error("Must not update an unexpected remote head");
+      ]);
+    }),
+  );
+
+  effectIt.effect("refuses remote publication when the Change branch moved after validation", () =>
+    Effect.gen(function* () {
+      const fixture = publicationFixture();
+      const publication = openCandidatePublication({
+        changeStore: fixture.changeStore,
+        candidateStore: fixture.candidateStore,
+        validationRunStore: fixture.validationRunStore,
+        git: {
+          readBranchHead: () => "newer-head",
+          readFirstNonMergeCommitSubject: () => ({ ok: true, subject: "Add taskless publication" }),
         },
-      },
-    });
-    const initial = publicationInput(fixture);
-
-    expect(publication.publish(initial)).toMatchObject({ ok: true, created: true });
-    branchHead = next.candidate.headSha;
-    remote = { ...remote, headSha: "unowned-remote-head" };
-    expect(
-      publication.publish({
-        ...initial,
-        candidateId: next.candidate.id,
-        validationRunId: next.validationRunId,
-      }),
-    ).toEqual({ ok: false, code: "publication_remote_mismatch" });
-  });
-
-  it("falls back to the short Change ID when taskless commit history has no non-merge commit", () => {
-    const fixture = publicationFixture();
-    const { publication, requests } = publicationWithSuccessfulCreate(fixture, () => ({
-      ok: true,
-      subject: undefined,
-    }));
-
-    expect(publication.publish(publicationInput(fixture))).toMatchObject({
-      ok: true,
-      created: true,
-    });
-    expect(requests).toEqual([expect.objectContaining({ title: "Change e9af559b" })]);
-  });
-
-  it("does not replace unavailable taskless commit history with a fallback title", () => {
-    const fixture = publicationFixture();
-    const publication = openCandidatePublication({
-      changeStore: fixture.changeStore,
-      candidateStore: fixture.candidateStore,
-      validationRunStore: fixture.validationRunStore,
-      git: {
-        readBranchHead: () => fixture.candidate.headSha,
-        readFirstNonMergeCommitSubject: () => ({ ok: false }),
-      },
-      github: noRemoteMutationGateway(),
-    });
-
-    expect(publication.publish(publicationInput(fixture))).toEqual({
-      ok: false,
-      code: "commit_history_unavailable",
-    });
-  });
-
-  it("generates Task-backed metadata from immutable Task and validation facts", () => {
-    const fixture = publicationFixture({ taskBacked: true });
-    const { publication, requests } = publicationWithSuccessfulCreate(fixture, () => {
-      throw new Error("Task-backed metadata must not read commit history");
-    });
-
-    expect(publication.publish(publicationInput(fixture))).toMatchObject({
-      ok: true,
-      created: true,
-    });
-    expect(requests).toEqual([
-      expect.objectContaining({
-        title: "Publish exact Candidate",
-        body: `Task: BY-1\nCandidate: ${fixture.candidate.id}\nValidation Run: ${fixture.validationRunId}`,
-      }),
-    ]);
-  });
-
-  it("refuses remote publication when the Change branch moved after validation", () => {
-    const fixture = publicationFixture();
-    const publication = openCandidatePublication({
-      changeStore: fixture.changeStore,
-      candidateStore: fixture.candidateStore,
-      validationRunStore: fixture.validationRunStore,
-      git: {
-        readBranchHead: () => "newer-head",
-        readFirstNonMergeCommitSubject: () => ({ ok: true, subject: "Add taskless publication" }),
-      },
-      github: {
-        findPullRequests: () => {
-          throw new Error("Unexpected PR lookup");
+        github: {
+          findPullRequests: () => {
+            throw new Error("Unexpected PR lookup");
+          },
+          getPullRequest: () => {
+            throw new Error("Unexpected PR read");
+          },
+          createPullRequest: () => {
+            throw new Error("Must not create a PR from a moved branch");
+          },
+          updatePullRequest: () => {
+            throw new Error("Unexpected PR update");
+          },
         },
-        getPullRequest: () => {
-          throw new Error("Unexpected PR read");
-        },
-        createPullRequest: () => {
-          throw new Error("Must not create a PR from a moved branch");
-        },
-        updatePullRequest: () => {
-          throw new Error("Unexpected PR update");
-        },
-      },
-    });
+      });
 
-    expect(
-      publication.publish({
-        changeId: fixture.changeId,
-        candidateId: fixture.candidate.id,
-        validationRunId: fixture.validationRunId,
-        policy,
-        target: { owner: "acme", repo: "widgets", baseBranch: "main", remoteName: "origin" },
-        now,
-      }),
-    ).toEqual({ ok: false, code: "current_head_mismatch" });
-    expect(fixture.changeStore.getChangeById(fixture.changeId)?.publication).toBeNull();
-  });
+      expect(
+        yield* publication.publish({
+          changeId: fixture.changeId,
+          candidateId: fixture.candidate.id,
+          validationRunId: fixture.validationRunId,
+          policy,
+          target: { owner: "acme", repo: "widgets", baseBranch: "main", remoteName: "origin" },
+          now,
+        }),
+      ).toEqual({ ok: false, code: "current_head_mismatch" });
+      expect(fixture.changeStore.getChangeById(fixture.changeId)?.publication).toBeNull();
+    }),
+  );
 
-  it("releases an unpushed reservation after an exact push failure", () => {
-    const fixture = publicationFixture();
-    const publication = openCandidatePublication({
-      changeStore: fixture.changeStore,
-      candidateStore: fixture.candidateStore,
-      validationRunStore: fixture.validationRunStore,
-      git: {
-        readBranchHead: () => fixture.candidate.headSha,
-        readFirstNonMergeCommitSubject: () => ({ ok: true, subject: "Add taskless publication" }),
-      },
-      github: {
-        findPullRequests: () => {
-          throw new Error("Must not recover when GitHub was never called");
+  effectIt.effect("releases an unpushed reservation after an exact push failure", () =>
+    Effect.gen(function* () {
+      const fixture = publicationFixture();
+      const publication = openCandidatePublication({
+        changeStore: fixture.changeStore,
+        candidateStore: fixture.candidateStore,
+        validationRunStore: fixture.validationRunStore,
+        git: {
+          readBranchHead: () => fixture.candidate.headSha,
+          readFirstNonMergeCommitSubject: () => ({ ok: true, subject: "Add taskless publication" }),
         },
-        getPullRequest: () => undefined,
-        createPullRequest: () => ({ ok: false, code: "push_failed" }),
-        updatePullRequest: () => {
-          throw new Error("Unexpected PR update");
+        github: {
+          findPullRequests: () => {
+            throw new Error("Must not recover when GitHub was never called");
+          },
+          getPullRequest: () => undefined,
+          createPullRequest: () => ({ ok: false, code: "push_failed" }),
+          updatePullRequest: () => {
+            throw new Error("Unexpected PR update");
+          },
         },
-      },
-    });
+      });
 
-    expect(publication.publish(publicationInput(fixture))).toEqual({
-      ok: false,
-      code: "publication_tooling_failed",
-    });
-    expect(fixture.changeStore.getChangeById(fixture.changeId)?.publication).toBeNull();
-  });
+      expect(yield* publication.publish(publicationInput(fixture))).toEqual({
+        ok: false,
+        code: "publication_tooling_failed",
+      });
+      expect(fixture.changeStore.getChangeById(fixture.changeId)?.publication).toBeNull();
+    }),
+  );
 
-  it("requires passing evidence for the exact resolved policy", () => {
-    const fixture = publicationFixture();
-    const publication = openCandidatePublication({
-      changeStore: fixture.changeStore,
-      candidateStore: fixture.candidateStore,
-      validationRunStore: fixture.validationRunStore,
-      git: {
-        readBranchHead: () => fixture.candidate.headSha,
-        readFirstNonMergeCommitSubject: () => ({ ok: true, subject: "Add taskless publication" }),
-      },
-      github: noRemoteMutationGateway(),
-    });
+  effectIt.effect("requires passing evidence for the exact resolved policy", () =>
+    Effect.gen(function* () {
+      const fixture = publicationFixture();
+      const publication = openCandidatePublication({
+        changeStore: fixture.changeStore,
+        candidateStore: fixture.candidateStore,
+        validationRunStore: fixture.validationRunStore,
+        git: {
+          readBranchHead: () => fixture.candidate.headSha,
+          readFirstNonMergeCommitSubject: () => ({ ok: true, subject: "Add taskless publication" }),
+        },
+        github: noRemoteMutationGateway(),
+      });
 
-    expect(
-      publication.publish({
-        changeId: fixture.changeId,
-        candidateId: fixture.candidate.id,
-        validationRunId: fixture.validationRunId,
-        policy: { ...policy, checks: [{ id: "new", command: "true", timeoutSeconds: 1 }] },
-        target: { owner: "acme", repo: "widgets", baseBranch: "main", remoteName: "origin" },
-        now,
-      }),
-    ).toEqual({ ok: false, code: "validation_evidence_invalid" });
-  });
+      expect(
+        yield* publication.publish({
+          changeId: fixture.changeId,
+          candidateId: fixture.candidate.id,
+          validationRunId: fixture.validationRunId,
+          policy: { ...policy, checks: [{ id: "new", command: "true", timeoutSeconds: 1 }] },
+          target: { owner: "acme", repo: "widgets", baseBranch: "main", remoteName: "origin" },
+          now,
+        }),
+      ).toEqual({ ok: false, code: "validation_evidence_invalid" });
+    }),
+  );
 });
 
-describe("Effect-native Candidate publication", () => {
+describe("Candidate publication persistence", () => {
   effectIt.effect("releases a publication reservation after a push failure", () =>
     Effect.gen(function* () {
       const fixture = publicationFixture();
-      const publication = openEffectCandidatePublication({
+      const publication = openPersistentCandidatePublication({
         changePersistence: effectChangePersistence(fixture.changeStore),
         validationPersistence: {
           getCandidateById: (candidateId) =>
@@ -469,6 +500,27 @@ describe("Effect-native Candidate publication", () => {
     }),
   );
 });
+
+const openCandidatePublication = (input: {
+  readonly changeStore: ReturnType<typeof openSqliteChangeStore>;
+  readonly candidateStore: ReturnType<typeof openSqliteCandidateStore>;
+  readonly validationRunStore: ReturnType<typeof inMemoryValidationRuns>;
+  readonly git: Parameters<typeof openPersistentCandidatePublication>[0]["git"];
+  readonly github: Parameters<typeof openPersistentCandidatePublication>[0]["github"];
+}) => {
+  const publication = openPersistentCandidatePublication({
+    changePersistence: effectChangePersistence(input.changeStore),
+    validationPersistence: {
+      getCandidateById: (candidateId) =>
+        Effect.sync(() => input.candidateStore.getCandidateById(candidateId)),
+      getRunById: (validationRunId) =>
+        Effect.sync(() => input.validationRunStore.getRunById(validationRunId)),
+    },
+    git: input.git,
+    github: input.github,
+  });
+  return publication;
+};
 
 const effectChangePersistence = (
   store: ReturnType<typeof openSqliteChangeStore>,

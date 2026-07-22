@@ -24,7 +24,7 @@ import { openSqliteChangeCandidateCapturePersistence } from "../sqlite/sqliteCha
 import { openSqliteChangePersistence } from "../sqlite/sqliteChangePersistence.js";
 import { openSqliteChangeValidationPersistence } from "../sqlite/sqliteChangeValidationPersistence.js";
 import { openSqliteTaskPersistence } from "../sqlite/sqliteTaskPersistence.js";
-import { openEffectCandidatePublication } from "../publication/publishCandidate.js";
+import { openCandidatePublication } from "../publication/candidatePublication.js";
 import { detectGitHubPrTarget } from "../submissionEnvironment/githubTarget.js";
 import { localGitHubPullRequestGateway } from "../submissionEnvironment/localGitHubPullRequestGateway.js";
 
@@ -75,7 +75,7 @@ export const loadChangeSubmit = (input: {
           taskBacked,
         }),
       publicationFor: (cwd) =>
-        openEffectCandidatePublication({
+        openCandidatePublication({
           changePersistence,
           validationPersistence,
           git: localCandidatePublicationGit({ cwd }),

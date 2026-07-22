@@ -218,7 +218,7 @@ const completeRepoInitialization = (
   };
 };
 
-export const initRepoLocalContextEffect = (input: InitRepoInput): Effect.Effect<InitRepoResult> => {
+export const initRepoLocalContext = (input: InitRepoInput): Effect.Effect<InitRepoResult> => {
   const preparation = prepareRepoInitialization(input);
   if (!preparation.ok) return Effect.succeed(preparation.result);
 

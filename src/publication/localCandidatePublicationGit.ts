@@ -1,6 +1,6 @@
 import { spawnSync } from "node:child_process";
 
-import type { CandidatePublicationGit, CommitSubjectResult } from "./publishCandidate.js";
+import type { CandidatePublicationGit, CommitSubjectResult } from "./candidatePublication.js";
 
 export type PublicationGitCommandResult =
   | { readonly ok: true; readonly stdout: string }

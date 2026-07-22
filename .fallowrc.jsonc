@@ -87,7 +87,7 @@
           "src/change/reconcileChange.ts",
           "src/change/submitChange.ts",
           "src/changeCandidateCapture/captureLocalCandidate.ts",
-          "src/publication/publishCandidate.ts"
+          "src/publication/candidatePublication.ts"
         ]
       }
     ],

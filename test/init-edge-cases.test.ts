@@ -6,7 +6,7 @@ import { Effect } from "effect";
 import { describe } from "vitest";
 
 import { isTaskPrefix } from "../src/contracts/taskPrefix.js";
-import { initRepoLocalContextEffect, snapshotStateDatabases } from "../src/init/repoContext.js";
+import { initRepoLocalContext, snapshotStateDatabases } from "../src/init/repoContext.js";
 import { createGitRepo, runByInProcessEffect } from "./support/by-cli.js";
 
 const writeConfig = (root: string, taskPrefix = "BY") => {
@@ -74,7 +74,7 @@ help[1]: Move the conflicting path aside before running init again.`);
     Effect.gen(function* () {
       const root = createGitRepo();
       const existingDatabases = snapshotStateDatabases();
-      const result = yield* initRepoLocalContextEffect({ cwd: root, taskPrefix: "BY" });
+      const result = yield* initRepoLocalContext({ cwd: root, taskPrefix: "BY" });
 
       expect(result).toMatchObject({ ok: true, status: "initialized" });
       expect(snapshotStateDatabases()).toEqual(existingDatabases);

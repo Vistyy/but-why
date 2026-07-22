@@ -8,7 +8,7 @@ import { selectOutput } from "./cliOutputSelection.js";
 import { runtimeError, success, type CliResult, usageError } from "./cliResults.js";
 import {
   closeStateDatabasesOpenedAfter,
-  initRepoLocalContextEffect,
+  initRepoLocalContext,
   snapshotStateDatabases,
 } from "./init/repoContext.js";
 import { structuredContractDiagnostics } from "./output/contractDiagnostics.js";
@@ -296,7 +296,7 @@ const routeInit = (
     );
   }
 
-  return initRepoLocalContextEffect({
+  return initRepoLocalContext({
     cwd: environment.cwd,
     taskPrefix,
   }).pipe(

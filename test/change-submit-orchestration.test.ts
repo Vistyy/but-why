@@ -8,9 +8,9 @@ import type { ChangePersistence } from "../src/change/changePersistence.js";
 import type { ChangeReconciliation } from "../src/change/reconcileChange.js";
 import { openChangeSubmit } from "../src/change/submitChange.js";
 import type {
-  CandidatePublication,
   PublishCandidateInput,
-} from "../src/publication/publishCandidate.js";
+  PublishCandidateResult,
+} from "../src/publication/candidatePublication.js";
 import type { TaskPersistence } from "../src/task/taskPersistence.js";
 import { publicTaskId } from "../src/task/taskId.js";
 
@@ -305,6 +305,10 @@ describe("Change Submit orchestration", () => {
   );
 });
 
+type PublicationFixture = {
+  readonly publish: (input: PublishCandidateInput) => PublishCandidateResult;
+};
+
 const dependencies = (input: {
   readonly change: ChangeRecord;
   readonly events?: string[];
@@ -312,7 +316,7 @@ const dependencies = (input: {
   readonly taskBacked?: boolean;
   readonly findings?: readonly (typeof finding)[];
   readonly toolingFailures?: readonly (typeof toolingFailure)[];
-  readonly publication?: CandidatePublication;
+  readonly publication?: PublicationFixture;
   readonly reconciliationStatus?: "not_owned" | "open";
   readonly targetResult?:
     | { readonly ok: false; readonly code: "PR_TARGET_NOT_FOUND" }
@@ -392,7 +396,7 @@ const dependencies = (input: {
               pullRequest: { number: 42, url: "https://github.test/acme/repo/pull/42" },
             };
           },
-        } satisfies CandidatePublication);
+        } satisfies PublicationFixture);
       return {
         publish: (publicationInput: PublishCandidateInput) =>
           Effect.sync(() => publication.publish(publicationInput)),

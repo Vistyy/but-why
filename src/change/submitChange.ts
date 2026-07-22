@@ -15,9 +15,9 @@ import type {
 } from "../changeCandidateCapture/captureLocalCandidate.js";
 import type { RepositoryStorageError } from "../repositoryStorageError.js";
 import type {
-  EffectCandidatePublication,
+  CandidatePublication,
   PublishCandidateResult,
-} from "../publication/publishCandidate.js";
+} from "../publication/candidatePublication.js";
 import type { TaskState } from "../task/lifecycle.js";
 import type { TaskPersistence } from "../task/taskPersistence.js";
 import {
@@ -119,7 +119,7 @@ export const openChangeSubmit = (dependencies: {
   readonly taskPersistence: Pick<TaskPersistence, "getTaskById" | "transitionTaskState">;
   readonly reconciliation: ChangeReconciliation;
   readonly resolvePolicy: (taskBacked: boolean) => CandidateValidationPolicyResolution;
-  readonly publicationFor: (cwd: string) => EffectCandidatePublication;
+  readonly publicationFor: (cwd: string) => CandidatePublication;
   readonly detectTarget: (cwd: string, branch: string) => PublicationTargetDetectionResult;
   readonly captureCandidate: CaptureCandidate;
 }): CandidateValidationChangeSubmit => ({

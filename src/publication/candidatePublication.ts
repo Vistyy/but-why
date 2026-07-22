@@ -1,9 +1,15 @@
 import { isDeepStrictEqual } from "node:util";
 import { Effect } from "effect";
 
+import type { CandidateValidationPolicySnapshot } from "../candidateValidation/candidateValidationRunStore.js";
 import type { ChangeValidationPersistence } from "../changeValidation/changeValidationPersistence.js";
 import type { ChangePersistence } from "../change/changePersistence.js";
-import type { ChangePublication, ChangePublicationTarget, ChangeRecord } from "../change/change.js";
+import type {
+  ChangeOwnedPullRequest,
+  ChangePublication,
+  ChangePublicationTarget,
+  ChangeRecord,
+} from "../change/change.js";
 import type {
   GitHubPullRequest,
   GitHubPullRequestGateway,
@@ -11,12 +17,53 @@ import type {
   GitHubPullRequestRequest,
 } from "../change/ownedPullRequestGateway.js";
 import type { RepositoryStorageError } from "../repositoryStorageError.js";
-import type {
-  CandidatePublicationGit,
-  EffectCandidatePublication,
-  PublishCandidateInput,
-  PublishCandidateResult,
-} from "./publishCandidate.js";
+export type CommitSubjectResult =
+  | { readonly ok: true; readonly subject: string | undefined }
+  | { readonly ok: false };
+
+export type CandidatePublicationGit = {
+  readonly readBranchHead: (branchRef: string) => string | undefined;
+  readonly readFirstNonMergeCommitSubject: (
+    startingCommit: string,
+    headSha: string,
+  ) => CommitSubjectResult;
+};
+
+export type CandidatePublication = {
+  readonly publish: (
+    input: PublishCandidateInput,
+  ) => Effect.Effect<PublishCandidateResult, RepositoryStorageError>;
+};
+
+export type PublishCandidateInput = {
+  readonly changeId: string;
+  readonly candidateId: string;
+  readonly validationRunId: string;
+  readonly policy: CandidateValidationPolicySnapshot;
+  readonly target: ChangePublicationTarget;
+  readonly now: string;
+};
+
+export type PublishCandidateResult =
+  | { readonly ok: true; readonly created: boolean; readonly pullRequest: ChangeOwnedPullRequest }
+  | {
+      readonly ok: false;
+      readonly code:
+        | "change_not_found"
+        | "change_closed"
+        | "candidate_not_found"
+        | "candidate_does_not_belong_to_change"
+        | "validation_evidence_invalid"
+        | "branch_binding_invalid"
+        | "current_head_mismatch"
+        | "task_metadata_missing"
+        | "commit_history_unavailable"
+        | "publication_creation_unconfirmed"
+        | "publication_lookup_ambiguous"
+        | "publication_remote_mismatch"
+        | "publication_state_conflict"
+        | "publication_tooling_failed";
+    };
 
 type Dependencies = {
   readonly changePersistence: ChangePersistence;
@@ -30,9 +77,7 @@ type Dependencies = {
 type PublicationEffect = Effect.Effect<PublishCandidateResult, RepositoryStorageError>;
 type Metadata = { readonly title: string; readonly body: string };
 
-export const openEffectCandidatePublicationImplementation = (
-  dependencies: Dependencies,
-): EffectCandidatePublication => ({
+export const openCandidatePublication = (dependencies: Dependencies): CandidatePublication => ({
   publish: (input) => publish(dependencies, input),
 });
 
