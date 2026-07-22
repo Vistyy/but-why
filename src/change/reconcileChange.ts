@@ -1,6 +1,8 @@
+import { Effect } from "effect";
+
+import type { RepositoryStorageError } from "../repositoryStorageError.js";
 import type { ChangeCleanup, ChangeOwnedPullRequest, ChangeRecord } from "./change.js";
-import type { ChangeStore } from "./changeStore.js";
-import type { ChangeCleanupResult } from "./localChangeCleanupGit.js";
+import type { ChangePersistence } from "./changePersistence.js";
 import type { GitHubPullRequest, GitHubPullRequestGateway } from "./ownedPullRequestGateway.js";
 
 export type ReconciledChange = {
@@ -18,6 +20,10 @@ export type ReconciledChange = {
   readonly rejection?: string;
 };
 
+export type ChangeCleanupOperationResult =
+  | { readonly state: "complete" }
+  | { readonly state: "pending"; readonly blockingReason: string };
+
 export type ChangeReconciliationResult = {
   readonly changes: readonly ReconciledChange[];
   readonly rejected: boolean;
@@ -28,17 +34,17 @@ export type ChangeReconciliation = {
     readonly repositoryCommonDirectory: string;
     readonly changeId?: string;
     readonly now: string;
-  }) => ChangeReconciliationResult;
+  }) => Effect.Effect<ChangeReconciliationResult, RepositoryStorageError>;
 };
 
 export const openChangeReconciliation = (input: {
-  readonly changeStore: ChangeStore;
+  readonly persistence: ChangePersistence;
   readonly github: GitHubPullRequestGateway;
   readonly cleanup: (input: {
     readonly repositoryCommonDirectory: string;
     readonly worktreePath: string | null;
     readonly branchRef: string;
-  }) => ChangeCleanupResult;
+  }) => ChangeCleanupOperationResult;
 }): ChangeReconciliation => ({
   reconcile: (reconciliationInput) => reconcile(input, reconciliationInput),
 });
@@ -46,85 +52,159 @@ export const openChangeReconciliation = (input: {
 const reconcile = (
   dependencies: Parameters<typeof openChangeReconciliation>[0],
   input: Parameters<ChangeReconciliation["reconcile"]>[0],
-): ChangeReconciliationResult => {
-  const changes =
-    input.changeId === undefined
-      ? dependencies.changeStore.listChangesForReconciliation(input.repositoryCommonDirectory)
-      : [dependencies.changeStore.getChangeById(input.changeId)].filter(
-          (change): change is ChangeRecord => change !== undefined,
-        );
-  const reconciled = changes.map((change) => reconcileOne(dependencies, change, input.now));
-  return {
-    changes: reconciled,
-    rejected: reconciled.some((change) => change.status === "rejected"),
-  };
-};
+): Effect.Effect<ChangeReconciliationResult, RepositoryStorageError> =>
+  Effect.gen(function* () {
+    const changes =
+      input.changeId === undefined
+        ? yield* dependencies.persistence.listChangesForReconciliation(
+            input.repositoryCommonDirectory,
+          )
+        : [yield* dependencies.persistence.getChangeById(input.changeId)].filter(
+            (change): change is ChangeRecord => change !== undefined,
+          );
+    const reconciled = yield* Effect.forEach(changes, (change) =>
+      reconcileOne(dependencies, change, input.now),
+    );
+    return {
+      changes: reconciled,
+      rejected: reconciled.some((change) => change.status === "rejected"),
+    };
+  });
 
 const reconcileOne = (
   dependencies: Parameters<typeof openChangeReconciliation>[0],
   change: ChangeRecord,
   now: string,
-): ReconciledChange => {
-  if (change.state === "closed") return reconcileCleanup(dependencies, change, now);
-  if (change.publication?.pullRequest === null || change.publication === null) {
-    return { changeId: change.id, status: "not_owned" };
-  }
+): Effect.Effect<ReconciledChange, RepositoryStorageError> =>
+  Effect.gen(function* () {
+    if (change.state === "closed") return yield* reconcileCleanup(dependencies, change, now);
+    const observation = observePullRequest(dependencies.github, change);
+    if (!observation.merged) return observation.result;
 
+    const completed = yield* dependencies.persistence.completeMergedChange({
+      changeId: change.id,
+      now,
+    });
+    if (!completed.ok) return rejected(change.id, completed.code);
+    const cleanup = yield* reconcileCleanup(dependencies, completed.change, now);
+    return { ...cleanup, status: "completed", pullRequest: observation.pullRequest };
+  });
+
+type MergedPullRequestObservation = {
+  readonly merged: true;
+  readonly pullRequest: ChangeOwnedPullRequest;
+};
+type PullRequestObservation =
+  | MergedPullRequestObservation
+  | { readonly merged: false; readonly result: ReconciledChange };
+
+const observePullRequest = (
+  github: GitHubPullRequestGateway,
+  change: ChangeRecord,
+): PullRequestObservation => {
+  const publication = ownedPublication(change);
+  if (publication === undefined) {
+    return { merged: false, result: { changeId: change.id, status: "not_owned" } };
+  }
+  const pullRequest = readPullRequest(github, change, publication.pullRequest.number);
+  if (!pullRequest.ok) return { merged: false, result: pullRequest.result };
+  const mismatch = unexpectedPullRequestFact(change, pullRequest.pullRequest);
+  if (mismatch !== undefined) {
+    return { merged: false, result: rejected(change.id, mismatch) };
+  }
+  return classifyMatchedPullRequest(change.id, publication.pullRequest, pullRequest.pullRequest);
+};
+
+const ownedPublication = (
+  change: ChangeRecord,
+):
+  | (NonNullable<ChangeRecord["publication"]> & {
+      readonly pullRequest: ChangeOwnedPullRequest;
+    })
+  | undefined => {
+  const publication = change.publication;
+  return publication?.pullRequest === null || publication === null
+    ? undefined
+    : (publication as NonNullable<ChangeRecord["publication"]> & {
+        readonly pullRequest: ChangeOwnedPullRequest;
+      });
+};
+
+const readPullRequest = (
+  github: GitHubPullRequestGateway,
+  change: ChangeRecord,
+  pullRequestNumber: number,
+):
+  | { readonly ok: true; readonly pullRequest: GitHubPullRequest }
+  | { readonly ok: false; readonly result: ReconciledChange } => {
   let pullRequest: GitHubPullRequest | undefined;
   try {
-    pullRequest = dependencies.github.getPullRequest(
-      change.publication.target,
-      change.publication.pullRequest.number,
-    );
+    const publication = change.publication;
+    if (publication === null) throw new Error("Missing owned publication");
+    pullRequest = github.getPullRequest(publication.target, pullRequestNumber);
   } catch {
-    return rejected(change.id, "github_unavailable");
+    return { ok: false, result: rejected(change.id, "github_unavailable") };
   }
-  if (pullRequest === undefined) return rejected(change.id, "pull_request_unavailable");
+  return pullRequest === undefined
+    ? { ok: false, result: rejected(change.id, "pull_request_unavailable") }
+    : { ok: true, pullRequest };
+};
 
-  const mismatch = unexpectedPullRequestFact(change, pullRequest);
-  if (mismatch !== undefined) return rejected(change.id, mismatch);
-  const ownedPullRequest = change.publication.pullRequest;
-  if (pullRequest.state === "open" && pullRequest.merged === false) {
-    return { changeId: change.id, status: "open", pullRequest: ownedPullRequest };
+const classifyMatchedPullRequest = (
+  changeId: string,
+  ownedPullRequest: ChangeOwnedPullRequest,
+  pullRequest: GitHubPullRequest,
+): PullRequestObservation => {
+  const state = `${pullRequest.state}:${String(pullRequest.merged)}`;
+  if (state === "open:false") {
+    return { merged: false, result: { changeId, status: "open", pullRequest: ownedPullRequest } };
   }
-  if (pullRequest.state === "closed" && pullRequest.merged === false) {
-    return { changeId: change.id, status: "closed_unmerged", pullRequest: ownedPullRequest };
+  if (state === "closed:false") {
+    return {
+      merged: false,
+      result: { changeId, status: "closed_unmerged", pullRequest: ownedPullRequest },
+    };
   }
-  if (pullRequest.state !== "closed" || pullRequest.merged !== true) {
-    return rejected(change.id, "pull_request_state_invalid");
-  }
-
-  const completed = dependencies.changeStore.completeMergedChange({ changeId: change.id, now });
-  if (!completed.ok) return rejected(change.id, completed.code);
-  const cleanup = reconcileCleanup(dependencies, completed.change, now);
-  return { ...cleanup, status: "completed", pullRequest: ownedPullRequest };
+  return state === "closed:true"
+    ? { merged: true, pullRequest: ownedPullRequest }
+    : { merged: false, result: rejected(changeId, "pull_request_state_invalid") };
 };
 
 const reconcileCleanup = (
   dependencies: Parameters<typeof openChangeReconciliation>[0],
   change: ChangeRecord,
   now: string,
-): ReconciledChange => {
-  if (change.cleanup.state === "complete") {
-    return { changeId: change.id, status: "cleanup_complete", cleanup: change.cleanup };
-  }
-  const result = dependencies.cleanup({
-    repositoryCommonDirectory: change.repositoryCommonDirectory,
-    worktreePath: change.worktreePath,
-    branchRef: change.branchRef,
+): Effect.Effect<ReconciledChange, RepositoryStorageError> =>
+  Effect.gen(function* () {
+    if (change.cleanup.state === "complete") {
+      return { changeId: change.id, status: "cleanup_complete", cleanup: change.cleanup };
+    }
+    const result = dependencies.cleanup({
+      repositoryCommonDirectory: change.repositoryCommonDirectory,
+      worktreePath: change.worktreePath,
+      branchRef: change.branchRef,
+    });
+    const cleanup = cleanupRecord(result);
+    const recorded = yield* dependencies.persistence.recordCleanup({
+      changeId: change.id,
+      cleanup,
+      now,
+    });
+    if (!recorded.ok) return rejected(change.id, recorded.code);
+    return {
+      changeId: change.id,
+      status: cleanupStatus(cleanup),
+      cleanup: recorded.change.cleanup,
+    };
   });
-  const cleanup: ChangeCleanup =
-    result.state === "complete"
-      ? { state: "complete", blockingReason: null }
-      : { state: "pending", blockingReason: result.blockingReason };
-  const recorded = dependencies.changeStore.recordCleanup({ changeId: change.id, cleanup, now });
-  if (!recorded.ok) return rejected(change.id, recorded.code);
-  return {
-    changeId: change.id,
-    status: cleanup.state === "complete" ? "cleanup_complete" : "cleanup_pending",
-    cleanup: recorded.change.cleanup,
-  };
-};
+
+const cleanupRecord = (result: ChangeCleanupOperationResult): ChangeCleanup =>
+  result.state === "complete"
+    ? { state: "complete", blockingReason: null }
+    : { state: "pending", blockingReason: result.blockingReason };
+
+const cleanupStatus = (cleanup: ChangeCleanup): "cleanup_complete" | "cleanup_pending" =>
+  cleanup.state === "complete" ? "cleanup_complete" : "cleanup_pending";
 
 const unexpectedPullRequestFact = (
   change: ChangeRecord,

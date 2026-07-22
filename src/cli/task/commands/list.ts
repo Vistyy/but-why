@@ -5,6 +5,7 @@ import { stateStoreUnavailable, success, usageError } from "../../../cliResults.
 import { withGlobalHelpFlags } from "../../../cliHelp.js";
 import { loadChangeInspection } from "../../../localChange/loadChangeInspection.js";
 import type { StructuredValue } from "../../../output/structured.js";
+import type { RepositoryStorageError } from "../../../repositoryStorageError.js";
 import { isTaskState, taskStates, type TaskState } from "../../../task/lifecycle.js";
 import type { TaskSummary } from "../../../task/task.js";
 import { withTasks, type TaskCommandEnvironment } from "../taskCliSupport.js";
@@ -37,7 +38,7 @@ export const runListCommand = (
   if (!parseResult.ok) return Effect.succeed(parseResult.result);
 
   return withTasks(environment, true, (taskUseCases) =>
-    Effect.map(
+    Effect.flatMap(
       taskUseCases.listTasks({
         includeDone: parseResult.all || parseResult.state !== undefined,
         ...(parseResult.state === undefined ? {} : { state: parseResult.state }),
@@ -48,18 +49,22 @@ export const runListCommand = (
             ? loadChangeInspection({ cwd: environment.cwd })
             : undefined;
         if (changeInspection !== undefined && !changeInspection.ok) {
-          return stateStoreUnavailable(taskUseCases.taskPrefix);
+          return Effect.succeed(stateStoreUnavailable(taskUseCases.taskPrefix));
         }
-        return success({
-          count: tasks.length,
-          tasks: taskSummaryRows(
+        return Effect.map(
+          taskSummaryRows(
             tasks,
             changeInspection === undefined
-              ? () => null
+              ? () => Effect.succeed(null)
               : changeInspection.inspection.inspectTaskProjection,
           ),
-          ...(tasks.length === 0 ? { help: [createTaskHelp] } : {}),
-        });
+          (rows) =>
+            success({
+              count: tasks.length,
+              tasks: rows,
+              ...(tasks.length === 0 ? { help: [createTaskHelp] } : {}),
+            }),
+        );
       },
     ),
   );
@@ -140,18 +145,22 @@ const invalidTaskState = (state: string): TaskListArgsParseResult => ({
 
 const taskSummaryRows = (
   tasks: readonly TaskSummary[],
-  changeProjection: (taskId: TaskSummary["id"]) => StructuredValue,
-): readonly StructuredValue[] =>
-  tasks.map((task) => ({
-    id: task.id,
-    title: task.title,
-    state: task.state,
-    createdAt: task.createdAt,
-    updatedAt: task.updatedAt,
-    startable: task.startable,
-    blockedBy: task.blockedBy,
-    change: changeProjection(task.id),
-  }));
+  changeProjection: (
+    taskId: TaskSummary["id"],
+  ) => Effect.Effect<StructuredValue, RepositoryStorageError>,
+): Effect.Effect<readonly StructuredValue[], RepositoryStorageError> =>
+  Effect.forEach(tasks, (task) =>
+    Effect.map(changeProjection(task.id), (change) => ({
+      id: task.id,
+      title: task.title,
+      state: task.state,
+      createdAt: task.createdAt,
+      updatedAt: task.updatedAt,
+      startable: task.startable,
+      blockedBy: task.blockedBy,
+      change,
+    })),
+  );
 
 const createTaskHelp =
   'Run `by task create --title "..." --description-file <file>` to create a task.';

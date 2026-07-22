@@ -1,4 +1,6 @@
 import { spawnSync } from "node:child_process";
+import { it as effectIt } from "@effect/vitest";
+import { Effect } from "effect";
 import { describe, expect, it } from "vitest";
 
 import type {
@@ -6,7 +8,11 @@ import type {
   CompleteCandidateValidationRunInput,
   StartCandidateValidationRunInput,
 } from "../src/candidateValidation/candidateValidationRunStore.js";
-import { openCandidatePublication } from "../src/publication/publishCandidate.js";
+import type { ChangePersistence } from "../src/change/changePersistence.js";
+import {
+  openCandidatePublication,
+  openEffectCandidatePublication,
+} from "../src/publication/publishCandidate.js";
 import { openSqliteCandidateStore } from "../src/sqlite/sqliteCandidateStore.js";
 import { openSqliteChangeStartStore } from "../src/sqlite/sqliteChangeStartStore.js";
 import { openSqliteChangeStore } from "../src/sqlite/sqliteChangeStore.js";
@@ -427,6 +433,56 @@ describe("Candidate publication", () => {
       }),
     ).toEqual({ ok: false, code: "validation_evidence_invalid" });
   });
+});
+
+describe("Effect-native Candidate publication", () => {
+  effectIt.effect("releases a publication reservation after a push failure", () =>
+    Effect.gen(function* () {
+      const fixture = publicationFixture();
+      const publication = openEffectCandidatePublication({
+        changePersistence: effectChangePersistence(fixture.changeStore),
+        validationPersistence: {
+          getCandidateById: (candidateId) =>
+            Effect.sync(() => fixture.candidateStore.getCandidateById(candidateId)),
+          getRunById: (validationRunId) =>
+            Effect.sync(() => fixture.validationRunStore.getRunById(validationRunId)),
+        },
+        git: {
+          readBranchHead: () => fixture.candidate.headSha,
+          readFirstNonMergeCommitSubject: () => ({ ok: true, subject: "Publish safely" }),
+        },
+        github: {
+          findPullRequests: () => [],
+          getPullRequest: () => undefined,
+          createPullRequest: () => ({ ok: false, code: "push_failed" }),
+          updatePullRequest: () => {
+            throw new Error("Unexpected PR update");
+          },
+        },
+      });
+
+      expect(yield* publication.publish(publicationInput(fixture))).toEqual({
+        ok: false,
+        code: "publication_tooling_failed",
+      });
+      expect(fixture.changeStore.getChangeById(fixture.changeId)?.publication).toBeNull();
+    }),
+  );
+});
+
+const effectChangePersistence = (
+  store: ReturnType<typeof openSqliteChangeStore>,
+): ChangePersistence => ({
+  getChangeById: (changeId) => Effect.sync(() => store.getChangeById(changeId)),
+  getChangeByTaskId: (taskId) => Effect.sync(() => store.getChangeByTaskId(taskId)),
+  listChanges: (input) => Effect.sync(() => store.listChanges(input)),
+  listChangesForReconciliation: (commonDirectory) =>
+    Effect.sync(() => store.listChangesForReconciliation(commonDirectory)),
+  completeMergedChange: (input) => Effect.sync(() => store.completeMergedChange(input)),
+  recordCleanup: (input) => Effect.sync(() => store.recordCleanup(input)),
+  beginPublication: (input) => Effect.sync(() => store.beginPublication(input)),
+  releasePendingPublication: (input) => Effect.sync(() => store.releasePendingPublication(input)),
+  recordPublishedPullRequest: (input) => Effect.sync(() => store.recordPublishedPullRequest(input)),
 });
 
 const publicationFixture = (options: { readonly taskBacked?: boolean } = {}) => {

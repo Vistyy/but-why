@@ -7,11 +7,11 @@ import { cleanupChangeResources } from "../change/localChangeCleanupGit.js";
 import { openChangeReconciliation } from "../change/reconcileChange.js";
 import { openChangeUseCases, type ChangeUseCases } from "../change/changeUseCases.js";
 import { provisionChangeWorktree, resolveChangeStartGitIntent } from "../change/changeStartGit.js";
-import { openRepoLocalStores } from "../init/repoLocalStores.js";
 import { executeLocalRepositoryPreparation } from "../repositoryPreparation/localRepositoryPreparation.js";
 import { loadRepoLocalContext, type LoadRepoLocalContextError } from "../init/repoContext.js";
 import type { RepositoryStorageError } from "../repositoryStorageError.js";
 import { repositorySqlLayer } from "../sqlite/repositorySql.js";
+import { openSqliteChangePersistence } from "../sqlite/sqliteChangePersistence.js";
 import { openSqliteChangeStartPersistence } from "../sqlite/sqliteChangeStartPersistence.js";
 import { localGitHubPullRequestGateway } from "../submissionEnvironment/localGitHubPullRequestGateway.js";
 
@@ -43,13 +43,15 @@ export const withChangeUseCases = <A, E, R>(
     });
   }
 
-  const stores = openRepoLocalStores(repoContext.context);
-  return openSqliteChangeStartPersistence().pipe(
-    Effect.flatMap((persistence) =>
+  return Effect.all({
+    startPersistence: openSqliteChangeStartPersistence(),
+    changePersistence: openSqliteChangePersistence(),
+  }).pipe(
+    Effect.flatMap(({ startPersistence, changePersistence }) =>
       use(
         openChangeUseCases(
           repoContext.context,
-          persistence,
+          startPersistence,
           {
             resolveIntent: (slug) => resolveChangeStartGitIntent(repoContext.context, slug),
             provisionWorktree: (change, recovering) =>
@@ -57,7 +59,7 @@ export const withChangeUseCases = <A, E, R>(
           },
           executeLocalRepositoryPreparation,
           openChangeReconciliation({
-            changeStore: stores.changeStore,
+            persistence: changePersistence,
             github: localGitHubPullRequestGateway(),
             cleanup: cleanupChangeResources,
           }),

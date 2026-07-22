@@ -8,6 +8,9 @@ It ends when But Why? completes one real SQLite-tracked Task-backed Change and p
 ## Can start immediately
 
 - Task 153: Migrate Submit, publication, and reconciliation.
+- Task 154: Cover Task dependency CLI errors.
+- Task 155: Cover Validation Workspace recovery.
+- Task 157: Cover Change Implement handoff errors.
 - Task 117: Cancel Task-backed and taskless Changes.
 - Task 129: Submit a Task-backed Change with no repository change.
 
@@ -18,7 +21,10 @@ It ends when But Why? completes one real SQLite-tracked Task-backed Change and p
 | 153 | Migrate Submit, publication, and reconciliation | None |
 | 147 | Remove the synchronous state storage path | 153 |
 | 135 | Consolidate the source hierarchy and names | 147 |
-| 156 | Establish and verify the final quality gate | 135 |
+| 154 | Cover Task dependency CLI errors | None |
+| 155 | Cover Validation Workspace recovery | None |
+| 157 | Cover Change Implement handoff errors | None |
+| 156 | Establish and verify the final quality gate | 135, 154, 155, 157 |
 | 123 | Ship the Change-centered manual workflow | 107, 117, 129, 135 |
 | 125 | Produce an installable v1 package | 123 |
 | 131 | Dogfood the first SQLite-tracked Change workflow | 125 |
@@ -41,9 +47,10 @@ It ends when But Why? completes one real SQLite-tracked Task-backed Change and p
 12. Task 153 integrates Submit, publication, and reconciliation after Tasks 150 and 152.
 13. Task 147 removes the temporary synchronous storage path after every production caller has migrated.
 14. Task 135 reorganizes the surviving modules and applies canonical names to the final hierarchy.
-15. Task 156 sets the achieved coverage floor and verifies the final gate from a clean locked-Nix checkout.
-16. Task 117 completes cancellation and cleanup before Task 123 ships the public workflow.
-17. After Task 126 publishes the package, Task 138 replaces the temporary unreleased-schema instruction with the post-publication compatibility policy.
+15. Tasks 154, 155, and 157 repair the remaining public behavior coverage before final gate verification.
+16. Task 156 sets the achieved coverage floor and verifies the final gate from a clean locked-Nix checkout.
+17. Task 117 completes cancellation and cleanup before Task 123 ships the public workflow.
+18. After Task 126 publishes the package, Task 138 replaces the temporary unreleased-schema instruction with the post-publication compatibility policy.
 
 ## Independent test-execution workstream
 

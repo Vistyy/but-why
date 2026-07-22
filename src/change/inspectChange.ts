@@ -9,17 +9,19 @@ import type {
 import type { ChangeValidationPersistence } from "../changeValidation/changeValidationPersistence.js";
 import type { RepositoryStorageError } from "../repositoryStorageError.js";
 import type { ChangeRecord } from "./change.js";
-import type { ChangeStore } from "./changeStore.js";
+import type { ChangePersistence } from "./changePersistence.js";
 
 export type ChangeInspection = {
   readonly list: (input: {
     readonly repositoryCommonDirectory: string;
     readonly includeClosed: boolean;
-  }) => readonly ChangeRecord[];
+  }) => Effect.Effect<readonly ChangeRecord[], RepositoryStorageError>;
   readonly inspect: (
     changeId: string,
   ) => Effect.Effect<ChangeDetail | undefined, RepositoryStorageError>;
-  readonly inspectTaskProjection: (taskId: string) => ChangeTaskProjection | null;
+  readonly inspectTaskProjection: (
+    taskId: string,
+  ) => Effect.Effect<ChangeTaskProjection | null, RepositoryStorageError>;
   readonly findings: (
     changeId: string,
   ) => Effect.Effect<ChangeFindings | undefined, RepositoryStorageError>;
@@ -56,30 +58,30 @@ export type ChangeValidationRunHistory = {
 };
 
 export const openChangeInspection = (input: {
-  readonly changeStore: ChangeStore;
+  readonly changePersistence: ChangePersistence;
   readonly persistence: ChangeValidationPersistence;
 }): ChangeInspection => ({
-  list: input.changeStore.listChanges,
+  list: input.changePersistence.listChanges,
   inspect: (changeId) => inspectChange(input, changeId),
-  inspectTaskProjection: (taskId) => {
-    const change = input.changeStore.getChangeByTaskId(taskId);
-    return change === undefined
-      ? null
-      : { id: change.id, state: change.state, readiness: change.readiness };
-  },
+  inspectTaskProjection: (taskId) =>
+    Effect.map(input.changePersistence.getChangeByTaskId(taskId), (change) =>
+      change === undefined
+        ? null
+        : { id: change.id, state: change.state, readiness: change.readiness },
+    ),
   findings: (changeId) => inspectFindings(input, changeId),
   validationRuns: (changeId) => inspectValidationRuns(input, changeId),
 });
 
 const inspectChange = (
   dependencies: {
-    readonly changeStore: ChangeStore;
+    readonly changePersistence: ChangePersistence;
     readonly persistence: ChangeValidationPersistence;
   },
   changeId: string,
 ): Effect.Effect<ChangeDetail | undefined, RepositoryStorageError> =>
   Effect.gen(function* () {
-    const change = dependencies.changeStore.getChangeById(changeId);
+    const change = yield* dependencies.changePersistence.getChangeById(changeId);
     if (change === undefined) return undefined;
     const candidate = yield* currentCandidate(dependencies.persistence, changeId);
     const validationRun =
@@ -103,7 +105,7 @@ const inspectChange = (
 
 const inspectFindings = (
   dependencies: {
-    readonly changeStore: ChangeStore;
+    readonly changePersistence: ChangePersistence;
     readonly persistence: ChangeValidationPersistence;
   },
   changeId: string,
@@ -122,13 +124,13 @@ const inspectFindings = (
 
 const inspectValidationRuns = (
   dependencies: {
-    readonly changeStore: ChangeStore;
+    readonly changePersistence: ChangePersistence;
     readonly persistence: ChangeValidationPersistence;
   },
   changeId: string,
 ): Effect.Effect<ChangeValidationRunHistory | undefined, RepositoryStorageError> =>
   Effect.gen(function* () {
-    const change = dependencies.changeStore.getChangeById(changeId);
+    const change = yield* dependencies.changePersistence.getChangeById(changeId);
     if (change === undefined) return undefined;
     const candidates = yield* dependencies.persistence.listCandidatesForChange(changeId);
     const validationRuns = yield* Effect.forEach(candidates, (candidate) =>

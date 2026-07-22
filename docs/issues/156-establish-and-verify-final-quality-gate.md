@@ -34,3 +34,6 @@ A clean local checkout runs `nix develop -c just init`, `nix develop -c just qua
 ## Blocked by
 
 - [Task 135](135-consolidate-source-hierarchy.md)
+- [Task 154](154-cover-task-dependency-cli-errors.md)
+- [Task 155](155-cover-validation-workspace-recovery.md)
+- [Task 157](157-cover-change-implement-handoff-errors.md)

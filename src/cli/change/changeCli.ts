@@ -18,6 +18,7 @@ import type { InteractiveSessionHost } from "../../change/interactiveSessionHost
 import type { ReviewerAgentRuntime } from "../../agent/reviewerAgentRuntime.js";
 import type { PublicTaskId } from "../../task/taskId.js";
 import type { ChangeRecord } from "../../change/change.js";
+import type { ChangeReconciliationResult } from "../../change/reconcileChange.js";
 import type { ChangeSubmitResult } from "../../change/submitChange.js";
 import type {
   ChangeImplementResult,
@@ -183,16 +184,16 @@ const runList = (
     cwd: environment.cwd,
   });
   if (!loaded.ok) return Effect.succeed(loadError(loaded.error));
-  try {
-    const now = environment.now().getTime();
-    return Effect.succeed(
-      success({
-        changes: loaded.inspection
-          .list({
-            repositoryCommonDirectory: loaded.commonDirectory,
-            includeClosed: args[0] === "--all",
-          })
-          .map((change) => ({
+  const now = environment.now().getTime();
+  return loaded.inspection
+    .list({
+      repositoryCommonDirectory: loaded.commonDirectory,
+      includeClosed: args[0] === "--all",
+    })
+    .pipe(
+      Effect.map((changes) =>
+        success({
+          changes: changes.map((change) => ({
             id: change.id,
             taskId: change.taskId,
             state: change.state,
@@ -203,11 +204,10 @@ const runList = (
                 }
               : {}),
           })),
-      }),
+        }),
+      ),
+      inspectionFailure,
     );
-  } catch {
-    return Effect.succeed(stateStoreUnavailable("repository"));
-  }
 };
 
 const runShow = (
@@ -642,26 +642,8 @@ const runReconcile = (
   args: readonly string[],
   environment: ChangeCommandEnvironment,
 ): Effect.Effect<CliResult> => {
-  if (args.length === 1 && args[0] === "--help") {
-    return Effect.succeed(
-      success({
-        usage: "by change reconcile [<change-id>]",
-        arguments: [
-          {
-            argument: "<change-id>",
-            description: "Optional Change ID. Without one, reconcile all eligible Changes.",
-          },
-        ],
-        flags: withGlobalHelpFlags(),
-        examples: [
-          "by change reconcile",
-          "by change reconcile <change-id>",
-          "by change reconcile --output json",
-        ],
-      }),
-    );
-  }
-  if (args.length > 1 || args[0]?.startsWith("-") === true) {
+  if (isReconcileHelp(args)) return Effect.succeed(reconcileHelp());
+  if (hasInvalidReconcileArguments(args)) {
     return Effect.succeed(
       usageError({
         code: "invalid_arguments",
@@ -672,27 +654,56 @@ const runReconcile = (
   }
   const changeId = args[0];
   return withChanges(environment, (changes) =>
-    Effect.sync(() => {
-      const result = changes.reconcile(changeId, environment.now().toISOString());
-      if (changeId !== undefined && result.changes.length === 0) {
-        return runtimeError({
-          code: "change_not_found",
-          message: "Change was not found.",
-          help: ["Use a Change ID returned by `by change start --output json`."],
-        });
-      }
-      return result.rejected
-        ? runtimeError({
-            code: "reconciliation_rejected",
-            message: "The owned pull request does not match the recorded Change facts.",
-            details: { changes: result.changes },
-            help: [
-              "Inspect the Change and resolve the remote mismatch. Do not adopt the pull request.",
-            ],
-          })
-        : success({ changes: result.changes });
-    }),
+    Effect.map(changes.reconcile(changeId, environment.now().toISOString()), (result) =>
+      reconcileResult(changeId, result),
+    ),
   );
+};
+
+const isReconcileHelp = (args: readonly string[]): boolean =>
+  args.length === 1 && args[0] === "--help";
+
+const hasInvalidReconcileArguments = (args: readonly string[]): boolean =>
+  args.length > 1 || args[0]?.startsWith("-") === true;
+
+const reconcileHelp = (): CliResult =>
+  success({
+    usage: "by change reconcile [<change-id>]",
+    arguments: [
+      {
+        argument: "<change-id>",
+        description: "Optional Change ID. Without one, reconcile all eligible Changes.",
+      },
+    ],
+    flags: withGlobalHelpFlags(),
+    examples: [
+      "by change reconcile",
+      "by change reconcile <change-id>",
+      "by change reconcile --output json",
+    ],
+  });
+
+const reconcileResult = (
+  changeId: string | undefined,
+  result: ChangeReconciliationResult,
+): CliResult => {
+  if (changeId !== undefined && result.changes.length === 0) {
+    return runtimeError({
+      code: "change_not_found",
+      message: "Change was not found.",
+      help: ["Use a Change ID returned by `by change start --output json`."],
+    });
+  }
+  return result.rejected
+    ? runtimeError({
+        code: "reconciliation_rejected",
+        message: "The owned pull request does not match the recorded Change facts.",
+        details: { changes: result.changes },
+        help: [
+          "Inspect the Change and resolve the remote mismatch. Do not adopt the pull request.",
+        ],
+      })
+    : success({ changes: result.changes });
 };
 
 const implementResult = (result: ChangeImplementResult): CliResult => {

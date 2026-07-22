@@ -4,14 +4,14 @@ import { describe } from "vitest";
 
 import { CandidateValidation } from "../src/candidateValidation/validateCandidate.js";
 import type { ChangeRecord } from "../src/change/change.js";
-import type { ChangeStore } from "../src/change/changeStore.js";
+import type { ChangePersistence } from "../src/change/changePersistence.js";
 import type { ChangeReconciliation } from "../src/change/reconcileChange.js";
 import { openChangeSubmit } from "../src/change/submitChange.js";
 import type {
   CandidatePublication,
   PublishCandidateInput,
 } from "../src/publication/publishCandidate.js";
-import type { TaskStore } from "../src/task/taskStore.js";
+import type { TaskPersistence } from "../src/task/taskPersistence.js";
 import { publicTaskId } from "../src/task/taskId.js";
 
 const now = "2026-06-30T12:00:00.000Z";
@@ -331,33 +331,35 @@ const dependencies = (input: {
   let taskState = "implementing";
   return {
     repositoryCommonDirectory: "/repo/.git",
-    changeStore: {
-      getChangeById: () => input.change,
-    } as unknown as ChangeStore,
-    taskStore: {
-      getTaskById: () => ({ state: taskState }),
-      transitionTaskState: ({ to }: { readonly to: string }) => {
-        input.transitions?.push(to);
-        taskState = to;
-        return { ok: true, changed: true, task: {} };
-      },
-    } as unknown as TaskStore,
+    persistence: {
+      getChangeById: () => Effect.succeed(input.change),
+    } as unknown as ChangePersistence,
+    taskPersistence: {
+      getTaskById: () => Effect.succeed({ state: taskState }),
+      transitionTaskState: ({ to }: { readonly to: string }) =>
+        Effect.sync(() => {
+          input.transitions?.push(to);
+          taskState = to;
+          return { ok: true, changed: true, task: {} };
+        }),
+    } as unknown as TaskPersistence,
     reconciliation: {
-      reconcile: () => {
-        events.push("reconcile");
-        return {
-          rejected: false,
-          changes: [
-            {
-              changeId: input.change.id,
-              status: input.reconciliationStatus ?? "not_owned",
-              ...(input.reconciliationStatus === "open" && input.change.publication?.pullRequest
-                ? { pullRequest: input.change.publication.pullRequest }
-                : {}),
-            },
-          ],
-        };
-      },
+      reconcile: () =>
+        Effect.sync(() => {
+          events.push("reconcile");
+          return {
+            rejected: false,
+            changes: [
+              {
+                changeId: input.change.id,
+                status: input.reconciliationStatus ?? "not_owned",
+                ...(input.reconciliationStatus === "open" && input.change.publication?.pullRequest
+                  ? { pullRequest: input.change.publication.pullRequest }
+                  : {}),
+              },
+            ],
+          };
+        }),
     } satisfies ChangeReconciliation,
     resolvePolicy: () =>
       input.taskBacked

@@ -15,14 +15,15 @@ import {
   type ChangeSubmit,
   type ChangeSubmitResult,
 } from "../change/submitChange.js";
-import { openRepoLocalStores } from "../init/repoLocalStores.js";
 import { loadRepoLocalContext, type LoadRepoLocalContextError } from "../init/repoContext.js";
 import { localCandidateValidationLayer } from "../localCandidateValidation/localCandidateValidationLayer.js";
 import { localCandidatePublicationGit } from "../publication/localCandidatePublicationGit.js";
 import type { RepositoryStorageError } from "../repositoryStorageError.js";
 import { repositorySqlLayer } from "../sqlite/repositorySql.js";
 import { openSqliteChangeCandidateCapturePersistence } from "../sqlite/sqliteChangeCandidateCapturePersistence.js";
+import { openSqliteChangePersistence } from "../sqlite/sqliteChangePersistence.js";
 import { openSqliteChangeValidationPersistence } from "../sqlite/sqliteChangeValidationPersistence.js";
+import { openSqliteTaskPersistence } from "../sqlite/sqliteTaskPersistence.js";
 import { openEffectCandidatePublication } from "../publication/publishCandidate.js";
 import { detectGitHubPrTarget } from "../submissionEnvironment/githubTarget.js";
 import { localGitHubPullRequestGateway } from "../submissionEnvironment/localGitHubPullRequestGateway.js";
@@ -51,20 +52,21 @@ export const loadChangeSubmit = (input: {
     };
   }
 
-  const stores = openRepoLocalStores(context);
-  const reconciliation = openChangeReconciliation({
-    changeStore: stores.changeStore,
-    github: localGitHubPullRequestGateway({ cwd: context.root }),
-    cleanup: cleanupChangeResources,
-  });
   const programFor = (
     capturePersistence: ChangeCandidateCapturePersistence,
     validationPersistence: ChangeValidationPersistence,
-  ) =>
-    openChangeSubmit({
+    changePersistence: import("../change/changePersistence.js").ChangePersistence,
+    taskPersistence: import("../task/taskPersistence.js").TaskPersistence,
+  ) => {
+    const reconciliation = openChangeReconciliation({
+      persistence: changePersistence,
+      github: localGitHubPullRequestGateway({ cwd: context.root }),
+      cleanup: cleanupChangeResources,
+    });
+    return openChangeSubmit({
       repositoryCommonDirectory: context.commonDirectory,
-      changeStore: stores.changeStore,
-      taskStore: stores.taskStore,
+      persistence: changePersistence,
+      taskPersistence,
       reconciliation,
       resolvePolicy: (taskBacked) =>
         resolveCandidateValidationPolicy({
@@ -74,8 +76,7 @@ export const loadChangeSubmit = (input: {
         }),
       publicationFor: (cwd) =>
         openEffectCandidatePublication({
-          changeStore: stores.changeStore,
-          candidateStore: stores.candidateStore,
+          changePersistence,
           validationPersistence,
           git: localCandidatePublicationGit({ cwd }),
           github: localGitHubPullRequestGateway({ cwd }),
@@ -86,6 +87,7 @@ export const loadChangeSubmit = (input: {
         git: localChangeCandidateCaptureGit,
       }).capture,
     });
+  };
   const layerFor = (persistence: ChangeValidationPersistence) =>
     localCandidateValidationLayer({
       localRepositoryMainCheckoutRoot: context.root,
@@ -108,9 +110,11 @@ export const loadChangeSubmit = (input: {
         Effect.all({
           capture: openSqliteChangeCandidateCapturePersistence(),
           validation: openSqliteChangeValidationPersistence(),
+          change: openSqliteChangePersistence(),
+          task: openSqliteTaskPersistence(context.taskPrefix),
         }).pipe(
-          Effect.flatMap(({ capture, validation }) =>
-            programFor(capture, validation)
+          Effect.flatMap(({ capture, validation, change, task }) =>
+            programFor(capture, validation, change, task)
               .submit(submitInput)
               .pipe(Effect.provide(layerFor(validation))),
           ),

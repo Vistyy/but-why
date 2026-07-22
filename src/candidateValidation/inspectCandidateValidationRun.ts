@@ -2,7 +2,7 @@ import { Effect } from "effect";
 
 import type { CandidateRecord } from "../candidate/candidate.js";
 import type { ChangeRecord } from "../change/change.js";
-import type { ChangeStore } from "../change/changeStore.js";
+import type { ChangePersistence } from "../change/changePersistence.js";
 import type {
   CandidateValidationArtifact,
   CandidateValidationFinding,
@@ -68,7 +68,7 @@ export type CandidateValidationRunInspectionUseCases = {
 
 export const openCandidateValidationRunInspection = (input: {
   readonly persistence: ChangeValidationPersistence;
-  readonly changeStore: ChangeStore;
+  readonly changePersistence: ChangePersistence;
   readonly artifactsRoot: string;
 }): CandidateValidationRunInspectionUseCases => ({
   inspectRun: (validationRunId) => inspectRun(input, validationRunId),
@@ -78,7 +78,7 @@ export const openCandidateValidationRunInspection = (input: {
 const inspectRun = (
   dependencies: {
     readonly persistence: ChangeValidationPersistence;
-    readonly changeStore: ChangeStore;
+    readonly changePersistence: ChangePersistence;
     readonly artifactsRoot: string;
   },
   validationRunId: string,
@@ -89,7 +89,7 @@ const inspectRun = (
 
     const candidate = yield* dependencies.persistence.getCandidateById(validationRun.candidateId);
     if (candidate === undefined) throw new Error("Candidate-owned Validation Run has no Candidate");
-    const change = dependencies.changeStore.getChangeById(candidate.changeId);
+    const change = yield* dependencies.changePersistence.getChangeById(candidate.changeId);
     if (change === undefined) throw new Error("Candidate-owned Validation Run has no Change");
     const rounds = yield* dependencies.persistence.listRounds(validationRunId);
     const findings = yield* dependencies.persistence.listFindings(validationRunId);

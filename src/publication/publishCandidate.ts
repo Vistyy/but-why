@@ -1,13 +1,15 @@
 import { isDeepStrictEqual } from "node:util";
 
 import type { CandidateStore } from "../candidate/candidateStore.js";
-import { Effect } from "effect";
+import type { Effect } from "effect";
 
 import type {
   CandidateValidationPolicySnapshot,
   CandidateValidationRunRecord,
 } from "../candidateValidation/candidateValidationRunStore.js";
 import type { ChangeValidationPersistence } from "../changeValidation/changeValidationPersistence.js";
+import type { ChangePersistence } from "../change/changePersistence.js";
+import { openEffectCandidatePublicationImplementation } from "./effectCandidatePublication.js";
 import type { RepositoryStorageError } from "../repositoryStorageError.js";
 import type {
   ChangeOwnedPullRequest,
@@ -92,18 +94,14 @@ export const openCandidatePublication = (input: {
 });
 
 export const openEffectCandidatePublication = (input: {
-  readonly changeStore: ChangeStore;
-  readonly candidateStore: CandidateStore;
-  readonly validationPersistence: Pick<ChangeValidationPersistence, "getRunById">;
+  readonly changePersistence: ChangePersistence;
+  readonly validationPersistence: Pick<
+    ChangeValidationPersistence,
+    "getCandidateById" | "getRunById"
+  >;
   readonly git: CandidatePublicationGit;
   readonly github: GitHubPullRequestGateway;
-}): EffectCandidatePublication => ({
-  publish: (publicationInput) =>
-    Effect.map(
-      input.validationPersistence.getRunById(publicationInput.validationRunId),
-      (validationRun) => publishCandidate(input, publicationInput, validationRun),
-    ),
-});
+}): EffectCandidatePublication => openEffectCandidatePublicationImplementation(input);
 
 const publishCandidate = (
   dependencies: {

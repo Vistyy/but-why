@@ -4,8 +4,8 @@ import { Effect } from "effect";
 
 import { openChangeInspection, type ChangeInspection } from "../change/inspectChange.js";
 import { loadRepoLocalContext, type LoadRepoLocalContextError } from "../init/repoContext.js";
-import { openRepoLocalStores } from "../init/repoLocalStores.js";
 import { repositorySqlLayer } from "../sqlite/repositorySql.js";
+import { openSqliteChangePersistence } from "../sqlite/sqliteChangePersistence.js";
 import { openSqliteChangeValidationPersistence } from "../sqlite/sqliteChangeValidationPersistence.js";
 
 export type LoadChangeInspectionResult =
@@ -32,37 +32,27 @@ export const loadChangeInspection = (input: {
   }
 
   const context = repoContext.context;
-  const stores = openRepoLocalStores(context);
   const repositoryLayer = repositorySqlLayer({
     statePath: context.paths.statePath,
     commonDirectory: context.commonDirectory,
   });
-  const inspectionFor = Effect.map(openSqliteChangeValidationPersistence(), (persistence) =>
-    openChangeInspection({ changeStore: stores.changeStore, persistence }),
-  );
+  const inspectionFor = Effect.all({
+    changePersistence: openSqliteChangePersistence(),
+    persistence: openSqliteChangeValidationPersistence(),
+  }).pipe(Effect.map(openChangeInspection));
+  const run = <A, E>(use: (inspection: ChangeInspection) => Effect.Effect<A, E>) =>
+    Effect.flatMap(inspectionFor, use).pipe(Effect.provide(repositoryLayer));
+
   return {
     ok: true,
     commonDirectory: context.commonDirectory,
     inspection: {
-      list: stores.changeStore.listChanges,
-      inspectTaskProjection: (taskId) => {
-        const change = stores.changeStore.getChangeByTaskId(taskId);
-        return change === undefined
-          ? null
-          : { id: change.id, state: change.state, readiness: change.readiness };
-      },
-      inspect: (changeId) =>
-        Effect.flatMap(inspectionFor, (inspection) => inspection.inspect(changeId)).pipe(
-          Effect.provide(repositoryLayer),
-        ),
-      findings: (changeId) =>
-        Effect.flatMap(inspectionFor, (inspection) => inspection.findings(changeId)).pipe(
-          Effect.provide(repositoryLayer),
-        ),
-      validationRuns: (changeId) =>
-        Effect.flatMap(inspectionFor, (inspection) => inspection.validationRuns(changeId)).pipe(
-          Effect.provide(repositoryLayer),
-        ),
+      list: (listInput) => run((inspection) => inspection.list(listInput)),
+      inspectTaskProjection: (taskId) =>
+        run((inspection) => inspection.inspectTaskProjection(taskId)),
+      inspect: (changeId) => run((inspection) => inspection.inspect(changeId)),
+      findings: (changeId) => run((inspection) => inspection.findings(changeId)),
+      validationRuns: (changeId) => run((inspection) => inspection.validationRuns(changeId)),
     },
   };
 };

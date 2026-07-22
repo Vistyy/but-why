@@ -7,8 +7,8 @@ import {
   type CandidateValidationRunInspectionUseCases,
 } from "../candidateValidation/inspectCandidateValidationRun.js";
 import { loadRepoLocalContext, type LoadRepoLocalContextError } from "../init/repoContext.js";
-import { openRepoLocalStores } from "../init/repoLocalStores.js";
 import { repositorySqlLayer } from "../sqlite/repositorySql.js";
+import { openSqliteChangePersistence } from "../sqlite/sqliteChangePersistence.js";
 import { openSqliteChangeValidationPersistence } from "../sqlite/sqliteChangeValidationPersistence.js";
 
 export type LoadCandidateValidationRunInspectionResult =
@@ -35,17 +35,21 @@ export const loadCandidateValidationRunInspection = (input: {
   }
 
   const context = repoContext.context;
-  const stores = openRepoLocalStores(context);
   const repositoryLayer = repositorySqlLayer({
     statePath: context.paths.statePath,
     commonDirectory: context.commonDirectory,
   });
-  const inspectionFor = Effect.map(openSqliteChangeValidationPersistence(), (persistence) =>
-    openCandidateValidationRunInspection({
-      persistence,
-      changeStore: stores.changeStore,
-      artifactsRoot: context.paths.artifactsPath,
-    }),
+  const inspectionFor = Effect.all({
+    persistence: openSqliteChangeValidationPersistence(),
+    changePersistence: openSqliteChangePersistence(),
+  }).pipe(
+    Effect.map(({ persistence, changePersistence }) =>
+      openCandidateValidationRunInspection({
+        persistence,
+        changePersistence,
+        artifactsRoot: context.paths.artifactsPath,
+      }),
+    ),
   );
   return {
     ok: true,

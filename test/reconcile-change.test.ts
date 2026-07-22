@@ -1,6 +1,9 @@
-import { describe, expect, it } from "vitest";
+import { expect, it } from "@effect/vitest";
+import { Effect } from "effect";
+import { describe } from "vitest";
 
 import { openChangeReconciliation } from "../src/change/reconcileChange.js";
+import type { ChangePersistence } from "../src/change/changePersistence.js";
 import type { ChangeStore } from "../src/change/changeStore.js";
 import type {
   GitHubPullRequest,
@@ -13,61 +16,67 @@ const now = "2026-07-24T10:00:00.000Z";
 const target = { owner: "acme", repo: "widgets", baseBranch: "main", remoteName: "origin" };
 
 describe("Change reconciliation", () => {
-  it("leaves a closed unmerged owned PR and its Change open", () => {
-    const fixture = publishedChange();
-    const reconciliation = reconciler(fixture.store, {
-      ...expectedPullRequest(),
-      state: "closed",
-      merged: false,
-    });
-
-    expect(
-      reconciliation.reconcile({
-        repositoryCommonDirectory: "/repos/example/.git",
-        changeId: fixture.changeId,
-        now,
-      }),
-    ).toEqual({
-      rejected: false,
-      changes: [
-        {
-          changeId: fixture.changeId,
-          status: "closed_unmerged",
-          pullRequest: { number: 42, url: "https://github.com/acme/widgets/pull/42" },
-        },
-      ],
-    });
-    expect(fixture.store.getChangeById(fixture.changeId)).toMatchObject({ state: "open" });
-  });
-
-  it("rejects unexpected repository, base, branch, and head facts without adopting them", () => {
-    const unexpectedFacts: readonly [GitHubPullRequest, string][] = [
-      [
-        { ...expectedPullRequest(), repository: { owner: "other", repo: "widgets" } },
-        "repository_mismatch",
-      ],
-      [{ ...expectedPullRequest(), baseBranch: "release" }, "base_branch_mismatch"],
-      [{ ...expectedPullRequest(), headBranch: "other-feature" }, "head_branch_mismatch"],
-      [{ ...expectedPullRequest(), headSha: "unexpected-head" }, "head_sha_mismatch"],
-    ];
-
-    for (const [pullRequest, rejection] of unexpectedFacts) {
+  it.effect("leaves a closed unmerged owned PR and its Change open", () =>
+    Effect.gen(function* () {
       const fixture = publishedChange();
-      const reconciliation = reconciler(fixture.store, pullRequest);
+      const reconciliation = reconciler(fixture.store, {
+        ...expectedPullRequest(),
+        state: "closed",
+        merged: false,
+      });
 
       expect(
-        reconciliation.reconcile({
+        yield* reconciliation.reconcile({
           repositoryCommonDirectory: "/repos/example/.git",
           changeId: fixture.changeId,
           now,
         }),
       ).toEqual({
-        rejected: true,
-        changes: [{ changeId: fixture.changeId, status: "rejected", rejection }],
+        rejected: false,
+        changes: [
+          {
+            changeId: fixture.changeId,
+            status: "closed_unmerged",
+            pullRequest: { number: 42, url: "https://github.com/acme/widgets/pull/42" },
+          },
+        ],
       });
       expect(fixture.store.getChangeById(fixture.changeId)).toMatchObject({ state: "open" });
-    }
-  });
+    }),
+  );
+
+  it.effect(
+    "rejects unexpected repository, base, branch, and head facts without adopting them",
+    () =>
+      Effect.gen(function* () {
+        const unexpectedFacts: readonly [GitHubPullRequest, string][] = [
+          [
+            { ...expectedPullRequest(), repository: { owner: "other", repo: "widgets" } },
+            "repository_mismatch",
+          ],
+          [{ ...expectedPullRequest(), baseBranch: "release" }, "base_branch_mismatch"],
+          [{ ...expectedPullRequest(), headBranch: "other-feature" }, "head_branch_mismatch"],
+          [{ ...expectedPullRequest(), headSha: "unexpected-head" }, "head_sha_mismatch"],
+        ];
+
+        for (const [pullRequest, rejection] of unexpectedFacts) {
+          const fixture = publishedChange();
+          const reconciliation = reconciler(fixture.store, pullRequest);
+
+          expect(
+            yield* reconciliation.reconcile({
+              repositoryCommonDirectory: "/repos/example/.git",
+              changeId: fixture.changeId,
+              now,
+            }),
+          ).toEqual({
+            rejected: true,
+            changes: [{ changeId: fixture.changeId, status: "rejected", rejection }],
+          });
+          expect(fixture.store.getChangeById(fixture.changeId)).toMatchObject({ state: "open" });
+        }
+      }),
+  );
 });
 
 const publishedChange = () => {
@@ -106,7 +115,15 @@ const publishedChange = () => {
 
 const reconciler = (store: ChangeStore, pullRequest: GitHubPullRequest) =>
   openChangeReconciliation({
-    changeStore: store,
+    persistence: {
+      getChangeById: (id: string) => Effect.sync(() => store.getChangeById(id)),
+      listChangesForReconciliation: (commonDirectory: string) =>
+        Effect.sync(() => store.listChangesForReconciliation(commonDirectory)),
+      completeMergedChange: (input: Parameters<ChangeStore["completeMergedChange"]>[0]) =>
+        Effect.sync(() => store.completeMergedChange(input)),
+      recordCleanup: (input: Parameters<ChangeStore["recordCleanup"]>[0]) =>
+        Effect.sync(() => store.recordCleanup(input)),
+    } as unknown as ChangePersistence,
     github: {
       findPullRequests: () => [],
       getPullRequest: () => pullRequest,

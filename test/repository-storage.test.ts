@@ -10,6 +10,7 @@ import { initializeStateDatabase } from "../src/init/stateDatabase.js";
 import { storedPublicTaskId } from "../src/task/taskId.js";
 import { withStateDatabase } from "../src/sqlite/connection.js";
 import { openSqliteChangeCandidateCapturePersistence } from "../src/sqlite/sqliteChangeCandidateCapturePersistence.js";
+import { openSqliteChangePersistence } from "../src/sqlite/sqliteChangePersistence.js";
 import { openSqliteChangeStartPersistence } from "../src/sqlite/sqliteChangeStartPersistence.js";
 import { openSqliteTaskPersistence } from "../src/sqlite/sqliteTaskPersistence.js";
 import {
@@ -121,6 +122,47 @@ describe("repository SQL storage", () => {
 
         expect(yield* changes.getById("change-atomic")).toBeUndefined();
         expect(yield* tasks.getTaskById(taskId)).toMatchObject({ state: "todo" });
+      }),
+    ),
+  );
+
+  it.scoped("atomically completes a merged Task-backed Change", () =>
+    withTemporaryState((input) =>
+      Effect.gen(function* () {
+        const tasks = yield* openSqliteTaskPersistence("BY");
+        const starts = yield* openSqliteChangeStartPersistence();
+        const changes = yield* openSqliteChangePersistence();
+        const created = yield* tasks.createTask({
+          title: "Complete merged Change",
+          description: "Complete the Change and linked Task together.",
+          now: "2026-07-17T22:55:00.000Z",
+        });
+        if (!created.ok) return;
+        const taskId = storedPublicTaskId(created.task.id);
+        yield* tasks.approveTask({ taskId, now: "2026-07-17T22:56:00.000Z" });
+        const started = yield* starts.create({
+          id: "change-complete",
+          repositoryCommonDirectory: input.commonDirectory,
+          branchRef: "refs/heads/but-why/by-1",
+          baseRef: "main",
+          startingCommit: "1111111111111111111111111111111111111111",
+          worktreePath: join(input.commonDirectory, "worktrees", "by-1"),
+          taskId,
+          now: "2026-07-17T22:57:00.000Z",
+        });
+        if (!started.ok) return;
+
+        const completed = yield* changes.completeMergedChange({
+          changeId: started.change.id,
+          now: "2026-07-17T22:58:00.000Z",
+        });
+
+        expect(completed).toMatchObject({
+          ok: true,
+          changed: true,
+          change: { state: "closed", closeReason: "completed", cleanup: { state: "pending" } },
+        });
+        expect(yield* tasks.getTaskById(taskId)).toMatchObject({ state: "done" });
       }),
     ),
   );

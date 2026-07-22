@@ -32,7 +32,10 @@ export type ChangeUseCases = {
     changeId: string,
     initialPrompt: string | undefined,
   ) => Effect.Effect<ChangeImplementResult, RepositoryStorageError>;
-  readonly reconcile: (changeId: string | undefined, now: string) => ChangeReconciliationResult;
+  readonly reconcile: (
+    changeId: string | undefined,
+    now: string,
+  ) => Effect.Effect<ChangeReconciliationResult, RepositoryStorageError>;
 };
 
 export type ChangeStartResult =

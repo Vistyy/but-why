@@ -32,13 +32,16 @@ export const runShowCommand = (
   return withTasks(environment, false, (tasks) => {
     const taskId = resolveTaskId(tasks, parsed.taskId);
     if (!taskId.ok) return Effect.succeed(taskId.result);
-    return Effect.map(tasks.getTaskForInspection(taskId.taskId), (task) => {
+    return Effect.gen(function* () {
+      const task = yield* tasks.getTaskForInspection(taskId.taskId);
       if (task === undefined) return taskNotFound(taskId.taskId);
       const change =
         environment.taskUseCases === undefined
           ? loadChangeInspection({ cwd: environment.cwd })
           : undefined;
       if (change !== undefined && !change.ok) return stateStoreUnavailable(tasks.taskPrefix);
+      const projection =
+        change === undefined ? null : yield* change.inspection.inspectTaskProjection(taskId.taskId);
       return success({
         task: {
           id: task.id,
@@ -50,8 +53,7 @@ export const runShowCommand = (
           commentCount: task.commentCount,
           prerequisites: task.prerequisites,
           dependents: task.dependents,
-          change:
-            change === undefined ? null : change.inspection.inspectTaskProjection(taskId.taskId),
+          change: projection,
         },
       });
     });
