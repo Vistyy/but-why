@@ -64,7 +64,7 @@ The create command's unreachable dependency-cycle mapping is covered at the CLI 
 
 ## Completion
 
-- Implementation commits: `e21fb456ccd5937a869e330a688cf3839df3afa5`, `b2e7960ff72494af162e55fd548e00e91bfb4e64`, `36983d2fd2b2100688eb1db95dd93e8c9f5c832c`, and `969a10994534047fa4a3234befbbf2414a90fbd3`.
+- Implementation commits: `e21fb456ccd5937a869e330a688cf3839df3afa5`, `b2e7960ff72494af162e55fd548e00e91bfb4e64`, `36983d2fd2b2100688eb1db95dd93e8c9f5c832c`, `969a10994534047fa4a3234befbbf2414a90fbd3`, `d041f88b2dfc58e1680ea17dfd2d5e151c264de7`, and `3e2ff3731a08a717f63a430b9a46c0425a21468b`.
 - Verification: focused Task CLI tests, type checking, formatting, linting, AST-grep, and documentation checks passed.
 - Verification: full coverage passed 367 tests with one intentional skip.
 - Verification: the repository quality run reports only the two pre-existing Fallow findings deferred to Tasks 155 and 157.
