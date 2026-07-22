@@ -1,15 +1,74 @@
-import { writeFileSync } from "node:fs";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
 import { describe } from "vitest";
 
+import { maxHandoffBytes } from "../src/change/handoffFile.js";
 import type { InteractiveSessionHost } from "../src/change/interactiveSessionHost.js";
 import { commitButWhyConfigAndRecordDefault, runByInProcessEffect } from "./support/by-cli.js";
 import { createInitializedRepo } from "./support/initializedRepo.js";
 
 const now = "2026-06-30T12:00:00.000Z";
+
+const invalidHandoffCases = [
+  [
+    "missing",
+    {
+      fileName: "missing.md",
+      setup: (_path: string): void => undefined,
+      code: "handoff_file_not_found",
+      message: "Change handoff file was not found.",
+      maxBytes: undefined,
+      help: "Create the handoff file, then rerun Change Implement.",
+    },
+  ],
+  [
+    "non-regular",
+    {
+      fileName: "handoff-directory",
+      setup: (path: string): void => mkdirSync(path),
+      code: "handoff_file_unreadable",
+      message: "Change handoff must be a readable regular file.",
+      maxBytes: undefined,
+      help: "Use a readable regular file for --handoff-file.",
+    },
+  ],
+  [
+    "oversized",
+    {
+      fileName: "large.md",
+      setup: (path: string): void => writeFileSync(path, "x".repeat(maxHandoffBytes + 1)),
+      code: "handoff_file_too_large",
+      message: "Change handoff file is larger than 256 KiB.",
+      maxBytes: maxHandoffBytes,
+      help: "Shorten the handoff file to 256 KiB or less.",
+    },
+  ],
+  [
+    "invalid UTF-8",
+    {
+      fileName: "invalid.bin",
+      setup: (path: string): void => writeFileSync(path, Buffer.from([0xff])),
+      code: "invalid_handoff_encoding",
+      message: "Change handoff file must be valid UTF-8.",
+      maxBytes: undefined,
+      help: "Rewrite the handoff file as UTF-8, then retry Change Implement.",
+    },
+  ],
+  [
+    "empty",
+    {
+      fileName: "empty.md",
+      setup: (path: string): void => writeFileSync(path, ""),
+      code: "empty_handoff_file",
+      message: "Change handoff file must not be empty.",
+      maxBytes: undefined,
+      help: "Write a non-empty handoff file, then retry Change Implement.",
+    },
+  ],
+] as const;
 
 describe("by change implement", () => {
   it.effect("launches a ready Change in its recorded Managed Worktree", () =>
@@ -177,6 +236,67 @@ describe("by change implement", () => {
     }),
   );
 
+  it.effect.each(invalidHandoffCases)(
+    "maps %s handoff input to its structured usage error",
+    ([_name, handoffCase]) =>
+      Effect.gen(function* () {
+        const root = initializedRepository();
+        const started = yield* runByInProcessEffect(
+          root,
+          ["change", "start", "--output", "json"],
+          now,
+        );
+        const change = JSON.parse(started.stdout) as {
+          readonly change: { readonly id: string };
+        };
+        let launches = 0;
+        const host: InteractiveSessionHost = {
+          launch: async () => {
+            launches += 1;
+            return { ok: true, host: "herdr", status: "started" };
+          },
+        };
+        const handoffPath = join(root, handoffCase.fileName);
+        handoffCase.setup(handoffPath);
+
+        const result = yield* runByInProcessEffect(
+          root,
+          [
+            "change",
+            "implement",
+            change.change.id,
+            "--handoff-file",
+            handoffPath,
+            "--output",
+            "json",
+          ],
+          now,
+          { interactiveSessionHost: host },
+        );
+
+        expect(result.status).toBe(2);
+        expect(JSON.parse(result.stdout)).toEqual({
+          error: {
+            code: handoffCase.code,
+            message: handoffCase.message,
+            path: handoffPath,
+            ...(handoffCase.maxBytes === undefined ? {} : { maxBytes: handoffCase.maxBytes }),
+          },
+          help: [handoffCase.help],
+        });
+        expect(launches).toBe(0);
+
+        const inspection = yield* runByInProcessEffect(
+          root,
+          ["change", "show", change.change.id, "--output", "json"],
+          now,
+        );
+        expect(JSON.parse(inspection.stdout)).toMatchObject({
+          change: { id: change.change.id, state: "open", readiness: "ready" },
+        });
+      }),
+  );
+
   it.effect("keeps a ready Change launchable after a retryable host failure", () =>
     Effect.gen(function* () {
       const root = initializedRepository();
@@ -212,44 +332,46 @@ describe("by change implement", () => {
     }),
   );
 
-  it.effect("passes a compact handoff file unchanged to the Interactive Session Host", () =>
-    Effect.gen(function* () {
-      const root = initializedRepository();
-      const started = yield* runByInProcessEffect(
-        root,
-        ["change", "start", "--output", "json"],
-        now,
-      );
-      const change = JSON.parse(started.stdout) as { readonly change: { readonly id: string } };
-      const handoff = "# Handoff\n\nKeep the next step small.\n";
-      const handoffPath = join(root, "handoff.md");
-      writeFileSync(handoffPath, handoff);
-      const received: string[] = [];
-      const host: InteractiveSessionHost = {
-        launch: async (input) => {
-          if (input.initialPrompt !== undefined) received.push(input.initialPrompt);
-          return { ok: true, host: "herdr", status: "started" };
-        },
-      };
+  it.effect(
+    "passes a valid handoff at the 256 KiB limit unchanged to the Interactive Session Host",
+    () =>
+      Effect.gen(function* () {
+        const root = initializedRepository();
+        const started = yield* runByInProcessEffect(
+          root,
+          ["change", "start", "--output", "json"],
+          now,
+        );
+        const change = JSON.parse(started.stdout) as { readonly change: { readonly id: string } };
+        const handoff = "x".repeat(maxHandoffBytes);
+        const handoffPath = join(root, "handoff.md");
+        writeFileSync(handoffPath, handoff);
+        const received: string[] = [];
+        const host: InteractiveSessionHost = {
+          launch: async (input) => {
+            if (input.initialPrompt !== undefined) received.push(input.initialPrompt);
+            return { ok: true, host: "herdr", status: "started" };
+          },
+        };
 
-      const result = yield* runByInProcessEffect(
-        root,
-        [
-          "change",
-          "implement",
-          change.change.id,
-          "--handoff-file",
-          handoffPath,
-          "--output",
-          "json",
-        ],
-        now,
-        { interactiveSessionHost: host },
-      );
+        const result = yield* runByInProcessEffect(
+          root,
+          [
+            "change",
+            "implement",
+            change.change.id,
+            "--handoff-file",
+            handoffPath,
+            "--output",
+            "json",
+          ],
+          now,
+          { interactiveSessionHost: host },
+        );
 
-      expect(result.status).toBe(0);
-      expect(received).toEqual([handoff]);
-    }),
+        expect(result.status).toBe(0);
+        expect(received).toEqual([handoff]);
+      }),
   );
 });
 
