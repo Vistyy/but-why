@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 
@@ -69,6 +70,24 @@ const dependencyErrorTaskUseCases = (overrides: Partial<TaskUseCases>): TaskUseC
   ...fakeTaskUseCases(),
   ...overrides,
 });
+
+const initializedRepositoryForChangeStart = (): string => {
+  const root = createInitializedRepo();
+  runGit(root, "config", "user.name", "But Why Test");
+  runGit(root, "config", "user.email", "but-why@example.test");
+  runGit(root, "branch", "-M", "main");
+  writeFileSync(join(root, "README.md"), "# Test repository\n");
+  runGit(root, "add", "README.md", ".gitignore", ".but-why/config.json");
+  runGit(root, "commit", "-m", "Initialize repository");
+  runGit(root, "remote", "add", "origin", root);
+  runGit(root, "update-ref", "refs/remotes/origin/main", "refs/heads/main");
+  runGit(root, "symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/main");
+  return root;
+};
+
+const runGit = (cwd: string, ...args: readonly string[]): void => {
+  execFileSync("git", args, { cwd, encoding: "utf8" });
+};
 
 describe("Task dependency graph", () => {
   it.effect("parses repeated dependency options", () =>
@@ -340,30 +359,40 @@ describe("Task dependency graph", () => {
     }),
   );
 
-  it.effect("maps locked dependency replacement through the public CLI contract", () =>
+  it.effect("rejects locked dependency replacement without changing the graph", () =>
     Effect.gen(function* () {
-      const root = createTestWorkspace();
-      const taskUseCases = dependencyErrorTaskUseCases({
-        replaceTaskDependencies: () =>
-          Effect.succeed({ ok: false, code: "dependencies_locked", state: "implementing" }),
-      });
+      const root = initializedRepositoryForChangeStart();
+      yield* createTaskThroughCli(root, "Started Task");
+      const approved = yield* runByInProcessEffect(
+        root,
+        ["task", "approve", "BY-1", "--output", "json"],
+        firstNow,
+      );
+      expect(approved.status).toBe(0);
+      const started = yield* runByInProcessEffect(
+        root,
+        ["change", "start", "--task", "BY-1", "--output", "json"],
+        firstNow,
+      );
+      expect(started.status).toBe(0);
+      const before = yield* readTaskGraph(root, "BY-1");
 
       const result = yield* runByInProcessEffect(
         root,
-        ["task", "dependencies", "set", "BY-3", "--output", "json"],
+        ["task", "dependencies", "set", "BY-1", "--output", "json"],
         firstNow,
-        { taskUseCases },
       );
 
       expectJsonError(result, {
         error: {
           code: "dependencies_locked",
-          message: "Dependencies for task BY-3 are locked after Start.",
-          taskId: "BY-3",
+          message: "Dependencies for task BY-1 are locked after Start.",
+          taskId: "BY-1",
           state: "implementing",
         },
         help: ["Dependency edits are available only before Change Start."],
       });
+      expect(yield* readTaskGraph(root, "BY-1")).toEqual(before);
     }),
   );
 

@@ -8,7 +8,6 @@ It ends when But Why? completes one real SQLite-tracked Task-backed Change and p
 ## Can start immediately
 
 - Task 135: Consolidate the source hierarchy and names.
-- Task 154: Cover Task dependency CLI errors.
 - Task 155: Cover Validation Workspace recovery.
 - Task 157: Cover Change Implement handoff errors.
 - Task 117: Cancel Task-backed and taskless Changes.
@@ -19,7 +18,6 @@ It ends when But Why? completes one real SQLite-tracked Task-backed Change and p
 | Task | Capability | Blocked by |
 | --- | --- | --- |
 | 135 | Consolidate the source hierarchy and names | None |
-| 154 | Cover Task dependency CLI errors | None |
 | 155 | Cover Validation Workspace recovery | None |
 | 157 | Cover Change Implement handoff errors | None |
 | 156 | Establish and verify the final quality gate | 135, 154, 155, 157 |
