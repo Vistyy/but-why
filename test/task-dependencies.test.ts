@@ -200,6 +200,7 @@ describe("Task dependency graph", () => {
     Effect.gen(function* () {
       const root = createTestWorkspace();
       writeFileSync(join(root, "cycle.md"), "Description for Cycle");
+      // A valid create operation cannot form a cycle because its new ID is not yet referenced.
       const taskUseCases = dependencyErrorTaskUseCases({
         createTask: () => Effect.succeed({ ok: false, code: "dependency_cycle" }),
       });
