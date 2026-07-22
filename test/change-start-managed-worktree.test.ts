@@ -6,9 +6,11 @@ import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
 import { describe, it as ordinaryIt } from "vitest";
 
+import { openSqliteChangeStartPersistence } from "../src/sqlite/sqliteChangeStartPersistence.js";
 import { publicTaskId, taskSlugForId } from "../src/task/taskId.js";
 import { runByInProcessEffect, runByWithEnv } from "./support/by-cli.js";
 import { createInitializedRepo } from "./support/initializedRepo.js";
+import { withTestRepository } from "./support/repository.js";
 
 const now = "2026-06-30T12:00:00.000Z";
 
@@ -60,6 +62,21 @@ describe("by change start managed worktree", () => {
       expect((yield* runByInProcessEffect(root, ["task", "show", "BY-1"])).stdout).toContain(
         "state: implementing",
       );
+      const persisted = yield* withTestRepository(
+        root,
+        Effect.gen(function* () {
+          const changes = yield* openSqliteChangeStartPersistence();
+          return yield* changes.getById(output.change.id);
+        }),
+      );
+      expect(persisted).toMatchObject({
+        acceptanceContext: {
+          version: 1,
+          title: "Prepared change",
+          description: "Prepare this Change.\n",
+          comments: [],
+        },
+      });
     }),
   );
 

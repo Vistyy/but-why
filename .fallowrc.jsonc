@@ -53,16 +53,11 @@
       },
       {
         "name": "composition",
-        "patterns": [
-          "src/init/repoLocalStores.ts",
-          "src/localCandidateValidation/**",
-          "src/localChange/**",
-          "src/localTask/**"
-        ]
+        "patterns": ["src/localCandidateValidation/**", "src/localChange/**", "src/localTask/**"]
       },
       {
         "name": "storage",
-        "patterns": ["src/init/stateDatabase.ts", "src/sqlite/**"]
+        "patterns": ["src/sqlite/**"]
       },
       {
         "name": "adapters",

@@ -52,6 +52,40 @@ it.scoped("preserves Task policy after migration to Effect persistence", () => {
   );
 });
 
+it.scoped("preserves Task ordering and rejects invalid state transitions", () => {
+  const root = createInitializedRepo();
+  return withTestRepository(
+    root,
+    Effect.gen(function* () {
+      const tasks = yield* openSqliteTaskPersistence("BY");
+      yield* tasks.createTask({ title: "First", description: "First", now: firstNow });
+      yield* tasks.createTask({ title: "Second", description: "Second", now: firstNow });
+
+      expect((yield* tasks.listTasks({ includeDone: false })).map((task) => task.id)).toEqual([
+        "BY-1",
+        "BY-2",
+      ]);
+      expect(
+        yield* tasks.transitionTaskState({
+          taskId: publicTaskId("BY-1"),
+          to: "ready",
+          now: secondNow,
+        }),
+      ).toEqual({
+        ok: false,
+        code: "invalid_task_state_transition",
+        from: "new",
+        to: "ready",
+      });
+      expect(yield* tasks.getTaskById(publicTaskId("BY-1"))).toMatchObject({
+        state: "new",
+        createdAt: firstNow,
+        updatedAt: firstNow,
+      });
+    }),
+  );
+});
+
 const transitionTo = (
   tasks: TaskPersistence,
   taskId: ReturnType<typeof publicTaskId>,
