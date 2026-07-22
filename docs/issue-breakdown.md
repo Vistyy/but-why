@@ -7,7 +7,7 @@ It ends when But Why? completes one real SQLite-tracked Task-backed Change and p
 
 ## Can start immediately
 
-- Task 147: Remove the synchronous state storage path.
+- Task 135: Consolidate the source hierarchy and names.
 - Task 154: Cover Task dependency CLI errors.
 - Task 155: Cover Validation Workspace recovery.
 - Task 157: Cover Change Implement handoff errors.
@@ -18,8 +18,7 @@ It ends when But Why? completes one real SQLite-tracked Task-backed Change and p
 
 | Task | Capability | Blocked by |
 | --- | --- | --- |
-| 147 | Remove the synchronous state storage path | None |
-| 135 | Consolidate the source hierarchy and names | 147 |
+| 135 | Consolidate the source hierarchy and names | None |
 | 154 | Cover Task dependency CLI errors | None |
 | 155 | Cover Validation Workspace recovery | None |
 | 157 | Cover Change Implement handoff errors | None |
@@ -44,7 +43,7 @@ It ends when But Why? completes one real SQLite-tracked Task-backed Change and p
 10. Tasks 150 and 151 migrated Task, Change Start, and Candidate capture storage.
 11. Task 152 migrated validation execution and history after Candidate capture.
 12. Task 153 integrates Submit, publication, and reconciliation after Tasks 150 and 152.
-13. Task 147 removes the temporary synchronous storage path after every production caller has migrated.
+13. Task 147 removed the temporary synchronous storage path after every production caller migrated.
 14. Task 135 reorganizes the surviving modules and applies canonical names to the final hierarchy.
 15. Tasks 154, 155, and 157 repair the remaining public behavior coverage before final gate verification.
 16. Task 156 sets the achieved coverage floor and verifies the final gate from a clean locked-Nix checkout.
