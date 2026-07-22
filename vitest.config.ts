@@ -9,7 +9,6 @@ export default defineConfig({
       reporter: ["text", "json", "json-summary"],
       reportsDirectory: "coverage",
     },
-    globalSetup: ["./test/globalSetup.ts"],
     pool: "threads",
   },
 });

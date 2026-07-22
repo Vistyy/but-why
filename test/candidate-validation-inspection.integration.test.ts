@@ -6,11 +6,9 @@ import { Effect } from "effect";
 import { describe } from "vitest";
 
 import type { ChangeValidationPersistence } from "../src/changeValidation/changeValidationPersistence.js";
-import { prepareStateDatabase } from "../src/init/stateDatabase.js";
-import { openSqliteCandidateStore } from "../src/sqlite/sqliteCandidateStore.js";
+import { openSqliteChangeCandidateCapturePersistence } from "../src/sqlite/sqliteChangeCandidateCapturePersistence.js";
 import { repositorySqlLayer } from "../src/sqlite/repositorySql.js";
 import { openSqliteChangeValidationPersistence } from "../src/sqlite/sqliteChangeValidationPersistence.js";
-import { openSqliteChangeStore } from "../src/sqlite/sqliteChangeStore.js";
 import { runByInProcessEffect } from "./support/by-cli.js";
 import { createInitializedRepo } from "./support/initializedRepo.js";
 
@@ -462,13 +460,10 @@ describe("Candidate-owned Validation Run inspection", () => {
 
 const candidateValidationFixture = () => {
   const root = createInitializedRepo();
-  const database = sqliteInput(root);
-  const changeStore = openSqliteChangeStore(database);
-  const candidateStore = openSqliteCandidateStore(database);
   const commonDirectory = join(root, ".git");
   const artifactsRoot = join(commonDirectory, "but-why", "artifacts");
   const repositoryLayer = repositorySqlLayer({
-    statePath: database.statePath,
+    statePath: join(commonDirectory, "but-why", "state.sqlite"),
     commonDirectory,
   });
   const withPersistence = <A, E>(
@@ -477,27 +472,26 @@ const candidateValidationFixture = () => {
     Effect.flatMap(openSqliteChangeValidationPersistence(), use).pipe(
       Effect.provide(repositoryLayer),
     );
-  const changeResult = changeStore.createChange({
-    repositoryCommonDirectory: commonDirectory,
-    branchRef: "refs/heads/feature",
-    now,
-  });
-  if (!changeResult.ok) throw new Error(changeResult.code);
-  const candidateResult = candidateStore.captureCandidate({
-    changeId: changeResult.change.id,
-    selectedBaseRef: "refs/remotes/origin/main",
-    resolvedTargetSha: "target-sha",
-    comparisonBaseSha: "base-sha",
-    headSha: "head-sha",
-    now,
-  });
-  if (!candidateResult.ok) throw new Error(candidateResult.code);
-
   return Effect.gen(function* () {
+    const candidateResult = yield* openSqliteChangeCandidateCapturePersistence().pipe(
+      Effect.flatMap((capture) =>
+        capture.commitCapture({
+          repositoryCommonDirectory: commonDirectory,
+          branchRef: "refs/heads/feature",
+          selectedBaseRef: "refs/remotes/origin/main",
+          resolvedTargetSha: "target-sha",
+          comparisonBaseSha: "base-sha",
+          headSha: "head-sha",
+          now,
+        }),
+      ),
+      Effect.provide(repositoryLayer),
+    );
+    if (!candidateResult.ok) throw new Error(candidateResult.code);
     const runResult = yield* withPersistence((persistence) =>
       persistence.startOrReuse({
-        candidateId: candidateResult.candidate.id,
-        headSha: candidateResult.candidate.headSha,
+        candidateId: candidateResult.candidateId,
+        headSha: "head-sha",
         policy,
         now,
       }),
@@ -549,13 +543,8 @@ const candidateValidationFixture = () => {
       artifactsRoot,
       artifact,
       validationRunId: runResult.validationRunId,
-      candidateId: candidateResult.candidate.id,
-      changeId: changeResult.change.id,
+      candidateId: candidateResult.candidateId,
+      changeId: candidateResult.changeId,
     };
   });
 };
-
-const sqliteInput = (root: string) =>
-  prepareStateDatabase({
-    statePath: join(root, ".git", "but-why", "state.sqlite"),
-  });

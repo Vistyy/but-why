@@ -11,6 +11,7 @@ import {
   taskIdResolutionError,
   type CliTaskIdParseResult,
 } from "../../cliTaskId.js";
+import { loadRepoLocalContext } from "../../init/repoContext.js";
 import { withTaskUseCases } from "../../localTask/taskUseCases.js";
 import type { RepositoryStorageError } from "../../repositoryStorageError.js";
 import type { PublicTaskId } from "../../task/taskId.js";
@@ -35,7 +36,11 @@ export const withTasks = (
       : use(environment.taskUseCases);
 
   return program.pipe(
-    Effect.catchAll((error) => Effect.succeed(repositoryStorageErrorResult(error))),
+    Effect.catchAll((error) => {
+      const context = loadRepoLocalContext(environment.cwd);
+      const taskPrefix = context.ok ? context.context.taskPrefix : undefined;
+      return Effect.succeed(repositoryStorageErrorResult(error, taskPrefix));
+    }),
   );
 };
 

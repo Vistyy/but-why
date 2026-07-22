@@ -8,9 +8,10 @@ import { describe } from "vitest";
 
 import { commitButWhyConfigAndRecordDefault, runByInProcessEffect } from "./support/by-cli.js";
 import type { ReviewerAgentRuntime } from "../src/agent/reviewerAgentRuntime.js";
-import { openSqliteTaskStore } from "../src/sqlite/sqliteTaskStore.js";
+import { repositorySqlLayer } from "../src/sqlite/repositorySql.js";
+import { openSqliteTaskPersistence } from "../src/sqlite/sqliteTaskPersistence.js";
 import { publicTaskId } from "../src/task/taskId.js";
-import { candidateSqliteInput, git } from "./support/candidateReadyRepo.js";
+import { candidateRepositoryConfig, git } from "./support/candidateReadyRepo.js";
 import { createInitializedRepo } from "./support/initializedRepo.js";
 import { createTestWorkspace } from "./support/testWorkspace.js";
 
@@ -124,10 +125,7 @@ describe("by change submit", () => {
             agentProfiles: { test: { agentRuntime: "pi", agentModel: "test/model" } },
           })}\n`,
         );
-        const tasks = openSqliteTaskStore({ ...candidateSqliteInput(root), taskPrefix: "BY" });
-        const task = tasks.createTask({ title: "Approved task", description: "Deliver it", now });
-        const taskId = publicTaskId(task.id);
-        expect(tasks.approveTask({ taskId, now }).ok).toBe(true);
+        const taskId = yield* createApprovedTask(root);
         const started = yield* runByInProcessEffect(
           root,
           ["change", "start", "--task", taskId, "--output", "json"],
@@ -195,7 +193,9 @@ describe("by change submit", () => {
           findings: [],
           toolingFailures: [],
         });
-        expect(tasks.getTaskById(taskId)?.state).toBe("ready");
+        expect((yield* runByInProcessEffect(root, ["task", "show", taskId])).stdout).toContain(
+          "state: ready",
+        );
       }),
     ),
   );
@@ -273,11 +273,7 @@ describe("by change submit", () => {
           agentProfiles: { test: { agentRuntime: "pi", agentModel: "test/model" } },
         })}\n`,
       );
-      const tasks = openSqliteTaskStore({ ...candidateSqliteInput(root), taskPrefix: "BY" });
-      const task = tasks.createTask({ title: "Approved task", description: "Deliver it", now });
-      const taskId = publicTaskId(task.id);
-      const approved = tasks.approveTask({ taskId, now });
-      expect(approved.ok).toBe(true);
+      const taskId = yield* createApprovedTask(root);
       commitButWhyConfigAndRecordDefault(root);
       const started = yield* runByInProcessEffect(
         root,
@@ -310,7 +306,9 @@ describe("by change submit", () => {
       expect(
         (JSON.parse(result.stdout) as { readonly error: { readonly code: string } }).error.code,
       ).toBe("validation_findings");
-      expect(tasks.getTaskById(taskId)?.state).toBe("implementing");
+      expect((yield* runByInProcessEffect(root, ["task", "show", taskId])).stdout).toContain(
+        "state: implementing",
+      );
     }),
   );
 
@@ -477,6 +475,23 @@ exit 1
     }
   };
 };
+
+const createApprovedTask = (root: string) =>
+  Effect.scoped(
+    Effect.gen(function* () {
+      const tasks = yield* openSqliteTaskPersistence("BY");
+      const created = yield* tasks.createTask({
+        title: "Approved task",
+        description: "Deliver it",
+        now,
+      });
+      if (!created.ok) throw new Error(created.code);
+      const taskId = publicTaskId(created.task.id);
+      const approved = yield* tasks.approveTask({ taskId, now });
+      if (!approved.ok) throw new Error(approved.code);
+      return taskId;
+    }).pipe(Effect.provide(repositorySqlLayer(candidateRepositoryConfig(root)))),
+  );
 
 const writeExecutable = (path: string, content: string): void => {
   writeFileSync(path, content);

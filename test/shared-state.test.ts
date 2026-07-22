@@ -6,8 +6,7 @@ import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
 import { describe } from "vitest";
 
-import { prepareStateDatabase } from "../src/init/stateDatabase.js";
-import { withStateDatabase } from "../src/sqlite/connection.js";
+import { RepositorySql, repositorySqlLayer } from "../src/sqlite/repositorySql.js";
 import { createGitRepo, runByInProcessEffect } from "./support/by-cli.js";
 import { createTestWorkspace } from "./support/testWorkspace.js";
 
@@ -99,11 +98,25 @@ describe("shared repository state", () => {
   it.effect("rejects shared state that belongs to another Git common directory", () =>
     Effect.gen(function* () {
       const root = yield* initializedRepo();
-      const state = prepareStateDatabase({ statePath: sharedStatePath(root) });
-      withStateDatabase(state, (database) =>
-        database
-          .prepare("UPDATE shared_state_identity SET common_directory = ? WHERE id = 1")
-          .run("/other/.git"),
+      yield* Effect.scoped(
+        Effect.gen(function* () {
+          const repository = yield* RepositorySql;
+          yield* repository.operation(
+            "change repository identity",
+            (sql) => sql`
+            UPDATE shared_state_identity
+            SET common_directory = ${"/other/.git"}
+            WHERE id = 1
+          `,
+          );
+        }).pipe(
+          Effect.provide(
+            repositorySqlLayer({
+              statePath: sharedStatePath(root),
+              commonDirectory: join(root, ".git"),
+            }),
+          ),
+        ),
       );
 
       const result = yield* runByInProcessEffect(root, ["task", "list"]);

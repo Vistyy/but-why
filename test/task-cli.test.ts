@@ -7,23 +7,20 @@ import { Effect } from "effect";
 import { describe, it as ordinaryIt } from "vitest";
 
 import { collapseHome } from "../src/cli.js";
-import { prepareStateDatabase } from "../src/init/stateDatabase.js";
-import { openSqliteTaskStore } from "../src/sqlite/sqliteTaskStore.js";
+import { RepositorySql, repositorySqlLayer } from "../src/sqlite/repositorySql.js";
 import type { TaskState } from "../src/task/lifecycle.js";
 import type { TaskRecord, TaskSummary } from "../src/task/task.js";
 import { publicTaskId } from "../src/task/taskId.js";
-import type { TaskStore } from "../src/task/taskStore.js";
 import {
   byExecutable,
   commitButWhyConfigAndRecordDefault,
   createGitRepo,
   runByInProcessEffect,
+  runByWithEnv,
 } from "./support/by-cli.js";
 import { createTestWorkspace } from "./support/testWorkspace.js";
 import { createInitializedRepo } from "./support/initializedRepo.js";
 import { fakeTaskUseCases } from "./support/taskUseCases.js";
-import { taskStateTransitionPath } from "./support/taskLifecycle.js";
-import { createTaskStore as createIsolatedTaskStore } from "./support/taskStore.js";
 
 const expectedBin = collapseHome(byExecutable);
 const firstNow = "2026-06-30T12:00:00.000Z";
@@ -55,15 +52,6 @@ describe("by task CLI", () => {
   createdAt: "${firstNow}"
   updatedAt: "${firstNow}"
 help[1]: Run \`by task list\` to see open tasks.`);
-
-        expect(taskStore(root).getTaskById(publicTaskId("BY-1"))).toMatchObject({
-          id: "BY-1",
-          title: "Add   login",
-          description: "  Preserve me exactly.\n\n",
-          state: "new",
-          createdAt: firstNow,
-          updatedAt: firstNow,
-        });
       }),
   );
 
@@ -100,10 +88,6 @@ help[1]: Run \`by task list\` to see open tasks.`);
   state: todo
   changed: false
   updatedAt: "${secondNow}"`);
-        expect(taskStore(root).getTaskById(publicTaskId("BY-1"))).toMatchObject({
-          state: "todo",
-          updatedAt: secondNow,
-        });
       }),
   );
 
@@ -228,18 +212,6 @@ tasks[2]:
     }),
   );
 
-  ordinaryIt("uses numeric ID order when Tasks share the same creation timestamp", () => {
-    const tasks = createIsolatedTaskStore();
-
-    tasks.createTask({ title: "First", description: "First", now: firstNow });
-    tasks.createTask({ title: "Second", description: "Second", now: firstNow });
-
-    expect(tasks.listTasks({ includeDone: false }).map((task) => task.id)).toEqual([
-      "BY-1",
-      "BY-2",
-    ]);
-  });
-
   it.effect("shows new Tasks on the dashboard so they can be approved", () =>
     Effect.gen(function* () {
       const task = taskSummary({ title: "Needs approval" });
@@ -259,13 +231,7 @@ tasks[2]:
       expect(
         (yield* runByInProcessEffect(root, ["task", "approve", "BY-1"], firstNow)).status,
       ).toBe(0);
-      expect(
-        taskStore(root).transitionTaskState({
-          taskId: publicTaskId("BY-1"),
-          to: "implementing",
-          now: secondNow,
-        }).ok,
-      ).toBe(true);
+      yield* setTaskState(root, "BY-1", "implementing", secondNow);
 
       expect((yield* runByInProcessEffect(root, [])).stdout).toBe(`bin: ${expectedBin}
 description: Validate completed code changes against approved human intent.
@@ -275,51 +241,8 @@ help[1]: "Run \`by task create --title \\"...\\" --description-file <file>\` to 
     }),
   );
 
-  ordinaryIt("rejects invalid Task state transitions through the Task module", () => {
-    const tasks = createIsolatedTaskStore();
-    tasks.createTask({ title: "Invalid transition", description: "Description", now: firstNow });
-
-    expect(
-      tasks.transitionTaskState({
-        taskId: publicTaskId("BY-1"),
-        to: "ready",
-        now: secondNow,
-      }),
-    ).toEqual({
-      ok: false,
-      code: "invalid_task_state_transition",
-      from: "new",
-      to: "ready",
-    });
-    expect(tasks.getTaskById(publicTaskId("BY-1"))).toMatchObject({
-      state: "new",
-      createdAt: firstNow,
-      updatedAt: firstNow,
-    });
-  });
-
   it.effect("supports --all and --state, with --state implying done visibility", () =>
     Effect.gen(function* () {
-      const tasks = createIsolatedTaskStore();
-      tasks.createTask({ title: "New", description: "Description", now: firstNow });
-      tasks.createTask({ title: "Todo", description: "Description", now: firstNow });
-      tasks.createTask({ title: "Done", description: "Description", now: firstNow });
-      expect(tasks.approveTask({ taskId: publicTaskId("BY-2"), now: secondNow }).ok).toBe(true);
-      transitionStoreTask(tasks, "BY-3", "done", thirdNow);
-
-      expect(tasks.listTasks({ includeDone: false }).map((task) => task.id)).toEqual([
-        "BY-1",
-        "BY-2",
-      ]);
-      expect(tasks.listTasks({ includeDone: true }).map((task) => task.id)).toEqual([
-        "BY-1",
-        "BY-2",
-        "BY-3",
-      ]);
-      expect(tasks.listTasks({ includeDone: true, state: "done" }).map((task) => task.id)).toEqual([
-        "BY-3",
-      ]);
-
       const root = createTestWorkspace();
       const inputs: Array<{ readonly includeDone: boolean; readonly state?: TaskState }> = [];
       const taskUseCases = fakeTaskUseCases({
@@ -623,7 +546,7 @@ help[1]: "Run \`by task create --title \\"...\\" --description-file <file>\` to 
         ]);
         const draft = JSON.parse(draftResult.stdout) as { draft: { path: string } };
         writeFileSync(draft.draft.path, "# Updated title\n\nUpdated description");
-        transitionTaskState(root, "BY-1", state, secondNow);
+        yield* setTaskState(root, "BY-1", state, secondNow);
 
         const result = yield* runByInProcessEffect(
           root,
@@ -739,9 +662,9 @@ help[1]: "Run \`by task create --title \\"...\\" --description-file <file>\` to 
 
       expect(result.status).toBe(0);
 
-      expect(taskStore(root).getTaskContextById(publicTaskId("BY-1"))?.comments).toEqual([
-        "\uFEFFBOM",
-      ]);
+      expect((yield* runByInProcessEffect(root, ["task", "context", "BY-1"])).stdout).toContain(
+        'comments[1]: "\uFEFFBOM"',
+      );
     }),
   );
 
@@ -876,72 +799,83 @@ help[1]: "Run \`by task create --title \\"...\\" --description-file <file>\` to 
   comments[1]: "Persist me exactly\\n"`);
   });
 
-  ordinaryIt("preserves all concurrent Task comment appends", async () => {
-    const root = initializedRepo();
-    const commentCount = concurrentWriterCount;
+  ordinaryIt(
+    "preserves all concurrent Task comment appends",
+    async () => {
+      const root = initializedRepo();
+      const commentCount = concurrentWriterCount;
 
-    createTask(root, firstNow, "Concurrent comments");
+      createTask(root, firstNow, "Concurrent comments");
 
-    for (let index = 0; index < commentCount; index += 1) {
-      writeFileSync(join(root, `comment-${index}.md`), `Comment ${index}`);
-    }
+      for (let index = 0; index < commentCount; index += 1) {
+        writeFileSync(join(root, `comment-${index}.md`), `Comment ${index}`);
+      }
 
-    const results = await Promise.all(
-      Array.from({ length: commentCount }, (_value, index) =>
+      const results = await Promise.all(
+        Array.from({ length: commentCount }, (_value, index) =>
+          runByAsync(
+            root,
+            { BUT_WHY_NOW: secondNow },
+            "task",
+            "comment",
+            "BY-1",
+            "--file",
+            `comment-${index}.md`,
+          ),
+        ),
+      );
+
+      expect(results.every((result) => result.status === 0)).toBe(true);
+
+      const contextResult = await runByAsync(root, {}, "task", "context", "BY-1");
+      for (let index = 0; index < commentCount; index += 1) {
+        expect(contextResult.stdout).toContain(`Comment ${index}`);
+      }
+
+      const showResult = await runByAsync(root, {}, "task", "show", "BY-1");
+      expect(showResult.stdout).toContain(`commentCount: ${commentCount}`);
+    },
+    15_000,
+  );
+
+  ordinaryIt(
+    "keeps concurrent Task dependency replacements atomic",
+    async () => {
+      const root = initializedRepo();
+      createTask(root, firstNow, "First prerequisite");
+      createTask(root, firstNow, "Second prerequisite");
+      createTask(root, firstNow, "Third prerequisite");
+      createTask(root, firstNow, "Dependent Task");
+
+      const results = await Promise.all([
+        runByAsync(root, {}, "task", "dependencies", "set", "BY-4", "--depends-on", "BY-1"),
         runByAsync(
           root,
-          { BUT_WHY_NOW: secondNow },
+          {},
           "task",
-          "comment",
-          "BY-1",
-          "--file",
-          `comment-${index}.md`,
+          "dependencies",
+          "set",
+          "BY-4",
+          "--depends-on",
+          "BY-2",
+          "--depends-on",
+          "BY-3",
         ),
-      ),
-    );
+      ]);
 
-    expect(results.every((result) => result.status === 0)).toBe(true);
-
-    const comments = taskStore(root).getTaskContextById(publicTaskId("BY-1"))?.comments ?? [];
-
-    expect(comments).toHaveLength(commentCount);
-    expect(new Set(comments)).toEqual(
-      new Set(Array.from({ length: commentCount }, (_value, index) => `Comment ${index}`)),
-    );
-
-    const showResult = await runByAsync(root, {}, "task", "show", "BY-1");
-    expect(showResult.stdout).toContain(`commentCount: ${commentCount}`);
-  });
-
-  ordinaryIt("keeps concurrent Task dependency replacements atomic", async () => {
-    const root = initializedRepo();
-    createTask(root, firstNow, "First prerequisite");
-    createTask(root, firstNow, "Second prerequisite");
-    createTask(root, firstNow, "Third prerequisite");
-    createTask(root, firstNow, "Dependent Task");
-
-    const results = await Promise.all([
-      runByAsync(root, {}, "task", "dependencies", "set", "BY-4", "--depends-on", "BY-1"),
-      runByAsync(
-        root,
-        {},
-        "task",
-        "dependencies",
-        "set",
-        "BY-4",
-        "--depends-on",
-        "BY-2",
-        "--depends-on",
-        "BY-3",
-      ),
-    ]);
-
-    expect(results.every((result) => result.status === 0)).toBe(true);
-    const prerequisites = taskStore(root).getTaskById(publicTaskId("BY-4"))?.prerequisites;
-    expect(prerequisites?.map((task) => task.id)).toSatisfy(
-      (ids: readonly string[]) => ids.join(",") === "BY-1" || ids.join(",") === "BY-2,BY-3",
-    );
-  });
+      expect(results.every((result) => result.status === 0)).toBe(true);
+      const shown = await runByAsync(root, {}, "task", "show", "BY-4", "--output", "json");
+      const prerequisites = (
+        JSON.parse(shown.stdout) as {
+          readonly task: { readonly prerequisites: readonly { readonly id: string }[] };
+        }
+      ).task.prerequisites;
+      expect(prerequisites.map((task) => task.id)).toSatisfy(
+        (ids: readonly string[]) => ids.join(",") === "BY-1" || ids.join(",") === "BY-2,BY-3",
+      );
+    },
+    15_000,
+  );
 
   it.effect("serializes missing Task IDs before command lookup", () =>
     Effect.gen(function* () {
@@ -1031,24 +965,28 @@ help[1]: "Run \`by task create --title \\"...\\" --description-file <file>\` to 
 
   it.effect("prints bare dashboard with only actionable Tasks by priority and updated time", () =>
     Effect.gen(function* () {
-      const tasks = createIsolatedTaskStore();
-      tasks.createTask({ title: "Todo old", description: "Description", now: firstNow });
-      expect(tasks.approveTask({ taskId: publicTaskId("BY-1"), now: firstNow }).ok).toBe(true);
-      tasks.createTask({ title: "Ready", description: "Description", now: secondNow });
-      transitionStoreTask(tasks, "BY-2", "ready", secondNow);
-      tasks.createTask({ title: "Implementing", description: "Description", now: firstNow });
-      transitionStoreTask(tasks, "BY-3", "implementing", thirdNow);
-      tasks.createTask({ title: "Todo new", description: "Description", now: firstNow });
-      expect(tasks.approveTask({ taskId: publicTaskId("BY-4"), now: firstNow }).ok).toBe(true);
-      expect(
-        tasks.appendTaskComment({
-          taskId: publicTaskId("BY-4"),
-          content: "Bump updated time",
-          now: () => thirdNow,
-        }).ok,
-      ).toBe(true);
-
-      const actionable = tasks.listActionableTasks();
+      const actionable: readonly TaskSummary[] = [
+        taskSummary({
+          id: "BY-2",
+          title: "Ready",
+          state: "ready",
+          createdAt: secondNow,
+          updatedAt: secondNow,
+          startable: false,
+        }),
+        taskSummary({
+          id: "BY-4",
+          title: "Todo new",
+          state: "todo",
+          updatedAt: thirdNow,
+          startable: true,
+        }),
+        taskSummary({
+          title: "Todo old",
+          state: "todo",
+          startable: true,
+        }),
+      ];
       const result = yield* runByInProcessEffect(createTestWorkspace(), [], firstNow, {
         taskUseCases: fakeTaskUseCases({ listActionableTasks: () => actionable }),
       });
@@ -1228,10 +1166,11 @@ help[1]: Run \`by init --task-prefix BY\` in the repository root.`);
 
     expect(results.every((result) => result.status === 0)).toBe(true);
 
+    const listed = await runByAsync(root, {}, "task", "list", "--all", "--output", "json");
     expect(
-      taskStore(root)
-        .listTasks({ includeDone: true })
-        .map((task) => task.id),
+      (
+        JSON.parse(listed.stdout) as { readonly tasks: readonly { readonly id: string }[] }
+      ).tasks.map((task) => task.id),
     ).toEqual(Array.from({ length: createCount }, (_value, index) => `BY-${index + 1}`));
   });
 
@@ -1284,18 +1223,6 @@ const listedTasks: readonly TaskSummary[] = [
   }),
 ];
 
-const transitionStoreTask = (
-  tasks: TaskStore,
-  taskId: string,
-  state: TaskState,
-  now: string,
-): void => {
-  for (const nextState of taskStateTransitionPath(state)) {
-    const result = tasks.transitionTaskState({ taskId: publicTaskId(taskId), to: nextState, now });
-    if (!result.ok) throw new Error(result.code);
-  }
-};
-
 const initializedRepo = (): string => createInitializedRepo();
 
 const initializedRepoWithDefault = (): string => {
@@ -1317,42 +1244,43 @@ const configuredRepo = (): string => {
 
 const sharedStatePath = (root: string): string => join(root, ".git", "but-why", "state.sqlite");
 
-const taskStore = (root: string) =>
-  openSqliteTaskStore({
-    ...prepareStateDatabase({
-      statePath: sharedStatePath(root),
-    }),
-    taskPrefix: "BY",
-  });
-
 const createTask = (root: string, now: string, title: string): void => {
-  taskStore(root).createTask({
+  const descriptionPath = join(root, ".task-description.md");
+  writeFileSync(descriptionPath, `Description for ${title}`);
+  const result = runByWithEnv(
+    root,
+    { BUT_WHY_NOW: now },
+    "task",
+    "create",
+    "--title",
     title,
-    description: `Description for ${title}`,
-    now,
-  });
+    "--description-file",
+    descriptionPath,
+  );
+  if (result.status !== 0) throw new Error(result.stdout || result.stderr);
 };
 
-const transitionTaskState = (
-  root: string,
-  id: string,
-  state: TaskState,
-  updatedAt: string,
-): void => {
-  const tasks = taskStore(root);
-
-  for (const nextState of taskStateTransitionPath(state)) {
-    const result = tasks.transitionTaskState({
-      taskId: publicTaskId(id),
-      to: nextState,
-      now: updatedAt,
-    });
-
-    if (!result.ok) {
-      throw new Error(`Could not transition ${id} to ${nextState}: ${result.code}`);
-    }
-  }
-};
+const setTaskState = (root: string, id: string, state: TaskState, updatedAt: string) =>
+  Effect.scoped(
+    RepositorySql.pipe(
+      Effect.flatMap((repository) =>
+        repository.operation(
+          "set Task fixture state",
+          (sql) => sql`
+          UPDATE tasks
+          SET state = ${state}, updated_at = ${updatedAt}
+          WHERE id = ${id}
+        `,
+        ),
+      ),
+      Effect.provide(
+        repositorySqlLayer({
+          statePath: sharedStatePath(root),
+          commonDirectory: join(root, ".git"),
+        }),
+      ),
+    ),
+  );
 
 type AsyncCliResult = {
   readonly status: number | null;

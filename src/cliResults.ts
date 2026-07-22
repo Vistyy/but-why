@@ -94,10 +94,13 @@ export const stateStoreUnavailable = (taskPrefix: string | undefined): CliResult
     ],
   });
 
-export const repositoryStorageErrorResult = (error: RepositoryStorageError): CliResult =>
+export const repositoryStorageErrorResult = (
+  error: RepositoryStorageError,
+  taskPrefix?: string,
+): CliResult =>
   error._tag === "RepositoryIdentityConflict"
     ? sharedStateIdentityConflict()
-    : stateStoreUnavailable(undefined);
+    : stateStoreUnavailable(taskPrefix);
 
 const sharedStateIdentityConflict = (): CliResult =>
   runtimeError({

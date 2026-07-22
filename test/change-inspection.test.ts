@@ -1,19 +1,20 @@
+import { randomUUID } from "node:crypto";
 import { join } from "node:path";
 
 import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
 import { describe } from "vitest";
 
-import { prepareStateDatabase } from "../src/init/stateDatabase.js";
 import { publicTaskId } from "../src/task/taskId.js";
-import { openSqliteTaskStore } from "../src/sqlite/sqliteTaskStore.js";
-import { openSqliteCandidateStore } from "../src/sqlite/sqliteCandidateStore.js";
+import { openSqliteChangeCandidateCapturePersistence } from "../src/sqlite/sqliteChangeCandidateCapturePersistence.js";
+import { openSqliteChangePersistence } from "../src/sqlite/sqliteChangePersistence.js";
 import type { ChangeValidationPersistence } from "../src/changeValidation/changeValidationPersistence.js";
-import { repositorySqlLayer } from "../src/sqlite/repositorySql.js";
+import { RepositorySql, repositorySqlLayer } from "../src/sqlite/repositorySql.js";
 import { openSqliteChangeValidationPersistence } from "../src/sqlite/sqliteChangeValidationPersistence.js";
-import { openSqliteChangeStore } from "../src/sqlite/sqliteChangeStore.js";
+import { openSqliteTaskPersistence } from "../src/sqlite/sqliteTaskPersistence.js";
 import { commitButWhyConfigAndRecordDefault, runByInProcessEffect } from "./support/by-cli.js";
 import { createInitializedRepo } from "./support/initializedRepo.js";
+import { withTestRepository } from "./support/repository.js";
 
 const firstNow = "2026-07-18T10:00:00.000Z";
 const secondNow = "2026-07-18T10:05:00.000Z";
@@ -23,23 +24,8 @@ describe("Change inspection CLI", () => {
   it.effect("lists open taskless Changes oldest first with their age", () =>
     Effect.gen(function* () {
       const root = createInitializedRepo();
-      const store = openSqliteChangeStore(
-        prepareStateDatabase({
-          statePath: join(root, ".git", "but-why", "state.sqlite"),
-        }),
-      );
-      const repositoryCommonDirectory = join(root, ".git");
-      const older = store.createChange({
-        repositoryCommonDirectory,
-        branchRef: "refs/heads/older",
-        now: firstNow,
-      });
-      const newer = store.createChange({
-        repositoryCommonDirectory,
-        branchRef: "refs/heads/newer",
-        now: secondNow,
-      });
-      if (!older.ok || !newer.ok) throw new Error("Could not create Changes");
+      const older = yield* createChangeFixture(root, "refs/heads/older", firstNow);
+      const newer = yield* createChangeFixture(root, "refs/heads/newer", secondNow);
 
       const result = yield* runByInProcessEffect(
         root,
@@ -51,14 +37,14 @@ describe("Change inspection CLI", () => {
       expect(JSON.parse(result.stdout)).toEqual({
         changes: [
           {
-            id: older.change.id,
+            id: older.id,
             taskId: null,
             state: "open",
             createdAt: firstNow,
             ageSeconds: 3_600,
           },
           {
-            id: newer.change.id,
+            id: newer.id,
             taskId: null,
             state: "open",
             createdAt: secondNow,
@@ -72,18 +58,8 @@ describe("Change inspection CLI", () => {
   it.effect("includes closed Changes only when --all is explicit", () =>
     Effect.gen(function* () {
       const root = createInitializedRepo();
-      const store = openSqliteChangeStore(
-        prepareStateDatabase({
-          statePath: join(root, ".git", "but-why", "state.sqlite"),
-        }),
-      );
-      const created = store.createChange({
-        repositoryCommonDirectory: join(root, ".git"),
-        branchRef: "refs/heads/closed",
-        now: firstNow,
-      });
-      if (!created.ok) throw new Error("Could not create Change");
-      store.closeChange({ changeId: created.change.id, reason: "cancelled", now: secondNow });
+      const created = yield* createChangeFixture(root, "refs/heads/closed", firstNow);
+      yield* closeChangeFixture(root, created.id, "cancelled", secondNow);
 
       const defaultResult = yield* runByInProcessEffect(root, [
         "change",
@@ -101,14 +77,14 @@ describe("Change inspection CLI", () => {
       const shown = yield* runByInProcessEffect(root, [
         "change",
         "show",
-        created.change.id,
+        created.id,
         "--output",
         "json",
       ]);
 
       expect(JSON.parse(defaultResult.stdout)).toEqual({ changes: [] });
       expect(JSON.parse(allResult.stdout)).toEqual({
-        changes: [{ id: created.change.id, taskId: null, state: "closed", createdAt: firstNow }],
+        changes: [{ id: created.id, taskId: null, state: "closed", createdAt: firstNow }],
       });
       expect(JSON.parse(shown.stdout)).toMatchObject({
         change: { state: "closed", closeReason: "cancelled" },
@@ -120,22 +96,12 @@ describe("Change inspection CLI", () => {
   it.effect("shows taskless Change facts while preserving unavailable Candidate detail", () =>
     Effect.gen(function* () {
       const root = createInitializedRepo();
-      const store = openSqliteChangeStore(
-        prepareStateDatabase({
-          statePath: join(root, ".git", "but-why", "state.sqlite"),
-        }),
-      );
-      const created = store.createChange({
-        repositoryCommonDirectory: join(root, ".git"),
-        branchRef: "refs/heads/taskless",
-        now: firstNow,
-      });
-      if (!created.ok) throw new Error("Could not create Change");
+      const created = yield* createChangeFixture(root, "refs/heads/taskless", firstNow);
 
       const result = yield* runByInProcessEffect(root, [
         "change",
         "show",
-        created.change.id,
+        created.id,
         "--output",
         "json",
       ]);
@@ -143,7 +109,7 @@ describe("Change inspection CLI", () => {
       expect(result.status).toBe(0);
       expect(JSON.parse(result.stdout)).toEqual({
         change: {
-          id: created.change.id,
+          id: created.id,
           taskId: null,
           state: "open",
           closeReason: null,
@@ -168,47 +134,33 @@ describe("Change inspection CLI", () => {
   it.effect("orders Validation Run History by run creation across Candidates", () =>
     Effect.gen(function* () {
       const root = createInitializedRepo();
-      const database = prepareStateDatabase({
-        statePath: join(root, ".git", "but-why", "state.sqlite"),
-      });
-      const changeStore = openSqliteChangeStore(database);
-      const candidateStore = openSqliteCandidateStore(database);
-      const change = changeStore.createChange({
-        repositoryCommonDirectory: join(root, ".git"),
-        branchRef: "refs/heads/history",
-        now: firstNow,
-      });
-      if (!change.ok) throw new Error("Could not create Change");
-      const firstCandidate = candidateStore.captureCandidate({
-        changeId: change.change.id,
-        selectedBaseRef: "refs/remotes/origin/main",
-        resolvedTargetSha: "target-sha",
-        comparisonBaseSha: "base-sha",
-        headSha: "first-head",
-        now: firstNow,
-      });
-      const secondCandidate = candidateStore.captureCandidate({
-        changeId: change.change.id,
-        selectedBaseRef: "refs/remotes/origin/main",
-        resolvedTargetSha: "target-sha",
-        comparisonBaseSha: "base-sha",
-        headSha: "second-head",
-        now: secondNow,
-      });
-      if (!firstCandidate.ok || !secondCandidate.ok)
-        throw new Error("Could not capture Candidates");
+      const change = yield* createChangeFixture(root, "refs/heads/history", firstNow);
+      const firstCandidate = yield* captureCandidateFixture(
+        root,
+        change.id,
+        "refs/heads/history",
+        "first-head",
+        firstNow,
+      );
+      const secondCandidate = yield* captureCandidateFixture(
+        root,
+        change.id,
+        "refs/heads/history",
+        "second-head",
+        secondNow,
+      );
       const newerRun = yield* withValidationPersistence(root, (persistence) =>
         persistence.startOrReuse({
-          candidateId: secondCandidate.candidate.id,
-          headSha: secondCandidate.candidate.headSha,
+          candidateId: secondCandidate.id,
+          headSha: secondCandidate.headSha,
           policy: { sandboxMode: "none", checks: [], copyFiles: [] },
           now: secondNow,
         }),
       );
       const olderCandidateRun = yield* withValidationPersistence(root, (persistence) =>
         persistence.startOrReuse({
-          candidateId: firstCandidate.candidate.id,
-          headSha: firstCandidate.candidate.headSha,
+          candidateId: firstCandidate.id,
+          headSha: firstCandidate.headSha,
           policy: { sandboxMode: "none", checks: [], copyFiles: [] },
           now: commandNow,
         }),
@@ -219,7 +171,7 @@ describe("Change inspection CLI", () => {
       const history = yield* runByInProcessEffect(root, [
         "change",
         "validation-runs",
-        change.change.id,
+        change.id,
         "--output",
         "json",
       ]);
@@ -252,21 +204,21 @@ describe("Change inspection CLI", () => {
     Effect.gen(function* () {
       const root = createInitializedRepo();
       commitButWhyConfigAndRecordDefault(root);
-      const taskStore = openSqliteTaskStore({
-        ...prepareStateDatabase({
-          statePath: join(root, ".git", "but-why", "state.sqlite"),
-        }),
-        taskPrefix: "BY",
-      });
-      taskStore.createTask({
-        title: "Task-backed Change",
-        description: "Inspect progress",
-        now: firstNow,
-      });
-      taskStore.approveTask({ taskId: publicTaskId("BY-1"), now: secondNow });
-      const changeStore = openSqliteChangeStore(
-        prepareStateDatabase({
-          statePath: join(root, ".git", "but-why", "state.sqlite"),
+      yield* withTestRepository(
+        root,
+        Effect.gen(function* () {
+          const tasks = yield* openSqliteTaskPersistence("BY");
+          const created = yield* tasks.createTask({
+            title: "Task-backed Change",
+            description: "Inspect progress",
+            now: firstNow,
+          });
+          if (!created.ok) throw new Error(created.code);
+          const approved = yield* tasks.approveTask({
+            taskId: publicTaskId("BY-1"),
+            now: secondNow,
+          });
+          if (!approved.ok) throw new Error(approved.code);
         }),
       );
 
@@ -303,29 +255,21 @@ describe("Change inspection CLI", () => {
         }),
       );
 
-      taskStore.transitionTaskState({
-        taskId: publicTaskId("BY-1"),
-        to: "validating",
-        now: commandNow,
-      });
+      yield* transitionTaskFixture(root, "validating");
       expect(
         JSON.parse(
           (yield* runByInProcessEffect(root, ["task", "show", "BY-1", "--output", "json"])).stdout,
         ).task.state,
       ).toBe("validating");
 
-      taskStore.transitionTaskState({
-        taskId: publicTaskId("BY-1"),
-        to: "ready",
-        now: commandNow,
-      });
+      yield* transitionTaskFixture(root, "ready");
       expect(
         JSON.parse(
           (yield* runByInProcessEffect(root, ["task", "show", "BY-1", "--output", "json"])).stdout,
         ).task.state,
       ).toBe("ready");
 
-      changeStore.completeMergedChange({ changeId, now: commandNow });
+      yield* completeChangeFixture(root, changeId);
       const completed = yield* runByInProcessEffect(root, [
         "change",
         "show",
@@ -348,29 +292,17 @@ describe("Change inspection CLI", () => {
   it.effect("inspects Findings and Validation Run History through the current Candidate", () =>
     Effect.gen(function* () {
       const root = createInitializedRepo();
-      const database = prepareStateDatabase({
-        statePath: join(root, ".git", "but-why", "state.sqlite"),
-      });
-      const changeStore = openSqliteChangeStore(database);
-      const candidateStore = openSqliteCandidateStore(database);
-      const changeResult = changeStore.createChange({
-        repositoryCommonDirectory: join(root, ".git"),
-        branchRef: "refs/heads/validated",
-        now: firstNow,
-      });
-      if (!changeResult.ok) throw new Error("Could not create Change");
-      const candidateResult = candidateStore.captureCandidate({
-        changeId: changeResult.change.id,
-        selectedBaseRef: "refs/remotes/origin/main",
-        resolvedTargetSha: "target-sha",
-        comparisonBaseSha: "base-sha",
-        headSha: "head-sha",
-        now: secondNow,
-      });
-      if (!candidateResult.ok) throw new Error("Could not capture Candidate");
+      const changeResult = yield* createChangeFixture(root, "refs/heads/validated", firstNow);
+      const candidateResult = yield* captureCandidateFixture(
+        root,
+        changeResult.id,
+        "refs/heads/validated",
+        "head-sha",
+        secondNow,
+      );
       const run = yield* withValidationPersistence(root, (persistence) =>
         persistence.startOrReuse({
-          candidateId: candidateResult.candidate.id,
+          candidateId: candidateResult.id,
           headSha: "head-sha",
           policy: { sandboxMode: "none", checks: [], copyFiles: [] },
           now: secondNow,
@@ -419,22 +351,22 @@ describe("Change inspection CLI", () => {
       const findings = yield* runByInProcessEffect(root, [
         "change",
         "findings",
-        changeResult.change.id,
+        changeResult.id,
         "--output",
         "json",
       ]);
       const history = yield* runByInProcessEffect(root, [
         "change",
         "validation-runs",
-        changeResult.change.id,
+        changeResult.id,
         "--output",
         "json",
       ]);
 
       expect(findings.status).toBe(0);
       expect(JSON.parse(findings.stdout)).toMatchObject({
-        change: { id: changeResult.change.id },
-        candidate: { id: candidateResult.candidate.id },
+        change: { id: changeResult.id },
+        candidate: { id: candidateResult.id },
         validationRun: { id: run.validationRunId, outcome: "blocked" },
         findings: [
           {
@@ -447,11 +379,110 @@ describe("Change inspection CLI", () => {
       });
       expect(history.status).toBe(0);
       expect(JSON.parse(history.stdout)).toMatchObject({
-        validationRuns: [{ id: run.validationRunId, candidateId: candidateResult.candidate.id }],
+        validationRuns: [{ id: run.validationRunId, candidateId: candidateResult.id }],
       });
     }),
   );
 });
+
+const createChangeFixture = (root: string, branchRef: string, createdAt: string) => {
+  const id = randomUUID();
+  return withTestRepository(
+    root,
+    Effect.gen(function* () {
+      const repository = yield* RepositorySql;
+      yield* repository.operation(
+        "create Change fixture",
+        (sql) => sql`
+        INSERT INTO changes (
+          id, repository_common_directory, branch_ref, task_id, state,
+          close_reason, created_at, updated_at, closed_at
+        ) VALUES (
+          ${id}, ${join(root, ".git")}, ${branchRef}, NULL, 'open',
+          NULL, ${createdAt}, ${createdAt}, NULL
+        )
+      `,
+      );
+      return { id };
+    }),
+  );
+};
+
+const closeChangeFixture = (
+  root: string,
+  changeId: string,
+  reason: "cancelled" | "completed",
+  closedAt: string,
+) =>
+  withTestRepository(
+    root,
+    Effect.gen(function* () {
+      const repository = yield* RepositorySql;
+      yield* repository.operation(
+        "close Change fixture",
+        (sql) => sql`
+        UPDATE changes
+        SET
+          state = 'closed',
+          close_reason = ${reason},
+          closed_at = ${closedAt},
+          updated_at = ${closedAt},
+          cleanup_state = 'pending'
+        WHERE id = ${changeId}
+      `,
+      );
+    }),
+  );
+
+const captureCandidateFixture = (
+  root: string,
+  changeId: string,
+  branchRef: string,
+  headSha: string,
+  capturedAt: string,
+) =>
+  withTestRepository(
+    root,
+    Effect.gen(function* () {
+      const capture = yield* openSqliteChangeCandidateCapturePersistence();
+      const result = yield* capture.commitCapture({
+        repositoryCommonDirectory: join(root, ".git"),
+        branchRef,
+        expectedChangeId: changeId,
+        selectedBaseRef: "refs/remotes/origin/main",
+        resolvedTargetSha: "target-sha",
+        comparisonBaseSha: "base-sha",
+        headSha,
+        now: capturedAt,
+      });
+      if (!result.ok) throw new Error(result.code);
+      return { id: result.candidateId, headSha };
+    }),
+  );
+
+const transitionTaskFixture = (root: string, state: "validating" | "ready") =>
+  withTestRepository(
+    root,
+    Effect.gen(function* () {
+      const tasks = yield* openSqliteTaskPersistence("BY");
+      const result = yield* tasks.transitionTaskState({
+        taskId: publicTaskId("BY-1"),
+        to: state,
+        now: commandNow,
+      });
+      if (!result.ok) throw new Error(result.code);
+    }),
+  );
+
+const completeChangeFixture = (root: string, changeId: string) =>
+  withTestRepository(
+    root,
+    Effect.gen(function* () {
+      const changes = yield* openSqliteChangePersistence();
+      const result = yield* changes.completeMergedChange({ changeId, now: commandNow });
+      if (!result.ok) throw new Error(result.code);
+    }),
+  );
 
 const withValidationPersistence = <A, E>(
   root: string,

@@ -3,7 +3,7 @@ import type { SqlError } from "@effect/sql/SqlError";
 import * as SqliteClient from "@effect/sql-sqlite-node/SqliteClient";
 import { Context, Effect, Layer } from "effect";
 
-import { migrateStateDatabase } from "../init/stateDatabase.js";
+import { migrateRepositoryState } from "./repositoryMigrations.js";
 import {
   RepositoryIdentityConflict,
   RepositoryMigrationFailed,
@@ -100,7 +100,7 @@ export const repositorySqlLayer = (
     Effect.gen(function* () {
       const sql = yield* SqlClient.SqlClient;
 
-      yield* migrateStateDatabase.pipe(
+      yield* migrateRepositoryState.pipe(
         Effect.catchAllCause((cause) =>
           Effect.fail(
             new RepositoryMigrationFailed({

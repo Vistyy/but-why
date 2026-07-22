@@ -6,9 +6,7 @@ import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
 import { describe } from "vitest";
 
-import { initializeStateDatabase } from "../src/init/stateDatabase.js";
 import { storedPublicTaskId } from "../src/task/taskId.js";
-import { withStateDatabase } from "../src/sqlite/connection.js";
 import { openSqliteChangeCandidateCapturePersistence } from "../src/sqlite/sqliteChangeCandidateCapturePersistence.js";
 import { openSqliteChangePersistence } from "../src/sqlite/sqliteChangePersistence.js";
 import { openSqliteChangeStartPersistence } from "../src/sqlite/sqliteChangeStartPersistence.js";
@@ -256,15 +254,23 @@ describe("repository SQL storage", () => {
       (directory) =>
         Effect.gen(function* () {
           const statePath = join(directory, "state.sqlite");
-          yield* Effect.sync(() => {
-            const database = initializeStateDatabase({ statePath }).database;
-            withStateDatabase(database, (sqlite) => {
-              sqlite.exec("DROP TABLE task_comments");
-              sqlite.exec("CREATE VIEW task_comments AS SELECT 1 AS sequence");
-              sqlite.exec("DELETE FROM effect_sql_migrations");
-            });
-            database.closeSync();
-          });
+          yield* Effect.scoped(
+            Effect.gen(function* () {
+              const repository = yield* RepositorySql;
+              yield* repository.operation(
+                "drop migrated Task comments",
+                (sql) => sql`DROP TABLE task_comments`,
+              );
+              yield* repository.operation(
+                "replace Task comments with an incompatible view",
+                (sql) => sql`CREATE VIEW task_comments AS SELECT 1 AS sequence`,
+              );
+              yield* repository.operation(
+                "clear repository migration ledger",
+                (sql) => sql`DELETE FROM effect_sql_migrations`,
+              );
+            }).pipe(Effect.provide(repositorySqlLayer({ commonDirectory: directory, statePath }))),
+          );
 
           const error = yield* Effect.scoped(
             RepositorySql.pipe(

@@ -6,7 +6,7 @@ import { Effect } from "effect";
 import { describe } from "vitest";
 
 import { isTaskPrefix } from "../src/contracts/taskPrefix.js";
-import { initRepoLocalContext, snapshotStateDatabases } from "../src/init/repoContext.js";
+import { initRepoLocalContext } from "../src/init/repoContext.js";
 import { createGitRepo, runByInProcessEffect } from "./support/by-cli.js";
 
 const writeConfig = (root: string, taskPrefix = "BY") => {
@@ -70,14 +70,13 @@ help[1]: Move the conflicting path aside before running init again.`);
     }),
   );
 
-  it.effect("initializes through the scoped repository SQL lifecycle", () =>
+  it.effect("initializes repository state through the scoped SQL service", () =>
     Effect.gen(function* () {
       const root = createGitRepo();
-      const existingDatabases = snapshotStateDatabases();
       const result = yield* initRepoLocalContext({ cwd: root, taskPrefix: "BY" });
 
       expect(result).toMatchObject({ ok: true, status: "initialized" });
-      expect(snapshotStateDatabases()).toEqual(existingDatabases);
+      expect(existsSync(join(root, ".git", "but-why", "state.sqlite"))).toBe(true);
     }),
   );
 

@@ -9,8 +9,7 @@ import { describe, it as ordinaryIt } from "vitest";
 
 import { collapseHome, mapRuntimeError } from "../src/cli.js";
 import { butWhyGitignoreBlock } from "../src/init/gitignore.js";
-import { prepareStateDatabase } from "../src/init/stateDatabase.js";
-import { withStateDatabase } from "../src/sqlite/connection.js";
+import { RepositorySql, repositorySqlLayer } from "../src/sqlite/repositorySql.js";
 import { encodeToon } from "../src/output/toon.js";
 import { createGitRepo, repoRoot, runByInProcessEffect, runJustBy } from "./support/by-cli.js";
 import { createTestWorkspace } from "./support/testWorkspace.js";
@@ -20,6 +19,22 @@ const expectedConfigDoc = join(repoRoot, "docs/public/config.md");
 const expectedSetupDoc = join(repoRoot, "docs/public/setup.md");
 const managedGitignoreBlock = `${butWhyGitignoreBlock}\n`;
 const sharedStatePath = (root: string): string => join(root, ".git", "but-why", "state.sqlite");
+
+const withRepositorySql = <A, E>(
+  root: string,
+  use: (repository: RepositorySql["Type"]) => Effect.Effect<A, E>,
+) =>
+  Effect.scoped(
+    RepositorySql.pipe(
+      Effect.flatMap(use),
+      Effect.provide(
+        repositorySqlLayer({
+          statePath: sharedStatePath(root),
+          commonDirectory: join(root, ".git"),
+        }),
+      ),
+    ),
+  );
 
 describe("by CLI", () => {
   ordinaryIt(
@@ -330,7 +345,7 @@ validationSetup:
       expect(existsSync(sharedStatePath(root))).toBe(true);
       expect(readdirSync(join(root, ".but-why/reviewers"))).toEqual([]);
       expect(readFileSync(join(root, ".gitignore"), "utf8")).toBe(managedGitignoreBlock);
-      expectInitializedSchema(root);
+      yield* expectInitializedSchema(root);
       expect(
         spawnSync("git", ["check-ignore", "-q", ".but-why/config.json"], { cwd: root }).status,
       ).toBe(1);
@@ -356,32 +371,38 @@ validationSetup:
     }),
   );
 
-  const expectInitializedSchema = (root: string): void => {
-    const database = prepareStateDatabase({ statePath: sharedStatePath(root) });
-    expect(
-      withStateDatabase(database, (connection) =>
-        connection
-          .prepare(
-            "SELECT name FROM sqlite_schema WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name",
-          )
-          .all(),
-      ).map((row) => row as { readonly name: string }),
-    ).toEqual([
-      { name: "candidate_validation_artifacts" },
-      { name: "candidate_validation_findings" },
-      { name: "candidate_validation_rounds" },
-      { name: "candidate_validation_runs" },
-      { name: "candidate_validation_tooling_failures" },
-      { name: "candidate_validation_workspace_setups" },
-      { name: "candidates" },
-      { name: "changes" },
-      { name: "effect_sql_migrations" },
-      { name: "shared_state_identity" },
-      { name: "task_comments" },
-      { name: "task_dependencies" },
-      { name: "tasks" },
-    ]);
-  };
+  const expectInitializedSchema = (root: string) =>
+    withRepositorySql(root, (repository) =>
+      repository
+        .operation(
+          "inspect initialized schema",
+          (sql) => sql<{ readonly name: string }>`
+            SELECT name
+            FROM sqlite_schema
+            WHERE type = 'table' AND name NOT LIKE 'sqlite_%'
+            ORDER BY name
+          `,
+        )
+        .pipe(
+          Effect.tap((rows) => {
+            expect(rows).toEqual([
+              { name: "candidate_validation_artifacts" },
+              { name: "candidate_validation_findings" },
+              { name: "candidate_validation_rounds" },
+              { name: "candidate_validation_runs" },
+              { name: "candidate_validation_tooling_failures" },
+              { name: "candidate_validation_workspace_setups" },
+              { name: "candidates" },
+              { name: "changes" },
+              { name: "effect_sql_migrations" },
+              { name: "shared_state_identity" },
+              { name: "task_comments" },
+              { name: "task_dependencies" },
+              { name: "tasks" },
+            ]);
+          }),
+        ),
+    );
 
   it.effect("prints unchanged when init is rerun without repairs", () =>
     Effect.gen(function* () {
@@ -405,14 +426,17 @@ validationSetup:
     inspect,Inspect repo tooling before choosing validation commands.
     configure,Configure top-level prepare and validation.checks to the best of your ability from observed tooling.
     review,Keep .but-why/config.json explicit and reviewable.`);
-      const database = prepareStateDatabase({ statePath: sharedStatePath(root) });
-      expect(
-        withStateDatabase(database, (connection) =>
-          connection
-            .prepare("SELECT migration_id, name FROM effect_sql_migrations ORDER BY migration_id")
-            .all(),
+      const migrations = yield* withRepositorySql(root, (repository) =>
+        repository.operation(
+          "inspect repository migrations",
+          (sql) => sql<{ readonly migration_id: number; readonly name: string }>`
+            SELECT migration_id, name
+            FROM effect_sql_migrations
+            ORDER BY migration_id
+          `,
         ),
-      ).toEqual([{ migration_id: 1, name: "baseline" }]);
+      );
+      expect(migrations).toEqual([{ migration_id: 1, name: "baseline" }]);
     }),
   );
 

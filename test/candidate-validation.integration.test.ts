@@ -14,7 +14,7 @@ import {
 import { candidateValidationForTest } from "./support/candidateValidation.js";
 import {
   candidateReadyRepo,
-  candidateSqliteInput,
+  candidateRepositoryConfig,
   commonDirectory,
   git,
 } from "./support/candidateReadyRepo.js";
@@ -308,6 +308,6 @@ const validateCandidate = (
   }).pipe(Effect.provide(validation.layer));
 
 const repositoryConfig = (root: string) => ({
-  statePath: candidateSqliteInput(root).statePath,
+  statePath: candidateRepositoryConfig(root).statePath,
   commonDirectory: commonDirectory(root),
 });

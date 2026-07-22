@@ -1,7 +1,5 @@
 import { spawnSync } from "node:child_process";
 import { join } from "node:path";
-
-import { prepareStateDatabase } from "../../src/init/stateDatabase.js";
 import { createInitializedRepo } from "./initializedRepo.js";
 
 export const candidateReadyRepo = (): string => {
@@ -29,7 +27,7 @@ export const git = (cwd: string, ...args: readonly string[]): string => {
 export const commonDirectory = (root: string): string =>
   git(root, "rev-parse", "--path-format=absolute", "--git-common-dir");
 
-export const candidateSqliteInput = (root: string) =>
-  prepareStateDatabase({
-    statePath: join(commonDirectory(root), "but-why", "state.sqlite"),
-  });
+export const candidateRepositoryConfig = (root: string) => ({
+  statePath: join(commonDirectory(root), "but-why", "state.sqlite"),
+  commonDirectory: commonDirectory(root),
+});

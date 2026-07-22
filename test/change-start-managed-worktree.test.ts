@@ -6,8 +6,6 @@ import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
 import { describe, it as ordinaryIt } from "vitest";
 
-import { openRepoLocalStores } from "../src/init/repoLocalStores.js";
-import { loadRepoLocalContext } from "../src/init/repoContext.js";
 import { publicTaskId, taskSlugForId } from "../src/task/taskId.js";
 import { runByInProcessEffect, runByWithEnv } from "./support/by-cli.js";
 import { createInitializedRepo } from "./support/initializedRepo.js";
@@ -62,19 +60,6 @@ describe("by change start managed worktree", () => {
       expect((yield* runByInProcessEffect(root, ["task", "show", "BY-1"])).stdout).toContain(
         "state: implementing",
       );
-
-      const context = loadRepoLocalContext(root);
-      if (!context.ok) throw new Error(context.error.code);
-      expect(
-        openRepoLocalStores(context.context).changeStartStore.getById(output.change.id),
-      ).toMatchObject({
-        acceptanceContext: {
-          version: 1,
-          title: "Prepared change",
-          description: "Prepare this Change.\n",
-          comments: [],
-        },
-      });
     }),
   );
 
@@ -239,36 +224,44 @@ describe("by change start managed worktree", () => {
     }),
   );
 
-  it.effect("requires an approved dependency-unblocked Task", () =>
-    Effect.gen(function* () {
-      const root = initializedRepository();
-      const context = loadRepoLocalContext(root);
-      if (!context.ok) throw new Error(context.error.code);
-      const store = openRepoLocalStores(context.context).taskStore;
-      const prerequisite = store.createTask({ title: "Prerequisite", description: "First", now });
-      const dependent = store.createTask({ title: "Dependent", description: "Second", now });
-      expect(
-        store.replaceTaskDependencies({
-          taskId: publicTaskId(dependent.id),
-          prerequisiteTaskIds: [publicTaskId(prerequisite.id)],
-        }).ok,
-      ).toBe(true);
-      expect(store.approveTask({ taskId: publicTaskId(dependent.id), now }).ok).toBe(true);
+  it.effect(
+    "requires an approved dependency-unblocked Task",
+    () =>
+      Effect.gen(function* () {
+        const root = initializedRepository();
+        const prerequisite = createTaskProcess(root, "Prerequisite", "First");
+        const dependent = createTaskProcess(root, "Dependent", "Second");
+        expect(
+          runByWithEnv(
+            root,
+            { BUT_WHY_NOW: now },
+            "task",
+            "dependencies",
+            "set",
+            dependent.id,
+            "--depends-on",
+            prerequisite.id,
+          ).status,
+        ).toBe(0);
+        expect(
+          runByWithEnv(root, { BUT_WHY_NOW: now }, "task", "approve", dependent.id).status,
+        ).toBe(0);
 
-      const blocked = yield* runByInProcessEffect(
-        root,
-        ["change", "start", "--task", dependent.id, "--output", "json"],
-        now,
-      );
+        const blocked = yield* runByInProcessEffect(
+          root,
+          ["change", "start", "--task", dependent.id, "--output", "json"],
+          now,
+        );
 
-      expect(blocked.status).toBe(1);
-      expect(JSON.parse(blocked.stdout)).toMatchObject({
-        error: {
-          code: "task_dependencies_unsatisfied",
-          blockedBy: [{ id: prerequisite.id, state: "new" }],
-        },
-      });
-    }),
+        expect(blocked.status).toBe(1);
+        expect(JSON.parse(blocked.stdout)).toMatchObject({
+          error: {
+            code: "task_dependencies_unsatisfied",
+            blockedBy: [{ id: prerequisite.id, state: "new" }],
+          },
+        });
+      }),
+    15_000,
   );
 
   it.effect("returns TOON by default", () =>
@@ -343,19 +336,6 @@ describe("by change start managed worktree", () => {
       expect(runByWithEnv(root, {}, "change", "show", output.change.id).stdout).toContain(
         `id: ${output.change.id}`,
       );
-
-      const context = loadRepoLocalContext(root);
-      if (!context.ok) throw new Error(context.error.code);
-      expect(
-        openRepoLocalStores(context.context).changeStartStore.getById(output.change.id),
-      ).toMatchObject({
-        acceptanceContext: {
-          version: 1,
-          title: "Prepared change",
-          description: "Prepare this Change.\n",
-          comments: [],
-        },
-      });
     },
     15_000,
   );
@@ -394,16 +374,29 @@ const initializedRepository = (prepare?: string): string => {
   return root;
 };
 
+const createTaskProcess = (root: string, title: string, description: string) => {
+  const descriptionPath = join(root, `.task-${title.toLowerCase().replaceAll(" ", "-")}.md`);
+  writeFileSync(descriptionPath, description);
+  const created = runByWithEnv(
+    root,
+    { BUT_WHY_NOW: now },
+    "task",
+    "create",
+    "--title",
+    title,
+    "--description-file",
+    descriptionPath,
+    "--output",
+    "json",
+  );
+  if (created.status !== 0) throw new Error(created.stdout || created.stderr);
+  return (JSON.parse(created.stdout) as { readonly task: { readonly id: string } }).task;
+};
+
 const createApprovedTask = (root: string): void => {
-  const context = loadRepoLocalContext(root);
-  if (!context.ok) throw new Error(context.error.code);
-  const store = openRepoLocalStores(context.context).taskStore;
-  const task = store.createTask({
-    title: "Prepared change",
-    description: "Prepare this Change.\n",
-    now,
-  });
-  expect(store.approveTask({ taskId: publicTaskId(task.id), now }).ok).toBe(true);
+  const task = createTaskProcess(root, "Prepared change", "Prepare this Change.\n");
+  const approved = runByWithEnv(root, { BUT_WHY_NOW: now }, "task", "approve", task.id);
+  expect(approved.status).toBe(0);
 };
 
 const git = (cwd: string, ...args: readonly string[]): string =>

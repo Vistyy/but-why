@@ -19,7 +19,7 @@ import { ReviewerOutputContractFailed } from "../src/validation/validationToolin
 import type { TaskContextSnapshotV1 } from "../src/validationRun/taskContextSnapshot.js";
 import {
   candidateReadyRepo,
-  candidateSqliteInput,
+  candidateRepositoryConfig,
   commonDirectory,
   git,
 } from "./support/candidateReadyRepo.js";
@@ -620,6 +620,6 @@ const reviewerFinding = (title: string) => ({
 });
 
 const repositoryConfig = (root: string) => ({
-  statePath: candidateSqliteInput(root).statePath,
+  statePath: candidateRepositoryConfig(root).statePath,
   commonDirectory: commonDirectory(root),
 });

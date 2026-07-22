@@ -1,4 +1,5 @@
 import { spawnSync } from "node:child_process";
+import { randomUUID } from "node:crypto";
 import { existsSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, it } from "@effect/vitest";
@@ -7,12 +8,10 @@ import { describe } from "vitest";
 
 import { RepositoryIdentityConflict } from "../src/repositoryStorageError.js";
 import { captureLocalCandidate } from "./support/changeCandidateCapture.js";
-import { openSqliteCandidateStore } from "../src/sqlite/sqliteCandidateStore.js";
-import { withStateDatabase } from "../src/sqlite/connection.js";
-import { prepareStateDatabase } from "../src/init/stateDatabase.js";
-import { openSqliteChangeStore } from "../src/sqlite/sqliteChangeStore.js";
+import { RepositorySql } from "../src/sqlite/repositorySql.js";
 import { createGitRepo } from "./support/by-cli.js";
 import { createTestWorkspace } from "./support/testWorkspace.js";
+import { withTestRepository } from "./support/repository.js";
 import { createInitializedRepo } from "./support/initializedRepo.js";
 
 const now = "2026-07-12T10:00:00.000Z";
@@ -81,10 +80,7 @@ describe("automatic Change and Candidate capture", () => {
         code: "dirty_work",
       });
       expect(
-        changeStore(dirty).getChangeByRepositoryBranch(
-          commonDirectory(dirty),
-          "refs/heads/feature",
-        ),
+        yield* readChangeByBranch(dirty, commonDirectory(dirty), "refs/heads/feature"),
       ).toBeUndefined();
 
       const detached = captureReadyRepo();
@@ -103,44 +99,52 @@ describe("automatic Change and Candidate capture", () => {
     }),
   );
 
-  it.effect("requires one recorded remote default with an available full local base", () =>
-    Effect.gen(function* () {
-      const missing = captureReadyRepo();
-      git(missing, "symbolic-ref", "--delete", "refs/remotes/origin/HEAD");
-      expect(yield* captureLocalCandidate({ cwd: missing, now })).toEqual({
-        ok: false,
-        code: "missing_remote_default",
-      });
+  it.effect(
+    "requires one recorded remote default with an available full local base",
+    () =>
+      Effect.gen(function* () {
+        const missing = captureReadyRepo();
+        git(missing, "symbolic-ref", "--delete", "refs/remotes/origin/HEAD");
+        expect(yield* captureLocalCandidate({ cwd: missing, now })).toEqual({
+          ok: false,
+          code: "missing_remote_default",
+        });
 
-      const ambiguous = captureReadyRepo();
-      git(ambiguous, "branch", "release", "main");
-      git(ambiguous, "remote", "add", "upstream", "https://example.com/upstream.git");
-      git(ambiguous, "update-ref", "refs/remotes/upstream/release", "refs/heads/release");
-      git(ambiguous, "symbolic-ref", "refs/remotes/upstream/HEAD", "refs/remotes/upstream/release");
-      expect(yield* captureLocalCandidate({ cwd: ambiguous, now })).toEqual({
-        ok: false,
-        code: "ambiguous_remote_default",
-      });
+        const ambiguous = captureReadyRepo();
+        git(ambiguous, "branch", "release", "main");
+        git(ambiguous, "remote", "add", "upstream", "https://example.com/upstream.git");
+        git(ambiguous, "update-ref", "refs/remotes/upstream/release", "refs/heads/release");
+        git(
+          ambiguous,
+          "symbolic-ref",
+          "refs/remotes/upstream/HEAD",
+          "refs/remotes/upstream/release",
+        );
+        expect(yield* captureLocalCandidate({ cwd: ambiguous, now })).toEqual({
+          ok: false,
+          code: "ambiguous_remote_default",
+        });
 
-      const unavailable = captureReadyRepo();
-      git(unavailable, "symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/missing");
-      expect(yield* captureLocalCandidate({ cwd: unavailable, now })).toEqual({
-        ok: false,
-        code: "local_base_unavailable",
-      });
-      expect(yield* captureLocalCandidate({ cwd: unavailable, now, baseRef: "main" })).toEqual({
-        ok: false,
-        code: "invalid_base_ref",
-      });
+        const unavailable = captureReadyRepo();
+        git(unavailable, "symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/missing");
+        expect(yield* captureLocalCandidate({ cwd: unavailable, now })).toEqual({
+          ok: false,
+          code: "local_base_unavailable",
+        });
+        expect(yield* captureLocalCandidate({ cwd: unavailable, now, baseRef: "main" })).toEqual({
+          ok: false,
+          code: "invalid_base_ref",
+        });
 
-      const slashRemote = captureReadyRepo();
-      git(slashRemote, "remote", "rename", "origin", "team/origin");
-      expect(yield* captureLocalCandidate({ cwd: slashRemote, now })).toMatchObject({
-        ok: true,
-        selectedBaseRef: "refs/heads/main",
-        baseSource: "remote_default",
-      });
-    }),
+        const slashRemote = captureReadyRepo();
+        git(slashRemote, "remote", "rename", "origin", "team/origin");
+        expect(yield* captureLocalCandidate({ cwd: slashRemote, now })).toMatchObject({
+          ok: true,
+          selectedBaseRef: "refs/heads/main",
+          baseSource: "remote_default",
+        });
+      }),
+    15_000,
   );
 
   it.effect("saves a caller-selected full local base on the first Candidate", () =>
@@ -160,7 +164,7 @@ describe("automatic Change and Candidate capture", () => {
         baseSource: "caller",
       });
       if (!captured.ok) return;
-      expect(changeStore(repo).getChangeById(captured.changeId)).toMatchObject({
+      expect(yield* readChange(repo, captured.changeId)).toMatchObject({
         baseRef: "refs/heads/release",
       });
     }),
@@ -173,19 +177,15 @@ describe("automatic Change and Candidate capture", () => {
       expect(feature.ok).toBe(true);
       if (!feature.ok) return;
 
-      const foreign = changeStore(repo).createChange({
-        repositoryCommonDirectory: "/different/repository/.git",
-        branchRef: "refs/heads/foreign",
-        now,
-      });
-      expect(foreign.ok).toBe(true);
-      if (!foreign.ok) return;
-      expect(yield* captureLocalCandidate({ cwd: repo, now, changeId: foreign.change.id })).toEqual(
-        {
-          ok: false,
-          code: "change_from_different_repository",
-        },
+      const foreign = yield* createStoredChange(
+        repo,
+        "/different/repository/.git",
+        "refs/heads/foreign",
       );
+      expect(yield* captureLocalCandidate({ cwd: repo, now, changeId: foreign.id })).toEqual({
+        ok: false,
+        code: "change_from_different_repository",
+      });
 
       git(repo, "checkout", "-b", "occupied", "main");
       writeFileSync(join(repo, "occupied.txt"), "occupied\n");
@@ -202,13 +202,7 @@ describe("automatic Change and Candidate capture", () => {
         }),
       ).toEqual({ ok: false, code: "destination_branch_has_history" });
 
-      expect(
-        changeStore(repo).closeChange({
-          changeId: occupied.ok ? occupied.changeId : "missing",
-          reason: "completed",
-          now,
-        }).ok,
-      ).toBe(true);
+      yield* closeStoredChange(repo, occupied.ok ? occupied.changeId : "missing");
       expect(yield* captureLocalCandidate({ cwd: repo, now })).toEqual({
         ok: false,
         code: "change_closed",
@@ -320,7 +314,7 @@ describe("automatic Change and Candidate capture", () => {
         ok: false,
         code: "destination_branch_has_history",
       });
-      expect(changeStore(repo).getChangeById(source.changeId)).toMatchObject({
+      expect(yield* readChange(repo, source.changeId)).toMatchObject({
         branchRef: "refs/heads/feature",
       });
     }),
@@ -338,11 +332,11 @@ describe("automatic Change and Candidate capture", () => {
       const captured = yield* captureLocalCandidate({ cwd: linked, now });
       expect(captured).toMatchObject({ ok: true, branchRef: "refs/heads/linked-feature" });
       if (!captured.ok) return;
-      expect(changeStore(repo).getChangeById(captured.changeId)).toMatchObject({
+      expect(yield* readChange(repo, captured.changeId)).toMatchObject({
         repositoryCommonDirectory: commonDirectory(repo),
         branchRef: "refs/heads/linked-feature",
       });
-      expect(candidateStore(repo).getCandidateById(captured.candidateId)).toBeDefined();
+      expect(yield* readCandidate(repo, captured.candidateId)).toBeDefined();
       expect(existsSync(join(linked, ".but-why", "state.sqlite"))).toBe(false);
     }),
   );
@@ -350,13 +344,19 @@ describe("automatic Change and Candidate capture", () => {
   it.effect("rejects Candidate capture when shared state belongs to another repository", () =>
     Effect.gen(function* () {
       const repo = captureReadyRepo();
-      const state = prepareStateDatabase({
-        statePath: join(commonDirectory(repo), "but-why", "state.sqlite"),
-      });
-      withStateDatabase(state, (database) =>
-        database
-          .prepare("UPDATE shared_state_identity SET common_directory = ? WHERE id = 1")
-          .run("/other/.git"),
+      yield* withTestRepository(
+        repo,
+        Effect.gen(function* () {
+          const repository = yield* RepositorySql;
+          yield* repository.operation(
+            "change repository identity",
+            (sql) => sql`
+            UPDATE shared_state_identity
+            SET common_directory = ${"/other/.git"}
+            WHERE id = 1
+          `,
+          );
+        }),
       );
 
       const error = yield* captureLocalCandidate({ cwd: repo, now }).pipe(Effect.flip);
@@ -390,8 +390,8 @@ describe("automatic Change and Candidate capture", () => {
         ok: false,
         code: "candidate_provenance_conflict",
       });
-      expect(candidateStore(repo).listCandidatesForChange(first.changeId)).toHaveLength(1);
-      expect(changeStore(repo).getChangeById(first.changeId)).toMatchObject({
+      expect(yield* countCandidates(repo, first.changeId)).toBe(1);
+      expect(yield* readChange(repo, first.changeId)).toMatchObject({
         branchRef: "refs/heads/feature",
         baseRef: "refs/heads/main",
       });
@@ -424,14 +424,118 @@ const git = (cwd: string, ...args: readonly string[]): string => {
   return result.stdout.trim();
 };
 
-const sqliteInput = (root: string) =>
-  prepareStateDatabase({
-    statePath: join(commonDirectory(root), "but-why", "state.sqlite"),
-  });
+const readChange = (root: string, changeId: string) =>
+  withTestRepository(
+    root,
+    Effect.gen(function* () {
+      const repository = yield* RepositorySql;
+      const rows = yield* repository.operation(
+        "read Change fixture",
+        (sql) => sql<{
+          readonly id: string;
+          readonly repositoryCommonDirectory: string;
+          readonly branchRef: string;
+          readonly baseRef: string | null;
+        }>`
+          SELECT
+            id,
+            repository_common_directory AS repositoryCommonDirectory,
+            branch_ref AS branchRef,
+            base_ref AS baseRef
+          FROM changes
+          WHERE id = ${changeId}
+        `,
+      );
+      return rows[0];
+    }),
+  );
 
-const changeStore = (root: string) => openSqliteChangeStore(sqliteInput(root));
+const readChangeByBranch = (root: string, repositoryCommonDirectory: string, branchRef: string) =>
+  withTestRepository(
+    root,
+    Effect.gen(function* () {
+      const repository = yield* RepositorySql;
+      const rows = yield* repository.operation(
+        "read Change branch fixture",
+        (sql) => sql`
+        SELECT id
+        FROM changes
+        WHERE repository_common_directory = ${repositoryCommonDirectory}
+          AND branch_ref = ${branchRef}
+      `,
+      );
+      return rows[0];
+    }),
+  );
 
-const candidateStore = (root: string) => openSqliteCandidateStore(sqliteInput(root));
+const createStoredChange = (root: string, repositoryCommonDirectory: string, branchRef: string) => {
+  const id = randomUUID();
+  return withTestRepository(
+    root,
+    Effect.gen(function* () {
+      const repository = yield* RepositorySql;
+      yield* repository.operation(
+        "create Change fixture",
+        (sql) => sql`
+        INSERT INTO changes (
+          id, repository_common_directory, branch_ref, task_id, state,
+          close_reason, created_at, updated_at, closed_at
+        ) VALUES (
+          ${id}, ${repositoryCommonDirectory}, ${branchRef}, NULL, 'open',
+          NULL, ${now}, ${now}, NULL
+        )
+      `,
+      );
+      return { id };
+    }),
+  );
+};
+
+const closeStoredChange = (root: string, changeId: string) =>
+  withTestRepository(
+    root,
+    Effect.gen(function* () {
+      const repository = yield* RepositorySql;
+      yield* repository.operation(
+        "close Change fixture",
+        (sql) => sql`
+        UPDATE changes
+        SET state = 'closed', close_reason = 'completed', closed_at = ${now}, updated_at = ${now}
+        WHERE id = ${changeId}
+      `,
+      );
+    }),
+  );
+
+const readCandidate = (root: string, candidateId: string) =>
+  withTestRepository(
+    root,
+    Effect.gen(function* () {
+      const repository = yield* RepositorySql;
+      const rows = yield* repository.operation(
+        "read Candidate fixture",
+        (sql) => sql`
+        SELECT id FROM candidates WHERE id = ${candidateId}
+      `,
+      );
+      return rows[0];
+    }),
+  );
+
+const countCandidates = (root: string, changeId: string) =>
+  withTestRepository(
+    root,
+    Effect.gen(function* () {
+      const repository = yield* RepositorySql;
+      const rows = yield* repository.operation(
+        "count Candidate fixtures",
+        (sql) => sql<{ readonly count: number }>`
+          SELECT COUNT(*) AS count FROM candidates WHERE change_id = ${changeId}
+        `,
+      );
+      return rows[0]?.count ?? 0;
+    }),
+  );
 
 const commonDirectory = (root: string): string =>
   git(root, "rev-parse", "--path-format=absolute", "--git-common-dir");

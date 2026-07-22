@@ -1,27 +1,6 @@
 import type { TaskState } from "./lifecycle.js";
-import type {
-  DependencyValidationCode,
-  TaskContext,
-  TaskDependencyFact,
-  TaskRecord,
-  TaskSummary,
-} from "./task.js";
+import type { DependencyValidationCode, TaskDependencyFact, TaskRecord } from "./task.js";
 import type { PublicTaskId } from "./taskId.js";
-
-export type TaskStore = {
-  readonly createTask: (input: CreateTaskInput) => TaskSummary;
-  readonly replaceTaskDependencies: (
-    input: ReplaceTaskDependenciesInput,
-  ) => ReplaceTaskDependenciesResult;
-  readonly listTasks: (input: ListTasksInput) => readonly TaskSummary[];
-  readonly listActionableTasks: () => readonly TaskSummary[];
-  readonly getTaskById: (taskId: PublicTaskId) => StoredTaskRecord | undefined;
-  readonly getTaskContextById: (taskId: PublicTaskId) => TaskContext | undefined;
-  readonly approveTask: (input: ApproveTaskInput) => TaskApprovalResult;
-  readonly appendTaskComment: (input: AppendTaskCommentInput) => AppendTaskCommentResult;
-  readonly updateTaskContext: (input: UpdateTaskContextInput) => UpdateTaskContextResult;
-  readonly transitionTaskState: (input: TransitionTaskStateInput) => TaskStateTransitionResult;
-};
 
 export type StoredTaskRecord = TaskRecord;
 

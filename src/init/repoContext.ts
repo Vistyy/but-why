@@ -10,14 +10,6 @@ import { isTaskPrefix } from "../contracts/taskPrefix.js";
 import { findGitRoot } from "./git.js";
 import { ensureGitignoreBlock } from "./gitignore.js";
 import { readRepoConfig, writeRepoConfig } from "./repoConfig.js";
-import {
-  closeStateDatabasesOpenedAfterForCli as closeStateDatabasesOpenedAfterImpl,
-  initializeStateDatabase,
-  prepareStateDatabase,
-  SharedStateIdentityConflictError,
-  snapshotStateDatabasesForCli as snapshotStateDatabasesImpl,
-  type StateDatabase,
-} from "./stateDatabase.js";
 
 export type RepoLocalPaths = {
   readonly butWhyDir: string;
@@ -36,11 +28,7 @@ export type RepoLocalContext = {
   readonly taskPrefix: string;
   readonly config: RepoConfig;
   readonly paths: RepoLocalPaths;
-  readonly stateDatabase: StateDatabase;
 };
-
-export const closeStateDatabasesOpenedAfter = closeStateDatabasesOpenedAfterImpl;
-export const snapshotStateDatabases = snapshotStateDatabasesImpl;
 
 export type InitRepoInput = {
   readonly cwd: string;
@@ -266,28 +254,6 @@ export const loadRepoLocalContext = (cwd: string): LoadRepoLocalContextResult =>
     return { ok: false, error: { code: "invalid_repo_config", error: repoConfig.error } };
   }
 
-  let stateDatabase: StateDatabase;
-
-  try {
-    stateDatabase = existsSync(paths.statePath)
-      ? initializeStateDatabase({
-          statePath: paths.statePath,
-          commonDirectory: gitRoot.commonDirectory,
-        }).database
-      : prepareStateDatabase({
-          statePath: paths.statePath,
-          commonDirectory: gitRoot.commonDirectory,
-        });
-  } catch (error) {
-    if (error instanceof SharedStateIdentityConflictError) {
-      return { ok: false, error: { code: "shared_state_identity_conflict" } };
-    }
-    return {
-      ok: false,
-      error: { code: "state_store_unavailable", taskPrefix: repoConfig.config.taskPrefix },
-    };
-  }
-
   return {
     ok: true,
     context: {
@@ -296,7 +262,6 @@ export const loadRepoLocalContext = (cwd: string): LoadRepoLocalContextResult =>
       paths,
       taskPrefix: repoConfig.config.taskPrefix,
       config: repoConfig.config,
-      stateDatabase,
     },
   };
 };

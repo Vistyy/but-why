@@ -28,6 +28,13 @@ Remove retired native SQLite, synchronous session, and migration-runner symbols 
 
 Run the complete cross-process CLI workflow through initialization, Task-backed Change persistence, later inspection, and final validation.
 
+## Scoped implementation record
+
+- Baseline: `6ee5f92c0398f911f1a54f2c1aad3506ecb31bc9`.
+- Spec review source: this task draft.
+- Normative traceability: Tasks 137 and 146, `spikes/effect-first-path/README.md`, and `docs/architecture.md`.
+- Primary seam: the complete cross-process CLI workflow through initialization, Task-backed Change persistence, later inspection, and final validation.
+
 ## Acceptance criteria
 
 - [ ] `StateDatabase.runSync` and `StateDatabase.withConnection` no longer exist.
@@ -37,9 +44,16 @@ Run the complete cross-process CLI workflow through initialization, Task-backed 
 - [ ] No application source or test imports `node:sqlite` or constructs `DatabaseSync`.
 - [ ] No application source directly depends on or imports `better-sqlite3`.
 - [ ] One Effect SQL adapter, one migration ledger, and one repository storage composition remain.
-- [ ] `just quality` passes.
+- [ ] Every `just quality` stage passes except the Fallow health findings owned by Tasks 154, 155, and 157.
 - [ ] The Effect-first spike typecheck and tests pass.
 - [ ] The full test suite passes with no known failures.
+
+## Implementation decision ledger
+
+- Local: move the single Effect Migrator baseline to `src/sqlite/repositoryMigrations.ts` because repository migration ownership remains separate from repository SQL composition.
+- Local: let each repository SQL Layer own its scoped SQLite lifetime because the synchronous process-wide database registry is retired.
+- Local: initialize synchronous test repositories through the executable CLI and use `@effect/vitest` for in-process Effect execution.
+- User-approved: permit the existing Fallow health findings owned by Tasks 154, 155, and 157 because those independently approved tasks remain nonblocking in `docs/issue-breakdown.md`.
 
 ## Blocked by
 

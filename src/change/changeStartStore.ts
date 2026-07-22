@@ -1,4 +1,4 @@
-import type { ChangePrepareFailure, ChangeReadiness, ChangeRecord } from "./change.js";
+import type { ChangeReadiness, ChangeRecord } from "./change.js";
 import type { TaskDependencyFact } from "../task/task.js";
 import type { PublicTaskId } from "../task/taskId.js";
 import type { TaskState } from "../task/lifecycle.js";
@@ -30,24 +30,3 @@ export type ChangeStartEligibilityError =
       readonly code: "task_dependencies_unsatisfied";
       readonly blockedBy: readonly TaskDependencyFact[];
     };
-
-export type ChangeStartStore = {
-  readonly prepareTask: (
-    taskId: PublicTaskId,
-  ) =>
-    | { readonly ok: true; readonly existing: ChangeStartRecord | undefined }
-    | ChangeStartEligibilityError;
-  readonly create: (
-    input: CreateChangeStartInput,
-  ) =>
-    | { readonly ok: true; readonly change: ChangeStartRecord }
-    | ChangeStartEligibilityError
-    | { readonly ok: false; readonly code: "change_start_conflict" };
-  readonly getById: (changeId: string) => ChangeStartRecord | undefined;
-  readonly markReady: (changeId: string, now: string) => ChangeStartRecord;
-  readonly markPrepareFailed: (
-    changeId: string,
-    failure: ChangePrepareFailure,
-    now: string,
-  ) => ChangeStartRecord;
-};

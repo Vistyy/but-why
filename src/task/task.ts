@@ -1,6 +1,4 @@
 import type { TaskState } from "./lifecycle.js";
-import type { PublicTaskId } from "./taskId.js";
-
 export type TaskDependencyFact = {
   readonly id: string;
   readonly title: string;
@@ -29,15 +27,6 @@ export type DependencyValidationCode =
   | "dependency_self"
   | "dependency_duplicate"
   | "dependency_cycle";
-
-export class TaskDependencyValidationError extends Error {
-  constructor(
-    readonly code: DependencyValidationCode,
-    readonly taskId?: PublicTaskId,
-  ) {
-    super(code);
-  }
-}
 
 export type TaskContext = {
   readonly id: string;

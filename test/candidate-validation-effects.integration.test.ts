@@ -34,7 +34,7 @@ import {
 import { runByInProcessEffect } from "./support/by-cli.js";
 import {
   candidateReadyRepo,
-  candidateSqliteInput,
+  candidateRepositoryConfig,
   commonDirectory,
 } from "./support/candidateReadyRepo.js";
 
@@ -185,7 +185,7 @@ layer(Layer.empty)("Candidate validation Effect composition", (it) => {
       const repo = candidateReadyRepo();
       const captured = yield* captureLocalCandidate({ cwd: repo, now });
       if (!captured.ok) throw new Error(`Candidate capture failed: ${captured.code}`);
-      const sqliteInput = candidateSqliteInput(repo);
+      const sqliteInput = candidateRepositoryConfig(repo);
       const repositoryLayer = repositorySqlLayer({
         statePath: sqliteInput.statePath,
         commonDirectory: sqliteInput.commonDirectory ?? commonDirectory(repo),
@@ -239,7 +239,7 @@ layer(Layer.empty)("Candidate validation Effect composition", (it) => {
       const repo = candidateReadyRepo();
       const captured = yield* captureLocalCandidate({ cwd: repo, now });
       if (!captured.ok) throw new Error(`Candidate capture failed: ${captured.code}`);
-      const sqliteInput = candidateSqliteInput(repo);
+      const sqliteInput = candidateRepositoryConfig(repo);
       const repositoryLayer = repositorySqlLayer({
         statePath: sqliteInput.statePath,
         commonDirectory: sqliteInput.commonDirectory ?? commonDirectory(repo),
@@ -333,7 +333,7 @@ layer(Layer.empty)("Candidate validation Effect composition", (it) => {
       const repo = candidateReadyRepo();
       const captured = yield* captureLocalCandidate({ cwd: repo, now });
       if (!captured.ok) throw new Error(`Candidate capture failed: ${captured.code}`);
-      const sqliteInput = candidateSqliteInput(repo);
+      const sqliteInput = candidateRepositoryConfig(repo);
       const repositoryLayer = repositorySqlLayer({
         statePath: sqliteInput.statePath,
         commonDirectory: sqliteInput.commonDirectory ?? commonDirectory(repo),
