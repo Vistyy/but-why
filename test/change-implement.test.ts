@@ -5,12 +5,12 @@ import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
 import { describe } from "vitest";
 
-import { maxHandoffBytes } from "../src/change/handoffFile.js";
 import type { InteractiveSessionHost } from "../src/change/interactiveSessionHost.js";
 import { commitButWhyConfigAndRecordDefault, runByInProcessEffect } from "./support/by-cli.js";
 import { createInitializedRepo } from "./support/initializedRepo.js";
 
 const now = "2026-06-30T12:00:00.000Z";
+const contractMaxHandoffBytes = 256 * 1024;
 
 const invalidHandoffCases = [
   [
@@ -39,10 +39,10 @@ const invalidHandoffCases = [
     "oversized",
     {
       fileName: "large.md",
-      setup: (path: string): void => writeFileSync(path, "x".repeat(maxHandoffBytes + 1)),
+      setup: (path: string): void => writeFileSync(path, "x".repeat(contractMaxHandoffBytes + 1)),
       code: "handoff_file_too_large",
       message: "Change handoff file is larger than 256 KiB.",
-      maxBytes: maxHandoffBytes,
+      maxBytes: contractMaxHandoffBytes,
       help: "Shorten the handoff file to 256 KiB or less.",
     },
   ],
@@ -343,7 +343,7 @@ describe("by change implement", () => {
           now,
         );
         const change = JSON.parse(started.stdout) as { readonly change: { readonly id: string } };
-        const handoff = "x".repeat(maxHandoffBytes);
+        const handoff = "x".repeat(contractMaxHandoffBytes);
         const handoffPath = join(root, "handoff.md");
         writeFileSync(handoffPath, handoff);
         const received: string[] = [];
