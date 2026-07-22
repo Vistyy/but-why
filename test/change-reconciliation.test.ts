@@ -68,6 +68,79 @@ describe("by change reconcile", () => {
   );
 
   it.effect(
+    "leaves a closed unmerged owned pull request and its Change open",
+    () =>
+      Effect.gen(function* () {
+        const repository = initializedRepository();
+        const started = startChangeProcess(repository, "--output", "json");
+        const change = JSON.parse(started.stdout) as ChangeProcessOutput;
+        const headSha = git(change.worktreePath, "rev-parse", "HEAD");
+        const headBranch = change.branch.slice("refs/heads/".length);
+        yield* recordPublishedPullRequest(
+          repository,
+          change.change.id,
+          publicationTarget,
+          headBranch,
+          headSha,
+        );
+
+        yield* withTestRepository(
+          repository,
+          Effect.gen(function* () {
+            const changes = yield* openSqliteChangePersistence();
+            const reconciliation = openChangeReconciliation({
+              persistence: changes,
+              github: {
+                findPullRequests: () => [],
+                getPullRequest: () => ({
+                  number: 42,
+                  url: "https://github.com/acme/widgets/pull/42",
+                  repository: { owner: publicationTarget.owner, repo: publicationTarget.repo },
+                  state: "closed",
+                  merged: false,
+                  baseBranch: publicationTarget.baseBranch,
+                  headBranch,
+                  headSha,
+                }),
+                createPullRequest: () => {
+                  throw new Error("Reconciliation must not create a pull request");
+                },
+                updatePullRequest: () => {
+                  throw new Error("Reconciliation must not update a pull request");
+                },
+              },
+              cleanup: () => {
+                throw new Error("Open Changes must not be cleaned");
+              },
+            });
+
+            expect(
+              yield* reconciliation.reconcile({
+                repositoryCommonDirectory: join(repository, ".git"),
+                changeId: change.change.id,
+                now,
+              }),
+            ).toEqual({
+              rejected: false,
+              changes: [
+                {
+                  changeId: change.change.id,
+                  status: "closed_unmerged",
+                  pullRequest: {
+                    number: 42,
+                    url: "https://github.com/acme/widgets/pull/42",
+                  },
+                },
+              ],
+            });
+          }),
+        );
+        expect(yield* readChange(repository, change.change.id)).toMatchObject({ state: "open" });
+      }),
+    15_000,
+  );
+
+  it.effect(
     "rejects unexpected pull request ownership facts without adopting them",
     () =>
       Effect.gen(function* () {

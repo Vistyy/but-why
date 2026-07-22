@@ -424,6 +424,37 @@ describe("repository SQL storage", () => {
     ),
   );
 
+  it.scoped("enforces the current Change lifecycle schema", () =>
+    withTemporaryState(() =>
+      Effect.gen(function* () {
+        const repository = yield* RepositorySql;
+        const error = yield* repository
+          .operation(
+            "insert invalid Change lifecycle state",
+            (sql) => sql`
+            INSERT INTO changes (
+              id, repository_common_directory, branch_ref, task_id, state,
+              close_reason, created_at, updated_at, closed_at
+            ) VALUES (
+              'invalid-change', '/repo/.git', 'refs/heads/invalid', NULL, 'invalid',
+              NULL, '2026-07-22T10:00:00.000Z', '2026-07-22T10:00:00.000Z', NULL
+            )
+          `,
+          )
+          .pipe(Effect.flip);
+
+        expect(error).toBeInstanceOf(RepositorySqlOperationFailed);
+        const rows = yield* repository.operation(
+          "count invalid Change rows",
+          (sql) => sql<{ readonly count: number }>`
+            SELECT COUNT(*) AS count FROM changes WHERE id = 'invalid-change'
+          `,
+        );
+        expect(rows).toEqual([{ count: 0 }]);
+      }),
+    ),
+  );
+
   it.effect("closes and reopens the same migrated repository state", () =>
     Effect.acquireUseRelease(
       Effect.sync(() => mkdtempSync(join(tmpdir(), "but-why-repository-sql-"))),

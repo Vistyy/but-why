@@ -54,6 +54,7 @@ Run the complete cross-process CLI workflow through initialization, Task-backed 
 - Local: let each repository SQL Layer own its scoped SQLite lifetime because the synchronous process-wide database registry is retired.
 - Local: initialize synchronous test repositories through the executable CLI and use `@effect/vitest` for in-process Effect execution.
 - User-approved: permit the existing Fallow health findings owned by Tasks 154, 155, and 157 because those independently approved tasks remain nonblocking in `docs/issue-breakdown.md`.
+- User-approved: remove Vitest `globalSetup` because its only behavior was to create and close the retired synchronous database template.
 
 ## Completion evidence
 
