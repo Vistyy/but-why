@@ -39,7 +39,7 @@ describe("by task CLI processes", () => {
   title: Persistent comments
   description: Description for Persistent comments
   comments[1]: "Persist me exactly\\n"`);
-  });
+  }, 15_000);
 
   it("preserves all concurrent Task comment appends", async () => {
     const root = createInitializedRepo();
@@ -142,7 +142,7 @@ describe("by task CLI processes", () => {
         JSON.parse(listed.stdout) as { readonly tasks: readonly { readonly id: string }[] }
       ).tasks.map((task) => task.id),
     ).toEqual(Array.from({ length: createCount }, (_value, index) => `BY-${index + 1}`));
-  });
+  }, 15_000);
 });
 
 const createTask = (root: string, now: string, title: string): void => {

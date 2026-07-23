@@ -16,8 +16,8 @@ It ends when But Why? completes one real SQLite-tracked Task-backed Change and p
 | Task | Capability | Blocked by |
 | --- | --- | --- |
 | 135 | Consolidate the source hierarchy and names | None |
-| 156 | Establish and verify the final quality gate | 135 |
-| 123 | Ship the Change-centered manual workflow | 107, 117, 129, 135 |
+| 156 | Establish and verify the final quality interface | 135, 155, 157 |
+| 123 | Ship the Change-centered manual workflow | 107, 117, 129, 130, 156 |
 | 125 | Produce an installable v1 package | 123 |
 | 131 | Dogfood the first SQLite-tracked Change workflow | 125 |
 | 126 | Publish But Why? to npm | 131 |
@@ -40,9 +40,10 @@ It ends when But Why? completes one real SQLite-tracked Task-backed Change and p
 13. Task 147 removed the temporary synchronous storage path after every production caller migrated.
 14. Task 135 reorganizes the surviving modules and applies canonical names to the final hierarchy.
 15. Tasks 154, 155, and 157 repair the remaining public behavior coverage before final gate verification.
-16. Task 156 sets the achieved coverage floor and verifies the final gate from a clean locked-Nix checkout.
-17. Task 117 completes cancellation and cleanup before Task 123 ships the public workflow.
-18. After Task 126 publishes the package, Task 138 replaces the temporary unreleased-schema instruction with the post-publication compatibility policy.
+16. Task 134 refactors expensive test boundaries while preserving each distinct behavior and real-boundary defect class.
+17. Task 156 establishes the routine and full quality commands and verifies them from a clean locked-Nix checkout.
+18. Task 117 completes cancellation and cleanup before Task 123 ships the public workflow.
+19. After Task 126 publishes the package, Task 138 replaces the temporary unreleased-schema instruction with the post-publication compatibility policy.
 
 ## Independent test-execution workstream
 
