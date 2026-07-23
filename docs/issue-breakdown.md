@@ -7,7 +7,6 @@ It ends when But Why? completes one real SQLite-tracked Task-backed Change and p
 
 ## Can start immediately
 
-- Task 129: Submit a Task-backed Change with no repository change.
 
 ## Dependency graph
 

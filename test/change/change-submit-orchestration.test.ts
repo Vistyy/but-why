@@ -109,6 +109,7 @@ describe("Change Submit orchestration", () => {
           comments: [],
         },
       });
+      const acceptanceReport = { findings: [] as readonly (typeof finding)[] };
       const submit = openChangeSubmit(
         dependencies({
           events,
@@ -129,7 +130,7 @@ describe("Change Submit orchestration", () => {
               ok: true,
               reused: false,
               validationRunId: "run-no-change",
-              outcome: "passed",
+              outcome: acceptanceReport.findings.length === 0 ? "passed" : "blocked",
             } as const;
           }),
         listFindings: () => Effect.succeed([]),
@@ -169,6 +170,7 @@ describe("Change Submit orchestration", () => {
             comments: [],
           },
         });
+        const acceptanceReport = { findings: [finding] as readonly (typeof finding)[] };
         const submit = openChangeSubmit(
           dependencies({
             events,
@@ -176,7 +178,7 @@ describe("Change Submit orchestration", () => {
             change,
             taskBacked: true,
             captureResult: { ...candidate, comparisonBaseSha: "base", headSha: "base" },
-            findings: [finding],
+            findings: acceptanceReport.findings,
           }),
         );
         const validationLayer = Layer.succeed(CandidateValidation, {
@@ -187,9 +189,9 @@ describe("Change Submit orchestration", () => {
               ok: true,
               reused: false,
               validationRunId: "run-no-change",
-              outcome: "blocked",
+              outcome: acceptanceReport.findings.length === 0 ? "passed" : "blocked",
             } as const),
-          listFindings: () => Effect.succeed([finding]),
+          listFindings: () => Effect.succeed(acceptanceReport.findings),
           listToolingFailures: () => Effect.succeed([]),
           listRounds: () => Effect.succeed([]),
         });
