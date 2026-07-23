@@ -86,7 +86,7 @@ Final locked-Nix evidence is recorded below.
 | Package contents | 16.45 s | 1.45 s | The routine suite verifies the dry-run packed-file manifest; runtime execution is deferred until npm publication |
 | Change Submit | 13.85 s | 1.23 s | In-process orchestration proves submission outcomes without a duplicate publication composition |
 | Candidate Validation and inspection | 9.89 s | 3.00 s | Focused tests retain validation file copying and persisted evidence inspection |
-| Complete non-coverage suite | 258.51 s aggregate / 113.15 s wall | 25.63 s median Vitest wall | The single-worker suite passes with retained external boundaries explicit |
+| Complete non-coverage suite | 258.51 s aggregate / 113.15 s wall | 26.67 s median Vitest wall | The single-worker suite passes with retained external boundaries explicit |
 
 ## Decision ledger
 
@@ -144,13 +144,13 @@ Historical review status:
 
 ## Final verification
 
-The complete selected suite passed with 314 tests and one intentional skip.
+The complete selected suite passed with 321 tests and one intentional skip.
 Three consecutive clean locked-Nix measurements produced these results:
 
 | Command | Run 1 | Run 2 | Run 3 | Median | Operating budget | Completion gate |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `just quality` | 8.671 s | 8.714 s | 8.255 s | 8.671 s | 10 s | 15 s |
-| `just full-quality` | 30.198 s | 29.010 s | 28.315 s | 29.010 s | 30 s | 60 s |
+| `just quality` | 9.427 s | 9.585 s | 9.036 s | 9.427 s | 10 s | 15 s |
+| `just full-quality` | 29.474 s | 29.887 s | 29.658 s | 29.658 s | 30 s | 60 s |
 
 ## Blocked by
 
