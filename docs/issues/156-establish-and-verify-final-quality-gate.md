@@ -59,7 +59,7 @@ A clean local checkout runs `nix develop -c just init`, `nix develop -c just qua
 | Clean locked-Nix commands pass | Repository toolchain | Primary command seam | `nix develop -c just init`, `quality`, and `full-quality` |
 | Quality commands leave tracked files unchanged | Quality command compositions | Primary command seam | `git status --short` after both gates |
 
-Required validation commands are `just test test/repository/quality-interface.boundary.test.ts`, `BY_VERIFY_QUALITY_COVERAGE=1 just test test/repository/quality-interface.test.ts`, `just typecheck`, `just format-check`, `just lint`, `just docs-check`, `just ast-grep-check`, `just quality`, `just full-quality`, `just health`, and the locked-Nix primary seam.
+Required validation commands are `just test test/repository/quality-interface.boundary.test.ts`, `BY_VERIFY_QUALITY_COVERAGE=1 just test test/repository/quality-interface.boundary.test.ts`, `just typecheck`, `just format-check`, `just lint`, `just docs-check`, `just ast-grep-check`, `just quality`, `just full-quality`, `just health`, and the locked-Nix primary seam.
 
 ## Decision ledger
 
