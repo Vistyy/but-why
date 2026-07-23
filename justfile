@@ -79,8 +79,8 @@ _quality-static-routine:
 
 # Check Just formatting plus Biome formatting and lint rules in one source scan.
 _biome-check:
-    just --unstable --fmt --check
-    pnpm exec biome check --assist-enabled=false .
+    @just --unstable --fmt --check
+    @pnpm exec biome check --assist-enabled=false .
 
 # Validate links and anchors in every tracked Markdown file.
 docs-check:
@@ -91,7 +91,7 @@ docs-check:
 
 # Check structural code rules.
 ast-grep-check:
-    pnpm run ast-grep-check
+    @pnpm run ast-grep-check
 
 # Check dead code, dependencies, and named architecture seams.
 fallow-check:
@@ -124,15 +124,25 @@ lint:
 
 # Type-check the codebase.
 typecheck:
-    pnpm run typecheck
+    @pnpm run typecheck
 
 # Run tests, forwarding any arguments.
 test *args:
-    pnpm exec vitest run "$@"
+    #!/usr/bin/env bash
+    set -euo pipefail
+    if (( $# > 0 )); then
+        exec pnpm exec vitest run "$@"
+    fi
+    exec ./scripts/with-capacity-lock.sh "complete test" pnpm exec vitest run
 
 # Run tests with measured production coverage.
 coverage *args:
-    pnpm exec vitest run --coverage "$@"
+    #!/usr/bin/env bash
+    set -euo pipefail
+    if (( $# > 0 )); then
+        exec pnpm exec vitest run --coverage "$@"
+    fi
+    exec ./scripts/with-capacity-lock.sh "complete coverage" pnpm exec vitest run --coverage
 
 # Build the production package.
 build:

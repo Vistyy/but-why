@@ -13,6 +13,7 @@ const suiteSelection =
 export default defineConfig({
   test: {
     ...suiteSelection,
+    reporters: ["dot"],
     coverage: {
       all: true,
       include: ["src/**/*.ts"],
