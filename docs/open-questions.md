@@ -35,6 +35,12 @@ Keep either capability separate from completed-code validation.
 AFK Implementers, automatic Fixers, and orchestration-owned stops are deferred.
 Before adding them, define process ownership, cancellation, workspace fencing, cost protection, recovery, and security from observed interactive-session behavior.
 
+## Should But Why stop human-managed Interactive Sessions during cancellation?
+
+V1 leaves Interactive Sessions under human control and does not stop them when a Task or Change is cancelled.
+Revisit this only if interactive-session evidence shows that post-cancellation writes create material risk or operational cost.
+Any future automation must define session identity, ownership, stop semantics, worktree fencing, recovery, and coordination with safe cleanup.
+
 A future Needs Input state must identify a known mechanical blocker.
 It must preserve evidence, exhaust approved recovery, and provide a resumable checkpoint.
 Agents should make and record reasonable implementation decisions without using that state.

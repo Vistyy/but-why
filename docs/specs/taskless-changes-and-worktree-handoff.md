@@ -147,6 +147,8 @@ Cleanup removes a worktree only when it has no uncommitted changes.
 Cleanup deletes a branch only when its commits remain reachable through another ref.
 Unsafe or failed cleanup remains pending and reports the blocking reason without preventing lifecycle closure.
 Task linkage does not affect cleanup policy.
+V1 cancellation does not stop a human-managed Interactive Session.
+The user remains responsible for stopping the session, and cleanup preserves resources when the session leaves the worktree unsafe.
 
 ### Herdr implementation handoff
 
@@ -172,6 +174,7 @@ The handoff describes relevant decisions, references existing artifacts instead 
 
 The new Herdr session receives the compact handoff rather than a clone of the existing Pi session.
 The current Pi session remains open.
+Interactive Session lifecycle control is outside the v1 cancellation contract.
 This preserves the current session's provider cache and avoids sending its full conversation as fresh input to the new session.
 
 ### Task graph

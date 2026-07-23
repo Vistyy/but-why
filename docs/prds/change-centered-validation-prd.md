@@ -253,7 +253,8 @@ V1 has no watcher, webhook, or automatic PR remediation.
 `by task cancel <task-id> --reason <reason>` synchronously cancels an unfinished Task.
 Cancellation is terminal, preserves history, and does not satisfy dependent Tasks.
 
-Cancellation stops the optional interactive implementation session when one exists.
+V1 does not stop an optional human-managed Interactive Session during cancellation.
+The session remains under human control and may continue until the user stops it.
 Cancellation closes the owned open PR when one exists.
 An observed merged PR is authoritative and completes the Task instead of cancelling it.
 
