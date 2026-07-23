@@ -12,6 +12,7 @@ import type {
   BeginChangePublicationInput,
   CancelChangeInput,
   CompleteMergedChangeInput,
+  CompleteNoChangeInput,
   ListChangesInput,
   RecordChangeCleanupInput,
   RecordPublishedPullRequestInput,
@@ -77,6 +78,10 @@ export const openSqliteChangePersistence = (): Effect.Effect<
     completeMergedChange: (input) =>
       repository.transactionImmediate("complete merged Change", (sql) =>
         completeMergedChange(sql, input),
+      ),
+    completeNoChange: (input) =>
+      repository.transactionImmediate("complete no-change Task", (sql) =>
+        completeNoChange(sql, input),
       ),
     cancelChange: (input) =>
       repository.transactionImmediate("cancel Change", (sql) => cancelChange(sql, input)),
@@ -190,12 +195,39 @@ const completeMergedChange = (sql: SqlClient.SqlClient, input: CompleteMergedCha
         : { ok: false as const, code: "change_already_closed" as const };
     yield* sql`UPDATE changes SET state = 'closed', close_reason = 'completed', cleanup_state = 'pending', cleanup_blocking_reason = NULL, updated_at = ${input.now}, closed_at = ${input.now} WHERE id = ${input.changeId} AND state = 'open'`;
     if (change.taskId !== null)
-      yield* sql`UPDATE tasks SET state = 'done', updated_at = ${input.now} WHERE id = ${change.taskId}`;
+      yield* sql`UPDATE tasks SET state = 'done', completion_kind = 'merged_pr', updated_at = ${input.now} WHERE id = ${change.taskId}`;
     return {
       ok: true as const,
       changed: true,
       change: yield* requireChange(sql, input.changeId, "complete merged Change"),
     };
+  });
+
+const completeNoChange = (sql: SqlClient.SqlClient, input: CompleteNoChangeInput) =>
+  Effect.gen(function* () {
+    const change = yield* getById(sql, input.changeId);
+    if (change === undefined) return { ok: false as const, code: "change_not_found" as const };
+    if (change.state !== changeState.open) {
+      return { ok: false as const, code: "change_not_open" as const };
+    }
+    if (change.taskId !== storedPublicTaskId(input.taskId)) {
+      return { ok: false as const, code: "task_not_found" as const };
+    }
+    const tasks = yield* sql<{ readonly state: string; readonly completionKind: string | null }>`
+      SELECT state, completion_kind AS completionKind FROM tasks WHERE id = ${input.taskId}
+    `;
+    const task = tasks[0];
+    if (task === undefined) return { ok: false as const, code: "task_not_found" as const };
+    if (task.state === "done") {
+      return task.completionKind === "no_change"
+        ? { ok: true as const, changed: false }
+        : { ok: false as const, code: "task_already_completed" as const };
+    }
+    yield* sql`
+      UPDATE tasks SET state = 'done', completion_kind = 'no_change', updated_at = ${input.now}
+      WHERE id = ${input.taskId}
+    `;
+    return { ok: true as const, changed: true };
   });
 
 const cancelChange = (sql: SqlClient.SqlClient, input: CancelChangeInput) =>

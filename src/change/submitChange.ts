@@ -37,6 +37,14 @@ export type ChangeSubmitResult =
     }
   | {
       readonly ok: true;
+      readonly status: "no_change";
+      readonly changeId: string;
+      readonly candidateId: string;
+      readonly validationRunId: string;
+      readonly completionKind: "no_change";
+    }
+  | {
+      readonly ok: true;
       readonly status: "published";
       readonly changeId: string;
       readonly candidateId: string;
@@ -146,10 +154,20 @@ const submitChange = (
       cwd: change.worktreePath,
       changeId: change.id,
       now: input.now,
+      ...(change.taskId === null || change.startingCommit === null
+        ? {}
+        : { startingCommit: change.startingCommit }),
     });
     if (!candidate.ok) return candidate;
     if (change.taskId === null && candidate.headSha === candidate.comparisonBaseSha) {
       return { ok: true, status: "nothing_to_submit", changeId: change.id } as const;
+    }
+    if (
+      change.taskId !== null &&
+      candidate.headSha === change.startingCommit &&
+      candidate.comparisonBaseSha === change.startingCommit
+    ) {
+      return yield* validateAndCompleteNoChange(dependencies, change, candidate, input.now);
     }
     if (isCurrentPublishedCandidate(change, candidate, reconciliation.reconciled)) {
       if (
@@ -163,6 +181,87 @@ const submitChange = (
     const target = detectPublicationTarget(dependencies, change, candidate);
     if (!target.ok) return githubTargetFailure(target);
     return yield* validateAndPublish(dependencies, change, candidate, target.target, input.now);
+  });
+
+const validateAndCompleteNoChange = (
+  dependencies: Parameters<typeof openChangeSubmit>[0],
+  change: ReadyChange,
+  candidate: CapturedCandidate,
+  now: string,
+): Effect.Effect<ChangeSubmitResult, RepositoryStorageError, CandidateValidation> =>
+  Effect.gen(function* () {
+    if (
+      change.taskId === null ||
+      change.acceptanceContext === null ||
+      change.startingCommit === null
+    ) {
+      return {
+        ok: false,
+        code: "validation_policy_invalid",
+        message:
+          "Task-backed no-change submission requires Acceptance Context and a starting commit.",
+      } as const;
+    }
+    const policy = dependencies.resolvePolicy(true);
+    if (!policy.ok || !policy.resolved.taskBacked) {
+      return {
+        ok: false,
+        code: "validation_policy_invalid",
+        message: policy.ok
+          ? "Task-backed no-change submission requires a Task-backed validation policy."
+          : policy.error.message,
+      } as const;
+    }
+    const task = yield* dependencies.taskPersistence.getTaskById(change.taskId);
+    const alreadyCompletedNoChange = task?.state === "done" && task.completionKind === "no_change";
+    if (
+      !alreadyCompletedNoChange &&
+      !(yield* transitionTask(dependencies.taskPersistence, change, "validating", now))
+    ) {
+      return taskTransitionFailure(change);
+    }
+    const validation = yield* CandidateValidation;
+    if (validation.validateNoChange === undefined) {
+      return {
+        ok: false,
+        code: "validation_policy_invalid",
+        message: "Acceptance-only Candidate validation is unavailable.",
+      } as const;
+    }
+    const validationResult = yield* validation.validateNoChange({
+      ...candidateIdentity(candidate),
+      noChange: true,
+      acceptanceContext: change.acceptanceContext,
+      policy: policy.resolved.policy,
+      now,
+    });
+    if (validationResult.outcome !== "passed") {
+      return yield* blockedValidationResult(
+        validation,
+        dependencies,
+        change,
+        candidate,
+        {
+          validationRunId: validationResult.validationRunId,
+          outcome: validationResult.outcome === "blocked" ? "blocked" : "tooling_failed",
+        },
+        now,
+      );
+    }
+    const completed = yield* dependencies.persistence.completeNoChange({
+      changeId: change.id,
+      taskId: change.taskId,
+      now,
+    });
+    if (!completed.ok) return taskTransitionFailure(change);
+    return {
+      ok: true,
+      status: "no_change",
+      changeId: change.id,
+      candidateId: candidate.candidateId,
+      validationRunId: validationResult.validationRunId,
+      completionKind: "no_change",
+    } as const;
   });
 
 const reconcileBeforeSubmission = (

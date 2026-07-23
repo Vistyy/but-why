@@ -10,6 +10,7 @@ const baselineStatements = [
       title TEXT NOT NULL,
       description TEXT NOT NULL,
       state TEXT NOT NULL CHECK (state IN ('new', 'todo', 'implementing', 'validating', 'ready', 'done', 'cancelled')),
+      completion_kind TEXT CHECK (completion_kind IS NULL OR completion_kind IN ('merged_pr', 'no_change')),
       cancel_reason TEXT,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL

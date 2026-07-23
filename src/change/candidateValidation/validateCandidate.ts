@@ -51,6 +51,10 @@ type ValidateTaskBackedCandidateInput = {
   readonly now: string;
 };
 
+type ValidateNoChangeInput = ValidateTaskBackedCandidateInput & {
+  readonly noChange: true;
+};
+
 type ValidateCandidateResult =
   | {
       readonly ok: true;
@@ -87,6 +91,9 @@ export type CandidateValidationService = {
   readonly validateTaskBackedCandidate: (
     input: ValidateTaskBackedCandidateInput,
   ) => Effect.Effect<ValidateCandidateResult, RepositoryStorageError>;
+  readonly validateNoChange?: (
+    input: ValidateNoChangeInput,
+  ) => Effect.Effect<ValidateCandidateResult, RepositoryStorageError>;
   readonly listFindings: ChangeValidationPersistence["listFindings"];
   readonly listToolingFailures: ChangeValidationPersistence["listToolingFailures"];
   readonly listRounds: (validationRunId: string) => Effect.Effect<
@@ -120,13 +127,14 @@ const makeCandidateValidation = (dependencies: {
   readonly reviewerAgentRuntime: ReviewerAgentRuntime;
 }): CandidateValidationService => {
   const validate = Effect.fn("CandidateValidation.validate")(function* (
-    input: ValidateCandidateInput | ValidateTaskBackedCandidateInput,
+    input: ValidateCandidateInput | ValidateTaskBackedCandidateInput | ValidateNoChangeInput,
   ) {
+    const policy = "noChange" in input ? acceptanceOnlyPolicy(input.policy) : input.policy;
     const started = yield* dependencies.persistence.startOrReuse({
       candidateId: input.candidateId,
       headSha: input.headSha,
       comparisonBaseSha: input.comparisonBaseSha,
-      policy: input.policy,
+      policy,
       now: input.now,
     });
     if (started.reused) return { ok: true, ...started } as const;
@@ -216,6 +224,7 @@ const makeCandidateValidation = (dependencies: {
   return {
     validateCandidate: (input) => validate(input),
     validateTaskBackedCandidate: (input) => validate(input),
+    validateNoChange: (input) => validate(input),
     listFindings: dependencies.persistence.listFindings,
     listToolingFailures: dependencies.persistence.listToolingFailures,
     listRounds: (validationRunId) =>
@@ -231,7 +240,7 @@ const runCandidatePhases = (
     readonly persistence: ChangeValidationPersistence;
     readonly reviewerAgentRuntime: ReviewerAgentRuntime;
   },
-  input: ValidateCandidateInput | ValidateTaskBackedCandidateInput,
+  input: ValidateCandidateInput | ValidateTaskBackedCandidateInput | ValidateNoChangeInput,
   validationRunId: string,
   activeWorkspace: {
     readonly sandbox: Pick<Sandbox, "exec" | "run">;
@@ -245,6 +254,26 @@ const runCandidatePhases = (
   ValidationToolingFailure | RepositoryStorageError
 > =>
   Effect.fn("CandidateValidation.runPhases")(function* () {
+    if ("noChange" in input) {
+      const acceptance = yield* runAcceptanceReviewPhase({
+        validationRunId,
+        candidate: candidateIdentity(input),
+        acceptanceContext: input.acceptanceContext,
+        policy: input.policy.acceptanceReview,
+        runtime: dependencies.reviewerAgentRuntime,
+        sandbox: activeWorkspace.sandbox,
+        artifactsRoot: dependencies.artifactsRoot,
+        artifactMaxBytes: maxValidationArtifactBytes,
+        commandCwd: activeWorkspace.worktreePath,
+        allowedUntrackedFiles: input.policy.copyFiles,
+        now: input.now,
+        listArtifacts: dependencies.persistence.listArtifacts,
+        listPreviousCandidateReviewerFindings:
+          dependencies.persistence.listPreviousCandidateReviewerFindings,
+        recordAcceptanceRound: dependencies.persistence.recordAcceptanceRound,
+      });
+      return { validationFindings: acceptance.findings };
+    }
     if (input.policy.prepare !== undefined) {
       const prepare = yield* runPreparePhase({
         validationRunId,
@@ -314,6 +343,16 @@ const runCandidatePhases = (
       toolingFailures: specialists.toolingFailures,
     };
   })();
+
+const acceptanceOnlyPolicy = (
+  policy: TaskBackedCandidateValidationPolicy,
+): TaskBackedCandidateValidationPolicy => ({
+  sandboxMode: policy.sandboxMode,
+  checks: [],
+  copyFiles: policy.copyFiles,
+  specialistReviews: [],
+  acceptanceReview: policy.acceptanceReview,
+});
 
 const candidateIdentity = (input: ValidateCandidateInput | ValidateTaskBackedCandidateInput) => ({
   candidateId: input.candidateId,

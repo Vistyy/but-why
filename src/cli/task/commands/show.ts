@@ -48,6 +48,7 @@ export const runShowCommand = (
           title: task.title,
           description: task.description,
           state: task.state,
+          ...(task.completionKind == null ? {} : { completionKind: task.completionKind }),
           createdAt: task.createdAt,
           updatedAt: task.updatedAt,
           commentCount: task.commentCount,

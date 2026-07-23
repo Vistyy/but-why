@@ -574,6 +574,14 @@ const submitResult = (result: ChangeSubmitResult): CliResult => {
     }
     if (result.status === "reconciled")
       return success({ status: result.status, change: result.change });
+    if (result.status === "no_change")
+      return success({
+        changeId: result.changeId,
+        candidateId: result.candidateId,
+        validationRunId: result.validationRunId,
+        status: result.status,
+        completionKind: result.completionKind,
+      });
     return success({
       changeId: result.changeId,
       candidateId: result.candidateId,

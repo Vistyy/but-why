@@ -1,4 +1,6 @@
 import type { TaskState } from "./lifecycle.js";
+
+export type TaskCompletionKind = "merged_pr" | "no_change";
 export type TaskDependencyFact = {
   readonly id: string;
   readonly title: string;
@@ -9,6 +11,7 @@ export type TaskSummary = {
   readonly id: string;
   readonly title: string;
   readonly state: TaskState;
+  readonly completionKind?: TaskCompletionKind | null;
   readonly createdAt: string;
   readonly updatedAt: string;
   readonly startable: boolean;

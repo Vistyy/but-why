@@ -96,6 +96,121 @@ describe("Change Submit orchestration", () => {
       }),
   );
 
+  it.effect("runs Acceptance only and completes a Task-backed no-change submission", () =>
+    Effect.gen(function* () {
+      const events: string[] = [];
+      const transitions: string[] = [];
+      const change = readyChange({
+        taskId: publicTaskId("BY-1"),
+        acceptanceContext: {
+          version: 1,
+          title: "Approved intent",
+          description: "Deliver it",
+          comments: [],
+        },
+      });
+      const submit = openChangeSubmit(
+        dependencies({
+          events,
+          transitions,
+          change,
+          taskBacked: true,
+          captureResult: { ...candidate, comparisonBaseSha: "base", headSha: "base" },
+        }),
+      );
+      const validationLayer = Layer.succeed(CandidateValidation, {
+        validateCandidate: () => Effect.die("Full validation was not expected"),
+        validateTaskBackedCandidate: () => Effect.die("Full validation was not expected"),
+        validateNoChange: (input) =>
+          Effect.sync(() => {
+            events.push("validate_no_change");
+            expect(input.acceptanceContext.title).toBe("Approved intent");
+            return {
+              ok: true,
+              reused: false,
+              validationRunId: "run-no-change",
+              outcome: "passed",
+            } as const;
+          }),
+        listFindings: () => Effect.succeed([]),
+        listToolingFailures: () => Effect.succeed([]),
+        listRounds: () => Effect.succeed([]),
+      });
+
+      const result = yield* submit
+        .submit({ changeId: change.id, now })
+        .pipe(Effect.provide(validationLayer));
+
+      expect(result).toEqual({
+        ok: true,
+        status: "no_change",
+        changeId: change.id,
+        candidateId: "candidate-1",
+        validationRunId: "run-no-change",
+        completionKind: "no_change",
+      });
+      expect(events).toEqual(["reconcile", "capture", "validate_no_change", "complete_no_change"]);
+      expect(transitions).toEqual(["validating"]);
+    }),
+  );
+
+  it.effect(
+    "returns no-change Acceptance Findings and moves the linked Task back to implementing",
+    () =>
+      Effect.gen(function* () {
+        const events: string[] = [];
+        const transitions: string[] = [];
+        const change = readyChange({
+          taskId: publicTaskId("BY-1"),
+          acceptanceContext: {
+            version: 1,
+            title: "Approved intent",
+            description: "Deliver it",
+            comments: [],
+          },
+        });
+        const submit = openChangeSubmit(
+          dependencies({
+            events,
+            transitions,
+            change,
+            taskBacked: true,
+            captureResult: { ...candidate, comparisonBaseSha: "base", headSha: "base" },
+            findings: [finding],
+          }),
+        );
+        const validationLayer = Layer.succeed(CandidateValidation, {
+          validateCandidate: () => Effect.die("Full validation was not expected"),
+          validateTaskBackedCandidate: () => Effect.die("Full validation was not expected"),
+          validateNoChange: () =>
+            Effect.succeed({
+              ok: true,
+              reused: false,
+              validationRunId: "run-no-change",
+              outcome: "blocked",
+            } as const),
+          listFindings: () => Effect.succeed([finding]),
+          listToolingFailures: () => Effect.succeed([]),
+          listRounds: () => Effect.succeed([]),
+        });
+
+        const result = yield* submit
+          .submit({ changeId: change.id, now })
+          .pipe(Effect.provide(validationLayer));
+
+        expect(result).toEqual({
+          ok: false,
+          code: "validation_findings",
+          changeId: change.id,
+          candidateId: "candidate-1",
+          validationRunId: "run-no-change",
+          findings: [finding],
+        });
+        expect(events).toEqual(["reconcile", "capture"]);
+        expect(transitions).toEqual(["validating", "implementing"]);
+      }),
+  );
+
   it.effect("uses Acceptance Context for a Task-backed Candidate and marks the Task ready", () =>
     Effect.gen(function* () {
       const events: string[] = [];
@@ -373,6 +488,10 @@ const dependencies = (input: {
     repositoryCommonDirectory: "/repo/.git",
     persistence: {
       getChangeById: () => Effect.succeed(input.change),
+      completeNoChange: () => {
+        events.push("complete_no_change");
+        return Effect.succeed({ ok: true as const, changed: true });
+      },
     } as unknown as ChangePersistence,
     taskPersistence: {
       getTaskById: () => Effect.succeed({ state: taskState }),

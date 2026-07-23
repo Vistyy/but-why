@@ -9,6 +9,7 @@ export const localCandidateCaptureGit: CandidateCaptureGit = {
   resolveLocalBranch: (cwd, ref) => Effect.sync(() => resolveLocalBranch(cwd, ref)),
   findComparisonBase: (cwd, targetSha, headSha) =>
     Effect.sync(() => findComparisonBase(cwd, targetSha, headSha)),
+  trackedTreeMatches: (cwd, commitSha) => Effect.sync(() => trackedTreeMatches(cwd, commitSha)),
   localBranchExists: (cwd, ref) => Effect.sync(() => localBranchExists(cwd, ref)),
   recordedRemoteDefaultLocalBranches: (cwd) =>
     Effect.sync(() => recordedRemoteDefaultLocalBranches(cwd)),
@@ -69,6 +70,12 @@ const findComparisonBase = (
 ): string | undefined => {
   const result = git(cwd, "merge-base", targetSha, headSha);
   return result.ok ? result.stdout : undefined;
+};
+
+const trackedTreeMatches = (cwd: string, commitSha: string): boolean => {
+  const currentTree = git(cwd, "rev-parse", "HEAD^{tree}");
+  const startingTree = git(cwd, "rev-parse", `${commitSha}^{tree}`);
+  return currentTree.ok && startingTree.ok && currentTree.stdout === startingTree.stdout;
 };
 
 const localBranchExists = (cwd: string, ref: string): boolean =>

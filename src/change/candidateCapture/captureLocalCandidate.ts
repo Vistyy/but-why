@@ -13,6 +13,7 @@ export type CaptureLocalCandidateInput = {
   readonly changeId?: string;
   readonly baseRef?: string;
   readonly allowRebind?: boolean;
+  readonly startingCommit?: string;
 };
 
 export type CandidateBaseSource = "saved_change" | "caller" | "remote_default";
@@ -107,6 +108,12 @@ const captureLocalCandidate = (
     if (comparisonBaseSha === undefined) {
       return { ok: false, code: "comparison_base_unavailable" };
     }
+    const startingCommit = input.startingCommit;
+    const isNoChange =
+      startingCommit !== undefined &&
+      (yield* dependencies.git.trackedTreeMatches(input.cwd, startingCommit));
+    const candidateHeadSha = isNoChange ? startingCommit : workspace.facts.headSha;
+    const candidateComparisonBaseSha = isNoChange ? startingCommit : comparisonBaseSha;
 
     const committed = yield* dependencies.persistence.commitCapture({
       repositoryCommonDirectory: workspace.facts.repositoryCommonDirectory,
@@ -119,8 +126,8 @@ const captureLocalCandidate = (
         : { rebindFromRef: changeSelection.selection.rebindFromRef }),
       selectedBaseRef: base.ref,
       resolvedTargetSha,
-      comparisonBaseSha,
-      headSha: workspace.facts.headSha,
+      comparisonBaseSha: candidateComparisonBaseSha,
+      headSha: candidateHeadSha,
       now: input.now,
     });
     if (!committed.ok) return { ok: false, code: mapCommitError(committed.code) };
@@ -133,8 +140,8 @@ const captureLocalCandidate = (
       selectedBaseRef: base.ref,
       baseSource: base.source,
       resolvedTargetSha,
-      comparisonBaseSha,
-      headSha: workspace.facts.headSha,
+      comparisonBaseSha: candidateComparisonBaseSha,
+      headSha: candidateHeadSha,
     };
   });
 

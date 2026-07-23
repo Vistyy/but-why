@@ -70,8 +70,8 @@ const createTask = (sql: SqlClient.SqlClient, taskPrefix: string, input: CreateT
     if (dependencyError !== undefined) return dependencyError;
 
     yield* sql`
-      INSERT INTO tasks (id, numeric_id, title, description, state, created_at, updated_at)
-      VALUES (${taskId}, ${numericId}, ${input.title}, ${input.description}, 'new', ${input.now}, ${input.now})
+      INSERT INTO tasks (id, numeric_id, title, description, state, completion_kind, created_at, updated_at)
+      VALUES (${taskId}, ${numericId}, ${input.title}, ${input.description}, 'new', NULL, ${input.now}, ${input.now})
     `;
     yield* insertDependencies(sql, taskId, prerequisiteTaskIds);
     const created = yield* getTaskById(sql, taskId);
@@ -105,19 +105,19 @@ const listTasks = (sql: SqlClient.SqlClient, input: ListTasksInput) =>
   Effect.gen(function* () {
     const rows = input.state
       ? yield* sql<TaskSummaryRow>`
-          SELECT id, title, state, created_at AS createdAt, updated_at AS updatedAt
+          SELECT id, title, state, completion_kind AS completionKind, created_at AS createdAt, updated_at AS updatedAt
           FROM tasks
           WHERE state = ${input.state}
           ORDER BY created_at ASC, numeric_id ASC
         `
       : input.includeDone
         ? yield* sql<TaskSummaryRow>`
-            SELECT id, title, state, created_at AS createdAt, updated_at AS updatedAt
+            SELECT id, title, state, completion_kind AS completionKind, created_at AS createdAt, updated_at AS updatedAt
             FROM tasks
             ORDER BY created_at ASC, numeric_id ASC
           `
         : yield* sql<TaskSummaryRow>`
-            SELECT id, title, state, created_at AS createdAt, updated_at AS updatedAt
+            SELECT id, title, state, completion_kind AS completionKind, created_at AS createdAt, updated_at AS updatedAt
             FROM tasks
             WHERE state NOT IN ('done', 'cancelled')
             ORDER BY created_at ASC, numeric_id ASC
@@ -128,7 +128,7 @@ const listTasks = (sql: SqlClient.SqlClient, input: ListTasksInput) =>
 const listActionableTasks = (sql: SqlClient.SqlClient) =>
   Effect.gen(function* () {
     const rows = yield* sql<TaskSummaryRow>`
-      SELECT id, title, state, created_at AS createdAt, updated_at AS updatedAt
+      SELECT id, title, state, completion_kind AS completionKind, created_at AS createdAt, updated_at AS updatedAt
       FROM tasks
       WHERE state IN ('new', 'todo', 'ready')
       ORDER BY
@@ -143,6 +143,7 @@ const getTaskById = (sql: SqlClient.SqlClient, taskId: PublicTaskId) =>
   Effect.gen(function* () {
     const rows = yield* sql<StoredTaskRecordRow>`
       SELECT id, title, description, state,
+        completion_kind AS completionKind,
         cancel_reason AS cancelReason,
         created_at AS createdAt,
         updated_at AS updatedAt,
@@ -478,6 +479,7 @@ type TaskSummaryRow = {
   readonly id: PublicTaskId;
   readonly title: string;
   readonly state: TaskState;
+  readonly completionKind: "merged_pr" | "no_change" | null;
   readonly createdAt: string;
   readonly updatedAt: string;
 };

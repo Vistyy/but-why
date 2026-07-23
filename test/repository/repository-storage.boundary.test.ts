@@ -142,6 +142,54 @@ describe("repository SQL storage", () => {
     ),
   );
 
+  it.scoped("completes and reuses a Task-backed no-change Change", () =>
+    withTemporaryState((input) =>
+      Effect.gen(function* () {
+        const tasks = yield* openSqliteTaskPersistence("BY");
+        const starts = yield* openSqliteChangeStartPersistence();
+        const changes = yield* openSqliteChangePersistence();
+        const created = yield* tasks.createTask({
+          title: "Complete no-change Change",
+          description: "Complete the linked Task without a PR.",
+          now: "2026-07-17T23:05:00.000Z",
+        });
+        if (!created.ok) return;
+        const taskId = storedPublicTaskId(created.task.id);
+        yield* tasks.approveTask({ taskId, now: "2026-07-17T23:06:00.000Z" });
+        const started = yield* starts.create({
+          id: "change-no-change",
+          repositoryCommonDirectory: input.commonDirectory,
+          branchRef: "refs/heads/but-why/by-1-no-change",
+          baseRef: "main",
+          startingCommit: "1111111111111111111111111111111111111111",
+          worktreePath: join(input.commonDirectory, "worktrees", "by-1-no-change"),
+          taskId,
+          now: "2026-07-17T23:07:00.000Z",
+        });
+        if (!started.ok) return;
+
+        expect(
+          yield* changes.completeNoChange({
+            changeId: started.change.id,
+            taskId,
+            now: "2026-07-17T23:08:00.000Z",
+          }),
+        ).toEqual({ ok: true, changed: true });
+        expect(
+          yield* changes.completeNoChange({
+            changeId: started.change.id,
+            taskId,
+            now: "2026-07-17T23:09:00.000Z",
+          }),
+        ).toEqual({ ok: true, changed: false });
+        expect(yield* tasks.getTaskById(taskId)).toMatchObject({
+          state: "done",
+          completionKind: "no_change",
+        });
+      }),
+    ),
+  );
+
   it.scoped("rolls back the complete Candidate capture when its write fails", () =>
     withTemporaryState((input) =>
       Effect.gen(function* () {

@@ -59,6 +59,7 @@ describe("Change Candidate capture orchestration", () => {
         recordedRemoteDefaultLocalBranches: () => Effect.succeed(["refs/heads/main"]),
         resolveLocalBranch: () => Effect.succeed("base"),
         findComparisonBase: () => Effect.succeed("base"),
+        trackedTreeMatches: () => Effect.succeed(false),
       };
       const capture = openCandidateCapture({ persistence, git });
 
@@ -76,6 +77,78 @@ describe("Change Candidate capture orchestration", () => {
         headSha: "head",
       });
       expect(events).toEqual(["read_workspace", "read_change", "commit_capture"]);
+    }),
+  );
+
+  it.effect("captures a no-change Candidate at the recorded starting commit", () =>
+    Effect.gen(function* () {
+      let committedHead: string | undefined;
+      const persistence: CandidateCapturePersistence = {
+        getChangeById: () =>
+          Effect.succeed({
+            id: "change-1",
+            repositoryCommonDirectory: "/repo/.git",
+            branchRef: "refs/heads/feature",
+            baseRef: null,
+            state: "open" as const,
+          }),
+        getChangeByRepositoryBranch: () =>
+          Effect.succeed({
+            id: "change-1",
+            repositoryCommonDirectory: "/repo/.git",
+            branchRef: "refs/heads/feature",
+            baseRef: null,
+            state: "open" as const,
+          }),
+        commitCapture: (input) =>
+          Effect.sync(() => {
+            committedHead = input.headSha;
+            expect(input.comparisonBaseSha).toBe("starting");
+            return {
+              ok: true as const,
+              changeId: "change-1",
+              candidateId: "candidate-no-change",
+              reused: false,
+            };
+          }),
+      };
+      const git: CandidateCaptureGit = {
+        readWorkspace: () =>
+          Effect.succeed({
+            ok: true as const,
+            facts: {
+              repositoryCommonDirectory: "/repo/.git",
+              primaryRoot: "/repo",
+              branchRef: "refs/heads/feature",
+              headSha: "different-commit-with-same-tree",
+            },
+          }),
+        localBranchExists: () => Effect.succeed(true),
+        recordedRemoteDefaultLocalBranches: () => Effect.succeed(["refs/heads/main"]),
+        resolveLocalBranch: () => Effect.succeed("base"),
+        findComparisonBase: () => Effect.succeed("base"),
+        trackedTreeMatches: (_cwd, commit) => Effect.succeed(commit === "starting"),
+      };
+
+      const result = yield* openCandidateCapture({ persistence, git }).capture({
+        cwd: "/repo/worktree",
+        now,
+        changeId: "change-1",
+        startingCommit: "starting",
+      });
+
+      expect(result).toEqual({
+        ok: true,
+        changeId: "change-1",
+        candidateId: "candidate-no-change",
+        branchRef: "refs/heads/feature",
+        selectedBaseRef: "refs/heads/main",
+        baseSource: "remote_default",
+        resolvedTargetSha: "base",
+        comparisonBaseSha: "starting",
+        headSha: "starting",
+      });
+      expect(committedHead).toBe("starting");
     }),
   );
 
@@ -175,6 +248,7 @@ describe("Change Candidate capture orchestration", () => {
             ),
           resolveLocalBranch: () => Effect.succeed("base"),
           findComparisonBase: () => Effect.succeed("base"),
+          trackedTreeMatches: () => Effect.succeed(false),
         };
 
         const result = yield* openCandidateCapture({ persistence, git }).capture({

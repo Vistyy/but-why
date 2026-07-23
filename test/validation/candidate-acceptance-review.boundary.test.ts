@@ -137,6 +137,27 @@ layer(acceptanceTemplateLayer)("Task-backed Candidate Acceptance Review", (it) =
         );
       }),
   );
+  it.scoped("runs no-change validation through Acceptance only", () =>
+    Effect.gen(function* () {
+      const review = vi.fn<ReviewerAgentRuntime["review"]>(() =>
+        Effect.succeed({
+          ok: true as const,
+          report: { findings: [] },
+          attempts: 1,
+          stdout: "acceptance-only",
+        }),
+      );
+      const ready = yield* acceptanceReadyRepo({ review });
+      const result = yield* runNoChangeCandidate(ready);
+
+      expect(result).toMatchObject({ ok: true, outcome: "passed" });
+      expect(review).toHaveBeenCalledOnce();
+      if (!result.ok) return;
+      expect(yield* ready.validation.listRounds(result.validationRunId)).toEqual([
+        { producer: "acceptance", status: "passed" },
+      ]);
+    }),
+  );
   it.scoped("does not start Acceptance after a Prepare or Check Finding", () =>
     Effect.gen(function* () {
       const review = vi.fn<ReviewerAgentRuntime["review"]>(() =>
@@ -526,6 +547,23 @@ const runTaskBackedCandidate = (
       headSha: captured.headSha,
       acceptanceContext,
       policy,
+      now,
+    });
+  }).pipe(Effect.provide(ready.validation.layer));
+
+const runNoChangeCandidate = (ready: AcceptanceReadyRepo, captured = ready.captured) =>
+  Effect.gen(function* () {
+    const validation = yield* CandidateValidation;
+    if (validation.validateNoChange === undefined) {
+      return yield* Effect.dieMessage("Acceptance-only validation is unavailable");
+    }
+    return yield* validation.validateNoChange({
+      candidateId: captured.candidateId,
+      comparisonBaseSha: captured.comparisonBaseSha,
+      headSha: captured.headSha,
+      acceptanceContext,
+      policy: passingValidationPolicy,
+      noChange: true,
       now,
     });
   }).pipe(Effect.provide(ready.validation.layer));

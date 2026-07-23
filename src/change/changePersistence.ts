@@ -9,6 +9,8 @@ import type {
   CancelChangeResult,
   CompleteMergedChangeInput,
   CompleteMergedChangeResult,
+  CompleteNoChangeInput,
+  CompleteNoChangeResult,
   ListChangesInput,
   RecordChangeCleanupInput,
   RecordChangeCleanupResult,
@@ -29,6 +31,9 @@ export type ChangePersistence = {
   readonly completeMergedChange: (
     input: CompleteMergedChangeInput,
   ) => StorageEffect<CompleteMergedChangeResult>;
+  readonly completeNoChange: (
+    input: CompleteNoChangeInput,
+  ) => StorageEffect<CompleteNoChangeResult>;
   readonly cancelChange: (input: CancelChangeInput) => StorageEffect<CancelChangeResult>;
   readonly recordCleanup: (
     input: RecordChangeCleanupInput,
