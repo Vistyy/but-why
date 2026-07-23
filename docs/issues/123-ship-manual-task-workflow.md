@@ -39,3 +39,4 @@ Installed-package workflow test plus review of the public workflow documentation
 - `docs/issues/117-cancel-task-and-owned-pr.md`
 - `docs/issues/129-submit-task-with-no-change.md`
 - `docs/issues/130-launch-task-implementer-in-herdr.md`
+- [Task 156](156-establish-and-verify-final-quality-gate.md)
