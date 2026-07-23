@@ -66,11 +66,20 @@ const stopRunner = async (runnerProcess: ReturnType<typeof startRunner>): Promis
   await runnerProcess.done;
 };
 
-const runVitest = (relativeFixture: string): Promise<CommandResult> =>
+const runVitest = (fixtureRoot: string, fixture: string): Promise<CommandResult> =>
   new Promise<CommandResult>((resolveResult) => {
     const child = spawn(
       "pnpm",
-      ["exec", "vitest", "run", "--config", "vitest.config.ts", relativeFixture],
+      [
+        "exec",
+        "vitest",
+        "run",
+        "--config",
+        join(repositoryRoot, "vitest.config.ts"),
+        "--root",
+        fixtureRoot,
+        fixture,
+      ],
       {
         cwd: repositoryRoot,
         env: { ...process.env, BY_TEST_SUITE: "" },
@@ -96,6 +105,19 @@ const waitForFile = async (file: string): Promise<void> => {
     await new Promise((resolveDelay) => setTimeout(resolveDelay, 20));
   }
   throw new Error(`The child did not reach its readiness handshake: ${file}`);
+};
+
+const waitForProcessExit = async (pidFile: string): Promise<void> => {
+  const pid = Number(readFileSync(pidFile, "utf8"));
+  for (let attempt = 0; attempt < 250; attempt += 1) {
+    try {
+      process.kill(pid, 0);
+    } catch {
+      return;
+    }
+    await new Promise((resolveDelay) => setTimeout(resolveDelay, 20));
+  }
+  throw new Error(`The descendant process is still running: ${pid}`);
 };
 
 const startHeldRunner = (lockFile: string, directory: string, workload: string) => {
@@ -164,19 +186,23 @@ describe("quality interface", () => {
     temporaryPaths.push(directory);
     const lockFile = join(directory, "capacity.lock");
     const readyFile = join(directory, "descendant-ready");
+    const descendantPidFile = join(directory, "descendant-pid");
     const holder = startRunner(lockFile, [
       "complete test",
       "sh",
       "-c",
-      'printf ready > "$1"; sleep 100 & wait',
+      'printf ready > "$1"; sleep 100 & descendant=$!; printf "$descendant" > "$2"; wait',
       "sh",
       readyFile,
+      descendantPidFile,
     ]);
 
     try {
       await waitForFile(readyFile);
+      await waitForFile(descendantPidFile);
       holder.child.kill("SIGINT");
       expect((await holder.done).status).toBe(143);
+      await waitForProcessExit(descendantPidFile);
     } finally {
       await stopRunner(holder);
     }
@@ -217,10 +243,10 @@ describe("quality interface", () => {
   });
 
   test("keeps successful output concise and failed diagnostics complete", async () => {
-    const suffix = `${process.pid}-${Date.now()}`;
-    const failureFixture = join(repositoryRoot, "test", `.quality-failure-${suffix}.test.ts`);
-    const successFixture = join(repositoryRoot, "test", `.quality-success-${suffix}.test.ts`);
-    temporaryPaths.push(failureFixture, successFixture);
+    const fixtureRoot = mkdtempSync(join(tmpdir(), "but-why-quality-fixtures-"));
+    temporaryPaths.push(fixtureRoot);
+    const failureFixture = join(fixtureRoot, "quality-failure.test.ts");
+    const successFixture = join(fixtureRoot, "quality-success.test.ts");
     writeFileSync(
       failureFixture,
       `import { expect, test } from "vitest";\n\ntest("retains controlled failure diagnostics", () => {\n  console.log("captured output marker");\n  expect({ actual: "value" }).toEqual({ actual: "different" });\n});\n`,
@@ -230,7 +256,7 @@ describe("quality interface", () => {
       `import { expect, test } from "vitest";\n\ntest("successful output remains concise", () => {\n  expect(true).toBe(true);\n});\n`,
     );
 
-    const failure = await runVitest(failureFixture.slice(`${repositoryRoot}/`.length));
+    const failure = await runVitest(fixtureRoot, failureFixture);
     expect(failure.status).toBe(1);
     expect(failure.output).toContain("retains controlled failure diagnostics");
     expect(failure.output).toContain("captured output marker");
@@ -238,7 +264,7 @@ describe("quality interface", () => {
     expect(failure.output).toContain("+ Received");
     expect(failure.output).toContain("AssertionError");
 
-    const success = await runVitest(successFixture.slice(`${repositoryRoot}/`.length));
+    const success = await runVitest(fixtureRoot, successFixture);
     expect(success.status).toBe(0);
     expect(success.output).toContain("Test Files");
     expect(success.output).not.toContain("✓ test/");
