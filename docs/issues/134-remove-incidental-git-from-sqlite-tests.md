@@ -2,9 +2,9 @@
 
 ## Status
 
-In progress.
+Done.
 
-The reopened migration is optimizing the complete single-worker suite while preserving worthwhile behavior and external defect coverage.
+The reopened migration optimized the complete single-worker suite while preserving worthwhile behavior and external defect coverage.
 
 ## Specification
 
@@ -43,7 +43,8 @@ Focused hotspot suites plus the complete non-coverage Vitest suite in the locked
 - [x] Every material hotspot has been optimized until further runtime reduction would cost disproportionate behavioral or boundary-defect coverage.
 - [x] `just quality` runs routine tests without coverage and has a median runtime at or below the 10-second operating budget and 15-second completion gate.
 - [x] `just full-quality` runs the complete selected test suite once without coverage and has a median runtime at or below the 30-second operating budget and 60-second completion gate.
-- [x] Each hotspot and both quality commands have recorded before-and-after timings for the completed migration.
+- [x] Each hotspot and the predecessor complete-suite seam have recorded before-and-after timings.
+- [x] Both new quality commands have recorded three-run final timings.
 - [x] All selected tests pass after every migration stage.
 
 ## Scoped implementation record
@@ -63,12 +64,13 @@ Focused hotspot suites plus the complete non-coverage Vitest suite in the locked
 | Verify package contents without installation | `test/repository/package-contents.test.ts` | `npm pack --dry-run` manifest | Package contents test |
 | Remove duplicate expensive permutations only with preserved coverage | Change Implement input validation and reconciliation ownership tests | Public CLI and reconciliation service seams | Focused Change Implement and reconciliation tests |
 | Establish real routine and complete quality memberships | `justfile`, Vitest configuration, and suite membership | `just quality` and `just full-quality` | Three-run median wall times and command guarantees |
-| Record hotspot and quality-command timings | This task's timing evidence | Vitest hotspot output and quality command output | Timing table below |
+| Record hotspot and command timings | This task's timing evidence | Vitest hotspot output, predecessor complete-suite output, and final quality command output | Timing tables below |
 | Keep selected tests green after each stage | All migrated test fixtures | Focused stage commands and both quality commands | Required validation commands |
 
 ### Timing evidence
 
 Baseline values are Vitest aggregate test time from the reopened audit.
+The previous `just quality` command included coverage, and `just full-quality` did not exist, so neither command has a comparable pre-migration measurement.
 Current hotspot values include command startup where the measurement used an isolated Just invocation.
 Final locked-Nix evidence remains pending.
 

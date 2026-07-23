@@ -144,7 +144,9 @@ Coverage verification must produce the machine-readable artifact without printin
 
 Runtime targets are measured on devbox as verification evidence.
 Tests do not fail based on wall-clock duration.
-Implementation work records before-and-after timings for each refactored hotspot and for both complete quality commands.
+Implementation work records before-and-after timings for each refactored hotspot and the predecessor complete-suite seam.
+The previous `just quality` command included coverage, and `just full-quality` did not exist.
+Implementation work records three-run final timings for both new quality commands.
 
 The accepted experiment on branch `prototype/fast-task-cli-suite` demonstrated the testing precedent.
 It retained all 46 Task CLI tests, reduced the 42 routine tests from approximately 38.66 seconds to 3.15 seconds, and preserved four process-backed tests in a focused file.

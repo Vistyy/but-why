@@ -25,13 +25,14 @@ quality:
     #!/usr/bin/env bash
     set -uo pipefail
     started_at=$SECONDS
-    BY_TEST_SUITE=routine just test & tests_pid=$!
     just _quality-static-routine & static_pid=$!
     just build & build_pid=$!
     status=0
-    for pid in "$tests_pid" "$static_pid" "$build_pid"; do
-        wait "$pid" || status=1
-    done
+    wait "$build_pid" || status=1
+    if (( status == 0 )); then
+        BY_TEST_SUITE=routine just test || status=1
+    fi
+    wait "$static_pid" || status=1
     elapsed=$((SECONDS - started_at))
     echo "quality completed in ${elapsed}s"
     if (( elapsed > 10 )); then
