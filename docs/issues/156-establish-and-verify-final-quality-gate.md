@@ -59,7 +59,7 @@ A clean local checkout runs `nix develop -c just init`, `nix develop -c just qua
 | Clean locked-Nix commands pass | Repository toolchain | Primary command seam | `nix develop -c just init`, `quality`, and `full-quality` |
 | Quality commands leave tracked files unchanged | Quality command compositions | Primary command seam | `git status --short` after both gates |
 
-Required validation commands are `just test test/repository/quality-interface.test.ts`, `BY_VERIFY_QUALITY_COVERAGE=1 just test test/repository/quality-interface.test.ts`, `just typecheck`, `just format-check`, `just lint`, `just docs-check`, `just ast-grep-check`, `just quality`, `just full-quality`, `just health`, and the locked-Nix primary seam.
+Required validation commands are `just test test/repository/quality-interface.boundary.test.ts`, `BY_VERIFY_QUALITY_COVERAGE=1 just test test/repository/quality-interface.test.ts`, `just typecheck`, `just format-check`, `just lint`, `just docs-check`, `just ast-grep-check`, `just quality`, `just full-quality`, `just health`, and the locked-Nix primary seam.
 
 ## Decision ledger
 
@@ -74,10 +74,11 @@ Required validation commands are `just test test/repository/quality-interface.te
 
 - Implementation: `323e6ce66d4a9ec83a9c16e8c4944ca4aec1c696`.
 - Completion and review-correction commits: `18ff84a`, `42f6837`, `f067868`, `9f79ca8`, and `9b79e3a`.
-- Focused quality-interface tests passed with five tests, plus the six-test coverage-interface verification mode.
+- Focused quality-interface boundary tests passed with five tests, plus the six-test coverage-interface verification mode.
 - Static checks, build, documentation validation, and the advisory health report passed through Just.
-- Three consecutive locked-Nix runs measured `just quality` at 7.275s, 7.311s, and 7.296s, with a median of 7.296s.
-- Three consecutive locked-Nix runs measured `just full-quality` at 17.159s, 17.219s, and 17.250s, with a median of 17.219s.
+- Three consecutive locked-Nix runs measured `just quality` at 6.513s, 6.634s, and 6.629s, with a median of 6.629s.
+- Three consecutive locked-Nix runs measured `just full-quality` at 17.758s, 17.757s, and 17.495s, with a median of 17.757s.
+- The quality-interface boundary tests are excluded from routine quality and retained in full quality.
 - The locked-Nix primary seam passed `just init`, `just quality`, and `just full-quality`.
 - The quality and full-quality runs left only the task implementation changes in the tracked working tree.
 - Coverage produced `coverage/coverage-final.json` without a text coverage table.
