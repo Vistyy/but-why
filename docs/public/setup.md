@@ -5,7 +5,7 @@ Use this guide to install But Why for one repository and configure its Default A
 ## Copyable prompt
 
 ```text
-Install But Why for this repository.
+Set up But Why for this repository.
 Follow docs/public/setup.md in this repository.
 Identify your current agent harness from your execution context.
 Ask whether I want to use that harness or another supported harness.
@@ -14,32 +14,14 @@ Detect my existing skill conventions before proposing a skill location.
 Ask where to install the skill.
 ```
 
-## Install But Why
+## Provide the CLI
 
 But Why requires Node.js 24.
 The package is not available from the npm registry yet.
+Before publication, this guide does not define a package-installation workflow.
+Use an existing working `by` executable and confirm that `by --help` succeeds.
 
-From the But Why source checkout, build a tarball:
-
-```bash
-just pack
-```
-
-Install the tarball in the target repository:
-
-```bash
-npm install /path/to/but-why-0.0.0.tgz
-npx by --help
-```
-
-Alternatively, install the tarball globally:
-
-```bash
-npm install --global /path/to/but-why-0.0.0.tgz
-by --help
-```
-
-Use an existing working installation when one is available.
+After publication, the setup guide will define the supported `pnpx` execution command.
 
 ## Initialize the repository
 

@@ -39,7 +39,7 @@ Change Implement CLI JSON results demonstrate every handoff-file rejection and c
 - Baseline: `d66c10ab85769d3f9b153097e4594f1494692b9b`.
 - Spec review source: this task document.
 - Normative traceability: `docs/specs/taskless-changes-and-worktree-handoff.md`, section `Herdr implementation handoff`.
-- Primary public test seam: `test/change-implement.test.ts` through the in-process Change Implement CLI with JSON output.
+- Primary public test seam: `test/change/change-implement.boundary.test.ts` through the in-process Change Implement CLI with JSON output.
 
 | Acceptance criterion | Implementation target | Public test seam | Verification target |
 | --- | --- | --- | --- |
@@ -49,11 +49,11 @@ Change Implement CLI JSON results demonstrate every handoff-file rejection and c
 | Standard input remains rejected | `src/cli/change/changeCli.ts:runImplement` | Existing standard-input CLI test | Focused Change Implement tests |
 | Valid handoffs are forwarded unchanged through 256 KiB | `src/change/handoffFile.ts` and `src/cli/change/changeCli.ts` | Host forwarding test at the 256 KiB boundary | Focused Change Implement tests and handoff file tests |
 | Handoff error health is resolved | `src/cli/change/changeCli.ts:handoffFileError` | Public tests cover every mapping branch | `just quality` and Fallow health output |
-| Focused tests and quality pass | Test and quality recipes | Repository test and quality commands | `just test test/change-implement.test.ts test/handoff-file.test.ts` and `just quality` |
+| Focused tests and quality pass | Test and quality recipes | Repository test and quality commands | `just test test/change/change-implement.boundary.test.ts test/change/handoff-file.test.ts` and `just quality` |
 
 ## Required validation
 
-- `just test test/change-implement.test.ts test/handoff-file.test.ts`
+- `just test test/change/change-implement.boundary.test.ts test/change/handoff-file.test.ts`
 - `just quality`
 
 ## Decision ledger
@@ -71,7 +71,7 @@ Implementation commits:
 
 Verification:
 
-- Focused tests passed: 20 tests across `test/change-implement.test.ts` and `test/handoff-file.test.ts`.
+- Focused tests passed: 20 tests across `test/change/change-implement.boundary.test.ts` and `test/change/handoff-file.test.ts`.
 - Full quality passed: 378 tests passed, 1 intentional test skipped, static checks passed, Fallow passed, and the build passed.
 - The handoff error health finding is resolved.
 

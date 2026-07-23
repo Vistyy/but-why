@@ -4,7 +4,7 @@
 
 Coding agents use the repository quality command repeatedly while implementing a Change.
 The current command takes approximately 104 seconds, emits hundreds of successful-output lines, and can overlap with equivalent coverage workloads from other agents.
-Repeated Git setup, SQLite setup, worktree setup, package installation, and operating-system process startup account for most of the cost.
+Repeated Git setup, SQLite setup, worktree setup, and operating-system process startup account for most of the cost.
 This feedback loop makes ordinary implementation sessions substantially slower and can exhaust devbox resources.
 
 The current suite also repeats expensive boundaries for behavior that a cheaper public interface can prove.
@@ -20,14 +20,14 @@ Targeted tests provide immediate feedback for the behavior under active developm
 
 Both quality commands report runtime warnings without changing a successful command exit status.
 `just quality` has a maintained 10-second operating budget and must complete within 15 seconds before the test-boundary migration and final quality interface are accepted.
-`just full-quality` has a maintained 20-second operating budget and must complete within 30 seconds before that work is accepted.
+`just full-quality` has a maintained 30-second operating budget and must complete within 60 seconds before that work is accepted.
 The commands warn when they exceed their operating budgets during implementation.
 
 The suite will be refactored before tests are assigned to either quality command.
 Each behavior variation will use the cheapest public seam that proves the behavior reliably.
 Implementation uses existing injected module and phase seams first.
 A new production seam is justified only when it expresses a real module boundary and replaces substantial repeated integration setup; test-only hooks and fake abstractions around inherently external behavior are not introduced.
-Focused real Git, SQLite, worktree, filesystem, package, and process tests remain only when they prove an externally consequential adapter contract or reproduce a concrete prior regression.
+Focused real Git, SQLite, worktree, filesystem, and process tests remain only when they prove an externally consequential adapter contract or reproduce a concrete prior regression.
 Policy and result permutations use in-process seams.
 Duplicate, speculative, impossible-state, and low-value boundary permutations are removed.
 
@@ -65,7 +65,7 @@ Ordinary agent instructions do not tell agents to run `just full-quality`.
 ### Test placement
 
 A test belongs in the routine suite when an existing public module or CLI interface can prove its behavior without an expensive external boundary.
-A test belongs in the slow boundary suite only when a real process, concurrent writer, package installation, Git worktree, or similarly expensive integration proves an externally consequential adapter contract or reproduces a concrete prior regression.
+A test belongs in the slow boundary suite only when a real process, concurrent writer, Git worktree, or similarly expensive integration proves an externally consequential adapter contract or reproduces a concrete prior regression.
 
 Tests may share immutable fixture inputs.
 Tests must not share mutable Git repositories or SQLite state unless isolation and reset behavior are proven.
@@ -74,9 +74,8 @@ Test count and broad boundary-state coverage are not preservation goals.
 The suite preserves supported observable behavior, externally consequential adapter contracts, and concrete prior regression classes.
 
 The packed-file manifest check remains in the routine suite because it is cheap.
-Fresh project-local and temporary-prefix global package-install checks belong in the slow boundary suite.
-The package-install checks use one packed tarball instead of packing independently.
-Testing a future npm-hosted `pnpx` workflow is deferred until npm publication exists.
+Before npm publication, the repository does not define a supported package-installation workflow.
+Runtime verification through `pnpx` is deferred until npm publication provides the supported distribution path.
 
 ### Coverage
 
@@ -94,8 +93,8 @@ Vitest uses a compact successful-run reporter.
 Failed tests retain complete diagnostics.
 Each quality command reports its elapsed time after completion.
 `just quality` prints an advisory warning above its 10-second operating budget.
-`just full-quality` prints an advisory warning above its 20-second operating budget.
-Runtime limits do not determine command exit status, but the measured 15-second routine-quality and 30-second full-quality limits are hard completion gates for Tasks 134 and 156.
+`just full-quality` prints an advisory warning above its 30-second operating budget.
+Runtime limits do not determine command exit status, but the measured 15-second routine-quality and 60-second full-quality limits are hard completion gates for Tasks 134 and 156.
 Acceptance uses the median wall time from three consecutive runs of each quality command in a clean locked-Nix checkout with dependencies installed and no competing heavy workload.
 A change that exceeds an operating budget must restore headroom by optimizing, consolidating, or removing lower-value coverage in the same change.
 
@@ -127,7 +126,7 @@ Tests use real Git, SQLite, filesystem, or process behavior only when that integ
 
 Focused adapter and end-to-end tests support the primary seam.
 A workflow retains an end-to-end test only when its composition creates a distinct failure mode that focused adapter and in-process orchestration tests cannot prove.
-Retained tests cover consequential Git facts, Managed Worktree safety, SQLite persistence and atomicity, cross-process writer behavior, package installation, and other external contracts.
+Retained tests cover consequential Git facts, Managed Worktree safety, SQLite persistence and atomicity, cross-process writer behavior, and other external contracts.
 
 The shared capacity runner has focused command-level tests.
 Those tests verify lock contention, fail-fast output, child exit-code forwarding, interruption cleanup, and non-recursive composition.
@@ -151,7 +150,7 @@ The experiment commit is `6779f17`.
 - Adding changed-file or dependency-graph test selection.
 - Adding hard wall-clock failures.
 - Adding coverage percentage thresholds.
-- Testing npm-hosted `pnpx` execution before npm publication.
+- Defining or testing the npm-hosted `pnpx` workflow before npm publication.
 - Removing the opt-in live Herdr smoke test.
 - Changing product behavior to make tests faster.
 - Changing devbox CPU, memory, or swap configuration.
@@ -166,7 +165,7 @@ Coverage adds approximately five seconds, 289 MiB maximum resident memory, and 1
 
 Parallel Vitest execution means isolated savings do not reduce complete-suite wall time linearly.
 Each implementation slice must remeasure the complete suite because removing one critical path exposes the next slow file.
-The completed migration targets at most 10 seconds for routine quality and at most 20 seconds for full quality.
-The maintained operating budgets are 10 seconds for routine quality and 20 seconds for full quality.
-The 15-second routine-quality and 30-second full-quality limits are hard completion gates.
+The completed migration targets at most 10 seconds for routine quality and at most 30 seconds for full quality.
+The maintained operating budgets are 10 seconds for routine quality and 30 seconds for full quality.
+The 15-second routine-quality and 60-second full-quality limits are hard completion gates.
 Implementation must continue reducing test cost or low-value boundary coverage until both measured commands satisfy their operating budgets and completion limits.

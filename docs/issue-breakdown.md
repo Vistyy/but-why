@@ -18,7 +18,7 @@ It ends when But Why? completes one real SQLite-tracked Task-backed Change and p
 | 135 | Consolidate the source hierarchy and names | None |
 | 156 | Establish and verify the final quality gate | 135, 155, 157 |
 | 123 | Ship the Change-centered manual workflow | 107, 117, 129, 130, 156 |
-| 125 | Produce an installable v1 package | 123 |
+| 125 | Produce the v1 package candidate | 123 |
 | 131 | Dogfood the first SQLite-tracked Change workflow | 125 |
 | 126 | Publish But Why? to npm | 131 |
 | 138 | Establish post-publication compatibility policy | 126 |

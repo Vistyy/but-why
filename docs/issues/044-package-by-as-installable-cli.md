@@ -2,7 +2,8 @@
 
 ## Status
 
-Done.
+Historical completion record.
+The current product defers package execution until npm publication provides the supported `pnpx` path.
 
 ## Parent
 

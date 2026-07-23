@@ -46,7 +46,7 @@ Validation Workspace lifecycle tests demonstrate reuse, safe replacement, and re
 - Baseline: `c0613e1f2fbb9d7aea216beff08856f710ab468f`.
 - Spec review source: this task draft.
 - Normative traceability: Tasks 011, 038, and 152, plus `docs/specs/taskless-changes-and-worktree-handoff.md` and ADRs 0001 and 0002.
-- Primary seam: `test/validation-workspace-lifecycle.test.ts` through `createValidationWorkspace`.
+- Primary seam: `test/validation/validation-workspace-lifecycle.test.ts` through `createValidationWorkspace`.
 
 | Acceptance criterion | Implementation target | Public test seam | Verification target |
 | --- | --- | --- | --- |
@@ -56,9 +56,9 @@ Validation Workspace lifecycle tests demonstrate reuse, safe replacement, and re
 | Failed removal is safe | Existing-worktree preparation | Validation Workspace lifecycle tests | Remaining worktree fails; disappeared worktree recovers |
 | Cleanup and temporary-ref behavior remains unchanged | Scoped resource lifecycle | Existing lifecycle tests and recovery tests | Cleanup order and results remain unchanged |
 | Recovery health finding is resolved | Lifecycle coverage | Full coverage report and Fallow health check | `prepareExistingWorktree` is no longer above the CRAP threshold |
-| Validation and quality checks pass | Repository quality recipes | Focused lifecycle test and quality gate | `just test test/validation-workspace-lifecycle.test.ts`, `just typecheck`, and `just quality` |
+| Validation and quality checks pass | Repository quality recipes | Focused lifecycle test and quality gate | `just test test/validation/validation-workspace-lifecycle.test.ts`, `just typecheck`, and `just quality` |
 
-Required validation commands are `just test test/validation-workspace-lifecycle.test.ts`, `just typecheck`, `just format-check`, `just lint`, and `just quality`.
+Required validation commands are `just test test/validation/validation-workspace-lifecycle.test.ts`, `just typecheck`, `just format-check`, `just lint`, and `just quality`.
 The full quality gate is expected to retain the user-approved Task 157 `handoffFileError` health finding until Task 157 is completed.
 
 ## Implementation decision ledger

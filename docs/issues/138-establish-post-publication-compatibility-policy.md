@@ -19,7 +19,7 @@ Keep current domain language as the naming standard while requiring an explicit 
 
 ## Primary verification seam
 
-Documentation consistency audit after the published package installs successfully from the public registry.
+Documentation consistency audit after the published package executes successfully through `pnpx`.
 
 ## Acceptance criteria
 

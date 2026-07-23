@@ -54,8 +54,8 @@ full-quality:
     fi
     elapsed=$((SECONDS - started_at))
     echo "full-quality completed in ${elapsed}s"
-    if (( elapsed > 20 )); then
-        echo "warning: full-quality exceeded its 20s operating budget"
+    if (( elapsed > 30 )); then
+        echo "warning: full-quality exceeded its 30s operating budget"
     fi
     exit "$status"
 

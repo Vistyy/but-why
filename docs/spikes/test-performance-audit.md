@@ -21,7 +21,7 @@ The experiment keeps all 46 assertions and uses the existing public CLI interfac
 The 42 routine Task CLI tests initialize repositories and create fixture Tasks through `runByInProcessEffect`.
 Those tests still use real Git repositories, real SQLite persistence, migrations, repository identity, and filesystem state.
 
-The four tests that require separate operating-system processes moved unchanged to `test/task-cli-process.test.ts`.
+The four tests that require separate operating-system processes moved unchanged to `test/task/task-cli-process.boundary.test.ts`.
 They continue to verify cross-process persistence, concurrent comment appends, concurrent dependency replacement, and concurrent Task creation.
 
 ## Results
