@@ -149,7 +149,7 @@ Three consecutive clean locked-Nix measurements produced these results:
 
 | Command | Run 1 | Run 2 | Run 3 | Median | Operating budget | Completion gate |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `just quality` | 8.464 s | 8.504 s | 8.127 s | 8.464 s | 10 s | 15 s |
+| `just quality` | 8.671 s | 8.714 s | 8.255 s | 8.671 s | 10 s | 15 s |
 | `just full-quality` | 24.838 s | 24.901 s | 25.030 s | 24.901 s | 30 s | 60 s |
 
 ## Blocked by
