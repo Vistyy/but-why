@@ -11,7 +11,7 @@ import {
   RepositorySqlOperationFailed,
   RepositoryStateUnavailable,
   type RepositoryStorageError,
-} from "../repositoryStorageError.js";
+} from "../contracts/repositoryStorageError.js";
 import { decodeSqliteJsonStringArray } from "./sqliteJsonStringArray.js";
 
 type RepositorySqlService = {

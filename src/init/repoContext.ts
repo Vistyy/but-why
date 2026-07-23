@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { Effect } from "effect";
 
 import type { RepoConfig } from "../contracts/repoConfig.js";
-import { RepositoryIdentityConflict } from "../repositoryStorageError.js";
+import { RepositoryIdentityConflict } from "../contracts/repositoryStorageError.js";
 import { RepositorySql, repositorySqlLayer } from "../sqlite/repositorySql.js";
 import { isTaskPrefix } from "../contracts/taskPrefix.js";
 import { findGitRoot } from "./git.js";

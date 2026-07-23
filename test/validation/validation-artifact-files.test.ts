@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import {
   maxValidationArtifactBytes,
   writeValidationRunArtifactFile,
-} from "../../src/validationRun/artifactFiles.js";
+} from "../../src/change/validationRun/artifactFiles.js";
 import { createTestWorkspace } from "../support/testWorkspace.js";
 
 describe("Validation Run artifacts", () => {

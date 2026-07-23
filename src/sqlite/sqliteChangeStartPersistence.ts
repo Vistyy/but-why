@@ -7,8 +7,8 @@ import type { ChangeStartRecord, CreateChangeStartInput } from "../change/change
 import type { TaskState } from "../task/lifecycle.js";
 import type { TaskDependencyFact } from "../task/task.js";
 import { storedPublicTaskId, type PublicTaskId } from "../task/taskId.js";
-import type { TaskContextSnapshotV1 } from "../validationRun/taskContextSnapshot.js";
-import { RepositoryPersistedDataInvalid } from "../repositoryStorageError.js";
+import type { TaskContextSnapshotV1 } from "../change/validationRun/taskContextSnapshot.js";
+import { RepositoryPersistedDataInvalid } from "../contracts/repositoryStorageError.js";
 import { RepositorySql } from "./repositorySql.js";
 import {
   decodeSqliteChangePrepareFailure,

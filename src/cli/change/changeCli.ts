@@ -11,9 +11,9 @@ import {
   type CliResult,
 } from "../../cliResults.js";
 import { readHandoffFile, type HandoffFileReadError } from "../../change/handoffFile.js";
-import { loadChangeInspection } from "../../localChange/loadChangeInspection.js";
-import { withChangeUseCases } from "../../localChange/changeUseCases.js";
-import { loadChangeSubmit } from "../../localChange/loadChangeSubmit.js";
+import { loadChangeInspection } from "../../change/loadChangeInspection.js";
+import { withChangeUseCases } from "../../change/loadChangeUseCases.js";
+import { loadChangeSubmit } from "../../change/loadChangeSubmit.js";
 import type { InteractiveSessionHost } from "../../change/interactiveSessionHost.js";
 import type { ReviewerAgentRuntime } from "../../agent/reviewerAgentRuntime.js";
 import type { PublicTaskId } from "../../task/taskId.js";
@@ -26,7 +26,7 @@ import type {
   ChangeStartResult,
   ChangeUseCases,
 } from "../../change/changeUseCases.js";
-import type { RepositoryStorageError } from "../../repositoryStorageError.js";
+import type { RepositoryStorageError } from "../../contracts/repositoryStorageError.js";
 
 export type ChangeCommandEnvironment = {
   readonly cwd: string;

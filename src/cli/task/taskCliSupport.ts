@@ -12,8 +12,8 @@ import {
   type CliTaskIdParseResult,
 } from "../../cliTaskId.js";
 import { loadRepoLocalContext } from "../../init/repoContext.js";
-import { withTaskUseCases } from "../../localTask/taskUseCases.js";
-import type { RepositoryStorageError } from "../../repositoryStorageError.js";
+import { withTaskUseCases } from "../../task/loadTaskUseCases.js";
+import type { RepositoryStorageError } from "../../contracts/repositoryStorageError.js";
 import type { PublicTaskId } from "../../task/taskId.js";
 import type { TaskUseCases } from "../../task/taskUseCases.js";
 

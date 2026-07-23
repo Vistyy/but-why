@@ -1,7 +1,7 @@
 import {
   runValidationCommand,
   type ValidationCommandExecutor,
-} from "../validation/runValidationCommand.js";
+} from "../change/validation/runValidationCommand.js";
 
 export type RepositoryPreparationExecutor = ValidationCommandExecutor;
 

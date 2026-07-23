@@ -1,5 +1,5 @@
 import type { LoadRepoLocalContextError } from "./init/repoContext.js";
-import type { RepositoryStorageError } from "./repositoryStorageError.js";
+import type { RepositoryStorageError } from "./contracts/repositoryStorageError.js";
 import { structuredContractDiagnostics } from "./output/contractDiagnostics.js";
 import type { OutputFormat, StructuredObject } from "./output/structured.js";
 import { structuredError, type StructuredErrorInput } from "./cliError.js";

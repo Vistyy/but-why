@@ -17,7 +17,7 @@ import {
   RepositoryPersistedDataInvalid,
   RepositorySqlOperationFailed,
   RepositoryStateUnavailable,
-} from "../../src/repositoryStorageError.js";
+} from "../../src/contracts/repositoryStorageError.js";
 import { RepositorySql, repositorySqlLayer } from "../../src/sqlite/repositorySql.js";
 import { withTemporaryRepositoryState as withTemporaryState } from "../support/repository.js";
 

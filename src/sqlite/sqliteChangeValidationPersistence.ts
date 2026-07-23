@@ -2,7 +2,7 @@ import type * as SqlClient from "@effect/sql/SqlClient";
 import { Effect } from "effect";
 import { randomUUID } from "node:crypto";
 
-import type { CandidateRecord } from "../candidate/candidate.js";
+import type { CandidateRecord } from "../change/candidate/candidate.js";
 import type {
   CandidateValidationArtifact,
   CandidateValidationFinding,
@@ -12,10 +12,10 @@ import type {
   RecordCandidateValidationCommandRoundInput,
   StartCandidateValidationRunInput,
   StartCandidateValidationRunResult,
-} from "../candidateValidation/candidateValidationRunStore.js";
-import type { ChangeValidationPersistence } from "../changeValidation/changeValidationPersistence.js";
-import { RepositoryPersistedDataInvalid } from "../repositoryStorageError.js";
-import { validationPhase } from "../validationRun/validationRun.js";
+} from "../change/candidateValidation/candidateValidationRunStore.js";
+import type { ChangeValidationPersistence } from "../change/validation/changeValidationPersistence.js";
+import { RepositoryPersistedDataInvalid } from "../contracts/repositoryStorageError.js";
+import { validationPhase } from "../change/validationRun/validationRun.js";
 import {
   decodeSqliteCandidateValidationPolicy,
   encodeSqliteCandidateValidationPolicy,

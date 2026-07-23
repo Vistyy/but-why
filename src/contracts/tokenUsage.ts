@@ -1,6 +1,6 @@
 import { Effect, Schema } from "effect";
 
-import { TokenUsageContractFailed } from "../validation/validationToolingFailures.js";
+import { TokenUsageContractFailed } from "../change/validation/validationToolingFailures.js";
 import { contractDiagnostics, formatContractDiagnostics } from "./contractDiagnostics.js";
 
 const tokenCountSchema = Schema.Number.pipe(

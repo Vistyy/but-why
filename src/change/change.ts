@@ -1,5 +1,5 @@
 import type { PublicTaskId } from "../task/taskId.js";
-import type { TaskContextSnapshotV1 } from "../validationRun/taskContextSnapshot.js";
+import type { TaskContextSnapshotV1 } from "./validationRun/taskContextSnapshot.js";
 
 export const changeState = {
   open: "open",

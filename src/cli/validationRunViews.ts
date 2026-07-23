@@ -1,16 +1,16 @@
-import type { CandidateRecord } from "../candidate/candidate.js";
+import type { CandidateRecord } from "../change/candidate/candidate.js";
 import type {
   CandidateValidationArtifactInspection,
   CandidateValidationArtifactPreview,
   CandidateValidationArtifactRecord,
   CandidateValidationRunInspection,
-} from "../candidateValidation/inspectCandidateValidationRun.js";
+} from "../change/candidateValidation/inspectCandidateValidationRun.js";
 import type { ChangeRecord } from "../change/change.js";
 import type { StructuredObject } from "../output/structured.js";
 import {
   validationPhase,
   type ValidationRunFindingRecord,
-} from "../validationRun/validationRun.js";
+} from "../change/validationRun/validationRun.js";
 
 const validationRunFindingView = (finding: ValidationRunFindingRecord): StructuredObject => ({
   id: finding.id,

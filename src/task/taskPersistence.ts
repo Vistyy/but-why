@@ -1,6 +1,6 @@
 import type { Effect } from "effect";
 
-import type { RepositoryStorageError } from "../repositoryStorageError.js";
+import type { RepositoryStorageError } from "../contracts/repositoryStorageError.js";
 import type {
   AppendTaskCommentInput,
   AppendTaskCommentResult,

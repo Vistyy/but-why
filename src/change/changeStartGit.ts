@@ -6,7 +6,7 @@ import { decodeRepoConfigSource } from "../init/repoConfig.js";
 import {
   recordedRemoteDefaultLocalBranches,
   resolveLocalBranch,
-} from "../changeCandidateCapture/localGitCandidate.js";
+} from "./candidateCapture/localGitCandidate.js";
 import type { RepoLocalContext } from "../init/repoContext.js";
 import { changeReadiness } from "./change.js";
 import type {

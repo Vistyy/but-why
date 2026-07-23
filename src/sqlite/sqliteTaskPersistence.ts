@@ -23,7 +23,7 @@ import type {
   TransitionTaskStateInput,
   UpdateTaskContextInput,
 } from "../task/taskStore.js";
-import { RepositoryPersistedDataInvalid } from "../repositoryStorageError.js";
+import { RepositoryPersistedDataInvalid } from "../contracts/repositoryStorageError.js";
 import { RepositorySql } from "./repositorySql.js";
 
 export const openSqliteTaskPersistence = (

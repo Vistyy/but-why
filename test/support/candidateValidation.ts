@@ -4,13 +4,13 @@ import {
   piReviewerAgentRuntime,
   type ReviewerAgentRuntime,
 } from "../../src/agent/reviewerAgentRuntime.js";
-import type { ChangeValidationPersistence } from "../../src/changeValidation/changeValidationPersistence.js";
+import type { ChangeValidationPersistence } from "../../src/change/validation/changeValidationPersistence.js";
 import {
   CandidateValidationLive,
   CandidateValidationPaths,
   CandidateValidationPersistence,
   CandidateReviewerAgentRuntime,
-} from "../../src/candidateValidation/validateCandidate.js";
+} from "../../src/change/candidateValidation/validateCandidate.js";
 import { repositorySqlLayer, type RepositorySqlConfig } from "../../src/sqlite/repositorySql.js";
 import { openSqliteChangeValidationPersistence } from "../../src/sqlite/sqliteChangeValidationPersistence.js";
 

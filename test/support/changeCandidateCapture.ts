@@ -7,8 +7,8 @@ import {
   openChangeCandidateCapture,
   type CaptureLocalCandidateInput,
   type CaptureLocalCandidateResult,
-} from "../../src/changeCandidateCapture/captureLocalCandidate.js";
-import { localChangeCandidateCaptureGit } from "../../src/changeCandidateCapture/localGitCandidate.js";
+} from "../../src/change/candidateCapture/captureLocalCandidate.js";
+import { localChangeCandidateCaptureGit } from "../../src/change/candidateCapture/localGitCandidate.js";
 import { repositorySqlLayer } from "../../src/sqlite/repositorySql.js";
 import { openSqliteChangeCandidateCapturePersistence } from "../../src/sqlite/sqliteChangeCandidateCapturePersistence.js";
 

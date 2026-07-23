@@ -1,13 +1,13 @@
 import { Effect } from "effect";
 
-import type { CandidateRecord } from "../candidate/candidate.js";
+import type { CandidateRecord } from "./candidate/candidate.js";
 import type {
   CandidateValidationFinding,
   CandidateValidationRunRecord,
   CandidateValidationToolingFailure,
-} from "../candidateValidation/candidateValidationRunStore.js";
-import type { ChangeValidationPersistence } from "../changeValidation/changeValidationPersistence.js";
-import type { RepositoryStorageError } from "../repositoryStorageError.js";
+} from "./candidateValidation/candidateValidationRunStore.js";
+import type { ChangeValidationPersistence } from "./validation/changeValidationPersistence.js";
+import type { RepositoryStorageError } from "../contracts/repositoryStorageError.js";
 import type { ChangeRecord } from "./change.js";
 import type { ChangePersistence } from "./changePersistence.js";
 

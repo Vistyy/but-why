@@ -4,7 +4,7 @@ import { join } from "node:path";
 
 import { Effect } from "effect";
 
-import type { RepositoryStorageError } from "../../src/repositoryStorageError.js";
+import type { RepositoryStorageError } from "../../src/contracts/repositoryStorageError.js";
 import { type RepositorySql, repositorySqlLayer } from "../../src/sqlite/repositorySql.js";
 
 export const testRepositoryConfig = (root: string) => ({

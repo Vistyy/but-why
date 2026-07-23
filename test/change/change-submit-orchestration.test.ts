@@ -2,16 +2,16 @@ import { expect, it } from "@effect/vitest";
 import { Effect, Layer } from "effect";
 import { describe } from "vitest";
 
-import { CandidateValidation } from "../../src/candidateValidation/validateCandidate.js";
+import { CandidateValidation } from "../../src/change/candidateValidation/validateCandidate.js";
 import type { ChangeRecord } from "../../src/change/change.js";
 import type { ChangePersistence } from "../../src/change/changePersistence.js";
 import type { ChangeReconciliation } from "../../src/change/reconcileChange.js";
 import { openChangeSubmit } from "../../src/change/submitChange.js";
-import type { CaptureLocalCandidateResult } from "../../src/changeCandidateCapture/captureLocalCandidate.js";
+import type { CaptureLocalCandidateResult } from "../../src/change/candidateCapture/captureLocalCandidate.js";
 import type {
   PublishCandidateInput,
   PublishCandidateResult,
-} from "../../src/publication/candidatePublication.js";
+} from "../../src/change/publication/candidatePublication.js";
 import type { TaskPersistence } from "../../src/task/taskPersistence.js";
 import { publicTaskId } from "../../src/task/taskId.js";
 

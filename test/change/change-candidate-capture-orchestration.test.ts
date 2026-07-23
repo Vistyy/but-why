@@ -2,12 +2,12 @@ import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
 import { describe } from "vitest";
 
-import { openChangeCandidateCapture } from "../../src/changeCandidateCapture/captureLocalCandidate.js";
+import { openChangeCandidateCapture } from "../../src/change/candidateCapture/captureLocalCandidate.js";
 import type {
   CandidateCaptureChange,
   ChangeCandidateCapturePersistence,
-} from "../../src/changeCandidateCapture/changeCandidateCapturePersistence.js";
-import type { ChangeCandidateCaptureGit } from "../../src/changeCandidateCapture/changeCandidateCaptureGit.js";
+} from "../../src/change/candidateCapture/changeCandidateCapturePersistence.js";
+import type { ChangeCandidateCaptureGit } from "../../src/change/candidateCapture/changeCandidateCaptureGit.js";
 
 const now = "2026-07-12T10:00:00.000Z";
 

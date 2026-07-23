@@ -36,9 +36,9 @@ Move each newly unblocked issue to `Can start immediately`.
 - `src/cli.ts`: top-level CLI routing.
 - `src/cli/`: command modules and output boundary.
 - `src/task/`: task use cases.
-- `src/validationRun/`: Validation Run domain records and storage ports.
-- `src/submit/`: submit flow.
-- `src/validation/`: validation gate.
+- `src/change/validationRun/`: Validation Run domain records and storage ports.
+- `src/change/submit/`: Change submission configuration and errors.
+- `src/change/validation/`: Change validation gate.
 - `src/sqlite/`: SQLite internals.
 - `src/output/`: structured output helpers.
 - `src/init/`: repo initialization.

@@ -1,4 +1,4 @@
-import type { CandidateValidationPolicySnapshot } from "../candidateValidation/candidateValidationRunStore.js";
+import type { CandidateValidationPolicySnapshot } from "../change/candidateValidation/candidateValidationRunStore.js";
 
 export const encodeSqliteCandidateValidationPolicy = (
   policy: CandidateValidationPolicySnapshot,

@@ -2,7 +2,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
-import { resolveAcceptanceReviewPolicy } from "../../src/acceptanceReview/acceptanceReviewConfig.js";
+import { resolveAcceptanceReviewPolicy } from "../../src/change/acceptanceReview/acceptanceReviewConfig.js";
 import type { GlobalConfig } from "../../src/contracts/globalConfig.js";
 import type { RepoConfig } from "../../src/contracts/repoConfig.js";
 import { createTestWorkspace } from "../support/testWorkspace.js";

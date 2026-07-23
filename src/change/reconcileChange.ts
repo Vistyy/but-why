@@ -1,6 +1,6 @@
 import { Effect } from "effect";
 
-import type { RepositoryStorageError } from "../repositoryStorageError.js";
+import type { RepositoryStorageError } from "../contracts/repositoryStorageError.js";
 import type { ChangeCleanup, ChangeOwnedPullRequest, ChangeRecord } from "./change.js";
 import type { ChangePersistence } from "./changePersistence.js";
 import type { GitHubPullRequest, GitHubPullRequestGateway } from "./ownedPullRequestGateway.js";

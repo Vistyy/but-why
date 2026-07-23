@@ -8,7 +8,7 @@ import { captureLocalCandidate } from "../support/changeCandidateCapture.js";
 import {
   CandidateValidation,
   type ValidateCandidateInput,
-} from "../../src/candidateValidation/validateCandidate.js";
+} from "../../src/change/candidateValidation/validateCandidate.js";
 import { candidateValidationForTest } from "../support/candidateValidation.js";
 import {
   candidateReadyRepo,

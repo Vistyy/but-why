@@ -40,20 +40,26 @@
       {
         "name": "domain",
         "patterns": [
-          "src/candidate/candidate.ts",
+          "src/change/candidate/candidate.ts",
           "src/change/change.ts",
+          "src/change/validationRun/cleanup.ts",
+          "src/change/validationRun/taskContextSnapshot.ts",
+          "src/change/validationRun/toolingErrorKind.ts",
+          "src/change/validationRun/validationRun.ts",
           "src/task/lifecycle.ts",
           "src/task/task.ts",
-          "src/task/taskId.ts",
-          "src/validationRun/cleanup.ts",
-          "src/validationRun/taskContextSnapshot.ts",
-          "src/validationRun/toolingErrorKind.ts",
-          "src/validationRun/validationRun.ts"
+          "src/task/taskId.ts"
         ]
       },
       {
         "name": "composition",
-        "patterns": ["src/localCandidateValidation/**", "src/localChange/**", "src/localTask/**"]
+        "patterns": [
+          "src/change/candidateValidation/candidateValidationLayer.ts",
+          "src/change/loadChangeInspection.ts",
+          "src/change/loadChangeSubmit.ts",
+          "src/change/loadChangeUseCases.ts",
+          "src/task/loadTaskUseCases.ts"
+        ]
       },
       {
         "name": "storage",
@@ -65,8 +71,8 @@
           "src/change/changeStartGit.ts",
           "src/change/herdrInteractiveSessionHost.ts",
           "src/change/localChangeCleanupGit.ts",
-          "src/changeCandidateCapture/localGitCandidate.ts",
-          "src/publication/localCandidatePublicationGit.ts",
+          "src/change/candidateCapture/localGitCandidate.ts",
+          "src/change/publication/localCandidatePublicationGit.ts",
           "src/repositoryPreparation/localRepositoryPreparation.ts",
           "src/submissionEnvironment/gitFacts.ts",
           "src/submissionEnvironment/githubTarget.ts",
@@ -76,13 +82,13 @@
       {
         "name": "change-workflows",
         "patterns": [
-          "src/candidateValidation/inspectCandidateValidationRun.ts",
+          "src/change/candidateValidation/inspectCandidateValidationRun.ts",
           "src/change/changeUseCases.ts",
           "src/change/inspectChange.ts",
           "src/change/reconcileChange.ts",
           "src/change/submitChange.ts",
-          "src/changeCandidateCapture/captureLocalCandidate.ts",
-          "src/publication/candidatePublication.ts"
+          "src/change/candidateCapture/captureLocalCandidate.ts",
+          "src/change/publication/candidatePublication.ts"
         ]
       }
     ],

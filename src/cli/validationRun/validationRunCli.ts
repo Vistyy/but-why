@@ -10,7 +10,7 @@ import {
   success,
   usageError,
 } from "../../cliResults.js";
-import { loadCandidateValidationRunInspection } from "../../localCandidateValidation/candidateValidationRunInspection.js";
+import { loadCandidateValidationRunInspection } from "../../change/candidateValidation/loadCandidateValidationRunInspection.js";
 import type { StructuredObject } from "../../output/structured.js";
 import {
   candidateValidationArtifactContentView,

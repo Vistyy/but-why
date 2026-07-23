@@ -15,7 +15,7 @@ import type {
   RecordChangeCleanupInput,
   RecordPublishedPullRequestInput,
 } from "../change/changeStore.js";
-import { RepositoryPersistedDataInvalid } from "../repositoryStorageError.js";
+import { RepositoryPersistedDataInvalid } from "../contracts/repositoryStorageError.js";
 import { storedPublicTaskId } from "../task/taskId.js";
 import { RepositorySql } from "./repositorySql.js";
 import { decodeSqliteChangePrepareFailure } from "./sqliteChangePreparation.js";

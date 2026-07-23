@@ -1,7 +1,7 @@
 import { encodeReviewerWireValue, reviewerOutputTag } from "./reviewerOutputWire.js";
-import type { ReviewerOutputContractFailed } from "../validation/validationToolingFailures.js";
+import type { ReviewerOutputContractFailed } from "../change/validation/validationToolingFailures.js";
 import type { ReviewerOutput } from "../contracts/reviewerOutput.js";
-import type { TaskContextSnapshotV1 } from "../validationRun/taskContextSnapshot.js";
+import type { TaskContextSnapshotV1 } from "../change/validationRun/taskContextSnapshot.js";
 
 export const defaultAcceptanceInstructions = [
   "Review the exact Candidate against the supplied immutable Acceptance Context.",

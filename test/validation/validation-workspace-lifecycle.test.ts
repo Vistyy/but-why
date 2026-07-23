@@ -2,7 +2,7 @@ import { expect, it } from "@effect/vitest";
 import { Effect, Exit, Fiber } from "effect";
 import { afterEach, describe, vi } from "vitest";
 
-import type { createValidationWorkspace as createValidationWorkspaceType } from "../../src/validation/createValidationWorkspace.js";
+import type { createValidationWorkspace as createValidationWorkspaceType } from "../../src/change/validation/createValidationWorkspace.js";
 
 const input = {
   repoRoot: "/repo",
@@ -472,7 +472,7 @@ const loadCreateValidationWorkspace = async (
     noSandbox: () => ({}),
   }));
 
-  vi.doMock("../../src/validation/validationGitGlue.js", () => ({
+  vi.doMock("../../src/change/validation/validationGitGlue.js", () => ({
     validationTempRefName: () => tempRefName,
     expectedSandcastleWorktreePath: () => expectedWorktreePath,
     ensureValidationTempRef: () => {
@@ -508,7 +508,7 @@ const loadCreateValidationWorkspace = async (
     },
   }));
 
-  const module = await import("../../src/validation/createValidationWorkspace.js");
+  const module = await import("../../src/change/validation/createValidationWorkspace.js");
 
   return module.createValidationWorkspace;
 };

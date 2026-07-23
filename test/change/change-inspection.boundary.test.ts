@@ -9,7 +9,7 @@ import { afterAll, beforeAll, describe } from "vitest";
 import { publicTaskId } from "../../src/task/taskId.js";
 import { openSqliteChangeCandidateCapturePersistence } from "../../src/sqlite/sqliteChangeCandidateCapturePersistence.js";
 import { openSqliteChangePersistence } from "../../src/sqlite/sqliteChangePersistence.js";
-import type { ChangeValidationPersistence } from "../../src/changeValidation/changeValidationPersistence.js";
+import type { ChangeValidationPersistence } from "../../src/change/validation/changeValidationPersistence.js";
 import { RepositorySql, repositorySqlLayer } from "../../src/sqlite/repositorySql.js";
 import { openSqliteChangeValidationPersistence } from "../../src/sqlite/sqliteChangeValidationPersistence.js";
 import { openSqliteTaskPersistence } from "../../src/sqlite/sqliteTaskPersistence.js";

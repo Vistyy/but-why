@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { localCandidatePublicationGit } from "../../src/publication/localCandidatePublicationGit.js";
+import { localCandidatePublicationGit } from "../../src/change/publication/localCandidatePublicationGit.js";
 
 describe("local Candidate publication Git", () => {
   it("reads the first non-merge subject in starting-commit order", () => {

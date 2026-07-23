@@ -4,9 +4,9 @@ import { afterAll, beforeAll } from "vitest";
 
 import type { ChangePersistence } from "../../src/change/changePersistence.js";
 import type { GitHubPullRequestRequest } from "../../src/change/ownedPullRequestGateway.js";
-import type { CaptureLocalCandidateResult } from "../../src/changeCandidateCapture/captureLocalCandidate.js";
-import type { ChangeValidationPersistence } from "../../src/changeValidation/changeValidationPersistence.js";
-import { openCandidatePublication } from "../../src/publication/candidatePublication.js";
+import type { CaptureLocalCandidateResult } from "../../src/change/candidateCapture/captureLocalCandidate.js";
+import type { ChangeValidationPersistence } from "../../src/change/validation/changeValidationPersistence.js";
+import { openCandidatePublication } from "../../src/change/publication/candidatePublication.js";
 import { RepositorySql } from "../../src/sqlite/repositorySql.js";
 import { openSqliteChangePersistence } from "../../src/sqlite/sqliteChangePersistence.js";
 import { openSqliteChangeValidationPersistence } from "../../src/sqlite/sqliteChangeValidationPersistence.js";

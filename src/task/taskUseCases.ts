@@ -4,7 +4,7 @@ import type { RepoLocalContext } from "../init/repoContext.js";
 import {
   RepositoryStateUnavailable,
   type RepositoryStorageError,
-} from "../repositoryStorageError.js";
+} from "../contracts/repositoryStorageError.js";
 import {
   readTaskContextDraft,
   removeTaskContextDraft,

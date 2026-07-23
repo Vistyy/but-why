@@ -7,16 +7,16 @@ import type {
   ReviewerAgentResult,
   ReviewerAgentRuntime,
 } from "../../src/agent/reviewerAgentRuntime.js";
-import type { CaptureLocalCandidateResult } from "../../src/changeCandidateCapture/captureLocalCandidate.js";
+import type { CaptureLocalCandidateResult } from "../../src/change/candidateCapture/captureLocalCandidate.js";
 import { captureLocalCandidate } from "../support/changeCandidateCapture.js";
 import {
   CandidateValidation,
   type TaskBackedCandidateValidationPolicy,
-} from "../../src/candidateValidation/validateCandidate.js";
+} from "../../src/change/candidateValidation/validateCandidate.js";
 import { candidateValidationForTest } from "../support/candidateValidation.js";
-import type { RepositoryStorageError } from "../../src/repositoryStorageError.js";
-import { ReviewerOutputContractFailed } from "../../src/validation/validationToolingFailures.js";
-import type { TaskContextSnapshotV1 } from "../../src/validationRun/taskContextSnapshot.js";
+import type { RepositoryStorageError } from "../../src/contracts/repositoryStorageError.js";
+import { ReviewerOutputContractFailed } from "../../src/change/validation/validationToolingFailures.js";
+import type { TaskContextSnapshotV1 } from "../../src/change/validationRun/taskContextSnapshot.js";
 import {
   candidateReadyRepo,
   candidateRepositoryConfig,

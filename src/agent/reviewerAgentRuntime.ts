@@ -12,7 +12,7 @@ import {
 import {
   SandcastleToolingFailed,
   type ValidationToolingFailure,
-} from "../validation/validationToolingFailures.js";
+} from "../change/validation/validationToolingFailures.js";
 
 export type ReviewerAgentRuntime = {
   readonly review: (input: ReviewerAgentInput) => Effect.Effect<ReviewerAgentResult>;

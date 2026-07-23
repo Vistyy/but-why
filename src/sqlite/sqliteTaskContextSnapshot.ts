@@ -1,4 +1,4 @@
-import type { TaskContextSnapshotV1 } from "../validationRun/taskContextSnapshot.js";
+import type { TaskContextSnapshotV1 } from "../change/validationRun/taskContextSnapshot.js";
 
 export const encodeSqliteTaskContextSnapshot = (snapshot: TaskContextSnapshotV1): string =>
   JSON.stringify({

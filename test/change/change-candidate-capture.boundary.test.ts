@@ -5,7 +5,7 @@ import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
 import { afterAll, beforeAll, describe } from "vitest";
 
-import { localChangeCandidateCaptureGit } from "../../src/changeCandidateCapture/localGitCandidate.js";
+import { localChangeCandidateCaptureGit } from "../../src/change/candidateCapture/localGitCandidate.js";
 import { createGitRepo } from "../support/by-cli.js";
 import { captureLocalCandidate } from "../support/changeCandidateCapture.js";
 import { createInitializedRepo } from "../support/initializedRepo.js";

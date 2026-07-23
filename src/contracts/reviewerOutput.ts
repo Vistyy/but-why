@@ -1,6 +1,6 @@
 import { Effect, Schema } from "effect";
 
-import { ReviewerOutputContractFailed } from "../validation/validationToolingFailures.js";
+import { ReviewerOutputContractFailed } from "../change/validation/validationToolingFailures.js";
 import { nonBlankStringSchema } from "./agentConfig.js";
 import { contractDiagnostics, formatContractDiagnostics } from "./contractDiagnostics.js";
 import { repoRelativePathSchema } from "./repoConfig.js";

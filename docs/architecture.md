@@ -3,6 +3,28 @@
 But Why? is a repository-scoped validation workflow for agent-assisted code work.
 It is task-based, not pipeline-based.
 
+## Source hierarchy
+
+`src/change/` owns Change workflows.
+It contains Change records, Candidates, Candidate capture, Candidate validation, Validation Runs, validation phases, publication, submission, and Change composition.
+
+`src/task/` owns Task intent and Task lifecycle.
+It contains Task records, lifecycle rules, Task identity, Task persistence interfaces, Task files, and Task composition.
+
+The following top-level source folders have shared roles:
+
+- `src/agent/` contains reviewer-agent execution adapters and agent-profile resolution.
+- `src/cli/` and `src/cli.ts` contain CLI routing and command adapters.
+- `src/contracts/` contains configuration, output, and repository-storage error contracts.
+- `src/init/` contains Local Repository initialization and repository-context adapters.
+- `src/output/` contains structured output codecs and serializers.
+- `src/repositoryPreparation/` contains the shared Repository Preparation adapter.
+- `src/sqlite/` contains SQLite persistence adapters.
+- `src/submissionEnvironment/` contains Git and GitHub submission-environment adapters.
+
+No top-level source folder represents a migration stage.
+Change and Task composition modules stay inside their owning domain instead of using `local*` folders.
+
 ## Ownership
 
 A Task owns requested outcome, approved intent, dependencies, and user-facing lifecycle.

@@ -8,8 +8,8 @@ import type {
   ChangeCandidateCapturePersistence,
   CommitCandidateCaptureInput,
   CommitCandidateCaptureResult,
-} from "../changeCandidateCapture/changeCandidateCapturePersistence.js";
-import { RepositoryPersistedDataInvalid } from "../repositoryStorageError.js";
+} from "../change/candidateCapture/changeCandidateCapturePersistence.js";
+import { RepositoryPersistedDataInvalid } from "../contracts/repositoryStorageError.js";
 import { RepositorySql } from "./repositorySql.js";
 
 type StoredCandidate = {

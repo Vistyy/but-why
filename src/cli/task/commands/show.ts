@@ -3,7 +3,7 @@ import { Effect } from "effect";
 import type { CliResult } from "../../../cliResults.js";
 import { stateStoreUnavailable, success } from "../../../cliResults.js";
 import { withGlobalHelpFlags } from "../../../cliHelp.js";
-import { loadChangeInspection } from "../../../localChange/loadChangeInspection.js";
+import { loadChangeInspection } from "../../../change/loadChangeInspection.js";
 import {
   parseTaskIdArg,
   resolveTaskId,

@@ -5,7 +5,7 @@ import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
 import { afterAll, beforeAll, describe } from "vitest";
 
-import type { ChangeValidationPersistence } from "../../src/changeValidation/changeValidationPersistence.js";
+import type { ChangeValidationPersistence } from "../../src/change/validation/changeValidationPersistence.js";
 import { openSqliteChangeCandidateCapturePersistence } from "../../src/sqlite/sqliteChangeCandidateCapturePersistence.js";
 import { repositorySqlLayer } from "../../src/sqlite/repositorySql.js";
 import { openSqliteChangeValidationPersistence } from "../../src/sqlite/sqliteChangeValidationPersistence.js";

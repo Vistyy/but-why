@@ -1,23 +1,23 @@
 import { Effect } from "effect";
 
-import type { CandidateValidationPolicyResolution } from "../candidateValidation/resolveCandidateValidationPolicy.js";
+import type { CandidateValidationPolicyResolution } from "./candidateValidation/resolveCandidateValidationPolicy.js";
 import type {
   CandidateValidationFinding,
   CandidateValidationToolingFailure,
-} from "../candidateValidation/candidateValidationRunStore.js";
+} from "./candidateValidation/candidateValidationRunStore.js";
 import {
   CandidateValidation,
   type CandidateValidationService,
-} from "../candidateValidation/validateCandidate.js";
+} from "./candidateValidation/validateCandidate.js";
 import type {
   CaptureLocalCandidateInput,
   CaptureLocalCandidateResult,
-} from "../changeCandidateCapture/captureLocalCandidate.js";
-import type { RepositoryStorageError } from "../repositoryStorageError.js";
+} from "./candidateCapture/captureLocalCandidate.js";
+import type { RepositoryStorageError } from "../contracts/repositoryStorageError.js";
 import type {
   CandidatePublication,
   PublishCandidateResult,
-} from "../publication/candidatePublication.js";
+} from "./publication/candidatePublication.js";
 import type { TaskState } from "../task/lifecycle.js";
 import type { TaskPersistence } from "../task/taskPersistence.js";
 import {

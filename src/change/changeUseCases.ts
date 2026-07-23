@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { Effect } from "effect";
 
 import type { RepoLocalContext } from "../init/repoContext.js";
-import type { RepositoryStorageError } from "../repositoryStorageError.js";
+import type { RepositoryStorageError } from "../contracts/repositoryStorageError.js";
 import {
   runRepositoryPreparation,
   type RepositoryPreparationExecutor,
