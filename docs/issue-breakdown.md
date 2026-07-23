@@ -8,7 +8,7 @@ It ends when But Why? completes one real SQLite-tracked Task-backed Change and p
 ## Can start immediately
 
 - Task 135: Consolidate the source hierarchy and names.
-- Task 158: Apply measured Vitest worker parallelism.
+- Task 159: Optimize remaining slow boundary fixtures.
 - Task 117: Cancel Task-backed and taskless Changes.
 - Task 129: Submit a Task-backed Change with no repository change.
 
@@ -17,8 +17,7 @@ It ends when But Why? completes one real SQLite-tracked Task-backed Change and p
 | Task | Capability | Blocked by |
 | --- | --- | --- |
 | 135 | Consolidate the source hierarchy and names | None |
-| 158 | Apply measured Vitest worker parallelism | None |
-| 159 | Optimize remaining slow boundary fixtures | 158 |
+| 159 | Optimize remaining slow boundary fixtures | None |
 | 156 | Establish and verify the final quality gate | 135, 155, 157, 159 |
 | 123 | Ship the Change-centered manual workflow | 107, 117, 129, 130, 156 |
 | 125 | Produce the v1 package candidate | 123 |
