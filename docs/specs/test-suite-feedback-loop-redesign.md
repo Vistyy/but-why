@@ -18,15 +18,18 @@ Targeted tests provide immediate feedback for the behavior under active developm
 `just quality` provides routine product feedback that agents can run repeatedly.
 `just full-quality` adds the small set of checks that remain expensive because they require a distinct real boundary.
 
-Both quality commands will have advisory runtime targets.
-`just quality` targets 10 to 15 seconds and warns above 15 seconds.
-`just full-quality` targets approximately 30 seconds and warns above 30 seconds.
-A runtime warning does not change a successful exit status.
+Both quality commands report runtime warnings without changing a successful command exit status.
+`just quality` has a maintained 10-second operating budget and must complete within 15 seconds before the test-boundary migration and final quality interface are accepted.
+`just full-quality` has a maintained 20-second operating budget and must complete within 30 seconds before that work is accepted.
+The commands warn when they exceed their operating budgets during implementation.
 
 The suite will be refactored before tests are assigned to either quality command.
 Each behavior variation will use the cheapest public seam that proves the behavior reliably.
-Focused real Git, SQLite, worktree, filesystem, package, and process tests will remain where those boundaries provide distinct coverage.
-Duplicate expensive permutations will move to cheaper seams or be removed when another test catches the same defect class.
+Implementation uses existing injected module and phase seams first.
+A new production seam is justified only when it expresses a real module boundary and replaces substantial repeated integration setup; test-only hooks and fake abstractions around inherently external behavior are not introduced.
+Focused real Git, SQLite, worktree, filesystem, package, and process tests remain only when they prove an externally consequential adapter contract or reproduce a concrete prior regression.
+Policy and result permutations use in-process seams.
+Duplicate, speculative, impossible-state, and low-value boundary permutations are removed.
 
 Successful test output will be concise.
 Failure output will preserve complete test names, errors, diffs, and stack traces.
@@ -61,13 +64,13 @@ Ordinary agent instructions do not tell agents to run `just full-quality`.
 ### Test placement
 
 A test belongs in the routine suite when an existing public module or CLI interface can prove its behavior without an expensive external boundary.
-A test belongs in the slow boundary suite only when its distinct defect class requires a real process, concurrent writer, package installation, Git worktree, or similarly expensive integration.
+A test belongs in the slow boundary suite only when a real process, concurrent writer, package installation, Git worktree, or similarly expensive integration proves an externally consequential adapter contract or reproduces a concrete prior regression.
 
 Tests may share immutable fixture inputs.
 Tests must not share mutable Git repositories or SQLite state unless isolation and reset behavior are proven.
 A slow fixture must be optimized before its test is assigned to the slow boundary suite.
-Test count is not a preservation goal.
-Preserving each distinct observable behavior and defect class is the preservation goal.
+Test count and broad boundary-state coverage are not preservation goals.
+The suite preserves supported observable behavior, externally consequential adapter contracts, and concrete prior regression classes.
 
 The packed-file manifest check remains in the routine suite because it is cheap.
 Fresh project-local and temporary-prefix global package-install checks belong in the slow boundary suite.
@@ -88,9 +91,11 @@ No coverage percentage threshold is introduced.
 Vitest uses a compact successful-run reporter.
 Failed tests retain complete diagnostics.
 Each quality command reports its elapsed time after completion.
-`just quality` prints an advisory warning above 15 seconds.
-`just full-quality` prints an advisory warning above 30 seconds.
-Runtime limits are soft expectations and do not determine command exit status.
+`just quality` prints an advisory warning above its 10-second operating budget.
+`just full-quality` prints an advisory warning above its 20-second operating budget.
+Runtime limits do not determine command exit status, but the measured 15-second routine-quality and 30-second full-quality limits are hard completion gates for Tasks 134 and 156.
+Acceptance uses the median wall time from three consecutive runs of each quality command in a clean locked-Nix checkout with dependencies installed and no competing heavy workload.
+A change that exceeds an operating budget must restore headroom by optimizing, consolidating, or removing lower-value coverage in the same change.
 
 ### Heavy-workload coordination
 
@@ -119,7 +124,8 @@ Routine behavior variations use existing in-process CLI and public module interf
 Tests use real Git, SQLite, filesystem, or process behavior only when that integration is part of the behavior under test.
 
 Focused adapter and end-to-end tests support the primary seam.
-These tests cover real Git facts, Managed Worktree safety, SQLite persistence and atomicity, cross-process writer behavior, package installation, and other retained external contracts.
+A workflow retains an end-to-end test only when its composition creates a distinct failure mode that focused adapter and in-process orchestration tests cannot prove.
+Retained tests cover consequential Git facts, Managed Worktree safety, SQLite persistence and atomicity, cross-process writer behavior, package installation, and other external contracts.
 
 The shared capacity runner has focused command-level tests.
 Those tests verify lock contention, fail-fast output, child exit-code forwarding, interruption cleanup, and non-recursive composition.
@@ -159,4 +165,6 @@ Coverage adds approximately five seconds, 289 MiB maximum resident memory, and 1
 Parallel Vitest execution means isolated savings do not reduce complete-suite wall time linearly.
 Each implementation slice must remeasure the complete suite because removing one critical path exposes the next slow file.
 The expected result is approximately 10 to 20 seconds for routine quality and approximately 25 to 40 seconds for full quality.
-The approved targets remain 15 seconds and 30 seconds, while these ranges acknowledge that the final result requires measurement.
+The maintained operating budgets are 10 seconds for routine quality and 20 seconds for full quality.
+The 15-second routine-quality and 30-second full-quality limits are hard completion gates.
+Implementation must continue reducing test cost or low-value boundary coverage until both measured commands satisfy their operating budgets and completion limits.

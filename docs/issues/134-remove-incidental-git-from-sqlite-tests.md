@@ -2,7 +2,10 @@
 
 ## Status
 
-Done.
+In progress.
+
+Reopened because the first implementation pass left major hotspots largely unchanged and did not exhaust the available performance improvements.
+The reopened implementation plan was approved after grilling and is recorded in the specification and decision ledger below.
 
 ## Specification
 
@@ -12,7 +15,7 @@ Done.
 ## Behaviors owned
 
 - Routine behavior tests use the cheapest public seam that proves each behavior reliably.
-- Focused tests retain real Git, Managed Worktree, SQLite concurrency, filesystem, package-install, and process coverage where those boundaries prove a distinct defect class.
+- Focused tests retain real Git, Managed Worktree, SQLite concurrency, filesystem, package-install, and process coverage only where they prove an externally consequential adapter contract or reproduce a concrete prior regression.
 - Storage-only tests do not initialize Git repositories.
 - Package-install checks reuse one immutable packed tarball.
 - Each migrated hotspot records before-and-after runtime evidence.
@@ -32,11 +35,12 @@ Focused hotspot suites plus the complete non-coverage Vitest suite in the locked
 
 - [x] The accepted Task CLI experiment is promoted without losing its 46 behavior checks.
 - [x] Storage-only tests do not initialize Git repositories.
-- [x] Routine CLI, Change, Candidate, and Validation behavior uses existing in-process or injected public seams where an external boundary is not observable behavior.
-- [x] Focused tests retain each distinct real Git, Managed Worktree, SQLite concurrency, filesystem, package-install, and process defect class.
+- [ ] Routine CLI, Change, Candidate, and Validation behavior uses existing in-process or injected public seams where an external boundary is not observable behavior.
+- [ ] Focused tests retain real Git, Managed Worktree, SQLite concurrency, filesystem, package-install, and process coverage only for externally consequential adapter contracts and concrete prior regressions.
 - [x] Fresh package-install checks share one packed tarball.
-- [x] Duplicate end-to-end permutations are removed only when another test proves the same behavior and defect class.
-- [x] Each hotspot and the complete non-coverage suite have recorded before-and-after timings.
+- [ ] Duplicate end-to-end permutations are removed only when another test proves the same behavior and defect class.
+- [ ] Every material hotspot has been optimized until further runtime reduction would cost disproportionate behavioral or boundary-defect coverage.
+- [ ] Each hotspot and the complete non-coverage suite have recorded before-and-after timings for the completed migration.
 - [x] All selected tests pass after every migration stage.
 
 ## Scoped implementation record
@@ -82,9 +86,16 @@ Wall time is included for the complete suite because parallel workers make aggre
 - Local: validate Change Implement handoff input before loading Change state in the invalid-input matrix because the external Change boundary is not observable for those usage errors.
 - Local: construct reconciliation ownership permutations through SQLite persistence and an injected GitHub gateway while retaining real Git for completion and unsafe-cleanup behavior.
 - Local: pack the package once in a suite-scoped immutable fixture and remove it after the suite because each consumer installation has independent mutable state.
+- Settled during the reopened planning session: measured `just quality` runtime at or below 15 seconds and measured `just full-quality` runtime at or below 30 seconds are hard completion gates, although runtime warnings do not change command exit status.
+- Settled during the reopened planning session: maintain 10-second routine-quality and 20-second full-quality operating budgets, verify each through the median wall time of three consecutive runs in a clean locked-Nix checkout with dependencies installed and no competing heavy workload, and restore headroom in any change that exceeds a budget.
+- Settled during the reopened planning session: retain a real-boundary test only when it proves an externally consequential adapter contract or reproduces a concrete prior regression; move policy and result permutations in-process and remove speculative, impossible-state, duplicate, and low-value boundary permutations.
+- Settled during the reopened planning session: do not require a representative end-to-end test for every workflow; retain one only when workflow composition creates a distinct failure mode that focused adapter and in-process orchestration tests cannot prove.
+- Settled during the reopened planning session: use existing injected module and phase seams first; add a production seam only when it expresses a real module boundary and replaces substantial repeated integration setup, without test-only hooks or fake abstractions around inherently external behavior.
 - Deferred to Task 156: final routine and full-quality command membership, capacity coordination, and locked clean-checkout verification.
 
-## Completion
+## First implementation checkpoint
+
+The following record describes the incomplete first pass and remains as baseline evidence for the reopened work.
 
 Implementation commits:
 
@@ -100,10 +111,10 @@ Verification:
 - `just typecheck`, `just format-check`, and `just docs-check` passed after the final correction batch.
 - The complete non-coverage suite improved from 258.51 to 224.94 aggregate Vitest seconds and from 113.15 to 84.43 wall-clock seconds in the measured runs.
 
-Review status:
+Historical review status:
 
-- Spec: `APPROVED` and latched.
-- Standards: `APPROVED WITH REQUIRED COMMENTS` and latched after guarding package-fixture cleanup and synchronizing the quality-task name.
+- The first pass received Spec `APPROVED` and Standards `APPROVED WITH REQUIRED COMMENTS`.
+- Reopening the task invalidates those completion reviews for the new implementation diff.
 
 ## Required validation
 
