@@ -73,6 +73,7 @@ Required validation commands are `just test test/repository/quality-interface.te
 ## Completion evidence
 
 - Implementation: `323e6ce66d4a9ec83a9c16e8c4944ca4aec1c696`.
+- Completion and review-correction commits: `18ff84a`, `42f6837`, `f067868`, `9f79ca8`, and `9b79e3a`.
 - Focused quality-interface tests passed with five tests, plus the six-test coverage-interface verification mode.
 - Static checks, build, documentation validation, and the advisory health report passed through Just.
 - Three consecutive locked-Nix runs measured `just quality` at 7.275s, 7.311s, and 7.296s, with a median of 7.296s.
@@ -80,6 +81,8 @@ Required validation commands are `just test test/repository/quality-interface.te
 - The locked-Nix primary seam passed `just init`, `just quality`, and `just full-quality`.
 - The quality and full-quality runs left only the task implementation changes in the tracked working tree.
 - Coverage produced `coverage/coverage-final.json` without a text coverage table.
+- Spec review: `APPROVED` and latched.
+- Standards review: `APPROVED` and latched.
 
 ## Blocked by
 
