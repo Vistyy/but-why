@@ -67,7 +67,7 @@ The full repository suite and Fallow import graph additionally verify the final 
   ADR 0008 makes Change the durable owner of Candidates, Validation Runs, Findings, and delivery.
 - Local: keep `agent`, `contracts`, `init`, `output`, `repositoryPreparation`, `sqlite`, and `submissionEnvironment` as top-level shared roles.
   The specification defines these as shared execution, contract, repository-context, output, preparation, persistence, and submission-environment adapters.
-- Local: move composition loaders into their owning domains as `change/loadChangeInspection.ts`, `change/loadChangeSubmit.ts`, `change/loadChangeUseCases.ts`, `change/candidateValidationLayer.ts`, and `task/loadTaskUseCases.ts`.
+- Local: move composition loaders into their owning domains as `change/loadChangeInspection.ts`, `change/loadChangeSubmit.ts`, `change/loadChangeUseCases.ts`, `change/candidateValidation/candidateValidationLayer.ts`, and `task/loadTaskUseCases.ts`.
   This removes migration-only `local*` folders without changing the existing interfaces.
 - Local: rename the `changeCandidateCapture` modules and identifiers to `candidateCapture` inside `src/change/`.
   `Candidate` and `Change` are the canonical terms, and the nested owner supplies the missing context.
@@ -75,6 +75,8 @@ The full repository suite and Fallow import graph additionally verify the final 
   Change owns validation, while `repositoryPreparation` remains shared because implementation and validation use the same preparation interface.
 - Local: place `repositoryStorageError.ts` under `src/contracts/`.
   CLI, Change, Task, and SQLite modules share the error contract, and Fallow keeps CLI modules independent from storage adapters.
+- Local: update path-based Fallow and ast-grep rules to the final source hierarchy.
+  The task requires structural checks to describe the final hierarchy, and this decision changes paths only without changing thresholds, exclusions, suppressions, or enforced behavior.
 
 ## Acceptance criteria
 
