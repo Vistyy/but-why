@@ -44,12 +44,14 @@ full-quality:
     #!/usr/bin/env bash
     set -uo pipefail
     started_at=$SECONDS
-    just test & tests_pid=$!
     just build & build_pid=$!
+    just _quality-static-routine & static_pid=$!
     status=0
-    wait "$tests_pid" || status=1
     wait "$build_pid" || status=1
-    just _quality-static-routine || status=1
+    wait "$static_pid" || status=1
+    if (( status == 0 )); then
+        just test || status=1
+    fi
     elapsed=$((SECONDS - started_at))
     echo "full-quality completed in ${elapsed}s"
     if (( elapsed > 20 )); then

@@ -84,7 +84,7 @@ The complete-suite final value is Vitest wall time from the final full-quality v
 | Installable CLI | 16.45 s | 6.67 s | Manifest and both documented installation workflows share one packed tarball |
 | Change Submit | 13.85 s | 1.23 s | In-process orchestration proves submission outcomes without a duplicate publication composition |
 | Candidate Validation and inspection | 9.89 s | 3.00 s | Focused tests retain validation file copying and persisted evidence inspection |
-| Complete non-coverage suite | 258.51 s aggregate / 113.15 s wall | 16.63 s wall | The selected suite passes with retained external boundaries explicit |
+| Complete non-coverage suite | 258.51 s aggregate / 113.15 s wall | 15.92 s wall | The selected suite passes with retained external boundaries explicit |
 
 ## Decision ledger
 
@@ -151,7 +151,7 @@ Three consecutive locked-Nix wall-time measurements produced these results:
 | Command | Run 1 | Run 2 | Run 3 | Median | Operating budget | Completion gate |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
 | `just quality` | 6.690 s | 6.852 s | 6.495 s | 6.690 s | 10 s | 15 s |
-| `just full-quality` | 19.777 s | 19.633 s | 19.070 s | 19.633 s | 20 s | 30 s |
+| `just full-quality` | 19.413 s | 19.720 s | 19.219 s | 19.413 s | 20 s | 30 s |
 
 ## Blocked by
 
