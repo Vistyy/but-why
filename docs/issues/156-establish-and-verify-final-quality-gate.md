@@ -66,6 +66,7 @@ Required validation commands are `just test test/repository/quality-interface.bo
 - Local: use one shell capacity runner backed by a lock in the Git Common Directory so linked worktrees share the repository workflow guardrail.
 - Local: mark the active workload class beside the lock and fail fast with an actionable message rather than waiting for capacity.
 - Local: use an inherited `BY_CAPACITY_LOCK_HELD` marker so nested internal commands execute under the existing lock without reacquiring it.
+- Local: run each locked workload in its own process group so interruption cleanup terminates descendants before releasing capacity.
 - Local: use Vitest's dot reporter because it removes routine per-test success lines while retaining Vitest's complete failed-test diagnostics.
 - User-approved: the original Task 156 request explicitly approved the shared capacity lock, concise Vitest reporter, truthful Just statuses, and complete-workload coordination; the follow-up approval authorized moving the process-heavy quality-interface tests into the boundary suite.
 - Local: preserve the existing suite selection, runtime warning budgets, advisory health coverage, and absence of a coverage threshold because the approved specification assigns those behaviors outside this implementation choice.
@@ -74,7 +75,8 @@ Required validation commands are `just test test/repository/quality-interface.bo
 
 - Implementation: `323e6ce66d4a9ec83a9c16e8c4944ca4aec1c696`.
 - Completion and review-correction commits: `18ff84a`, `42f6837`, `f067868`, `9f79ca8`, and `9b79e3a`.
-- Focused quality-interface boundary tests passed with five tests, plus the six-test coverage-interface verification mode.
+- Focused quality-interface boundary tests passed with six tests, plus the seven-test coverage-interface verification mode.
+- The complete boundary suite passed with 66 tests.
 - Static checks, build, documentation validation, and the advisory health report passed through Just.
 - Three consecutive locked-Nix runs measured `just quality` at 6.513s, 6.634s, and 6.629s, with a median of 6.629s.
 - Three consecutive locked-Nix runs measured `just full-quality` at 17.758s, 17.757s, and 17.495s, with a median of 17.757s.

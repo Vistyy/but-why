@@ -34,9 +34,9 @@ trap cleanup EXIT
 
 export BY_CAPACITY_LOCK_HELD=1
 set +e
-"$@" &
+setsid --wait "$@" &
 child_pid=$!
-trap 'kill -TERM "$child_pid" 2>/dev/null || true; wait "$child_pid" 2>/dev/null || true; exit 143' INT TERM
+trap 'kill -TERM -- "-$child_pid" 2>/dev/null || true; wait "$child_pid" 2>/dev/null || true; exit 143' INT TERM
 wait "$child_pid"
 status=$?
 trap - INT TERM

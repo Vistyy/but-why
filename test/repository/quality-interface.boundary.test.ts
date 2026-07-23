@@ -159,6 +159,32 @@ describe("quality interface", () => {
     expect(recovered.status).toBe(0);
   });
 
+  test("terminates interrupted workload descendants before releasing the lock", async () => {
+    const directory = mkdtempSync(join(tmpdir(), "but-why-quality-lock-"));
+    temporaryPaths.push(directory);
+    const lockFile = join(directory, "capacity.lock");
+    const readyFile = join(directory, "descendant-ready");
+    const holder = startRunner(lockFile, [
+      "complete test",
+      "sh",
+      "-c",
+      'printf ready > "$1"; sleep 100 & wait',
+      "sh",
+      readyFile,
+    ]);
+
+    try {
+      await waitForFile(readyFile);
+      holder.child.kill("SIGINT");
+      expect((await holder.done).status).toBe(143);
+    } finally {
+      await stopRunner(holder);
+    }
+
+    const recovered = await runRunner(lockFile, ["complete coverage", "sh", "-c", "exit 0"]);
+    expect(recovered.status).toBe(0);
+  });
+
   test("locks complete option-bearing commands while leaving targeted tests unlocked", async () => {
     const directory = mkdtempSync(join(tmpdir(), "but-why-quality-lock-"));
     temporaryPaths.push(directory);
