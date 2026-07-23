@@ -18,6 +18,8 @@ export type CompleteMergedChangeInput = {
 export type CompleteNoChangeInput = {
   readonly changeId: string;
   readonly taskId: string;
+  readonly candidateId: string;
+  readonly validationRunId: string;
   readonly now: string;
 };
 
@@ -55,14 +57,15 @@ export type CompleteMergedChangeResult =
   | { readonly ok: false; readonly code: "change_not_found" | "change_already_closed" };
 
 export type CompleteNoChangeResult =
-  | { readonly ok: true; readonly changed: boolean }
+  | { readonly ok: true; readonly changed: boolean; readonly change: ChangeRecord }
   | {
       readonly ok: false;
       readonly code:
         | "change_not_found"
         | "change_not_open"
         | "task_not_found"
-        | "task_already_completed";
+        | "task_already_completed"
+        | "task_state_invalid";
     };
 
 export type CancelChangeResult =

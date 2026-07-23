@@ -144,6 +144,17 @@ const submitChange = (
   input: ChangeSubmitInput,
 ): Effect.Effect<ChangeSubmitResult, RepositoryStorageError, CandidateValidation> =>
   Effect.gen(function* () {
+    const existing = yield* dependencies.persistence.getChangeById(input.changeId);
+    if (existing?.noChangeCompletion !== undefined && existing.noChangeCompletion !== null) {
+      return {
+        ok: true,
+        status: "no_change",
+        changeId: existing.id,
+        candidateId: existing.noChangeCompletion.candidateId,
+        validationRunId: existing.noChangeCompletion.validationRunId,
+        completionKind: "no_change",
+      } as const;
+    }
     const selected = yield* selectReadyChange(dependencies.persistence, input.changeId);
     if (!selected.ok) return selected;
     const change = selected.change;
@@ -162,8 +173,17 @@ const submitChange = (
     if (change.taskId === null && candidate.headSha === candidate.comparisonBaseSha) {
       return { ok: true, status: "nothing_to_submit", changeId: change.id } as const;
     }
+    const changedCandidateHistory =
+      change.taskId !== null && change.publication === null && change.startingCommit !== null
+        ? yield* dependencies.persistence.hasCandidateWithChangedHead(
+            change.id,
+            change.startingCommit,
+          )
+        : false;
     if (
       change.taskId !== null &&
+      change.publication === null &&
+      !changedCandidateHistory &&
       candidate.headSha === change.startingCommit &&
       candidate.comparisonBaseSha === change.startingCommit
     ) {
@@ -221,13 +241,6 @@ const validateAndCompleteNoChange = (
       return taskTransitionFailure(change);
     }
     const validation = yield* CandidateValidation;
-    if (validation.validateNoChange === undefined) {
-      return {
-        ok: false,
-        code: "validation_policy_invalid",
-        message: "Acceptance-only Candidate validation is unavailable.",
-      } as const;
-    }
     const validationResult = yield* validation.validateNoChange({
       ...candidateIdentity(candidate),
       noChange: true,
@@ -251,6 +264,8 @@ const validateAndCompleteNoChange = (
     const completed = yield* dependencies.persistence.completeNoChange({
       changeId: change.id,
       taskId: change.taskId,
+      candidateId: candidate.candidateId,
+      validationRunId: validationResult.validationRunId,
       now,
     });
     if (!completed.ok) return taskTransitionFailure(change);

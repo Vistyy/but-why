@@ -60,6 +60,11 @@ export type ChangePublication = {
   readonly pullRequest: ChangeOwnedPullRequest | null;
 };
 
+export type ChangeNoChangeCompletion = {
+  readonly candidateId: string;
+  readonly validationRunId: string;
+};
+
 export type ChangeRecord = {
   readonly id: string;
   readonly repositoryCommonDirectory: string;
@@ -73,6 +78,7 @@ export type ChangeRecord = {
   readonly prepare: ChangePrepareDefinition | null;
   readonly prepareFailure: ChangePrepareFailure | null;
   readonly publication: ChangePublication | null;
+  readonly noChangeCompletion?: ChangeNoChangeCompletion | null;
   readonly cleanup: ChangeCleanup;
   readonly state: ChangeState;
   readonly closeReason: ChangeCloseReason | null;

@@ -68,6 +68,7 @@ describe("Change Submit orchestration", () => {
               } as const;
             }),
           validateTaskBackedCandidate: () => Effect.die("Acceptance Review was not expected"),
+          validateNoChange: () => Effect.die("Acceptance-only validation was not expected"),
           listFindings: () => Effect.succeed([]),
           listToolingFailures: () => Effect.succeed([]),
           listRounds: () => Effect.succeed([]),
@@ -213,6 +214,107 @@ describe("Change Submit orchestration", () => {
       }),
   );
 
+  it.effect("does not complete no-change when the Change already owns a pull request", () =>
+    Effect.gen(function* () {
+      const events: string[] = [];
+      const change = readyChange({
+        taskId: publicTaskId("BY-1"),
+        acceptanceContext: {
+          version: 1,
+          title: "Approved intent",
+          description: "Deliver it",
+          comments: [],
+        },
+        publication: {
+          candidateId: "published-candidate",
+          validationRunId: "published-run",
+          target: { owner: "acme", repo: "repo", baseBranch: "main", remoteName: "origin" },
+          headBranch: "change-1",
+          expectedHeadSha: "published-head",
+          pullRequest: { number: 42, url: "https://github.test/acme/repo/pull/42" },
+        },
+      });
+      const submit = openChangeSubmit(
+        dependencies({
+          events,
+          change,
+          taskBacked: true,
+          reconciliationStatus: "open",
+          captureResult: { ...candidate, comparisonBaseSha: "base", headSha: "base" },
+        }),
+      );
+      const validationLayer = Layer.succeed(CandidateValidation, {
+        validateCandidate: () => Effect.die("Taskless validation was not expected"),
+        validateNoChange: () => Effect.die("No-change completion was not expected"),
+        validateTaskBackedCandidate: () =>
+          Effect.sync(() => {
+            events.push("validate_task_backed");
+            return {
+              ok: true,
+              reused: false,
+              validationRunId: "run-1",
+              outcome: "passed",
+            } as const;
+          }),
+        listFindings: () => Effect.succeed([]),
+        listToolingFailures: () => Effect.succeed([]),
+        listRounds: () => Effect.succeed([]),
+      });
+
+      const result = yield* submit
+        .submit({ changeId: change.id, now })
+        .pipe(Effect.provide(validationLayer));
+
+      expect(result).toMatchObject({ ok: true, status: "published" });
+      expect(events).toEqual([
+        "reconcile",
+        "capture",
+        "detect_target",
+        "validate_task_backed",
+        "publish",
+      ]);
+    }),
+  );
+
+  it.effect("returns a durable no-change completion on repeated Submit", () =>
+    Effect.gen(function* () {
+      const events: string[] = [];
+      const change = readyChange({
+        taskId: publicTaskId("BY-1"),
+        state: "closed",
+        closeReason: "completed",
+        closedAt: now,
+        noChangeCompletion: {
+          candidateId: "candidate-no-change",
+          validationRunId: "run-no-change",
+        },
+      });
+      const submit = openChangeSubmit(dependencies({ events, change }));
+      const validationLayer = Layer.succeed(CandidateValidation, {
+        validateCandidate: () => Effect.die("Validation was not expected"),
+        validateTaskBackedCandidate: () => Effect.die("Validation was not expected"),
+        validateNoChange: () => Effect.die("Validation was not expected"),
+        listFindings: () => Effect.succeed([]),
+        listToolingFailures: () => Effect.succeed([]),
+        listRounds: () => Effect.succeed([]),
+      });
+
+      const result = yield* submit
+        .submit({ changeId: change.id, now })
+        .pipe(Effect.provide(validationLayer));
+
+      expect(result).toEqual({
+        ok: true,
+        status: "no_change",
+        changeId: change.id,
+        candidateId: "candidate-no-change",
+        validationRunId: "run-no-change",
+        completionKind: "no_change",
+      });
+      expect(events).toEqual([]);
+    }),
+  );
+
   it.effect("uses Acceptance Context for a Task-backed Candidate and marks the Task ready", () =>
     Effect.gen(function* () {
       const events: string[] = [];
@@ -242,6 +344,7 @@ describe("Change Submit orchestration", () => {
               outcome: "passed",
             } as const;
           }),
+        validateNoChange: () => Effect.die("Taskless validation was not expected"),
         listFindings: () => Effect.succeed([]),
         listToolingFailures: () => Effect.succeed([]),
         listRounds: () => Effect.succeed([]),
@@ -293,6 +396,7 @@ describe("Change Submit orchestration", () => {
         const validationLayer = Layer.succeed(CandidateValidation, {
           validateCandidate: () => Effect.die("Duplicate validation"),
           validateTaskBackedCandidate: () => Effect.die("Duplicate validation"),
+          validateNoChange: () => Effect.die("Duplicate validation"),
           listFindings: () => Effect.succeed([]),
           listToolingFailures: () => Effect.succeed([]),
           listRounds: () => Effect.succeed([]),
@@ -329,6 +433,7 @@ describe("Change Submit orchestration", () => {
         const validationLayer = Layer.succeed(CandidateValidation, {
           validateCandidate: () => Effect.die("Validation must not start"),
           validateTaskBackedCandidate: () => Effect.die("Validation must not start"),
+          validateNoChange: () => Effect.die("Validation must not start"),
           listFindings: () => Effect.succeed([]),
           listToolingFailures: () => Effect.succeed([]),
           listRounds: () => Effect.succeed([]),
@@ -355,6 +460,7 @@ describe("Change Submit orchestration", () => {
         validateCandidate: () => Effect.die("Validation must not start without a GitHub target"),
         validateTaskBackedCandidate: () =>
           Effect.die("Validation must not start without a GitHub target"),
+        validateNoChange: () => Effect.die("Validation must not start without a GitHub target"),
         listFindings: () => Effect.succeed([]),
         listToolingFailures: () => Effect.succeed([]),
         listRounds: () => Effect.succeed([]),
@@ -393,6 +499,7 @@ describe("Change Submit orchestration", () => {
             validationRunId: "run-1",
             outcome: "blocked",
           }),
+        validateNoChange: () => Effect.die("Taskless validation was not expected"),
         listFindings: () => Effect.succeed([finding]),
         listToolingFailures: () => Effect.succeed([]),
         listRounds: () => Effect.succeed([]),
@@ -437,6 +544,7 @@ describe("Change Submit orchestration", () => {
             validationRunId: "run-1",
             outcome: "tooling_failed",
           }),
+        validateNoChange: () => Effect.die("Taskless validation was not expected"),
         listFindings: () => Effect.succeed([]),
         listToolingFailures: () => Effect.succeed([toolingFailure]),
         listRounds: () => Effect.succeed([]),
@@ -490,6 +598,7 @@ const dependencies = (input: {
     repositoryCommonDirectory: "/repo/.git",
     persistence: {
       getChangeById: () => Effect.succeed(input.change),
+      hasCandidateWithChangedHead: () => Effect.succeed(false),
       completeNoChange: () => {
         events.push("complete_no_change");
         return Effect.succeed({ ok: true as const, changed: true });

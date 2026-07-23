@@ -50,6 +50,8 @@ const columns = [
   "publication_expected_head_sha AS publicationExpectedHeadSha",
   "publication_pr_number AS publicationPrNumber",
   "publication_pr_url AS publicationPrUrl",
+  "no_change_candidate_id AS noChangeCandidateId",
+  "no_change_validation_run_id AS noChangeValidationRunId",
   "cleanup_state AS cleanupState",
   "cleanup_blocking_reason AS cleanupBlockingReason",
   "state",
@@ -69,6 +71,10 @@ export const openSqliteChangePersistence = (): Effect.Effect<
       repository.transaction("read Change", (sql) => getById(sql, changeId)),
     getChangeByTaskId: (taskId) =>
       repository.transaction("read Change by Task", (sql) => getByTaskId(sql, taskId)),
+    hasCandidateWithChangedHead: (changeId, startingCommit) =>
+      repository.operation("check changed Candidate history", (sql) =>
+        hasCandidateWithChangedHead(sql, changeId, startingCommit),
+      ),
     listChanges: (input) =>
       repository.transaction("list Changes", (sql) => listChanges(sql, input)),
     listChangesForReconciliation: (commonDirectory) =>
@@ -111,6 +117,21 @@ const getByTaskId = (sql: SqlClient.SqlClient, taskId: string) =>
   Effect.flatMap(
     sql.unsafe<ChangeRow>(`SELECT ${columns} FROM changes WHERE task_id = ?`, [taskId]),
     (rows) => mapRow(rows[0], "read Change by Task"),
+  );
+
+const hasCandidateWithChangedHead = (
+  sql: SqlClient.SqlClient,
+  changeId: string,
+  startingCommit: string,
+) =>
+  Effect.map(
+    sql<{ readonly present: number }>`
+      SELECT 1 AS present
+      FROM candidates
+      WHERE change_id = ${changeId} AND head_sha <> ${startingCommit}
+      LIMIT 1
+    `,
+    (rows) => rows.length > 0,
   );
 
 const listChanges = (sql: SqlClient.SqlClient, input: ListChangesInput) =>
@@ -207,27 +228,42 @@ const completeNoChange = (sql: SqlClient.SqlClient, input: CompleteNoChangeInput
   Effect.gen(function* () {
     const change = yield* getById(sql, input.changeId);
     if (change === undefined) return { ok: false as const, code: "change_not_found" as const };
-    if (change.state !== changeState.open) {
-      return { ok: false as const, code: "change_not_open" as const };
+    if (change.state === changeState.closed) {
+      return change.noChangeCompletion?.candidateId === input.candidateId &&
+        change.noChangeCompletion.validationRunId === input.validationRunId
+        ? { ok: true as const, changed: false, change }
+        : { ok: false as const, code: "change_not_open" as const };
     }
     if (change.taskId !== storedPublicTaskId(input.taskId)) {
       return { ok: false as const, code: "task_not_found" as const };
     }
-    const tasks = yield* sql<{ readonly state: string; readonly completionKind: string | null }>`
-      SELECT state, completion_kind AS completionKind FROM tasks WHERE id = ${input.taskId}
+    const tasks = yield* sql<{ readonly state: string }>`
+      SELECT state FROM tasks WHERE id = ${input.taskId}
     `;
     const task = tasks[0];
     if (task === undefined) return { ok: false as const, code: "task_not_found" as const };
     if (task.state === "done") {
-      return task.completionKind === "no_change"
-        ? { ok: true as const, changed: false }
-        : { ok: false as const, code: "task_already_completed" as const };
+      return { ok: false as const, code: "task_already_completed" as const };
     }
+    if (task.state !== "validating" && task.state !== "ready") {
+      return { ok: false as const, code: "task_state_invalid" as const };
+    }
+    yield* sql`
+      UPDATE changes
+      SET state = 'closed', close_reason = 'completed', cleanup_state = 'pending',
+        cleanup_blocking_reason = NULL, no_change_candidate_id = ${input.candidateId},
+        no_change_validation_run_id = ${input.validationRunId}, updated_at = ${input.now},
+        closed_at = ${input.now}
+      WHERE id = ${input.changeId} AND state = 'open'
+    `;
     yield* sql`
       UPDATE tasks SET state = 'done', completion_kind = 'no_change', updated_at = ${input.now}
       WHERE id = ${input.taskId}
     `;
-    return { ok: true as const, changed: true };
+    const completed = yield* getById(sql, input.changeId);
+    if (completed === undefined)
+      return yield* invalidData("complete no-change Task", "Change disappeared");
+    return { ok: true as const, changed: true, change: completed };
   });
 
 const cancelChange = (sql: SqlClient.SqlClient, input: CancelChangeInput) =>
@@ -381,6 +417,13 @@ const mapRow = (row: ChangeRow | undefined, operationName: string) =>
               ? null
               : decodeSqliteChangePrepareFailure(row.prepareFailure),
           publication: decodeSqliteChangePublication(row),
+          noChangeCompletion:
+            row.noChangeCandidateId === null || row.noChangeValidationRunId === null
+              ? null
+              : {
+                  candidateId: row.noChangeCandidateId,
+                  validationRunId: row.noChangeValidationRunId,
+                },
           cleanup: { state: row.cleanupState, blockingReason: row.cleanupBlockingReason },
           state: row.state,
           closeReason: row.closeReason,
@@ -402,6 +445,8 @@ type ChangeRow = Omit<
   readonly prepareCommand: string | null;
   readonly prepareTimeoutSeconds: number | null;
   readonly prepareFailure: string | null;
+  readonly noChangeCandidateId: string | null;
+  readonly noChangeValidationRunId: string | null;
   readonly cleanupState: ChangeCleanup["state"];
   readonly cleanupBlockingReason: string | null;
 } & SqliteChangePublicationRow;

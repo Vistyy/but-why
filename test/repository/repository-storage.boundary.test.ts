@@ -156,6 +156,16 @@ describe("repository SQL storage", () => {
         if (!created.ok) return;
         const taskId = storedPublicTaskId(created.task.id);
         yield* tasks.approveTask({ taskId, now: "2026-07-17T23:06:00.000Z" });
+        yield* tasks.transitionTaskState({
+          taskId,
+          to: "implementing",
+          now: "2026-07-17T23:06:30.000Z",
+        });
+        yield* tasks.transitionTaskState({
+          taskId,
+          to: "validating",
+          now: "2026-07-17T23:06:45.000Z",
+        });
         const started = yield* starts.create({
           id: "change-no-change",
           repositoryCommonDirectory: input.commonDirectory,
@@ -172,16 +182,28 @@ describe("repository SQL storage", () => {
           yield* changes.completeNoChange({
             changeId: started.change.id,
             taskId,
+            candidateId: "candidate-no-change",
+            validationRunId: "run-no-change",
             now: "2026-07-17T23:08:00.000Z",
           }),
-        ).toEqual({ ok: true, changed: true });
+        ).toMatchObject({ ok: true, changed: true, change: { state: "closed" } });
         expect(
           yield* changes.completeNoChange({
             changeId: started.change.id,
             taskId,
+            candidateId: "candidate-no-change",
+            validationRunId: "run-no-change",
             now: "2026-07-17T23:09:00.000Z",
           }),
-        ).toEqual({ ok: true, changed: false });
+        ).toMatchObject({ ok: true, changed: false, change: { state: "closed" } });
+        expect(yield* changes.getChangeById(started.change.id)).toMatchObject({
+          state: "closed",
+          closeReason: "completed",
+          noChangeCompletion: {
+            candidateId: "candidate-no-change",
+            validationRunId: "run-no-change",
+          },
+        });
         expect(yield* tasks.getTaskById(taskId)).toMatchObject({
           state: "done",
           completionKind: "no_change",

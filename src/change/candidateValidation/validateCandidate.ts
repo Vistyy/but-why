@@ -91,7 +91,7 @@ export type CandidateValidationService = {
   readonly validateTaskBackedCandidate: (
     input: ValidateTaskBackedCandidateInput,
   ) => Effect.Effect<ValidateCandidateResult, RepositoryStorageError>;
-  readonly validateNoChange?: (
+  readonly validateNoChange: (
     input: ValidateNoChangeInput,
   ) => Effect.Effect<ValidateCandidateResult, RepositoryStorageError>;
   readonly listFindings: ChangeValidationPersistence["listFindings"];

@@ -66,6 +66,8 @@ const baselineStatements = [
       publication_expected_head_sha TEXT,
       publication_pr_number INTEGER,
       publication_pr_url TEXT,
+      no_change_candidate_id TEXT,
+      no_change_validation_run_id TEXT,
       cleanup_state TEXT NOT NULL DEFAULT 'complete' CHECK (cleanup_state IN ('complete', 'pending')),
       cleanup_blocking_reason TEXT,
       FOREIGN KEY (task_id) REFERENCES tasks(id),
