@@ -74,12 +74,12 @@ Required validation commands are `just test test/repository/quality-interface.bo
 ## Completion evidence
 
 - Implementation: `323e6ce66d4a9ec83a9c16e8c4944ca4aec1c696`.
-- Completion and review-correction commits: `18ff84a`, `42f6837`, `f067868`, `9f79ca8`, and `9b79e3a`.
+- Completion and review-correction commits: `18ff84a`, `42f6837`, `f067868`, `9f79ca8`, `9b79e3a`, `2b61e90`, `0e6add9`, `ffdcf10`, `48e316a`, and `f6a1c11`.
 - Focused quality-interface boundary tests passed with six tests, plus the seven-test coverage-interface verification mode.
 - The complete boundary suite passed with 66 tests.
 - Static checks, build, documentation validation, and the advisory health report passed through Just.
-- Three consecutive locked-Nix runs measured `just quality` at 6.513s, 6.634s, and 6.629s, with a median of 6.629s.
-- Three consecutive locked-Nix runs measured `just full-quality` at 17.758s, 17.757s, and 17.495s, with a median of 17.757s.
+- Three consecutive locked-Nix runs measured `just quality` at 6.702s, 6.765s, and 6.935s, with a median of 6.765s.
+- Three consecutive locked-Nix runs measured `just full-quality` at 18.134s, 17.379s, and 17.904s, with a median of 17.904s.
 - The quality-interface boundary tests are excluded from routine quality and retained in full quality.
 - The locked-Nix primary seam passed `just init`, `just quality`, and `just full-quality`.
 - The quality and full-quality runs left only the task implementation changes in the tracked working tree.
