@@ -15,6 +15,12 @@ export type CompleteMergedChangeInput = {
   readonly now: string;
 };
 
+export type CancelChangeInput = {
+  readonly changeId: string;
+  readonly reason: string;
+  readonly now: string;
+};
+
 export type RecordChangeCleanupInput = {
   readonly changeId: string;
   readonly cleanup: ChangeCleanup;
@@ -41,6 +47,13 @@ export type RecordPublishedPullRequestInput = BeginChangePublicationInput & {
 export type CompleteMergedChangeResult =
   | { readonly ok: true; readonly changed: boolean; readonly change: ChangeRecord }
   | { readonly ok: false; readonly code: "change_not_found" | "change_already_closed" };
+
+export type CancelChangeResult =
+  | { readonly ok: true; readonly changed: boolean; readonly change: ChangeRecord }
+  | {
+      readonly ok: false;
+      readonly code: "change_not_found" | "change_already_completed";
+    };
 
 export type RecordChangeCleanupResult =
   | { readonly ok: true; readonly changed: boolean; readonly change: ChangeRecord }

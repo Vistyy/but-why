@@ -15,6 +15,8 @@ import { generatedPublicTaskId, type PublicTaskId } from "../task/taskId.js";
 import type {
   AppendTaskCommentInput,
   ApproveTaskInput,
+  CancelTaskInput,
+  CancelTaskResult,
   CreateTaskInput,
   ListTasksInput,
   ReplaceTaskDependenciesInput,
@@ -55,6 +57,8 @@ export const openSqliteTaskPersistence = (
       repository.transactionImmediate("transition Task state", (sql) =>
         transitionTaskState(sql, input),
       ),
+    cancelTask: (input) =>
+      repository.transactionImmediate("cancel Task", (sql) => cancelTask(sql, input)),
   }));
 
 const createTask = (sql: SqlClient.SqlClient, taskPrefix: string, input: CreateTaskInput) =>
@@ -115,7 +119,7 @@ const listTasks = (sql: SqlClient.SqlClient, input: ListTasksInput) =>
         : yield* sql<TaskSummaryRow>`
             SELECT id, title, state, created_at AS createdAt, updated_at AS updatedAt
             FROM tasks
-            WHERE state <> 'done'
+            WHERE state NOT IN ('done', 'cancelled')
             ORDER BY created_at ASC, numeric_id ASC
           `;
     return yield* Effect.forEach(rows, (row) => rowToTaskSummary(sql, row));
@@ -139,6 +143,7 @@ const getTaskById = (sql: SqlClient.SqlClient, taskId: PublicTaskId) =>
   Effect.gen(function* () {
     const rows = yield* sql<StoredTaskRecordRow>`
       SELECT id, title, description, state,
+        cancel_reason AS cancelReason,
         created_at AS createdAt,
         updated_at AS updatedAt,
         (SELECT COUNT(*) FROM task_comments WHERE task_id = tasks.id) AS commentCount
@@ -211,6 +216,24 @@ const updateTaskContext = (sql: SqlClient.SqlClient, input: UpdateTaskContextInp
       return yield* invalidData("update Task Context", "Task disappeared");
     }
     return { ok: true as const, task: updated };
+  });
+
+const cancelTask = (
+  sql: SqlClient.SqlClient,
+  input: CancelTaskInput,
+): Effect.Effect<CancelTaskResult, SqlError | RepositoryPersistedDataInvalid> =>
+  Effect.gen(function* () {
+    const current = yield* getTaskById(sql, input.taskId);
+    if (current === undefined) return { ok: false as const, code: "task_not_found" as const };
+    if (current.state === "done") return { ok: false as const, code: "task_already_done" as const };
+    if (current.state === "cancelled") return { ok: true as const, changed: false, task: current };
+    yield* sql`
+      UPDATE tasks SET state = 'cancelled', cancel_reason = ${input.reason}, updated_at = ${input.now}
+      WHERE id = ${input.taskId}
+    `;
+    const updated = yield* getTaskById(sql, input.taskId);
+    if (updated === undefined) return yield* invalidData("cancel Task", "Task disappeared");
+    return { ok: true as const, changed: true, task: updated };
   });
 
 const transitionTaskState = (sql: SqlClient.SqlClient, input: TransitionTaskStateInput) =>
@@ -426,6 +449,7 @@ const rowToStoredTaskRecord = (sql: SqlClient.SqlClient, row: StoredTaskRecordRo
       ...summary,
       description: row.description,
       commentCount: Number(row.commentCount),
+      cancelReason: row.cancelReason,
       prerequisites,
       dependents,
     } satisfies StoredTaskRecord;
@@ -460,6 +484,7 @@ type TaskSummaryRow = {
 type StoredTaskRecordRow = TaskSummaryRow & {
   readonly description: string;
   readonly commentCount: number | bigint;
+  readonly cancelReason: string | null;
 };
 type TaskContextHeaderRow = {
   readonly id: PublicTaskId;

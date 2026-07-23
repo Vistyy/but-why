@@ -9,7 +9,8 @@ const baselineStatements = [
       numeric_id INTEGER NOT NULL UNIQUE,
       title TEXT NOT NULL,
       description TEXT NOT NULL,
-      state TEXT NOT NULL CHECK (state IN ('new', 'todo', 'implementing', 'validating', 'ready', 'done')),
+      state TEXT NOT NULL CHECK (state IN ('new', 'todo', 'implementing', 'validating', 'ready', 'done', 'cancelled')),
+      cancel_reason TEXT,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     )

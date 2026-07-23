@@ -16,11 +16,13 @@ import { withTaskUseCases } from "../../task/loadTaskUseCases.js";
 import type { RepositoryStorageError } from "../../contracts/repositoryStorageError.js";
 import type { PublicTaskId } from "../../task/taskId.js";
 import type { TaskUseCases } from "../../task/taskUseCases.js";
+import type { CancellationUseCases } from "../../change/cancelChange.js";
 
 export type TaskCommandEnvironment = {
   readonly cwd: string;
   readonly now: () => Date;
   readonly taskUseCases?: TaskUseCases;
+  readonly cancellationUseCases?: CancellationUseCases;
 };
 
 export const withTasks = (

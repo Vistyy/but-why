@@ -5,6 +5,8 @@ import type { ChangeRecord } from "./change.js";
 import type {
   BeginChangePublicationInput,
   BeginChangePublicationResult,
+  CancelChangeInput,
+  CancelChangeResult,
   CompleteMergedChangeInput,
   CompleteMergedChangeResult,
   ListChangesInput,
@@ -27,6 +29,7 @@ export type ChangePersistence = {
   readonly completeMergedChange: (
     input: CompleteMergedChangeInput,
   ) => StorageEffect<CompleteMergedChangeResult>;
+  readonly cancelChange: (input: CancelChangeInput) => StorageEffect<CancelChangeResult>;
   readonly recordCleanup: (
     input: RecordChangeCleanupInput,
   ) => StorageEffect<RecordChangeCleanupResult>;

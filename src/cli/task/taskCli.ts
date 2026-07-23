@@ -6,6 +6,7 @@ import { withGlobalHelpFlags } from "../../cliHelp.js";
 import type { StructuredObject } from "../../output/structured.js";
 import { runApproveCommand } from "./commands/approve.js";
 import { runCommentCommand } from "./commands/comment.js";
+import { runCancelCommand } from "./commands/cancel.js";
 import { runContextCommand } from "./commands/context.js";
 import { runCreateCommand } from "./commands/create.js";
 import { runDependenciesCommand } from "./commands/dependencies.js";
@@ -60,6 +61,10 @@ export const routeTask = (
 
   if (subcommand === "comment") {
     return runCommentCommand(args.slice(1), environment);
+  }
+
+  if (subcommand === "cancel") {
+    return runCancelCommand(args.slice(1), environment);
   }
 
   if (subcommand?.startsWith("-")) {
@@ -120,6 +125,10 @@ const taskHelpView = (): StructuredObject => ({
     {
       command: "by task comment <task-id> --file <file>",
       description: "Append a Markdown Task comment",
+    },
+    {
+      command: "by task cancel <task-id> --reason <reason>",
+      description: "Permanently cancel an unfinished Task",
     },
   ],
   flags: withGlobalHelpFlags(),

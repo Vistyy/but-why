@@ -1,4 +1,12 @@
-export const taskStates = ["new", "todo", "implementing", "validating", "ready", "done"] as const;
+export const taskStates = [
+  "new",
+  "todo",
+  "implementing",
+  "validating",
+  "ready",
+  "done",
+  "cancelled",
+] as const;
 
 export type TaskState = (typeof taskStates)[number];
 
@@ -11,6 +19,7 @@ const validTransitions: ReadonlyMap<TaskState, readonly TaskState[]> = new Map([
   ["validating", ["implementing", "ready"]],
   ["ready", ["validating", "done"]],
   ["done", []],
+  ["cancelled", []],
 ]);
 
 export const isTaskState = (value: string): value is TaskState => taskStateSet.has(value);

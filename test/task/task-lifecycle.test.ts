@@ -9,7 +9,15 @@ import {
 
 describe("Task lifecycle", () => {
   it("owns the canonical Task state vocabulary and legal transitions", () => {
-    expect(taskStates).toEqual(["new", "todo", "implementing", "validating", "ready", "done"]);
+    expect(taskStates).toEqual([
+      "new",
+      "todo",
+      "implementing",
+      "validating",
+      "ready",
+      "done",
+      "cancelled",
+    ]);
 
     const expectedTransitions = new Map<TaskState, readonly TaskState[]>([
       ["new", ["todo"]],
@@ -18,6 +26,7 @@ describe("Task lifecycle", () => {
       ["validating", ["implementing", "ready"]],
       ["ready", ["validating", "done"]],
       ["done", []],
+      ["cancelled", []],
     ]);
 
     for (const from of taskStates) {

@@ -98,6 +98,17 @@ export type TransitionTaskStateInput = {
   readonly now: string;
 };
 
+export type CancelTaskInput = {
+  readonly taskId: PublicTaskId;
+  readonly reason: string;
+  readonly now: string;
+};
+
+export type CancelTaskResult =
+  | { readonly ok: true; readonly changed: boolean; readonly task: StoredTaskRecord }
+  | { readonly ok: false; readonly code: "task_not_found" }
+  | { readonly ok: false; readonly code: "task_already_done" };
+
 export type TaskStateTransitionResult =
   | {
       readonly ok: true;

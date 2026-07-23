@@ -100,6 +100,41 @@ describe("GitHub pull request gateway", () => {
     });
   });
 
+  it("closes an owned pull request through GitHub", () => {
+    const ghCalls: (readonly string[])[] = [];
+    const gateway = localGitHubPullRequestGateway({
+      runGh: (args) => {
+        ghCalls.push(args);
+        return {
+          ok: true,
+          stdout:
+            '{"number":42,"url":"https://github.com/acme/widgets/pull/42","state":"closed","merged":false,"base":{"ref":"main"},"head":{"ref":"feature","sha":"candidate-sha"}}',
+        };
+      },
+    });
+
+    expect(
+      gateway.closePullRequest?.({
+        target: { owner: "acme", repo: "widgets", baseBranch: "main", remoteName: "origin" },
+        number: 42,
+      }),
+    ).toMatchObject({ ok: true, pullRequest: { state: "closed", merged: false } });
+    expect(ghCalls).toEqual([
+      ["api", "--method", "PATCH", "repos/acme/widgets/pulls/42", "-f", "state=closed"],
+    ]);
+  });
+
+  it("reports a GitHub closure failure without claiming local cancellation", () => {
+    const gateway = localGitHubPullRequestGateway({ runGh: () => ({ ok: false }) });
+
+    expect(
+      gateway.closePullRequest?.({
+        target: { owner: "acme", repo: "widgets", baseBranch: "main", remoteName: "origin" },
+        number: 42,
+      }),
+    ).toEqual({ ok: false, code: "close_failed" });
+  });
+
   it("rejects an existing remote head before initial publication", () => {
     const gitCalls: (readonly string[])[] = [];
     const gateway = localGitHubPullRequestGateway({

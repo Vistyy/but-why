@@ -16,6 +16,7 @@ import { routeValidationRun } from "./cli/validationRun/validationRunCli.js";
 import type { InteractiveSessionHost } from "./change/interactiveSessionHost.js";
 import type { ReviewerAgentRuntime } from "./agent/reviewerAgentRuntime.js";
 import type { TaskUseCases } from "./task/taskUseCases.js";
+import type { CancellationUseCases } from "./change/cancelChange.js";
 
 export type { CliResult } from "./cliResults.js";
 
@@ -25,6 +26,7 @@ export type CliEnvironment = {
   readonly globalConfigPath: string;
   readonly now: () => Date;
   readonly taskUseCases?: TaskUseCases;
+  readonly cancellationUseCases?: CancellationUseCases;
   readonly reviewerAgentRuntime?: ReviewerAgentRuntime;
   readonly interactiveSessionHost?: InteractiveSessionHost;
   readonly interactiveSessionPath?: string;

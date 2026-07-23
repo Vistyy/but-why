@@ -10,6 +10,7 @@ import {
 import type { ChangePersistence } from "../change/changePersistence.js";
 import type {
   BeginChangePublicationInput,
+  CancelChangeInput,
   CompleteMergedChangeInput,
   ListChangesInput,
   RecordChangeCleanupInput,
@@ -77,6 +78,8 @@ export const openSqliteChangePersistence = (): Effect.Effect<
       repository.transactionImmediate("complete merged Change", (sql) =>
         completeMergedChange(sql, input),
       ),
+    cancelChange: (input) =>
+      repository.transactionImmediate("cancel Change", (sql) => cancelChange(sql, input)),
     recordCleanup: (input) =>
       repository.transactionImmediate("record Change cleanup", (sql) => recordCleanup(sql, input)),
     beginPublication: (input) =>
@@ -192,6 +195,25 @@ const completeMergedChange = (sql: SqlClient.SqlClient, input: CompleteMergedCha
       ok: true as const,
       changed: true,
       change: yield* requireChange(sql, input.changeId, "complete merged Change"),
+    };
+  });
+
+const cancelChange = (sql: SqlClient.SqlClient, input: CancelChangeInput) =>
+  Effect.gen(function* () {
+    const change = yield* getById(sql, input.changeId);
+    if (change === undefined) return { ok: false as const, code: "change_not_found" as const };
+    if (change.state === changeState.closed) {
+      return change.closeReason === "cancelled"
+        ? { ok: true as const, changed: false, change }
+        : { ok: false as const, code: "change_already_completed" as const };
+    }
+    yield* sql`UPDATE changes SET state = 'closed', close_reason = 'cancelled', cleanup_state = 'pending', cleanup_blocking_reason = NULL, updated_at = ${input.now}, closed_at = ${input.now} WHERE id = ${input.changeId} AND state = 'open'`;
+    if (change.taskId !== null)
+      yield* sql`UPDATE tasks SET state = 'cancelled', cancel_reason = ${input.reason}, updated_at = ${input.now} WHERE id = ${change.taskId}`;
+    return {
+      ok: true as const,
+      changed: true,
+      change: yield* requireChange(sql, input.changeId, "cancel Change"),
     };
   });
 

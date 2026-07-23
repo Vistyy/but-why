@@ -6,6 +6,7 @@ import type { ChangePublicationTarget } from "../change/change.js";
 import type {
   GitHubPullRequest,
   GitHubPullRequestGateway,
+  GitHubPullRequestMutationResult,
   GitHubPullRequestRequest,
 } from "../change/ownedPullRequestGateway.js";
 
@@ -28,6 +29,7 @@ export const localGitHubPullRequestGateway = (
   return {
     findPullRequests: (target, headBranch) => findPullRequests(runGh, target, headBranch),
     getPullRequest: (target, number) => getPullRequest(runGh, target, number),
+    closePullRequest: (input) => closePullRequest(runGh, input),
     createPullRequest: (request) => createPullRequest(runGit, runGh, request),
     updatePullRequest: (request) => updatePullRequest(runGit, runGh, request),
   };
@@ -55,6 +57,25 @@ const getPullRequest = (
 ): GitHubPullRequest | undefined => {
   const result = runGh(["api", `repos/${target.owner}/${target.repo}/pulls/${number}`]);
   return result.ok ? parsePullRequest(result.stdout) : undefined;
+};
+
+const closePullRequest = (
+  runGh: PublicationCommandRunner,
+  input: { readonly target: ChangePublicationTarget; readonly number: number },
+): GitHubPullRequestMutationResult => {
+  const result = runGh([
+    "api",
+    "--method",
+    "PATCH",
+    `repos/${input.target.owner}/${input.target.repo}/pulls/${input.number}`,
+    "-f",
+    "state=closed",
+  ]);
+  if (!result.ok) return { ok: false, code: "close_failed" };
+  const pullRequest = parsePullRequest(result.stdout);
+  return pullRequest === undefined
+    ? { ok: false, code: "close_failed" }
+    : { ok: true, pullRequest };
 };
 
 const createPullRequest = (

@@ -29,8 +29,14 @@ export type GitHubPullRequestMutationResult =
         | "local_head_mismatch"
         | "remote_head_mismatch"
         | "push_failed"
-        | "remote_response_lost";
+        | "remote_response_lost"
+        | "close_failed";
     };
+
+export type GitHubPullRequestCloseInput = {
+  readonly target: ChangePublicationTarget;
+  readonly number: number;
+};
 
 export type GitHubPullRequestGateway = {
   readonly findPullRequests: (
@@ -41,6 +47,9 @@ export type GitHubPullRequestGateway = {
     target: ChangePublicationTarget,
     number: number,
   ) => GitHubPullRequest | undefined;
+  readonly closePullRequest?: (
+    input: GitHubPullRequestCloseInput,
+  ) => GitHubPullRequestMutationResult;
   readonly createPullRequest: (
     request: GitHubPullRequestRequest,
   ) => GitHubPullRequestMutationResult;

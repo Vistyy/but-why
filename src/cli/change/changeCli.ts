@@ -14,6 +14,8 @@ import { readHandoffFile, type HandoffFileReadError } from "../../change/handoff
 import { loadChangeInspection } from "../../change/loadChangeInspection.js";
 import { withChangeUseCases } from "../../change/loadChangeUseCases.js";
 import { loadChangeSubmit } from "../../change/loadChangeSubmit.js";
+import type { ChangeCancellationResult, CancellationUseCases } from "../../change/cancelChange.js";
+import { withCancellation } from "../../change/loadChangeCancellation.js";
 import type { InteractiveSessionHost } from "../../change/interactiveSessionHost.js";
 import type { ReviewerAgentRuntime } from "../../agent/reviewerAgentRuntime.js";
 import type { PublicTaskId } from "../../task/taskId.js";
@@ -35,6 +37,7 @@ export type ChangeCommandEnvironment = {
   readonly reviewerAgentRuntime?: ReviewerAgentRuntime;
   readonly interactiveSessionHost?: InteractiveSessionHost;
   readonly interactiveSessionPath?: string;
+  readonly cancellationUseCases?: CancellationUseCases;
 };
 
 export const routeChange = (
@@ -75,6 +78,10 @@ export const routeChange = (
             description: "Validate and publish a ready Change.",
           },
           {
+            command: "by change cancel <change-id>",
+            description: "Cancel an open taskless Change.",
+          },
+          {
             command: "by change reconcile [<change-id>]",
             description: "Read owned pull requests and clean up terminal Changes.",
           },
@@ -96,6 +103,7 @@ export const routeChange = (
   if (subcommand === "validation-runs") return runValidationRuns(args.slice(1), environment);
   if (subcommand === "implement") return runImplement(args.slice(1), environment);
   if (subcommand === "submit") return runSubmit(args.slice(1), environment);
+  if (subcommand === "cancel") return runCancel(args.slice(1), environment);
   if (subcommand === "reconcile") return runReconcile(args.slice(1), environment);
   return Effect.succeed(
     usageError({
@@ -635,6 +643,88 @@ const submitResult = (result: ChangeSubmitResult): CliResult => {
     message: "Change Submit could not validate or publish the current Candidate.",
     ...(result.code === "reconciliation_rejected" ? { details: { change: result.change } } : {}),
     help: ["Inspect the Change, validation evidence, and owned pull request, then retry."],
+  });
+};
+
+const runCancel = (
+  args: readonly string[],
+  environment: ChangeCommandEnvironment,
+): Effect.Effect<CliResult> => {
+  if (args.length === 1 && args[0] === "--help") {
+    return Effect.succeed(
+      success({
+        usage: "by change cancel <change-id>",
+        arguments: [{ argument: "<change-id>", description: "Open taskless Change ID" }],
+        flags: withGlobalHelpFlags(),
+        examples: ["by change cancel <change-id>", "by change cancel <change-id> --output json"],
+      }),
+    );
+  }
+  if (args.length !== 1 || args[0] === undefined || args[0].startsWith("-")) {
+    return Effect.succeed(
+      usageError({
+        code: "invalid_arguments",
+        message: "Change Cancel requires one Change ID.",
+        help: ["Run `by change cancel <change-id>`."],
+      }),
+    );
+  }
+  return withCancellation(
+    {
+      cwd: environment.cwd,
+      ...(environment.cancellationUseCases === undefined
+        ? {}
+        : { cancellationUseCases: environment.cancellationUseCases }),
+    },
+    (cancellation) =>
+      Effect.map(
+        cancellation.cancelChange({
+          changeId: args[0] as string,
+          now: environment.now().toISOString(),
+        }),
+        changeCancelResult,
+      ),
+  );
+};
+
+const changeCancelResult = (result: ChangeCancellationResult): CliResult => {
+  if (result.ok) {
+    return success({
+      status: result.status,
+      changed: result.changed,
+      change: {
+        id: result.change.id,
+        state: result.change.state,
+        closeReason: result.change.closeReason,
+        cleanup: result.change.cleanup,
+      },
+      ...(result.task === null ? {} : { task: { id: result.task.id, state: result.task.state } }),
+    });
+  }
+  if (result.code === "change_not_found") {
+    return runtimeError({
+      code: result.code,
+      message: "Change was not found.",
+      details: { changeId: result.changeId },
+      help: ["Use a Change ID returned by `by change start --output json`."],
+    });
+  }
+  if (result.code === "task_backed_change") {
+    return runtimeError({
+      code: result.code,
+      message: "Task-backed Changes must be cancelled through their Task.",
+      details: {
+        changeId: result.changeId,
+        ...(result.taskId === undefined ? {} : { taskId: result.taskId }),
+      },
+      help: [`Run \`by task cancel ${result.taskId} --reason <reason>\`.`],
+    });
+  }
+  return runtimeError({
+    code: result.code,
+    message: "The Change was already completed and cannot be cancelled.",
+    details: { changeId: result.changeId },
+    help: ["Inspect the Change with `by change show <change-id>`."],
   });
 };
 

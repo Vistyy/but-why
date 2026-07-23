@@ -50,6 +50,26 @@ help[1]: Run \`by task list\` to see open tasks.`);
       }),
   );
 
+  it.effect("cancels an unfinished Task with a reason", () =>
+    Effect.gen(function* () {
+      const root = yield* initializedRepo();
+
+      yield* createTask(root, firstNow, "Cancel intent");
+
+      const result = yield* runByInProcessEffect(
+        root,
+        ["task", "cancel", "BY-1", "--reason", "No longer needed"],
+        secondNow,
+      );
+
+      expect(result.status).toBe(0);
+      expect(result.stderr).toBe("");
+      expect(result.stdout).toContain("id: BY-1");
+      expect(result.stdout).toContain("state: cancelled");
+      expect(result.stdout).toContain("reason: No longer needed");
+    }),
+  );
+
   it.effect(
     "approves Task intent durably and reports repeated approval as an unchanged success",
     () =>
@@ -921,7 +941,7 @@ help[1]: "Run \`by task create --title \\"...\\" --description-file <file>\` to 
   code: invalid_task_state
   message: Unknown task state blocked.
   state: blocked
-help[1]: "Use one of: new, todo, implementing, validating, ready, done."`);
+help[1]: "Use one of: new, todo, implementing, validating, ready, done, cancelled."`);
     }),
   );
 
@@ -1061,6 +1081,7 @@ const taskRecord = (overrides: Partial<TaskRecord> = {}): TaskRecord => ({
   ...taskSummary(),
   description: "Description",
   commentCount: 0,
+  cancelReason: null,
   prerequisites: [],
   dependents: [],
   ...overrides,

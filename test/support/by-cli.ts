@@ -9,6 +9,7 @@ import { createTestWorkspace } from "./testWorkspace.js";
 
 import { runCli, type CliResult } from "../../src/cli.js";
 import type { InteractiveSessionHost } from "../../src/change/interactiveSessionHost.js";
+import type { CancellationUseCases } from "../../src/change/cancelChange.js";
 import type { ReviewerAgentRuntime } from "../../src/agent/reviewerAgentRuntime.js";
 import { serializeOutput } from "../../src/output/serialize.js";
 import type { TaskUseCases } from "../../src/task/taskUseCases.js";
@@ -84,6 +85,7 @@ type InProcessCliResult = {
 type InProcessCliOptions = {
   readonly globalConfigPath?: string;
   readonly taskUseCases?: TaskUseCases;
+  readonly cancellationUseCases?: CancellationUseCases;
   readonly reviewerAgentRuntime?: ReviewerAgentRuntime;
   readonly interactiveSessionHost?: InteractiveSessionHost;
 };
@@ -106,6 +108,9 @@ export const runByInProcessEffect = (
     globalConfigPath: options.globalConfigPath ?? join(cwd, ".test-global-config.json"),
     now: () => new Date(now),
     ...(options.taskUseCases === undefined ? {} : { taskUseCases: options.taskUseCases }),
+    ...(options.cancellationUseCases === undefined
+      ? {}
+      : { cancellationUseCases: options.cancellationUseCases }),
     ...(options.reviewerAgentRuntime === undefined
       ? {}
       : { reviewerAgentRuntime: options.reviewerAgentRuntime }),

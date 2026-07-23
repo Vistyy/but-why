@@ -5,6 +5,8 @@ import type {
   AppendTaskCommentInput,
   AppendTaskCommentResult,
   ApproveTaskInput,
+  CancelTaskInput,
+  CancelTaskResult,
   CreateTaskInput,
   ListTasksInput,
   ReplaceTaskDependenciesInput,
@@ -56,4 +58,7 @@ export type TaskPersistence = {
   readonly transitionTaskState: (
     input: TransitionTaskStateInput,
   ) => Effect.Effect<TaskStateTransitionResult, RepositoryStorageError>;
+  readonly cancelTask: (
+    input: CancelTaskInput,
+  ) => Effect.Effect<CancelTaskResult, RepositoryStorageError>;
 };
