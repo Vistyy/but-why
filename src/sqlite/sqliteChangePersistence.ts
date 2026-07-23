@@ -71,10 +71,6 @@ export const openSqliteChangePersistence = (): Effect.Effect<
       repository.transaction("read Change", (sql) => getById(sql, changeId)),
     getChangeByTaskId: (taskId) =>
       repository.transaction("read Change by Task", (sql) => getByTaskId(sql, taskId)),
-    hasCandidateWithChangedHead: (changeId, startingCommit) =>
-      repository.operation("check changed Candidate history", (sql) =>
-        hasCandidateWithChangedHead(sql, changeId, startingCommit),
-      ),
     listChanges: (input) =>
       repository.transaction("list Changes", (sql) => listChanges(sql, input)),
     listChangesForReconciliation: (commonDirectory) =>
@@ -117,21 +113,6 @@ const getByTaskId = (sql: SqlClient.SqlClient, taskId: string) =>
   Effect.flatMap(
     sql.unsafe<ChangeRow>(`SELECT ${columns} FROM changes WHERE task_id = ?`, [taskId]),
     (rows) => mapRow(rows[0], "read Change by Task"),
-  );
-
-const hasCandidateWithChangedHead = (
-  sql: SqlClient.SqlClient,
-  changeId: string,
-  startingCommit: string,
-) =>
-  Effect.map(
-    sql<{ readonly present: number }>`
-      SELECT 1 AS present
-      FROM candidates
-      WHERE change_id = ${changeId} AND head_sha <> ${startingCommit}
-      LIMIT 1
-    `,
-    (rows) => rows.length > 0,
   );
 
 const listChanges = (sql: SqlClient.SqlClient, input: ListChangesInput) =>
@@ -239,6 +220,43 @@ const completeNoChange = (sql: SqlClient.SqlClient, input: CompleteNoChangeInput
     }
     if (change.taskId !== storedPublicTaskId(input.taskId)) {
       return { ok: false as const, code: "task_not_found" as const };
+    }
+    if (change.publication !== null || change.startingCommit === null) {
+      return { ok: false as const, code: "no_change_evidence_invalid" as const };
+    }
+    const candidates = yield* sql<{
+      readonly changeId: string;
+      readonly comparisonBaseSha: string;
+      readonly headSha: string;
+    }>`
+      SELECT change_id AS changeId, comparison_base_sha AS comparisonBaseSha, head_sha AS headSha
+      FROM candidates WHERE id = ${input.candidateId}
+    `;
+    const candidate = candidates[0];
+    if (
+      candidate === undefined ||
+      candidate.changeId !== change.id ||
+      candidate.comparisonBaseSha !== change.startingCommit ||
+      candidate.headSha !== change.startingCommit
+    ) {
+      return { ok: false as const, code: "no_change_evidence_invalid" as const };
+    }
+    const validationRuns = yield* sql<{
+      readonly candidateId: string;
+      readonly state: string;
+      readonly outcome: string | null;
+    }>`
+      SELECT candidate_id AS candidateId, state, outcome
+      FROM candidate_validation_runs WHERE id = ${input.validationRunId}
+    `;
+    const validationRun = validationRuns[0];
+    if (
+      validationRun === undefined ||
+      validationRun.candidateId !== input.candidateId ||
+      validationRun.state !== "complete" ||
+      validationRun.outcome !== "passed"
+    ) {
+      return { ok: false as const, code: "no_change_evidence_invalid" as const };
     }
     const tasks = yield* sql<{ readonly state: string }>`
       SELECT state FROM tasks WHERE id = ${input.taskId}

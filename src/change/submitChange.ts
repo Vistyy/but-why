@@ -160,19 +160,11 @@ const submitChange = (
     const change = selected.change;
     const reconciliation = yield* reconcileBeforeSubmission(dependencies, change, input.now);
     if (!reconciliation.proceed) return reconciliation.result;
-    const changedCandidateHistory =
-      change.taskId !== null && change.publication === null && change.startingCommit !== null
-        ? yield* dependencies.persistence.hasCandidateWithChangedHead(
-            change.id,
-            change.startingCommit,
-          )
-        : false;
-
     const candidate = yield* dependencies.captureCandidate({
       cwd: change.worktreePath,
       changeId: change.id,
       now: input.now,
-      ...(change.taskId === null || change.startingCommit === null || changedCandidateHistory
+      ...(change.taskId === null || change.startingCommit === null
         ? {}
         : { startingCommit: change.startingCommit }),
     });
@@ -183,7 +175,6 @@ const submitChange = (
     if (
       change.taskId !== null &&
       change.publication === null &&
-      !changedCandidateHistory &&
       candidate.headSha === change.startingCommit &&
       candidate.comparisonBaseSha === change.startingCommit
     ) {

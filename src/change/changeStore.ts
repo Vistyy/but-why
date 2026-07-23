@@ -65,7 +65,8 @@ export type CompleteNoChangeResult =
         | "change_not_open"
         | "task_not_found"
         | "task_already_completed"
-        | "task_state_invalid";
+        | "task_state_invalid"
+        | "no_change_evidence_invalid";
     };
 
 export type CancelChangeResult =

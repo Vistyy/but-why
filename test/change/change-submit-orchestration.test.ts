@@ -276,6 +276,82 @@ describe("Change Submit orchestration", () => {
     }),
   );
 
+  it.effect("completes a changed-then-reverted Task-backed Change through Acceptance", () =>
+    Effect.gen(function* () {
+      const events: string[] = [];
+      const transitions: string[] = [];
+      const change = readyChange({
+        taskId: publicTaskId("BY-1"),
+        acceptanceContext: {
+          version: 1,
+          title: "Approved intent",
+          description: "Deliver it",
+          comments: [],
+        },
+      });
+      const submit = openChangeSubmit(
+        dependencies({
+          events,
+          transitions,
+          change,
+          taskBacked: true,
+          captureResults: [
+            { ...candidate, headSha: "changed-head" },
+            { ...candidate, headSha: "base" },
+          ],
+        }),
+      );
+      const validationLayer = Layer.succeed(CandidateValidation, {
+        validateCandidate: () => Effect.die("Taskless validation was not expected"),
+        validateTaskBackedCandidate: () =>
+          Effect.sync(() => {
+            events.push("validate_task_backed");
+            return {
+              ok: true,
+              reused: false,
+              validationRunId: "run-changed",
+              outcome: "passed",
+            } as const;
+          }),
+        validateNoChange: () =>
+          Effect.sync(() => {
+            events.push("validate_no_change");
+            return {
+              ok: true,
+              reused: false,
+              validationRunId: "run-no-change",
+              outcome: "passed",
+            } as const;
+          }),
+        listFindings: () => Effect.succeed([]),
+        listToolingFailures: () => Effect.succeed([]),
+        listRounds: () => Effect.succeed([]),
+      });
+
+      const first = yield* submit
+        .submit({ changeId: change.id, now })
+        .pipe(Effect.provide(validationLayer));
+      const second = yield* submit
+        .submit({ changeId: change.id, now })
+        .pipe(Effect.provide(validationLayer));
+
+      expect(first).toMatchObject({ ok: true, status: "published" });
+      expect(second).toMatchObject({ ok: true, status: "no_change" });
+      expect(events).toEqual([
+        "reconcile",
+        "capture",
+        "detect_target",
+        "validate_task_backed",
+        "publish",
+        "reconcile",
+        "capture",
+        "validate_no_change",
+        "complete_no_change",
+      ]);
+      expect(transitions).toEqual(["validating", "ready", "validating"]);
+    }),
+  );
+
   it.effect("returns a durable no-change completion on repeated Submit", () =>
     Effect.gen(function* () {
       const events: string[] = [];
@@ -579,6 +655,7 @@ const dependencies = (input: {
   readonly publication?: PublicationFixture;
   readonly reconciliationStatus?: "not_owned" | "open";
   readonly captureResult?: CaptureLocalCandidateResult;
+  readonly captureResults?: readonly CaptureLocalCandidateResult[];
   readonly targetResult?:
     | { readonly ok: false; readonly code: "PR_TARGET_NOT_FOUND" }
     | {
@@ -593,12 +670,12 @@ const dependencies = (input: {
       };
 }) => {
   const events = input.events ?? [];
+  const captureResults = [...(input.captureResults ?? [])];
   let taskState = "implementing";
   return {
     repositoryCommonDirectory: "/repo/.git",
     persistence: {
       getChangeById: () => Effect.succeed(input.change),
-      hasCandidateWithChangedHead: () => Effect.succeed(false),
       completeNoChange: () => {
         events.push("complete_no_change");
         return Effect.succeed({ ok: true as const, changed: true });
@@ -686,7 +763,7 @@ const dependencies = (input: {
     captureCandidate: () =>
       Effect.sync(() => {
         events.push("capture");
-        return input.captureResult ?? candidate;
+        return captureResults.shift() ?? input.captureResult ?? candidate;
       }),
   };
 };

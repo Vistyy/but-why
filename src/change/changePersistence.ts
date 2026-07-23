@@ -24,10 +24,6 @@ type StorageEffect<A> = Effect.Effect<A, RepositoryStorageError>;
 export type ChangePersistence = {
   readonly getChangeById: (changeId: string) => StorageEffect<ChangeRecord | undefined>;
   readonly getChangeByTaskId: (taskId: string) => StorageEffect<ChangeRecord | undefined>;
-  readonly hasCandidateWithChangedHead: (
-    changeId: string,
-    startingCommit: string,
-  ) => StorageEffect<boolean>;
   readonly listChanges: (input: ListChangesInput) => StorageEffect<readonly ChangeRecord[]>;
   readonly listChangesForReconciliation: (
     repositoryCommonDirectory: string,

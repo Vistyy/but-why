@@ -186,6 +186,70 @@ describe("repository SQL storage", () => {
           now: "2026-07-17T23:07:00.000Z",
         });
         if (!started.ok) return;
+        const repository = yield* RepositorySql;
+        yield* repository.operation(
+          "install no-change publication conflict",
+          (sql) => sql`
+            UPDATE changes SET
+              publication_candidate_id = 'published-candidate',
+              publication_validation_run_id = 'published-run',
+              publication_owner = 'acme', publication_repo = 'repo',
+              publication_base_branch = 'main', publication_remote_name = 'origin',
+              publication_head_branch = 'change-no-change',
+              publication_expected_head_sha = 'published-head',
+              publication_pr_number = 42, publication_pr_url = 'https://github.test/pull/42'
+            WHERE id = ${started.change.id}
+          `,
+        );
+        expect(
+          yield* changes.completeNoChange({
+            changeId: started.change.id,
+            taskId,
+            candidateId: "candidate-no-change",
+            validationRunId: "run-no-change",
+            now: "2026-07-17T23:07:15.000Z",
+          }),
+        ).toEqual({ ok: false, code: "no_change_evidence_invalid" });
+        yield* repository.operation(
+          "clear no-change publication conflict",
+          (sql) => sql`
+            UPDATE changes SET
+              publication_candidate_id = NULL, publication_validation_run_id = NULL,
+              publication_owner = NULL, publication_repo = NULL,
+              publication_base_branch = NULL, publication_remote_name = NULL,
+              publication_head_branch = NULL, publication_expected_head_sha = NULL,
+              publication_pr_number = NULL, publication_pr_url = NULL
+            WHERE id = ${started.change.id}
+          `,
+        );
+        expect(
+          yield* changes.completeNoChange({
+            changeId: started.change.id,
+            taskId,
+            candidateId: "missing-candidate",
+            validationRunId: "missing-run",
+            now: "2026-07-17T23:07:20.000Z",
+          }),
+        ).toEqual({ ok: false, code: "no_change_evidence_invalid" });
+        yield* repository.operation(
+          "insert no-change evidence",
+          (sql) => sql`
+            INSERT INTO candidates (
+              id, change_id, selected_base_ref, resolved_target_sha,
+              comparison_base_sha, head_sha, created_at
+            ) VALUES (
+              'candidate-no-change', ${started.change.id}, 'refs/heads/main',
+              ${started.change.startingCommit}, ${started.change.startingCommit},
+              ${started.change.startingCommit}, '2026-07-17T23:07:30.000Z'
+            );
+            INSERT INTO candidate_validation_runs (
+              id, candidate_id, policy_snapshot, state, outcome, created_at, updated_at
+            ) VALUES (
+              'run-no-change', 'candidate-no-change', '{}', 'complete', 'passed',
+              '2026-07-17T23:07:45.000Z', '2026-07-17T23:07:45.000Z'
+            );
+          `,
+        );
 
         expect(
           yield* changes.completeNoChange({
