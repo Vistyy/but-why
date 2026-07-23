@@ -48,6 +48,7 @@ const runJust = (lockFile: string, args: string[]): Promise<CommandResult> =>
         ...process.env,
         BY_CAPACITY_LOCK_FILE: lockFile,
         BY_CAPACITY_LOCK_HELD: "0",
+        BY_TEST_SUITE: "",
       },
     });
     let output = "";
@@ -60,12 +61,20 @@ const runJust = (lockFile: string, args: string[]): Promise<CommandResult> =>
     child.on("close", (status) => resolveResult({ status, output }));
   });
 
+const stopRunner = async (runnerProcess: ReturnType<typeof startRunner>): Promise<void> => {
+  if (!runnerProcess.child.killed) runnerProcess.child.kill("SIGTERM");
+  await runnerProcess.done;
+};
+
 const runVitest = (relativeFixture: string): Promise<CommandResult> =>
   new Promise<CommandResult>((resolveResult) => {
     const child = spawn(
       "pnpm",
       ["exec", "vitest", "run", "--config", "vitest.config.ts", relativeFixture],
-      { cwd: repositoryRoot, env: process.env },
+      {
+        cwd: repositoryRoot,
+        env: { ...process.env, BY_TEST_SUITE: "" },
+      },
     );
     let output = "";
     child.stdout.on("data", (chunk: Buffer) => {
@@ -117,15 +126,16 @@ describe("quality interface", () => {
     const lockFile = join(directory, "capacity.lock");
     const { holder, readyFile } = startHeldRunner(lockFile, directory, "complete test");
 
-    await waitForFile(readyFile);
-    const contender = await runRunner(lockFile, ["complete coverage", "sh", "-c", "exit 0"]);
+    try {
+      await waitForFile(readyFile);
+      const contender = await runRunner(lockFile, ["complete coverage", "sh", "-c", "exit 0"]);
 
-    expect(contender.status).toBe(1);
-    expect(contender.output).toContain("active workload: complete test");
-    expect(contender.output).toContain("running complete coverage");
-
-    holder.child.kill("SIGTERM");
-    await holder.done;
+      expect(contender.status).toBe(1);
+      expect(contender.output).toContain("active workload: complete test");
+      expect(contender.output).toContain("running complete coverage");
+    } finally {
+      await stopRunner(holder);
+    }
   });
 
   test("forwards child exit status and releases the lock after interruption", async () => {
@@ -137,9 +147,13 @@ describe("quality interface", () => {
     expect(failed.status).toBe(7);
 
     const { holder, readyFile } = startHeldRunner(lockFile, directory, "complete coverage");
-    await waitForFile(readyFile);
-    holder.child.kill("SIGINT");
-    expect((await holder.done).status).toBe(143);
+    try {
+      await waitForFile(readyFile);
+      holder.child.kill("SIGINT");
+      expect((await holder.done).status).toBe(143);
+    } finally {
+      await stopRunner(holder);
+    }
 
     const recovered = await runRunner(lockFile, ["complete test", "sh", "-c", "exit 0"]);
     expect(recovered.status).toBe(0);
@@ -151,17 +165,18 @@ describe("quality interface", () => {
     const lockFile = join(directory, "capacity.lock");
     const { holder, readyFile } = startHeldRunner(lockFile, directory, "complete coverage");
 
-    await waitForFile(readyFile);
-    const complete = await runJust(lockFile, ["test", "--reporter=dot"]);
-    const targeted = await runJust(lockFile, ["test", "test/repository/module-seams.test.ts"]);
+    try {
+      await waitForFile(readyFile);
+      const complete = await runJust(lockFile, ["test", "--reporter=dot"]);
+      const targeted = await runJust(lockFile, ["test", "test/repository/module-seams.test.ts"]);
 
-    expect(complete.status).toBe(1);
-    expect(complete.output).toContain("active workload: complete coverage");
-    expect(targeted.status).toBe(0);
-    expect(targeted.output).toContain("1 passed");
-
-    holder.child.kill("SIGTERM");
-    await holder.done;
+      expect(complete.status).toBe(1);
+      expect(complete.output).toContain("active workload: complete coverage");
+      expect(targeted.status).toBe(0);
+      expect(targeted.output).toContain("1 passed");
+    } finally {
+      await stopRunner(holder);
+    }
   });
 
   test("does not reacquire the lock for nested internal commands", async () => {
@@ -211,21 +226,22 @@ describe("quality interface", () => {
       const { holder, readyFile } = startHeldRunner(lockFile, directory, "complete test");
 
       rmSync(coverageArtifact, { force: true });
-      await waitForFile(readyFile);
-      const complete = await runJust(lockFile, ["coverage", "--reporter=dot"]);
-      const targeted = await runJust(lockFile, [
-        "coverage",
-        "test/repository/module-seams.test.ts",
-      ]);
+      try {
+        await waitForFile(readyFile);
+        const complete = await runJust(lockFile, ["coverage", "--reporter=dot"]);
+        const targeted = await runJust(lockFile, [
+          "coverage",
+          "test/repository/module-seams.test.ts",
+        ]);
 
-      expect(complete.status).toBe(1);
-      expect(complete.output).toContain("active workload: complete test");
-      expect(targeted.status).toBe(0);
-      expect(targeted.output).not.toMatch(/All files|Statements| %/);
-      expect(readFileSync(coverageArtifact, "utf8")).not.toBe("");
-
-      holder.child.kill("SIGTERM");
-      await holder.done;
+        expect(complete.status).toBe(1);
+        expect(complete.output).toContain("active workload: complete test");
+        expect(targeted.status).toBe(0);
+        expect(targeted.output).not.toMatch(/All files|Statements| %/);
+        expect(readFileSync(coverageArtifact, "utf8")).not.toBe("");
+      } finally {
+        await stopRunner(holder);
+      }
     });
   }
 });

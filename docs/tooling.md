@@ -36,6 +36,10 @@ The runner identifies the active workload class when another complete test or co
 Targeted invocations with a test file path, test-name selection, or related-test selection remain unlocked.
 Option-only invocations remain complete workloads and use the lock.
 
+Vitest selects the routine suite when `BY_TEST_SUITE=routine`, the boundary suite when `BY_TEST_SUITE=boundary`, and the complete selected suite when the variable is empty.
+`just quality` uses the routine suite, while `just full-quality` uses the complete selected suite.
+Run `BY_TEST_SUITE=boundary just test` to exercise the focused external-boundary suite directly.
+
 Vitest uses its compact dot reporter for successful runs.
 Failed runs retain test names, assertion differences, stack traces, and captured output.
 

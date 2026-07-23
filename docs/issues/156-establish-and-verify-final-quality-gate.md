@@ -67,7 +67,7 @@ Required validation commands are `just test test/repository/quality-interface.bo
 - Local: mark the active workload class beside the lock and fail fast with an actionable message rather than waiting for capacity.
 - Local: use an inherited `BY_CAPACITY_LOCK_HELD` marker so nested internal commands execute under the existing lock without reacquiring it.
 - Local: use Vitest's dot reporter because it removes routine per-test success lines while retaining Vitest's complete failed-test diagnostics.
-- User-approved: implement the approved Task 156 quality-policy changes to Just composition, Vitest reporting, and complete-workload coordination.
+- User-approved: the original Task 156 request explicitly approved the shared capacity lock, concise Vitest reporter, truthful Just statuses, and complete-workload coordination; the follow-up approval authorized moving the process-heavy quality-interface tests into the boundary suite.
 - Local: preserve the existing suite selection, runtime warning budgets, advisory health coverage, and absence of a coverage threshold because the approved specification assigns those behaviors outside this implementation choice.
 
 ## Completion evidence
