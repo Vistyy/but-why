@@ -9,6 +9,7 @@ import {
   runByInProcessEffect,
   createGitRepo,
 } from "../support/by-cli.js";
+import { createTestWorkspace } from "../support/testWorkspace.js";
 import {
   openCancellationUseCases,
   type CancellationDependencies,
@@ -112,6 +113,87 @@ describe("Change cancellation", () => {
       const repeated = yield* runByInProcessEffect(root, ["change", "cancel", changeId]);
       expect(repeated.status).toBe(0);
       expect(repeated.stdout).toContain("changed: false");
+    }),
+  );
+
+  it.effect("proves PR closure ordering through the Change CLI", () =>
+    Effect.gen(function* () {
+      const events: string[] = [];
+      const task = taskRecord("implementing");
+      const dependencies = cancellationDependencies({
+        task,
+        change: changeRecord(null),
+        pullRequest: pullRequest("open", false),
+        closePullRequest: { ok: true, pullRequest: pullRequest("closed", false) },
+        events,
+      });
+      const result = yield* runByInProcessEffect(
+        createTestWorkspace(),
+        ["change", "cancel", "change-1"],
+        now,
+        { cancellationUseCases: openCancellationUseCases(dependencies) },
+      );
+
+      expect(result.status).toBe(0);
+      expect(result.stdout).toContain("status: cancelled");
+      expect(events).toEqual(["read-pr", "close-pr", "cancel-change", "cleanup", "record-cleanup"]);
+    }),
+  );
+
+  it.effect("reports a fake GitHub closure failure through the Change CLI", () =>
+    Effect.gen(function* () {
+      const events: string[] = [];
+      const task = taskRecord("implementing");
+      const dependencies = cancellationDependencies({
+        task,
+        change: changeRecord(null),
+        pullRequest: pullRequest("open", false),
+        closePullRequest: { ok: false, code: "close_failed" },
+        events,
+      });
+      const result = yield* runByInProcessEffect(
+        createTestWorkspace(),
+        ["change", "cancel", "change-1"],
+        now,
+        { cancellationUseCases: openCancellationUseCases(dependencies) },
+      );
+
+      expect(result.status).toBe(1);
+      expect(result.stdout).toContain("code: github_close_failed");
+      expect(result.stdout).toContain("Change remains open");
+      expect(events).toEqual(["read-pr", "close-pr"]);
+    }),
+  );
+
+  it.effect("reports merged observation through the Task CLI", () =>
+    Effect.gen(function* () {
+      const events: string[] = [];
+      const task = taskRecord("implementing");
+      const dependencies = cancellationDependencies({
+        task,
+        change: changeRecord(publicTaskId(task.id)),
+        pullRequest: pullRequest("closed", true),
+        events,
+      });
+      const result = yield* runByInProcessEffect(
+        createTestWorkspace(),
+        ["task", "cancel", "BY-1", "--reason", "Stop"],
+        now,
+        { cancellationUseCases: openCancellationUseCases(dependencies) },
+      );
+
+      expect(result.status).toBe(0);
+      expect(result.stdout).toContain("status: completed");
+      expect(result.stdout).toContain("state: done");
+      expect(events).toEqual([
+        "read-task",
+        "read-change",
+        "read-pr",
+        "complete-change",
+        "cleanup",
+        "record-cleanup",
+        "read-task",
+      ]);
     }),
   );
 

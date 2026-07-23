@@ -102,19 +102,29 @@ const cancelResult = (taskId: PublicTaskId, result: TaskCancellationResult): Cli
     change_not_found: `Change for Task ${taskId} was not found.`,
     task_already_done: `Cannot cancel completed Task ${taskId}.`,
     change_already_completed: `Task ${taskId} is already complete through its Change.`,
-    github_pull_request_unavailable: "The owned pull request could not be read.",
-    owned_pull_request_mismatch: "The owned pull request does not match the recorded Change facts.",
-    github_close_failed: "The owned pull request could not be closed.",
+    github_pull_request_unavailable:
+      "The owned pull request could not be read, so the Task remains unfinished.",
+    owned_pull_request_mismatch:
+      "The owned pull request does not match the recorded Change facts, so the Task remains unfinished.",
+    github_close_failed:
+      "The owned pull request could not be closed, so the Task remains unfinished.",
   };
+  const help =
+    result.code === "github_close_failed"
+      ? ["Resolve the GitHub issue, then retry Task Cancel."]
+      : result.code === "github_pull_request_unavailable"
+        ? ["Restore GitHub access, then retry Task Cancel."]
+        : result.code === "owned_pull_request_mismatch"
+          ? ["Inspect the Change and resolve the remote mismatch before retrying."]
+          : result.code === "change_already_completed"
+            ? ["Inspect the Change with `by change show <change-id>`."]
+            : result.code === "change_not_found"
+              ? ["Inspect the Task and its Change linkage before retrying."]
+              : ["Only unfinished Tasks can be cancelled."];
   return runtimeError({
     code: result.code,
     message: messages[result.code],
     details: { taskId },
-    help:
-      result.code === "github_close_failed"
-        ? ["Resolve the GitHub issue, then retry Task Cancel."]
-        : result.code === "owned_pull_request_mismatch"
-          ? ["Inspect the Change and resolve the remote mismatch before retrying."]
-          : ["Only unfinished Tasks can be cancelled."],
+    help,
   });
 };

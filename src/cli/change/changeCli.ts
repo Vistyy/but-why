@@ -720,6 +720,30 @@ const changeCancelResult = (result: ChangeCancellationResult): CliResult => {
       help: [`Run \`by task cancel ${result.taskId} --reason <reason>\`.`],
     });
   }
+  if (result.code === "github_close_failed") {
+    return runtimeError({
+      code: result.code,
+      message: "The owned pull request could not be closed, so the Change remains open.",
+      details: { changeId: result.changeId },
+      help: ["Resolve the GitHub issue, then retry Change Cancel."],
+    });
+  }
+  if (result.code === "github_pull_request_unavailable") {
+    return runtimeError({
+      code: result.code,
+      message: "The owned pull request could not be read, so the Change remains open.",
+      details: { changeId: result.changeId },
+      help: ["Restore GitHub access, then retry Change Cancel."],
+    });
+  }
+  if (result.code === "owned_pull_request_mismatch") {
+    return runtimeError({
+      code: result.code,
+      message: "The owned pull request does not match the recorded Change facts.",
+      details: { changeId: result.changeId },
+      help: ["Inspect the Change and resolve the remote mismatch before retrying."],
+    });
+  }
   return runtimeError({
     code: result.code,
     message: "The Change was already completed and cannot be cancelled.",
