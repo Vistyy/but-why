@@ -327,7 +327,7 @@ const listPreviousCandidateReviewerFindings = (
 ) =>
   sql.unsafe<CandidateValidationFindingRow>(
     `WITH current_candidate AS (
-       SELECT change_id, rowid AS insertion_order
+       SELECT change_id, created_at, id
        FROM candidates
        WHERE id = ?
      ), immediately_preceding_candidate AS (
@@ -335,8 +335,9 @@ const listPreviousCandidateReviewerFindings = (
        FROM candidates AS candidate
        JOIN current_candidate AS current
          ON current.change_id = candidate.change_id
-       WHERE candidate.rowid < current.insertion_order
-       ORDER BY candidate.rowid DESC
+       WHERE candidate.created_at < current.created_at
+          OR (candidate.created_at = current.created_at AND candidate.id < current.id)
+       ORDER BY candidate.created_at DESC, candidate.id DESC
        LIMIT 1
      ), latest_reviewer_round AS (
        SELECT prior_round.validation_run_id

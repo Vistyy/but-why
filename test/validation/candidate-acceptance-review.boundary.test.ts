@@ -30,6 +30,7 @@ import {
 } from "../support/testWorkspace.js";
 
 const now = "2026-07-15T10:00:00.000Z";
+const successorNow = "2026-07-15T10:05:00.000Z";
 let candidateRepoTemplate: string;
 
 beforeAll(() => {
@@ -213,7 +214,7 @@ describe("Task-backed Candidate Acceptance Review", () => {
       if (!earlier.ok) return;
 
       git(ready.repo, "commit", "--allow-empty", "-m", "address acceptance Finding");
-      const successor = yield* captureLocalCandidate({ cwd: ready.repo, now });
+      const successor = yield* captureLocalCandidate({ cwd: ready.repo, now: successorNow });
       if (!successor.ok) throw new Error(`Candidate capture failed: ${successor.code}`);
 
       review.mockImplementationOnce(() =>
@@ -279,7 +280,7 @@ describe("Task-backed Candidate Acceptance Review", () => {
       if (!earlier.ok) return;
 
       git(ready.repo, "commit", "--allow-empty", "-m", "address acceptance Finding");
-      const successor = yield* captureLocalCandidate({ cwd: ready.repo, now });
+      const successor = yield* captureLocalCandidate({ cwd: ready.repo, now: successorNow });
       if (!successor.ok) throw new Error(`Candidate capture failed: ${successor.code}`);
 
       review.mockImplementationOnce(() =>
@@ -347,7 +348,7 @@ describe("Task-backed Candidate Acceptance Review", () => {
       if (!earlier.ok) return;
 
       git(ready.repo, "commit", "--allow-empty", "-m", "address specialist Finding");
-      const successor = yield* captureLocalCandidate({ cwd: ready.repo, now });
+      const successor = yield* captureLocalCandidate({ cwd: ready.repo, now: successorNow });
       if (!successor.ok) throw new Error(`Candidate capture failed: ${successor.code}`);
 
       const final = yield* runTaskBackedCandidate(ready, policy, successor);
