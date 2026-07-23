@@ -8,6 +8,7 @@ import { afterEach, describe, expect, test } from "vitest";
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const runner = join(repositoryRoot, "scripts/with-capacity-lock.sh");
 const temporaryPaths: string[] = [];
+const coverageArtifact = join(repositoryRoot, "coverage/coverage-final.json");
 
 type CommandResult = {
   status: number | null;
@@ -90,15 +91,17 @@ const waitForFile = async (file: string): Promise<void> => {
 
 const startHeldRunner = (lockFile: string, directory: string, workload: string) => {
   const readyFile = join(directory, "ready");
+  const releaseFile = join(directory, "release");
   const holder = startRunner(lockFile, [
     workload,
     "sh",
     "-c",
-    'printf ready > "$1"; sleep 2',
+    'printf ready > "$1"; while [[ ! -f "$2" ]]; do sleep 0.01; done',
     "sh",
     readyFile,
+    releaseFile,
   ]);
-  return { holder, readyFile };
+  return { holder, readyFile, releaseFile };
 };
 
 afterEach(() => {
@@ -207,6 +210,7 @@ describe("quality interface", () => {
       const lockFile = join(directory, "capacity.lock");
       const { holder, readyFile } = startHeldRunner(lockFile, directory, "complete test");
 
+      rmSync(coverageArtifact, { force: true });
       await waitForFile(readyFile);
       const complete = await runJust(lockFile, ["coverage", "--reporter=dot"]);
       const targeted = await runJust(lockFile, [
@@ -218,9 +222,7 @@ describe("quality interface", () => {
       expect(complete.output).toContain("active workload: complete test");
       expect(targeted.status).toBe(0);
       expect(targeted.output).not.toMatch(/All files|Statements| %/);
-      expect(readFileSync(join(repositoryRoot, "coverage/coverage-final.json"), "utf8")).not.toBe(
-        "",
-      );
+      expect(readFileSync(coverageArtifact, "utf8")).not.toBe("");
 
       holder.child.kill("SIGTERM");
       await holder.done;
