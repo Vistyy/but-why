@@ -1,5 +1,9 @@
 # Optimize remaining slow boundary fixtures
 
+## Status
+
+Done.
+
 ## Specification
 
 - [Test Suite Feedback Loop Redesign](../specs/test-suite-feedback-loop-redesign.md)
@@ -30,14 +34,14 @@ Focused hotspot suites plus three consecutive uncontended locked-Nix runs of `ju
 
 ## Acceptance criteria
 
-- [ ] Each changed hotspot records its setup profile and before-and-after runtime evidence.
-- [ ] Candidate Validation inspection reuses initialized prerequisite state without bypassing its public inspection and persistence behavior.
-- [ ] Acceptance Review and publication fixtures remove only setup work that is not part of their observable contracts.
-- [ ] Every distinct process concurrency, Git provenance, Candidate capture, publication, SQLite, and Managed Worktree contract remains covered through a real applicable boundary.
-- [ ] Mutable Git repositories and SQLite state remain isolated between tests.
-- [ ] Every migration stage passes its focused hotspot suite and `just full-quality`.
-- [ ] The first passing candidate stage with less than five percent median complete-quality improvement is recorded, and any continuation has explicit user approval.
-- [ ] Three final locked-Nix `just full-quality` runs pass within the approved operating and completion budgets.
+- [x] Each changed hotspot records its setup profile and before-and-after runtime evidence.
+- [x] Candidate Validation inspection reuses initialized prerequisite state without bypassing its public inspection and persistence behavior.
+- [x] Acceptance Review and publication fixtures remove only setup work that is not part of their observable contracts.
+- [x] Every distinct process concurrency, Git provenance, Candidate capture, publication, SQLite, and Managed Worktree contract remains covered through a real applicable boundary.
+- [x] Mutable Git repositories and SQLite state remain isolated between tests.
+- [x] Every migration stage passes its focused hotspot suite and `just full-quality`.
+- [x] The first passing candidate stage with less than five percent median complete-quality improvement is recorded, and any continuation has explicit user approval.
+- [x] Three final locked-Nix `just full-quality` runs pass within the approved operating and completion budgets.
 
 ## Scoped implementation record
 
@@ -103,6 +107,27 @@ Its three-run `just full-quality` medians were measured after both stages.
 
 All three runs passed with 321 tests and one intentional skip.
 The remaining process concurrency, Candidate capture, and Managed Worktree suites remain process-backed or isolated because their external state is the behavior under test.
+
+## Completion
+
+Implementation commits:
+
+- `e4443eb042ee717a749b92aa79c857e1e81fb7fa` - reuse initialized Candidate Validation repositories.
+- `09740ea2a2c2438ab57dd030d5e45e42437edf61` - update the issue graph and unblock the final quality gate.
+- `25d5104ce559256ba6e46f27011c33047104f5f3` - reuse captured Candidate and Validation Run fixture state for Acceptance Review and publication.
+
+Verification:
+
+- The Candidate Validation, Acceptance Review, and publication focused suites passed with 16 tests.
+- The complete boundary suite passed with 60 tests.
+- Three consecutive locked-Nix `just full-quality` runs passed with 321 tests and one intentional skip per run.
+- The final `just full-quality` medians were 16.487 s, 16.403 s, and 16.633 s, with a 16.487 s median within the 30-second operating budget and 60-second completion gate.
+- Typecheck, formatting, AST-grep, documentation checks, build, and Fallow routine checks passed through `just full-quality`.
+
+Review status:
+
+- Spec: `APPROVED` and latched.
+- Standards: `APPROVED WITH REQUIRED COMMENTS` and latched.
 
 ## Blocked by
 
