@@ -5,9 +5,9 @@ import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
 import { afterAll, beforeAll, describe } from "vitest";
 
-import { localChangeCandidateCaptureGit } from "../../src/change/candidateCapture/localGitCandidate.js";
+import { localCandidateCaptureGit } from "../../src/change/candidateCapture/localGitCandidate.js";
 import { createGitRepo } from "../support/by-cli.js";
-import { captureLocalCandidate } from "../support/changeCandidateCapture.js";
+import { captureLocalCandidate } from "../support/candidateCapture.js";
 import { createInitializedRepo } from "../support/initializedRepo.js";
 import {
   acquireTestWorkspace,
@@ -76,21 +76,21 @@ describe("Change Candidate capture boundaries", () => {
     Effect.gen(function* () {
       const dirty = committedRepoCopy();
       writeFileSync(join(dirty, "untracked.txt"), "dirty\n");
-      expect(yield* localChangeCandidateCaptureGit.readWorkspace(dirty)).toEqual({
+      expect(yield* localCandidateCaptureGit.readWorkspace(dirty)).toEqual({
         ok: false,
         code: "dirty_work",
       });
 
       const detached = committedRepoCopy();
       git(detached, "checkout", "--detach", "HEAD");
-      expect(yield* localChangeCandidateCaptureGit.readWorkspace(detached)).toEqual({
+      expect(yield* localCandidateCaptureGit.readWorkspace(detached)).toEqual({
         ok: false,
         code: "detached_head",
       });
 
       const unborn = createGitRepo();
       git(unborn, "checkout", "-b", "unborn");
-      expect(yield* localChangeCandidateCaptureGit.readWorkspace(unborn)).toEqual({
+      expect(yield* localCandidateCaptureGit.readWorkspace(unborn)).toEqual({
         ok: false,
         code: "unborn_branch",
       });
@@ -101,7 +101,7 @@ describe("Change Candidate capture boundaries", () => {
     Effect.gen(function* () {
       const repo = committedRepoCopy();
       git(repo, "branch", "-m", "renamed");
-      const renamed = yield* localChangeCandidateCaptureGit.readWorkspace(repo);
+      const renamed = yield* localCandidateCaptureGit.readWorkspace(repo);
       expect(renamed).toMatchObject({
         ok: true,
         facts: { branchRef: "refs/heads/renamed", renameFromRef: "refs/heads/main" },
@@ -109,7 +109,7 @@ describe("Change Candidate capture boundaries", () => {
 
       const linked = join(createTestWorkspace(), "linked");
       git(repo, "worktree", "add", "-b", "linked", linked, "HEAD");
-      const linkedFacts = yield* localChangeCandidateCaptureGit.readWorkspace(linked);
+      const linkedFacts = yield* localCandidateCaptureGit.readWorkspace(linked);
       expect(linkedFacts).toMatchObject({
         ok: true,
         facts: {

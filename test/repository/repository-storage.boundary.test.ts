@@ -7,7 +7,7 @@ import { Effect } from "effect";
 import { describe } from "vitest";
 
 import { storedPublicTaskId } from "../../src/task/taskId.js";
-import { openSqliteChangeCandidateCapturePersistence } from "../../src/sqlite/sqliteChangeCandidateCapturePersistence.js";
+import { openSqliteCandidateCapturePersistence } from "../../src/sqlite/sqliteCandidateCapturePersistence.js";
 import { openSqliteChangePersistence } from "../../src/sqlite/sqliteChangePersistence.js";
 import { openSqliteChangeStartPersistence } from "../../src/sqlite/sqliteChangeStartPersistence.js";
 import { openSqliteTaskPersistence } from "../../src/sqlite/sqliteTaskPersistence.js";
@@ -146,7 +146,7 @@ describe("repository SQL storage", () => {
     withTemporaryState((input) =>
       Effect.gen(function* () {
         const repository = yield* RepositorySql;
-        const capture = yield* openSqliteChangeCandidateCapturePersistence();
+        const capture = yield* openSqliteCandidateCapturePersistence();
         yield* repository.operation(
           "prepare failed Candidate capture",
           (sql) => sql`

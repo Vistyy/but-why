@@ -5,10 +5,10 @@ import { Effect } from "effect";
 import { changeState } from "../change/change.js";
 import type {
   CandidateCaptureChange,
-  ChangeCandidateCapturePersistence,
+  CandidateCapturePersistence,
   CommitCandidateCaptureInput,
   CommitCandidateCaptureResult,
-} from "../change/candidateCapture/changeCandidateCapturePersistence.js";
+} from "../change/candidateCapture/candidateCapturePersistence.js";
 import { RepositoryPersistedDataInvalid } from "../contracts/repositoryStorageError.js";
 import { RepositorySql } from "./repositorySql.js";
 
@@ -20,8 +20,8 @@ type StoredCandidate = {
 
 type CommitRejection = Extract<CommitCandidateCaptureResult, { readonly ok: false }>;
 
-export const openSqliteChangeCandidateCapturePersistence = (): Effect.Effect<
-  ChangeCandidateCapturePersistence,
+export const openSqliteCandidateCapturePersistence = (): Effect.Effect<
+  CandidateCapturePersistence,
   never,
   RepositorySql
 > =>

@@ -6,7 +6,7 @@ import { Effect } from "effect";
 import { afterAll, beforeAll, describe } from "vitest";
 
 import type { ChangeValidationPersistence } from "../../src/change/validation/changeValidationPersistence.js";
-import { openSqliteChangeCandidateCapturePersistence } from "../../src/sqlite/sqliteChangeCandidateCapturePersistence.js";
+import { openSqliteCandidateCapturePersistence } from "../../src/sqlite/sqliteCandidateCapturePersistence.js";
 import { repositorySqlLayer } from "../../src/sqlite/repositorySql.js";
 import { openSqliteChangeValidationPersistence } from "../../src/sqlite/sqliteChangeValidationPersistence.js";
 import { runByInProcessEffect } from "../support/by-cli.js";
@@ -382,7 +382,7 @@ const candidateValidationFixture = () =>
       Effect.flatMap(openSqliteChangeValidationPersistence(), use).pipe(
         Effect.provide(repositoryLayer),
       );
-    const candidateResult = yield* openSqliteChangeCandidateCapturePersistence().pipe(
+    const candidateResult = yield* openSqliteCandidateCapturePersistence().pipe(
       Effect.flatMap((capture) =>
         capture.commitCapture({
           repositoryCommonDirectory: commonDirectory,

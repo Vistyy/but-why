@@ -7,7 +7,7 @@ import { Effect } from "effect";
 import { afterAll, beforeAll, describe } from "vitest";
 
 import { publicTaskId } from "../../src/task/taskId.js";
-import { openSqliteChangeCandidateCapturePersistence } from "../../src/sqlite/sqliteChangeCandidateCapturePersistence.js";
+import { openSqliteCandidateCapturePersistence } from "../../src/sqlite/sqliteCandidateCapturePersistence.js";
 import { openSqliteChangePersistence } from "../../src/sqlite/sqliteChangePersistence.js";
 import type { ChangeValidationPersistence } from "../../src/change/validation/changeValidationPersistence.js";
 import { RepositorySql, repositorySqlLayer } from "../../src/sqlite/repositorySql.js";
@@ -410,7 +410,7 @@ const captureCandidateFixture = (
   withTestRepository(
     root,
     Effect.gen(function* () {
-      const capture = yield* openSqliteChangeCandidateCapturePersistence();
+      const capture = yield* openSqliteCandidateCapturePersistence();
       const result = yield* capture.commitCapture({
         repositoryCommonDirectory: join(root, ".git"),
         branchRef,

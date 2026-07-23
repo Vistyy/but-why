@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
 import { describe } from "vitest";
-import { captureLocalCandidate } from "../support/changeCandidateCapture.js";
+import { captureLocalCandidate } from "../support/candidateCapture.js";
 import {
   CandidateValidation,
   type ValidateCandidateInput,

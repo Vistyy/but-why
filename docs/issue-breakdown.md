@@ -7,7 +7,6 @@ It ends when But Why? completes one real SQLite-tracked Task-backed Change and p
 
 ## Can start immediately
 
-- Task 135: Consolidate the source hierarchy and names.
 - Task 117: Cancel Task-backed and taskless Changes.
 - Task 129: Submit a Task-backed Change with no repository change.
 - Task 156: Establish and verify the final quality gate.
@@ -16,7 +15,6 @@ It ends when But Why? completes one real SQLite-tracked Task-backed Change and p
 
 | Task | Capability | Blocked by |
 | --- | --- | --- |
-| 135 | Consolidate the source hierarchy and names | None |
 | 156 | Establish and verify the final quality gate | 135, 155, 157 |
 | 123 | Ship the Change-centered manual workflow | 107, 117, 129, 130, 156 |
 | 125 | Produce the v1 package candidate | 123 |
@@ -39,7 +37,7 @@ It ends when But Why? completes one real SQLite-tracked Task-backed Change and p
 11. Task 152 migrated validation execution and history after Candidate capture.
 12. Task 153 integrates Submit, publication, and reconciliation after Tasks 150 and 152.
 13. Task 147 removed the temporary synchronous storage path after every production caller migrated.
-14. Task 135 reorganizes the surviving modules and applies canonical names to the final hierarchy.
+14. Task 135 completed the reorganization of surviving modules and the canonical names in the final hierarchy.
 15. Tasks 154, 155, and 157 repair the remaining public behavior coverage before final gate verification.
 16. Task 134 refactors expensive test boundaries while preserving each distinct behavior and real-boundary defect class.
 17. Task 158 applies the measured three-worker execution model.

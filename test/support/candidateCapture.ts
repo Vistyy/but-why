@@ -4,16 +4,16 @@ import { join } from "node:path";
 import { Effect } from "effect";
 
 import {
-  openChangeCandidateCapture,
+  openCandidateCapture,
   type CaptureLocalCandidateInput,
   type CaptureLocalCandidateResult,
 } from "../../src/change/candidateCapture/captureLocalCandidate.js";
-import { localChangeCandidateCaptureGit } from "../../src/change/candidateCapture/localGitCandidate.js";
+import { localCandidateCaptureGit } from "../../src/change/candidateCapture/localGitCandidate.js";
 import { repositorySqlLayer } from "../../src/sqlite/repositorySql.js";
-import { openSqliteChangeCandidateCapturePersistence } from "../../src/sqlite/sqliteChangeCandidateCapturePersistence.js";
+import { openSqliteCandidateCapturePersistence } from "../../src/sqlite/sqliteCandidateCapturePersistence.js";
 
 export const captureLocalCandidate = (input: CaptureLocalCandidateInput) =>
-  Effect.flatMap(localChangeCandidateCaptureGit.readWorkspace(input.cwd), (workspace) => {
+  Effect.flatMap(localCandidateCaptureGit.readWorkspace(input.cwd), (workspace) => {
     if (!workspace.ok) return Effect.succeed<CaptureLocalCandidateResult>(workspace);
     const result = spawnSync("git", ["rev-parse", "--path-format=absolute", "--git-common-dir"], {
       cwd: input.cwd,
@@ -23,10 +23,10 @@ export const captureLocalCandidate = (input: CaptureLocalCandidateInput) =>
       return Effect.succeed<CaptureLocalCandidateResult>({ ok: false, code: "git_tooling_error" });
     }
     const commonDirectory = realpathSync(result.stdout.trim());
-    const program = Effect.flatMap(openSqliteChangeCandidateCapturePersistence(), (persistence) =>
-      openChangeCandidateCapture({
+    const program = Effect.flatMap(openSqliteCandidateCapturePersistence(), (persistence) =>
+      openCandidateCapture({
         persistence,
-        git: localChangeCandidateCaptureGit,
+        git: localCandidateCaptureGit,
       }).capture(input),
     );
 

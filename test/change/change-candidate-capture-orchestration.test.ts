@@ -2,12 +2,12 @@ import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
 import { describe } from "vitest";
 
-import { openChangeCandidateCapture } from "../../src/change/candidateCapture/captureLocalCandidate.js";
+import { openCandidateCapture } from "../../src/change/candidateCapture/captureLocalCandidate.js";
 import type {
   CandidateCaptureChange,
-  ChangeCandidateCapturePersistence,
-} from "../../src/change/candidateCapture/changeCandidateCapturePersistence.js";
-import type { ChangeCandidateCaptureGit } from "../../src/change/candidateCapture/changeCandidateCaptureGit.js";
+  CandidateCapturePersistence,
+} from "../../src/change/candidateCapture/candidateCapturePersistence.js";
+import type { CandidateCaptureGit } from "../../src/change/candidateCapture/candidateCaptureGit.js";
 
 const now = "2026-07-12T10:00:00.000Z";
 
@@ -15,7 +15,7 @@ describe("Change Candidate capture orchestration", () => {
   it.effect("captures through supplied persistence and Git interfaces", () =>
     Effect.gen(function* () {
       const events: string[] = [];
-      const persistence: ChangeCandidateCapturePersistence = {
+      const persistence: CandidateCapturePersistence = {
         getChangeById: () => Effect.succeed(undefined),
         getChangeByRepositoryBranch: () =>
           Effect.sync(() => {
@@ -41,7 +41,7 @@ describe("Change Candidate capture orchestration", () => {
             };
           }),
       };
-      const git: ChangeCandidateCaptureGit = {
+      const git: CandidateCaptureGit = {
         readWorkspace: () =>
           Effect.sync(() => {
             events.push("read_workspace");
@@ -60,7 +60,7 @@ describe("Change Candidate capture orchestration", () => {
         resolveLocalBranch: () => Effect.succeed("base"),
         findComparisonBase: () => Effect.succeed("base"),
       };
-      const capture = openChangeCandidateCapture({ persistence, git });
+      const capture = openCandidateCapture({ persistence, git });
 
       const result = yield* capture.capture({ cwd: "/repo/worktree", now });
 
@@ -134,7 +134,7 @@ describe("Change Candidate capture orchestration", () => {
         { code: "candidate_provenance_conflict", commitCode: "candidate_provenance_conflict" },
       ] as const) {
         let commitCalls = 0;
-        const persistence: ChangeCandidateCapturePersistence = {
+        const persistence: CandidateCapturePersistence = {
           getChangeById: () => Effect.succeed("change" in testCase ? testCase.change : undefined),
           getChangeByRepositoryBranch: (_repository, branchRef) =>
             Effect.succeed(
@@ -156,7 +156,7 @@ describe("Change Candidate capture orchestration", () => {
             );
           },
         };
-        const git: ChangeCandidateCaptureGit = {
+        const git: CandidateCaptureGit = {
           readWorkspace: () =>
             Effect.succeed({
               ok: true,
@@ -177,7 +177,7 @@ describe("Change Candidate capture orchestration", () => {
           findComparisonBase: () => Effect.succeed("base"),
         };
 
-        const result = yield* openChangeCandidateCapture({ persistence, git }).capture({
+        const result = yield* openCandidateCapture({ persistence, git }).capture({
           cwd: "/repo/worktree",
           now,
           ...("input" in testCase ? testCase.input : {}),

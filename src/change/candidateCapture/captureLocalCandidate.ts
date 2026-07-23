@@ -3,12 +3,9 @@ import { Effect } from "effect";
 import type { RepositoryStorageError } from "../../contracts/repositoryStorageError.js";
 import type {
   CandidateCaptureChange,
-  ChangeCandidateCapturePersistence,
-} from "./changeCandidateCapturePersistence.js";
-import type {
-  ChangeCandidateCaptureGit,
-  LocalCandidateWorkspace,
-} from "./changeCandidateCaptureGit.js";
+  CandidateCapturePersistence,
+} from "./candidateCapturePersistence.js";
+import type { CandidateCaptureGit, LocalCandidateWorkspace } from "./candidateCaptureGit.js";
 
 export type CaptureLocalCandidateInput = {
   readonly cwd: string;
@@ -63,23 +60,23 @@ type ChangeSelection = {
   readonly rebindFromRef?: string;
 };
 
-export type ChangeCandidateCapture = {
+export type CandidateCapture = {
   readonly capture: (
     input: CaptureLocalCandidateInput,
   ) => Effect.Effect<CaptureLocalCandidateResult, RepositoryStorageError>;
 };
 
-export const openChangeCandidateCapture = (dependencies: {
-  readonly persistence: ChangeCandidateCapturePersistence;
-  readonly git: ChangeCandidateCaptureGit;
-}): ChangeCandidateCapture => ({
+export const openCandidateCapture = (dependencies: {
+  readonly persistence: CandidateCapturePersistence;
+  readonly git: CandidateCaptureGit;
+}): CandidateCapture => ({
   capture: (input) => captureLocalCandidate(dependencies, input),
 });
 
 const captureLocalCandidate = (
   dependencies: {
-    readonly persistence: ChangeCandidateCapturePersistence;
-    readonly git: ChangeCandidateCaptureGit;
+    readonly persistence: CandidateCapturePersistence;
+    readonly git: CandidateCaptureGit;
   },
   input: CaptureLocalCandidateInput,
 ): Effect.Effect<CaptureLocalCandidateResult, RepositoryStorageError> =>
@@ -142,7 +139,7 @@ const captureLocalCandidate = (
   });
 
 const selectChange = (
-  changes: ChangeCandidateCapturePersistence,
+  changes: CandidateCapturePersistence,
   input: CaptureLocalCandidateInput,
   workspace: LocalCandidateWorkspace,
 ): Effect.Effect<
@@ -186,7 +183,7 @@ const selectChange = (
   });
 
 const selectSuppliedChange = (
-  changes: ChangeCandidateCapturePersistence,
+  changes: CandidateCapturePersistence,
   changeId: string,
   allowRebind: boolean | undefined,
   workspace: LocalCandidateWorkspace,
@@ -223,7 +220,7 @@ type SelectedBase =
   | CaptureRejection;
 
 const selectBase = (
-  git: ChangeCandidateCaptureGit,
+  git: CandidateCaptureGit,
   cwd: string,
   supplied: string | undefined,
   saved: string | null,
@@ -234,7 +231,7 @@ const selectBase = (
 };
 
 const selectSavedBase = (
-  git: ChangeCandidateCaptureGit,
+  git: CandidateCaptureGit,
   cwd: string,
   supplied: string | undefined,
   saved: string,
@@ -252,7 +249,7 @@ const selectSavedBase = (
 };
 
 const selectCallerBase = (
-  git: ChangeCandidateCaptureGit,
+  git: CandidateCaptureGit,
   cwd: string,
   supplied: string,
 ): Effect.Effect<SelectedBase> => {
@@ -269,7 +266,7 @@ const selectCallerBase = (
 };
 
 const selectRemoteDefaultBase = (
-  git: ChangeCandidateCaptureGit,
+  git: CandidateCaptureGit,
   cwd: string,
 ): Effect.Effect<SelectedBase> =>
   Effect.gen(function* () {

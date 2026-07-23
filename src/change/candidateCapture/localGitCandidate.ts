@@ -2,12 +2,9 @@ import { spawnSync } from "node:child_process";
 import { realpathSync } from "node:fs";
 import { Effect } from "effect";
 
-import type {
-  ChangeCandidateCaptureGit,
-  LocalCandidateWorkspaceResult,
-} from "./changeCandidateCaptureGit.js";
+import type { CandidateCaptureGit, LocalCandidateWorkspaceResult } from "./candidateCaptureGit.js";
 
-export const localChangeCandidateCaptureGit: ChangeCandidateCaptureGit = {
+export const localCandidateCaptureGit: CandidateCaptureGit = {
   readWorkspace: (cwd) => Effect.sync(() => readLocalCandidateWorkspace(cwd)),
   resolveLocalBranch: (cwd, ref) => Effect.sync(() => resolveLocalBranch(cwd, ref)),
   findComparisonBase: (cwd, targetSha, headSha) =>

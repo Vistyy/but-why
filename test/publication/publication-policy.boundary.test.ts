@@ -10,7 +10,7 @@ import { openCandidatePublication } from "../../src/change/publication/candidate
 import { RepositorySql } from "../../src/sqlite/repositorySql.js";
 import { openSqliteChangePersistence } from "../../src/sqlite/sqliteChangePersistence.js";
 import { openSqliteChangeValidationPersistence } from "../../src/sqlite/sqliteChangeValidationPersistence.js";
-import { captureLocalCandidate } from "../support/changeCandidateCapture.js";
+import { captureLocalCandidate } from "../support/candidateCapture.js";
 import { candidateReadyRepo, git } from "../support/candidateReadyRepo.js";
 import { cloneInitializedTestRepository } from "../support/initializedRepo.js";
 import { withTestRepository } from "../support/repository.js";

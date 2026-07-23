@@ -4,10 +4,10 @@ import { Effect } from "effect";
 
 import type { ReviewerAgentRuntime } from "../agent/reviewerAgentRuntime.js";
 import { resolveCandidateValidationPolicy } from "./candidateValidation/resolveCandidateValidationPolicy.js";
-import { openChangeCandidateCapture } from "./candidateCapture/captureLocalCandidate.js";
-import type { ChangeCandidateCapturePersistence } from "./candidateCapture/changeCandidateCapturePersistence.js";
+import { openCandidateCapture } from "./candidateCapture/captureLocalCandidate.js";
+import type { CandidateCapturePersistence } from "./candidateCapture/candidateCapturePersistence.js";
 import type { ChangeValidationPersistence } from "./validation/changeValidationPersistence.js";
-import { localChangeCandidateCaptureGit } from "./candidateCapture/localGitCandidate.js";
+import { localCandidateCaptureGit } from "./candidateCapture/localGitCandidate.js";
 import { cleanupChangeResources } from "./localChangeCleanupGit.js";
 import { openChangeReconciliation } from "./reconcileChange.js";
 import { openChangeSubmit, type ChangeSubmit, type ChangeSubmitResult } from "./submitChange.js";
@@ -16,7 +16,7 @@ import { candidateValidationLayer } from "./candidateValidation/candidateValidat
 import { localCandidatePublicationGit } from "./publication/localCandidatePublicationGit.js";
 import type { RepositoryStorageError } from "../contracts/repositoryStorageError.js";
 import { repositorySqlLayer } from "../sqlite/repositorySql.js";
-import { openSqliteChangeCandidateCapturePersistence } from "../sqlite/sqliteChangeCandidateCapturePersistence.js";
+import { openSqliteCandidateCapturePersistence } from "../sqlite/sqliteCandidateCapturePersistence.js";
 import { openSqliteChangePersistence } from "../sqlite/sqliteChangePersistence.js";
 import { openSqliteChangeValidationPersistence } from "../sqlite/sqliteChangeValidationPersistence.js";
 import { openSqliteTaskPersistence } from "../sqlite/sqliteTaskPersistence.js";
@@ -49,7 +49,7 @@ export const loadChangeSubmit = (input: {
   }
 
   const programFor = (
-    capturePersistence: ChangeCandidateCapturePersistence,
+    capturePersistence: CandidateCapturePersistence,
     validationPersistence: ChangeValidationPersistence,
     changePersistence: import("./changePersistence.js").ChangePersistence,
     taskPersistence: import("../task/taskPersistence.js").TaskPersistence,
@@ -78,9 +78,9 @@ export const loadChangeSubmit = (input: {
           github: localGitHubPullRequestGateway({ cwd }),
         }),
       detectTarget: detectGitHubPrTarget,
-      captureCandidate: openChangeCandidateCapture({
+      captureCandidate: openCandidateCapture({
         persistence: capturePersistence,
-        git: localChangeCandidateCaptureGit,
+        git: localCandidateCaptureGit,
       }).capture,
     });
   };
@@ -104,7 +104,7 @@ export const loadChangeSubmit = (input: {
     submit: {
       submit: (submitInput): Effect.Effect<ChangeSubmitResult, RepositoryStorageError> =>
         Effect.all({
-          capture: openSqliteChangeCandidateCapturePersistence(),
+          capture: openSqliteCandidateCapturePersistence(),
           validation: openSqliteChangeValidationPersistence(),
           change: openSqliteChangePersistence(),
           task: openSqliteTaskPersistence(context.taskPrefix),

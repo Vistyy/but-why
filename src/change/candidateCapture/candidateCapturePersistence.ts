@@ -40,7 +40,7 @@ export type CandidateCaptureChange = {
   readonly state: ChangeState;
 };
 
-export type ChangeCandidateCapturePersistence = {
+export type CandidateCapturePersistence = {
   readonly getChangeById: (
     changeId: string,
   ) => Effect.Effect<CandidateCaptureChange | undefined, RepositoryStorageError>;

@@ -69,7 +69,7 @@ The full repository suite and Fallow import graph additionally verify the final 
   The specification defines these as shared execution, contract, repository-context, output, preparation, persistence, and submission-environment adapters.
 - Local: move composition loaders into their owning domains as `change/loadChangeInspection.ts`, `change/loadChangeSubmit.ts`, `change/loadChangeUseCases.ts`, `change/candidateValidationLayer.ts`, and `task/loadTaskUseCases.ts`.
   This removes migration-only `local*` folders without changing the existing interfaces.
-- Local: rename `changeCandidateCapture` to `candidateCapture` inside `src/change/`.
+- Local: rename the `changeCandidateCapture` modules and identifiers to `candidateCapture` inside `src/change/`.
   `Candidate` and `Change` are the canonical terms, and the nested owner supplies the missing context.
 - Local: place validation phases and Validation Run records under `src/change/validation/` and `src/change/validationRun/`.
   Change owns validation, while `repositoryPreparation` remains shared because implementation and validation use the same preparation interface.

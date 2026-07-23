@@ -8,7 +8,7 @@ import type {
   ReviewerAgentRuntime,
 } from "../../src/agent/reviewerAgentRuntime.js";
 import type { CaptureLocalCandidateResult } from "../../src/change/candidateCapture/captureLocalCandidate.js";
-import { captureLocalCandidate } from "../support/changeCandidateCapture.js";
+import { captureLocalCandidate } from "../support/candidateCapture.js";
 import {
   CandidateValidation,
   type TaskBackedCandidateValidationPolicy,

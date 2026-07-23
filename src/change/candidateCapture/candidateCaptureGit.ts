@@ -20,7 +20,7 @@ export type LocalCandidateWorkspaceResult =
         | "git_tooling_error";
     };
 
-export type ChangeCandidateCaptureGit = {
+export type CandidateCaptureGit = {
   readonly readWorkspace: (cwd: string) => Effect.Effect<LocalCandidateWorkspaceResult>;
   readonly resolveLocalBranch: (cwd: string, ref: string) => Effect.Effect<string | undefined>;
   readonly findComparisonBase: (
