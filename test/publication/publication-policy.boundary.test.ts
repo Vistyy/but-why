@@ -12,12 +12,9 @@ import { openSqliteChangePersistence } from "../../src/sqlite/sqliteChangePersis
 import { openSqliteChangeValidationPersistence } from "../../src/sqlite/sqliteChangeValidationPersistence.js";
 import { captureLocalCandidate } from "../support/changeCandidateCapture.js";
 import { candidateReadyRepo, git } from "../support/candidateReadyRepo.js";
+import { cloneInitializedTestRepository } from "../support/initializedRepo.js";
 import { withTestRepository } from "../support/repository.js";
-import {
-  acquireTestWorkspace,
-  cloneInitializedTestRepository,
-  releaseTestWorkspace,
-} from "../support/testWorkspace.js";
+import { acquireTestWorkspace, releaseTestWorkspace } from "../support/testWorkspace.js";
 
 const now = "2026-07-22T10:00:00.000Z";
 const policy = { sandboxMode: "none" as const, checks: [], copyFiles: [], specialistReviews: [] };

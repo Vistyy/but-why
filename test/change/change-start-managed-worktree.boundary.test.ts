@@ -10,11 +10,13 @@ import { provisionChangeWorktree } from "../../src/change/changeStartGit.js";
 import type { ChangeStartRecord } from "../../src/change/changeStartStore.js";
 import { openSqliteChangeStartPersistence } from "../../src/sqlite/sqliteChangeStartPersistence.js";
 import { runByInProcessEffect } from "../support/by-cli.js";
-import { createInitializedRepo } from "../support/initializedRepo.js";
+import {
+  cloneInitializedTestRepository,
+  createInitializedRepo,
+} from "../support/initializedRepo.js";
 import { withTestRepository } from "../support/repository.js";
 import {
   acquireTestWorkspace,
-  cloneInitializedTestRepository,
   createTestWorkspace,
   releaseTestWorkspace,
 } from "../support/testWorkspace.js";

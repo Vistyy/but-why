@@ -93,7 +93,7 @@ docs-check:
 ast-grep-check:
     pnpm run ast-grep-check
 
-# Check dead code, dependencies, named architecture seams, and direct health limits.
+# Check dead code, dependencies, and named architecture seams.
 fallow-check:
     just coverage
     just _fallow-check

@@ -23,11 +23,8 @@ import {
   commonDirectory,
   git,
 } from "../support/candidateReadyRepo.js";
-import {
-  acquireTestWorkspace,
-  cloneInitializedTestRepository,
-  releaseTestWorkspace,
-} from "../support/testWorkspace.js";
+import { cloneInitializedTestRepository } from "../support/initializedRepo.js";
+import { acquireTestWorkspace, releaseTestWorkspace } from "../support/testWorkspace.js";
 
 const now = "2026-07-15T10:00:00.000Z";
 const successorNow = "2026-07-15T10:05:00.000Z";

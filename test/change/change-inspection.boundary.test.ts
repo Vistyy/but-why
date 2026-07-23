@@ -14,13 +14,12 @@ import { RepositorySql, repositorySqlLayer } from "../../src/sqlite/repositorySq
 import { openSqliteChangeValidationPersistence } from "../../src/sqlite/sqliteChangeValidationPersistence.js";
 import { openSqliteTaskPersistence } from "../../src/sqlite/sqliteTaskPersistence.js";
 import { commitButWhyConfigAndRecordDefault, runByInProcessEffect } from "../support/by-cli.js";
-import { createInitializedRepo } from "../support/initializedRepo.js";
-import { withTestRepository } from "../support/repository.js";
 import {
-  acquireTestWorkspace,
   cloneInitializedTestRepository,
-  releaseTestWorkspace,
-} from "../support/testWorkspace.js";
+  createInitializedRepo,
+} from "../support/initializedRepo.js";
+import { withTestRepository } from "../support/repository.js";
+import { acquireTestWorkspace, releaseTestWorkspace } from "../support/testWorkspace.js";
 
 const firstNow = "2026-07-18T10:00:00.000Z";
 const secondNow = "2026-07-18T10:05:00.000Z";

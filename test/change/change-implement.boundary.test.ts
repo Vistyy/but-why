@@ -7,10 +7,12 @@ import { afterAll, beforeAll, describe } from "vitest";
 
 import type { InteractiveSessionHost } from "../../src/change/interactiveSessionHost.js";
 import { commitButWhyConfigAndRecordDefault, runByInProcessEffect } from "../support/by-cli.js";
-import { createInitializedRepo } from "../support/initializedRepo.js";
+import {
+  cloneInitializedTestRepository,
+  createInitializedRepo,
+} from "../support/initializedRepo.js";
 import {
   acquireTestWorkspace,
-  cloneInitializedTestRepository,
   createTestWorkspace,
   releaseTestWorkspace,
 } from "../support/testWorkspace.js";
