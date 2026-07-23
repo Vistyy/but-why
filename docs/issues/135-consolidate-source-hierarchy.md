@@ -92,6 +92,18 @@ The full repository suite and Fallow import graph additionally verify the final 
 - [x] Imports, tests, structural checks, and architecture documentation describe the final hierarchy.
 - [x] The full repository suite passes after the move.
 
+## Status
+
+Done.
+
+## Completion evidence
+
+- Implementation and correction commits: `4d3aa86b4f74198467834c8dafe9a160f3cacf1c`, `897bbee4fcccd1b2399adca1ee9ff19d703d1fb9`, `544ea05e9b9c9bb46a982ffd65e05d5207a48cc2`, `e32b200f751f77519cfde799fd41dff1d47d562b`, `be1362f253bd7855bbbb208f3402af46f3e7c17b`, and `38fbff9db00c4524afa33885eed38d5ca0c43bff`.
+- Spec review: approved with required comments and latched.
+- Standards review: approved and latched.
+- `just quality`, `just full-quality`, `just typecheck`, `just test`, `just build`, `just docs-check`, `just ast-grep-check`, and `just fallow-check` pass.
+- The source hierarchy test passes with 322 tests and one intentionally skipped smoke test.
+
 ## Blocked by
 
 - None.
