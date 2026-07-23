@@ -19,6 +19,7 @@ The reopened implementation plan was approved after grilling and is recorded in 
 - Storage-only tests do not initialize Git repositories.
 - Package-install checks reuse one immutable packed tarball.
 - Each migrated hotspot records before-and-after runtime evidence.
+- `just quality` and `just full-quality` provide the real routine and complete suite memberships used to enforce the approved performance budgets.
 
 ## What to build
 
@@ -40,12 +41,15 @@ Focused hotspot suites plus the complete non-coverage Vitest suite in the locked
 - [x] Fresh package-install checks share one packed tarball.
 - [ ] Duplicate end-to-end permutations are removed only when another test proves the same behavior and defect class.
 - [ ] Every material hotspot has been optimized until further runtime reduction would cost disproportionate behavioral or boundary-defect coverage.
-- [ ] Each hotspot and the complete non-coverage suite have recorded before-and-after timings for the completed migration.
+- [ ] `just quality` runs routine tests without coverage and has a median runtime at or below the 10-second operating budget and 15-second completion gate.
+- [ ] `just full-quality` adds coverage and retained slow boundary tests without redundant routine execution and has a median runtime at or below the 20-second operating budget and 30-second completion gate.
+- [ ] Each hotspot and both quality commands have recorded before-and-after timings for the completed migration.
 - [x] All selected tests pass after every migration stage.
 
 ## Scoped implementation record
 
-- Baseline: `02d61b7a363cacc90fdfef367fab28972228a5dc`.
+- First-pass baseline: `02d61b7a363cacc90fdfef367fab28972228a5dc`.
+- Reopened implementation baseline: `cefa590913823d72b45b96d074b34ba80957ae22`.
 - Spec review source: this task document.
 - Normative traceability: `docs/specs/test-suite-feedback-loop-redesign.md` and `docs/specs/taskless-changes-and-worktree-handoff.md`.
 - Primary public test seam: focused hotspot suites and the complete non-coverage Vitest suite through Just.
@@ -58,8 +62,9 @@ Focused hotspot suites plus the complete non-coverage Vitest suite in the locked
 | Retain distinct real external defect classes | Existing real Git, Managed Worktree, validation workspace, package, filesystem, and process suites | Focused integration and adapter tests | Complete non-coverage suite |
 | Reuse one immutable package tarball | `test/installable-cli.test.ts` suite fixture | Shared packed tarball for manifest and both installation checks | Installable CLI test |
 | Remove duplicate expensive permutations only with preserved coverage | Change Implement input validation and reconciliation ownership tests | Public CLI and reconciliation service seams | Focused Change Implement and reconciliation tests |
-| Record hotspot and complete-suite timings | This task's timing evidence | Vitest hotspot output and complete suite output | Timing table below |
-| Keep selected tests green after each stage | All migrated test fixtures | Focused stage commands and complete suite | Required validation commands |
+| Establish real routine and complete quality memberships | `justfile`, Vitest configuration, and suite membership | `just quality` and `just full-quality` | Three-run median wall times and command guarantees |
+| Record hotspot and quality-command timings | This task's timing evidence | Vitest hotspot output and quality command output | Timing table below |
+| Keep selected tests green after each stage | All migrated test fixtures | Focused stage commands and both quality commands | Required validation commands |
 
 ### Timing evidence
 
@@ -91,7 +96,8 @@ Wall time is included for the complete suite because parallel workers make aggre
 - Settled during the reopened planning session: retain a real-boundary test only when it proves an externally consequential adapter contract or reproduces a concrete prior regression; move policy and result permutations in-process and remove speculative, impossible-state, duplicate, and low-value boundary permutations.
 - Settled during the reopened planning session: do not require a representative end-to-end test for every workflow; retain one only when workflow composition creates a distinct failure mode that focused adapter and in-process orchestration tests cannot prove.
 - Settled during the reopened planning session: use existing injected module and phase seams first; add a production seam only when it expresses a real module boundary and replaces substantial repeated integration setup, without test-only hooks or fake abstractions around inherently external behavior.
-- Deferred to Task 156: final routine and full-quality command membership, capacity coordination, and locked clean-checkout verification.
+- User-approved: Task 134 owns routine and full-quality command composition, suite membership, timing output, and performance-budget verification so optimization is measured through the real command interface.
+- Deferred to Task 156: shared capacity coordination, final concise diagnostics, and locked clean-checkout verification.
 
 ## First implementation checkpoint
 
@@ -124,7 +130,8 @@ Historical review status:
 - `just test test/change-reconciliation.test.ts`
 - `just test test/installable-cli.test.ts`
 - `just test`
-- `just quality`
+- Three consecutive uncontended locked-Nix runs of `just quality`
+- Three consecutive uncontended locked-Nix runs of `just full-quality`
 - `just typecheck`
 - `just format-check`
 
