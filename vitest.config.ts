@@ -1,14 +1,18 @@
 import { configDefaults, defineConfig } from "vitest/config";
 
 const boundaryTestFiles = [
+  "test/candidate-acceptance-review.integration.test.ts",
   "test/candidate-validation-inspection.integration.test.ts",
   "test/candidate-validation.integration.test.ts",
   "test/change-candidate-capture.test.ts",
+  "test/change-inspection.test.ts",
   "test/change-cleanup-git.test.ts",
   "test/change-implement.test.ts",
   "test/change-start-managed-worktree.test.ts",
+  "test/publication-policy.test.ts",
   "test/repository-storage.test.ts",
   "test/shared-state.test.ts",
+  "test/state-storage-workflow.test.ts",
   "test/task-cli-process.test.ts",
 ] as const;
 const packageTestFiles = ["test/installable-cli.test.ts"] as const;
@@ -34,6 +38,7 @@ export default defineConfig({
       reporter: ["json", "json-summary"],
       reportsDirectory: "coverage",
     },
+    isolate: false,
     pool: "threads",
   },
 });

@@ -1,9 +1,9 @@
-import { spawn, spawnSync } from "node:child_process";
-import { existsSync, writeFileSync } from "node:fs";
+import { spawn } from "node:child_process";
+import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
-import { byExecutable, repoRoot } from "./support/by-cli.js";
+import { builtByExecutable, byExecutable } from "./support/by-cli.js";
 import { createInitializedRepo } from "./support/initializedRepo.js";
 
 const now = "2026-06-30T12:00:00.000Z";
@@ -12,7 +12,7 @@ const concurrentWriterCount = 3;
 describe("by task CLI processes", () => {
   it("preserves Task state across concurrent CLI processes", async () => {
     const root = createInitializedRepo();
-    const executable = builtCli();
+    const executable = builtByExecutable();
 
     for (let index = 0; index < concurrentWriterCount; index += 1) {
       writeFileSync(join(root, `description-${index}.md`), `Description ${index}`);
@@ -116,15 +116,6 @@ type AsyncCliResult = {
   readonly status: number | null;
   readonly stdout: string;
   readonly stderr: string;
-};
-
-const builtCli = (): string => {
-  const executable = join(repoRoot, "dist/main.js");
-  if (!existsSync(executable)) {
-    const built = spawnSync("just", ["build"], { cwd: repoRoot, encoding: "utf8" });
-    if (built.status !== 0) throw new Error(built.stderr || built.stdout);
-  }
-  return executable;
 };
 
 const runByAsync = (

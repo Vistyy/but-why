@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { writeFileSync } from "node:fs";
+import { existsSync, writeFileSync } from "node:fs";
 import { Effect } from "effect";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -15,6 +15,32 @@ import type { TaskUseCases } from "../../src/task/taskUseCases.js";
 
 export const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 export const byExecutable = join(repoRoot, "bin/by");
+
+export const builtByExecutable = (): string => {
+  const executable = join(repoRoot, "dist/main.js");
+  if (!existsSync(executable)) {
+    const built = spawnSync("just", ["build"], { cwd: repoRoot, encoding: "utf8" });
+    if (built.status !== 0) throw new Error(built.stderr || built.stdout);
+  }
+  return executable;
+};
+
+export const runBuiltByWithEnv = (
+  cwd: string,
+  env: NodeJS.ProcessEnv,
+  ...args: readonly string[]
+) =>
+  spawnSync(process.execPath, [builtByExecutable(), ...args], {
+    cwd,
+    encoding: "utf8",
+    env: {
+      ...process.env,
+      ...env,
+      BUT_WHY_EXECUTABLE_PATH: byExecutable,
+      FORCE_COLOR: "0",
+      NO_COLOR: "1",
+    },
+  });
 
 export const runBy = (cwd: string, ...args: readonly string[]) => runByWithEnv(cwd, {}, ...args);
 
@@ -88,8 +114,7 @@ export const runByInProcessEffect = (
       : { interactiveSessionHost: options.interactiveSessionHost }),
   }).pipe(Effect.map(cliResultToInProcessResult));
 
-export const createGitRepo = () => {
-  const root = createTestWorkspace();
+export const createGitRepo = (root = createTestWorkspace()) => {
   const result = spawnSync("git", ["init", "-q"], { cwd: root, encoding: "utf8" });
 
   expect(result.status).toBe(0);

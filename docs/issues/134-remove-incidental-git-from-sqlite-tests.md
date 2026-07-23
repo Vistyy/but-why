@@ -77,13 +77,14 @@ The complete-suite final value is Vitest wall time from the final full-quality v
 | Task CLI and process checks | 39.96 s | 4.65 s | Routine checks use the in-process CLI; one cross-process scenario preserves concurrent persistence and atomicity coverage |
 | Change Start Managed Worktree | 30.71 s | 3.34 s | One creation scenario and one safety scenario retain real Git, worktree, and preparation coverage |
 | Change Candidate Capture | 26.90 s | 2.77 s | Focused adapter checks retain real Git identity, history, and provenance coverage |
-| Candidate Acceptance Review | 22.14 s | Removed | Phase seams and reviewer contracts prove the retained behavior without a duplicate end-to-end workspace |
+| Candidate Acceptance Review | 22.14 s | 4.56 s | One immutable repository template supports focused phase sequencing, Finding, Specialist, and tooling-failure contracts |
+| Change inspection | Not isolated | 2.81 s | One immutable repository template supports public inspection routes, Task projection, and submit guidance |
 | Change Implement | 19.15 s | 2.60 s | Handoff permutations use the in-process CLI; launch behavior retains Managed Worktree coverage |
 | Change Reconciliation | 17.83 s | 1.44 s | Ownership permutations use SQLite and injected gateways without duplicate Git setup |
 | Installable CLI | 16.45 s | 6.67 s | Manifest and both documented installation workflows share one packed tarball |
 | Change Submit | 13.85 s | 1.23 s | In-process orchestration proves submission outcomes without a duplicate publication composition |
 | Candidate Validation and inspection | 9.89 s | 3.00 s | Focused tests retain validation file copying and persisted evidence inspection |
-| Complete non-coverage suite | 258.51 s aggregate / 113.15 s wall | 17.58 s wall | The selected suite passes with retained external boundaries explicit |
+| Complete non-coverage suite | 258.51 s aggregate / 113.15 s wall | 16.63 s wall | The selected suite passes with retained external boundaries explicit |
 
 ## Decision ledger
 
@@ -92,6 +93,8 @@ The complete-suite final value is Vitest wall time from the final full-quality v
 - Local: validate Change Implement handoff input before loading Change state in the invalid-input matrix because the external Change boundary is not observable for those usage errors.
 - Local: construct reconciliation ownership permutations through SQLite persistence and an injected GitHub gateway while retaining real Git for completion and unsafe-cleanup behavior.
 - Local: pack the package once in a suite-scoped immutable fixture and remove it after the suite because each consumer installation has independent mutable state.
+- Local: disable Vitest module isolation so workers reuse the immutable module graph while every Git repository, SQLite database, filesystem workspace, and process fixture remains isolated.
+- Local: clone immutable initialized-repository templates and rebind copied SQLite identity before each focused boundary scenario.
 - Settled during the reopened planning session: measured `just quality` runtime at or below 15 seconds and measured `just full-quality` runtime at or below 30 seconds are hard completion gates, although runtime warnings do not change command exit status.
 - Settled during the reopened planning session: maintain 10-second routine-quality and 20-second full-quality operating budgets, verify each through the median wall time of three consecutive runs in a clean locked-Nix checkout with dependencies installed and no competing heavy workload, and restore headroom in any change that exceeds a budget.
 - Settled during the reopened planning session: retain a real-boundary test only when it proves an externally consequential adapter contract or reproduces a concrete prior regression; move policy and result permutations in-process and remove speculative, impossible-state, duplicate, and low-value boundary permutations.
@@ -140,15 +143,15 @@ Historical review status:
 ## Final verification
 
 All required focused commands passed in the locked Nix environment.
-The complete selected suite passed with 292 tests and one intentional skip.
+The complete selected suite passed with 314 tests and one intentional skip.
 `just health` produced machine-readable coverage and completed with advisory coverage-based Fallow health at `78 B`.
 
 Three consecutive locked-Nix wall-time measurements produced these results:
 
 | Command | Run 1 | Run 2 | Run 3 | Median | Operating budget | Completion gate |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `just quality` | 9.733 s | 9.870 s | 9.390 s | 9.733 s | 10 s | 15 s |
-| `just full-quality` | 19.816 s | 19.975 s | 20.253 s | 19.975 s | 20 s | 30 s |
+| `just quality` | 6.690 s | 6.852 s | 6.495 s | 6.690 s | 10 s | 15 s |
+| `just full-quality` | 19.777 s | 19.633 s | 19.070 s | 19.633 s | 20 s | 30 s |
 
 ## Blocked by
 

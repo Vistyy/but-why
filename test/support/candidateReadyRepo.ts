@@ -2,8 +2,8 @@ import { spawnSync } from "node:child_process";
 import { join } from "node:path";
 import { createInitializedRepo } from "./initializedRepo.js";
 
-export const candidateReadyRepo = (): string => {
-  const root = createInitializedRepo();
+export const candidateReadyRepo = (workspace?: string): string => {
+  const root = createInitializedRepo(workspace);
   git(root, "config", "user.email", "test@example.com");
   git(root, "config", "user.name", "Test User");
   git(root, "checkout", "-b", "main");

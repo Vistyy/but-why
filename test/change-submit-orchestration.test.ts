@@ -7,6 +7,7 @@ import type { ChangeRecord } from "../src/change/change.js";
 import type { ChangePersistence } from "../src/change/changePersistence.js";
 import type { ChangeReconciliation } from "../src/change/reconcileChange.js";
 import { openChangeSubmit } from "../src/change/submitChange.js";
+import type { CaptureLocalCandidateResult } from "../src/changeCandidateCapture/captureLocalCandidate.js";
 import type {
   PublishCandidateInput,
   PublishCandidateResult,
@@ -189,6 +190,40 @@ describe("Change Submit orchestration", () => {
       }),
   );
 
+  it.effect.each([
+    {
+      name: "unchanged taskless work",
+      captureResult: { ...candidate, headSha: "base" } as CaptureLocalCandidateResult,
+      expected: { ok: true, status: "nothing_to_submit", changeId: "change-1" },
+    },
+    {
+      name: "dirty work",
+      captureResult: { ok: false, code: "dirty_work" } as CaptureLocalCandidateResult,
+      expected: { ok: false, code: "dirty_work" },
+    },
+  ])(
+    "returns the Candidate selection result for $name before validation",
+    ({ captureResult, expected }) =>
+      Effect.gen(function* () {
+        const events: string[] = [];
+        const submit = openChangeSubmit(
+          dependencies({ events, change: readyChange(), captureResult }),
+        );
+        const validationLayer = Layer.succeed(CandidateValidation, {
+          validateCandidate: () => Effect.die("Validation must not start"),
+          validateTaskBackedCandidate: () => Effect.die("Validation must not start"),
+          listFindings: () => Effect.succeed([]),
+          listToolingFailures: () => Effect.succeed([]),
+          listRounds: () => Effect.succeed([]),
+        });
+
+        expect(
+          yield* submit.submit({ changeId: "change-1", now }).pipe(Effect.provide(validationLayer)),
+        ).toEqual(expected);
+        expect(events).toEqual(["reconcile", "capture"]);
+      }),
+  );
+
   it.effect("rejects a missing GitHub target before Candidate validation starts", () =>
     Effect.gen(function* () {
       const events: string[] = [];
@@ -318,6 +353,7 @@ const dependencies = (input: {
   readonly toolingFailures?: readonly (typeof toolingFailure)[];
   readonly publication?: PublicationFixture;
   readonly reconciliationStatus?: "not_owned" | "open";
+  readonly captureResult?: CaptureLocalCandidateResult;
   readonly targetResult?:
     | { readonly ok: false; readonly code: "PR_TARGET_NOT_FOUND" }
     | {
@@ -420,7 +456,7 @@ const dependencies = (input: {
     captureCandidate: () =>
       Effect.sync(() => {
         events.push("capture");
-        return candidate;
+        return input.captureResult ?? candidate;
       }),
   };
 };
