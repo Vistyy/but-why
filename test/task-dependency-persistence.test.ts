@@ -4,8 +4,7 @@ import { Effect } from "effect";
 import { openSqliteTaskPersistence } from "../src/sqlite/sqliteTaskPersistence.js";
 import type { TaskPersistence } from "../src/task/taskPersistence.js";
 import { publicTaskId } from "../src/task/taskId.js";
-import { createInitializedRepo } from "./support/initializedRepo.js";
-import { withTestRepository } from "./support/repository.js";
+import { withTemporaryRepositoryState } from "./support/repository.js";
 
 const firstNow = "2026-06-30T12:00:00.000Z";
 const secondNow = "2026-06-30T12:05:00.000Z";
@@ -118,9 +117,7 @@ it.scoped("returns direct Task dependency facts and start eligibility", () =>
 );
 
 const withTasks = <A, E>(use: (tasks: TaskPersistence) => Effect.Effect<A, E>) => {
-  const root = createInitializedRepo();
-  return withTestRepository(
-    root,
+  return withTemporaryRepositoryState(() =>
     Effect.flatMap(openSqliteTaskPersistence("BY"), (tasks) => use(tasks)),
   );
 };

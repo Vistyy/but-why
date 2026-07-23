@@ -5,8 +5,7 @@ import type { TaskState } from "../src/task/lifecycle.js";
 import type { TaskPersistence } from "../src/task/taskPersistence.js";
 import { openSqliteTaskPersistence } from "../src/sqlite/sqliteTaskPersistence.js";
 import { publicTaskId } from "../src/task/taskId.js";
-import { createInitializedRepo } from "./support/initializedRepo.js";
-import { withTestRepository } from "./support/repository.js";
+import { withTemporaryRepositoryState } from "./support/repository.js";
 
 const firstNow = "2026-06-30T12:00:00.000Z";
 const secondNow = "2026-06-30T12:05:00.000Z";
@@ -14,9 +13,7 @@ const thirdNow = "2026-06-30T12:10:00.000Z";
 const closedStates = ["implementing", "validating", "ready", "done"] as const;
 
 it.scoped("preserves Task policy after migration to Effect persistence", () => {
-  const root = createInitializedRepo();
-  return withTestRepository(
-    root,
+  return withTemporaryRepositoryState(() =>
     Effect.gen(function* () {
       const tasks = yield* openSqliteTaskPersistence("BY");
 
@@ -53,9 +50,7 @@ it.scoped("preserves Task policy after migration to Effect persistence", () => {
 });
 
 it.scoped("preserves Task ordering and rejects invalid state transitions", () => {
-  const root = createInitializedRepo();
-  return withTestRepository(
-    root,
+  return withTemporaryRepositoryState(() =>
     Effect.gen(function* () {
       const tasks = yield* openSqliteTaskPersistence("BY");
       yield* tasks.createTask({ title: "First", description: "First", now: firstNow });

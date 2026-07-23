@@ -8,10 +8,11 @@ import { describe } from "vitest";
 import { openChangeReconciliation } from "../src/change/reconcileChange.js";
 import type { GitHubPullRequest } from "../src/change/ownedPullRequestGateway.js";
 import { openSqliteChangePersistence } from "../src/sqlite/sqliteChangePersistence.js";
+import { openSqliteChangeStartPersistence } from "../src/sqlite/sqliteChangeStartPersistence.js";
 import { runByWithEnv } from "./support/by-cli.js";
 import { createTestWorkspace } from "./support/testWorkspace.js";
 import { createInitializedRepo } from "./support/initializedRepo.js";
-import { withTestRepository } from "./support/repository.js";
+import { withTemporaryRepositoryState, withTestRepository } from "./support/repository.js";
 
 const now = "2026-07-24T10:00:00.000Z";
 const pathEnvironmentVariable = "PATH";
@@ -70,38 +71,145 @@ describe("by change reconcile", () => {
   it.effect(
     "leaves a closed unmerged owned pull request and its Change open",
     () =>
-      Effect.gen(function* () {
-        const repository = initializedRepository();
-        const started = startChangeProcess(repository, "--output", "json");
-        const change = JSON.parse(started.stdout) as ChangeProcessOutput;
-        const headSha = git(change.worktreePath, "rev-parse", "HEAD");
-        const headBranch = change.branch.slice("refs/heads/".length);
-        yield* recordPublishedPullRequest(
-          repository,
-          change.change.id,
-          publicationTarget,
-          headBranch,
-          headSha,
-        );
+      withTemporaryRepositoryState((input) =>
+        Effect.gen(function* () {
+          const starts = yield* openSqliteChangeStartPersistence();
+          const created = yield* starts.create({
+            id: "change-1",
+            repositoryCommonDirectory: input.commonDirectory,
+            branchRef: "refs/heads/change-1",
+            baseRef: "refs/heads/main",
+            startingCommit: "head",
+            worktreePath: join(input.commonDirectory, "worktree"),
+            now,
+          });
+          if (!created.ok) throw new Error(created.code);
+          yield* starts.markReady(created.change.id, now);
+          const changes = yield* openSqliteChangePersistence();
+          const publication = {
+            changeId: created.change.id,
+            candidateId: "candidate-1",
+            validationRunId: "validation-run-1",
+            target: publicationTarget,
+            headBranch: "change-1",
+            expectedHeadSha: "head",
+            now,
+          };
+          const begun = yield* changes.beginPublication(publication);
+          if (!begun.ok) throw new Error(begun.code);
+          const recorded = yield* changes.recordPublishedPullRequest({
+            ...publication,
+            pullRequest: { number: 42, url: "https://github.com/acme/widgets/pull/42" },
+          });
+          if (!recorded.ok) throw new Error(recorded.code);
+          const reconciliation = openChangeReconciliation({
+            persistence: changes,
+            github: {
+              findPullRequests: () => [],
+              getPullRequest: () => ({
+                number: 42,
+                url: "https://github.com/acme/widgets/pull/42",
+                repository: { owner: publicationTarget.owner, repo: publicationTarget.repo },
+                state: "closed",
+                merged: false,
+                baseBranch: publicationTarget.baseBranch,
+                headBranch: "change-1",
+                headSha: "head",
+              }),
+              createPullRequest: () => {
+                throw new Error("Reconciliation must not create a pull request");
+              },
+              updatePullRequest: () => {
+                throw new Error("Reconciliation must not update a pull request");
+              },
+            },
+            cleanup: () => {
+              throw new Error("Open Changes must not be cleaned");
+            },
+          });
 
-        yield* withTestRepository(
-          repository,
-          Effect.gen(function* () {
-            const changes = yield* openSqliteChangePersistence();
+          expect(
+            yield* reconciliation.reconcile({
+              repositoryCommonDirectory: input.commonDirectory,
+              changeId: created.change.id,
+              now,
+            }),
+          ).toEqual({
+            rejected: false,
+            changes: [
+              {
+                changeId: created.change.id,
+                status: "closed_unmerged",
+                pullRequest: {
+                  number: 42,
+                  url: "https://github.com/acme/widgets/pull/42",
+                },
+              },
+            ],
+          });
+          expect(yield* changes.getChangeById(created.change.id)).toMatchObject({ state: "open" });
+        }),
+      ),
+    15_000,
+  );
+
+  it.effect(
+    "rejects unexpected pull request ownership facts without adopting them",
+    () =>
+      withTemporaryRepositoryState((input) =>
+        Effect.gen(function* () {
+          const starts = yield* openSqliteChangeStartPersistence();
+          const created = yield* starts.create({
+            id: "change-1",
+            repositoryCommonDirectory: input.commonDirectory,
+            branchRef: "refs/heads/change-1",
+            baseRef: "refs/heads/main",
+            startingCommit: "head",
+            worktreePath: join(input.commonDirectory, "worktree"),
+            now,
+          });
+          if (!created.ok) throw new Error(created.code);
+          yield* starts.markReady(created.change.id, now);
+          const changes = yield* openSqliteChangePersistence();
+          const publication = {
+            changeId: created.change.id,
+            candidateId: "candidate-1",
+            validationRunId: "validation-run-1",
+            target: publicationTarget,
+            headBranch: "change-1",
+            expectedHeadSha: "head",
+            now,
+          };
+          const begun = yield* changes.beginPublication(publication);
+          if (!begun.ok) throw new Error(begun.code);
+          const recorded = yield* changes.recordPublishedPullRequest({
+            ...publication,
+            pullRequest: { number: 42, url: "https://github.com/acme/widgets/pull/42" },
+          });
+          if (!recorded.ok) throw new Error(recorded.code);
+          const expected: GitHubPullRequest = {
+            number: 42,
+            url: "https://github.com/acme/widgets/pull/42",
+            repository: { owner: publicationTarget.owner, repo: publicationTarget.repo },
+            state: "open",
+            merged: false,
+            baseBranch: publicationTarget.baseBranch,
+            headBranch: "change-1",
+            headSha: "head",
+          };
+          const unexpected: readonly GitHubPullRequest[] = [
+            { ...expected, repository: { owner: "other", repo: publicationTarget.repo } },
+            { ...expected, baseBranch: "release" },
+            { ...expected, headBranch: "other-feature" },
+            { ...expected, headSha: "unexpected-head" },
+          ];
+
+          for (const pullRequest of unexpected) {
             const reconciliation = openChangeReconciliation({
               persistence: changes,
               github: {
                 findPullRequests: () => [],
-                getPullRequest: () => ({
-                  number: 42,
-                  url: "https://github.com/acme/widgets/pull/42",
-                  repository: { owner: publicationTarget.owner, repo: publicationTarget.repo },
-                  state: "closed",
-                  merged: false,
-                  baseBranch: publicationTarget.baseBranch,
-                  headBranch,
-                  headSha,
-                }),
+                getPullRequest: () => pullRequest,
                 createPullRequest: () => {
                   throw new Error("Reconciliation must not create a pull request");
                 },
@@ -110,105 +218,23 @@ describe("by change reconcile", () => {
                 },
               },
               cleanup: () => {
-                throw new Error("Open Changes must not be cleaned");
+                throw new Error("Rejected Changes must not be cleaned");
               },
             });
-
             expect(
               yield* reconciliation.reconcile({
-                repositoryCommonDirectory: join(repository, ".git"),
-                changeId: change.change.id,
+                repositoryCommonDirectory: input.commonDirectory,
+                changeId: created.change.id,
                 now,
               }),
-            ).toEqual({
-              rejected: false,
-              changes: [
-                {
-                  changeId: change.change.id,
-                  status: "closed_unmerged",
-                  pullRequest: {
-                    number: 42,
-                    url: "https://github.com/acme/widgets/pull/42",
-                  },
-                },
-              ],
+            ).toMatchObject({
+              rejected: true,
+              changes: [{ changeId: created.change.id, status: "rejected" }],
             });
-          }),
-        );
-        expect(yield* readChange(repository, change.change.id)).toMatchObject({ state: "open" });
-      }),
-    15_000,
-  );
-
-  it.effect(
-    "rejects unexpected pull request ownership facts without adopting them",
-    () =>
-      Effect.gen(function* () {
-        const repository = initializedRepository();
-        const started = startChangeProcess(repository, "--output", "json");
-        const change = JSON.parse(started.stdout) as ChangeProcessOutput;
-        const headSha = git(change.worktreePath, "rev-parse", "HEAD");
-        const headBranch = change.branch.slice("refs/heads/".length);
-        yield* recordPublishedPullRequest(
-          repository,
-          change.change.id,
-          publicationTarget,
-          headBranch,
-          headSha,
-        );
-        const expected: GitHubPullRequest = {
-          number: 42,
-          url: "https://github.com/acme/widgets/pull/42",
-          repository: { owner: publicationTarget.owner, repo: publicationTarget.repo },
-          state: "open",
-          merged: false,
-          baseBranch: publicationTarget.baseBranch,
-          headBranch,
-          headSha,
-        };
-        const unexpected: readonly GitHubPullRequest[] = [
-          { ...expected, repository: { owner: "other", repo: publicationTarget.repo } },
-          { ...expected, baseBranch: "release" },
-          { ...expected, headBranch: "other-feature" },
-          { ...expected, headSha: "unexpected-head" },
-        ];
-
-        yield* withTestRepository(
-          repository,
-          Effect.gen(function* () {
-            const changes = yield* openSqliteChangePersistence();
-            for (const pullRequest of unexpected) {
-              const reconciliation = openChangeReconciliation({
-                persistence: changes,
-                github: {
-                  findPullRequests: () => [],
-                  getPullRequest: () => pullRequest,
-                  createPullRequest: () => {
-                    throw new Error("Reconciliation must not create a pull request");
-                  },
-                  updatePullRequest: () => {
-                    throw new Error("Reconciliation must not update a pull request");
-                  },
-                },
-                cleanup: () => {
-                  throw new Error("Rejected Changes must not be cleaned");
-                },
-              });
-              expect(
-                yield* reconciliation.reconcile({
-                  repositoryCommonDirectory: join(repository, ".git"),
-                  changeId: change.change.id,
-                  now,
-                }),
-              ).toMatchObject({
-                rejected: true,
-                changes: [{ changeId: change.change.id, status: "rejected" }],
-              });
-            }
-          }),
-        );
-        expect(yield* readChange(repository, change.change.id)).toMatchObject({ state: "open" });
-      }),
+          }
+          expect(yield* changes.getChangeById(created.change.id)).toMatchObject({ state: "open" });
+        }),
+      ),
     30_000,
   );
 

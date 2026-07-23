@@ -1,14 +1,20 @@
 import { spawnSync, type SpawnSyncReturns } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { delimiter, join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { tmpdir } from "node:os";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { createGitRepo, repoRoot } from "./support/by-cli.js";
 import { createTestWorkspace } from "./support/testWorkspace.js";
 
-type PackedPackage = {
+type PackedPackageMetadata = {
   readonly filename: string;
   readonly files: readonly { readonly path: string }[];
+};
+
+type PackedPackage = {
+  readonly tarballPath: string;
+  readonly files: readonly string[];
 };
 
 type CommandResult = SpawnSyncReturns<string>;
@@ -41,8 +47,7 @@ const expectCleanSuccessfulCommand = (result: CommandResult) => {
   expect(result.stderr).toBe("");
 };
 
-const packPackage = () => {
-  const destination = createTestWorkspace();
+const packPackage = (destination: string): PackedPackage => {
   const result = runCommandSync(
     "npm",
     ["pack", "--json", "--pack-destination", destination],
@@ -51,7 +56,7 @@ const packPackage = () => {
 
   expectSuccessfulCommand(result);
 
-  const packedPackages = JSON.parse(result.stdout) as readonly PackedPackage[];
+  const packedPackages = JSON.parse(result.stdout) as readonly PackedPackageMetadata[];
   const [packedPackage] = packedPackages;
 
   if (packedPackage === undefined) {
@@ -63,6 +68,19 @@ const packPackage = () => {
     files: packedPackage.files.map((file) => file.path).sort(),
   };
 };
+
+type PackageFixture = PackedPackage & { readonly directory: string };
+
+let packageFixture: PackageFixture;
+
+beforeAll(() => {
+  const directory = mkdtempSync(join(tmpdir(), "but-why-package-"));
+  packageFixture = { ...packPackage(directory), directory };
+});
+
+afterAll(() => {
+  rmSync(packageFixture.directory, { recursive: true, force: true });
+});
 
 const installPackage = (cwd: string, tarballPath: string) => {
   expectSuccessfulCommand(runCommandSync("npm", ["init", "--yes"], cwd));
@@ -85,7 +103,7 @@ const expectInstalledHelp = (result: CommandResult) => {
 
 describe("installable by CLI package", () => {
   it("packs built CLI output and user-facing package metadata only", () => {
-    const { files } = packPackage();
+    const { files } = packageFixture;
     expect(files).toContain("dist/main.js");
     expect(files).toContain("package.json");
     expect(files).toContain("README.md");
@@ -106,7 +124,7 @@ describe("installable by CLI package", () => {
   }, 120_000);
 
   it("runs help and init from one project-local tarball install in another Git repo", () => {
-    const packed = packPackage();
+    const packed = packageFixture;
     const localConsumerRepo = createGitRepo();
     installPackage(localConsumerRepo, packed.tarballPath);
 
@@ -130,7 +148,7 @@ describe("installable by CLI package", () => {
   }, 120_000);
 
   it("runs help from the same tarball installed under a temp global prefix", () => {
-    const packed = packPackage();
+    const packed = packageFixture;
     const globalPrefix = createTestWorkspace();
     const globalConsumerRepo = createGitRepo();
     expectSuccessfulCommand(

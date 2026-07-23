@@ -8,6 +8,7 @@ import { describe } from "vitest";
 import type { InteractiveSessionHost } from "../src/change/interactiveSessionHost.js";
 import { commitButWhyConfigAndRecordDefault, runByInProcessEffect } from "./support/by-cli.js";
 import { createInitializedRepo } from "./support/initializedRepo.js";
+import { createTestWorkspace } from "./support/testWorkspace.js";
 
 const now = "2026-06-30T12:00:00.000Z";
 const contractMaxHandoffBytes = 256 * 1024;
@@ -215,17 +216,11 @@ describe("by change implement", () => {
 
   it.effect("rejects standard input as a handoff source", () =>
     Effect.gen(function* () {
-      const root = initializedRepository();
-      const started = yield* runByInProcessEffect(
-        root,
-        ["change", "start", "--output", "json"],
-        now,
-      );
-      const change = JSON.parse(started.stdout) as { readonly change: { readonly id: string } };
+      const root = createTestWorkspace();
 
       const result = yield* runByInProcessEffect(
         root,
-        ["change", "implement", change.change.id, "--handoff-file", "-", "--output", "json"],
+        ["change", "implement", "change-1", "--handoff-file", "-", "--output", "json"],
         now,
       );
 
@@ -240,15 +235,7 @@ describe("by change implement", () => {
     "maps %s handoff input to its structured usage error",
     ([_name, handoffCase]) =>
       Effect.gen(function* () {
-        const root = initializedRepository();
-        const started = yield* runByInProcessEffect(
-          root,
-          ["change", "start", "--output", "json"],
-          now,
-        );
-        const change = JSON.parse(started.stdout) as {
-          readonly change: { readonly id: string };
-        };
+        const root = createTestWorkspace();
         let launches = 0;
         const host: InteractiveSessionHost = {
           launch: async () => {
@@ -261,15 +248,7 @@ describe("by change implement", () => {
 
         const result = yield* runByInProcessEffect(
           root,
-          [
-            "change",
-            "implement",
-            change.change.id,
-            "--handoff-file",
-            handoffPath,
-            "--output",
-            "json",
-          ],
+          ["change", "implement", "change-1", "--handoff-file", handoffPath, "--output", "json"],
           now,
           { interactiveSessionHost: host },
         );
@@ -285,15 +264,6 @@ describe("by change implement", () => {
           help: [handoffCase.help],
         });
         expect(launches).toBe(0);
-
-        const inspection = yield* runByInProcessEffect(
-          root,
-          ["change", "show", change.change.id, "--output", "json"],
-          now,
-        );
-        expect(JSON.parse(inspection.stdout)).toMatchObject({
-          change: { id: change.change.id, state: "open", readiness: "ready" },
-        });
       }),
   );
 

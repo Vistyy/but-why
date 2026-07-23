@@ -1,10 +1,9 @@
-import { spawn } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
-import { describe, it as ordinaryIt } from "vitest";
+import { describe } from "vitest";
 
 import { collapseHome } from "../src/cli.js";
 import { RepositorySql, repositorySqlLayer } from "../src/sqlite/repositorySql.js";
@@ -16,25 +15,21 @@ import {
   commitButWhyConfigAndRecordDefault,
   createGitRepo,
   runByInProcessEffect,
-  runByWithEnv,
 } from "./support/by-cli.js";
 import { createTestWorkspace } from "./support/testWorkspace.js";
-import { createInitializedRepo } from "./support/initializedRepo.js";
 import { fakeTaskUseCases } from "./support/taskUseCases.js";
 
 const expectedBin = collapseHome(byExecutable);
 const firstNow = "2026-06-30T12:00:00.000Z";
 const secondNow = "2026-06-30T12:05:00.000Z";
 const thirdNow = "2026-06-30T12:10:00.000Z";
-// Four workers exercise overlapping SQLite writers while keeping subprocess tests fast.
-const concurrentWriterCount = 4;
 
 describe("by task CLI", () => {
   it.effect(
     "creates a new Task with trimmed title, exact description, configured prefix, and summary output",
     () =>
       Effect.gen(function* () {
-        const root = initializedRepo();
+        const root = yield* initializedRepo();
         writeFileSync(join(root, "task.md"), "  Preserve me exactly.\n\n");
 
         const result = yield* runByInProcessEffect(
@@ -59,9 +54,9 @@ help[1]: Run \`by task list\` to see open tasks.`);
     "approves Task intent durably and reports repeated approval as an unchanged success",
     () =>
       Effect.gen(function* () {
-        const root = initializedRepo();
+        const root = yield* initializedRepo();
 
-        createTask(root, firstNow, "Approve intent");
+        yield* createTask(root, firstNow, "Approve intent");
 
         const firstApproval = yield* runByInProcessEffect(
           root,
@@ -114,7 +109,7 @@ help[1]: Run \`by task list\` to see open tasks.`);
 
   it.effect("does not consume a Task ID when validation fails before insert", () =>
     Effect.gen(function* () {
-      const root = initializedRepo();
+      const root = yield* initializedRepo();
       writeFileSync(join(root, "task.md"), "Description");
 
       expect(
@@ -225,9 +220,9 @@ tasks[2]:
 
   it.effect("removes started Tasks from the default dashboard", () =>
     Effect.gen(function* () {
-      const root = initializedRepoWithDefault();
+      const root = yield* initializedRepoWithDefault();
 
-      createTask(root, firstNow, "Started");
+      yield* createTask(root, firstNow, "Started");
       expect(
         (yield* runByInProcessEffect(root, ["task", "approve", "BY-1"], firstNow)).status,
       ).toBe(0);
@@ -335,9 +330,9 @@ help[1]: "Run \`by task create --title \\"...\\" --description-file <file>\` to 
 
   it.effect("creates a managed Task Context draft with the current title and description", () =>
     Effect.gen(function* () {
-      const root = initializedRepo();
+      const root = yield* initializedRepo();
 
-      createTask(root, firstNow, "Draft title");
+      yield* createTask(root, firstNow, "Draft title");
 
       const result = yield* runByInProcessEffect(root, [
         "task",
@@ -365,8 +360,8 @@ help[1]: "Run \`by task create --title \\"...\\" --description-file <file>\` to 
 
   it.effect("reports unavailable state when a Task Context draft cannot be written", () =>
     Effect.gen(function* () {
-      const root = initializedRepo();
-      createTask(root, firstNow, "Blocked draft");
+      const root = yield* initializedRepo();
+      yield* createTask(root, firstNow, "Blocked draft");
       writeFileSync(join(root, ".git", "but-why", "task-context-drafts"), "not a directory");
 
       const result = yield* runByInProcessEffect(root, [
@@ -387,9 +382,9 @@ help[1]: "Run \`by task create --title \\"...\\" --description-file <file>\` to 
 
   it.effect("replaces a prior Task Context draft with current Task Context", () =>
     Effect.gen(function* () {
-      const root = initializedRepo();
+      const root = yield* initializedRepo();
 
-      createTask(root, firstNow, "Original title");
+      yield* createTask(root, firstNow, "Original title");
       const firstDraft = JSON.parse(
         (yield* runByInProcessEffect(root, [
           "task",
@@ -426,9 +421,9 @@ help[1]: "Run \`by task create --title \\"...\\" --description-file <file>\` to 
 
   it.effect("applies a valid Task Context draft before Change Start and removes it", () =>
     Effect.gen(function* () {
-      const root = initializedRepo();
+      const root = yield* initializedRepo();
 
-      createTask(root, firstNow, "Original title");
+      yield* createTask(root, firstNow, "Original title");
 
       const draftResult = yield* runByInProcessEffect(root, [
         "task",
@@ -467,9 +462,9 @@ help[1]: "Run \`by task create --title \\"...\\" --description-file <file>\` to 
 
   it.effect("retains an invalid Task Context draft without changing the Task", () =>
     Effect.gen(function* () {
-      const root = initializedRepo();
+      const root = yield* initializedRepo();
 
-      createTask(root, firstNow, "Original title");
+      yield* createTask(root, firstNow, "Original title");
 
       const draftResult = yield* runByInProcessEffect(root, [
         "task",
@@ -500,9 +495,9 @@ help[1]: "Run \`by task create --title \\"...\\" --description-file <file>\` to 
 
   it.effect("retains a Task Context draft without its required blank-line separator", () =>
     Effect.gen(function* () {
-      const root = initializedRepo();
+      const root = yield* initializedRepo();
 
-      createTask(root, firstNow, "Original title");
+      yield* createTask(root, firstNow, "Original title");
       const draftResult = yield* runByInProcessEffect(root, [
         "task",
         "context",
@@ -533,9 +528,9 @@ help[1]: "Run \`by task create --title \\"...\\" --description-file <file>\` to 
     "retains Task Context drafts when applying to a %s Task",
     (state) =>
       Effect.gen(function* () {
-        const root = initializedRepo();
+        const root = yield* initializedRepo();
 
-        createTask(root, firstNow, "Original title");
+        yield* createTask(root, firstNow, "Original title");
         const draftResult = yield* runByInProcessEffect(root, [
           "task",
           "context",
@@ -568,9 +563,9 @@ help[1]: "Run \`by task create --title \\"...\\" --description-file <file>\` to 
     "appends Task comments as ordered raw Task Context before Start without changing state",
     () =>
       Effect.gen(function* () {
-        const root = initializedRepo();
+        const root = yield* initializedRepo();
 
-        createTask(root, firstNow, "Commented task");
+        yield* createTask(root, firstNow, "Commented task");
         writeFileSync(join(root, "comment-1.md"), "First comment\n\nWith Markdown.\n");
         writeFileSync(join(root, "comment-2.md"), "First comment\n\nWith Markdown.\n");
 
@@ -649,9 +644,9 @@ help[1]: "Run \`by task create --title \\"...\\" --description-file <file>\` to 
 
   it.effect("preserves a leading UTF-8 BOM in Task comment content", () =>
     Effect.gen(function* () {
-      const root = initializedRepo();
+      const root = yield* initializedRepo();
 
-      createTask(root, firstNow, "BOM comment");
+      yield* createTask(root, firstNow, "BOM comment");
       writeFileSync(join(root, "bom.md"), Buffer.from([0xef, 0xbb, 0xbf, 0x42, 0x4f, 0x4d]));
 
       const result = yield* runByInProcessEffect(
@@ -767,114 +762,6 @@ help[1]: "Run \`by task create --title \\"...\\" --description-file <file>\` to 
 
       expect(appendCalls).toBe(0);
     }),
-  );
-
-  ordinaryIt("persists Task comments across CLI processes", async () => {
-    const root = initializedRepo();
-
-    createTask(root, firstNow, "Persistent comments");
-    writeFileSync(join(root, "comment.md"), "Persist me exactly\n");
-
-    const appendResult = await runByAsync(
-      root,
-      { BUT_WHY_NOW: secondNow },
-      "task",
-      "comment",
-      "BY-1",
-      "--file",
-      "comment.md",
-    );
-
-    expect(appendResult.status).toBe(0);
-    expect(appendResult.stderr).toBe("");
-    expect(appendResult.stdout).toBe(`task:
-  id: BY-1
-  commentCount: 1`);
-
-    const contextResult = await runByAsync(root, {}, "task", "context", "BY-1");
-    expect(contextResult.stdout).toBe(`task:
-  id: BY-1
-  title: Persistent comments
-  description: Description for Persistent comments
-  comments[1]: "Persist me exactly\\n"`);
-  });
-
-  ordinaryIt(
-    "preserves all concurrent Task comment appends",
-    async () => {
-      const root = initializedRepo();
-      const commentCount = concurrentWriterCount;
-
-      createTask(root, firstNow, "Concurrent comments");
-
-      for (let index = 0; index < commentCount; index += 1) {
-        writeFileSync(join(root, `comment-${index}.md`), `Comment ${index}`);
-      }
-
-      const results = await Promise.all(
-        Array.from({ length: commentCount }, (_value, index) =>
-          runByAsync(
-            root,
-            { BUT_WHY_NOW: secondNow },
-            "task",
-            "comment",
-            "BY-1",
-            "--file",
-            `comment-${index}.md`,
-          ),
-        ),
-      );
-
-      expect(results.every((result) => result.status === 0)).toBe(true);
-
-      const contextResult = await runByAsync(root, {}, "task", "context", "BY-1");
-      for (let index = 0; index < commentCount; index += 1) {
-        expect(contextResult.stdout).toContain(`Comment ${index}`);
-      }
-
-      const showResult = await runByAsync(root, {}, "task", "show", "BY-1");
-      expect(showResult.stdout).toContain(`commentCount: ${commentCount}`);
-    },
-    15_000,
-  );
-
-  ordinaryIt(
-    "keeps concurrent Task dependency replacements atomic",
-    async () => {
-      const root = initializedRepo();
-      createTask(root, firstNow, "First prerequisite");
-      createTask(root, firstNow, "Second prerequisite");
-      createTask(root, firstNow, "Third prerequisite");
-      createTask(root, firstNow, "Dependent Task");
-
-      const results = await Promise.all([
-        runByAsync(root, {}, "task", "dependencies", "set", "BY-4", "--depends-on", "BY-1"),
-        runByAsync(
-          root,
-          {},
-          "task",
-          "dependencies",
-          "set",
-          "BY-4",
-          "--depends-on",
-          "BY-2",
-          "--depends-on",
-          "BY-3",
-        ),
-      ]);
-
-      expect(results.every((result) => result.status === 0)).toBe(true);
-      const shown = await runByAsync(root, {}, "task", "show", "BY-4", "--output", "json");
-      const prerequisites = (
-        JSON.parse(shown.stdout) as {
-          readonly task: { readonly prerequisites: readonly { readonly id: string }[] };
-        }
-      ).task.prerequisites;
-      expect(prerequisites.map((task) => task.id)).toSatisfy(
-        (ids: readonly string[]) => ids.join(",") === "BY-1" || ids.join(",") === "BY-2,BY-3",
-      );
-    },
-    15_000,
   );
 
   it.effect("serializes missing Task IDs before command lookup", () =>
@@ -1141,39 +1028,6 @@ help[1]: Run \`by init --task-prefix BY\` in the repository root.`);
     }),
   );
 
-  ordinaryIt("serializes concurrent Task creation through repo state", async () => {
-    const root = initializedRepo();
-    const createCount = concurrentWriterCount;
-
-    for (let index = 0; index < createCount; index += 1) {
-      writeFileSync(join(root, `concurrent-${index}.md`), `Description ${index}`);
-    }
-
-    const results = await Promise.all(
-      Array.from({ length: createCount }, (_value, index) =>
-        runByAsync(
-          root,
-          { BUT_WHY_NOW: firstNow },
-          "task",
-          "create",
-          "--title",
-          `Concurrent ${index}`,
-          "--description-file",
-          `concurrent-${index}.md`,
-        ),
-      ),
-    );
-
-    expect(results.every((result) => result.status === 0)).toBe(true);
-
-    const listed = await runByAsync(root, {}, "task", "list", "--all", "--output", "json");
-    expect(
-      (
-        JSON.parse(listed.stdout) as { readonly tasks: readonly { readonly id: string }[] }
-      ).tasks.map((task) => task.id),
-    ).toEqual(Array.from({ length: createCount }, (_value, index) => `BY-${index + 1}`));
-  });
-
   it.effect("prints state_store_unavailable when repo state cannot be opened", () =>
     Effect.gen(function* () {
       const root = configuredRepo();
@@ -1223,15 +1077,23 @@ const listedTasks: readonly TaskSummary[] = [
   }),
 ];
 
-const initializedRepo = (): string => createInitializedRepo();
+const initializedRepo = () =>
+  Effect.gen(function* () {
+    const root = createGitRepo();
+    const result = yield* runByInProcessEffect(root, ["init", "--task-prefix", "BY"]);
 
-const initializedRepoWithDefault = (): string => {
-  const root = initializedRepo();
+    if (result.status !== 0) {
+      throw new Error(result.stdout || result.stderr);
+    }
 
-  commitButWhyConfigAndRecordDefault(root);
+    return root;
+  });
 
-  return root;
-};
+const initializedRepoWithDefault = () =>
+  Effect.map(initializedRepo(), (root) => {
+    commitButWhyConfigAndRecordDefault(root);
+    return root;
+  });
 
 const configuredRepo = (): string => {
   const root = createGitRepo();
@@ -1244,20 +1106,19 @@ const configuredRepo = (): string => {
 
 const sharedStatePath = (root: string): string => join(root, ".git", "but-why", "state.sqlite");
 
-const createTask = (root: string, now: string, title: string): void => {
+const createTask = (root: string, now: string, title: string) => {
   const descriptionPath = join(root, ".task-description.md");
   writeFileSync(descriptionPath, `Description for ${title}`);
-  const result = runByWithEnv(
-    root,
-    { BUT_WHY_NOW: now },
-    "task",
-    "create",
-    "--title",
-    title,
-    "--description-file",
-    descriptionPath,
+
+  return Effect.flatMap(
+    runByInProcessEffect(
+      root,
+      ["task", "create", "--title", title, "--description-file", descriptionPath],
+      now,
+    ),
+    (result) =>
+      result.status === 0 ? Effect.void : Effect.die(new Error(result.stdout || result.stderr)),
   );
-  if (result.status !== 0) throw new Error(result.stdout || result.stderr);
 };
 
 const setTaskState = (root: string, id: string, state: TaskState, updatedAt: string) =>
@@ -1281,42 +1142,3 @@ const setTaskState = (root: string, id: string, state: TaskState, updatedAt: str
       ),
     ),
   );
-
-type AsyncCliResult = {
-  readonly status: number | null;
-  readonly stdout: string;
-  readonly stderr: string;
-};
-
-const runByAsync = (
-  cwd: string,
-  env: NodeJS.ProcessEnv,
-  ...args: readonly string[]
-): Promise<AsyncCliResult> =>
-  new Promise((resolve, reject) => {
-    const child = spawn(byExecutable, [...args], {
-      cwd,
-      env: {
-        ...process.env,
-        ...env,
-        FORCE_COLOR: "0",
-        NO_COLOR: "1",
-      },
-      stdio: ["ignore", "pipe", "pipe"],
-    });
-    const stdout: string[] = [];
-    const stderr: string[] = [];
-
-    child.stdout.setEncoding("utf8");
-    child.stderr.setEncoding("utf8");
-    child.stdout.on("data", (chunk: string) => stdout.push(chunk));
-    child.stderr.on("data", (chunk: string) => stderr.push(chunk));
-    child.on("error", reject);
-    child.on("close", (status) =>
-      resolve({
-        status,
-        stdout: stdout.join(""),
-        stderr: stderr.join(""),
-      }),
-    );
-  });

@@ -17,32 +17,9 @@ import {
   RepositoryPersistedDataInvalid,
   RepositorySqlOperationFailed,
   RepositoryStateUnavailable,
-  type RepositoryStorageError,
 } from "../src/repositoryStorageError.js";
 import { RepositorySql, repositorySqlLayer } from "../src/sqlite/repositorySql.js";
-
-const withTemporaryState = <A, E>(
-  use: (input: {
-    readonly commonDirectory: string;
-    readonly statePath: string;
-  }) => Effect.Effect<A, E, RepositorySql>,
-): Effect.Effect<A, E | RepositoryStorageError> =>
-  Effect.acquireUseRelease(
-    Effect.sync(() => mkdtempSync(join(tmpdir(), "but-why-repository-sql-"))),
-    (directory) =>
-      use({
-        commonDirectory: directory,
-        statePath: join(directory, "state.sqlite"),
-      }).pipe(
-        Effect.provide(
-          repositorySqlLayer({
-            commonDirectory: directory,
-            statePath: join(directory, "state.sqlite"),
-          }),
-        ),
-      ),
-    (directory) => Effect.sync(() => rmSync(directory, { recursive: true, force: true })),
-  );
+import { withTemporaryRepositoryState as withTemporaryState } from "./support/repository.js";
 
 const migrationCount = Effect.gen(function* () {
   const repositorySql = yield* RepositorySql;
