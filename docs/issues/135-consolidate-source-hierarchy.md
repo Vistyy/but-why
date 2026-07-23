@@ -78,17 +78,17 @@ The full repository suite and Fallow import graph additionally verify the final 
 
 ## Acceptance criteria
 
-- [ ] Every top-level `src/` folder has one documented domain owner or shared adapter role.
-- [ ] Task-owned code covers Task intent and Task lifecycle.
-- [ ] Change-owned code covers implementation, Candidates, submission, validation ownership, and delivery.
-- [ ] Cross-domain workflows live under one primary owner and call other modules through their existing interfaces.
-- [ ] CLI, persistence, repository, execution, and output adapters are grouped by clear shared roles.
-- [ ] No migration-only folder or forwarding module remains.
-- [ ] The reorganization does not redesign public or internal interfaces.
-- [ ] The reorganization preserves public commands and persisted data.
-- [ ] Public and domain-facing names use canonical project terms and remain precise search anchors.
-- [ ] Imports, tests, structural checks, and architecture documentation describe the final hierarchy.
-- [ ] The full repository suite passes after the move.
+- [x] Every top-level `src/` folder has one documented domain owner or shared adapter role.
+- [x] Task-owned code covers Task intent and Task lifecycle.
+- [x] Change-owned code covers implementation, Candidates, submission, validation ownership, and delivery.
+- [x] Cross-domain workflows live under one primary owner and call other modules through their existing interfaces.
+- [x] CLI, persistence, repository, execution, and output adapters are grouped by clear shared roles.
+- [x] No migration-only folder or forwarding module remains.
+- [x] The reorganization does not redesign public or internal interfaces.
+- [x] The reorganization preserves public commands and persisted data.
+- [x] Public and domain-facing names use canonical project terms and remain precise search anchors.
+- [x] Imports, tests, structural checks, and architecture documentation describe the final hierarchy.
+- [x] The full repository suite passes after the move.
 
 ## Blocked by
 
