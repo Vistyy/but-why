@@ -78,6 +78,27 @@ Task 134's accepted single-worker baselines are 9.427 seconds for `just quality`
 | `just quality` | 6.573 s | 6.553 s | 6.616 s | 6.573 s | 9.427 s | 30.3% faster | 10 s | 15 s |
 | `just full-quality` | 18.417 s | 17.994 s | 18.053 s | 18.053 s | 29.658 s | 39.1% faster | 30 s | 60 s |
 
+## Completion
+
+Implementation commits:
+
+- `bae9bd92d6a69228bd07e2cf7752bf1fb3e6ad62` - apply three Vitest workers and record the scoped implementation plan.
+- `cc7db110c48f33c73c886db1634b77e7eb04c086` - record clean locked-Nix timing evidence.
+- `4db7d255db84c74504fc5b7d09955d2d842dd9e1` - remove Task 158 from the active issue graph and unblock Task 159.
+- `ca96dc67d133908ff0dba30bc8779934b1c44c57` - align completed task documentation.
+
+Verification:
+
+- Three consecutive locked-Nix `just quality` runs passed with 261 tests and one intentional skip per run.
+- Three consecutive locked-Nix `just full-quality` runs passed with 321 tests and one intentional skip per run.
+- Static checks, Fallow, the production build, documentation checks, and diff checks passed.
+- The three-worker medians remained within the approved 10-second and 30-second operating budgets and 15-second and 60-second completion gates.
+
+Review status:
+
+- Spec: `APPROVED` and latched.
+- Standards: `APPROVED` and latched.
+
 ## Blocked by
 
 None - can start immediately.
