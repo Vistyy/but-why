@@ -17,25 +17,12 @@ case "$workload" in
 esac
 
 has_selection=0
-option_value=0
 for arg in "$@"; do
-    if (( option_value == 1 )); then
-        option_value=0
-        continue
-    fi
     case "$arg" in
-        --testNamePattern|-t)
-            has_selection=1
-            option_value=1
-            ;;
-        --reporter|-r|--pool|--environment|-e|--config|-c|--root|--dir|--project|--maxWorkers|--minWorkers|--retry|--bail|--shard|--coverage.provider|--coverage.reportsDirectory|--coverage.include|--coverage.exclude)
-            option_value=1
-            ;;
-        --)
+        --testNamePattern|-t|--related|--changed|--findRelatedTests|--testNamePattern=*|-t=*)
             has_selection=1
             ;;
-        --*=*|-*) ;;
-        *)
+        test/*|src/*|*.test.*|*.spec.*)
             has_selection=1
             ;;
     esac

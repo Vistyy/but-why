@@ -200,15 +200,30 @@ describe("quality interface", () => {
     expect(success.output).not.toContain("✓ test/");
   });
 
-  if (process.env["BY_VERIFY_QUALITY_COVERAGE"] === "1") {
-    test("writes machine-readable coverage without a text table", async () => {
-      const result = await runJust("", ["coverage", "test/repository/module-seams.test.ts"]);
+  if (Reflect.get(process.env, "BY_VERIFY_QUALITY_COVERAGE") === "1") {
+    test("coordinates complete and targeted coverage through Just", async () => {
+      const directory = mkdtempSync(join(tmpdir(), "but-why-quality-lock-"));
+      temporaryPaths.push(directory);
+      const lockFile = join(directory, "capacity.lock");
+      const { holder, readyFile } = startHeldRunner(lockFile, directory, "complete test");
 
-      expect(result.status).toBe(0);
+      await waitForFile(readyFile);
+      const complete = await runJust(lockFile, ["coverage", "--reporter=dot"]);
+      const targeted = await runJust(lockFile, [
+        "coverage",
+        "test/repository/module-seams.test.ts",
+      ]);
+
+      expect(complete.status).toBe(1);
+      expect(complete.output).toContain("active workload: complete test");
+      expect(targeted.status).toBe(0);
+      expect(targeted.output).not.toMatch(/All files|Statements| %/);
       expect(readFileSync(join(repositoryRoot, "coverage/coverage-final.json"), "utf8")).not.toBe(
         "",
       );
-      expect(result.output).not.toMatch(/All files|Statements| %/);
+
+      holder.child.kill("SIGTERM");
+      await holder.done;
     });
   }
 });

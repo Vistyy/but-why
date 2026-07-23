@@ -73,7 +73,7 @@ Required validation commands are `just test test/repository/quality-interface.te
 ## Completion evidence
 
 - Implementation: `323e6ce66d4a9ec83a9c16e8c4944ca4aec1c696`.
-- Focused quality-interface tests passed with five tests.
+- Focused quality-interface tests passed with five tests, plus the six-test coverage-interface verification mode.
 - Static checks, build, documentation validation, and the advisory health report passed through Just.
 - Three consecutive locked-Nix runs measured `just quality` at 7.275s, 7.311s, and 7.296s, with a median of 7.296s.
 - Three consecutive locked-Nix runs measured `just full-quality` at 17.159s, 17.219s, and 17.250s, with a median of 17.219s.

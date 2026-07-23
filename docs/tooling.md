@@ -33,7 +33,8 @@ Neither blocking quality command generates coverage.
 
 Complete invocations of `just test` and `just coverage` use `scripts/with-capacity-lock.sh` to acquire one repository-local, fail-fast capacity lock.
 The runner identifies the active workload class when another complete test or coverage workload already holds the lock, forwards the child exit status, releases the lock after interruption, and bypasses reacquisition for nested commands.
-Targeted invocations with a test selection remain unlocked.
+Targeted invocations with a test file path, test-name selection, or related-test selection remain unlocked.
+Option-only invocations remain complete workloads and use the lock.
 
 Vitest uses its compact dot reporter for successful runs.
 Failed runs retain test names, assertion differences, stack traces, and captured output.
