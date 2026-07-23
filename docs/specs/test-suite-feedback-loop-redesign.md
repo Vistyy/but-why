@@ -47,6 +47,13 @@ Failure output will preserve complete test names, errors, diffs, and stack trace
 
 ## Implementation Decisions
 
+### Task ownership
+
+Task 134 owns test-boundary optimization, routine and complete suite membership, the single-worker baseline, and performance-budget evidence.
+Task 134 does not own workload locking, reporter behavior, or final coverage composition.
+Task 156 owns the shared capacity runner, concise successful output, complete failure diagnostics, coverage output, and clean-checkout verification of the final quality interface.
+Task 156 must preserve the suite membership and performance baseline established by Task 134.
+
 ### Feedback levels
 
 Targeted test commands remain available for one file or behavior selection.
