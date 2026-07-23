@@ -75,7 +75,7 @@ The full repository suite and Fallow import graph additionally verify the final 
   Change owns validation, while `repositoryPreparation` remains shared because implementation and validation use the same preparation interface.
 - Local: place `repositoryStorageError.ts` under `src/contracts/`.
   CLI, Change, Task, and SQLite modules share the error contract, and Fallow keeps CLI modules independent from storage adapters.
-- Local: update path-based Fallow and ast-grep rules to the final source hierarchy.
+- User-approved: update path-based Fallow and ast-grep rules to the final source hierarchy.
   The task requires structural checks to describe the final hierarchy, and this decision changes paths only without changing thresholds, exclusions, suppressions, or enforced behavior.
 
 ## Acceptance criteria

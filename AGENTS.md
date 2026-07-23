@@ -35,13 +35,22 @@ Move each newly unblocked issue to `Can start immediately`.
 - `src/main.ts`: executable entrypoint.
 - `src/cli.ts`: top-level CLI routing.
 - `src/cli/`: command modules and output boundary.
-- `src/task/`: task use cases.
-- `src/change/validationRun/`: Validation Run domain records and storage ports.
+- `src/task/`: Task intent, lifecycle, persistence interfaces, files, and composition.
+- `src/change/`: Change workflows and Change-owned implementation, Candidate, validation, and delivery modules.
+- `src/change/candidate/`: Candidate domain records.
+- `src/change/candidateCapture/`: Candidate capture interfaces and Git adapters.
+- `src/change/candidateValidation/`: Candidate validation policy, execution, inspection, and composition.
+- `src/change/validation/`: Change validation gate and validation adapters.
+- `src/change/validationRun/`: Validation Run domain records and evidence.
+- `src/change/publication/`: Candidate publication policy and Git adapter.
 - `src/change/submit/`: Change submission configuration and errors.
-- `src/change/validation/`: Change validation gate.
-- `src/sqlite/`: SQLite internals.
-- `src/output/`: structured output helpers.
-- `src/init/`: repo initialization.
+- `src/agent/`: reviewer-agent execution and profile resolution.
+- `src/contracts/`: configuration, output, and shared error contracts.
+- `src/init/`: Local Repository initialization and repository context.
+- `src/output/`: structured output codecs and serializers.
+- `src/repositoryPreparation/`: shared Repository Preparation adapter.
+- `src/sqlite/`: SQLite persistence adapters.
+- `src/submissionEnvironment/`: Git and GitHub submission-environment adapters.
 - `spikes/`: prototypes and spikes.
 
 ## Commands
