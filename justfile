@@ -51,7 +51,7 @@ full-quality:
     wait "$build_pid" || status=1
     wait "$static_pid" || status=1
     if (( status == 0 )); then
-        just test || status=1
+        BY_TEST_SUITE= just test || status=1
     fi
     elapsed=$((SECONDS - started_at))
     echo "full-quality completed in ${elapsed}s"

@@ -21,6 +21,7 @@ import {
   candidateReadyRepo,
   candidateRepositoryConfig,
   commonDirectory,
+  git,
 } from "../support/candidateReadyRepo.js";
 import {
   acquireTestWorkspace,
@@ -194,6 +195,189 @@ describe("Task-backed Candidate Acceptance Review", () => {
       );
     }),
   );
+  it.scoped("rechecks earlier Acceptance Findings after a blind successor review", () =>
+    Effect.gen(function* () {
+      const earlierFinding = reviewerFinding("Earlier acceptance Finding");
+      const review = vi.fn<ReviewerAgentRuntime["review"]>(() =>
+        Effect.succeed({
+          ok: true,
+          report: { findings: [earlierFinding] },
+          attempts: 1,
+          stdout: "earlier acceptance report",
+        }),
+      );
+      const ready = yield* acceptanceReadyRepo({ review });
+
+      const earlier = yield* runTaskBackedCandidate(ready);
+      expect(earlier).toMatchObject({ ok: true, outcome: "blocked" });
+      if (!earlier.ok) return;
+
+      git(ready.repo, "commit", "--allow-empty", "-m", "address acceptance Finding");
+      const successor = yield* captureLocalCandidate({ cwd: ready.repo, now });
+      if (!successor.ok) throw new Error(`Candidate capture failed: ${successor.code}`);
+
+      review.mockImplementationOnce(() =>
+        Effect.succeed({
+          ok: true,
+          report: { findings: [reviewerFinding("Provisional new Finding")] },
+          attempts: 1,
+          stdout: "provisional acceptance report",
+        }),
+      );
+      review.mockImplementationOnce(() =>
+        Effect.succeed({
+          ok: true,
+          report: { findings: [reviewerFinding("Unresolved earlier Finding")] },
+          attempts: 1,
+          stdout: "final acceptance report",
+        }),
+      );
+
+      const final = yield* runTaskBackedCandidate(ready, passingValidationPolicy, successor);
+
+      expect(final).toMatchObject({ ok: true, outcome: "blocked" });
+      expect(review).toHaveBeenCalledTimes(3);
+      expect(review.mock.calls[1]?.[0].prompt).not.toContain(earlierFinding.title);
+      const finalPrompt = review.mock.calls[2]?.[0].prompt;
+      expect(finalPrompt).toContain("Provisional new Finding");
+      expect(finalPrompt).toContain(earlierFinding.title);
+      expect(finalPrompt).not.toContain(earlier.validationRunId);
+      expect(
+        (yield* ready.validation.listFindings(final.validationRunId)).map(
+          (finding) => finding.title,
+        ),
+      ).toEqual(["Unresolved earlier Finding"]);
+      expect(
+        (yield* ready.validation.listFindings(earlier.validationRunId)).map(
+          (finding) => finding.title,
+        ),
+      ).toEqual([earlierFinding.title]);
+    }),
+  );
+
+  it.scoped("records exhausted final Acceptance correction as a Tooling Failure", () =>
+    Effect.gen(function* () {
+      const earlierFinding = reviewerFinding("Earlier acceptance Finding");
+      const failure = new ReviewerOutputContractFailed({
+        operationName: "decode_reviewer_output",
+        reviewer: "acceptance",
+        attempts: 2,
+        diagnostics: [],
+        message: "Final output correction failed.",
+      });
+      const review = vi.fn<ReviewerAgentRuntime["review"]>(() =>
+        Effect.succeed({
+          ok: true,
+          report: { findings: [earlierFinding] },
+          attempts: 1,
+          stdout: "earlier acceptance report",
+        }),
+      );
+      const ready = yield* acceptanceReadyRepo({ review });
+      const earlier = yield* runTaskBackedCandidate(ready);
+      expect(earlier).toMatchObject({ ok: true, outcome: "blocked" });
+      if (!earlier.ok) return;
+
+      git(ready.repo, "commit", "--allow-empty", "-m", "address acceptance Finding");
+      const successor = yield* captureLocalCandidate({ cwd: ready.repo, now });
+      if (!successor.ok) throw new Error(`Candidate capture failed: ${successor.code}`);
+
+      review.mockImplementationOnce(() =>
+        Effect.succeed({
+          ok: true,
+          report: { findings: [] },
+          attempts: 1,
+          stdout: "provisional acceptance report",
+        }),
+      );
+      review.mockImplementationOnce(() =>
+        Effect.succeed({ ok: false, failure, attempts: 2, stdout: "invalid final output" }),
+      );
+
+      const final = yield* runTaskBackedCandidate(ready, passingValidationPolicy, successor);
+
+      expect(final).toMatchObject({ ok: false, outcome: "tooling_failed" });
+      expect(review).toHaveBeenCalledTimes(3);
+      expect(yield* ready.validation.listFindings(final.validationRunId)).toEqual([]);
+      expect(yield* ready.validation.listToolingFailures(final.validationRunId)).toEqual([
+        expect.objectContaining({ errorKind: "reviewer_output_contract_failed" }),
+      ]);
+    }),
+  );
+
+  it.scoped("rechecks earlier Specialist Findings after a blind successor review", () =>
+    Effect.gen(function* () {
+      const earlierFinding = reviewerFinding("Earlier specialist Finding");
+      const reports: readonly ReviewerAgentResult[] = [
+        { ok: true, report: { findings: [] }, attempts: 1, stdout: "accepted" },
+        {
+          ok: true,
+          report: { findings: [earlierFinding] },
+          attempts: 1,
+          stdout: "earlier standards",
+        },
+        { ok: true, report: { findings: [] }, attempts: 1, stdout: "accepted successor" },
+        {
+          ok: true,
+          report: { findings: [reviewerFinding("Provisional specialist Finding")] },
+          attempts: 1,
+          stdout: "provisional standards",
+        },
+        {
+          ok: true,
+          report: { findings: [reviewerFinding("Final specialist Finding")] },
+          attempts: 1,
+          stdout: "final standards",
+        },
+      ];
+      let reportIndex = 0;
+      const review = vi.fn<ReviewerAgentRuntime["review"]>(() => {
+        const report = reports[reportIndex++];
+        if (report === undefined) throw new Error("Unexpected review request.");
+        return Effect.succeed(report);
+      });
+      const ready = yield* acceptanceReadyRepo({ review });
+      const policy = {
+        ...passingValidationPolicy,
+        specialistReviews: [specialistPolicy("standards")],
+      };
+
+      const earlier = yield* runTaskBackedCandidate(ready, policy);
+      expect(earlier).toMatchObject({ ok: true, outcome: "blocked" });
+      if (!earlier.ok) return;
+
+      git(ready.repo, "commit", "--allow-empty", "-m", "address specialist Finding");
+      const successor = yield* captureLocalCandidate({ cwd: ready.repo, now });
+      if (!successor.ok) throw new Error(`Candidate capture failed: ${successor.code}`);
+
+      const final = yield* runTaskBackedCandidate(ready, policy, successor);
+
+      expect(final).toMatchObject({ ok: true, outcome: "blocked" });
+      expect(review.mock.calls.map(([input]) => input.reviewer)).toEqual([
+        "acceptance",
+        "standards",
+        "acceptance",
+        "standards",
+        "standards",
+      ]);
+      expect(review.mock.calls[3]?.[0].prompt).not.toContain(earlierFinding.title);
+      const finalPrompt = review.mock.calls[4]?.[0].prompt;
+      expect(finalPrompt).toContain("Provisional specialist Finding");
+      expect(finalPrompt).toContain(earlierFinding.title);
+      expect(finalPrompt).not.toContain(earlier.validationRunId);
+      expect(
+        (yield* ready.validation.listFindings(final.validationRunId)).map(
+          (finding) => finding.title,
+        ),
+      ).toEqual(["Final specialist Finding"]);
+      expect(
+        (yield* ready.validation.listFindings(earlier.validationRunId)).map(
+          (finding) => finding.title,
+        ),
+      ).toEqual([earlierFinding.title]);
+    }),
+  );
+
   it.scoped(
     "runs configured Specialists once and keeps trustworthy results in configured order",
     () =>
@@ -352,4 +536,13 @@ const acceptanceReadyRepo = (
 const repositoryConfig = (root: string) => ({
   statePath: candidateRepositoryConfig(root).statePath,
   commonDirectory: commonDirectory(root),
+});
+
+const reviewerFinding = (title: string) => ({
+  title,
+  description: `${title} description`,
+  severity: "high" as const,
+  evidence: `${title} evidence`,
+  files: [],
+  artifactRefs: [],
 });

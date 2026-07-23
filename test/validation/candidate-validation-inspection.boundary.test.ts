@@ -1,4 +1,4 @@
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { expect, it } from "@effect/vitest";
@@ -239,6 +239,116 @@ describe("Candidate-owned Validation Run inspection", () => {
         artifact: { ref: artifactRef, storedBytes: 1_200 },
         content: longContent,
       });
+    }),
+  );
+
+  it.effect("keeps empty evidence distinct from unavailable artifact content", () =>
+    Effect.gen(function* () {
+      const empty = yield* candidateValidationFixture();
+      yield* empty.runStore.complete({
+        validationRunId: empty.validationRunId,
+        outcome: "passed",
+        now,
+      });
+
+      const emptyResult = yield* runByInProcessEffect(empty.root, [
+        "validation-run",
+        "show",
+        empty.validationRunId,
+        "--output",
+        "json",
+      ]);
+      expect(emptyResult.status).toBe(0);
+      expect(JSON.parse(emptyResult.stdout)).toMatchObject({
+        phases: [
+          { phase: "prepare", rounds: [] },
+          { phase: "checks", rounds: [] },
+          { phase: "acceptance_review", rounds: [] },
+          { phase: "specialist_review", rounds: [] },
+        ],
+        findings: [],
+        toolingFailures: [],
+        artifacts: [],
+      });
+
+      const unavailable = yield* candidateValidationFixture();
+      const missing = unavailable.artifact("checks", "types", "stdout.txt", "missing");
+      yield* unavailable.runStore.recordCheckRound({
+        validationRunId: unavailable.validationRunId,
+        producer: "types",
+        roundNumber: 1,
+        roundStatus: "passed",
+        phaseStatus: "passed",
+        artifactRecords: [missing],
+        now,
+      });
+      rmSync(join(unavailable.artifactsRoot, missing.path));
+
+      const unavailableResult = yield* runByInProcessEffect(unavailable.root, [
+        "validation-run",
+        "show",
+        unavailable.validationRunId,
+        "--output",
+        "json",
+      ]);
+      expect(unavailableResult.status).toBe(0);
+      expect(JSON.parse(unavailableResult.stdout).artifacts[0].preview).toEqual({
+        status: "unavailable",
+        reason: "content_unavailable",
+        detailCommand: `by validation-run artifact ${unavailable.validationRunId} ${missing.ref}`,
+      });
+
+      const unknownRun = yield* runByInProcessEffect(unavailable.root, [
+        "validation-run",
+        "show",
+        "missing-run",
+        "--output",
+        "json",
+      ]);
+      const unknownArtifact = yield* runByInProcessEffect(unavailable.root, [
+        "validation-run",
+        "artifact",
+        unavailable.validationRunId,
+        "missing-artifact",
+        "--output",
+        "json",
+      ]);
+      const unavailableContent = yield* runByInProcessEffect(unavailable.root, [
+        "validation-run",
+        "artifact",
+        unavailable.validationRunId,
+        missing.ref,
+        "--output",
+        "json",
+      ]);
+
+      expect(JSON.parse(unknownRun.stdout)).toMatchObject({
+        error: { code: "validation_run_not_found", validationRunId: "missing-run" },
+        help: ["Run `by change show <change-id>` to inspect known Candidates and Validation Runs."],
+      });
+      expect(JSON.parse(unknownArtifact.stdout)).toMatchObject({
+        error: {
+          code: "artifact_not_found",
+          validationRunId: unavailable.validationRunId,
+          artifactRef: "missing-artifact",
+        },
+        help: [
+          `Run \`by validation-run show ${unavailable.validationRunId}\` to list known Artifacts.`,
+        ],
+      });
+      expect(JSON.parse(unavailableContent.stdout)).toMatchObject({
+        error: {
+          code: "artifact_content_unavailable",
+          validationRunId: unavailable.validationRunId,
+          artifactRef: missing.ref,
+        },
+        help: [
+          `Run \`by validation-run show ${unavailable.validationRunId}\` to inspect the recorded metadata.`,
+        ],
+      });
+      expect([unknownRun.status, unknownArtifact.status, unavailableContent.status]).toEqual([
+        1, 1, 1,
+      ]);
     }),
   );
 });
