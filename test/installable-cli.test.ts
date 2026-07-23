@@ -71,16 +71,27 @@ const packPackage = (destination: string): PackedPackage => {
 
 type PackageFixture = PackedPackage & { readonly directory: string };
 
-let packageFixture: PackageFixture;
+let packageDirectory: string | undefined;
+let packageFixture: PackageFixture | undefined;
 
 beforeAll(() => {
   const directory = mkdtempSync(join(tmpdir(), "but-why-package-"));
+  packageDirectory = directory;
   packageFixture = { ...packPackage(directory), directory };
 });
 
 afterAll(() => {
-  rmSync(packageFixture.directory, { recursive: true, force: true });
+  if (packageDirectory !== undefined) {
+    rmSync(packageDirectory, { recursive: true, force: true });
+  }
 });
+
+const packedPackage = (): PackageFixture => {
+  if (packageFixture === undefined) {
+    throw new Error("The package fixture was not initialized.");
+  }
+  return packageFixture;
+};
 
 const installPackage = (cwd: string, tarballPath: string) => {
   expectSuccessfulCommand(runCommandSync("npm", ["init", "--yes"], cwd));
@@ -103,7 +114,7 @@ const expectInstalledHelp = (result: CommandResult) => {
 
 describe("installable by CLI package", () => {
   it("packs built CLI output and user-facing package metadata only", () => {
-    const { files } = packageFixture;
+    const { files } = packedPackage();
     expect(files).toContain("dist/main.js");
     expect(files).toContain("package.json");
     expect(files).toContain("README.md");
@@ -124,7 +135,7 @@ describe("installable by CLI package", () => {
   }, 120_000);
 
   it("runs help and init from one project-local tarball install in another Git repo", () => {
-    const packed = packageFixture;
+    const packed = packedPackage();
     const localConsumerRepo = createGitRepo();
     installPackage(localConsumerRepo, packed.tarballPath);
 
@@ -148,7 +159,7 @@ describe("installable by CLI package", () => {
   }, 120_000);
 
   it("runs help from the same tarball installed under a temp global prefix", () => {
-    const packed = packageFixture;
+    const packed = packedPackage();
     const globalPrefix = createTestWorkspace();
     const globalConsumerRepo = createGitRepo();
     expectSuccessfulCommand(

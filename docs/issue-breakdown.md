@@ -16,7 +16,7 @@ It ends when But Why? completes one real SQLite-tracked Task-backed Change and p
 | Task | Capability | Blocked by |
 | --- | --- | --- |
 | 135 | Consolidate the source hierarchy and names | None |
-| 156 | Establish and verify the final quality interface | 135, 155, 157 |
+| 156 | Establish and verify the final quality gate | 135, 155, 157 |
 | 123 | Ship the Change-centered manual workflow | 107, 117, 129, 130, 156 |
 | 125 | Produce an installable v1 package | 123 |
 | 131 | Dogfood the first SQLite-tracked Change workflow | 125 |
