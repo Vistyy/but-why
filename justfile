@@ -128,21 +128,11 @@ typecheck:
 
 # Run tests, forwarding any arguments.
 test *args:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    if (( $# > 0 )); then
-        exec pnpm exec vitest run "$@"
-    fi
-    exec ./scripts/with-capacity-lock.sh "complete test" pnpm exec vitest run
+    @./scripts/run-test-workload.sh test "$@"
 
 # Run tests with measured production coverage.
 coverage *args:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    if (( $# > 0 )); then
-        exec pnpm exec vitest run --coverage "$@"
-    fi
-    exec ./scripts/with-capacity-lock.sh "complete coverage" pnpm exec vitest run --coverage
+    @./scripts/run-test-workload.sh coverage "$@"
 
 # Build the production package.
 build:

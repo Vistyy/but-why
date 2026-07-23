@@ -39,6 +39,26 @@ const startRunner = (lockFile: string, args: string[]) => {
 const runRunner = (lockFile: string, args: string[]): Promise<CommandResult> =>
   startRunner(lockFile, args).done;
 
+const runJust = (lockFile: string, args: string[]): Promise<CommandResult> =>
+  new Promise<CommandResult>((resolveResult) => {
+    const child = spawn("just", args, {
+      cwd: repositoryRoot,
+      env: {
+        ...process.env,
+        BY_CAPACITY_LOCK_FILE: lockFile,
+        BY_CAPACITY_LOCK_HELD: "0",
+      },
+    });
+    let output = "";
+    child.stdout.on("data", (chunk: Buffer) => {
+      output += chunk.toString();
+    });
+    child.stderr.on("data", (chunk: Buffer) => {
+      output += chunk.toString();
+    });
+    child.on("close", (status) => resolveResult({ status, output }));
+  });
+
 const runVitest = (relativeFixture: string): Promise<CommandResult> =>
   new Promise<CommandResult>((resolveResult) => {
     const child = spawn(
@@ -56,16 +76,29 @@ const runVitest = (relativeFixture: string): Promise<CommandResult> =>
     child.on("close", (status) => resolveResult({ status, output }));
   });
 
-const waitForActiveWorkload = async (statusFile: string): Promise<void> => {
-  for (let attempt = 0; attempt < 50; attempt += 1) {
+const waitForFile = async (file: string): Promise<void> => {
+  for (let attempt = 0; attempt < 250; attempt += 1) {
     try {
-      if (readFileSync(statusFile, "utf8").trim() !== "") return;
+      if (readFileSync(file, "utf8").trim() !== "") return;
     } catch {
-      // The runner has not acquired the lock yet.
+      // The child has not reached the readiness handshake yet.
     }
-    await new Promise((resolveDelay) => setTimeout(resolveDelay, 10));
+    await new Promise((resolveDelay) => setTimeout(resolveDelay, 20));
   }
-  throw new Error("The capacity runner did not acquire its lock.");
+  throw new Error(`The child did not reach its readiness handshake: ${file}`);
+};
+
+const startHeldRunner = (lockFile: string, directory: string, workload: string) => {
+  const readyFile = join(directory, "ready");
+  const holder = startRunner(lockFile, [
+    workload,
+    "sh",
+    "-c",
+    'printf ready > "$1"; sleep 2',
+    "sh",
+    readyFile,
+  ]);
+  return { holder, readyFile };
 };
 
 afterEach(() => {
@@ -79,9 +112,9 @@ describe("quality interface", () => {
     const directory = mkdtempSync(join(tmpdir(), "but-why-quality-lock-"));
     temporaryPaths.push(directory);
     const lockFile = join(directory, "capacity.lock");
-    const holder = startRunner(lockFile, ["complete test", "sh", "-c", "sleep 2"]);
+    const { holder, readyFile } = startHeldRunner(lockFile, directory, "complete test");
 
-    await waitForActiveWorkload(`${lockFile}.status`);
+    await waitForFile(readyFile);
     const contender = await runRunner(lockFile, ["complete coverage", "sh", "-c", "exit 0"]);
 
     expect(contender.status).toBe(1);
@@ -100,13 +133,32 @@ describe("quality interface", () => {
 
     expect(failed.status).toBe(7);
 
-    const holder = startRunner(lockFile, ["complete coverage", "sh", "-c", "sleep 2"]);
-    await waitForActiveWorkload(`${lockFile}.status`);
+    const { holder, readyFile } = startHeldRunner(lockFile, directory, "complete coverage");
+    await waitForFile(readyFile);
     holder.child.kill("SIGINT");
     expect((await holder.done).status).toBe(143);
 
     const recovered = await runRunner(lockFile, ["complete test", "sh", "-c", "exit 0"]);
     expect(recovered.status).toBe(0);
+  });
+
+  test("locks complete option-bearing commands while leaving targeted tests unlocked", async () => {
+    const directory = mkdtempSync(join(tmpdir(), "but-why-quality-lock-"));
+    temporaryPaths.push(directory);
+    const lockFile = join(directory, "capacity.lock");
+    const { holder, readyFile } = startHeldRunner(lockFile, directory, "complete coverage");
+
+    await waitForFile(readyFile);
+    const complete = await runJust(lockFile, ["test", "--reporter=dot"]);
+    const targeted = await runJust(lockFile, ["test", "test/repository/module-seams.test.ts"]);
+
+    expect(complete.status).toBe(1);
+    expect(complete.output).toContain("active workload: complete coverage");
+    expect(targeted.status).toBe(0);
+    expect(targeted.output).toContain("1 passed");
+
+    holder.child.kill("SIGTERM");
+    await holder.done;
   });
 
   test("does not reacquire the lock for nested internal commands", async () => {
@@ -147,4 +199,14 @@ describe("quality interface", () => {
     expect(success.output).toContain("Test Files");
     expect(success.output).not.toContain("✓ test/");
   });
+
+  if (process.env.BY_VERIFY_QUALITY_COVERAGE === "1") {
+    test("writes machine-readable coverage without a text table", async () => {
+      const result = await runJust("", ["coverage", "test/repository/module-seams.test.ts"]);
+
+      expect(result.status).toBe(0);
+      expect(readFileSync(join(repositoryRoot, "coverage/coverage-final.json"), "utf8")).not.toBe("");
+      expect(result.output).not.toMatch(/All files|Statements| %/);
+    });
+  }
 });

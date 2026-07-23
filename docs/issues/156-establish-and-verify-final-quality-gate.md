@@ -52,7 +52,7 @@ A clean local checkout runs `nix develop -c just init`, `nix develop -c just qua
 | Quality suite membership and performance remain intact | `justfile` quality compositions | `just quality` and `just full-quality` | Three-run command timings and suite summaries |
 | Success is concise and failure diagnostics remain complete | `vitest.config.ts` reporter configuration | Controlled Vitest success and failure runs | Reporter output assertions and quality commands |
 | Coverage emits machine-readable output without a text table | `vitest.config.ts` coverage reporters and `just coverage` | Coverage command | Coverage artifact and output inspection |
-| Complete workloads share fail-fast capacity while targeted tests stay unlocked | `scripts/with-capacity-lock.sh` and `justfile` test recipes | Capacity runner command tests | Contention, child status, interruption, and nested invocation tests |
+| Complete workloads share fail-fast capacity while targeted tests stay unlocked | `scripts/run-test-workload.sh`, `scripts/with-capacity-lock.sh`, and `justfile` test recipes | Public Just-interface and capacity runner tests | Contention, child status, interruption, nested invocation, and targeted selection tests |
 | Fallow and direct health checks retain their selected status | Existing `justfile` health compositions | `just quality`, `just full-quality`, and `just health` | Blocking and advisory exit statuses |
 | Static, build, and documentation checks remain in the gates | Existing Just quality compositions | Quality commands | ast-grep, format, lint, type, docs, Fallow, and build output |
 | No coverage threshold is introduced | Existing Vitest and Fallow configuration | Coverage and health commands | Configuration and command verification |
@@ -67,12 +67,13 @@ Required validation commands are `just test test/repository/quality-interface.te
 - Local: mark the active workload class beside the lock and fail fast with an actionable message rather than waiting for capacity.
 - Local: use an inherited `BY_CAPACITY_LOCK_HELD` marker so nested internal commands execute under the existing lock without reacquiring it.
 - Local: use Vitest's dot reporter because it removes routine per-test success lines while retaining Vitest's complete failed-test diagnostics.
+- User-approved: implement the approved Task 156 quality-policy changes to Just composition, Vitest reporting, and complete-workload coordination.
 - Local: preserve the existing suite selection, runtime warning budgets, advisory health coverage, and absence of a coverage threshold because the approved specification assigns those behaviors outside this implementation choice.
 
 ## Completion evidence
 
 - Implementation: `323e6ce66d4a9ec83a9c16e8c4944ca4aec1c696`.
-- Focused quality-interface tests passed with four tests.
+- Focused quality-interface tests passed with five tests.
 - Static checks, build, documentation validation, and the advisory health report passed through Just.
 - Three consecutive locked-Nix runs measured `just quality` at 7.275s, 7.311s, and 7.296s, with a median of 7.296s.
 - Three consecutive locked-Nix runs measured `just full-quality` at 17.159s, 17.219s, and 17.250s, with a median of 17.219s.
@@ -82,6 +83,4 @@ Required validation commands are `just test test/repository/quality-interface.te
 
 ## Blocked by
 
-- [Task 135](135-consolidate-source-hierarchy.md)
-- [Task 155](155-cover-validation-workspace-recovery.md)
-- [Task 157](157-cover-change-implement-handoff-errors.md)
+None - completed prerequisites.
