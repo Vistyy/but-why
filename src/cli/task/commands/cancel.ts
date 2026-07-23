@@ -2,7 +2,7 @@ import { Effect } from "effect";
 
 import type { CliResult } from "../../../cliResults.js";
 import { runtimeError, success, usageError } from "../../../cliResults.js";
-import { parseCliTaskIdValue } from "../../../cliTaskId.js";
+import { parseCliTaskIdValue, taskIdResolutionError } from "../../../cliTaskId.js";
 import { withGlobalHelpFlags } from "../../../cliHelp.js";
 import type { TaskCancellationResult } from "../../../change/cancelChange.js";
 import { withCancellation } from "../../../change/loadChangeCancellation.js";
@@ -54,15 +54,18 @@ export const runCancelCommand = (
         ? {}
         : { cancellationUseCases: environment.cancellationUseCases }),
     },
-    (cancellation) =>
-      Effect.map(
+    (cancellation) => {
+      const resolved = cancellation.resolveTaskId(parsed.taskId);
+      if (!resolved.ok) return Effect.succeed(taskIdResolutionError(resolved));
+      return Effect.map(
         cancellation.cancelTask({
-          taskId: parsed.taskId,
+          taskId: resolved.taskId,
           reason: args[2] as string,
           now: environment.now().toISOString(),
         }),
-        (result) => cancelResult(parsed.taskId, result),
-      ),
+        (result) => cancelResult(resolved.taskId, result),
+      );
+    },
   );
 };
 

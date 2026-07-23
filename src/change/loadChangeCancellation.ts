@@ -3,6 +3,7 @@ import { Effect } from "effect";
 
 import { repositoryStorageErrorResult, repoStateLoadError, type CliResult } from "../cliResults.js";
 import { loadRepoLocalContext } from "../init/repoContext.js";
+import { resolveRepoTaskId } from "../task/repoTaskIds.js";
 import { cleanupChangeResources } from "./localChangeCleanupGit.js";
 import { openCancellationUseCases, type CancellationUseCases } from "./cancelChange.js";
 import { localGitHubPullRequestGateway } from "../submissionEnvironment/localGitHubPullRequestGateway.js";
@@ -44,6 +45,7 @@ export const withCancellation = <A, R>(
     Effect.flatMap(({ changes, tasks }) =>
       use(
         openCancellationUseCases({
+          resolveTaskId: (taskId) => resolveRepoTaskId(context.context, taskId),
           changes,
           tasks,
           github: localGitHubPullRequestGateway({ cwd: context.context.root }),

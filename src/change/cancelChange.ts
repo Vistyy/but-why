@@ -3,6 +3,7 @@ import { Effect } from "effect";
 import type { RepositoryStorageError } from "../contracts/repositoryStorageError.js";
 import type { TaskRecord } from "../task/task.js";
 import type { PublicTaskId } from "../task/taskId.js";
+import type { RepoTaskIdResolution } from "../task/repoTaskIds.js";
 import type { ChangeCleanup, ChangeRecord } from "./change.js";
 import type { ChangePersistence } from "./changePersistence.js";
 import type { ChangeCleanupOperationResult } from "./reconcileChange.js";
@@ -10,6 +11,7 @@ import type { TaskPersistence } from "../task/taskPersistence.js";
 import type { GitHubPullRequest, GitHubPullRequestGateway } from "./ownedPullRequestGateway.js";
 
 export type CancellationUseCases = {
+  readonly resolveTaskId: (taskId: PublicTaskId) => RepoTaskIdResolution;
   readonly cancelTask: (input: {
     readonly taskId: PublicTaskId;
     readonly reason: string;
@@ -22,6 +24,7 @@ export type CancellationUseCases = {
 };
 
 export type CancellationDependencies = {
+  readonly resolveTaskId: (taskId: PublicTaskId) => RepoTaskIdResolution;
   readonly tasks: Pick<TaskPersistence, "getTaskById" | "cancelTask">;
   readonly changes: Pick<
     ChangePersistence,
@@ -85,6 +88,7 @@ export type ChangeCancellationResult =
 export const openCancellationUseCases = (
   dependencies: CancellationDependencies,
 ): CancellationUseCases => ({
+  resolveTaskId: dependencies.resolveTaskId,
   cancelTask: (input) => cancelTask(dependencies, input),
   cancelChange: (input) => cancelChange(dependencies, input),
 });

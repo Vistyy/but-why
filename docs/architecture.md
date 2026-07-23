@@ -77,10 +77,13 @@ by change show <change-id>
 by change findings <change-id>
 by change validation-runs <change-id>
 by change submit <change-id>
+by change cancel <change-id>
 by change implement <change-id> [--handoff-file <path>]
 by change reconcile [<change-id>]
 ```
 
+`by change cancel` accepts only open taskless Changes.
+Task-backed Changes are cancelled through `by task cancel <task-id> --reason <reason>`.
 CLI commands return structured data on stdout.
 TOON is the default output format.
 Callers that parse output pass `--output json`.

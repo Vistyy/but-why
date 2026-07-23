@@ -165,6 +165,38 @@ describe("Change cancellation", () => {
     }),
   );
 
+  it.effect("uses repository-local Task ID resolution before cancellation", () =>
+    Effect.gen(function* () {
+      const task = taskRecord("implementing");
+      const dependencies = cancellationDependencies({
+        task,
+        change: changeRecord(null),
+        pullRequest: pullRequest("closed", false),
+        events: [],
+      });
+      const result = yield* runByInProcessEffect(
+        createTestWorkspace(),
+        ["task", "cancel", "GH-1", "--reason", "Stop"],
+        now,
+        {
+          cancellationUseCases: openCancellationUseCases({
+            ...dependencies,
+            resolveTaskId: (taskId) => ({
+              ok: false,
+              code: "remote_tasks_not_supported",
+              taskId,
+              help: "Use a repo-local Task ID such as BY-1.",
+            }),
+          }),
+        },
+      );
+
+      expect(result.status).toBe(1);
+      expect(result.stdout).toContain("code: remote_tasks_not_supported");
+      expect(result.stdout).toContain("Use a repo-local Task ID such as BY-1.");
+    }),
+  );
+
   it.effect("reports merged observation through the Task CLI", () =>
     Effect.gen(function* () {
       const events: string[] = [];
@@ -391,6 +423,7 @@ const cancellationDependencies = (input: {
   let currentTask = input.task;
   let currentChange = input.change;
   return {
+    resolveTaskId: (taskId) => ({ ok: true, taskId }),
     tasks: {
       getTaskById: () => {
         input.events.push("read-task");
