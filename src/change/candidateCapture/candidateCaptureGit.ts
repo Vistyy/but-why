@@ -28,7 +28,10 @@ export type CandidateCaptureGit = {
     targetSha: string,
     headSha: string,
   ) => Effect.Effect<string | undefined>;
-  readonly trackedTreeMatches: (cwd: string, commitSha: string) => Effect.Effect<boolean>;
+  readonly trackedTreeMatches: (
+    cwd: string,
+    commitSha: string,
+  ) => Effect.Effect<boolean | undefined>;
   readonly localBranchExists: (cwd: string, ref: string) => Effect.Effect<boolean>;
   readonly recordedRemoteDefaultLocalBranches: (
     cwd: string,

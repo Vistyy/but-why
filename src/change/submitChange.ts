@@ -160,19 +160,6 @@ const submitChange = (
     const change = selected.change;
     const reconciliation = yield* reconcileBeforeSubmission(dependencies, change, input.now);
     if (!reconciliation.proceed) return reconciliation.result;
-
-    const candidate = yield* dependencies.captureCandidate({
-      cwd: change.worktreePath,
-      changeId: change.id,
-      now: input.now,
-      ...(change.taskId === null || change.startingCommit === null
-        ? {}
-        : { startingCommit: change.startingCommit }),
-    });
-    if (!candidate.ok) return candidate;
-    if (change.taskId === null && candidate.headSha === candidate.comparisonBaseSha) {
-      return { ok: true, status: "nothing_to_submit", changeId: change.id } as const;
-    }
     const changedCandidateHistory =
       change.taskId !== null && change.publication === null && change.startingCommit !== null
         ? yield* dependencies.persistence.hasCandidateWithChangedHead(
@@ -180,6 +167,19 @@ const submitChange = (
             change.startingCommit,
           )
         : false;
+
+    const candidate = yield* dependencies.captureCandidate({
+      cwd: change.worktreePath,
+      changeId: change.id,
+      now: input.now,
+      ...(change.taskId === null || change.startingCommit === null || changedCandidateHistory
+        ? {}
+        : { startingCommit: change.startingCommit }),
+    });
+    if (!candidate.ok) return candidate;
+    if (change.taskId === null && candidate.headSha === candidate.comparisonBaseSha) {
+      return { ok: true, status: "nothing_to_submit", changeId: change.id } as const;
+    }
     if (
       change.taskId !== null &&
       change.publication === null &&

@@ -72,10 +72,11 @@ const findComparisonBase = (
   return result.ok ? result.stdout : undefined;
 };
 
-const trackedTreeMatches = (cwd: string, commitSha: string): boolean => {
+const trackedTreeMatches = (cwd: string, commitSha: string): boolean | undefined => {
   const currentTree = git(cwd, "rev-parse", "HEAD^{tree}");
   const startingTree = git(cwd, "rev-parse", `${commitSha}^{tree}`);
-  return currentTree.ok && startingTree.ok && currentTree.stdout === startingTree.stdout;
+  if (!currentTree.ok || !startingTree.ok) return undefined;
+  return currentTree.stdout === startingTree.stdout;
 };
 
 const localBranchExists = (cwd: string, ref: string): boolean =>

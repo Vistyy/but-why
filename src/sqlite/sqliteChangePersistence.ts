@@ -229,8 +229,11 @@ const completeNoChange = (sql: SqlClient.SqlClient, input: CompleteNoChangeInput
     const change = yield* getById(sql, input.changeId);
     if (change === undefined) return { ok: false as const, code: "change_not_found" as const };
     if (change.state === changeState.closed) {
-      return change.noChangeCompletion?.candidateId === input.candidateId &&
-        change.noChangeCompletion.validationRunId === input.validationRunId
+      const completion = change.noChangeCompletion;
+      return completion !== undefined &&
+        completion !== null &&
+        completion.candidateId === input.candidateId &&
+        completion.validationRunId === input.validationRunId
         ? { ok: true as const, changed: false, change }
         : { ok: false as const, code: "change_not_open" as const };
     }

@@ -138,6 +138,15 @@ describe("repository SQL storage", () => {
           change: { state: "closed", closeReason: "completed", cleanup: { state: "pending" } },
         });
         expect(yield* tasks.getTaskById(taskId)).toMatchObject({ state: "done" });
+        expect(
+          yield* changes.completeNoChange({
+            changeId: started.change.id,
+            taskId,
+            candidateId: "candidate-no-change",
+            validationRunId: "run-no-change",
+            now: "2026-07-17T22:59:00.000Z",
+          }),
+        ).toEqual({ ok: false, code: "change_not_open" });
       }),
     ),
   );
@@ -208,6 +217,50 @@ describe("repository SQL storage", () => {
           state: "done",
           completionKind: "no_change",
         });
+      }),
+    ),
+  );
+
+  it.scoped("rejects no-change completion for a cancelled Change", () =>
+    withTemporaryState((input) =>
+      Effect.gen(function* () {
+        const tasks = yield* openSqliteTaskPersistence("BY");
+        const starts = yield* openSqliteChangeStartPersistence();
+        const changes = yield* openSqliteChangePersistence();
+        const created = yield* tasks.createTask({
+          title: "Cancelled no-change Change",
+          description: "Do not complete a cancelled Change.",
+          now: "2026-07-17T23:10:00.000Z",
+        });
+        if (!created.ok) return;
+        const taskId = storedPublicTaskId(created.task.id);
+        yield* tasks.approveTask({ taskId, now: "2026-07-17T23:11:00.000Z" });
+        const started = yield* starts.create({
+          id: "change-cancelled-no-change",
+          repositoryCommonDirectory: input.commonDirectory,
+          branchRef: "refs/heads/but-why/by-1-cancelled",
+          baseRef: "main",
+          startingCommit: "1111111111111111111111111111111111111111",
+          worktreePath: join(input.commonDirectory, "worktrees", "by-1-cancelled"),
+          taskId,
+          now: "2026-07-17T23:12:00.000Z",
+        });
+        if (!started.ok) return;
+        yield* changes.cancelChange({
+          changeId: started.change.id,
+          reason: "cancelled for test",
+          now: "2026-07-17T23:13:00.000Z",
+        });
+
+        expect(
+          yield* changes.completeNoChange({
+            changeId: started.change.id,
+            taskId,
+            candidateId: "candidate-no-change",
+            validationRunId: "run-no-change",
+            now: "2026-07-17T23:14:00.000Z",
+          }),
+        ).toEqual({ ok: false, code: "change_not_open" });
       }),
     ),
   );

@@ -72,6 +72,30 @@ describe("Change Candidate capture boundaries", () => {
     }),
   );
 
+  it.effect("captures a reverted worktree at the starting commit after changed work", () =>
+    Effect.gen(function* () {
+      const repo = captureReadyRepo();
+      const startingCommit = git(repo, "rev-parse", "refs/heads/main");
+      const changed = yield* captureLocalCandidate({ cwd: repo, now });
+      if (!changed.ok) return;
+
+      git(repo, "reset", "--hard", startingCommit);
+      const reverted = yield* captureLocalCandidate({
+        cwd: repo,
+        changeId: changed.changeId,
+        startingCommit,
+        now: "2026-07-12T10:05:00.000Z",
+      });
+
+      expect(reverted).toMatchObject({
+        ok: true,
+        changeId: changed.changeId,
+        comparisonBaseSha: startingCommit,
+        headSha: startingCommit,
+      });
+    }),
+  );
+
   it.effect("reports dirty, detached, and unborn local Git workspaces", () =>
     Effect.gen(function* () {
       const dirty = committedRepoCopy();
@@ -80,6 +104,9 @@ describe("Change Candidate capture boundaries", () => {
         ok: false,
         code: "dirty_work",
       });
+      expect(yield* localCandidateCaptureGit.trackedTreeMatches(dirty, "missing-commit")).toBe(
+        undefined,
+      );
 
       const detached = committedRepoCopy();
       git(detached, "checkout", "--detach", "HEAD");

@@ -109,9 +109,12 @@ const captureLocalCandidate = (
       return { ok: false, code: "comparison_base_unavailable" };
     }
     const startingCommit = input.startingCommit;
-    const isNoChange =
-      startingCommit !== undefined &&
-      (yield* dependencies.git.trackedTreeMatches(input.cwd, startingCommit));
+    const treesMatch =
+      startingCommit === undefined
+        ? false
+        : yield* dependencies.git.trackedTreeMatches(input.cwd, startingCommit);
+    if (treesMatch === undefined) return { ok: false, code: "git_tooling_error" };
+    const isNoChange = startingCommit !== undefined && treesMatch;
     const candidateHeadSha = isNoChange ? startingCommit : workspace.facts.headSha;
     const candidateComparisonBaseSha = isNoChange ? startingCommit : comparisonBaseSha;
 
