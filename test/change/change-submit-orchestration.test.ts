@@ -310,7 +310,7 @@ describe("Change Submit orchestration", () => {
               ok: true,
               reused: false,
               validationRunId: "run-changed",
-              outcome: "passed",
+              outcome: "blocked",
             } as const;
           }),
         validateNoChange: () =>
@@ -323,7 +323,7 @@ describe("Change Submit orchestration", () => {
               outcome: "passed",
             } as const;
           }),
-        listFindings: () => Effect.succeed([]),
+        listFindings: () => Effect.succeed([finding]),
         listToolingFailures: () => Effect.succeed([]),
         listRounds: () => Effect.succeed([]),
       });
@@ -335,20 +335,19 @@ describe("Change Submit orchestration", () => {
         .submit({ changeId: change.id, now })
         .pipe(Effect.provide(validationLayer));
 
-      expect(first).toMatchObject({ ok: true, status: "published" });
+      expect(first).toMatchObject({ ok: false, code: "validation_findings" });
       expect(second).toMatchObject({ ok: true, status: "no_change" });
       expect(events).toEqual([
         "reconcile",
         "capture",
         "detect_target",
         "validate_task_backed",
-        "publish",
         "reconcile",
         "capture",
         "validate_no_change",
         "complete_no_change",
       ]);
-      expect(transitions).toEqual(["validating", "ready", "validating"]);
+      expect(transitions).toEqual(["validating", "implementing", "validating"]);
     }),
   );
 
