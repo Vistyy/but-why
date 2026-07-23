@@ -26,9 +26,19 @@ export const cloneInitializedTestRepository = (template: string) =>
       return workspace;
     });
     const commonDirectory = join(root, ".git");
+    const templateCommonDirectory = join(template, ".git");
     yield* Effect.gen(function* () {
       const sql = yield* SqlClient.SqlClient;
       yield* sql`UPDATE shared_state_identity SET common_directory = ${commonDirectory}`;
+      yield* sql`
+        UPDATE changes
+        SET repository_common_directory = ${commonDirectory},
+            worktree_path = CASE
+              WHEN worktree_path IS NULL THEN NULL
+              ELSE replace(worktree_path, ${template}, ${root})
+            END
+        WHERE repository_common_directory = ${templateCommonDirectory}
+      `;
     }).pipe(
       Effect.provide(
         SqliteClient.layer({ filename: join(commonDirectory, "but-why", "state.sqlite") }),

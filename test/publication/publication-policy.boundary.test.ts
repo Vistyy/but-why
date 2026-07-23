@@ -1,5 +1,5 @@
-import { expect, it } from "@effect/vitest";
-import { Effect } from "effect";
+import { expect, layer } from "@effect/vitest";
+import { Context, Effect, Layer } from "effect";
 import { afterAll, beforeAll } from "vitest";
 
 import type { ChangePersistence } from "../../src/change/changePersistence.js";
@@ -19,6 +19,7 @@ import { acquireTestWorkspace, releaseTestWorkspace } from "../support/testWorks
 const now = "2026-07-22T10:00:00.000Z";
 const policy = { sandboxMode: "none" as const, checks: [], copyFiles: [], specialistReviews: [] };
 const target = { owner: "acme", repo: "widgets", baseBranch: "main", remoteName: "origin" };
+type Captured = Extract<CaptureLocalCandidateResult, { readonly ok: true }>;
 let candidateRepoTemplate: string;
 
 beforeAll(() => {
@@ -30,283 +31,322 @@ afterAll(() => {
   releaseTestWorkspace(candidateRepoTemplate);
 });
 
-const candidateReadyRepoCopy = () => cloneInitializedTestRepository(candidateRepoTemplate);
+class PublicationTemplate extends Context.Tag("@but-why/PublicationTemplate")<
+  PublicationTemplate,
+  { readonly captured: Captured; readonly validationRunId: string }
+>() {}
 
-it.scoped("publishes exact taskless metadata only from matching policy evidence", () =>
-  withFixture((fixture) =>
-    Effect.gen(function* () {
-      const requests: unknown[] = [];
-      const publication = openCandidatePublication({
-        changePersistence: fixture.changes,
-        validationPersistence: fixture.validation,
-        git: {
-          readBranchHead: () => fixture.captured.headSha,
-          readFirstNonMergeCommitSubject: () => ({ ok: true, subject: "Add taskless publication" }),
-        },
-        github: successfulCreation(requests),
-      });
-      expect(
-        yield* publication.publish({
-          ...input(fixture),
-          policy: { ...policy, checks: [{ id: "new", command: "true", timeoutSeconds: 1 }] },
-        }),
-      ).toEqual({ ok: false, code: "validation_evidence_invalid" });
-      expect(requests).toEqual([]);
-      expect(yield* publication.publish(input(fixture))).toMatchObject({ ok: true, created: true });
-      expect(requests).toEqual([
-        {
-          ...target,
-          headBranch: "feature",
-          branchRef: "refs/heads/feature",
-          expectedHeadSha: fixture.captured.headSha,
-          title: "Add taskless publication",
-          body: `Change: ${fixture.captured.changeId}\nCandidate: ${fixture.captured.candidateId}\nValidation Run: ${fixture.validationRunId}`,
-        },
-      ]);
-    }),
-  ),
+const publicationTemplateLayer = Layer.effect(
+  PublicationTemplate,
+  Effect.gen(function* () {
+    const captured = yield* captureLocalCandidate({ cwd: candidateRepoTemplate, now });
+    if (!captured.ok) return yield* Effect.dieMessage(`Candidate capture failed: ${captured.code}`);
+    const validationRunId = yield* withTestRepository(
+      candidateRepoTemplate,
+      Effect.gen(function* () {
+        const repository = yield* RepositorySql;
+        yield* repository.operation(
+          "complete publication Change fixture",
+          (sql) => sql`
+          UPDATE changes
+          SET starting_commit = ${git(candidateRepoTemplate, "rev-parse", "refs/heads/main")},
+              worktree_path = ${candidateRepoTemplate}
+          WHERE id = ${captured.changeId}
+        `,
+        );
+        const validation = yield* openSqliteChangeValidationPersistence();
+        return yield* completeValidation(validation, captured, now);
+      }),
+    );
+    return { captured, validationRunId };
+  }),
 );
 
-it.scoped("releases a failed reservation and permits a clean retry", () =>
-  withFixture((fixture) =>
-    Effect.gen(function* () {
-      let currentHead = "moved-head";
-      let createCalls = 0;
-      const publication = openCandidatePublication({
-        changePersistence: fixture.changes,
-        validationPersistence: fixture.validation,
-        git: {
-          readBranchHead: () => currentHead,
-          readFirstNonMergeCommitSubject: () => ({ ok: true, subject: "Retry publication" }),
-        },
-        github: {
-          findPullRequests: () => [],
-          getPullRequest: () => undefined,
-          createPullRequest: (request) => {
-            createCalls += 1;
-            return createCalls === 1
-              ? { ok: false as const, code: "push_failed" as const }
-              : { ok: true as const, pullRequest: pullRequest(request.expectedHeadSha) };
+layer(publicationTemplateLayer)("Candidate publication", (it) => {
+  it.scoped("publishes exact taskless metadata only from matching policy evidence", () =>
+    withFixture((fixture) =>
+      Effect.gen(function* () {
+        const requests: unknown[] = [];
+        const publication = openCandidatePublication({
+          changePersistence: fixture.changes,
+          validationPersistence: fixture.validation,
+          git: {
+            readBranchHead: () => fixture.captured.headSha,
+            readFirstNonMergeCommitSubject: () => ({
+              ok: true,
+              subject: "Add taskless publication",
+            }),
           },
-          updatePullRequest: () => {
-            throw new Error("Unexpected PR update");
+          github: successfulCreation(requests),
+        });
+        expect(
+          yield* publication.publish({
+            ...input(fixture),
+            policy: { ...policy, checks: [{ id: "new", command: "true", timeoutSeconds: 1 }] },
+          }),
+        ).toEqual({ ok: false, code: "validation_evidence_invalid" });
+        expect(requests).toEqual([]);
+        expect(yield* publication.publish(input(fixture))).toMatchObject({
+          ok: true,
+          created: true,
+        });
+        expect(requests).toEqual([
+          {
+            ...target,
+            headBranch: "feature",
+            branchRef: "refs/heads/feature",
+            expectedHeadSha: fixture.captured.headSha,
+            title: "Add taskless publication",
+            body: `Change: ${fixture.captured.changeId}\nCandidate: ${fixture.captured.candidateId}\nValidation Run: ${fixture.validationRunId}`,
           },
-        },
-      });
-      expect(yield* publication.publish(input(fixture))).toEqual({
-        ok: false,
-        code: "current_head_mismatch",
-      });
-      expect(createCalls).toBe(0);
-      currentHead = fixture.captured.headSha;
-      expect(yield* publication.publish(input(fixture))).toEqual({
-        ok: false,
-        code: "publication_tooling_failed",
-      });
-      expect(yield* fixture.changes.getChangeById(fixture.captured.changeId)).toMatchObject({
-        publication: null,
-      });
-      expect(yield* publication.publish(input(fixture))).toMatchObject({ ok: true, created: true });
-    }),
-  ),
-);
+        ]);
+      }),
+    ),
+  );
 
-it.scoped("uses taskless fallback metadata and reports unavailable history", () =>
-  withFixture((fixture) =>
-    Effect.gen(function* () {
-      const requests: unknown[] = [];
-      let historyAvailable = false;
-      const publication = openCandidatePublication({
-        changePersistence: fixture.changes,
-        validationPersistence: fixture.validation,
-        git: {
-          readBranchHead: () => fixture.captured.headSha,
-          readFirstNonMergeCommitSubject: () =>
-            historyAvailable
-              ? { ok: true as const, subject: undefined }
-              : { ok: false as const, code: "commit_history_unavailable" as const },
-        },
-        github: successfulCreation(requests),
-      });
-      expect(yield* publication.publish(input(fixture))).toEqual({
-        ok: false,
-        code: "commit_history_unavailable",
-      });
-      expect(requests).toEqual([]);
-      historyAvailable = true;
-      expect(yield* publication.publish(input(fixture))).toMatchObject({ ok: true });
-      expect(requests).toContainEqual(
-        expect.objectContaining({ title: `Change ${fixture.captured.changeId.slice(0, 8)}` }),
-      );
-    }),
-  ),
-);
+  it.scoped("releases a failed reservation and permits a clean retry", () =>
+    withFixture((fixture) =>
+      Effect.gen(function* () {
+        let currentHead = "moved-head";
+        let createCalls = 0;
+        const publication = openCandidatePublication({
+          changePersistence: fixture.changes,
+          validationPersistence: fixture.validation,
+          git: {
+            readBranchHead: () => currentHead,
+            readFirstNonMergeCommitSubject: () => ({ ok: true, subject: "Retry publication" }),
+          },
+          github: {
+            findPullRequests: () => [],
+            getPullRequest: () => undefined,
+            createPullRequest: (request) => {
+              createCalls += 1;
+              return createCalls === 1
+                ? { ok: false as const, code: "push_failed" as const }
+                : { ok: true as const, pullRequest: pullRequest(request.expectedHeadSha) };
+            },
+            updatePullRequest: () => {
+              throw new Error("Unexpected PR update");
+            },
+          },
+        });
+        expect(yield* publication.publish(input(fixture))).toEqual({
+          ok: false,
+          code: "current_head_mismatch",
+        });
+        expect(createCalls).toBe(0);
+        currentHead = fixture.captured.headSha;
+        expect(yield* publication.publish(input(fixture))).toEqual({
+          ok: false,
+          code: "publication_tooling_failed",
+        });
+        expect(yield* fixture.changes.getChangeById(fixture.captured.changeId)).toMatchObject({
+          publication: null,
+        });
+        expect(yield* publication.publish(input(fixture))).toMatchObject({
+          ok: true,
+          created: true,
+        });
+      }),
+    ),
+  );
 
-it.scoped("publishes Task-backed metadata without reading commit history", () =>
-  withFixture((fixture) =>
-    Effect.gen(function* () {
-      const repository = yield* RepositorySql;
-      yield* repository.operation(
-        "create publication Task",
-        (sql) => sql`
+  it.scoped("uses taskless fallback metadata and reports unavailable history", () =>
+    withFixture((fixture) =>
+      Effect.gen(function* () {
+        const requests: unknown[] = [];
+        let historyAvailable = false;
+        const publication = openCandidatePublication({
+          changePersistence: fixture.changes,
+          validationPersistence: fixture.validation,
+          git: {
+            readBranchHead: () => fixture.captured.headSha,
+            readFirstNonMergeCommitSubject: () =>
+              historyAvailable
+                ? { ok: true as const, subject: undefined }
+                : { ok: false as const, code: "commit_history_unavailable" as const },
+          },
+          github: successfulCreation(requests),
+        });
+        expect(yield* publication.publish(input(fixture))).toEqual({
+          ok: false,
+          code: "commit_history_unavailable",
+        });
+        expect(requests).toEqual([]);
+        historyAvailable = true;
+        expect(yield* publication.publish(input(fixture))).toMatchObject({ ok: true });
+        expect(requests).toContainEqual(
+          expect.objectContaining({ title: `Change ${fixture.captured.changeId.slice(0, 8)}` }),
+        );
+      }),
+    ),
+  );
+
+  it.scoped("publishes Task-backed metadata without reading commit history", () =>
+    withFixture((fixture) =>
+      Effect.gen(function* () {
+        const repository = yield* RepositorySql;
+        yield* repository.operation(
+          "create publication Task",
+          (sql) => sql`
         INSERT INTO tasks (id, numeric_id, title, description, state, created_at, updated_at)
         VALUES ('BY-1', 1, 'Publish exact Candidate', 'Description', 'implementing', ${now}, ${now})
       `,
-      );
-      yield* repository.operation(
-        "attach Task publication metadata",
-        (sql) => sql`
+        );
+        yield* repository.operation(
+          "attach Task publication metadata",
+          (sql) => sql`
         UPDATE changes
         SET task_id = 'BY-1', acceptance_context = ${JSON.stringify({ version: 1, title: "Publish exact Candidate", description: "Description", comments: [] })}
         WHERE id = ${fixture.captured.changeId}
       `,
-      );
-      const requests: unknown[] = [];
-      const publication = openCandidatePublication({
-        changePersistence: fixture.changes,
-        validationPersistence: fixture.validation,
-        git: {
-          readBranchHead: () => fixture.captured.headSha,
-          readFirstNonMergeCommitSubject: () => {
-            throw new Error("Task-backed metadata must not read commit history");
+        );
+        const requests: unknown[] = [];
+        const publication = openCandidatePublication({
+          changePersistence: fixture.changes,
+          validationPersistence: fixture.validation,
+          git: {
+            readBranchHead: () => fixture.captured.headSha,
+            readFirstNonMergeCommitSubject: () => {
+              throw new Error("Task-backed metadata must not read commit history");
+            },
           },
-        },
-        github: successfulCreation(requests),
-      });
-      expect(yield* publication.publish(input(fixture))).toMatchObject({ ok: true });
-      expect(requests).toContainEqual(
-        expect.objectContaining({
-          title: "Publish exact Candidate",
-          body: `Task: BY-1\nCandidate: ${fixture.captured.candidateId}\nValidation Run: ${fixture.validationRunId}`,
-        }),
-      );
-    }),
-  ),
-);
-
-it.scoped("updates only the owned pull request at its expected remote head", () =>
-  withFixture((fixture) =>
-    Effect.gen(function* () {
-      let branchHead = fixture.captured.headSha;
-      let remote = pullRequest(branchHead);
-      const updates: unknown[] = [];
-      const publication = openCandidatePublication({
-        changePersistence: fixture.changes,
-        validationPersistence: fixture.validation,
-        git: {
-          readBranchHead: () => branchHead,
-          readFirstNonMergeCommitSubject: () => ({ ok: true, subject: "Publication" }),
-        },
-        github: {
-          findPullRequests: () => [],
-          getPullRequest: () => remote,
-          createPullRequest: () => ({ ok: true, pullRequest: remote }),
-          updatePullRequest: (request) => {
-            updates.push(request);
-            remote = pullRequest(request.expectedHeadSha);
-            return { ok: true, pullRequest: remote };
-          },
-        },
-      });
-      expect(yield* publication.publish(input(fixture))).toMatchObject({ ok: true });
-
-      const next = yield* nextCandidate(fixture, "New Candidate", "2026-07-22T10:05:00.000Z");
-      branchHead = next.captured.headSha;
-      expect(
-        yield* publication.publish({
-          ...input(fixture),
-          candidateId: next.captured.candidateId,
-          validationRunId: next.validationRunId,
-          now: "2026-07-22T10:05:00.000Z",
-        }),
-      ).toMatchObject({ ok: true, created: false });
-      expect(updates).toContainEqual(
-        expect.objectContaining({
-          number: 42,
-          expectedCurrentHeadSha: fixture.captured.headSha,
-          expectedHeadSha: next.captured.headSha,
-        }),
-      );
-
-      remote = { ...remote, headSha: "foreign-head" };
-      const third = yield* nextCandidate(fixture, "Third Candidate", "2026-07-22T10:10:00.000Z");
-      branchHead = third.captured.headSha;
-      expect(
-        yield* publication.publish({
-          ...input(fixture),
-          candidateId: third.captured.candidateId,
-          validationRunId: third.validationRunId,
-          now: "2026-07-22T10:10:00.000Z",
-        }),
-      ).toEqual({ ok: false, code: "publication_remote_mismatch" });
-      expect(updates).toHaveLength(1);
-      expect(yield* fixture.changes.getChangeById(fixture.captured.changeId)).toMatchObject({
-        publication: {
-          candidateId: next.captured.candidateId,
-          expectedHeadSha: next.captured.headSha,
-        },
-      });
-    }),
-  ),
-);
-
-it.scoped("recovers a created pull request after its response is lost", () =>
-  withFixture((fixture) =>
-    Effect.gen(function* () {
-      const remotePullRequests: {
-        readonly number: number;
-        readonly url: string;
-        readonly baseBranch: string;
-        readonly headBranch: string;
-        readonly headSha: string;
-      }[] = [];
-      let createCalls = 0;
-      const publication = openCandidatePublication({
-        changePersistence: fixture.changes,
-        validationPersistence: fixture.validation,
-        git: {
-          readBranchHead: () => fixture.captured.headSha,
-          readFirstNonMergeCommitSubject: () => ({
-            ok: true,
-            subject: "Add taskless publication",
+          github: successfulCreation(requests),
+        });
+        expect(yield* publication.publish(input(fixture))).toMatchObject({ ok: true });
+        expect(requests).toContainEqual(
+          expect.objectContaining({
+            title: "Publish exact Candidate",
+            body: `Task: BY-1\nCandidate: ${fixture.captured.candidateId}\nValidation Run: ${fixture.validationRunId}`,
           }),
-        },
-        github: {
-          findPullRequests: () => remotePullRequests,
-          getPullRequest: () => remotePullRequests[0],
-          createPullRequest: (request) => {
-            createCalls += 1;
-            remotePullRequests.push({
-              number: 42,
-              url: "https://github.com/acme/widgets/pull/42",
-              baseBranch: request.baseBranch,
-              headBranch: request.headBranch,
-              headSha: request.expectedHeadSha,
-            });
-            return { ok: false, code: "remote_response_lost" };
-          },
-          updatePullRequest: () => {
-            throw new Error("Recovery must not update the pull request");
-          },
-        },
-      });
+        );
+      }),
+    ),
+  );
 
-      expect(yield* publication.publish(input(fixture))).toMatchObject({
-        ok: true,
-        created: true,
-        pullRequest: { number: 42 },
-      });
-      expect(yield* publication.publish(input(fixture))).toMatchObject({
-        ok: true,
-        created: false,
-        pullRequest: { number: 42 },
-      });
-      expect(createCalls).toBe(1);
-    }),
-  ),
-);
+  it.scoped("updates only the owned pull request at its expected remote head", () =>
+    withFixture((fixture) =>
+      Effect.gen(function* () {
+        let branchHead = fixture.captured.headSha;
+        let remote = pullRequest(branchHead);
+        const updates: unknown[] = [];
+        const publication = openCandidatePublication({
+          changePersistence: fixture.changes,
+          validationPersistence: fixture.validation,
+          git: {
+            readBranchHead: () => branchHead,
+            readFirstNonMergeCommitSubject: () => ({ ok: true, subject: "Publication" }),
+          },
+          github: {
+            findPullRequests: () => [],
+            getPullRequest: () => remote,
+            createPullRequest: () => ({ ok: true, pullRequest: remote }),
+            updatePullRequest: (request) => {
+              updates.push(request);
+              remote = pullRequest(request.expectedHeadSha);
+              return { ok: true, pullRequest: remote };
+            },
+          },
+        });
+        expect(yield* publication.publish(input(fixture))).toMatchObject({ ok: true });
 
-type Captured = Extract<CaptureLocalCandidateResult, { readonly ok: true }>;
+        const next = yield* nextCandidate(fixture, "New Candidate", "2026-07-22T10:05:00.000Z");
+        branchHead = next.captured.headSha;
+        expect(
+          yield* publication.publish({
+            ...input(fixture),
+            candidateId: next.captured.candidateId,
+            validationRunId: next.validationRunId,
+            now: "2026-07-22T10:05:00.000Z",
+          }),
+        ).toMatchObject({ ok: true, created: false });
+        expect(updates).toContainEqual(
+          expect.objectContaining({
+            number: 42,
+            expectedCurrentHeadSha: fixture.captured.headSha,
+            expectedHeadSha: next.captured.headSha,
+          }),
+        );
+
+        remote = { ...remote, headSha: "foreign-head" };
+        const third = yield* nextCandidate(fixture, "Third Candidate", "2026-07-22T10:10:00.000Z");
+        branchHead = third.captured.headSha;
+        expect(
+          yield* publication.publish({
+            ...input(fixture),
+            candidateId: third.captured.candidateId,
+            validationRunId: third.validationRunId,
+            now: "2026-07-22T10:10:00.000Z",
+          }),
+        ).toEqual({ ok: false, code: "publication_remote_mismatch" });
+        expect(updates).toHaveLength(1);
+        expect(yield* fixture.changes.getChangeById(fixture.captured.changeId)).toMatchObject({
+          publication: {
+            candidateId: next.captured.candidateId,
+            expectedHeadSha: next.captured.headSha,
+          },
+        });
+      }),
+    ),
+  );
+
+  it.scoped("recovers a created pull request after its response is lost", () =>
+    withFixture((fixture) =>
+      Effect.gen(function* () {
+        const remotePullRequests: {
+          readonly number: number;
+          readonly url: string;
+          readonly baseBranch: string;
+          readonly headBranch: string;
+          readonly headSha: string;
+        }[] = [];
+        let createCalls = 0;
+        const publication = openCandidatePublication({
+          changePersistence: fixture.changes,
+          validationPersistence: fixture.validation,
+          git: {
+            readBranchHead: () => fixture.captured.headSha,
+            readFirstNonMergeCommitSubject: () => ({
+              ok: true,
+              subject: "Add taskless publication",
+            }),
+          },
+          github: {
+            findPullRequests: () => remotePullRequests,
+            getPullRequest: () => remotePullRequests[0],
+            createPullRequest: (request) => {
+              createCalls += 1;
+              remotePullRequests.push({
+                number: 42,
+                url: "https://github.com/acme/widgets/pull/42",
+                baseBranch: request.baseBranch,
+                headBranch: request.headBranch,
+                headSha: request.expectedHeadSha,
+              });
+              return { ok: false, code: "remote_response_lost" };
+            },
+            updatePullRequest: () => {
+              throw new Error("Recovery must not update the pull request");
+            },
+          },
+        });
+
+        expect(yield* publication.publish(input(fixture))).toMatchObject({
+          ok: true,
+          created: true,
+          pullRequest: { number: 42 },
+        });
+        expect(yield* publication.publish(input(fixture))).toMatchObject({
+          ok: true,
+          created: false,
+          pullRequest: { number: 42 },
+        });
+        expect(createCalls).toBe(1);
+      }),
+    ),
+  );
+});
+
 type Fixture = {
   readonly root: string;
   readonly captured: Captured;
@@ -315,38 +355,32 @@ type Fixture = {
   readonly validationRunId: string;
 };
 
-const withFixture = <A, E>(use: (fixture: Fixture) => Effect.Effect<A, E, RepositorySql>) => {
-  return Effect.gen(function* () {
-    const root = yield* candidateReadyRepoCopy();
-    const captured = yield* captureLocalCandidate({ cwd: root, now });
-    if (!captured.ok) throw new Error(captured.code);
+const withFixture = <A, E>(use: (fixture: Fixture) => Effect.Effect<A, E, RepositorySql>) =>
+  Effect.gen(function* () {
+    const template = yield* PublicationTemplate;
+    const root = yield* cloneInitializedTestRepository(candidateRepoTemplate);
     return yield* withTestRepository(
       root,
       Effect.gen(function* () {
-        const repository = yield* RepositorySql;
-        yield* repository.operation(
-          "complete publication Change fixture",
-          (sql) => sql`
-          UPDATE changes
-          SET starting_commit = ${git(root, "rev-parse", "refs/heads/main")}, worktree_path = ${root}
-          WHERE id = ${captured.changeId}
-        `,
-        );
         const changes = yield* openSqliteChangePersistence();
         const validation = yield* openSqliteChangeValidationPersistence();
-        const validationRunId = yield* completeValidation(validation, captured, now);
-        return yield* use({ root, captured, changes, validation, validationRunId });
+        return yield* use({
+          root,
+          captured: template.captured,
+          changes,
+          validation,
+          validationRunId: template.validationRunId,
+        });
       }),
     );
   });
-};
 
-const completeValidation = (
+function completeValidation(
   validation: ChangeValidationPersistence,
   captured: Captured,
   at: string,
-) =>
-  Effect.gen(function* () {
+) {
+  return Effect.gen(function* () {
     const run = yield* validation.startOrReuse({
       candidateId: captured.candidateId,
       headSha: captured.headSha,
@@ -361,6 +395,7 @@ const completeValidation = (
     });
     return run.validationRunId;
   });
+}
 
 const nextCandidate = (fixture: Fixture, subject: string, at: string) =>
   Effect.gen(function* () {

@@ -1,7 +1,7 @@
 import { join } from "node:path";
-import { expect, it } from "@effect/vitest";
-import { Effect } from "effect";
-import { afterAll, beforeAll, describe, vi } from "vitest";
+import { expect, layer } from "@effect/vitest";
+import { Context, Effect, Layer } from "effect";
+import { afterAll, beforeAll, vi } from "vitest";
 
 import type {
   ReviewerAgentResult,
@@ -28,6 +28,7 @@ import { acquireTestWorkspace, releaseTestWorkspace } from "../support/testWorks
 
 const now = "2026-07-15T10:00:00.000Z";
 const successorNow = "2026-07-15T10:05:00.000Z";
+type Captured = Extract<CaptureLocalCandidateResult, { readonly ok: true }>;
 let candidateRepoTemplate: string;
 
 beforeAll(() => {
@@ -40,6 +41,20 @@ afterAll(() => {
 });
 
 const candidateReadyRepoCopy = () => cloneInitializedTestRepository(candidateRepoTemplate);
+
+class AcceptanceTemplate extends Context.Tag("@but-why/AcceptanceTemplate")<
+  AcceptanceTemplate,
+  { readonly captured: Captured }
+>() {}
+
+const acceptanceTemplateLayer = Layer.effect(
+  AcceptanceTemplate,
+  Effect.gen(function* () {
+    const captured = yield* captureLocalCandidate({ cwd: candidateRepoTemplate, now });
+    if (!captured.ok) return yield* Effect.dieMessage(`Candidate capture failed: ${captured.code}`);
+    return { captured };
+  }),
+);
 
 const acceptanceContext = Object.freeze({
   version: 1 as const,
@@ -77,7 +92,7 @@ const passingValidationPolicy = {
   specialistReviews: [],
 };
 
-describe("Task-backed Candidate Acceptance Review", () => {
+layer(acceptanceTemplateLayer)("Task-backed Candidate Acceptance Review", (it) => {
   it.scoped(
     "reviews the exact Candidate and immutable Acceptance Context after passing Checks",
     () =>
@@ -494,7 +509,7 @@ describe("Task-backed Candidate Acceptance Review", () => {
 
 type AcceptanceReadyRepo = {
   readonly repo: string;
-  readonly captured: Extract<CaptureLocalCandidateResult, { readonly ok: true }>;
+  readonly captured: Captured;
   readonly validation: ReturnType<typeof candidateValidationForTest>;
 };
 
@@ -517,11 +532,11 @@ const runTaskBackedCandidate = (
 
 const acceptanceReadyRepo = (
   reviewerAgentRuntime: ReviewerAgentRuntime,
-): Effect.Effect<AcceptanceReadyRepo, RepositoryStorageError> =>
+): Effect.Effect<AcceptanceReadyRepo, RepositoryStorageError, AcceptanceTemplate> =>
   Effect.gen(function* () {
+    const template = yield* AcceptanceTemplate;
     const repo = yield* candidateReadyRepoCopy();
-    const captured = yield* captureLocalCandidate({ cwd: repo, now });
-    if (!captured.ok) throw new Error(`Candidate capture failed: ${captured.code}`);
+    const captured = template.captured;
     const validation = candidateValidationForTest({
       localRepositoryMainCheckoutRoot: repo,
       artifactsRoot: join(commonDirectory(repo), "but-why", "artifacts"),
