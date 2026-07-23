@@ -8,6 +8,7 @@ It ends when But Why? completes one real SQLite-tracked Task-backed Change and p
 ## Can start immediately
 
 - Task 135: Consolidate the source hierarchy and names.
+- Task 158: Apply measured Vitest worker parallelism.
 - Task 117: Cancel Task-backed and taskless Changes.
 - Task 129: Submit a Task-backed Change with no repository change.
 
@@ -16,7 +17,9 @@ It ends when But Why? completes one real SQLite-tracked Task-backed Change and p
 | Task | Capability | Blocked by |
 | --- | --- | --- |
 | 135 | Consolidate the source hierarchy and names | None |
-| 156 | Establish and verify the final quality gate | 135, 155, 157 |
+| 158 | Apply measured Vitest worker parallelism | None |
+| 159 | Optimize remaining slow boundary fixtures | 158 |
+| 156 | Establish and verify the final quality gate | 135, 155, 157, 159 |
 | 123 | Ship the Change-centered manual workflow | 107, 117, 129, 130, 156 |
 | 125 | Produce the v1 package candidate | 123 |
 | 131 | Dogfood the first SQLite-tracked Change workflow | 125 |
@@ -41,9 +44,11 @@ It ends when But Why? completes one real SQLite-tracked Task-backed Change and p
 14. Task 135 reorganizes the surviving modules and applies canonical names to the final hierarchy.
 15. Tasks 154, 155, and 157 repair the remaining public behavior coverage before final gate verification.
 16. Task 134 refactors expensive test boundaries while preserving each distinct behavior and real-boundary defect class.
-17. Task 156 establishes the routine and full quality commands and verifies them from a clean locked-Nix checkout.
-18. Task 117 completes cancellation and cleanup before Task 123 ships the public workflow.
-19. After Task 126 publishes the package, Task 138 replaces the temporary unreleased-schema instruction with the post-publication compatibility policy.
+17. Task 158 applies the measured three-worker execution model.
+18. Task 159 optimizes the remaining slow boundary fixtures under that execution model.
+19. Task 156 establishes the final quality interface and verifies it from a clean locked-Nix checkout.
+20. Task 117 completes cancellation and cleanup before Task 123 ships the public workflow.
+21. After Task 126 publishes the package, Task 138 replaces the temporary unreleased-schema instruction with the post-publication compatibility policy.
 
 ## Independent test-execution workstream
 
