@@ -1,5 +1,10 @@
 # Establish the project quality policy
 
+## Status
+
+Historical completion record.
+Task 134 supersedes the blocking coverage-health policy with the approved routine and complete non-coverage quality interfaces.
+
 ## Specification
 
 - [Tooling](../tooling.md)

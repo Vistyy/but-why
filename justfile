@@ -24,7 +24,7 @@ init:
 quality:
     #!/usr/bin/env bash
     set -uo pipefail
-    started_at=$SECONDS
+    started_at_ns=$(date +%s%N)
     just _quality-static-routine & static_pid=$!
     just build & build_pid=$!
     status=0
@@ -33,9 +33,10 @@ quality:
         BY_TEST_SUITE=routine just test || status=1
     fi
     wait "$static_pid" || status=1
-    elapsed=$((SECONDS - started_at))
+    elapsed_ms=$((($(date +%s%N) - started_at_ns) / 1000000))
+    printf -v elapsed '%d.%03d' "$((elapsed_ms / 1000))" "$((elapsed_ms % 1000))"
     echo "quality completed in ${elapsed}s"
-    if (( elapsed > 10 )); then
+    if (( elapsed_ms > 10000 )); then
         echo "warning: quality exceeded its 10s operating budget"
     fi
     exit "$status"
@@ -44,7 +45,7 @@ quality:
 full-quality:
     #!/usr/bin/env bash
     set -uo pipefail
-    started_at=$SECONDS
+    started_at_ns=$(date +%s%N)
     just build & build_pid=$!
     just _quality-static-routine & static_pid=$!
     status=0
@@ -53,9 +54,10 @@ full-quality:
     if (( status == 0 )); then
         BY_TEST_SUITE= just test || status=1
     fi
-    elapsed=$((SECONDS - started_at))
+    elapsed_ms=$((($(date +%s%N) - started_at_ns) / 1000000))
+    printf -v elapsed '%d.%03d' "$((elapsed_ms / 1000))" "$((elapsed_ms % 1000))"
     echo "full-quality completed in ${elapsed}s"
-    if (( elapsed > 30 )); then
+    if (( elapsed_ms > 30000 )); then
         echo "warning: full-quality exceeded its 30s operating budget"
     fi
     exit "$status"

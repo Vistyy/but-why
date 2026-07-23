@@ -1,7 +1,10 @@
 import { spawnSync } from "node:child_process";
+import { cpSync, mkdirSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import { repoRoot } from "../support/by-cli.js";
+import { createTestWorkspace } from "../support/testWorkspace.js";
 
 type PackedPackageMetadata = {
   readonly files: readonly { readonly path: string }[];
@@ -9,8 +12,25 @@ type PackedPackageMetadata = {
 
 describe("CLI package contents", () => {
   it("packs built CLI output and public package metadata only", () => {
+    const fixture = createTestWorkspace();
+    cpSync(join(repoRoot, "package.json"), join(fixture, "package.json"));
+    cpSync(join(repoRoot, "README.md"), join(fixture, "README.md"));
+    mkdirSync(join(fixture, "docs"));
+    cpSync(join(repoRoot, "docs", "public"), join(fixture, "docs", "public"), {
+      recursive: true,
+    });
+    for (const directory of ["dist", "src", "test", "spikes", "docs/issues"]) {
+      mkdirSync(join(fixture, directory), { recursive: true });
+    }
+    writeFileSync(join(fixture, "dist", "main.js"), "#!/usr/bin/env node\n");
+    writeFileSync(join(fixture, "src", "main.ts"), "export {};\n");
+    writeFileSync(join(fixture, "test", "main.test.ts"), "export {};\n");
+    writeFileSync(join(fixture, "spikes", "prototype.ts"), "export {};\n");
+    writeFileSync(join(fixture, "docs", "issues", "draft.md"), "# Draft\n");
+    writeFileSync(join(fixture, "justfile"), "default:\n");
+
     const result = spawnSync("npm", ["pack", "--dry-run", "--json", "--ignore-scripts"], {
-      cwd: repoRoot,
+      cwd: fixture,
       encoding: "utf8",
       env: { ...process.env, FORCE_COLOR: "0", NO_COLOR: "1" },
     });

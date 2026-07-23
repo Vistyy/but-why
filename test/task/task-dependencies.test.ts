@@ -125,6 +125,61 @@ describe("Task dependency CLI", () => {
 
       expect(result.status).toBe(0);
       expect(receivedDependencies).toEqual(["BY-1", "BY-2"]);
+
+      let replacementDependencies: readonly string[] = [];
+      const replacement = yield* runByInProcessEffect(
+        root,
+        [
+          "task",
+          "dependencies",
+          "set",
+          "BY-3",
+          "--depends-on",
+          "BY-1",
+          "--depends-on",
+          "BY-2",
+          "--output",
+          "json",
+        ],
+        now,
+        {
+          taskUseCases: fakeTaskUseCases({
+            replaceTaskDependencies: (_taskId, prerequisiteTaskIds) => {
+              replacementDependencies = prerequisiteTaskIds;
+              return {
+                ok: true,
+                task: {
+                  id: "BY-3",
+                  title: "Dependent",
+                  description: "Description",
+                  state: "new",
+                  createdAt: now,
+                  updatedAt: now,
+                  startable: false,
+                  blockedBy: [],
+                  commentCount: 0,
+                  prerequisites: [
+                    { id: "BY-1", title: "First", state: "new" },
+                    { id: "BY-2", title: "Second", state: "new" },
+                  ],
+                  dependents: [],
+                },
+              };
+            },
+          }),
+        },
+      );
+      expect(replacement.status).toBe(0);
+      expect(replacementDependencies).toEqual(["BY-1", "BY-2"]);
+      expect(JSON.parse(replacement.stdout)).toEqual({
+        task: {
+          id: "BY-3",
+          prerequisites: [
+            { id: "BY-1", title: "First", state: "new" },
+            { id: "BY-2", title: "Second", state: "new" },
+          ],
+        },
+      });
     }),
   );
 
