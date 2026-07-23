@@ -103,7 +103,7 @@ Its three-run `just full-quality` medians were measured after both stages.
 
 | Command | Run 1 | Run 2 | Run 3 | Median | Preceding stage median | Improvement | Operating budget | Completion gate |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| `nix develop -c just full-quality` | 16.487 s | 16.403 s | 16.633 s | 16.487 s | 17.657 s | 6.6% faster | 30 s | 60 s |
+| `nix develop -c just full-quality` | 16.320 s | 16.516 s | 16.436 s | 16.436 s | 17.657 s | 6.9% faster | 30 s | 60 s |
 
 All three runs passed with 321 tests and one intentional skip.
 The remaining process concurrency, Candidate capture, and Managed Worktree suites remain process-backed or isolated because their external state is the behavior under test.
@@ -121,7 +121,7 @@ Verification:
 - The Candidate Validation, Acceptance Review, and publication focused suites passed with 16 tests.
 - The complete boundary suite passed with 60 tests.
 - Three consecutive locked-Nix `just full-quality` runs passed with 321 tests and one intentional skip per run.
-- The final `just full-quality` medians were 16.487 s, 16.403 s, and 16.633 s, with a 16.487 s median within the 30-second operating budget and 60-second completion gate.
+- The final `just full-quality` runs were 16.320 s, 16.516 s, and 16.436 s, with a 16.436 s median within the 30-second operating budget and 60-second completion gate.
 - Typecheck, formatting, AST-grep, documentation checks, build, and Fallow routine checks passed through `just full-quality`.
 
 Review status:
