@@ -102,7 +102,7 @@ describe("quality interface", () => {
 
     const holder = startRunner(lockFile, ["complete coverage", "sh", "-c", "sleep 2"]);
     await waitForActiveWorkload(`${lockFile}.status`);
-    holder.child.kill("SIGTERM");
+    holder.child.kill("SIGINT");
     expect((await holder.done).status).toBe(143);
 
     const recovered = await runRunner(lockFile, ["complete test", "sh", "-c", "exit 0"]);

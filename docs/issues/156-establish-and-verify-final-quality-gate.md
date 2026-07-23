@@ -1,5 +1,9 @@
 # Establish and verify the final quality interface
 
+## Status
+
+Done.
+
 ## Specification
 
 - [Test Suite Feedback Loop Redesign](../specs/test-suite-feedback-loop-redesign.md)
@@ -26,15 +30,15 @@ A clean local checkout runs `nix develop -c just init`, `nix develop -c just qua
 
 ## Acceptance criteria
 
-- [ ] Existing `just quality` and `just full-quality` memberships and performance guarantees remain intact.
-- [ ] Successful output is concise, while controlled failures retain test names, errors, diffs, stack traces, and applicable captured output.
-- [ ] Coverage continues to produce the required machine-readable artifact without printing the full text table.
-- [ ] Complete test and coverage workloads share one fail-fast capacity lock, nested recipes do not reacquire it, and targeted tests remain unlocked.
-- [ ] Fallow dependency, dead-code, architecture, coverage-based, and direct health checks retain their selected blocking or advisory status.
-- [ ] ast-grep fixtures, formatting, linting, type checking, tests, documentation validation, and build checks pass through Just.
-- [ ] No coverage percentage threshold is introduced.
-- [ ] `just init`, `just quality`, and `just full-quality` pass in a clean locked-Nix checkout.
-- [ ] Both quality commands leave tracked files unchanged.
+- [x] Existing `just quality` and `just full-quality` memberships and performance guarantees remain intact.
+- [x] Successful output is concise, while controlled failures retain test names, errors, diffs, stack traces, and applicable captured output.
+- [x] Coverage continues to produce the required machine-readable artifact without printing the full text table.
+- [x] Complete test and coverage workloads share one fail-fast capacity lock, nested recipes do not reacquire it, and targeted tests remain unlocked.
+- [x] Fallow dependency, dead-code, architecture, coverage-based, and direct health checks retain their selected blocking or advisory status.
+- [x] ast-grep fixtures, formatting, linting, type checking, tests, documentation validation, and build checks pass through Just.
+- [x] No coverage percentage threshold is introduced.
+- [x] `just init`, `just quality`, and `just full-quality` pass in a clean locked-Nix checkout.
+- [x] Both quality commands leave tracked files unchanged.
 
 ## Scoped implementation record
 
@@ -64,6 +68,17 @@ Required validation commands are `just test test/repository/quality-interface.te
 - Local: use an inherited `BY_CAPACITY_LOCK_HELD` marker so nested internal commands execute under the existing lock without reacquiring it.
 - Local: use Vitest's dot reporter because it removes routine per-test success lines while retaining Vitest's complete failed-test diagnostics.
 - Local: preserve the existing suite selection, runtime warning budgets, advisory health coverage, and absence of a coverage threshold because the approved specification assigns those behaviors outside this implementation choice.
+
+## Completion evidence
+
+- Implementation: `323e6ce66d4a9ec83a9c16e8c4944ca4aec1c696`.
+- Focused quality-interface tests passed with four tests.
+- Static checks, build, documentation validation, and the advisory health report passed through Just.
+- Three consecutive locked-Nix runs measured `just quality` at 7.275s, 7.311s, and 7.296s, with a median of 7.296s.
+- Three consecutive locked-Nix runs measured `just full-quality` at 17.159s, 17.219s, and 17.250s, with a median of 17.219s.
+- The locked-Nix primary seam passed `just init`, `just quality`, and `just full-quality`.
+- The quality and full-quality runs left only the task implementation changes in the tracked working tree.
+- Coverage produced `coverage/coverage-final.json` without a text coverage table.
 
 ## Blocked by
 

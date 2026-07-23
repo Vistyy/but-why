@@ -9,13 +9,11 @@ It ends when But Why? completes one real SQLite-tracked Task-backed Change and p
 
 - Task 117: Cancel Task-backed and taskless Changes.
 - Task 129: Submit a Task-backed Change with no repository change.
-- Task 156: Establish and verify the final quality gate.
 
 ## Dependency graph
 
 | Task | Capability | Blocked by |
 | --- | --- | --- |
-| 156 | Establish and verify the final quality gate | 155, 157 |
 | 123 | Ship the Change-centered manual workflow | 107, 117, 129, 130, 156 |
 | 125 | Produce the v1 package candidate | 123 |
 | 131 | Dogfood the first SQLite-tracked Change workflow | 125 |
