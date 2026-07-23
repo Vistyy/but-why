@@ -1,5 +1,9 @@
 # Apply measured Vitest worker parallelism
 
+## Status
+
+Done.
+
 ## Specification
 
 - [Test Suite Feedback Loop Redesign](../specs/test-suite-feedback-loop-redesign.md)

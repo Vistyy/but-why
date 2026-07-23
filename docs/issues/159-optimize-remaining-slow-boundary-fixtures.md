@@ -41,4 +41,4 @@ Focused hotspot suites plus three consecutive uncontended locked-Nix runs of `ju
 
 ## Blocked by
 
-- [Task 158: Apply measured Vitest worker parallelism](158-apply-measured-vitest-worker-parallelism.md)
+None - can start immediately.
