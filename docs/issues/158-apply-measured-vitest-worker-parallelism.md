@@ -60,6 +60,20 @@ Three consecutive uncontended locked-Nix runs each of `just quality` and `just f
 - Local: change only `maxWorkers` from `1` to `3` because the approved worker experiment supports three workers while retaining `pool: "threads"` and `isolate: false`.
 - Local: use the existing quality command interface as the primary verification seam because the task forbids changing suite membership and quality-command composition.
 
+## Final verification
+
+The routine suite passed with 261 tests and one intentional skip in all three runs.
+The complete suite passed with 321 tests and one intentional skip in all three runs.
+Static checks, the production build, and Fallow checks passed through both quality commands.
+
+Measurements were taken in three consecutive uncontended locked-Nix runs after the implementation commit.
+Task 134's accepted single-worker baselines are 9.427 seconds for `just quality` and 29.658 seconds for `just full-quality`.
+
+| Command | Run 1 | Run 2 | Run 3 | Three-worker median | Accepted single-worker baseline | Improvement | Operating budget | Completion gate |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| `just quality` | 6.573 s | 6.553 s | 6.616 s | 6.573 s | 9.427 s | 30.3% faster | 10 s | 15 s |
+| `just full-quality` | 18.417 s | 17.994 s | 18.053 s | 18.053 s | 29.658 s | 39.1% faster | 30 s | 60 s |
+
 ## Blocked by
 
 None - can start immediately.
