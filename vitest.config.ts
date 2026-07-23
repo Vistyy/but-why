@@ -21,7 +21,7 @@ export default defineConfig({
       reportsDirectory: "coverage",
     },
     isolate: false,
-    maxWorkers: 1,
+    maxWorkers: 3,
     pool: "threads",
   },
 });
