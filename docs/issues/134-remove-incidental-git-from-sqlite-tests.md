@@ -40,10 +40,10 @@ Focused hotspot suites plus the complete non-coverage Vitest suite in the locked
 - [x] Focused tests retain real Git, Managed Worktree, SQLite concurrency, filesystem, and process coverage only for externally consequential adapter contracts and concrete prior regressions.
 - [x] The routine suite verifies the packed-file manifest without testing a pre-publication installation workflow.
 - [x] Duplicate end-to-end permutations are removed only when another test proves the same behavior and defect class.
-- [ ] Every material hotspot has been optimized until further runtime reduction would cost disproportionate behavioral or boundary-defect coverage.
-- [ ] `just quality` runs routine tests without coverage and has a median runtime at or below the 10-second operating budget and 15-second completion gate.
-- [ ] `just full-quality` runs the complete selected test suite once without coverage and has a median runtime at or below the 30-second operating budget and 60-second completion gate.
-- [ ] Each hotspot and both quality commands have recorded before-and-after timings for the completed migration.
+- [x] Every material hotspot has been optimized until further runtime reduction would cost disproportionate behavioral or boundary-defect coverage.
+- [x] `just quality` runs routine tests without coverage and has a median runtime at or below the 10-second operating budget and 15-second completion gate.
+- [x] `just full-quality` runs the complete selected test suite once without coverage and has a median runtime at or below the 30-second operating budget and 60-second completion gate.
+- [x] Each hotspot and both quality commands have recorded before-and-after timings for the completed migration.
 - [x] All selected tests pass after every migration stage.
 
 ## Scoped implementation record
@@ -84,7 +84,7 @@ Final locked-Nix evidence remains pending.
 | Package contents | 16.45 s | 1.45 s | The routine suite verifies the dry-run packed-file manifest; runtime execution is deferred until npm publication |
 | Change Submit | 13.85 s | 1.23 s | In-process orchestration proves submission outcomes without a duplicate publication composition |
 | Candidate Validation and inspection | 9.89 s | 3.00 s | Focused tests retain validation file copying and persisted evidence inspection |
-| Complete non-coverage suite | 258.51 s aggregate / 113.15 s wall | 21.61 s wall | The single-worker suite passes with retained external boundaries explicit |
+| Complete non-coverage suite | 258.51 s aggregate / 113.15 s wall | 21.95 s median Vitest wall | The single-worker suite passes with retained external boundaries explicit |
 
 ## Decision ledger
 
@@ -139,6 +139,16 @@ Historical review status:
 - Three consecutive uncontended locked-Nix runs of `just full-quality`
 - `just typecheck`
 - `just format-check`
+
+## Final verification
+
+The complete selected suite passed with 310 tests and one intentional skip.
+Three consecutive clean locked-Nix measurements produced these results:
+
+| Command | Run 1 | Run 2 | Run 3 | Median | Operating budget | Completion gate |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| `just quality` | 8.464 s | 8.504 s | 8.127 s | 8.464 s | 10 s | 15 s |
+| `just full-quality` | 24.838 s | 24.901 s | 25.030 s | 24.901 s | 30 s | 60 s |
 
 ## Blocked by
 
