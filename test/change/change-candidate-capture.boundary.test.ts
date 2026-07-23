@@ -53,6 +53,22 @@ describe("Change Candidate capture boundaries", () => {
         comparisonBaseSha: mainSha,
         headSha,
       });
+
+      const tree = git(repo, "rev-parse", "refs/heads/main^{tree}");
+      const movedTarget = git(
+        repo,
+        "commit-tree",
+        tree,
+        "-p",
+        "refs/heads/main",
+        "-m",
+        "move base",
+      );
+      git(repo, "update-ref", "refs/heads/main", movedTarget);
+      expect(yield* captureLocalCandidate({ cwd: repo, now: "2026-07-12T11:00:00.000Z" })).toEqual({
+        ok: false,
+        code: "candidate_provenance_conflict",
+      });
     }),
   );
 

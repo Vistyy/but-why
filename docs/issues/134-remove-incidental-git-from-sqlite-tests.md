@@ -72,7 +72,7 @@ Focused hotspot suites plus the complete non-coverage Vitest suite in the locked
 Baseline values are Vitest aggregate test time from the reopened audit.
 The previous `just quality` command included coverage, and `just full-quality` did not exist, so neither command has a comparable pre-migration measurement.
 Current hotspot values include command startup where the measurement used an isolated Just invocation.
-Final locked-Nix evidence remains pending.
+Final locked-Nix evidence is recorded below.
 
 | Hotspot | Reopened baseline | Current | Boundary decision |
 | --- | ---: | ---: | --- |
@@ -104,7 +104,7 @@ Final locked-Nix evidence remains pending.
 - Settled during the reopened planning session: use existing injected module and phase seams first; add a production seam only when it expresses a real module boundary and replaces substantial repeated integration setup, without test-only hooks or fake abstractions around inherently external behavior.
 - User-approved: Task 134 owns routine and full-quality command composition, suite membership, timing output, and performance-budget verification so optimization is measured through the real command interface.
 - User-approved: coverage remains diagnostic rather than a preservation target; coverage-based Fallow health is advisory while dead-code and structural checks remain blocking.
-- Deferred to Task 156: shared capacity coordination, final concise diagnostics, and locked clean-checkout verification.
+- User-approved: Task 156 owns shared capacity coordination, final concise diagnostics, and locked clean-checkout verification.
 
 ## First implementation checkpoint
 

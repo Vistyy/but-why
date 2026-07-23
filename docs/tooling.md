@@ -31,11 +31,8 @@ It runs routine tests, formatting, linting, type checking, documentation validat
 `just full-quality` runs the complete selected test suite plus the same static checks and production build.
 Neither blocking quality command generates coverage.
 
-Fallow blocks dead code, dependency errors, cycles, invalid suppressions, and these direct health limits:
-
-- Maximum cyclomatic complexity: 20.
-- Maximum cognitive complexity: 15.
-- Maximum CRAP: 30.
+Fallow blocks dead code, dependency errors, cycles, invalid suppressions, and named architecture contracts.
+Coverage-based complexity, CRAP, and maintainability results are advisory health evidence.
 
 Fallow enforces three architecture contracts:
 
@@ -62,7 +59,7 @@ The current coverage policy has no percentage threshold.
 ## Advisory health reports
 
 `just health` runs coverage before producing Fallow health and duplication reports.
-The reports include CRAP, function size, composite scores, hotspots, and duplication.
+The reports include complexity, CRAP, function size, composite scores, hotspots, coverage gaps, and duplication.
 Advisory reports do not determine the `just quality` result.
 A report becomes implementation work only when repository evidence establishes a concrete defect or maintenance cost.
 
