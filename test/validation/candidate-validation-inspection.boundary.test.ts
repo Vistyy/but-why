@@ -3,14 +3,18 @@ import { join } from "node:path";
 
 import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
-import { describe } from "vitest";
+import { afterAll, beforeAll, describe } from "vitest";
 
 import type { ChangeValidationPersistence } from "../../src/changeValidation/changeValidationPersistence.js";
 import { openSqliteChangeCandidateCapturePersistence } from "../../src/sqlite/sqliteChangeCandidateCapturePersistence.js";
 import { repositorySqlLayer } from "../../src/sqlite/repositorySql.js";
 import { openSqliteChangeValidationPersistence } from "../../src/sqlite/sqliteChangeValidationPersistence.js";
 import { runByInProcessEffect } from "../support/by-cli.js";
-import { createInitializedRepo } from "../support/initializedRepo.js";
+import {
+  cloneInitializedTestRepository,
+  createInitializedRepo,
+} from "../support/initializedRepo.js";
+import { acquireTestWorkspace, releaseTestWorkspace } from "../support/testWorkspace.js";
 
 const now = "2026-07-18T10:00:00.000Z";
 const later = "2026-07-18T10:05:00.000Z";
@@ -24,6 +28,16 @@ const policy = {
   ],
   copyFiles: [".env.test"],
 };
+let candidateValidationRepoTemplate: string;
+
+beforeAll(() => {
+  candidateValidationRepoTemplate = acquireTestWorkspace();
+  createInitializedRepo(candidateValidationRepoTemplate);
+});
+
+afterAll(() => {
+  releaseTestWorkspace(candidateValidationRepoTemplate);
+});
 
 describe("Candidate-owned Validation Run inspection", () => {
   it.effect("shows the Candidate judgment and ordered evidence with bounded previews", () =>
@@ -353,21 +367,21 @@ describe("Candidate-owned Validation Run inspection", () => {
   );
 });
 
-const candidateValidationFixture = () => {
-  const root = createInitializedRepo();
-  const commonDirectory = join(root, ".git");
-  const artifactsRoot = join(commonDirectory, "but-why", "artifacts");
-  const repositoryLayer = repositorySqlLayer({
-    statePath: join(commonDirectory, "but-why", "state.sqlite"),
-    commonDirectory,
-  });
-  const withPersistence = <A, E>(
-    use: (persistence: ChangeValidationPersistence) => Effect.Effect<A, E>,
-  ) =>
-    Effect.flatMap(openSqliteChangeValidationPersistence(), use).pipe(
-      Effect.provide(repositoryLayer),
-    );
-  return Effect.gen(function* () {
+const candidateValidationFixture = () =>
+  Effect.gen(function* () {
+    const root = yield* cloneInitializedTestRepository(candidateValidationRepoTemplate);
+    const commonDirectory = join(root, ".git");
+    const artifactsRoot = join(commonDirectory, "but-why", "artifacts");
+    const repositoryLayer = repositorySqlLayer({
+      statePath: join(commonDirectory, "but-why", "state.sqlite"),
+      commonDirectory,
+    });
+    const withPersistence = <A, E>(
+      use: (persistence: ChangeValidationPersistence) => Effect.Effect<A, E>,
+    ) =>
+      Effect.flatMap(openSqliteChangeValidationPersistence(), use).pipe(
+        Effect.provide(repositoryLayer),
+      );
     const candidateResult = yield* openSqliteChangeCandidateCapturePersistence().pipe(
       Effect.flatMap((capture) =>
         capture.commitCapture({
@@ -442,4 +456,3 @@ const candidateValidationFixture = () => {
       changeId: candidateResult.changeId,
     };
   });
-};
