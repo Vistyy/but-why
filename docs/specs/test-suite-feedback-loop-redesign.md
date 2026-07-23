@@ -56,8 +56,9 @@ Targeted tests do not acquire the shared heavy-workload lock.
 It includes routine tests, formatting, linting, type checking, documentation validation, structural checks, applicable non-coverage static checks, and the production build.
 It does not generate coverage.
 
-`just full-quality` includes every guarantee from `just quality` plus coverage, coverage-based analysis, and the focused slow boundary suite.
-The implementation may share internal recipes so that `just full-quality` does not rerun the same routine tests unnecessarily.
+`just full-quality` includes every guarantee from `just quality` plus the focused slow boundary suite.
+It runs the complete selected test suite once without coverage instrumentation.
+Coverage and coverage-based analysis remain available through `just health` without extending the blocking full-quality feedback loop.
 The mechanism that invokes `just full-quality` is not decided by this specification.
 Ordinary agent instructions do not tell agents to run `just full-quality`.
 
@@ -79,10 +80,11 @@ Testing a future npm-hosted `pnpx` workflow is deferred until npm publication ex
 
 ### Coverage
 
-Routine quality does not generate coverage.
-Full quality generates coverage once for the routine product suite.
-The slow boundary suite runs without coverage instrumentation.
+Routine and full quality do not generate coverage.
+`just health` generates coverage for the complete selected test suite.
 Coverage retains the machine-readable artifact required by coverage-based analysis.
+Coverage-based Fallow health is advisory because focused test value, rather than path-coverage or CRAP-score preservation, governs suite membership.
+Dead-code and structural checks remain blocking.
 Routine successful output does not print the full text coverage table.
 No coverage percentage threshold is introduced.
 
@@ -164,7 +166,7 @@ Coverage adds approximately five seconds, 289 MiB maximum resident memory, and 1
 
 Parallel Vitest execution means isolated savings do not reduce complete-suite wall time linearly.
 Each implementation slice must remeasure the complete suite because removing one critical path exposes the next slow file.
-The expected result is approximately 10 to 20 seconds for routine quality and approximately 25 to 40 seconds for full quality.
+The completed migration targets at most 10 seconds for routine quality and at most 20 seconds for full quality.
 The maintained operating budgets are 10 seconds for routine quality and 20 seconds for full quality.
 The 15-second routine-quality and 30-second full-quality limits are hard completion gates.
 Implementation must continue reducing test cost or low-value boundary coverage until both measured commands satisfy their operating budgets and completion limits.

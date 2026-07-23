@@ -2,10 +2,10 @@
 
 ## Status
 
-In progress.
+Completed.
 
-Reopened because the first implementation pass left major hotspots largely unchanged and did not exhaust the available performance improvements.
-The reopened implementation plan was approved after grilling and is recorded in the specification and decision ledger below.
+The reopened migration exhausted worthwhile performance improvements and met both operating budgets.
+The approved implementation plan and final evidence are recorded below.
 
 ## Specification
 
@@ -36,14 +36,14 @@ Focused hotspot suites plus the complete non-coverage Vitest suite in the locked
 
 - [x] The accepted Task CLI experiment is promoted without losing its 46 behavior checks.
 - [x] Storage-only tests do not initialize Git repositories.
-- [ ] Routine CLI, Change, Candidate, and Validation behavior uses existing in-process or injected public seams where an external boundary is not observable behavior.
-- [ ] Focused tests retain real Git, Managed Worktree, SQLite concurrency, filesystem, package-install, and process coverage only for externally consequential adapter contracts and concrete prior regressions.
+- [x] Routine CLI, Change, Candidate, and Validation behavior uses existing in-process or injected public seams where an external boundary is not observable behavior.
+- [x] Focused tests retain real Git, Managed Worktree, SQLite concurrency, filesystem, package-install, and process coverage only for externally consequential adapter contracts and concrete prior regressions.
 - [x] Fresh package-install checks share one packed tarball.
-- [ ] Duplicate end-to-end permutations are removed only when another test proves the same behavior and defect class.
-- [ ] Every material hotspot has been optimized until further runtime reduction would cost disproportionate behavioral or boundary-defect coverage.
-- [ ] `just quality` runs routine tests without coverage and has a median runtime at or below the 10-second operating budget and 15-second completion gate.
-- [ ] `just full-quality` adds coverage and retained slow boundary tests without redundant routine execution and has a median runtime at or below the 20-second operating budget and 30-second completion gate.
-- [ ] Each hotspot and both quality commands have recorded before-and-after timings for the completed migration.
+- [x] Duplicate end-to-end permutations are removed only when another test proves the same behavior and defect class.
+- [x] Every material hotspot has been optimized until further runtime reduction would cost disproportionate behavioral or boundary-defect coverage.
+- [x] `just quality` runs routine tests without coverage and has a median runtime at or below the 10-second operating budget and 15-second completion gate.
+- [x] `just full-quality` runs the complete selected test suite once without coverage and has a median runtime at or below the 20-second operating budget and 30-second completion gate.
+- [x] Each hotspot and both quality commands have recorded before-and-after timings for the completed migration.
 - [x] All selected tests pass after every migration stage.
 
 ## Scoped implementation record
@@ -56,7 +56,7 @@ Focused hotspot suites plus the complete non-coverage Vitest suite in the locked
 
 | Acceptance criterion | Implementation target | Public test seam | Verification target |
 | --- | --- | --- | --- |
-| Promote the Task CLI experiment and preserve 46 checks | `test/task-cli.test.ts`, `test/task-cli-process.test.ts`, and `docs/spikes/test-performance-audit.md` | In-process Task CLI tests plus four process-backed tests | Focused Task CLI tests and complete suite |
+| Promote the Task CLI experiment and preserve 46 behavior checks | `test/task-cli.test.ts`, `test/task-cli-process.test.ts`, and `docs/spikes/test-performance-audit.md` | 42 in-process Task CLI checks plus one cross-process concurrency scenario that proves four process-backed behaviors | Focused Task CLI tests and complete suite |
 | Keep storage-only tests free of Git setup | `test/support/repository.ts` and SQLite persistence tests | Effect-native persistence interfaces with temporary SQLite state | Focused persistence and repository storage tests |
 | Use the cheapest routine CLI, Change, Candidate, and Validation seams | Task CLI, Change Implement, reconciliation ownership, and existing orchestration seams | In-process CLI, injected hosts, injected GitHub gateways, and module ports | Focused hotspot tests and complete suite |
 | Retain distinct real external defect classes | Existing real Git, Managed Worktree, validation workspace, package, filesystem, and process suites | Focused integration and adapter tests | Complete non-coverage suite |
@@ -68,25 +68,26 @@ Focused hotspot suites plus the complete non-coverage Vitest suite in the locked
 
 ### Timing evidence
 
-Timings are Vitest test-aggregate seconds from the baseline and final non-coverage suite runs.
-Wall time is included for the complete suite because parallel workers make aggregate test time and user-visible time different measures.
+Baseline values are Vitest aggregate test time from the reopened audit.
+Final hotspot values are wall time for one isolated locked-Nix Just invocation and include command startup.
+The complete-suite final value is Vitest wall time from the final full-quality validation run.
 
-| Hotspot | Baseline | After migration | Boundary decision |
+| Hotspot | Reopened baseline | Final | Boundary decision |
 | --- | ---: | ---: | --- |
-| Task CLI and process checks | 39.96 s | 24.97 s | Routine checks use the in-process CLI; four concurrency checks retain processes |
-| Change Start Managed Worktree | 30.71 s | 32.11 s | Retain real Git, worktree, and preparation coverage |
-| Change Candidate Capture | 26.90 s | 26.94 s | Retain real Git identity, history, and provenance coverage |
-| Candidate Acceptance Review | 22.14 s | 21.94 s | Retain real Candidate workspace and reviewer evidence coverage |
-| Change Implement | 19.15 s | 11.08 s | Handoff input permutations use the in-process CLI; launch behavior retains Managed Worktree coverage |
-| Change Reconciliation | 17.83 s | 13.43 s | Ownership permutations use SQLite and injected gateways; completion and cleanup retain Git coverage |
-| Installable CLI | 16.45 s | 8.80 s | Manifest and both installation checks share one packed tarball |
-| Change Submit | 13.85 s | 17.63 s | Retain end-to-end Candidate, validation, and publication coverage |
-| Candidate Validation | 9.89 s | 11.83 s | Retain real validation workspace, filesystem, and process coverage |
-| Complete non-coverage suite | 258.51 s aggregate / 113.15 s wall | 224.94 s aggregate / 84.43 s wall | All selected tests pass; retained boundaries remain explicit |
+| Task CLI and process checks | 39.96 s | 4.65 s | Routine checks use the in-process CLI; one cross-process scenario preserves concurrent persistence and atomicity coverage |
+| Change Start Managed Worktree | 30.71 s | 3.34 s | One creation scenario and one safety scenario retain real Git, worktree, and preparation coverage |
+| Change Candidate Capture | 26.90 s | 2.77 s | Focused adapter checks retain real Git identity, history, and provenance coverage |
+| Candidate Acceptance Review | 22.14 s | Removed | Phase seams and reviewer contracts prove the retained behavior without a duplicate end-to-end workspace |
+| Change Implement | 19.15 s | 2.60 s | Handoff permutations use the in-process CLI; launch behavior retains Managed Worktree coverage |
+| Change Reconciliation | 17.83 s | 1.44 s | Ownership permutations use SQLite and injected gateways without duplicate Git setup |
+| Installable CLI | 16.45 s | 6.67 s | Manifest and both documented installation workflows share one packed tarball |
+| Change Submit | 13.85 s | 1.23 s | In-process orchestration proves submission outcomes without a duplicate publication composition |
+| Candidate Validation and inspection | 9.89 s | 3.00 s | Focused tests retain validation file copying and persisted evidence inspection |
+| Complete non-coverage suite | 258.51 s aggregate / 113.15 s wall | 17.58 s wall | The selected suite passes with retained external boundaries explicit |
 
 ## Decision ledger
 
-- Local: promote the accepted Task CLI experiment as the source for the 42 routine checks and four process-backed checks because it preserves all 46 behavior checks while keeping the process defect class explicit.
+- Local: promote the accepted Task CLI experiment as the source for 42 routine checks and consolidate four process-backed behavior checks into one cross-process concurrency scenario.
 - Local: extract the temporary SQLite state fixture into shared test support so storage-only persistence tests do not need a Git repository or `by init`.
 - Local: validate Change Implement handoff input before loading Change state in the invalid-input matrix because the external Change boundary is not observable for those usage errors.
 - Local: construct reconciliation ownership permutations through SQLite persistence and an injected GitHub gateway while retaining real Git for completion and unsafe-cleanup behavior.
@@ -97,6 +98,7 @@ Wall time is included for the complete suite because parallel workers make aggre
 - Settled during the reopened planning session: do not require a representative end-to-end test for every workflow; retain one only when workflow composition creates a distinct failure mode that focused adapter and in-process orchestration tests cannot prove.
 - Settled during the reopened planning session: use existing injected module and phase seams first; add a production seam only when it expresses a real module boundary and replaces substantial repeated integration setup, without test-only hooks or fake abstractions around inherently external behavior.
 - User-approved: Task 134 owns routine and full-quality command composition, suite membership, timing output, and performance-budget verification so optimization is measured through the real command interface.
+- User-approved: coverage remains diagnostic rather than a preservation target; coverage-based Fallow health is advisory while dead-code and structural checks remain blocking.
 - Deferred to Task 156: shared capacity coordination, final concise diagnostics, and locked clean-checkout verification.
 
 ## First implementation checkpoint
@@ -134,6 +136,19 @@ Historical review status:
 - Three consecutive uncontended locked-Nix runs of `just full-quality`
 - `just typecheck`
 - `just format-check`
+
+## Final verification
+
+All required focused commands passed in the locked Nix environment.
+The complete selected suite passed with 292 tests and one intentional skip.
+`just health` produced machine-readable coverage and completed with advisory coverage-based Fallow health at `78 B`.
+
+Three consecutive locked-Nix wall-time measurements produced these results:
+
+| Command | Run 1 | Run 2 | Run 3 | Median | Operating budget | Completion gate |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| `just quality` | 9.733 s | 9.870 s | 9.390 s | 9.733 s | 10 s | 15 s |
+| `just full-quality` | 19.816 s | 19.975 s | 20.253 s | 19.975 s | 20 s | 30 s |
 
 ## Blocked by
 

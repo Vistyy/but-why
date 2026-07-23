@@ -50,7 +50,7 @@ const expectCleanSuccessfulCommand = (result: CommandResult) => {
 const packPackage = (destination: string): PackedPackage => {
   const result = runCommandSync(
     "npm",
-    ["pack", "--json", "--pack-destination", destination],
+    ["pack", "--json", "--ignore-scripts", "--pack-destination", destination],
     repoRoot,
   );
 
@@ -95,7 +95,9 @@ const packedPackage = (): PackageFixture => {
 
 const installPackage = (cwd: string, tarballPath: string) => {
   expectSuccessfulCommand(runCommandSync("npm", ["init", "--yes"], cwd));
-  expectSuccessfulCommand(runCommandSync("npm", ["install", tarballPath], cwd));
+  expectSuccessfulCommand(
+    runCommandSync("npm", ["install", "--no-audit", "--no-fund", tarballPath], cwd),
+  );
 };
 
 const localInstalledBy = (cwd: string) => join(cwd, "node_modules/.bin/by");
@@ -112,7 +114,7 @@ const expectInstalledHelp = (result: CommandResult) => {
   expect(result.stdout).not.toContain(join(repoRoot, "bin/by"));
 };
 
-describe("installable by CLI package", () => {
+describe.concurrent("installable by CLI package", () => {
   it("packs built CLI output and user-facing package metadata only", () => {
     const { files } = packedPackage();
     expect(files).toContain("dist/main.js");
@@ -165,7 +167,16 @@ describe("installable by CLI package", () => {
     expectSuccessfulCommand(
       runCommandSync(
         "npm",
-        ["install", "--global", "--prefix", globalPrefix, packed.tarballPath],
+        [
+          "install",
+          "--global",
+          "--prefix",
+          globalPrefix,
+          "--ignore-scripts",
+          "--no-audit",
+          "--no-fund",
+          packed.tarballPath,
+        ],
         globalConsumerRepo,
       ),
     );

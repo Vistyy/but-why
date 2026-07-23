@@ -26,8 +26,10 @@ The project uses:
 
 ## Blocking quality policy
 
-`just quality` is the blocking acceptance command.
-It runs formatting, linting, type checking, tests, coverage, documentation validation, ast-grep, Fallow, and the production build.
+`just quality` is the blocking routine acceptance command.
+It runs routine tests, formatting, linting, type checking, documentation validation, ast-grep, blocking Fallow checks, and the production build.
+`just full-quality` runs the complete selected test suite plus the same static checks and production build.
+Neither blocking quality command generates coverage.
 
 Fallow blocks dead code, dependency errors, cycles, invalid suppressions, and these direct health limits:
 

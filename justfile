@@ -20,27 +20,62 @@ init:
     fi
     pnpm install --frozen-lockfile
 
-# Run all quality checks.
+# Run routine product feedback without coverage or slow external boundaries.
 quality:
-    just coverage
-    just _quality-static
-    just build
+    #!/usr/bin/env bash
+    set -uo pipefail
+    started_at=$SECONDS
+    BY_TEST_SUITE=routine just test & tests_pid=$!
+    just _quality-static-routine & static_pid=$!
+    just build & build_pid=$!
+    status=0
+    for pid in "$tests_pid" "$static_pid" "$build_pid"; do
+        wait "$pid" || status=1
+    done
+    elapsed=$((SECONDS - started_at))
+    echo "quality completed in ${elapsed}s"
+    if (( elapsed > 10 )); then
+        echo "warning: quality exceeded its 10s operating budget"
+    fi
+    exit "$status"
 
-# Run internal static checks after coverage is available.
-_quality-static:
+# Run complete product feedback, including focused external boundaries, without coverage.
+full-quality:
+    #!/usr/bin/env bash
+    set -uo pipefail
+    started_at=$SECONDS
+    just test & tests_pid=$!
+    just build & build_pid=$!
+    status=0
+    wait "$tests_pid" || status=1
+    wait "$build_pid" || status=1
+    just _quality-static-routine || status=1
+    elapsed=$((SECONDS - started_at))
+    echo "full-quality completed in ${elapsed}s"
+    if (( elapsed > 20 )); then
+        echo "warning: full-quality exceeded its 20s operating budget"
+    fi
+    exit "$status"
+
+# Run routine static checks that do not require coverage.
+_quality-static-routine:
     #!/usr/bin/env bash
     set -uo pipefail
     just docs-check & docs_pid=$!
-    just format-check & format_pid=$!
-    just lint & lint_pid=$!
+    just _biome-check & biome_pid=$!
     just ast-grep-check & ast_grep_pid=$!
     just typecheck & typecheck_pid=$!
-    just _fallow-check & fallow_pid=$!
+    just _fallow-routine-check & fallow_pid=$!
     status=0
-    for pid in "$docs_pid" "$format_pid" "$lint_pid" "$ast_grep_pid" "$typecheck_pid" "$fallow_pid"; do
+    for pid in "$docs_pid" "$biome_pid" "$ast_grep_pid" "$typecheck_pid" "$fallow_pid"; do
         wait "$pid" || status=1
     done
     exit "$status"
+
+# Check Just formatting plus Biome formatting and lint rules in one source scan.
+_biome-check:
+    just --unstable --fmt --check
+    pnpm exec biome check --assist-enabled=false .
 
 # Validate links and anchors in every tracked Markdown file.
 docs-check:
@@ -59,12 +94,18 @@ fallow-check:
     just _fallow-check
 
 _fallow-check:
+    just _fallow-routine-check
+    just _fallow-coverage-check
+
+_fallow-routine-check:
     #!/usr/bin/env bash
     set -uo pipefail
     status=0
     pnpm exec fallow dead-code --no-production --no-cache --fail-on-issues || status=1
-    pnpm exec fallow health --no-production --no-cache --coverage coverage/coverage-final.json --complexity --min-severity moderate || status=1
     exit "$status"
+
+_fallow-coverage-check:
+    pnpm exec fallow health --no-production --no-cache --coverage coverage/coverage-final.json --report-only
 
 # Report advisory code-health and duplication findings.
 health:

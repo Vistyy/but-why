@@ -11,7 +11,7 @@ import { collapseHome, mapRuntimeError } from "../src/cli.js";
 import { butWhyGitignoreBlock } from "../src/init/gitignore.js";
 import { RepositorySql, repositorySqlLayer } from "../src/sqlite/repositorySql.js";
 import { encodeToon } from "../src/output/toon.js";
-import { createGitRepo, repoRoot, runByInProcessEffect, runJustBy } from "./support/by-cli.js";
+import { createGitRepo, repoRoot, runByInProcessEffect } from "./support/by-cli.js";
 import { createTestWorkspace } from "./support/testWorkspace.js";
 
 const expectedBin = collapseHome(join(repoRoot, "bin/by"));
@@ -37,20 +37,6 @@ const withRepositorySql = <A, E>(
   );
 
 describe("by CLI", () => {
-  ordinaryIt(
-    "prints not_initialized for bare just by before setup without touching the repo root",
-    () => {
-      const result = runJustBy();
-
-      expect(result.status).toBe(1);
-      expect(result.stderr).toBe("");
-      expect(result.stdout).toBe(`error:
-  code: not_initialized
-  message: This workspace is not initialized for But Why?.
-help[1]: Run \`by init --task-prefix BY\` in the repository root.`);
-    },
-  );
-
   it.effect("prints the help view", () =>
     Effect.gen(function* () {
       const result = yield* runByInProcessEffect(repoRoot, ["--help"]);

@@ -38,7 +38,6 @@ A clean local checkout runs `nix develop -c just init`, `nix develop -c just qua
 
 ## Blocked by
 
-- [Task 134](134-remove-incidental-git-from-sqlite-tests.md)
 - [Task 135](135-consolidate-source-hierarchy.md)
 - [Task 155](155-cover-validation-workspace-recovery.md)
 - [Task 157](157-cover-change-implement-handoff-errors.md)
