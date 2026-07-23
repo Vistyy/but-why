@@ -24,17 +24,17 @@ Task and Change cancellation CLI tests with a fake GitHub boundary and focused r
 
 ## Acceptance criteria
 
-- [ ] Task cancellation requires a non-empty reason and an unfinished Task.
-- [ ] `by change cancel` accepts only an open taskless Change.
-- [ ] Direct Change cancellation of a Task-backed Change is rejected with the supported Task command.
-- [ ] Cancellation closes an owned open PR before it records local cancellation.
-- [ ] A GitHub closure failure leaves the lifecycle open and returns an actionable error.
-- [ ] An observed merged PR completes the Change and linked Task instead of cancelling them.
-- [ ] Cancellation permanently closes the applicable Change and Task while preserving history.
-- [ ] Cancellation applies the cleanup policy for merged Changes.
-- [ ] If cleanup is unsafe, resources remain pending and the command reports the reason.
-- [ ] Pending cleanup does not reopen the Change lifecycle.
-- [ ] Repeated cancellation returns the durable result unchanged.
+- [x] Task cancellation requires a non-empty reason and an unfinished Task.
+- [x] `by change cancel` accepts only an open taskless Change.
+- [x] Direct Change cancellation of a Task-backed Change is rejected with the supported Task command.
+- [x] Cancellation closes an owned open PR before it records local cancellation.
+- [x] A GitHub closure failure leaves the lifecycle open and returns an actionable error.
+- [x] An observed merged PR completes the Change and linked Task instead of cancelling them.
+- [x] Cancellation permanently closes the applicable Change and Task while preserving history.
+- [x] Cancellation applies the cleanup policy for merged Changes.
+- [x] If cleanup is unsafe, resources remain pending and the command reports the reason.
+- [x] Pending cleanup does not reopen the Change lifecycle.
+- [x] Repeated cancellation returns the durable result unchanged.
 
 ## Blocked by
 
@@ -42,3 +42,10 @@ Task and Change cancellation CLI tests with a fake GitHub boundary and focused r
 - `docs/issues/101-reconcile-owned-pr-during-submit.md`
 - `docs/issues/105-migrate-task-submit.md`
 - `docs/issues/133-start-prepared-changes.md`
+
+## Completion
+
+Implemented in `28d3f00`, `bb26d72`, and `b787f57`.
+Verified with focused cancellation and GitHub gateway tests, `just docs-check`, `just quality`, and `git diff --check`.
+Spec review: approved.
+Standards review: approved with required comments, with all comments resolved and the axis latched.
