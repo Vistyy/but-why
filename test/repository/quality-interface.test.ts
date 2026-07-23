@@ -200,12 +200,14 @@ describe("quality interface", () => {
     expect(success.output).not.toContain("✓ test/");
   });
 
-  if (process.env.BY_VERIFY_QUALITY_COVERAGE === "1") {
+  if (process.env["BY_VERIFY_QUALITY_COVERAGE"] === "1") {
     test("writes machine-readable coverage without a text table", async () => {
       const result = await runJust("", ["coverage", "test/repository/module-seams.test.ts"]);
 
       expect(result.status).toBe(0);
-      expect(readFileSync(join(repositoryRoot, "coverage/coverage-final.json"), "utf8")).not.toBe("");
+      expect(readFileSync(join(repositoryRoot, "coverage/coverage-final.json"), "utf8")).not.toBe(
+        "",
+      );
       expect(result.output).not.toMatch(/All files|Statements| %/);
     });
   }
