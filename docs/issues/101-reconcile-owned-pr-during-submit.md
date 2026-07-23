@@ -23,19 +23,25 @@ Change reconciliation CLI tests with a fake GitHub repository and focused real-G
 
 ## Acceptance criteria
 
-- [ ] Repository-wide reconciliation checks only open Changes with recorded PRs and closed Changes with pending cleanup.
-- [ ] Targeted reconciliation checks exactly one Change.
-- [ ] An open PR at the expected validated head is returned without mutation.
-- [ ] A merged PR atomically completes the Change and its linked Task when present.
-- [ ] A closed unmerged PR remains closed and no replacement PR is created.
-- [ ] Unexpected repository, head branch, base target, or head SHA is rejected without adoption.
-- [ ] Cleanup removes a worktree only when it has no uncommitted changes.
-- [ ] Cleanup deletes a branch only when its commits remain reachable through another ref.
-- [ ] Unsafe or failed cleanup remains pending and reports its blocking reason.
-- [ ] Reconciliation works from any checkout in the Local Repository and is idempotent.
-- [ ] V1 has no reconciliation daemon, webhook, or automatic polling requirement.
+- [x] Repository-wide reconciliation checks only open Changes with recorded PRs and closed Changes with pending cleanup.
+- [x] Targeted reconciliation checks exactly one Change.
+- [x] An open PR at the expected validated head is returned without mutation.
+- [x] A merged PR atomically completes the Change and its linked Task when present.
+- [x] A closed unmerged PR remains closed and no replacement PR is created.
+- [x] Unexpected repository, head branch, base target, or head SHA is rejected without adoption.
+- [x] Cleanup removes a worktree only when it has no uncommitted changes.
+- [x] Cleanup deletes a branch only when its commits remain reachable through another ref.
+- [x] Unsafe or failed cleanup remains pending and reports its blocking reason.
+- [x] Reconciliation works from any checkout in the Local Repository and is idempotent.
+- [x] V1 has no reconciliation daemon, webhook, or automatic polling requirement.
 
 ## Blocked by
 
 - `docs/issues/098-publish-one-exact-candidate-with-recovery.md`
 - `docs/issues/133-start-prepared-changes.md`
+
+## Completion
+
+Implemented in `7a9c150`.
+Verified with focused reconciliation and cleanup tests, `just typecheck`, and `just quality`.
+The issue breakdown records Task 101 as complete and no longer blocks Task 117.

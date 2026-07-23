@@ -7,14 +7,13 @@ It ends when But Why? completes one real SQLite-tracked Task-backed Change and p
 
 ## Can start immediately
 
-- Task 117: Cancel Task-backed and taskless Changes.
 - Task 129: Submit a Task-backed Change with no repository change.
 
 ## Dependency graph
 
 | Task | Capability | Blocked by |
 | --- | --- | --- |
-| 123 | Ship the Change-centered manual workflow | 107, 117, 129, 130 |
+| 123 | Ship the Change-centered manual workflow | 107, 129, 130 |
 | 125 | Produce the v1 package candidate | 123 |
 | 131 | Dogfood the first SQLite-tracked Change workflow | 125 |
 | 126 | Publish But Why? to npm | 131 |
@@ -41,7 +40,7 @@ It ends when But Why? completes one real SQLite-tracked Task-backed Change and p
 17. Task 158 applies the measured three-worker execution model.
 18. Task 159 optimizes the remaining slow boundary fixtures under that execution model.
 19. Task 156 establishes the final quality interface and verifies it from a clean locked-Nix checkout.
-20. Task 117 completes cancellation and cleanup before Task 123 ships the public workflow.
+20. Task 117 completed cancellation and cleanup before Task 123 ships the public workflow.
 21. After Task 126 publishes the package, Task 138 replaces the temporary unreleased-schema instruction with the post-publication compatibility policy.
 
 ## Independent test-execution workstream
