@@ -7,6 +7,8 @@ The repository uses ESM TypeScript on Node.js 24.x.
 Nix provides the authoritative development environment.
 Direnv enters the locked Nix development shell when a developer enters the repository directory.
 Run `just init` after entering the environment.
+The tracked pnpm workspace policy permits build scripts only for exact versions of required native dependencies and rejects unapproved dependency build scripts.
+Review and update that allowlist explicitly when a dependency upgrade changes the required build packages.
 Corepack is not part of the repository toolchain.
 
 A non-Nix environment may run repository commands when it provides Node.js 24.x, pnpm 10.28.0, Just, and the installed project dependencies.
