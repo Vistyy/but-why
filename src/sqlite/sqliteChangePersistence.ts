@@ -211,9 +211,7 @@ const completeNoChange = (sql: SqlClient.SqlClient, input: CompleteNoChangeInput
     if (change === undefined) return { ok: false as const, code: "change_not_found" as const };
     if (change.state === changeState.closed) {
       const completion = change.noChangeCompletion;
-      return completion !== undefined &&
-        completion !== null &&
-        completion.candidateId === input.candidateId &&
+      return completion?.candidateId === input.candidateId &&
         completion.validationRunId === input.validationRunId
         ? { ok: true as const, changed: false, change }
         : { ok: false as const, code: "change_not_open" as const };
@@ -221,41 +219,10 @@ const completeNoChange = (sql: SqlClient.SqlClient, input: CompleteNoChangeInput
     if (change.taskId !== storedPublicTaskId(input.taskId)) {
       return { ok: false as const, code: "task_not_found" as const };
     }
-    if (change.publication !== null || change.startingCommit === null) {
+    if (change.publication !== null) {
       return { ok: false as const, code: "no_change_evidence_invalid" as const };
     }
-    const candidates = yield* sql<{
-      readonly changeId: string;
-      readonly comparisonBaseSha: string;
-      readonly headSha: string;
-    }>`
-      SELECT change_id AS changeId, comparison_base_sha AS comparisonBaseSha, head_sha AS headSha
-      FROM candidates WHERE id = ${input.candidateId}
-    `;
-    const candidate = candidates[0];
-    if (
-      candidate === undefined ||
-      candidate.changeId !== change.id ||
-      candidate.comparisonBaseSha !== change.startingCommit ||
-      candidate.headSha !== change.startingCommit
-    ) {
-      return { ok: false as const, code: "no_change_evidence_invalid" as const };
-    }
-    const validationRuns = yield* sql<{
-      readonly candidateId: string;
-      readonly state: string;
-      readonly outcome: string | null;
-    }>`
-      SELECT candidate_id AS candidateId, state, outcome
-      FROM candidate_validation_runs WHERE id = ${input.validationRunId}
-    `;
-    const validationRun = validationRuns[0];
-    if (
-      validationRun === undefined ||
-      validationRun.candidateId !== input.candidateId ||
-      validationRun.state !== "complete" ||
-      validationRun.outcome !== "passed"
-    ) {
+    if (!(yield* hasValidNoChangeEvidence(sql, change, input))) {
       return { ok: false as const, code: "no_change_evidence_invalid" as const };
     }
     const tasks = yield* sql<{ readonly state: string }>`
@@ -266,7 +233,7 @@ const completeNoChange = (sql: SqlClient.SqlClient, input: CompleteNoChangeInput
     if (task.state === "done") {
       return { ok: false as const, code: "task_already_completed" as const };
     }
-    if (task.state !== "validating" && task.state !== "ready") {
+    if (!["validating", "ready"].includes(task.state)) {
       return { ok: false as const, code: "task_state_invalid" as const };
     }
     yield* sql`
@@ -285,6 +252,45 @@ const completeNoChange = (sql: SqlClient.SqlClient, input: CompleteNoChangeInput
     if (completed === undefined)
       return yield* invalidData("complete no-change Task", "Change disappeared");
     return { ok: true as const, changed: true, change: completed };
+  });
+
+const hasValidNoChangeEvidence = (
+  sql: SqlClient.SqlClient,
+  change: ChangeRecord,
+  input: CompleteNoChangeInput,
+) =>
+  Effect.gen(function* () {
+    if (change.startingCommit === null) return false;
+    const candidates = yield* sql<{
+      readonly changeId: string;
+      readonly comparisonBaseSha: string;
+      readonly headSha: string;
+    }>`
+      SELECT change_id AS changeId, comparison_base_sha AS comparisonBaseSha, head_sha AS headSha
+      FROM candidates WHERE id = ${input.candidateId}
+    `;
+    const candidate = candidates[0];
+    if (
+      candidate?.changeId !== change.id ||
+      candidate.comparisonBaseSha !== change.startingCommit ||
+      candidate.headSha !== change.startingCommit
+    ) {
+      return false;
+    }
+    const validationRuns = yield* sql<{
+      readonly candidateId: string;
+      readonly state: string;
+      readonly outcome: string | null;
+    }>`
+      SELECT candidate_id AS candidateId, state, outcome
+      FROM candidate_validation_runs WHERE id = ${input.validationRunId}
+    `;
+    const validationRun = validationRuns[0];
+    return (
+      validationRun?.candidateId === input.candidateId &&
+      validationRun.state === "complete" &&
+      validationRun.outcome === "passed"
+    );
   });
 
 const cancelChange = (sql: SqlClient.SqlClient, input: CancelChangeInput) =>
