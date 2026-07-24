@@ -34,7 +34,11 @@ _Avoid_: Worktree root, Repo Config location, per-worktree Git directory
 
 **Repository Branch**:
 The canonical local branch reference durably owned by one open Change.
-_Avoid_: Worktree path, remote branch, Candidate
+_Avoid_: Worktree path, Remote Change Branch, Candidate
+
+**Remote Change Branch**:
+The remote Git branch that Candidate Publication creates or updates as the head of one Change's owned pull request.
+_Avoid_: Repository Branch, GitHub PR Target
 
 **Change Base**:
 The recorded comparison and publication target from which a Change's Candidates are judged.
