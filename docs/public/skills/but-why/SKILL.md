@@ -7,7 +7,7 @@ description: Use when setting up But Why, running its CLI, or implementing and s
 
 Resolve one But Why command prefix before running commands.
 Use `just by` in the But Why source repository.
-Otherwise, use `pnpx but-why` or `npx --yes but-why` from the published package.
+Otherwise, use `pnpx but-why` or `npx -y but-why` from the published package.
 Use the resolved prefix for every command in the session.
 
 Before setup or workflow guidance, read `docs/public/setup.md` from the installed But Why package or repository.
