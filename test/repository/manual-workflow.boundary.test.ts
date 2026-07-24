@@ -31,6 +31,17 @@ type HelpView = {
 const commandsFor = (group: "task" | "change"): readonly string[] =>
   documentedCommands.filter((command) => command.startsWith(`by ${group} `));
 
+const extractDocumentedCommands = (docs: string): readonly string[] =>
+  Array.from(
+    new Set(
+      Array.from(
+        docs.matchAll(/The installed command templates? (?:is|are):\n\n```text\n([\s\S]*?)```/gu),
+      )
+        .flatMap((match) => match[1]?.split("\n") ?? [])
+        .filter((command) => command.length > 0),
+    ),
+  ).sort();
+
 const expectJsonHelpCommands = (stdout: string, expected: readonly string[]): void => {
   const parsed = JSON.parse(stdout) as HelpView;
   expect(parsed.commands.map(({ command }) => command)).toEqual(expected);
@@ -70,7 +81,7 @@ describe("installed manual workflow", () => {
     const config = readFileSync(join(repoRoot, "docs/public/config.md"), "utf8");
     const docs = `${setup}\n${config}`;
 
-    for (const command of documentedCommands) expect(docs).toContain(command);
+    expect(extractDocumentedCommands(docs)).toEqual([...documentedCommands].sort());
 
     expect(docs).not.toMatch(
       /\/code-review|\bAFK\b|\bFixer\b|Final Review|PR Writer|Supervisor|remediation/iu,
