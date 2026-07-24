@@ -60,6 +60,13 @@ But Why must revalidate before an expected-SHA push.
 A human must retain merge authority.
 Conflict remediation should merge the latest base into the PR branch, then run the complete Validation Gate.
 
+## Should exploratory work be imported into a Change?
+
+V1 requires the user to commit exploratory work, start a Taskless Change, and cherry-pick the commit into its Managed Worktree.
+A future `by change import` command may copy committed and uncommitted work into a new Taskless Change without modifying the source checkout.
+Do not extend Change Start with import behavior because clean Change creation and existing-work import have different safety and recovery contracts.
+Before implementation, define support for staged, unstaged, untracked, ignored, binary, conflicted, submodule, and concurrently modified work.
+
 ## Should But Why support another Interactive Session Host?
 
 V1 uses Herdr for Interactive Sessions.
