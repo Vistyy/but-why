@@ -7,14 +7,13 @@ It ends when But Why? completes one real SQLite-tracked Task-backed Change and p
 
 ## Can start immediately
 
-- Task 125: Produce the v1 package candidate.
+- Task 131: Dogfood the first SQLite-tracked Change workflow.
 
 ## Dependency graph
 
 | Task | Capability | Blocked by |
 | --- | --- | --- |
-| 125 | Produce the v1 package candidate | None |
-| 131 | Dogfood the first SQLite-tracked Change workflow | 125 |
+| 131 | Dogfood the first SQLite-tracked Change workflow | None |
 | 126 | Publish But Why? to npm | 131 |
 | 138 | Establish post-publication compatibility policy | 126 |
 

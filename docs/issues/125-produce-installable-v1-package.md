@@ -29,3 +29,17 @@ Packed-file metadata and the repository quality commands.
 ## Blocked by
 
 - `docs/issues/123-ship-manual-task-workflow.md`
+
+## Completion
+
+Status: Complete.
+
+Completion evidence: `just quality` passed with 281 tests passed and 1 skipped.
+
+Completion evidence: the packed candidate contains the built runtime, migrations, reviewer prompts, public documentation, and changelog, with stale generated output rejected by the installed-package boundary test.
+
+Completion evidence: package metadata exposes `by` through `dist/main.js`, uses version `0.0.1`, and sets `private` to `false`.
+
+Completion evidence: the `v0.0.1` tag points to the exact candidate commit `cc7a1790019cb4cc8c39087cba806b8a50724f70`.
+
+Implementation commits: `1e5ea12` and `cc7a179`.
