@@ -301,7 +301,7 @@ Read `worktreePath` from the Change Start JSON result, change into that director
 cd <worktreePath>
 # edit files
 git add <paths>
- git commit -m "Add the login flow"
+git commit -m "Add the login flow"
 ```
 
 The caller checkout is not the implementation workspace for a Change.

@@ -24,6 +24,23 @@ const expectSuccess = (result: ReturnType<typeof run>): void => {
   expect(result.status, result.stderr).toBe(0);
 };
 
+type HelpView = {
+  readonly commands: readonly { readonly command: string }[];
+};
+
+const commandsFor = (group: "task" | "change"): readonly string[] =>
+  documentedCommands.filter((command) => command.startsWith(`by ${group} `));
+
+const expectJsonHelpCommands = (stdout: string, expected: readonly string[]): void => {
+  const parsed = JSON.parse(stdout) as HelpView;
+  expect(parsed.commands.map(({ command }) => command)).toEqual(expected);
+};
+
+const expectToonHelpCommands = (stdout: string, expected: readonly string[]): void => {
+  expect(stdout).toContain(`commands[${expected.length}]{command,description}:`);
+  for (const command of expected) expect(stdout).toContain(command);
+};
+
 const documentedCommands = [
   "by task create --title <title> --description-file <file> [--depends-on <task-id>]...",
   "by task dependencies set <task-id> [--depends-on <task-id>]...",
@@ -125,10 +142,16 @@ describe("installed manual workflow", () => {
     expect(existsSync(by)).toBe(true);
     const taskHelp = run(by, ["task", "--help"], consumer);
     const changeHelp = run(by, ["change", "--help"], consumer);
+    const taskJsonHelp = run(by, ["--output", "json", "task", "--help"], consumer);
+    const changeJsonHelp = run(by, ["--output", "json", "change", "--help"], consumer);
     expectSuccess(taskHelp);
     expectSuccess(changeHelp);
-    const installedHelp = `${taskHelp.stdout}\n${changeHelp.stdout}`;
-    for (const command of documentedCommands) expect(installedHelp).toContain(command);
+    expectSuccess(taskJsonHelp);
+    expectSuccess(changeJsonHelp);
+    expectToonHelpCommands(taskHelp.stdout, commandsFor("task"));
+    expectToonHelpCommands(changeHelp.stdout, commandsFor("change"));
+    expectJsonHelpCommands(taskJsonHelp.stdout, commandsFor("task"));
+    expectJsonHelpCommands(changeJsonHelp.stdout, commandsFor("change"));
 
     const initialized = run(by, ["init", "--task-prefix", "BY"], consumer);
     expectSuccess(initialized);
