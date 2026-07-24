@@ -215,28 +215,73 @@ const helpView = (bin: string, docs: PublicDocs): StructuredObject =>
         description: "Create repo-local But Why? state",
       },
       {
-        command: "by task create --title <title> --description-file <file>",
+        command:
+          "by task create --title <title> --description-file <file> [--depends-on <task-id>]...",
         description: "Create a repo-local Task",
+      },
+      {
+        command: "by task dependencies set <task-id> [--depends-on <task-id>]...",
+        description: "Replace direct Task prerequisites before Start",
       },
       {
         command: "by task list [--all] [--state <state>]",
         description: "List repo-local Tasks",
       },
       {
+        command: "by task show <task-id>",
+        description: "Show compact Task metadata",
+      },
+      {
+        command: "by task approve <task-id>",
+        description: "Permanently approve Task intent",
+      },
+      {
+        command: "by task context <task-id>",
+        description: "Show full Task Context",
+      },
+      {
+        command: "by task cancel <task-id> --reason <reason>",
+        description: "Permanently cancel an unfinished Task",
+      },
+      {
         command: "by change start [--task <task-id>]",
         description: "Create a prepared Change worktree",
+      },
+      {
+        command: "by change prepare <change-id>",
+        description: "Run or retry Repository Preparation",
+      },
+      {
+        command: "by change list [--all]",
+        description: "List Changes oldest first",
+      },
+      {
+        command: "by change show <change-id>",
+        description: "Show Change implementation, validation, and delivery facts",
+      },
+      {
+        command: "by change findings <change-id>",
+        description: "Show Findings for the current Change Candidate",
+      },
+      {
+        command: "by change validation-runs <change-id>",
+        description: "List Validation Run History for a Change",
       },
       {
         command: "by change submit <change-id>",
         description: "Validate and publish a ready Change",
       },
       {
+        command: "by change cancel <change-id>",
+        description: "Cancel an open taskless Change",
+      },
+      {
         command: "by change reconcile [<change-id>]",
-        description: "Read owned pull requests and clean terminal Changes",
+        description: "Read owned pull requests and clean up terminal Changes",
       },
       {
         command: "by change implement <change-id> [--handoff-file <path>]",
-        description: "Launch a fresh Interactive Session in a ready Change worktree",
+        description: "Launch an Interactive Session in a ready Change worktree",
       },
       {
         command: "by validation-run show <validation-run-id>",

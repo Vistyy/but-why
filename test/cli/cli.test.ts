@@ -46,15 +46,26 @@ describe("by CLI", () => {
       expect(result.stdout).toBe(`bin: ${expectedBin}
 description: Validate completed code changes against approved human intent.
 usage: "by [--output <format>] [command] [--help]"
-commands[9]{command,description}:
+commands[20]{command,description}:
   by,Show workspace task dashboard
   by init --task-prefix <prefix>,Create repo-local But Why? state
-  by task create --title <title> --description-file <file>,Create a repo-local Task
+  "by task create --title <title> --description-file <file> [--depends-on <task-id>]...",Create a repo-local Task
+  "by task dependencies set <task-id> [--depends-on <task-id>]...",Replace direct Task prerequisites before Start
   "by task list [--all] [--state <state>]",List repo-local Tasks
+  by task show <task-id>,Show compact Task metadata
+  by task approve <task-id>,Permanently approve Task intent
+  by task context <task-id>,Show full Task Context
+  by task cancel <task-id> --reason <reason>,Permanently cancel an unfinished Task
   "by change start [--task <task-id>]",Create a prepared Change worktree
+  by change prepare <change-id>,Run or retry Repository Preparation
+  "by change list [--all]",List Changes oldest first
+  by change show <change-id>,"Show Change implementation, validation, and delivery facts"
+  by change findings <change-id>,Show Findings for the current Change Candidate
+  by change validation-runs <change-id>,List Validation Run History for a Change
   by change submit <change-id>,Validate and publish a ready Change
-  "by change reconcile [<change-id>]",Read owned pull requests and clean terminal Changes
-  "by change implement <change-id> [--handoff-file <path>]",Launch a fresh Interactive Session in a ready Change worktree
+  by change cancel <change-id>,Cancel an open taskless Change
+  "by change reconcile [<change-id>]",Read owned pull requests and clean up terminal Changes
+  "by change implement <change-id> [--handoff-file <path>]",Launch an Interactive Session in a ready Change worktree
   by validation-run show <validation-run-id>,Show full Validation Run details
 flags[3]{flag,description}:
   "--output <format>",Set the stdout format to toon or json. The default is toon.
@@ -85,7 +96,7 @@ docs[2]{name,path}:
           { name: "config", path: expectedConfigDoc },
         ],
       });
-      expect(parsed.commands).toHaveLength(9);
+      expect(parsed.commands).toHaveLength(20);
       expect(parsed.flags).toHaveLength(3);
     }),
   );
