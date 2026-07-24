@@ -27,9 +27,6 @@ coverage/
 .lavish/
 
 # But Why?
-.but-why/state.sqlite
-.but-why/state.sqlite-*
-.but-why/artifacts/
 .sandcastle/worktrees/
 .sandcastle/logs/
 .sandcastle/patches/
