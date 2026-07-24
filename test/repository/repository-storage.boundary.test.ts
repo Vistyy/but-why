@@ -165,16 +165,6 @@ describe("repository SQL storage", () => {
         if (!created.ok) return;
         const taskId = storedPublicTaskId(created.task.id);
         yield* tasks.approveTask({ taskId, now: "2026-07-17T23:06:00.000Z" });
-        yield* tasks.transitionTaskState({
-          taskId,
-          to: "implementing",
-          now: "2026-07-17T23:06:30.000Z",
-        });
-        yield* tasks.transitionTaskState({
-          taskId,
-          to: "validating",
-          now: "2026-07-17T23:06:45.000Z",
-        });
         const started = yield* starts.create({
           id: "change-no-change",
           repositoryCommonDirectory: input.commonDirectory,
@@ -185,7 +175,13 @@ describe("repository SQL storage", () => {
           taskId,
           now: "2026-07-17T23:07:00.000Z",
         });
+        expect(started.ok).toBe(true);
         if (!started.ok) return;
+        yield* tasks.transitionTaskState({
+          taskId,
+          to: "validating",
+          now: "2026-07-17T23:07:05.000Z",
+        });
         const repository = yield* RepositorySql;
         yield* repository.operation(
           "install no-change publication conflict",
@@ -231,24 +227,27 @@ describe("repository SQL storage", () => {
             now: "2026-07-17T23:07:20.000Z",
           }),
         ).toEqual({ ok: false, code: "no_change_evidence_invalid" });
-        yield* repository.operation(
-          "insert no-change evidence",
-          (sql) => sql`
-            INSERT INTO candidates (
-              id, change_id, selected_base_ref, resolved_target_sha,
-              comparison_base_sha, head_sha, created_at
-            ) VALUES (
-              'candidate-no-change', ${started.change.id}, 'refs/heads/main',
-              ${started.change.startingCommit}, ${started.change.startingCommit},
-              ${started.change.startingCommit}, '2026-07-17T23:07:30.000Z'
-            );
-            INSERT INTO candidate_validation_runs (
-              id, candidate_id, policy_snapshot, state, outcome, created_at, updated_at
-            ) VALUES (
-              'run-no-change', 'candidate-no-change', '{}', 'complete', 'passed',
-              '2026-07-17T23:07:45.000Z', '2026-07-17T23:07:45.000Z'
-            );
-          `,
+        yield* repository.operation("insert no-change evidence", (sql) =>
+          Effect.gen(function* () {
+            yield* sql`
+                INSERT INTO candidates (
+                  id, change_id, selected_base_ref, resolved_target_sha,
+                  comparison_base_sha, head_sha, created_at
+                ) VALUES (
+                  'candidate-no-change', ${started.change.id}, 'refs/heads/main',
+                  ${started.change.startingCommit}, ${started.change.startingCommit},
+                  ${started.change.startingCommit}, '2026-07-17T23:07:30.000Z'
+                )
+              `;
+            yield* sql`
+                INSERT INTO candidate_validation_runs (
+                  id, candidate_id, policy_snapshot, state, outcome, created_at, updated_at
+                ) VALUES (
+                  'run-no-change', 'candidate-no-change', '{}', 'complete', 'passed',
+                  '2026-07-17T23:07:45.000Z', '2026-07-17T23:07:45.000Z'
+                )
+              `;
+          }),
         );
 
         expect(
