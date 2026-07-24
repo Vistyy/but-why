@@ -260,8 +260,9 @@ An observed merged PR is authoritative and completes the Task instead of cancell
 
 ## Dogfooding transition
 
-V1 is complete only after one real follow-up Task uses the installed workflow end to end.
+V1 is complete only after one real follow-up Task uses the accepted candidate through the repository command `just by` end to end.
 The dogfood Task must be created, approved, dependency-checked, started, implemented in its managed worktree, submitted, reviewed, published, merged, and observed as Done through SQLite state.
+Task 126 separately verifies package execution from the npm registry through `pnpx`.
 
 After that succeeds, new active work is created and managed through the But Why? CLI rather than new Markdown issue drafts.
 Existing Markdown issues remain planning and migration history.

@@ -11,7 +11,8 @@
 
 ## What to build
 
-Pack the dogfooded v1 and verify its contents before registry publication.
+Pack the v1 candidate that Task 131 will dogfood through the repository command interface.
+Verify its contents before registry publication.
 Task 126 owns public execution and workflow smoke tests through `pnpx`.
 
 ## Primary verification seam

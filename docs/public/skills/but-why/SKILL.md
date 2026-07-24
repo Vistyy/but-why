@@ -1,8 +1,16 @@
 ---
 name: but-why
-description: Use when running `by` commands or setting up But Why in a repository.
+description: Use when setting up But Why, running its CLI, or implementing and submitting a But Why Change.
 ---
 
-Use `by` for But Why tasks and validation in the current repository.
+# But Why
 
-Before giving setup or workflow guidance, follow `docs/public/setup.md` from the installed But Why package or repository.
+Resolve one But Why command prefix before running commands.
+Use `just by` in the But Why source repository.
+Otherwise, use `pnpx but-why` or `npx --yes but-why` from the published package.
+Use the resolved prefix for every command in the session.
+
+Before setup or workflow guidance, read `docs/public/setup.md` from the installed But Why package or repository.
+Use CLI `--help` output for exact command syntax.
+
+When implementing a Change in its Managed Worktree, follow [Implement a Change](references/implement-change.md).

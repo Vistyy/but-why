@@ -12,7 +12,9 @@
 
 ## What to build
 
-Use the installed v1 candidate to create and complete one approved Task-backed Change through the public CLI.
+Use the accepted v1 candidate through the repository command `just by` to create and complete one approved Task-backed Change.
+Task 131 owns repo-local lifecycle dogfooding before publication.
+Task 126 owns package execution from the npm registry through `pnpx`.
 
 ## Primary verification seam
 
@@ -20,8 +22,8 @@ One real Task and linked Change progressing from approved intent through an owne
 
 ## Acceptance criteria
 
-- [ ] The follow-up Task is created, approved, and dependency-checked through `by`.
-- [ ] `by change start --task` creates and prepares the owned branch and Managed Worktree.
+- [ ] The follow-up Task is created, approved, and dependency-checked through `just by`.
+- [ ] `just by change start --task` creates and prepares the owned branch and Managed Worktree.
 - [ ] The Implementer uses the returned worktree directly or through Change Implement.
 - [ ] Change Submit runs Acceptance Review and configured Specialists and returns actionable Findings when present.
 - [ ] The Implementer fixes Findings and resubmits until one exact Candidate publishes.

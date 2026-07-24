@@ -101,6 +101,7 @@ describe("CLI package contents", () => {
     expect(files).toContain("docs/public/config.md");
     expect(files).toContain("docs/public/setup.md");
     expect(files).toContain("docs/public/skills/but-why/SKILL.md");
+    expect(files).toContain("docs/public/skills/but-why/references/implement-change.md");
     expect(files.some((path) => path.startsWith("skills/"))).toBe(false);
     expect(files.some((path) => path.startsWith("src/"))).toBe(false);
     expect(files.some((path) => path.startsWith("test/"))).toBe(false);
