@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
@@ -67,6 +67,35 @@ describe("installed manual workflow", () => {
     builtByExecutable();
     const packageDirectory = createTestWorkspace();
     const consumer = createGitRepo();
+    writeFileSync(join(consumer, "README.md"), "consumer repository\n");
+    expectSuccess(run("git", ["add", "README.md"], consumer));
+    expectSuccess(
+      run(
+        "git",
+        [
+          "-c",
+          "user.name=But Why Test",
+          "-c",
+          "user.email=but-why@example.test",
+          "commit",
+          "-m",
+          "Initial commit",
+        ],
+        consumer,
+      ),
+    );
+    expectSuccess(run("git", ["branch", "-M", "main"], consumer));
+    expectSuccess(run("git", ["remote", "add", "origin", consumer], consumer));
+    expectSuccess(
+      run("git", ["update-ref", "refs/remotes/origin/main", "refs/heads/main"], consumer),
+    );
+    expectSuccess(
+      run(
+        "git",
+        ["symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/main"],
+        consumer,
+      ),
+    );
     const packed = run(
       "npm",
       ["pack", "--json", "--ignore-scripts", "--pack-destination", packageDirectory],
@@ -108,5 +137,159 @@ describe("installed manual workflow", () => {
       '"taskPrefix": "BY"',
     );
     expect(existsSync(join(consumer, ".git", "but-why", "state.sqlite"))).toBe(true);
+
+    writeFileSync(
+      join(consumer, ".but-why/config.json"),
+      `${JSON.stringify(
+        {
+          taskPrefix: "BY",
+          prepare: {
+            command:
+              "if [ -f .prepare-attempted ]; then exit 0; else touch .prepare-attempted; exit 7; fi",
+          },
+          validation: { checks: [{ id: "quality", command: "true" }] },
+        },
+        null,
+        2,
+      )}\n`,
+    );
+    expectSuccess(run("git", ["add", ".but-why/config.json", ".gitignore"], consumer));
+    expectSuccess(
+      run(
+        "git",
+        [
+          "-c",
+          "user.name=But Why Test",
+          "-c",
+          "user.email=but-why@example.test",
+          "commit",
+          "-m",
+          "Configure manual workflow",
+        ],
+        consumer,
+      ),
+    );
+
+    const tasklessStart = run(by, ["change", "start", "--output", "json"], consumer);
+    expect(tasklessStart.status).toBe(1);
+    const tasklessFailure = JSON.parse(tasklessStart.stdout) as {
+      readonly error: {
+        readonly changeId: string;
+        readonly readiness: string;
+        readonly worktreePath: string;
+      };
+    };
+    expect(tasklessFailure.error).toMatchObject({
+      changeId: expect.any(String),
+      readiness: "prepare_failed",
+      worktreePath: expect.any(String),
+    });
+    expect(existsSync(tasklessFailure.error.worktreePath)).toBe(true);
+
+    const tasklessId = tasklessFailure.error.changeId;
+    const prepared = run(by, ["change", "prepare", tasklessId, "--output", "json"], consumer);
+    expectSuccess(prepared);
+    const tasklessChange = JSON.parse(prepared.stdout) as {
+      readonly change: {
+        readonly id: string;
+        readonly taskId: string | null;
+        readonly readiness: string;
+      };
+      readonly worktreePath: string;
+    };
+    expect(tasklessChange).toMatchObject({
+      change: { id: tasklessId, taskId: null, readiness: "ready" },
+      worktreePath: tasklessFailure.error.worktreePath,
+    });
+
+    const shown = run(by, ["change", "show", tasklessId, "--output", "json"], consumer);
+    expectSuccess(shown);
+    expect(JSON.parse(shown.stdout)).toMatchObject({
+      change: { id: tasklessId, taskId: null, readiness: "ready", state: "open" },
+    });
+    rmSync(join(tasklessChange.worktreePath, ".prepare-attempted"));
+
+    const nothingToSubmit = run(by, ["change", "submit", tasklessId, "--output", "json"], consumer);
+    expectSuccess(nothingToSubmit);
+    expect(JSON.parse(nothingToSubmit.stdout)).toMatchObject({
+      changeId: tasklessId,
+      status: "nothing_to_submit",
+    });
+
+    writeFileSync(join(tasklessChange.worktreePath, "manual.txt"), "manual implementation\n");
+    expectSuccess(run("git", ["add", "manual.txt"], tasklessChange.worktreePath));
+    expectSuccess(
+      run(
+        "git",
+        [
+          "-c",
+          "user.name=But Why Test",
+          "-c",
+          "user.email=but-why@example.test",
+          "commit",
+          "-m",
+          "Implement manually",
+        ],
+        tasklessChange.worktreePath,
+      ),
+    );
+
+    const cancelled = run(by, ["change", "cancel", tasklessId, "--output", "json"], consumer);
+    expectSuccess(cancelled);
+    expect(JSON.parse(cancelled.stdout)).toMatchObject({
+      status: "cancelled",
+      change: { id: tasklessId, state: "closed" },
+    });
+
+    const descriptionPath = join(consumer, "task.md");
+    writeFileSync(descriptionPath, "Ship the manual workflow.\n");
+    const createdTask = run(
+      by,
+      [
+        "task",
+        "create",
+        "--title",
+        "Ship the manual workflow",
+        "--description-file",
+        descriptionPath,
+        "--output",
+        "json",
+      ],
+      consumer,
+    );
+    expectSuccess(createdTask);
+    const taskId = (JSON.parse(createdTask.stdout) as { readonly task: { readonly id: string } })
+      .task.id;
+    expectSuccess(run(by, ["task", "approve", taskId, "--output", "json"], consumer));
+
+    const taskBackedStart = run(
+      by,
+      ["change", "start", "--task", taskId, "--output", "json"],
+      consumer,
+    );
+    expect(taskBackedStart.status).toBe(1);
+    const taskBackedFailure = JSON.parse(taskBackedStart.stdout) as {
+      readonly error: { readonly changeId: string };
+    };
+    expect(taskBackedFailure.error.changeId).toEqual(expect.any(String));
+    const taskBackedPrepared = run(
+      by,
+      ["change", "prepare", taskBackedFailure.error.changeId, "--output", "json"],
+      consumer,
+    );
+    expectSuccess(taskBackedPrepared);
+    expect(JSON.parse(taskBackedPrepared.stdout)).toMatchObject({
+      change: { id: taskBackedFailure.error.changeId, taskId, readiness: "ready" },
+    });
+
+    const cancelledTask = run(
+      by,
+      ["task", "cancel", taskId, "--reason", "No longer needed", "--output", "json"],
+      consumer,
+    );
+    expectSuccess(cancelledTask);
+    expect(JSON.parse(cancelledTask.stdout)).toMatchObject({
+      task: { id: taskId, state: "cancelled" },
+    });
   }, 120_000);
 });
