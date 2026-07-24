@@ -83,6 +83,13 @@ OpenShell, Gondolin, or another provider requires an adapter and conformance tes
 Dogfooding should determine whether Validation Run history, Change activity, agent-session inspection, and external tracing justify their maintenance cost.
 Usage reporting must distinguish unknown values from zero.
 
+## What CLI startup latency matters?
+
+Dogfooding measured approximately 730 ms for the source launcher and 400 ms for the compiled CLI.
+The source TypeScript loader accounts for part of the difference, but the compiled startup remains noticeable.
+Do not optimize startup until packaged use shows that the delay materially affects agent or human workflows.
+Profile the compiled CLI before selecting an optimization.
+
 ## Is a Coordinator or Supervisor needed?
 
 A future Coordinator Agent, terminal UI, or user-level Supervisor may dispatch and monitor several repositories.
