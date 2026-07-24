@@ -25,6 +25,18 @@ Sandcastle does not return trustworthy Pi token or monetary usage.
 Future reporting must distinguish unknown usage from zero usage.
 After trustworthy usage exists, decide whether automatic work needs user-defined spending limits.
 
+## How should agent execution identities work?
+
+V1 may use a temporary hard-coded Pi wrapper to isolate reviewer resources from the user's normal Pi session.
+The permanent design must define how each agent role selects its tools, extensions, skills, context, settings, runtime, model, and thinking level.
+The design must also decide which controls belong to Global Config, Repo Config, and But Why-owned defaults.
+
+Evaluate whether Sandcastle can support that design through extension, requires a maintained fork, or should be replaced by another execution boundary.
+Keep Sandcastle behind its current domain seams until evidence justifies that decision.
+
+Persistent reviewer sessions require a separate decision.
+That decision must define session ownership, identity, retention, security, recovery, Candidate transitions, and the trade-off between fresh review and reused repository orientation.
+
 ## Does Task readiness need another gate?
 
 Dogfooding may justify an optional Task Preflight or a disposable feasibility prototype.
