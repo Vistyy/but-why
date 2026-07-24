@@ -20,11 +20,11 @@ Packed-file metadata and the repository quality commands.
 
 ## Acceptance criteria
 
-- [ ] The package contains only intended runtime, migration, prompt, and public documentation files.
-- [ ] The package metadata exposes the `by` executable through the built runtime entrypoint.
-- [ ] The package does not expose `by task start` or top-level `by submit`.
-- [ ] The package version, provenance metadata, and release notes identify the exact source commit.
-- [ ] The repository is green before the package candidate is accepted.
+- [x] The package contains only intended runtime, migration, prompt, and public documentation files.
+- [x] The package metadata exposes the `by` executable through the built runtime entrypoint.
+- [x] The package does not expose `by task start` or top-level `by submit`.
+- [x] The package version, provenance metadata, and release notes identify the exact source commit.
+- [x] The repository is green before the package candidate is accepted.
 
 ## Blocked by
 
