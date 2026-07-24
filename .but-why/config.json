@@ -11,7 +11,7 @@
     "checks": [
       {
         "id": "quality",
-        "command": "just quality",
+        "command": "just full-quality",
         "timeoutSeconds": 1200
       }
     ]
