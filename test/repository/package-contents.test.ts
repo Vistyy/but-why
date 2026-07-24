@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { cpSync, mkdirSync, writeFileSync } from "node:fs";
+import { cpSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
@@ -7,7 +7,19 @@ import { repoRoot } from "../support/by-cli.js";
 import { createTestWorkspace } from "../support/testWorkspace.js";
 
 type PackedPackageMetadata = {
+  readonly id: string;
+  readonly name: string;
+  readonly version: string;
   readonly files: readonly { readonly path: string }[];
+};
+
+type PackageManifest = {
+  readonly name: string;
+  readonly version: string;
+  readonly private: boolean;
+  readonly bin: { readonly by: string };
+  readonly files: readonly string[];
+  readonly repository: { readonly type: string; readonly url: string };
 };
 
 describe("CLI package contents", () => {
@@ -15,6 +27,7 @@ describe("CLI package contents", () => {
     const fixture = createTestWorkspace();
     cpSync(join(repoRoot, "package.json"), join(fixture, "package.json"));
     cpSync(join(repoRoot, "README.md"), join(fixture, "README.md"));
+    cpSync(join(repoRoot, "CHANGELOG.md"), join(fixture, "CHANGELOG.md"));
     mkdirSync(join(fixture, "docs"));
     cpSync(join(repoRoot, "docs", "public"), join(fixture, "docs", "public"), {
       recursive: true,
@@ -23,11 +36,32 @@ describe("CLI package contents", () => {
       mkdirSync(join(fixture, directory), { recursive: true });
     }
     writeFileSync(join(fixture, "dist", "main.js"), "#!/usr/bin/env node\n");
+    mkdirSync(join(fixture, "dist", "sqlite"));
+    mkdirSync(join(fixture, "dist", "agent"));
+    mkdirSync(join(fixture, "dist", "acceptanceReview"));
+    writeFileSync(join(fixture, "dist", "sqlite", "repositoryMigrations.js"), "export {};\n");
+    writeFileSync(join(fixture, "dist", "agent", "reviewerPrompts.js"), "export {};\n");
+    writeFileSync(
+      join(fixture, "dist", "acceptanceReview", "acceptanceReviewPrompt.js"),
+      "export {};\n",
+    );
     writeFileSync(join(fixture, "src", "main.ts"), "export {};\n");
     writeFileSync(join(fixture, "test", "main.test.ts"), "export {};\n");
     writeFileSync(join(fixture, "spikes", "prototype.ts"), "export {};\n");
     writeFileSync(join(fixture, "docs", "issues", "draft.md"), "# Draft\n");
     writeFileSync(join(fixture, "justfile"), "default:\n");
+
+    const manifest = JSON.parse(
+      readFileSync(join(fixture, "package.json"), "utf8"),
+    ) as PackageManifest;
+    expect(manifest).toMatchObject({
+      name: "but-why",
+      version: "0.0.1",
+      private: false,
+      bin: { by: "./dist/main.js" },
+      files: ["dist", "docs/public", "README.md", "CHANGELOG.md"],
+      repository: { type: "git", url: "git+https://github.com/Vistyy/but-why.git" },
+    });
 
     const result = spawnSync("npm", ["pack", "--dry-run", "--json", "--ignore-scripts"], {
       cwd: fixture,
@@ -42,9 +76,28 @@ describe("CLI package contents", () => {
     if (packedPackage === undefined) throw new Error("npm pack did not return a package");
     const files = packedPackage.files.map((file) => file.path).sort();
 
+    expect(packedPackage).toMatchObject({
+      id: "but-why@0.0.1",
+      name: "but-why",
+      version: "0.0.1",
+    });
+    expect(
+      files.every(
+        (path) =>
+          path === "package.json" ||
+          path === "README.md" ||
+          path === "CHANGELOG.md" ||
+          path.startsWith("dist/") ||
+          path.startsWith("docs/public/"),
+      ),
+    ).toBe(true);
     expect(files).toContain("dist/main.js");
+    expect(files).toContain("dist/sqlite/repositoryMigrations.js");
+    expect(files).toContain("dist/agent/reviewerPrompts.js");
+    expect(files).toContain("dist/acceptanceReview/acceptanceReviewPrompt.js");
     expect(files).toContain("package.json");
     expect(files).toContain("README.md");
+    expect(files).toContain("CHANGELOG.md");
     expect(files).toContain("docs/public/config.md");
     expect(files).toContain("docs/public/setup.md");
     expect(files).toContain("docs/public/skills/but-why/SKILL.md");
@@ -59,5 +112,6 @@ describe("CLI package contents", () => {
     expect(files).not.toContain("docs/open-questions.md");
     expect(files).not.toContain("bin/by");
     expect(files).not.toContain("justfile");
+    expect(readFileSync(join(fixture, "CHANGELOG.md"), "utf8")).toContain("Source tag: `v0.0.1`");
   });
 });

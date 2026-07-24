@@ -151,12 +151,18 @@ describe("installed manual workflow", () => {
 
     const by = join(consumer, "node_modules/.bin/by");
     expect(existsSync(by)).toBe(true);
+    const topHelp = run(by, ["--help"], consumer);
     const taskHelp = run(by, ["task", "--help"], consumer);
     const changeHelp = run(by, ["change", "--help"], consumer);
     const taskJsonHelp = run(by, ["--output", "json", "task", "--help"], consumer);
     const changeJsonHelp = run(by, ["--output", "json", "change", "--help"], consumer);
+    expectSuccess(topHelp);
     expectSuccess(taskHelp);
     expectSuccess(changeHelp);
+    expect(topHelp.stdout).not.toContain("by task start");
+    expect(topHelp.stdout).not.toContain("by submit");
+    expect(taskHelp.stdout).not.toContain("by task start");
+    expect(changeHelp.stdout).not.toContain("by submit");
     expectSuccess(taskJsonHelp);
     expectSuccess(changeJsonHelp);
     expectToonHelpCommands(taskHelp.stdout, commandsFor("task"));
