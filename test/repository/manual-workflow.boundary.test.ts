@@ -130,8 +130,17 @@ describe("installed manual workflow", () => {
       repoRoot,
     );
     expectSuccess(packed);
-    const [metadata] = JSON.parse(packed.stdout) as readonly { readonly filename: string }[];
+    const [metadata] = JSON.parse(packed.stdout) as readonly {
+      readonly filename: string;
+      readonly files: readonly { readonly path: string }[];
+    }[];
     if (metadata === undefined) throw new Error("npm pack did not return a package");
+    expect(metadata.files.some(({ path }) => path === "CHANGELOG.md")).toBe(true);
+    for (const { path } of metadata.files) {
+      if (!path.startsWith("dist/") || !path.endsWith(".js")) continue;
+      const sourcePath = join(repoRoot, "src", path.slice("dist/".length).replace(/\.js$/u, ".ts"));
+      expect(existsSync(sourcePath), `stale build output: ${path}`).toBe(true);
+    }
 
     const installed = run("npm", ["init", "--yes"], consumer);
     expectSuccess(installed);

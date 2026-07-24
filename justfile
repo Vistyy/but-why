@@ -136,6 +136,7 @@ coverage *args:
 
 # Build the production package.
 build:
+    @rm -rf dist
     @pnpm --silent run build
 
 # Create the npm package tarball.
