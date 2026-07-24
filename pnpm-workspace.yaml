@@ -1,6 +1,0 @@
-strictDepBuilds: true
-allowBuilds:
-  '@ast-grep/cli@0.44.1': true
-  better-sqlite3@12.11.1: true
-  esbuild@0.28.1: true
-  msgpackr-extract@3.0.4: true
