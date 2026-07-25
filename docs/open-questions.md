@@ -118,6 +118,25 @@ A Supervisor must remain infrastructure-only.
 It may own durable wakes, repository process isolation, restart recovery, and worker health.
 Design this capability only after dogfooding the manual workflow and optional Herdr dispatch.
 
+## How should agents navigate large Task collections?
+
+V1 bounds default `by task list` output through Task BY-18 while preserving oldest-first ordering and explicit access to the complete matching inventory.
+Do not add Task text search, saved views, relationship discovery, or another navigation command before post-v1 evidence establishes the required jobs.
+
+Post-v1 design should distinguish exact Task lookup, bounded inventory browsing, relevance-ranked text search, and agent reasoning about possible Task relationships.
+Relevance-ranked search is a hypothesis rather than an accepted contract.
+Before implementing it, decide its command ownership, searchable Task fields, ranking and tie-breaking behavior, continuation contract, interaction with lifecycle filters, and whether observed usage justifies saved queries.
+Search results must not imply that matching Tasks have a dependency relationship.
+
+Linear separates current-view title filtering from workspace search across issue titles, descriptions, and comments.
+GitHub provides bounded issue lists with optional search syntax and a separate broader issue-search command.
+Jira combines text matching, structured filters, and ordering through JQL at the cost of a larger query language.
+Use these products as evidence, but keep But Why's interface agent-first and repository-scoped.
+
+- [Linear search](https://linear.app/docs/search)
+- [GitHub issue list](https://cli.github.com/manual/gh_issue_list)
+- [Jira issue search](https://developer.atlassian.com/cloud/jira/platform/rest/v3/api-group-issue-search/)
+
 ## Historical planning source
 
 Commit `9c50334` preserves the detailed 55-Task plan and removed ADRs that preceded the reduced v1.
