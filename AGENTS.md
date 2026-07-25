@@ -5,6 +5,8 @@
 - `by` is an agent-first, non-interactive AXI CLI.
 - This repository is unreleased.
 - State storage uses one current Effect SQL schema baseline.
+- SQLite Tasks are the source of truth for new active work.
+  Treat `docs/issues/` as historical implementation records.
 - Use current domain terms in code, storage, and documentation.
   Correct misleading names now.
 - Treat historical migrations and planning documents as historical evidence.
@@ -16,7 +18,8 @@
 - Current v1 architecture: `docs/architecture.md`.
 - Current implementation order: `docs/issue-breakdown.md`.
 - Approved product specifications: `docs/specs/`.
-- Detailed implementation work: `docs/issues/` and `docs/prds/`; PRDs are context, not accepted architecture.
+- Active implementation work: SQLite Tasks through `by task`.
+- Historical implementation evidence: `docs/issues/` and `docs/prds/`; PRDs are context, not accepted architecture.
 - Development tooling: `docs/tooling.md`.
 - Accepted architecture decisions: `docs/adr/`.
 - Open design questions: `docs/open-questions.md`.
@@ -24,11 +27,11 @@
 - Internal setup and onboarding: `docs/setup.md`.
 - Shipped public docs for installed users: `docs/public/config.md` and `docs/public/setup.md`.
 
-## Issue completion
+## Historical issue completion
 
-When completing an issue from `docs/issues/`, update `docs/issue-breakdown.md` in the same commit.
-Remove the completed issue from the dependency graph.
-Move each newly unblocked issue to `Can start immediately`.
+When completing work still linked to an issue in `docs/issues/`, update `docs/issue-breakdown.md` in the same commit.
+Remove the completed historical issue from any remaining Markdown dependency graph.
+Record active dependencies through `by task dependencies set`.
 
 ## Code map
 

@@ -5,17 +5,18 @@
 V1 is the Change-centered workflow defined by `docs/specs/taskless-changes-and-worktree-handoff.md`.
 It ends when But Why? completes one real SQLite-tracked Task-backed Change and publishes the verified npm package.
 
-## Can start immediately
+## Active implementation
 
-- Task 131: Dogfood the first SQLite-tracked Change workflow.
+SQLite Tasks are the source of truth for active implementation.
+Run `just by task list` to inspect the oldest-first queue and current dependency facts.
+Start the oldest startable Task unless an explicit dependency or user decision requires another order.
 
-## Dependency graph
+## Remaining release dependency graph
 
-| Task | Capability | Blocked by |
+| SQLite Task | Capability | Blocked by |
 | --- | --- | --- |
-| 131 | Dogfood the first SQLite-tracked Change workflow | None |
-| 126 | Publish But Why? to npm | 131 |
-| 138 | Establish post-publication compatibility policy | 126 |
+| `BY-14` | Publish But Why? to npm | None |
+| `BY-15` | Establish post-publication compatibility policy | `BY-14` |
 
 ## Migration order
 
@@ -64,11 +65,13 @@ The following are not v1 contracts:
 - Batch Task creation.
 - Tag-based or path-based conditional validation.
 
-After Task 131 succeeds, reviewer evaluation work is created as SQLite Tasks rather than new Markdown issue drafts.
-The first evaluation Tasks should cover one Acceptance fixture, one calibrated reviewer suite, and comparison of prompt or model reports.
+Task 131 completed the first SQLite-tracked Change workflow.
+Dogfood findings and reviewer execution improvements are tracked as SQLite Tasks rather than new Markdown issue drafts.
+Future reviewer evaluation Tasks should cover one Acceptance fixture, one calibrated reviewer suite, and comparison of prompt or model reports.
 
 ## Planning status
 
-- The active drafts have approved v1 boundaries.
-- Exact interfaces, errors, limits, and edge cases are refined when each Task becomes ready to implement.
+- SQLite Task Context defines approved active work.
+- Existing Markdown issues remain historical implementation evidence.
+- Exact interfaces, errors, limits, and edge cases are refined before each Task starts.
 - Local and reversible implementation choices remain with execution.

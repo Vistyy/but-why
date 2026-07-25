@@ -17,6 +17,10 @@ It stores shared SQLite state and Artifacts at `<git-common-dir>/but-why/`.
 
 ## Change workflow
 
+SQLite Tasks are the source of truth for new active work.
+Use `by task` instead of creating new files in `docs/issues/`.
+Existing Markdown issues remain historical implementation records.
+
 1. Create and approve a Task when the work needs durable intent and dependencies.
 
    ```bash
