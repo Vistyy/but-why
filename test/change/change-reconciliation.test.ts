@@ -24,6 +24,7 @@ describe("by change reconcile", () => {
             repositoryCommonDirectory: input.commonDirectory,
             branchRef: "refs/heads/change-1",
             baseRef: "refs/heads/main",
+            baseRemoteUrl: "https://github.com/acme/repo.git",
             startingCommit: "head",
             worktreePath: join(input.commonDirectory, "worktree"),
             now,
@@ -109,6 +110,7 @@ describe("by change reconcile", () => {
             repositoryCommonDirectory: input.commonDirectory,
             branchRef: "refs/heads/change-1",
             baseRef: "refs/heads/main",
+            baseRemoteUrl: "https://github.com/acme/repo.git",
             startingCommit: "head",
             worktreePath: join(input.commonDirectory, "worktree"),
             now,
@@ -147,6 +149,12 @@ describe("by change reconcile", () => {
             { ...expected, baseBranch: "release" },
             { ...expected, headBranch: "other-feature" },
             { ...expected, headSha: "unexpected-head" },
+            {
+              ...expected,
+              state: "closed",
+              merged: false,
+              headSha: "unexpected-closed-head",
+            },
           ];
 
           for (const pullRequest of unexpected) {
@@ -205,6 +213,7 @@ describe("by change reconcile", () => {
           repositoryCommonDirectory: input.commonDirectory,
           branchRef: "refs/heads/change-1",
           baseRef: "refs/heads/main",
+          baseRemoteUrl: "https://github.com/acme/repo.git",
           startingCommit: "head",
           worktreePath: join(input.commonDirectory, "worktree"),
           taskId,
@@ -243,7 +252,7 @@ describe("by change reconcile", () => {
               merged: true,
               baseBranch: publicationTarget.baseBranch,
               headBranch: "change-1",
-              headSha: "head",
+              headSha: "merged-head",
             }),
             createPullRequest: () => {
               throw new Error("Reconciliation must not create a pull request");

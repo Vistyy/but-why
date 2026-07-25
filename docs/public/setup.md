@@ -220,9 +220,14 @@ by change start --task BY-3 --output json
 The installed command template is:
 
 ```text
-by change start [--task <task-id>]
+by change start [--task <task-id>] [--base <branch>]
 ```
 
+Change Start fetches the detected publication remote before it records the Change.
+Without `--base`, it uses the exact fetched remote default branch commit.
+With `--base <branch>`, it uses that exact fetched remote branch commit.
+The selected remote branch becomes the recorded Change Base and pull request target.
+Local branches cannot be Change Bases, so publish local commits before Change Start if the Change needs them.
 The result records the Change ID, optional Task ID, branch, base ref, starting commit, and `worktreePath`.
 
 If But Why cannot create or safely use the sibling path, Change Start reports the attempted path.
@@ -238,7 +243,7 @@ Its later Submission includes Acceptance Review.
 
 Use a taskless Change for work that does not need Task intent.
 
-Start it directly from the configured default branch:
+Start it directly from the freshly fetched publication-remote default branch:
 
 ```bash
 by change start --output json
@@ -249,6 +254,12 @@ The command creates a Change without a Task or Acceptance Context.
 It still creates and prepares a Managed Worktree.
 
 Its later Submission runs Repository Preparation, Checks, configured Specialists, and publication policy without Acceptance Review.
+Submit first reconciles an existing owned pull request.
+For a new Submission, Submit fetches the recorded remote Change Base before Candidate capture.
+The Repository Branch must contain the exact fetched Change Base commit.
+If the ancestry check fails, Submit creates no Candidate or Validation Run and does not change Task progress or publication.
+Merge or rebase the Change Base into the Repository Branch before retrying.
+Fetch and ancestry inspection do not modify the Managed Worktree or Repository Branch.
 
 The taskless Change remains eligible for code-based validation and publication.
 
@@ -375,7 +386,9 @@ by change findings <change-id>
 by change validation-runs <change-id>
 ```
 
-A taskless Change with no changed Candidate returns `nothing_to_submit`, remains open, and suggests explicit cancellation.
+A taskless Change whose Repository Branch has the same tracked tree as the fetched Change Base returns `nothing_to_submit` and remains open.
+A Task-backed Change with the same tracked tree runs Acceptance Review and completes without a pull request when it passes.
+Commit topology and the Change starting commit do not determine No-Change.
 
 Cancel that unchanged taskless Change with:
 

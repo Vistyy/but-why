@@ -20,14 +20,25 @@ export type LocalCandidateWorkspaceResult =
         | "git_tooling_error";
     };
 
+export type RepositoryBranchHeadResult =
+  | { readonly ok: true; readonly headSha: string }
+  | {
+      readonly ok: false;
+      readonly code:
+        | "detached_head"
+        | "unborn_branch"
+        | "conflicting_branch_facts"
+        | "git_tooling_error";
+    };
+
 export type CandidateCaptureGit = {
   readonly readWorkspace: (cwd: string) => Effect.Effect<LocalCandidateWorkspaceResult>;
   readonly resolveLocalBranch: (cwd: string, ref: string) => Effect.Effect<string | undefined>;
-  readonly findComparisonBase: (
+  readonly containsCommit: (
     cwd: string,
-    targetSha: string,
+    ancestorSha: string,
     headSha: string,
-  ) => Effect.Effect<string | undefined>;
+  ) => Effect.Effect<boolean | undefined>;
   readonly trackedTreeMatches: (
     cwd: string,
     commitSha: string,

@@ -19,7 +19,7 @@ V1 creates Changes only for started Tasks, while the ownership model may support
 - A Task has at most one Change, and a Change has at most one linked Task.
 - A repository branch binds at most one Change.
 - Change and Candidate records use permanent opaque IDs.
-- A Candidate identifies one immutable comparison-base and head pair within its Change.
+- A Candidate identifies one immutable fetched Change Base and Repository Branch head pair within its Change.
 - Validation Runs belong to Candidates and use Task-derived Acceptance Context.
 - The Validation Gate remains read-only.
 - `by change submit <change-id>` validates and publishes the exact eligible Candidate.

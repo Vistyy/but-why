@@ -138,8 +138,7 @@ export const openSqliteChangeValidationPersistence = (): Effect.Effect<
   }));
 
 const candidateColumns = `
-  id, change_id AS changeId, selected_base_ref AS selectedBaseRef,
-  resolved_target_sha AS resolvedTargetSha, comparison_base_sha AS comparisonBaseSha,
+  id, change_id AS changeId, change_base_sha AS changeBaseSha,
   head_sha AS headSha, created_at AS createdAt
 `;
 
@@ -163,15 +162,14 @@ const listCandidatesForChange = (sql: SqlClient.SqlClient, changeId: string) =>
 const startOrReuse = (sql: SqlClient.SqlClient, input: StartCandidateValidationRunInput) =>
   Effect.gen(function* () {
     const candidates = yield* sql<CandidateIdentityRow>`
-      SELECT head_sha AS headSha, comparison_base_sha AS comparisonBaseSha
+      SELECT head_sha AS headSha, change_base_sha AS changeBaseSha
       FROM candidates WHERE id = ${input.candidateId}
     `;
     const candidate = candidates[0];
     if (
       candidate === undefined ||
       candidate.headSha !== input.headSha ||
-      (input.comparisonBaseSha !== undefined &&
-        candidate.comparisonBaseSha !== input.comparisonBaseSha)
+      (input.changeBaseSha !== undefined && candidate.changeBaseSha !== input.changeBaseSha)
     ) {
       return yield* new RepositoryPersistedDataInvalid({
         operationName: "start Candidate Validation Run",
@@ -440,7 +438,7 @@ const decodeArtifact = (artifact: CandidateValidationArtifactRow): CandidateVali
 
 type CandidateIdentityRow = {
   readonly headSha: string;
-  readonly comparisonBaseSha: string;
+  readonly changeBaseSha: string;
 };
 type CandidateValidationRunRow = Omit<CandidateValidationRunRecord, "policy"> & {
   readonly policySnapshot: string;

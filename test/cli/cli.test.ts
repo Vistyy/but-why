@@ -56,7 +56,7 @@ commands[20]{command,description}:
   by task approve <task-id>,Permanently approve Task intent
   by task context <task-id>,Show full Task Context
   by task cancel <task-id> --reason <reason>,Permanently cancel an unfinished Task
-  "by change start [--task <task-id>]",Create a prepared Change worktree
+  "by change start [--task <task-id>] [--base <branch>]",Create a prepared Change worktree
   by change prepare <change-id>,Run or retry Repository Preparation
   "by change list [--all]",List Changes oldest first
   by change show <change-id>,"Show Change implementation, validation, and delivery facts"

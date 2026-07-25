@@ -7,9 +7,8 @@ export type CommitCandidateCaptureInput = {
   readonly branchRef: string;
   readonly expectedChangeId?: string;
   readonly rebindFromRef?: string;
-  readonly selectedBaseRef: string;
-  readonly resolvedTargetSha: string;
-  readonly comparisonBaseSha: string;
+  readonly baseRef: string;
+  readonly changeBaseSha: string;
   readonly headSha: string;
   readonly now: string;
 };
@@ -28,8 +27,7 @@ export type CommitCandidateCaptureResult =
         | "change_closed"
         | "change_binding_conflict"
         | "destination_branch_has_history"
-        | "base_ref_conflict"
-        | "candidate_provenance_conflict";
+        | "base_ref_conflict";
     };
 
 export type CandidateCaptureChange = {

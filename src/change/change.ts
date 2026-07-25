@@ -63,6 +63,7 @@ export type ChangePublication = {
 export type ChangeNoChangeCompletion = {
   readonly candidateId: string;
   readonly validationRunId: string;
+  readonly changeBaseSha: string;
 };
 
 export type ChangeRecord = {
@@ -70,6 +71,7 @@ export type ChangeRecord = {
   readonly repositoryCommonDirectory: string;
   readonly branchRef: string;
   readonly baseRef: string | null;
+  readonly baseRemoteUrl: string | null;
   readonly taskId: PublicTaskId | null;
   readonly startingCommit: string | null;
   readonly worktreePath: string | null;

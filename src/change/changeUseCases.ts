@@ -4,6 +4,7 @@ import { Effect } from "effect";
 import type { InteractiveSessionAgentProfile } from "../agent/agentProfiles.js";
 import type { RepoLocalContext } from "../init/repoContext.js";
 import type { RepositoryStorageError } from "../contracts/repositoryStorageError.js";
+import { parseRemoteChangeBaseRef } from "../submissionEnvironment/remoteChangeBase.js";
 import {
   runRepositoryPreparation,
   type RepositoryPreparationExecutor,
@@ -23,6 +24,7 @@ import type { ChangeStartEligibilityError, ChangeStartRecord } from "./changeSta
 export type ChangeUseCases = {
   readonly start: (input: {
     readonly taskId?: PublicTaskId;
+    readonly baseBranch?: string;
     readonly now: string;
   }) => Effect.Effect<ChangeStartResult, RepositoryStorageError>;
   readonly prepare: (
@@ -102,17 +104,24 @@ const startChange = (
   store: ChangeStartPersistence,
   git: ChangeStartGitOperations,
   executor: RepositoryPreparationExecutor,
-  input: { readonly taskId?: PublicTaskId; readonly now: string },
+  input: { readonly taskId?: PublicTaskId; readonly baseBranch?: string; readonly now: string },
 ): Effect.Effect<ChangeStartResult, RepositoryStorageError> =>
   Effect.gen(function* () {
     if (input.taskId !== undefined) {
-      const resumed = yield* resumeTaskChange(store, git, executor, input.taskId, input.now);
+      const resumed = yield* resumeTaskChange(
+        store,
+        git,
+        executor,
+        input.taskId,
+        input.baseBranch,
+        input.now,
+      );
       if (resumed !== undefined) return resumed;
     }
 
     const id = randomUUID();
     const slug = input.taskId === undefined ? `change-${id}` : taskSlugForId(input.taskId);
-    const gitIntent = git.resolveIntent(slug);
+    const gitIntent = git.resolveIntent(slug, input.baseBranch);
     if (!gitIntent.ok) return gitIntent;
     const created = yield* store.create({
       id,
@@ -132,12 +141,22 @@ const resumeTaskChange = (
   git: ChangeStartGitOperations,
   executor: RepositoryPreparationExecutor,
   taskId: PublicTaskId,
+  requestedBaseBranch: string | undefined,
   now: string,
 ): Effect.Effect<ChangeStartResult | undefined, RepositoryStorageError> =>
   Effect.gen(function* () {
     const eligibility = yield* store.prepareTask(taskId);
     if (!eligibility.ok) return eligibility;
     if (eligibility.existing === undefined) return undefined;
+    const recordedBaseBranch = parseRemoteChangeBaseRef(eligibility.existing.baseRef)?.branchName;
+    if (requestedBaseBranch !== undefined && requestedBaseBranch !== recordedBaseBranch) {
+      return {
+        ok: false,
+        code: "requested_base_conflict",
+        requestedBaseBranch,
+        ...(recordedBaseBranch === undefined ? {} : { recordedBaseBranch }),
+      } as const;
+    }
 
     const provisioned = git.provisionWorktree(eligibility.existing, true);
     if (!provisioned.ok) return { ...provisioned, change: eligibility.existing };

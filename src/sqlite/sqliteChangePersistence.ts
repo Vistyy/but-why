@@ -7,7 +7,7 @@ import {
   type ChangePublication,
   type ChangeRecord,
 } from "../change/change.js";
-import type { ChangePersistence } from "../change/changePersistence.js";
+import type { ChangePersistence, ChangePublicationEvidence } from "../change/changePersistence.js";
 import type {
   BeginChangePublicationInput,
   CancelChangeInput,
@@ -32,6 +32,7 @@ const columns = [
   "repository_common_directory AS repositoryCommonDirectory",
   "branch_ref AS branchRef",
   "base_ref AS baseRef",
+  "base_remote_url AS baseRemoteUrl",
   "task_id AS taskId",
   "starting_commit AS startingCommit",
   "worktree_path AS worktreePath",
@@ -52,6 +53,7 @@ const columns = [
   "publication_pr_url AS publicationPrUrl",
   "no_change_candidate_id AS noChangeCandidateId",
   "no_change_validation_run_id AS noChangeValidationRunId",
+  "(SELECT change_base_sha FROM candidates WHERE id = no_change_candidate_id) AS noChangeChangeBaseSha",
   "cleanup_state AS cleanupState",
   "cleanup_blocking_reason AS cleanupBlockingReason",
   "state",
@@ -71,6 +73,10 @@ export const openSqliteChangePersistence = (): Effect.Effect<
       repository.transaction("read Change", (sql) => getById(sql, changeId)),
     getChangeByTaskId: (taskId) =>
       repository.transaction("read Change by Task", (sql) => getByTaskId(sql, taskId)),
+    getPassingPublicationEvidence: (changeId) =>
+      repository.transaction("read passing Change publication evidence", (sql) =>
+        getPassingPublicationEvidence(sql, changeId),
+      ),
     listChanges: (input) =>
       repository.transaction("list Changes", (sql) => listChanges(sql, input)),
     listChangesForReconciliation: (commonDirectory) =>
@@ -113,6 +119,29 @@ const getByTaskId = (sql: SqlClient.SqlClient, taskId: string) =>
   Effect.flatMap(
     sql.unsafe<ChangeRow>(`SELECT ${columns} FROM changes WHERE task_id = ?`, [taskId]),
     (rows) => mapRow(rows[0], "read Change by Task"),
+  );
+
+const getPassingPublicationEvidence = (sql: SqlClient.SqlClient, changeId: string) =>
+  Effect.map(
+    sql<ChangePublicationEvidence>`
+      SELECT
+        candidate.id AS candidateId,
+        run.id AS validationRunId,
+        candidate.change_base_sha AS changeBaseSha,
+        candidate.head_sha AS headSha
+      FROM changes AS change
+      JOIN candidates AS candidate
+        ON candidate.id = change.publication_candidate_id
+        AND candidate.change_id = change.id
+      JOIN candidate_validation_runs AS run
+        ON run.id = change.publication_validation_run_id
+        AND run.candidate_id = candidate.id
+      WHERE change.id = ${changeId}
+        AND change.publication_pr_number IS NOT NULL
+        AND run.state = 'complete'
+        AND run.outcome = 'passed'
+    `,
+    (rows) => rows[0],
   );
 
 const listChanges = (sql: SqlClient.SqlClient, input: ListChangesInput) =>
@@ -260,23 +289,10 @@ const hasValidNoChangeEvidence = (
   input: CompleteNoChangeInput,
 ) =>
   Effect.gen(function* () {
-    if (change.startingCommit === null) return false;
-    const candidates = yield* sql<{
-      readonly changeId: string;
-      readonly comparisonBaseSha: string;
-      readonly headSha: string;
-    }>`
-      SELECT change_id AS changeId, comparison_base_sha AS comparisonBaseSha, head_sha AS headSha
-      FROM candidates WHERE id = ${input.candidateId}
+    const candidates = yield* sql<{ readonly changeId: string }>`
+      SELECT change_id AS changeId FROM candidates WHERE id = ${input.candidateId}
     `;
-    const candidate = candidates[0];
-    if (
-      candidate?.changeId !== change.id ||
-      candidate.comparisonBaseSha !== change.startingCommit ||
-      candidate.headSha !== change.startingCommit
-    ) {
-      return false;
-    }
+    if (candidates[0]?.changeId !== change.id) return false;
     const validationRuns = yield* sql<{
       readonly candidateId: string;
       readonly state: string;
@@ -427,6 +443,7 @@ const mapRow = (row: ChangeRow | undefined, operationName: string) =>
           repositoryCommonDirectory: row.repositoryCommonDirectory,
           branchRef: row.branchRef,
           baseRef: row.baseRef,
+          baseRemoteUrl: row.baseRemoteUrl,
           taskId: row.taskId === null ? null : storedPublicTaskId(row.taskId),
           startingCommit: row.startingCommit,
           worktreePath: row.worktreePath,
@@ -445,11 +462,14 @@ const mapRow = (row: ChangeRow | undefined, operationName: string) =>
               : decodeSqliteChangePrepareFailure(row.prepareFailure),
           publication: decodeSqliteChangePublication(row),
           noChangeCompletion:
-            row.noChangeCandidateId === null || row.noChangeValidationRunId === null
+            row.noChangeCandidateId === null ||
+            row.noChangeValidationRunId === null ||
+            row.noChangeChangeBaseSha === null
               ? null
               : {
                   candidateId: row.noChangeCandidateId,
                   validationRunId: row.noChangeValidationRunId,
+                  changeBaseSha: row.noChangeChangeBaseSha,
                 },
           cleanup: { state: row.cleanupState, blockingReason: row.cleanupBlockingReason },
           state: row.state,
@@ -474,6 +494,7 @@ type ChangeRow = Omit<
   readonly prepareFailure: string | null;
   readonly noChangeCandidateId: string | null;
   readonly noChangeValidationRunId: string | null;
+  readonly noChangeChangeBaseSha: string | null;
   readonly cleanupState: ChangeCleanup["state"];
   readonly cleanupBlockingReason: string | null;
 } & SqliteChangePublicationRow;

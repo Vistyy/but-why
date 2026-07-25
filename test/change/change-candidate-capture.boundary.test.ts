@@ -5,7 +5,10 @@ import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
 import { afterAll, beforeAll, describe } from "vitest";
 
-import { localCandidateCaptureGit } from "../../src/change/candidateCapture/localGitCandidate.js";
+import {
+  localCandidateCaptureGit,
+  readRepositoryBranchHead,
+} from "../../src/change/candidateCapture/localGitCandidate.js";
 import { createGitRepo } from "../support/by-cli.js";
 import { captureLocalCandidate } from "../support/candidateCapture.js";
 import { createInitializedRepo } from "../support/initializedRepo.js";
@@ -37,7 +40,7 @@ describe("Change Candidate capture boundaries", () => {
   it.effect("captures committed work against the recorded remote default", () =>
     Effect.gen(function* () {
       const repo = captureReadyRepo();
-      const mainSha = git(repo, "rev-parse", "refs/heads/main");
+      const mainSha = git(repo, "rev-parse", "refs/remotes/origin/main");
       const headSha = git(repo, "rev-parse", "HEAD");
 
       const result = yield* captureLocalCandidate({ cwd: repo, now });
@@ -47,32 +50,108 @@ describe("Change Candidate capture boundaries", () => {
         changeId: expect.any(String),
         candidateId: expect.any(String),
         branchRef: "refs/heads/feature",
-        selectedBaseRef: "refs/heads/main",
-        baseSource: "remote_default",
-        resolvedTargetSha: mainSha,
-        comparisonBaseSha: mainSha,
+        changeBaseSha: mainSha,
         headSha,
+        trackedTreeMatchesChangeBase: false,
       });
 
-      const tree = git(repo, "rev-parse", "refs/heads/main^{tree}");
+      if (!result.ok) return;
+      const tree = git(repo, "rev-parse", "refs/remotes/origin/main^{tree}");
       const movedTarget = git(
         repo,
         "commit-tree",
         tree,
         "-p",
-        "refs/heads/main",
+        "refs/remotes/origin/main",
         "-m",
         "move base",
       );
-      git(repo, "update-ref", "refs/heads/main", movedTarget);
-      expect(yield* captureLocalCandidate({ cwd: repo, now: "2026-07-12T11:00:00.000Z" })).toEqual({
+      git(repo, "update-ref", "refs/remotes/origin/main", movedTarget);
+      const refreshed = yield* captureLocalCandidate({
+        cwd: repo,
+        now: "2026-07-12T11:00:00.000Z",
+      });
+      expect(refreshed).toEqual({
         ok: false,
-        code: "candidate_provenance_conflict",
+        code: "change_base_not_ancestor",
+        branchRef: "refs/heads/feature",
+        headSha,
+        changeBaseRef: "refs/remotes/origin/main",
+        changeBaseSha: movedTarget,
+      });
+
+      git(repo, "merge", "--no-edit", "refs/remotes/origin/main");
+      const merged = yield* captureLocalCandidate({
+        cwd: repo,
+        now: "2026-07-12T11:05:00.000Z",
+      });
+      expect(merged).toMatchObject({
+        ok: true,
+        changeId: result.changeId,
+        changeBaseSha: movedTarget,
       });
     }),
   );
 
-  it.effect("captures a reverted worktree at the starting commit after changed work", () =>
+  it.effect(
+    "rejects a divergent same-tree branch because every new Submission requires Change Base ancestry",
+    () =>
+      Effect.gen(function* () {
+        const repo = captureReadyRepo();
+        const baseTree = git(repo, "rev-parse", "refs/remotes/origin/main^{tree}");
+        const movedTarget = git(
+          repo,
+          "commit-tree",
+          baseTree,
+          "-p",
+          "refs/remotes/origin/main",
+          "-m",
+          "move base",
+        );
+        git(repo, "update-ref", "refs/remotes/origin/main", movedTarget);
+        const sameTreeHead = git(repo, "commit-tree", baseTree, "-p", "HEAD", "-m", "same tree");
+        git(repo, "reset", "--hard", sameTreeHead);
+
+        const captured = yield* captureLocalCandidate({ cwd: repo, now });
+
+        expect(captured).toEqual({
+          ok: false,
+          code: "change_base_not_ancestor",
+          branchRef: "refs/heads/feature",
+          headSha: sameTreeHead,
+          changeBaseRef: "refs/remotes/origin/main",
+          changeBaseSha: movedTarget,
+        });
+      }),
+  );
+
+  it.effect("accepts a Repository Branch rebased onto the fetched Change Base", () =>
+    Effect.gen(function* () {
+      const repo = captureReadyRepo();
+      const tree = git(repo, "rev-parse", "refs/remotes/origin/main^{tree}");
+      const movedTarget = git(
+        repo,
+        "commit-tree",
+        tree,
+        "-p",
+        "refs/remotes/origin/main",
+        "-m",
+        "move base",
+      );
+      git(repo, "update-ref", "refs/remotes/origin/main", movedTarget);
+      git(repo, "rebase", "refs/remotes/origin/main");
+
+      const captured = yield* captureLocalCandidate({ cwd: repo, now });
+
+      expect(captured).toMatchObject({
+        ok: true,
+        changeBaseSha: movedTarget,
+        headSha: git(repo, "rev-parse", "HEAD"),
+      });
+    }),
+  );
+
+  it.effect("reports tracked-tree equality against the current Change Base", () =>
     Effect.gen(function* () {
       const repo = captureReadyRepo();
       const startingCommit = git(repo, "rev-parse", "refs/heads/main");
@@ -83,15 +162,15 @@ describe("Change Candidate capture boundaries", () => {
       const reverted = yield* captureLocalCandidate({
         cwd: repo,
         changeId: changed.changeId,
-        startingCommit,
         now: "2026-07-12T10:05:00.000Z",
       });
 
       expect(reverted).toMatchObject({
         ok: true,
         changeId: changed.changeId,
-        comparisonBaseSha: startingCommit,
+        changeBaseSha: startingCommit,
         headSha: startingCommit,
+        trackedTreeMatchesChangeBase: true,
       });
     }),
   );
@@ -103,6 +182,10 @@ describe("Change Candidate capture boundaries", () => {
       expect(yield* localCandidateCaptureGit.readWorkspace(dirty)).toEqual({
         ok: false,
         code: "dirty_work",
+      });
+      expect(readRepositoryBranchHead(dirty, "refs/heads/main")).toEqual({
+        ok: true,
+        headSha: git(dirty, "rev-parse", "HEAD"),
       });
       expect(yield* localCandidateCaptureGit.trackedTreeMatches(dirty, "missing-commit")).toBe(
         undefined,

@@ -2,13 +2,17 @@ import { spawnSync } from "node:child_process";
 import { realpathSync } from "node:fs";
 import { Effect } from "effect";
 
-import type { CandidateCaptureGit, LocalCandidateWorkspaceResult } from "./candidateCaptureGit.js";
+import type {
+  CandidateCaptureGit,
+  LocalCandidateWorkspaceResult,
+  RepositoryBranchHeadResult,
+} from "./candidateCaptureGit.js";
 
 export const localCandidateCaptureGit: CandidateCaptureGit = {
   readWorkspace: (cwd) => Effect.sync(() => readLocalCandidateWorkspace(cwd)),
   resolveLocalBranch: (cwd, ref) => Effect.sync(() => resolveLocalBranch(cwd, ref)),
-  findComparisonBase: (cwd, targetSha, headSha) =>
-    Effect.sync(() => findComparisonBase(cwd, targetSha, headSha)),
+  containsCommit: (cwd, ancestorSha, headSha) =>
+    Effect.sync(() => containsCommit(cwd, ancestorSha, headSha)),
   trackedTreeMatches: (cwd, commitSha) => Effect.sync(() => trackedTreeMatches(cwd, commitSha)),
   localBranchExists: (cwd, ref) => Effect.sync(() => localBranchExists(cwd, ref)),
   recordedRemoteDefaultLocalBranches: (cwd) =>
@@ -58,18 +62,32 @@ const readLocalCandidateWorkspace = (cwd: string): LocalCandidateWorkspaceResult
   };
 };
 
+export const readRepositoryBranchHead = (
+  cwd: string,
+  expectedBranchRef: string,
+): RepositoryBranchHeadResult => {
+  const branch = git(cwd, "symbolic-ref", "-q", "HEAD");
+  if (!branch.ok) return { ok: false, code: "detached_head" };
+  if (!branch.stdout.startsWith("refs/heads/") || branch.stdout !== expectedBranchRef) {
+    return { ok: false, code: "conflicting_branch_facts" };
+  }
+  const head = git(cwd, "rev-parse", "--verify", "HEAD^{commit}");
+  return head.ok ? { ok: true, headSha: head.stdout } : { ok: false, code: "unborn_branch" };
+};
+
 export const resolveLocalBranch = (cwd: string, ref: string): string | undefined => {
   const result = git(cwd, "rev-parse", "--verify", `${ref}^{commit}`);
   return result.ok ? result.stdout : undefined;
 };
 
-const findComparisonBase = (
-  cwd: string,
-  targetSha: string,
-  headSha: string,
-): string | undefined => {
-  const result = git(cwd, "merge-base", targetSha, headSha);
-  return result.ok ? result.stdout : undefined;
+const containsCommit = (cwd: string, ancestorSha: string, headSha: string): boolean | undefined => {
+  const result = spawnSync("git", ["merge-base", "--is-ancestor", ancestorSha, headSha], {
+    cwd,
+    encoding: "utf8",
+  });
+  if (result.status === 0) return true;
+  if (result.status === 1) return false;
+  return undefined;
 };
 
 const trackedTreeMatches = (cwd: string, commitSha: string): boolean | undefined => {
@@ -80,9 +98,10 @@ const trackedTreeMatches = (cwd: string, commitSha: string): boolean | undefined
 };
 
 const localBranchExists = (cwd: string, ref: string): boolean =>
-  ref.startsWith("refs/heads/") && git(cwd, "show-ref", "--verify", "--quiet", ref).ok;
+  (ref.startsWith("refs/heads/") || ref.startsWith("refs/remotes/")) &&
+  git(cwd, "show-ref", "--verify", "--quiet", ref).ok;
 
-export const recordedRemoteDefaultLocalBranches = (cwd: string): readonly string[] | undefined => {
+const recordedRemoteDefaultLocalBranches = (cwd: string): readonly string[] | undefined => {
   const remotes = git(cwd, "remote");
   if (!remotes.ok) return undefined;
   return remotes.stdout
@@ -91,9 +110,7 @@ export const recordedRemoteDefaultLocalBranches = (cwd: string): readonly string
     .flatMap((remote) => {
       const prefix = `refs/remotes/${remote}/`;
       const result = git(cwd, "symbolic-ref", `${prefix}HEAD`);
-      return result.ok && result.stdout.startsWith(prefix)
-        ? [`refs/heads/${result.stdout.slice(prefix.length)}`]
-        : [];
+      return result.ok && result.stdout.startsWith(prefix) ? [result.stdout] : [];
     });
 };
 

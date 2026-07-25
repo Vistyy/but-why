@@ -3,7 +3,10 @@ import { Context, Effect, Layer } from "effect";
 import { afterAll, beforeAll } from "vitest";
 
 import type { ChangePersistence } from "../../src/change/changePersistence.js";
-import type { GitHubPullRequestRequest } from "../../src/change/ownedPullRequestGateway.js";
+import type {
+  GitHubPullRequest,
+  GitHubPullRequestRequest,
+} from "../../src/change/ownedPullRequestGateway.js";
 import type { CaptureLocalCandidateResult } from "../../src/change/candidateCapture/captureLocalCandidate.js";
 import type { ChangeValidationPersistence } from "../../src/change/validation/changeValidationPersistence.js";
 import { openCandidatePublication } from "../../src/change/publication/candidatePublication.js";
@@ -100,6 +103,38 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
             body: `Change: ${fixture.captured.changeId}\nCandidate: ${fixture.captured.candidateId}\nValidation Run: ${fixture.validationRunId}`,
           },
         ]);
+      }),
+    ),
+  );
+
+  it.scoped("does not record an incomplete pull request creation response", () =>
+    withFixture((fixture) =>
+      Effect.gen(function* () {
+        const { repository: _repository, ...incomplete } = pullRequest(fixture.captured.headSha);
+        const publication = openCandidatePublication({
+          changePersistence: fixture.changes,
+          validationPersistence: fixture.validation,
+          git: {
+            readBranchHead: () => fixture.captured.headSha,
+            readFirstNonMergeCommitSubject: () => ({ ok: true, subject: "Publication" }),
+          },
+          github: {
+            findPullRequests: () => [],
+            getPullRequest: () => undefined,
+            createPullRequest: () => ({ ok: true, pullRequest: incomplete }),
+            updatePullRequest: () => {
+              throw new Error("Unexpected PR update");
+            },
+          },
+        });
+
+        expect(yield* publication.publish(input(fixture))).toEqual({
+          ok: false,
+          code: "publication_remote_mismatch",
+        });
+        expect(yield* fixture.changes.getChangeById(fixture.captured.changeId)).toMatchObject({
+          publication: { pullRequest: null },
+        });
       }),
     ),
   );
@@ -224,12 +259,13 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
     ),
   );
 
-  it.scoped("updates only the owned pull request at its expected remote head", () =>
+  it.scoped("confirms a stale update response before recording the Candidate", () =>
     withFixture((fixture) =>
       Effect.gen(function* () {
         let branchHead = fixture.captured.headSha;
         let remote = pullRequest(branchHead);
         const updates: unknown[] = [];
+        const confirmationDelays: number[] = [];
         const publication = openCandidatePublication({
           changePersistence: fixture.changes,
           validationPersistence: fixture.validation,
@@ -243,10 +279,15 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
             createPullRequest: () => ({ ok: true, pullRequest: remote }),
             updatePullRequest: (request) => {
               updates.push(request);
+              const staleResponse = remote;
               remote = pullRequest(request.expectedHeadSha);
-              return { ok: true, pullRequest: remote };
+              return { ok: true, pullRequest: staleResponse };
             },
           },
+          delayBeforeConfirmation: (milliseconds) =>
+            Effect.sync(() => {
+              confirmationDelays.push(milliseconds);
+            }),
         });
         expect(yield* publication.publish(input(fixture))).toMatchObject({ ok: true });
 
@@ -267,6 +308,7 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
             expectedHeadSha: next.captured.headSha,
           }),
         );
+        expect(confirmationDelays).toEqual([100]);
 
         remote = { ...remote, headSha: "foreign-head" };
         const third = yield* nextCandidate(fixture, "Third Candidate", "2026-07-22T10:10:00.000Z");
@@ -290,12 +332,214 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
     ),
   );
 
+  it.scoped("returns a remote mismatch after three stale confirmation reads", () =>
+    withFixture((fixture) =>
+      Effect.gen(function* () {
+        let branchHead = fixture.captured.headSha;
+        const remote = pullRequest(branchHead);
+        let confirmationReads = 0;
+        const confirmationDelays: number[] = [];
+        const publication = openCandidatePublication({
+          changePersistence: fixture.changes,
+          validationPersistence: fixture.validation,
+          git: {
+            readBranchHead: () => branchHead,
+            readFirstNonMergeCommitSubject: () => ({ ok: true, subject: "Publication" }),
+          },
+          github: {
+            findPullRequests: () => [],
+            getPullRequest: () => {
+              confirmationReads += 1;
+              return remote;
+            },
+            createPullRequest: () => ({ ok: true, pullRequest: remote }),
+            updatePullRequest: () => ({ ok: true, pullRequest: remote }),
+          },
+          delayBeforeConfirmation: (milliseconds) =>
+            Effect.sync(() => {
+              confirmationDelays.push(milliseconds);
+            }),
+        });
+        expect(yield* publication.publish(input(fixture))).toMatchObject({ ok: true });
+
+        const next = yield* nextCandidate(fixture, "New Candidate", "2026-07-22T10:05:00.000Z");
+        branchHead = next.captured.headSha;
+        confirmationReads = 0;
+        expect(
+          yield* publication.publish({
+            ...input(fixture),
+            candidateId: next.captured.candidateId,
+            validationRunId: next.validationRunId,
+            now: "2026-07-22T10:05:00.000Z",
+          }),
+        ).toEqual({ ok: false, code: "publication_remote_mismatch" });
+        expect(confirmationReads).toBe(4);
+        expect(confirmationDelays).toEqual([100, 100, 100]);
+        expect(yield* fixture.changes.getChangeById(fixture.captured.changeId)).toMatchObject({
+          publication: {
+            candidateId: fixture.captured.candidateId,
+            expectedHeadSha: fixture.captured.headSha,
+          },
+        });
+      }),
+    ),
+  );
+
+  it.scoped("records a later Candidate already present on the owned pull request", () =>
+    withFixture((fixture) =>
+      Effect.gen(function* () {
+        let branchHead = fixture.captured.headSha;
+        let remote = pullRequest(branchHead);
+        let updateCalls = 0;
+        const publication = openCandidatePublication({
+          changePersistence: fixture.changes,
+          validationPersistence: fixture.validation,
+          git: {
+            readBranchHead: () => branchHead,
+            readFirstNonMergeCommitSubject: () => ({ ok: true, subject: "Publication" }),
+          },
+          github: {
+            findPullRequests: () => [],
+            getPullRequest: () => remote,
+            createPullRequest: () => ({ ok: true, pullRequest: remote }),
+            updatePullRequest: () => {
+              updateCalls += 1;
+              throw new Error("An already published Candidate must not be pushed again");
+            },
+          },
+        });
+        expect(yield* publication.publish(input(fixture))).toMatchObject({ ok: true });
+
+        const next = yield* nextCandidate(fixture, "New Candidate", "2026-07-22T10:05:00.000Z");
+        branchHead = next.captured.headSha;
+        remote = pullRequest(next.captured.headSha);
+        expect(
+          yield* publication.publish({
+            ...input(fixture),
+            candidateId: next.captured.candidateId,
+            validationRunId: next.validationRunId,
+            now: "2026-07-22T10:05:00.000Z",
+          }),
+        ).toMatchObject({ ok: true, created: false, pullRequest: { number: 42 } });
+        expect(updateCalls).toBe(0);
+        expect(yield* fixture.changes.getChangeById(fixture.captured.changeId)).toMatchObject({
+          publication: {
+            candidateId: next.captured.candidateId,
+            validationRunId: next.validationRunId,
+            expectedHeadSha: next.captured.headSha,
+          },
+        });
+      }),
+    ),
+  );
+
+  it.scoped("rejects every mismatched owned pull request identity during later recovery", () =>
+    Effect.forEach(
+      [
+        { name: "number", mutate: (value: GitHubPullRequest) => ({ ...value, number: 43 }) },
+        {
+          name: "base branch",
+          mutate: (value: GitHubPullRequest) => ({ ...value, baseBranch: "release" }),
+        },
+        {
+          name: "head branch",
+          mutate: (value: GitHubPullRequest) => ({ ...value, headBranch: "other-change" }),
+        },
+        {
+          name: "Candidate commit",
+          mutate: (value: GitHubPullRequest) => ({ ...value, headSha: "other-candidate" }),
+        },
+        {
+          name: "repository",
+          mutate: (value: GitHubPullRequest) => ({
+            ...value,
+            repository: { owner: "other", repo: "widgets" },
+          }),
+        },
+        {
+          name: "missing state",
+          mutate: ({ state: _state, ...value }: GitHubPullRequest) => value,
+        },
+        {
+          name: "missing merged fact",
+          mutate: ({ merged: _merged, ...value }: GitHubPullRequest) => value,
+        },
+        {
+          name: "closed state",
+          mutate: (value: GitHubPullRequest) => ({ ...value, state: "closed" as const }),
+        },
+        {
+          name: "merged state",
+          mutate: (value: GitHubPullRequest) => ({
+            ...value,
+            state: "closed" as const,
+            merged: true,
+          }),
+        },
+      ],
+      ({ name, mutate }) =>
+        withFixture((fixture) =>
+          Effect.gen(function* () {
+            let branchHead = fixture.captured.headSha;
+            let remote: GitHubPullRequest = pullRequest(branchHead);
+            let updateCalls = 0;
+            const publication = openCandidatePublication({
+              changePersistence: fixture.changes,
+              validationPersistence: fixture.validation,
+              git: {
+                readBranchHead: () => branchHead,
+                readFirstNonMergeCommitSubject: () => ({ ok: true, subject: "Publication" }),
+              },
+              github: {
+                findPullRequests: () => [],
+                getPullRequest: () => remote,
+                createPullRequest: () => ({ ok: true, pullRequest: remote }),
+                updatePullRequest: () => {
+                  updateCalls += 1;
+                  return { ok: true, pullRequest: remote };
+                },
+              },
+            });
+            expect(yield* publication.publish(input(fixture))).toMatchObject({ ok: true });
+
+            const next = yield* nextCandidate(
+              fixture,
+              `Reject mismatched ${name}`,
+              "2026-07-22T10:05:00.000Z",
+            );
+            branchHead = next.captured.headSha;
+            remote = mutate(pullRequest(next.captured.headSha));
+            expect(
+              yield* publication.publish({
+                ...input(fixture),
+                candidateId: next.captured.candidateId,
+                validationRunId: next.validationRunId,
+                now: "2026-07-22T10:05:00.000Z",
+              }),
+            ).toEqual({ ok: false, code: "publication_remote_mismatch" });
+            expect(updateCalls).toBe(0);
+            expect(yield* fixture.changes.getChangeById(fixture.captured.changeId)).toMatchObject({
+              publication: {
+                candidateId: fixture.captured.candidateId,
+                expectedHeadSha: fixture.captured.headSha,
+                pullRequest: { number: 42 },
+              },
+            });
+          }),
+        ),
+      { concurrency: 1 },
+    ),
+  );
+
   it.scoped("recovers a created pull request after its response is lost", () =>
     withFixture((fixture) =>
       Effect.gen(function* () {
         const remotePullRequests: {
           readonly number: number;
           readonly url: string;
+          readonly repository: { readonly owner: string; readonly repo: string };
+          readonly state: "open";
+          readonly merged: false;
           readonly baseBranch: string;
           readonly headBranch: string;
           readonly headSha: string;
@@ -319,6 +563,9 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
               remotePullRequests.push({
                 number: 42,
                 url: "https://github.com/acme/widgets/pull/42",
+                repository: { owner: request.owner, repo: request.repo },
+                state: "open",
+                merged: false,
                 baseBranch: request.baseBranch,
                 headBranch: request.headBranch,
                 headSha: request.expectedHeadSha,
@@ -418,6 +665,9 @@ const input = (fixture: Fixture) => ({
 const pullRequest = (headSha: string) => ({
   number: 42,
   url: "https://github.com/acme/widgets/pull/42",
+  repository: { owner: "acme", repo: "widgets" },
+  state: "open" as const,
+  merged: false,
   baseBranch: "main",
   headBranch: "feature",
   headSha,

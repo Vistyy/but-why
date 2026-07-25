@@ -7,13 +7,17 @@ import type { ChangeRecord } from "../../src/change/change.js";
 import type { ChangePersistence } from "../../src/change/changePersistence.js";
 import type { ChangeReconciliation } from "../../src/change/reconcileChange.js";
 import { openChangeSubmit } from "../../src/change/submitChange.js";
-import type { CaptureLocalCandidateResult } from "../../src/change/candidateCapture/captureLocalCandidate.js";
+import type {
+  CaptureLocalCandidateInput,
+  CaptureLocalCandidateResult,
+} from "../../src/change/candidateCapture/captureLocalCandidate.js";
 import type {
   PublishCandidateInput,
   PublishCandidateResult,
 } from "../../src/change/publication/candidatePublication.js";
 import type { TaskPersistence } from "../../src/task/taskPersistence.js";
 import { publicTaskId } from "../../src/task/taskId.js";
+import type { RemoteChangeBaseResult } from "../../src/submissionEnvironment/remoteChangeBase.js";
 
 const now = "2026-06-30T12:00:00.000Z";
 const candidate = {
@@ -21,11 +25,9 @@ const candidate = {
   changeId: "change-1",
   candidateId: "candidate-1",
   branchRef: "refs/heads/change-1",
-  selectedBaseRef: "refs/heads/main",
-  baseSource: "saved_change",
-  resolvedTargetSha: "base",
-  comparisonBaseSha: "base",
+  changeBaseSha: "base",
   headSha: "head",
+  trackedTreeMatchesChangeBase: false,
 } as const;
 const tasklessPolicy = {
   sandboxMode: "none",
@@ -97,12 +99,99 @@ describe("Change Submit orchestration", () => {
       }),
   );
 
+  it.effect("runs fresh validation when the fetched Change Base target advances", () =>
+    Effect.gen(function* () {
+      const events: string[] = [];
+      const headSha = "c0ebeaa730bcd666c7b927db2542ea6ea9d9575c";
+      const oldTargetSha = "d5fbe76f5565fa4d7de3ee3c48135fc595b26bea";
+      const newTargetSha = "b32245d73e2c2aaf9ed9d46270720591a6f62946";
+      const submit = openChangeSubmit(
+        dependencies({
+          events,
+          change: readyChange(),
+          refreshResults: [
+            { ok: true, base: { ...refreshedBase, commit: oldTargetSha } },
+            { ok: true, base: { ...refreshedBase, commit: newTargetSha } },
+          ],
+          captureResults: [
+            {
+              ...candidate,
+              candidateId: "candidate-old-target",
+              changeBaseSha: oldTargetSha,
+              headSha,
+            },
+            {
+              ...candidate,
+              candidateId: "candidate-new-target",
+              changeBaseSha: newTargetSha,
+              headSha,
+            },
+          ],
+        }),
+      );
+      const validatedCandidates: string[] = [];
+      const validationLayer = Layer.succeed(CandidateValidation, {
+        validateCandidate: (input) =>
+          Effect.sync(() => {
+            events.push("validate_taskless");
+            validatedCandidates.push(input.candidateId);
+            return {
+              ok: true,
+              reused: false,
+              validationRunId:
+                input.candidateId === "candidate-old-target" ? "run-old-target" : "run-new-target",
+              outcome: "passed",
+            } as const;
+          }),
+        validateTaskBackedCandidate: () => Effect.die("Acceptance Review was not expected"),
+        validateNoChange: () => Effect.die("Acceptance-only validation was not expected"),
+        listFindings: () => Effect.succeed([]),
+        listToolingFailures: () => Effect.succeed([]),
+        listRounds: () => Effect.succeed([]),
+      });
+
+      const oldTarget = yield* submit
+        .submit({ changeId: "change-1", now })
+        .pipe(Effect.provide(validationLayer));
+      const newTarget = yield* submit
+        .submit({ changeId: "change-1", now })
+        .pipe(Effect.provide(validationLayer));
+
+      expect(oldTarget).toMatchObject({
+        ok: true,
+        candidateId: "candidate-old-target",
+        validationRunId: "run-old-target",
+      });
+      expect(newTarget).toMatchObject({
+        ok: true,
+        candidateId: "candidate-new-target",
+        validationRunId: "run-new-target",
+      });
+      expect(validatedCandidates).toEqual(["candidate-old-target", "candidate-new-target"]);
+      expect(events).toEqual([
+        "reconcile",
+        "refresh_base",
+        "capture",
+        "detect_target",
+        "validate_taskless",
+        "publish",
+        "reconcile",
+        "refresh_base",
+        "capture",
+        "detect_target",
+        "validate_taskless",
+        "publish",
+      ]);
+    }),
+  );
+
   it.effect("runs Acceptance only and completes a Task-backed no-change submission", () =>
     Effect.gen(function* () {
       const events: string[] = [];
       const transitions: string[] = [];
       const change = readyChange({
         taskId: publicTaskId("BY-1"),
+        startingCommit: null,
         acceptanceContext: {
           version: 1,
           title: "Approved intent",
@@ -117,7 +206,12 @@ describe("Change Submit orchestration", () => {
           transitions,
           change,
           taskBacked: true,
-          captureResult: { ...candidate, comparisonBaseSha: "base", headSha: "base" },
+          captureResult: {
+            ...candidate,
+            changeBaseSha: "base",
+            headSha: "base",
+            trackedTreeMatchesChangeBase: true,
+          },
         }),
       );
       const validationLayer = Layer.succeed(CandidateValidation, {
@@ -178,7 +272,12 @@ describe("Change Submit orchestration", () => {
             transitions,
             change,
             taskBacked: true,
-            captureResult: { ...candidate, comparisonBaseSha: "base", headSha: "base" },
+            captureResult: {
+              ...candidate,
+              changeBaseSha: "base",
+              headSha: "base",
+              trackedTreeMatchesChangeBase: true,
+            },
             findings: acceptanceReport.findings,
           }),
         );
@@ -214,66 +313,74 @@ describe("Change Submit orchestration", () => {
       }),
   );
 
-  it.effect("does not complete no-change when the Change already owns a pull request", () =>
-    Effect.gen(function* () {
-      const events: string[] = [];
-      const change = readyChange({
-        taskId: publicTaskId("BY-1"),
-        acceptanceContext: {
-          version: 1,
-          title: "Approved intent",
-          description: "Deliver it",
-          comments: [],
-        },
-        publication: {
-          candidateId: "published-candidate",
-          validationRunId: "published-run",
-          target: { owner: "acme", repo: "repo", baseBranch: "main", remoteName: "origin" },
-          headBranch: "change-1",
-          expectedHeadSha: "published-head",
-          pullRequest: { number: 42, url: "https://github.test/acme/repo/pull/42" },
-        },
-      });
-      const submit = openChangeSubmit(
-        dependencies({
-          events,
-          change,
-          taskBacked: true,
-          reconciliationStatus: "open",
-          captureResult: { ...candidate, comparisonBaseSha: "base", headSha: "base" },
-        }),
-      );
-      const validationLayer = Layer.succeed(CandidateValidation, {
-        validateCandidate: () => Effect.die("Taskless validation was not expected"),
-        validateNoChange: () => Effect.die("No-change completion was not expected"),
-        validateTaskBackedCandidate: () =>
-          Effect.sync(() => {
-            events.push("validate_task_backed");
-            return {
-              ok: true,
-              reused: false,
-              validationRunId: "run-1",
-              outcome: "passed",
-            } as const;
+  it.effect(
+    "updates an owned pull request when its Repository Branch returns to the Change Base tree",
+    () =>
+      Effect.gen(function* () {
+        const events: string[] = [];
+        const change = readyChange({
+          taskId: publicTaskId("BY-1"),
+          acceptanceContext: {
+            version: 1,
+            title: "Approved intent",
+            description: "Deliver it",
+            comments: [],
+          },
+          publication: {
+            candidateId: "published-candidate",
+            validationRunId: "published-run",
+            target: { owner: "acme", repo: "repo", baseBranch: "main", remoteName: "origin" },
+            headBranch: "change-1",
+            expectedHeadSha: "published-head",
+            pullRequest: { number: 42, url: "https://github.test/acme/repo/pull/42" },
+          },
+        });
+        const submit = openChangeSubmit(
+          dependencies({
+            events,
+            change,
+            taskBacked: true,
+            reconciliationStatus: "open",
+            branchHeadSha: "base",
+            captureResult: {
+              ...candidate,
+              changeBaseSha: "base",
+              headSha: "base",
+              trackedTreeMatchesChangeBase: true,
+            },
           }),
-        listFindings: () => Effect.succeed([]),
-        listToolingFailures: () => Effect.succeed([]),
-        listRounds: () => Effect.succeed([]),
-      });
+        );
+        const validationLayer = Layer.succeed(CandidateValidation, {
+          validateCandidate: () => Effect.die("Taskless validation was not expected"),
+          validateNoChange: () => Effect.die("No-Change validation was not expected"),
+          validateTaskBackedCandidate: () =>
+            Effect.sync(() => {
+              events.push("validate_task_backed");
+              return {
+                ok: true,
+                reused: false,
+                validationRunId: "run-1",
+                outcome: "passed",
+              } as const;
+            }),
+          listFindings: () => Effect.succeed([]),
+          listToolingFailures: () => Effect.succeed([]),
+          listRounds: () => Effect.succeed([]),
+        });
 
-      const result = yield* submit
-        .submit({ changeId: change.id, now })
-        .pipe(Effect.provide(validationLayer));
+        const result = yield* submit
+          .submit({ changeId: change.id, now })
+          .pipe(Effect.provide(validationLayer));
 
-      expect(result).toMatchObject({ ok: true, status: "published" });
-      expect(events).toEqual([
-        "reconcile",
-        "capture",
-        "detect_target",
-        "validate_task_backed",
-        "publish",
-      ]);
-    }),
+        expect(result).toMatchObject({ ok: true, status: "published" });
+        expect(events).toEqual([
+          "reconcile",
+          "capture",
+          "detect_target",
+          "validate_task_backed",
+          "publish",
+        ]);
+      }),
   );
 
   it.effect("completes a changed-then-reverted Task-backed Change through Acceptance", () =>
@@ -297,7 +404,7 @@ describe("Change Submit orchestration", () => {
           taskBacked: true,
           captureResults: [
             { ...candidate, headSha: "changed-head" },
-            { ...candidate, headSha: "base" },
+            { ...candidate, headSha: "base", trackedTreeMatchesChangeBase: true },
           ],
         }),
       );
@@ -362,9 +469,16 @@ describe("Change Submit orchestration", () => {
         noChangeCompletion: {
           candidateId: "candidate-no-change",
           validationRunId: "run-no-change",
+          changeBaseSha: "base",
         },
       });
-      const submit = openChangeSubmit(dependencies({ events, change }));
+      const submit = openChangeSubmit(
+        dependencies({
+          events,
+          change,
+          refreshResult: { ok: true, base: refreshedBase },
+        }),
+      );
       const validationLayer = Layer.succeed(CandidateValidation, {
         validateCandidate: () => Effect.die("Validation was not expected"),
         validateTaskBackedCandidate: () => Effect.die("Validation was not expected"),
@@ -379,6 +493,53 @@ describe("Change Submit orchestration", () => {
         .pipe(Effect.provide(validationLayer));
 
       expect(result).toEqual({
+        ok: true,
+        status: "no_change",
+        changeId: change.id,
+        candidateId: "candidate-no-change",
+        validationRunId: "run-no-change",
+        completionKind: "no_change",
+      });
+      expect(events).toEqual([]);
+    }),
+  );
+
+  it.effect("keeps completed no-change evidence stable when the Change Base advances", () =>
+    Effect.gen(function* () {
+      const events: string[] = [];
+      const change = readyChange({
+        taskId: publicTaskId("BY-1"),
+        state: "closed",
+        closeReason: "completed",
+        closedAt: now,
+        noChangeCompletion: {
+          candidateId: "candidate-no-change",
+          validationRunId: "run-no-change",
+          changeBaseSha: "base",
+        },
+      });
+      const submit = openChangeSubmit(
+        dependencies({
+          events,
+          change,
+          refreshResult: {
+            ok: true,
+            base: { ...refreshedBase, commit: "advanced-base" },
+          },
+        }),
+      );
+      const validationLayer = Layer.succeed(CandidateValidation, {
+        validateCandidate: () => Effect.die("Validation was not expected"),
+        validateTaskBackedCandidate: () => Effect.die("Validation was not expected"),
+        validateNoChange: () => Effect.die("Validation was not expected"),
+        listFindings: () => Effect.succeed([]),
+        listToolingFailures: () => Effect.succeed([]),
+        listRounds: () => Effect.succeed([]),
+      });
+
+      expect(
+        yield* submit.submit({ changeId: change.id, now }).pipe(Effect.provide(validationLayer)),
+      ).toEqual({
         ok: true,
         status: "no_change",
         changeId: change.id,
@@ -441,6 +602,123 @@ describe("Change Submit orchestration", () => {
     }),
   );
 
+  it.effect("continues to validated publication after a stale stored Candidate is observed", () =>
+    Effect.gen(function* () {
+      const events: string[] = [];
+      const change = readyChange({
+        publication: {
+          candidateId: "previous-candidate",
+          validationRunId: "previous-run",
+          target: { owner: "acme", repo: "repo", baseBranch: "main", remoteName: "origin" },
+          headBranch: "change-1",
+          expectedHeadSha: "previous-head",
+          pullRequest: { number: 42, url: "https://github.test/acme/repo/pull/42" },
+        },
+      });
+      const submit = openChangeSubmit(
+        dependencies({
+          events,
+          change,
+          reconciliationStatus: "rejected",
+          reconciliationRejection: "head_sha_mismatch",
+        }),
+      );
+      const validationLayer = Layer.succeed(CandidateValidation, {
+        validateCandidate: () =>
+          Effect.sync(() => {
+            events.push("validate_taskless");
+            return {
+              ok: true,
+              reused: false,
+              validationRunId: "run-1",
+              outcome: "passed",
+            } as const;
+          }),
+        validateTaskBackedCandidate: () => Effect.die("Acceptance Review was not expected"),
+        validateNoChange: () => Effect.die("Acceptance-only validation was not expected"),
+        listFindings: () => Effect.succeed([]),
+        listToolingFailures: () => Effect.succeed([]),
+        listRounds: () => Effect.succeed([]),
+      });
+
+      expect(
+        yield* submit.submit({ changeId: change.id, now }).pipe(Effect.provide(validationLayer)),
+      ).toMatchObject({ ok: true, status: "published", candidateId: "candidate-1" });
+      expect(events).toEqual([
+        "reconcile",
+        "capture",
+        "detect_target",
+        "validate_taskless",
+        "publish",
+      ]);
+    }),
+  );
+
+  it.effect.each([
+    {
+      status: "completed" as const,
+      expected: { ok: true, status: "reconciled" },
+    },
+    {
+      status: "closed_unmerged" as const,
+      expected: { ok: false, code: "owned_pull_request_closed" },
+    },
+  ])(
+    "returns authoritative $status pull request facts before fetching the Change Base",
+    ({ status, expected }) =>
+      Effect.gen(function* () {
+        const events: string[] = [];
+        const submit = openChangeSubmit(
+          dependencies({ events, change: readyChange(), reconciliationStatus: status }),
+        );
+        const validationLayer = Layer.succeed(CandidateValidation, {
+          validateCandidate: () => Effect.die("Validation must not start"),
+          validateTaskBackedCandidate: () => Effect.die("Validation must not start"),
+          validateNoChange: () => Effect.die("Validation must not start"),
+          listFindings: () => Effect.succeed([]),
+          listToolingFailures: () => Effect.succeed([]),
+          listRounds: () => Effect.succeed([]),
+        });
+
+        expect(
+          yield* submit.submit({ changeId: "change-1", now }).pipe(Effect.provide(validationLayer)),
+        ).toMatchObject(expected);
+        expect(events).toEqual(["reconcile"]);
+      }),
+  );
+
+  it.effect("keeps rejecting reconciliation mismatches other than the Candidate commit", () =>
+    Effect.gen(function* () {
+      const events: string[] = [];
+      const change = readyChange();
+      const submit = openChangeSubmit(
+        dependencies({
+          events,
+          change,
+          reconciliationStatus: "rejected",
+          reconciliationRejection: "base_branch_mismatch",
+        }),
+      );
+      const validationLayer = Layer.succeed(CandidateValidation, {
+        validateCandidate: () => Effect.die("Validation must not start"),
+        validateTaskBackedCandidate: () => Effect.die("Validation must not start"),
+        validateNoChange: () => Effect.die("Validation must not start"),
+        listFindings: () => Effect.succeed([]),
+        listToolingFailures: () => Effect.succeed([]),
+        listRounds: () => Effect.succeed([]),
+      });
+
+      expect(
+        yield* submit.submit({ changeId: change.id, now }).pipe(Effect.provide(validationLayer)),
+      ).toMatchObject({
+        ok: false,
+        code: "reconciliation_rejected",
+        change: { rejection: "base_branch_mismatch" },
+      });
+      expect(events).toEqual(["reconcile"]);
+    }),
+  );
+
   it.effect(
     "returns an existing owned pull request without duplicate validation or publication",
     () =>
@@ -482,14 +760,78 @@ describe("Change Submit orchestration", () => {
           .pipe(Effect.provide(validationLayer));
 
         expect(result).toMatchObject({ ok: true, status: "published", created: false });
-        expect(events).toEqual(["reconcile", "capture"]);
+        expect(events).toEqual(["reconcile", "read_publication_evidence"]);
       }),
+  );
+
+  it.effect("does not reuse publication when only the Repository Branch head matches", () =>
+    Effect.gen(function* () {
+      const events: string[] = [];
+      const change = readyChange({
+        publication: {
+          candidateId: "other-candidate",
+          validationRunId: "other-run",
+          target: { owner: "acme", repo: "repo", baseBranch: "main", remoteName: "origin" },
+          headBranch: "change-1",
+          expectedHeadSha: "head",
+          pullRequest: { number: 42, url: "https://github.test/acme/repo/pull/42" },
+        },
+      });
+      const submit = openChangeSubmit(
+        dependencies({
+          events,
+          change,
+          reconciliationStatus: "open",
+          publicationEvidence: null,
+        }),
+      );
+      const validationLayer = Layer.succeed(CandidateValidation, {
+        validateCandidate: () =>
+          Effect.sync(() => {
+            events.push("validate_taskless");
+            return {
+              ok: true,
+              reused: false,
+              validationRunId: "new-run",
+              outcome: "passed",
+            } as const;
+          }),
+        validateTaskBackedCandidate: () => Effect.die("Acceptance Review was not expected"),
+        validateNoChange: () => Effect.die("No-Change validation was not expected"),
+        listFindings: () => Effect.succeed([]),
+        listToolingFailures: () => Effect.succeed([]),
+        listRounds: () => Effect.succeed([]),
+      });
+
+      const result = yield* submit
+        .submit({ changeId: change.id, now })
+        .pipe(Effect.provide(validationLayer));
+
+      expect(result).toMatchObject({
+        ok: true,
+        status: "published",
+        candidateId: "candidate-1",
+        validationRunId: "new-run",
+      });
+      expect(events).toEqual([
+        "reconcile",
+        "read_publication_evidence",
+        "capture",
+        "detect_target",
+        "validate_taskless",
+        "publish",
+      ]);
+    }),
   );
 
   it.effect.each([
     {
       name: "unchanged taskless work",
-      captureResult: { ...candidate, headSha: "base" } as CaptureLocalCandidateResult,
+      captureResult: {
+        ...candidate,
+        headSha: "base",
+        trackedTreeMatchesChangeBase: true,
+      } as CaptureLocalCandidateResult,
       expected: { ok: true, status: "nothing_to_submit", changeId: "change-1" },
     },
     {
@@ -519,6 +861,124 @@ describe("Change Submit orchestration", () => {
         ).toEqual(expected);
         expect(events).toEqual(["reconcile", "capture"]);
       }),
+  );
+
+  it.effect(
+    "rejects a Repository Branch behind its fetched Change Base before Candidate creation",
+    () =>
+      Effect.gen(function* () {
+        const events: string[] = [];
+        const submit = openChangeSubmit(
+          dependencies({
+            events,
+            change: readyChange({
+              taskId: publicTaskId("BY-1"),
+              acceptanceContext: {
+                version: 1,
+                title: "Approved intent",
+                description: "Deliver it",
+                comments: [],
+              },
+            }),
+            taskBacked: true,
+            refreshResult: { ok: true, base: refreshedBase },
+            captureResult: {
+              ok: false,
+              code: "change_base_not_ancestor",
+              branchRef: "refs/heads/change-1",
+              headSha: "behind-head",
+              changeBaseRef: "refs/remotes/origin/main",
+              changeBaseSha: "base",
+            },
+          }),
+        );
+        const validationLayer = Layer.succeed(CandidateValidation, {
+          validateCandidate: () => Effect.die("Validation must not start"),
+          validateTaskBackedCandidate: () => Effect.die("Validation must not start"),
+          validateNoChange: () => Effect.die("Validation must not start"),
+          listFindings: () => Effect.succeed([]),
+          listToolingFailures: () => Effect.succeed([]),
+          listRounds: () => Effect.succeed([]),
+        });
+
+        expect(
+          yield* submit.submit({ changeId: "change-1", now }).pipe(Effect.provide(validationLayer)),
+        ).toEqual({
+          ok: false,
+          code: "change_base_not_ancestor",
+          branchRef: "refs/heads/change-1",
+          headSha: "behind-head",
+          changeBaseRef: "refs/remotes/origin/main",
+          changeBaseSha: "base",
+        });
+        expect(events).toEqual(["reconcile", "refresh_base", "capture"]);
+      }),
+  );
+
+  it.effect("rejects a failed Change Base refresh before Candidate capture", () =>
+    Effect.gen(function* () {
+      const events: string[] = [];
+      const submit = openChangeSubmit(
+        dependencies({
+          events,
+          change: readyChange(),
+          refreshResult: {
+            ok: false,
+            code: "publication_remote_unreachable",
+            remoteName: "origin",
+          },
+        }),
+      );
+      const validationLayer = Layer.succeed(CandidateValidation, {
+        validateCandidate: () => Effect.die("Validation must not start"),
+        validateTaskBackedCandidate: () => Effect.die("Validation must not start"),
+        validateNoChange: () => Effect.die("Validation must not start"),
+        listFindings: () => Effect.succeed([]),
+        listToolingFailures: () => Effect.succeed([]),
+        listRounds: () => Effect.succeed([]),
+      });
+
+      expect(
+        yield* submit.submit({ changeId: "change-1", now }).pipe(Effect.provide(validationLayer)),
+      ).toEqual({
+        ok: false,
+        code: "publication_remote_unreachable",
+        remoteName: "origin",
+      });
+      expect(events).toEqual(["reconcile", "refresh_base"]);
+    }),
+  );
+
+  it.effect("rejects a changed publication remote before Candidate capture", () =>
+    Effect.gen(function* () {
+      const events: string[] = [];
+      const submit = openChangeSubmit(
+        dependencies({
+          events,
+          change: readyChange(),
+          refreshResult: {
+            ok: false,
+            code: "publication_remote_changed",
+            remoteName: "origin",
+            expectedRemoteUrl: "https://github.test/acme/repo.git",
+            actualRemoteUrl: "https://github.test/acme/other.git",
+          },
+        }),
+      );
+      const validationLayer = Layer.succeed(CandidateValidation, {
+        validateCandidate: () => Effect.die("Validation must not start"),
+        validateTaskBackedCandidate: () => Effect.die("Validation must not start"),
+        validateNoChange: () => Effect.die("Validation must not start"),
+        listFindings: () => Effect.succeed([]),
+        listToolingFailures: () => Effect.succeed([]),
+        listRounds: () => Effect.succeed([]),
+      });
+
+      expect(
+        yield* submit.submit({ changeId: "change-1", now }).pipe(Effect.provide(validationLayer)),
+      ).toMatchObject({ ok: false, code: "publication_remote_changed", remoteName: "origin" });
+      expect(events).toEqual(["reconcile", "refresh_base"]);
+    }),
   );
 
   it.effect("rejects a missing GitHub target before Candidate validation starts", () =>
@@ -652,9 +1112,24 @@ const dependencies = (input: {
   readonly findings?: readonly (typeof finding)[];
   readonly toolingFailures?: readonly (typeof toolingFailure)[];
   readonly publication?: PublicationFixture;
-  readonly reconciliationStatus?: "not_owned" | "open";
+  readonly reconciliationStatus?:
+    | "not_owned"
+    | "open"
+    | "rejected"
+    | "completed"
+    | "closed_unmerged";
+  readonly reconciliationRejection?: string;
   readonly captureResult?: CaptureLocalCandidateResult;
   readonly captureResults?: readonly CaptureLocalCandidateResult[];
+  readonly refreshResult?: RemoteChangeBaseResult;
+  readonly branchHeadSha?: string;
+  readonly publicationEvidence?: {
+    readonly candidateId: string;
+    readonly validationRunId: string;
+    readonly changeBaseSha: string;
+    readonly headSha: string;
+  } | null;
+  readonly refreshResults?: readonly RemoteChangeBaseResult[];
   readonly targetResult?:
     | { readonly ok: false; readonly code: "PR_TARGET_NOT_FOUND" }
     | {
@@ -670,11 +1145,28 @@ const dependencies = (input: {
 }) => {
   const events = input.events ?? [];
   const captureResults = [...(input.captureResults ?? [])];
+  const refreshResults = [...(input.refreshResults ?? [])];
+  let currentTargetSha: string = refreshedBase.commit;
   let taskState = "implementing";
   return {
     repositoryCommonDirectory: "/repo/.git",
+    repositoryPath: "/repo",
     persistence: {
       getChangeById: () => Effect.succeed(input.change),
+      getPassingPublicationEvidence: () =>
+        Effect.sync(() => {
+          events.push("read_publication_evidence");
+          if (input.publicationEvidence === null) return undefined;
+          return (
+            input.publicationEvidence ?? {
+              candidateId: input.change.publication?.candidateId ?? candidate.candidateId,
+              validationRunId:
+                input.change.publication?.validationRunId ?? "published-validation-run",
+              changeBaseSha: candidate.changeBaseSha,
+              headSha: input.change.publication?.expectedHeadSha ?? candidate.headSha,
+            }
+          );
+        }),
       completeNoChange: () => {
         events.push("complete_no_change");
         return Effect.succeed({ ok: true as const, changed: true });
@@ -693,14 +1185,18 @@ const dependencies = (input: {
       reconcile: () =>
         Effect.sync(() => {
           events.push("reconcile");
+          const status = input.reconciliationStatus ?? "not_owned";
           return {
-            rejected: false,
+            rejected: status === "rejected",
             changes: [
               {
                 changeId: input.change.id,
-                status: input.reconciliationStatus ?? "not_owned",
-                ...(input.reconciliationStatus === "open" && input.change.publication?.pullRequest
+                status,
+                ...(status === "open" && input.change.publication?.pullRequest
                   ? { pullRequest: input.change.publication.pullRequest }
+                  : {}),
+                ...(status === "rejected"
+                  ? { rejection: input.reconciliationRejection ?? "remote_mismatch" }
                   : {}),
               },
             ],
@@ -744,6 +1240,20 @@ const dependencies = (input: {
           Effect.sync(() => publication.publish(publicationInput)),
       };
     },
+    readBranchHead: () =>
+      Effect.succeed({
+        ok: true as const,
+        headSha:
+          input.branchHeadSha ?? input.change.publication?.expectedHeadSha ?? candidate.headSha,
+      }),
+    refreshBase: () => {
+      if (input.refreshResult !== undefined || input.refreshResults !== undefined)
+        events.push("refresh_base");
+      const result = refreshResults.shift() ??
+        input.refreshResult ?? { ok: true, base: refreshedBase };
+      if (result.ok) currentTargetSha = result.base.commit;
+      return result;
+    },
     detectTarget: () => {
       events.push("detect_target");
       return (
@@ -759,8 +1269,9 @@ const dependencies = (input: {
         }
       );
     },
-    captureCandidate: () =>
+    captureCandidate: (captureInput: CaptureLocalCandidateInput) =>
       Effect.sync(() => {
+        expect(captureInput.changeBaseSha).toBe(currentTargetSha);
         events.push("capture");
         return captureResults.shift() ?? input.captureResult ?? candidate;
       }),
@@ -771,7 +1282,8 @@ const readyChange = (overrides: Partial<ChangeRecord> = {}): ChangeRecord => ({
   id: "change-1",
   repositoryCommonDirectory: "/repo/.git",
   branchRef: "refs/heads/change-1",
-  baseRef: "refs/heads/main",
+  baseRef: "refs/remotes/origin/main",
+  baseRemoteUrl: "https://github.test/acme/repo.git",
   taskId: null,
   startingCommit: "base",
   worktreePath: "/repo/worktree",
@@ -788,6 +1300,14 @@ const readyChange = (overrides: Partial<ChangeRecord> = {}): ChangeRecord => ({
   closedAt: null,
   ...overrides,
 });
+
+const refreshedBase = {
+  remoteName: "origin",
+  branchName: "main",
+  remoteUrl: "https://github.test/acme/repo.git",
+  ref: "refs/remotes/origin/main",
+  commit: "base",
+} as const;
 
 const toolingFailure = {
   sequence: 1,

@@ -135,6 +135,11 @@ Taskless Change Start:
 by change start --output json
 ```
 
+Add `--base <branch>` to either form to select a named branch on the detected publication remote.
+Without `--base`, Change Start selects the remote default branch.
+Change Start fetches the selected branch and records its remote-tracking ref as the Change Base.
+Local branches are not supported as Change Bases.
+
 A Task-backed Change captures Acceptance Context and later runs Acceptance Review.
 
 A taskless Change has no Acceptance Context and omits Acceptance Review while retaining code-based validation and publication.
@@ -144,6 +149,15 @@ Use the recorded `worktreePath` for manual implementation, then submit the commi
 ```bash
 by change submit <change-id> --output json
 ```
+
+Change Submit reconciles an existing owned pull request before a new Submission.
+A new Submission fetches the recorded remote Change Base before Candidate capture.
+The Repository Branch must contain the exact fetched Change Base commit.
+If it does not, merge or rebase the Change Base into the Repository Branch and retry.
+The fetch and rejection do not modify the Managed Worktree or Repository Branch.
+A Candidate is identified by the Change, `changeBaseSha`, and `headSha`.
+A new Change Base commit creates a different Candidate and prevents evidence reuse by `headSha` alone.
+Completed Submission evidence remains stable when the Change Base or configuration later changes.
 
 Repeat Change Submit after fixing Findings in the Managed Worktree and committing the fixes.
 
@@ -170,7 +184,7 @@ by task context draft <task-id>
 by task context apply <task-id>
 by task comment <task-id> --file <file>
 by task cancel <task-id> --reason <reason>
-by change start [--task <task-id>]
+by change start [--task <task-id>] [--base <branch>]
 by change prepare <change-id>
 by change list [--all]
 by change show <change-id>

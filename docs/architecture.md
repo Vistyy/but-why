@@ -43,17 +43,30 @@ See [ADR 0014](adr/0014-use-module-owned-storage-and-change-transactions.md).
 
 ## Change lifecycle
 
-`by change start [--task <task-id>]` creates a Change from the detected default branch.
+`by change start [--task <task-id>] [--base <branch>]` creates a Change from a freshly fetched branch on the detected publication remote.
+Without `--base`, Change Start uses the remote default branch.
+With `--base`, Change Start uses the named remote branch.
+Local branches never supply a v1 Change Base.
 It asks Git for the canonical main checkout and creates the Managed Worktree at `<main-checkout-parent>/<main-checkout-name>-worktrees/but-why/<change-slug>`.
 Change Start resolves the same Managed Worktree root from the main checkout and every linked worktree.
 It then runs Repository Preparation.
 A Task-backed Change captures immutable Acceptance Context.
 A taskless Change has no Acceptance Context.
 
-`by change submit <change-id>` selects the current Candidate from the Change Managed Worktree.
-It runs Repository Preparation, Checks, Acceptance Review for Task-backed Changes, configured Specialists, and publication policy.
+`by change submit <change-id>` first returns a stored terminal No-Change completion or reconciles an existing owned pull request.
+Merged or closed pull request facts take precedence over current Change Base ancestry.
+An unchanged Repository Branch head returns stored publication success only when the owned pull request confirms the exact passing Candidate.
+Otherwise Submit fetches the recorded Change Base and requires `changeBaseSha` to be an ancestor of `headSha` before Candidate creation.
+The fetch updates only the remote-tracking ref and does not modify the Managed Worktree or Repository Branch.
+A Candidate is identified by `changeId`, `changeBaseSha`, and `headSha`.
+Validation compares the Candidate head directly with `changeBaseSha`.
+After the ancestry gate passes, tracked-tree equality between `headSha` and `changeBaseSha` defines No-Change regardless of later commit topology or the starting commit.
+A divergent same-tree Repository Branch still fails the mandatory Change Base ancestry gate.
+Submit runs Repository Preparation, Checks, Acceptance Review for Task-backed Changes, configured Specialists, and publication policy.
 Validation Runs belong to Candidates.
 Findings and artifacts belong to the Validation Run for that Candidate.
+Completed Submissions retain their point-in-time Candidate, publication, and Validation Policy Snapshot evidence.
+Current configuration applies to future or unfinished Submissions.
 
 `by change reconcile [<change-id>]` observes owned pull requests.
 A merged owned pull request closes the Change and completes its linked Task.
@@ -66,7 +79,8 @@ Repo Config remains tracked at `.but-why/config.json` in each worktree.
 Shared Repository State identifies the Local Repository by its Git common directory.
 Existing Changes continue to use their recorded absolute Managed Worktree paths.
 
-State databases initialize from one current schema baseline.
+Before the first public release, state databases initialize from one replaceable current schema baseline.
+The first public release freezes that baseline as schema version 1, and later schema changes use ordered forward migrations through the existing Effect SQL Migrator.
 
 ## CLI
 
@@ -74,7 +88,7 @@ The public CLI is `by`.
 The Change command surface includes:
 
 ```text
-by change start [--task <task-id>]
+by change start [--task <task-id>] [--base <branch>]
 by change prepare <change-id>
 by change list [--all]
 by change show <change-id>
