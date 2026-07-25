@@ -43,7 +43,7 @@ Deepen CLI result construction third.
 Programmatic CLI Consumer result construction should be consistent across Task, submit preflight, and future commands.
 Concentrate module-load error mapping, structured usage errors, structured runtime errors, help shape, success result construction, and serializer-facing result objects behind a small `cliResults` interface.
 Name the new CLI result code with a domain name such as `cliResults.ts`, not `cliResultModule.ts`.
-The serializer seam from ADR-0003 must stay intact.
+The serializer seam from ADR-0002 must stay intact.
 Domain modules must not import TOON or JSON serializers.
 
 ## Design decisions
@@ -63,7 +63,7 @@ If a seam exists only for tests, keep it internal to the deeper module unless pr
 
 - [x] Existing `by init`, `by`, `by task create`, `by task list`, `by task show`, `by task context`, `by task comment`, `by task start`, and `by submit` behavior is preserved.
 - [x] Existing TOON stdout shape, error codes, exit codes, and help text remain unchanged unless an intentional output contract update is documented in this issue.
-- [x] Existing JSON stdout shape, error codes, exit codes, and help text remain supported through the serializer seam from ADR-0003.
+- [x] Existing JSON stdout shape, error codes, exit codes, and help text remain supported through the serializer seam from ADR-0002.
 - [x] Task and Run durability sit behind one durable state module interface that speaks in Task and Run terms and hides SQLite and migrations.
 - [x] Submit code no longer duplicates Task state validation logic.
 - [x] Submit code no longer owns SQL details for branch binding persistence, active Run uniqueness, Run ID allocation, or Task state mutation.

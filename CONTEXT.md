@@ -132,12 +132,12 @@ _Avoid_: Validation Workspace, caller checkout, temporary agent worktree, Task W
 An optional visible external-agent process hosted in a Managed Worktree, with Herdr as the temporary v1 integration.
 _Avoid_: Task state, Validation Run, background Supervisor worker
 
-**Interactive Session Environment**:
-The optional command wrapper read from the Managed Worktree's Repo Config that starts an Interactive Session with the repository's required development tools.
-It affects the Implementer and commands launched by that session, not Repository Preparation or the Validation Gate.
-When no wrapper is configured, the Interactive Session uses its existing direct launch behavior.
-A configured wrapper must launch successfully; failure rejects the Interactive Session launch without an unwrapped fallback and preserves the ready Change for retry.
-_Avoid_: Caller-checkout config, Global Config preference, Repository Preparation, Validation Workspace, Herdr configuration
+**Agent Environment**:
+The optional command wrapper read from Repo Config that starts each host-run Implementer and reviewer with the repository's required development tools.
+The same Agent Environment applies in the Managed Worktree and in a host-run Validation Workspace.
+It does not alter Repository Preparation, Checks, or containerized reviewer execution.
+If the configured wrapper fails, But Why stops the agent operation without an unwrapped retry.
+_Avoid_: Interactive Session Environment, Reviewer Environment, Caller-checkout config, Global Config preference, Repository Preparation, Herdr configuration
 
 **Interactive Session Host**:
 An external tool that opens and presents an Interactive Session in a supplied Managed Worktree.

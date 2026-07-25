@@ -7,7 +7,7 @@ Done.
 ## Specification
 
 - [Source specification decomposed from Task 146](146-migrate-state-stores-to-effect-programs.md)
-- [Module-owned storage and Change transactions](../adr/0014-use-module-owned-storage-and-change-transactions.md)
+- [Domain-centered modules and module-owned persistence](../adr/0006-use-domain-centered-modules-and-module-owned-persistence.md)
 - [Taskless Changes and worktree handoff](../specs/taskless-changes-and-worktree-handoff.md)
 
 ## Behaviors owned
@@ -28,7 +28,7 @@ Keep validation history and delivery on their temporary storage paths until thei
 
 - Baseline: `22e0583577d429b358fa85780539d9b5f76cd8a7`.
 - Spec review source: this task draft.
-- Normative traceability: Task 146, ADR 0014, `docs/architecture.md`, the Effect-first storage spike, and `docs/specs/taskless-changes-and-worktree-handoff.md`.
+- Normative traceability: Task 146, ADR 0006, `docs/architecture.md`, the Effect-first storage spike, and `docs/specs/taskless-changes-and-worktree-handoff.md`.
 - Primary seam: Candidate capture integration tests create, reuse, reject, and roll back Candidates through the public Change capture behavior.
 
 | Acceptance criterion | Implementation target | Public test seam | Verification target |
@@ -46,7 +46,7 @@ Task 151 must remove its two Candidate capture violations and introduce no new q
 ## Implementation decision ledger
 
 - Local: keep Candidate capture domain rejections as successful Effect values and propagate repository storage failures through the typed error channel, matching Tasks 146 and 149.
-- Local: give Candidate capture separate workflow-owned persistence and Git interfaces, while repository composition selects the SQLite and local Git adapters required by ADR 0014.
+- Local: give Candidate capture separate workflow-owned persistence and Git interfaces, while repository composition selects the SQLite and local Git adapters required by ADR 0006.
 - Local: keep Change selection, rebinding, base assignment, Candidate reuse, and Candidate insertion in the named Candidate capture persistence module, with the durable write set inside `RepositorySql.transactionImmediate`.
 - Local: preserve Git-visible rejection checks before persistence acquisition in the public integration seam, so unsafe worktrees do not create repository state.
 - Deferred to Task 152: migrate Candidate reads used by validation history from their temporary synchronous storage path.

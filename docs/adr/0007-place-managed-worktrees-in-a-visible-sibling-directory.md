@@ -1,6 +1,8 @@
-# Place Managed Worktrees in a visible sibling directory
+---
+status: accepted
+---
 
-Status: accepted
+# Place Managed Worktrees in a visible sibling directory
 
 New Managed Worktrees use `<main-checkout-parent>/<main-checkout-name>-worktrees/but-why/<change-slug>`.
 But Why asks Git for the canonical main checkout so Change Start resolves the same root from the main checkout and every linked worktree.

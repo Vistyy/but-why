@@ -5,7 +5,7 @@
 - `docs/prds/change-centered-validation-prd.md`
 - `docs/specs/taskless-changes-and-worktree-handoff.md`
 - `CONTEXT.md`
-- `docs/adr/0013-require-a-pr-or-verified-no-change-completion.md`
+- `docs/adr/0008-preserve-exact-candidate-provenance-through-submission.md`
 
 ## Behaviors owned
 

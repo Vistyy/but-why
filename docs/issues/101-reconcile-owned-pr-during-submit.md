@@ -5,7 +5,7 @@
 - `docs/prds/change-centered-validation-prd.md`
 - `docs/specs/taskless-changes-and-worktree-handoff.md`
 - `CONTEXT.md`
-- `docs/adr/0011-keep-v1-pr-heads-locally-owned.md`
+- `docs/adr/0008-preserve-exact-candidate-provenance-through-submission.md`
 
 ## Behaviors owned
 

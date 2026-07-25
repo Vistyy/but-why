@@ -7,7 +7,7 @@ Done.
 ## Specification
 
 - [Source specification decomposed from Task 146](146-migrate-state-stores-to-effect-programs.md)
-- [Module-owned storage and Change transactions](../adr/0014-use-module-owned-storage-and-change-transactions.md)
+- [Domain-centered modules and module-owned persistence](../adr/0006-use-domain-centered-modules-and-module-owned-persistence.md)
 - [Taskless Changes and worktree handoff](../specs/taskless-changes-and-worktree-handoff.md)
 
 ## Behaviors owned
@@ -29,7 +29,7 @@ Keep unmigrated Candidate, validation, submission, and reconciliation callers on
 
 - Baseline: `5ad27375d28ed3700b61d152490bef39404acbcc`.
 - Spec review source: this task draft.
-- Normative traceability: Task 146, ADR 0014, `docs/architecture.md`, the Effect-first storage spike, and `docs/specs/taskless-changes-and-worktree-handoff.md`.
+- Normative traceability: Task 146, ADR 0006, `docs/architecture.md`, the Effect-first storage spike, and `docs/specs/taskless-changes-and-worktree-handoff.md`.
 - Primary seam: one CLI process creates and approves a Task, another starts and prepares its Change, and a later process reads the persisted Task state, Change, and Acceptance Context.
 
 | Acceptance criterion | Implementation target | Public test seam | Verification target |
@@ -50,7 +50,7 @@ Task 150 must remove its owned Change Start violation and introduce no new quali
 
 - Local: add Effect-native Task and Change Start persistence interfaces beside the synchronous compatibility interfaces, because Tasks 151 through 153 still require the compatibility path and Task 147 owns its removal.
 - Local: keep domain rejection unions as successful Effect values and reserve `RepositoryStorageError` for the typed error channel, matching Task 146 and the Task 149 foundation.
-- Local: compose scoped repository SQL and concrete persistence adapters at the repository edge, so Task and Change workflows receive only module-owned interfaces required by ADR 0014.
+- Local: compose scoped repository SQL and concrete persistence adapters at the repository edge, so Task and Change workflows receive only module-owned interfaces required by ADR 0006.
 - Local: inject Change Start Git operations through one Change-owned interface whose production adapter wraps the existing native Git behavior, because Git provisioning belongs to Change and deterministic workflow tests need a system seam.
 - Local: preserve current immediate transaction semantics for concurrent Task writes and Task-backed Change Start by acquiring SQLite's write reservation with an identity no-op at the start of the Effect SQL transaction, because the pinned adapter uses deferred `BEGIN` and existing public concurrency and atomicity behavior is normative.
 - Local: keep the repository storage error contract module-neutral while SQLite owns its construction, so workflows and CLI result mapping do not depend on a storage adapter module.

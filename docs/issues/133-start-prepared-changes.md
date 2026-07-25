@@ -4,8 +4,8 @@
 
 - `docs/specs/taskless-changes-and-worktree-handoff.md`
 - `CONTEXT.md`
-- `docs/adr/0008-use-change-as-validation-and-delivery-owner.md`
-- `docs/adr/0012-control-task-progress-through-lifecycle-operations.md`
+- `docs/adr/0006-use-domain-centered-modules-and-module-owned-persistence.md`
+- `docs/adr/0005-control-task-progress-through-lifecycle-operations.md`
 
 ## Behaviors owned
 

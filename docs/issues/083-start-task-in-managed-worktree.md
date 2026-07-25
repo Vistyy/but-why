@@ -8,8 +8,8 @@ Done.
 
 - `docs/prds/change-centered-validation-prd.md`
 - `CONTEXT.md`
-- `docs/adr/0004-use-canonical-task-slugs-for-operational-names.md`
-- `docs/adr/0008-use-change-as-validation-and-delivery-owner.md`
+- `docs/adr/0003-use-canonical-task-slugs-for-operational-names.md`
+- `docs/adr/0006-use-domain-centered-modules-and-module-owned-persistence.md`
 
 ## Behaviors owned
 

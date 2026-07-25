@@ -37,7 +37,7 @@ The `0.12.0` package reported version `0.12.0` at runtime.
 ## Prototype archive
 
 The executable prototype was removed after its findings were incorporated into the accepted architecture and production implementation.
-See [ADR 0002](../adr/0002-use-sandcastle-as-v1-execution-engine.md) for the accepted decision and [issue 011](../issues/011-create-validation-workspaces-through-sandcastle.md) for the implementation record.
+See [ADR 0001](../adr/0001-use-fixed-validation-gate-through-sandcastle.md) for the accepted decision and [issue 011](../issues/011-create-validation-workspaces-through-sandcastle.md) for the implementation record.
 
 ## What worked on Sandcastle 0.12.0
 

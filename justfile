@@ -82,11 +82,15 @@ _biome-check:
     @just --unstable --fmt --check
     @pnpm exec biome check --assist-enabled=false .
 
-# Validate links and anchors in every tracked Markdown file.
+# Validate links and anchors in tracked and non-ignored untracked Markdown files.
 docs-check:
     #!/usr/bin/env bash
     set -euo pipefail
-    mapfile -d '' markdown_files < <(git ls-files -z -- '*.md')
+    mapfile -d '' candidate_markdown_files < <(git ls-files -z --cached --others --exclude-standard -- '*.md')
+    markdown_files=()
+    for file in "${candidate_markdown_files[@]}"; do
+        [[ -f "$file" ]] && markdown_files+=("$file")
+    done
     pnpm --silent run docs-check -- "${markdown_files[@]}"
 
 # Check structural code rules.

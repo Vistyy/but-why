@@ -90,6 +90,17 @@ V1 uses the fixed changed-code Validation Gate and the Acceptance-only no-change
 Future configuration may select Checks or Specialists from trusted facts such as changed paths or Task metadata.
 Use named conditions instead of a generic workflow language.
 
+## How should reviewer execution use containers?
+
+V1 continues to run reviewers on the host.
+The Agent Environment configures the repository toolchain for host-run agents only.
+Do not treat the current Docker or Podman path as a security boundary.
+
+Before relying on containerized reviewers, define the maintained image and toolchain, writable mounts, Git access, credential exposure, network access, process ownership, cleanup, and resource limits.
+Measure whether CPU limits prevent reviewer experiments or repository Checks from monopolizing the development host.
+Decide whether Sandcastle can own this behavior through a maintained supported contract or whether But Why needs another execution provider.
+Plan this work after the Tasks required for the first release are complete.
+
 ## Does automatic writing need stronger isolation?
 
 Read-only validation uses Sandcastle.

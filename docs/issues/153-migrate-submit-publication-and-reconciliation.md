@@ -8,7 +8,7 @@ Done.
 
 - [Source specification decomposed from Task 146](146-migrate-state-stores-to-effect-programs.md)
 - [Taskless Changes and worktree handoff](../specs/taskless-changes-and-worktree-handoff.md)
-- [Module-owned storage and Change transactions](../adr/0014-use-module-owned-storage-and-change-transactions.md)
+- [Domain-centered modules and module-owned persistence](../adr/0006-use-domain-centered-modules-and-module-owned-persistence.md)
 
 ## Behaviors owned
 
@@ -29,7 +29,7 @@ Remove repeated Change transaction and CLI loading behavior only where one share
 
 - Baseline: `ed206384fc20a5f0ab410444e1cf57221b7c9289`.
 - Spec review source: this task draft.
-- Normative traceability: Task 146, the Taskless Changes and worktree handoff specification, ADR 0014, `docs/architecture.md`, and the Effect-first storage spike.
+- Normative traceability: Task 146, the Taskless Changes and worktree handoff specification, ADR 0006, `docs/architecture.md`, and the Effect-first storage spike.
 - Primary seam: a cross-process Change CLI workflow captures a Candidate, submits it, records publication, observes merge state, reconciles the Change, and reads the completed Task and cleanup result.
 
 | Acceptance criterion | Implementation target | Public test seam | Verification target |

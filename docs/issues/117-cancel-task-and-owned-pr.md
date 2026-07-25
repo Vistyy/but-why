@@ -5,7 +5,7 @@
 - `docs/prds/change-centered-validation-prd.md`
 - `docs/specs/taskless-changes-and-worktree-handoff.md`
 - `CONTEXT.md`
-- `docs/adr/0012-control-task-progress-through-lifecycle-operations.md`
+- `docs/adr/0005-control-task-progress-through-lifecycle-operations.md`
 
 ## Behaviors owned
 

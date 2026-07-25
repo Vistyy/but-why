@@ -43,7 +43,7 @@ The Validation Gate reports its results through Change-owned interfaces.
 Task and Change own their persistence interfaces.
 Repository storage composition owns database lifecycle and constructs SQLite adapters.
 Each workflow receives only the persistence operations it requires.
-See [ADR 0014](adr/0014-use-module-owned-storage-and-change-transactions.md).
+See [ADR 0006](adr/0006-use-domain-centered-modules-and-module-owned-persistence.md).
 
 ## Change lifecycle
 

@@ -6,7 +6,7 @@ Done.
 
 ## Parent
 
-`docs/adr/0003-support-json-for-programmatic-cli-consumers.md`
+`docs/adr/0002-support-json-for-programmatic-cli-consumers.md`
 
 ## What to build
 

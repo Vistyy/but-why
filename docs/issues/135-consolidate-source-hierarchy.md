@@ -4,8 +4,7 @@
 
 - `docs/specs/taskless-changes-and-worktree-handoff.md`
 - `CONTEXT.md`
-- `docs/adr/0006-use-domain-centered-modular-monolith.md`
-- `docs/adr/0008-use-change-as-validation-and-delivery-owner.md`
+- `docs/adr/0006-use-domain-centered-modules-and-module-owned-persistence.md`
 
 ## Behaviors owned
 
@@ -32,7 +31,7 @@ The full repository suite and Fallow import graph additionally verify the final 
 
 - Baseline: `637d50257aad4b495f2bd64ec824b41470b1a350`.
 - Spec review source: this task draft.
-- Normative traceability: `docs/specs/taskless-changes-and-worktree-handoff.md`, `CONTEXT.md`, ADR 0006, and ADR 0008.
+- Normative traceability: `docs/specs/taskless-changes-and-worktree-handoff.md`, `CONTEXT.md`, and ADR 0006.
 - Primary seam: the complete Task-backed Change workflow through the Change CLI with the existing public results and persisted state.
 - Structural seam: the source hierarchy test and Fallow import graph.
 
@@ -64,7 +63,7 @@ The full repository suite and Fallow import graph additionally verify the final 
 ### Decision ledger
 
 - Local: nest Change-owned workflow modules under `src/change/`.
-  ADR 0008 makes Change the durable owner of Candidates, Validation Runs, Findings, and delivery.
+  ADR 0006 makes Change the durable owner of Candidates, Validation Runs, Findings, and delivery.
 - Local: keep `agent`, `contracts`, `init`, `output`, `repositoryPreparation`, `sqlite`, and `submissionEnvironment` as top-level shared roles.
   The specification defines these as shared execution, contract, repository-context, output, preparation, persistence, and submission-environment adapters.
 - Local: move composition loaders into their owning domains as `change/loadChangeInspection.ts`, `change/loadChangeSubmit.ts`, `change/loadChangeUseCases.ts`, `change/candidateValidation/candidateValidationLayer.ts`, and `task/loadTaskUseCases.ts`.

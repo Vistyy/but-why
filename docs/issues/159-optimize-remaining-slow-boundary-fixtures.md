@@ -47,7 +47,7 @@ Focused hotspot suites plus three consecutive uncontended locked-Nix runs of `ju
 
 - Baseline: `264b8594d96f067161cfce1271e02c82b1f72dd2`.
 - Spec review source: this task document.
-- Normative traceability: `docs/specs/test-suite-feedback-loop-redesign.md`, `CONTEXT.md`, and `docs/adr/0014-use-module-owned-storage-and-change-transactions.md`.
+- Normative traceability: `docs/specs/test-suite-feedback-loop-redesign.md`, `CONTEXT.md`, and `docs/adr/0006-use-domain-centered-modules-and-module-owned-persistence.md`.
 - Primary public verification seam: focused hotspot boundary suites plus three consecutive locked-Nix `just full-quality` runs after each passing migration stage.
 
 | Acceptance criterion | Implementation target | Public test seam | Verification target |

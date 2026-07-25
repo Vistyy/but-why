@@ -9,7 +9,7 @@ Done.
 - [Source specification decomposed from Task 146](146-migrate-state-stores-to-effect-programs.md)
 - [Task 137 Effect SQL foundation](137-move-state-storage-to-effect-sql.md)
 - [Effect-first storage spike](../../spikes/effect-first-path/README.md)
-- [Module-owned storage and Change transactions](../adr/0014-use-module-owned-storage-and-change-transactions.md)
+- [Domain-centered modules and module-owned persistence](../adr/0006-use-domain-centered-modules-and-module-owned-persistence.md)
 
 ## Behaviors owned
 
@@ -30,7 +30,7 @@ Prove the new lifecycle and failure behavior through storage integration tests b
 
 - Baseline: `31a563544e51afb6a655dc9b42a2b4e325034b87`.
 - Spec review source: this task draft.
-- Normative traceability: Task 146, Task 137, the Effect-first storage spike, ADR 0014, `docs/architecture.md`, and `docs/specs/taskless-changes-and-worktree-handoff.md`.
+- Normative traceability: Task 146, Task 137, the Effect-first storage spike, ADR 0006, `docs/architecture.md`, and `docs/specs/taskless-changes-and-worktree-handoff.md`.
 - Primary seam: `by init` acquires, migrates, closes, and reopens repository state through the scoped Effect storage lifecycle.
 
 | Acceptance criterion | Implementation target | Public test seam | Verification target |
@@ -50,7 +50,7 @@ Task 149 must introduce no additional quality failure.
 
 - User-approved: preserve the five baseline Fallow boundary violations while Task 149 introduces no new violation, because Tasks 150, 151, and 135 own the affected migration and consolidation work.
 - Local: add one Effect-native repository SQL composition contract beside the synchronous compatibility contract, because Tasks 150 through 153 own domain workflow migration and Task 147 owns compatibility removal.
-- Local: expose the scoped SQL client only to repository composition and SQLite adapters, while domain modules continue to receive narrow module-owned persistence interfaces required by ADR 0014.
+- Local: expose the scoped SQL client only to repository composition and SQLite adapters, while domain modules continue to receive narrow module-owned persistence interfaces required by ADR 0006.
 - Local: use tagged errors named for unavailable state, repository identity conflict, SQL operations, migrations, and persisted data, with diagnostic operation or path fields and preserved causes where applicable.
 - Local: treat the persisted string-array representation as strict JSON containing only strings, because the stored form is JSON and no normative source defines a wider grammar.
 

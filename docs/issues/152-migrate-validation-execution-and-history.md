@@ -8,7 +8,7 @@ Done.
 
 - [Source specification decomposed from Task 146](146-migrate-state-stores-to-effect-programs.md)
 - [Change-centered validation PRD](../prds/change-centered-validation-prd.md)
-- [Module-owned storage and Change transactions](../adr/0014-use-module-owned-storage-and-change-transactions.md)
+- [Domain-centered modules and module-owned persistence](../adr/0006-use-domain-centered-modules-and-module-owned-persistence.md)
 
 ## Behaviors owned
 
@@ -29,7 +29,7 @@ Preserve phase order, error types, Artifact names, and reviewer evidence.
 
 - Baseline: `b2eea3f5d62674c4e1126324b50bdf437689dbc9`.
 - Spec review source: this task draft.
-- Normative traceability: Task 146, the Change-centered validation PRD, ADR 0014, `docs/architecture.md`, and the Effect-first storage spike.
+- Normative traceability: Task 146, the Change-centered validation PRD, ADR 0006, `docs/architecture.md`, and the Effect-first storage spike.
 - Primary seam: Candidate validation runs through all four phases before the Findings and Validation Run commands return the persisted evidence.
 
 | Acceptance criterion | Implementation target | Public test seam | Verification target |

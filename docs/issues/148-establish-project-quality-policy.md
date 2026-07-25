@@ -8,7 +8,7 @@ Task 134 supersedes the blocking coverage-health policy with the approved routin
 ## Specification
 
 - [Tooling](../tooling.md)
-- [Module-owned storage and Change transactions](../adr/0014-use-module-owned-storage-and-change-transactions.md)
+- [Domain-centered modules and module-owned persistence](../adr/0006-use-domain-centered-modules-and-module-owned-persistence.md)
 
 ## Behaviors owned
 
