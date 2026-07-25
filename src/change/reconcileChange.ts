@@ -229,8 +229,8 @@ const unexpectedPullRequestFact = (
   if (state !== "open:false" && state !== "closed:false" && state !== "closed:true") {
     return "pull_request_state_invalid";
   }
-  if (pullRequest.headSha !== publication.expectedHeadSha && state !== "closed:false") {
-    return state === "closed:true" ? "merged_head_sha_mismatch" : "head_sha_mismatch";
+  if (pullRequest.headSha !== publication.expectedHeadSha && state === "open:false") {
+    return "head_sha_mismatch";
   }
   return undefined;
 };
