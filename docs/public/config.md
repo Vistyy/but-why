@@ -278,6 +278,11 @@ When a reviewer names an `agentProfile`, But Why searches Repo Config first and 
 
 When a reviewer does not name an `agentProfile`, But Why uses `defaultAgentProfile` and searches Global Config only.
 
+Acceptance Review and Specialist Review currently use a temporary hard-coded Pi resource wrapper.
+It disables discovered extensions, skills, prompt templates, themes, and context files and allows reviewers only `read`, `bash`, `grep`, `find`, and `ls`.
+This wrapper does not configure `by change implement` or its Interactive Session.
+The permanent design is tracked in [Open Questions: How should agent execution identities work?](../open-questions.md#how-should-agent-execution-identities-work).
+
 But Why validates profiles when an operation needs an agent, so unrelated commands remain available.
 
 Unsupported runtimes, missing profiles, and missing required models produce typed errors with setup actions.

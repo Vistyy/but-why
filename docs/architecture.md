@@ -22,6 +22,10 @@ The following top-level source folders have shared roles:
 - `src/sqlite/` contains SQLite persistence adapters.
 - `src/submissionEnvironment/` contains Git and GitHub submission-environment adapters.
 
+Acceptance Review and Specialist Review currently use a temporary hard-coded Pi resource wrapper that disables discovered reviewer resources and limits reviewer tools to `read`, `bash`, `grep`, `find`, and `ls`.
+This wrapper does not configure the Implementer or Interactive Session.
+The permanent design is tracked in [Open Questions: How should agent execution identities work?](open-questions.md#how-should-agent-execution-identities-work).
+
 No top-level source folder represents a migration stage.
 Change and Task composition modules stay inside their owning domain instead of using `local*` folders.
 

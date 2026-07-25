@@ -3,6 +3,12 @@ import type { ReviewerOutputContractFailed } from "../change/validation/validati
 import type { ReviewerOutput } from "../contracts/reviewerOutput.js";
 import type { TaskContextSnapshotV1 } from "../change/validationRun/taskContextSnapshot.js";
 
+const reviewerExecutionInstructions = [
+  "When inspection is insufficient, you may use bash and operating-system temporary space for targeted experiments, generated scripts, fixtures, and other disposable evidence.",
+  "Use passing Check Artifacts for broad validation evidence instead of rerunning the same broad repository Checks.",
+  "You must not modify the Candidate. Candidate integrity verification by But Why is authoritative.",
+].join("\n");
+
 export const defaultAcceptanceInstructions = [
   "Review the exact Candidate against the supplied immutable Acceptance Context.",
   "Inspect the repository and Candidate diff before deciding.",
@@ -23,6 +29,7 @@ export const buildAcceptanceReviewerPrompt = (input: {
 }): string =>
   [
     input.instructions,
+    reviewerExecutionInstructions,
     "",
     "Available Validation Run evidence:",
     encodeReviewerWireValue({
@@ -45,6 +52,7 @@ export const buildSpecialistReviewerPrompt = (input: {
   readonly specialist: string;
   readonly instructions: string;
   readonly validationRunId: string;
+  readonly availableArtifactRefs: readonly string[];
   readonly candidate: {
     readonly changeBaseSha: string;
     readonly headSha: string;
@@ -52,13 +60,17 @@ export const buildSpecialistReviewerPrompt = (input: {
 }): string =>
   [
     input.instructions,
+    reviewerExecutionInstructions,
     "",
     `Specialist: ${input.specialist}`,
     "Review the exact Candidate only for the configured concern.",
     "Inspect the repository and Candidate diff before deciding.",
     "",
-    "Validation Run:",
-    encodeReviewerWireValue({ validationRunId: input.validationRunId }),
+    "Available Validation Run evidence:",
+    encodeReviewerWireValue({
+      validationRunId: input.validationRunId,
+      availableArtifactRefs: input.availableArtifactRefs,
+    }),
     "",
     "Candidate:",
     encodeReviewerWireValue(input.candidate),
