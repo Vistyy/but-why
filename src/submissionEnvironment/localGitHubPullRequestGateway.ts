@@ -203,6 +203,7 @@ type GitHubPullRequestJson = {
   readonly url?: unknown;
   readonly state?: unknown;
   readonly merged?: unknown;
+  readonly merged_at?: unknown;
   readonly base?: {
     readonly ref?: unknown;
     readonly repo?: { readonly owner?: { readonly login?: unknown }; readonly name?: unknown };
@@ -237,6 +238,14 @@ const parsePullRequestObject = (value: unknown): GitHubPullRequest | undefined =
   const repository = repositoryIdentity(pullRequest.base.repo);
   const state =
     pullRequest.state === "open" || pullRequest.state === "closed" ? pullRequest.state : undefined;
+  const merged =
+    typeof pullRequest.merged === "boolean"
+      ? pullRequest.merged
+      : pullRequest.merged_at === null
+        ? false
+        : typeof pullRequest.merged_at === "string"
+          ? true
+          : undefined;
   return {
     number: pullRequest.number,
     url: pullRequest.url,
@@ -244,7 +253,7 @@ const parsePullRequestObject = (value: unknown): GitHubPullRequest | undefined =
     headBranch: pullRequest.head.ref,
     headSha: pullRequest.head.sha,
     ...(state === undefined ? {} : { state }),
-    ...(typeof pullRequest.merged === "boolean" ? { merged: pullRequest.merged } : {}),
+    ...(merged === undefined ? {} : { merged }),
     ...(repository === undefined ? {} : { repository }),
   };
 };

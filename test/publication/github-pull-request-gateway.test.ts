@@ -130,6 +130,34 @@ describe("GitHub pull request gateway", () => {
     ]);
   });
 
+  it("reads complete unmerged facts from GitHub pull request lists", () => {
+    const gateway = localGitHubPullRequestGateway({
+      runGh: () => ({
+        ok: true,
+        stdout:
+          '[{"number":42,"url":"https://github.com/acme/widgets/pull/42","state":"open","merged_at":null,"base":{"ref":"main","repo":{"owner":{"login":"acme"},"name":"widgets"}},"head":{"ref":"feature","sha":"candidate-sha"}}]',
+      }),
+    });
+
+    expect(
+      gateway.findPullRequests(
+        { owner: "acme", repo: "widgets", baseBranch: "main", remoteName: "origin" },
+        "feature",
+      ),
+    ).toEqual([
+      {
+        number: 42,
+        url: "https://github.com/acme/widgets/pull/42",
+        state: "open",
+        merged: false,
+        repository: { owner: "acme", repo: "widgets" },
+        baseBranch: "main",
+        headBranch: "feature",
+        headSha: "candidate-sha",
+      },
+    ]);
+  });
+
   it("reads authoritative repository and lifecycle facts for an owned pull request", () => {
     const gateway = localGitHubPullRequestGateway({
       runGh: () => ({
