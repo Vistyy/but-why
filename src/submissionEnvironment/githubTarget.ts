@@ -2,6 +2,7 @@ import { spawnSync } from "node:child_process";
 
 import type { GitHubPrTarget } from "../change/validationRun/validationRun.js";
 import { type GitCommandRunner, runGitCommand } from "./gitFacts.js";
+import { parseRemoteChangeBaseRef } from "./remoteChangeBase.js";
 
 export type GitHubTargetResult =
   | {
@@ -50,7 +51,11 @@ export const detectGitHubPrTarget = (
   currentBranch: string,
   runGit: GitCommandRunner = runGitCommand,
   runGh: GhCommandRunner = runGhCommand,
+  selectedBaseRef?: string,
 ): GitHubTargetResult => {
+  if (selectedBaseRef !== undefined) {
+    return detectSelectedTarget(cwd, selectedBaseRef, runGit);
+  }
   const remote = selectGitHubRemote(cwd, runGit);
 
   if (!remote.ok) {
@@ -84,6 +89,30 @@ export const detectGitHubPrTarget = (
       baseBranch: defaultBranch.baseBranch,
       remoteName: remote.name,
       remoteUrl: remote.url,
+    },
+  };
+};
+
+const detectSelectedTarget = (
+  cwd: string,
+  selectedBaseRef: string,
+  runGit: GitCommandRunner,
+): GitHubTargetResult => {
+  const selected = parseRemoteChangeBaseRef(selectedBaseRef);
+  if (selected === undefined) return { ok: false, code: "PR_TARGET_NOT_FOUND" };
+  const url = runGit(["config", "--get", `remote.${selected.remoteName}.url`], cwd);
+  if (!url.ok) return { ok: false, code: "GITHUB_TOOLING_ERROR" };
+  const remoteUrl = url.stdout.trim();
+  const repository = parseGitHubRemoteUrl(remoteUrl);
+  if (repository === undefined) return { ok: false, code: "PR_TARGET_NOT_FOUND" };
+  return {
+    ok: true,
+    target: {
+      owner: repository.owner,
+      repo: repository.repo,
+      baseBranch: selected.branchName,
+      remoteName: selected.remoteName,
+      remoteUrl,
     },
   };
 };

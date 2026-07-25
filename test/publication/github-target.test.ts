@@ -13,7 +13,9 @@ const gitFor =
   (args) => {
     const command = args.join(" ");
     if (command === "remote") return { ok: true, stdout: "origin\n" };
-    if (command === "remote get-url origin") return { ok: true, stdout: `${url}\n` };
+    if (command === "remote get-url origin" || command === "config --get remote.origin.url") {
+      return { ok: true, stdout: `${url}\n` };
+    }
     return { ok: false, code: "command_failed" };
   };
 
@@ -55,6 +57,22 @@ describe("GitHub PR target detection", () => {
     expect(detectGitHubPrTarget(cwd, "feature", gitFor(url), ghWithDefault())).toEqual({
       ok: false,
       code: "PR_TARGET_NOT_FOUND",
+    });
+  });
+
+  it("uses the selected remote Change Base as the pull request target", () => {
+    const runGit = gitFor("git@github.com:acme/widgets.git");
+    expect(
+      detectGitHubPrTarget(
+        cwd,
+        "feature",
+        runGit,
+        ghWithDefault("ignored"),
+        "refs/remotes/origin/release/next",
+      ),
+    ).toMatchObject({
+      ok: true,
+      target: { remoteName: "origin", baseBranch: "release/next" },
     });
   });
 

@@ -21,7 +21,7 @@ const candidate = {
   changeId: "change-1",
   candidateId: "candidate-1",
   branchRef: "refs/heads/change-1",
-  selectedBaseRef: "refs/heads/main",
+  selectedBaseRef: "refs/remotes/origin/main",
   baseSource: "saved_change",
   resolvedTargetSha: "base",
   comparisonBaseSha: "base",
@@ -605,6 +605,40 @@ describe("Change Submit orchestration", () => {
       }),
   );
 
+  it.effect("rejects a failed Change Base refresh before Candidate capture", () =>
+    Effect.gen(function* () {
+      const events: string[] = [];
+      const submit = openChangeSubmit(
+        dependencies({
+          events,
+          change: readyChange(),
+          refreshResult: {
+            ok: false,
+            code: "publication_remote_unreachable",
+            remoteName: "origin",
+          },
+        }),
+      );
+      const validationLayer = Layer.succeed(CandidateValidation, {
+        validateCandidate: () => Effect.die("Validation must not start"),
+        validateTaskBackedCandidate: () => Effect.die("Validation must not start"),
+        validateNoChange: () => Effect.die("Validation must not start"),
+        listFindings: () => Effect.succeed([]),
+        listToolingFailures: () => Effect.succeed([]),
+        listRounds: () => Effect.succeed([]),
+      });
+
+      expect(
+        yield* submit.submit({ changeId: "change-1", now }).pipe(Effect.provide(validationLayer)),
+      ).toEqual({
+        ok: false,
+        code: "publication_remote_unreachable",
+        remoteName: "origin",
+      });
+      expect(events).toEqual(["refresh_base"]);
+    }),
+  );
+
   it.effect("rejects a missing GitHub target before Candidate validation starts", () =>
     Effect.gen(function* () {
       const events: string[] = [];
@@ -740,6 +774,13 @@ const dependencies = (input: {
   readonly reconciliationRejection?: string;
   readonly captureResult?: CaptureLocalCandidateResult;
   readonly captureResults?: readonly CaptureLocalCandidateResult[];
+  readonly refreshResult?:
+    | { readonly ok: true; readonly base: typeof refreshedBase }
+    | {
+        readonly ok: false;
+        readonly code: "publication_remote_unreachable";
+        readonly remoteName: string;
+      };
   readonly targetResult?:
     | { readonly ok: false; readonly code: "PR_TARGET_NOT_FOUND" }
     | {
@@ -833,6 +874,10 @@ const dependencies = (input: {
           Effect.sync(() => publication.publish(publicationInput)),
       };
     },
+    refreshBase: () => {
+      if (input.refreshResult !== undefined) events.push("refresh_base");
+      return input.refreshResult ?? { ok: true, base: refreshedBase };
+    },
     detectTarget: () => {
       events.push("detect_target");
       return (
@@ -860,7 +905,7 @@ const readyChange = (overrides: Partial<ChangeRecord> = {}): ChangeRecord => ({
   id: "change-1",
   repositoryCommonDirectory: "/repo/.git",
   branchRef: "refs/heads/change-1",
-  baseRef: "refs/heads/main",
+  baseRef: "refs/remotes/origin/main",
   taskId: null,
   startingCommit: "base",
   worktreePath: "/repo/worktree",
@@ -877,6 +922,13 @@ const readyChange = (overrides: Partial<ChangeRecord> = {}): ChangeRecord => ({
   closedAt: null,
   ...overrides,
 });
+
+const refreshedBase = {
+  remoteName: "origin",
+  branchName: "main",
+  ref: "refs/remotes/origin/main",
+  commit: "base",
+} as const;
 
 const toolingFailure = {
   sequence: 1,

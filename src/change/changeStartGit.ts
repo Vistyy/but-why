@@ -3,10 +3,8 @@ import { constants, existsSync, lstatSync, mkdirSync, realpathSync, accessSync }
 import { basename, dirname, join } from "node:path";
 
 import { decodeRepoConfigSource } from "../init/repoConfig.js";
-import {
-  recordedRemoteDefaultLocalBranches,
-  resolveLocalBranch,
-} from "./candidateCapture/localGitCandidate.js";
+import { resolveLocalBranch } from "./candidateCapture/localGitCandidate.js";
+import { fetchRemoteChangeBase } from "../submissionEnvironment/remoteChangeBase.js";
 import type { RepoLocalContext } from "../init/repoContext.js";
 import { changeReadiness } from "./change.js";
 import type {
@@ -18,19 +16,12 @@ import type { ChangeStartRecord } from "./changeStartStore.js";
 export const resolveChangeStartGitIntent = (
   context: RepoLocalContext,
   slug: string,
+  requestedBaseBranch?: string,
 ): ResolveChangeStartGitResult => {
-  const recorded = recordedRemoteDefaultLocalBranches(context.root);
-  if (recorded === undefined) return { ok: false, code: "local_default_branch_unavailable" };
-  const defaults = [...new Set(recorded)];
-  if (defaults.length === 0) return { ok: false, code: "local_default_branch_missing" };
-  if (defaults.length > 1) return { ok: false, code: "local_default_branch_ambiguous" };
-
-  const baseRef = defaults[0];
-  if (baseRef === undefined) return { ok: false, code: "local_default_branch_missing" };
-  const startingCommit = resolveLocalBranch(context.root, baseRef);
-  if (startingCommit === undefined) {
-    return { ok: false, code: "local_default_branch_unavailable" };
-  }
+  const fetched = fetchRemoteChangeBase(context.root, requestedBaseBranch);
+  if (!fetched.ok) return fetched;
+  const baseRef = fetched.base.ref;
+  const startingCommit = fetched.base.commit;
 
   const configSource = git(context.root, "show", `${startingCommit}:.but-why/config.json`);
   if (!configSource.ok) return { ok: false, code: "committed_repo_config_missing" };

@@ -63,7 +63,7 @@ const documentedCommands = [
   "by task context apply <task-id>",
   "by task comment <task-id> --file <file>",
   "by task cancel <task-id> --reason <reason>",
-  "by change start [--task <task-id>]",
+  "by change start [--task <task-id>] [--base <branch>]",
   "by change prepare <change-id>",
   "by change list [--all]",
   "by change show <change-id>",
@@ -113,7 +113,9 @@ describe("installed manual workflow", () => {
       ),
     );
     expectSuccess(run("git", ["branch", "-M", "main"], consumer));
-    expectSuccess(run("git", ["remote", "add", "origin", consumer], consumer));
+    const publicationUrl = "https://github.com/acme/manual-workflow.git";
+    expectSuccess(run("git", ["config", `url.${consumer}.insteadOf`, publicationUrl], consumer));
+    expectSuccess(run("git", ["remote", "add", "origin", publicationUrl], consumer));
     expectSuccess(
       run("git", ["update-ref", "refs/remotes/origin/main", "refs/heads/main"], consumer),
     );

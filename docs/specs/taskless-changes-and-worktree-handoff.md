@@ -17,7 +17,8 @@ A Change may optionally link to one approved Task, but every But Why-managed per
 Task-backed Changes retain Acceptance Context and Acceptance Review.
 Taskless Changes run code-based validation and publication without requiring artificial Task intent.
 
-Change Start will create a branch from the default branch, create the persistent Managed Worktree through native Git, run shared Repository Preparation, and return the Change identity and readiness state.
+Change Start will fetch the detected publication remote and create a branch from its default branch or a named `--base` branch.
+It will create the persistent Managed Worktree through native Git, run shared Repository Preparation, and return the Change identity and readiness state.
 Preparation and agent launch remain separate operations.
 Herdr can start a fresh Pi session in a ready Managed Worktree and seed it from a compact handoff file.
 A user-owned manually invoked Pi skill can create that handoff and orchestrate the CLI commands without copying the full Pi session or invalidating its prompt cache.
@@ -27,7 +28,7 @@ A user-owned manually invoked Pi skill can create that handoff and orchestrate t
 1. As a developer, I want to start a taskless Change, so that I can work in parallel without creating artificial Task intent.
 2. As a developer, I want every managed worktree to belong to a Change, so that validation, findings, publication, and cleanup use one lifecycle.
 3. As a developer, I want to start a Change from an approved Task, so that planned work retains its Acceptance Context.
-4. As a developer, I want Change Start to choose the default branch automatically, so that I do not need to manage base refs for ordinary work.
+4. As a developer, I want Change Start to fetch and choose the publication remote's default branch automatically, so that ordinary work starts from current published code.
 5. As a developer, I want Change Start to create and name the branch and worktree safely, so that I do not need to understand Git worktree infrastructure.
 6. As an implementer, I want the worktree prepared before I enter it, so that its dependencies and tools are ready.
 7. As an implementer, I want failed preparation to preserve the Change and worktree, so that I can diagnose and retry the failure.
@@ -68,8 +69,13 @@ A Change has no title or duplicate intent fields.
 Change Start replaces Task Start as the implementation entry point.
 `by change start --task <task-id>` creates a Task-backed Change after enforcing Task approval and dependency rules.
 `by change start` creates a taskless Change without requiring metadata.
-Both forms create from the configured default branch.
-Arbitrary base refs and stacked Change semantics are excluded from v1.
+Both forms fetch the detected publication remote before they record a Change or start a Task.
+Without `--base`, both forms create from the exact fetched remote default branch commit.
+With `--base <branch>`, both forms create from the exact fetched named branch on the same remote.
+The selected branch is the recorded Change Base and future pull request target.
+Local branches and arbitrary refs are excluded from v1.
+A user must publish local commits before using them in a Change Base.
+Stacked Change semantics remain excluded from v1.
 
 Native `git worktree` is the required persistent-worktree provisioning adapter.
 New Managed Worktrees use `<main-checkout-parent>/<main-checkout-name>-worktrees/but-why/<change-slug>`.
@@ -103,7 +109,7 @@ The recorded Change remains recoverable after the path becomes usable.
 
 The supported Change command surface includes:
 
-- `by change start [--task <task-id>]`
+- `by change start [--task <task-id>] [--base <branch>]`
 - `by change prepare <change-id>`
 - `by change list [--all]`
 - `by change show <change-id>`
@@ -131,6 +137,11 @@ Skills, extensions, tests, and other programmatic callers pass `--output json` a
 
 ### Validation and publication
 
+Every Submission fetches the recorded remote Change Base before Candidate capture.
+Candidate capture and validation use the newly fetched target commit.
+A changed target commit produces a new Candidate and prevents reuse of validation for the older target.
+A failed fetch rejects Submission before Candidate or Validation Run creation.
+Submission does not merge, rebase, reset, or otherwise modify the Managed Worktree.
 Task-backed submission runs Repository Preparation, Checks, Acceptance Review, configured Specialists, and publication policy.
 Taskless submission runs Repository Preparation, Checks, configured Specialists, and publication policy without Acceptance Review.
 A taskless Change with no changed Candidate returns a structured nothing-to-submit result and remains open.

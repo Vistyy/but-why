@@ -220,9 +220,14 @@ by change start --task BY-3 --output json
 The installed command template is:
 
 ```text
-by change start [--task <task-id>]
+by change start [--task <task-id>] [--base <branch>]
 ```
 
+Change Start fetches the detected publication remote before it records the Change.
+Without `--base`, it uses the exact fetched remote default branch commit.
+With `--base <branch>`, it uses that exact fetched remote branch commit.
+The selected remote branch becomes the recorded Change Base and pull request target.
+Local branches cannot be Change Bases, so publish local commits before Change Start if the Change needs them.
 The result records the Change ID, optional Task ID, branch, base ref, starting commit, and `worktreePath`.
 
 If But Why cannot create or safely use the sibling path, Change Start reports the attempted path.
@@ -238,7 +243,7 @@ Its later Submission includes Acceptance Review.
 
 Use a taskless Change for work that does not need Task intent.
 
-Start it directly from the configured default branch:
+Start it directly from the freshly fetched publication-remote default branch:
 
 ```bash
 by change start --output json
@@ -249,6 +254,9 @@ The command creates a Change without a Task or Acceptance Context.
 It still creates and prepares a Managed Worktree.
 
 Its later Submission runs Repository Preparation, Checks, configured Specialists, and publication policy without Acceptance Review.
+Before Candidate capture, every Submission fetches the recorded remote Change Base again.
+A failed fetch rejects Submission without creating a Candidate or Validation Run.
+A successful fetch does not modify the Managed Worktree or Repository Branch.
 
 The taskless Change remains eligible for code-based validation and publication.
 

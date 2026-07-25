@@ -28,6 +28,10 @@ import {
 } from "./change.js";
 import type { ChangeReconciliation, ReconciledChange } from "./reconcileChange.js";
 import type { ChangePersistence } from "./changePersistence.js";
+import type {
+  RemoteChangeBaseError,
+  RemoteChangeBaseResult,
+} from "../submissionEnvironment/remoteChangeBase.js";
 
 export type ChangeSubmitResult =
   | {
@@ -84,6 +88,7 @@ export type ChangeSubmitResult =
   | { readonly ok: false; readonly code: "task_transition_failed"; readonly changeId: string }
   | { readonly ok: false; readonly code: "validation_policy_invalid"; readonly message: string }
   | { readonly ok: false; readonly code: "github_target_not_found" | "github_tooling_error" }
+  | RemoteChangeBaseError
   | { readonly ok: false; readonly code: PublishCandidateFailureCode }
   | Exclude<CaptureLocalCandidateResult, { readonly ok: true }>;
 
@@ -128,7 +133,12 @@ export const openChangeSubmit = (dependencies: {
   readonly reconciliation: ChangeReconciliation;
   readonly resolvePolicy: (taskBacked: boolean) => CandidateValidationPolicyResolution;
   readonly publicationFor: (cwd: string) => CandidatePublication;
-  readonly detectTarget: (cwd: string, branch: string) => PublicationTargetDetectionResult;
+  readonly refreshBase: (cwd: string, baseRef: string) => RemoteChangeBaseResult;
+  readonly detectTarget: (
+    cwd: string,
+    branch: string,
+    baseRef: string,
+  ) => PublicationTargetDetectionResult;
   readonly captureCandidate: CaptureCandidate;
 }): CandidateValidationChangeSubmit => ({
   submit: (input) => submitChange(dependencies, input),
@@ -158,6 +168,11 @@ const submitChange = (
     const selected = yield* selectReadyChange(dependencies.persistence, input.changeId);
     if (!selected.ok) return selected;
     const change = selected.change;
+    if (change.baseRef === null) {
+      return { ok: false, code: "invalid_remote_change_base", baseRef: "" } as const;
+    }
+    const refreshedBase = dependencies.refreshBase(change.worktreePath, change.baseRef);
+    if (!refreshedBase.ok) return refreshedBase;
     const reconciliation = yield* reconcileBeforeSubmission(dependencies, change, input.now);
     if (!reconciliation.proceed) return reconciliation.result;
     const candidate = yield* dependencies.captureCandidate({
@@ -500,7 +515,11 @@ const detectPublicationTarget = (
   change: ChangeRecord & { readonly worktreePath: string },
   candidate: CapturedCandidate,
 ): PublicationTargetDetectionResult =>
-  dependencies.detectTarget(change.worktreePath, candidate.branchRef.replace(/^refs\/heads\//, ""));
+  dependencies.detectTarget(
+    change.worktreePath,
+    candidate.branchRef.replace(/^refs\/heads\//, ""),
+    change.baseRef ?? "",
+  );
 
 const publishedResult = (
   change: ChangeRecord,

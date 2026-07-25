@@ -41,8 +41,9 @@ The remote Git branch that Candidate Publication creates or updates as the head 
 _Avoid_: Repository Branch, GitHub PR Target
 
 **Change Base**:
-The recorded comparison and publication target from which a Change's Candidates are judged.
-_Avoid_: Current merge base chosen implicitly, starting worktree path
+The recorded remote branch that is the comparison and publication target from which a Change's Candidates are judged.
+But Why fetches the Change Base at Change Start and before each Submission.
+_Avoid_: Local branch, current merge base chosen implicitly, starting worktree path
 
 **Candidate**:
 One immutable committed code state identified by an exact comparison base and head within a Change.

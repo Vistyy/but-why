@@ -80,9 +80,10 @@ const trackedTreeMatches = (cwd: string, commitSha: string): boolean | undefined
 };
 
 const localBranchExists = (cwd: string, ref: string): boolean =>
-  ref.startsWith("refs/heads/") && git(cwd, "show-ref", "--verify", "--quiet", ref).ok;
+  (ref.startsWith("refs/heads/") || ref.startsWith("refs/remotes/")) &&
+  git(cwd, "show-ref", "--verify", "--quiet", ref).ok;
 
-export const recordedRemoteDefaultLocalBranches = (cwd: string): readonly string[] | undefined => {
+const recordedRemoteDefaultLocalBranches = (cwd: string): readonly string[] | undefined => {
   const remotes = git(cwd, "remote");
   if (!remotes.ok) return undefined;
   return remotes.stdout
@@ -91,9 +92,7 @@ export const recordedRemoteDefaultLocalBranches = (cwd: string): readonly string
     .flatMap((remote) => {
       const prefix = `refs/remotes/${remote}/`;
       const result = git(cwd, "symbolic-ref", `${prefix}HEAD`);
-      return result.ok && result.stdout.startsWith(prefix)
-        ? [`refs/heads/${result.stdout.slice(prefix.length)}`]
-        : [];
+      return result.ok && result.stdout.startsWith(prefix) ? [result.stdout] : [];
     });
 };
 

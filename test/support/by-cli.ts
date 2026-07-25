@@ -134,7 +134,9 @@ export const commitButWhyConfigAndRecordDefault = (root: string): void => {
   runGit(root, "branch", "-M", "main");
   runGit(root, "add", ".but-why/config.json", ".gitignore");
   runGit(root, "commit", "-m", "Initialize But Why");
-  runGit(root, "remote", "add", "origin", root);
+  const publicationUrl = "https://github.com/acme/repo.git";
+  runGit(root, "config", `url.${root}.insteadOf`, publicationUrl);
+  runGit(root, "remote", "add", "origin", publicationUrl);
   runGit(root, "update-ref", "refs/remotes/origin/main", "refs/heads/main");
   runGit(root, "symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/main");
 };

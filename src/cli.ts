@@ -244,7 +244,7 @@ const helpView = (bin: string, docs: PublicDocs): StructuredObject =>
         description: "Permanently cancel an unfinished Task",
       },
       {
-        command: "by change start [--task <task-id>]",
+        command: "by change start [--task <task-id>] [--base <branch>]",
         description: "Create a prepared Change worktree",
       },
       {

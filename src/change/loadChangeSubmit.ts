@@ -22,6 +22,7 @@ import { openSqliteChangeValidationPersistence } from "../sqlite/sqliteChangeVal
 import { openSqliteTaskPersistence } from "../sqlite/sqliteTaskPersistence.js";
 import { openCandidatePublication } from "./publication/candidatePublication.js";
 import { detectGitHubPrTarget } from "../submissionEnvironment/githubTarget.js";
+import { refreshRemoteChangeBase } from "../submissionEnvironment/remoteChangeBase.js";
 import { localGitHubPullRequestGateway } from "../submissionEnvironment/localGitHubPullRequestGateway.js";
 
 export type LoadChangeSubmitResult =
@@ -77,7 +78,9 @@ export const loadChangeSubmit = (input: {
           git: localCandidatePublicationGit({ cwd }),
           github: localGitHubPullRequestGateway({ cwd }),
         }),
-      detectTarget: detectGitHubPrTarget,
+      refreshBase: refreshRemoteChangeBase,
+      detectTarget: (cwd, branch, baseRef) =>
+        detectGitHubPrTarget(cwd, branch, undefined, undefined, baseRef),
       captureCandidate: openCandidateCapture({
         persistence: capturePersistence,
         git: localCandidateCaptureGit,

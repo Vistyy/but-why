@@ -50,7 +50,7 @@ export const routeChange = (
         usage: "by change <command> [--help]",
         commands: [
           {
-            command: "by change start [--task <task-id>]",
+            command: "by change start [--task <task-id>] [--base <branch>]",
             description: "Create a prepared Change worktree.",
           },
           {
@@ -124,47 +124,76 @@ const runStart = (
   if (args.length === 1 && args[0] === "--help") {
     return Effect.succeed(
       success({
-        usage: "by change start [--task <task-id>]",
+        usage: "by change start [--task <task-id>] [--base <branch>]",
         flags: withGlobalHelpFlags([
           {
             flag: "--task <task-id>",
             description: "Link one approved Task with satisfied prerequisites.",
           },
+          {
+            flag: "--base <branch>",
+            description: "Use this freshly fetched publication-remote branch as the Change Base.",
+          },
         ]),
         examples: [
           "by change start",
           "by change start --task BY-1",
-          "by change start --output json",
+          "by change start --base release --output json",
         ],
       }),
     );
   }
-  let taskId: PublicTaskId | undefined;
-  if (args.length > 0) {
-    if (args.length !== 2 || args[0] !== "--task" || args[1] === undefined) {
-      return Effect.succeed(
-        usageError({
-          code: "invalid_arguments",
-          message: "Change Start accepts only an optional --task <task-id>.",
-          help: ["Run `by change start [--task <task-id>]`."],
-        }),
-      );
-    }
-    const parsed = parseCliTaskIdValue(args[1]);
-    if (!parsed.ok) return Effect.succeed(parsed.result);
-    taskId = parsed.taskId;
-  }
+  const parsed = parseStartArgs(args);
+  if (!parsed.ok) return Effect.succeed(parsed.result);
 
   return withChanges(environment, (changes) =>
     Effect.map(
       changes.start({
-        ...(taskId === undefined ? {} : { taskId }),
+        ...(parsed.taskId === undefined ? {} : { taskId: parsed.taskId }),
+        ...(parsed.baseBranch === undefined ? {} : { baseBranch: parsed.baseBranch }),
         now: environment.now().toISOString(),
       }),
       startResult,
     ),
   );
 };
+
+type StartArgsParseResult =
+  | {
+      readonly ok: true;
+      readonly taskId: PublicTaskId | undefined;
+      readonly baseBranch: string | undefined;
+    }
+  | { readonly ok: false; readonly result: CliResult };
+
+const parseStartArgs = (args: readonly string[]): StartArgsParseResult => {
+  let taskId: PublicTaskId | undefined;
+  let baseBranch: string | undefined;
+  for (let index = 0; index < args.length; index += 2) {
+    const flag = args[index];
+    const value = args[index + 1];
+    if (value === undefined || value.startsWith("-")) return invalidStartArgs();
+    if (flag === "--task" && taskId === undefined) {
+      const parsed = parseCliTaskIdValue(value);
+      if (!parsed.ok) return { ok: false, result: parsed.result };
+      taskId = parsed.taskId;
+    } else if (flag === "--base" && baseBranch === undefined) {
+      baseBranch = value;
+    } else {
+      return invalidStartArgs();
+    }
+  }
+  return { ok: true, taskId, baseBranch };
+};
+
+const invalidStartArgs = (): StartArgsParseResult => ({
+  ok: false,
+  result: usageError({
+    code: "invalid_arguments",
+    message: "Change Start accepts optional --task <task-id> and --base <branch> flags.",
+    help: ["Run `by change start [--task <task-id>] [--base <branch>]`."],
+  }),
+});
 
 const runList = (
   args: readonly string[],
@@ -646,6 +675,16 @@ const submitResult = (result: ChangeSubmitResult): CliResult => {
       help: ["Fix Repo Config or Global Config, then retry Change Submit."],
     });
   }
+  if (
+    result.code === "publication_remote_missing" ||
+    result.code === "publication_remote_ambiguous" ||
+    result.code === "publication_remote_unreachable" ||
+    result.code === "remote_default_branch_missing" ||
+    result.code === "remote_branch_missing" ||
+    result.code === "invalid_remote_change_base"
+  ) {
+    return remoteChangeBaseError(result, "Submit");
+  }
   return runtimeError({
     code: result.code,
     message: "Change Submit could not validate or publish the current Candidate.",
@@ -893,6 +932,31 @@ const startResult = (result: ChangeStartResult): CliResult => {
       help: ["Approve the Task before starting its Change."],
     });
   }
+  if (result.code === "requested_base_conflict") {
+    return runtimeError({
+      code: result.code,
+      message: "The existing Task-backed Change uses a different Change Base branch.",
+      details: {
+        ...(result.requestedBaseBranch === undefined
+          ? {}
+          : { requestedBaseBranch: result.requestedBaseBranch }),
+        ...(result.recordedBaseBranch === undefined
+          ? {}
+          : { recordedBaseBranch: result.recordedBaseBranch }),
+      },
+      help: ["Retry Change Start without --base and continue the existing Change."],
+    });
+  }
+  if (
+    result.code === "publication_remote_missing" ||
+    result.code === "publication_remote_ambiguous" ||
+    result.code === "publication_remote_unreachable" ||
+    result.code === "remote_default_branch_missing" ||
+    result.code === "remote_branch_missing" ||
+    result.code === "invalid_remote_change_base"
+  ) {
+    return remoteChangeBaseError(result, "Start");
+  }
   return operationalError(result.code, "change" in result ? result.change : undefined);
 };
 
@@ -941,6 +1005,43 @@ const boundedEvidence = (value: string): string =>
   value.length <= 1000
     ? value
     : `${value.slice(0, 1000)}\n... (truncated, ${value.length} chars total)`;
+
+const remoteChangeBaseError = (
+  result: Extract<
+    ChangeStartResult | ChangeSubmitResult,
+    {
+      readonly code:
+        | "publication_remote_missing"
+        | "publication_remote_ambiguous"
+        | "publication_remote_unreachable"
+        | "remote_default_branch_missing"
+        | "remote_branch_missing"
+        | "invalid_remote_change_base";
+    }
+  >,
+  operation: "Start" | "Submit",
+): CliResult => {
+  const details = {
+    ...(result.code === "publication_remote_ambiguous" ? { remoteNames: result.remoteNames } : {}),
+    ...(result.code === "publication_remote_unreachable" ||
+    result.code === "remote_default_branch_missing" ||
+    result.code === "remote_branch_missing"
+      ? { remoteName: result.remoteName }
+      : {}),
+    ...(result.code === "remote_branch_missing" ? { branchName: result.branchName } : {}),
+    ...(result.code === "invalid_remote_change_base" ? { baseRef: result.baseRef } : {}),
+  };
+  return runtimeError({
+    code: result.code,
+    message: `Change ${operation} could not fetch the selected remote Change Base.`,
+    details,
+    help: [
+      operation === "Start"
+        ? "Fix the publication remote or publish the selected branch, then retry Change Start."
+        : "Restore the recorded publication remote and branch, then retry Change Submit.",
+    ],
+  });
+};
 
 const operationalError = (code: string, change?: ChangeRecord): CliResult =>
   runtimeError({
