@@ -62,6 +62,7 @@ export const loadChangeSubmit = (input: {
     });
     return openChangeSubmit({
       repositoryCommonDirectory: context.commonDirectory,
+      repositoryPath: context.root,
       persistence: changePersistence,
       taskPersistence,
       reconciliation,

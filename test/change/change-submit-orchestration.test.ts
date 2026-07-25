@@ -364,7 +364,13 @@ describe("Change Submit orchestration", () => {
           validationRunId: "run-no-change",
         },
       });
-      const submit = openChangeSubmit(dependencies({ events, change }));
+      const submit = openChangeSubmit(
+        dependencies({
+          events,
+          change,
+          refreshResult: { ok: true, base: refreshedBase },
+        }),
+      );
       const validationLayer = Layer.succeed(CandidateValidation, {
         validateCandidate: () => Effect.die("Validation was not expected"),
         validateTaskBackedCandidate: () => Effect.die("Validation was not expected"),
@@ -386,7 +392,7 @@ describe("Change Submit orchestration", () => {
         validationRunId: "run-no-change",
         completionKind: "no_change",
       });
-      expect(events).toEqual([]);
+      expect(events).toEqual(["refresh_base"]);
     }),
   );
 
@@ -799,6 +805,7 @@ const dependencies = (input: {
   let taskState = "implementing";
   return {
     repositoryCommonDirectory: "/repo/.git",
+    repositoryPath: "/repo",
     persistence: {
       getChangeById: () => Effect.succeed(input.change),
       completeNoChange: () => {

@@ -221,24 +221,39 @@ describe("Change Start Managed Worktree boundaries", () => {
     }),
   );
 
-  it.effect("uses the canonical main checkout when started from a linked worktree", () =>
+  it.effect("uses the canonical main checkout upstream from main and linked worktrees", () =>
     Effect.gen(function* () {
       const root = yield* repositoryCopy();
+      configurePublicationRemote(root, initializedRepositoryTemplate, "upstream");
+      git(root, "config", "branch.main.remote", "upstream");
       const linkedWorktree = join(dirname(root), `${basename(root)}-linked-caller`);
       git(root, "worktree", "add", "-b", "linked-caller", linkedWorktree, "main");
 
-      const started = yield* runByInProcessEffect(
+      const fromMain = yield* runByInProcessEffect(
+        root,
+        ["change", "start", "--output", "json"],
+        now,
+      );
+      const fromLinked = yield* runByInProcessEffect(
         linkedWorktree,
         ["change", "start", "--output", "json"],
         now,
       );
 
-      expect(started.status).toBe(0);
-      const output = JSON.parse(started.stdout) as ChangeOutput;
-      expect(output.startingCommit).toBe(
-        git(root, "rev-parse", "refs/remotes/origin/main^{commit}"),
-      );
-      expect(dirname(dirname(output.worktreePath))).toBe(
+      expect(fromMain.status).toBe(0);
+      expect(fromLinked.status).toBe(0);
+      const mainOutput = JSON.parse(fromMain.stdout) as ChangeOutput;
+      const linkedOutput = JSON.parse(fromLinked.stdout) as ChangeOutput;
+      const upstreamCommit = git(root, "rev-parse", "refs/remotes/upstream/main^{commit}");
+      expect(mainOutput).toMatchObject({
+        baseRef: "refs/remotes/upstream/main",
+        startingCommit: upstreamCommit,
+      });
+      expect(linkedOutput).toMatchObject({
+        baseRef: "refs/remotes/upstream/main",
+        startingCommit: upstreamCommit,
+      });
+      expect(dirname(dirname(linkedOutput.worktreePath))).toBe(
         join(dirname(root), `${basename(root)}-worktrees`),
       );
     }),

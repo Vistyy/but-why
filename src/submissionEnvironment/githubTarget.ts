@@ -151,7 +151,7 @@ const selectGitHubRemote = (cwd: string, runGit: GitCommandRunner): RemoteSelect
     return { ok: false, code: "PR_TARGET_NOT_FOUND" };
   }
 
-  const upstreamRemoteName = currentBranchUpstreamRemote(cwd, runGit);
+  const upstreamRemoteName = canonicalMainCheckoutUpstreamRemote(cwd, runGit);
 
   if (upstreamRemoteName !== undefined) {
     const upstreamRemote = remotes.remotes.find((remote) => remote.name === upstreamRemoteName);
@@ -210,21 +210,23 @@ const listGitHubRemotes = (cwd: string, runGit: GitCommandRunner): GitHubRemotes
   return { ok: true, remotes };
 };
 
-const currentBranchUpstreamRemote = (cwd: string, runGit: GitCommandRunner): string | undefined => {
-  const upstream = runGit(["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"], cwd);
-
-  if (!upstream.ok) {
-    return undefined;
-  }
-
-  const upstreamRef = upstream.stdout.trim();
-  const slashIndex = upstreamRef.indexOf("/");
-
-  if (slashIndex <= 0) {
-    return undefined;
-  }
-
-  return upstreamRef.slice(0, slashIndex);
+const canonicalMainCheckoutUpstreamRemote = (
+  cwd: string,
+  runGit: GitCommandRunner,
+): string | undefined => {
+  const worktrees = runGit(["worktree", "list", "--porcelain"], cwd);
+  if (!worktrees.ok) return undefined;
+  const primaryBranchRef = worktrees.stdout
+    .split("\n\n")[0]
+    ?.split("\n")
+    .find((line) => line.startsWith("branch "))
+    ?.slice("branch ".length);
+  if (primaryBranchRef?.startsWith("refs/heads/") !== true) return undefined;
+  const branchName = primaryBranchRef.slice("refs/heads/".length);
+  const configured = runGit(["config", "--get", `branch.${branchName}.remote`], cwd);
+  return configured.ok && configured.stdout.trim().length > 0
+    ? configured.stdout.trim()
+    : undefined;
 };
 
 type BranchLookupResult =

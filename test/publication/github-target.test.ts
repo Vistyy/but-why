@@ -60,6 +60,31 @@ describe("GitHub PR target detection", () => {
     });
   });
 
+  it("prefers the canonical main checkout upstream publication remote", () => {
+    const runGit: GitCommandRunner = (args) => {
+      const command = args.join(" ");
+      if (command === "remote") return { ok: true, stdout: "origin\nupstream\n" };
+      if (command === "remote get-url origin") {
+        return { ok: true, stdout: "https://github.com/acme/fork.git\n" };
+      }
+      if (command === "remote get-url upstream") {
+        return { ok: true, stdout: "https://github.com/acme/widgets.git\n" };
+      }
+      if (command === "worktree list --porcelain") {
+        return { ok: true, stdout: "worktree /repo\nHEAD abc\nbranch refs/heads/main\n" };
+      }
+      if (command === "config --get branch.main.remote") {
+        return { ok: true, stdout: "upstream\n" };
+      }
+      return { ok: false };
+    };
+
+    expect(detectGitHubPrTarget(cwd, "feature", runGit, ghWithDefault())).toMatchObject({
+      ok: true,
+      target: { remoteName: "upstream", repo: "widgets" },
+    });
+  });
+
   it("uses the selected remote Change Base as the pull request target", () => {
     const runGit = gitFor("git@github.com:acme/widgets.git");
     expect(

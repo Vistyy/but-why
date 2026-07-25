@@ -85,8 +85,26 @@ const selectPublicationRemote = (
     });
   if (remoteNames.length === 0) return { ok: false, code: "publication_remote_missing" };
   if (remoteNames.length === 1) return { ok: true, remoteName: remoteNames[0] as string };
+  const upstreamRemote = canonicalMainCheckoutUpstreamRemote(cwd);
+  if (upstreamRemote !== undefined && remoteNames.includes(upstreamRemote)) {
+    return { ok: true, remoteName: upstreamRemote };
+  }
   if (remoteNames.includes("origin")) return { ok: true, remoteName: "origin" };
   return { ok: false, code: "publication_remote_ambiguous", remoteNames };
+};
+
+const canonicalMainCheckoutUpstreamRemote = (cwd: string): string | undefined => {
+  const worktrees = git(cwd, "worktree", "list", "--porcelain");
+  if (!worktrees.ok) return undefined;
+  const primaryBranchRef = worktrees.stdout
+    .split("\n\n")[0]
+    ?.split("\n")
+    .find((line) => line.startsWith("branch "))
+    ?.slice("branch ".length);
+  if (primaryBranchRef?.startsWith("refs/heads/") !== true) return undefined;
+  const branchName = primaryBranchRef.slice("refs/heads/".length);
+  const configured = git(cwd, "config", "--get", `branch.${branchName}.remote`);
+  return configured.ok && configured.stdout.length > 0 ? configured.stdout : undefined;
 };
 
 const isGitHubRemoteUrl = (url: string): boolean => {

@@ -128,6 +128,7 @@ type CaptureCandidate = (
 
 export const openChangeSubmit = (dependencies: {
   readonly repositoryCommonDirectory: string;
+  readonly repositoryPath: string;
   readonly persistence: ChangePersistence;
   readonly taskPersistence: Pick<TaskPersistence, "getTaskById" | "transitionTaskState">;
   readonly reconciliation: ChangeReconciliation;
@@ -156,6 +157,11 @@ const submitChange = (
   Effect.gen(function* () {
     const existing = yield* dependencies.persistence.getChangeById(input.changeId);
     if (existing?.noChangeCompletion !== undefined && existing.noChangeCompletion !== null) {
+      if (existing.baseRef === null) {
+        return { ok: false, code: "invalid_remote_change_base", baseRef: "" } as const;
+      }
+      const refreshedBase = dependencies.refreshBase(dependencies.repositoryPath, existing.baseRef);
+      if (!refreshedBase.ok) return refreshedBase;
       return {
         ok: true,
         status: "no_change",
@@ -171,7 +177,7 @@ const submitChange = (
     if (change.baseRef === null) {
       return { ok: false, code: "invalid_remote_change_base", baseRef: "" } as const;
     }
-    const refreshedBase = dependencies.refreshBase(change.worktreePath, change.baseRef);
+    const refreshedBase = dependencies.refreshBase(dependencies.repositoryPath, change.baseRef);
     if (!refreshedBase.ok) return refreshedBase;
     const reconciliation = yield* reconcileBeforeSubmission(dependencies, change, input.now);
     if (!reconciliation.proceed) return reconciliation.result;
