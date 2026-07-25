@@ -28,6 +28,7 @@ const columns = [
   "repository_common_directory AS repositoryCommonDirectory",
   "branch_ref AS branchRef",
   "base_ref AS baseRef",
+  "base_remote_url AS baseRemoteUrl",
   "task_id AS taskId",
   "starting_commit AS startingCommit",
   "worktree_path AS worktreePath",
@@ -124,13 +125,13 @@ const create = (sql: SqlClient.SqlClient, input: CreateChangeStartInput) =>
 
     yield* sql`
       INSERT INTO changes (
-        id, repository_common_directory, branch_ref, base_ref, task_id,
+        id, repository_common_directory, branch_ref, base_ref, base_remote_url, task_id,
         starting_commit, worktree_path, acceptance_context, readiness,
         prepare_command, prepare_timeout_seconds, prepare_failure,
         state, close_reason, created_at, updated_at, closed_at
       ) VALUES (
         ${input.id}, ${input.repositoryCommonDirectory}, ${input.branchRef}, ${input.baseRef},
-        ${input.taskId ?? null}, ${input.startingCommit}, ${input.worktreePath},
+        ${input.baseRemoteUrl}, ${input.taskId ?? null}, ${input.startingCommit}, ${input.worktreePath},
         ${acceptanceContext === null ? null : encodeSqliteTaskContextSnapshot(acceptanceContext)},
         'pending', ${input.prepare?.command ?? null}, ${input.prepare?.timeoutSeconds ?? null},
         NULL, 'open', NULL, ${input.now}, ${input.now}, NULL
@@ -219,6 +220,7 @@ const mapRow = (row: ChangeStartRow | undefined) => {
   if (
     row === undefined ||
     row.baseRef === null ||
+    row.baseRemoteUrl === null ||
     row.startingCommit === null ||
     row.worktreePath === null ||
     row.readiness === null
@@ -226,6 +228,7 @@ const mapRow = (row: ChangeStartRow | undefined) => {
     return Effect.succeed(undefined);
   }
   const baseRef = row.baseRef;
+  const baseRemoteUrl = row.baseRemoteUrl;
   const startingCommit = row.startingCommit;
   const worktreePath = row.worktreePath;
   const readiness = row.readiness;
@@ -235,6 +238,7 @@ const mapRow = (row: ChangeStartRow | undefined) => {
       repositoryCommonDirectory: row.repositoryCommonDirectory,
       branchRef: row.branchRef,
       baseRef,
+      baseRemoteUrl,
       taskId: row.taskId === null ? null : storedPublicTaskId(row.taskId),
       startingCommit,
       worktreePath,
@@ -277,6 +281,7 @@ type ChangeStartRow = {
   readonly repositoryCommonDirectory: string;
   readonly branchRef: string;
   readonly baseRef: string | null;
+  readonly baseRemoteUrl: string | null;
   readonly taskId: string | null;
   readonly startingCommit: string | null;
   readonly worktreePath: string | null;

@@ -7,6 +7,7 @@ import { Effect } from "effect";
 import { afterAll, beforeAll, describe } from "vitest";
 
 import { provisionChangeWorktree } from "../../src/change/changeStartGit.js";
+import { refreshRemoteChangeBase } from "../../src/submissionEnvironment/remoteChangeBase.js";
 import type { ChangeStartRecord } from "../../src/change/changeStartStore.js";
 import { openSqliteChangeStartPersistence } from "../../src/sqlite/sqliteChangeStartPersistence.js";
 import { runByInProcessEffect } from "../support/by-cli.js";
@@ -36,7 +37,7 @@ afterAll(() => {
 const repositoryCopy = () => cloneInitializedTestRepository(initializedRepositoryTemplate);
 
 describe("Change Start Managed Worktree boundaries", () => {
-  it.effect("creates a ready taskless Change from the local default branch", () =>
+  it.effect("creates a ready taskless Change from the freshly fetched remote default branch", () =>
     Effect.gen(function* () {
       const root = yield* repositoryCopy();
       writeFileSync(join(root, "dirty.txt"), "caller work is not part of Change Start\n");
@@ -49,11 +50,11 @@ describe("Change Start Managed Worktree boundaries", () => {
 
       expect(result.status).toBe(0);
       const output = JSON.parse(result.stdout) as ChangeOutput;
-      const startingCommit = git(root, "rev-parse", "refs/heads/main^{commit}");
+      const startingCommit = git(root, "rev-parse", "refs/remotes/origin/main^{commit}");
       expect(output).toMatchObject({
         change: { id: expect.any(String), taskId: null, readiness: "ready" },
         branch: expect.stringMatching(/^refs\/heads\/but-why\/change-/u),
-        baseRef: "refs/heads/main",
+        baseRef: "refs/remotes/origin/main",
         startingCommit,
         worktreePath: expect.any(String),
       });
@@ -69,21 +70,207 @@ describe("Change Start Managed Worktree boundaries", () => {
     }),
   );
 
-  it.effect("uses the canonical main checkout when started from a linked worktree", () =>
+  it.effect("ignores an ahead local branch and preserves it unchanged", () =>
     Effect.gen(function* () {
       const root = yield* repositoryCopy();
-      const linkedWorktree = join(dirname(root), `${basename(root)}-linked-caller`);
-      git(root, "worktree", "add", "-b", "linked-caller", linkedWorktree, "main");
+      const remoteCommit = git(root, "rev-parse", "refs/remotes/origin/main^{commit}");
+      writeFileSync(join(root, "local-only.txt"), "not published\n");
+      git(root, "add", "local-only.txt");
+      git(root, "commit", "-m", "Local-only commit");
+      const localCommit = git(root, "rev-parse", "refs/heads/main^{commit}");
 
       const started = yield* runByInProcessEffect(
-        linkedWorktree,
+        root,
         ["change", "start", "--output", "json"],
         now,
       );
 
       expect(started.status).toBe(0);
       const output = JSON.parse(started.stdout) as ChangeOutput;
-      expect(dirname(dirname(output.worktreePath))).toBe(
+      expect(output.startingCommit).toBe(remoteCommit);
+      expect(git(output.worktreePath, "rev-parse", "HEAD^{commit}")).toBe(remoteCommit);
+      expect(git(root, "rev-parse", "refs/heads/main^{commit}")).toBe(localCommit);
+      expect(existsSync(join(output.worktreePath, "local-only.txt"))).toBe(false);
+    }),
+  );
+
+  it.effect("fetches a requested publication-remote branch", () =>
+    Effect.gen(function* () {
+      const root = yield* repositoryCopy();
+      const remote = yield* repositoryCopy();
+      git(remote, "branch", "release", "main");
+      configurePublicationRemote(root, remote);
+      const releaseCommit = git(remote, "rev-parse", "refs/heads/release^{commit}");
+
+      const started = yield* runByInProcessEffect(
+        root,
+        ["change", "start", "--base", "release", "--output", "json"],
+        now,
+      );
+
+      expect(started.status).toBe(0);
+      expect(JSON.parse(started.stdout)).toMatchObject({
+        baseRef: "refs/remotes/origin/release",
+        startingCommit: releaseCommit,
+      });
+    }),
+  );
+
+  it.effect("rejects a missing remote branch before recording a Change", () =>
+    Effect.gen(function* () {
+      const root = yield* repositoryCopy();
+
+      const started = yield* runByInProcessEffect(
+        root,
+        ["change", "start", "--base", "missing", "--output", "json"],
+        now,
+      );
+
+      expect(started.status).toBe(1);
+      expect(JSON.parse(started.stdout)).toMatchObject({
+        error: { code: "remote_branch_missing", remoteName: "origin", branchName: "missing" },
+        help: [expect.stringContaining("retry Change Start")],
+      });
+      const listed = yield* runByInProcessEffect(root, ["change", "list", "--output", "json"], now);
+      expect(JSON.parse(listed.stdout)).toEqual({ changes: [] });
+    }),
+  );
+
+  it.effect("does not start a Task when the publication remote is missing", () =>
+    Effect.gen(function* () {
+      const root = yield* repositoryCopy();
+      const taskId = yield* createTask(root, "Remote required", "Do not start without it.\n");
+      expect((yield* runByInProcessEffect(root, ["task", "approve", taskId], now)).status).toBe(0);
+      git(root, "remote", "remove", "origin");
+
+      const started = yield* runByInProcessEffect(
+        root,
+        ["change", "start", "--task", taskId, "--output", "json"],
+        now,
+      );
+
+      expect(started.status).toBe(1);
+      expect(JSON.parse(started.stdout)).toMatchObject({
+        error: { code: "publication_remote_missing" },
+        help: [expect.stringContaining("retry Change Start")],
+      });
+      const task = yield* runByInProcessEffect(
+        root,
+        ["task", "show", taskId, "--output", "json"],
+        now,
+      );
+      expect(JSON.parse(task.stdout)).toMatchObject({ task: { id: taskId, state: "todo" } });
+    }),
+  );
+
+  it.effect("rejects a local-only remote as a publication remote", () =>
+    Effect.gen(function* () {
+      const root = yield* repositoryCopy();
+      git(root, "remote", "set-url", "origin", root);
+
+      const started = yield* runByInProcessEffect(
+        root,
+        ["change", "start", "--output", "json"],
+        now,
+      );
+
+      expect(started.status).toBe(1);
+      expect(JSON.parse(started.stdout)).toMatchObject({
+        error: { code: "publication_remote_missing" },
+      });
+    }),
+  );
+
+  it.effect("rejects ambiguous publication remotes", () =>
+    Effect.gen(function* () {
+      const root = yield* repositoryCopy();
+      git(root, "remote", "remove", "origin");
+      configurePublicationRemote(root, initializedRepositoryTemplate, "upstream");
+      configurePublicationRemote(root, initializedRepositoryTemplate, "fork");
+
+      const started = yield* runByInProcessEffect(
+        root,
+        ["change", "start", "--output", "json"],
+        now,
+      );
+
+      expect(started.status).toBe(1);
+      expect(JSON.parse(started.stdout)).toMatchObject({
+        error: {
+          code: "publication_remote_ambiguous",
+          remoteNames: ["fork", "upstream"],
+        },
+      });
+    }),
+  );
+
+  it.effect("reports an unreachable publication remote", () =>
+    Effect.gen(function* () {
+      const root = yield* repositoryCopy();
+      configurePublicationRemote(root, join(root, "missing-remote"));
+
+      const started = yield* runByInProcessEffect(
+        root,
+        ["change", "start", "--output", "json"],
+        now,
+      );
+
+      expect(started.status).toBe(1);
+      expect(JSON.parse(started.stdout)).toMatchObject({
+        error: { code: "publication_remote_unreachable", remoteName: "origin" },
+      });
+    }),
+  );
+
+  it.effect("rejects a publication remote URL change during refresh", () =>
+    Effect.gen(function* () {
+      const root = yield* repositoryCopy();
+      const expectedRemoteUrl = git(root, "config", "--get", "remote.origin.url");
+      git(root, "remote", "set-url", "origin", "https://github.com/acme/other.git");
+
+      expect(refreshRemoteChangeBase(root, "refs/remotes/origin/main", expectedRemoteUrl)).toEqual({
+        ok: false,
+        code: "publication_remote_changed",
+        remoteName: "origin",
+        expectedRemoteUrl,
+        actualRemoteUrl: "https://github.com/acme/other.git",
+      });
+    }),
+  );
+
+  it.effect("uses the canonical main checkout upstream from main and linked worktrees", () =>
+    Effect.gen(function* () {
+      const root = yield* repositoryCopy();
+      configurePublicationRemote(root, initializedRepositoryTemplate, "upstream");
+      git(root, "config", "branch.main.remote", "upstream");
+      const linkedWorktree = join(dirname(root), `${basename(root)}-linked-caller`);
+      git(root, "worktree", "add", "-b", "linked-caller", linkedWorktree, "main");
+
+      const fromMain = yield* runByInProcessEffect(
+        root,
+        ["change", "start", "--output", "json"],
+        now,
+      );
+      const fromLinked = yield* runByInProcessEffect(
+        linkedWorktree,
+        ["change", "start", "--output", "json"],
+        now,
+      );
+
+      expect(fromMain.status).toBe(0);
+      expect(fromLinked.status).toBe(0);
+      const mainOutput = JSON.parse(fromMain.stdout) as ChangeOutput;
+      const linkedOutput = JSON.parse(fromLinked.stdout) as ChangeOutput;
+      const upstreamCommit = git(root, "rev-parse", "refs/remotes/upstream/main^{commit}");
+      expect(mainOutput).toMatchObject({
+        baseRef: "refs/remotes/upstream/main",
+        startingCommit: upstreamCommit,
+      });
+      expect(linkedOutput).toMatchObject({
+        baseRef: "refs/remotes/upstream/main",
+        startingCommit: upstreamCommit,
+      });
+      expect(dirname(dirname(linkedOutput.worktreePath))).toBe(
         join(dirname(root), `${basename(root)}-worktrees`),
       );
     }),
@@ -160,6 +347,18 @@ describe("Change Start Managed Worktree boundaries", () => {
       expect((yield* runByInProcessEffect(root, ["task", "show", taskId])).stdout).toContain(
         "state: implementing",
       );
+      const conflictingBase = yield* runByInProcessEffect(
+        root,
+        ["change", "start", "--task", taskId, "--base", "release", "--output", "json"],
+        now,
+      );
+      expect(JSON.parse(conflictingBase.stdout)).toMatchObject({
+        error: {
+          code: "requested_base_conflict",
+          requestedBaseBranch: "release",
+          recordedBaseBranch: "main",
+        },
+      });
       const persisted = yield* withTestRepository(
         root,
         Effect.gen(function* () {
@@ -168,6 +367,7 @@ describe("Change Start Managed Worktree boundaries", () => {
         }),
       );
       expect(persisted).toMatchObject({
+        baseRemoteUrl: expect.stringMatching(/^https:\/\/github\.com\//u),
         acceptanceContext: {
           version: 1,
           title: "Prepared change",
@@ -220,7 +420,7 @@ describe("Change Start Managed Worktree boundaries", () => {
       );
       git(root, "add", ".but-why/config.json");
       git(root, "commit", "-m", "Configure preparation");
-      git(root, "update-ref", "refs/remotes/origin/main", "refs/heads/main");
+      configurePublicationRemote(root, root);
 
       const started = yield* runByInProcessEffect(
         root,
@@ -417,10 +617,23 @@ const initializedRepository = (workspace?: string): string => {
   writeFileSync(join(root, "README.md"), "# Test repository\n");
   git(root, "add", "README.md", ".gitignore", ".but-why/config.json");
   git(root, "commit", "-m", "Initialize repository");
-  git(root, "remote", "add", "origin", root);
+  configurePublicationRemote(root, root);
   git(root, "update-ref", "refs/remotes/origin/main", "refs/heads/main");
   git(root, "symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/main");
   return root;
+};
+
+const configurePublicationRemote = (
+  root: string,
+  remotePath: string,
+  remoteName = "origin",
+): void => {
+  const repository = `${basename(remotePath).replace(/[^a-zA-Z0-9-]/gu, "-")}-${remoteName}`;
+  const url = `https://github.com/acme/${repository}.git`;
+  git(root, "config", `url.${remotePath}.insteadOf`, url);
+  const remotes = git(root, "remote").split("\n");
+  if (remotes.includes(remoteName)) git(root, "remote", "set-url", remoteName, url);
+  else git(root, "remote", "add", remoteName, url);
 };
 
 const changeStartRecord = (root: string): ChangeStartRecord => {
@@ -430,6 +643,7 @@ const changeStartRecord = (root: string): ChangeStartRecord => {
     repositoryCommonDirectory: commonDirectory,
     branchRef: "refs/heads/but-why/change-1",
     baseRef: "refs/heads/main",
+    baseRemoteUrl: "https://github.com/acme/repo.git",
     taskId: null,
     startingCommit: git(root, "rev-parse", "refs/heads/main"),
     worktreePath: join(commonDirectory, "but-why", "worktrees", "change-1"),

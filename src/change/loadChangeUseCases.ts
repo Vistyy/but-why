@@ -53,7 +53,8 @@ export const withChangeUseCases = <A, E, R>(
           repoContext.context,
           startPersistence,
           {
-            resolveIntent: (slug) => resolveChangeStartGitIntent(repoContext.context, slug),
+            resolveIntent: (slug, requestedBaseBranch) =>
+              resolveChangeStartGitIntent(repoContext.context, slug, requestedBaseBranch),
             provisionWorktree: (change, recovering) =>
               provisionChangeWorktree(repoContext.context.root, change, recovering),
           },

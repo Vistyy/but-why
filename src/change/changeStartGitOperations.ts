@@ -1,8 +1,10 @@
+import type { RemoteChangeBaseError } from "../submissionEnvironment/remoteChangeBase.js";
 import type { ChangeStartRecord } from "./changeStartStore.js";
 
 export type ChangeStartGitIntent = {
   readonly repositoryCommonDirectory: string;
   readonly baseRef: string;
+  readonly baseRemoteUrl: string;
   readonly branchRef: string;
   readonly startingCommit: string;
   readonly worktreePath: string;
@@ -11,15 +13,16 @@ export type ChangeStartGitIntent = {
 
 export type ResolveChangeStartGitResult =
   | { readonly ok: true; readonly intent: ChangeStartGitIntent }
+  | RemoteChangeBaseError
   | {
       readonly ok: false;
       readonly code:
-        | "local_default_branch_missing"
-        | "local_default_branch_ambiguous"
-        | "local_default_branch_unavailable"
         | "committed_repo_config_missing"
         | "committed_repo_config_invalid"
-        | "change_start_conflict";
+        | "change_start_conflict"
+        | "requested_base_conflict";
+      readonly requestedBaseBranch?: string;
+      readonly recordedBaseBranch?: string;
     };
 
 export type ProvisionChangeWorktreeResult =
@@ -32,7 +35,10 @@ export type ProvisionChangeWorktreeResult =
     };
 
 export type ChangeStartGitOperations = {
-  readonly resolveIntent: (slug: string) => ResolveChangeStartGitResult;
+  readonly resolveIntent: (
+    slug: string,
+    requestedBaseBranch?: string,
+  ) => ResolveChangeStartGitResult;
   readonly provisionWorktree: (
     start: ChangeStartRecord,
     recovering: boolean,

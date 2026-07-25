@@ -5,6 +5,7 @@ import type { TaskState } from "../task/lifecycle.js";
 
 export type ChangeStartRecord = ChangeRecord & {
   readonly baseRef: string;
+  readonly baseRemoteUrl: string;
   readonly startingCommit: string;
   readonly worktreePath: string;
   readonly readiness: ChangeReadiness;
@@ -15,6 +16,7 @@ export type CreateChangeStartInput = {
   readonly repositoryCommonDirectory: string;
   readonly branchRef: string;
   readonly baseRef: string;
+  readonly baseRemoteUrl: string;
   readonly startingCommit: string;
   readonly worktreePath: string;
   readonly taskId?: PublicTaskId;

@@ -14,6 +14,7 @@ export type CaptureLocalCandidateInput = {
   readonly baseRef?: string;
   readonly allowRebind?: boolean;
   readonly startingCommit?: string;
+  readonly resolvedTargetSha?: string;
 };
 
 export type CandidateBaseSource = "saved_change" | "caller" | "remote_default";
@@ -98,7 +99,8 @@ const captureLocalCandidate = (
       changeSelection.selection.change?.baseRef ?? null,
     );
     if (!base.ok) return base;
-    const resolvedTargetSha = yield* dependencies.git.resolveLocalBranch(input.cwd, base.ref);
+    const resolvedTargetSha =
+      input.resolvedTargetSha ?? (yield* dependencies.git.resolveLocalBranch(input.cwd, base.ref));
     if (resolvedTargetSha === undefined) return { ok: false, code: "local_base_unavailable" };
     const comparisonBaseSha = yield* dependencies.git.findComparisonBase(
       input.cwd,

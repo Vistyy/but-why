@@ -374,6 +374,7 @@ const changeRecord = (taskId: PublicTaskId | null): ChangeRecord => ({
   repositoryCommonDirectory: "/repo/.git",
   branchRef: "refs/heads/change-1",
   baseRef: "refs/heads/main",
+  baseRemoteUrl: "https://github.com/acme/repo.git",
   taskId,
   startingCommit: "base",
   worktreePath: null,

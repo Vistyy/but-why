@@ -43,14 +43,19 @@ See [ADR 0014](adr/0014-use-module-owned-storage-and-change-transactions.md).
 
 ## Change lifecycle
 
-`by change start [--task <task-id>]` creates a Change from the detected default branch.
+`by change start [--task <task-id>] [--base <branch>]` creates a Change from a freshly fetched branch on the detected publication remote.
+Without `--base`, Change Start uses the remote default branch.
+With `--base`, Change Start uses the named remote branch.
+Local branches never supply a v1 Change Base.
 It asks Git for the canonical main checkout and creates the Managed Worktree at `<main-checkout-parent>/<main-checkout-name>-worktrees/but-why/<change-slug>`.
 Change Start resolves the same Managed Worktree root from the main checkout and every linked worktree.
 It then runs Repository Preparation.
 A Task-backed Change captures immutable Acceptance Context.
 A taskless Change has no Acceptance Context.
 
-`by change submit <change-id>` selects the current Candidate from the Change Managed Worktree.
+`by change submit <change-id>` fetches the recorded remote Change Base before it selects the current Candidate from the Change Managed Worktree.
+Candidate capture, validation, and publication use the freshly fetched target commit and recorded target branch.
+The fetch updates only the remote-tracking ref and does not merge, rebase, reset, or otherwise modify the Managed Worktree.
 It runs Repository Preparation, Checks, Acceptance Review for Task-backed Changes, configured Specialists, and publication policy.
 Validation Runs belong to Candidates.
 Findings and artifacts belong to the Validation Run for that Candidate.
@@ -74,7 +79,7 @@ The public CLI is `by`.
 The Change command surface includes:
 
 ```text
-by change start [--task <task-id>]
+by change start [--task <task-id>] [--base <branch>]
 by change prepare <change-id>
 by change list [--all]
 by change show <change-id>

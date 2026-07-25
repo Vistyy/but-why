@@ -68,8 +68,10 @@ Example:
 }
 ```
 
-Repo Config does not duplicate Git facts such as default branch, publish remote, GitHub repository, or current head.
-But Why? detects those facts at runtime.
+Repo Config does not duplicate Git facts such as default branch, publication remote, GitHub repository, or current head.
+But Why detects the publication remote at runtime.
+Change Start fetches its default branch or the named `--base` branch.
+Change Submit fetches the recorded remote Change Base before Candidate capture.
 
 ## Global Config
 

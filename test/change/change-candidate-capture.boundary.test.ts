@@ -37,7 +37,7 @@ describe("Change Candidate capture boundaries", () => {
   it.effect("captures committed work against the recorded remote default", () =>
     Effect.gen(function* () {
       const repo = captureReadyRepo();
-      const mainSha = git(repo, "rev-parse", "refs/heads/main");
+      const mainSha = git(repo, "rev-parse", "refs/remotes/origin/main");
       const headSha = git(repo, "rev-parse", "HEAD");
 
       const result = yield* captureLocalCandidate({ cwd: repo, now });
@@ -47,28 +47,36 @@ describe("Change Candidate capture boundaries", () => {
         changeId: expect.any(String),
         candidateId: expect.any(String),
         branchRef: "refs/heads/feature",
-        selectedBaseRef: "refs/heads/main",
+        selectedBaseRef: "refs/remotes/origin/main",
         baseSource: "remote_default",
         resolvedTargetSha: mainSha,
         comparisonBaseSha: mainSha,
         headSha,
       });
 
-      const tree = git(repo, "rev-parse", "refs/heads/main^{tree}");
+      if (!result.ok) return;
+      const tree = git(repo, "rev-parse", "refs/remotes/origin/main^{tree}");
       const movedTarget = git(
         repo,
         "commit-tree",
         tree,
         "-p",
-        "refs/heads/main",
+        "refs/remotes/origin/main",
         "-m",
         "move base",
       );
-      git(repo, "update-ref", "refs/heads/main", movedTarget);
-      expect(yield* captureLocalCandidate({ cwd: repo, now: "2026-07-12T11:00:00.000Z" })).toEqual({
-        ok: false,
-        code: "candidate_provenance_conflict",
+      git(repo, "update-ref", "refs/remotes/origin/main", movedTarget);
+      const refreshed = yield* captureLocalCandidate({
+        cwd: repo,
+        now: "2026-07-12T11:00:00.000Z",
       });
+      expect(refreshed).toMatchObject({
+        ok: true,
+        changeId: result.changeId,
+        selectedBaseRef: "refs/remotes/origin/main",
+        resolvedTargetSha: movedTarget,
+      });
+      if (refreshed.ok) expect(refreshed.candidateId).not.toBe(result.candidateId);
     }),
   );
 

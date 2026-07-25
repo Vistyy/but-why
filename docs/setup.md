@@ -38,6 +38,9 @@ Existing Markdown issues remain historical implementation records.
    ```
 
    Omit `--task` for taskless work.
+   Change Start fetches the detected publication remote's default branch.
+   Pass `--base <branch>` to fetch and use a named branch on that remote.
+   Local branches cannot supply a Change Base.
 
 3. Implement and commit in the returned Managed Worktree.
 
@@ -47,6 +50,7 @@ Existing Markdown issues remain historical implementation records.
    by change submit <change-id>
    ```
 
+   But Why fetches the recorded remote Change Base before Candidate capture.
    But Why validates the selected Candidate and publishes an eligible Change.
    A taskless Change remains open when it has no changed Candidate.
 

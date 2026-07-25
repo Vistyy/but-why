@@ -160,6 +160,7 @@ const captureStoredCandidate = (
         resolved_target_sha AS resolvedTargetSha
       FROM candidates
       WHERE change_id = ${changeId}
+        AND resolved_target_sha = ${input.resolvedTargetSha}
         AND comparison_base_sha = ${input.comparisonBaseSha}
         AND head_sha = ${input.headSha}
     `;

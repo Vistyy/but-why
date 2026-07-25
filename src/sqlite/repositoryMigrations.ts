@@ -49,6 +49,7 @@ const baselineStatements = [
       updated_at TEXT NOT NULL,
       closed_at TEXT,
       base_ref TEXT,
+      base_remote_url TEXT,
       starting_commit TEXT,
       worktree_path TEXT,
       acceptance_context TEXT,
@@ -86,7 +87,7 @@ const baselineStatements = [
       head_sha TEXT NOT NULL,
       created_at TEXT NOT NULL,
       FOREIGN KEY (change_id) REFERENCES changes(id),
-      UNIQUE (change_id, comparison_base_sha, head_sha)
+      UNIQUE (change_id, resolved_target_sha, comparison_base_sha, head_sha)
     )
   `,
   "CREATE INDEX IF NOT EXISTS candidates_change_id_created_at_idx ON candidates (change_id, created_at)",
