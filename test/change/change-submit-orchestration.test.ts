@@ -313,7 +313,7 @@ describe("Change Submit orchestration", () => {
   );
 
   it.effect(
-    "completes no-change when an owned pull request no longer identifies the branch head",
+    "updates an owned pull request when its Repository Branch returns to the Change Base tree",
     () =>
       Effect.gen(function* () {
         const events: string[] = [];
@@ -351,16 +351,7 @@ describe("Change Submit orchestration", () => {
         );
         const validationLayer = Layer.succeed(CandidateValidation, {
           validateCandidate: () => Effect.die("Taskless validation was not expected"),
-          validateNoChange: () =>
-            Effect.sync(() => {
-              events.push("validate_no_change");
-              return {
-                ok: true,
-                reused: false,
-                validationRunId: "run-no-change",
-                outcome: "passed",
-              } as const;
-            }),
+          validateNoChange: () => Effect.die("No-Change validation was not expected"),
           validateTaskBackedCandidate: () =>
             Effect.sync(() => {
               events.push("validate_task_backed");
@@ -380,12 +371,13 @@ describe("Change Submit orchestration", () => {
           .submit({ changeId: change.id, now })
           .pipe(Effect.provide(validationLayer));
 
-        expect(result).toMatchObject({ ok: true, status: "no_change" });
+        expect(result).toMatchObject({ ok: true, status: "published" });
         expect(events).toEqual([
           "reconcile",
           "capture",
-          "validate_no_change",
-          "complete_no_change",
+          "detect_target",
+          "validate_task_backed",
+          "publish",
         ]);
       }),
   );

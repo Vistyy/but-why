@@ -214,7 +214,9 @@ const submitChange = (
       if (change.taskId === null) {
         return { ok: true, status: "nothing_to_submit", changeId: change.id } as const;
       }
-      return yield* validateAndCompleteNoChange(dependencies, change, candidate, input.now);
+      if (change.publication === null) {
+        return yield* validateAndCompleteNoChange(dependencies, change, candidate, input.now);
+      }
     }
     const target = detectPublicationTarget(dependencies, change, candidate);
     if (!target.ok) return githubTargetFailure(target);

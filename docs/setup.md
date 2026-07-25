@@ -18,6 +18,15 @@ Change Start creates each new Managed Worktree at `<main-checkout-parent>/<main-
 But Why resolves this location from Git's canonical main checkout, including when Change Start runs from a linked worktree.
 But Why does not support bare repositories, repository relocation, or Git worktree repair.
 
+## Pre-release Candidate state
+
+The development database was repaired to the simplified Candidate schema before this change was submitted.
+The one-time utility was removed after successful execution and is not a supported product migration.
+The repair preserved 26 Tasks, 8 Changes, 19 Candidates, 20 Validation Runs, 13 Findings, 217 Artifacts, and all other table rows.
+Foreign-key checks and SQLite integrity checks passed after the repair.
+The backup is stored beside Shared Repository State as `state.before-candidate-repair.sqlite` until dependent development work resumes.
+`test/repository/pre-release-candidate-state-repair.test.ts` retains executable evidence for the lossless transformation and collision guard.
+
 ## Change workflow
 
 SQLite Tasks are the source of truth for new active work.
