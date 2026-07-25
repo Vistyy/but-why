@@ -52,9 +52,10 @@ export const detectGitHubPrTarget = (
   runGit: GitCommandRunner = runGitCommand,
   runGh: GhCommandRunner = runGhCommand,
   selectedBaseRef?: string,
+  selectedRemoteUrl?: string,
 ): GitHubTargetResult => {
   if (selectedBaseRef !== undefined) {
-    return detectSelectedTarget(cwd, selectedBaseRef, runGit);
+    return detectSelectedTarget(cwd, selectedBaseRef, runGit, selectedRemoteUrl);
   }
   const remote = selectGitHubRemote(cwd, runGit);
 
@@ -97,12 +98,16 @@ const detectSelectedTarget = (
   cwd: string,
   selectedBaseRef: string,
   runGit: GitCommandRunner,
+  selectedRemoteUrl?: string,
 ): GitHubTargetResult => {
   const selected = parseRemoteChangeBaseRef(selectedBaseRef);
   if (selected === undefined) return { ok: false, code: "PR_TARGET_NOT_FOUND" };
-  const url = runGit(["config", "--get", `remote.${selected.remoteName}.url`], cwd);
-  if (!url.ok) return { ok: false, code: "GITHUB_TOOLING_ERROR" };
-  const remoteUrl = url.stdout.trim();
+  const configuredUrl =
+    selectedRemoteUrl === undefined
+      ? runGit(["config", "--get", `remote.${selected.remoteName}.url`], cwd)
+      : { ok: true as const, stdout: selectedRemoteUrl };
+  if (!configuredUrl.ok) return { ok: false, code: "GITHUB_TOOLING_ERROR" };
+  const remoteUrl = configuredUrl.stdout.trim();
   const repository = parseGitHubRemoteUrl(remoteUrl);
   if (repository === undefined) return { ok: false, code: "PR_TARGET_NOT_FOUND" };
   return {

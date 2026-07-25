@@ -7,13 +7,17 @@ import type { ChangeRecord } from "../../src/change/change.js";
 import type { ChangePersistence } from "../../src/change/changePersistence.js";
 import type { ChangeReconciliation } from "../../src/change/reconcileChange.js";
 import { openChangeSubmit } from "../../src/change/submitChange.js";
-import type { CaptureLocalCandidateResult } from "../../src/change/candidateCapture/captureLocalCandidate.js";
+import type {
+  CaptureLocalCandidateInput,
+  CaptureLocalCandidateResult,
+} from "../../src/change/candidateCapture/captureLocalCandidate.js";
 import type {
   PublishCandidateInput,
   PublishCandidateResult,
 } from "../../src/change/publication/candidatePublication.js";
 import type { TaskPersistence } from "../../src/task/taskPersistence.js";
 import { publicTaskId } from "../../src/task/taskId.js";
+import type { RemoteChangeBaseResult } from "../../src/submissionEnvironment/remoteChangeBase.js";
 
 const now = "2026-06-30T12:00:00.000Z";
 const candidate = {
@@ -384,14 +388,7 @@ describe("Change Submit orchestration", () => {
         .submit({ changeId: change.id, now })
         .pipe(Effect.provide(validationLayer));
 
-      expect(result).toEqual({
-        ok: true,
-        status: "no_change",
-        changeId: change.id,
-        candidateId: "candidate-no-change",
-        validationRunId: "run-no-change",
-        completionKind: "no_change",
-      });
+      expect(result).toEqual({ ok: false, code: "change_not_open" });
       expect(events).toEqual(["refresh_base"]);
     }),
   );
@@ -645,6 +642,38 @@ describe("Change Submit orchestration", () => {
     }),
   );
 
+  it.effect("rejects a changed publication remote before Candidate capture", () =>
+    Effect.gen(function* () {
+      const events: string[] = [];
+      const submit = openChangeSubmit(
+        dependencies({
+          events,
+          change: readyChange(),
+          refreshResult: {
+            ok: false,
+            code: "publication_remote_changed",
+            remoteName: "origin",
+            expectedRemoteUrl: "https://github.test/acme/repo.git",
+            actualRemoteUrl: "https://github.test/acme/other.git",
+          },
+        }),
+      );
+      const validationLayer = Layer.succeed(CandidateValidation, {
+        validateCandidate: () => Effect.die("Validation must not start"),
+        validateTaskBackedCandidate: () => Effect.die("Validation must not start"),
+        validateNoChange: () => Effect.die("Validation must not start"),
+        listFindings: () => Effect.succeed([]),
+        listToolingFailures: () => Effect.succeed([]),
+        listRounds: () => Effect.succeed([]),
+      });
+
+      expect(
+        yield* submit.submit({ changeId: "change-1", now }).pipe(Effect.provide(validationLayer)),
+      ).toMatchObject({ ok: false, code: "publication_remote_changed", remoteName: "origin" });
+      expect(events).toEqual(["refresh_base"]);
+    }),
+  );
+
   it.effect("rejects a missing GitHub target before Candidate validation starts", () =>
     Effect.gen(function* () {
       const events: string[] = [];
@@ -780,13 +809,7 @@ const dependencies = (input: {
   readonly reconciliationRejection?: string;
   readonly captureResult?: CaptureLocalCandidateResult;
   readonly captureResults?: readonly CaptureLocalCandidateResult[];
-  readonly refreshResult?:
-    | { readonly ok: true; readonly base: typeof refreshedBase }
-    | {
-        readonly ok: false;
-        readonly code: "publication_remote_unreachable";
-        readonly remoteName: string;
-      };
+  readonly refreshResult?: RemoteChangeBaseResult;
   readonly targetResult?:
     | { readonly ok: false; readonly code: "PR_TARGET_NOT_FOUND" }
     | {
@@ -900,8 +923,9 @@ const dependencies = (input: {
         }
       );
     },
-    captureCandidate: () =>
+    captureCandidate: (captureInput: CaptureLocalCandidateInput) =>
       Effect.sync(() => {
+        expect(captureInput.resolvedTargetSha).toBe(refreshedBase.commit);
         events.push("capture");
         return captureResults.shift() ?? input.captureResult ?? candidate;
       }),
@@ -913,6 +937,7 @@ const readyChange = (overrides: Partial<ChangeRecord> = {}): ChangeRecord => ({
   repositoryCommonDirectory: "/repo/.git",
   branchRef: "refs/heads/change-1",
   baseRef: "refs/remotes/origin/main",
+  baseRemoteUrl: "https://github.test/acme/repo.git",
   taskId: null,
   startingCommit: "base",
   worktreePath: "/repo/worktree",
@@ -933,6 +958,7 @@ const readyChange = (overrides: Partial<ChangeRecord> = {}): ChangeRecord => ({
 const refreshedBase = {
   remoteName: "origin",
   branchName: "main",
+  remoteUrl: "https://github.test/acme/repo.git",
   ref: "refs/remotes/origin/main",
   commit: "base",
 } as const;

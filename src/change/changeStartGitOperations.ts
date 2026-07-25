@@ -4,6 +4,7 @@ import type { ChangeStartRecord } from "./changeStartStore.js";
 export type ChangeStartGitIntent = {
   readonly repositoryCommonDirectory: string;
   readonly baseRef: string;
+  readonly baseRemoteUrl: string;
   readonly branchRef: string;
   readonly startingCommit: string;
   readonly worktreePath: string;

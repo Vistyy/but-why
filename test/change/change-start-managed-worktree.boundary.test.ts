@@ -7,6 +7,7 @@ import { Effect } from "effect";
 import { afterAll, beforeAll, describe } from "vitest";
 
 import { provisionChangeWorktree } from "../../src/change/changeStartGit.js";
+import { refreshRemoteChangeBase } from "../../src/submissionEnvironment/remoteChangeBase.js";
 import type { ChangeStartRecord } from "../../src/change/changeStartStore.js";
 import { openSqliteChangeStartPersistence } from "../../src/sqlite/sqliteChangeStartPersistence.js";
 import { runByInProcessEffect } from "../support/by-cli.js";
@@ -221,6 +222,22 @@ describe("Change Start Managed Worktree boundaries", () => {
     }),
   );
 
+  it.effect("rejects a publication remote URL change during refresh", () =>
+    Effect.gen(function* () {
+      const root = yield* repositoryCopy();
+      const expectedRemoteUrl = git(root, "config", "--get", "remote.origin.url");
+      git(root, "remote", "set-url", "origin", "https://github.com/acme/other.git");
+
+      expect(refreshRemoteChangeBase(root, "refs/remotes/origin/main", expectedRemoteUrl)).toEqual({
+        ok: false,
+        code: "publication_remote_changed",
+        remoteName: "origin",
+        expectedRemoteUrl,
+        actualRemoteUrl: "https://github.com/acme/other.git",
+      });
+    }),
+  );
+
   it.effect("uses the canonical main checkout upstream from main and linked worktrees", () =>
     Effect.gen(function* () {
       const root = yield* repositoryCopy();
@@ -350,6 +367,7 @@ describe("Change Start Managed Worktree boundaries", () => {
         }),
       );
       expect(persisted).toMatchObject({
+        baseRemoteUrl: expect.stringMatching(/^https:\/\/github\.com\//u),
         acceptanceContext: {
           version: 1,
           title: "Prepared change",
@@ -625,6 +643,7 @@ const changeStartRecord = (root: string): ChangeStartRecord => {
     repositoryCommonDirectory: commonDirectory,
     branchRef: "refs/heads/but-why/change-1",
     baseRef: "refs/heads/main",
+    baseRemoteUrl: "https://github.com/acme/repo.git",
     taskId: null,
     startingCommit: git(root, "rev-parse", "refs/heads/main"),
     worktreePath: join(commonDirectory, "but-why", "worktrees", "change-1"),

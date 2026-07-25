@@ -3,6 +3,7 @@ import { spawnSync } from "node:child_process";
 export type RemoteChangeBase = {
   readonly remoteName: string;
   readonly branchName: string;
+  readonly remoteUrl: string;
   readonly ref: string;
   readonly commit: string;
 };
@@ -30,7 +31,14 @@ export type RemoteChangeBaseError =
       readonly remoteName: string;
       readonly branchName: string;
     }
-  | { readonly ok: false; readonly code: "invalid_remote_change_base"; readonly baseRef: string };
+  | { readonly ok: false; readonly code: "invalid_remote_change_base"; readonly baseRef: string }
+  | {
+      readonly ok: false;
+      readonly code: "publication_remote_changed";
+      readonly remoteName: string;
+      readonly expectedRemoteUrl: string;
+      readonly actualRemoteUrl: string;
+    };
 
 export type RemoteChangeBaseResult =
   | { readonly ok: true; readonly base: RemoteChangeBase }
@@ -50,9 +58,26 @@ export const fetchRemoteChangeBase = (
   return fetchSelectedBranch(cwd, selected.remoteName, branch.branchName);
 };
 
-export const refreshRemoteChangeBase = (cwd: string, baseRef: string): RemoteChangeBaseResult => {
+export const refreshRemoteChangeBase = (
+  cwd: string,
+  baseRef: string,
+  expectedRemoteUrl: string,
+): RemoteChangeBaseResult => {
   const parsed = parseRemoteChangeBaseRef(baseRef);
   if (parsed === undefined) return { ok: false, code: "invalid_remote_change_base", baseRef };
+  const configuredUrl = readConfiguredRemoteUrl(cwd, parsed.remoteName);
+  if (configuredUrl === undefined) {
+    return { ok: false, code: "publication_remote_missing" };
+  }
+  if (configuredUrl !== expectedRemoteUrl) {
+    return {
+      ok: false,
+      code: "publication_remote_changed",
+      remoteName: parsed.remoteName,
+      expectedRemoteUrl,
+      actualRemoteUrl: configuredUrl,
+    };
+  }
   return fetchSelectedBranch(cwd, parsed.remoteName, parsed.branchName);
 };
 
@@ -154,6 +179,8 @@ const fetchSelectedBranch = (
       ? { ok: false, code: "remote_branch_missing", remoteName, branchName }
       : { ok: false, code: "publication_remote_unreachable", remoteName };
   }
+  const remoteUrl = readConfiguredRemoteUrl(cwd, remoteName);
+  if (remoteUrl === undefined) return { ok: false, code: "publication_remote_missing" };
   const ref = `refs/remotes/${remoteName}/${branchName}`;
   const fetched = git(cwd, "fetch", "--no-tags", remoteName, `+refs/heads/${branchName}:${ref}`);
   if (!fetched.ok) return { ok: false, code: "publication_remote_unreachable", remoteName };
@@ -161,8 +188,13 @@ const fetchSelectedBranch = (
   if (!resolved.ok) return { ok: false, code: "remote_branch_missing", remoteName, branchName };
   return {
     ok: true,
-    base: { remoteName, branchName, ref, commit: resolved.stdout },
+    base: { remoteName, branchName, remoteUrl, ref, commit: resolved.stdout },
   };
+};
+
+const readConfiguredRemoteUrl = (cwd: string, remoteName: string): string | undefined => {
+  const configured = git(cwd, "config", "--get", `remote.${remoteName}.url`);
+  return configured.ok && configured.stdout.length > 0 ? configured.stdout : undefined;
 };
 
 type GitResult =

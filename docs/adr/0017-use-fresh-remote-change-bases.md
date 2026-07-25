@@ -2,6 +2,7 @@
 
 But Why uses only a branch on the detected publication remote as a v1 Change Base because changed-code delivery targets an owned pull request and local branch state is not published intent.
 Change Start fetches the remote default branch or a named `--base` branch before recording the Change, and the selected branch becomes the pull request target.
+The Change records the publication remote URL so Submit rejects a remote name that is later redirected to another repository.
 Change Submit fetches that recorded branch before Candidate capture so Candidate identity and validation include the current target commit without modifying the Managed Worktree or Repository Branch.
 
 ## Considered Options

@@ -49,6 +49,7 @@ const baselineStatements = [
       updated_at TEXT NOT NULL,
       closed_at TEXT,
       base_ref TEXT,
+      base_remote_url TEXT,
       starting_commit TEXT,
       worktree_path TEXT,
       acceptance_context TEXT,

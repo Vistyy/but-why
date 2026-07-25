@@ -134,11 +134,16 @@ export const openChangeSubmit = (dependencies: {
   readonly reconciliation: ChangeReconciliation;
   readonly resolvePolicy: (taskBacked: boolean) => CandidateValidationPolicyResolution;
   readonly publicationFor: (cwd: string) => CandidatePublication;
-  readonly refreshBase: (cwd: string, baseRef: string) => RemoteChangeBaseResult;
+  readonly refreshBase: (
+    cwd: string,
+    baseRef: string,
+    expectedRemoteUrl: string,
+  ) => RemoteChangeBaseResult;
   readonly detectTarget: (
     cwd: string,
     branch: string,
     baseRef: string,
+    baseRemoteUrl: string,
   ) => PublicationTargetDetectionResult;
   readonly captureCandidate: CaptureCandidate;
 }): CandidateValidationChangeSubmit => ({
@@ -157,27 +162,27 @@ const submitChange = (
   Effect.gen(function* () {
     const existing = yield* dependencies.persistence.getChangeById(input.changeId);
     if (existing?.noChangeCompletion !== undefined && existing.noChangeCompletion !== null) {
-      if (existing.baseRef === null) {
+      if (existing.baseRef === null || existing.baseRemoteUrl === null) {
         return { ok: false, code: "invalid_remote_change_base", baseRef: "" } as const;
       }
-      const refreshedBase = dependencies.refreshBase(dependencies.repositoryPath, existing.baseRef);
+      const refreshedBase = dependencies.refreshBase(
+        dependencies.repositoryPath,
+        existing.baseRef,
+        existing.baseRemoteUrl,
+      );
       if (!refreshedBase.ok) return refreshedBase;
-      return {
-        ok: true,
-        status: "no_change",
-        changeId: existing.id,
-        candidateId: existing.noChangeCompletion.candidateId,
-        validationRunId: existing.noChangeCompletion.validationRunId,
-        completionKind: "no_change",
-      } as const;
     }
     const selected = yield* selectReadyChange(dependencies.persistence, input.changeId);
     if (!selected.ok) return selected;
     const change = selected.change;
-    if (change.baseRef === null) {
+    if (change.baseRef === null || change.baseRemoteUrl === null) {
       return { ok: false, code: "invalid_remote_change_base", baseRef: "" } as const;
     }
-    const refreshedBase = dependencies.refreshBase(dependencies.repositoryPath, change.baseRef);
+    const refreshedBase = dependencies.refreshBase(
+      dependencies.repositoryPath,
+      change.baseRef,
+      change.baseRemoteUrl,
+    );
     if (!refreshedBase.ok) return refreshedBase;
     const reconciliation = yield* reconcileBeforeSubmission(dependencies, change, input.now);
     if (!reconciliation.proceed) return reconciliation.result;
@@ -185,6 +190,7 @@ const submitChange = (
       cwd: change.worktreePath,
       changeId: change.id,
       now: input.now,
+      resolvedTargetSha: refreshedBase.base.commit,
       ...(change.taskId === null || change.startingCommit === null
         ? {}
         : { startingCommit: change.startingCommit }),
@@ -525,6 +531,7 @@ const detectPublicationTarget = (
     change.worktreePath,
     candidate.branchRef.replace(/^refs\/heads\//, ""),
     change.baseRef ?? "",
+    change.baseRemoteUrl ?? "",
   );
 
 const publishedResult = (

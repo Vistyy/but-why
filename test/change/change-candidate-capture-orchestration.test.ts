@@ -29,7 +29,7 @@ describe("Change Candidate capture orchestration", () => {
               repositoryCommonDirectory: "/repo/.git",
               branchRef: "refs/heads/feature",
               selectedBaseRef: "refs/heads/main",
-              resolvedTargetSha: "base",
+              resolvedTargetSha: "fetched-target",
               comparisonBaseSha: "base",
               headSha: "head",
             });
@@ -57,13 +57,17 @@ describe("Change Candidate capture orchestration", () => {
           }),
         localBranchExists: () => Effect.succeed(true),
         recordedRemoteDefaultLocalBranches: () => Effect.succeed(["refs/heads/main"]),
-        resolveLocalBranch: () => Effect.succeed("base"),
+        resolveLocalBranch: () => Effect.die("The fetched target commit must remain exact"),
         findComparisonBase: () => Effect.succeed("base"),
         trackedTreeMatches: () => Effect.succeed(false),
       };
       const capture = openCandidateCapture({ persistence, git });
 
-      const result = yield* capture.capture({ cwd: "/repo/worktree", now });
+      const result = yield* capture.capture({
+        cwd: "/repo/worktree",
+        now,
+        resolvedTargetSha: "fetched-target",
+      });
 
       expect(result).toEqual({
         ok: true,
@@ -72,7 +76,7 @@ describe("Change Candidate capture orchestration", () => {
         branchRef: "refs/heads/feature",
         selectedBaseRef: "refs/heads/main",
         baseSource: "remote_default",
-        resolvedTargetSha: "base",
+        resolvedTargetSha: "fetched-target",
         comparisonBaseSha: "base",
         headSha: "head",
       });

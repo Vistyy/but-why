@@ -681,7 +681,8 @@ const submitResult = (result: ChangeSubmitResult): CliResult => {
     result.code === "publication_remote_unreachable" ||
     result.code === "remote_default_branch_missing" ||
     result.code === "remote_branch_missing" ||
-    result.code === "invalid_remote_change_base"
+    result.code === "invalid_remote_change_base" ||
+    result.code === "publication_remote_changed"
   ) {
     return remoteChangeBaseError(result, "Submit");
   }
@@ -953,7 +954,8 @@ const startResult = (result: ChangeStartResult): CliResult => {
     result.code === "publication_remote_unreachable" ||
     result.code === "remote_default_branch_missing" ||
     result.code === "remote_branch_missing" ||
-    result.code === "invalid_remote_change_base"
+    result.code === "invalid_remote_change_base" ||
+    result.code === "publication_remote_changed"
   ) {
     return remoteChangeBaseError(result, "Start");
   }
@@ -1016,7 +1018,8 @@ const remoteChangeBaseError = (
         | "publication_remote_unreachable"
         | "remote_default_branch_missing"
         | "remote_branch_missing"
-        | "invalid_remote_change_base";
+        | "invalid_remote_change_base"
+        | "publication_remote_changed";
     }
   >,
   operation: "Start" | "Submit",
@@ -1030,6 +1033,13 @@ const remoteChangeBaseError = (
       : {}),
     ...(result.code === "remote_branch_missing" ? { branchName: result.branchName } : {}),
     ...(result.code === "invalid_remote_change_base" ? { baseRef: result.baseRef } : {}),
+    ...(result.code === "publication_remote_changed"
+      ? {
+          remoteName: result.remoteName,
+          expectedRemoteUrl: result.expectedRemoteUrl,
+          actualRemoteUrl: result.actualRemoteUrl,
+        }
+      : {}),
   };
   return runtimeError({
     code: result.code,

@@ -40,6 +40,7 @@ export const resolveChangeStartGitIntent = (
     intent: {
       repositoryCommonDirectory: context.commonDirectory,
       baseRef,
+      baseRemoteUrl: fetched.base.remoteUrl,
       branchRef,
       startingCommit,
       worktreePath: join(

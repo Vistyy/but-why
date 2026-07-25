@@ -70,6 +70,7 @@ export type ChangeRecord = {
   readonly repositoryCommonDirectory: string;
   readonly branchRef: string;
   readonly baseRef: string | null;
+  readonly baseRemoteUrl: string | null;
   readonly taskId: PublicTaskId | null;
   readonly startingCommit: string | null;
   readonly worktreePath: string | null;

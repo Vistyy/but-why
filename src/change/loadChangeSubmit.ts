@@ -80,8 +80,8 @@ export const loadChangeSubmit = (input: {
           github: localGitHubPullRequestGateway({ cwd }),
         }),
       refreshBase: refreshRemoteChangeBase,
-      detectTarget: (cwd, branch, baseRef) =>
-        detectGitHubPrTarget(cwd, branch, undefined, undefined, baseRef),
+      detectTarget: (cwd, branch, baseRef, baseRemoteUrl) =>
+        detectGitHubPrTarget(cwd, branch, undefined, undefined, baseRef, baseRemoteUrl),
       captureCandidate: openCandidateCapture({
         persistence: capturePersistence,
         git: localCandidateCaptureGit,
