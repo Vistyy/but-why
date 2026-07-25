@@ -222,9 +222,15 @@ const unexpectedPullRequestFact = (
   }
   if (pullRequest.baseBranch !== publication.target.baseBranch) return "base_branch_mismatch";
   if (pullRequest.headBranch !== publication.headBranch) return "head_branch_mismatch";
-  if (pullRequest.headSha !== publication.expectedHeadSha) return "head_sha_mismatch";
   if (pullRequest.state === undefined || pullRequest.merged === undefined) {
     return "pull_request_facts_unavailable";
+  }
+  const state = `${pullRequest.state}:${String(pullRequest.merged)}`;
+  if (state !== "open:false" && state !== "closed:false" && state !== "closed:true") {
+    return "pull_request_state_invalid";
+  }
+  if (pullRequest.headSha !== publication.expectedHeadSha && state !== "closed:true") {
+    return state === "closed:false" ? "closed_unmerged_head_sha_mismatch" : "head_sha_mismatch";
   }
   return undefined;
 };

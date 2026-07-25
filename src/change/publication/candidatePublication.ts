@@ -73,6 +73,7 @@ type Dependencies = {
   >;
   readonly git: CandidatePublicationGit;
   readonly github: GitHubPullRequestGateway;
+  readonly delayBeforeConfirmation?: (milliseconds: number) => Effect.Effect<void>;
 };
 type PublicationEffect = Effect.Effect<PublishCandidateResult, RepositoryStorageError>;
 type Metadata = { readonly title: string; readonly body: string };
@@ -283,16 +284,19 @@ const updateOrReuse = (
     headBranch,
     expectedHeadSha,
   );
-  return prepared.proceed
-    ? executePullRequestUpdate(
-        dependencies,
-        input,
-        change,
-        prepared.owned,
-        headBranch,
-        expectedHeadSha,
-        metadata,
-      )
+  if (prepared.proceed) {
+    return executePullRequestUpdate(
+      dependencies,
+      input,
+      change,
+      prepared.owned,
+      headBranch,
+      expectedHeadSha,
+      metadata,
+    );
+  }
+  return "recovered" in prepared
+    ? record(dependencies, input, headBranch, expectedHeadSha, prepared.recovered, prepared.owned)
     : Effect.succeed(prepared.result);
 };
 
@@ -301,6 +305,7 @@ type Published = ChangePublication & {
 };
 type UpdatePreparation =
   | { readonly proceed: true; readonly owned: Published }
+  | { readonly proceed: false; readonly owned: Published; readonly recovered: GitHubPullRequest }
   | { readonly proceed: false; readonly result: PublishCandidateResult };
 
 const preparePullRequestUpdate = (
@@ -339,10 +344,36 @@ const prepareOwnedPullRequestUpdate = (
   headBranch: string,
   expectedHeadSha: string,
 ): UpdatePreparation => {
-  const remoteError = expectedRemoteError(dependencies, input, owned, headBranch);
-  if (remoteError !== undefined) return { proceed: false, result: remoteError };
-  if (owned.expectedHeadSha === expectedHeadSha) {
-    return { proceed: false, result: reusePublishedCandidate(owned, input) };
+  const remote = dependencies.github.getPullRequest(input.target, owned.pullRequest.number);
+  if (remote === undefined) {
+    return { proceed: false, result: { ok: false, code: "publication_tooling_failed" } };
+  }
+  if (
+    isExpectedPullRequest(
+      remote,
+      owned.pullRequest.number,
+      input.target,
+      headBranch,
+      expectedHeadSha,
+    )
+  ) {
+    if (owned.expectedHeadSha === expectedHeadSha) {
+      return { proceed: false, result: reusePublishedCandidate(owned, input) };
+    }
+    return hasExpectedHead(dependencies.git, change.branchRef, expectedHeadSha)
+      ? { proceed: false, owned, recovered: remote }
+      : { proceed: false, result: { ok: false, code: "current_head_mismatch" } };
+  }
+  if (
+    !isExpectedPullRequest(
+      remote,
+      owned.pullRequest.number,
+      input.target,
+      headBranch,
+      owned.expectedHeadSha,
+    )
+  ) {
+    return { proceed: false, result: { ok: false, code: "publication_remote_mismatch" } };
   }
   return hasExpectedHead(dependencies.git, change.branchRef, expectedHeadSha)
     ? { proceed: true, owned }
@@ -354,19 +385,6 @@ const publishedChangePublication = (change: ChangeRecord): Published | undefined
   return publication?.pullRequest === null || publication === null
     ? undefined
     : (publication as Published);
-};
-
-const expectedRemoteError = (
-  dependencies: Dependencies,
-  input: PublishCandidateInput,
-  owned: Published,
-  headBranch: string,
-): Extract<PublishCandidateResult, { readonly ok: false }> | undefined => {
-  const remote = dependencies.github.getPullRequest(input.target, owned.pullRequest.number);
-  if (remote === undefined) return { ok: false, code: "publication_tooling_failed" };
-  return matches(remote, input.target, headBranch, owned.expectedHeadSha)
-    ? undefined
-    : { ok: false, code: "publication_remote_mismatch" };
 };
 
 const reusePublishedCandidate = (
@@ -398,10 +416,34 @@ const executePullRequestUpdate = (
   if (
     !isExpectedUpdatedPullRequest(updated.pullRequest, owned, input, headBranch, expectedHeadSha)
   ) {
-    return Effect.succeed({ ok: false, code: "publication_remote_mismatch" });
+    return confirmUpdatedPullRequest(dependencies, input, owned, headBranch, expectedHeadSha);
   }
   return record(dependencies, input, headBranch, expectedHeadSha, updated.pullRequest, owned);
 };
+
+const confirmUpdatedPullRequest = (
+  dependencies: Dependencies,
+  input: PublishCandidateInput,
+  owned: Published,
+  headBranch: string,
+  expectedHeadSha: string,
+): PublicationEffect =>
+  Effect.gen(function* () {
+    const delay =
+      dependencies.delayBeforeConfirmation ??
+      ((milliseconds: number) => Effect.sleep(`${milliseconds} millis`));
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      yield* delay(100);
+      const confirmed = dependencies.github.getPullRequest(input.target, owned.pullRequest.number);
+      if (confirmed === undefined) {
+        return { ok: false, code: "publication_tooling_failed" };
+      }
+      if (isExpectedUpdatedPullRequest(confirmed, owned, input, headBranch, expectedHeadSha)) {
+        return yield* record(dependencies, input, headBranch, expectedHeadSha, confirmed, owned);
+      }
+    }
+    return { ok: false, code: "publication_remote_mismatch" };
+  });
 
 const isExpectedUpdatedPullRequest = (
   pullRequest: GitHubPullRequest,
@@ -410,8 +452,22 @@ const isExpectedUpdatedPullRequest = (
   headBranch: string,
   expectedHeadSha: string,
 ): boolean =>
-  pullRequest.number === owned.pullRequest.number &&
-  matches(pullRequest, input.target, headBranch, expectedHeadSha);
+  isExpectedPullRequest(
+    pullRequest,
+    owned.pullRequest.number,
+    input.target,
+    headBranch,
+    expectedHeadSha,
+  );
+
+const isExpectedPullRequest = (
+  pullRequest: GitHubPullRequest,
+  number: number,
+  target: ChangePublicationTarget,
+  headBranch: string,
+  expectedHeadSha: string,
+): boolean =>
+  pullRequest.number === number && matches(pullRequest, target, headBranch, expectedHeadSha);
 
 const updateFailure = (
   dependencies: Dependencies,
@@ -540,6 +596,10 @@ const matches = (
   headBranch: string,
   expectedHeadSha: string,
 ) =>
+  pullRequest.repository?.owner === target.owner &&
+  pullRequest.repository.repo === target.repo &&
+  pullRequest.state === "open" &&
+  pullRequest.merged === false &&
   pullRequest.baseBranch === target.baseBranch &&
   pullRequest.headBranch === headBranch &&
   pullRequest.headSha === expectedHeadSha;

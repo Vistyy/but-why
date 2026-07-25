@@ -285,7 +285,7 @@ const reconcileBeforeSubmission = (
     if (reconciled === undefined) {
       return { proceed: false, result: { ok: false, code: "change_not_found" } };
     }
-    if (reconciled.status === "rejected") {
+    if (reconciled.status === "rejected" && reconciled.rejection !== "head_sha_mismatch") {
       return {
         proceed: false,
         result: { ok: false, code: "reconciliation_rejected", change: reconciled },

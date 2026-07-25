@@ -441,6 +441,90 @@ describe("Change Submit orchestration", () => {
     }),
   );
 
+  it.effect("continues to validated publication after a stale stored Candidate is observed", () =>
+    Effect.gen(function* () {
+      const events: string[] = [];
+      const change = readyChange({
+        publication: {
+          candidateId: "previous-candidate",
+          validationRunId: "previous-run",
+          target: { owner: "acme", repo: "repo", baseBranch: "main", remoteName: "origin" },
+          headBranch: "change-1",
+          expectedHeadSha: "previous-head",
+          pullRequest: { number: 42, url: "https://github.test/acme/repo/pull/42" },
+        },
+      });
+      const submit = openChangeSubmit(
+        dependencies({
+          events,
+          change,
+          reconciliationStatus: "rejected",
+          reconciliationRejection: "head_sha_mismatch",
+        }),
+      );
+      const validationLayer = Layer.succeed(CandidateValidation, {
+        validateCandidate: () =>
+          Effect.sync(() => {
+            events.push("validate_taskless");
+            return {
+              ok: true,
+              reused: false,
+              validationRunId: "run-1",
+              outcome: "passed",
+            } as const;
+          }),
+        validateTaskBackedCandidate: () => Effect.die("Acceptance Review was not expected"),
+        validateNoChange: () => Effect.die("Acceptance-only validation was not expected"),
+        listFindings: () => Effect.succeed([]),
+        listToolingFailures: () => Effect.succeed([]),
+        listRounds: () => Effect.succeed([]),
+      });
+
+      expect(
+        yield* submit.submit({ changeId: change.id, now }).pipe(Effect.provide(validationLayer)),
+      ).toMatchObject({ ok: true, status: "published", candidateId: "candidate-1" });
+      expect(events).toEqual([
+        "reconcile",
+        "capture",
+        "detect_target",
+        "validate_taskless",
+        "publish",
+      ]);
+    }),
+  );
+
+  it.effect("keeps rejecting reconciliation mismatches other than the Candidate commit", () =>
+    Effect.gen(function* () {
+      const events: string[] = [];
+      const change = readyChange();
+      const submit = openChangeSubmit(
+        dependencies({
+          events,
+          change,
+          reconciliationStatus: "rejected",
+          reconciliationRejection: "base_branch_mismatch",
+        }),
+      );
+      const validationLayer = Layer.succeed(CandidateValidation, {
+        validateCandidate: () => Effect.die("Validation must not start"),
+        validateTaskBackedCandidate: () => Effect.die("Validation must not start"),
+        validateNoChange: () => Effect.die("Validation must not start"),
+        listFindings: () => Effect.succeed([]),
+        listToolingFailures: () => Effect.succeed([]),
+        listRounds: () => Effect.succeed([]),
+      });
+
+      expect(
+        yield* submit.submit({ changeId: change.id, now }).pipe(Effect.provide(validationLayer)),
+      ).toMatchObject({
+        ok: false,
+        code: "reconciliation_rejected",
+        change: { rejection: "base_branch_mismatch" },
+      });
+      expect(events).toEqual(["reconcile"]);
+    }),
+  );
+
   it.effect(
     "returns an existing owned pull request without duplicate validation or publication",
     () =>
@@ -652,7 +736,8 @@ const dependencies = (input: {
   readonly findings?: readonly (typeof finding)[];
   readonly toolingFailures?: readonly (typeof toolingFailure)[];
   readonly publication?: PublicationFixture;
-  readonly reconciliationStatus?: "not_owned" | "open";
+  readonly reconciliationStatus?: "not_owned" | "open" | "rejected";
+  readonly reconciliationRejection?: string;
   readonly captureResult?: CaptureLocalCandidateResult;
   readonly captureResults?: readonly CaptureLocalCandidateResult[];
   readonly targetResult?:
@@ -693,14 +778,18 @@ const dependencies = (input: {
       reconcile: () =>
         Effect.sync(() => {
           events.push("reconcile");
+          const status = input.reconciliationStatus ?? "not_owned";
           return {
-            rejected: false,
+            rejected: status === "rejected",
             changes: [
               {
                 changeId: input.change.id,
-                status: input.reconciliationStatus ?? "not_owned",
-                ...(input.reconciliationStatus === "open" && input.change.publication?.pullRequest
+                status,
+                ...(status === "open" && input.change.publication?.pullRequest
                   ? { pullRequest: input.change.publication.pullRequest }
+                  : {}),
+                ...(status === "rejected"
+                  ? { rejection: input.reconciliationRejection ?? "remote_mismatch" }
                   : {}),
               },
             ],
