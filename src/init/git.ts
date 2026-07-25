@@ -5,6 +5,7 @@ export type GitRootResult =
   | {
       readonly ok: true;
       readonly root: string;
+      readonly mainCheckoutRoot: string;
       readonly commonDirectory: string;
     }
   | {
@@ -37,5 +38,29 @@ export const findGitRoot = (cwd: string): GitRootResult => {
     return { ok: false };
   }
 
-  return { ok: true, root, commonDirectory: realpathSync(commonDirectory) };
+  const worktrees = spawnSync("git", ["worktree", "list", "--porcelain", "-z"], {
+    cwd,
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "ignore"],
+  });
+  if (worktrees.status !== 0) return { ok: false };
+  const mainWorktree = worktrees.stdout.split("\0\0", 1)[0];
+  const mainCheckoutRoot = mainWorktree
+    ?.split("\0")
+    .find((line) => line.startsWith("worktree "))
+    ?.slice("worktree ".length);
+  if (
+    mainCheckoutRoot === undefined ||
+    mainCheckoutRoot.length === 0 ||
+    mainWorktree?.split("\0").includes("bare") === true
+  ) {
+    return { ok: false };
+  }
+
+  return {
+    ok: true,
+    root,
+    mainCheckoutRoot: realpathSync(mainCheckoutRoot),
+    commonDirectory: realpathSync(commonDirectory),
+  };
 };

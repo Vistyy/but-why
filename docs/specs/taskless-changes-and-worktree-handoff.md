@@ -72,7 +72,13 @@ Both forms create from the configured default branch.
 Arbitrary base refs and stacked Change semantics are excluded from v1.
 
 Native `git worktree` is the required persistent-worktree provisioning adapter.
+New Managed Worktrees use `<main-checkout-parent>/<main-checkout-name>-worktrees/but-why/<change-slug>`.
+But Why asks Git for the canonical main checkout so the main checkout and linked worktrees resolve the same sibling root.
+SQLite, Artifacts, and other Shared Repository State remain under `<git-common-dir>/but-why/`.
+Existing Changes retain their recorded absolute Managed Worktree paths without migration.
 But Why remains authoritative for Change identity, branch ownership, worktree path, starting commit, readiness, recovery, and cleanup eligibility.
+Change Start does not use a configurable root or fallback location.
+Bare repositories, repository relocation, and Git worktree repair are not supported.
 Sandcastle remains an execution and disposable Validation Workspace mechanism rather than the persistent worktree registry.
 Worktrunk may be reconsidered as an optional adapter after a concrete need exists.
 Treehouse's detached reusable-pool model is not compatible with persistent Change-owned branches.
@@ -89,6 +95,8 @@ Future monorepo-aware preparation may select work from Task or changed-file cont
 Change Start records the Change and worktree before preparation begins.
 Successful preparation marks the Managed Worktree ready.
 Failed preparation records a retryable `prepare_failed` state, preserves the branch and worktree, and prevents implementer launch.
+A sibling-path failure reports the attempted path and directs the user to make the parent writable, create the expected directory with suitable ownership, or move the repository to a writable parent.
+The recorded Change remains recoverable after the path becomes usable.
 `by change prepare <change-id>` explicitly runs or retries preparation.
 
 ### Change-centered CLI
@@ -144,6 +152,8 @@ There is no v1 webhook, daemon, or automatic polling requirement.
 Reconciliation marks a Change complete when its recorded owned PR is observed merged.
 Cancellation synchronously closes the Change and makes it eligible for the same cleanup policy.
 Cleanup removes a worktree only when it has no uncommitted changes.
+After the final Managed Worktree is removed, cleanup removes empty `but-why` and sibling `*-worktrees` containers.
+Cleanup preserves a container that contains any other entry.
 Cleanup deletes a branch only when its commits remain reachable through another ref.
 Unsafe or failed cleanup remains pending and reports the blocking reason without preventing lifecycle closure.
 Task linkage does not affect cleanup policy.

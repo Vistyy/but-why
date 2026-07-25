@@ -42,6 +42,15 @@ The command creates `.but-why/config.json` and `.but-why/reviewers/` in the work
 
 It stores SQLite state and Artifacts under `<git-common-dir>/but-why/` so every linked worktree shares them.
 
+New Managed Worktrees use `<main-checkout-parent>/<main-checkout-name>-worktrees/but-why/<change-slug>`.
+But Why asks Git for the canonical main checkout, so Change Start uses the same sibling root from the main checkout and every linked worktree.
+Existing Changes continue to use their recorded absolute Managed Worktree paths.
+
+But Why requires a normal main checkout with tracked project files and Repo Config.
+Bare repositories, repository relocation, and `git worktree repair` are not supported.
+After a manual repository move or rename, existing Changes retain their recorded absolute paths without repair or migration.
+New Changes can use the sibling root for the new canonical main-checkout location.
+
 Inspect the repository tooling before you edit `.but-why/config.json`.
 
 Add `validation.checks`.
@@ -216,6 +225,11 @@ by change start [--task <task-id>]
 
 The result records the Change ID, optional Task ID, branch, base ref, starting commit, and `worktreePath`.
 
+If But Why cannot create or safely use the sibling path, Change Start reports the attempted path.
+Make the parent writable, create the expected directory with suitable ownership, or move the repository to a writable parent.
+But Why does not select a fallback location.
+Retry the recorded Change after you correct the path failure.
+
 A Task-backed Change captures immutable Acceptance Context from the approved Task.
 
 Its later Submission includes Acceptance Review.
@@ -256,7 +270,7 @@ change:
   id: chg_01J...
   taskId: null
   readiness: ready
-worktreePath: /path/to/.but-why/changes/chg_01J...
+worktreePath: /path/to/repository-worktrees/but-why/change-chg_01J...
 ```
 
 For a programmatic caller, request JSON:
@@ -274,7 +288,7 @@ A failed preparation preserves the Change and worktree and returns retryable evi
     "message": "Repository Preparation failed; the Change and worktree were preserved.",
     "changeId": "chg_01J...",
     "readiness": "prepare_failed",
-    "worktreePath": "/path/to/.but-why/changes/chg_01J...",
+    "worktreePath": "/path/to/repository-worktrees/but-why/change-chg_01J...",
     "command": "pnpm install --frozen-lockfile",
     "exitCode": 1,
     "timedOut": false,

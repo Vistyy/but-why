@@ -956,9 +956,16 @@ const operationalError = (code: string, change?: ChangeRecord): CliResult =>
             worktreePath: change.worktreePath,
           },
         }),
-    help: [
-      "Inspect the default branch, committed Repo Config, branch, and worktree path, then retry.",
-    ],
+    help:
+      code === "managed_worktree_path_unavailable"
+        ? [
+            `Make the parent directory writable, then run \`by change prepare ${change?.id ?? "<change-id>"}\`.`,
+            `Create the expected directory with suitable ownership, then run \`by change prepare ${change?.id ?? "<change-id>"}\`.`,
+            "Move the repository to a writable parent, then start a new Change.",
+          ]
+        : [
+            "Inspect the default branch, committed Repo Config, branch, and worktree path, then retry.",
+          ],
   });
 
 const withChanges = (

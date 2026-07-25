@@ -14,6 +14,9 @@ by init --task-prefix BY
 
 The command creates tracked Repo Config at `.but-why/config.json` and `.but-why/reviewers/`.
 It stores shared SQLite state and Artifacts at `<git-common-dir>/but-why/`.
+Change Start creates each new Managed Worktree at `<main-checkout-parent>/<main-checkout-name>-worktrees/but-why/<change-slug>`.
+But Why resolves this location from Git's canonical main checkout, including when Change Start runs from a linked worktree.
+But Why does not support bare repositories, repository relocation, or Git worktree repair.
 
 ## Change workflow
 

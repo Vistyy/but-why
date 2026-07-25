@@ -1,5 +1,6 @@
 import { spawnSync } from "node:child_process";
-import { existsSync } from "node:fs";
+import { existsSync, lstatSync, rmdirSync } from "node:fs";
+import { basename, dirname } from "node:path";
 
 export type ChangeCleanupResult =
   | { readonly state: "complete" }
@@ -9,6 +10,8 @@ export type ChangeCleanupResult =
         | "worktree_has_uncommitted_changes"
         | "worktree_status_unavailable"
         | "worktree_removal_failed"
+        | "worktree_path_unsafe"
+        | "worktree_container_removal_failed"
         | "branch_ref_invalid"
         | "branch_reachability_unavailable"
         | "branch_not_reachable_from_another_ref"
@@ -20,6 +23,9 @@ export const cleanupChangeResources = (input: {
   readonly worktreePath: string | null;
   readonly branchRef: string;
 }): ChangeCleanupResult => {
+  if (input.worktreePath !== null && !isWorktreePathSafe(input.worktreePath)) {
+    return { state: "pending", blockingReason: "worktree_path_unsafe" };
+  }
   if (input.worktreePath !== null && existsSync(input.worktreePath)) {
     const status = gitAtWorktree(input.worktreePath, [
       "status",
@@ -35,6 +41,10 @@ export const cleanupChangeResources = (input: {
     ) {
       return { state: "pending", blockingReason: "worktree_removal_failed" };
     }
+  }
+
+  if (input.worktreePath !== null && !removeEmptySiblingContainers(input.worktreePath)) {
+    return { state: "pending", blockingReason: "worktree_container_removal_failed" };
   }
 
   const branchName = branchNameForRef(input.branchRef);
@@ -65,6 +75,42 @@ export const cleanupChangeResources = (input: {
     ? { state: "complete" }
     : { state: "pending", blockingReason: "branch_deletion_failed" };
 };
+
+const isWorktreePathSafe = (worktreePath: string): boolean => {
+  const paths = [dirname(dirname(worktreePath)), dirname(worktreePath), worktreePath];
+  return paths.every((path) => {
+    try {
+      if (!existsSync(path)) return true;
+      const entry = lstatSync(path);
+      return entry.isDirectory() && !entry.isSymbolicLink();
+    } catch {
+      return false;
+    }
+  });
+};
+
+const removeEmptySiblingContainers = (worktreePath: string): boolean => {
+  const butWhyContainer = dirname(worktreePath);
+  const siblingRoot = dirname(butWhyContainer);
+  if (basename(butWhyContainer) !== "but-why" || !basename(siblingRoot).endsWith("-worktrees")) {
+    return true;
+  }
+  try {
+    rmdirSync(butWhyContainer);
+  } catch (error) {
+    if (isFileSystemError(error, "ENOTEMPTY")) return true;
+    if (!isFileSystemError(error, "ENOENT")) return false;
+  }
+  try {
+    rmdirSync(siblingRoot);
+    return true;
+  } catch (error) {
+    return isFileSystemError(error, "ENOTEMPTY") || isFileSystemError(error, "ENOENT");
+  }
+};
+
+const isFileSystemError = (error: unknown, code: string): boolean =>
+  error instanceof Error && "code" in error && error.code === code;
 
 type GitResult = { readonly ok: true; readonly stdout: string } | { readonly ok: false };
 
