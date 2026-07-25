@@ -332,6 +332,58 @@ describe("repository SQL storage", () => {
     ),
   );
 
+  it.scoped("identifies a Candidate by its exact fetched Change Base target", () =>
+    withTemporaryState((input) =>
+      Effect.gen(function* () {
+        const capture = yield* openSqliteCandidateCapturePersistence();
+        const first = yield* capture.commitCapture({
+          repositoryCommonDirectory: input.commonDirectory,
+          branchRef: "refs/heads/by-8",
+          selectedBaseRef: "refs/remotes/origin/main",
+          resolvedTargetSha: "d5fbe76f5565fa4d7de3ee3c48135fc595b26bea",
+          comparisonBaseSha: "d5fbe76f5565fa4d7de3ee3c48135fc595b26bea",
+          headSha: "c0ebeaa730bcd666c7b927db2542ea6ea9d9575c",
+          now: "2026-07-25T12:00:00.000Z",
+        });
+        expect(first).toMatchObject({ ok: true, reused: false });
+        if (!first.ok) return;
+
+        const advancedTarget = yield* capture.commitCapture({
+          repositoryCommonDirectory: input.commonDirectory,
+          branchRef: "refs/heads/by-8",
+          expectedChangeId: first.changeId,
+          selectedBaseRef: "refs/remotes/origin/main",
+          resolvedTargetSha: "b32245d73e2c2aaf9ed9d46270720591a6f62946",
+          comparisonBaseSha: "d5fbe76f5565fa4d7de3ee3c48135fc595b26bea",
+          headSha: "c0ebeaa730bcd666c7b927db2542ea6ea9d9575c",
+          now: "2026-07-25T13:00:00.000Z",
+        });
+        expect(advancedTarget).toMatchObject({ ok: true, reused: false });
+        if (!advancedTarget.ok) return;
+
+        const exactRepeat = yield* capture.commitCapture({
+          repositoryCommonDirectory: input.commonDirectory,
+          branchRef: "refs/heads/by-8",
+          expectedChangeId: first.changeId,
+          selectedBaseRef: "refs/remotes/origin/main",
+          resolvedTargetSha: "b32245d73e2c2aaf9ed9d46270720591a6f62946",
+          comparisonBaseSha: "d5fbe76f5565fa4d7de3ee3c48135fc595b26bea",
+          headSha: "c0ebeaa730bcd666c7b927db2542ea6ea9d9575c",
+          now: "2026-07-25T14:00:00.000Z",
+        });
+
+        expect(advancedTarget.candidateId).not.toBe(first.candidateId);
+        expect(advancedTarget.reused).toBe(false);
+        expect(exactRepeat).toEqual({
+          ok: true,
+          changeId: first.changeId,
+          candidateId: advancedTarget.candidateId,
+          reused: true,
+        });
+      }),
+    ),
+  );
+
   it.scoped("rolls back the complete Candidate capture when its write fails", () =>
     withTemporaryState((input) =>
       Effect.gen(function* () {

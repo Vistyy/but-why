@@ -101,6 +101,95 @@ describe("Change Submit orchestration", () => {
       }),
   );
 
+  it.effect("runs fresh validation when the fetched Change Base target advances", () =>
+    Effect.gen(function* () {
+      const events: string[] = [];
+      const headSha = "c0ebeaa730bcd666c7b927db2542ea6ea9d9575c";
+      const comparisonBaseSha = "d5fbe76f5565fa4d7de3ee3c48135fc595b26bea";
+      const oldTargetSha = "d5fbe76f5565fa4d7de3ee3c48135fc595b26bea";
+      const newTargetSha = "b32245d73e2c2aaf9ed9d46270720591a6f62946";
+      const submit = openChangeSubmit(
+        dependencies({
+          events,
+          change: readyChange(),
+          refreshResults: [
+            { ok: true, base: { ...refreshedBase, commit: oldTargetSha } },
+            { ok: true, base: { ...refreshedBase, commit: newTargetSha } },
+          ],
+          captureResults: [
+            {
+              ...candidate,
+              candidateId: "candidate-old-target",
+              resolvedTargetSha: oldTargetSha,
+              comparisonBaseSha,
+              headSha,
+            },
+            {
+              ...candidate,
+              candidateId: "candidate-new-target",
+              resolvedTargetSha: newTargetSha,
+              comparisonBaseSha,
+              headSha,
+            },
+          ],
+        }),
+      );
+      const validatedCandidates: string[] = [];
+      const validationLayer = Layer.succeed(CandidateValidation, {
+        validateCandidate: (input) =>
+          Effect.sync(() => {
+            events.push("validate_taskless");
+            validatedCandidates.push(input.candidateId);
+            return {
+              ok: true,
+              reused: false,
+              validationRunId:
+                input.candidateId === "candidate-old-target" ? "run-old-target" : "run-new-target",
+              outcome: "passed",
+            } as const;
+          }),
+        validateTaskBackedCandidate: () => Effect.die("Acceptance Review was not expected"),
+        validateNoChange: () => Effect.die("Acceptance-only validation was not expected"),
+        listFindings: () => Effect.succeed([]),
+        listToolingFailures: () => Effect.succeed([]),
+        listRounds: () => Effect.succeed([]),
+      });
+
+      const oldTarget = yield* submit
+        .submit({ changeId: "change-1", now })
+        .pipe(Effect.provide(validationLayer));
+      const newTarget = yield* submit
+        .submit({ changeId: "change-1", now })
+        .pipe(Effect.provide(validationLayer));
+
+      expect(oldTarget).toMatchObject({
+        ok: true,
+        candidateId: "candidate-old-target",
+        validationRunId: "run-old-target",
+      });
+      expect(newTarget).toMatchObject({
+        ok: true,
+        candidateId: "candidate-new-target",
+        validationRunId: "run-new-target",
+      });
+      expect(validatedCandidates).toEqual(["candidate-old-target", "candidate-new-target"]);
+      expect(events).toEqual([
+        "refresh_base",
+        "reconcile",
+        "capture",
+        "detect_target",
+        "validate_taskless",
+        "publish",
+        "refresh_base",
+        "reconcile",
+        "capture",
+        "detect_target",
+        "validate_taskless",
+        "publish",
+      ]);
+    }),
+  );
+
   it.effect("runs Acceptance only and completes a Task-backed no-change submission", () =>
     Effect.gen(function* () {
       const events: string[] = [];
@@ -864,6 +953,7 @@ const dependencies = (input: {
   readonly captureResult?: CaptureLocalCandidateResult;
   readonly captureResults?: readonly CaptureLocalCandidateResult[];
   readonly refreshResult?: RemoteChangeBaseResult;
+  readonly refreshResults?: readonly RemoteChangeBaseResult[];
   readonly targetResult?:
     | { readonly ok: false; readonly code: "PR_TARGET_NOT_FOUND" }
     | {
@@ -879,6 +969,8 @@ const dependencies = (input: {
 }) => {
   const events = input.events ?? [];
   const captureResults = [...(input.captureResults ?? [])];
+  const refreshResults = [...(input.refreshResults ?? [])];
+  let currentTargetSha: string = refreshedBase.commit;
   let taskState = "implementing";
   return {
     repositoryCommonDirectory: "/repo/.git",
@@ -959,8 +1051,12 @@ const dependencies = (input: {
       };
     },
     refreshBase: () => {
-      if (input.refreshResult !== undefined) events.push("refresh_base");
-      return input.refreshResult ?? { ok: true, base: refreshedBase };
+      if (input.refreshResult !== undefined || input.refreshResults !== undefined)
+        events.push("refresh_base");
+      const result = refreshResults.shift() ??
+        input.refreshResult ?? { ok: true, base: refreshedBase };
+      if (result.ok) currentTargetSha = result.base.commit;
+      return result;
     },
     detectTarget: () => {
       events.push("detect_target");
@@ -979,7 +1075,7 @@ const dependencies = (input: {
     },
     captureCandidate: (captureInput: CaptureLocalCandidateInput) =>
       Effect.sync(() => {
-        expect(captureInput.resolvedTargetSha).toBe(refreshedBase.commit);
+        expect(captureInput.resolvedTargetSha).toBe(currentTargetSha);
         events.push("capture");
         return captureResults.shift() ?? input.captureResult ?? candidate;
       }),
