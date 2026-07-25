@@ -1,5 +1,6 @@
 import { Effect } from "effect";
 
+import { resolveInteractiveSessionAgentProfile } from "../../agent/agentProfiles.js";
 import { parseCliTaskIdValue } from "../../cliTaskId.js";
 import { withGlobalHelpFlags } from "../../cliHelp.js";
 import {
@@ -14,6 +15,7 @@ import { readHandoffFile, type HandoffFileReadError } from "../../change/handoff
 import { loadChangeInspection } from "../../change/loadChangeInspection.js";
 import { withChangeUseCases } from "../../change/loadChangeUseCases.js";
 import { loadChangeSubmit } from "../../change/loadChangeSubmit.js";
+import { readGlobalConfig } from "../../init/globalConfig.js";
 import type { ChangeCancellationResult, CancellationUseCases } from "../../change/cancelChange.js";
 import { withCancellation } from "../../change/loadChangeCancellation.js";
 import type { InteractiveSessionHost } from "../../change/interactiveSessionHost.js";
@@ -440,11 +442,32 @@ const runImplement = (
       ? undefined
       : readHandoffFile(environment.cwd, parsed.handoffFile);
   if (handoff !== undefined && !handoff.ok) return Effect.succeed(handoffFileError(handoff.error));
+
+  const global = readGlobalConfig(environment.globalConfigPath);
+  if (!global.ok) {
+    return Effect.succeed(
+      runtimeError({
+        code: "interactive_session_agent_profile_invalid",
+        message: `Global Config is invalid: ${global.error.message}`,
+        ...(global.error.path === undefined ? {} : { details: { path: global.error.path } }),
+        help: ["Fix Global Config, then retry Change Implement."],
+      }),
+    );
+  }
+  const agentProfile = resolveInteractiveSessionAgentProfile(global.config);
+  if (!agentProfile.ok) {
+    return Effect.succeed(interactiveSessionAgentProfileError(agentProfile.error));
+  }
+
   return withChanges(
     environment,
     (changes) =>
       Effect.map(
-        changes.implement(parsed.changeId, handoff === undefined ? undefined : handoff.content),
+        changes.implement(
+          parsed.changeId,
+          handoff === undefined ? undefined : handoff.content,
+          agentProfile.profile,
+        ),
         implementResult,
       ),
     () =>
@@ -454,6 +477,33 @@ const runImplement = (
         help: ["Confirm Herdr is running, then retry Change Implement."],
       }),
   );
+};
+
+const interactiveSessionAgentProfileError = (
+  error:
+    | { readonly _tag: "MissingAgentProfile"; readonly profileName?: string }
+    | {
+        readonly _tag: "UnsupportedAgentRuntime";
+        readonly profileName: string;
+        readonly agentRuntime: string;
+      },
+): CliResult => {
+  const profileName = error.profileName ?? "<missing>";
+  return runtimeError({
+    code: "interactive_session_agent_profile_invalid",
+    message:
+      error._tag === "MissingAgentProfile"
+        ? `Interactive Session Agent Profile "${profileName}" does not exist in Global Config.`
+        : `Interactive Session Agent Profile "${profileName}" must use the Pi agent runtime; it uses "${error.agentRuntime}".`,
+    help:
+      error._tag === "MissingAgentProfile"
+        ? [
+            `Define Global Agent Profile "${profileName}", or remove interactiveSession.agentProfile.`,
+          ]
+        : [
+            `Set agentProfiles.${profileName}.agentRuntime to "pi", or remove interactiveSession.agentProfile.`,
+          ],
+  });
 };
 
 type ImplementArgsParseResult =

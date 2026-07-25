@@ -4,7 +4,7 @@ But Why uses two configuration files.
 
 Repo Config lives at `.but-why/config.json` and contains tracked repository policy.
 
-Global Config lives at `~/.config/but-why/config.json` and contains reusable Agent Profiles and the Default Agent Profile selection.
+Global Config lives at `~/.config/but-why/config.json` and contains reusable Agent Profiles, the Default Agent Profile selection, and the optional Interactive Session Agent Profile selection.
 
 ## Example Repo Config
 
@@ -207,7 +207,8 @@ Supported `agentRuntime` values:
 
 An Agent Profile contains `agentRuntime`, optional `agentModel`, and optional `thinking`.
 
-All current adapters require `agentModel` when an agent operation resolves the profile.
+Reviewer adapters require `agentModel` when a reviewer operation resolves the profile.
+The Interactive Session Agent Profile may omit `agentModel` or `thinking`; Pi supplies the omitted defaults.
 
 For Pi, `thinking` must be `off`, `minimal`, `low`, `medium`, `high`, or `xhigh`.
 
@@ -218,15 +219,30 @@ Global Config selects the Default Agent Profile by name:
 ```json
 {
   "defaultAgentProfile": "pi",
+  "interactiveSession": {
+    "agentProfile": "implementation"
+  },
   "agentProfiles": {
     "pi": {
       "agentRuntime": "pi",
       "agentModel": "openai-codex/gpt-5.5",
       "thinking": "medium"
+    },
+    "implementation": {
+      "agentRuntime": "pi",
+      "agentModel": "openai-codex/gpt-5.6-luna",
+      "thinking": "high"
     }
   }
 }
 ```
+
+The optional `interactiveSession.agentProfile` selects the Global Agent Profile for `by change implement`.
+The selected profile must exist in Global Config and must use the Pi runtime.
+Repo Config cannot select or override this profile.
+But Why passes each selected `agentModel` and `thinking` value explicitly to Pi.
+If `interactiveSession.agentProfile` is absent, Pi uses its normal model and thinking defaults.
+A missing or non-Pi selection rejects Change Implement before Herdr launches and preserves the Change.
 
 A reviewer may select an Agent Profile explicitly:
 
