@@ -46,7 +46,7 @@ But Why fetches the Change Base at Change Start and before each Submission.
 _Avoid_: Local branch, current merge base chosen implicitly, starting worktree path
 
 **Candidate**:
-One immutable committed code state identified by an exact comparison base and head within a Change.
+One immutable committed code state identified within a Change by its exact fetched Change Base target commit, comparison base, and head commit.
 _Avoid_: Change, working tree, Submission, Validation Run
 
 **Current Candidate**:

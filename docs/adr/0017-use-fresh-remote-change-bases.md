@@ -15,5 +15,6 @@ But Why also rejects using a stale remote-tracking ref without fetching because 
 
 A missing, ambiguous, unreachable, or incomplete publication remote rejects Change Start before Change or Task mutation.
 A Submit-time refresh failure rejects Submission before Candidate or Validation Run creation.
+Candidate identity includes the Change, exact fetched Change Base target commit, comparison base, and head commit.
 When the target commit changes, But Why records a new Candidate and cannot reuse validation for the older target.
 ADR 0011 continues to require locally owned pull request heads; this decision permits remote-only commits only on the Change Base.

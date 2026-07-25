@@ -71,7 +71,8 @@ Repo Config remains tracked at `.but-why/config.json` in each worktree.
 Shared Repository State identifies the Local Repository by its Git common directory.
 Existing Changes continue to use their recorded absolute Managed Worktree paths.
 
-State databases initialize from one current schema baseline.
+Before the first public release, state databases initialize from one replaceable current schema baseline.
+The first public release freezes that baseline as schema version 1, and later schema changes use ordered forward migrations through the existing Effect SQL Migrator.
 
 ## CLI
 
