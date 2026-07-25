@@ -44,7 +44,9 @@ See [ADR 0014](adr/0014-use-module-owned-storage-and-change-transactions.md).
 ## Change lifecycle
 
 `by change start [--task <task-id>]` creates a Change from the detected default branch.
-It creates the Managed Worktree and runs Repository Preparation.
+It asks Git for the canonical main checkout and creates the Managed Worktree at `<main-checkout-parent>/<main-checkout-name>-worktrees/but-why/<change-slug>`.
+Change Start resolves the same Managed Worktree root from the main checkout and every linked worktree.
+It then runs Repository Preparation.
 A Task-backed Change captures immutable Acceptance Context.
 A taskless Change has no Acceptance Context.
 
@@ -58,9 +60,11 @@ A merged owned pull request closes the Change and completes its linked Task.
 
 ## Storage
 
-But Why stores operational state under `<git-common-dir>/but-why/`.
+But Why stores Shared Repository State under `<git-common-dir>/but-why/`.
+SQLite, Artifacts, and other operational state do not move with Managed Worktrees.
 Repo Config remains tracked at `.but-why/config.json` in each worktree.
-Shared state identifies the Local Repository by its Git common directory.
+Shared Repository State identifies the Local Repository by its Git common directory.
+Existing Changes continue to use their recorded absolute Managed Worktree paths.
 
 State databases initialize from one current schema baseline.
 

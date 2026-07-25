@@ -1,6 +1,6 @@
 import { spawnSync } from "node:child_process";
-import { existsSync, lstatSync, mkdirSync, realpathSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { constants, existsSync, lstatSync, mkdirSync, realpathSync, accessSync } from "node:fs";
+import { basename, dirname, join } from "node:path";
 
 import { decodeRepoConfigSource } from "../init/repoConfig.js";
 import {
@@ -51,7 +51,12 @@ export const resolveChangeStartGitIntent = (
       baseRef,
       branchRef,
       startingCommit,
-      worktreePath: join(context.commonDirectory, "but-why", "worktrees", slug),
+      worktreePath: join(
+        dirname(context.mainCheckoutRoot),
+        `${basename(context.mainCheckoutRoot)}-worktrees`,
+        "but-why",
+        slug,
+      ),
       ...(config.config.prepare === undefined
         ? {}
         : {
@@ -88,6 +93,13 @@ const inspectRecordedWorktree = (
   start: ChangeStartRecord,
   worktrees: readonly WorktreeEntry[],
 ): ProvisionChangeWorktreeResult | "missing" | "stale" => {
+  if (!managedWorktreeContainersAreSafe(start.worktreePath)) {
+    return {
+      ok: false,
+      code: "managed_worktree_path_unavailable",
+      path: start.worktreePath,
+    };
+  }
   const expectedPath = canonicalPathIfPresent(start.worktreePath);
   const listedAtPath = worktrees.find((entry) => entry.path === expectedPath);
   const listedForBranch = worktrees.find((entry) => entry.branchRef === start.branchRef);
@@ -99,9 +111,14 @@ const inspectRecordedWorktree = (
       ? "stale"
       : { ok: false, code: "change_start_conflict" };
   }
-  return listedAtPath?.branchRef === start.branchRef &&
-    listedForBranch?.path === expectedPath &&
-    !lstatSync(start.worktreePath).isSymbolicLink()
+  if (lstatSync(start.worktreePath).isSymbolicLink() || listedAtPath === undefined) {
+    return {
+      ok: false,
+      code: "managed_worktree_path_unavailable",
+      path: start.worktreePath,
+    };
+  }
+  return listedAtPath.branchRef === start.branchRef && listedForBranch?.path === expectedPath
     ? { ok: true }
     : { ok: false, code: "change_start_conflict" };
 };
@@ -146,14 +163,56 @@ const addRecordedWorktree = (
   cwd: string,
   start: ChangeStartRecord,
 ): ProvisionChangeWorktreeResult => {
+  if (!ensureManagedWorktreeParent(start.worktreePath)) {
+    return {
+      ok: false,
+      code: "managed_worktree_path_unavailable",
+      path: start.worktreePath,
+    };
+  }
   try {
-    mkdirSync(dirname(start.worktreePath), { recursive: true });
+    accessSync(dirname(start.worktreePath), constants.W_OK | constants.X_OK);
   } catch {
-    return { ok: false, code: "git_tooling_error" };
+    return {
+      ok: false,
+      code: "managed_worktree_path_unavailable",
+      path: start.worktreePath,
+    };
   }
   const branchName = start.branchRef.slice("refs/heads/".length);
   const add = git(cwd, "worktree", "add", start.worktreePath, branchName);
   return add.ok ? { ok: true } : { ok: false, code: "git_tooling_error" };
+};
+
+const managedWorktreeContainers = (worktreePath: string): readonly [string, string] => {
+  const butWhyContainer = dirname(worktreePath);
+  return [dirname(butWhyContainer), butWhyContainer];
+};
+
+const managedWorktreeContainersAreSafe = (worktreePath: string): boolean =>
+  managedWorktreeContainers(worktreePath).every((path) => {
+    try {
+      if (!pathEntryExists(path)) return true;
+      const entry = lstatSync(path);
+      return entry.isDirectory() && !entry.isSymbolicLink();
+    } catch {
+      return false;
+    }
+  });
+
+const ensureManagedWorktreeParent = (worktreePath: string): boolean => {
+  const [siblingRoot, butWhyContainer] = managedWorktreeContainers(worktreePath);
+  return ensureDirectory(siblingRoot) && ensureDirectory(butWhyContainer);
+};
+
+const ensureDirectory = (path: string): boolean => {
+  try {
+    if (!pathEntryExists(path)) mkdirSync(path);
+    const entry = lstatSync(path);
+    return entry.isDirectory() && !entry.isSymbolicLink();
+  } catch {
+    return false;
+  }
 };
 
 type WorktreeEntry = {

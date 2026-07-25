@@ -70,7 +70,7 @@ change:
   id: chg_01J...
   taskId: null
   readiness: ready
-worktreePath: /path/to/.but-why/changes/chg_01J...
+worktreePath: /path/to/repository-worktrees/but-why/change-chg_01J...
 ```
 
 A failed result preserves the Change and worktree.
@@ -84,7 +84,7 @@ The JSON error contains `code: "prepare_failed"`, the Change ID, `readiness: "pr
     "message": "Repository Preparation failed; the Change and worktree were preserved.",
     "changeId": "chg_01J...",
     "readiness": "prepare_failed",
-    "worktreePath": "/path/to/.but-why/changes/chg_01J...",
+    "worktreePath": "/path/to/repository-worktrees/but-why/change-chg_01J...",
     "command": "pnpm install --frozen-lockfile",
     "exitCode": 1,
     "timedOut": false,

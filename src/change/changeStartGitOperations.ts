@@ -24,7 +24,12 @@ export type ResolveChangeStartGitResult =
 
 export type ProvisionChangeWorktreeResult =
   | { readonly ok: true }
-  | { readonly ok: false; readonly code: "change_start_conflict" | "git_tooling_error" };
+  | { readonly ok: false; readonly code: "change_start_conflict" | "git_tooling_error" }
+  | {
+      readonly ok: false;
+      readonly code: "managed_worktree_path_unavailable";
+      readonly path: string;
+    };
 
 export type ChangeStartGitOperations = {
   readonly resolveIntent: (slug: string) => ResolveChangeStartGitResult;

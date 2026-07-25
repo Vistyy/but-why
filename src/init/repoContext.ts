@@ -24,6 +24,7 @@ export type RepoLocalPaths = {
 
 export type RepoLocalContext = {
   readonly root: string;
+  readonly mainCheckoutRoot: string;
   readonly commonDirectory: string;
   readonly taskPrefix: string;
   readonly config: RepoConfig;
@@ -258,6 +259,7 @@ export const loadRepoLocalContext = (cwd: string): LoadRepoLocalContextResult =>
     ok: true,
     context: {
       root: gitRoot.root,
+      mainCheckoutRoot: gitRoot.mainCheckoutRoot,
       commonDirectory: gitRoot.commonDirectory,
       paths,
       taskPrefix: repoConfig.config.taskPrefix,
