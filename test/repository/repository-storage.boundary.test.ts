@@ -430,6 +430,35 @@ describe("repository SQL storage", () => {
           (sql) => sql`UPDATE candidate_validation_runs SET outcome = 'blocked' WHERE id = 'run-1'`,
         );
         expect(yield* changes.getPassingPublicationEvidence(captured.changeId)).toBeUndefined();
+
+        const other = yield* capture.commitCapture({
+          repositoryCommonDirectory: input.commonDirectory,
+          branchRef: "refs/heads/other",
+          baseRef: "refs/remotes/origin/main",
+          changeBaseSha: "base-sha",
+          headSha: "head-sha",
+          now: "2026-07-25T15:02:00.000Z",
+        });
+        if (!other.ok) return;
+        yield* repository.operation("install another Change publication evidence", (sql) =>
+          Effect.gen(function* () {
+            yield* sql`
+              INSERT INTO candidate_validation_runs (
+                id, candidate_id, policy_snapshot, state, outcome, created_at, updated_at
+              ) VALUES (
+                'run-2', ${other.candidateId}, '{}', 'complete', 'passed',
+                '2026-07-25T15:03:00.000Z', '2026-07-25T15:03:00.000Z'
+              )
+            `;
+            yield* sql`
+              UPDATE changes SET
+                publication_candidate_id = ${other.candidateId},
+                publication_validation_run_id = 'run-2'
+              WHERE id = ${captured.changeId}
+            `;
+          }),
+        );
+        expect(yield* changes.getPassingPublicationEvidence(captured.changeId)).toBeUndefined();
       }),
     ),
   );

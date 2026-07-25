@@ -27,8 +27,7 @@ export type CommitCandidateCaptureResult =
         | "change_closed"
         | "change_binding_conflict"
         | "destination_branch_has_history"
-        | "base_ref_conflict"
-        | "candidate_provenance_conflict";
+        | "base_ref_conflict";
     };
 
 export type CandidateCaptureChange = {

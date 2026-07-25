@@ -44,7 +44,6 @@ export type CaptureLocalCandidateResult =
         | "missing_remote_default"
         | "ambiguous_remote_default"
         | "local_base_unavailable"
-        | "candidate_provenance_conflict"
         | "capture_conflict"
         | "git_tooling_error";
     }
@@ -302,6 +301,5 @@ const mapCommitError = (
     | "change_closed"
     | "change_binding_conflict"
     | "destination_branch_has_history"
-    | "base_ref_conflict"
-    | "candidate_provenance_conflict",
+    | "base_ref_conflict",
 ): CaptureRejection["code"] => (code === "change_binding_conflict" ? "capture_conflict" : code);

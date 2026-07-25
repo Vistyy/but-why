@@ -202,7 +202,6 @@ describe("Change Candidate capture orchestration", () => {
           change: openChange,
           renameFromRef: "refs/heads/other",
         },
-        { code: "candidate_provenance_conflict", commitCode: "candidate_provenance_conflict" },
       ] as const) {
         let commitCalls = 0;
         const persistence: CandidateCapturePersistence = {
@@ -215,16 +214,12 @@ describe("Change Candidate capture orchestration", () => {
             ),
           commitCapture: () => {
             commitCalls += 1;
-            return Effect.succeed(
-              "commitCode" in testCase
-                ? ({ ok: false, code: testCase.commitCode } as const)
-                : ({
-                    ok: true,
-                    changeId: "change-1",
-                    candidateId: "candidate-1",
-                    reused: false,
-                  } as const),
-            );
+            return Effect.succeed({
+              ok: true,
+              changeId: "change-1",
+              candidateId: "candidate-1",
+              reused: false,
+            } as const);
           },
         };
         const git: CandidateCaptureGit = {
@@ -256,7 +251,7 @@ describe("Change Candidate capture orchestration", () => {
         });
 
         expect(result).toEqual({ ok: false, code: testCase.code });
-        expect(commitCalls).toBe("commitCode" in testCase ? 1 : 0);
+        expect(commitCalls).toBe(0);
       }
     }),
   );

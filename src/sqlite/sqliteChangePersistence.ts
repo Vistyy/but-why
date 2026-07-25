@@ -130,7 +130,9 @@ const getPassingPublicationEvidence = (sql: SqlClient.SqlClient, changeId: strin
         candidate.change_base_sha AS changeBaseSha,
         candidate.head_sha AS headSha
       FROM changes AS change
-      JOIN candidates AS candidate ON candidate.id = change.publication_candidate_id
+      JOIN candidates AS candidate
+        ON candidate.id = change.publication_candidate_id
+        AND candidate.change_id = change.id
       JOIN candidate_validation_runs AS run
         ON run.id = change.publication_validation_run_id
         AND run.candidate_id = candidate.id
