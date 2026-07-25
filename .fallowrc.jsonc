@@ -1,6 +1,6 @@
 {
   "$schema": "https://raw.githubusercontent.com/fallow-rs/fallow/main/config-schema.json",
-  "entry": ["src/main.ts", "scripts/repair-pre-release-candidate-state.mjs", "test/**/*.ts"],
+  "entry": ["src/main.ts", "test/**/*.ts"],
   "ignorePatterns": ["spikes/**", "dist/**", "build/**", "coverage/**"],
   "rulePacks": ["./fallow-rules/architecture.json"],
   "rules": {

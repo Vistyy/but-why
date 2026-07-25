@@ -134,10 +134,6 @@ test *args:
 coverage *args:
     @./scripts/run-test-workload.sh coverage "$@"
 
-# Repair one pre-release development database to the current Candidate shape.
-repair-pre-release-candidate-state database backup:
-    node scripts/repair-pre-release-candidate-state.mjs --database "{{ database }}" --backup "{{ backup }}" --confirm-pre-release-development-state
-
 # Build the production package.
 build:
     @rm -rf dist
