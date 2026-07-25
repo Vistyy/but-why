@@ -14,7 +14,7 @@ import { withTemporaryRepositoryState } from "../support/repository.js";
 const now = "2026-07-24T10:00:00.000Z";
 describe("by change reconcile", () => {
   it.effect(
-    "leaves a closed unmerged owned pull request and its Change open after its head moves",
+    "leaves a closed unmerged owned pull request and its Change open",
     () =>
       withTemporaryRepositoryState((input) =>
         Effect.gen(function* () {
@@ -59,7 +59,7 @@ describe("by change reconcile", () => {
                 merged: false,
                 baseBranch: publicationTarget.baseBranch,
                 headBranch: "change-1",
-                headSha: "newer-head",
+                headSha: "head",
               }),
               createPullRequest: () => {
                 throw new Error("Reconciliation must not create a pull request");
@@ -147,6 +147,12 @@ describe("by change reconcile", () => {
             { ...expected, baseBranch: "release" },
             { ...expected, headBranch: "other-feature" },
             { ...expected, headSha: "unexpected-head" },
+            {
+              ...expected,
+              state: "closed",
+              merged: false,
+              headSha: "unexpected-closed-head",
+            },
           ];
 
           for (const pullRequest of unexpected) {

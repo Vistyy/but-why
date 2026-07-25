@@ -3,7 +3,10 @@ import { Context, Effect, Layer } from "effect";
 import { afterAll, beforeAll } from "vitest";
 
 import type { ChangePersistence } from "../../src/change/changePersistence.js";
-import type { GitHubPullRequestRequest } from "../../src/change/ownedPullRequestGateway.js";
+import type {
+  GitHubPullRequest,
+  GitHubPullRequestRequest,
+} from "../../src/change/ownedPullRequestGateway.js";
 import type { CaptureLocalCandidateResult } from "../../src/change/candidateCapture/captureLocalCandidate.js";
 import type { ChangeValidationPersistence } from "../../src/change/validation/changeValidationPersistence.js";
 import { openCandidatePublication } from "../../src/change/publication/candidatePublication.js";
@@ -401,18 +404,52 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
   it.scoped("rejects every mismatched owned pull request identity during later recovery", () =>
     Effect.forEach(
       [
-        { name: "number", mismatch: { number: 43 } },
-        { name: "base branch", mismatch: { baseBranch: "release" } },
-        { name: "head branch", mismatch: { headBranch: "other-change" } },
-        { name: "Candidate commit", mismatch: { headSha: "other-candidate" } },
-        { name: "closed state", mismatch: { state: "closed" as const, merged: false } },
-        { name: "merged state", mismatch: { state: "closed" as const, merged: true } },
+        { name: "number", mutate: (value: GitHubPullRequest) => ({ ...value, number: 43 }) },
+        {
+          name: "base branch",
+          mutate: (value: GitHubPullRequest) => ({ ...value, baseBranch: "release" }),
+        },
+        {
+          name: "head branch",
+          mutate: (value: GitHubPullRequest) => ({ ...value, headBranch: "other-change" }),
+        },
+        {
+          name: "Candidate commit",
+          mutate: (value: GitHubPullRequest) => ({ ...value, headSha: "other-candidate" }),
+        },
+        {
+          name: "repository",
+          mutate: (value: GitHubPullRequest) => ({
+            ...value,
+            repository: { owner: "other", repo: "widgets" },
+          }),
+        },
+        {
+          name: "missing state",
+          mutate: ({ state: _state, ...value }: GitHubPullRequest) => value,
+        },
+        {
+          name: "missing merged fact",
+          mutate: ({ merged: _merged, ...value }: GitHubPullRequest) => value,
+        },
+        {
+          name: "closed state",
+          mutate: (value: GitHubPullRequest) => ({ ...value, state: "closed" as const }),
+        },
+        {
+          name: "merged state",
+          mutate: (value: GitHubPullRequest) => ({
+            ...value,
+            state: "closed" as const,
+            merged: true,
+          }),
+        },
       ],
-      ({ name, mismatch }) =>
+      ({ name, mutate }) =>
         withFixture((fixture) =>
           Effect.gen(function* () {
             let branchHead = fixture.captured.headSha;
-            let remote = pullRequest(branchHead);
+            let remote: GitHubPullRequest = pullRequest(branchHead);
             let updateCalls = 0;
             const publication = openCandidatePublication({
               changePersistence: fixture.changes,
@@ -439,7 +476,7 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
               "2026-07-22T10:05:00.000Z",
             );
             branchHead = next.captured.headSha;
-            remote = { ...pullRequest(next.captured.headSha), ...mismatch };
+            remote = mutate(pullRequest(next.captured.headSha));
             expect(
               yield* publication.publish({
                 ...input(fixture),
@@ -468,6 +505,9 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
         const remotePullRequests: {
           readonly number: number;
           readonly url: string;
+          readonly repository: { readonly owner: string; readonly repo: string };
+          readonly state: "open";
+          readonly merged: false;
           readonly baseBranch: string;
           readonly headBranch: string;
           readonly headSha: string;
@@ -491,6 +531,9 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
               remotePullRequests.push({
                 number: 42,
                 url: "https://github.com/acme/widgets/pull/42",
+                repository: { owner: request.owner, repo: request.repo },
+                state: "open",
+                merged: false,
                 baseBranch: request.baseBranch,
                 headBranch: request.headBranch,
                 headSha: request.expectedHeadSha,
@@ -590,6 +633,9 @@ const input = (fixture: Fixture) => ({
 const pullRequest = (headSha: string) => ({
   number: 42,
   url: "https://github.com/acme/widgets/pull/42",
+  repository: { owner: "acme", repo: "widgets" },
+  state: "open" as const,
+  merged: false,
   baseBranch: "main",
   headBranch: "feature",
   headSha,

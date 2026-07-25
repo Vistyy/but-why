@@ -468,8 +468,10 @@ const isExpectedPullRequest = (
   expectedHeadSha: string,
 ): boolean =>
   pullRequest.number === number &&
-  pullRequest.state !== "closed" &&
-  pullRequest.merged !== true &&
+  pullRequest.repository?.owner === target.owner &&
+  pullRequest.repository.repo === target.repo &&
+  pullRequest.state === "open" &&
+  pullRequest.merged === false &&
   matches(pullRequest, target, headBranch, expectedHeadSha);
 
 const updateFailure = (
