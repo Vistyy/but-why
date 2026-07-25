@@ -46,9 +46,7 @@ const reviewWithPi = (input: ReviewerAgentInput): Effect.Effect<ReviewerAgentRes
     const initial = yield* Effect.either(
       runSandbox(() =>
         input.sandbox.run({
-          agent: pi(input.profile.agentModel, {
-            ...(input.profile.thinking === undefined ? {} : { thinking: input.profile.thinking }),
-          }),
+          agent: isolatedPiReviewerAgent(input.profile.agentModel, input.profile.thinking),
           prompt: input.prompt,
           maxIterations: 1,
           name: `${input.reviewer} Review`,
@@ -81,6 +79,23 @@ const reviewWithPi = (input: ReviewerAgentInput): Effect.Effect<ReviewerAgentRes
 
 export const piReviewerAgentRuntime: ReviewerAgentRuntime = {
   review: reviewWithPi,
+};
+
+const isolatedPiReviewerAgent = (model: string, thinking: ResolvedPiAgentProfile["thinking"]) => {
+  const base = pi(model, {
+    ...(thinking === undefined ? {} : { thinking }),
+  });
+
+  return {
+    ...base,
+    buildPrintCommand: (options: Parameters<typeof base.buildPrintCommand>[0]) => {
+      const command = base.buildPrintCommand(options);
+      return {
+        ...command,
+        command: `${command.command} --no-extensions --no-skills --no-prompt-templates --no-themes --no-context-files --tools read,bash,grep,find,ls`,
+      };
+    },
+  };
 };
 
 const validateRunResult = (input: ReviewerAgentInput, result: SandboxRunResult, attempts: number) =>

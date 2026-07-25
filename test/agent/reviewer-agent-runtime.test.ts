@@ -39,6 +39,37 @@ describe("Pi reviewer agent runtime", () => {
     }),
   );
 
+  it.effect("launches reviewers with an isolated Pi resource and tool boundary", () =>
+    Effect.gen(function* () {
+      let command = "";
+      const run: Pick<Sandbox, "run">["run"] = async (options) => {
+        const built = options.agent.buildPrintCommand({
+          prompt: options.prompt ?? "",
+          dangerouslySkipPermissions: true,
+        });
+        command = built.command;
+        return runResult('<reviewer-output>{"findings":[]}</reviewer-output>');
+      };
+
+      const result = yield* piReviewerAgentRuntime.review({
+        sandbox: { run } as unknown as Pick<Sandbox, "run">,
+        reviewer: "specialist:security",
+        validationRunId: "123e4567-e89b-42d3-a456-426614174000",
+        availableArtifactRefs: [],
+        prompt: "Review the Candidate.",
+        profile,
+      });
+
+      expect(result).toMatchObject({ ok: true, attempts: 1 });
+      expect(command).toBe(
+        "pi -p --mode json --model 'openai-codex/gpt-5.5' --thinking high --no-extensions --no-skills --no-prompt-templates --no-themes --no-context-files --tools read,bash,grep,find,ls",
+      );
+      expect(command).not.toContain("--subagent");
+      expect(command).not.toContain("--edit");
+      expect(command).not.toContain("--write");
+    }),
+  );
+
   it.effect("retries a dangling Artifact reference and accepts the corrected report", () =>
     Effect.gen(function* () {
       const corrected = runResult('<reviewer-output>{"findings":[]}</reviewer-output>');
