@@ -109,5 +109,5 @@ Callers that parse output pass `--output json`.
 ## Configuration
 
 Repo Config owns Repository Preparation, Checks, validation workspaces, and review policy.
-Global Config owns reusable Agent Profiles and reviewer defaults.
+Global Config owns Agent Profiles, reviewer defaults, and Interactive Session preferences.
 See [`docs/config.md`](config.md) for the configuration contract.

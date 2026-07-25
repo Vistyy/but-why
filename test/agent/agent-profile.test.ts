@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import { resolveAgentProfile } from "../../src/agent/agentProfiles.js";
+import {
+  resolveAgentProfile,
+  resolveInteractiveSessionAgentProfile,
+} from "../../src/agent/agentProfiles.js";
 
 describe("Agent Profiles", () => {
   it("resolves an explicit profile from Repo Config before Global Config", () => {
@@ -44,6 +47,61 @@ describe("Agent Profiles", () => {
         profile: { agentRuntime: "pi", agentModel: "global-model" },
       },
     });
+  });
+
+  it("resolves an Interactive Session Agent Profile only from Global Config", () => {
+    expect(
+      resolveInteractiveSessionAgentProfile({
+        interactiveSession: { agentProfile: "implementation" },
+        agentProfiles: {
+          implementation: {
+            agentRuntime: "pi",
+            agentModel: "openai-codex/gpt-5.6-luna",
+            thinking: "high",
+          },
+        },
+      }),
+    ).toEqual({
+      ok: true,
+      profile: {
+        agentModel: "openai-codex/gpt-5.6-luna",
+        thinking: "high",
+      },
+    });
+  });
+
+  it("preserves Pi defaults when no Interactive Session Agent Profile is selected", () => {
+    expect(
+      resolveInteractiveSessionAgentProfile({
+        defaultAgentProfile: "review",
+        agentProfiles: {
+          review: { agentRuntime: "pi", agentModel: "review-model", thinking: "xhigh" },
+        },
+      }),
+    ).toEqual({ ok: true, profile: undefined });
+  });
+
+  it.each([
+    [
+      "a missing Interactive Session profile",
+      { interactiveSession: { agentProfile: "missing" } },
+      "MissingAgentProfile",
+    ],
+    [
+      "a non-Pi Interactive Session profile",
+      {
+        interactiveSession: { agentProfile: "implementation" },
+        agentProfiles: {
+          implementation: { agentRuntime: "codex", agentModel: "model" },
+        },
+      },
+      "UnsupportedAgentRuntime",
+    ],
+  ] as const)("rejects %s", (_name, globalConfig, tag) => {
+    const result = resolveInteractiveSessionAgentProfile(globalConfig);
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error._tag).toBe(tag);
   });
 
   it.each([

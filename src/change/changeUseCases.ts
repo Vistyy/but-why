@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { Effect } from "effect";
 
+import type { InteractiveSessionAgentProfile } from "../agent/agentProfiles.js";
 import type { RepoLocalContext } from "../init/repoContext.js";
 import type { RepositoryStorageError } from "../contracts/repositoryStorageError.js";
 import { parseRemoteChangeBaseRef } from "../submissionEnvironment/remoteChangeBase.js";
@@ -33,6 +34,7 @@ export type ChangeUseCases = {
   readonly implement: (
     changeId: string,
     initialPrompt: string | undefined,
+    agentProfile: InteractiveSessionAgentProfile | undefined,
   ) => Effect.Effect<ChangeImplementResult, RepositoryStorageError>;
   readonly reconcile: (
     changeId: string | undefined,
@@ -88,8 +90,8 @@ export const openChangeUseCases = (
 ): ChangeUseCases => ({
   start: (input) => startChange(store, git, executor, input),
   prepare: (changeId, now) => prepareChange(store, git, executor, changeId, now),
-  implement: (changeId, initialPrompt) =>
-    implementChange(context, store, interactiveSessionHost, changeId, initialPrompt),
+  implement: (changeId, initialPrompt, agentProfile) =>
+    implementChange(context, store, interactiveSessionHost, changeId, initialPrompt, agentProfile),
   reconcile: (changeId, now) =>
     reconciliation.reconcile({
       repositoryCommonDirectory: context.commonDirectory,
@@ -186,6 +188,7 @@ const implementChange = (
   interactiveSessionHost: InteractiveSessionHost,
   changeId: string,
   initialPrompt: string | undefined,
+  agentProfile: InteractiveSessionAgentProfile | undefined,
 ): Effect.Effect<ChangeImplementResult, RepositoryStorageError> =>
   Effect.gen(function* () {
     const change = yield* store.getById(changeId);
@@ -201,6 +204,10 @@ const implementChange = (
           repositoryPath: context.root,
           worktreePath: change.worktreePath,
           initialPrompt,
+          ...(agentProfile?.agentModel === undefined
+            ? {}
+            : { agentModel: agentProfile.agentModel }),
+          ...(agentProfile?.thinking === undefined ? {} : { thinking: agentProfile.thinking }),
         }),
       catch: (error) => (error instanceof Error ? error.message : String(error)),
     }).pipe(

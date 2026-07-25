@@ -1,3 +1,5 @@
+import type { PiAgentProfileConfig } from "../contracts/agentConfig.js";
+
 export type InteractiveSessionHost = {
   readonly launch: (
     input: InteractiveSessionLaunchInput,
@@ -9,6 +11,8 @@ export type InteractiveSessionLaunchInput = {
   readonly repositoryPath: string;
   readonly worktreePath: string;
   readonly initialPrompt: string | undefined;
+  readonly agentModel?: string;
+  readonly thinking?: PiAgentProfileConfig["thinking"];
 };
 
 export type InteractiveSessionLaunchResult =

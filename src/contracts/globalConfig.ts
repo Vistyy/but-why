@@ -23,6 +23,11 @@ const globalConfigSchema = Schema.Struct({
       value: agentProfileSchema,
     }),
   ),
+  interactiveSession: Schema.optional(
+    Schema.Struct({
+      agentProfile: Schema.optional(configNameSchema),
+    }),
+  ),
   review: Schema.optional(
     Schema.Struct({
       acceptance: Schema.optional(globalAcceptanceReviewConfigSchema),

@@ -4,7 +4,7 @@ But Why uses two configuration files.
 
 Repo Config lives at `.but-why/config.json` and contains tracked repository policy.
 
-Global Config lives at `~/.config/but-why/config.json` and contains reusable Agent Profiles and the Default Agent Profile selection.
+Global Config lives at `~/.config/but-why/config.json` and contains reusable Agent Profiles and user-level Agent Profile selections.
 
 ## Example Repo Config
 
@@ -221,17 +221,16 @@ Supported `agentRuntime` values:
 
 An Agent Profile contains `agentRuntime`, optional `agentModel`, and optional `thinking`.
 
-All current adapters require `agentModel` when an agent operation resolves the profile.
-
-For Pi, `thinking` must be `off`, `minimal`, `low`, `medium`, `high`, or `xhigh`.
-
-Other runtimes accept a non-empty runtime-defined value.
+Reviewer operations require `agentModel`.
 
 Global Config selects the Default Agent Profile by name:
 
 ```json
 {
   "defaultAgentProfile": "pi",
+  "interactiveSession": {
+    "agentProfile": "pi"
+  },
   "agentProfiles": {
     "pi": {
       "agentRuntime": "pi",
@@ -241,6 +240,12 @@ Global Config selects the Default Agent Profile by name:
   }
 }
 ```
+
+`interactiveSession.agentProfile` selects a Global Agent Profile that uses Pi for `by change implement`.
+Repo Config cannot select or override this profile.
+But Why passes configured `agentModel` and `thinking` values to Pi.
+If the setting is absent, But Why preserves the existing Pi launch behavior.
+A missing or non-Pi profile rejects Change Implement before Herdr launches and preserves the Change.
 
 A reviewer may select an Agent Profile explicitly:
 

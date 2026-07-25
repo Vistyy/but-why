@@ -169,6 +169,126 @@ describe("by change implement", () => {
     }),
   );
 
+  it.effect("passes the selected Global Pi Agent Profile to the Interactive Session Host", () =>
+    Effect.gen(function* () {
+      const root = yield* readyRepository();
+      const started = yield* runByInProcessEffect(
+        root,
+        ["change", "start", "--output", "json"],
+        now,
+      );
+      const change = JSON.parse(started.stdout) as { readonly change: { readonly id: string } };
+      const globalConfigPath = join(root, "global-config.json");
+      writeFileSync(
+        globalConfigPath,
+        JSON.stringify({
+          interactiveSession: { agentProfile: "implementation" },
+          agentProfiles: {
+            implementation: {
+              agentRuntime: "pi",
+              agentModel: "openai-codex/gpt-5.6-luna",
+              thinking: "high",
+            },
+          },
+        }),
+      );
+      const launches: unknown[] = [];
+
+      const result = yield* runByInProcessEffect(
+        root,
+        ["change", "implement", change.change.id, "--output", "json"],
+        now,
+        {
+          globalConfigPath,
+          interactiveSessionHost: {
+            launch: async (input) => {
+              launches.push(input);
+              return { ok: true, host: "herdr", status: "started" };
+            },
+          },
+        },
+      );
+
+      expect(result.status).toBe(0);
+      expect(launches).toEqual([
+        expect.objectContaining({
+          agentModel: "openai-codex/gpt-5.6-luna",
+          thinking: "high",
+        }),
+      ]);
+    }),
+  );
+
+  it.effect.each([
+    [
+      "missing",
+      {
+        interactiveSession: { agentProfile: "implementation" },
+      },
+      "does not exist in Global Config",
+    ],
+    [
+      "non-Pi",
+      {
+        interactiveSession: { agentProfile: "implementation" },
+        agentProfiles: {
+          implementation: { agentRuntime: "codex", agentModel: "model" },
+        },
+      },
+      "must use the Pi agent runtime",
+    ],
+  ] as const)(
+    "rejects a %s Interactive Session Agent Profile without launching or changing the Change",
+    ([_name, globalConfig, message]) =>
+      Effect.gen(function* () {
+        const root = yield* readyRepository();
+        const started = yield* runByInProcessEffect(
+          root,
+          ["change", "start", "--output", "json"],
+          now,
+        );
+        const change = JSON.parse(started.stdout) as { readonly change: { readonly id: string } };
+        const globalConfigPath = join(root, "global-config.json");
+        writeFileSync(globalConfigPath, JSON.stringify(globalConfig));
+        const before = yield* runByInProcessEffect(
+          root,
+          ["change", "show", change.change.id, "--output", "json"],
+          now,
+        );
+        let launches = 0;
+
+        const result = yield* runByInProcessEffect(
+          root,
+          ["change", "implement", change.change.id, "--output", "json"],
+          now,
+          {
+            globalConfigPath,
+            interactiveSessionHost: {
+              launch: async () => {
+                launches += 1;
+                return { ok: true, host: "herdr", status: "started" };
+              },
+            },
+          },
+        );
+        const after = yield* runByInProcessEffect(
+          root,
+          ["change", "show", change.change.id, "--output", "json"],
+          now,
+        );
+
+        expect(result.status).toBe(1);
+        expect(JSON.parse(result.stdout)).toMatchObject({
+          error: {
+            code: "interactive_session_agent_profile_invalid",
+            message: expect.stringContaining(message),
+          },
+        });
+        expect(launches).toBe(0);
+        expect(after.stdout).toBe(before.stdout);
+      }),
+  );
+
   it.effect("rejects a Change whose Repository Preparation has not succeeded", () =>
     Effect.gen(function* () {
       const root = yield* unreadyRepository();

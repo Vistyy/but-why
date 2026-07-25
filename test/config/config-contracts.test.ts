@@ -56,6 +56,28 @@ describe("configuration contracts", () => {
     expect(right(decodeGlobalConfig(config))).toEqual(config);
   });
 
+  it("decodes the Global Interactive Session Agent Profile selection", () => {
+    const config = {
+      interactiveSession: { agentProfile: "implementation" },
+    };
+
+    expect(right(decodeGlobalConfig(config))).toEqual(config);
+  });
+
+  it("rejects the Interactive Session Agent Profile selection in Repo Config", () => {
+    const error = left(
+      decodeRepoConfig({
+        taskPrefix: "BY",
+        interactiveSession: { agentProfile: "implementation" },
+      }),
+    );
+
+    expect(error._tag).toBe("RepoConfigValidationFailed");
+    expect(error.diagnostics).toContainEqual(
+      expect.objectContaining({ path: ["interactiveSession"] }),
+    );
+  });
+
   it("decodes global Acceptance overrides", () => {
     const config = {
       review: {

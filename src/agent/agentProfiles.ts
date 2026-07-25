@@ -13,10 +13,47 @@ export type ResolvedPiAgentProfile = Omit<PiAgentProfileConfig, "agentModel" | "
   readonly thinking?: Exclude<PiAgentProfileConfig["thinking"], undefined>;
 };
 
+export type InteractiveSessionAgentProfile = {
+  readonly agentModel?: string;
+  readonly thinking?: Exclude<PiAgentProfileConfig["thinking"], undefined>;
+};
+
 export type ResolvedAgentProfile = {
   readonly agentProfile: string;
   readonly source: "repo" | "global";
   readonly profile: AgentProfileConfig;
+};
+
+export const resolveInteractiveSessionAgentProfile = (
+  globalConfig: GlobalConfig,
+):
+  | { readonly ok: true; readonly profile: InteractiveSessionAgentProfile | undefined }
+  | { readonly ok: false; readonly error: MissingAgentProfile | UnsupportedAgentRuntime } => {
+  const profileName = globalConfig.interactiveSession?.agentProfile;
+  if (profileName === undefined) return { ok: true, profile: undefined };
+
+  const profile = globalConfig.agentProfiles?.[profileName];
+  if (profile === undefined) {
+    return {
+      ok: false,
+      error: new MissingAgentProfile({ profileName, selection: "explicit" }),
+    };
+  }
+  if (profile.agentRuntime !== "pi") {
+    return {
+      ok: false,
+      error: new UnsupportedAgentRuntime({ profileName, agentRuntime: profile.agentRuntime }),
+    };
+  }
+
+  const piProfile = profile as PiAgentProfileConfig;
+  return {
+    ok: true,
+    profile: {
+      ...(piProfile.agentModel === undefined ? {} : { agentModel: piProfile.agentModel }),
+      ...(piProfile.thinking === undefined ? {} : { thinking: piProfile.thinking }),
+    },
+  };
 };
 
 export const resolveAgentProfile = (input: {

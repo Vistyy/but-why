@@ -102,6 +102,8 @@ const piCommand = (input: InteractiveSessionLaunchInput, path: string | undefine
     "exec pi",
     "--name",
     shellQuote(herdrSessionName(input.changeId)),
+    ...(input.agentModel === undefined ? [] : ["--model", shellQuote(input.agentModel)]),
+    ...(input.thinking === undefined ? [] : ["--thinking", shellQuote(input.thinking)]),
     shellQuote(
       [
         `Implement Change ${input.changeId} in this Managed Worktree.`,

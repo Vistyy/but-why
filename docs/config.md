@@ -83,6 +83,9 @@ Example:
 ```json
 {
   "defaultAgentProfile": "pi",
+  "interactiveSession": {
+    "agentProfile": "pi"
+  },
   "agentProfiles": {
     "pi": {
       "agentRuntime": "pi",
@@ -107,19 +110,20 @@ Example:
 Instruction paths in Global Config are relative to the Global Config directory.
 Instruction paths in Repo Config are relative to the repository root.
 
-Interactive Session Host launch is not configured through Global Config in v1.
 Herdr must be installed and running when `by change implement` is invoked.
+
+## Interactive Session Agent Profile
+
+Global Config may set `interactiveSession.agentProfile` to a Global Agent Profile that uses Pi.
+Repo Config cannot select or override this profile.
+Change Implement passes configured `agentModel` and `thinking` values to Pi.
+If the setting is absent, Change Implement preserves the existing Pi launch behavior.
+A missing or non-Pi profile rejects Change Implement before Herdr launches and preserves the Change.
 
 ## Agent Profiles
 
-V1 runs reviewer agents through Pi.
-An Agent Profile contains:
-
-```text
-agentRuntime: pi
-agentModel: <non-empty Pi model identifier>
-thinking: off | minimal | low | medium | high | xhigh
-```
+An Agent Profile selects an `agentRuntime` and may select `agentModel` and `thinking`.
+Reviewer operations require `agentModel`.
 
 A role with an explicit `agentProfile` resolves Repo Config profiles before Global Config profiles.
 A role without an explicit profile uses `defaultAgentProfile`, which resolves from Global Config only.
