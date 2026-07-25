@@ -74,6 +74,62 @@ describe("GitHub pull request gateway", () => {
     ]);
   });
 
+  it("returns a stale update response after pushing the exact Candidate", () => {
+    const gitCalls: (readonly string[])[] = [];
+    const ghCalls: (readonly string[])[] = [];
+    const gateway = localGitHubPullRequestGateway({
+      runGit: (args) => {
+        gitCalls.push(args);
+        return { ok: true, stdout: args[0] === "rev-parse" ? "candidate-sha\n" : "" };
+      },
+      runGh: (args) => {
+        ghCalls.push(args);
+        return {
+          ok: true,
+          stdout:
+            '{"number":42,"url":"https://github.com/acme/widgets/pull/42","base":{"ref":"main"},"head":{"ref":"feature","sha":"previous-candidate-sha"}}',
+        };
+      },
+    });
+
+    expect(
+      gateway.updatePullRequest({
+        owner: "acme",
+        repo: "widgets",
+        remoteName: "origin",
+        baseBranch: "main",
+        headBranch: "feature",
+        branchRef: "refs/heads/feature",
+        expectedHeadSha: "candidate-sha",
+        expectedCurrentHeadSha: "previous-candidate-sha",
+        number: 42,
+        title: "Publish Candidate",
+        body: "Validation facts",
+      }),
+    ).toMatchObject({ ok: true, pullRequest: { headSha: "previous-candidate-sha" } });
+    expect(gitCalls).toEqual([
+      ["rev-parse", "--verify", "refs/heads/feature^{commit}"],
+      [
+        "push",
+        "--force-with-lease=refs/heads/feature:previous-candidate-sha",
+        "origin",
+        "candidate-sha:refs/heads/feature",
+      ],
+    ]);
+    expect(ghCalls).toEqual([
+      [
+        "api",
+        "--method",
+        "PATCH",
+        "repos/acme/widgets/pulls/42",
+        "-f",
+        "title=Publish Candidate",
+        "-f",
+        "body=Validation facts",
+      ],
+    ]);
+  });
+
   it("reads authoritative repository and lifecycle facts for an owned pull request", () => {
     const gateway = localGitHubPullRequestGateway({
       runGh: () => ({
