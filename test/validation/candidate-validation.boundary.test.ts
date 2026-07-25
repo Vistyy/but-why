@@ -49,7 +49,7 @@ describe("Candidate validation", () => {
         });
         const result = yield* validateCandidate(validation, {
           candidateId: captured.candidateId,
-          comparisonBaseSha: captured.comparisonBaseSha,
+          changeBaseSha: captured.changeBaseSha,
           headSha: captured.headSha,
           policy: {
             sandboxMode: "none",

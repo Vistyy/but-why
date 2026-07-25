@@ -7,7 +7,10 @@ import { resolveCandidateValidationPolicy } from "./candidateValidation/resolveC
 import { openCandidateCapture } from "./candidateCapture/captureLocalCandidate.js";
 import type { CandidateCapturePersistence } from "./candidateCapture/candidateCapturePersistence.js";
 import type { ChangeValidationPersistence } from "./validation/changeValidationPersistence.js";
-import { localCandidateCaptureGit } from "./candidateCapture/localGitCandidate.js";
+import {
+  localCandidateCaptureGit,
+  readRepositoryBranchHead,
+} from "./candidateCapture/localGitCandidate.js";
 import { cleanupChangeResources } from "./localChangeCleanupGit.js";
 import { openChangeReconciliation } from "./reconcileChange.js";
 import { openChangeSubmit, type ChangeSubmit, type ChangeSubmitResult } from "./submitChange.js";
@@ -80,6 +83,8 @@ export const loadChangeSubmit = (input: {
           github: localGitHubPullRequestGateway({ cwd }),
         }),
       refreshBase: refreshRemoteChangeBase,
+      readBranchHead: (cwd, expectedBranchRef) =>
+        Effect.sync(() => readRepositoryBranchHead(cwd, expectedBranchRef)),
       detectTarget: (cwd, branch, baseRef, baseRemoteUrl) =>
         detectGitHubPrTarget(cwd, branch, undefined, undefined, baseRef, baseRemoteUrl),
       captureCandidate: openCandidateCapture({

@@ -72,9 +72,7 @@ const candidateValidationChangeView = (change: ChangeRecord): StructuredObject =
 const candidateView = (candidate: CandidateRecord): StructuredObject => ({
   id: candidate.id,
   changeId: candidate.changeId,
-  selectedBaseRef: candidate.selectedBaseRef,
-  resolvedTargetSha: candidate.resolvedTargetSha,
-  comparisonBaseSha: candidate.comparisonBaseSha,
+  changeBaseSha: candidate.changeBaseSha,
   headSha: candidate.headSha,
   createdAt: candidate.createdAt,
 });

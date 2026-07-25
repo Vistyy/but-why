@@ -21,7 +21,8 @@ But Why also rejects using a stale remote-tracking ref without fetching because 
 A missing, ambiguous, unreachable, or incomplete publication remote rejects Change Start before Change or Task mutation.
 A Submit-time refresh failure rejects Submission before Candidate or Validation Run creation.
 Candidate identity includes the Change, exact fetched Change Base commit, and Repository Branch head commit.
-`changeBaseSha` is the single canonical code, storage, and CLI name for that commit; `resolvedTargetSha` and `comparisonBaseSha` are retired.
+`changeBaseSha` is the single canonical code, storage, and CLI name for that commit.
+The former target and computed comparison aliases are retired.
 When the Change Base commit changes, the existing Repository Branch cannot produce another Candidate until it contains that commit.
 A completed Submission remains valid evidence for its recorded Change Base commit and is not invalidated automatically when the remote Change Base advances later.
 Only a new Submission fetches a newer Change Base commit and requires the Repository Branch to contain it.

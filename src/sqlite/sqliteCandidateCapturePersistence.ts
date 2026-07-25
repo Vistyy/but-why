@@ -7,18 +7,13 @@ import type {
   CandidateCaptureChange,
   CandidateCapturePersistence,
   CommitCandidateCaptureInput,
-  CommitCandidateCaptureResult,
 } from "../change/candidateCapture/candidateCapturePersistence.js";
 import { RepositoryPersistedDataInvalid } from "../contracts/repositoryStorageError.js";
 import { RepositorySql } from "./repositorySql.js";
 
 type StoredCandidate = {
   readonly id: string;
-  readonly selectedBaseRef: string;
-  readonly resolvedTargetSha: string;
 };
-
-type CommitRejection = Extract<CommitCandidateCaptureResult, { readonly ok: false }>;
 
 export const openSqliteCandidateCapturePersistence = (): Effect.Effect<
   CandidateCapturePersistence,
@@ -47,7 +42,6 @@ const commitCapture = (sql: SqlClient.SqlClient, input: CommitCandidateCaptureIn
     const baseAssignment = yield* assignBase(sql, selected.change, input);
     if (!baseAssignment.ok) return baseAssignment;
     const candidate = yield* captureStoredCandidate(sql, selected.change.id, input);
-    if (!candidate.ok) return candidate;
 
     return {
       ok: true,
@@ -135,14 +129,14 @@ const assignBase = (
 ) => {
   if (change.baseRef !== null) {
     return Effect.succeed(
-      change.baseRef === input.selectedBaseRef
+      change.baseRef === input.baseRef
         ? ({ ok: true } as const)
         : ({ ok: false, code: "base_ref_conflict" } as const),
     );
   }
   return Effect.as(
     sql`
-      UPDATE changes SET base_ref = ${input.selectedBaseRef}, updated_at = ${input.now}
+      UPDATE changes SET base_ref = ${input.baseRef}, updated_at = ${input.now}
       WHERE id = ${change.id}
     `,
     { ok: true as const },
@@ -156,38 +150,27 @@ const captureStoredCandidate = (
 ) =>
   Effect.gen(function* () {
     const rows = yield* sql<StoredCandidate>`
-      SELECT id, selected_base_ref AS selectedBaseRef,
-        resolved_target_sha AS resolvedTargetSha
+      SELECT id
       FROM candidates
       WHERE change_id = ${changeId}
-        AND resolved_target_sha = ${input.resolvedTargetSha}
-        AND comparison_base_sha = ${input.comparisonBaseSha}
+        AND change_base_sha = ${input.changeBaseSha}
         AND head_sha = ${input.headSha}
     `;
     const existing = rows[0];
-    if (existing !== undefined) return reuseStoredCandidate(existing, input);
+    if (existing !== undefined) {
+      return { ok: true, candidateId: existing.id, reused: true } as const;
+    }
 
     const candidateId = randomUUID();
     yield* sql`
       INSERT INTO candidates (
-        id, change_id, selected_base_ref, resolved_target_sha,
-        comparison_base_sha, head_sha, created_at
+        id, change_id, change_base_sha, head_sha, created_at
       ) VALUES (
-        ${candidateId}, ${changeId}, ${input.selectedBaseRef}, ${input.resolvedTargetSha},
-        ${input.comparisonBaseSha}, ${input.headSha}, ${input.now}
+        ${candidateId}, ${changeId}, ${input.changeBaseSha}, ${input.headSha}, ${input.now}
       )
     `;
     return { ok: true, candidateId, reused: false } as const;
   });
-
-const reuseStoredCandidate = (
-  existing: StoredCandidate,
-  input: CommitCandidateCaptureInput,
-): { readonly ok: true; readonly candidateId: string; readonly reused: true } | CommitRejection =>
-  existing.selectedBaseRef === input.selectedBaseRef &&
-  existing.resolvedTargetSha === input.resolvedTargetSha
-    ? { ok: true, candidateId: existing.id, reused: true }
-    : { ok: false, code: "candidate_provenance_conflict" };
 
 const getChangeById = (sql: SqlClient.SqlClient, changeId: string) =>
   Effect.map(

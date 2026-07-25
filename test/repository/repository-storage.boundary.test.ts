@@ -234,12 +234,11 @@ describe("repository SQL storage", () => {
           Effect.gen(function* () {
             yield* sql`
                 INSERT INTO candidates (
-                  id, change_id, selected_base_ref, resolved_target_sha,
-                  comparison_base_sha, head_sha, created_at
+                  id, change_id, change_base_sha, head_sha, created_at
                 ) VALUES (
-                  'candidate-no-change', ${started.change.id}, 'refs/heads/main',
+                  'candidate-no-change', ${started.change.id},
                   ${started.change.startingCommit}, ${started.change.startingCommit},
-                  ${started.change.startingCommit}, '2026-07-17T23:07:30.000Z'
+                  '2026-07-17T23:07:30.000Z'
                 )
               `;
             yield* sql`
@@ -339,9 +338,8 @@ describe("repository SQL storage", () => {
         const first = yield* capture.commitCapture({
           repositoryCommonDirectory: input.commonDirectory,
           branchRef: "refs/heads/by-8",
-          selectedBaseRef: "refs/remotes/origin/main",
-          resolvedTargetSha: "d5fbe76f5565fa4d7de3ee3c48135fc595b26bea",
-          comparisonBaseSha: "d5fbe76f5565fa4d7de3ee3c48135fc595b26bea",
+          baseRef: "refs/remotes/origin/main",
+          changeBaseSha: "d5fbe76f5565fa4d7de3ee3c48135fc595b26bea",
           headSha: "c0ebeaa730bcd666c7b927db2542ea6ea9d9575c",
           now: "2026-07-25T12:00:00.000Z",
         });
@@ -352,9 +350,8 @@ describe("repository SQL storage", () => {
           repositoryCommonDirectory: input.commonDirectory,
           branchRef: "refs/heads/by-8",
           expectedChangeId: first.changeId,
-          selectedBaseRef: "refs/remotes/origin/main",
-          resolvedTargetSha: "b32245d73e2c2aaf9ed9d46270720591a6f62946",
-          comparisonBaseSha: "d5fbe76f5565fa4d7de3ee3c48135fc595b26bea",
+          baseRef: "refs/remotes/origin/main",
+          changeBaseSha: "b32245d73e2c2aaf9ed9d46270720591a6f62946",
           headSha: "c0ebeaa730bcd666c7b927db2542ea6ea9d9575c",
           now: "2026-07-25T13:00:00.000Z",
         });
@@ -365,9 +362,8 @@ describe("repository SQL storage", () => {
           repositoryCommonDirectory: input.commonDirectory,
           branchRef: "refs/heads/by-8",
           expectedChangeId: first.changeId,
-          selectedBaseRef: "refs/remotes/origin/main",
-          resolvedTargetSha: "b32245d73e2c2aaf9ed9d46270720591a6f62946",
-          comparisonBaseSha: "d5fbe76f5565fa4d7de3ee3c48135fc595b26bea",
+          baseRef: "refs/remotes/origin/main",
+          changeBaseSha: "b32245d73e2c2aaf9ed9d46270720591a6f62946",
           headSha: "c0ebeaa730bcd666c7b927db2542ea6ea9d9575c",
           now: "2026-07-25T14:00:00.000Z",
         });
@@ -380,6 +376,89 @@ describe("repository SQL storage", () => {
           candidateId: advancedTarget.candidateId,
           reused: true,
         });
+      }),
+    ),
+  );
+
+  it.scoped("returns only exact passing publication evidence", () =>
+    withTemporaryState((input) =>
+      Effect.gen(function* () {
+        const repository = yield* RepositorySql;
+        const capture = yield* openSqliteCandidateCapturePersistence();
+        const changes = yield* openSqliteChangePersistence();
+        const captured = yield* capture.commitCapture({
+          repositoryCommonDirectory: input.commonDirectory,
+          branchRef: "refs/heads/feature",
+          baseRef: "refs/remotes/origin/main",
+          changeBaseSha: "base-sha",
+          headSha: "head-sha",
+          now: "2026-07-25T15:00:00.000Z",
+        });
+        if (!captured.ok) return;
+        yield* repository.operation("install passing publication evidence", (sql) =>
+          Effect.gen(function* () {
+            yield* sql`
+              INSERT INTO candidate_validation_runs (
+                id, candidate_id, policy_snapshot, state, outcome, created_at, updated_at
+              ) VALUES (
+                'run-1', ${captured.candidateId}, '{}', 'complete', 'passed',
+                '2026-07-25T15:01:00.000Z', '2026-07-25T15:01:00.000Z'
+              )
+            `;
+            yield* sql`
+              UPDATE changes SET
+                publication_candidate_id = ${captured.candidateId},
+                publication_validation_run_id = 'run-1',
+                publication_owner = 'acme', publication_repo = 'repo',
+                publication_base_branch = 'main', publication_remote_name = 'origin',
+                publication_head_branch = 'feature', publication_expected_head_sha = 'head-sha',
+                publication_pr_number = 42, publication_pr_url = 'https://github.test/pull/42'
+              WHERE id = ${captured.changeId}
+            `;
+          }),
+        );
+
+        expect(yield* changes.getPassingPublicationEvidence(captured.changeId)).toEqual({
+          candidateId: captured.candidateId,
+          validationRunId: "run-1",
+          changeBaseSha: "base-sha",
+          headSha: "head-sha",
+        });
+
+        yield* repository.operation(
+          "invalidate publication evidence",
+          (sql) => sql`UPDATE candidate_validation_runs SET outcome = 'blocked' WHERE id = 'run-1'`,
+        );
+        expect(yield* changes.getPassingPublicationEvidence(captured.changeId)).toBeUndefined();
+
+        const other = yield* capture.commitCapture({
+          repositoryCommonDirectory: input.commonDirectory,
+          branchRef: "refs/heads/other",
+          baseRef: "refs/remotes/origin/main",
+          changeBaseSha: "base-sha",
+          headSha: "head-sha",
+          now: "2026-07-25T15:02:00.000Z",
+        });
+        if (!other.ok) return;
+        yield* repository.operation("install another Change publication evidence", (sql) =>
+          Effect.gen(function* () {
+            yield* sql`
+              INSERT INTO candidate_validation_runs (
+                id, candidate_id, policy_snapshot, state, outcome, created_at, updated_at
+              ) VALUES (
+                'run-2', ${other.candidateId}, '{}', 'complete', 'passed',
+                '2026-07-25T15:03:00.000Z', '2026-07-25T15:03:00.000Z'
+              )
+            `;
+            yield* sql`
+              UPDATE changes SET
+                publication_candidate_id = ${other.candidateId},
+                publication_validation_run_id = 'run-2'
+              WHERE id = ${captured.changeId}
+            `;
+          }),
+        );
+        expect(yield* changes.getPassingPublicationEvidence(captured.changeId)).toBeUndefined();
       }),
     ),
   );
@@ -417,9 +496,8 @@ describe("repository SQL storage", () => {
             repositoryCommonDirectory: input.commonDirectory,
             branchRef: "refs/heads/feature",
             expectedChangeId: "change-1",
-            selectedBaseRef: "refs/heads/main",
-            resolvedTargetSha: "base",
-            comparisonBaseSha: "base",
+            baseRef: "refs/heads/main",
+            changeBaseSha: "base",
             headSha: "head",
             now: "2026-07-17T23:01:00.000Z",
           })
@@ -461,8 +539,20 @@ describe("repository SQL storage", () => {
           `,
         );
 
+        const candidateColumns = yield* repositorySql.operation(
+          "read Candidate baseline shape",
+          (sql) => sql<{ readonly name: string }>`PRAGMA table_info(candidates)`,
+        );
+
         expect(migrations).toEqual([{ migration_id: 1, name: "baseline" }]);
         expect(identities).toEqual([{ common_directory: repositorySql.commonDirectory }]);
+        expect(candidateColumns.map(({ name }) => name)).toEqual([
+          "id",
+          "change_id",
+          "change_base_sha",
+          "head_sha",
+          "created_at",
+        ]);
       }),
     ),
   );

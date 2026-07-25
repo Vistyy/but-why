@@ -20,7 +20,7 @@ export type RunAcceptanceReviewPhaseInput = {
   readonly validationRunId: string;
   readonly candidate: {
     readonly candidateId: string;
-    readonly comparisonBaseSha: string;
+    readonly changeBaseSha: string;
     readonly headSha: string;
   };
   readonly acceptanceContext: TaskContextSnapshotV1;

@@ -122,7 +122,7 @@ layer(acceptanceTemplateLayer)("Task-backed Candidate Acceptance Review", (it) =
         );
         const prompt = review.mock.calls[0]?.[0].prompt;
         expect(prompt).toContain(result.validationRunId);
-        expect(prompt).toContain(captured.comparisonBaseSha);
+        expect(prompt).toContain(captured.changeBaseSha);
         expect(prompt).toContain(acceptanceContext.description);
         expect(prompt).toContain(acceptancePolicy.instructions);
         expect(prompt).toContain("<reviewer-output>");
@@ -471,7 +471,7 @@ layer(acceptanceTemplateLayer)("Task-backed Candidate Acceptance Review", (it) =
         ]);
         for (const [input] of review.mock.calls.slice(1)) {
           expect(input.availableArtifactRefs).toEqual([]);
-          expect(input.prompt).toContain(ready.captured.comparisonBaseSha);
+          expect(input.prompt).toContain(ready.captured.changeBaseSha);
           expect(input.prompt).toContain(ready.captured.headSha);
           expect(input.prompt).toContain(`${input.reviewer} review instructions`);
           expect(input.prompt).not.toContain(ready.captured.candidateId);
@@ -543,7 +543,7 @@ const runTaskBackedCandidate = (
     const validation = yield* CandidateValidation;
     return yield* validation.validateTaskBackedCandidate({
       candidateId: captured.candidateId,
-      comparisonBaseSha: captured.comparisonBaseSha,
+      changeBaseSha: captured.changeBaseSha,
       headSha: captured.headSha,
       acceptanceContext,
       policy,
@@ -559,7 +559,7 @@ const runNoChangeCandidate = (ready: AcceptanceReadyRepo, captured = ready.captu
     }
     return yield* validation.validateNoChange({
       candidateId: captured.candidateId,
-      comparisonBaseSha: captured.comparisonBaseSha,
+      changeBaseSha: captured.changeBaseSha,
       headSha: captured.headSha,
       acceptanceContext,
       policy: passingValidationPolicy,

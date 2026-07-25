@@ -16,7 +16,7 @@ export const buildAcceptanceReviewerPrompt = (input: {
   readonly availableArtifactRefs: readonly string[];
   readonly candidate: {
     readonly candidateId: string;
-    readonly comparisonBaseSha: string;
+    readonly changeBaseSha: string;
     readonly headSha: string;
   };
   readonly acceptanceContext: TaskContextSnapshotV1;
@@ -46,7 +46,7 @@ export const buildSpecialistReviewerPrompt = (input: {
   readonly instructions: string;
   readonly validationRunId: string;
   readonly candidate: {
-    readonly comparisonBaseSha: string;
+    readonly changeBaseSha: string;
     readonly headSha: string;
   };
 }): string =>

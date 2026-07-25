@@ -13,6 +13,7 @@ import type {
   CaptureLocalCandidateInput,
   CaptureLocalCandidateResult,
 } from "./candidateCapture/captureLocalCandidate.js";
+import type { RepositoryBranchHeadResult } from "./candidateCapture/candidateCaptureGit.js";
 import type { RepositoryStorageError } from "../contracts/repositoryStorageError.js";
 import type {
   CandidatePublication,
@@ -85,13 +86,6 @@ export type ChangeSubmitResult =
       readonly change: ReconciledChange;
     }
   | { readonly ok: false; readonly code: "owned_pull_request_closed"; readonly changeId: string }
-  | {
-      readonly ok: false;
-      readonly code: "completed_change_base_advanced";
-      readonly changeId: string;
-      readonly previousTargetSha: string;
-      readonly currentTargetSha: string;
-    }
   | { readonly ok: false; readonly code: "task_transition_failed"; readonly changeId: string }
   | { readonly ok: false; readonly code: "validation_policy_invalid"; readonly message: string }
   | { readonly ok: false; readonly code: "github_target_not_found" | "github_tooling_error" }
@@ -146,6 +140,10 @@ export const openChangeSubmit = (dependencies: {
     baseRef: string,
     expectedRemoteUrl: string,
   ) => RemoteChangeBaseResult;
+  readonly readBranchHead: (
+    cwd: string,
+    expectedBranchRef: string,
+  ) => Effect.Effect<RepositoryBranchHeadResult>;
   readonly detectTarget: (
     cwd: string,
     branch: string,
@@ -169,31 +167,13 @@ const submitChange = (
   Effect.gen(function* () {
     const existing = yield* dependencies.persistence.getChangeById(input.changeId);
     if (existing?.noChangeCompletion !== undefined && existing.noChangeCompletion !== null) {
-      if (existing.baseRef === null || existing.baseRemoteUrl === null) {
-        return { ok: false, code: "invalid_remote_change_base", baseRef: "" } as const;
-      }
-      const refreshedBase = dependencies.refreshBase(
-        dependencies.repositoryPath,
-        existing.baseRef,
-        existing.baseRemoteUrl,
-      );
-      if (!refreshedBase.ok) return refreshedBase;
-      if (refreshedBase.base.commit === existing.noChangeCompletion.resolvedTargetSha) {
-        return {
-          ok: true,
-          status: "no_change",
-          changeId: existing.id,
-          candidateId: existing.noChangeCompletion.candidateId,
-          validationRunId: existing.noChangeCompletion.validationRunId,
-          completionKind: "no_change",
-        } as const;
-      }
       return {
-        ok: false,
-        code: "completed_change_base_advanced",
+        ok: true,
+        status: "no_change",
         changeId: existing.id,
-        previousTargetSha: existing.noChangeCompletion.resolvedTargetSha,
-        currentTargetSha: refreshedBase.base.commit,
+        candidateId: existing.noChangeCompletion.candidateId,
+        validationRunId: existing.noChangeCompletion.validationRunId,
+        completionKind: "no_change",
       } as const;
     }
     const selected = yield* selectReadyChange(dependencies.persistence, input.changeId);
@@ -202,43 +182,48 @@ const submitChange = (
     if (change.baseRef === null || change.baseRemoteUrl === null) {
       return { ok: false, code: "invalid_remote_change_base", baseRef: "" } as const;
     }
+    const reconciliation = yield* reconcileBeforeSubmission(dependencies, change, input.now);
+    if (!reconciliation.proceed) return reconciliation.result;
+    if (change.publication !== null && reconciliation.reconciled.status === "open") {
+      const branchHead = yield* dependencies.readBranchHead(change.worktreePath, change.branchRef);
+      if (!branchHead.ok) return branchHead;
+      if (branchHead.headSha === change.publication.expectedHeadSha) {
+        const evidence = yield* dependencies.persistence.getPassingPublicationEvidence(change.id);
+        if (
+          evidence?.candidateId === change.publication.candidateId &&
+          evidence.validationRunId === change.publication.validationRunId &&
+          evidence.headSha === branchHead.headSha
+        ) {
+          if (
+            change.taskId !== null &&
+            !(yield* transitionTask(dependencies.taskPersistence, change, "ready", input.now))
+          ) {
+            return taskTransitionFailure(change);
+          }
+          return publishedResult(change, false);
+        }
+      }
+    }
     const refreshedBase = dependencies.refreshBase(
       dependencies.repositoryPath,
       change.baseRef,
       change.baseRemoteUrl,
     );
     if (!refreshedBase.ok) return refreshedBase;
-    const reconciliation = yield* reconcileBeforeSubmission(dependencies, change, input.now);
-    if (!reconciliation.proceed) return reconciliation.result;
     const candidate = yield* dependencies.captureCandidate({
       cwd: change.worktreePath,
       changeId: change.id,
       now: input.now,
-      resolvedTargetSha: refreshedBase.base.commit,
-      ...(change.taskId === null || change.startingCommit === null
-        ? {}
-        : { startingCommit: change.startingCommit }),
+      changeBaseSha: refreshedBase.base.commit,
     });
     if (!candidate.ok) return candidate;
-    if (change.taskId === null && candidate.headSha === candidate.comparisonBaseSha) {
-      return { ok: true, status: "nothing_to_submit", changeId: change.id } as const;
-    }
-    if (
-      change.taskId !== null &&
-      change.publication === null &&
-      candidate.headSha === change.startingCommit &&
-      candidate.comparisonBaseSha === change.startingCommit
-    ) {
-      return yield* validateAndCompleteNoChange(dependencies, change, candidate, input.now);
-    }
-    if (isCurrentPublishedCandidate(change, candidate, reconciliation.reconciled)) {
-      if (
-        change.taskId !== null &&
-        !(yield* transitionTask(dependencies.taskPersistence, change, "ready", input.now))
-      ) {
-        return taskTransitionFailure(change);
+    if (candidate.trackedTreeMatchesChangeBase) {
+      if (change.taskId === null) {
+        return { ok: true, status: "nothing_to_submit", changeId: change.id } as const;
       }
-      return publishedResult(change, candidate, false);
+      if (change.publication === null) {
+        return yield* validateAndCompleteNoChange(dependencies, change, candidate, input.now);
+      }
     }
     const target = detectPublicationTarget(dependencies, change, candidate);
     if (!target.ok) return githubTargetFailure(target);
@@ -252,16 +237,11 @@ const validateAndCompleteNoChange = (
   now: string,
 ): Effect.Effect<ChangeSubmitResult, RepositoryStorageError, CandidateValidation> =>
   Effect.gen(function* () {
-    if (
-      change.taskId === null ||
-      change.acceptanceContext === null ||
-      change.startingCommit === null
-    ) {
+    if (change.taskId === null || change.acceptanceContext === null) {
       return {
         ok: false,
         code: "validation_policy_invalid",
-        message:
-          "Task-backed no-change submission requires Acceptance Context and a starting commit.",
+        message: "Task-backed no-change submission requires Acceptance Context.",
       } as const;
     }
     const policy = dependencies.resolvePolicy(true);
@@ -498,15 +478,6 @@ const taskTransitionFailure = (change: ChangeRecord): ChangeSubmitResult => ({
   changeId: change.id,
 });
 
-const isCurrentPublishedCandidate = (
-  change: ChangeRecord,
-  candidate: CapturedCandidate,
-  reconciled: ReconciledChange,
-): boolean =>
-  reconciled.status === "open" &&
-  change.publication?.pullRequest !== null &&
-  change.publication?.expectedHeadSha === candidate.headSha;
-
 const selectReadyChange = (
   persistence: ChangePersistence,
   changeId: string,
@@ -530,7 +501,7 @@ const selectReadyChange = (
 
 const candidateIdentity = (candidate: CapturedCandidate) => ({
   candidateId: candidate.candidateId,
-  comparisonBaseSha: candidate.comparisonBaseSha,
+  changeBaseSha: candidate.changeBaseSha,
   headSha: candidate.headSha,
 });
 
@@ -558,11 +529,7 @@ const detectPublicationTarget = (
     change.baseRemoteUrl ?? "",
   );
 
-const publishedResult = (
-  change: ChangeRecord,
-  candidate: CapturedCandidate,
-  created: boolean,
-): ChangeSubmitResult => {
+const publishedResult = (change: ChangeRecord, created: boolean): ChangeSubmitResult => {
   const publication = change.publication;
   if (publication?.pullRequest === null || publication === null) {
     throw new Error("Reconciled Change lacks owned pull request facts");
@@ -571,7 +538,7 @@ const publishedResult = (
     ok: true,
     status: "published",
     changeId: change.id,
-    candidateId: candidate.candidateId,
+    candidateId: publication.candidateId,
     validationRunId: publication.validationRunId,
     created,
     pullRequest: publication.pullRequest,
