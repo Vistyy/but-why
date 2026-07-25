@@ -46,8 +46,9 @@ But Why fetches the Change Base at Change Start and before each Submission.
 _Avoid_: Local branch, current merge base chosen implicitly, starting worktree path
 
 **Candidate**:
-One immutable committed code state identified within a Change by its exact fetched Change Base target commit, comparison base, and head commit.
-_Avoid_: Change, working tree, Submission, Validation Run
+One immutable committed code state identified within a Change by its exact fetched Change Base commit and Repository Branch head commit.
+The Repository Branch must contain that Change Base commit before the Candidate is created.
+_Avoid_: Change, working tree, resolved target, comparison base, merge-base pair, Submission, Validation Run
 
 **Current Candidate**:
 The latest Candidate selected from the Managed Worktree for the open Change.
@@ -75,7 +76,8 @@ _Avoid_: Mutable current report, Task comments
 
 **Validation Policy Snapshot**:
 The immutable resolved Prepare, Checks, reviewer instructions, Agent Profiles, and output contract used by one Validation Run.
-_Avoid_: Mutable current config, raw config hash
+Later configuration changes do not alter the snapshot or its historical Validation Run.
+_Avoid_: Mutable current config, raw config hash, retroactive policy
 
 **Task**:
 The durable record of one requested outcome, its approved intent, dependencies, and user-facing progress.
@@ -147,16 +149,22 @@ An open Change has at most one.
 _Avoid_: Active Implementer, current Validation Run
 
 **Submission**:
-The act of asking But Why? to inspect a Change's Managed Worktree, select its Candidate or no-change state, validate it, and publish when eligible.
-_Avoid_: Push, Candidate, Validation Run
+The point-in-time act of asking But Why? to fetch the Change Base, inspect a Change's Managed Worktree, select its Candidate or no-change state, validate it, and publish when eligible.
+Later Change Base advancement does not alter a completed Submission or invalidate its Candidate automatically.
+A repeated Submit command returns stored success without fetching a newer Change Base only when durable evidence proves that the unchanged Repository Branch head is the exact passing Candidate confirmed on the owned pull request.
+Otherwise the command begins a new Submission and fetches the current Change Base.
+Current configuration applies to a future or unfinished Submission but does not invalidate a completed Submission.
+_Avoid_: Push, Candidate, Validation Run, head-commit-only retry, retroactive configuration invalidation, continuous merge gate
 
 **No-Change Submission**:
-A Submission whose current tracked tree matches the Task's recorded starting tree and therefore runs Acceptance Review only.
-_Avoid_: Empty commit, caller assertion, cancelled Task
+A Submission whose Repository Branch head has the same tracked file tree as the exact fetched Change Base and therefore runs Acceptance Review only against that current base.
+A passing No-Change Submission is terminal and remains complete when the Change Base later advances.
+_Avoid_: Empty commit, comparison with the Change's original starting tree, reopened completion, caller assertion, cancelled Task
 
 **Submit Rejection Error**:
-A failure that rejects Submission before a Candidate-owned Validation Run or no-change review begins.
-_Avoid_: Finding, Validation Tooling Failure
+A failure that rejects Submission before Candidate creation, a Validation Run, Task progress, or publication mutation.
+Authoritative owned pull request facts observed by earlier reconciliation remain recorded.
+_Avoid_: Finding, Validation Tooling Failure, partial Submission
 
 **Submission Environment**:
 The Managed Worktree and repository facts from which Submission reads the committed code and local validation environment.

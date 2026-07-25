@@ -22,3 +22,4 @@ BY-15 establishes the supported-state compatibility policy and configures the ex
 Migrations preserve the domain-owned persistence interfaces and Change-owned transaction boundaries established by ADR 0014.
 Pre-release schema fixes continue to update the single current baseline.
 Existing pre-release development databases may require an explicit one-time repair rather than permanent product migration code.
+That repair preserves every durable record and verifies row counts, foreign keys, and database integrity before the affected workflow resumes.
