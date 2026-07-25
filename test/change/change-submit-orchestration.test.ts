@@ -366,6 +366,7 @@ describe("Change Submit orchestration", () => {
         noChangeCompletion: {
           candidateId: "candidate-no-change",
           validationRunId: "run-no-change",
+          resolvedTargetSha: "base",
         },
       });
       const submit = openChangeSubmit(
@@ -388,7 +389,60 @@ describe("Change Submit orchestration", () => {
         .submit({ changeId: change.id, now })
         .pipe(Effect.provide(validationLayer));
 
-      expect(result).toEqual({ ok: false, code: "change_not_open" });
+      expect(result).toEqual({
+        ok: true,
+        status: "no_change",
+        changeId: change.id,
+        candidateId: "candidate-no-change",
+        validationRunId: "run-no-change",
+        completionKind: "no_change",
+      });
+      expect(events).toEqual(["refresh_base"]);
+    }),
+  );
+
+  it.effect("does not reuse no-change validation after the Change Base advances", () =>
+    Effect.gen(function* () {
+      const events: string[] = [];
+      const change = readyChange({
+        taskId: publicTaskId("BY-1"),
+        state: "closed",
+        closeReason: "completed",
+        closedAt: now,
+        noChangeCompletion: {
+          candidateId: "candidate-no-change",
+          validationRunId: "run-no-change",
+          resolvedTargetSha: "base",
+        },
+      });
+      const submit = openChangeSubmit(
+        dependencies({
+          events,
+          change,
+          refreshResult: {
+            ok: true,
+            base: { ...refreshedBase, commit: "advanced-base" },
+          },
+        }),
+      );
+      const validationLayer = Layer.succeed(CandidateValidation, {
+        validateCandidate: () => Effect.die("Validation was not expected"),
+        validateTaskBackedCandidate: () => Effect.die("Validation was not expected"),
+        validateNoChange: () => Effect.die("Validation was not expected"),
+        listFindings: () => Effect.succeed([]),
+        listToolingFailures: () => Effect.succeed([]),
+        listRounds: () => Effect.succeed([]),
+      });
+
+      expect(
+        yield* submit.submit({ changeId: change.id, now }).pipe(Effect.provide(validationLayer)),
+      ).toEqual({
+        ok: false,
+        code: "completed_change_base_advanced",
+        changeId: change.id,
+        previousTargetSha: "base",
+        currentTargetSha: "advanced-base",
+      });
       expect(events).toEqual(["refresh_base"]);
     }),
   );

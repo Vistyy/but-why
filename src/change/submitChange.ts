@@ -85,6 +85,13 @@ export type ChangeSubmitResult =
       readonly change: ReconciledChange;
     }
   | { readonly ok: false; readonly code: "owned_pull_request_closed"; readonly changeId: string }
+  | {
+      readonly ok: false;
+      readonly code: "completed_change_base_advanced";
+      readonly changeId: string;
+      readonly previousTargetSha: string;
+      readonly currentTargetSha: string;
+    }
   | { readonly ok: false; readonly code: "task_transition_failed"; readonly changeId: string }
   | { readonly ok: false; readonly code: "validation_policy_invalid"; readonly message: string }
   | { readonly ok: false; readonly code: "github_target_not_found" | "github_tooling_error" }
@@ -171,6 +178,23 @@ const submitChange = (
         existing.baseRemoteUrl,
       );
       if (!refreshedBase.ok) return refreshedBase;
+      if (refreshedBase.base.commit === existing.noChangeCompletion.resolvedTargetSha) {
+        return {
+          ok: true,
+          status: "no_change",
+          changeId: existing.id,
+          candidateId: existing.noChangeCompletion.candidateId,
+          validationRunId: existing.noChangeCompletion.validationRunId,
+          completionKind: "no_change",
+        } as const;
+      }
+      return {
+        ok: false,
+        code: "completed_change_base_advanced",
+        changeId: existing.id,
+        previousTargetSha: existing.noChangeCompletion.resolvedTargetSha,
+        currentTargetSha: refreshedBase.base.commit,
+      } as const;
     }
     const selected = yield* selectReadyChange(dependencies.persistence, input.changeId);
     if (!selected.ok) return selected;

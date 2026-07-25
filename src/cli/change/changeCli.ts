@@ -668,6 +668,18 @@ const submitResult = (result: ChangeSubmitResult): CliResult => {
       help: ["Fix the validation tooling failure, then retry Change Submit."],
     });
   }
+  if (result.code === "completed_change_base_advanced") {
+    return runtimeError({
+      code: result.code,
+      message: "The completed No-Change Submission used an older Change Base commit.",
+      details: {
+        changeId: result.changeId,
+        previousTargetSha: result.previousTargetSha,
+        currentTargetSha: result.currentTargetSha,
+      },
+      help: ["Start a new Change against the current remote branch."],
+    });
+  }
   if (result.code === "validation_policy_invalid") {
     return runtimeError({
       code: result.code,

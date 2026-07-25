@@ -63,6 +63,7 @@ export type ChangePublication = {
 export type ChangeNoChangeCompletion = {
   readonly candidateId: string;
   readonly validationRunId: string;
+  readonly resolvedTargetSha: string;
 };
 
 export type ChangeRecord = {

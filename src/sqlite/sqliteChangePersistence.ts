@@ -53,6 +53,7 @@ const columns = [
   "publication_pr_url AS publicationPrUrl",
   "no_change_candidate_id AS noChangeCandidateId",
   "no_change_validation_run_id AS noChangeValidationRunId",
+  "(SELECT resolved_target_sha FROM candidates WHERE id = no_change_candidate_id) AS noChangeResolvedTargetSha",
   "cleanup_state AS cleanupState",
   "cleanup_blocking_reason AS cleanupBlockingReason",
   "state",
@@ -447,11 +448,14 @@ const mapRow = (row: ChangeRow | undefined, operationName: string) =>
               : decodeSqliteChangePrepareFailure(row.prepareFailure),
           publication: decodeSqliteChangePublication(row),
           noChangeCompletion:
-            row.noChangeCandidateId === null || row.noChangeValidationRunId === null
+            row.noChangeCandidateId === null ||
+            row.noChangeValidationRunId === null ||
+            row.noChangeResolvedTargetSha === null
               ? null
               : {
                   candidateId: row.noChangeCandidateId,
                   validationRunId: row.noChangeValidationRunId,
+                  resolvedTargetSha: row.noChangeResolvedTargetSha,
                 },
           cleanup: { state: row.cleanupState, blockingReason: row.cleanupBlockingReason },
           state: row.state,
@@ -476,6 +480,7 @@ type ChangeRow = Omit<
   readonly prepareFailure: string | null;
   readonly noChangeCandidateId: string | null;
   readonly noChangeValidationRunId: string | null;
+  readonly noChangeResolvedTargetSha: string | null;
   readonly cleanupState: ChangeCleanup["state"];
   readonly cleanupBlockingReason: string | null;
 } & SqliteChangePublicationRow;
