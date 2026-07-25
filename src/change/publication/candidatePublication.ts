@@ -467,12 +467,7 @@ const isExpectedPullRequest = (
   headBranch: string,
   expectedHeadSha: string,
 ): boolean =>
-  pullRequest.number === number &&
-  pullRequest.repository?.owner === target.owner &&
-  pullRequest.repository.repo === target.repo &&
-  pullRequest.state === "open" &&
-  pullRequest.merged === false &&
-  matches(pullRequest, target, headBranch, expectedHeadSha);
+  pullRequest.number === number && matches(pullRequest, target, headBranch, expectedHeadSha);
 
 const updateFailure = (
   dependencies: Dependencies,
@@ -601,6 +596,10 @@ const matches = (
   headBranch: string,
   expectedHeadSha: string,
 ) =>
+  pullRequest.repository?.owner === target.owner &&
+  pullRequest.repository.repo === target.repo &&
+  pullRequest.state === "open" &&
+  pullRequest.merged === false &&
   pullRequest.baseBranch === target.baseBranch &&
   pullRequest.headBranch === headBranch &&
   pullRequest.headSha === expectedHeadSha;

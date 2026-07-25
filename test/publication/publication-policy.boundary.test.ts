@@ -107,6 +107,38 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
     ),
   );
 
+  it.scoped("does not record an incomplete pull request creation response", () =>
+    withFixture((fixture) =>
+      Effect.gen(function* () {
+        const { repository: _repository, ...incomplete } = pullRequest(fixture.captured.headSha);
+        const publication = openCandidatePublication({
+          changePersistence: fixture.changes,
+          validationPersistence: fixture.validation,
+          git: {
+            readBranchHead: () => fixture.captured.headSha,
+            readFirstNonMergeCommitSubject: () => ({ ok: true, subject: "Publication" }),
+          },
+          github: {
+            findPullRequests: () => [],
+            getPullRequest: () => undefined,
+            createPullRequest: () => ({ ok: true, pullRequest: incomplete }),
+            updatePullRequest: () => {
+              throw new Error("Unexpected PR update");
+            },
+          },
+        });
+
+        expect(yield* publication.publish(input(fixture))).toEqual({
+          ok: false,
+          code: "publication_remote_mismatch",
+        });
+        expect(yield* fixture.changes.getChangeById(fixture.captured.changeId)).toMatchObject({
+          publication: { pullRequest: null },
+        });
+      }),
+    ),
+  );
+
   it.scoped("releases a failed reservation and permits a clean retry", () =>
     withFixture((fixture) =>
       Effect.gen(function* () {
