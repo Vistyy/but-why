@@ -7,7 +7,7 @@ import {
   type ChangePublication,
   type ChangeRecord,
 } from "../change/change.js";
-import type { ChangePersistence } from "../change/changePersistence.js";
+import type { ChangePersistence, ChangePublicationEvidence } from "../change/changePersistence.js";
 import type {
   BeginChangePublicationInput,
   CancelChangeInput,
@@ -73,6 +73,10 @@ export const openSqliteChangePersistence = (): Effect.Effect<
       repository.transaction("read Change", (sql) => getById(sql, changeId)),
     getChangeByTaskId: (taskId) =>
       repository.transaction("read Change by Task", (sql) => getByTaskId(sql, taskId)),
+    getPassingPublicationEvidence: (changeId) =>
+      repository.transaction("read passing Change publication evidence", (sql) =>
+        getPassingPublicationEvidence(sql, changeId),
+      ),
     listChanges: (input) =>
       repository.transaction("list Changes", (sql) => listChanges(sql, input)),
     listChangesForReconciliation: (commonDirectory) =>
@@ -115,6 +119,27 @@ const getByTaskId = (sql: SqlClient.SqlClient, taskId: string) =>
   Effect.flatMap(
     sql.unsafe<ChangeRow>(`SELECT ${columns} FROM changes WHERE task_id = ?`, [taskId]),
     (rows) => mapRow(rows[0], "read Change by Task"),
+  );
+
+const getPassingPublicationEvidence = (sql: SqlClient.SqlClient, changeId: string) =>
+  Effect.map(
+    sql<ChangePublicationEvidence>`
+      SELECT
+        candidate.id AS candidateId,
+        run.id AS validationRunId,
+        candidate.change_base_sha AS changeBaseSha,
+        candidate.head_sha AS headSha
+      FROM changes AS change
+      JOIN candidates AS candidate ON candidate.id = change.publication_candidate_id
+      JOIN candidate_validation_runs AS run
+        ON run.id = change.publication_validation_run_id
+        AND run.candidate_id = candidate.id
+      WHERE change.id = ${changeId}
+        AND change.publication_pr_number IS NOT NULL
+        AND run.state = 'complete'
+        AND run.outcome = 'passed'
+    `,
+    (rows) => rows[0],
   );
 
 const listChanges = (sql: SqlClient.SqlClient, input: ListChangesInput) =>

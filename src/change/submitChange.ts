@@ -188,13 +188,20 @@ const submitChange = (
       const branchHead = yield* dependencies.readBranchHead(change.worktreePath, change.branchRef);
       if (!branchHead.ok) return branchHead;
       if (branchHead.headSha === change.publication.expectedHeadSha) {
+        const evidence = yield* dependencies.persistence.getPassingPublicationEvidence(change.id);
         if (
-          change.taskId !== null &&
-          !(yield* transitionTask(dependencies.taskPersistence, change, "ready", input.now))
+          evidence?.candidateId === change.publication.candidateId &&
+          evidence.validationRunId === change.publication.validationRunId &&
+          evidence.headSha === branchHead.headSha
         ) {
-          return taskTransitionFailure(change);
+          if (
+            change.taskId !== null &&
+            !(yield* transitionTask(dependencies.taskPersistence, change, "ready", input.now))
+          ) {
+            return taskTransitionFailure(change);
+          }
+          return publishedResult(change, false);
         }
-        return publishedResult(change, false);
       }
     }
     const refreshedBase = dependencies.refreshBase(
@@ -230,16 +237,11 @@ const validateAndCompleteNoChange = (
   now: string,
 ): Effect.Effect<ChangeSubmitResult, RepositoryStorageError, CandidateValidation> =>
   Effect.gen(function* () {
-    if (
-      change.taskId === null ||
-      change.acceptanceContext === null ||
-      change.startingCommit === null
-    ) {
+    if (change.taskId === null || change.acceptanceContext === null) {
       return {
         ok: false,
         code: "validation_policy_invalid",
-        message:
-          "Task-backed no-change submission requires Acceptance Context and a starting commit.",
+        message: "Task-backed no-change submission requires Acceptance Context.",
       } as const;
     }
     const policy = dependencies.resolvePolicy(true);

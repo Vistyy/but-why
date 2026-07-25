@@ -150,7 +150,8 @@ Validation compares and reviews `headSha` directly against `changeBaseSha`.
 Evidence reuse requires the exact Candidate and cannot match `headSha` alone.
 Task-backed submission runs Repository Preparation, Checks, Acceptance Review, configured Specialists, and publication policy.
 Taskless submission runs Repository Preparation, Checks, configured Specialists, and publication policy without Acceptance Review.
-Tracked-tree equality between the Repository Branch head and `changeBaseSha` defines No-Change regardless of commit topology or the starting commit.
+After the mandatory Change Base ancestry gate passes, tracked-tree equality between the Repository Branch head and `changeBaseSha` defines No-Change regardless of later commit topology or the starting commit.
+A divergent same-tree Repository Branch is rejected because it does not contain `changeBaseSha`.
 A taskless Change with no changed tracked tree returns a structured nothing-to-submit result and remains open.
 The response suggests explicit cancellation when the user intends to abandon the unchanged Change.
 A Task-backed No-Change Submission runs Acceptance Review to determine whether approved Task intent already holds.

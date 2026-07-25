@@ -60,7 +60,8 @@ Otherwise Submit fetches the recorded Change Base and requires `changeBaseSha` t
 The fetch updates only the remote-tracking ref and does not modify the Managed Worktree or Repository Branch.
 A Candidate is identified by `changeId`, `changeBaseSha`, and `headSha`.
 Validation compares the Candidate head directly with `changeBaseSha`.
-Tracked-tree equality between `headSha` and `changeBaseSha` defines No-Change regardless of commit topology or the starting commit.
+After the ancestry gate passes, tracked-tree equality between `headSha` and `changeBaseSha` defines No-Change regardless of later commit topology or the starting commit.
+A divergent same-tree Repository Branch still fails the mandatory Change Base ancestry gate.
 Submit runs Repository Preparation, Checks, Acceptance Review for Task-backed Changes, configured Specialists, and publication policy.
 Validation Runs belong to Candidates.
 Findings and artifacts belong to the Validation Run for that Candidate.

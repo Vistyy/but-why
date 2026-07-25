@@ -93,6 +93,38 @@ describe("Change Candidate capture boundaries", () => {
     }),
   );
 
+  it.effect(
+    "rejects a divergent same-tree branch because every new Submission requires Change Base ancestry",
+    () =>
+      Effect.gen(function* () {
+        const repo = captureReadyRepo();
+        const baseTree = git(repo, "rev-parse", "refs/remotes/origin/main^{tree}");
+        const movedTarget = git(
+          repo,
+          "commit-tree",
+          baseTree,
+          "-p",
+          "refs/remotes/origin/main",
+          "-m",
+          "move base",
+        );
+        git(repo, "update-ref", "refs/remotes/origin/main", movedTarget);
+        const sameTreeHead = git(repo, "commit-tree", baseTree, "-p", "HEAD", "-m", "same tree");
+        git(repo, "reset", "--hard", sameTreeHead);
+
+        const captured = yield* captureLocalCandidate({ cwd: repo, now });
+
+        expect(captured).toEqual({
+          ok: false,
+          code: "change_base_not_ancestor",
+          branchRef: "refs/heads/feature",
+          headSha: sameTreeHead,
+          changeBaseRef: "refs/remotes/origin/main",
+          changeBaseSha: movedTarget,
+        });
+      }),
+  );
+
   it.effect("accepts a Repository Branch rebased onto the fetched Change Base", () =>
     Effect.gen(function* () {
       const repo = captureReadyRepo();

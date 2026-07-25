@@ -380,6 +380,60 @@ describe("repository SQL storage", () => {
     ),
   );
 
+  it.scoped("returns only exact passing publication evidence", () =>
+    withTemporaryState((input) =>
+      Effect.gen(function* () {
+        const repository = yield* RepositorySql;
+        const capture = yield* openSqliteCandidateCapturePersistence();
+        const changes = yield* openSqliteChangePersistence();
+        const captured = yield* capture.commitCapture({
+          repositoryCommonDirectory: input.commonDirectory,
+          branchRef: "refs/heads/feature",
+          baseRef: "refs/remotes/origin/main",
+          changeBaseSha: "base-sha",
+          headSha: "head-sha",
+          now: "2026-07-25T15:00:00.000Z",
+        });
+        if (!captured.ok) return;
+        yield* repository.operation("install passing publication evidence", (sql) =>
+          Effect.gen(function* () {
+            yield* sql`
+              INSERT INTO candidate_validation_runs (
+                id, candidate_id, policy_snapshot, state, outcome, created_at, updated_at
+              ) VALUES (
+                'run-1', ${captured.candidateId}, '{}', 'complete', 'passed',
+                '2026-07-25T15:01:00.000Z', '2026-07-25T15:01:00.000Z'
+              )
+            `;
+            yield* sql`
+              UPDATE changes SET
+                publication_candidate_id = ${captured.candidateId},
+                publication_validation_run_id = 'run-1',
+                publication_owner = 'acme', publication_repo = 'repo',
+                publication_base_branch = 'main', publication_remote_name = 'origin',
+                publication_head_branch = 'feature', publication_expected_head_sha = 'head-sha',
+                publication_pr_number = 42, publication_pr_url = 'https://github.test/pull/42'
+              WHERE id = ${captured.changeId}
+            `;
+          }),
+        );
+
+        expect(yield* changes.getPassingPublicationEvidence(captured.changeId)).toEqual({
+          candidateId: captured.candidateId,
+          validationRunId: "run-1",
+          changeBaseSha: "base-sha",
+          headSha: "head-sha",
+        });
+
+        yield* repository.operation(
+          "invalidate publication evidence",
+          (sql) => sql`UPDATE candidate_validation_runs SET outcome = 'blocked' WHERE id = 'run-1'`,
+        );
+        expect(yield* changes.getPassingPublicationEvidence(captured.changeId)).toBeUndefined();
+      }),
+    ),
+  );
+
   it.scoped("rolls back the complete Candidate capture when its write fails", () =>
     withTemporaryState((input) =>
       Effect.gen(function* () {

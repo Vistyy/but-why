@@ -191,6 +191,7 @@ describe("Change Submit orchestration", () => {
       const transitions: string[] = [];
       const change = readyChange({
         taskId: publicTaskId("BY-1"),
+        startingCommit: null,
         acceptanceContext: {
           version: 1,
           title: "Approved intent",
@@ -759,8 +760,68 @@ describe("Change Submit orchestration", () => {
           .pipe(Effect.provide(validationLayer));
 
         expect(result).toMatchObject({ ok: true, status: "published", created: false });
-        expect(events).toEqual(["reconcile"]);
+        expect(events).toEqual(["reconcile", "read_publication_evidence"]);
       }),
+  );
+
+  it.effect("does not reuse publication when only the Repository Branch head matches", () =>
+    Effect.gen(function* () {
+      const events: string[] = [];
+      const change = readyChange({
+        publication: {
+          candidateId: "other-candidate",
+          validationRunId: "other-run",
+          target: { owner: "acme", repo: "repo", baseBranch: "main", remoteName: "origin" },
+          headBranch: "change-1",
+          expectedHeadSha: "head",
+          pullRequest: { number: 42, url: "https://github.test/acme/repo/pull/42" },
+        },
+      });
+      const submit = openChangeSubmit(
+        dependencies({
+          events,
+          change,
+          reconciliationStatus: "open",
+          publicationEvidence: null,
+        }),
+      );
+      const validationLayer = Layer.succeed(CandidateValidation, {
+        validateCandidate: () =>
+          Effect.sync(() => {
+            events.push("validate_taskless");
+            return {
+              ok: true,
+              reused: false,
+              validationRunId: "new-run",
+              outcome: "passed",
+            } as const;
+          }),
+        validateTaskBackedCandidate: () => Effect.die("Acceptance Review was not expected"),
+        validateNoChange: () => Effect.die("No-Change validation was not expected"),
+        listFindings: () => Effect.succeed([]),
+        listToolingFailures: () => Effect.succeed([]),
+        listRounds: () => Effect.succeed([]),
+      });
+
+      const result = yield* submit
+        .submit({ changeId: change.id, now })
+        .pipe(Effect.provide(validationLayer));
+
+      expect(result).toMatchObject({
+        ok: true,
+        status: "published",
+        candidateId: "candidate-1",
+        validationRunId: "new-run",
+      });
+      expect(events).toEqual([
+        "reconcile",
+        "read_publication_evidence",
+        "capture",
+        "detect_target",
+        "validate_taskless",
+        "publish",
+      ]);
+    }),
   );
 
   it.effect.each([
@@ -1062,6 +1123,12 @@ const dependencies = (input: {
   readonly captureResults?: readonly CaptureLocalCandidateResult[];
   readonly refreshResult?: RemoteChangeBaseResult;
   readonly branchHeadSha?: string;
+  readonly publicationEvidence?: {
+    readonly candidateId: string;
+    readonly validationRunId: string;
+    readonly changeBaseSha: string;
+    readonly headSha: string;
+  } | null;
   readonly refreshResults?: readonly RemoteChangeBaseResult[];
   readonly targetResult?:
     | { readonly ok: false; readonly code: "PR_TARGET_NOT_FOUND" }
@@ -1086,6 +1153,20 @@ const dependencies = (input: {
     repositoryPath: "/repo",
     persistence: {
       getChangeById: () => Effect.succeed(input.change),
+      getPassingPublicationEvidence: () =>
+        Effect.sync(() => {
+          events.push("read_publication_evidence");
+          if (input.publicationEvidence === null) return undefined;
+          return (
+            input.publicationEvidence ?? {
+              candidateId: input.change.publication?.candidateId ?? candidate.candidateId,
+              validationRunId:
+                input.change.publication?.validationRunId ?? "published-validation-run",
+              changeBaseSha: candidate.changeBaseSha,
+              headSha: input.change.publication?.expectedHeadSha ?? candidate.headSha,
+            }
+          );
+        }),
       completeNoChange: () => {
         events.push("complete_no_change");
         return Effect.succeed({ ok: true as const, changed: true });
