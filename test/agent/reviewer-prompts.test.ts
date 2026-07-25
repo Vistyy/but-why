@@ -27,6 +27,7 @@ describe("reviewer prompts", () => {
       specialist: "security",
       instructions: "Specialist instructions",
       validationRunId: "123e4567-e89b-42d3-a456-426614174000",
+      availableArtifactRefs: ["artifact:check"],
       candidate: { changeBaseSha: "base", headSha: "head" },
     });
 

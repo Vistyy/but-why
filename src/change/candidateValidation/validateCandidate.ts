@@ -334,6 +334,7 @@ const runCandidatePhases = (
       commandCwd: activeWorkspace.worktreePath,
       allowedUntrackedFiles: input.policy.copyFiles,
       now: input.now,
+      listArtifacts: dependencies.persistence.listArtifacts,
       listPreviousCandidateReviewerFindings:
         dependencies.persistence.listPreviousCandidateReviewerFindings,
       recordSpecialistRound: dependencies.persistence.recordSpecialistRound,

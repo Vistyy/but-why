@@ -30,6 +30,9 @@ export type RunSpecialistReviewPhaseInput = {
   readonly commandCwd: string;
   readonly allowedUntrackedFiles: readonly string[];
   readonly now: string;
+  readonly listArtifacts: (
+    validationRunId: string,
+  ) => Effect.Effect<readonly { readonly ref: string }[], RepositoryStorageError>;
   readonly listPreviousCandidateReviewerFindings: (input: {
     readonly candidateId: string;
     readonly phase: "specialist_review";
@@ -84,10 +87,14 @@ const runSpecialist = (
 > =>
   Effect.gen(function* () {
     yield* verifyIntegrity(input);
+    const availableArtifactRefs = (yield* input.listArtifacts(input.validationRunId)).map(
+      (artifact) => artifact.ref,
+    );
     const prompt = buildSpecialistReviewerPrompt({
       specialist: policy.id,
       instructions: policy.instructions,
       validationRunId: input.validationRunId,
+      availableArtifactRefs,
       candidate: {
         changeBaseSha: input.candidate.changeBaseSha,
         headSha: input.candidate.headSha,
@@ -104,7 +111,7 @@ const runSpecialist = (
       sandbox: input.sandbox,
       reviewer: policy.id,
       validationRunId: input.validationRunId,
-      availableArtifactRefs: [],
+      availableArtifactRefs,
       prompt,
       profile: policy.profile,
     });
@@ -115,7 +122,7 @@ const runSpecialist = (
             sandbox: input.sandbox,
             reviewer: policy.id,
             validationRunId: input.validationRunId,
-            availableArtifactRefs: [],
+            availableArtifactRefs,
             prompt: buildReviewerRevisionPrompt({
               reviewPrompt: prompt,
               provisionalReport: provisional.report,

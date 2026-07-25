@@ -470,12 +470,14 @@ layer(acceptanceTemplateLayer)("Task-backed Candidate Acceptance Review", (it) =
           "alpha",
         ]);
         for (const [input] of review.mock.calls.slice(1)) {
-          expect(input.availableArtifactRefs).toEqual([]);
+          expect(input.availableArtifactRefs).toEqual(
+            expect.arrayContaining([expect.stringContaining("/checks/quality/")]),
+          );
           expect(input.prompt).toContain(ready.captured.changeBaseSha);
           expect(input.prompt).toContain(ready.captured.headSha);
           expect(input.prompt).toContain(`${input.reviewer} review instructions`);
+          expect(input.prompt).toContain("/checks/quality/");
           expect(input.prompt).not.toContain(ready.captured.candidateId);
-          expect(input.prompt).not.toContain("availableArtifactRefs");
           expect(input.prompt).not.toContain(acceptanceContext.description);
         }
         expect(
