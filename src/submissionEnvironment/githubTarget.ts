@@ -51,11 +51,11 @@ export const detectGitHubPrTarget = (
   currentBranch: string,
   runGit: GitCommandRunner = runGitCommand,
   runGh: GhCommandRunner = runGhCommand,
-  selectedBaseRef?: string,
+  baseRef?: string,
   selectedRemoteUrl?: string,
 ): GitHubTargetResult => {
-  if (selectedBaseRef !== undefined) {
-    return detectSelectedTarget(cwd, selectedBaseRef, runGit, selectedRemoteUrl);
+  if (baseRef !== undefined) {
+    return detectSelectedTarget(cwd, baseRef, runGit, selectedRemoteUrl);
   }
   const remote = selectGitHubRemote(cwd, runGit);
 
@@ -96,11 +96,11 @@ export const detectGitHubPrTarget = (
 
 const detectSelectedTarget = (
   cwd: string,
-  selectedBaseRef: string,
+  baseRef: string,
   runGit: GitCommandRunner,
   selectedRemoteUrl?: string,
 ): GitHubTargetResult => {
-  const selected = parseRemoteChangeBaseRef(selectedBaseRef);
+  const selected = parseRemoteChangeBaseRef(baseRef);
   if (selected === undefined) return { ok: false, code: "PR_TARGET_NOT_FOUND" };
   const configuredUrl =
     selectedRemoteUrl === undefined

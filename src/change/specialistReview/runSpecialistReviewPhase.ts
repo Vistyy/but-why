@@ -19,7 +19,7 @@ export type RunSpecialistReviewPhaseInput = {
   readonly validationRunId: string;
   readonly candidate: {
     readonly candidateId: string;
-    readonly comparisonBaseSha: string;
+    readonly changeBaseSha: string;
     readonly headSha: string;
   };
   readonly policies: readonly SpecialistReviewPolicy[];
@@ -89,7 +89,7 @@ const runSpecialist = (
       instructions: policy.instructions,
       validationRunId: input.validationRunId,
       candidate: {
-        comparisonBaseSha: input.candidate.comparisonBaseSha,
+        changeBaseSha: input.candidate.changeBaseSha,
         headSha: input.candidate.headSha,
       },
     });

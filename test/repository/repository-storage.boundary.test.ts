@@ -234,12 +234,11 @@ describe("repository SQL storage", () => {
           Effect.gen(function* () {
             yield* sql`
                 INSERT INTO candidates (
-                  id, change_id, selected_base_ref, resolved_target_sha,
-                  comparison_base_sha, head_sha, created_at
+                  id, change_id, change_base_sha, head_sha, created_at
                 ) VALUES (
-                  'candidate-no-change', ${started.change.id}, 'refs/heads/main',
+                  'candidate-no-change', ${started.change.id},
                   ${started.change.startingCommit}, ${started.change.startingCommit},
-                  ${started.change.startingCommit}, '2026-07-17T23:07:30.000Z'
+                  '2026-07-17T23:07:30.000Z'
                 )
               `;
             yield* sql`
@@ -339,9 +338,8 @@ describe("repository SQL storage", () => {
         const first = yield* capture.commitCapture({
           repositoryCommonDirectory: input.commonDirectory,
           branchRef: "refs/heads/by-8",
-          selectedBaseRef: "refs/remotes/origin/main",
-          resolvedTargetSha: "d5fbe76f5565fa4d7de3ee3c48135fc595b26bea",
-          comparisonBaseSha: "d5fbe76f5565fa4d7de3ee3c48135fc595b26bea",
+          baseRef: "refs/remotes/origin/main",
+          changeBaseSha: "d5fbe76f5565fa4d7de3ee3c48135fc595b26bea",
           headSha: "c0ebeaa730bcd666c7b927db2542ea6ea9d9575c",
           now: "2026-07-25T12:00:00.000Z",
         });
@@ -352,9 +350,8 @@ describe("repository SQL storage", () => {
           repositoryCommonDirectory: input.commonDirectory,
           branchRef: "refs/heads/by-8",
           expectedChangeId: first.changeId,
-          selectedBaseRef: "refs/remotes/origin/main",
-          resolvedTargetSha: "b32245d73e2c2aaf9ed9d46270720591a6f62946",
-          comparisonBaseSha: "d5fbe76f5565fa4d7de3ee3c48135fc595b26bea",
+          baseRef: "refs/remotes/origin/main",
+          changeBaseSha: "b32245d73e2c2aaf9ed9d46270720591a6f62946",
           headSha: "c0ebeaa730bcd666c7b927db2542ea6ea9d9575c",
           now: "2026-07-25T13:00:00.000Z",
         });
@@ -365,9 +362,8 @@ describe("repository SQL storage", () => {
           repositoryCommonDirectory: input.commonDirectory,
           branchRef: "refs/heads/by-8",
           expectedChangeId: first.changeId,
-          selectedBaseRef: "refs/remotes/origin/main",
-          resolvedTargetSha: "b32245d73e2c2aaf9ed9d46270720591a6f62946",
-          comparisonBaseSha: "d5fbe76f5565fa4d7de3ee3c48135fc595b26bea",
+          baseRef: "refs/remotes/origin/main",
+          changeBaseSha: "b32245d73e2c2aaf9ed9d46270720591a6f62946",
           headSha: "c0ebeaa730bcd666c7b927db2542ea6ea9d9575c",
           now: "2026-07-25T14:00:00.000Z",
         });
@@ -417,9 +413,8 @@ describe("repository SQL storage", () => {
             repositoryCommonDirectory: input.commonDirectory,
             branchRef: "refs/heads/feature",
             expectedChangeId: "change-1",
-            selectedBaseRef: "refs/heads/main",
-            resolvedTargetSha: "base",
-            comparisonBaseSha: "base",
+            baseRef: "refs/heads/main",
+            changeBaseSha: "base",
             headSha: "head",
             now: "2026-07-17T23:01:00.000Z",
           })
@@ -461,8 +456,20 @@ describe("repository SQL storage", () => {
           `,
         );
 
+        const candidateColumns = yield* repositorySql.operation(
+          "read Candidate baseline shape",
+          (sql) => sql<{ readonly name: string }>`PRAGMA table_info(candidates)`,
+        );
+
         expect(migrations).toEqual([{ migration_id: 1, name: "baseline" }]);
         expect(identities).toEqual([{ common_directory: repositorySql.commonDirectory }]);
+        expect(candidateColumns.map(({ name }) => name)).toEqual([
+          "id",
+          "change_id",
+          "change_base_sha",
+          "head_sha",
+          "created_at",
+        ]);
       }),
     ),
   );

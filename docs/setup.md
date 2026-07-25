@@ -50,9 +50,11 @@ Existing Markdown issues remain historical implementation records.
    by change submit <change-id>
    ```
 
+   But Why reconciles an existing owned pull request before a new Submission.
    But Why fetches the recorded remote Change Base before Candidate capture.
+   Merge or rebase the Change Base first when the Repository Branch does not contain the fetched commit.
    But Why validates the selected Candidate and publishes an eligible Change.
-   A taskless Change remains open when it has no changed Candidate.
+   A taskless Change remains open when its tracked tree matches the fetched Change Base.
 
 5. Reconcile an owned pull request after it merges.
 
@@ -61,3 +63,21 @@ Existing Markdown issues remain historical implementation records.
    ```
 
    Reconciliation closes the Change and completes its linked Task when applicable.
+
+## pre-release Candidate state repair
+
+Do not run this procedure before the simplified Candidate schema is present on the integration branch.
+Before repair, stop workflows that can write Shared Repository State.
+Choose a backup path that does not exist.
+Run the conditional repair against the shared development database:
+
+```bash
+just repair-pre-release-candidate-state <git-common-dir>/but-why/state.sqlite <backup-path>
+```
+
+The command repairs only the retired pre-release Candidate schema.
+The command exits successfully without mutation when the Candidate schema is already current.
+Before mutation, the command rejects Candidate identity collisions and creates the requested backup.
+The transaction preserves Candidate IDs and maps the freshly fetched Change Base commit to `changeBaseSha`.
+The command verifies every table row count, foreign keys, and SQLite integrity before commit and after commit.
+Keep the backup until the blocked workflow resumes and the repaired state has been inspected.

@@ -150,9 +150,14 @@ Use the recorded `worktreePath` for manual implementation, then submit the commi
 by change submit <change-id> --output json
 ```
 
-Change Submit fetches the recorded remote Change Base before Candidate capture.
-A target commit change creates new Candidate facts and prevents validation reuse for the older target.
-The fetch does not modify the Managed Worktree or Repository Branch.
+Change Submit reconciles an existing owned pull request before a new Submission.
+A new Submission fetches the recorded remote Change Base before Candidate capture.
+The Repository Branch must contain the exact fetched Change Base commit.
+If it does not, merge or rebase the Change Base into the Repository Branch and retry.
+The fetch and rejection do not modify the Managed Worktree or Repository Branch.
+A Candidate is identified by the Change, `changeBaseSha`, and `headSha`.
+A new Change Base commit creates a different Candidate and prevents evidence reuse by `headSha` alone.
+Completed Submission evidence remains stable when the Change Base or configuration later changes.
 
 Repeat Change Submit after fixing Findings in the Managed Worktree and committing the fixes.
 

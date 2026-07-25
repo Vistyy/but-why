@@ -7,9 +7,8 @@ export type CommitCandidateCaptureInput = {
   readonly branchRef: string;
   readonly expectedChangeId?: string;
   readonly rebindFromRef?: string;
-  readonly selectedBaseRef: string;
-  readonly resolvedTargetSha: string;
-  readonly comparisonBaseSha: string;
+  readonly baseRef: string;
+  readonly changeBaseSha: string;
   readonly headSha: string;
   readonly now: string;
 };

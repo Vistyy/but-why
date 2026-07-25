@@ -13,11 +13,8 @@ export type CaptureLocalCandidateInput = {
   readonly changeId?: string;
   readonly baseRef?: string;
   readonly allowRebind?: boolean;
-  readonly startingCommit?: string;
-  readonly resolvedTargetSha?: string;
+  readonly changeBaseSha?: string;
 };
-
-export type CandidateBaseSource = "saved_change" | "caller" | "remote_default";
 
 export type CaptureLocalCandidateResult =
   | {
@@ -25,11 +22,9 @@ export type CaptureLocalCandidateResult =
       readonly changeId: string;
       readonly candidateId: string;
       readonly branchRef: string;
-      readonly selectedBaseRef: string;
-      readonly baseSource: CandidateBaseSource;
-      readonly resolvedTargetSha: string;
-      readonly comparisonBaseSha: string;
+      readonly changeBaseSha: string;
       readonly headSha: string;
+      readonly trackedTreeMatchesChangeBase?: boolean;
     }
   | {
       readonly ok: false;
@@ -49,13 +44,23 @@ export type CaptureLocalCandidateResult =
         | "missing_remote_default"
         | "ambiguous_remote_default"
         | "local_base_unavailable"
-        | "comparison_base_unavailable"
         | "candidate_provenance_conflict"
         | "capture_conflict"
         | "git_tooling_error";
+    }
+  | {
+      readonly ok: false;
+      readonly code: "change_base_not_ancestor";
+      readonly branchRef: string;
+      readonly headSha: string;
+      readonly changeBaseRef: string;
+      readonly changeBaseSha: string;
     };
 
-type CaptureRejection = Extract<CaptureLocalCandidateResult, { readonly ok: false }>;
+type CaptureRejection = Exclude<
+  Extract<CaptureLocalCandidateResult, { readonly ok: false }>,
+  { readonly code: "change_base_not_ancestor" }
+>;
 
 type ChangeSelection = {
   readonly change?: CandidateCaptureChange;
@@ -99,26 +104,32 @@ const captureLocalCandidate = (
       changeSelection.selection.change?.baseRef ?? null,
     );
     if (!base.ok) return base;
-    const resolvedTargetSha =
-      input.resolvedTargetSha ?? (yield* dependencies.git.resolveLocalBranch(input.cwd, base.ref));
-    if (resolvedTargetSha === undefined) return { ok: false, code: "local_base_unavailable" };
-    const comparisonBaseSha = yield* dependencies.git.findComparisonBase(
+    const changeBaseSha =
+      input.changeBaseSha ?? (yield* dependencies.git.resolveLocalBranch(input.cwd, base.ref));
+    if (changeBaseSha === undefined) return { ok: false, code: "local_base_unavailable" };
+    const containsChangeBase = yield* dependencies.git.containsCommit(
       input.cwd,
-      resolvedTargetSha,
+      changeBaseSha,
       workspace.facts.headSha,
     );
-    if (comparisonBaseSha === undefined) {
-      return { ok: false, code: "comparison_base_unavailable" };
+    if (containsChangeBase === undefined) return { ok: false, code: "git_tooling_error" };
+    if (!containsChangeBase) {
+      return {
+        ok: false,
+        code: "change_base_not_ancestor",
+        branchRef: workspace.facts.branchRef,
+        headSha: workspace.facts.headSha,
+        changeBaseRef: base.ref,
+        changeBaseSha,
+      };
     }
-    const startingCommit = input.startingCommit;
-    const treesMatch =
-      startingCommit === undefined
-        ? false
-        : yield* dependencies.git.trackedTreeMatches(input.cwd, startingCommit);
-    if (treesMatch === undefined) return { ok: false, code: "git_tooling_error" };
-    const isNoChange = startingCommit !== undefined && treesMatch;
-    const candidateHeadSha = isNoChange ? startingCommit : workspace.facts.headSha;
-    const candidateComparisonBaseSha = isNoChange ? startingCommit : comparisonBaseSha;
+    const trackedTreeMatchesChangeBase = yield* dependencies.git.trackedTreeMatches(
+      input.cwd,
+      changeBaseSha,
+    );
+    if (trackedTreeMatchesChangeBase === undefined) {
+      return { ok: false, code: "git_tooling_error" };
+    }
 
     const committed = yield* dependencies.persistence.commitCapture({
       repositoryCommonDirectory: workspace.facts.repositoryCommonDirectory,
@@ -129,10 +140,9 @@ const captureLocalCandidate = (
       ...(changeSelection.selection.rebindFromRef === undefined
         ? {}
         : { rebindFromRef: changeSelection.selection.rebindFromRef }),
-      selectedBaseRef: base.ref,
-      resolvedTargetSha,
-      comparisonBaseSha: candidateComparisonBaseSha,
-      headSha: candidateHeadSha,
+      baseRef: base.ref,
+      changeBaseSha,
+      headSha: workspace.facts.headSha,
       now: input.now,
     });
     if (!committed.ok) return { ok: false, code: mapCommitError(committed.code) };
@@ -142,11 +152,9 @@ const captureLocalCandidate = (
       changeId: committed.changeId,
       candidateId: committed.candidateId,
       branchRef: workspace.facts.branchRef,
-      selectedBaseRef: base.ref,
-      baseSource: base.source,
-      resolvedTargetSha,
-      comparisonBaseSha: candidateComparisonBaseSha,
-      headSha: candidateHeadSha,
+      changeBaseSha,
+      headSha: workspace.facts.headSha,
+      trackedTreeMatchesChangeBase,
     };
   });
 
@@ -227,9 +235,7 @@ const selectSuppliedChange = (
       : { ok: false, code: "destination_branch_has_history" };
   });
 
-type SelectedBase =
-  | { readonly ok: true; readonly ref: string; readonly source: CandidateBaseSource }
-  | CaptureRejection;
+type SelectedBase = { readonly ok: true; readonly ref: string } | CaptureRejection;
 
 const selectBase = (
   git: CandidateCaptureGit,
@@ -254,9 +260,7 @@ const selectSavedBase = (
   return Effect.map(
     git.localBranchExists(cwd, saved),
     (exists): SelectedBase =>
-      exists
-        ? { ok: true, ref: saved, source: "saved_change" }
-        : { ok: false, code: "local_base_unavailable" },
+      exists ? { ok: true, ref: saved } : { ok: false, code: "local_base_unavailable" },
   );
 };
 
@@ -271,9 +275,7 @@ const selectCallerBase = (
   return Effect.map(
     git.localBranchExists(cwd, supplied),
     (exists): SelectedBase =>
-      exists
-        ? { ok: true, ref: supplied, source: "caller" }
-        : { ok: false, code: "local_base_unavailable" },
+      exists ? { ok: true, ref: supplied } : { ok: false, code: "local_base_unavailable" },
   );
 };
 
@@ -290,7 +292,7 @@ const selectRemoteDefaultBase = (
     const ref = unique[0];
     if (ref === undefined) return { ok: false, code: "local_base_unavailable" };
     return (yield* git.localBranchExists(cwd, ref))
-      ? { ok: true, ref, source: "remote_default" }
+      ? { ok: true, ref }
       : { ok: false, code: "local_base_unavailable" };
   });
 

@@ -61,7 +61,7 @@ export type CandidateValidationPolicySnapshot = {
 export type StartCandidateValidationRunInput = {
   readonly candidateId: string;
   readonly headSha: string;
-  readonly comparisonBaseSha?: string;
+  readonly changeBaseSha?: string;
   readonly policy: CandidateValidationPolicySnapshot;
   readonly now: string;
 };

@@ -28,9 +28,8 @@ describe("Change Candidate capture orchestration", () => {
             expect(input).toMatchObject({
               repositoryCommonDirectory: "/repo/.git",
               branchRef: "refs/heads/feature",
-              selectedBaseRef: "refs/heads/main",
-              resolvedTargetSha: "fetched-target",
-              comparisonBaseSha: "base",
+              baseRef: "refs/heads/main",
+              changeBaseSha: "fetched-target",
               headSha: "head",
             });
             return {
@@ -57,8 +56,8 @@ describe("Change Candidate capture orchestration", () => {
           }),
         localBranchExists: () => Effect.succeed(true),
         recordedRemoteDefaultLocalBranches: () => Effect.succeed(["refs/heads/main"]),
-        resolveLocalBranch: () => Effect.die("The fetched target commit must remain exact"),
-        findComparisonBase: () => Effect.succeed("base"),
+        resolveLocalBranch: () => Effect.die("The fetched Change Base must remain exact"),
+        containsCommit: () => Effect.succeed(true),
         trackedTreeMatches: () => Effect.succeed(false),
       };
       const capture = openCandidateCapture({ persistence, git });
@@ -66,7 +65,7 @@ describe("Change Candidate capture orchestration", () => {
       const result = yield* capture.capture({
         cwd: "/repo/worktree",
         now,
-        resolvedTargetSha: "fetched-target",
+        changeBaseSha: "fetched-target",
       });
 
       expect(result).toEqual({
@@ -74,17 +73,15 @@ describe("Change Candidate capture orchestration", () => {
         changeId: "change-1",
         candidateId: "candidate-1",
         branchRef: "refs/heads/feature",
-        selectedBaseRef: "refs/heads/main",
-        baseSource: "remote_default",
-        resolvedTargetSha: "fetched-target",
-        comparisonBaseSha: "base",
+        changeBaseSha: "fetched-target",
         headSha: "head",
+        trackedTreeMatchesChangeBase: false,
       });
       expect(events).toEqual(["read_workspace", "read_change", "commit_capture"]);
     }),
   );
 
-  it.effect("captures a no-change Candidate at the recorded starting commit", () =>
+  it.effect("captures tracked-tree equality against the fetched Change Base", () =>
     Effect.gen(function* () {
       let committedHead: string | undefined;
       const persistence: CandidateCapturePersistence = {
@@ -107,7 +104,7 @@ describe("Change Candidate capture orchestration", () => {
         commitCapture: (input) =>
           Effect.sync(() => {
             committedHead = input.headSha;
-            expect(input.comparisonBaseSha).toBe("starting");
+            expect(input.changeBaseSha).toBe("base");
             return {
               ok: true as const,
               changeId: "change-1",
@@ -130,15 +127,14 @@ describe("Change Candidate capture orchestration", () => {
         localBranchExists: () => Effect.succeed(true),
         recordedRemoteDefaultLocalBranches: () => Effect.succeed(["refs/heads/main"]),
         resolveLocalBranch: () => Effect.succeed("base"),
-        findComparisonBase: () => Effect.succeed("base"),
-        trackedTreeMatches: (_cwd, commit) => Effect.succeed(commit === "starting"),
+        containsCommit: () => Effect.succeed(true),
+        trackedTreeMatches: (_cwd, commit) => Effect.succeed(commit === "base"),
       };
 
       const result = yield* openCandidateCapture({ persistence, git }).capture({
         cwd: "/repo/worktree",
         now,
         changeId: "change-1",
-        startingCommit: "starting",
       });
 
       expect(result).toEqual({
@@ -146,13 +142,11 @@ describe("Change Candidate capture orchestration", () => {
         changeId: "change-1",
         candidateId: "candidate-no-change",
         branchRef: "refs/heads/feature",
-        selectedBaseRef: "refs/heads/main",
-        baseSource: "remote_default",
-        resolvedTargetSha: "base",
-        comparisonBaseSha: "starting",
-        headSha: "starting",
+        changeBaseSha: "base",
+        headSha: "different-commit-with-same-tree",
+        trackedTreeMatchesChangeBase: true,
       });
-      expect(committedHead).toBe("starting");
+      expect(committedHead).toBe("different-commit-with-same-tree");
     }),
   );
 
@@ -251,7 +245,7 @@ describe("Change Candidate capture orchestration", () => {
               "remoteDefaults" in testCase ? testCase.remoteDefaults : ["refs/heads/main"],
             ),
           resolveLocalBranch: () => Effect.succeed("base"),
-          findComparisonBase: () => Effect.succeed("base"),
+          containsCommit: () => Effect.succeed(true),
           trackedTreeMatches: () => Effect.succeed(false),
         };
 

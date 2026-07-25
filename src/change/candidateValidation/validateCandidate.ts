@@ -36,7 +36,7 @@ export type TaskBackedCandidateValidationPolicy = CandidateValidationPolicy & {
 
 export type ValidateCandidateInput = {
   readonly candidateId: string;
-  readonly comparisonBaseSha: string;
+  readonly changeBaseSha: string;
   readonly headSha: string;
   readonly policy: CandidateValidationPolicy;
   readonly now: string;
@@ -44,7 +44,7 @@ export type ValidateCandidateInput = {
 
 type ValidateTaskBackedCandidateInput = {
   readonly candidateId: string;
-  readonly comparisonBaseSha: string;
+  readonly changeBaseSha: string;
   readonly headSha: string;
   readonly acceptanceContext: TaskContextSnapshotV1;
   readonly policy: TaskBackedCandidateValidationPolicy;
@@ -133,7 +133,7 @@ const makeCandidateValidation = (dependencies: {
     const started = yield* dependencies.persistence.startOrReuse({
       candidateId: input.candidateId,
       headSha: input.headSha,
-      comparisonBaseSha: input.comparisonBaseSha,
+      changeBaseSha: input.changeBaseSha,
       policy,
       now: input.now,
     });
@@ -356,6 +356,6 @@ const acceptanceOnlyPolicy = (
 
 const candidateIdentity = (input: ValidateCandidateInput | ValidateTaskBackedCandidateInput) => ({
   candidateId: input.candidateId,
-  comparisonBaseSha: input.comparisonBaseSha,
+  changeBaseSha: input.changeBaseSha,
   headSha: input.headSha,
 });

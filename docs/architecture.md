@@ -53,12 +53,19 @@ It then runs Repository Preparation.
 A Task-backed Change captures immutable Acceptance Context.
 A taskless Change has no Acceptance Context.
 
-`by change submit <change-id>` fetches the recorded remote Change Base before it selects the current Candidate from the Change Managed Worktree.
-Candidate capture, validation, and publication use the freshly fetched target commit and recorded target branch.
-The fetch updates only the remote-tracking ref and does not merge, rebase, reset, or otherwise modify the Managed Worktree.
-It runs Repository Preparation, Checks, Acceptance Review for Task-backed Changes, configured Specialists, and publication policy.
+`by change submit <change-id>` first returns a stored terminal No-Change completion or reconciles an existing owned pull request.
+Merged or closed pull request facts take precedence over current Change Base ancestry.
+An unchanged Repository Branch head returns stored publication success only when the owned pull request confirms the exact passing Candidate.
+Otherwise Submit fetches the recorded Change Base and requires `changeBaseSha` to be an ancestor of `headSha` before Candidate creation.
+The fetch updates only the remote-tracking ref and does not modify the Managed Worktree or Repository Branch.
+A Candidate is identified by `changeId`, `changeBaseSha`, and `headSha`.
+Validation compares the Candidate head directly with `changeBaseSha`.
+Tracked-tree equality between `headSha` and `changeBaseSha` defines No-Change regardless of commit topology or the starting commit.
+Submit runs Repository Preparation, Checks, Acceptance Review for Task-backed Changes, configured Specialists, and publication policy.
 Validation Runs belong to Candidates.
 Findings and artifacts belong to the Validation Run for that Candidate.
+Completed Submissions retain their point-in-time Candidate, publication, and Validation Policy Snapshot evidence.
+Current configuration applies to future or unfinished Submissions.
 
 `by change reconcile [<change-id>]` observes owned pull requests.
 A merged owned pull request closes the Change and completes its linked Task.

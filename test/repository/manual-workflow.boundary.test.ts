@@ -260,6 +260,51 @@ describe("installed manual workflow", () => {
     });
     rmSync(join(tasklessChange.worktreePath, ".prepare-attempted"));
 
+    writeFileSync(join(consumer, "base-advanced.txt"), "fresh Change Base\n");
+    expectSuccess(run("git", ["add", "base-advanced.txt"], consumer));
+    expectSuccess(
+      run(
+        "git",
+        [
+          "-c",
+          "user.name=But Why Test",
+          "-c",
+          "user.email=but-why@example.test",
+          "commit",
+          "-m",
+          "Advance Change Base",
+        ],
+        consumer,
+      ),
+    );
+
+    const behindBase = run(by, ["change", "submit", tasklessId, "--output", "json"], consumer);
+    expect(behindBase.status).toBe(1);
+    expect(JSON.parse(behindBase.stdout)).toMatchObject({
+      error: {
+        code: "change_base_not_ancestor",
+        branchRef: expect.stringContaining("but-why/"),
+        headSha: expect.any(String),
+        changeBaseRef: "refs/remotes/origin/main",
+        changeBaseSha: expect.any(String),
+      },
+    });
+    const unchangedAfterRejection = run(
+      by,
+      ["change", "show", tasklessId, "--output", "json"],
+      consumer,
+    );
+    expectSuccess(unchangedAfterRejection);
+    expect(JSON.parse(unchangedAfterRejection.stdout)).toMatchObject({
+      change: { id: tasklessId, state: "open" },
+      currentCandidate: null,
+      currentValidationRun: null,
+      pullRequest: null,
+    });
+
+    expectSuccess(
+      run("git", ["merge", "--no-edit", "refs/remotes/origin/main"], tasklessChange.worktreePath),
+    );
     const nothingToSubmit = run(by, ["change", "submit", tasklessId, "--output", "json"], consumer);
     expectSuccess(nothingToSubmit);
     expect(JSON.parse(nothingToSubmit.stdout)).toMatchObject({
@@ -329,8 +374,58 @@ describe("installed manual workflow", () => {
       consumer,
     );
     expectSuccess(taskBackedPrepared);
-    expect(JSON.parse(taskBackedPrepared.stdout)).toMatchObject({
+    const preparedTaskBackedChange = JSON.parse(taskBackedPrepared.stdout) as {
+      readonly change: { readonly id: string; readonly taskId: string; readonly readiness: string };
+      readonly worktreePath: string;
+    };
+    expect(preparedTaskBackedChange).toMatchObject({
       change: { id: taskBackedFailure.error.changeId, taskId, readiness: "ready" },
+      worktreePath: expect.any(String),
+    });
+    rmSync(join(preparedTaskBackedChange.worktreePath, ".prepare-attempted"));
+
+    writeFileSync(join(consumer, "base-advanced-again.txt"), "newer Change Base\n");
+    expectSuccess(run("git", ["add", "base-advanced-again.txt"], consumer));
+    expectSuccess(
+      run(
+        "git",
+        [
+          "-c",
+          "user.name=But Why Test",
+          "-c",
+          "user.email=but-why@example.test",
+          "commit",
+          "-m",
+          "Advance Change Base again",
+        ],
+        consumer,
+      ),
+    );
+    const taskBackedBehindBase = run(
+      by,
+      ["change", "submit", taskBackedFailure.error.changeId, "--output", "json"],
+      consumer,
+    );
+    expect(taskBackedBehindBase.status).toBe(1);
+    expect(JSON.parse(taskBackedBehindBase.stdout)).toMatchObject({
+      error: { code: "change_base_not_ancestor" },
+    });
+    const taskAfterRejection = run(by, ["task", "show", taskId, "--output", "json"], consumer);
+    expectSuccess(taskAfterRejection);
+    expect(JSON.parse(taskAfterRejection.stdout)).toMatchObject({
+      task: { id: taskId, state: "implementing" },
+    });
+    const taskBackedChangeAfterRejection = run(
+      by,
+      ["change", "show", taskBackedFailure.error.changeId, "--output", "json"],
+      consumer,
+    );
+    expectSuccess(taskBackedChangeAfterRejection);
+    expect(JSON.parse(taskBackedChangeAfterRejection.stdout)).toMatchObject({
+      change: { id: taskBackedFailure.error.changeId, state: "open" },
+      currentCandidate: null,
+      currentValidationRun: null,
+      pullRequest: null,
     });
 
     const cancelledTask = run(

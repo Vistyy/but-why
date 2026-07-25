@@ -254,9 +254,12 @@ The command creates a Change without a Task or Acceptance Context.
 It still creates and prepares a Managed Worktree.
 
 Its later Submission runs Repository Preparation, Checks, configured Specialists, and publication policy without Acceptance Review.
-Before Candidate capture, every Submission fetches the recorded remote Change Base again.
-A failed fetch rejects Submission without creating a Candidate or Validation Run.
-A successful fetch does not modify the Managed Worktree or Repository Branch.
+Submit first reconciles an existing owned pull request.
+For a new Submission, Submit fetches the recorded remote Change Base before Candidate capture.
+The Repository Branch must contain the exact fetched Change Base commit.
+If the ancestry check fails, Submit creates no Candidate or Validation Run and does not change Task progress or publication.
+Merge or rebase the Change Base into the Repository Branch before retrying.
+Fetch and ancestry inspection do not modify the Managed Worktree or Repository Branch.
 
 The taskless Change remains eligible for code-based validation and publication.
 
@@ -383,7 +386,9 @@ by change findings <change-id>
 by change validation-runs <change-id>
 ```
 
-A taskless Change with no changed Candidate returns `nothing_to_submit`, remains open, and suggests explicit cancellation.
+A taskless Change whose Repository Branch has the same tracked tree as the fetched Change Base returns `nothing_to_submit` and remains open.
+A Task-backed Change with the same tracked tree runs Acceptance Review and completes without a pull request when it passes.
+Commit topology and the Change starting commit do not determine No-Change.
 
 Cancel that unchanged taskless Change with:
 

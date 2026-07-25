@@ -81,13 +81,11 @@ const baselineStatements = [
     CREATE TABLE IF NOT EXISTS candidates (
       id TEXT PRIMARY KEY,
       change_id TEXT NOT NULL,
-      selected_base_ref TEXT NOT NULL,
-      resolved_target_sha TEXT NOT NULL,
-      comparison_base_sha TEXT NOT NULL,
+      change_base_sha TEXT NOT NULL,
       head_sha TEXT NOT NULL,
       created_at TEXT NOT NULL,
       FOREIGN KEY (change_id) REFERENCES changes(id),
-      UNIQUE (change_id, resolved_target_sha, comparison_base_sha, head_sha)
+      UNIQUE (change_id, change_base_sha, head_sha)
     )
   `,
   "CREATE INDEX IF NOT EXISTS candidates_change_id_created_at_idx ON candidates (change_id, created_at)",

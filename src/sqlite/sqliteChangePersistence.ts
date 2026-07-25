@@ -53,7 +53,7 @@ const columns = [
   "publication_pr_url AS publicationPrUrl",
   "no_change_candidate_id AS noChangeCandidateId",
   "no_change_validation_run_id AS noChangeValidationRunId",
-  "(SELECT resolved_target_sha FROM candidates WHERE id = no_change_candidate_id) AS noChangeResolvedTargetSha",
+  "(SELECT change_base_sha FROM candidates WHERE id = no_change_candidate_id) AS noChangeChangeBaseSha",
   "cleanup_state AS cleanupState",
   "cleanup_blocking_reason AS cleanupBlockingReason",
   "state",
@@ -262,23 +262,10 @@ const hasValidNoChangeEvidence = (
   input: CompleteNoChangeInput,
 ) =>
   Effect.gen(function* () {
-    if (change.startingCommit === null) return false;
-    const candidates = yield* sql<{
-      readonly changeId: string;
-      readonly comparisonBaseSha: string;
-      readonly headSha: string;
-    }>`
-      SELECT change_id AS changeId, comparison_base_sha AS comparisonBaseSha, head_sha AS headSha
-      FROM candidates WHERE id = ${input.candidateId}
+    const candidates = yield* sql<{ readonly changeId: string }>`
+      SELECT change_id AS changeId FROM candidates WHERE id = ${input.candidateId}
     `;
-    const candidate = candidates[0];
-    if (
-      candidate?.changeId !== change.id ||
-      candidate.comparisonBaseSha !== change.startingCommit ||
-      candidate.headSha !== change.startingCommit
-    ) {
-      return false;
-    }
+    if (candidates[0]?.changeId !== change.id) return false;
     const validationRuns = yield* sql<{
       readonly candidateId: string;
       readonly state: string;
@@ -450,12 +437,12 @@ const mapRow = (row: ChangeRow | undefined, operationName: string) =>
           noChangeCompletion:
             row.noChangeCandidateId === null ||
             row.noChangeValidationRunId === null ||
-            row.noChangeResolvedTargetSha === null
+            row.noChangeChangeBaseSha === null
               ? null
               : {
                   candidateId: row.noChangeCandidateId,
                   validationRunId: row.noChangeValidationRunId,
-                  resolvedTargetSha: row.noChangeResolvedTargetSha,
+                  changeBaseSha: row.noChangeChangeBaseSha,
                 },
           cleanup: { state: row.cleanupState, blockingReason: row.cleanupBlockingReason },
           state: row.state,
@@ -480,7 +467,7 @@ type ChangeRow = Omit<
   readonly prepareFailure: string | null;
   readonly noChangeCandidateId: string | null;
   readonly noChangeValidationRunId: string | null;
-  readonly noChangeResolvedTargetSha: string | null;
+  readonly noChangeChangeBaseSha: string | null;
   readonly cleanupState: ChangeCleanup["state"];
   readonly cleanupBlockingReason: string | null;
 } & SqliteChangePublicationRow;

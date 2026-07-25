@@ -137,16 +137,26 @@ Skills, extensions, tests, and other programmatic callers pass `--output json` a
 
 ### Validation and publication
 
-Every Submission fetches the recorded remote Change Base before Candidate capture.
-Candidate capture and validation use the newly fetched target commit.
-A changed target commit produces a new Candidate and prevents reuse of validation for the older target.
-A failed fetch rejects Submission before Candidate or Validation Run creation.
-Submission does not merge, rebase, reset, or otherwise modify the Managed Worktree.
+Submit first returns a stored terminal No-Change completion or reconciles an existing owned pull request.
+Merged or closed pull request facts take precedence over current Change Base ancestry.
+Submit returns stored publication success without a fetch only when the unchanged Repository Branch head is the exact passing Candidate confirmed by the owned pull request.
+Otherwise a new Submission fetches the recorded remote Change Base before Candidate capture.
+The exact fetched Change Base commit must be an ancestor of the Repository Branch head.
+A failed fetch or ancestry check rejects Submission before Candidate or Validation Run creation.
+The ancestry rejection does not change Task progress or publication state.
+Submission does not merge, rebase, reset, or otherwise modify the Managed Worktree or Repository Branch.
+A Candidate is identified by `changeId`, `changeBaseSha`, and `headSha`.
+Validation compares and reviews `headSha` directly against `changeBaseSha`.
+Evidence reuse requires the exact Candidate and cannot match `headSha` alone.
 Task-backed submission runs Repository Preparation, Checks, Acceptance Review, configured Specialists, and publication policy.
 Taskless submission runs Repository Preparation, Checks, configured Specialists, and publication policy without Acceptance Review.
-A taskless Change with no changed Candidate returns a structured nothing-to-submit result and remains open.
+Tracked-tree equality between the Repository Branch head and `changeBaseSha` defines No-Change regardless of commit topology or the starting commit.
+A taskless Change with no changed tracked tree returns a structured nothing-to-submit result and remains open.
 The response suggests explicit cancellation when the user intends to abandon the unchanged Change.
-Task-backed No-Change Submission remains the Acceptance Review path for determining whether approved Task intent already holds.
+A Task-backed No-Change Submission runs Acceptance Review to determine whether approved Task intent already holds.
+A passing No-Change Submission completes the Task and closes the Change without a pull request.
+Completed Submission evidence remains stable when the Change Base or configuration later changes.
+Current configuration applies to future or unfinished Submissions.
 
 Publication records exact PR identity on the owning Change.
 Task-backed PR metadata may use Task intent.

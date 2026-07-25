@@ -415,9 +415,8 @@ const captureCandidateFixture = (
         repositoryCommonDirectory: join(root, ".git"),
         branchRef,
         expectedChangeId: changeId,
-        selectedBaseRef: "refs/remotes/origin/main",
-        resolvedTargetSha: "target-sha",
-        comparisonBaseSha: "base-sha",
+        baseRef: "refs/remotes/origin/main",
+        changeBaseSha: "target-sha",
         headSha,
         now: capturedAt,
       });

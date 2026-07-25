@@ -71,7 +71,10 @@ Example:
 Repo Config does not duplicate Git facts such as default branch, publication remote, GitHub repository, or current head.
 But Why detects the publication remote at runtime.
 Change Start fetches its default branch or the named `--base` branch.
-Change Submit fetches the recorded remote Change Base before Candidate capture.
+For a new Submission, Change Submit fetches the recorded remote Change Base before Candidate capture.
+Change Submit rejects the Submission unless the Repository Branch contains the exact fetched Change Base commit.
+Completed Submissions retain their Validation Policy Snapshot and do not resolve later configuration changes.
+Future or unfinished Submissions resolve current Repo Config and Global Config.
 
 ## Global Config
 

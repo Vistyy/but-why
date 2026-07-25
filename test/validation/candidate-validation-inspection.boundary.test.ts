@@ -127,9 +127,7 @@ describe("Candidate-owned Validation Run inspection", () => {
         candidate: {
           id: fixture.candidateId,
           changeId: fixture.changeId,
-          selectedBaseRef: "refs/remotes/origin/main",
-          resolvedTargetSha: "target-sha",
-          comparisonBaseSha: "base-sha",
+          changeBaseSha: "target-sha",
           headSha: "head-sha",
           createdAt: now,
         },
@@ -387,9 +385,8 @@ const candidateValidationFixture = () =>
         capture.commitCapture({
           repositoryCommonDirectory: commonDirectory,
           branchRef: "refs/heads/feature",
-          selectedBaseRef: "refs/remotes/origin/main",
-          resolvedTargetSha: "target-sha",
-          comparisonBaseSha: "base-sha",
+          baseRef: "refs/remotes/origin/main",
+          changeBaseSha: "target-sha",
           headSha: "head-sha",
           now,
         }),
