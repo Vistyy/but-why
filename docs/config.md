@@ -79,18 +79,13 @@ Example:
 {
   "defaultAgentProfile": "pi",
   "interactiveSession": {
-    "agentProfile": "implementation"
+    "agentProfile": "pi"
   },
   "agentProfiles": {
     "pi": {
       "agentRuntime": "pi",
       "agentModel": "openai-codex/gpt-5.5",
       "thinking": "medium"
-    },
-    "implementation": {
-      "agentRuntime": "pi",
-      "agentModel": "openai-codex/gpt-5.6-luna",
-      "thinking": "high"
     }
   },
   "review": {
@@ -114,21 +109,16 @@ Herdr must be installed and running when `by change implement` is invoked.
 
 ## Interactive Session Agent Profile
 
-Global Config may select an Agent Profile for Interactive Sessions with `interactiveSession.agentProfile`.
-The selected name resolves only from Global Agent Profiles and must identify a Pi Agent Profile.
-Repo Config cannot select or override the Interactive Session Agent Profile.
-
-When the Pi Agent Profile selects `agentModel` or `thinking`, Change Implement passes each selected value explicitly to Pi.
-When `interactiveSession.agentProfile` is absent, Change Implement passes neither value and Pi uses its normal defaults.
-A missing or non-Pi selected profile rejects Change Implement before Herdr launches and preserves the Change.
+Global Config may set `interactiveSession.agentProfile` to a Global Agent Profile that uses Pi.
+Repo Config cannot select or override this profile.
+Change Implement passes configured `agentModel` and `thinking` values to Pi.
+If the setting is absent, Change Implement preserves the existing Pi launch behavior.
+A missing or non-Pi profile rejects Change Implement before Herdr launches and preserves the Change.
 
 ## Agent Profiles
 
-V1 runs reviewer agents through Pi.
-An Agent Profile contains `agentRuntime` and may contain `agentModel` and `thinking`.
-Reviewer operations require a non-empty Pi model identifier.
-The Interactive Session Agent Profile may omit `agentModel` or `thinking`; Pi supplies the omitted defaults.
-For Pi, `thinking` accepts `off`, `minimal`, `low`, `medium`, `high`, or `xhigh`.
+An Agent Profile selects an `agentRuntime` and may select `agentModel` and `thinking`.
+Reviewer operations require `agentModel`.
 
 A role with an explicit `agentProfile` resolves Repo Config profiles before Global Config profiles.
 A role without an explicit profile uses `defaultAgentProfile`, which resolves from Global Config only.
