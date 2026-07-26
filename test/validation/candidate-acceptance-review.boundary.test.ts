@@ -296,6 +296,199 @@ layer(acceptanceTemplateLayer)("Task-backed Candidate Acceptance Review", (it) =
     }),
   );
 
+  it.scoped("rechecks earlier Acceptance Findings after a skipped successor review", () =>
+    Effect.gen(function* () {
+      const earlierFinding = reviewerFinding("Earlier acceptance Finding");
+      const review = vi.fn<ReviewerAgentRuntime["review"]>(() =>
+        Effect.succeed({
+          ok: true,
+          report: { findings: [earlierFinding] },
+          attempts: 1,
+          stdout: "earlier acceptance report",
+        }),
+      );
+      const ready = yield* acceptanceReadyRepo({ review });
+      const earlier = yield* runTaskBackedCandidate(ready);
+      expect(earlier).toMatchObject({ ok: true, outcome: "blocked" });
+      if (!earlier.ok) return;
+
+      git(ready.repo, "commit", "--allow-empty", "-m", "intermediate checks fail");
+      const intermediate = yield* captureLocalCandidate({
+        cwd: ready.repo,
+        now: "2026-07-15T10:02:00.000Z",
+      });
+      if (!intermediate.ok) throw new Error(`Candidate capture failed: ${intermediate.code}`);
+      const skipped = yield* runTaskBackedCandidate(
+        ready,
+        {
+          ...passingValidationPolicy,
+          checks: [{ id: "fails", command: "false", timeoutSeconds: 1 }],
+        },
+        intermediate,
+      );
+      expect(skipped).toMatchObject({ ok: true, outcome: "blocked" });
+
+      git(ready.repo, "commit", "--allow-empty", "-m", "final candidate");
+      const successor = yield* captureLocalCandidate({
+        cwd: ready.repo,
+        now: successorNow,
+      });
+      if (!successor.ok) throw new Error(`Candidate capture failed: ${successor.code}`);
+
+      review.mockImplementationOnce(() =>
+        Effect.succeed({
+          ok: true,
+          report: { findings: [reviewerFinding("Provisional acceptance Finding")] },
+          attempts: 1,
+          stdout: "provisional acceptance report",
+        }),
+      );
+      review.mockImplementationOnce(() =>
+        Effect.succeed({
+          ok: true,
+          report: { findings: [reviewerFinding("Final acceptance Finding")] },
+          attempts: 1,
+          stdout: "final acceptance report",
+        }),
+      );
+
+      const final = yield* runTaskBackedCandidate(ready, passingValidationPolicy, successor);
+
+      expect(final).toMatchObject({ ok: true, outcome: "blocked" });
+      expect(review).toHaveBeenCalledTimes(3);
+      expect(review.mock.calls[1]?.[0].prompt).not.toContain(earlierFinding.title);
+      expect(review.mock.calls[2]?.[0].prompt).toContain(earlierFinding.title);
+    }),
+  );
+
+  it.scoped("preserves earlier Acceptance Findings after a reviewer Tooling Failure", () =>
+    Effect.gen(function* () {
+      const earlierFinding = reviewerFinding("Earlier acceptance Finding");
+      const failure = new ReviewerOutputContractFailed({
+        operationName: "decode_reviewer_output",
+        reviewer: "acceptance",
+        attempts: 2,
+        diagnostics: [],
+        message: "Intermediate output correction failed.",
+      });
+      const review = vi.fn<ReviewerAgentRuntime["review"]>(() =>
+        Effect.succeed({
+          ok: true,
+          report: { findings: [earlierFinding] },
+          attempts: 1,
+          stdout: "earlier acceptance report",
+        }),
+      );
+      const ready = yield* acceptanceReadyRepo({ review });
+      const earlier = yield* runTaskBackedCandidate(ready);
+      expect(earlier).toMatchObject({ ok: true, outcome: "blocked" });
+      if (!earlier.ok) return;
+
+      git(ready.repo, "commit", "--allow-empty", "-m", "intermediate reviewer fails");
+      const intermediate = yield* captureLocalCandidate({
+        cwd: ready.repo,
+        now: "2026-07-15T10:02:00.000Z",
+      });
+      if (!intermediate.ok) throw new Error(`Candidate capture failed: ${intermediate.code}`);
+      review.mockImplementationOnce(() =>
+        Effect.succeed({ ok: false, failure, attempts: 2, stdout: "" }),
+      );
+      const failed = yield* runTaskBackedCandidate(ready, passingValidationPolicy, intermediate);
+      expect(failed).toMatchObject({ ok: false, outcome: "tooling_failed" });
+
+      git(ready.repo, "commit", "--allow-empty", "-m", "final candidate");
+      const successor = yield* captureLocalCandidate({ cwd: ready.repo, now: successorNow });
+      if (!successor.ok) throw new Error(`Candidate capture failed: ${successor.code}`);
+
+      review.mockImplementationOnce(() =>
+        Effect.succeed({
+          ok: true,
+          report: { findings: [reviewerFinding("Provisional acceptance Finding")] },
+          attempts: 1,
+          stdout: "provisional acceptance report",
+        }),
+      );
+      review.mockImplementationOnce(() =>
+        Effect.succeed({
+          ok: true,
+          report: { findings: [reviewerFinding("Final acceptance Finding")] },
+          attempts: 1,
+          stdout: "final acceptance report",
+        }),
+      );
+
+      const final = yield* runTaskBackedCandidate(ready, passingValidationPolicy, successor);
+
+      expect(final).toMatchObject({ ok: true, outcome: "blocked" });
+      expect(review).toHaveBeenCalledTimes(4);
+      expect(review.mock.calls[2]?.[0].prompt).not.toContain(earlierFinding.title);
+      expect(review.mock.calls[3]?.[0].prompt).toContain(earlierFinding.title);
+    }),
+  );
+
+  it.scoped("clears earlier Acceptance Findings after a later clean report", () =>
+    Effect.gen(function* () {
+      const earlierFinding = reviewerFinding("Earlier acceptance Finding");
+      const review = vi.fn<ReviewerAgentRuntime["review"]>(() =>
+        Effect.succeed({
+          ok: true,
+          report: { findings: [earlierFinding] },
+          attempts: 1,
+          stdout: "earlier acceptance report",
+        }),
+      );
+      const ready = yield* acceptanceReadyRepo({ review });
+      const earlier = yield* runTaskBackedCandidate(ready);
+      expect(earlier).toMatchObject({ ok: true, outcome: "blocked" });
+      if (!earlier.ok) return;
+
+      git(ready.repo, "commit", "--allow-empty", "-m", "clean acceptance candidate");
+      const cleanCandidate = yield* captureLocalCandidate({
+        cwd: ready.repo,
+        now: "2026-07-15T10:02:00.000Z",
+      });
+      if (!cleanCandidate.ok) throw new Error(`Candidate capture failed: ${cleanCandidate.code}`);
+      review.mockImplementationOnce(() =>
+        Effect.succeed({
+          ok: true,
+          report: { findings: [] },
+          attempts: 1,
+          stdout: "provisional clean acceptance report",
+        }),
+      );
+      review.mockImplementationOnce(() =>
+        Effect.succeed({
+          ok: true,
+          report: { findings: [] },
+          attempts: 1,
+          stdout: "final clean acceptance report",
+        }),
+      );
+      const clean = yield* runTaskBackedCandidate(ready, passingValidationPolicy, cleanCandidate);
+      expect(clean).toMatchObject({ ok: true, outcome: "passed" });
+
+      git(ready.repo, "commit", "--allow-empty", "-m", "successor acceptance candidate");
+      const successor = yield* captureLocalCandidate({ cwd: ready.repo, now: successorNow });
+      if (!successor.ok) throw new Error(`Candidate capture failed: ${successor.code}`);
+      review.mockImplementationOnce(() =>
+        Effect.succeed({
+          ok: true,
+          report: { findings: [] },
+          attempts: 1,
+          stdout: "successor clean acceptance report",
+        }),
+      );
+
+      const final = yield* runTaskBackedCandidate(ready, passingValidationPolicy, successor);
+
+      expect(final).toMatchObject({ ok: true, outcome: "passed" });
+      expect(review).toHaveBeenCalledTimes(4);
+      expect(review.mock.calls[1]?.[0].prompt).not.toContain(earlierFinding.title);
+      expect(review.mock.calls[2]?.[0].prompt).toContain(earlierFinding.title);
+      expect(review.mock.calls[3]?.[0].prompt).not.toContain(earlierFinding.title);
+    }),
+  );
+
   it.scoped("records exhausted final Acceptance correction as a Tooling Failure", () =>
     Effect.gen(function* () {
       const earlierFinding = reviewerFinding("Earlier acceptance Finding");
@@ -416,6 +609,145 @@ layer(acceptanceTemplateLayer)("Task-backed Candidate Acceptance Review", (it) =
           (finding) => finding.title,
         ),
       ).toEqual([earlierFinding.title]);
+    }),
+  );
+
+  it.scoped("rechecks earlier Specialist Findings after a skipped successor review", () =>
+    Effect.gen(function* () {
+      const earlierFinding = reviewerFinding("Earlier specialist Finding");
+      const reports: readonly ReviewerAgentResult[] = [
+        { ok: true, report: { findings: [] }, attempts: 1, stdout: "accepted" },
+        {
+          ok: true,
+          report: { findings: [earlierFinding] },
+          attempts: 1,
+          stdout: "earlier specialist report",
+        },
+        { ok: true, report: { findings: [] }, attempts: 1, stdout: "final accepted" },
+        {
+          ok: true,
+          report: { findings: [reviewerFinding("Provisional specialist Finding")] },
+          attempts: 1,
+          stdout: "provisional specialist report",
+        },
+        {
+          ok: true,
+          report: { findings: [reviewerFinding("Final specialist Finding")] },
+          attempts: 1,
+          stdout: "final specialist report",
+        },
+      ];
+      let reportIndex = 0;
+      const review = vi.fn<ReviewerAgentRuntime["review"]>(() => {
+        const report = reports[reportIndex++];
+        if (report === undefined) throw new Error("Unexpected review request.");
+        return Effect.succeed(report);
+      });
+      const ready = yield* acceptanceReadyRepo({ review });
+      const policy = {
+        ...passingValidationPolicy,
+        specialistReviews: [specialistPolicy("standards")],
+      };
+
+      const earlier = yield* runTaskBackedCandidate(ready, policy);
+      expect(earlier).toMatchObject({ ok: true, outcome: "blocked" });
+      if (!earlier.ok) return;
+
+      git(ready.repo, "commit", "--allow-empty", "-m", "intermediate checks fail");
+      const intermediate = yield* captureLocalCandidate({
+        cwd: ready.repo,
+        now: "2026-07-15T10:02:00.000Z",
+      });
+      if (!intermediate.ok) throw new Error(`Candidate capture failed: ${intermediate.code}`);
+      const skipped = yield* runTaskBackedCandidate(
+        ready,
+        { ...policy, checks: [{ id: "fails", command: "false", timeoutSeconds: 1 }] },
+        intermediate,
+      );
+      expect(skipped).toMatchObject({ ok: true, outcome: "blocked" });
+
+      git(ready.repo, "commit", "--allow-empty", "-m", "final candidate");
+      const successor = yield* captureLocalCandidate({ cwd: ready.repo, now: successorNow });
+      if (!successor.ok) throw new Error(`Candidate capture failed: ${successor.code}`);
+      const final = yield* runTaskBackedCandidate(ready, policy, successor);
+
+      expect(final).toMatchObject({ ok: true, outcome: "blocked" });
+      expect(review).toHaveBeenCalledTimes(5);
+      expect(review.mock.calls[3]?.[0].prompt).not.toContain(earlierFinding.title);
+      expect(review.mock.calls[4]?.[0].prompt).toContain(earlierFinding.title);
+    }),
+  );
+
+  it.scoped("preserves and clears Specialist Findings across invalid and clean reports", () =>
+    Effect.gen(function* () {
+      const earlierFinding = reviewerFinding("Earlier specialist Finding");
+      const failure = new ReviewerOutputContractFailed({
+        operationName: "decode_reviewer_output",
+        reviewer: "standards",
+        attempts: 2,
+        diagnostics: [],
+        message: "Intermediate specialist output correction failed.",
+      });
+      const reports: readonly ReviewerAgentResult[] = [
+        { ok: true, report: { findings: [] }, attempts: 1, stdout: "accepted 1" },
+        {
+          ok: true,
+          report: { findings: [earlierFinding] },
+          attempts: 1,
+          stdout: "specialist 1",
+        },
+        { ok: true, report: { findings: [] }, attempts: 1, stdout: "accepted 2" },
+        { ok: false, failure, attempts: 2, stdout: "invalid specialist output" },
+        { ok: true, report: { findings: [] }, attempts: 1, stdout: "accepted 3" },
+        { ok: true, report: { findings: [] }, attempts: 1, stdout: "provisional specialist 3" },
+        { ok: true, report: { findings: [] }, attempts: 1, stdout: "final specialist 3" },
+        { ok: true, report: { findings: [] }, attempts: 1, stdout: "accepted 4" },
+        { ok: true, report: { findings: [] }, attempts: 1, stdout: "specialist 4" },
+      ];
+      let reportIndex = 0;
+      const review = vi.fn<ReviewerAgentRuntime["review"]>(() => {
+        const report = reports[reportIndex++];
+        if (report === undefined) throw new Error("Unexpected review request.");
+        return Effect.succeed(report);
+      });
+      const ready = yield* acceptanceReadyRepo({ review });
+      const policy = {
+        ...passingValidationPolicy,
+        specialistReviews: [specialistPolicy("standards")],
+      };
+
+      const first = yield* runTaskBackedCandidate(ready, policy);
+      expect(first).toMatchObject({ ok: true, outcome: "blocked" });
+      if (!first.ok) return;
+
+      git(ready.repo, "commit", "--allow-empty", "-m", "intermediate specialist fails");
+      const intermediate = yield* captureLocalCandidate({
+        cwd: ready.repo,
+        now: "2026-07-15T10:02:00.000Z",
+      });
+      if (!intermediate.ok) throw new Error(`Candidate capture failed: ${intermediate.code}`);
+      const failed = yield* runTaskBackedCandidate(ready, policy, intermediate);
+      expect(failed).toMatchObject({ ok: false, outcome: "tooling_failed" });
+
+      git(ready.repo, "commit", "--allow-empty", "-m", "clean specialist candidate");
+      const clean = yield* captureLocalCandidate({
+        cwd: ready.repo,
+        now: "2026-07-15T10:04:00.000Z",
+      });
+      if (!clean.ok) throw new Error(`Candidate capture failed: ${clean.code}`);
+      const cleanResult = yield* runTaskBackedCandidate(ready, policy, clean);
+      expect(cleanResult).toMatchObject({ ok: true, outcome: "passed" });
+
+      git(ready.repo, "commit", "--allow-empty", "-m", "successor specialist candidate");
+      const successor = yield* captureLocalCandidate({ cwd: ready.repo, now: successorNow });
+      if (!successor.ok) throw new Error(`Candidate capture failed: ${successor.code}`);
+      const final = yield* runTaskBackedCandidate(ready, policy, successor);
+
+      expect(final).toMatchObject({ ok: true, outcome: "passed" });
+      expect(review).toHaveBeenCalledTimes(9);
+      expect(review.mock.calls[5]?.[0].prompt).not.toContain(earlierFinding.title);
+      expect(review.mock.calls[6]?.[0].prompt).toContain(earlierFinding.title);
+      expect(review.mock.calls[8]?.[0].prompt).not.toContain(earlierFinding.title);
     }),
   );
 
