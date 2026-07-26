@@ -40,26 +40,31 @@ const startRunner = (lockFile: string, args: string[]) => {
 const runRunner = (lockFile: string, args: string[]): Promise<CommandResult> =>
   startRunner(lockFile, args).done;
 
-const runJust = (lockFile: string, args: string[]): Promise<CommandResult> =>
-  new Promise<CommandResult>((resolveResult) => {
-    const child = spawn("just", args, {
-      cwd: repositoryRoot,
-      env: {
-        ...process.env,
-        BY_CAPACITY_LOCK_FILE: lockFile,
-        BY_CAPACITY_LOCK_HELD: "0",
-        BY_TEST_SUITE: "",
-      },
-    });
-    let output = "";
-    child.stdout.on("data", (chunk: Buffer) => {
-      output += chunk.toString();
-    });
-    child.stderr.on("data", (chunk: Buffer) => {
-      output += chunk.toString();
-    });
+const startJust = (lockFile: string, args: string[]) => {
+  const child = spawn("just", args, {
+    cwd: repositoryRoot,
+    env: {
+      ...process.env,
+      BY_CAPACITY_LOCK_FILE: lockFile,
+      BY_CAPACITY_LOCK_HELD: "0",
+      BY_TEST_SUITE: "routine",
+    },
+  });
+  let output = "";
+  child.stdout.on("data", (chunk: Buffer) => {
+    output += chunk.toString();
+  });
+  child.stderr.on("data", (chunk: Buffer) => {
+    output += chunk.toString();
+  });
+  const done = new Promise<CommandResult>((resolveResult) => {
     child.on("close", (status) => resolveResult({ status, output }));
   });
+  return { child, done };
+};
+
+const runJust = (lockFile: string, args: string[]): Promise<CommandResult> =>
+  startJust(lockFile, args).done;
 
 const stopRunner = async (runnerProcess: ReturnType<typeof startRunner>): Promise<void> => {
   if (!runnerProcess.child.killed) runnerProcess.child.kill("SIGTERM");
@@ -142,23 +147,38 @@ afterEach(() => {
 });
 
 describe("quality interface", () => {
-  test("fails fast with the active complete workload", async () => {
+  test("waits for complete workloads while targeted tests remain unlocked", async () => {
     const directory = mkdtempSync(join(tmpdir(), "but-why-quality-lock-"));
     temporaryPaths.push(directory);
     const lockFile = join(directory, "capacity.lock");
-    const { holder, readyFile } = startHeldRunner(lockFile, directory, "complete test");
+    const { holder, readyFile, releaseFile } = startHeldRunner(
+      lockFile,
+      directory,
+      "complete coverage",
+    );
+    let complete: ReturnType<typeof startJust> | undefined;
 
     try {
       await waitForFile(readyFile);
-      const contender = await runRunner(lockFile, ["complete coverage", "sh", "-c", "exit 0"]);
+      complete = startJust(lockFile, ["test", "--reporter=dot"]);
+      await new Promise((resolveDelay) => setTimeout(resolveDelay, 100));
+      expect(complete.child.exitCode).toBeNull();
 
-      expect(contender.status).toBe(1);
-      expect(contender.output).toContain("active workload: complete test");
-      expect(contender.output).toContain("running complete coverage");
+      const targeted = await runJust(lockFile, ["test", "test/repository/module-seams.test.ts"]);
+      expect(targeted.status).toBe(0);
+      expect(targeted.output).toContain("1 passed");
+
+      writeFileSync(releaseFile, "release");
+      const completeResult = await complete.done;
+      expect(completeResult.status, completeResult.output).toBe(0);
     } finally {
+      if (complete?.child.exitCode === null) {
+        complete.child.kill("SIGTERM");
+        await complete.done;
+      }
       await stopRunner(holder);
     }
-  });
+  }, 30_000);
 
   test("forwards child exit status and releases the lock after interruption", async () => {
     const directory = mkdtempSync(join(tmpdir(), "but-why-quality-lock-"));
@@ -211,26 +231,6 @@ describe("quality interface", () => {
     expect(recovered.status).toBe(0);
   });
 
-  test("locks complete option-bearing commands while leaving targeted tests unlocked", async () => {
-    const directory = mkdtempSync(join(tmpdir(), "but-why-quality-lock-"));
-    temporaryPaths.push(directory);
-    const lockFile = join(directory, "capacity.lock");
-    const { holder, readyFile } = startHeldRunner(lockFile, directory, "complete coverage");
-
-    try {
-      await waitForFile(readyFile);
-      const complete = await runJust(lockFile, ["test", "--reporter=dot"]);
-      const targeted = await runJust(lockFile, ["test", "test/repository/module-seams.test.ts"]);
-
-      expect(complete.status).toBe(1);
-      expect(complete.output).toContain("active workload: complete coverage");
-      expect(targeted.status).toBe(0);
-      expect(targeted.output).toContain("1 passed");
-    } finally {
-      await stopRunner(holder);
-    }
-  });
-
   test("does not reacquire the lock for nested internal commands", async () => {
     const directory = mkdtempSync(join(tmpdir(), "but-why-quality-lock-"));
     temporaryPaths.push(directory);
@@ -271,29 +271,42 @@ describe("quality interface", () => {
   });
 
   if (Reflect.get(process.env, "BY_VERIFY_QUALITY_COVERAGE") === "1") {
-    test("coordinates complete and targeted coverage through Just", async () => {
+    test("waits for complete coverage while targeted coverage remains unlocked", async () => {
       const directory = mkdtempSync(join(tmpdir(), "but-why-quality-lock-"));
       temporaryPaths.push(directory);
       const lockFile = join(directory, "capacity.lock");
-      const { holder, readyFile } = startHeldRunner(lockFile, directory, "complete test");
+      const { holder, readyFile, releaseFile } = startHeldRunner(
+        lockFile,
+        directory,
+        "complete test",
+      );
+      let complete: ReturnType<typeof startJust> | undefined;
 
       rmSync(coverageArtifact, { force: true });
       try {
         await waitForFile(readyFile);
-        const complete = await runJust(lockFile, ["coverage", "--reporter=dot"]);
+        complete = startJust(lockFile, ["coverage", "--reporter=dot"]);
+        await new Promise((resolveDelay) => setTimeout(resolveDelay, 100));
+        expect(complete.child.exitCode).toBeNull();
+
         const targeted = await runJust(lockFile, [
           "coverage",
           "test/repository/module-seams.test.ts",
         ]);
 
-        expect(complete.status).toBe(1);
-        expect(complete.output).toContain("active workload: complete test");
         expect(targeted.status).toBe(0);
         expect(targeted.output).not.toMatch(/All files|Statements| %/);
+
+        writeFileSync(releaseFile, "release");
+        expect((await complete.done).status).toBe(0);
         expect(readFileSync(coverageArtifact, "utf8")).not.toBe("");
       } finally {
+        if (complete?.child.exitCode === null) {
+          complete.child.kill("SIGTERM");
+          await complete.done;
+        }
         await stopRunner(holder);
       }
-    });
+    }, 30_000);
   }
 });

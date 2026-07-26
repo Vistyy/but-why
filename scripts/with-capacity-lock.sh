@@ -19,10 +19,8 @@ status_file="${lock_file}.status"
 mkdir -p "$(dirname "$lock_file")"
 
 exec 9>"$lock_file"
-if ! flock -n 9; then
-    active_workload=$(cat "$status_file" 2>/dev/null || printf 'unknown')
-    printf 'error: another complete workload is already running (active workload: %s)\n' "$active_workload" >&2
-    printf 'help: wait for the active workload to finish before running %s\n' "$workload_class" >&2
+if ! flock 9; then
+    printf 'error: failed to acquire the capacity lock for %s\n' "$workload_class" >&2
     exit 1
 fi
 

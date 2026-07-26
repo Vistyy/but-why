@@ -108,8 +108,8 @@ A change that exceeds an operating budget must restore headroom by optimizing, c
 ### Heavy-workload coordination
 
 All supported commands that start a complete test or coverage workload use one internal capacity runner.
-The capacity runner acquires one shared fail-fast lock.
-A second heavy workload exits with an actionable message that identifies the active workload class.
+The capacity runner acquires one shared lock and waits when another heavy workload holds it.
+The lock records the active workload class for operational inspection.
 Nested internal recipes execute under the existing lock and do not reacquire it.
 
 The lock is a repository workflow guardrail, not a security boundary.
@@ -136,7 +136,7 @@ A workflow retains an end-to-end test only when its composition creates a distin
 Retained tests cover consequential Git facts, Managed Worktree safety, SQLite persistence and atomicity, cross-process writer behavior, and other external contracts.
 
 The shared capacity runner has focused command-level tests.
-Those tests verify lock contention, fail-fast output, child exit-code forwarding, interruption cleanup, and non-recursive composition.
+Those tests verify lock contention and release, child exit-code forwarding, interruption cleanup, and non-recursive composition.
 
 Reporter verification includes one successful run and one controlled failing run.
 The failing run must retain the test name, assertion difference, stack trace, and applicable captured output.
