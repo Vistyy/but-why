@@ -328,29 +328,45 @@ const listPreviousCandidateReviewerFindings = (
        SELECT change_id, created_at, id
        FROM candidates
        WHERE id = ?
-     ), immediately_preceding_candidate AS (
-       SELECT candidate.id
-       FROM candidates AS candidate
-       JOIN current_candidate AS current
-         ON current.change_id = candidate.change_id
-       WHERE candidate.created_at < current.created_at
-          OR (candidate.created_at = current.created_at AND candidate.id < current.id)
-       ORDER BY candidate.created_at DESC, candidate.id DESC
-       LIMIT 1
-     ), latest_reviewer_round AS (
+     ), latest_valid_reviewer_round AS (
        SELECT prior_round.validation_run_id
-       FROM candidate_validation_rounds AS prior_round
+       FROM candidates AS prior_candidate
+       JOIN current_candidate AS current
+         ON current.change_id = prior_candidate.change_id
        JOIN candidate_validation_runs AS prior_run
-         ON prior_run.id = prior_round.validation_run_id
-       WHERE prior_run.candidate_id = (SELECT id FROM immediately_preceding_candidate)
+         ON prior_run.candidate_id = prior_candidate.id
+       JOIN candidate_validation_rounds AS prior_round
+         ON prior_round.validation_run_id = prior_run.id
+       WHERE (
+         prior_candidate.created_at < current.created_at
+         OR (
+           prior_candidate.created_at = current.created_at
+           AND prior_candidate.id < current.id
+         )
+       )
          AND prior_round.phase = ?
          AND prior_round.producer = ?
-       ORDER BY prior_run.created_at DESC, prior_run.id DESC
+         AND (
+           prior_round.status = 'passed'
+           OR EXISTS (
+             SELECT 1
+             FROM candidate_validation_findings AS finding
+             WHERE finding.validation_run_id = prior_round.validation_run_id
+               AND finding.phase = prior_round.phase
+               AND finding.producer = prior_round.producer
+           )
+         )
+       ORDER BY
+         prior_candidate.created_at DESC,
+         prior_candidate.id DESC,
+         prior_run.created_at DESC,
+         prior_run.id DESC,
+         prior_round.round_number DESC
        LIMIT 1
      )
      SELECT ${findingColumns}
      FROM candidate_validation_findings
-     WHERE validation_run_id = (SELECT validation_run_id FROM latest_reviewer_round)
+     WHERE validation_run_id = (SELECT validation_run_id FROM latest_valid_reviewer_round)
        AND phase = ?
        AND producer = ?
      ORDER BY id`,

@@ -112,7 +112,7 @@ export const buildReviewerRevisionPrompt = (input: {
     "Blind provisional report:",
     encodeReviewerWireValue(input.provisionalReport),
     "",
-    "Findings from the immediately preceding Candidate:",
+    "Findings from the latest earlier valid report:",
     encodeReviewerWireValue({ findings: input.earlierFindings }),
     "",
     "Recheck the Candidate against the applicable instructions.",
