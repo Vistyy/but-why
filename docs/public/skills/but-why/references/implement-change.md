@@ -25,7 +25,8 @@ This step is complete when the committed Candidate satisfies the accepted intent
 
 Run `<but-why> change submit <change-id>`.
 Change Submit owns Acceptance Review, configured Specialists, the Validation Gate, and eligible publication.
-Use Change Submit instead of a separate generic code-review lifecycle.
+Do not run or delegate a separate review for a Change.
+Route all Change review through Change Submit.
 
 When Change Submit returns Findings, run `<but-why> change findings <change-id>`.
 Fix every applicable Finding in the Managed Worktree.
