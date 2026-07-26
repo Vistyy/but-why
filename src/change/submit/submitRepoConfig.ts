@@ -1,9 +1,7 @@
 import type { RepoCheckConfig, RepoConfig, RepoPrepareConfig } from "../../contracts/repoConfig.js";
-import type { ValidationSandboxMode } from "../validation/validationWorkspace.js";
 import { RepoConfigValidationFailed, type SubmitRejectionError } from "./submitRejectionErrors.js";
 
 export type SubmitRepoConfig = {
-  readonly sandboxMode: ValidationSandboxMode;
   readonly prepare?: SubmitPrepareConfig;
   readonly checks: readonly SubmitCheckConfig[];
 };
@@ -50,7 +48,6 @@ export const submitRepoConfig = (
   return {
     ok: true,
     config: {
-      sandboxMode: config.validation?.sandbox?.mode ?? "none",
       ...(prepare === undefined
         ? {}
         : {

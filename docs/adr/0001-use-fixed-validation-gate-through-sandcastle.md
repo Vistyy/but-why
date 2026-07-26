@@ -6,7 +6,7 @@ status: accepted
 
 But Why uses a fixed read-only Validation Gate instead of a generic pipeline language.
 Repositories configure Checks and reviewers inside the fixed phases, but they do not define arbitrary phases or step types.
-Sandcastle provides the v1 Validation Workspace, sandbox, command, and reviewer-process execution behind thin But Why domain seams.
+Sandcastle provides the v1 disposable Validation Workspace and host process execution behind thin But Why domain seams.
 
 ## Considered Options
 

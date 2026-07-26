@@ -34,7 +34,6 @@ export type RecordCandidateValidationPrepareRoundInput = Omit<
 >;
 
 export type CandidateValidationPolicySnapshot = {
-  readonly sandboxMode: string;
   readonly agentEnvironment?: AgentEnvironmentCommand;
   readonly prepare?: { readonly command: string; readonly timeoutSeconds: number };
   readonly checks: readonly {

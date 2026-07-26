@@ -40,7 +40,6 @@ export const resolveCandidateValidationPolicy = (input: {
   if (!specialistReviews.ok) return specialistReviews;
 
   const policy: CandidateValidationPolicy = {
-    sandboxMode: submit.config.sandboxMode,
     ...(submit.config.prepare === undefined ? {} : { prepare: submit.config.prepare }),
     checks: submit.config.checks,
     copyFiles: input.context.config.validationWorkspace?.copyFiles ?? [],

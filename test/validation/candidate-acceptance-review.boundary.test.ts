@@ -88,7 +88,6 @@ const specialistPolicy = (id: string) => ({
 });
 
 const passingValidationPolicy = {
-  sandboxMode: "none" as const,
   agentEnvironment: ["nix", "develop", "-c"] as const,
   checks: [{ id: "quality", command: "true", timeoutSeconds: 1 }],
   copyFiles: [],

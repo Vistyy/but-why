@@ -28,9 +28,8 @@ It explicitly loads the `package-manager-policy` and `web-search` extensions and
 It loads `AGENTS.md` and `CLAUDE.md` context files from the global agent location, parent directories, and the Validation Workspace.
 It limits reviewer tools to exactly `read`, `bash`, `grep`, `find`, `ls`, `web_search`, `web_fetch`, and `web_content_get`.
 The `package-manager-policy` extension registers no tools and continues to enforce its bash policy hooks.
-Docker and Podman Validation Workspaces mount only the fixed reviewer resource paths and available global context files read-only at the corresponding Pi paths.
 Repo Config may additionally define one Agent Environment command list for the Implementer and host-run reviewers.
-The Agent Environment does not apply to Repository Preparation, Checks, or Docker and Podman reviewer execution.
+The Agent Environment does not apply to Repository Preparation or Checks.
 The curated reviewer resource wrapper does not configure the Implementer or Interactive Session.
 The remaining agent execution identity design is tracked in [Open Questions: How should agent execution identities work?](open-questions.md#how-should-agent-execution-identities-work).
 
@@ -45,7 +44,8 @@ A Change may link to one Task.
 
 Task commands manage intent and lifecycle.
 Change commands manage implementation, validation, delivery, and reconciliation.
-Submission executes the Validation Gate against a Candidate.
+Submission executes the host-only Validation Gate against a Candidate.
+Sandcastle provides the internal disposable Validation Workspace and host process adapter.
 The Validation Gate reports its results through Change-owned interfaces.
 
 Task and Change own their persistence interfaces.

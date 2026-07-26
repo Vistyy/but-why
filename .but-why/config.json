@@ -8,9 +8,6 @@
     "timeoutSeconds": 1200
   },
   "validation": {
-    "sandbox": {
-      "mode": "none"
-    },
     "checks": [
       {
         "id": "quality",

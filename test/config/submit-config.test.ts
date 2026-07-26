@@ -13,7 +13,6 @@ describe("submit repository configuration", () => {
     expect(submitRepoConfig(checkConfig)).toEqual({
       ok: true,
       config: {
-        sandboxMode: "none",
         checks: [{ id: "quality", command: "true", timeoutSeconds: 1200 }],
       },
     });

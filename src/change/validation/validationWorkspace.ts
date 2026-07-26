@@ -2,8 +2,6 @@ import type { Sandbox } from "@ai-hero/sandcastle";
 
 import type { CleanupState } from "../validationRun/cleanup.js";
 
-export type ValidationSandboxMode = "none" | "docker" | "podman";
-
 export type ValidationWorkspaceCleanupResult = {
   readonly worktree: CleanupState;
   readonly tempRef: CleanupState;

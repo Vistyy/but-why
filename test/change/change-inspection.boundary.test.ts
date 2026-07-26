@@ -134,7 +134,7 @@ describe("Change inspection CLI", () => {
         persistence.startOrReuse({
           candidateId: secondCandidate.id,
           headSha: secondCandidate.headSha,
-          policy: { sandboxMode: "none", checks: [], copyFiles: [] },
+          policy: { checks: [], copyFiles: [] },
           now: secondNow,
         }),
       );
@@ -142,7 +142,7 @@ describe("Change inspection CLI", () => {
         persistence.startOrReuse({
           candidateId: firstCandidate.id,
           headSha: firstCandidate.headSha,
-          policy: { sandboxMode: "none", checks: [], copyFiles: [] },
+          policy: { checks: [], copyFiles: [] },
           now: commandNow,
         }),
       );
