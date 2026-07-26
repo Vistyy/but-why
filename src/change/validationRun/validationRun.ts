@@ -1,11 +1,8 @@
 export const validationPhase = {
-  preflight: "preflight",
   prepare: "prepare",
   checks: "checks",
   acceptanceReview: "acceptance_review",
   specialistReview: "specialist_review",
-  publishPr: "publish_pr",
-  watchPr: "watch_pr",
 } as const;
 
 const validationPhaseStatuses = [

@@ -49,7 +49,6 @@ The one-time utility was removed after successful execution and is not a support
 The repair preserved 26 Tasks, 8 Changes, 19 Candidates, 20 Validation Runs, 13 Findings, 217 Artifacts, and all other table rows.
 Foreign-key checks and SQLite integrity checks passed after the repair.
 The backup is stored beside Shared Repository State as `state.before-candidate-repair.sqlite` until dependent development work resumes.
-`test/repository/pre-release-candidate-state-repair.test.ts` retains executable evidence for the lossless transformation and collision guard.
 
 ## Change workflow
 

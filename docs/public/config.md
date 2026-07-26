@@ -281,12 +281,13 @@ A reviewer may select an Agent Profile explicitly:
     "checks": [{ "id": "quality", "command": "just quality" }]
   },
   "review": {
-    "intent": { "reviewer": "intent" }
+    "acceptance": { "agentProfile": "strict-reviewer" },
+    "specialists": ["security"]
   },
   "reviewers": {
-    "intent": {
+    "security": {
       "agentProfile": "strict-reviewer",
-      "instructionsFile": ".but-why/reviewers/intent.md"
+      "instructionsFile": ".but-why/reviewers/security.md"
     }
   },
   "agentProfiles": {

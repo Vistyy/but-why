@@ -58,17 +58,6 @@ const acceptanceReviewConfigSchema = Schema.Struct({
 const repoReviewConfigSchema = Schema.Struct({
   acceptance: Schema.optional(acceptanceReviewConfigSchema),
   specialists: Schema.optional(Schema.Array(configNameSchema)),
-  intent: Schema.optional(
-    Schema.Struct({
-      reviewer: configNameSchema,
-    }),
-  ),
-  quality: Schema.optional(
-    Schema.Struct({
-      mode: Schema.Literal("sequential", "parallel"),
-      reviewers: Schema.NonEmptyArray(configNameSchema),
-    }),
-  ),
 });
 
 const repoConfigSchema = Schema.Struct({
