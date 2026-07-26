@@ -255,8 +255,9 @@ User-level local configuration for reusable Agent Profiles, Acceptance overrides
 _Avoid_: Repository policy, project-tracked config
 
 **Agent Profile**:
-A named reusable selection of agent runtime, model, and thinking level.
-_Avoid_: Reviewer instructions, validation phase
+A named reusable configuration of an agent runtime, including its model, thinking level, and runtime-specific execution resources.
+An Agent Profile does not define an agent role's lifecycle or safety invariants.
+_Avoid_: Reviewer instructions, agent role, validation phase
 
 **Default Agent Profile**:
 The Global Agent Profile used when a reviewer does not select another profile explicitly.
