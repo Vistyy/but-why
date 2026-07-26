@@ -174,6 +174,11 @@ _Avoid_: Validation Workspace, current caller checkout
 The authenticated GitHub repository and base branch where But Why? may publish an exact passing Candidate.
 _Avoid_: Git remote name, owned PR
 
+**Owned Pull Request URL**:
+The URL identifying a Change's owned pull request.
+It is normally the browser-facing GitHub URL, with the GitHub API URL accepted only when GitHub does not provide the browser-facing URL.
+_Avoid_: Remote Change Branch
+
 **Implementer**:
 The human or external interactive agent responsible for writing and committing Change work and addressing returned Findings.
 _Avoid_: Acceptance Reviewer, Specialist Reviewer, But Why Fixer
