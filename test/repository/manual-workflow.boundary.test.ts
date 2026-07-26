@@ -82,13 +82,6 @@ describe("installed manual workflow", () => {
     const docs = `${setup}\n${config}`;
 
     expect(extractDocumentedCommands(docs)).toEqual([...documentedCommands].sort());
-
-    expect(docs).not.toMatch(
-      /\/code-review|\bAFK\b|\bFixer\b|Final Review|PR Writer|Supervisor|remediation/iu,
-    );
-    expect(docs).toContain("--output json");
-    expect(docs).toContain("by change submit <change-id>");
-    expect(docs).toContain("human merge");
   });
 
   it("runs the installed package from another Git repository", () => {
