@@ -91,6 +91,10 @@ export type LoadRepoLocalContextError =
       readonly code: "not_initialized";
     }
   | {
+      readonly code: "main_checkout_unavailable";
+      readonly path?: string;
+    }
+  | {
       readonly code: "invalid_repo_config";
       readonly error: import("../contracts/configErrors.js").RepoConfigValidationFailed;
     }
@@ -240,7 +244,13 @@ export const loadRepoLocalContext = (cwd: string): LoadRepoLocalContextResult =>
   const gitRoot = findGitRoot(cwd);
 
   if (!gitRoot.ok) {
-    return { ok: false, error: { code: "not_initialized" } };
+    return {
+      ok: false,
+      error:
+        gitRoot.code === "main_checkout_unavailable"
+          ? { code: gitRoot.code, ...(gitRoot.path === undefined ? {} : { path: gitRoot.path }) }
+          : { code: "not_initialized" },
+    };
   }
 
   const paths = repoLocalPaths(gitRoot.root, gitRoot.commonDirectory);
