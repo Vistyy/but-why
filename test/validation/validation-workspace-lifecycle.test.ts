@@ -1,3 +1,6 @@
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { homedir, tmpdir } from "node:os";
+import { join } from "node:path";
 import { expect, it } from "@effect/vitest";
 import { Effect, Exit, Fiber } from "effect";
 import { afterEach, describe, vi } from "vitest";
@@ -386,6 +389,97 @@ describe("Validation Workspace scoped lifecycle", () => {
     }),
   );
 
+  it.scoped("mounts fixed reviewer Pi resources read-only for container workspaces", () =>
+    Effect.gen(function* () {
+      for (const sandboxMode of ["docker", "podman"] as const) {
+        const providerOptions: unknown[] = [];
+        const createValidationWorkspace = yield* Effect.promise(() =>
+          loadCreateValidationWorkspace([], {
+            onSandboxProvider: (options) => providerOptions.push(options),
+          }),
+        );
+
+        const result = yield* createValidationWorkspace({ ...input, sandboxMode });
+
+        expect(result).toMatchObject({ ok: true });
+        expect(providerOptions).toHaveLength(1);
+        const mounts = (
+          providerOptions[0] as {
+            readonly mounts: readonly {
+              readonly hostPath: string;
+              readonly sandboxPath: string;
+              readonly readonly: boolean;
+            }[];
+          }
+        ).mounts;
+        expect(mounts).toEqual(
+          expect.arrayContaining([
+            {
+              hostPath: join(homedir(), ".pi", "agent", "extensions/package-manager-policy"),
+              sandboxPath: "/home/agent/.pi/agent/extensions/package-manager-policy",
+              readonly: true,
+            },
+            {
+              hostPath: join(homedir(), ".pi", "agent", "skills/codebase-design"),
+              sandboxPath: "/home/agent/.pi/agent/skills/codebase-design",
+              readonly: true,
+            },
+          ]),
+        );
+        const webSearchMount = mounts.find(
+          (mount) => mount.sandboxPath === "/home/agent/.pi/agent/extensions/web-search",
+        );
+        expect(webSearchMount?.hostPath).toMatch(/but-why-reviewer-web-search-.*\/web-search$/);
+        expect(mounts.every((mount) => mount.readonly === true)).toBe(true);
+      }
+    }),
+  );
+
+  it.scoped("mounts parent-directory context into container workspaces", () =>
+    Effect.gen(function* () {
+      const parent = mkdtempSync(join(tmpdir(), "but-why-parent-context-"));
+      const repoRoot = join(parent, "repo");
+      mkdirSync(repoRoot);
+      writeFileSync(join(parent, "AGENTS.md"), "PARENT_AGENTS_MARKER\n");
+      writeFileSync(join(parent, "CLAUDE.md"), "PARENT_CLAUDE_MARKER\n");
+      let parentContext = "";
+
+      try {
+        const createValidationWorkspace = yield* Effect.promise(() =>
+          loadCreateValidationWorkspace([], {
+            onSandboxProvider: (options) => {
+              const mounts = (
+                options as {
+                  readonly mounts: readonly {
+                    readonly hostPath: string;
+                    readonly sandboxPath: string;
+                  }[];
+                }
+              ).mounts;
+              const parentMount = mounts.find(
+                (mount) => mount.sandboxPath === "/home/agent/AGENTS.md",
+              );
+              if (parentMount !== undefined)
+                parentContext = readFileSync(parentMount.hostPath, "utf8");
+            },
+          }),
+        );
+
+        const result = yield* createValidationWorkspace({
+          ...input,
+          repoRoot,
+          sandboxMode: "docker",
+        });
+
+        expect(result).toMatchObject({ ok: true });
+        expect(parentContext).toContain("PARENT_AGENTS_MARKER");
+        expect(parentContext).toContain("PARENT_CLAUDE_MARKER");
+      } finally {
+        rmSync(parent, { force: true, recursive: true });
+      }
+    }),
+  );
+
   it.scoped("runs acquired-resource cleanup when the workflow defects", () =>
     Effect.gen(function* () {
       const events: string[] = [];
@@ -424,6 +518,7 @@ type FakeOptions = {
   readonly worktreeCleanup?: "removed" | "failed";
   readonly worktreeDisappearsAfterFailedRemoval?: boolean;
   readonly tempRefCleanup?: "removed" | "failed";
+  readonly onSandboxProvider?: (options: unknown) => void;
 };
 
 const loadCreateValidationWorkspace = async (
@@ -465,6 +560,20 @@ const loadCreateValidationWorkspace = async (
           return { exitCode: 0, stdout: `${input.submittedSha}\n`, stderr: "" };
         },
       };
+    },
+  }));
+
+  vi.doMock("@ai-hero/sandcastle/sandboxes/docker", () => ({
+    docker: (providerOptions: unknown) => {
+      options.onSandboxProvider?.(providerOptions);
+      return {};
+    },
+  }));
+
+  vi.doMock("@ai-hero/sandcastle/sandboxes/podman", () => ({
+    podman: (providerOptions: unknown) => {
+      options.onSandboxProvider?.(providerOptions);
+      return {};
     },
   }));
 

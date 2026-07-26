@@ -27,7 +27,7 @@ After trustworthy usage exists, decide whether automatic work needs user-defined
 
 ## How should agent execution identities work?
 
-V1 may use a temporary hard-coded Pi wrapper to isolate reviewer resources from the user's normal Pi session.
+V1 uses a fixed hard-coded Pi wrapper to isolate the curated reviewer resources from the user's normal Pi session.
 The permanent design must define how each agent role selects its tools, extensions, skills, context, settings, runtime, model, and thinking level.
 The design must also decide which controls belong to Global Config, Repo Config, and But Why-owned defaults.
 

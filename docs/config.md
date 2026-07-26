@@ -158,6 +158,24 @@ A role with an explicit `agentProfile` resolves Repo Config profiles before Glob
 A role without an explicit profile uses `defaultAgentProfile`, which resolves from Global Config only.
 Profile validation is lazy so unrelated commands remain usable when an unused profile is invalid.
 
+## Reviewer Pi resources
+
+Acceptance Review and Specialist Review use the same fixed curated Pi resource wrapper.
+
+The wrapper:
+
+- The wrapper disables extension, skill, prompt template, and theme discovery.
+- The wrapper loads `package-manager-policy` and `web-search` from `~/.pi/agent/extensions/`.
+- The wrapper loads `codebase-design` from `~/.pi/agent/skills/`.
+- The wrapper keeps `AGENTS.md` and `CLAUDE.md` context discovery enabled.
+- The wrapper allows exactly `read`, `bash`, `grep`, `find`, `ls`, `web_search`, `web_fetch`, and `web_content_get`.
+
+The `package-manager-policy` extension adds no tools and continues to enforce its bash policy hooks.
+Docker and Podman Validation Workspaces mount the fixed reviewer resource paths and available global context files read-only at the corresponding Pi paths.
+The wrapper is a But Why-owned reviewer default.
+It is not Agent Environment configuration and it is not configurable through Repo Config or Global Config.
+Agent Profiles continue to select reviewer model and thinking values only.
+
 ## Acceptance Review
 
 Acceptance is always enabled for Task-backed submission.
