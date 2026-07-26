@@ -1,6 +1,6 @@
-import { existsSync, lstatSync } from "node:fs";
-import { homedir } from "node:os";
-import { join } from "node:path";
+import { existsSync, lstatSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { homedir, tmpdir } from "node:os";
+import { dirname, join } from "node:path";
 
 import {
   createSandbox,
@@ -145,18 +145,23 @@ const initialCleanupResult: ValidationWorkspaceCleanupResult = {
   tempRef: "not_created",
 };
 
-const validationSandboxProvider = (mode: ValidationSandboxMode): SandboxProvider => {
+const validationSandboxProvider = (
+  mode: ValidationSandboxMode,
+  parentContextPath: string | undefined,
+): SandboxProvider => {
   switch (mode) {
     case "none":
       return noSandbox();
     case "docker":
-      return docker({ mounts: reviewerPiResourceMounts() });
+      return docker({ mounts: reviewerPiResourceMounts(parentContextPath) });
     case "podman":
-      return podman({ mounts: reviewerPiResourceMounts() });
+      return podman({ mounts: reviewerPiResourceMounts(parentContextPath) });
   }
 };
 
-const reviewerPiResourceMounts = (): readonly MountConfig[] => {
+const reviewerPiResourceMounts = (
+  parentContextPath: string | undefined,
+): readonly MountConfig[] => {
   const agentRoot = join(homedir(), ".pi", "agent");
   const requiredResources = [
     "extensions/package-manager-policy",
@@ -170,6 +175,15 @@ const reviewerPiResourceMounts = (): readonly MountConfig[] => {
   return [
     ...requiredResources.map((resource) => reviewerPiMount(agentRoot, resource)),
     ...contextFiles.map((file) => reviewerPiMount(agentRoot, file)),
+    ...(parentContextPath === undefined
+      ? []
+      : [
+          {
+            hostPath: parentContextPath,
+            sandboxPath: "/home/agent/AGENTS.md",
+            readonly: true,
+          },
+        ]),
   ];
 };
 
@@ -178,6 +192,34 @@ const reviewerPiMount = (agentRoot: string, resource: string): MountConfig => ({
   sandboxPath: `/home/agent/.pi/agent/${resource}`,
   readonly: true,
 });
+
+const createReviewerParentContextFile = (repoRoot: string): string | undefined => {
+  const contextParts: string[] = [];
+  let directory = dirname(repoRoot);
+
+  while (true) {
+    for (const file of ["AGENTS.md", "CLAUDE.md"]) {
+      const path = join(directory, file);
+      if (!existsSync(path)) continue;
+      try {
+        contextParts.unshift(`<!-- ${path} -->\n${readFileSync(path, "utf8")}`);
+      } catch {
+        // Ignore unreadable parent context files. Pi also treats them as unavailable.
+      }
+    }
+
+    const parent = dirname(directory);
+    if (parent === directory) break;
+    directory = parent;
+  }
+
+  if (contextParts.length === 0) return undefined;
+
+  const contextDirectory = mkdtempSync(join(tmpdir(), "but-why-reviewer-context-"));
+  const contextPath = join(contextDirectory, "AGENTS.md");
+  writeFileSync(contextPath, contextParts.join("\n\n"));
+  return contextPath;
+};
 
 export const createValidationWorkspace = (
   input: CreateValidationWorkspaceInput,
@@ -468,11 +510,21 @@ const acquireSandcastleWorktree = (
     );
 
     state.worktreePath = state.expectedWorktreePath;
+    const parentContextPath =
+      input.sandboxMode === "none"
+        ? undefined
+        : yield* Effect.acquireRelease(
+            Effect.sync(() => createReviewerParentContextFile(input.repoRoot)),
+            (path) =>
+              Effect.sync(() => {
+                if (path !== undefined) rmSync(dirname(path), { force: true, recursive: true });
+              }),
+          );
     const worktree = yield* adapters.createSandcastleWorktree({
       repoRoot: input.repoRoot,
       tempRefName: state.tempRefName,
       copyFiles: input.copyFiles,
-      sandboxProvider: validationSandboxProvider(input.sandboxMode),
+      sandboxProvider: validationSandboxProvider(input.sandboxMode, parentContextPath),
     });
 
     if (!worktree.ok) {

@@ -1,4 +1,5 @@
-import { homedir } from "node:os";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, it } from "@effect/vitest";
 import { Effect, Exit, Fiber } from "effect";
@@ -431,6 +432,51 @@ describe("Validation Workspace scoped lifecycle", () => {
           ]),
         );
         expect(mounts.every((mount) => mount.readonly === true)).toBe(true);
+      }
+    }),
+  );
+
+  it.scoped("mounts parent-directory context into container workspaces", () =>
+    Effect.gen(function* () {
+      const parent = mkdtempSync(join(tmpdir(), "but-why-parent-context-"));
+      const repoRoot = join(parent, "repo");
+      mkdirSync(repoRoot);
+      writeFileSync(join(parent, "AGENTS.md"), "PARENT_AGENTS_MARKER\n");
+      writeFileSync(join(parent, "CLAUDE.md"), "PARENT_CLAUDE_MARKER\n");
+      let parentContext = "";
+
+      try {
+        const createValidationWorkspace = yield* Effect.promise(() =>
+          loadCreateValidationWorkspace([], {
+            onSandboxProvider: (options) => {
+              const mounts = (
+                options as {
+                  readonly mounts: readonly {
+                    readonly hostPath: string;
+                    readonly sandboxPath: string;
+                  }[];
+                }
+              ).mounts;
+              const parentMount = mounts.find(
+                (mount) => mount.sandboxPath === "/home/agent/AGENTS.md",
+              );
+              if (parentMount !== undefined)
+                parentContext = readFileSync(parentMount.hostPath, "utf8");
+            },
+          }),
+        );
+
+        const result = yield* createValidationWorkspace({
+          ...input,
+          repoRoot,
+          sandboxMode: "docker",
+        });
+
+        expect(result).toMatchObject({ ok: true });
+        expect(parentContext).toContain("PARENT_AGENTS_MARKER");
+        expect(parentContext).toContain("PARENT_CLAUDE_MARKER");
+      } finally {
+        rmSync(parent, { force: true, recursive: true });
       }
     }),
   );
