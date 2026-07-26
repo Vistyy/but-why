@@ -1,5 +1,7 @@
 import { existsSync } from "node:fs";
+import { join } from "node:path";
 
+import { repoAgentEnvironment } from "../agent/agentEnvironment.js";
 import { Effect } from "effect";
 
 import type { ReviewerAgentRuntime } from "../agent/reviewerAgentRuntime.js";
@@ -13,8 +15,14 @@ import {
 } from "./candidateCapture/localGitCandidate.js";
 import { cleanupChangeResources } from "./localChangeCleanupGit.js";
 import { openChangeReconciliation } from "./reconcileChange.js";
-import { openChangeSubmit, type ChangeSubmit, type ChangeSubmitResult } from "./submitChange.js";
+import {
+  openChangeSubmit,
+  type AgentEnvironmentResolution,
+  type ChangeSubmit,
+  type ChangeSubmitResult,
+} from "./submitChange.js";
 import { loadRepoLocalContext, type LoadRepoLocalContextError } from "../init/repoContext.js";
+import { readRepoConfig } from "../init/repoConfig.js";
 import { candidateValidationLayer } from "./candidateValidation/candidateValidationLayer.js";
 import { localCandidatePublicationGit } from "./publication/localCandidatePublicationGit.js";
 import type { RepositoryStorageError } from "../contracts/repositoryStorageError.js";
@@ -75,6 +83,17 @@ export const loadChangeSubmit = (input: {
           globalConfigPath: input.globalConfigPath,
           taskBacked,
         }),
+      resolveAgentEnvironment: (worktreePath): AgentEnvironmentResolution => {
+        const config = readRepoConfig(join(worktreePath, ".but-why", "config.json"));
+        if (!config.ok) {
+          return {
+            ok: false,
+            message: `Managed Worktree Repo Config is invalid: ${config.error.message}`,
+          };
+        }
+        const command = repoAgentEnvironment(config.config);
+        return command === undefined ? { ok: true } : { ok: true, command };
+      },
       publicationFor: (cwd) =>
         openCandidatePublication({
           changePersistence,

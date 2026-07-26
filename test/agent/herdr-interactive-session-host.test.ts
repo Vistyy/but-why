@@ -51,6 +51,7 @@ describe("Herdr Interactive Session Host", () => {
       initialPrompt: "Continue from the recorded decision.",
       agentModel: "openai-codex/gpt-5.6-luna",
       thinking: "high",
+      agentEnvironment: ["nix", "develop", "-c"],
     });
 
     expect(result).toEqual({ ok: true, host: "herdr", status: "started" });
@@ -71,7 +72,7 @@ describe("Herdr Interactive Session Host", () => {
         "pane",
         "run",
         "workspace-1:pane-1",
-        "PATH='/usr/local/bin:/opt/pi/bin' exec pi --name 'but-why-change-123' --model 'openai-codex/gpt-5.6-luna' --thinking 'high' 'Implement Change change-123 in this Managed Worktree.\n\nContinue from the recorded decision.'",
+        "PATH='/usr/local/bin:/opt/pi/bin' exec 'nix' 'develop' '-c' pi --name 'but-why-change-123' --model 'openai-codex/gpt-5.6-luna' --thinking 'high' 'Implement Change change-123 in this Managed Worktree.\n\nContinue from the recorded decision.'",
       ],
       ["agent", "rename", "workspace-1:pane-1", sessionName],
     ]);

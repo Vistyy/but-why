@@ -1,5 +1,6 @@
 import { Effect } from "effect";
 
+import type { AgentEnvironmentCommand } from "../agent/agentEnvironment.js";
 import type { CandidateValidationPolicyResolution } from "./candidateValidation/resolveCandidateValidationPolicy.js";
 import type {
   CandidateValidationFinding,
@@ -111,6 +112,11 @@ export type ChangeSubmitInput = {
   readonly now: string;
 };
 
+export type AgentEnvironmentResolution =
+  | { readonly ok: true }
+  | { readonly ok: true; readonly command: AgentEnvironmentCommand }
+  | { readonly ok: false; readonly message: string };
+
 export type ChangeSubmit = {
   readonly submit: (
     input: ChangeSubmitInput,
@@ -134,6 +140,7 @@ export const openChangeSubmit = (dependencies: {
   readonly taskPersistence: Pick<TaskPersistence, "getTaskById" | "transitionTaskState">;
   readonly reconciliation: ChangeReconciliation;
   readonly resolvePolicy: (taskBacked: boolean) => CandidateValidationPolicyResolution;
+  readonly resolveAgentEnvironment?: (worktreePath: string) => AgentEnvironmentResolution;
   readonly publicationFor: (cwd: string) => CandidatePublication;
   readonly refreshBase: (
     cwd: string,
@@ -184,6 +191,13 @@ const submitChange = (
     }
     const reconciliation = yield* reconcileBeforeSubmission(dependencies, change, input.now);
     if (!reconciliation.proceed) return reconciliation.result;
+    const agentEnvironment =
+      dependencies.resolveAgentEnvironment?.(change.worktreePath) ?? ({ ok: true } as const);
+    if (!agentEnvironment.ok) {
+      return { ok: false, code: "validation_policy_invalid", message: agentEnvironment.message };
+    }
+    const agentEnvironmentCommand =
+      "command" in agentEnvironment ? agentEnvironment.command : undefined;
     if (change.publication !== null && reconciliation.reconciled.status === "open") {
       const branchHead = yield* dependencies.readBranchHead(change.worktreePath, change.branchRef);
       if (!branchHead.ok) return branchHead;
@@ -222,12 +236,25 @@ const submitChange = (
         return { ok: true, status: "nothing_to_submit", changeId: change.id } as const;
       }
       if (change.publication === null) {
-        return yield* validateAndCompleteNoChange(dependencies, change, candidate, input.now);
+        return yield* validateAndCompleteNoChange(
+          dependencies,
+          change,
+          candidate,
+          input.now,
+          agentEnvironmentCommand,
+        );
       }
     }
     const target = detectPublicationTarget(dependencies, change, candidate);
     if (!target.ok) return githubTargetFailure(target);
-    return yield* validateAndPublish(dependencies, change, candidate, target.target, input.now);
+    return yield* validateAndPublish(
+      dependencies,
+      change,
+      candidate,
+      target.target,
+      input.now,
+      agentEnvironmentCommand,
+    );
   });
 
 const validateAndCompleteNoChange = (
@@ -235,6 +262,7 @@ const validateAndCompleteNoChange = (
   change: ReadyChange,
   candidate: CapturedCandidate,
   now: string,
+  agentEnvironment: AgentEnvironmentCommand | undefined,
 ): Effect.Effect<ChangeSubmitResult, RepositoryStorageError, CandidateValidation> =>
   Effect.gen(function* () {
     if (change.taskId === null || change.acceptanceContext === null) {
@@ -267,7 +295,7 @@ const validateAndCompleteNoChange = (
       ...candidateIdentity(candidate),
       noChange: true,
       acceptanceContext: change.acceptanceContext,
-      policy: policy.resolved.policy,
+      policy: withAgentEnvironment(policy.resolved.policy, agentEnvironment),
       now,
     });
     if (validationResult.outcome !== "passed") {
@@ -344,6 +372,7 @@ const validateAndPublish = (
   candidate: CapturedCandidate,
   target: ChangePublicationTarget,
   now: string,
+  agentEnvironment: AgentEnvironmentCommand | undefined,
 ): Effect.Effect<ChangeSubmitResult, RepositoryStorageError, CandidateValidation> =>
   Effect.gen(function* () {
     const policy = dependencies.resolvePolicy(change.acceptanceContext !== null);
@@ -367,12 +396,12 @@ const validateAndPublish = (
         ? yield* validation.validateTaskBackedCandidate({
             ...candidateIdentity(candidate),
             acceptanceContext: change.acceptanceContext,
-            policy: policy.resolved.policy,
+            policy: withAgentEnvironment(policy.resolved.policy, agentEnvironment),
             now,
           })
         : yield* validation.validateCandidate({
             ...candidateIdentity(candidate),
-            policy: policy.resolved.policy,
+            policy: withAgentEnvironment(policy.resolved.policy, agentEnvironment),
             now,
           });
     if (validationResult.outcome !== "passed") {
@@ -393,7 +422,7 @@ const validateAndPublish = (
       changeId: change.id,
       candidateId: candidate.candidateId,
       validationRunId: validationResult.validationRunId,
-      policy: policy.resolved.policy,
+      policy: withAgentEnvironment(policy.resolved.policy, agentEnvironment),
       target,
       now,
     });
@@ -503,6 +532,14 @@ const candidateIdentity = (candidate: CapturedCandidate) => ({
   candidateId: candidate.candidateId,
   changeBaseSha: candidate.changeBaseSha,
   headSha: candidate.headSha,
+});
+
+const withAgentEnvironment = <Policy extends object>(
+  policy: Policy,
+  agentEnvironment: AgentEnvironmentCommand | undefined,
+): Policy & { readonly agentEnvironment?: AgentEnvironmentCommand } => ({
+  ...policy,
+  ...(agentEnvironment === undefined ? {} : { agentEnvironment }),
 });
 
 const transitionTask = (

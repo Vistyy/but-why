@@ -22,9 +22,10 @@ The following top-level source folders have shared roles:
 - `src/sqlite/` contains SQLite persistence adapters.
 - `src/submissionEnvironment/` contains Git and GitHub submission-environment adapters.
 
-Acceptance Review and Specialist Review currently use a temporary hard-coded Pi resource wrapper that disables discovered reviewer resources and limits reviewer tools to `read`, `bash`, `grep`, `find`, and `ls`.
-This wrapper does not configure the Implementer or Interactive Session.
-The permanent design is tracked in [Open Questions: How should agent execution identities work?](open-questions.md#how-should-agent-execution-identities-work).
+Acceptance Review and Specialist Review use a temporary hard-coded Pi resource wrapper that disables discovered reviewer resources and limits reviewer tools to `read`, `bash`, `grep`, `find`, and `ls`.
+Repo Config may additionally define one Agent Environment command list for the Implementer and host-run reviewers.
+The Agent Environment does not apply to Repository Preparation, Checks, or Docker and Podman reviewer execution.
+The remaining agent execution identity design is tracked in [Open Questions: How should agent execution identities work?](open-questions.md#how-should-agent-execution-identities-work).
 
 No top-level source folder represents a migration stage.
 Change and Task composition modules stay inside their owning domain instead of using `local*` folders.
@@ -112,6 +113,6 @@ Callers that parse output pass `--output json`.
 
 ## Configuration
 
-Repo Config owns Repository Preparation, Checks, validation workspaces, and review policy.
+Repo Config owns Repository Preparation, Checks, validation workspaces, review policy, and the Agent Environment.
 Global Config owns Agent Profiles, reviewer defaults, and Interactive Session preferences.
 See [`docs/config.md`](config.md) for the configuration contract.

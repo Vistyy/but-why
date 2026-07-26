@@ -26,6 +26,10 @@ const repoValidationSandboxConfigSchema = Schema.Struct({
   mode: Schema.optional(Schema.Literal("none", "docker", "podman")),
 });
 
+const repoAgentEnvironmentConfigSchema = Schema.Struct({
+  command: Schema.NonEmptyArray(nonBlankStringSchema),
+});
+
 const repoPrepareConfigSchema = Schema.Struct({
   command: nonBlankStringSchema,
   timeoutSeconds: Schema.optional(timeoutSecondsSchema),
@@ -69,6 +73,7 @@ const repoReviewConfigSchema = Schema.Struct({
 
 const repoConfigSchema = Schema.Struct({
   taskPrefix: taskPrefixSchema,
+  agentEnvironment: Schema.optional(repoAgentEnvironmentConfigSchema),
   prepare: Schema.optional(repoPrepareConfigSchema),
   validation: Schema.optional(repoValidationConfigSchema),
   review: Schema.optional(repoReviewConfigSchema),
