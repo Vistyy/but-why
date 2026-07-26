@@ -1,5 +1,6 @@
 import { spawn } from "node:child_process";
 
+import { prependAgentEnvironment, shellQuote } from "../agent/agentEnvironment.js";
 import type {
   InteractiveSessionHost,
   InteractiveSessionLaunchInput,
@@ -99,7 +100,7 @@ const launchFailure = (message: string): InteractiveSessionLaunchResult => ({
 const piCommand = (input: InteractiveSessionLaunchInput, path: string | undefined): string =>
   [
     ...(path === undefined ? [] : [`PATH=${shellQuote(path)}`]),
-    "exec pi",
+    `exec ${prependAgentEnvironment("pi", input.agentEnvironment)}`,
     "--name",
     shellQuote(herdrSessionName(input.changeId)),
     ...(input.agentModel === undefined ? [] : ["--model", shellQuote(input.agentModel)]),
@@ -203,8 +204,6 @@ const openedWorktree = (source: string): OpenedWorktree | undefined => {
     ? { workspaceId, rootPaneId, alreadyOpen }
     : undefined;
 };
-
-const shellQuote = (value: string): string => `'${value.replaceAll("'", "'\\''")}'`;
 
 const herdrResult = (source: string): Record<string, unknown> | undefined => {
   const response = parseJson(source);

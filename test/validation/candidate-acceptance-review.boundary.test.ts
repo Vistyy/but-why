@@ -15,7 +15,10 @@ import {
 } from "../../src/change/candidateValidation/validateCandidate.js";
 import { candidateValidationForTest } from "../support/candidateValidation.js";
 import type { RepositoryStorageError } from "../../src/contracts/repositoryStorageError.js";
-import { ReviewerOutputContractFailed } from "../../src/change/validation/validationToolingFailures.js";
+import {
+  ReviewerOutputContractFailed,
+  SandcastleToolingFailed,
+} from "../../src/change/validation/validationToolingFailures.js";
 import type { TaskContextSnapshotV1 } from "../../src/change/validationRun/taskContextSnapshot.js";
 import {
   candidateReadyRepo,
@@ -86,6 +89,7 @@ const specialistPolicy = (id: string) => ({
 
 const passingValidationPolicy = {
   sandboxMode: "none" as const,
+  agentEnvironment: ["nix", "develop", "-c"] as const,
   checks: [{ id: "quality", command: "true", timeoutSeconds: 1 }],
   copyFiles: [],
   acceptanceReview: acceptancePolicy,
@@ -113,10 +117,14 @@ layer(acceptanceTemplateLayer)("Task-backed Candidate Acceptance Review", (it) =
         expect(result).toMatchObject({ ok: true, reused: false, outcome: "passed" });
         if (!result.ok) return;
         expect(review).toHaveBeenCalledOnce();
+        expect(yield* validation.getRun(result.validationRunId)).toMatchObject({
+          policy: { agentEnvironment: ["nix", "develop", "-c"] },
+        });
         expect(review).toHaveBeenCalledWith(
           expect.objectContaining({
             reviewer: "acceptance",
             profile: acceptancePolicy.profile,
+            agentEnvironment: ["nix", "develop", "-c"],
             prompt: expect.stringContaining(captured.headSha),
           }),
         );
@@ -470,6 +478,7 @@ layer(acceptanceTemplateLayer)("Task-backed Candidate Acceptance Review", (it) =
           "alpha",
         ]);
         for (const [input] of review.mock.calls.slice(1)) {
+          expect(input.agentEnvironment).toEqual(["nix", "develop", "-c"]);
           expect(input.availableArtifactRefs).toEqual(
             expect.arrayContaining([expect.stringContaining("/checks/quality/")]),
           );
@@ -502,6 +511,38 @@ layer(acceptanceTemplateLayer)("Task-backed Candidate Acceptance Review", (it) =
         );
       }),
   );
+  it.scoped("records a configured reviewer launch failure as a Validation Tooling Failure", () =>
+    Effect.gen(function* () {
+      const failure = new SandcastleToolingFailed({
+        operationName: "run_reviewer_agent",
+        message: "wrapper failed",
+      });
+      let calls = 0;
+      const ready = yield* acceptanceReadyRepo({
+        review: (input) => {
+          calls += 1;
+          expect(input.agentEnvironment).toEqual(["nix", "develop", "-c"]);
+          return Effect.succeed({ ok: false, failure, attempts: 1, stdout: "" });
+        },
+      });
+
+      const result = yield* runTaskBackedCandidate(ready);
+
+      expect(result).toMatchObject({ ok: false, outcome: "tooling_failed" });
+      expect(calls).toBe(1);
+      expect(yield* ready.validation.listToolingFailures(result.validationRunId)).toEqual([
+        expect.objectContaining({
+          errorKind: "sandcastle_tooling_failed",
+          operationName: "run_reviewer_agent",
+        }),
+      ]);
+      expect(yield* ready.validation.listRounds(result.validationRunId)).toEqual([
+        { producer: "quality", status: "passed" },
+        { producer: "acceptance", status: "failed" },
+      ]);
+    }),
+  );
+
   it.scoped("records structured-output exhaustion as tooling failure without a Finding", () =>
     Effect.gen(function* () {
       const failure = new ReviewerOutputContractFailed({

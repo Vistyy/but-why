@@ -1,3 +1,4 @@
+import type { AgentEnvironmentCommand } from "../../agent/agentEnvironment.js";
 import type { ResolvedPiAgentProfile } from "../../agent/agentProfiles.js";
 import type { ValidationToolingFailureRecordInput } from "../validation/validationToolingFailures.js";
 import type {
@@ -34,6 +35,7 @@ export type RecordCandidateValidationPrepareRoundInput = Omit<
 
 export type CandidateValidationPolicySnapshot = {
   readonly sandboxMode: string;
+  readonly agentEnvironment?: AgentEnvironmentCommand;
   readonly prepare?: { readonly command: string; readonly timeoutSeconds: number };
   readonly checks: readonly {
     readonly id: string;

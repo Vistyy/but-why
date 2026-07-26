@@ -1,6 +1,7 @@
 import type { Sandbox } from "@ai-hero/sandcastle";
 import { Context, Effect, Layer } from "effect";
 
+import type { AgentEnvironmentCommand } from "../../agent/agentEnvironment.js";
 import type { CandidateValidationOutcome } from "./candidateValidationRunStore.js";
 import type { ChangeValidationPersistence } from "../validation/changeValidationPersistence.js";
 import type { RepositoryStorageError } from "../../contracts/repositoryStorageError.js";
@@ -24,6 +25,7 @@ import type { TaskContextSnapshotV1 } from "../validationRun/taskContextSnapshot
 
 export type CandidateValidationPolicy = {
   readonly sandboxMode: ValidationSandboxMode;
+  readonly agentEnvironment?: AgentEnvironmentCommand;
   readonly prepare?: SubmitPrepareConfig;
   readonly checks: readonly SubmitCheckConfig[];
   readonly copyFiles: readonly string[];
@@ -254,12 +256,15 @@ const runCandidatePhases = (
   ValidationToolingFailure | RepositoryStorageError
 > =>
   Effect.fn("CandidateValidation.runPhases")(function* () {
+    const agentEnvironment =
+      input.policy.sandboxMode === "none" ? input.policy.agentEnvironment : undefined;
     if ("noChange" in input) {
       const acceptance = yield* runAcceptanceReviewPhase({
         validationRunId,
         candidate: candidateIdentity(input),
         acceptanceContext: input.acceptanceContext,
         policy: input.policy.acceptanceReview,
+        ...(agentEnvironment === undefined ? {} : { agentEnvironment }),
         runtime: dependencies.reviewerAgentRuntime,
         sandbox: activeWorkspace.sandbox,
         artifactsRoot: dependencies.artifactsRoot,
@@ -309,6 +314,7 @@ const runCandidatePhases = (
         candidate: candidateIdentity(input),
         acceptanceContext: input.acceptanceContext,
         policy: input.policy.acceptanceReview,
+        ...(agentEnvironment === undefined ? {} : { agentEnvironment }),
         runtime: dependencies.reviewerAgentRuntime,
         sandbox: activeWorkspace.sandbox,
         artifactsRoot: dependencies.artifactsRoot,
@@ -327,6 +333,7 @@ const runCandidatePhases = (
       validationRunId,
       candidate: candidateIdentity(input),
       policies: input.policy.specialistReviews,
+      ...(agentEnvironment === undefined ? {} : { agentEnvironment }),
       runtime: dependencies.reviewerAgentRuntime,
       sandbox: activeWorkspace.sandbox,
       artifactsRoot: dependencies.artifactsRoot,
@@ -349,6 +356,7 @@ const acceptanceOnlyPolicy = (
   policy: TaskBackedCandidateValidationPolicy,
 ): TaskBackedCandidateValidationPolicy => ({
   sandboxMode: policy.sandboxMode,
+  ...(policy.agentEnvironment === undefined ? {} : { agentEnvironment: policy.agentEnvironment }),
   checks: [],
   copyFiles: policy.copyFiles,
   specialistReviews: [],

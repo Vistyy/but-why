@@ -957,6 +957,14 @@ const implementResult = (result: ChangeImplementResult): CliResult => {
       help: [`Run \`by change prepare ${result.change.id}\`, then retry Change Implement.`],
     });
   }
+  if (result.code === "agent_environment_invalid") {
+    return runtimeError({
+      code: result.code,
+      message: result.message,
+      details: { changeId: result.change.id, worktreePath: result.change.worktreePath },
+      help: ["Fix Repo Config in the Managed Worktree, then retry Change Implement."],
+    });
+  }
   if ("message" in result) {
     return runtimeError({
       code: result.code,

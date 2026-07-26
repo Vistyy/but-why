@@ -1,8 +1,11 @@
 import { randomUUID } from "node:crypto";
+import { join } from "node:path";
 import { Effect } from "effect";
 
+import { repoAgentEnvironment } from "../agent/agentEnvironment.js";
 import type { InteractiveSessionAgentProfile } from "../agent/agentProfiles.js";
 import type { RepoLocalContext } from "../init/repoContext.js";
+import { readRepoConfig } from "../init/repoConfig.js";
 import type { RepositoryStorageError } from "../contracts/repositoryStorageError.js";
 import { parseRemoteChangeBaseRef } from "../submissionEnvironment/remoteChangeBase.js";
 import {
@@ -63,7 +66,7 @@ export type ChangeImplementResult =
   | {
       readonly ok: false;
       readonly change: ChangeStartRecord;
-      readonly code: "host_unavailable" | "launch_failed";
+      readonly code: "host_unavailable" | "launch_failed" | "agent_environment_invalid";
       readonly message: string;
     }
   | { readonly ok: false; readonly code: "change_not_found" | "change_not_open" }
@@ -197,6 +200,16 @@ const implementChange = (
     if (change.readiness !== changeReadiness.ready) {
       return { ok: false, code: "change_not_ready", change };
     }
+    const managedRepoConfig = readRepoConfig(join(change.worktreePath, ".but-why", "config.json"));
+    if (!managedRepoConfig.ok) {
+      return {
+        ok: false,
+        code: "agent_environment_invalid",
+        message: `Managed Worktree Repo Config is invalid: ${managedRepoConfig.error.message}`,
+        change,
+      };
+    }
+    const agentEnvironment = repoAgentEnvironment(managedRepoConfig.config);
     const launched = yield* Effect.tryPromise({
       try: () =>
         interactiveSessionHost.launch({
@@ -208,6 +221,7 @@ const implementChange = (
             ? {}
             : { agentModel: agentProfile.agentModel }),
           ...(agentProfile?.thinking === undefined ? {} : { thinking: agentProfile.thinking }),
+          ...(agentEnvironment === undefined ? {} : { agentEnvironment }),
         }),
       catch: (error) => (error instanceof Error ? error.message : String(error)),
     }).pipe(

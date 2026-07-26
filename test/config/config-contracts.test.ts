@@ -172,6 +172,15 @@ describe("configuration contracts", () => {
     );
   });
 
+  it("decodes a repository Agent Environment command", () => {
+    const config = {
+      taskPrefix: "BY",
+      agentEnvironment: { command: ["nix", "develop", "-c"] },
+    };
+
+    expect(right(decodeRepoConfig(config))).toEqual(config);
+  });
+
   it("decodes repository Acceptance overrides", () => {
     const config = {
       taskPrefix: "BY",
@@ -262,6 +271,11 @@ describe("repository configuration rejection matrix", () => {
       },
     ],
     ["prepare severity", { taskPrefix: "BY", prepare: { severity: "high" } }],
+    ["empty Agent Environment command", { taskPrefix: "BY", agentEnvironment: { command: [] } }],
+    [
+      "blank Agent Environment command entry",
+      { taskPrefix: "BY", agentEnvironment: { command: ["   "] } },
+    ],
     [
       "disabled Acceptance Review",
       { taskPrefix: "BY", review: { acceptance: { enabled: false } } },

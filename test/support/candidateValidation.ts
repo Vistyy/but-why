@@ -49,6 +49,8 @@ export const candidateValidationForTest = (input: {
 
   return {
     layer,
+    getRun: (validationRunId: string) =>
+      withPersistence((persistence) => persistence.getRunById(validationRunId)),
     listRounds: (validationRunId: string) =>
       withPersistence((persistence) =>
         Effect.map(persistence.listRounds(validationRunId), (rounds) =>
