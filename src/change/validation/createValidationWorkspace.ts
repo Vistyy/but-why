@@ -1,4 +1,13 @@
-import { existsSync, lstatSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { createRequire } from "node:module";
+import {
+  existsSync,
+  lstatSync,
+  mkdtempSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 
@@ -174,6 +183,7 @@ const reviewerPiResourceMounts = (
 
   return [
     ...requiredResources.map((resource) => reviewerPiMount(agentRoot, resource)),
+    ...piRuntimeDependencyMounts(),
     ...contextFiles.map((file) => reviewerPiMount(agentRoot, file)),
     ...(parentContextPath === undefined
       ? []
@@ -192,6 +202,41 @@ const reviewerPiMount = (agentRoot: string, resource: string): MountConfig => ({
   sandboxPath: `/home/agent/.pi/agent/${resource}`,
   readonly: true,
 });
+
+const piRuntimeDependencyMounts = (): readonly MountConfig[] => {
+  let piTuiEntry: string;
+  try {
+    piTuiEntry = createRequire(
+      join(homedir(), ".pi", "agent", "extensions", "web-search", "index.js"),
+    ).resolve("@earendil-works/pi-tui");
+  } catch {
+    return [];
+  }
+
+  const piTuiRoot = realpathSync(dirname(dirname(piTuiEntry)));
+  const dependencyRoot = dirname(dirname(piTuiRoot));
+  const piTuiSandboxPath = "/home/agent/.pi/agent/extensions/web-search/node_modules";
+  const dependencies = ["marked", "get-east-asian-width"];
+
+  return [
+    {
+      hostPath: piTuiRoot,
+      sandboxPath: `${piTuiSandboxPath}/@earendil-works/pi-tui`,
+      readonly: true,
+    },
+    ...dependencies
+      .map((dependency) => ({
+        dependency,
+        hostPath: join(dependencyRoot, dependency),
+      }))
+      .filter(({ hostPath }) => existsSync(hostPath))
+      .map(({ dependency, hostPath }) => ({
+        hostPath: realpathSync(hostPath),
+        sandboxPath: `${piTuiSandboxPath}/@earendil-works/pi-tui/node_modules/${dependency}`,
+        readonly: true,
+      })),
+  ];
+};
 
 const createReviewerParentContextFile = (repoRoot: string): string | undefined => {
   const contextParts: string[] = [];
