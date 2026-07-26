@@ -1,5 +1,8 @@
 {
   "taskPrefix": "BY",
+  "agentEnvironment": {
+    "command": ["nix", "develop", "-c"]
+  },
   "prepare": {
     "command": "pnpm install --frozen-lockfile --prefer-offline",
     "timeoutSeconds": 1200

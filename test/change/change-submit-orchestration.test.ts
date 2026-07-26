@@ -46,6 +46,7 @@ describe("Change Submit orchestration", () => {
           dependencies({
             events,
             change: readyChange(),
+            agentEnvironment: ["nix", "develop", "-c"],
             publication: {
               publish: () => {
                 events.push("publish");
@@ -59,9 +60,10 @@ describe("Change Submit orchestration", () => {
           }),
         );
         const validationLayer = Layer.succeed(CandidateValidation, {
-          validateCandidate: () =>
+          validateCandidate: (input) =>
             Effect.sync(() => {
               events.push("validate_taskless");
+              expect(input.policy.agentEnvironment).toEqual(["nix", "develop", "-c"]);
               return {
                 ok: true,
                 reused: false,
@@ -97,6 +99,38 @@ describe("Change Submit orchestration", () => {
           "publish",
         ]);
       }),
+  );
+
+  it.effect("rejects invalid Managed Worktree Agent Environment before Candidate capture", () =>
+    Effect.gen(function* () {
+      const events: string[] = [];
+      const submit = openChangeSubmit(
+        dependencies({
+          events,
+          change: readyChange(),
+          agentEnvironmentError: "Managed Worktree Repo Config is invalid.",
+        }),
+      );
+      const validationLayer = Layer.succeed(CandidateValidation, {
+        validateCandidate: () => Effect.die("Validation must not start"),
+        validateTaskBackedCandidate: () => Effect.die("Validation must not start"),
+        validateNoChange: () => Effect.die("Validation must not start"),
+        listFindings: () => Effect.succeed([]),
+        listToolingFailures: () => Effect.succeed([]),
+        listRounds: () => Effect.succeed([]),
+      });
+
+      const result = yield* submit
+        .submit({ changeId: "change-1", now })
+        .pipe(Effect.provide(validationLayer));
+
+      expect(result).toEqual({
+        ok: false,
+        code: "validation_policy_invalid",
+        message: "Managed Worktree Repo Config is invalid.",
+      });
+      expect(events).toEqual(["reconcile"]);
+    }),
   );
 
   it.effect("runs fresh validation when the fetched Change Base target advances", () =>
@@ -739,6 +773,7 @@ describe("Change Submit orchestration", () => {
             events,
             change,
             reconciliationStatus: "open",
+            agentEnvironmentError: "Managed Worktree Repo Config is invalid.",
             publication: {
               publish: () => {
                 throw new Error("Duplicate publication");
@@ -1109,6 +1144,8 @@ const dependencies = (input: {
   readonly events?: string[];
   readonly transitions?: string[];
   readonly taskBacked?: boolean;
+  readonly agentEnvironment?: readonly string[];
+  readonly agentEnvironmentError?: string;
   readonly findings?: readonly (typeof finding)[];
   readonly toolingFailures?: readonly (typeof toolingFailure)[];
   readonly publication?: PublicationFixture;
@@ -1203,6 +1240,12 @@ const dependencies = (input: {
           };
         }),
     } satisfies ChangeReconciliation,
+    resolveAgentEnvironment: () =>
+      input.agentEnvironmentError === undefined
+        ? input.agentEnvironment === undefined
+          ? { ok: true as const }
+          : { ok: true as const, command: input.agentEnvironment }
+        : { ok: false as const, message: input.agentEnvironmentError },
     resolvePolicy: () =>
       input.taskBacked
         ? ({

@@ -1,6 +1,8 @@
 import type { Sandbox } from "@ai-hero/sandcastle";
 import { Effect } from "effect";
 
+import type { AgentEnvironmentCommand } from "../../agent/agentEnvironment.js";
+
 import type { SpecialistReviewPolicy } from "./specialistReviewConfig.js";
 import type { ReviewerAgentRuntime } from "../../agent/reviewerAgentRuntime.js";
 import {
@@ -23,6 +25,7 @@ export type RunSpecialistReviewPhaseInput = {
     readonly headSha: string;
   };
   readonly policies: readonly SpecialistReviewPolicy[];
+  readonly agentEnvironment?: AgentEnvironmentCommand;
   readonly runtime: ReviewerAgentRuntime;
   readonly sandbox: Pick<Sandbox, "exec" | "run">;
   readonly artifactsRoot: string;
@@ -114,6 +117,7 @@ const runSpecialist = (
       availableArtifactRefs,
       prompt,
       profile: policy.profile,
+      ...(input.agentEnvironment === undefined ? {} : { agentEnvironment: input.agentEnvironment }),
     });
     yield* verifyIntegrity(input);
     const result =
@@ -129,6 +133,9 @@ const runSpecialist = (
               earlierFindings,
             }),
             profile: policy.profile,
+            ...(input.agentEnvironment === undefined
+              ? {}
+              : { agentEnvironment: input.agentEnvironment }),
           })
         : provisional;
     if (result !== provisional) yield* verifyIntegrity(input);

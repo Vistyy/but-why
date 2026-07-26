@@ -17,6 +17,9 @@ Top-level `prepare` is optional.
 ```json
 {
   "taskPrefix": "BY",
+  "agentEnvironment": {
+    "command": ["nix", "develop", "-c"]
+  },
   "prepare": {
     "command": "pnpm install --frozen-lockfile --prefer-offline",
     "timeoutSeconds": 1200
@@ -29,6 +32,28 @@ Top-level `prepare` is optional.
   }
 }
 ```
+
+`agentEnvironment.command` is an optional non-empty argument list.
+
+Each entry must be a non-empty string.
+
+But Why prepends this command to the complete Pi invocation for the Implementer's Interactive Session and for every host-run reviewer.
+
+Change Implement and Change Submit resolve the setting from the Change Managed Worktree, not the caller checkout.
+
+Missing configuration preserves direct Pi launch.
+
+An invalid configuration rejects the applicable command before agent launch and preserves the ready Change.
+
+A configured wrapper failure stops the agent operation.
+
+But Why never retries without the configured wrapper.
+
+The wrapper applies to reviewers only when `validation.sandbox.mode` is `none`.
+
+Docker and Podman reviewer execution does not use the host Agent Environment command.
+
+The wrapper does not alter Repository Preparation or Checks.
 
 After `by init`:
 
@@ -286,9 +311,9 @@ It keeps `AGENTS.md` and `CLAUDE.md` context discovery enabled.
 It allows exactly `read`, `bash`, `grep`, `find`, `ls`, `web_search`, `web_fetch`, and `web_content_get`.
 The `package-manager-policy` extension adds no tools and continues to enforce its bash policy hooks.
 Docker and Podman Validation Workspaces mount the fixed reviewer resource paths and available global context files read-only at the corresponding Pi paths.
-This wrapper does not configure `by change implement` or its Interactive Session.
-It is not Agent Environment configuration and is not configurable through Repo Config or Global Config.
-The permanent design is tracked in [Open Questions: How should agent execution identities work?](../open-questions.md#how-should-agent-execution-identities-work).
+Repo Config can separately define the Agent Environment for `by change implement` and host-run reviewers.
+The curated reviewer resource wrapper does not configure `by change implement` or its Interactive Session.
+The remaining agent execution identity design is tracked in [Open Questions: How should agent execution identities work?](../open-questions.md#how-should-agent-execution-identities-work).
 
 But Why validates profiles when an operation needs an agent, so unrelated commands remain available.
 

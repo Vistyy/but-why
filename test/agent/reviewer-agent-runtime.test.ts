@@ -62,15 +62,49 @@ describe("Pi reviewer agent runtime", () => {
         availableArtifactRefs: [],
         prompt: "Review the Candidate.",
         profile,
+        agentEnvironment: ["nix", "develop", "-c"],
       });
 
       expect(result).toMatchObject({ ok: true, attempts: 1 });
       expect(command).toBe(
-        "pi -p --mode json --model 'openai-codex/gpt-5.5' --thinking high --no-extensions --no-skills --no-prompt-templates --no-themes --extension ~/.pi/agent/extensions/package-manager-policy --extension ~/.pi/agent/extensions/web-search --skill ~/.pi/agent/skills/codebase-design --tools read,bash,grep,find,ls,web_search,web_fetch,web_content_get",
+        "'nix' 'develop' '-c' pi -p --mode json --model 'openai-codex/gpt-5.5' --thinking high --no-extensions --no-skills --no-prompt-templates --no-themes --extension ~/.pi/agent/extensions/package-manager-policy --extension ~/.pi/agent/extensions/web-search --skill ~/.pi/agent/skills/codebase-design --tools read,bash,grep,find,ls,web_search,web_fetch,web_content_get",
       );
       expect(command).not.toContain("--subagent");
       expect(command).not.toContain("--edit");
       expect(command).not.toContain("--write");
+    }),
+  );
+
+  it.effect("stops after a configured Agent Environment launch failure", () =>
+    Effect.gen(function* () {
+      let attempts = 0;
+      let command = "";
+      const result = yield* piReviewerAgentRuntime.review({
+        sandbox: {
+          run: async (options: Parameters<Pick<Sandbox, "run">["run"]>[0]) => {
+            attempts += 1;
+            command = options.agent.buildPrintCommand({
+              prompt: options.prompt ?? "",
+              dangerouslySkipPermissions: true,
+            }).command;
+            throw new Error("wrapper failed");
+          },
+        } as unknown as Pick<Sandbox, "run">,
+        reviewer: "acceptance",
+        validationRunId: "123e4567-e89b-42d3-a456-426614174000",
+        availableArtifactRefs: [],
+        prompt: "Review the Candidate.",
+        profile,
+        agentEnvironment: ["nix", "develop", "-c"],
+      });
+
+      expect(result).toMatchObject({
+        ok: false,
+        attempts: 1,
+        failure: { _tag: "SandcastleToolingFailed", message: "wrapper failed" },
+      });
+      expect(command.startsWith("'nix' 'develop' '-c' pi ")).toBe(true);
+      expect(attempts).toBe(1);
     }),
   );
 

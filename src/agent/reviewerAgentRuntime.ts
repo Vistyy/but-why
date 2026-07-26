@@ -1,6 +1,7 @@
 import { pi, type Sandbox, type SandboxRunResult } from "@ai-hero/sandcastle";
 import { Effect } from "effect";
 
+import { prependAgentEnvironment, type AgentEnvironmentCommand } from "./agentEnvironment.js";
 import type { ResolvedPiAgentProfile } from "./agentProfiles.js";
 import { parseTaggedReviewerOutput } from "./reviewerOutputWire.js";
 import { buildReviewerOutputCorrectionPrompt } from "./reviewerPrompts.js";
@@ -25,6 +26,7 @@ export type ReviewerAgentInput = {
   readonly availableArtifactRefs: readonly string[];
   readonly prompt: string;
   readonly profile: ResolvedPiAgentProfile;
+  readonly agentEnvironment?: AgentEnvironmentCommand;
 };
 
 export type ReviewerAgentResult =
@@ -46,7 +48,11 @@ const reviewWithPi = (input: ReviewerAgentInput): Effect.Effect<ReviewerAgentRes
     const initial = yield* Effect.either(
       runSandbox(() =>
         input.sandbox.run({
-          agent: isolatedPiReviewerAgent(input.profile.agentModel, input.profile.thinking),
+          agent: isolatedPiReviewerAgent(
+            input.profile.agentModel,
+            input.profile.thinking,
+            input.agentEnvironment,
+          ),
           prompt: input.prompt,
           maxIterations: 1,
           name: `${input.reviewer} Review`,
@@ -92,7 +98,11 @@ const reviewerPiResourceFlags = [
   "--tools read,bash,grep,find,ls,web_search,web_fetch,web_content_get",
 ].join(" ");
 
-const isolatedPiReviewerAgent = (model: string, thinking: ResolvedPiAgentProfile["thinking"]) => {
+const isolatedPiReviewerAgent = (
+  model: string,
+  thinking: ResolvedPiAgentProfile["thinking"],
+  agentEnvironment: AgentEnvironmentCommand | undefined,
+) => {
   const base = pi(model, {
     ...(thinking === undefined ? {} : { thinking }),
   });
@@ -103,7 +113,10 @@ const isolatedPiReviewerAgent = (model: string, thinking: ResolvedPiAgentProfile
       const command = base.buildPrintCommand(options);
       return {
         ...command,
-        command: `${command.command} ${reviewerPiResourceFlags}`,
+        command: prependAgentEnvironment(
+          `${command.command} ${reviewerPiResourceFlags}`,
+          agentEnvironment,
+        ),
       };
     },
   };

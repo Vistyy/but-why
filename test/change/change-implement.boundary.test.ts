@@ -108,6 +108,13 @@ describe("by change implement", () => {
         readonly change: { readonly id: string };
         readonly worktreePath: string;
       };
+      writeFileSync(
+        join(change.worktreePath, ".but-why", "config.json"),
+        JSON.stringify({
+          taskPrefix: "BY",
+          agentEnvironment: { command: ["nix", "develop", "-c"] },
+        }),
+      );
       const launches: unknown[] = [];
       const host: InteractiveSessionHost = {
         launch: async (input) => {
@@ -136,6 +143,7 @@ describe("by change implement", () => {
           repositoryPath: root,
           worktreePath: change.worktreePath,
           initialPrompt: undefined,
+          agentEnvironment: ["nix", "develop", "-c"],
         },
       ]);
 
@@ -287,6 +295,46 @@ describe("by change implement", () => {
         expect(launches).toBe(0);
         expect(after.stdout).toBe(before.stdout);
       }),
+  );
+
+  it.effect("rejects invalid Managed Worktree Repo Config before launching", () =>
+    Effect.gen(function* () {
+      const root = yield* readyRepository();
+      const started = yield* runByInProcessEffect(
+        root,
+        ["change", "start", "--output", "json"],
+        now,
+      );
+      const change = JSON.parse(started.stdout) as {
+        readonly change: { readonly id: string };
+        readonly worktreePath: string;
+      };
+      writeFileSync(
+        join(change.worktreePath, ".but-why", "config.json"),
+        JSON.stringify({ taskPrefix: "BY", agentEnvironment: { command: [] } }),
+      );
+      let launches = 0;
+
+      const result = yield* runByInProcessEffect(
+        root,
+        ["change", "implement", change.change.id, "--output", "json"],
+        now,
+        {
+          interactiveSessionHost: {
+            launch: async () => {
+              launches += 1;
+              return { ok: true, host: "herdr", status: "started" };
+            },
+          },
+        },
+      );
+
+      expect(result.status).toBe(1);
+      expect(JSON.parse(result.stdout)).toMatchObject({
+        error: { code: "agent_environment_invalid" },
+      });
+      expect(launches).toBe(0);
+    }),
   );
 
   it.effect("rejects a Change whose Repository Preparation has not succeeded", () =>

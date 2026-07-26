@@ -28,6 +28,9 @@ Example:
 ```json
 {
   "taskPrefix": "BY",
+  "agentEnvironment": {
+    "command": ["nix", "develop", "-c"]
+  },
   "prepare": {
     "command": "pnpm install --frozen-lockfile",
     "timeoutSeconds": 1200
@@ -75,6 +78,32 @@ For a new Submission, Change Submit fetches the recorded remote Change Base befo
 Change Submit rejects the Submission unless the Repository Branch contains the exact fetched Change Base commit.
 Completed Submissions retain their Validation Policy Snapshot and do not resolve later configuration changes.
 Future or unfinished Submissions resolve current Repo Config and Global Config.
+
+## Agent Environment
+
+Repo Config may define one `agentEnvironment.command` argument list for the repository's development tools.
+
+Every entry must be a non-empty string.
+
+But Why prepends the argument list to the complete Pi invocation after it resolves the Agent Profile.
+
+Change Implement reads the setting from the Change Managed Worktree.
+
+Change Submit reads the setting from the Change Managed Worktree and records it in the Validation Policy Snapshot.
+
+Missing configuration preserves direct Pi launch.
+
+An invalid configuration rejects Change Implement or Change Submit before agent launch and preserves the ready Change.
+
+A configured wrapper failure returns a launch or Validation Tooling Failure result.
+
+But Why does not retry the agent without the configured wrapper.
+
+The Agent Environment applies to host-run reviewers when `validation.sandbox.mode` is `none`.
+
+Docker and Podman reviewer execution does not use the host Agent Environment command.
+
+The Agent Environment does not alter Repository Preparation or Checks.
 
 ## Global Config
 

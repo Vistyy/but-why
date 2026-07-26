@@ -1,6 +1,8 @@
 import type { Sandbox } from "@ai-hero/sandcastle";
 import { Effect } from "effect";
 
+import type { AgentEnvironmentCommand } from "../../agent/agentEnvironment.js";
+
 import type { AcceptanceReviewPolicy } from "./acceptanceReviewConfig.js";
 import type { ReviewerAgentRuntime } from "../../agent/reviewerAgentRuntime.js";
 import {
@@ -25,6 +27,7 @@ export type RunAcceptanceReviewPhaseInput = {
   };
   readonly acceptanceContext: TaskContextSnapshotV1;
   readonly policy: AcceptanceReviewPolicy;
+  readonly agentEnvironment?: AgentEnvironmentCommand;
   readonly runtime: ReviewerAgentRuntime;
   readonly sandbox: Pick<Sandbox, "exec" | "run">;
   readonly artifactsRoot: string;
@@ -91,6 +94,7 @@ export const runAcceptanceReviewPhase = (
       availableArtifactRefs,
       prompt,
       profile: input.policy.profile,
+      ...(input.agentEnvironment === undefined ? {} : { agentEnvironment: input.agentEnvironment }),
     });
     yield* verifyIntegrity(input);
     const result =
@@ -106,6 +110,9 @@ export const runAcceptanceReviewPhase = (
               earlierFindings,
             }),
             profile: input.policy.profile,
+            ...(input.agentEnvironment === undefined
+              ? {}
+              : { agentEnvironment: input.agentEnvironment }),
           })
         : provisional;
     if (result !== provisional) yield* verifyIntegrity(input);

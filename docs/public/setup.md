@@ -69,6 +69,30 @@ Put verification commands in `validation.checks`.
 
 Commit `.but-why/config.json` so the policy is reviewable with the repository.
 
+To use repository development tools for host-run agents, add one Agent Environment command list:
+
+```json
+{
+  "agentEnvironment": {
+    "command": ["nix", "develop", "-c"]
+  }
+}
+```
+
+Change Implement and host-run reviewers prepend this command to their complete Pi invocation.
+
+Change Implement and Change Submit read the setting from the Change Managed Worktree.
+
+Omit the setting to preserve direct Pi launch.
+
+Fix an invalid setting before retrying the applicable command.
+
+But Why does not retry without a configured wrapper after the wrapper fails.
+
+Docker and Podman reviewers do not use the host Agent Environment command.
+
+The Agent Environment does not alter Repository Preparation or Checks.
+
 Top-level `prepare` runs when But Why creates a Managed Worktree and before Checks run in a Validation Workspace.
 
 A successful Change Start reports `readiness: ready`.
