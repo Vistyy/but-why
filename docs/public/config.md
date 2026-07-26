@@ -25,7 +25,6 @@ Top-level `prepare` is optional.
     "timeoutSeconds": 1200
   },
   "validation": {
-    "sandbox": { "mode": "none" },
     "checks": [
       { "id": "quality", "command": "just quality", "timeoutSeconds": 1200 }
     ]
@@ -49,9 +48,7 @@ A configured wrapper failure stops the agent operation.
 
 But Why never retries without the configured wrapper.
 
-The wrapper applies to reviewers only when `validation.sandbox.mode` is `none`.
-
-Docker and Podman reviewer execution does not use the host Agent Environment command.
+The wrapper applies to every host-run reviewer.
 
 The wrapper does not alter Repository Preparation or Checks.
 
@@ -137,6 +134,11 @@ Each Check must contain an `id` and a `command`.
 Check IDs may contain lowercase letters, numbers, `-`, and `_`.
 
 `timeoutSeconds` is optional and defaults to 1200.
+
+## Host Validation Workspace
+
+V1 runs Repository Preparation, Checks, reviewers, Candidate integrity verification, and cleanup through the host-only Validation Workspace path.
+Sandcastle provides the internal disposable workspace and host process adapter.
 
 ## Manual workflow commands
 
@@ -310,7 +312,6 @@ It explicitly loads `package-manager-policy` and `web-search` from `~/.pi/agent/
 It keeps `AGENTS.md` and `CLAUDE.md` context discovery enabled.
 It allows exactly `read`, `bash`, `grep`, `find`, `ls`, `web_search`, `web_fetch`, and `web_content_get`.
 The `package-manager-policy` extension adds no tools and continues to enforce its bash policy hooks.
-Docker and Podman Validation Workspaces mount the fixed reviewer resource paths and available global context files read-only at the corresponding Pi paths.
 Repo Config can separately define the Agent Environment for `by change implement` and host-run reviewers.
 The curated reviewer resource wrapper does not configure `by change implement` or its Interactive Session.
 The remaining agent execution identity design is tracked in [Open Questions: How should agent execution identities work?](../open-questions.md#how-should-agent-execution-identities-work).

@@ -35,8 +35,6 @@ Invalid configuration rejects the applicable command before agent launch.
 
 A configured wrapper failure does not trigger an unwrapped retry.
 
-Docker and Podman reviewer execution does not use the host Agent Environment.
-
 The Agent Environment does not alter Repository Preparation or Checks.
 Change Start creates each new Managed Worktree at `<main-checkout-parent>/<main-checkout-name>-worktrees/but-why/<change-slug>`.
 But Why resolves this location from Git's canonical main checkout, including when Change Start runs from a linked worktree.

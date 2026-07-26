@@ -92,14 +92,13 @@ Use named conditions instead of a generic workflow language.
 
 ## How should reviewer execution use containers?
 
-V1 continues to run reviewers on the host.
-The Agent Environment configures the repository toolchain for host-run agents only.
-Do not treat the current Docker or Podman path as a security boundary.
+V1 supports host execution only.
+Containerized reviewer execution is unsupported in v1 and deferred until after v1.
+The Agent Environment configures the repository toolchain for host-run agents.
 
-Before relying on containerized reviewers, define the maintained image and toolchain, writable mounts, Git access, credential exposure, network access, process ownership, cleanup, and resource limits.
+Before reconsidering containerized reviewers after v1, define the maintained image and toolchain, writable mounts, Git access, credential exposure, network access, process ownership, cleanup, and resource limits.
 Measure whether CPU limits prevent reviewer experiments or repository Checks from monopolizing the development host.
 Decide whether Sandcastle can own this behavior through a maintained supported contract or whether But Why needs another execution provider.
-Plan this work after the Tasks required for the first release are complete.
 
 ## Does automatic writing need stronger isolation?
 

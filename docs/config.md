@@ -36,9 +36,6 @@ Example:
     "timeoutSeconds": 1200
   },
   "validation": {
-    "sandbox": {
-      "mode": "none"
-    },
     "checks": [
       {
         "id": "quality",
@@ -99,9 +96,7 @@ A configured wrapper failure returns a launch or Validation Tooling Failure resu
 
 But Why does not retry the agent without the configured wrapper.
 
-The Agent Environment applies to host-run reviewers when `validation.sandbox.mode` is `none`.
-
-Docker and Podman reviewer execution does not use the host Agent Environment command.
+The Agent Environment applies to every host-run reviewer.
 
 The Agent Environment does not alter Repository Preparation or Checks.
 
@@ -171,7 +166,6 @@ The wrapper:
 - The wrapper allows exactly `read`, `bash`, `grep`, `find`, `ls`, `web_search`, `web_fetch`, and `web_content_get`.
 
 The `package-manager-policy` extension adds no tools and continues to enforce its bash policy hooks.
-Docker and Podman Validation Workspaces mount the fixed reviewer resource paths and available global context files read-only at the corresponding Pi paths.
 The wrapper is a But Why-owned reviewer default.
 It is not Agent Environment configuration and it is not configurable through Repo Config or Global Config.
 Agent Profiles continue to select reviewer model and thinking values only.
@@ -207,19 +201,10 @@ Duplicate names and unresolved definitions reject submission before a Validation
 Specialist output is reported in configured list order.
 Execution scheduling is internal and is not configurable in v1.
 
-## Validation sandbox
+## Host Validation Workspace
 
-Repo Config selects `validation.sandbox.mode`:
-
-```text
-none
-docker
-podman
-```
-
-Missing mode defaults to `none`.
-An invalid mode rejects submission before Run creation.
-An unavailable requested provider creates a Validation Tooling Failure.
+V1 runs Repository Preparation, Checks, reviewers, Candidate integrity verification, and cleanup through the host-only Validation Workspace path.
+Sandcastle provides the internal disposable workspace and host process adapter.
 Validation commands run from the repository root of the disposable Validation Workspace.
 
 ## Prepare

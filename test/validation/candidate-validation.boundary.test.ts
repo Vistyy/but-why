@@ -52,7 +52,6 @@ describe("Candidate validation", () => {
           changeBaseSha: captured.changeBaseSha,
           headSha: captured.headSha,
           policy: {
-            sandboxMode: "none",
             checks: [
               {
                 id: "reads-main-env",

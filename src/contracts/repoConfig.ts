@@ -22,10 +22,6 @@ const reviewerSchema = Schema.Struct({
   instructionsFile: repoRelativePathSchema,
 });
 
-const repoValidationSandboxConfigSchema = Schema.Struct({
-  mode: Schema.optional(Schema.Literal("none", "docker", "podman")),
-});
-
 const repoAgentEnvironmentConfigSchema = Schema.Struct({
   command: Schema.NonEmptyArray(nonBlankStringSchema),
 });
@@ -46,7 +42,6 @@ const repoValidationWorkspaceConfigSchema = Schema.Struct({
 });
 
 const repoValidationConfigSchema = Schema.Struct({
-  sandbox: Schema.optional(repoValidationSandboxConfigSchema),
   checks: Schema.optional(Schema.NonEmptyArray(repoCheckConfigSchema)),
 });
 

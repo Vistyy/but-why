@@ -20,7 +20,6 @@ const now = "2026-07-18T10:00:00.000Z";
 const later = "2026-07-18T10:05:00.000Z";
 
 const policy = {
-  sandboxMode: "none",
   prepare: { command: "pnpm install", timeoutSeconds: 60 },
   checks: [
     { id: "types", command: "pnpm typecheck", timeoutSeconds: 30 },

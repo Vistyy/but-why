@@ -1,28 +1,8 @@
-import { execFileSync } from "node:child_process";
-import { createRequire } from "node:module";
-import {
-  cpSync,
-  existsSync,
-  lstatSync,
-  mkdirSync,
-  mkdtempSync,
-  readFileSync,
-  realpathSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
-import { homedir, tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { lstatSync } from "node:fs";
+import { join } from "node:path";
 
-import {
-  createSandbox,
-  type MountConfig,
-  type Sandbox,
-  type SandboxProvider,
-} from "@ai-hero/sandcastle";
-import { docker } from "@ai-hero/sandcastle/sandboxes/docker";
+import { createSandbox, type Sandbox, type SandboxProvider } from "@ai-hero/sandcastle";
 import { noSandbox } from "@ai-hero/sandcastle/sandboxes/no-sandbox";
-import { podman } from "@ai-hero/sandcastle/sandboxes/podman";
 import { Effect, Option, Ref, type Scope } from "effect";
 
 import {
@@ -38,7 +18,6 @@ import type { ValidationToolingFailure } from "./validationToolingFailures.js";
 import type {
   ActiveValidationWorkspace,
   ActiveValidationWorkspaceResult,
-  ValidationSandboxMode,
   ValidationWorkspaceCleanupResult,
   ValidationWorkspaceSetup,
   ValidationWorkspaceToolingError,
@@ -49,7 +28,6 @@ export type CreateValidationWorkspaceInput = {
   readonly validationRunId: string;
   readonly submittedSha: string;
   readonly copyFiles: readonly string[];
-  readonly sandboxMode: ValidationSandboxMode;
   readonly recordInterruptedCleanupResult?: (
     toolingError: ValidationWorkspaceToolingError,
   ) => Effect.Effect<void>;
@@ -155,143 +133,6 @@ const cleanupStepTimeoutMs = 5_000;
 const initialCleanupResult: ValidationWorkspaceCleanupResult = {
   worktree: "not_created",
   tempRef: "not_created",
-};
-
-const validationSandboxProvider = (
-  mode: ValidationSandboxMode,
-  parentContextPath: string | undefined,
-  webSearchPath: string | undefined,
-): SandboxProvider => {
-  switch (mode) {
-    case "none":
-      return noSandbox();
-    case "docker":
-      return docker({ mounts: reviewerPiResourceMounts(parentContextPath, webSearchPath) });
-    case "podman":
-      return podman({ mounts: reviewerPiResourceMounts(parentContextPath, webSearchPath) });
-  }
-};
-
-const reviewerPiResourceMounts = (
-  parentContextPath: string | undefined,
-  webSearchPath: string | undefined,
-): readonly MountConfig[] => {
-  const agentRoot = join(homedir(), ".pi", "agent");
-  const requiredResources = [
-    "extensions/package-manager-policy",
-    "extensions/web-search",
-    "skills/codebase-design",
-  ];
-  const contextFiles = ["AGENTS.md", "CLAUDE.md"].filter((file) =>
-    existsSync(join(agentRoot, file)),
-  );
-
-  return [
-    ...requiredResources
-      .filter((resource) => resource !== "extensions/web-search")
-      .map((resource) => reviewerPiMount(agentRoot, resource)),
-    {
-      hostPath: webSearchPath ?? join(agentRoot, "extensions/web-search"),
-      sandboxPath: "/home/agent/.pi/agent/extensions/web-search",
-      readonly: true,
-    },
-    ...contextFiles.map((file) => reviewerPiMount(agentRoot, file)),
-    ...(parentContextPath === undefined
-      ? []
-      : [
-          {
-            hostPath: parentContextPath,
-            sandboxPath: "/home/agent/AGENTS.md",
-            readonly: true,
-          },
-        ]),
-  ];
-};
-
-const reviewerPiMount = (agentRoot: string, resource: string): MountConfig => ({
-  hostPath: join(agentRoot, resource),
-  sandboxPath: `/home/agent/.pi/agent/${resource}`,
-  readonly: true,
-});
-
-const createReviewerWebSearchResource = (): string => {
-  const source = join(homedir(), ".pi", "agent", "extensions", "web-search");
-  const stagingRoot = mkdtempSync(join(tmpdir(), "but-why-reviewer-web-search-"));
-  const staged = join(stagingRoot, "web-search");
-  cpSync(source, staged, { dereference: true, recursive: true });
-
-  const piTuiRoot = resolvePiTuiRoot();
-  if (piTuiRoot === undefined) return staged;
-  const dependencyRoot = dirname(dirname(piTuiRoot));
-  const stagedPiTuiRoot = join(staged, "node_modules", "@earendil-works", "pi-tui");
-  mkdirSync(dirname(stagedPiTuiRoot), { recursive: true });
-  cpSync(piTuiRoot, stagedPiTuiRoot, { dereference: true, recursive: true });
-
-  for (const dependency of ["marked", "get-east-asian-width"]) {
-    const dependencyPath = join(dependencyRoot, dependency);
-    if (!existsSync(dependencyPath)) continue;
-    const stagedDependencyPath = join(stagedPiTuiRoot, "node_modules", dependency);
-    mkdirSync(dirname(stagedDependencyPath), { recursive: true });
-    cpSync(realpathSync(dependencyPath), stagedDependencyPath, {
-      dereference: true,
-      recursive: true,
-    });
-  }
-
-  return staged;
-};
-
-const resolvePiTuiRoot = (): string | undefined => {
-  try {
-    const extensionRequire = createRequire(
-      join(homedir(), ".pi", "agent", "extensions", "web-search", "index.js"),
-    );
-    return realpathSync(dirname(dirname(extensionRequire.resolve("@earendil-works/pi-tui"))));
-  } catch {
-    try {
-      const piCommand = execFileSync("sh", ["-c", "command -v pi"], {
-        encoding: "utf8",
-      }).trim();
-      const commandText = readFileSync(piCommand, "utf8");
-      const roots = [...commandText.matchAll(/NODE_PATH="([^"]+)"/g)].flatMap(
-        (match) => match[1]?.split(":") ?? [],
-      );
-      const piTuiPath = roots
-        .map((root) => join(root, "@earendil-works", "pi-tui"))
-        .find((path) => existsSync(path));
-      return piTuiPath === undefined ? undefined : realpathSync(piTuiPath);
-    } catch {
-      return undefined;
-    }
-  }
-};
-
-const createReviewerParentContextFile = (repoRoot: string): string | undefined => {
-  const contextParts: string[] = [];
-  let directory = dirname(repoRoot);
-
-  while (true) {
-    for (const file of ["AGENTS.md", "CLAUDE.md"]) {
-      const path = join(directory, file);
-      if (!existsSync(path)) continue;
-      try {
-        contextParts.unshift(`<!-- ${path} -->\n${readFileSync(path, "utf8")}`);
-      } catch {
-        // Ignore unreadable parent context files. Pi also treats them as unavailable.
-      }
-    }
-
-    const parent = dirname(directory);
-    if (parent === directory) break;
-    directory = parent;
-  }
-
-  if (contextParts.length === 0) return undefined;
-
-  const contextDirectory = mkdtempSync(join(tmpdir(), "but-why-reviewer-context-"));
-  const contextPath = join(contextDirectory, "AGENTS.md");
-  writeFileSync(contextPath, contextParts.join("\n\n"));
-  return contextPath;
 };
 
 export const createValidationWorkspace = (
@@ -578,23 +419,6 @@ const acquireSandcastleWorktree = (
   Scope.Scope
 > =>
   Effect.gen(function* () {
-    const parentContextPath =
-      input.sandboxMode === "none"
-        ? undefined
-        : yield* Effect.acquireRelease(
-            Effect.sync(() => createReviewerParentContextFile(input.repoRoot)),
-            (path) =>
-              Effect.sync(() => {
-                if (path !== undefined) rmSync(dirname(path), { force: true, recursive: true });
-              }),
-          );
-    const webSearchPath =
-      input.sandboxMode === "none"
-        ? undefined
-        : yield* Effect.acquireRelease(Effect.sync(createReviewerWebSearchResource), (path) =>
-            Effect.sync(() => rmSync(dirname(path), { force: true, recursive: true })),
-          );
-
     yield* Effect.acquireRelease(Effect.succeed(state.expectedWorktreePath), () =>
       releaseWorktree(input.repoRoot, state, adapters, cleanupResult),
     );
@@ -604,11 +428,7 @@ const acquireSandcastleWorktree = (
       repoRoot: input.repoRoot,
       tempRefName: state.tempRefName,
       copyFiles: input.copyFiles,
-      sandboxProvider: validationSandboxProvider(
-        input.sandboxMode,
-        parentContextPath,
-        webSearchPath,
-      ),
+      sandboxProvider: noSandbox(),
     });
 
     if (!worktree.ok) {

@@ -19,12 +19,10 @@ import {
   validationToolingFailureRecord,
   type ValidationToolingFailure,
 } from "../validation/validationToolingFailures.js";
-import type { ValidationSandboxMode } from "../validation/validationWorkspace.js";
 import { maxValidationArtifactBytes } from "../validationRun/artifactFiles.js";
 import type { TaskContextSnapshotV1 } from "../validationRun/taskContextSnapshot.js";
 
 export type CandidateValidationPolicy = {
-  readonly sandboxMode: ValidationSandboxMode;
   readonly agentEnvironment?: AgentEnvironmentCommand;
   readonly prepare?: SubmitPrepareConfig;
   readonly checks: readonly SubmitCheckConfig[];
@@ -146,7 +144,6 @@ const makeCandidateValidation = (dependencies: {
       validationRunId: started.validationRunId,
       submittedSha: input.headSha,
       copyFiles: input.policy.copyFiles,
-      sandboxMode: input.policy.sandboxMode,
       runInWorkspace: (activeWorkspace) =>
         runCandidatePhases(dependencies, input, started.validationRunId, activeWorkspace),
     });
@@ -256,8 +253,7 @@ const runCandidatePhases = (
   ValidationToolingFailure | RepositoryStorageError
 > =>
   Effect.fn("CandidateValidation.runPhases")(function* () {
-    const agentEnvironment =
-      input.policy.sandboxMode === "none" ? input.policy.agentEnvironment : undefined;
+    const agentEnvironment = input.policy.agentEnvironment;
     if ("noChange" in input) {
       const acceptance = yield* runAcceptanceReviewPhase({
         validationRunId,
@@ -355,7 +351,6 @@ const runCandidatePhases = (
 const acceptanceOnlyPolicy = (
   policy: TaskBackedCandidateValidationPolicy,
 ): TaskBackedCandidateValidationPolicy => ({
-  sandboxMode: policy.sandboxMode,
   ...(policy.agentEnvironment === undefined ? {} : { agentEnvironment: policy.agentEnvironment }),
   checks: [],
   copyFiles: policy.copyFiles,

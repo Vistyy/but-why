@@ -30,7 +30,6 @@ const candidate = {
   trackedTreeMatchesChangeBase: false,
 } as const;
 const tasklessPolicy = {
-  sandboxMode: "none",
   checks: [{ id: "quality", command: "true", timeoutSeconds: 30 }],
   copyFiles: [],
   specialistReviews: [],
