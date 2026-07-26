@@ -142,6 +142,7 @@ The wrapper:
 - The wrapper allows exactly `read`, `bash`, `grep`, `find`, `ls`, `web_search`, `web_fetch`, and `web_content_get`.
 
 The `package-manager-policy` extension adds no tools and continues to enforce its bash policy hooks.
+Docker and Podman Validation Workspaces mount the fixed reviewer resource paths and available global context files read-only at the corresponding Pi paths.
 The wrapper is a But Why-owned reviewer default.
 It is not Agent Environment configuration and it is not configurable through Repo Config or Global Config.
 Agent Profiles continue to select reviewer model and thinking values only.

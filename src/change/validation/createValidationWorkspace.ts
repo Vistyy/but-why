@@ -1,7 +1,13 @@
-import { lstatSync } from "node:fs";
+import { existsSync, lstatSync } from "node:fs";
+import { homedir } from "node:os";
 import { join } from "node:path";
 
-import { createSandbox, type Sandbox, type SandboxProvider } from "@ai-hero/sandcastle";
+import {
+  createSandbox,
+  type MountConfig,
+  type Sandbox,
+  type SandboxProvider,
+} from "@ai-hero/sandcastle";
 import { docker } from "@ai-hero/sandcastle/sandboxes/docker";
 import { noSandbox } from "@ai-hero/sandcastle/sandboxes/no-sandbox";
 import { podman } from "@ai-hero/sandcastle/sandboxes/podman";
@@ -144,11 +150,34 @@ const validationSandboxProvider = (mode: ValidationSandboxMode): SandboxProvider
     case "none":
       return noSandbox();
     case "docker":
-      return docker();
+      return docker({ mounts: reviewerPiResourceMounts() });
     case "podman":
-      return podman();
+      return podman({ mounts: reviewerPiResourceMounts() });
   }
 };
+
+const reviewerPiResourceMounts = (): readonly MountConfig[] => {
+  const agentRoot = join(homedir(), ".pi", "agent");
+  const requiredResources = [
+    "extensions/package-manager-policy",
+    "extensions/web-search",
+    "skills/codebase-design",
+  ];
+  const contextFiles = ["AGENTS.md", "CLAUDE.md"].filter((file) =>
+    existsSync(join(agentRoot, file)),
+  );
+
+  return [
+    ...requiredResources.map((resource) => reviewerPiMount(agentRoot, resource)),
+    ...contextFiles.map((file) => reviewerPiMount(agentRoot, file)),
+  ];
+};
+
+const reviewerPiMount = (agentRoot: string, resource: string): MountConfig => ({
+  hostPath: join(agentRoot, resource),
+  sandboxPath: `/home/agent/.pi/agent/${resource}`,
+  readonly: true,
+});
 
 export const createValidationWorkspace = (
   input: CreateValidationWorkspaceInput,

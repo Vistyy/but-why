@@ -284,6 +284,7 @@ It explicitly loads `package-manager-policy` and `web-search` from `~/.pi/agent/
 It keeps `AGENTS.md` and `CLAUDE.md` context discovery enabled.
 It allows exactly `read`, `bash`, `grep`, `find`, `ls`, `web_search`, `web_fetch`, and `web_content_get`.
 The `package-manager-policy` extension adds no tools and continues to enforce its bash policy hooks.
+Docker and Podman Validation Workspaces mount the fixed reviewer resource paths and available global context files read-only at the corresponding Pi paths.
 This wrapper does not configure `by change implement` or its Interactive Session.
 It is not Agent Environment configuration and is not configurable through Repo Config or Global Config.
 The permanent design is tracked in [Open Questions: How should agent execution identities work?](../open-questions.md#how-should-agent-execution-identities-work).

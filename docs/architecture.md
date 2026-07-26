@@ -28,6 +28,7 @@ It explicitly loads the `package-manager-policy` and `web-search` extensions and
 It loads `AGENTS.md` and `CLAUDE.md` context files from the global agent location, parent directories, and the Validation Workspace.
 It limits reviewer tools to exactly `read`, `bash`, `grep`, `find`, `ls`, `web_search`, `web_fetch`, and `web_content_get`.
 The `package-manager-policy` extension registers no tools and continues to enforce its bash policy hooks.
+Docker and Podman Validation Workspaces mount only the fixed reviewer resource paths and available global context files read-only at the corresponding Pi paths.
 This wrapper does not configure the Implementer or Interactive Session.
 The permanent design is tracked in [Open Questions: How should agent execution identities work?](open-questions.md#how-should-agent-execution-identities-work).
 
