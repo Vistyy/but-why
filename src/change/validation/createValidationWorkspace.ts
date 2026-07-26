@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import { createRequire } from "node:module";
 import {
   cpSync,
@@ -219,14 +220,8 @@ const createReviewerWebSearchResource = (): string => {
   const staged = join(stagingRoot, "web-search");
   cpSync(source, staged, { dereference: true, recursive: true });
 
-  let piTuiEntry: string;
-  try {
-    piTuiEntry = createRequire(join(source, "index.js")).resolve("@earendil-works/pi-tui");
-  } catch {
-    return staged;
-  }
-
-  const piTuiRoot = realpathSync(dirname(dirname(piTuiEntry)));
+  const piTuiRoot = resolvePiTuiRoot();
+  if (piTuiRoot === undefined) return staged;
   const dependencyRoot = dirname(dirname(piTuiRoot));
   const stagedPiTuiRoot = join(staged, "node_modules", "@earendil-works", "pi-tui");
   mkdirSync(dirname(stagedPiTuiRoot), { recursive: true });
@@ -244,6 +239,31 @@ const createReviewerWebSearchResource = (): string => {
   }
 
   return staged;
+};
+
+const resolvePiTuiRoot = (): string | undefined => {
+  try {
+    const extensionRequire = createRequire(
+      join(homedir(), ".pi", "agent", "extensions", "web-search", "index.js"),
+    );
+    return realpathSync(dirname(dirname(extensionRequire.resolve("@earendil-works/pi-tui"))));
+  } catch {
+    try {
+      const piCommand = execFileSync("sh", ["-c", "command -v pi"], {
+        encoding: "utf8",
+      }).trim();
+      const commandText = readFileSync(piCommand, "utf8");
+      const roots = [...commandText.matchAll(/NODE_PATH="([^"]+)"/g)].flatMap(
+        (match) => match[1]?.split(":") ?? [],
+      );
+      const piTuiPath = roots
+        .map((root) => join(root, "@earendil-works", "pi-tui"))
+        .find((path) => existsSync(path));
+      return piTuiPath === undefined ? undefined : realpathSync(piTuiPath);
+    } catch {
+      return undefined;
+    }
+  }
 };
 
 const createReviewerParentContextFile = (repoRoot: string): string | undefined => {
