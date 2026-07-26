@@ -12,7 +12,7 @@ const secondNow = "2026-06-30T12:05:00.000Z";
 const thirdNow = "2026-06-30T12:10:00.000Z";
 const closedStates = ["implementing", "validating", "ready", "done"] as const;
 
-it.scoped("preserves Task policy after migration to Effect persistence", () => {
+it.scoped("preserves closed Task policy", () => {
   return withTemporaryRepositoryState(() =>
     Effect.gen(function* () {
       const tasks = yield* openSqliteTaskPersistence("BY");
