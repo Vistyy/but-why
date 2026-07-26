@@ -133,14 +133,13 @@ describe("configuration contracts", () => {
         checks: [{ id: "quality", command: "just quality", timeoutSeconds: 120 }],
       },
       review: {
-        intent: { reviewer: "intent" },
-        quality: { mode: "parallel", reviewers: ["bugs"] },
+        acceptance: {
+          agentProfile: "default",
+          instructionsFile: ".but-why/reviewers/acceptance.md",
+        },
+        specialists: ["bugs"],
       },
       reviewers: {
-        intent: {
-          agentProfile: "default",
-          instructionsFile: ".but-why/reviewers/intent.md",
-        },
         bugs: {
           agentProfile: "default",
           instructionsFile: ".but-why/reviewers/bugs.md",
@@ -253,6 +252,7 @@ describe("repository configuration rejection matrix", () => {
     ["non-string taskPrefix", { taskPrefix: 123 }],
     ["invalid existing taskPrefix", { taskPrefix: "B" }],
     ["extra key", { taskPrefix: "BY", extra: true }],
+    ["unknown review key", { taskPrefix: "BY", review: { unsupported: true } }],
     ["top-level checks", { taskPrefix: "BY", checks: [{ id: "quality", command: "true" }] }],
     [
       "check severity",
