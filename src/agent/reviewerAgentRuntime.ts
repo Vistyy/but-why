@@ -81,6 +81,17 @@ export const piReviewerAgentRuntime: ReviewerAgentRuntime = {
   review: reviewWithPi,
 };
 
+const reviewerPiResourceFlags = [
+  "--no-extensions",
+  "--no-skills",
+  "--no-prompt-templates",
+  "--no-themes",
+  "--extension ~/.pi/agent/extensions/package-manager-policy",
+  "--extension ~/.pi/agent/extensions/web-search",
+  "--skill ~/.pi/agent/skills/codebase-design",
+  "--tools read,bash,grep,find,ls,web_search,web_fetch,web_content_get",
+].join(" ");
+
 const isolatedPiReviewerAgent = (model: string, thinking: ResolvedPiAgentProfile["thinking"]) => {
   const base = pi(model, {
     ...(thinking === undefined ? {} : { thinking }),
@@ -92,7 +103,7 @@ const isolatedPiReviewerAgent = (model: string, thinking: ResolvedPiAgentProfile
       const command = base.buildPrintCommand(options);
       return {
         ...command,
-        command: `${command.command} --no-extensions --no-skills --no-prompt-templates --no-themes --no-context-files --tools read,bash,grep,find,ls`,
+        command: `${command.command} ${reviewerPiResourceFlags}`,
       };
     },
   };
