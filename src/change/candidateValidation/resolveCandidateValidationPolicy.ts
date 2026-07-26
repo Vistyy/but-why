@@ -29,7 +29,7 @@ export const resolveCandidateValidationPolicy = (input: {
   const global = readGlobalConfig(input.globalConfigPath);
   if (!global.ok) return global;
 
-  const submit = submitRepoConfig(input.context.config, global.config);
+  const submit = submitRepoConfig(input.context.config);
   if (!submit.ok) return submit;
   const specialistReviews = resolveSpecialistReviewPolicies({
     repoConfig: input.context.config,
