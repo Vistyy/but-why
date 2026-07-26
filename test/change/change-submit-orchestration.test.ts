@@ -773,6 +773,7 @@ describe("Change Submit orchestration", () => {
             events,
             change,
             reconciliationStatus: "open",
+            agentEnvironmentError: "Managed Worktree Repo Config is invalid.",
             publication: {
               publish: () => {
                 throw new Error("Duplicate publication");

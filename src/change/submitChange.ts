@@ -191,13 +191,6 @@ const submitChange = (
     }
     const reconciliation = yield* reconcileBeforeSubmission(dependencies, change, input.now);
     if (!reconciliation.proceed) return reconciliation.result;
-    const agentEnvironment =
-      dependencies.resolveAgentEnvironment?.(change.worktreePath) ?? ({ ok: true } as const);
-    if (!agentEnvironment.ok) {
-      return { ok: false, code: "validation_policy_invalid", message: agentEnvironment.message };
-    }
-    const agentEnvironmentCommand =
-      "command" in agentEnvironment ? agentEnvironment.command : undefined;
     if (change.publication !== null && reconciliation.reconciled.status === "open") {
       const branchHead = yield* dependencies.readBranchHead(change.worktreePath, change.branchRef);
       if (!branchHead.ok) return branchHead;
@@ -218,6 +211,13 @@ const submitChange = (
         }
       }
     }
+    const agentEnvironment =
+      dependencies.resolveAgentEnvironment?.(change.worktreePath) ?? ({ ok: true } as const);
+    if (!agentEnvironment.ok) {
+      return { ok: false, code: "validation_policy_invalid", message: agentEnvironment.message };
+    }
+    const agentEnvironmentCommand =
+      "command" in agentEnvironment ? agentEnvironment.command : undefined;
     const refreshedBase = dependencies.refreshBase(
       dependencies.repositoryPath,
       change.baseRef,
