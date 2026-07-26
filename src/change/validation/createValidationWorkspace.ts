@@ -1,7 +1,9 @@
 import { createRequire } from "node:module";
 import {
+  cpSync,
   existsSync,
   lstatSync,
+  mkdirSync,
   mkdtempSync,
   readFileSync,
   realpathSync,
@@ -157,19 +159,21 @@ const initialCleanupResult: ValidationWorkspaceCleanupResult = {
 const validationSandboxProvider = (
   mode: ValidationSandboxMode,
   parentContextPath: string | undefined,
+  webSearchPath: string | undefined,
 ): SandboxProvider => {
   switch (mode) {
     case "none":
       return noSandbox();
     case "docker":
-      return docker({ mounts: reviewerPiResourceMounts(parentContextPath) });
+      return docker({ mounts: reviewerPiResourceMounts(parentContextPath, webSearchPath) });
     case "podman":
-      return podman({ mounts: reviewerPiResourceMounts(parentContextPath) });
+      return podman({ mounts: reviewerPiResourceMounts(parentContextPath, webSearchPath) });
   }
 };
 
 const reviewerPiResourceMounts = (
   parentContextPath: string | undefined,
+  webSearchPath: string | undefined,
 ): readonly MountConfig[] => {
   const agentRoot = join(homedir(), ".pi", "agent");
   const requiredResources = [
@@ -182,8 +186,14 @@ const reviewerPiResourceMounts = (
   );
 
   return [
-    ...requiredResources.map((resource) => reviewerPiMount(agentRoot, resource)),
-    ...piRuntimeDependencyMounts(),
+    ...requiredResources
+      .filter((resource) => resource !== "extensions/web-search")
+      .map((resource) => reviewerPiMount(agentRoot, resource)),
+    {
+      hostPath: webSearchPath ?? join(agentRoot, "extensions/web-search"),
+      sandboxPath: "/home/agent/.pi/agent/extensions/web-search",
+      readonly: true,
+    },
     ...contextFiles.map((file) => reviewerPiMount(agentRoot, file)),
     ...(parentContextPath === undefined
       ? []
@@ -203,39 +213,37 @@ const reviewerPiMount = (agentRoot: string, resource: string): MountConfig => ({
   readonly: true,
 });
 
-const piRuntimeDependencyMounts = (): readonly MountConfig[] => {
+const createReviewerWebSearchResource = (): string => {
+  const source = join(homedir(), ".pi", "agent", "extensions", "web-search");
+  const stagingRoot = mkdtempSync(join(tmpdir(), "but-why-reviewer-web-search-"));
+  const staged = join(stagingRoot, "web-search");
+  cpSync(source, staged, { dereference: true, recursive: true });
+
   let piTuiEntry: string;
   try {
-    piTuiEntry = createRequire(
-      join(homedir(), ".pi", "agent", "extensions", "web-search", "index.js"),
-    ).resolve("@earendil-works/pi-tui");
+    piTuiEntry = createRequire(join(source, "index.js")).resolve("@earendil-works/pi-tui");
   } catch {
-    return [];
+    return staged;
   }
 
   const piTuiRoot = realpathSync(dirname(dirname(piTuiEntry)));
   const dependencyRoot = dirname(dirname(piTuiRoot));
-  const piTuiSandboxPath = "/home/agent/.pi/agent/extensions/web-search/node_modules";
-  const dependencies = ["marked", "get-east-asian-width"];
+  const stagedPiTuiRoot = join(staged, "node_modules", "@earendil-works", "pi-tui");
+  mkdirSync(dirname(stagedPiTuiRoot), { recursive: true });
+  cpSync(piTuiRoot, stagedPiTuiRoot, { dereference: true, recursive: true });
 
-  return [
-    {
-      hostPath: piTuiRoot,
-      sandboxPath: `${piTuiSandboxPath}/@earendil-works/pi-tui`,
-      readonly: true,
-    },
-    ...dependencies
-      .map((dependency) => ({
-        dependency,
-        hostPath: join(dependencyRoot, dependency),
-      }))
-      .filter(({ hostPath }) => existsSync(hostPath))
-      .map(({ dependency, hostPath }) => ({
-        hostPath: realpathSync(hostPath),
-        sandboxPath: `${piTuiSandboxPath}/@earendil-works/pi-tui/node_modules/${dependency}`,
-        readonly: true,
-      })),
-  ];
+  for (const dependency of ["marked", "get-east-asian-width"]) {
+    const dependencyPath = join(dependencyRoot, dependency);
+    if (!existsSync(dependencyPath)) continue;
+    const stagedDependencyPath = join(stagedPiTuiRoot, "node_modules", dependency);
+    mkdirSync(dirname(stagedDependencyPath), { recursive: true });
+    cpSync(realpathSync(dependencyPath), stagedDependencyPath, {
+      dereference: true,
+      recursive: true,
+    });
+  }
+
+  return staged;
 };
 
 const createReviewerParentContextFile = (repoRoot: string): string | undefined => {
@@ -550,11 +558,6 @@ const acquireSandcastleWorktree = (
   Scope.Scope
 > =>
   Effect.gen(function* () {
-    yield* Effect.acquireRelease(Effect.succeed(state.expectedWorktreePath), () =>
-      releaseWorktree(input.repoRoot, state, adapters, cleanupResult),
-    );
-
-    state.worktreePath = state.expectedWorktreePath;
     const parentContextPath =
       input.sandboxMode === "none"
         ? undefined
@@ -565,11 +568,27 @@ const acquireSandcastleWorktree = (
                 if (path !== undefined) rmSync(dirname(path), { force: true, recursive: true });
               }),
           );
+    const webSearchPath =
+      input.sandboxMode === "none"
+        ? undefined
+        : yield* Effect.acquireRelease(Effect.sync(createReviewerWebSearchResource), (path) =>
+            Effect.sync(() => rmSync(dirname(path), { force: true, recursive: true })),
+          );
+
+    yield* Effect.acquireRelease(Effect.succeed(state.expectedWorktreePath), () =>
+      releaseWorktree(input.repoRoot, state, adapters, cleanupResult),
+    );
+
+    state.worktreePath = state.expectedWorktreePath;
     const worktree = yield* adapters.createSandcastleWorktree({
       repoRoot: input.repoRoot,
       tempRefName: state.tempRefName,
       copyFiles: input.copyFiles,
-      sandboxProvider: validationSandboxProvider(input.sandboxMode, parentContextPath),
+      sandboxProvider: validationSandboxProvider(
+        input.sandboxMode,
+        parentContextPath,
+        webSearchPath,
+      ),
     });
 
     if (!worktree.ok) {

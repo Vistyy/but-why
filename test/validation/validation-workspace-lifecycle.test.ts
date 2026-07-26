@@ -420,17 +420,16 @@ describe("Validation Workspace scoped lifecycle", () => {
               readonly: true,
             },
             {
-              hostPath: join(homedir(), ".pi", "agent", "extensions/web-search"),
-              sandboxPath: "/home/agent/.pi/agent/extensions/web-search",
-              readonly: true,
-            },
-            {
               hostPath: join(homedir(), ".pi", "agent", "skills/codebase-design"),
               sandboxPath: "/home/agent/.pi/agent/skills/codebase-design",
               readonly: true,
             },
           ]),
         );
+        const webSearchMount = mounts.find(
+          (mount) => mount.sandboxPath === "/home/agent/.pi/agent/extensions/web-search",
+        );
+        expect(webSearchMount?.hostPath).toMatch(/but-why-reviewer-web-search-.*\/web-search$/);
         expect(mounts.every((mount) => mount.readonly === true)).toBe(true);
       }
     }),
