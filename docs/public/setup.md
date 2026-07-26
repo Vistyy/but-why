@@ -353,7 +353,10 @@ git commit -m "Add the login flow"
 
 The caller checkout is not the implementation workspace for a Change.
 
-A ready Change can also launch a fresh Herdr-hosted Pi session in the recorded Managed Worktree:
+A ready Change can also launch a fresh Herdr-hosted Pi session in the recorded Managed Worktree.
+Run Change Implement from the Local Repository's main checkout or any linked worktree.
+But Why uses the canonical main checkout as Herdr's repository source and continues to open the recorded Managed Worktree.
+The caller checkout does not change the Change identity, Change Base, or Managed Worktree.
 
 ```text
 by change implement <change-id> [--handoff-file <path>]

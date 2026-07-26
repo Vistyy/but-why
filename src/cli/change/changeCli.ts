@@ -5,6 +5,7 @@ import { parseCliTaskIdValue } from "../../cliTaskId.js";
 import { withGlobalHelpFlags } from "../../cliHelp.js";
 import {
   repositoryStorageErrorResult,
+  repoStateLoadError,
   runtimeError,
   stateStoreUnavailable,
   success,
@@ -31,6 +32,7 @@ import type {
   ChangeUseCases,
 } from "../../change/changeUseCases.js";
 import type { RepositoryStorageError } from "../../contracts/repositoryStorageError.js";
+import type { RepoStateLoadError } from "../../cliResults.js";
 
 export type ChangeCommandEnvironment = {
   readonly cwd: string;
@@ -1174,11 +1176,4 @@ const withChanges = (
     Effect.catchAllCause(() => Effect.succeed(unexpectedFailure())),
   );
 
-const loadError = (error: { readonly code: string; readonly taskPrefix?: string }): CliResult =>
-  error.code === "state_store_unavailable"
-    ? stateStoreUnavailable(error.taskPrefix ?? "repository")
-    : runtimeError({
-        code: error.code,
-        message: "But Why repository state is unavailable.",
-        help: ["Run `by init --task-prefix <prefix>` in the repository."],
-      });
+const loadError = (error: RepoStateLoadError): CliResult => repoStateLoadError(error);

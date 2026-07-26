@@ -1,5 +1,6 @@
+import { execFileSync } from "node:child_process";
 import { mkdirSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { basename, dirname, join } from "node:path";
 
 import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
@@ -174,6 +175,69 @@ describe("by change implement", () => {
       );
       expect(handoffResult.status).toBe(0);
       expect(received).toEqual([handoff]);
+    }),
+  );
+
+  it.effect("uses the canonical main checkout from a linked caller checkout", () =>
+    Effect.gen(function* () {
+      const root = yield* readyRepository();
+      const linkedCheckout = join(dirname(root), `${basename(root)}-linked-caller`);
+      execFileSync("git", ["worktree", "add", "-b", "linked-caller", linkedCheckout, "main"], {
+        cwd: root,
+        encoding: "utf8",
+      });
+
+      try {
+        const started = yield* runByInProcessEffect(
+          root,
+          ["change", "start", "--output", "json"],
+          now,
+        );
+        const change = JSON.parse(started.stdout) as {
+          readonly change: { readonly id: string };
+          readonly worktreePath: string;
+        };
+        const launches: unknown[] = [];
+        const host: InteractiveSessionHost = {
+          launch: async (input) => {
+            launches.push(input);
+            return { ok: true, host: "herdr", status: "started" };
+          },
+        };
+
+        const fromMain = yield* runByInProcessEffect(
+          root,
+          ["change", "implement", change.change.id, "--output", "json"],
+          now,
+          { interactiveSessionHost: host },
+        );
+        const fromLinked = yield* runByInProcessEffect(
+          linkedCheckout,
+          ["change", "implement", change.change.id, "--output", "json"],
+          now,
+          { interactiveSessionHost: host },
+        );
+
+        expect(fromMain.status).toBe(0);
+        expect(fromLinked.status).toBe(0);
+        expect(launches).toEqual([
+          expect.objectContaining({
+            changeId: change.change.id,
+            repositoryPath: root,
+            worktreePath: change.worktreePath,
+          }),
+          expect.objectContaining({
+            changeId: change.change.id,
+            repositoryPath: root,
+            worktreePath: change.worktreePath,
+          }),
+        ]);
+      } finally {
+        execFileSync("git", ["worktree", "remove", "--force", linkedCheckout], {
+          cwd: root,
+          encoding: "utf8",
+        });
+      }
     }),
   );
 

@@ -214,7 +214,7 @@ const implementChange = (
       try: () =>
         interactiveSessionHost.launch({
           changeId: change.id,
-          repositoryPath: context.root,
+          repositoryPath: context.mainCheckoutRoot,
           worktreePath: change.worktreePath,
           initialPrompt,
           ...(agentProfile?.agentModel === undefined
