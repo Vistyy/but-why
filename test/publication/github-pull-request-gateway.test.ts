@@ -19,7 +19,7 @@ describe("GitHub pull request gateway", () => {
         return {
           ok: true,
           stdout:
-            '{"number":42,"url":"https://github.com/acme/widgets/pull/42","base":{"ref":"main"},"head":{"ref":"feature","sha":"candidate-sha"}}',
+            '{"number":42,"url":"https://api.github.com/repos/acme/widgets/pulls/42","html_url":"https://github.com/acme/widgets/pull/42","base":{"ref":"main"},"head":{"ref":"feature","sha":"candidate-sha"}}',
         };
       },
     });
@@ -87,7 +87,7 @@ describe("GitHub pull request gateway", () => {
         return {
           ok: true,
           stdout:
-            '{"number":42,"url":"https://github.com/acme/widgets/pull/42","base":{"ref":"main"},"head":{"ref":"feature","sha":"previous-candidate-sha"}}',
+            '{"number":42,"url":"https://api.github.com/repos/acme/widgets/pulls/42","html_url":"not-a-url","base":{"ref":"main"},"head":{"ref":"feature","sha":"previous-candidate-sha"}}',
         };
       },
     });
@@ -106,7 +106,13 @@ describe("GitHub pull request gateway", () => {
         title: "Publish Candidate",
         body: "Validation facts",
       }),
-    ).toMatchObject({ ok: true, pullRequest: { headSha: "previous-candidate-sha" } });
+    ).toMatchObject({
+      ok: true,
+      pullRequest: {
+        headSha: "previous-candidate-sha",
+        url: "https://api.github.com/repos/acme/widgets/pulls/42",
+      },
+    });
     expect(gitCalls).toEqual([
       ["rev-parse", "--verify", "refs/heads/feature^{commit}"],
       [
@@ -135,7 +141,7 @@ describe("GitHub pull request gateway", () => {
       runGh: () => ({
         ok: true,
         stdout:
-          '[{"number":42,"url":"https://github.com/acme/widgets/pull/42","state":"open","merged_at":null,"base":{"ref":"main","repo":{"owner":{"login":"acme"},"name":"widgets"}},"head":{"ref":"feature","sha":"candidate-sha"}}]',
+          '[{"number":42,"url":"https://api.github.com/repos/acme/widgets/pulls/42","state":"open","merged_at":null,"base":{"ref":"main","repo":{"owner":{"login":"acme"},"name":"widgets"}},"head":{"ref":"feature","sha":"candidate-sha"}}]',
       }),
     });
 
@@ -147,7 +153,7 @@ describe("GitHub pull request gateway", () => {
     ).toEqual([
       {
         number: 42,
-        url: "https://github.com/acme/widgets/pull/42",
+        url: "https://api.github.com/repos/acme/widgets/pulls/42",
         state: "open",
         merged: false,
         repository: { owner: "acme", repo: "widgets" },
@@ -163,7 +169,7 @@ describe("GitHub pull request gateway", () => {
       runGh: () => ({
         ok: true,
         stdout:
-          '{"number":42,"url":"https://github.com/acme/widgets/pull/42","state":"closed","merged":true,"base":{"ref":"main","repo":{"owner":{"login":"acme"},"name":"widgets"}},"head":{"ref":"feature","sha":"candidate-sha"}}',
+          '{"number":42,"url":"https://api.github.com/repos/acme/widgets/pulls/42","html_url":null,"state":"closed","merged":true,"base":{"ref":"main","repo":{"owner":{"login":"acme"},"name":"widgets"}},"head":{"ref":"feature","sha":"candidate-sha"}}',
       }),
     });
 
@@ -174,7 +180,7 @@ describe("GitHub pull request gateway", () => {
       ),
     ).toEqual({
       number: 42,
-      url: "https://github.com/acme/widgets/pull/42",
+      url: "https://api.github.com/repos/acme/widgets/pulls/42",
       state: "closed",
       merged: true,
       repository: { owner: "acme", repo: "widgets" },
@@ -192,7 +198,7 @@ describe("GitHub pull request gateway", () => {
         return {
           ok: true,
           stdout:
-            '{"number":42,"url":"https://github.com/acme/widgets/pull/42","state":"closed","merged":false,"base":{"ref":"main"},"head":{"ref":"feature","sha":"candidate-sha"}}',
+            '{"number":42,"url":"https://api.github.com/repos/acme/widgets/pulls/42","state":"closed","merged":false,"base":{"ref":"main"},"head":{"ref":"feature","sha":"candidate-sha"}}',
         };
       },
     });
@@ -202,7 +208,14 @@ describe("GitHub pull request gateway", () => {
         target: { owner: "acme", repo: "widgets", baseBranch: "main", remoteName: "origin" },
         number: 42,
       }),
-    ).toMatchObject({ ok: true, pullRequest: { state: "closed", merged: false } });
+    ).toMatchObject({
+      ok: true,
+      pullRequest: {
+        state: "closed",
+        merged: false,
+        url: "https://api.github.com/repos/acme/widgets/pulls/42",
+      },
+    });
     expect(ghCalls).toEqual([
       ["api", "--method", "PATCH", "repos/acme/widgets/pulls/42", "-f", "state=closed"],
     ]);
