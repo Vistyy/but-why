@@ -81,7 +81,6 @@ const readStdin = (options: TextInputOptions): TextInputResult => {
 
   const chunks: Buffer[] = [];
   let totalBytes = 0;
-  let tooLarge = false;
   const chunk = Buffer.alloc(64 * 1024);
 
   try {
@@ -91,20 +90,15 @@ const readStdin = (options: TextInputOptions): TextInputResult => {
 
       totalBytes += bytesRead;
       if (options.maxBytes !== undefined && totalBytes > options.maxBytes) {
-        tooLarge = true;
-        continue;
+        return {
+          ok: false,
+          error: { code: "text_input_too_large", source: "stdin", maxBytes: options.maxBytes },
+        };
       }
       chunks.push(Buffer.from(chunk.subarray(0, bytesRead)));
     }
   } catch {
     return { ok: false, error: { code: "text_input_stdin_unreadable" } };
-  }
-
-  if (tooLarge && options.maxBytes !== undefined) {
-    return {
-      ok: false,
-      error: { code: "text_input_too_large", source: "stdin", maxBytes: options.maxBytes },
-    };
   }
 
   return decodeText(Buffer.concat(chunks, totalBytes), "stdin", undefined, options.ignoreBOM);
