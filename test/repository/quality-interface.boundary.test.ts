@@ -34,7 +34,13 @@ const startRunner = (lockFile: string, args: string[]) => {
   const done = new Promise<CommandResult>((resolveResult) => {
     child.on("close", (status) => resolveResult({ status, output }));
   });
-  return { child, done };
+  return {
+    child,
+    done,
+    get output() {
+      return output;
+    },
+  };
 };
 
 const runRunner = (lockFile: string, args: string[]): Promise<CommandResult> =>
@@ -226,6 +232,40 @@ describe("quality interface", () => {
       await stopRunner(holder);
     }
   }, 30_000);
+
+  test("interrupts a workload while it waits for capacity", async () => {
+    const directory = mkdtempSync(join(tmpdir(), "but-why-quality-lock-"));
+    temporaryPaths.push(directory);
+    const lockFile = join(directory, "capacity.lock");
+    const acquiredFile = join(directory, "acquired");
+    const { holder, readyFile, releaseFile } = startHeldRunner(
+      lockFile,
+      directory,
+      "complete coverage",
+    );
+    const waiter = startRunner(lockFile, [
+      "complete test",
+      "sh",
+      "-c",
+      'printf acquired > "$1"',
+      "sh",
+      acquiredFile,
+    ]);
+
+    try {
+      await waitForFile(readyFile);
+      await new Promise((resolveDelay) => setTimeout(resolveDelay, 100));
+      expect(waiter.child.exitCode).toBeNull();
+      expect(waiter.output).toContain("waiting: complete test is waiting for capacity");
+      waiter.child.kill("SIGTERM");
+      expect((await waiter.done).status).toBe(143);
+      expect(() => readFileSync(acquiredFile)).toThrow();
+    } finally {
+      writeFileSync(releaseFile, "release");
+      await stopRunner(waiter);
+      await stopRunner(holder);
+    }
+  });
 
   test("forwards child exit status and releases the lock after interruption", async () => {
     const directory = mkdtempSync(join(tmpdir(), "but-why-quality-lock-"));
