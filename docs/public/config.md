@@ -52,12 +52,7 @@ The wrapper applies to every host-run reviewer.
 
 The wrapper does not alter Repository Preparation or Checks.
 
-After `by init`:
-
-1. Inspect the repository tooling.
-2. Put dependency installation, restore, sync, or fetch work in top-level `prepare` when required.
-3. Put verification commands in `validation.checks`.
-4. Commit `.but-why/config.json` so reviewers can inspect the policy.
+See [Agent-Assisted Setup and Manual Change Workflow](setup.md#configure-the-repository) for the canonical `by init` setup sequence, including `.sandcastle/**` exclusions for recursive repository tools.
 
 ## Repository Preparation
 
