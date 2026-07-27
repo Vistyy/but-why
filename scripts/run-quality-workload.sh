@@ -18,6 +18,12 @@ esac
 
 child_pids=()
 interrupted_status=0
+lock_wait_ms=0
+lock_acquired_at_file=$(mktemp "${TMPDIR:-/tmp}/but-why-quality-lock-acquired.XXXXXX")
+cleanup_lock_timing() {
+    rm -f "$lock_acquired_at_file"
+}
+trap cleanup_lock_timing EXIT
 
 start_child() {
     setsid --wait "$@" &
@@ -48,6 +54,26 @@ wait_for_child() {
     return "$status"
 }
 
+run_test_child() {
+    local suite=$1
+    local test_started_at_ns
+    local test_status
+    rm -f "$lock_acquired_at_file"
+    test_started_at_ns=$(date +%s%N)
+    start_child env BY_TEST_SUITE="$suite" BY_CAPACITY_LOCK_ACQUIRED_AT_FILE="$lock_acquired_at_file" just test
+    test_pid=${child_pids[-1]}
+    wait_for_child "$test_pid"
+    test_status=$?
+    if [[ -s "$lock_acquired_at_file" ]]; then
+        local lock_acquired_at_ns
+        lock_acquired_at_ns=$(<"$lock_acquired_at_file")
+        if (( lock_acquired_at_ns > test_started_at_ns )); then
+            lock_wait_ms=$((lock_wait_ms + (lock_acquired_at_ns - test_started_at_ns) / 1000000))
+        fi
+    fi
+    return "$test_status"
+}
+
 started_at_ns=$(date +%s%N)
 status=0
 start_child just _quality-static-routine
@@ -57,9 +83,7 @@ if [[ "$mode" == "quality" ]]; then
     build_pid=${child_pids[-1]}
     wait_for_child "$build_pid" || status=1
     if (( status == 0 && interrupted_status == 0 )); then
-        start_child env BY_TEST_SUITE=routine just test
-        test_pid=${child_pids[-1]}
-        wait_for_child "$test_pid" || status=1
+        run_test_child routine || status=1
     fi
     wait_for_child "$static_pid" || status=1
 else
@@ -68,9 +92,7 @@ else
     wait_for_child "$build_pid" || status=1
     wait_for_child "$static_pid" || status=1
     if (( status == 0 && interrupted_status == 0 )); then
-        start_child env BY_TEST_SUITE= just test
-        test_pid=${child_pids[-1]}
-        wait_for_child "$test_pid" || status=1
+        run_test_child "" || status=1
     fi
 fi
 
@@ -84,7 +106,10 @@ else
     exit_status=$status
 fi
 
-elapsed_ms=$((($(date +%s%N) - started_at_ns) / 1000000))
+elapsed_ms=$((($(date +%s%N) - started_at_ns) / 1000000 - lock_wait_ms))
+if (( elapsed_ms < 0 )); then
+    elapsed_ms=0
+fi
 printf -v elapsed '%d.%03d' "$((elapsed_ms / 1000))" "$((elapsed_ms % 1000))"
 echo "$mode completed in ${elapsed}s"
 if [[ "$mode" == "quality" && $elapsed_ms -gt 10000 ]]; then

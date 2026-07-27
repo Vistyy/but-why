@@ -26,6 +26,9 @@ if ! flock 9; then
 fi
 
 printf '%s\n' "$workload_class" > "$status_file"
+if [[ -n "${BY_CAPACITY_LOCK_ACQUIRED_AT_FILE:-}" ]]; then
+    date +%s%N > "$BY_CAPACITY_LOCK_ACQUIRED_AT_FILE" 2>/dev/null || true
+fi
 cleanup() {
     rm -f "$status_file"
 }

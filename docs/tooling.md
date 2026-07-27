@@ -34,6 +34,7 @@ It runs routine tests, formatting, linting, type checking, documentation validat
 Neither blocking quality command generates coverage.
 
 `just quality` and `just full-quality` supervise their complete process trees during interruption and return 130 for SIGINT or 143 for SIGTERM after bounded cleanup.
+Their reported elapsed time and operating-budget warnings exclude time spent waiting for the shared capacity lock.
 
 Complete invocations of `just test` and `just coverage` use `scripts/with-capacity-lock.sh` to acquire one repository-local capacity lock.
 The runner waits when another complete test or coverage workload already holds the lock, records the active workload class, and forwards the child exit status.
