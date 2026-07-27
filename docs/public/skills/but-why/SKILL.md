@@ -26,4 +26,5 @@ When the user selects an optional setup step, setup is complete only after that 
 A read-only CLI operation is complete when its output and exit code demonstrate the requested behavior.
 A mutating CLI operation is complete when its output, exit code, and resulting persisted state demonstrate the requested behavior.
 
-When implementing a Change in its Managed Worktree, follow [Implement a Change](references/implement-change.md).
+When a handoff identifies a Change, Task-backed Change, or Managed Worktree, treat the session as Change implementation.
+Before inspecting the repository, editing files, or running repository commands, read [Implement a Change](references/implement-change.md) completely and follow it.
