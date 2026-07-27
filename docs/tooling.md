@@ -33,9 +33,11 @@ It runs routine tests, formatting, linting, type checking, documentation validat
 `just full-quality` runs the complete selected test suite plus the same static checks and production build.
 Neither blocking quality command generates coverage.
 
+`just quality` and `just full-quality` supervise their complete process trees during interruption and return 130 for SIGINT or 143 for SIGTERM after bounded cleanup.
+
 Complete invocations of `just test` and `just coverage` use `scripts/with-capacity-lock.sh` to acquire one repository-local capacity lock.
 The runner waits when another complete test or coverage workload already holds the lock, records the active workload class, and forwards the child exit status.
-When `SIGINT` or `SIGTERM` reaches the runner directly, it signals the child process group and releases the lock when the runner exits.
+SIGINT and SIGTERM terminate the complete workload process tree with bounded TERM-to-KILL escalation before the lock is released, returning 130 or 143 respectively.
 Nested commands bypass lock reacquisition.
 Targeted invocations with a test file path, test-name selection, or related-test selection remain unlocked.
 Option-only invocations remain complete workloads and use the lock.
