@@ -94,6 +94,7 @@ const reviewerPiResourceFlags = [
   "--no-themes",
   "--extension ~/.pi/agent/extensions/package-manager-policy",
   "--extension ~/.pi/agent/extensions/web-search",
+  "--extension ~/.pi/agent/extensions/openai-remote-compaction",
   "--skill ~/.pi/agent/skills/codebase-design",
   "--tools read,bash,grep,find,ls,web_search,web_fetch,web_content_get",
 ].join(" ");
