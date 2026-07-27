@@ -1,4 +1,4 @@
-import { execFileSync, spawn } from "node:child_process";
+import { execFileSync, spawn, spawnSync } from "node:child_process";
 import { chmodSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, it } from "@effect/vitest";
@@ -11,6 +11,7 @@ import {
   commitButWhyConfigAndRecordDefault,
   createGitRepo,
   runBuiltByWithEnv,
+  runBuiltByWithInput,
   runByInProcessEffect,
 } from "../support/by-cli.js";
 import { createTestWorkspace } from "../support/testWorkspace.js";
@@ -19,6 +20,122 @@ const now = "2026-06-30T12:00:00.000Z";
 const concurrentWriterCount = 2;
 
 describe("by task CLI processes", () => {
+  it("reads piped UTF-8 stdin for Task descriptions and comments", () => {
+    const root = createGitRepo();
+    const initialized = runBuiltByWithEnv(root, {}, "init", "--task-prefix", "BY");
+    expect(initialized.status).toBe(0);
+
+    const created = runBuiltByWithInput(
+      root,
+      "Descripción exacta\n",
+      {},
+      "task",
+      "create",
+      "--title",
+      "Piped input",
+      "--description-file",
+      "-",
+      "--output",
+      "json",
+    );
+    expect(created.status).toBe(0);
+
+    const commented = runBuiltByWithInput(
+      root,
+      "Comentario exacto\n",
+      {},
+      "task",
+      "comment",
+      "BY-1",
+      "--file",
+      "-",
+      "--output",
+      "json",
+    );
+    expect(commented.status).toBe(0);
+
+    const context = runBuiltByWithEnv(root, {}, "task", "context", "BY-1");
+    expect(context.status).toBe(0);
+    expect(context.stdout).toContain("Descripción exacta");
+    expect(context.stdout).toContain("Comentario exacto");
+  });
+
+  it("preserves command-specific stdin errors at the process boundary", () => {
+    const root = createGitRepo();
+    const initialized = runBuiltByWithEnv(root, {}, "init", "--task-prefix", "BY");
+    expect(initialized.status).toBe(0);
+
+    const empty = runBuiltByWithInput(
+      root,
+      "",
+      {},
+      "task",
+      "create",
+      "--title",
+      "Empty",
+      "--description-file",
+      "-",
+      "--output",
+      "json",
+    );
+    expect(empty.status).toBe(2);
+    expect(JSON.parse(empty.stdout)).toMatchObject({ error: { code: "empty_description" } });
+
+    const invalid = runBuiltByWithInput(
+      root,
+      Buffer.from([0xff]),
+      {},
+      "task",
+      "create",
+      "--title",
+      "Invalid",
+      "--description-file",
+      "-",
+      "--output",
+      "json",
+    );
+    expect(invalid.status).toBe(2);
+    expect(JSON.parse(invalid.stdout)).toMatchObject({
+      error: { code: "invalid_description_encoding" },
+    });
+
+    const oversized = runBuiltByWithInput(
+      root,
+      "x".repeat(256 * 1024 + 1),
+      {},
+      "task",
+      "create",
+      "--title",
+      "Oversized",
+      "--description-file",
+      "-",
+      "--output",
+      "json",
+    );
+    expect(oversized.status).toBe(2);
+    expect(JSON.parse(oversized.stdout)).toMatchObject({
+      error: { code: "description_too_large" },
+    });
+
+    const terminal = spawnSync(
+      "script",
+      [
+        "-qec",
+        `${process.execPath} ${builtByExecutable()} task create --title Terminal --description-file - --output json`,
+        "/dev/null",
+      ],
+      {
+        cwd: root,
+        encoding: "utf8",
+        env: { ...process.env, FORCE_COLOR: "0", NO_COLOR: "1" },
+      },
+    );
+    expect(terminal.status).toBe(2);
+    expect(JSON.parse(terminal.stdout.trim())).toMatchObject({
+      error: { code: "stdin_is_terminal" },
+    });
+  });
+
   it.effect(
     "preserves Task state across concurrent CLI processes",
     () =>

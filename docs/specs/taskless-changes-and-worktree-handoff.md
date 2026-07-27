@@ -200,7 +200,9 @@ A missing or stopped Herdr host and a Herdr launch failure preserve the prepared
 
 `--handoff-file <path>` supplies an optional compact initial prompt for the fresh Pi session.
 The path must identify a non-empty regular file containing valid UTF-8 and at most 256 KiB.
-The CLI does not accept the handoff through standard input.
+The exact `--handoff-file -` value reads the handoff from piped or heredoc UTF-8 standard input.
+An omitted `--handoff-file` does not read standard input.
+The CLI rejects `-` immediately when standard input is an interactive terminal.
 The CLI reads the handoff and passes its content unchanged through the Interactive Session Host interface.
 The handoff describes relevant decisions, references existing artifacts instead of copying them, states the next implementation goal, suggests relevant skills, and excludes sensitive information.
 

@@ -181,6 +181,10 @@ The installed command template is:
 by task create --title <title> --description-file <file> [--depends-on <task-id>]...
 ```
 
+Use the exact file value `-` to read the Task description from piped or heredoc UTF-8 standard input.
+Omit `--description-file` when the command must not read standard input.
+The command rejects `-` immediately when standard input is an interactive terminal.
+
 Set or replace direct prerequisites before approval:
 
 ```bash
@@ -214,6 +218,10 @@ by task context draft <task-id>
 by task context apply <task-id>
 by task comment <task-id> --file <file>
 ```
+
+Use the exact file value `-` to read the Task comment from piped or heredoc UTF-8 standard input.
+Omit `--file` when the command must not read standard input.
+The command rejects `-` immediately when standard input is an interactive terminal.
 
 #### 2. Approve the intent
 
@@ -373,6 +381,9 @@ The result reports `changeId`, `worktreePath`, `host: "herdr"`, and `status: "st
 Preparation and Change Implement are separate operations.
 
 The handoff file must be a non-empty regular UTF-8 file no larger than 256 KiB.
+Use the exact value `-` for `--handoff-file` to read the handoff from piped or heredoc UTF-8 standard input.
+Omit `--handoff-file` when the command must not read standard input.
+The command rejects `-` immediately when standard input is an interactive terminal.
 
 ### Submit, inspect, and reconcile
 

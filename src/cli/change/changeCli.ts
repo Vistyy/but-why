@@ -33,11 +33,13 @@ import type {
 } from "../../change/changeUseCases.js";
 import type { RepositoryStorageError } from "../../contracts/repositoryStorageError.js";
 import type { RepoStateLoadError } from "../../cliResults.js";
+import type { TextInputStdin } from "../../cli/input/textInput.js";
 
 export type ChangeCommandEnvironment = {
   readonly cwd: string;
   readonly globalConfigPath: string;
   readonly now: () => Date;
+  readonly stdin: TextInputStdin;
   readonly reviewerAgentRuntime?: ReviewerAgentRuntime;
   readonly interactiveSessionHost?: InteractiveSessionHost;
   readonly interactiveSessionPath?: string;
@@ -446,32 +448,25 @@ const runImplement = (
           { argument: "<change-id>", description: "Ready Change ID returned by Change Start" },
         ],
         flags: withGlobalHelpFlags([
-          { flag: "--handoff-file <path>", description: "Optional compact handoff file" },
+          {
+            flag: "--handoff-file <path>",
+            description: "Optional compact UTF-8 handoff file; use - for piped stdin",
+          },
         ]),
         examples: [
           "by change implement <change-id>",
           "by change implement <change-id> --handoff-file /tmp/handoff.md --output json",
+          'printf "Handoff" | by change implement <change-id> --handoff-file -',
         ],
       }),
     );
   }
   const parsed = parseImplementArgs(args);
   if (!parsed.ok) return Effect.succeed(parsed.result);
-  if (parsed.handoffFile === "-") {
-    return Effect.succeed(
-      usageError({
-        code: "unsupported_stdin_handoff_file",
-        message: "Reading a Change handoff from standard input is not supported.",
-        help: [
-          "Write the handoff to a file, then rerun Change Implement with --handoff-file <path>.",
-        ],
-      }),
-    );
-  }
   const handoff =
     parsed.handoffFile === undefined
       ? undefined
-      : readHandoffFile(environment.cwd, parsed.handoffFile);
+      : readHandoffFile(environment.cwd, parsed.handoffFile, environment.stdin);
   if (handoff !== undefined && !handoff.ok) return Effect.succeed(handoffFileError(handoff.error));
 
   const global = readGlobalConfig(environment.globalConfigPath);
@@ -603,6 +598,12 @@ const handoffFileError = (error: HandoffFileReadError): CliResult => {
         message: "Change handoff file must not be empty.",
         details: { path: error.path },
         help: ["Write a non-empty handoff file, then retry Change Implement."],
+      });
+    case "stdin_is_terminal":
+      return usageError({
+        code: error.code,
+        message: "Standard input is an interactive terminal.",
+        help: ["Pipe UTF-8 text or use a shell heredoc with --handoff-file -."],
       });
   }
 };

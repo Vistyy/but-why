@@ -17,6 +17,7 @@ import type { InteractiveSessionHost } from "./change/interactiveSessionHost.js"
 import type { ReviewerAgentRuntime } from "./agent/reviewerAgentRuntime.js";
 import type { TaskUseCases } from "./task/taskUseCases.js";
 import type { CancellationUseCases } from "./change/cancelChange.js";
+import type { TextInputStdin } from "./cli/input/textInput.js";
 
 export type { CliResult } from "./cliResults.js";
 
@@ -25,6 +26,7 @@ export type CliEnvironment = {
   readonly cwd: string;
   readonly globalConfigPath: string;
   readonly now: () => Date;
+  readonly stdin: TextInputStdin;
   readonly taskUseCases?: TaskUseCases;
   readonly cancellationUseCases?: CancellationUseCases;
   readonly reviewerAgentRuntime?: ReviewerAgentRuntime;

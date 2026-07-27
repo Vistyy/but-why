@@ -13,6 +13,7 @@ import type { CancellationUseCases } from "../../src/change/cancelChange.js";
 import type { ReviewerAgentRuntime } from "../../src/agent/reviewerAgentRuntime.js";
 import { serializeOutput } from "../../src/output/serialize.js";
 import type { TaskUseCases } from "../../src/task/taskUseCases.js";
+import type { TextInputStdin } from "../../src/cli/input/textInput.js";
 
 export const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 export const byExecutable = join(repoRoot, "bin/by");
@@ -33,6 +34,25 @@ export const runBuiltByWithEnv = (
 ) =>
   spawnSync(process.execPath, [builtByExecutable(), ...args], {
     cwd,
+    encoding: "utf8",
+    env: {
+      ...process.env,
+      ...env,
+      BUT_WHY_EXECUTABLE_PATH: byExecutable,
+      FORCE_COLOR: "0",
+      NO_COLOR: "1",
+    },
+  });
+
+export const runBuiltByWithInput = (
+  cwd: string,
+  input: string | Buffer,
+  env: NodeJS.ProcessEnv = {},
+  ...args: readonly string[]
+) =>
+  spawnSync(process.execPath, [builtByExecutable(), ...args], {
+    cwd,
+    input,
     encoding: "utf8",
     env: {
       ...process.env,
@@ -84,6 +104,7 @@ type InProcessCliResult = {
 
 type InProcessCliOptions = {
   readonly globalConfigPath?: string;
+  readonly stdin?: TextInputStdin;
   readonly taskUseCases?: TaskUseCases;
   readonly cancellationUseCases?: CancellationUseCases;
   readonly reviewerAgentRuntime?: ReviewerAgentRuntime;
@@ -107,6 +128,7 @@ export const runByInProcessEffect = (
     cwd,
     globalConfigPath: options.globalConfigPath ?? join(cwd, ".test-global-config.json"),
     now: () => new Date(now),
+    stdin: options.stdin ?? { fd: -1, isTerminal: true },
     ...(options.taskUseCases === undefined ? {} : { taskUseCases: options.taskUseCases }),
     ...(options.cancellationUseCases === undefined
       ? {}

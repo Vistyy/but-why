@@ -27,6 +27,7 @@ Effect.runPromise(
     cwd: process.cwd(),
     globalConfigPath: join(homedir(), ".config/but-why/config.json"),
     now: fixedNow === undefined ? () => new Date() : () => new Date(fixedNow),
+    stdin: { fd: 0, isTerminal: process.stdin.isTTY === true },
     ...interactiveSessionPath(),
   }),
 )

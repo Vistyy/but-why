@@ -1,6 +1,7 @@
-import { readFileSync, statSync } from "node:fs";
 import { resolve } from "node:path";
-import { TextDecoder } from "node:util";
+
+import type { TextInputStdin } from "../cli/input/textInput.js";
+import { readTextInput } from "../cli/input/textInput.js";
 
 export const maxHandoffBytes = 256 * 1024;
 
@@ -13,42 +14,59 @@ export type HandoffFileReadError =
   | { readonly code: "handoff_file_unreadable"; readonly path: string }
   | { readonly code: "handoff_file_too_large"; readonly path: string; readonly maxBytes: number }
   | { readonly code: "invalid_handoff_encoding"; readonly path: string }
-  | { readonly code: "empty_handoff_file"; readonly path: string };
+  | { readonly code: "empty_handoff_file"; readonly path: string }
+  | { readonly code: "stdin_is_terminal" };
 
-export const readHandoffFile = (cwd: string, handoffFile: string): HandoffFileReadResult => {
-  const path = resolve(cwd, handoffFile);
-  let size: number;
-
-  try {
-    const stats = statSync(path);
-    if (!stats.isFile()) return { ok: false, error: { code: "handoff_file_unreadable", path } };
-    size = stats.size;
-  } catch (error) {
-    if (isNodeError(error) && error.code === "ENOENT") {
-      return { ok: false, error: { code: "handoff_file_not_found", path } };
+export const readHandoffFile = (
+  cwd: string,
+  handoffFile: string,
+  stdin?: TextInputStdin,
+): HandoffFileReadResult => {
+  const input = readTextInput(cwd, handoffFile, {
+    maxBytes: maxHandoffBytes,
+    stdin,
+  });
+  if (!input.ok) {
+    switch (input.error.code) {
+      case "text_input_file_not_found":
+        return { ok: false, error: { code: "handoff_file_not_found", path: input.error.path } };
+      case "text_input_file_unreadable":
+      case "text_input_stdin_unreadable":
+        return {
+          ok: false,
+          error: {
+            code: "handoff_file_unreadable",
+            path: input.error.code === "text_input_file_unreadable" ? input.error.path : "-",
+          },
+        };
+      case "text_input_too_large":
+        return {
+          ok: false,
+          error: {
+            code: "handoff_file_too_large",
+            path: input.error.path ?? "-",
+            maxBytes: input.error.maxBytes,
+          },
+        };
+      case "text_input_invalid_utf8":
+        return {
+          ok: false,
+          error: { code: "invalid_handoff_encoding", path: input.error.path ?? "-" },
+        };
+      case "stdin_is_terminal":
+        return { ok: false, error: { code: "stdin_is_terminal" } };
     }
-    return { ok: false, error: { code: "handoff_file_unreadable", path } };
   }
 
-  if (size === 0) return { ok: false, error: { code: "empty_handoff_file", path } };
-  if (size > maxHandoffBytes) {
+  if (input.content.length === 0) {
     return {
       ok: false,
-      error: { code: "handoff_file_too_large", path, maxBytes: maxHandoffBytes },
+      error: {
+        code: "empty_handoff_file",
+        path: handoffFile === "-" ? "-" : resolve(cwd, handoffFile),
+      },
     };
   }
 
-  try {
-    const content = new TextDecoder("utf-8", { fatal: true }).decode(readFileSync(path));
-    return { ok: true, content };
-  } catch (error) {
-    if (error instanceof TypeError) {
-      return { ok: false, error: { code: "invalid_handoff_encoding", path } };
-    }
-    return { ok: false, error: { code: "handoff_file_unreadable", path } };
-  }
+  return { ok: true, content: input.content };
 };
-
-type NodeError = Error & { readonly code?: string };
-
-const isNodeError = (value: unknown): value is NodeError => value instanceof Error;

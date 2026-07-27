@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { closeSync, mkdirSync, openSync, writeFileSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 
 import { expect, it } from "@effect/vitest";
@@ -500,7 +500,42 @@ describe("by change implement", () => {
     }),
   );
 
-  it.effect("rejects standard input as a handoff source", () =>
+  it.effect("passes piped UTF-8 standard input to the Interactive Session Host", () =>
+    Effect.gen(function* () {
+      const root = yield* readyRepository();
+      const started = yield* runByInProcessEffect(
+        root,
+        ["change", "start", "--output", "json"],
+        now,
+      );
+      const change = JSON.parse(started.stdout) as { readonly change: { readonly id: string } };
+      const stdinPath = join(root, "stdin-handoff.md");
+      writeFileSync(stdinPath, "Handoff from stdin: Héllo\n");
+      const stdin = openSync(stdinPath, "r");
+      let prompt: string | undefined;
+      const host: InteractiveSessionHost = {
+        launch: async (input) => {
+          prompt = input.initialPrompt;
+          return { ok: true, host: "herdr", status: "started" };
+        },
+      };
+
+      try {
+        const result = yield* runByInProcessEffect(
+          root,
+          ["change", "implement", change.change.id, "--handoff-file", "-", "--output", "json"],
+          now,
+          { interactiveSessionHost: host, stdin: { fd: stdin, isTerminal: false } },
+        );
+        expect(result.status).toBe(0);
+        expect(prompt).toBe("Handoff from stdin: Héllo\n");
+      } finally {
+        closeSync(stdin);
+      }
+    }),
+  );
+
+  it.effect("rejects standard input as an interactive terminal", () =>
     Effect.gen(function* () {
       const root = createTestWorkspace();
 
@@ -512,7 +547,7 @@ describe("by change implement", () => {
 
       expect(result.status).toBe(2);
       expect(JSON.parse(result.stdout)).toMatchObject({
-        error: { code: "unsupported_stdin_handoff_file" },
+        error: { code: "stdin_is_terminal" },
       });
     }),
   );
