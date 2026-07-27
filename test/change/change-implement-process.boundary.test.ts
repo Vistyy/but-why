@@ -64,7 +64,7 @@ exit 1
     chmodSync(join(tools, "herdr"), 0o755);
     const baseEnv = {
       HOME: home,
-      PATH: `${tools}:${process.env["PATH"] ?? ""}`,
+      PATH: `${tools}:${process.env.PATH ?? ""}`,
     };
 
     const started = runBuiltByWithEnv(root, baseEnv, "change", "start", "--output", "json");
