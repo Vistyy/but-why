@@ -37,7 +37,7 @@ Neither blocking quality command generates coverage.
 Their reported elapsed time and operating-budget warnings exclude time spent waiting for the shared capacity lock.
 
 Complete invocations of `just test` and `just coverage` use `scripts/with-capacity-lock.sh` to acquire one repository-local capacity lock.
-The runner waits when another complete test or coverage workload already holds the lock, records the active workload class, and forwards the child exit status.
+The runner waits when another complete test or coverage workload already holds the lock, reports the active workload class on stderr, and forwards the child exit status.
 SIGINT and SIGTERM terminate the complete workload process tree with bounded TERM-to-KILL escalation before the lock is released, returning 130 or 143 respectively.
 Nested commands bypass lock reacquisition.
 Targeted invocations with a test file path, test-name selection, or related-test selection remain unlocked.

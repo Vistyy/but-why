@@ -20,9 +20,13 @@ mkdir -p "$(dirname "$lock_file")"
 source "$(dirname "${BASH_SOURCE[0]}")/process-tree.sh"
 
 exec 9>"$lock_file"
-if ! flock 9; then
-    printf 'error: failed to acquire the capacity lock for %s\n' "$workload_class" >&2
-    exit 1
+if ! flock -n 9; then
+    active_workload=$(cat "$status_file" 2>/dev/null || printf 'unknown')
+    printf 'waiting: %s is waiting for capacity (active workload: %s)\n' "$workload_class" "$active_workload" >&2
+    if ! flock 9; then
+        printf 'error: failed to acquire the capacity lock for %s\n' "$workload_class" >&2
+        exit 1
+    fi
 fi
 
 printf '%s\n' "$workload_class" > "$status_file"

@@ -62,7 +62,13 @@ const startJust = (lockFile: string, args: string[], environment: NodeJS.Process
   const done = new Promise<CommandResult>((resolveResult) => {
     child.on("close", (status) => resolveResult({ status, output }));
   });
-  return { child, done };
+  return {
+    child,
+    done,
+    get output() {
+      return output;
+    },
+  };
 };
 
 const runJust = (lockFile: string, args: string[]): Promise<CommandResult> =>
@@ -137,6 +143,12 @@ const waitForProcessExit = async (pidFile: string): Promise<void> => {
   throw new Error(`The descendant process is still running: ${pid}`);
 };
 
+const createCompletingPnpm = (directory: string): void => {
+  const pnpm = join(directory, "pnpm");
+  writeFileSync(pnpm, "#!/usr/bin/env bash\nexit 0\n");
+  chmodSync(pnpm, 0o755);
+};
+
 const createBlockingPnpm = (
   directory: string,
   readyFile: string,
@@ -190,13 +202,17 @@ describe("quality interface", () => {
       directory,
       "complete coverage",
     );
+    createCompletingPnpm(directory);
     let complete: ReturnType<typeof startJust> | undefined;
 
     try {
       await waitForFile(readyFile);
-      complete = startJust(lockFile, ["test", "--reporter=dot"]);
+      complete = startJust(lockFile, ["test", "--reporter=dot"], {
+        PATH: `${directory}:${Reflect.get(process.env, "PATH") ?? ""}`,
+      });
       await new Promise((resolveDelay) => setTimeout(resolveDelay, 100));
       expect(complete.child.exitCode).toBeNull();
+      expect(complete.output).toContain("waiting: complete test is waiting for capacity");
 
       const targeted = await runJust(lockFile, ["test", "test/repository/module-seams.test.ts"]);
       expect(targeted.status).toBe(0);
@@ -206,10 +222,7 @@ describe("quality interface", () => {
       const completeResult = await complete.done;
       expect(completeResult.status, completeResult.output).toBe(0);
     } finally {
-      if (complete?.child.exitCode === null) {
-        complete.child.kill("SIGTERM");
-        await complete.done;
-      }
+      if (complete?.child.exitCode === null) await stopJust(complete);
       await stopRunner(holder);
     }
   }, 30_000);
