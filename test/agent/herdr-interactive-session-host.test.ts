@@ -72,7 +72,7 @@ describe("Herdr Interactive Session Host", () => {
         "pane",
         "run",
         "workspace-1:pane-1",
-        "PATH='/usr/local/bin:/opt/pi/bin' exec 'nix' 'develop' '-c' pi --name 'but-why-change-123' --model 'openai-codex/gpt-5.6-luna' --thinking 'high' 'Implement Change change-123 in this Managed Worktree.\n\nContinue from the recorded decision.'",
+        "PATH='/usr/local/bin:/opt/pi/bin' exec 'nix' 'develop' '-c' pi --name 'but-why-change-123' --model 'openai-codex/gpt-5.6-luna' --thinking 'high' 'Implement Change change-123 in this Managed Worktree.\n\nBefore doing any work, load the But Why skill and read its references/implement-change.md document completely. Follow that document for this Change.\n\nContinue from the recorded decision.'",
       ],
       ["agent", "rename", "workspace-1:pane-1", sessionName],
     ]);

@@ -108,6 +108,7 @@ const piCommand = (input: InteractiveSessionLaunchInput, path: string | undefine
     shellQuote(
       [
         `Implement Change ${input.changeId} in this Managed Worktree.`,
+        "Before doing any work, load the But Why skill and read its references/implement-change.md document completely. Follow that document for this Change.",
         ...(input.initialPrompt === undefined ? [] : [input.initialPrompt]),
       ].join("\n\n"),
     ),
