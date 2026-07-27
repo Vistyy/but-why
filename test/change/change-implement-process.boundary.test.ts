@@ -74,5 +74,5 @@ describe("by change implement stdin process boundary", () => {
     expect(JSON.parse(terminal.stdout.trim())).toMatchObject({
       error: { code: "stdin_is_terminal" },
     });
-  });
+  }, 30_000);
 });

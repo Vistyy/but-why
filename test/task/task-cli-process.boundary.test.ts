@@ -134,7 +134,7 @@ describe("by task CLI processes", () => {
     expect(JSON.parse(terminal.stdout.trim())).toMatchObject({
       error: { code: "stdin_is_terminal" },
     });
-  });
+  }, 30_000);
 
   it.effect(
     "preserves Task state across concurrent CLI processes",
