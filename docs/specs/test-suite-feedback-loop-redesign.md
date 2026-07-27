@@ -111,6 +111,8 @@ All supported commands that start a complete test or coverage workload use one i
 The capacity runner acquires one shared lock and waits when another heavy workload holds it.
 The lock records the active workload class for operational inspection.
 Nested internal recipes execute under the existing lock and do not reacquire it.
+When an interrupted supported command owns the workload, the runner sends termination to the complete process tree, escalates to a bounded kill signal when needed, waits for cleanup, and then releases the lock.
+The interrupted command returns 130 for SIGINT or 143 for SIGTERM.
 
 The lock is a repository workflow guardrail, not a security boundary.
 Direct invocation of underlying tools is outside the supported repository command interface.
@@ -136,7 +138,8 @@ A workflow retains an end-to-end test only when its composition creates a distin
 Retained tests cover consequential Git facts, Managed Worktree safety, SQLite persistence and atomicity, cross-process writer behavior, and other external contracts.
 
 The shared capacity runner has focused command-level tests.
-Those tests verify lock contention and release, child exit-code forwarding, interruption cleanup, and non-recursive composition.
+Those tests verify lock contention and release, child exit-code forwarding, bounded interruption cleanup, and non-recursive composition.
+Process-level tests exercise SIGINT and SIGTERM through the supported Just command interface and verify immediate lock reuse.
 
 Reporter verification includes one successful run and one controlled failing run.
 The failing run must retain the test name, assertion difference, stack trace, and applicable captured output.
