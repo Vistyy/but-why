@@ -387,6 +387,8 @@ describe("quality interface", () => {
       const interruptedAt = Date.now();
       signalJust(justProcess, signal);
       expect((await justProcess.done).status).toBe(expectedStatus);
+      expect(justProcess.output).toContain(`${qualityCommand} interrupted after`);
+      expect(justProcess.output).not.toContain(`${qualityCommand} completed in`);
       expect(Date.now() - interruptedAt).toBeLessThan(3_000);
       const recovered = await runRunner(lockFile, ["complete test", "sh", "-c", "exit 0"]);
       expect(recovered.status).toBe(0);
