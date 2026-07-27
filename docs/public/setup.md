@@ -11,6 +11,7 @@ Identify your current agent harness from your execution context.
 Ask whether I want to use that harness or another supported harness.
 Do not scan my machine for harnesses.
 Detect my existing skill conventions before proposing a skill location.
+Configure recursive formatter, linter, test, and analysis tools to exclude `.sandcastle/**`.
 Ask where to install the skill.
 ```
 
@@ -38,6 +39,9 @@ by init --task-prefix BY
 
 Replace `BY` with a repository-specific uppercase Task prefix.
 
+`by init` adds Git ignore rules for `.sandcastle/worktrees/`, `.sandcastle/logs/`, `.sandcastle/patches/`, and `.sandcastle/.env`.
+It does not edit formatter, linter, test, or analysis configuration.
+
 The command creates `.but-why/config.json` and `.but-why/reviewers/` in the worktree.
 
 It stores SQLite state and Artifacts under `<git-common-dir>/but-why/` so every linked worktree shares them.
@@ -52,6 +56,11 @@ After a manual repository move or rename, existing Changes retain their recorded
 New Changes can use the sibling root for the new canonical main-checkout location.
 
 Inspect the repository tooling before you edit `.but-why/config.json`.
+
+Configure every recursive formatter, linter, test, and analysis tool to exclude `.sandcastle/**`.
+Sandcastle creates Validation Workspaces under `.sandcastle/worktrees/`.
+A recursive tool can otherwise discover nested configuration or test files in a Validation Workspace.
+Do not move Validation Workspaces as part of setup.
 
 Add `validation.checks`.
 
