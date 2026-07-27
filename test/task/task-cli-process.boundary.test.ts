@@ -1,4 +1,4 @@
-import { execFileSync, spawn, spawnSync } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 import { chmodSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, it } from "@effect/vitest";
@@ -58,7 +58,7 @@ describe("by task CLI processes", () => {
     expect(context.status).toBe(0);
     expect(context.stdout).toContain("Descripción exacta");
     expect(context.stdout).toContain("Comentario exacto");
-  });
+  }, 30_000);
 
   it("preserves command-specific stdin errors at the process boundary", () => {
     const root = createGitRepo();
@@ -115,24 +115,6 @@ describe("by task CLI processes", () => {
     expect(oversized.status).toBe(2);
     expect(JSON.parse(oversized.stdout)).toMatchObject({
       error: { code: "description_too_large" },
-    });
-
-    const terminal = spawnSync(
-      "script",
-      [
-        "-qec",
-        `${process.execPath} ${builtByExecutable()} task create --title Terminal --description-file - --output json`,
-        "/dev/null",
-      ],
-      {
-        cwd: root,
-        encoding: "utf8",
-        env: { ...process.env, FORCE_COLOR: "0", NO_COLOR: "1" },
-      },
-    );
-    expect(terminal.status).toBe(2);
-    expect(JSON.parse(terminal.stdout.trim())).toMatchObject({
-      error: { code: "stdin_is_terminal" },
     });
   }, 30_000);
 

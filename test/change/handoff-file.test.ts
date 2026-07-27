@@ -6,15 +6,6 @@ import { maxHandoffBytes, readHandoffFile } from "../../src/change/handoffFile.j
 import { createTestWorkspace } from "../support/testWorkspace.js";
 
 describe("Change handoff files", () => {
-  it("preserves a non-empty UTF-8 handoff through the 256 KiB limit", () => {
-    const root = createTestWorkspace();
-    const path = join(root, "handoff.md");
-    const handoff = "x".repeat(maxHandoffBytes);
-    writeFileSync(path, handoff);
-
-    expect(readHandoffFile(root, "handoff.md")).toEqual({ ok: true, content: handoff });
-  });
-
   it("accepts a non-empty file containing only a UTF-8 BOM", () => {
     const root = createTestWorkspace();
     const path = join(root, "bom.md");

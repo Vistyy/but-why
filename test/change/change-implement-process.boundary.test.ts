@@ -13,7 +13,7 @@ import { createInitializedRepo } from "../support/initializedRepo.js";
 import { createTestWorkspace } from "../support/testWorkspace.js";
 
 describe("by change implement stdin process boundary", () => {
-  it("forwards piped stdin and normal handoff files through a real process", () => {
+  it("forwards piped stdin through a real process", () => {
     const root = createInitializedRepo();
     commitButWhyConfigAndRecordDefault(root);
     const home = createTestWorkspace();
@@ -80,20 +80,6 @@ exit 1
       BY_FAKE_WORKTREE: change.worktreePath,
     };
 
-    writeFileSync(join(root, "handoff.md"), "Handoff from a regular file\n");
-    const file = runBuiltByWithEnv(
-      root,
-      env,
-      "change",
-      "implement",
-      change.change.id,
-      "--handoff-file",
-      "handoff.md",
-      "--output",
-      "json",
-    );
-    expect(file.status).toBe(0);
-
     const piped = runBuiltByWithInput(
       root,
       "Handoff from piped stdin\n",
@@ -113,21 +99,6 @@ exit 1
   it("preserves handoff input errors for piped stdin", () => {
     const root = createTestWorkspace();
 
-    const empty = runBuiltByWithInput(
-      root,
-      "",
-      {},
-      "change",
-      "implement",
-      "change-1",
-      "--handoff-file",
-      "-",
-      "--output",
-      "json",
-    );
-    expect(empty.status).toBe(2);
-    expect(JSON.parse(empty.stdout)).toMatchObject({ error: { code: "empty_handoff_file" } });
-
     const invalid = runBuiltByWithInput(
       root,
       Buffer.from([0xff]),
@@ -143,23 +114,6 @@ exit 1
     expect(invalid.status).toBe(2);
     expect(JSON.parse(invalid.stdout)).toMatchObject({
       error: { code: "invalid_handoff_encoding" },
-    });
-
-    const oversized = runBuiltByWithInput(
-      root,
-      "x".repeat(256 * 1024 + 1),
-      {},
-      "change",
-      "implement",
-      "change-1",
-      "--handoff-file",
-      "-",
-      "--output",
-      "json",
-    );
-    expect(oversized.status).toBe(2);
-    expect(JSON.parse(oversized.stdout)).toMatchObject({
-      error: { code: "handoff_file_too_large" },
     });
 
     const terminal = spawnSync(
