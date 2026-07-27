@@ -11,12 +11,11 @@ SQLite Tasks are the source of truth for active implementation.
 Run `just by task list` to inspect the oldest-first queue and current dependency facts.
 Start the oldest startable Task unless an explicit dependency or user decision requires another order.
 
-## Remaining release dependency graph
+## Remaining release sequence
 
-| SQLite Task | Capability | Blocked by |
-| --- | --- | --- |
-| `BY-14` | Publish But Why? to npm | None |
-| `BY-15` | Establish post-publication compatibility policy | `BY-14` |
+SQLite Task dependencies define the complete release graph.
+`BY-14` publishes But Why? to npm after its recorded prerequisites are Done.
+`BY-15` establishes the post-publication compatibility policy after publication.
 
 ## Migration order
 
@@ -56,7 +55,6 @@ The following are not v1 contracts:
 
 - Validation without a Change.
 - Automatic Fixers and AFK workers.
-- Needs Input, Hold, and Resume.
 - Supervisor services and background PR watching.
 - Automatic GitHub CI, review-comment, and merge-conflict remediation.
 - Final Review and PR Writer agents.

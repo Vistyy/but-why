@@ -19,6 +19,16 @@ Reconsider parallel execution only after real-use evidence justifies workspace i
 V1 performs one local output-correction request because `Sandbox.run()` does not expose structured-output retry.
 If Sandcastle gains that capability, remove the local correction path and delegate the behavior.
 
+## Where should disposable Validation Workspaces live?
+
+Sandcastle places each v1 Validation Workspace under the consumer repository at `.sandcastle/worktrees/`.
+Recursive repository tools can discover an abandoned Validation Workspace unless the repository excludes `.sandcastle/**`.
+V1 setup guidance must direct the user's coding agent to configure that exclusion.
+But Why does not edit consumer tool configuration automatically.
+
+After v1, move Validation Workspaces outside the consumer repository and remove Sandcastle's control of their placement.
+Before implementation, select the external location and define naming, Git registration, cleanup, recovery, and repository-relocation behavior.
+
 ## How should agent usage and cost be measured?
 
 Sandcastle does not return trustworthy Pi token or monetary usage.
@@ -37,25 +47,47 @@ Keep Sandcastle behind its current domain seams until evidence justifies that de
 Persistent reviewer sessions require a separate decision.
 That decision must define session ownership, identity, retention, security, recovery, Candidate transitions, and the trade-off between fresh review and reused repository orientation.
 
+## What role should Task Comments have before Start?
+
+Task Comments currently append Markdown to Task Context before Change Start and become part of approved Acceptance Context.
+Direct Task Context editing may be simpler when one operator is refining intent.
+Future planning agents or multiple reviewers may instead need durable feedback that remains distinct from accepted intent.
+Keep current behavior until observed planning or review usage establishes whether comments should remain intent additions or become a separate record.
+
 ## Does Task readiness need another gate?
 
 Dogfooding may justify an optional Task Preflight or a disposable feasibility prototype.
 Keep either capability separate from completed-code validation.
+
+## How should cancelled Tasks relate to successor work and dependents?
+
+A Cancelled Task is terminal and does not satisfy Tasks that depend on it.
+Future design must decide whether a Cancelled Task may have no successor, one successor, or several successor Tasks, and how those relationships remain visible from each Task.
+It must also define how users explicitly redirect unfinished dependents without silently rewriting dependencies or treating cancellation as completion.
+Revisit this when real replacement work requires more than creating a new Task and manually updating its dependents.
 
 ## Should But Why automate implementation and fixes?
 
 AFK Implementers, automatic Fixers, and orchestration-owned stops are deferred.
 Before adding them, define process ownership, cancellation, workspace fencing, cost protection, recovery, and security from observed interactive-session behavior.
 
+## How should But Why separate operator and Implementer authority?
+
+Implementers currently use the same local CLI and Shared Repository State as the main operator.
+An Implementer can therefore invoke operator-owned lifecycle commands or edit local state as an easier substitute for completing accepted work.
+Future design should make accidental and reward-seeking destructive actions impractical without obstructing normal implementation.
+It does not need to defend against a fully hostile process running as the same operating-system user.
+
+The design must define operator authority, Implementer authority, subagent delegation, and the trust boundary around Shared Repository State.
+Scoped capabilities, a local authority broker, signed authoritative state, and stronger process isolation have been discussed only as possible approaches.
+None is accepted architecture.
+Revisit this before supporting unattended implementation or automated destructive operations.
+
 ## Should But Why stop human-managed Interactive Sessions during cancellation?
 
 V1 leaves Interactive Sessions under human control and does not stop them when a Task or Change is cancelled.
 Revisit this only if interactive-session evidence shows that post-cancellation writes create material risk or operational cost.
 Any future automation must define session identity, ownership, stop semantics, worktree fencing, recovery, and coordination with safe cleanup.
-
-A future Needs Input state must identify a known mechanical blocker.
-It must preserve evidence, exhaust approved recovery, and provide a resumable checkpoint.
-Agents should make and record reasonable implementation decisions without using that state.
 
 ## Which GitHub events should drive automation?
 

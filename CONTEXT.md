@@ -20,6 +20,11 @@ _Avoid_: Ad hoc worktree, implicit Task
 A Change whose implementation, validation, publication, or merge observation may still advance.
 _Avoid_: Active process, current Validation Run
 
+**Blocked Change**:
+A temporary Change state caused by one active Implementation Blocker.
+A Blocked Change cannot be submitted and returns to Open when its blocker is resolved.
+_Avoid_: Closed Change, Validation Run blocked by Findings
+
 **Closed Change**:
 A Change permanently completed or cancelled while preserving its history.
 _Avoid_: Deleted Change, merged branch
@@ -55,8 +60,11 @@ The latest Candidate selected from the Managed Worktree for the open Change.
 _Avoid_: Latest historical Candidate, dirty workspace
 
 **Acceptance Context**:
-The immutable approved Task intent captured when the Task starts and supplied only to Acceptance Review.
-_Avoid_: Current mutable Task text, Specialist instructions, inferred intent
+One immutable version of the approved Task intent supplied only to Acceptance Review.
+The initial version is captured when the Task starts.
+Each approved Implementation Blocker Resolution creates a new version by appending the resolution to the original approved intent and earlier resolutions.
+A Validation Run retains the exact Acceptance Context version it reviewed.
+_Avoid_: Current mutable Task text, Specialist instructions, inferred intent, Implementation Blocker report
 
 **Validation Run**:
 One durable execution and judgment of one Candidate under one resolved validation policy.
@@ -97,8 +105,13 @@ It may link an approved Task and capture its Acceptance Context.
 _Avoid_: Agent launch alone, validation, arbitrary state assignment
 
 **Task Lifecycle**:
-The user-facing progress of a Task through New, Todo, Implementing, Validating, Ready, Done, or Cancelled.
+The user-facing progress of a Task through New, Todo, Implementing, Blocked, Validating, Ready, Done, or Cancelled.
 _Avoid_: Validation Run state, generic pipeline
+
+**Blocked Task**:
+A temporary Task state reflecting that its linked Change has an active Implementation Blocker.
+Resolving the blocker returns the Task to Implementing.
+_Avoid_: Todo Task blocked by a Task Dependency, Validation Run blocked by Findings
 
 **Task Dependency**:
 A directed prerequisite relationship that blocks the dependent Task from starting until the prerequisite is Done.
@@ -153,6 +166,7 @@ The point-in-time act of asking But Why? to fetch the Change Base, inspect a Cha
 Later Change Base advancement does not alter a completed Submission or invalidate its Candidate automatically.
 A repeated Submit command returns stored success without fetching a newer Change Base only when durable evidence proves that the unchanged Repository Branch head is the exact passing Candidate confirmed on the owned pull request.
 Otherwise the command begins a new Submission and fetches the current Change Base.
+At most one Submission may execute for a Change at a time.
 Current configuration applies to a future or unfinished Submission but does not invalidate a completed Submission.
 _Avoid_: Push, Candidate, Validation Run, head-commit-only retry, retroactive configuration invalidation, continuous merge gate
 
@@ -182,6 +196,26 @@ _Avoid_: Remote Change Branch
 **Implementer**:
 The human or external interactive agent responsible for writing and committing Change work and addressing returned Findings.
 _Avoid_: Acceptance Reviewer, Specialist Reviewer, But Why Fixer
+
+**Implementation Decision**:
+An immutable Implementer-authored record of one material choice and its reasoning during a Change.
+But Why assigns its sequence and timestamp when the decision is recorded.
+Implementation Decisions form the Change's chronological Implementation Decision Log and may contradict earlier entries as reasoning evolves.
+They are non-authoritative rationale supplied separately from Acceptance Context to Acceptance Review and publication.
+_Avoid_: Task Comment, Acceptance Context amendment, ADR, Finding
+
+**Implementation Blocker**:
+An immutable Implementer-authored problem report for one Open Change when implementation cannot safely continue under the accepted intent without an external decision or action.
+An active Implementation Blocker moves the Change and its linked Task to Blocked and prevents Submission until the blocker is resolved or the work is cancelled.
+The report is non-authoritative evidence and does not amend Acceptance Context.
+_Avoid_: Finding, Validation Tooling Failure, Task Dependency, Implementation Decision, cancellation
+
+**Implementation Blocker Resolution**:
+An immutable user-approved answer to one active Implementation Blocker.
+It returns the Change to Open and its linked Task to Implementing.
+For a Task-backed Change, every Resolution creates a new Acceptance Context version and is authoritative when it conflicts with earlier accepted intent.
+For a taskless Change, the Resolution remains Change history without creating Acceptance Context.
+_Avoid_: Implementation Decision, Task Comment, silent Task edit, automatic recovery
 
 **Validation Gate**:
 The fixed read-only sequence that judges changed code through Repository Preparation, Checks, Acceptance Review for a Task-backed Change, and configured Specialists.
