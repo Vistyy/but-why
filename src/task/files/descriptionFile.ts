@@ -1,6 +1,7 @@
-import { readFileSync, statSync } from "node:fs";
 import { resolve } from "node:path";
-import { TextDecoder } from "node:util";
+
+import type { TextInputStdin } from "../../cli/input/textInput.js";
+import { readTextInput } from "../../cli/input/textInput.js";
 
 const maxDescriptionBytes = 256 * 1024;
 
@@ -35,61 +36,59 @@ export type DescriptionFileReadError =
   | {
       readonly code: "empty_description";
       readonly path: string;
-    };
+    }
+  | { readonly code: "stdin_is_terminal" };
 
 export const readDescriptionFile = (
   cwd: string,
   descriptionFile: string,
+  stdin?: TextInputStdin,
 ): DescriptionFileReadResult => {
-  const path = resolve(cwd, descriptionFile);
-
-  let size: number;
-
-  try {
-    const stats = statSync(path);
-
-    if (!stats.isFile()) {
-      return { ok: false, error: { code: "description_file_unreadable", path } };
+  const input = readTextInput(cwd, descriptionFile, {
+    maxBytes: maxDescriptionBytes,
+    stdin,
+  });
+  if (!input.ok) {
+    switch (input.error.code) {
+      case "text_input_file_not_found":
+        return { ok: false, error: { code: "description_file_not_found", path: input.error.path } };
+      case "text_input_file_unreadable":
+      case "text_input_stdin_unreadable":
+        return {
+          ok: false,
+          error: {
+            code: "description_file_unreadable",
+            path: input.error.code === "text_input_file_unreadable" ? input.error.path : "-",
+          },
+        };
+      case "text_input_too_large":
+        return {
+          ok: false,
+          error: {
+            code: "description_too_large",
+            path: input.error.path ?? "-",
+            maxBytes: input.error.maxBytes,
+          },
+        };
+      case "text_input_invalid_utf8":
+        return {
+          ok: false,
+          error: { code: "invalid_description_encoding", path: input.error.path ?? "-" },
+        };
+      case "stdin_is_terminal":
+        return { ok: false, error: { code: "stdin_is_terminal" } };
     }
-
-    size = stats.size;
-  } catch (error) {
-    if (isNodeError(error) && error.code === "ENOENT") {
-      return { ok: false, error: { code: "description_file_not_found", path } };
-    }
-
-    return { ok: false, error: { code: "description_file_unreadable", path } };
   }
 
-  if (size > maxDescriptionBytes) {
+  if (input.content.trim().length === 0) {
     return {
       ok: false,
-      error: { code: "description_too_large", path, maxBytes: maxDescriptionBytes },
+      error: {
+        code: "empty_description",
+        path: descriptionFile === "-" ? "-" : resolve(cwd, descriptionFile),
+      },
     };
   }
 
-  let content: string;
-
-  try {
-    const bytes = readFileSync(path);
-    content = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
-  } catch (error) {
-    if (error instanceof TypeError) {
-      return { ok: false, error: { code: "invalid_description_encoding", path } };
-    }
-
-    return { ok: false, error: { code: "description_file_unreadable", path } };
-  }
-
-  if (content.trim().length === 0) {
-    return { ok: false, error: { code: "empty_description", path } };
-  }
-
-  return { ok: true, content };
+  return { ok: true, content: input.content };
 };
-
-type NodeError = Error & {
-  readonly code?: string;
-};
-
-const isNodeError = (value: unknown): value is NodeError => value instanceof Error;

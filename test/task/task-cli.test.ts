@@ -767,7 +767,7 @@ help[1]: "Run \`by task create --title \\"...\\" --description-file <file>\` to 
           name: "stdin file",
           args: ["task", "comment", "BY-1", "--file", "-"],
           status: 1,
-          code: "unsupported_stdin_comment_file",
+          code: "stdin_is_terminal",
         },
       ] as const;
 

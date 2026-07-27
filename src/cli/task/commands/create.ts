@@ -25,14 +25,17 @@ export const runCreateCommand = (
           { flag: "--title <title>", description: "Required Task title" },
           {
             flag: "--description-file <file>",
-            description: "Required UTF-8 Task description file, max 256 KiB",
+            description: "Required UTF-8 Task description file, max 256 KiB; use - for piped stdin",
           },
           {
             flag: "--depends-on <task-id>",
             description: "Direct prerequisite; repeat for multiple Tasks",
           },
         ]),
-        examples: ['by task create --title "Add login" --description-file task.md'],
+        examples: [
+          'by task create --title "Add login" --description-file task.md',
+          'printf "Description" | by task create --title "Add login" --description-file -',
+        ],
       }),
     );
   }
@@ -71,7 +74,11 @@ export const runCreateCommand = (
         help: ['Run `by task create --title "..." --description-file <file>` to create a task.'],
       }),
     );
-  const description = readDescriptionFile(environment.cwd, parsed.descriptionFile);
+  const description = readDescriptionFile(
+    environment.cwd,
+    parsed.descriptionFile,
+    environment.stdin,
+  );
   if (!description.ok) return Effect.succeed(descriptionFileError(description.error));
 
   return withTasks(environment, true, (tasks) => {
@@ -148,7 +155,10 @@ const parseTaskCreateArgs = (args: readonly string[]): TaskCreateArgsParseResult
 
     const value = args[index + 1];
 
-    if (value === undefined || value.startsWith("-")) {
+    if (
+      value === undefined ||
+      (value.startsWith("-") && !(option === "descriptionFile" && value === "-"))
+    ) {
       return missingCreateOptionValue(option, title, descriptionFile, dependsOn);
     }
 
@@ -267,6 +277,12 @@ const descriptionFileError = (error: DescriptionFileReadError): CliResult => {
         message: "Task description must not be empty.",
         details: { path: error.path },
         help: ["Write a non-empty description file and rerun the command."],
+      });
+    case "stdin_is_terminal":
+      return usageError({
+        code: error.code,
+        message: "Standard input is an interactive terminal.",
+        help: ["Pipe UTF-8 text or use a shell heredoc with --description-file -."],
       });
   }
 };

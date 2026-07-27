@@ -17,10 +17,12 @@ import type { RepositoryStorageError } from "../../contracts/repositoryStorageEr
 import type { PublicTaskId } from "../../task/taskId.js";
 import type { TaskUseCases } from "../../task/taskUseCases.js";
 import type { CancellationUseCases } from "../../change/cancelChange.js";
+import type { TextInputStdin } from "../../cli/input/textInput.js";
 
 export type TaskCommandEnvironment = {
   readonly cwd: string;
   readonly now: () => Date;
+  readonly stdin: TextInputStdin;
   readonly taskUseCases?: TaskUseCases;
   readonly cancellationUseCases?: CancellationUseCases;
 };

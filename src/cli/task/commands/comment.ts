@@ -30,10 +30,13 @@ export const runCommentCommand = (
         flags: withGlobalHelpFlags([
           {
             flag: "--file <file>",
-            description: "Required UTF-8 Markdown comment file. Stdin is not supported.",
+            description: "Required UTF-8 Markdown comment file; use - for piped stdin",
           },
         ]),
-        examples: ["by task comment BY-1 --file comment.md"],
+        examples: [
+          "by task comment BY-1 --file comment.md",
+          'printf "Comment" | by task comment BY-1 --file -',
+        ],
       }),
     );
   }
@@ -58,18 +61,7 @@ export const runCommentCommand = (
     if (!taskId.ok) return Effect.succeed(taskId.result);
     return Effect.flatMap(tasks.getTaskById(taskId.taskId), (task) => {
       if (task === undefined) return Effect.succeed(taskNotFound(taskId.taskId));
-      if (commentFile === "-") {
-        return Effect.succeed(
-          runtimeError({
-            code: "unsupported_stdin_comment_file",
-            message: "Reading Task comments from stdin is not supported in v1.",
-            help: [
-              "Write the comment to a file, then rerun `by task comment <task-id> --file <file>`.",
-            ],
-          }),
-        );
-      }
-      const comment = readCommentFile(environment.cwd, commentFile);
+      const comment = readCommentFile(environment.cwd, commentFile, environment.stdin);
       if (!comment.ok) return Effect.succeed(commentFileError(comment.error));
       return Effect.map(
         tasks.appendTaskComment({
@@ -192,6 +184,12 @@ const commentFileError = (error: CommentFileReadError): CliResult => {
         message: "Task comment must not be empty.",
         details: { path: error.path },
         help: ["Write a non-empty comment file and rerun the command."],
+      });
+    case "stdin_is_terminal":
+      return runtimeError({
+        code: error.code,
+        message: "Standard input is an interactive terminal.",
+        help: ["Pipe UTF-8 text or use a shell heredoc with --file -."],
       });
   }
 };
