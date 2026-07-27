@@ -17,10 +17,12 @@ This step is complete when the Change, accepted intent, readiness, and Managed W
 Follow the repository instructions in the Managed Worktree.
 Use test-driven development at the applicable public seams.
 Run only focused tests and relevant focused static checks during implementation.
-Do not manually run a repository-wide quality command, complete test suite, coverage workload, or review.
+Do not manually run a repository-wide quality command, complete test suite, coverage workload, or review before Submission.
 Change Submit owns the configured blocking Checks and reviews.
 If Acceptance Context requires a blocking gate to pass, satisfy that requirement through Change Submit instead of running the gate manually.
 After a Check failure, reproduce the reported failure with the narrowest applicable command before changing code or submitting again.
+Use the repository's routine quality command only when the failure cannot be reproduced by a narrower supported command.
+Never run the complete quality command manually during Change implementation.
 Commit one complete Candidate before Submission.
 
 This step is complete when the committed Candidate satisfies the accepted intent and focused verification passes without a manually duplicated blocking Check.
