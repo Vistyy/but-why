@@ -201,6 +201,7 @@ const runCommand = (
 type GitHubPullRequestJson = {
   readonly number?: unknown;
   readonly url?: unknown;
+  readonly html_url?: unknown;
   readonly state?: unknown;
   readonly merged?: unknown;
   readonly merged_at?: unknown;
@@ -226,9 +227,10 @@ const parsePullRequest = (value: string): GitHubPullRequest | undefined =>
 const parsePullRequestObject = (value: unknown): GitHubPullRequest | undefined => {
   if (typeof value !== "object" || value === null || Array.isArray(value)) return undefined;
   const pullRequest = value as GitHubPullRequestJson;
+  const url = selectPullRequestUrl(pullRequest);
   if (
     typeof pullRequest.number !== "number" ||
-    typeof pullRequest.url !== "string" ||
+    url === undefined ||
     typeof pullRequest.base?.ref !== "string" ||
     typeof pullRequest.head?.ref !== "string" ||
     typeof pullRequest.head?.sha !== "string"
@@ -248,7 +250,7 @@ const parsePullRequestObject = (value: unknown): GitHubPullRequest | undefined =
           : undefined;
   return {
     number: pullRequest.number,
-    url: pullRequest.url,
+    url,
     baseBranch: pullRequest.base.ref,
     headBranch: pullRequest.head.ref,
     headSha: pullRequest.head.sha,
@@ -256,6 +258,23 @@ const parsePullRequestObject = (value: unknown): GitHubPullRequest | undefined =
     ...(merged === undefined ? {} : { merged }),
     ...(repository === undefined ? {} : { repository }),
   };
+};
+
+const selectPullRequestUrl = (pullRequest: GitHubPullRequestJson): string | undefined =>
+  validHttpUrl(pullRequest.html_url)
+    ? pullRequest.html_url
+    : validHttpUrl(pullRequest.url)
+      ? pullRequest.url
+      : undefined;
+
+const validHttpUrl = (value: unknown): value is string => {
+  if (typeof value !== "string") return false;
+  try {
+    const protocol = new URL(value).protocol;
+    return protocol === "http:" || protocol === "https:";
+  } catch {
+    return false;
+  }
 };
 
 const repositoryIdentity = (
