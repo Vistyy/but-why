@@ -243,17 +243,18 @@ describe("quality interface", () => {
       directory,
       "complete coverage",
     );
-    const waiter = startRunner(lockFile, [
-      "complete test",
-      "sh",
-      "-c",
-      'printf acquired > "$1"',
-      "sh",
-      acquiredFile,
-    ]);
+    let waiter: ReturnType<typeof startRunner> | undefined;
 
     try {
       await waitForFile(readyFile);
+      waiter = startRunner(lockFile, [
+        "complete test",
+        "sh",
+        "-c",
+        'printf acquired > "$1"',
+        "sh",
+        acquiredFile,
+      ]);
       await new Promise((resolveDelay) => setTimeout(resolveDelay, 100));
       expect(waiter.child.exitCode).toBeNull();
       expect(waiter.output).toContain("waiting: complete test is waiting for capacity");
@@ -262,7 +263,7 @@ describe("quality interface", () => {
       expect(() => readFileSync(acquiredFile)).toThrow();
     } finally {
       writeFileSync(releaseFile, "release");
-      await stopRunner(waiter);
+      if (waiter !== undefined) await stopRunner(waiter);
       await stopRunner(holder);
     }
   });
