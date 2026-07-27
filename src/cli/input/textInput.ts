@@ -27,7 +27,7 @@ type TextInputError =
     };
 
 export type TextInputResult =
-  | { readonly ok: true; readonly content: string }
+  | { readonly ok: true; readonly content: string; readonly byteLength: number }
   | { readonly ok: false; readonly error: TextInputError };
 
 export type TextInputOptions = {
@@ -133,6 +133,7 @@ const decodeText = (
     return {
       ok: true,
       content: new TextDecoder("utf-8", { fatal: true, ignoreBOM }).decode(bytes),
+      byteLength: bytes.byteLength,
     };
   } catch (error) {
     if (error instanceof TypeError) {

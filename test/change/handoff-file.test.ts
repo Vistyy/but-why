@@ -15,6 +15,14 @@ describe("Change handoff files", () => {
     expect(readHandoffFile(root, "handoff.md")).toEqual({ ok: true, content: handoff });
   });
 
+  it("accepts a non-empty file containing only a UTF-8 BOM", () => {
+    const root = createTestWorkspace();
+    const path = join(root, "bom.md");
+    writeFileSync(path, Buffer.from([0xef, 0xbb, 0xbf]));
+
+    expect(readHandoffFile(root, "bom.md")).toEqual({ ok: true, content: "" });
+  });
+
   it.each([
     ["missing", "missing.md", "handoff_file_not_found"],
     ["directory", "handoff-dir", "handoff_file_unreadable"],

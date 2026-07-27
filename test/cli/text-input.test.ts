@@ -17,7 +17,7 @@ describe("bounded text input", () => {
         readTextInput(root, "-", {
           stdin: { fd: stdin, isTerminal: false },
         }),
-      ).toEqual({ ok: true, content: "  Héllo from stdin.  \n" });
+      ).toEqual({ ok: true, content: "  Héllo from stdin.  \n", byteLength: 23 });
     } finally {
       closeSync(stdin);
     }

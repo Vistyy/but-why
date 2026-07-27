@@ -58,7 +58,7 @@ export const readHandoffFile = (
     }
   }
 
-  if (input.content.length === 0) {
+  if (input.byteLength === 0) {
     return {
       ok: false,
       error: {
