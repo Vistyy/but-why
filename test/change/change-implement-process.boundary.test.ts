@@ -64,7 +64,8 @@ exit 1
     chmodSync(join(tools, "herdr"), 0o755);
     const baseEnv = {
       HOME: home,
-      PATH: `${tools}:${process.env.PATH ?? ""}`,
+      // biome-ignore lint/complexity/useLiteralKeys: NodeJS.ProcessEnv has an index signature.
+      PATH: `${tools}:${process.env["PATH"] ?? ""}`,
     };
 
     const started = runBuiltByWithEnv(root, baseEnv, "change", "start", "--output", "json");
