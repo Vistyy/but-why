@@ -7,7 +7,10 @@ import type { ChangeValidationPersistence } from "../validation/changeValidation
 import type { RepositoryStorageError } from "../../contracts/repositoryStorageError.js";
 import type { AcceptanceReviewPolicy } from "../acceptanceReview/acceptanceReviewConfig.js";
 import type { ReviewerAgentRuntime } from "../../agent/reviewerAgentRuntime.js";
-import { runAcceptanceReviewPhase } from "../acceptanceReview/runAcceptanceReviewPhase.js";
+import {
+  runAcceptanceReviewPhase,
+  type ReviewerContinuityEvidence,
+} from "../acceptanceReview/runAcceptanceReviewPhase.js";
 import type { SpecialistReviewPolicy } from "../specialistReview/specialistReviewConfig.js";
 import { runSpecialistReviewPhase } from "../specialistReview/runSpecialistReviewPhase.js";
 import type { SubmitCheckConfig, SubmitPrepareConfig } from "../submit/submitRepoConfig.js";
@@ -66,8 +69,14 @@ type ValidateCandidateResult =
       readonly reused: boolean;
       readonly validationRunId: string;
       readonly outcome: CandidateValidationOutcome;
+      readonly reviewerEvidence?: ReviewerContinuityEvidence;
     }
-  | { readonly ok: false; readonly validationRunId: string; readonly outcome: "tooling_failed" };
+  | {
+      readonly ok: false;
+      readonly validationRunId: string;
+      readonly outcome: "tooling_failed";
+      readonly reviewerEvidence?: ReviewerContinuityEvidence;
+    };
 
 type CandidateValidationPathsValue = {
   readonly localRepositoryMainCheckoutRoot: string;
@@ -226,7 +235,15 @@ const makeCandidateValidation = (dependencies: {
     });
     return outcome === "tooling_failed"
       ? ({ ok: false, validationRunId: started.validationRunId, outcome } as const)
-      : ({ ok: true, reused: false, validationRunId: started.validationRunId, outcome } as const);
+      : ({
+          ok: true,
+          reused: false,
+          validationRunId: started.validationRunId,
+          outcome,
+          ...(activeResult?.reviewerEvidence === undefined
+            ? {}
+            : { reviewerEvidence: activeResult.reviewerEvidence }),
+        } as const);
   });
 
   return {
@@ -266,6 +283,7 @@ const runCandidatePhases = (
   Effect.fn("CandidateValidation.runPhases")(function* () {
     const agentEnvironment = input.policy.agentEnvironment;
     const resourceRoot = input.resourceRoot ?? activeWorkspace.worktreePath;
+    let reviewerEvidence: ReviewerContinuityEvidence | undefined;
     const sessionOptions = {
       ...(dependencies.sessionStore === undefined
         ? {}
@@ -295,7 +313,10 @@ const runCandidatePhases = (
         recordAcceptanceRound: dependencies.persistence.recordAcceptanceRound,
         ...sessionOptions,
       });
-      return { validationFindings: acceptance.findings };
+      return {
+        validationFindings: acceptance.findings,
+        reviewerEvidence: acceptance.reviewerEvidence,
+      };
     }
     if (input.policy.prepare !== undefined) {
       const prepare = yield* runPreparePhase({
@@ -347,7 +368,8 @@ const runCandidatePhases = (
         recordAcceptanceRound: dependencies.persistence.recordAcceptanceRound,
         ...sessionOptions,
       });
-      if (acceptance.findings === 1) return { validationFindings: 1 as const };
+      reviewerEvidence = acceptance.reviewerEvidence;
+      if (acceptance.findings === 1) return { validationFindings: 1 as const, reviewerEvidence };
     }
     const specialists = yield* runSpecialistReviewPhase({
       validationRunId,
@@ -369,6 +391,7 @@ const runCandidatePhases = (
     });
     return {
       validationFindings: specialists.findings,
+      reviewerEvidence,
       toolingFailures: specialists.toolingFailures,
     };
   })();

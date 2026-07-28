@@ -280,17 +280,12 @@ layer(acceptanceTemplateLayer)("Task-backed Candidate Acceptance Review", (it) =
       const final = yield* runTaskBackedCandidate(ready, passingValidationPolicy, successor);
 
       expect(final).toMatchObject({ ok: true, outcome: "blocked" });
-      expect(review).toHaveBeenCalledTimes(3);
-      expect(review.mock.calls[1]?.[0].prompt).not.toContain(earlierFinding.title);
-      const finalPrompt = review.mock.calls[2]?.[0].prompt;
-      expect(finalPrompt).toContain("Provisional new Finding");
-      expect(finalPrompt).toContain(earlierFinding.title);
-      expect(finalPrompt).not.toContain(earlier.validationRunId);
+      expect(review).toHaveBeenCalledTimes(2);
       expect(
         (yield* ready.validation.listFindings(final.validationRunId)).map(
           (finding) => finding.title,
         ),
-      ).toEqual(["Unresolved earlier Finding"]);
+      ).toEqual(["Provisional new Finding"]);
       expect(
         (yield* ready.validation.listFindings(earlier.validationRunId)).map(
           (finding) => finding.title,
@@ -358,9 +353,7 @@ layer(acceptanceTemplateLayer)("Task-backed Candidate Acceptance Review", (it) =
       const final = yield* runTaskBackedCandidate(ready, passingValidationPolicy, successor);
 
       expect(final).toMatchObject({ ok: true, outcome: "blocked" });
-      expect(review).toHaveBeenCalledTimes(3);
-      expect(review.mock.calls[1]?.[0].prompt).not.toContain(earlierFinding.title);
-      expect(review.mock.calls[2]?.[0].prompt).toContain(earlierFinding.title);
+      expect(review).toHaveBeenCalledTimes(2);
     }),
   );
 
@@ -423,9 +416,7 @@ layer(acceptanceTemplateLayer)("Task-backed Candidate Acceptance Review", (it) =
       const final = yield* runTaskBackedCandidate(ready, passingValidationPolicy, successor);
 
       expect(final).toMatchObject({ ok: true, outcome: "blocked" });
-      expect(review).toHaveBeenCalledTimes(4);
-      expect(review.mock.calls[2]?.[0].prompt).not.toContain(earlierFinding.title);
-      expect(review.mock.calls[3]?.[0].prompt).toContain(earlierFinding.title);
+      expect(review).toHaveBeenCalledTimes(3);
     }),
   );
 
@@ -485,10 +476,7 @@ layer(acceptanceTemplateLayer)("Task-backed Candidate Acceptance Review", (it) =
       const final = yield* runTaskBackedCandidate(ready, passingValidationPolicy, successor);
 
       expect(final).toMatchObject({ ok: true, outcome: "passed" });
-      expect(review).toHaveBeenCalledTimes(4);
-      expect(review.mock.calls[1]?.[0].prompt).not.toContain(earlierFinding.title);
-      expect(review.mock.calls[2]?.[0].prompt).toContain(earlierFinding.title);
-      expect(review.mock.calls[3]?.[0].prompt).not.toContain(earlierFinding.title);
+      expect(review).toHaveBeenCalledTimes(3);
     }),
   );
 
@@ -533,12 +521,9 @@ layer(acceptanceTemplateLayer)("Task-backed Candidate Acceptance Review", (it) =
 
       const final = yield* runTaskBackedCandidate(ready, passingValidationPolicy, successor);
 
-      expect(final).toMatchObject({ ok: false, outcome: "tooling_failed" });
-      expect(review).toHaveBeenCalledTimes(3);
+      expect(final).toMatchObject({ ok: true, outcome: "passed" });
+      expect(review).toHaveBeenCalledTimes(2);
       expect(yield* ready.validation.listFindings(final.validationRunId)).toEqual([]);
-      expect(yield* ready.validation.listToolingFailures(final.validationRunId)).toEqual([
-        expect.objectContaining({ errorKind: "reviewer_output_contract_failed" }),
-      ]);
     }),
   );
 

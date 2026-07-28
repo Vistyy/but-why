@@ -2,6 +2,7 @@ import { Effect } from "effect";
 
 import type { AgentEnvironmentCommand } from "../agent/agentEnvironment.js";
 import type { CandidateValidationPolicyResolution } from "./candidateValidation/resolveCandidateValidationPolicy.js";
+import type { ReviewerContinuityEvidence } from "./acceptanceReview/runAcceptanceReviewPhase.js";
 import type {
   CandidateValidationFinding,
   CandidateValidationToolingFailure,
@@ -48,6 +49,7 @@ export type ChangeSubmitResult =
       readonly candidateId: string;
       readonly validationRunId: string;
       readonly completionKind: "no_change";
+      readonly reviewerEvidence?: ReviewerContinuityEvidence;
     }
   | {
       readonly ok: true;
@@ -57,6 +59,7 @@ export type ChangeSubmitResult =
       readonly validationRunId: string;
       readonly created: boolean;
       readonly pullRequest: { readonly number: number; readonly url: string };
+      readonly reviewerEvidence?: ReviewerContinuityEvidence;
     }
   | {
       readonly ok: true;
@@ -331,6 +334,9 @@ const validateAndCompleteNoChange = (
       candidateId: candidate.candidateId,
       validationRunId: validationResult.validationRunId,
       completionKind: "no_change",
+      ...(validationResult.reviewerEvidence === undefined
+        ? {}
+        : { reviewerEvidence: validationResult.reviewerEvidence }),
     } as const;
   });
 
@@ -455,6 +461,9 @@ const validateAndPublish = (
       validationRunId: validationResult.validationRunId,
       created: publication.created,
       pullRequest: publication.pullRequest,
+      ...(validationResult.reviewerEvidence === undefined
+        ? {}
+        : { reviewerEvidence: validationResult.reviewerEvidence }),
     } as const;
   });
 

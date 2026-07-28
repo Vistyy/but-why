@@ -617,6 +617,9 @@ const submitResult = (result: ChangeSubmitResult): CliResult => {
         validationRunId: result.validationRunId,
         status: result.status,
         completionKind: result.completionKind,
+        ...(result.reviewerEvidence === undefined
+          ? {}
+          : { reviewerEvidence: result.reviewerEvidence }),
       });
     return success({
       changeId: result.changeId,
@@ -625,6 +628,9 @@ const submitResult = (result: ChangeSubmitResult): CliResult => {
       status: result.status,
       created: result.created,
       pullRequest: result.pullRequest,
+      ...(result.reviewerEvidence === undefined
+        ? {}
+        : { reviewerEvidence: result.reviewerEvidence }),
     });
   }
   if (result.code === "change_not_found" || result.code === "change_not_open") {
