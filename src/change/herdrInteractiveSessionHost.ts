@@ -70,6 +70,9 @@ const launchHerdrSession = async (
   if (hasActiveSession(agents.stdout, input, sessionName)) {
     return { ok: true, host: "herdr", status: "already_active" };
   }
+  if (hasUnknownSession(agents.stdout, input, sessionName)) {
+    return launchIndeterminate("Herdr could not determine the existing session state.");
+  }
 
   const worktreeArgs = [
     "worktree",
@@ -92,6 +95,16 @@ const launchHerdrSession = async (
       options.observationRetries,
     );
     if (state.ok && worktreeMatchesTarget(state.stdout, input.worktreePath)) {
+      agents = await observe(command, ["agent", "list"], signal, options.observationRetries);
+      if (!agents.ok || !isValidAgentList(agents.stdout)) {
+        return launchIndeterminate("Herdr did not provide session facts for worktree recovery.");
+      }
+      if (hasActiveSession(agents.stdout, input, sessionName)) {
+        return { ok: true, host: "herdr", status: "already_active" };
+      }
+      if (hasUnknownSession(agents.stdout, input, sessionName)) {
+        return launchIndeterminate("Herdr could not determine the existing session state.");
+      }
       worktree = await command(worktreeArgs, signal);
       recoveredWorktree = true;
     }
@@ -150,7 +163,7 @@ const launchInOpenedWorktree = async (
   );
   if (!launched.ok) {
     const observed = launched.message.includes("timed out")
-      ? await waitForSession(execute, input, sessionName, signal, options)
+      ? await waitForSession(execute, input, sessionName, opened.rootPaneId, signal, options)
       : ({ kind: "absent" } as const);
     if (observed.kind === "ready") {
       return { ok: true, host: "herdr", status: "started" };
@@ -210,7 +223,14 @@ const launchInOpenedWorktree = async (
       }
     }
   }
-  const ready = await waitForSession(execute, input, sessionName, signal, options);
+  const ready = await waitForSession(
+    execute,
+    input,
+    sessionName,
+    opened.rootPaneId,
+    signal,
+    options,
+  );
   if (ready.kind === "exited") {
     const evidence = await launchEvidence(execute, opened.rootPaneId, signal);
     if (!opened.alreadyOpen) await closeWorkspace(execute, opened.workspaceId, signal);
@@ -253,6 +273,7 @@ const waitForSession = async (
   execute: HerdrCommandExecutor,
   input: InteractiveSessionLaunchInput,
   sessionName: string,
+  paneId: string,
   signal: AbortSignal | undefined,
   options: ResolvedOptions,
 ): Promise<SessionObservation> => {
@@ -265,7 +286,7 @@ const waitForSession = async (
     } else if (!isValidAgentList(listed.stdout)) {
       last = { kind: "unknown" };
     } else {
-      const agent = findSession(listed.stdout, input, sessionName);
+      const agent = findSession(listed.stdout, input, sessionName, paneId);
       if (agent === undefined) {
         last = { kind: "absent" };
       } else if (isActiveAgentStatus(recordValue(agent, "agent_status"))) {
@@ -289,11 +310,12 @@ const findSession = (
   source: string,
   input: InteractiveSessionLaunchInput,
   sessionName: string,
+  paneId?: string,
 ): Record<string, unknown> | undefined => {
   const result = herdrResult(source);
   const agents = result === undefined ? undefined : recordValue(result, "agents");
   return Array.isArray(agents)
-    ? (agents.find((agent) => matchesSession(agent, input, sessionName, undefined, false)) as
+    ? (agents.find((agent) => matchesSession(agent, input, sessionName, paneId, false)) as
         | Record<string, unknown>
         | undefined)
     : undefined;
@@ -357,6 +379,9 @@ const isValidAgentList = (source: string): boolean => {
         isRecord(agent) &&
         typeof recordValue(agent, "cwd") === "string" &&
         typeof recordValue(agent, "agent_status") === "string" &&
+        ["idle", "working", "blocked", "unknown", "done"].includes(
+          recordValue(agent, "agent_status") as string,
+        ) &&
         (recordValue(agent, "name") === undefined ||
           typeof recordValue(agent, "name") === "string") &&
         (recordValue(agent, "agent") === undefined ||
@@ -374,6 +399,7 @@ const worktreeMatchesTarget = (source: string, targetPath: string): boolean => {
     worktrees.some(
       (worktree) =>
         isRecord(worktree) &&
+        typeof recordValue(worktree, "workspace_id") === "string" &&
         (recordValue(worktree, "path") === targetPath ||
           recordValue(worktree, "worktree_path") === targetPath ||
           recordValue(worktree, "cwd") === targetPath),
@@ -455,6 +481,15 @@ const hasActiveSession = (
   );
 };
 
+const hasUnknownSession = (
+  source: string,
+  input: InteractiveSessionLaunchInput,
+  sessionName: string,
+): boolean => {
+  const agent = findSession(source, input, sessionName);
+  return agent !== undefined && recordValue(agent, "agent_status") === "unknown";
+};
+
 const hasActiveAgentInWorktree = (
   source: string,
   input: InteractiveSessionLaunchInput,
@@ -499,7 +534,7 @@ const matchesSession = (
   return (
     (name === sessionName || agent === sessionName) &&
     cwd === input.worktreePath &&
-    (paneId === undefined || reportedPaneId === paneId) &&
+    (paneId === undefined || reportedPaneId === undefined || reportedPaneId === paneId) &&
     (!requireActive || isActiveAgentStatus(status))
   );
 };
