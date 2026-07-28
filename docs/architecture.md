@@ -22,15 +22,13 @@ The following top-level source folders have shared roles:
 - `src/sqlite/` contains SQLite persistence adapters.
 - `src/submissionEnvironment/` contains Git and GitHub submission-environment adapters.
 
-Acceptance Review and Specialist Review use one fixed curated Pi resource wrapper.
-The wrapper disables discovered extensions, skills, prompt templates, and themes.
-It explicitly loads the `package-manager-policy` and `web-search` extensions and the `codebase-design` skill from the global Pi agent location.
-It loads `AGENTS.md` and `CLAUDE.md` context files from the global agent location, parent directories, and the Validation Workspace.
-It limits reviewer tools to exactly `read`, `bash`, `grep`, `find`, `ls`, `web_search`, `web_fetch`, and `web_content_get`.
-The `package-manager-policy` extension registers no tools and continues to enforce its bash policy hooks.
+Acceptance Review and Specialist Review use their resolved Pi Agent Profile resources.
+Configured extension, skill, and tool arrays are exact allowlists.
+Omitted resource fields preserve normal Pi behavior.
+Prompt templates and themes remain fixed background-agent hygiene.
 Repo Config may additionally define one Agent Environment command list for the Implementer and host-run reviewers.
 The Agent Environment does not apply to Repository Preparation or Checks.
-The curated reviewer resource wrapper does not configure the Implementer or Interactive Session.
+Change Implement resolves Repo and Global Agent Profiles from the Managed Worktree and Global Config.
 The remaining agent execution identity design is tracked in [Open Questions: How should agent execution identities work?](open-questions.md#how-should-agent-execution-identities-work).
 
 No top-level source folder represents a migration stage.

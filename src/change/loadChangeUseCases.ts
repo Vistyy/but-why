@@ -26,6 +26,7 @@ export type WithChangeUseCasesResult<A> =
 export const withChangeUseCases = <A, E, R>(
   input: {
     readonly cwd: string;
+    readonly globalConfigPath: string;
     readonly interactiveSessionHost?: InteractiveSessionHost;
     readonly interactiveSessionPath?: string;
   },
@@ -70,6 +71,7 @@ export const withChangeUseCases = <A, E, R>(
                 ? {}
                 : { path: input.interactiveSessionPath }),
             }),
+          input.globalConfigPath,
         ),
       ),
     ),

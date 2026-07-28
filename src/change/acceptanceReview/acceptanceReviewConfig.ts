@@ -14,7 +14,7 @@ export type AcceptanceReviewPolicy = {
   readonly instructions: string;
   readonly instructionsSource: "repo" | "global" | "built_in";
   readonly agentProfile: string;
-  readonly profileSource: "repo" | "global";
+  readonly profileScope: "repo" | "global";
   readonly profile: ResolvedPiAgentProfile;
 };
 
@@ -26,21 +26,29 @@ export const resolveAcceptanceReviewPolicy = (input: {
 }):
   | { readonly ok: true; readonly policy: AcceptanceReviewPolicy }
   | { readonly ok: false; readonly error: SubmitRejectionError } => {
-  const selectedProfile =
-    input.repoConfig.review?.acceptance?.agentProfile ??
-    input.globalConfig.review?.acceptance?.agentProfile;
   const resolution = resolveAgentProfile({
-    ...(selectedProfile === undefined ? {} : { agentProfile: selectedProfile }),
+    ...(input.repoConfig.review?.acceptance?.agentProfile === undefined
+      ? {}
+      : { repoSelection: input.repoConfig.review.acceptance.agentProfile }),
+    ...(input.globalConfig.review?.acceptance?.agentProfile === undefined
+      ? {}
+      : { globalSelection: input.globalConfig.review.acceptance.agentProfile }),
+    ...(input.globalConfig.defaultAgentProfile === undefined
+      ? {}
+      : { defaultSelection: input.globalConfig.defaultAgentProfile }),
     ...(input.repoConfig.agentProfiles === undefined
       ? {}
       : { repoProfiles: input.repoConfig.agentProfiles }),
-    globalConfig: input.globalConfig,
+    ...(input.globalConfig.agentProfiles === undefined
+      ? {}
+      : { globalProfiles: input.globalConfig.agentProfiles }),
+    globalConfigDirectory: dirname(input.globalConfigPath),
   });
 
   if (!resolution.ok) return resolution;
   if (
     resolution.resolved.profile.agentRuntime !== "pi" ||
-    resolution.resolved.profile.agentModel === undefined
+    resolution.resolved.profile.runtimeConfig?.model === undefined
   ) {
     return {
       ok: false,
@@ -59,19 +67,8 @@ export const resolveAcceptanceReviewPolicy = (input: {
     policy: {
       ...instructions,
       agentProfile: resolution.resolved.agentProfile,
-      profileSource: resolution.resolved.source,
-      profile: {
-        agentRuntime: "pi",
-        agentModel: resolution.resolved.profile.agentModel,
-        ...(resolution.resolved.profile.thinking === undefined
-          ? {}
-          : {
-              thinking: resolution.resolved.profile.thinking as Exclude<
-                ResolvedPiAgentProfile["thinking"],
-                undefined
-              >,
-            }),
-      },
+      profileScope: resolution.resolved.scope,
+      profile: resolution.resolved,
     },
   };
 };

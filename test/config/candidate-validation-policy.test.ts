@@ -16,11 +16,11 @@ describe("Candidate validation policy configuration", () => {
     writeFileSync(
       globalConfigPath,
       JSON.stringify({
-        defaultAgentProfile: "default",
+        defaultAgentProfile: { scope: "global", name: "default" },
         agentProfiles: {
-          default: { agentRuntime: "pi", agentModel: "default-model" },
-          acceptance: { agentRuntime: "pi", agentModel: "acceptance-model" },
-          specialist: { agentRuntime: "pi", agentModel: "specialist-model" },
+          default: { agentRuntime: "pi", runtimeConfig: { model: "default-model" } },
+          acceptance: { agentRuntime: "pi", runtimeConfig: { model: "acceptance-model" } },
+          specialist: { agentRuntime: "pi", runtimeConfig: { model: "specialist-model" } },
         },
       }),
     );
@@ -29,12 +29,12 @@ describe("Candidate validation policy configuration", () => {
       taskPrefix: "BY",
       validation: { checks: [{ id: "quality", command: "true" }] },
       review: {
-        acceptance: { agentProfile: "acceptance" },
+        acceptance: { agentProfile: { scope: "global", name: "acceptance" } },
         specialists: ["security"],
       },
       reviewers: {
         security: {
-          agentProfile: "specialist",
+          agentProfile: { scope: "global", name: "specialist" },
           instructionsFile: "security.md",
         },
       },
@@ -68,8 +68,15 @@ describe("Candidate validation policy configuration", () => {
       resolved: {
         taskBacked: true,
         policy: {
-          acceptanceReview: { profile: { agentModel: "acceptance-model" } },
-          specialistReviews: [{ id: "security", profile: { agentModel: "specialist-model" } }],
+          acceptanceReview: {
+            profile: { profile: { runtimeConfig: { model: "acceptance-model" } } },
+          },
+          specialistReviews: [
+            {
+              id: "security",
+              profile: { profile: { runtimeConfig: { model: "specialist-model" } } },
+            },
+          ],
         },
       },
     });

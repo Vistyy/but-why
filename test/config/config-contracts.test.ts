@@ -5,23 +5,30 @@ import { decodeGlobalConfig } from "../../src/contracts/globalConfig.js";
 import { decodeRepoConfig } from "../../src/contracts/repoConfig.js";
 
 describe("configuration contracts", () => {
-  it("decodes runtime-specific Agent Profile thinking", () => {
+  it("decodes Pi Agent Profile runtimeConfig", () => {
     const config = {
       agentProfiles: {
         pi: {
           agentRuntime: "pi",
-          agentModel: "openai-codex/gpt-5.5",
-          thinking: "xhigh",
-        },
-        other: {
-          agentRuntime: "custom-runtime",
-          agentModel: "review-model",
-          thinking: "extended",
+          runtimeConfig: {
+            model: "openai-codex/gpt-5.5",
+            thinking: "xhigh",
+            extensions: [],
+            skills: [],
+            tools: [],
+            contextFileDiscovery: false,
+          },
         },
       },
     };
 
     expect(right(decodeGlobalConfig(config))).toEqual(config);
+  });
+
+  it("rejects non-Pi Agent Profiles", () => {
+    const error = left(decodeGlobalConfig({ agentProfiles: { other: { agentRuntime: "codex" } } }));
+
+    expect(error._tag).toBe("GlobalConfigValidationFailed");
   });
 
   it("rejects non-canonical Pi thinking", () => {
@@ -30,8 +37,7 @@ describe("configuration contracts", () => {
         agentProfiles: {
           default: {
             agentRuntime: "pi",
-            agentModel: "openai-codex/gpt-5.5",
-            thinking: "extended",
+            runtimeConfig: { model: "openai-codex/gpt-5.5", thinking: "extended" },
           },
         },
       }),
@@ -43,12 +49,11 @@ describe("configuration contracts", () => {
 
   it("decodes global Agent Profiles", () => {
     const config = {
-      defaultAgentProfile: "default",
+      defaultAgentProfile: { scope: "global", name: "default" },
       agentProfiles: {
         default: {
           agentRuntime: "pi",
-          agentModel: "openai-codex/gpt-5.5",
-          thinking: "xhigh",
+          runtimeConfig: { model: "openai-codex/gpt-5.5", thinking: "xhigh" },
         },
       },
     };
@@ -58,24 +63,19 @@ describe("configuration contracts", () => {
 
   it("decodes the Global Interactive Session Agent Profile selection", () => {
     const config = {
-      interactiveSession: { agentProfile: "implementation" },
+      interactiveSession: { agentProfile: { scope: "global", name: "implementation" } },
     };
 
     expect(right(decodeGlobalConfig(config))).toEqual(config);
   });
 
-  it("rejects the Interactive Session Agent Profile selection in Repo Config", () => {
-    const error = left(
-      decodeRepoConfig({
-        taskPrefix: "BY",
-        interactiveSession: { agentProfile: "implementation" },
-      }),
-    );
+  it("decodes the Repo Interactive Session Agent Profile selection", () => {
+    const config = {
+      taskPrefix: "BY",
+      interactiveSession: { agentProfile: { scope: "repo", name: "implementation" } },
+    };
 
-    expect(error._tag).toBe("RepoConfigValidationFailed");
-    expect(error.diagnostics).toContainEqual(
-      expect.objectContaining({ path: ["interactiveSession"] }),
-    );
+    expect(right(decodeRepoConfig(config))).toEqual(config);
   });
 
   it("decodes global Acceptance overrides", () => {
@@ -83,7 +83,7 @@ describe("configuration contracts", () => {
       review: {
         acceptance: {
           instructionsFile: "reviewers/acceptance.md",
-          agentProfile: "strict",
+          agentProfile: { scope: "global", name: "strict" },
         },
       },
     };
@@ -97,7 +97,7 @@ describe("configuration contracts", () => {
       reviewers: {
         standards: {
           instructionsFile: "reviewers/standards.md",
-          agentProfile: "strict",
+          agentProfile: { scope: "global", name: "strict" },
         },
       },
     };
@@ -117,9 +117,8 @@ describe("configuration contracts", () => {
     expect(error._tag).toBe("GlobalConfigValidationFailed");
     expect(error.diagnostics).toContainEqual(
       expect.objectContaining({
-        path: ["agentProfiles", "default", "agentRuntime"],
-        actual: undefined,
-        message: "Required value is missing.",
+        path: ["agentProfiles", "default", "agentModel"],
+        message: "Unknown key.",
       }),
     );
   });
@@ -133,22 +132,21 @@ describe("configuration contracts", () => {
       },
       review: {
         acceptance: {
-          agentProfile: "default",
+          agentProfile: { scope: "repo", name: "default" },
           instructionsFile: ".but-why/reviewers/acceptance.md",
         },
         specialists: ["bugs"],
       },
       reviewers: {
         bugs: {
-          agentProfile: "default",
+          agentProfile: { scope: "repo", name: "default" },
           instructionsFile: ".but-why/reviewers/bugs.md",
         },
       },
       agentProfiles: {
         default: {
           agentRuntime: "pi",
-          agentModel: "openai-codex/gpt-5.5",
-          thinking: "medium",
+          runtimeConfig: { model: "openai-codex/gpt-5.5", thinking: "medium" },
         },
       },
       validationWorkspace: { copyFiles: [".env.test"] },
@@ -203,7 +201,7 @@ describe("configuration contracts", () => {
       review: {
         acceptance: {
           instructionsFile: ".but-why/reviewers/acceptance.md",
-          agentProfile: "strict",
+          agentProfile: { scope: "global", name: "strict" },
         },
       },
     };
@@ -224,7 +222,7 @@ describe("configuration contracts", () => {
     const error = left(
       decodeGlobalConfig({
         review: { specialists: ["standards"] },
-        reviewers: { standards: { agentProfile: "strict" } },
+        reviewers: { standards: { agentProfile: { scope: "global", name: "strict" } } },
       }),
     );
 
@@ -260,7 +258,7 @@ describe("configuration contracts", () => {
       "empty profile names",
       {
         taskPrefix: "BY",
-        agentProfiles: { "": { agentRuntime: "pi", agentModel: "model" } },
+        agentProfiles: { "": { agentRuntime: "pi", runtimeConfig: { model: "model" } } },
       },
     ],
   ])("rejects repo config with %s", (_name, input) => {

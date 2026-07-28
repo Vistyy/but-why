@@ -49,8 +49,15 @@ describe("Herdr Interactive Session Host", () => {
       repositoryPath: "/repository",
       worktreePath: "/workspace/change-123",
       initialPrompt: "Continue from the recorded decision.",
-      agentModel: "openai-codex/gpt-5.6-luna",
-      thinking: "high",
+      agentProfile: {
+        agentProfile: "implementation",
+        scope: "global",
+        profile: {
+          agentRuntime: "pi",
+          runtimeConfig: { model: "openai-codex/gpt-5.6-luna", thinking: "high" },
+        },
+      },
+      globalConfigDirectory: "/home/test/.config/but-why",
       agentEnvironment: ["nix", "develop", "-c"],
     });
 
@@ -72,10 +79,64 @@ describe("Herdr Interactive Session Host", () => {
         "pane",
         "run",
         "workspace-1:pane-1",
-        "PATH='/usr/local/bin:/opt/pi/bin' exec 'nix' 'develop' '-c' pi --name 'but-why-change-123' --model 'openai-codex/gpt-5.6-luna' --thinking 'high' 'Implement Change change-123 in this Managed Worktree.\n\nBefore doing any work, load the But Why skill and read its references/implement-change.md document completely. Follow that document for this Change.\n\nContinue from the recorded decision.'",
+        "PATH='/usr/local/bin:/opt/pi/bin' exec 'nix' 'develop' '-c' pi --name 'but-why-change-123' --model 'openai-codex/gpt-5.6-luna' --thinking 'high' 'Continue from the recorded decision.'",
       ],
       ["agent", "rename", "workspace-1:pane-1", sessionName],
     ]);
+  });
+
+  it("materializes scoped Pi resource allowlists for the Implementer", async () => {
+    const commands: readonly string[][] = [];
+    const execute: HerdrCommandExecutor = async (args) => {
+      (commands as string[][]).push([...args]);
+      if (args[0] === "agent" && args[1] === "list") {
+        return { ok: true, stdout: '{"result":{"agents":[]}}' };
+      }
+      if (args[0] === "worktree") {
+        return {
+          ok: true,
+          stdout:
+            '{"result":{"workspace":{"workspace_id":"workspace-1"},"root_pane":{"pane_id":"workspace-1:pane-1"},"already_open":false}}',
+        };
+      }
+      if (args[0] === "agent" && args[1] === "rename") {
+        return {
+          ok: true,
+          stdout:
+            '{"result":{"agent":{"name":"but-why-change-123","pane_id":"workspace-1:pane-1","cwd":"/workspace/change-123"}}}',
+        };
+      }
+      return { ok: true, stdout: "{}" };
+    };
+
+    await expect(
+      openHerdrInteractiveSessionHost(execute).launch({
+        changeId: "change-123",
+        repositoryPath: "/repository",
+        worktreePath: "/workspace/change-123",
+        initialPrompt: "Implement",
+        agentProfile: {
+          agentProfile: "implementation",
+          scope: "repo",
+          profile: {
+            agentRuntime: "pi",
+            runtimeConfig: {
+              extensions: ["extensions/one.ts"],
+              skills: ["skills/one"],
+              tools: [],
+              contextFileDiscovery: false,
+            },
+          },
+        },
+        globalConfigDirectory: "/global/config",
+      }),
+    ).resolves.toEqual({ ok: true, host: "herdr", status: "started" });
+
+    expect(commands[2]?.[3]).toContain(
+      "--no-extensions --extension '/workspace/change-123/extensions/one.ts'",
+    );
+    expect(commands[2]?.[3]).toContain("--no-skills --skill '/workspace/change-123/skills/one'");
+    expect(commands[2]?.[3]).toContain("--tools '' --no-context-files");
   });
 
   it("returns a retryable failure when a concurrent launch claims the session name", async () => {

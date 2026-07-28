@@ -1,22 +1,31 @@
 import { Either, Schema } from "effect";
 
-import { agentProfileSchema, configNameSchema } from "./agentConfig.js";
+import {
+  agentProfileReferenceSchema,
+  agentProfileSchema,
+  configNameSchema,
+} from "./agentConfig.js";
 import { contractDiagnostics, formatContractDiagnostics } from "./contractDiagnostics.js";
 import { GlobalConfigValidationFailed } from "./configErrors.js";
 import { repoRelativePathSchema } from "./repoConfig.js";
 
 const globalAcceptanceReviewConfigSchema = Schema.Struct({
-  agentProfile: Schema.optional(configNameSchema),
+  agentProfile: Schema.optional(agentProfileReferenceSchema),
   instructionsFile: Schema.optional(repoRelativePathSchema),
 });
 
 const globalReviewerSchema = Schema.Struct({
-  agentProfile: Schema.optional(configNameSchema),
+  agentProfile: Schema.optional(agentProfileReferenceSchema),
   instructionsFile: repoRelativePathSchema,
 });
 
+const globalDefaultAgentProfileSchema = Schema.Struct({
+  scope: Schema.Literal("global"),
+  name: configNameSchema,
+});
+
 const globalConfigSchema = Schema.Struct({
-  defaultAgentProfile: Schema.optional(configNameSchema),
+  defaultAgentProfile: Schema.optional(globalDefaultAgentProfileSchema),
   agentProfiles: Schema.optional(
     Schema.Record({
       key: configNameSchema,
@@ -25,7 +34,7 @@ const globalConfigSchema = Schema.Struct({
   ),
   interactiveSession: Schema.optional(
     Schema.Struct({
-      agentProfile: Schema.optional(configNameSchema),
+      agentProfile: Schema.optional(agentProfileReferenceSchema),
     }),
   ),
   review: Schema.optional(

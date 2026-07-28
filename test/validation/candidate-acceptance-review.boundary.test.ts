@@ -70,11 +70,14 @@ const acceptancePolicy = {
   instructions: "Repository Acceptance instructions",
   instructionsSource: "repo" as const,
   agentProfile: "strict",
-  profileSource: "repo" as const,
+  profileScope: "repo" as const,
   profile: {
-    agentRuntime: "pi" as const,
-    agentModel: "openai-codex/gpt-5.5",
-    thinking: "high" as const,
+    agentProfile: "strict",
+    scope: "repo" as const,
+    profile: {
+      agentRuntime: "pi" as const,
+      runtimeConfig: { model: "openai-codex/gpt-5.5", thinking: "high" as const },
+    },
   },
 };
 
@@ -83,7 +86,7 @@ const specialistPolicy = (id: string) => ({
   instructions: `${id} review instructions`,
   instructionsSource: "repo" as const,
   agentProfile: "strict",
-  profileSource: "repo" as const,
+  profileScope: "repo" as const,
   profile: acceptancePolicy.profile,
 });
 

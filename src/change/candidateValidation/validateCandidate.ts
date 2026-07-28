@@ -38,6 +38,7 @@ export type ValidateCandidateInput = {
   readonly candidateId: string;
   readonly changeBaseSha: string;
   readonly headSha: string;
+  readonly resourceRoot?: string;
   readonly policy: CandidateValidationPolicy;
   readonly now: string;
 };
@@ -46,6 +47,7 @@ type ValidateTaskBackedCandidateInput = {
   readonly candidateId: string;
   readonly changeBaseSha: string;
   readonly headSha: string;
+  readonly resourceRoot?: string;
   readonly acceptanceContext: TaskContextSnapshotV1;
   readonly policy: TaskBackedCandidateValidationPolicy;
   readonly now: string;
@@ -254,6 +256,7 @@ const runCandidatePhases = (
 > =>
   Effect.fn("CandidateValidation.runPhases")(function* () {
     const agentEnvironment = input.policy.agentEnvironment;
+    const resourceRoot = input.resourceRoot ?? activeWorkspace.worktreePath;
     if ("noChange" in input) {
       const acceptance = yield* runAcceptanceReviewPhase({
         validationRunId,
@@ -266,6 +269,7 @@ const runCandidatePhases = (
         artifactsRoot: dependencies.artifactsRoot,
         artifactMaxBytes: maxValidationArtifactBytes,
         commandCwd: activeWorkspace.worktreePath,
+        resourceRoot,
         allowedUntrackedFiles: input.policy.copyFiles,
         now: input.now,
         listArtifacts: dependencies.persistence.listArtifacts,
@@ -316,6 +320,7 @@ const runCandidatePhases = (
         artifactsRoot: dependencies.artifactsRoot,
         artifactMaxBytes: maxValidationArtifactBytes,
         commandCwd: activeWorkspace.worktreePath,
+        resourceRoot,
         allowedUntrackedFiles: input.policy.copyFiles,
         now: input.now,
         listArtifacts: dependencies.persistence.listArtifacts,
@@ -335,6 +340,7 @@ const runCandidatePhases = (
       artifactsRoot: dependencies.artifactsRoot,
       artifactMaxBytes: maxValidationArtifactBytes,
       commandCwd: activeWorkspace.worktreePath,
+      resourceRoot,
       allowedUntrackedFiles: input.policy.copyFiles,
       now: input.now,
       listArtifacts: dependencies.persistence.listArtifacts,

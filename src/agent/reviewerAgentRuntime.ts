@@ -2,6 +2,7 @@ import { pi, type Sandbox, type SandboxRunResult } from "@ai-hero/sandcastle";
 import { Effect } from "effect";
 
 import { prependAgentEnvironment, type AgentEnvironmentCommand } from "./agentEnvironment.js";
+import { piResourceFlags } from "./piRuntime.js";
 import type { ResolvedPiAgentProfile } from "./agentProfiles.js";
 import { parseTaggedReviewerOutput } from "./reviewerOutputWire.js";
 import { buildReviewerOutputCorrectionPrompt } from "./reviewerPrompts.js";
@@ -26,6 +27,8 @@ export type ReviewerAgentInput = {
   readonly availableArtifactRefs: readonly string[];
   readonly prompt: string;
   readonly profile: ResolvedPiAgentProfile;
+  readonly commandCwd?: string;
+  readonly resourceRoot?: string;
   readonly agentEnvironment?: AgentEnvironmentCommand;
 };
 
@@ -49,8 +52,8 @@ const reviewWithPi = (input: ReviewerAgentInput): Effect.Effect<ReviewerAgentRes
       runSandbox(() =>
         input.sandbox.run({
           agent: isolatedPiReviewerAgent(
-            input.profile.agentModel,
-            input.profile.thinking,
+            input.profile,
+            input.resourceRoot ?? input.commandCwd ?? ".",
             input.agentEnvironment,
           ),
           prompt: input.prompt,
@@ -87,23 +90,23 @@ export const piReviewerAgentRuntime: ReviewerAgentRuntime = {
   review: reviewWithPi,
 };
 
-const reviewerPiResourceFlags = [
-  "--no-extensions",
-  "--no-skills",
-  "--no-prompt-templates",
-  "--no-themes",
-  "--extension ~/.pi/agent/extensions/package-manager-policy",
-  "--extension ~/.pi/agent/extensions/web-search",
-  "--extension ~/.pi/agent/extensions/openai-remote-compaction",
-  "--skill ~/.pi/agent/skills/codebase-design",
-  "--tools read,bash,grep,find,ls,web_search,web_fetch,web_content_get",
-].join(" ");
-
 const isolatedPiReviewerAgent = (
-  model: string,
-  thinking: ResolvedPiAgentProfile["thinking"],
+  profile: ResolvedPiAgentProfile,
+  resourceRoot: string,
   agentEnvironment: AgentEnvironmentCommand | undefined,
 ) => {
+  const model = profile.profile.runtimeConfig?.model;
+  if (model === undefined) throw new Error("Reviewer Pi Agent Profile has no model.");
+  const thinking = profile.profile.runtimeConfig?.thinking;
+  const resourceFlags = piResourceFlags(
+    profile.profile.runtimeConfig,
+    {
+      scope: profile.scope,
+      repoRoot: resourceRoot,
+      globalConfigDirectory: profile.globalConfigDirectory,
+    },
+    { reviewerHygiene: true },
+  );
   const base = pi(model, {
     ...(thinking === undefined ? {} : { thinking }),
   });
@@ -115,7 +118,7 @@ const isolatedPiReviewerAgent = (
       return {
         ...command,
         command: prependAgentEnvironment(
-          `${command.command} ${reviewerPiResourceFlags}`,
+          `${command.command}${resourceFlags.length === 0 ? "" : ` ${resourceFlags}`}`,
           agentEnvironment,
         ),
       };

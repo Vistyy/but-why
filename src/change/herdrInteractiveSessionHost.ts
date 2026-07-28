@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process";
 
 import { prependAgentEnvironment, shellQuote } from "../agent/agentEnvironment.js";
+import { piResourceFlags } from "../agent/piRuntime.js";
 import type {
   InteractiveSessionHost,
   InteractiveSessionLaunchInput,
@@ -97,22 +98,28 @@ const launchFailure = (message: string): InteractiveSessionLaunchResult => ({
   message: `Herdr could not launch the Interactive Session: ${message}`,
 });
 
-const piCommand = (input: InteractiveSessionLaunchInput, path: string | undefined): string =>
-  [
+const piCommand = (input: InteractiveSessionLaunchInput, path: string | undefined): string => {
+  const profileFlags =
+    input.agentProfile === undefined
+      ? ""
+      : piResourceFlags(input.agentProfile.profile.runtimeConfig, {
+          scope: input.agentProfile.scope,
+          repoRoot: input.worktreePath,
+          globalConfigDirectory: input.globalConfigDirectory,
+        });
+  const model = input.agentProfile?.profile.runtimeConfig?.model;
+  const thinking = input.agentProfile?.profile.runtimeConfig?.thinking;
+  return [
     ...(path === undefined ? [] : [`PATH=${shellQuote(path)}`]),
     `exec ${prependAgentEnvironment("pi", input.agentEnvironment)}`,
     "--name",
     shellQuote(herdrSessionName(input.changeId)),
-    ...(input.agentModel === undefined ? [] : ["--model", shellQuote(input.agentModel)]),
-    ...(input.thinking === undefined ? [] : ["--thinking", shellQuote(input.thinking)]),
-    shellQuote(
-      [
-        `Implement Change ${input.changeId} in this Managed Worktree.`,
-        "Before doing any work, load the But Why skill and read its references/implement-change.md document completely. Follow that document for this Change.",
-        ...(input.initialPrompt === undefined ? [] : [input.initialPrompt]),
-      ].join("\n\n"),
-    ),
+    ...(model === undefined ? [] : ["--model", shellQuote(model)]),
+    ...(thinking === undefined ? [] : ["--thinking", shellQuote(thinking)]),
+    ...(profileFlags.length === 0 ? [] : [profileFlags]),
+    shellQuote(input.initialPrompt ?? ""),
   ].join(" ");
+};
 
 const hasActiveSession = (
   source: string,

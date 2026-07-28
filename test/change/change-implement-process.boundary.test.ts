@@ -22,8 +22,8 @@ describe("by change implement stdin process boundary", () => {
     writeFileSync(
       join(globalConfigDirectory, "config.json"),
       `${JSON.stringify({
-        defaultAgentProfile: "test",
-        agentProfiles: { test: { agentRuntime: "pi", agentModel: "test/model" } },
+        defaultAgentProfile: { scope: "global", name: "test" },
+        agentProfiles: { test: { agentRuntime: "pi", runtimeConfig: { model: "test/model" } } },
       })}\n`,
     );
     const tools = createTestWorkspace();

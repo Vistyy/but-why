@@ -232,93 +232,115 @@ TOON is the default.
 
 ## Agent Profiles
 
-Supported `agentRuntime` values:
+V1 supports only the `pi` Agent Profile runtime.
 
-- `pi`
-- `claude-code`
-- `codex`
-- `cursor`
-- `opencode`
-- `copilot`
+Every profile stores Pi settings under `runtimeConfig`:
 
-An Agent Profile contains `agentRuntime`, optional `agentModel`, and optional `thinking`.
+- `model`.
+- `thinking`.
+- `extensions`.
+- `skills`.
+- `tools`.
+- `contextFileDiscovery`.
 
-Reviewer operations require `agentModel`.
+Reviewer operations require `runtimeConfig.model`.
+Interactive Sessions may omit the model and preserve Pi's normal model behavior.
 
-Global Config selects the Default Agent Profile by name:
+Profile selections use an explicit reference:
+
+```json
+{ "scope": "repo", "name": "implementer" }
+```
+
+Repo Config may declare Repo Agent Profiles and select the Interactive Session profile.
+Global Config may declare Global Agent Profiles and select the fallback Interactive Session profile.
+Global Config owns `defaultAgentProfile`.
+The default profile is used when neither role selection exists.
+An explicit reference resolves only the profile in its declared scope.
+Duplicate names across scopes are valid.
+
+Configured resource arrays are exact allowlists.
+An empty array disables that resource type.
+An omitted resource field preserves normal Pi behavior.
+Repo extension and skill paths resolve from the Managed Worktree and remain inside the repository.
+Global relative paths resolve from the Global Config directory.
+Global profiles may also use supported absolute paths and Pi package sources.
+
+Example Global Config:
 
 ```json
 {
-  "defaultAgentProfile": "pi",
+  "defaultAgentProfile": { "scope": "global", "name": "reviewer" },
   "interactiveSession": {
-    "agentProfile": "pi"
+    "agentProfile": { "scope": "global", "name": "implementer" }
   },
   "agentProfiles": {
-    "pi": {
+    "reviewer": {
       "agentRuntime": "pi",
-      "agentModel": "openai-codex/gpt-5.5",
-      "thinking": "medium"
+      "runtimeConfig": {
+        "model": "openai-codex/gpt-5.5",
+        "thinking": "medium",
+        "extensions": ["~/.pi/agent/extensions/package-manager-policy"],
+        "skills": ["~/.pi/agent/skills/codebase-design"],
+        "tools": ["read", "bash", "grep", "find", "ls", "web_search", "web_fetch", "web_content_get"]
+      }
+    },
+    "implementer": {
+      "agentRuntime": "pi",
+      "runtimeConfig": {
+        "model": "openai-codex/gpt-5.5",
+        "thinking": "medium",
+        "extensions": [
+          "~/.pi/agent/extensions/inline-skills",
+          "~/.pi/agent/extensions/openai-remote-compaction",
+          "~/.pi/agent/extensions/package-manager-policy",
+          "~/.pi/agent/extensions/web-search",
+          "~/.pi/agent/extensions/herdr-agent-state.ts",
+          "~/.pi/agent/extensions/openai-fast.ts",
+          "~/.pi/agent/extensions/output-style.ts",
+          "~/.pi/agent/extensions/statusline.ts",
+          "~/.pi/agent/extensions/fuzzy-files/",
+          "~/.pi/agent/extensions/codex-usage.ts",
+          "~/.pi/agent/extensions/codex-resets.ts",
+          "npm:@ogulcancelik/pi-auto-permissions@0.1.2"
+        ]
+      }
     }
   }
 }
 ```
 
-`interactiveSession.agentProfile` selects a Global Agent Profile that uses Pi for `by change implement`.
-Repo Config cannot select or override this profile.
-But Why passes configured `agentModel` and `thinking` values to Pi.
-If the setting is absent, But Why preserves the existing Pi launch behavior.
-A missing or non-Pi profile rejects Change Implement before Herdr launches and preserves the Change.
+The Implementer profile does not configure `skills`, `tools`, or `contextFileDiscovery`.
+Pi therefore keeps normal behavior for those resources.
+The Implementer extension allowlist excludes subagent, Lavish, and session-recall extensions.
 
-A reviewer may select an Agent Profile explicitly:
+Reviewer profile selections use the same scoped reference contract:
 
 ```json
 {
-  "taskPrefix": "BY",
-  "validation": {
-    "checks": [{ "id": "quality", "command": "just quality" }]
-  },
   "review": {
-    "acceptance": { "agentProfile": "strict-reviewer" },
-    "specialists": ["security"]
-  },
-  "reviewers": {
-    "security": {
-      "agentProfile": "strict-reviewer",
-      "instructionsFile": ".but-why/reviewers/security.md"
+    "acceptance": {
+      "agentProfile": { "scope": "repo", "name": "strict-reviewer" }
     }
   },
   "agentProfiles": {
     "strict-reviewer": {
       "agentRuntime": "pi",
-      "agentModel": "anthropic/claude-sonnet-4",
-      "thinking": "high"
+      "runtimeConfig": {
+        "model": "anthropic/claude-sonnet-4",
+        "thinking": "high"
+      }
     }
   }
 }
 ```
 
-When a reviewer names an `agentProfile`, But Why searches Repo Config first and Global Config second.
+Reviewer selection resolves the Repo role selection first, the Global role selection second, and the Global default last.
+The resolved profile name and scope appear in validation policy and inspection output.
 
-When a reviewer does not name an `agentProfile`, But Why uses `defaultAgentProfile` and searches Global Config only.
-
-Acceptance Review and Specialist Review use the same fixed curated Pi resource wrapper.
-It disables discovered extensions, skills, prompt templates, and themes.
-It explicitly loads `package-manager-policy` and `web-search` from `~/.pi/agent/extensions/` and `codebase-design` from `~/.pi/agent/skills/`.
-It keeps `AGENTS.md` and `CLAUDE.md` context discovery enabled.
-It allows exactly `read`, `bash`, `grep`, `find`, `ls`, `web_search`, `web_fetch`, and `web_content_get`.
-The `package-manager-policy` extension adds no tools and continues to enforce its bash policy hooks.
-Repo Config can separately define the Agent Environment for `by change implement` and host-run reviewers.
-The curated reviewer resource wrapper does not configure `by change implement` or its Interactive Session.
-The remaining agent execution identity design is tracked in [Open Questions: How should agent execution identities work?](../open-questions.md#how-should-agent-execution-identities-work).
-
-But Why validates profiles when an operation needs an agent, so unrelated commands remain available.
-
-Unsupported runtimes, missing profiles, and missing required models produce typed errors with setup actions.
-
-But Why reports a harness launch failure when it first tries to use the harness.
-
-Use only documented keys.
-
-Config rejects unknown keys.
+The old flat `agentModel` and flat `thinking` fields are invalid.
+Non-Pi runtimes are invalid.
+Configuration with an unknown key is invalid.
+No compatibility parser or automatic migration is provided.
 
 `ignorePatterns` is not supported.

@@ -49,7 +49,7 @@ Example:
   },
   "review": {
     "acceptance": {
-      "agentProfile": "strict"
+      "agentProfile": { "scope": "repo", "name": "strict" }
     },
     "specialists": ["security"]
   },
@@ -61,8 +61,10 @@ Example:
   "agentProfiles": {
     "strict": {
       "agentRuntime": "pi",
-      "agentModel": "anthropic/claude-sonnet-4",
-      "thinking": "high"
+      "runtimeConfig": {
+        "model": "anthropic/claude-sonnet-4",
+        "thinking": "high"
+      }
     }
   }
 }
@@ -106,15 +108,44 @@ Example:
 
 ```json
 {
-  "defaultAgentProfile": "pi",
+  "defaultAgentProfile": { "scope": "global", "name": "reviewer" },
   "interactiveSession": {
-    "agentProfile": "pi"
+    "agentProfile": { "scope": "global", "name": "implementer" }
   },
   "agentProfiles": {
-    "pi": {
+    "reviewer": {
       "agentRuntime": "pi",
-      "agentModel": "openai-codex/gpt-5.5",
-      "thinking": "medium"
+      "runtimeConfig": {
+        "model": "openai-codex/gpt-5.5",
+        "thinking": "medium",
+        "extensions": [
+          "~/.pi/agent/extensions/package-manager-policy",
+          "~/.pi/agent/extensions/web-search"
+        ],
+        "skills": ["~/.pi/agent/skills/codebase-design"],
+        "tools": ["read", "bash", "grep", "find", "ls", "web_search", "web_fetch", "web_content_get"]
+      }
+    },
+    "implementer": {
+      "agentRuntime": "pi",
+      "runtimeConfig": {
+        "model": "openai-codex/gpt-5.5",
+        "thinking": "medium",
+        "extensions": [
+          "~/.pi/agent/extensions/inline-skills",
+          "~/.pi/agent/extensions/openai-remote-compaction",
+          "~/.pi/agent/extensions/package-manager-policy",
+          "~/.pi/agent/extensions/web-search",
+          "~/.pi/agent/extensions/herdr-agent-state.ts",
+          "~/.pi/agent/extensions/openai-fast.ts",
+          "~/.pi/agent/extensions/output-style.ts",
+          "~/.pi/agent/extensions/statusline.ts",
+          "~/.pi/agent/extensions/fuzzy-files/",
+          "~/.pi/agent/extensions/codex-usage.ts",
+          "~/.pi/agent/extensions/codex-resets.ts",
+          "npm:@ogulcancelik/pi-auto-permissions@0.1.2"
+        ]
+      }
     }
   },
   "review": {
@@ -138,37 +169,28 @@ Herdr must be installed and running when `by change implement` is invoked.
 
 ## Interactive Session Agent Profile
 
-Global Config may set `interactiveSession.agentProfile` to a Global Agent Profile that uses Pi.
-Repo Config cannot select or override this profile.
-Change Implement passes configured `agentModel` and `thinking` values to Pi.
-If the setting is absent, Change Implement preserves the existing Pi launch behavior.
-A missing or non-Pi profile rejects Change Implement before Herdr launches and preserves the Change.
+Repo Config may select a Repo or Global profile for Change Implement.
+Global Config may select a Repo or Global profile as its fallback.
+When neither role selection exists, Global Config `defaultAgentProfile` is the final selection.
+Every selection uses `{ "scope": "repo" | "global", "name": "..." }`.
+An explicit selection resolves only the profile in its declared scope.
 
 ## Agent Profiles
 
-An Agent Profile selects an `agentRuntime` and may select `agentModel` and `thinking`.
-Reviewer operations require `agentModel`.
+V1 supports only the Pi runtime.
+Pi settings live under `runtimeConfig`.
+The supported settings are `model`, `thinking`, `extensions`, `skills`, `tools`, and `contextFileDiscovery`.
+Reviewer operations require `runtimeConfig.model`.
 
-A role with an explicit `agentProfile` resolves Repo Config profiles before Global Config profiles.
-A role without an explicit profile uses `defaultAgentProfile`, which resolves from Global Config only.
+Omitted resource fields preserve normal Pi behavior.
+Configured `extensions`, `skills`, and `tools` arrays are exact allowlists.
+An empty configured array disables that resource type.
+Repo extension and skill paths resolve from the Managed Worktree and remain inside the repository.
+Global paths resolve from the Global Config directory, with supported absolute paths and Pi package sources allowed.
+
+Acceptance Review and Specialist Review use the resolved profile resources.
+Prompt templates and themes remain fixed background-agent hygiene and are not Agent Profile settings.
 Profile validation is lazy so unrelated commands remain usable when an unused profile is invalid.
-
-## Reviewer Pi resources
-
-Acceptance Review and Specialist Review use the same fixed curated Pi resource wrapper.
-
-The wrapper:
-
-- The wrapper disables extension, skill, prompt template, and theme discovery.
-- The wrapper loads `package-manager-policy` and `web-search` from `~/.pi/agent/extensions/`.
-- The wrapper loads `codebase-design` from `~/.pi/agent/skills/`.
-- The wrapper keeps `AGENTS.md` and `CLAUDE.md` context discovery enabled.
-- The wrapper allows exactly `read`, `bash`, `grep`, `find`, `ls`, `web_search`, `web_fetch`, and `web_content_get`.
-
-The `package-manager-policy` extension adds no tools and continues to enforce its bash policy hooks.
-The wrapper is a But Why-owned reviewer default.
-It is not Agent Environment configuration and it is not configurable through Repo Config or Global Config.
-Agent Profiles continue to select reviewer model and thinking values only.
 
 ## Acceptance Review
 

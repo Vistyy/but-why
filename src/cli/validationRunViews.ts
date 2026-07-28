@@ -7,6 +7,7 @@ import type {
 } from "../change/candidateValidation/inspectCandidateValidationRun.js";
 import type { ChangeRecord } from "../change/change.js";
 import type { StructuredObject } from "../output/structured.js";
+import { structuredValue } from "../output/structuredValue.js";
 import {
   validationPhase,
   type ValidationRunFindingRecord,
@@ -41,7 +42,7 @@ export const candidateValidationRunInspectionView = (
   },
   change: candidateValidationChangeView(inspection.change),
   candidate: candidateView(inspection.candidate),
-  policy: inspection.validationRun.policy,
+  policy: structuredValue(inspection.validationRun.policy),
   phases: [
     { phase: validationPhase.prepare, rounds: inspection.prepareRounds },
     { phase: validationPhase.checks, rounds: inspection.checkRounds },
