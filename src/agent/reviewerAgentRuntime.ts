@@ -6,7 +6,9 @@ import {
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  readdirSync,
   rmSync,
+  statSync,
   writeFileSync,
 } from "node:fs";
 import { join } from "node:path";
@@ -274,15 +276,26 @@ const preparePiSession = async (
   if (located.path === undefined) return;
   const targetDirectory = agent.sessionStorage.hostSessionFilePath(cwd, sessionId);
   if (targetDirectory === undefined) return;
+  const filename = located.path.split("/").pop() ?? `${sessionId}.jsonl`;
   const content = readFileSync(located.path, "utf8").replace(
     /"cwd":"(?:\\\\.|[^"\\\\])*"/g,
     `"cwd":${JSON.stringify(cwd)}`,
   );
+  removeMatchingSessionFiles(agent.sessionStorage.hostSessionFilePath(cwd, sessionId), filename);
   mkdirSync(targetDirectory, { recursive: true, mode: 0o700 });
   chmodSync(targetDirectory, 0o700);
-  const target = join(targetDirectory, located.path.split("/").pop() ?? `${sessionId}.jsonl`);
+  const target = join(targetDirectory, filename);
   writeFileSync(target, content, { mode: 0o600 });
   chmodSync(target, 0o600);
+};
+
+const removeMatchingSessionFiles = (root: string | undefined, filename: string): void => {
+  if (root === undefined || !existsSync(root)) return;
+  for (const entry of readdirSync(root)) {
+    const path = join(root, entry);
+    if (statSync(path).isDirectory()) removeMatchingSessionFiles(path, filename);
+    else if (entry === filename) rmSync(path, { force: true });
+  }
 };
 
 const snapshotSessionRoot = (
