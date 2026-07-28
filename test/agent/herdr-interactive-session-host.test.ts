@@ -82,6 +82,7 @@ describe("Herdr Interactive Session Host", () => {
         "PATH='/usr/local/bin:/opt/pi/bin' exec 'nix' 'develop' '-c' pi --name 'but-why-change-123' --model 'openai-codex/gpt-5.6-luna' --thinking 'high' '\n---\ndescription: Continue from the recorded decision.\n---'",
       ],
       ["agent", "rename", "workspace-1:pane-1", sessionName],
+      ["agent", "list"],
     ]);
   });
 
@@ -318,6 +319,56 @@ describe("Herdr Interactive Session Host", () => {
         initialPrompt: undefined,
       }),
     ).resolves.toEqual({ ok: true, host: "herdr", status: "already_active" });
+  });
+
+  it("does not retry an uncertain pane run and preserves early-exit evidence", async () => {
+    const commands: string[][] = [];
+    const execute: HerdrCommandExecutor = async (args) => {
+      commands.push([...args]);
+      if (args[0] === "agent" && args[1] === "list") {
+        return commands.filter(([command, operation]) => command === "pane" && operation === "run")
+          .length > 0
+          ? {
+              ok: true,
+              stdout: `{"result":{"agents":[{"agent":"${herdrSessionName("change-123")}","cwd":"/workspace/change-123","agent_status":"done"}]}}`,
+            }
+          : { ok: true, stdout: '{"result":{"agents":[]}}' };
+      }
+      if (args[0] === "worktree") {
+        return {
+          ok: true,
+          stdout:
+            '{"result":{"workspace":{"workspace_id":"workspace-1"},"root_pane":{"pane_id":"workspace-1:pane-1"},"already_open":false}}',
+        };
+      }
+      if (args[0] === "pane" && args[1] === "run") return new Promise(() => {});
+      if (args[0] === "pane" && args[1] === "read")
+        return { ok: true, stdout: "Pi startup output" };
+      if (args[0] === "pane" && args[1] === "process-info")
+        return { ok: true, stdout: "exit code 2" };
+      return { ok: true, stdout: "{}" };
+    };
+
+    await expect(
+      openHerdrInteractiveSessionHost(execute, {
+        commandTimeoutMs: 5,
+        readinessTimeoutMs: 20,
+        readinessPollMs: 1,
+      }).launch({
+        changeId: "change-123",
+        repositoryPath: "/repository",
+        worktreePath: "/workspace/change-123",
+        initialPrompt: undefined,
+      }),
+    ).resolves.toEqual({
+      ok: false,
+      code: "launch_failed",
+      message: expect.stringContaining("exited during startup"),
+      evidence: { startupOutput: "Pi startup output", exitEvidence: "exit code 2" },
+    });
+    expect(
+      commands.filter(([command, operation]) => command === "pane" && operation === "run"),
+    ).toHaveLength(1);
   });
 
   it.each([

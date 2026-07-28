@@ -15,7 +15,10 @@ import {
 } from "../repositoryPreparation/runRepositoryPreparation.js";
 import { taskSlugForId, type PublicTaskId } from "../task/taskId.js";
 import { changeReadiness, changeState, type ChangePrepareFailure } from "./change.js";
-import type { InteractiveSessionHost } from "./interactiveSessionHost.js";
+import type {
+  InteractiveSessionHost,
+  InteractiveSessionLaunchEvidence,
+} from "./interactiveSessionHost.js";
 import { buildImplementerPrompt } from "./implementerPrompt.js";
 import type { ChangeReconciliation, ChangeReconciliationResult } from "./reconcileChange.js";
 import type {
@@ -72,9 +75,11 @@ export type ChangeImplementResult =
       readonly code:
         | "host_unavailable"
         | "launch_failed"
+        | "launch_indeterminate"
         | "agent_environment_invalid"
         | "agent_profile_invalid";
       readonly message: string;
+      readonly evidence?: InteractiveSessionLaunchEvidence;
     }
   | { readonly ok: false; readonly code: "change_not_found" | "change_not_open" }
   | { readonly ok: false; readonly code: "change_not_ready"; readonly change: ChangeStartRecord };

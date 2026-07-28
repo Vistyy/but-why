@@ -953,6 +953,11 @@ const implementResult = (result: ChangeImplementResult): CliResult => {
         changeId: result.change.id,
         worktreePath: result.change.worktreePath,
         host: "herdr",
+        ...(result.code === "launch_failed" || result.code === "launch_indeterminate"
+          ? result.evidence === undefined
+            ? {}
+            : { evidence: result.evidence }
+          : {}),
       },
       help: ["Confirm Herdr is installed and running, then retry Change Implement."],
     });
