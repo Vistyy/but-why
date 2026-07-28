@@ -42,6 +42,7 @@ describe("host command Adapter", () => {
         yield* Effect.promise(() => waitForFile(pidFile));
         expect(existsSync(pidFile)).toBe(true);
         yield* Fiber.interrupt(fiber);
+        yield* Effect.promise(() => waitForProcessExit(Number(readFileSync(pidFile, "utf8"))));
         expect(processIsGone(Number(readFileSync(pidFile, "utf8")))).toBe(true);
       } finally {
         rmSync(directory, { recursive: true, force: true });
@@ -52,6 +53,12 @@ describe("host command Adapter", () => {
 
 const waitForFile = async (path: string): Promise<void> => {
   for (let attempt = 0; attempt < 20 && !existsSync(path); attempt += 1) {
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+};
+
+const waitForProcessExit = async (pid: number): Promise<void> => {
+  for (let attempt = 0; attempt < 20 && !processIsGone(pid); attempt += 1) {
     await new Promise((resolve) => setTimeout(resolve, 25));
   }
 };

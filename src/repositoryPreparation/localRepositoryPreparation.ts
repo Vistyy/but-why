@@ -1,12 +1,17 @@
-import { executeHostCommand } from "../command/hostCommand.js";
-import type { RepositoryPreparationExecutor } from "./runRepositoryPreparation.js";
+import { executeHostCommand, executeHostCommandEffect } from "../command/hostCommand.js";
+import type { RepositoryPreparationEffectExecutor } from "./runRepositoryPreparation.js";
 
-export const executeLocalRepositoryPreparation: RepositoryPreparationExecutor = (
-  command,
-  options,
-) =>
-  executeHostCommand({
-    command: "sh",
-    args: ["-c", command],
-    ...(options?.cwd === undefined ? {} : { cwd: options.cwd }),
-  });
+const commandInput = (command: string, cwd: string | undefined) => ({
+  command: "sh",
+  args: ["-c", command],
+  ...(cwd === undefined ? {} : { cwd }),
+});
+
+export const executeLocalRepositoryPreparation: RepositoryPreparationEffectExecutor = Object.assign(
+  (command: string, options?: { readonly cwd?: string }) =>
+    executeHostCommand(commandInput(command, options?.cwd)),
+  {
+    effect: (command: string, options?: { readonly cwd?: string }) =>
+      executeHostCommandEffect(commandInput(command, options?.cwd)),
+  },
+);
