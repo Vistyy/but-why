@@ -117,8 +117,13 @@ const piCommand = (input: InteractiveSessionLaunchInput, path: string | undefine
     ...(model === undefined ? [] : ["--model", shellQuote(model)]),
     ...(thinking === undefined ? [] : ["--thinking", shellQuote(thinking)]),
     ...(profileFlags.length === 0 ? [] : [profileFlags]),
-    shellQuote(input.initialPrompt ?? ""),
+    shellQuote(piInitialPrompt(input.initialPrompt)),
   ].join(" ");
+};
+
+const piInitialPrompt = (prompt: string | undefined): string => {
+  const value = prompt ?? "";
+  return value.startsWith("---") ? `\n${value}` : value;
 };
 
 const hasActiveSession = (

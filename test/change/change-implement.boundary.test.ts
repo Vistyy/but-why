@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { closeSync, mkdirSync, openSync, writeFileSync } from "node:fs";
+import { closeSync, mkdirSync, openSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 
 import { expect, it } from "@effect/vitest";
@@ -162,9 +162,22 @@ describe("by change implement", () => {
         worktreePath: change.worktreePath,
         agentEnvironment: ["nix", "develop", "-c"],
       });
-      expect((launches[0] as { readonly initialPrompt: string }).initialPrompt).toContain(
-        `Change identity: ${change.change.id}.`,
+      const prompt = (launches[0] as { readonly initialPrompt: string }).initialPrompt;
+      const skill = readFileSync("docs/public/skills/but-why/SKILL.md", "utf8").trim();
+      const implementationReference = readFileSync(
+        "docs/public/skills/but-why/references/implement-change.md",
+        "utf8",
+      ).trim();
+      expect(prompt).toContain(skill);
+      expect(prompt).toContain(implementationReference);
+      expect(prompt.indexOf(skill)).toBe(0);
+      expect(prompt.indexOf(implementationReference)).toBeGreaterThan(prompt.indexOf(skill));
+      expect(prompt.indexOf(`Change identity: ${change.change.id}.`)).toBeGreaterThan(
+        prompt.indexOf(implementationReference),
       );
+      expect(prompt).toContain(`Managed Worktree: ${change.worktreePath}.`);
+      expect(prompt.match(/# But Why/g)).toHaveLength(1);
+      expect(prompt.match(/# Implement a Change/g)).toHaveLength(1);
 
       const handoff = "x".repeat(contractMaxHandoffBytes);
       const handoffPath = join(root, "handoff.md");

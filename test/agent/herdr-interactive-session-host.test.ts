@@ -48,7 +48,7 @@ describe("Herdr Interactive Session Host", () => {
       changeId: "change-123",
       repositoryPath: "/repository",
       worktreePath: "/workspace/change-123",
-      initialPrompt: "Continue from the recorded decision.",
+      initialPrompt: "---\ndescription: Continue from the recorded decision.\n---",
       agentProfile: {
         agentProfile: "implementation",
         scope: "global",
@@ -79,7 +79,7 @@ describe("Herdr Interactive Session Host", () => {
         "pane",
         "run",
         "workspace-1:pane-1",
-        "PATH='/usr/local/bin:/opt/pi/bin' exec 'nix' 'develop' '-c' pi --name 'but-why-change-123' --model 'openai-codex/gpt-5.6-luna' --thinking 'high' 'Continue from the recorded decision.'",
+        "PATH='/usr/local/bin:/opt/pi/bin' exec 'nix' 'develop' '-c' pi --name 'but-why-change-123' --model 'openai-codex/gpt-5.6-luna' --thinking 'high' '\n---\ndescription: Continue from the recorded decision.\n---'",
       ],
       ["agent", "rename", "workspace-1:pane-1", sessionName],
     ]);
