@@ -6,6 +6,7 @@ import type { AcceptanceReviewPolicy } from "./acceptanceReviewConfig.js";
 import type { ReviewerAgentRuntime } from "../../agent/reviewerAgentRuntime.js";
 import {
   buildAcceptanceReviewerPrompt,
+  buildReviewerRevisionPrompt,
   reviewerFindingHistory,
 } from "../../agent/reviewerPrompts.js";
 import type { TaskContextSnapshotV1 } from "../validationRun/taskContextSnapshot.js";
@@ -172,7 +173,26 @@ export const runAcceptanceReviewPhase = (
       }
     }
     yield* verifyIntegrity(input);
-    const result = provisional;
+    const result =
+      input.sessionStore === undefined && provisional.ok && earlierFindings.length > 0
+        ? yield* input.runtime.review({
+            sandbox: input.sandbox,
+            reviewer: "acceptance",
+            validationRunId: input.validationRunId,
+            availableArtifactRefs,
+            prompt: buildReviewerRevisionPrompt({
+              reviewPrompt: prompt,
+              provisionalReport: provisional.report,
+              earlierFindings,
+            }),
+            profile: input.policy.profile,
+            commandCwd: input.commandCwd,
+            ...(input.resourceRoot === undefined ? {} : { resourceRoot: input.resourceRoot }),
+            ...(input.agentEnvironment === undefined
+              ? {}
+              : { agentEnvironment: input.agentEnvironment }),
+          })
+        : provisional;
     const artifacts = yield* writeReviewerArtifacts({
       validationRunId: input.validationRunId,
       phase: validationPhase.acceptanceReview,
