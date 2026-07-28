@@ -234,7 +234,14 @@ const makeCandidateValidation = (dependencies: {
       now: input.now,
     });
     return outcome === "tooling_failed"
-      ? ({ ok: false, validationRunId: started.validationRunId, outcome } as const)
+      ? ({
+          ok: false,
+          validationRunId: started.validationRunId,
+          outcome,
+          ...(activeResult?.reviewerEvidence === undefined
+            ? {}
+            : { reviewerEvidence: activeResult.reviewerEvidence }),
+        } as const)
       : ({
           ok: true,
           reused: false,

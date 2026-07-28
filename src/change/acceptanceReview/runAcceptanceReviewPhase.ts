@@ -1,5 +1,5 @@
 import type { Sandbox } from "@ai-hero/sandcastle";
-import { chmodSync } from "node:fs";
+import { chmodSync, readdirSync, statSync } from "node:fs";
 import { Clock, Effect } from "effect";
 import type { AgentEnvironmentCommand } from "../../agent/agentEnvironment.js";
 import type { AcceptanceReviewPolicy } from "./acceptanceReviewConfig.js";
@@ -128,15 +128,22 @@ export const runAcceptanceReviewPhase = (
       input.sessionStore === undefined
         ? undefined
         : yield* input.sessionStore.get(identity.changeId);
-    const compatible = stored !== undefined && sessionIdentityMatches(stored, identity);
+    const identityCompatible = stored !== undefined && sessionIdentityMatches(stored, identity);
+    const compatible = identityCompatible && stored.sessionReference.length > 0;
     let continuity: ReviewerContinuity = compatible
       ? "resumed"
       : stored === undefined
         ? "fresh"
         : "restarted";
     let restartReason: string | undefined =
-      stored === undefined ? undefined : compatible ? undefined : "identity_mismatch";
-    if (stored !== undefined && !compatible && input.sessionStore !== undefined) {
+      stored === undefined
+        ? undefined
+        : identityCompatible && stored.sessionReference.length === 0
+          ? "session_capture_unavailable"
+          : compatible
+            ? undefined
+            : "identity_mismatch";
+    if (stored !== undefined && !identityCompatible && input.sessionStore !== undefined) {
       yield* input.sessionStore.remove(identity.changeId);
     }
     const review = (resumeSession?: string) =>
@@ -219,12 +226,12 @@ export const runAcceptanceReviewPhase = (
       now: input.now,
     });
     if (!result.ok) return yield* Effect.fail(result.failure);
-    if (input.sessionStore !== undefined && result.sessionReference !== undefined) {
+    if (input.sessionStore !== undefined) {
       if (result.sessionFilePath !== undefined) chmodSessionFile(result.sessionFilePath);
       yield* input.sessionStore.save({
         identity,
         fingerprint,
-        sessionReference: result.sessionReference,
+        sessionReference: result.sessionReference ?? "",
         lastCandidateId: input.candidate.candidateId,
       });
     }
@@ -241,7 +248,12 @@ export const runAcceptanceReviewPhase = (
 
 const chmodSessionFile = (path: string): void => {
   try {
-    chmodSync(path, 0o600);
+    chmodSync(path, 0o700);
+    if (statSync(path).isDirectory()) {
+      for (const entry of readdirSync(path)) chmodSessionFile(`${path}/${entry}`);
+    } else {
+      chmodSync(path, 0o600);
+    }
   } catch {
     // Missing capture is handled by the session reference check on the next run.
   }

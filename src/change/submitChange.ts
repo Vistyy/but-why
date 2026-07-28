@@ -317,6 +317,9 @@ const validateAndCompleteNoChange = (
         {
           validationRunId: validationResult.validationRunId,
           outcome: validationResult.outcome === "blocked" ? "blocked" : "tooling_failed",
+          ...(validationResult.reviewerEvidence === undefined
+            ? {}
+            : { reviewerEvidence: validationResult.reviewerEvidence }),
         },
         now,
       );
@@ -433,6 +436,9 @@ const validateAndPublish = (
         {
           validationRunId: validationResult.validationRunId,
           outcome: validationResult.outcome === "blocked" ? "blocked" : "tooling_failed",
+          ...(validationResult.reviewerEvidence === undefined
+            ? {}
+            : { reviewerEvidence: validationResult.reviewerEvidence }),
         },
         now,
       );

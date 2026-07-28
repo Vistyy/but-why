@@ -137,7 +137,7 @@ export const openSqliteChangePersistence = (
           Effect.tap(() =>
             Effect.sync(() => {
               if (input.reviewerSessionsRoot === undefined) return;
-              const path = join(input.reviewerSessionsRoot, "reviewer-sessions", changeId);
+              const path = join(input.reviewerSessionsRoot, changeId);
               if (existsSync(path)) rmSync(path, { recursive: true, force: true });
             }),
           ),
