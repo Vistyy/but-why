@@ -1,4 +1,4 @@
-import { spawn } from "node:child_process";
+import { executeHostCommand } from "../command/hostCommand.js";
 
 import { prependAgentEnvironment, shellQuote } from "../agent/agentEnvironment.js";
 import { piResourceFlags } from "../agent/piRuntime.js";
@@ -237,27 +237,16 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 
 const recordValue = (record: Record<string, unknown>, key: string): unknown => record[key];
 
-const executeHerdr: HerdrCommandExecutor = (args) =>
-  new Promise((resolve) => {
-    const child = spawn("herdr", [...args], { stdio: ["ignore", "pipe", "pipe"] });
-    let stdout = "";
-    let stderr = "";
-    child.stdout.setEncoding("utf8");
-    child.stderr.setEncoding("utf8");
-    child.stdout.on("data", (chunk: string) => {
-      stdout += chunk;
-    });
-    child.stderr.on("data", (chunk: string) => {
-      stderr += chunk;
-    });
-    child.once("error", (error) => {
-      resolve({ ok: false, message: error.message });
-    });
-    child.once("close", (code) => {
-      resolve(
-        code === 0
-          ? { ok: true, stdout }
-          : { ok: false, message: stderr.trim() || `Herdr exited with status ${code ?? 1}.` },
-      );
-    });
-  });
+const executeHerdr: HerdrCommandExecutor = async (args) => {
+  try {
+    const result = await executeHostCommand({ command: "herdr", args });
+    return result.exitCode === 0
+      ? { ok: true, stdout: result.stdout }
+      : {
+          ok: false,
+          message: result.stderr.trim() || `Herdr exited with status ${result.exitCode}.`,
+        };
+  } catch (error) {
+    return { ok: false, message: error instanceof Error ? error.message : String(error) };
+  }
+};
