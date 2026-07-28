@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { existsSync, lstatSync, rmdirSync } from "node:fs";
+import { existsSync, lstatSync, rmdirSync, rmSync, readdirSync, statSync } from "node:fs";
 import { basename, dirname } from "node:path";
 
 export type ChangeCleanupResult =
@@ -15,13 +15,15 @@ export type ChangeCleanupResult =
         | "branch_ref_invalid"
         | "branch_reachability_unavailable"
         | "branch_not_reachable_from_another_ref"
-        | "branch_deletion_failed";
+        | "branch_deletion_failed"
+        | "reviewer_session_removal_failed";
     };
 
 export const cleanupChangeResources = (input: {
   readonly repositoryCommonDirectory: string;
   readonly worktreePath: string | null;
   readonly branchRef: string;
+  readonly reviewerSessionsRoot?: string;
 }): ChangeCleanupResult => {
   if (input.worktreePath !== null && !isWorktreePathSafe(input.worktreePath)) {
     return { state: "pending", blockingReason: "worktree_path_unsafe" };
@@ -45,6 +47,13 @@ export const cleanupChangeResources = (input: {
 
   if (input.worktreePath !== null && !removeEmptySiblingContainers(input.worktreePath)) {
     return { state: "pending", blockingReason: "worktree_container_removal_failed" };
+  }
+
+  if (
+    input.reviewerSessionsRoot !== undefined &&
+    !removeReviewerSessions(input.reviewerSessionsRoot)
+  ) {
+    return { state: "pending", blockingReason: "reviewer_session_removal_failed" };
   }
 
   const branchName = branchNameForRef(input.branchRef);
@@ -106,6 +115,20 @@ const removeEmptySiblingContainers = (worktreePath: string): boolean => {
     return true;
   } catch (error) {
     return isFileSystemError(error, "ENOTEMPTY") || isFileSystemError(error, "ENOENT");
+  }
+};
+
+const removeReviewerSessions = (root: string): boolean => {
+  try {
+    if (!existsSync(root)) return true;
+    for (const name of readdirSync(root)) {
+      const path = `${root}/${name}`;
+      if (statSync(path).isFile()) rmSync(path);
+      else rmSync(path, { recursive: true, force: true });
+    }
+    return true;
+  } catch {
+    return false;
   }
 };
 

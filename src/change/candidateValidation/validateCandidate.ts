@@ -21,6 +21,7 @@ import {
 } from "../validation/validationToolingFailures.js";
 import { maxValidationArtifactBytes } from "../validationRun/artifactFiles.js";
 import type { TaskContextSnapshotV1 } from "../validationRun/taskContextSnapshot.js";
+import type { ReviewerSessionStore } from "../reviewerSession/reviewerSession.js";
 
 export type CandidateValidationPolicy = {
   readonly agentEnvironment?: AgentEnvironmentCommand;
@@ -35,6 +36,7 @@ export type TaskBackedCandidateValidationPolicy = CandidateValidationPolicy & {
 };
 
 export type ValidateCandidateInput = {
+  readonly changeId?: string;
   readonly candidateId: string;
   readonly changeBaseSha: string;
   readonly headSha: string;
@@ -44,6 +46,7 @@ export type ValidateCandidateInput = {
 };
 
 type ValidateTaskBackedCandidateInput = {
+  readonly changeId?: string;
   readonly candidateId: string;
   readonly changeBaseSha: string;
   readonly headSha: string;
@@ -69,6 +72,8 @@ type ValidateCandidateResult =
 type CandidateValidationPathsValue = {
   readonly localRepositoryMainCheckoutRoot: string;
   readonly artifactsRoot: string;
+  readonly reviewerSessionsRoot?: string;
+  readonly sessionStore?: ReviewerSessionStore;
 };
 
 export class CandidateValidationPaths extends Context.Tag("CandidateValidationPaths")<
@@ -84,6 +89,11 @@ export class CandidateValidationPersistence extends Context.Tag("CandidateValida
 export class CandidateReviewerAgentRuntime extends Context.Tag("CandidateReviewerAgentRuntime")<
   CandidateReviewerAgentRuntime,
   ReviewerAgentRuntime
+>() {}
+
+export class CandidateReviewerSessionStore extends Context.Tag("CandidateReviewerSessionStore")<
+  CandidateReviewerSessionStore,
+  ReviewerSessionStore
 >() {}
 
 export type CandidateValidationService = {
@@ -127,6 +137,8 @@ const makeCandidateValidation = (dependencies: {
   readonly artifactsRoot: string;
   readonly persistence: ChangeValidationPersistence;
   readonly reviewerAgentRuntime: ReviewerAgentRuntime;
+  readonly sessionStore?: ReviewerSessionStore;
+  readonly reviewerSessionsRoot?: string;
 }): CandidateValidationService => {
   const validate = Effect.fn("CandidateValidation.validate")(function* (
     input: ValidateCandidateInput | ValidateTaskBackedCandidateInput | ValidateNoChangeInput,
@@ -240,6 +252,8 @@ const runCandidatePhases = (
     readonly artifactsRoot: string;
     readonly persistence: ChangeValidationPersistence;
     readonly reviewerAgentRuntime: ReviewerAgentRuntime;
+    readonly sessionStore?: ReviewerSessionStore;
+    readonly reviewerSessionsRoot?: string;
   },
   input: ValidateCandidateInput | ValidateTaskBackedCandidateInput | ValidateNoChangeInput,
   validationRunId: string,
@@ -257,6 +271,14 @@ const runCandidatePhases = (
   Effect.fn("CandidateValidation.runPhases")(function* () {
     const agentEnvironment = input.policy.agentEnvironment;
     const resourceRoot = input.resourceRoot ?? activeWorkspace.worktreePath;
+    const sessionOptions = {
+      ...(dependencies.sessionStore === undefined
+        ? {}
+        : { sessionStore: dependencies.sessionStore }),
+      ...(dependencies.reviewerSessionsRoot === undefined
+        ? {}
+        : { sessionStorageRoot: dependencies.reviewerSessionsRoot }),
+    };
     if ("noChange" in input) {
       const acceptance = yield* runAcceptanceReviewPhase({
         validationRunId,
@@ -276,6 +298,7 @@ const runCandidatePhases = (
         listPreviousCandidateReviewerFindings:
           dependencies.persistence.listPreviousCandidateReviewerFindings,
         recordAcceptanceRound: dependencies.persistence.recordAcceptanceRound,
+        ...sessionOptions,
       });
       return { validationFindings: acceptance.findings };
     }
@@ -327,6 +350,7 @@ const runCandidatePhases = (
         listPreviousCandidateReviewerFindings:
           dependencies.persistence.listPreviousCandidateReviewerFindings,
         recordAcceptanceRound: dependencies.persistence.recordAcceptanceRound,
+        ...sessionOptions,
       });
       if (acceptance.findings === 1) return { validationFindings: 1 as const };
     }

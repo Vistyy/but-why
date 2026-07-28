@@ -544,7 +544,10 @@ describe("repository SQL storage", () => {
           (sql) => sql<{ readonly name: string }>`PRAGMA table_info(candidates)`,
         );
 
-        expect(migrations).toEqual([{ migration_id: 1, name: "baseline" }]);
+        expect(migrations).toEqual([
+          { migration_id: 1, name: "baseline" },
+          { migration_id: 2, name: "reviewer_sessions" },
+        ]);
         expect(identities).toEqual([{ common_directory: repositorySql.commonDirectory }]);
         expect(candidateColumns.map(({ name }) => name)).toEqual([
           "id",
@@ -777,8 +780,8 @@ describe("repository SQL storage", () => {
         );
 
         return Effect.gen(function* () {
-          expect(yield* readMigrationCount).toBe(1);
-          expect(yield* readMigrationCount).toBe(1);
+          expect(yield* readMigrationCount).toBe(2);
+          expect(yield* readMigrationCount).toBe(2);
         });
       },
       (directory) => Effect.sync(() => rmSync(directory, { recursive: true, force: true })),

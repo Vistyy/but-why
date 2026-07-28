@@ -30,6 +30,8 @@ export type ReviewerAgentInput = {
   readonly commandCwd?: string;
   readonly resourceRoot?: string;
   readonly agentEnvironment?: AgentEnvironmentCommand;
+  readonly sessionStorageRoot?: string;
+  readonly resumeSession?: string;
 };
 
 export type ReviewerAgentResult =
@@ -38,12 +40,16 @@ export type ReviewerAgentResult =
       readonly report: ReviewerOutput;
       readonly attempts: number;
       readonly stdout: string;
+      readonly sessionReference?: string;
+      readonly sessionFilePath?: string;
     }
   | {
       readonly ok: false;
       readonly failure: ValidationToolingFailure;
       readonly attempts: number;
       readonly stdout: string;
+      readonly sessionReference?: string;
+      readonly sessionFilePath?: string;
     };
 
 const reviewWithPi = (input: ReviewerAgentInput): Effect.Effect<ReviewerAgentResult> =>
@@ -55,8 +61,10 @@ const reviewWithPi = (input: ReviewerAgentInput): Effect.Effect<ReviewerAgentRes
             input.profile,
             input.resourceRoot ?? input.commandCwd ?? ".",
             input.agentEnvironment,
+            input.sessionStorageRoot,
           ),
           prompt: input.prompt,
+          ...(input.resumeSession === undefined ? {} : { resumeSession: input.resumeSession }),
           maxIterations: 1,
           name: `${input.reviewer} Review`,
         }),
@@ -66,11 +74,23 @@ const reviewWithPi = (input: ReviewerAgentInput): Effect.Effect<ReviewerAgentRes
 
     const first = yield* Effect.either(validateRunResult(input, initial.right, 1));
     if (first._tag === "Right") {
-      return { ok: true, report: first.right, attempts: 1, stdout: initial.right.stdout };
+      return {
+        ok: true,
+        report: first.right,
+        attempts: 1,
+        stdout: initial.right.stdout,
+        ...sessionMetadata(initial.right),
+      };
     }
     const resume = initial.right.resume;
     if (resume === undefined) {
-      return { ok: false, failure: first.left, attempts: 1, stdout: initial.right.stdout };
+      return {
+        ok: false,
+        failure: first.left,
+        attempts: 1,
+        stdout: initial.right.stdout,
+        ...sessionMetadata(initial.right),
+      };
     }
 
     const corrected = yield* Effect.either(
@@ -82,8 +102,20 @@ const reviewWithPi = (input: ReviewerAgentInput): Effect.Effect<ReviewerAgentRes
 
     const second = yield* Effect.either(validateRunResult(input, corrected.right, 2));
     return second._tag === "Right"
-      ? { ok: true, report: second.right, attempts: 2, stdout: corrected.right.stdout }
-      : { ok: false, failure: second.left, attempts: 2, stdout: corrected.right.stdout };
+      ? {
+          ok: true,
+          report: second.right,
+          attempts: 2,
+          stdout: corrected.right.stdout,
+          ...sessionMetadata(corrected.right),
+        }
+      : {
+          ok: false,
+          failure: second.left,
+          attempts: 2,
+          stdout: corrected.right.stdout,
+          ...sessionMetadata(corrected.right),
+        };
   });
 
 export const piReviewerAgentRuntime: ReviewerAgentRuntime = {
@@ -94,6 +126,7 @@ const isolatedPiReviewerAgent = (
   profile: ResolvedPiAgentProfile,
   resourceRoot: string,
   agentEnvironment: AgentEnvironmentCommand | undefined,
+  sessionStorageRoot: string | undefined,
 ) => {
   const model = profile.profile.runtimeConfig?.model;
   if (model === undefined) throw new Error("Reviewer Pi Agent Profile has no model.");
@@ -109,6 +142,9 @@ const isolatedPiReviewerAgent = (
   );
   const base = pi(model, {
     ...(thinking === undefined ? {} : { thinking }),
+    ...(sessionStorageRoot === undefined
+      ? {}
+      : { sessionStorage: { hostSessionsDir: sessionStorageRoot } }),
   });
 
   return {
@@ -160,6 +196,18 @@ const sandcastleFailure = (
   attempts: number,
   stdout: string,
 ): ReviewerAgentResult => ({ ok: false, failure, attempts, stdout });
+
+const sessionMetadata = (result: SandboxRunResult) => {
+  const iteration = result.iterations[result.iterations.length - 1];
+  return iteration?.sessionId === undefined
+    ? {}
+    : {
+        sessionReference: iteration.sessionId,
+        ...(iteration.sessionFilePath === undefined
+          ? {}
+          : { sessionFilePath: iteration.sessionFilePath }),
+      };
+};
 
 const errorMessage = (error: unknown): string =>
   error instanceof Error ? error.message : String(error);

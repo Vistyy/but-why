@@ -128,7 +128,10 @@ export const loadChangeSubmit = (input: {
       }).capture,
     });
   };
-  const layerFor = (persistence: ChangeValidationPersistence) =>
+  const layerFor = (
+    persistence: ChangeValidationPersistence,
+    changePersistence: import("./changePersistence.js").ChangePersistence,
+  ) =>
     candidateValidationLayer({
       localRepositoryMainCheckoutRoot: context.root,
       artifactsRoot: context.paths.artifactsPath,
@@ -136,6 +139,12 @@ export const loadChangeSubmit = (input: {
       ...(input.reviewerAgentRuntime === undefined
         ? {}
         : { reviewerAgentRuntime: input.reviewerAgentRuntime }),
+      sessionStore: {
+        get: changePersistence.getReviewerSession,
+        save: changePersistence.saveReviewerSession,
+        remove: changePersistence.removeReviewerSession,
+      },
+      reviewerSessionsRoot: context.paths.operationalDir,
     });
 
   const repositoryLayer = repositorySqlLayer({
@@ -156,7 +165,7 @@ export const loadChangeSubmit = (input: {
           Effect.flatMap(({ capture, validation, change, task }) =>
             programFor(capture, validation, change, task)
               .submit(submitInput)
-              .pipe(Effect.provide(layerFor(validation))),
+              .pipe(Effect.provide(layerFor(validation, change))),
           ),
           Effect.provide(repositoryLayer),
         ),

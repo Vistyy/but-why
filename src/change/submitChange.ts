@@ -295,6 +295,7 @@ const validateAndCompleteNoChange = (
     }
     const validation = yield* CandidateValidation;
     const validationResult = yield* validation.validateNoChange({
+      changeId: change.id,
       ...candidateIdentity(candidate),
       resourceRoot: change.worktreePath,
       noChange: true,
@@ -401,6 +402,7 @@ const validateAndPublish = (
     const validationResult =
       policy.resolved.taskBacked && change.acceptanceContext !== null
         ? yield* validation.validateTaskBackedCandidate({
+            changeId: change.id,
             ...candidateIdentity(candidate),
             resourceRoot: change.worktreePath,
             acceptanceContext: change.acceptanceContext,
@@ -408,6 +410,7 @@ const validateAndPublish = (
             now,
           })
         : yield* validation.validateCandidate({
+            changeId: change.id,
             ...candidateIdentity(candidate),
             resourceRoot: change.worktreePath,
             policy: withAgentEnvironment(policy.resolved.policy, agentEnvironment),

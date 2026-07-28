@@ -26,6 +26,7 @@ import {
   type SqliteChangePublicationRow,
 } from "./sqliteChangePublication.js";
 import { decodeSqliteTaskContextSnapshot } from "./sqliteTaskContextSnapshot.js";
+import type { ReviewerSessionRecord } from "../change/reviewerSession/reviewerSession.js";
 
 const columns = [
   "id",
@@ -95,6 +96,37 @@ export const openSqliteChangePersistence = (): Effect.Effect<
       repository.transactionImmediate("cancel Change", (sql) => cancelChange(sql, input)),
     recordCleanup: (input) =>
       repository.transactionImmediate("record Change cleanup", (sql) => recordCleanup(sql, input)),
+    getReviewerSession: (changeId) =>
+      repository.operation("read Reviewer Session", (sql) =>
+        Effect.flatMap(
+          sql<ReviewerSessionRow>`SELECT identity, fingerprint, session_reference AS sessionReference, last_candidate_id AS lastCandidateId FROM reviewer_sessions WHERE change_id = ${changeId}`,
+          (rows) => {
+            const row = rows[0];
+            if (row === undefined) return Effect.succeed(undefined);
+            return Effect.sync(
+              () =>
+                ({
+                  identity: JSON.parse(row.identity),
+                  fingerprint: row.fingerprint,
+                  sessionReference: row.sessionReference,
+                  lastCandidateId: row.lastCandidateId,
+                }) as ReviewerSessionRecord,
+            );
+          },
+        ),
+      ),
+    saveReviewerSession: (input) =>
+      repository.transactionImmediate("save Reviewer Session", (sql) =>
+        Effect.asVoid(sql`
+      INSERT INTO reviewer_sessions (change_id, identity, fingerprint, session_reference, last_candidate_id, updated_at)
+      VALUES (${input.identity.changeId}, ${JSON.stringify(input.identity)}, ${input.fingerprint}, ${input.sessionReference}, ${input.lastCandidateId}, datetime('now'))
+      ON CONFLICT(change_id) DO UPDATE SET identity = excluded.identity, fingerprint = excluded.fingerprint, session_reference = excluded.session_reference, last_candidate_id = excluded.last_candidate_id, updated_at = excluded.updated_at
+    `),
+      ),
+    removeReviewerSession: (changeId) =>
+      repository.transactionImmediate("remove Reviewer Session", (sql) =>
+        Effect.asVoid(sql`DELETE FROM reviewer_sessions WHERE change_id = ${changeId}`),
+      ),
     beginPublication: (input) =>
       repository.transactionImmediate("begin Change publication", (sql) =>
         beginPublication(sql, input),
@@ -482,6 +514,13 @@ const mapRow = (row: ChangeRow | undefined, operationName: string) =>
       });
 const invalidData = (operationName: string, message: string) =>
   Effect.fail(new RepositoryPersistedDataInvalid({ operationName, cause: new Error(message) }));
+
+type ReviewerSessionRow = {
+  readonly identity: string;
+  readonly fingerprint: string;
+  readonly sessionReference: string;
+  readonly lastCandidateId: string;
+};
 
 type ChangeRow = Omit<
   ChangeRecord,

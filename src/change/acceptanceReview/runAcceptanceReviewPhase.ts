@@ -1,8 +1,6 @@
 import type { Sandbox } from "@ai-hero/sandcastle";
 import { Effect } from "effect";
-
 import type { AgentEnvironmentCommand } from "../../agent/agentEnvironment.js";
-
 import type { AcceptanceReviewPolicy } from "./acceptanceReviewConfig.js";
 import type { ReviewerAgentRuntime } from "../../agent/reviewerAgentRuntime.js";
 import {
@@ -17,9 +15,18 @@ import type { RecordCandidateAcceptanceRoundInput } from "../candidateValidation
 import type { RepositoryStorageError } from "../../contracts/repositoryStorageError.js";
 import type { ValidationToolingFailure } from "../validation/validationToolingFailures.js";
 import { verifyCandidateIntegrity } from "../validation/verifyCandidateIntegrity.js";
+import {
+  continuationPrompt,
+  reviewerSessionFingerprint,
+  reviewerSessionsPath,
+  sessionIdentityMatches,
+  type ReviewerSessionStore,
+  type ReviewerContinuity,
+} from "../reviewerSession/reviewerSession.js";
 
 export type RunAcceptanceReviewPhaseInput = {
   readonly validationRunId: string;
+  readonly changeId?: string;
   readonly candidate: {
     readonly candidateId: string;
     readonly changeBaseSha: string;
@@ -34,6 +41,8 @@ export type RunAcceptanceReviewPhaseInput = {
   readonly artifactMaxBytes?: number;
   readonly commandCwd: string;
   readonly resourceRoot?: string;
+  readonly sessionStorageRoot?: string;
+  readonly sessionStore?: ReviewerSessionStore;
   readonly allowedUntrackedFiles: readonly string[];
   readonly now: string;
   readonly listArtifacts: (
@@ -58,10 +67,7 @@ export type RunAcceptanceReviewPhaseInput = {
     input: RecordCandidateAcceptanceRoundInput,
   ) => Effect.Effect<void, RepositoryStorageError>;
 };
-
-export type RunAcceptanceReviewPhaseResult = {
-  readonly findings: 0 | 1;
-};
+export type RunAcceptanceReviewPhaseResult = { readonly findings: 0 | 1 };
 
 export const runAcceptanceReviewPhase = (
   input: RunAcceptanceReviewPhaseInput,
@@ -71,6 +77,7 @@ export const runAcceptanceReviewPhase = (
 > =>
   Effect.gen(function* () {
     yield* verifyIntegrity(input);
+    const startedAt = Date.now();
     const availableArtifactRefs = (yield* input.listArtifacts(input.validationRunId)).map(
       (artifact) => artifact.ref,
     );
@@ -88,20 +95,72 @@ export const runAcceptanceReviewPhase = (
         producer: "acceptance",
       }),
     );
-    const provisional = yield* input.runtime.review({
-      sandbox: input.sandbox,
-      reviewer: "acceptance",
-      validationRunId: input.validationRunId,
-      availableArtifactRefs,
-      prompt,
-      profile: input.policy.profile,
-      commandCwd: input.commandCwd,
-      ...(input.resourceRoot === undefined ? {} : { resourceRoot: input.resourceRoot }),
+    const identity = {
+      changeId: input.changeId ?? input.candidate.candidateId,
+      producer: "acceptance" as const,
+      agentProfile: input.policy.profile,
+      instructions: input.policy.instructions,
       ...(input.agentEnvironment === undefined ? {} : { agentEnvironment: input.agentEnvironment }),
-    });
+      resources: {
+        ...(input.policy.profile.profile.runtimeConfig?.extensions === undefined
+          ? {}
+          : { extensions: input.policy.profile.profile.runtimeConfig.extensions }),
+        ...(input.policy.profile.profile.runtimeConfig?.skills === undefined
+          ? {}
+          : { skills: input.policy.profile.profile.runtimeConfig.skills }),
+        ...(input.policy.profile.profile.runtimeConfig?.tools === undefined
+          ? {}
+          : { tools: input.policy.profile.profile.runtimeConfig.tools }),
+      },
+    };
+    const fingerprint = reviewerSessionFingerprint(identity);
+    const stored =
+      input.sessionStore === undefined
+        ? undefined
+        : yield* input.sessionStore.get(identity.changeId);
+    const compatible = stored !== undefined && sessionIdentityMatches(stored, identity);
+    let continuity: ReviewerContinuity = compatible
+      ? "resumed"
+      : stored === undefined
+        ? "fresh"
+        : "restarted";
+    let restartReason: string | undefined =
+      stored === undefined ? undefined : compatible ? undefined : "identity_mismatch";
+    const review = (resumeSession?: string) =>
+      input.runtime.review({
+        sandbox: input.sandbox,
+        reviewer: "acceptance",
+        validationRunId: input.validationRunId,
+        availableArtifactRefs,
+        prompt:
+          compatible && resumeSession !== undefined
+            ? continuationPrompt({
+                candidate: input.candidate,
+                acceptanceContext: input.acceptanceContext,
+                availableArtifactRefs,
+                previousFindings: earlierFindings,
+              })
+            : prompt,
+        profile: input.policy.profile,
+        commandCwd: input.commandCwd,
+        ...(input.resourceRoot === undefined ? {} : { resourceRoot: input.resourceRoot }),
+        ...(input.agentEnvironment === undefined
+          ? {}
+          : { agentEnvironment: input.agentEnvironment }),
+        ...(input.sessionStorageRoot === undefined
+          ? {}
+          : { sessionStorageRoot: reviewerSessionsPath(input.sessionStorageRoot) }),
+        ...(resumeSession === undefined ? {} : { resumeSession }),
+      });
+    let provisional = yield* review(compatible ? stored?.sessionReference : undefined);
+    if (!provisional.ok && compatible) {
+      continuity = "restarted";
+      restartReason = "session_unusable";
+      provisional = yield* review();
+    }
     yield* verifyIntegrity(input);
     const result =
-      provisional.ok && earlierFindings.length > 0
+      provisional.ok && continuity !== "resumed" && earlierFindings.length > 0
         ? yield* input.runtime.review({
             sandbox: input.sandbox,
             reviewer: "acceptance",
@@ -118,6 +177,9 @@ export const runAcceptanceReviewPhase = (
             ...(input.agentEnvironment === undefined
               ? {}
               : { agentEnvironment: input.agentEnvironment }),
+            ...(input.sessionStorageRoot === undefined
+              ? {}
+              : { sessionStorageRoot: reviewerSessionsPath(input.sessionStorageRoot) }),
           })
         : provisional;
     if (result !== provisional) yield* verifyIntegrity(input);
@@ -128,18 +190,23 @@ export const runAcceptanceReviewPhase = (
       result,
       artifactsRoot: input.artifactsRoot,
       ...(input.artifactMaxBytes === undefined ? {} : { artifactMaxBytes: input.artifactMaxBytes }),
+      executionEvidence: {
+        continuity,
+        identityFingerprint: fingerprint,
+        ...(restartReason === undefined ? {} : { restartReason }),
+        durationMs: Date.now() - startedAt,
+      },
     });
     const findings = result.ok
       ? result.report.findings.map((finding, index) => ({
           id: `${input.validationRunId}-acceptance-F${index + 1}`,
           validationRunId: input.validationRunId,
           phase: validationPhase.acceptanceReview,
-          producer: "acceptance",
+          producer: "acceptance" as const,
           ...finding,
         }))
       : [];
-
-    yield* recordAcceptanceRound(input, {
+    yield* input.recordAcceptanceRound({
       validationRunId: input.validationRunId,
       roundNumber: 1,
       roundStatus: result.ok && findings.length === 0 ? "passed" : "failed",
@@ -148,8 +215,14 @@ export const runAcceptanceReviewPhase = (
       findings,
       now: input.now,
     });
-
     if (!result.ok) return yield* Effect.fail(result.failure);
+    if (input.sessionStore !== undefined && result.sessionReference !== undefined)
+      yield* input.sessionStore.save({
+        identity,
+        fingerprint,
+        sessionReference: result.sessionReference,
+        lastCandidateId: input.candidate.candidateId,
+      });
     return { findings: findings.length === 0 ? 0 : 1 };
   });
 
@@ -163,8 +236,3 @@ const verifyIntegrity = (
     allowedUntrackedFiles: input.allowedUntrackedFiles,
     operationName: "verify_acceptance_candidate",
   });
-
-const recordAcceptanceRound = (
-  input: RunAcceptanceReviewPhaseInput,
-  round: RecordCandidateAcceptanceRoundInput,
-): Effect.Effect<void, RepositoryStorageError> => input.recordAcceptanceRound(round);

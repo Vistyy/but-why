@@ -16,6 +16,7 @@ export const writeReviewerArtifacts = (input: {
   readonly result: ReviewerAgentResult;
   readonly artifactsRoot: string;
   readonly artifactMaxBytes?: number;
+  readonly executionEvidence?: Record<string, unknown>;
 }): Effect.Effect<
   readonly Omit<ValidationRunArtifactRecord, "createdAt">[],
   ValidationToolingFailure
@@ -32,7 +33,7 @@ export const writeReviewerArtifacts = (input: {
         },
         {
           fileName: "execution.json",
-          content: `${encodeReviewerWireValue({ attempts: input.result.attempts })}\n`,
+          content: `${encodeReviewerWireValue({ attempts: input.result.attempts, ...(input.executionEvidence ?? {}) })}\n`,
         },
       ] as const;
 
