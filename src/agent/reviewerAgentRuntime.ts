@@ -1,5 +1,14 @@
-import { pi, type Sandbox, type SandboxRunResult } from "@ai-hero/sandcastle";
-import { cpSync, existsSync, mkdtempSync, rmSync } from "node:fs";
+import { pi, type AgentProvider, type Sandbox, type SandboxRunResult } from "@ai-hero/sandcastle";
+import {
+  chmodSync,
+  cpSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { Effect } from "effect";
@@ -65,20 +74,27 @@ const reviewWithPi = (input: ReviewerAgentInput): Effect.Effect<ReviewerAgentRes
       if (sessionSnapshot !== undefined) restoreSessionRoot(sessionSnapshot);
     };
     const initial = yield* Effect.either(
-      runSandbox(() =>
-        input.sandbox.run({
-          agent: isolatedPiReviewerAgent(
-            input.profile,
-            input.resourceRoot ?? input.commandCwd ?? ".",
-            input.agentEnvironment,
-            input.sessionStorageRoot,
-          ),
-          prompt: input.prompt,
-          ...(input.resumeSession === undefined ? {} : { resumeSession: input.resumeSession }),
-          maxIterations: 1,
-          name: `${input.reviewer} Review`,
-        }),
-      ),
+      runSandbox(() => {
+        const agent = isolatedPiReviewerAgent(
+          input.profile,
+          input.resourceRoot ?? input.commandCwd ?? ".",
+          input.agentEnvironment,
+          input.sessionStorageRoot,
+        );
+        return preparePiSession(
+          agent,
+          input.commandCwd ?? input.resourceRoot ?? ".",
+          input.resumeSession,
+        ).then(() =>
+          input.sandbox.run({
+            agent,
+            prompt: input.prompt,
+            ...(input.resumeSession === undefined ? {} : { resumeSession: input.resumeSession }),
+            maxIterations: 1,
+            name: `${input.reviewer} Review`,
+          }),
+        );
+      }),
     );
     if (initial._tag === "Left" && /session capture failed/i.test(initial.left.message)) {
       restoreSession();
@@ -247,6 +263,27 @@ const sandcastleFailure = (
   attempts: number,
   stdout: string,
 ): ReviewerAgentResult => ({ ok: false, failure, attempts, stdout });
+
+const preparePiSession = async (
+  agent: AgentProvider,
+  cwd: string,
+  sessionId: string | undefined,
+): Promise<void> => {
+  if (sessionId === undefined || agent.sessionStorage === undefined) return;
+  const located = await agent.sessionStorage.findByIdOnHost(sessionId);
+  if (located.path === undefined) return;
+  const targetDirectory = agent.sessionStorage.hostSessionFilePath(cwd, sessionId);
+  if (targetDirectory === undefined) return;
+  const content = readFileSync(located.path, "utf8").replace(
+    /"cwd":"(?:\\\\.|[^"\\\\])*"/g,
+    `"cwd":${JSON.stringify(cwd)}`,
+  );
+  mkdirSync(targetDirectory, { recursive: true, mode: 0o700 });
+  chmodSync(targetDirectory, 0o700);
+  const target = join(targetDirectory, located.path.split("/").pop() ?? `${sessionId}.jsonl`);
+  writeFileSync(target, content, { mode: 0o600 });
+  chmodSync(target, 0o600);
+};
 
 const snapshotSessionRoot = (
   root: string,

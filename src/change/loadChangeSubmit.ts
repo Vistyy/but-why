@@ -1,4 +1,4 @@
-import { existsSync } from "node:fs";
+import { existsSync, rmSync } from "node:fs";
 import { join } from "node:path";
 
 import { repoAgentEnvironment } from "../agent/agentEnvironment.js";
@@ -143,7 +143,17 @@ export const loadChangeSubmit = (input: {
       sessionStore: {
         get: changePersistence.getReviewerSession,
         save: changePersistence.saveReviewerSession,
-        remove: changePersistence.removeReviewerSession,
+        remove: (changeId: string) =>
+          changePersistence.removeReviewerSession(changeId).pipe(
+            Effect.tap(() =>
+              Effect.sync(() =>
+                rmSync(join(context.paths.operationalDir, changeId), {
+                  recursive: true,
+                  force: true,
+                }),
+              ),
+            ),
+          ),
       },
       reviewerSessionsRoot: context.paths.operationalDir,
     });
