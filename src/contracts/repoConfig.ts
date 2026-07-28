@@ -2,7 +2,11 @@ import { posix, win32 } from "node:path";
 
 import { Either, Schema } from "effect";
 
-import { agentProfileSchema, configNameSchema, nonBlankStringSchema } from "./agentConfig.js";
+import {
+  agentProfileReferenceSchema,
+  configNameSchema,
+  nonBlankStringSchema,
+} from "./agentConfig.js";
 import { contractDiagnostics, formatContractDiagnostics } from "./contractDiagnostics.js";
 import { taskPrefixPattern } from "./taskPrefix.js";
 import { RepoConfigValidationFailed } from "./configErrors.js";
@@ -17,8 +21,22 @@ export const repoRelativePathSchema = Schema.String.pipe(
   }),
 );
 
+const repoRuntimeConfigSchema = Schema.Struct({
+  model: Schema.optional(nonBlankStringSchema),
+  thinking: Schema.optional(Schema.Literal("off", "minimal", "low", "medium", "high", "xhigh")),
+  extensions: Schema.optional(Schema.Array(repoRelativePathSchema)),
+  skills: Schema.optional(Schema.Array(repoRelativePathSchema)),
+  tools: Schema.optional(Schema.Array(nonBlankStringSchema)),
+  contextFileDiscovery: Schema.optional(Schema.Boolean),
+});
+
+const repoAgentProfileSchema = Schema.Struct({
+  agentRuntime: Schema.Literal("pi"),
+  runtimeConfig: Schema.optional(repoRuntimeConfigSchema),
+});
+
 const reviewerSchema = Schema.Struct({
-  agentProfile: Schema.optional(configNameSchema),
+  agentProfile: Schema.optional(agentProfileReferenceSchema),
   instructionsFile: repoRelativePathSchema,
 });
 
@@ -46,7 +64,7 @@ const repoValidationConfigSchema = Schema.Struct({
 });
 
 const acceptanceReviewConfigSchema = Schema.Struct({
-  agentProfile: Schema.optional(configNameSchema),
+  agentProfile: Schema.optional(agentProfileReferenceSchema),
   instructionsFile: Schema.optional(repoRelativePathSchema),
 });
 
@@ -63,7 +81,12 @@ const repoConfigSchema = Schema.Struct({
   review: Schema.optional(repoReviewConfigSchema),
   reviewers: Schema.optional(Schema.Record({ key: configNameSchema, value: reviewerSchema })),
   agentProfiles: Schema.optional(
-    Schema.Record({ key: configNameSchema, value: agentProfileSchema }),
+    Schema.Record({ key: configNameSchema, value: repoAgentProfileSchema }),
+  ),
+  interactiveSession: Schema.optional(
+    Schema.Struct({
+      agentProfile: Schema.optional(agentProfileReferenceSchema),
+    }),
   ),
   validationWorkspace: Schema.optional(repoValidationWorkspaceConfigSchema),
 });
@@ -100,6 +123,7 @@ function isRepoRelativePath(value: string): boolean {
     !posix.isAbsolute(value) &&
     !win32.isAbsolute(value) &&
     !value.split(/[\\/]/u).includes("..") &&
-    !value.includes("\\")
+    !value.includes("\\") &&
+    !value.includes(":")
   );
 }

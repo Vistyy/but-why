@@ -1,105 +1,129 @@
-import type { AgentProfileConfig, PiAgentProfileConfig } from "../contracts/agentConfig.js";
+import type { AgentProfileReference, PiAgentProfileConfig } from "../contracts/agentConfig.js";
 import type { GlobalConfig } from "../contracts/globalConfig.js";
+import type { RepoConfig } from "../contracts/repoConfig.js";
 import {
   MissingAgentModel,
   MissingAgentProfile,
   UnsupportedAgentRuntime,
   type AgentProfileResolutionError,
 } from "./agentProfileErrors.js";
-import { agentRuntimeAdapters, isSupportedAgentRuntime } from "./runtimeAdapters.js";
 
-export type ResolvedPiAgentProfile = Omit<PiAgentProfileConfig, "agentModel" | "thinking"> & {
-  readonly agentModel: string;
-  readonly thinking?: Exclude<PiAgentProfileConfig["thinking"], undefined>;
-};
-
-export type InteractiveSessionAgentProfile = {
-  readonly agentModel?: string;
-  readonly thinking?: Exclude<PiAgentProfileConfig["thinking"], undefined>;
-};
-
-export type ResolvedAgentProfile = {
+export type ResolvedPiAgentProfile = {
   readonly agentProfile: string;
-  readonly source: "repo" | "global";
-  readonly profile: AgentProfileConfig;
+  readonly scope: "repo" | "global";
+  readonly profile: PiAgentProfileConfig;
+  readonly globalConfigDirectory?: string;
 };
 
-export const resolveInteractiveSessionAgentProfile = (
-  globalConfig: GlobalConfig,
-):
-  | { readonly ok: true; readonly profile: InteractiveSessionAgentProfile | undefined }
-  | { readonly ok: false; readonly error: MissingAgentProfile | UnsupportedAgentRuntime } => {
-  const profileName = globalConfig.interactiveSession?.agentProfile;
-  if (profileName === undefined) return { ok: true, profile: undefined };
+export type InteractiveSessionAgentProfile = ResolvedPiAgentProfile;
 
-  const profile = globalConfig.agentProfiles?.[profileName];
-  if (profile === undefined) {
-    return {
-      ok: false,
-      error: new MissingAgentProfile({ profileName, selection: "explicit" }),
-    };
-  }
-  if (profile.agentRuntime !== "pi") {
-    return {
-      ok: false,
-      error: new UnsupportedAgentRuntime({ profileName, agentRuntime: profile.agentRuntime }),
-    };
-  }
-
-  const piProfile = profile as PiAgentProfileConfig;
-  return {
-    ok: true,
-    profile: {
-      ...(piProfile.agentModel === undefined ? {} : { agentModel: piProfile.agentModel }),
-      ...(piProfile.thinking === undefined ? {} : { thinking: piProfile.thinking }),
-    },
-  };
+type ProfileResolutionInput = {
+  readonly repoSelection?: AgentProfileReference;
+  readonly globalSelection?: AgentProfileReference;
+  readonly defaultSelection?: AgentProfileReference;
+  readonly repoProfiles?: Readonly<Record<string, PiAgentProfileConfig>>;
+  readonly globalProfiles?: Readonly<Record<string, PiAgentProfileConfig>>;
+  readonly requireModel?: boolean;
+  readonly globalConfigDirectory?: string;
 };
 
-export const resolveAgentProfile = (input: {
-  readonly agentProfile?: string;
-  readonly repoProfiles?: Readonly<Record<string, AgentProfileConfig>>;
+export const resolveInteractiveSessionAgentProfile = (input: {
+  readonly repoConfig: RepoConfig;
   readonly globalConfig: GlobalConfig;
+  readonly globalConfigDirectory?: string;
 }):
-  | { readonly ok: true; readonly resolved: ResolvedAgentProfile }
+  | { readonly ok: true; readonly profile: InteractiveSessionAgentProfile | undefined }
   | { readonly ok: false; readonly error: AgentProfileResolutionError } => {
-  const profileName = input.agentProfile ?? input.globalConfig.defaultAgentProfile;
+  const selection = resolveAgentProfile({
+    ...(input.repoConfig.interactiveSession?.agentProfile === undefined
+      ? {}
+      : { repoSelection: input.repoConfig.interactiveSession.agentProfile }),
+    ...(input.globalConfig.interactiveSession?.agentProfile === undefined
+      ? {}
+      : { globalSelection: input.globalConfig.interactiveSession.agentProfile }),
+    ...(input.globalConfig.defaultAgentProfile === undefined
+      ? {}
+      : { defaultSelection: input.globalConfig.defaultAgentProfile }),
+    ...(input.repoConfig.agentProfiles === undefined
+      ? {}
+      : { repoProfiles: input.repoConfig.agentProfiles }),
+    ...(input.globalConfig.agentProfiles === undefined
+      ? {}
+      : { globalProfiles: input.globalConfig.agentProfiles }),
+    requireModel: false,
+    ...(input.globalConfigDirectory === undefined
+      ? {}
+      : { globalConfigDirectory: input.globalConfigDirectory }),
+  });
+  return selection.ok
+    ? { ok: true, profile: selection.resolved }
+    : selection.error._tag === "MissingAgentProfile" && selection.error.selection === "default"
+      ? { ok: true, profile: undefined }
+      : selection;
+};
 
-  if (profileName === undefined) {
-    return { ok: false, error: new MissingAgentProfile({ selection: "default" }) };
+export const resolveAgentProfile = (
+  input: ProfileResolutionInput,
+):
+  | { readonly ok: true; readonly resolved: ResolvedPiAgentProfile }
+  | { readonly ok: false; readonly error: AgentProfileResolutionError } => {
+  const selection = input.repoSelection ?? input.globalSelection ?? input.defaultSelection;
+  const selectionKind =
+    input.repoSelection !== undefined || input.globalSelection !== undefined
+      ? "explicit"
+      : "default";
+
+  if (selection === undefined) {
+    return { ok: false, error: new MissingAgentProfile({ selection: selectionKind }) };
   }
 
-  const explicit = input.agentProfile !== undefined;
-  const repoProfile = explicit ? input.repoProfiles?.[profileName] : undefined;
-  const profile = repoProfile ?? input.globalConfig.agentProfiles?.[profileName];
-  const source = repoProfile === undefined ? "global" : "repo";
-
+  const profiles = selection.scope === "repo" ? input.repoProfiles : input.globalProfiles;
+  const profile = profiles?.[selection.name];
   if (profile === undefined) {
     return {
       ok: false,
       error: new MissingAgentProfile({
-        profileName,
-        selection: explicit ? "explicit" : "default",
+        profileName: selection.name,
+        scope: selection.scope,
+        selection: selectionKind,
       }),
     };
   }
 
-  if (!isSupportedAgentRuntime(profile.agentRuntime)) {
+  if (profile.agentRuntime !== "pi") {
     return {
       ok: false,
-      error: new UnsupportedAgentRuntime({ profileName, agentRuntime: profile.agentRuntime }),
+      error: new UnsupportedAgentRuntime({
+        profileName: selection.name,
+        scope: selection.scope,
+        agentRuntime: profile.agentRuntime,
+      }),
     };
   }
 
-  if (
-    profile.agentModel === undefined &&
-    !agentRuntimeAdapters[profile.agentRuntime].supportsHarnessDefaultModel
-  ) {
+  const model = profile.runtimeConfig?.model;
+  if (input.requireModel !== false && model === undefined) {
     return {
       ok: false,
-      error: new MissingAgentModel({ profileName, agentRuntime: profile.agentRuntime }),
+      error: new MissingAgentModel({
+        profileName: selection.name,
+        scope: selection.scope,
+        agentRuntime: "pi",
+      }),
     };
   }
 
-  return { ok: true, resolved: { agentProfile: profileName, source, profile } };
+  const resolved: ResolvedPiAgentProfile = {
+    agentProfile: selection.name,
+    scope: selection.scope,
+    profile,
+  };
+  if (input.globalConfigDirectory !== undefined) {
+    Object.defineProperty(resolved, "globalConfigDirectory", {
+      value: input.globalConfigDirectory,
+      enumerable: false,
+    });
+  }
+
+  return { ok: true, resolved };
 };

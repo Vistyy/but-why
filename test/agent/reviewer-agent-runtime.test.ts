@@ -10,9 +10,22 @@ import { describe, expect, vi } from "vitest";
 import { piReviewerAgentRuntime } from "../../src/agent/reviewerAgentRuntime.js";
 
 const profile = {
-  agentRuntime: "pi" as const,
-  agentModel: "openai-codex/gpt-5.5",
-  thinking: "high" as const,
+  agentProfile: "review",
+  scope: "global" as const,
+  profile: {
+    agentRuntime: "pi" as const,
+    runtimeConfig: {
+      model: "openai-codex/gpt-5.5",
+      thinking: "high" as const,
+      extensions: [
+        "~/.pi/agent/extensions/package-manager-policy",
+        "~/.pi/agent/extensions/web-search",
+        "~/.pi/agent/extensions/openai-remote-compaction",
+      ],
+      skills: ["~/.pi/agent/skills/codebase-design"],
+      tools: ["read", "bash", "grep", "find", "ls", "web_search", "web_fetch", "web_content_get"],
+    },
+  },
 };
 
 describe("Pi reviewer agent runtime", () => {
@@ -67,7 +80,7 @@ describe("Pi reviewer agent runtime", () => {
 
       expect(result).toMatchObject({ ok: true, attempts: 1 });
       expect(command).toBe(
-        "'nix' 'develop' '-c' pi -p --mode json --model 'openai-codex/gpt-5.5' --thinking high --no-extensions --no-skills --no-prompt-templates --no-themes --extension ~/.pi/agent/extensions/package-manager-policy --extension ~/.pi/agent/extensions/web-search --extension ~/.pi/agent/extensions/openai-remote-compaction --skill ~/.pi/agent/skills/codebase-design --tools read,bash,grep,find,ls,web_search,web_fetch,web_content_get",
+        "'nix' 'develop' '-c' pi -p --mode json --model 'openai-codex/gpt-5.5' --thinking high --no-prompt-templates --no-themes --no-extensions --extension '~/.pi/agent/extensions/package-manager-policy' --extension '~/.pi/agent/extensions/web-search' --extension '~/.pi/agent/extensions/openai-remote-compaction' --no-skills --skill '~/.pi/agent/skills/codebase-design' --tools read,bash,grep,find,ls,web_search,web_fetch,web_content_get",
       );
       expect(command).not.toContain("--subagent");
       expect(command).not.toContain("--edit");
@@ -233,10 +246,10 @@ describe("Pi reviewer agent runtime", () => {
         expect(command).toContain("--no-prompt-templates");
         expect(command).toContain("--no-themes");
         expect(command).not.toContain("--no-context-files");
-        expect(command).toContain("--extension ~/.pi/agent/extensions/package-manager-policy");
-        expect(command).toContain("--extension ~/.pi/agent/extensions/web-search");
-        expect(command).toContain("--extension ~/.pi/agent/extensions/openai-remote-compaction");
-        expect(command).toContain("--skill ~/.pi/agent/skills/codebase-design");
+        expect(command).toContain("--extension '~/.pi/agent/extensions/package-manager-policy'");
+        expect(command).toContain("--extension '~/.pi/agent/extensions/web-search'");
+        expect(command).toContain("--extension '~/.pi/agent/extensions/openai-remote-compaction'");
+        expect(command).toContain("--skill '~/.pi/agent/skills/codebase-design'");
         const probe = JSON.parse(readFileSync(probeOutput, "utf8")) as {
           readonly prompt: string;
           readonly tools: readonly string[];

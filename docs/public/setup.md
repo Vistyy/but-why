@@ -110,55 +110,48 @@ See [config.md](config.md#repository-preparation) for the configuration contract
 
 ## Choose the Default Agent Profile
 
-The setup agent must identify its current harness from its execution context.
+The setup agent must identify Pi from its execution context.
 
-It must ask whether to use that harness or another supported runtime.
-
-It must not scan the machine for installed harnesses.
+It must not scan the machine for other harnesses.
 
 <!-- supported-agent-runtimes:start -->
 - `pi`
-- `claude-code`
-- `codex`
-- `cursor`
-- `opencode`
-- `copilot`
 <!-- supported-agent-runtimes:end -->
 
-See [Agent Profiles](config.md#agent-profiles) for runtime configuration.
-
-If the setup agent knows its current model, it should suggest that model.
-
-Otherwise, it must ask for a model.
-
-All current adapters require `agentModel`.
+See [Agent Profiles](config.md#agent-profiles) for the Pi runtime configuration.
 
 The setup agent must preserve every existing setting and Agent Profile in `~/.config/but-why/config.json`.
 
-It should reuse a profile whose `agentRuntime` and `agentModel` match the selection.
+Setup must create or update separate editable Global `reviewer` and `implementer` profiles.
 
-If no profile matches, it must create a profile named after the runtime.
+Setup must set `defaultAgentProfile` to `{ "scope": "global", "name": "reviewer" }`.
 
-If that name has different settings, it must ask the user for another profile name.
+Setup must set `interactiveSession.agentProfile` to `{ "scope": "global", "name": "implementer" }`.
 
-It must set `defaultAgentProfile` to the selected profile name.
+The reviewer profile must configure the current curated reviewer model, thinking level, extension list, skill list, and exact reviewer tool list.
 
-Example:
+The Implementer profile must configure this exact extension allowlist:
 
-```json
-{
-  "defaultAgentProfile": "pi",
-  "agentProfiles": {
-    "pi": {
-      "agentRuntime": "pi",
-      "agentModel": "openai-codex/gpt-5.5",
-      "thinking": "medium"
-    }
-  }
-}
-```
+- `inline-skills`.
+- `openai-remote-compaction`.
+- `package-manager-policy`.
+- `web-search`.
+- `herdr-agent-state.ts`.
+- `openai-fast.ts`.
+- `output-style.ts`.
+- `statusline.ts`.
+- `fuzzy-files/`.
+- `codex-usage.ts`.
+- `codex-resets.ts`.
+- `npm:@ogulcancelik/pi-auto-permissions@0.1.2`.
 
-Setup does not verify that the selected harness can run.
+The Implementer profile must omit `skills`, `tools`, and `contextFileDiscovery`.
+
+Subagent, Lavish, and session-recall extensions must be absent from the Implementer extension list.
+
+Users may edit or replace either generated profile.
+
+Setup does not verify that Pi can run.
 
 If a launch fails, But Why reports a typed error with a recovery action.
 

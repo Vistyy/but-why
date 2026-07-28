@@ -1,6 +1,5 @@
 import { Effect } from "effect";
 
-import { resolveInteractiveSessionAgentProfile } from "../../agent/agentProfiles.js";
 import { parseCliTaskIdValue } from "../../cliTaskId.js";
 import { withGlobalHelpFlags } from "../../cliHelp.js";
 import {
@@ -16,7 +15,6 @@ import { readHandoffFile, type HandoffFileReadError } from "../../change/handoff
 import { loadChangeInspection } from "../../change/loadChangeInspection.js";
 import { withChangeUseCases } from "../../change/loadChangeUseCases.js";
 import { loadChangeSubmit } from "../../change/loadChangeSubmit.js";
-import { readGlobalConfig } from "../../init/globalConfig.js";
 import type { ChangeCancellationResult, CancellationUseCases } from "../../change/cancelChange.js";
 import { withCancellation } from "../../change/loadChangeCancellation.js";
 import type { InteractiveSessionHost } from "../../change/interactiveSessionHost.js";
@@ -34,6 +32,7 @@ import type {
 import type { RepositoryStorageError } from "../../contracts/repositoryStorageError.js";
 import type { RepoStateLoadError } from "../../cliResults.js";
 import type { TextInputStdin } from "../../cli/input/textInput.js";
+import { structuredValue } from "../../output/structuredValue.js";
 
 export type ChangeCommandEnvironment = {
   readonly cwd: string;
@@ -287,7 +286,7 @@ const runShow = (
         : success({
             change: changeInspectionView(detail.change),
             currentCandidate: detail.currentCandidate,
-            currentValidationRun: detail.currentValidationRun,
+            currentValidationRun: structuredValue(detail.currentValidationRun),
             findings: detail.findings,
             toolingFailures: detail.toolingFailures,
             pullRequest: detail.change.publication?.pullRequest ?? null,
@@ -336,7 +335,7 @@ const runFindings = (
         : success({
             change: changeInspectionView(result.change),
             candidate: result.candidate,
-            validationRun: result.validationRun,
+            validationRun: structuredValue(result.validationRun),
             findings: result.findings,
             toolingFailures: result.toolingFailures,
             count: result.findings.length,
@@ -358,7 +357,9 @@ const runValidationRuns = (
   if (!loaded.ok) return Effect.succeed(loadError(loaded.error));
   return loaded.inspection.validationRuns(changeId.changeId).pipe(
     Effect.map((result) =>
-      result === undefined ? changeNotFound() : success({ validationRuns: result.validationRuns }),
+      result === undefined
+        ? changeNotFound()
+        : success({ validationRuns: structuredValue(result.validationRuns) }),
     ),
     inspectionFailure,
   );
@@ -469,31 +470,11 @@ const runImplement = (
       : readHandoffFile(environment.cwd, parsed.handoffFile, environment.stdin);
   if (handoff !== undefined && !handoff.ok) return Effect.succeed(handoffFileError(handoff.error));
 
-  const global = readGlobalConfig(environment.globalConfigPath);
-  if (!global.ok) {
-    return Effect.succeed(
-      runtimeError({
-        code: "interactive_session_agent_profile_invalid",
-        message: `Global Config is invalid: ${global.error.message}`,
-        ...(global.error.path === undefined ? {} : { details: { path: global.error.path } }),
-        help: ["Fix Global Config, then retry Change Implement."],
-      }),
-    );
-  }
-  const agentProfile = resolveInteractiveSessionAgentProfile(global.config);
-  if (!agentProfile.ok) {
-    return Effect.succeed(interactiveSessionAgentProfileError(agentProfile.error));
-  }
-
   return withChanges(
     environment,
     (changes) =>
       Effect.map(
-        changes.implement(
-          parsed.changeId,
-          handoff === undefined ? undefined : handoff.content,
-          agentProfile.profile,
-        ),
+        changes.implement(parsed.changeId, handoff === undefined ? undefined : handoff.content),
         implementResult,
       ),
     () =>
@@ -503,33 +484,6 @@ const runImplement = (
         help: ["Confirm Herdr is running, then retry Change Implement."],
       }),
   );
-};
-
-const interactiveSessionAgentProfileError = (
-  error:
-    | { readonly _tag: "MissingAgentProfile"; readonly profileName?: string }
-    | {
-        readonly _tag: "UnsupportedAgentRuntime";
-        readonly profileName: string;
-        readonly agentRuntime: string;
-      },
-): CliResult => {
-  const profileName = error.profileName ?? "<missing>";
-  return runtimeError({
-    code: "interactive_session_agent_profile_invalid",
-    message:
-      error._tag === "MissingAgentProfile"
-        ? `Interactive Session Agent Profile "${profileName}" does not exist in Global Config.`
-        : `Interactive Session Agent Profile "${profileName}" must use the Pi agent runtime; it uses "${error.agentRuntime}".`,
-    help:
-      error._tag === "MissingAgentProfile"
-        ? [
-            `Define Global Agent Profile "${profileName}", or remove interactiveSession.agentProfile.`,
-          ]
-        : [
-            `Set agentProfiles.${profileName}.agentRuntime to "pi", or remove interactiveSession.agentProfile.`,
-          ],
-  });
 };
 
 type ImplementArgsParseResult =
@@ -943,6 +897,9 @@ const implementResult = (result: ChangeImplementResult): CliResult => {
       worktreePath: result.change.worktreePath,
       host: result.host,
       status: result.status,
+      ...(result.agentProfile === undefined
+        ? {}
+        : { agentProfile: result.agentProfile, profileScope: result.profileScope }),
     });
   }
   if (result.code === "change_not_found" || result.code === "change_not_open") {
@@ -966,6 +923,14 @@ const implementResult = (result: ChangeImplementResult): CliResult => {
       message: result.message,
       details: { changeId: result.change.id, worktreePath: result.change.worktreePath },
       help: ["Fix Repo Config in the Managed Worktree, then retry Change Implement."],
+    });
+  }
+  if (result.code === "agent_profile_invalid") {
+    return runtimeError({
+      code: result.code,
+      message: result.message,
+      details: { changeId: result.change.id, worktreePath: result.change.worktreePath },
+      help: ["Fix the selected Agent Profile, then retry Change Implement."],
     });
   }
   if ("message" in result) {
@@ -1166,6 +1131,7 @@ const withChanges = (
       ...(environment.interactiveSessionHost === undefined
         ? {}
         : { interactiveSessionHost: environment.interactiveSessionHost }),
+      globalConfigPath: environment.globalConfigPath,
       ...(environment.interactiveSessionPath === undefined
         ? {}
         : { interactiveSessionPath: environment.interactiveSessionPath }),

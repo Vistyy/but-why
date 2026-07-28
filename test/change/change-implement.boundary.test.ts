@@ -138,15 +138,16 @@ describe("by change implement", () => {
         host: "herdr",
         status: "started",
       });
-      expect(launches).toEqual([
-        {
-          changeId: change.change.id,
-          repositoryPath: root,
-          worktreePath: change.worktreePath,
-          initialPrompt: undefined,
-          agentEnvironment: ["nix", "develop", "-c"],
-        },
-      ]);
+      expect(launches).toHaveLength(1);
+      expect(launches[0]).toMatchObject({
+        changeId: change.change.id,
+        repositoryPath: root,
+        worktreePath: change.worktreePath,
+        agentEnvironment: ["nix", "develop", "-c"],
+      });
+      expect((launches[0] as { readonly initialPrompt: string }).initialPrompt).toContain(
+        `Change identity: ${change.change.id}.`,
+      );
 
       const handoff = "x".repeat(contractMaxHandoffBytes);
       const handoffPath = join(root, "handoff.md");
@@ -174,7 +175,8 @@ describe("by change implement", () => {
         },
       );
       expect(handoffResult.status).toBe(0);
-      expect(received).toEqual([handoff]);
+      expect(received).toHaveLength(1);
+      expect(received[0]).toContain(handoff);
     }),
   );
 
@@ -254,12 +256,11 @@ describe("by change implement", () => {
       writeFileSync(
         globalConfigPath,
         JSON.stringify({
-          interactiveSession: { agentProfile: "implementation" },
+          interactiveSession: { agentProfile: { scope: "global", name: "implementation" } },
           agentProfiles: {
             implementation: {
               agentRuntime: "pi",
-              agentModel: "openai-codex/gpt-5.6-luna",
-              thinking: "high",
+              runtimeConfig: { model: "openai-codex/gpt-5.6-luna", thinking: "high" },
             },
           },
         }),
@@ -284,8 +285,10 @@ describe("by change implement", () => {
       expect(result.status).toBe(0);
       expect(launches).toEqual([
         expect.objectContaining({
-          agentModel: "openai-codex/gpt-5.6-luna",
-          thinking: "high",
+          agentProfile: expect.objectContaining({
+            agentProfile: "implementation",
+            scope: "global",
+          }),
         }),
       ]);
     }),
@@ -295,19 +298,19 @@ describe("by change implement", () => {
     [
       "missing",
       {
-        interactiveSession: { agentProfile: "implementation" },
+        interactiveSession: { agentProfile: { scope: "global", name: "implementation" } },
       },
-      "does not exist in Global Config",
+      "was not found",
     ],
     [
       "non-Pi",
       {
-        interactiveSession: { agentProfile: "implementation" },
+        interactiveSession: { agentProfile: { scope: "global", name: "implementation" } },
         agentProfiles: {
-          implementation: { agentRuntime: "codex", agentModel: "model" },
+          implementation: { agentRuntime: "codex" },
         },
       },
-      "must use the Pi agent runtime",
+      "Global Config is invalid",
     ],
   ] as const)(
     "rejects a %s Interactive Session Agent Profile without launching or changing the Change",
@@ -352,7 +355,7 @@ describe("by change implement", () => {
         expect(result.status).toBe(1);
         expect(JSON.parse(result.stdout)).toMatchObject({
           error: {
-            code: "interactive_session_agent_profile_invalid",
+            code: "agent_profile_invalid",
             message: expect.stringContaining(message),
           },
         });
@@ -528,7 +531,7 @@ describe("by change implement", () => {
           { interactiveSessionHost: host, stdin: { fd: stdin, isTerminal: false } },
         );
         expect(result.status).toBe(0);
-        expect(prompt).toBe("Handoff from stdin: Héllo\n");
+        expect(prompt).toContain("Handoff from stdin: Héllo\n");
       } finally {
         closeSync(stdin);
       }

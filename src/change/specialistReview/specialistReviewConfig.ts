@@ -14,7 +14,7 @@ export type SpecialistReviewPolicy = {
   readonly instructions: string;
   readonly instructionsSource: "repo" | "global";
   readonly agentProfile: string;
-  readonly profileSource: "repo" | "global";
+  readonly profileScope: "repo" | "global";
   readonly profile: ResolvedPiAgentProfile;
 };
 
@@ -61,16 +61,27 @@ const resolveSpecialist = (
   if (definition === undefined) return invalid(`Specialist is not defined: ${id}`);
 
   const profileResolution = resolveAgentProfile({
-    ...(definition.agentProfile === undefined ? {} : { agentProfile: definition.agentProfile }),
+    ...(repoDefinition?.agentProfile === undefined
+      ? {}
+      : { repoSelection: repoDefinition.agentProfile }),
+    ...(globalDefinition?.agentProfile === undefined
+      ? {}
+      : { globalSelection: globalDefinition.agentProfile }),
+    ...(input.globalConfig.defaultAgentProfile === undefined
+      ? {}
+      : { defaultSelection: input.globalConfig.defaultAgentProfile }),
     ...(input.repoConfig.agentProfiles === undefined
       ? {}
       : { repoProfiles: input.repoConfig.agentProfiles }),
-    globalConfig: input.globalConfig,
+    ...(input.globalConfig.agentProfiles === undefined
+      ? {}
+      : { globalProfiles: input.globalConfig.agentProfiles }),
+    globalConfigDirectory: dirname(input.globalConfigPath),
   });
   if (!profileResolution.ok) return profileResolution;
   if (
     profileResolution.resolved.profile.agentRuntime !== "pi" ||
-    profileResolution.resolved.profile.agentModel === undefined
+    profileResolution.resolved.profile.runtimeConfig?.model === undefined
   ) {
     return invalid(
       "Specialist Review requires a Pi Agent Profile.",
@@ -93,19 +104,8 @@ const resolveSpecialist = (
       instructions: instructions.instructions,
       instructionsSource,
       agentProfile: profileResolution.resolved.agentProfile,
-      profileSource: profileResolution.resolved.source,
-      profile: {
-        agentRuntime: "pi",
-        agentModel: profileResolution.resolved.profile.agentModel,
-        ...(profileResolution.resolved.profile.thinking === undefined
-          ? {}
-          : {
-              thinking: profileResolution.resolved.profile.thinking as Exclude<
-                ResolvedPiAgentProfile["thinking"],
-                undefined
-              >,
-            }),
-      },
+      profileScope: profileResolution.resolved.scope,
+      profile: profileResolution.resolved,
     },
   };
 };

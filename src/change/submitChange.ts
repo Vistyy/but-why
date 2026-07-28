@@ -139,7 +139,10 @@ export const openChangeSubmit = (dependencies: {
   readonly persistence: ChangePersistence;
   readonly taskPersistence: Pick<TaskPersistence, "getTaskById" | "transitionTaskState">;
   readonly reconciliation: ChangeReconciliation;
-  readonly resolvePolicy: (taskBacked: boolean) => CandidateValidationPolicyResolution;
+  readonly resolvePolicy: (
+    taskBacked: boolean,
+    worktreePath: string,
+  ) => CandidateValidationPolicyResolution;
   readonly resolveAgentEnvironment?: (worktreePath: string) => AgentEnvironmentResolution;
   readonly publicationFor: (cwd: string) => CandidatePublication;
   readonly refreshBase: (
@@ -272,7 +275,7 @@ const validateAndCompleteNoChange = (
         message: "Task-backed no-change submission requires Acceptance Context.",
       } as const;
     }
-    const policy = dependencies.resolvePolicy(true);
+    const policy = dependencies.resolvePolicy(true, change.worktreePath);
     if (!policy.ok || !policy.resolved.taskBacked) {
       return {
         ok: false,
@@ -375,7 +378,10 @@ const validateAndPublish = (
   agentEnvironment: AgentEnvironmentCommand | undefined,
 ): Effect.Effect<ChangeSubmitResult, RepositoryStorageError, CandidateValidation> =>
   Effect.gen(function* () {
-    const policy = dependencies.resolvePolicy(change.acceptanceContext !== null);
+    const policy = dependencies.resolvePolicy(
+      change.acceptanceContext !== null,
+      change.worktreePath,
+    );
     if (!policy.ok) {
       return {
         ok: false,

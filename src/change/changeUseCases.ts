@@ -1,10 +1,11 @@
 import { randomUUID } from "node:crypto";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { Effect } from "effect";
 
 import { repoAgentEnvironment } from "../agent/agentEnvironment.js";
-import type { InteractiveSessionAgentProfile } from "../agent/agentProfiles.js";
+import { resolveInteractiveSessionAgentProfile } from "../agent/agentProfiles.js";
 import type { RepoLocalContext } from "../init/repoContext.js";
+import { readGlobalConfig } from "../init/globalConfig.js";
 import { readRepoConfig } from "../init/repoConfig.js";
 import type { RepositoryStorageError } from "../contracts/repositoryStorageError.js";
 import { parseRemoteChangeBaseRef } from "../submissionEnvironment/remoteChangeBase.js";
@@ -15,6 +16,7 @@ import {
 import { taskSlugForId, type PublicTaskId } from "../task/taskId.js";
 import { changeReadiness, changeState, type ChangePrepareFailure } from "./change.js";
 import type { InteractiveSessionHost } from "./interactiveSessionHost.js";
+import { buildImplementerPrompt } from "./implementerPrompt.js";
 import type { ChangeReconciliation, ChangeReconciliationResult } from "./reconcileChange.js";
 import type {
   ChangeStartGitOperations,
@@ -37,7 +39,6 @@ export type ChangeUseCases = {
   readonly implement: (
     changeId: string,
     initialPrompt: string | undefined,
-    agentProfile: InteractiveSessionAgentProfile | undefined,
   ) => Effect.Effect<ChangeImplementResult, RepositoryStorageError>;
   readonly reconcile: (
     changeId: string | undefined,
@@ -62,11 +63,17 @@ export type ChangeImplementResult =
       readonly change: ChangeStartRecord;
       readonly host: "herdr";
       readonly status: "started" | "already_active";
+      readonly agentProfile?: string;
+      readonly profileScope?: "repo" | "global";
     }
   | {
       readonly ok: false;
       readonly change: ChangeStartRecord;
-      readonly code: "host_unavailable" | "launch_failed" | "agent_environment_invalid";
+      readonly code:
+        | "host_unavailable"
+        | "launch_failed"
+        | "agent_environment_invalid"
+        | "agent_profile_invalid";
       readonly message: string;
     }
   | { readonly ok: false; readonly code: "change_not_found" | "change_not_open" }
@@ -90,11 +97,19 @@ export const openChangeUseCases = (
   executor: RepositoryPreparationExecutor,
   reconciliation: ChangeReconciliation,
   interactiveSessionHost: InteractiveSessionHost,
+  globalConfigPath: string,
 ): ChangeUseCases => ({
   start: (input) => startChange(store, git, executor, input),
   prepare: (changeId, now) => prepareChange(store, git, executor, changeId, now),
-  implement: (changeId, initialPrompt, agentProfile) =>
-    implementChange(context, store, interactiveSessionHost, changeId, initialPrompt, agentProfile),
+  implement: (changeId, initialPrompt) =>
+    implementChange(
+      context,
+      store,
+      interactiveSessionHost,
+      globalConfigPath,
+      changeId,
+      initialPrompt,
+    ),
   reconcile: (changeId, now) =>
     reconciliation.reconcile({
       repositoryCommonDirectory: context.commonDirectory,
@@ -189,9 +204,9 @@ const implementChange = (
   context: RepoLocalContext,
   store: ChangeStartPersistence,
   interactiveSessionHost: InteractiveSessionHost,
+  globalConfigPath: string,
   changeId: string,
-  initialPrompt: string | undefined,
-  agentProfile: InteractiveSessionAgentProfile | undefined,
+  handoff: string | undefined,
 ): Effect.Effect<ChangeImplementResult, RepositoryStorageError> =>
   Effect.gen(function* () {
     const change = yield* store.getById(changeId);
@@ -209,6 +224,28 @@ const implementChange = (
         change,
       };
     }
+    const globalConfig = readGlobalConfig(globalConfigPath);
+    if (!globalConfig.ok) {
+      return {
+        ok: false,
+        code: "agent_profile_invalid",
+        message: `Global Config is invalid: ${globalConfig.error.message}`,
+        change,
+      };
+    }
+    const agentProfile = resolveInteractiveSessionAgentProfile({
+      repoConfig: managedRepoConfig.config,
+      globalConfig: globalConfig.config,
+      globalConfigDirectory: dirname(globalConfigPath),
+    });
+    if (!agentProfile.ok) {
+      return {
+        ok: false,
+        code: "agent_profile_invalid",
+        message: agentProfileErrorMessage(agentProfile.error),
+        change,
+      };
+    }
     const agentEnvironment = repoAgentEnvironment(managedRepoConfig.config);
     const launched = yield* Effect.tryPromise({
       try: () =>
@@ -216,11 +253,13 @@ const implementChange = (
           changeId: change.id,
           repositoryPath: context.mainCheckoutRoot,
           worktreePath: change.worktreePath,
-          initialPrompt,
-          ...(agentProfile?.agentModel === undefined
-            ? {}
-            : { agentModel: agentProfile.agentModel }),
-          ...(agentProfile?.thinking === undefined ? {} : { thinking: agentProfile.thinking }),
+          initialPrompt: buildImplementerPrompt({
+            changeId: change.id,
+            worktreePath: change.worktreePath,
+            ...(handoff === undefined ? {} : { handoff }),
+          }),
+          ...(agentProfile.profile === undefined ? {} : { agentProfile: agentProfile.profile }),
+          globalConfigDirectory: dirname(globalConfigPath),
           ...(agentEnvironment === undefined ? {} : { agentEnvironment }),
         }),
       catch: (error) => (error instanceof Error ? error.message : String(error)),
@@ -231,9 +270,35 @@ const implementChange = (
       }),
     );
     return launched.ok
-      ? { change, ...launched.result }
+      ? {
+          change,
+          ...launched.result,
+          ...(agentProfile.profile === undefined
+            ? {}
+            : {
+                agentProfile: agentProfile.profile.agentProfile,
+                profileScope: agentProfile.profile.scope,
+              }),
+        }
       : { ok: false, code: "launch_failed", message: launched.message, change };
   });
+
+const agentProfileErrorMessage = (error: {
+  readonly _tag: string;
+  readonly profileName?: string;
+  readonly scope?: "repo" | "global";
+  readonly agentRuntime?: string;
+}): string => {
+  const profile = `Interactive Session Agent Profile "${error.profileName ?? "<missing>"}"`;
+  const scope = error.scope === undefined ? "" : ` in ${error.scope} scope`;
+  if (error._tag === "MissingAgentProfile") {
+    return `${profile}${scope} was not found.`;
+  }
+  if (error._tag === "MissingAgentModel") {
+    return `${profile}${scope} has no Pi model in runtimeConfig.`;
+  }
+  return `${profile}${scope} must use the Pi agent runtime; it uses "${error.agentRuntime ?? "unknown"}".`;
+};
 
 type PreparationResult =
   | { readonly ok: true; readonly change: ChangeStartRecord }

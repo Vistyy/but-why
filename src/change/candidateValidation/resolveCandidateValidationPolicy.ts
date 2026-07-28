@@ -1,4 +1,5 @@
 import type { GlobalConfigValidationFailed } from "../../contracts/configErrors.js";
+import type { RepoConfig } from "../../contracts/repoConfig.js";
 import { readGlobalConfig } from "../../init/globalConfig.js";
 import type { RepoLocalContext } from "../../init/repoContext.js";
 import { resolveAcceptanceReviewPolicy } from "../acceptanceReview/acceptanceReviewConfig.js";
@@ -25,16 +26,20 @@ export const resolveCandidateValidationPolicy = (input: {
   readonly context: RepoLocalContext;
   readonly globalConfigPath: string;
   readonly taskBacked: boolean;
+  readonly repoConfig?: RepoConfig;
+  readonly repoRoot?: string;
 }): CandidateValidationPolicyResolution => {
   const global = readGlobalConfig(input.globalConfigPath);
   if (!global.ok) return global;
 
-  const submit = submitRepoConfig(input.context.config);
+  const repoConfig = input.repoConfig ?? input.context.config;
+  const repoRoot = input.repoRoot ?? input.context.root;
+  const submit = submitRepoConfig(repoConfig);
   if (!submit.ok) return submit;
   const specialistReviews = resolveSpecialistReviewPolicies({
-    repoConfig: input.context.config,
+    repoConfig,
     globalConfig: global.config,
-    repoRoot: input.context.root,
+    repoRoot,
     globalConfigPath: input.globalConfigPath,
   });
   if (!specialistReviews.ok) return specialistReviews;
@@ -42,15 +47,15 @@ export const resolveCandidateValidationPolicy = (input: {
   const policy: CandidateValidationPolicy = {
     ...(submit.config.prepare === undefined ? {} : { prepare: submit.config.prepare }),
     checks: submit.config.checks,
-    copyFiles: input.context.config.validationWorkspace?.copyFiles ?? [],
+    copyFiles: repoConfig.validationWorkspace?.copyFiles ?? [],
     specialistReviews: specialistReviews.policies,
   };
   if (!input.taskBacked) return { ok: true, resolved: { taskBacked: false, policy } };
 
   const acceptanceReview = resolveAcceptanceReviewPolicy({
-    repoConfig: input.context.config,
+    repoConfig,
     globalConfig: global.config,
-    repoRoot: input.context.root,
+    repoRoot,
     globalConfigPath: input.globalConfigPath,
   });
   return acceptanceReview.ok

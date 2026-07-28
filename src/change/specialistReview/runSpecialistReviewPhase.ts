@@ -117,6 +117,7 @@ const runSpecialist = (
       availableArtifactRefs,
       prompt,
       profile: policy.profile,
+      commandCwd: input.commandCwd,
       ...(input.agentEnvironment === undefined ? {} : { agentEnvironment: input.agentEnvironment }),
     });
     yield* verifyIntegrity(input);
@@ -133,6 +134,7 @@ const runSpecialist = (
               earlierFindings,
             }),
             profile: policy.profile,
+            commandCwd: input.commandCwd,
             ...(input.agentEnvironment === undefined
               ? {}
               : { agentEnvironment: input.agentEnvironment }),

@@ -7,10 +7,9 @@ import type { GlobalConfig } from "../../src/contracts/globalConfig.js";
 import type { RepoConfig } from "../../src/contracts/repoConfig.js";
 import { createTestWorkspace } from "../support/testWorkspace.js";
 
-const piProfile = (agentModel: string) => ({
+const piProfile = (model: string) => ({
   agentRuntime: "pi" as const,
-  agentModel,
-  thinking: "high" as const,
+  runtimeConfig: { model, thinking: "high" as const },
 });
 
 describe("Specialist Review configuration", () => {
@@ -24,24 +23,30 @@ describe("Specialist Review configuration", () => {
       taskPrefix: "BY",
       review: { specialists: ["security"] },
       reviewers: {
-        security: { instructionsFile: "repo-security.md", agentProfile: "review" },
+        security: {
+          instructionsFile: "repo-security.md",
+          agentProfile: { scope: "repo", name: "review" },
+        },
       },
       agentProfiles: { review: piProfile("repo-model") },
     } satisfies RepoConfig;
     const globalConfig = {
       review: { specialists: ["standards"] },
       reviewers: {
-        security: { instructionsFile: "global-security.md", agentProfile: "review" },
+        security: {
+          instructionsFile: "global-security.md",
+          agentProfile: { scope: "global", name: "review" },
+        },
         standards: { instructionsFile: "standards.md" },
       },
-      defaultAgentProfile: "default",
+      defaultAgentProfile: { scope: "global", name: "default" },
       agentProfiles: {
         review: piProfile("global-model"),
         default: piProfile("default-model"),
       },
     } satisfies GlobalConfig;
 
-    expect(resolve(root, repoConfig, globalConfig)).toEqual({
+    expect(resolve(root, repoConfig, globalConfig)).toMatchObject({
       ok: true,
       policies: [
         {
@@ -49,8 +54,8 @@ describe("Specialist Review configuration", () => {
           instructions: "Repo security instructions\n",
           instructionsSource: "repo",
           agentProfile: "review",
-          profileSource: "repo",
-          profile: piProfile("repo-model"),
+          profileScope: "repo",
+          profile: { scope: "repo" },
         },
       ],
     });
@@ -67,7 +72,7 @@ describe("Specialist Review configuration", () => {
         {
           review: { specialists: ["standards"] },
           reviewers: { standards: { instructionsFile: "standards.md" } },
-          defaultAgentProfile: "default",
+          defaultAgentProfile: { scope: "global", name: "default" },
           agentProfiles: { default: piProfile("default-model") },
         },
       ),
@@ -78,8 +83,8 @@ describe("Specialist Review configuration", () => {
           id: "standards",
           instructionsSource: "global",
           agentProfile: "default",
-          profileSource: "global",
-          profile: { agentModel: "default-model" },
+          profileScope: "global",
+          profile: { profile: { runtimeConfig: { model: "default-model" } } },
         },
       ],
     });
@@ -107,10 +112,7 @@ describe("Specialist Review configuration", () => {
       { taskPrefix: "BY", review: { specialists: ["same", "same"] } },
       {},
     );
-    expect(duplicate).toMatchObject({
-      ok: false,
-      error: { _tag: "InvalidReviewerConfig" },
-    });
+    expect(duplicate).toMatchObject({ ok: false, error: { _tag: "InvalidReviewerConfig" } });
     if (!duplicate.ok) expect(duplicate.error.message).toBe("Duplicate Specialist: same");
   });
 });

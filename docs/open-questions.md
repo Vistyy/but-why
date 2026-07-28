@@ -37,9 +37,9 @@ After trustworthy usage exists, decide whether automatic work needs user-defined
 
 ## How should agent execution identities work?
 
-V1 uses a fixed hard-coded Pi wrapper to isolate the curated reviewer resources from the user's normal Pi session.
-The permanent design must define how each agent role selects its tools, extensions, skills, context, settings, runtime, model, and thinking level.
-The design must also decide which controls belong to Global Config, Repo Config, and But Why-owned defaults.
+V1 resolves Pi Agent Profiles from explicit Repo or Global references.
+Each profile selects its model, thinking level, and optional Pi resource allowlists.
+The remaining design question is whether later runtimes require a separate execution identity interface.
 
 Evaluate whether Sandcastle can support that design through extension, requires a maintained fork, or should be replaced by another execution boundary.
 Keep Sandcastle behind its current domain seams until evidence justifies that decision.

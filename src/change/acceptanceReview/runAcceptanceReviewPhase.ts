@@ -94,6 +94,7 @@ export const runAcceptanceReviewPhase = (
       availableArtifactRefs,
       prompt,
       profile: input.policy.profile,
+      commandCwd: input.commandCwd,
       ...(input.agentEnvironment === undefined ? {} : { agentEnvironment: input.agentEnvironment }),
     });
     yield* verifyIntegrity(input);
@@ -110,6 +111,7 @@ export const runAcceptanceReviewPhase = (
               earlierFindings,
             }),
             profile: input.policy.profile,
+            commandCwd: input.commandCwd,
             ...(input.agentEnvironment === undefined
               ? {}
               : { agentEnvironment: input.agentEnvironment }),

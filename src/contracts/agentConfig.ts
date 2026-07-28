@@ -11,26 +11,28 @@ export const configNameSchema = Schema.String.pipe(Schema.pattern(/^[a-z0-9][a-z
 
 const thinkingSchema = Schema.Literal("off", "minimal", "low", "medium", "high", "xhigh");
 
+export const agentProfileReferenceSchema = Schema.Struct({
+  scope: Schema.Literal("repo", "global"),
+  name: configNameSchema,
+});
+
+const piRuntimeConfigSchema = Schema.Struct({
+  model: Schema.optional(nonBlankStringSchema),
+  thinking: Schema.optional(thinkingSchema),
+  extensions: Schema.optional(Schema.Array(nonBlankStringSchema)),
+  skills: Schema.optional(Schema.Array(nonBlankStringSchema)),
+  tools: Schema.optional(Schema.Array(nonBlankStringSchema)),
+  contextFileDiscovery: Schema.optional(Schema.Boolean),
+});
+
 const piAgentConfigSchema = Schema.Struct({
   agentRuntime: Schema.Literal("pi"),
-  agentModel: Schema.optional(nonBlankStringSchema),
-  thinking: Schema.optional(thinkingSchema),
+  runtimeConfig: Schema.optional(piRuntimeConfigSchema),
 });
 
-const nonPiRuntimeSchema = nonBlankStringSchema.pipe(
-  Schema.filter((value) => value !== "pi", {
-    identifier: "non-Pi agent runtime",
-    message: () => 'Expected an agent runtime other than "pi"',
-  }),
-);
+export const agentProfileSchema = piAgentConfigSchema;
 
-const nonPiAgentConfigSchema = Schema.Struct({
-  agentRuntime: nonPiRuntimeSchema,
-  agentModel: Schema.optional(nonBlankStringSchema),
-  thinking: Schema.optional(nonBlankStringSchema),
-});
-
-export const agentProfileSchema = Schema.Union(piAgentConfigSchema, nonPiAgentConfigSchema);
-
+export type AgentProfileReference = Schema.Schema.Type<typeof agentProfileReferenceSchema>;
+export type PiRuntimeConfig = Schema.Schema.Type<typeof piRuntimeConfigSchema>;
 export type PiAgentProfileConfig = Schema.Schema.Type<typeof piAgentConfigSchema>;
 export type AgentProfileConfig = Schema.Schema.Type<typeof agentProfileSchema>;

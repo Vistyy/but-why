@@ -7,26 +7,25 @@ import type { GlobalConfig } from "../../src/contracts/globalConfig.js";
 import type { RepoConfig } from "../../src/contracts/repoConfig.js";
 import { createTestWorkspace } from "../support/testWorkspace.js";
 
-const profile = {
+const profile = (model: string) => ({
   agentRuntime: "pi" as const,
-  agentModel: "openai-codex/gpt-5.5",
-  thinking: "high" as const,
-};
+  runtimeConfig: { model, thinking: "high" as const },
+});
 
 const repoConfig = (instructionsFile?: string): RepoConfig => ({
   taskPrefix: "BY",
   review: {
     acceptance: {
-      agentProfile: "strict",
+      agentProfile: { scope: "repo", name: "strict" },
       ...(instructionsFile === undefined ? {} : { instructionsFile }),
     },
   },
-  agentProfiles: { strict: profile },
+  agentProfiles: { strict: profile("repo-model") },
 });
 
 const globalConfig = (instructionsFile?: string): GlobalConfig => ({
-  defaultAgentProfile: "default",
-  agentProfiles: { default: profile },
+  defaultAgentProfile: { scope: "global", name: "default" },
+  agentProfiles: { default: profile("default-model") },
   ...(instructionsFile === undefined ? {} : { review: { acceptance: { instructionsFile } } }),
 });
 
@@ -39,52 +38,45 @@ describe("Acceptance Review configuration", () => {
     writeFileSync(join(root, "repo", ".but-why", "reviewers", "acceptance.md"), "repo\n");
     writeFileSync(join(root, "global", "reviewers", "acceptance.md"), "global\n");
 
-    const fromRepo = resolveAcceptanceReviewPolicy({
-      repoConfig: repoConfig(".but-why/reviewers/acceptance.md"),
-      globalConfig: globalConfig("reviewers/acceptance.md"),
-      repoRoot: join(root, "repo"),
-      globalConfigPath,
-    });
-    expect(fromRepo).toMatchObject({
-      ok: true,
-      policy: { instructions: "repo\n", instructionsSource: "repo" },
-    });
+    expect(
+      resolveAcceptanceReviewPolicy({
+        repoConfig: repoConfig(".but-why/reviewers/acceptance.md"),
+        globalConfig: globalConfig("reviewers/acceptance.md"),
+        repoRoot: join(root, "repo"),
+        globalConfigPath,
+      }),
+    ).toMatchObject({ ok: true, policy: { instructions: "repo\n", instructionsSource: "repo" } });
 
-    const fromGlobal = resolveAcceptanceReviewPolicy({
-      repoConfig: repoConfig(),
-      globalConfig: globalConfig("reviewers/acceptance.md"),
-      repoRoot: join(root, "repo"),
-      globalConfigPath,
-    });
-    expect(fromGlobal).toMatchObject({
-      ok: true,
-      policy: { instructions: "global\n", instructionsSource: "global" },
-    });
+    expect(
+      resolveAcceptanceReviewPolicy({
+        repoConfig: { taskPrefix: "BY" },
+        globalConfig: globalConfig("reviewers/acceptance.md"),
+        repoRoot: join(root, "repo"),
+        globalConfigPath,
+      }),
+    ).toMatchObject({ ok: true, policy: { instructions: "global\n" } });
 
-    const fromBuiltIn = resolveAcceptanceReviewPolicy({
-      repoConfig: repoConfig(),
-      globalConfig: globalConfig(),
-      repoRoot: join(root, "repo"),
-      globalConfigPath,
-    });
-    expect(fromBuiltIn).toMatchObject({
-      ok: true,
-      policy: { instructionsSource: "built_in" },
-    });
+    expect(
+      resolveAcceptanceReviewPolicy({
+        repoConfig: { taskPrefix: "BY" },
+        globalConfig: globalConfig(),
+        repoRoot: join(root, "repo"),
+        globalConfigPath,
+      }),
+    ).toMatchObject({ ok: true, policy: { instructionsSource: "built_in" } });
   });
 
-  it("resolves repository, global, then default Agent Profile selection", () => {
+  it("resolves scoped repository, global, then default Agent Profile selection", () => {
     const root = createTestWorkspace();
     const profiles = {
-      repo: { ...profile, agentModel: "repo-model" },
-      global: { ...profile, agentModel: "global-model" },
-      default: { ...profile, agentModel: "default-model" },
+      repo: profile("repo-model"),
+      global: profile("global-model"),
+      default: profile("default-model"),
     } satisfies NonNullable<GlobalConfig["agentProfiles"]>;
     const baseGlobal = {
-      defaultAgentProfile: "default",
+      defaultAgentProfile: { scope: "global", name: "default" },
       agentProfiles: profiles,
     } satisfies GlobalConfig;
-
     const resolve = (repo: RepoConfig, global: GlobalConfig) =>
       resolveAcceptanceReviewPolicy({
         repoConfig: repo,
@@ -97,27 +89,27 @@ describe("Acceptance Review configuration", () => {
       resolve(
         {
           taskPrefix: "BY",
-          review: { acceptance: { agentProfile: "repo" } },
+          review: { acceptance: { agentProfile: { scope: "repo", name: "repo" } } },
           agentProfiles: { repo: profiles.repo },
         },
-        { ...baseGlobal, review: { acceptance: { agentProfile: "global" } } },
+        {
+          ...baseGlobal,
+          review: { acceptance: { agentProfile: { scope: "global", name: "global" } } },
+        },
       ),
-    ).toMatchObject({
-      ok: true,
-      policy: { agentProfile: "repo", profile: { agentModel: "repo-model" } },
-    });
+    ).toMatchObject({ ok: true, policy: { agentProfile: "repo", profileScope: "repo" } });
     expect(
       resolve(
         { taskPrefix: "BY" },
-        { ...baseGlobal, review: { acceptance: { agentProfile: "global" } } },
+        {
+          ...baseGlobal,
+          review: { acceptance: { agentProfile: { scope: "global", name: "global" } } },
+        },
       ),
-    ).toMatchObject({
-      ok: true,
-      policy: { agentProfile: "global", profile: { agentModel: "global-model" } },
-    });
+    ).toMatchObject({ ok: true, policy: { agentProfile: "global", profileScope: "global" } });
     expect(resolve({ taskPrefix: "BY" }, baseGlobal)).toMatchObject({
       ok: true,
-      policy: { agentProfile: "default", profile: { agentModel: "default-model" } },
+      policy: { agentProfile: "default", profileScope: "global" },
     });
   });
 });

@@ -46,7 +46,7 @@ export type CandidateValidationPolicySnapshot = {
     readonly instructions: string;
     readonly instructionsSource: "repo" | "global" | "built_in";
     readonly agentProfile: string;
-    readonly profileSource: "repo" | "global";
+    readonly profileScope: "repo" | "global";
     readonly profile: ResolvedPiAgentProfile;
   };
   readonly specialistReviews?: readonly {
@@ -54,7 +54,7 @@ export type CandidateValidationPolicySnapshot = {
     readonly instructions: string;
     readonly instructionsSource: "repo" | "global";
     readonly agentProfile: string;
-    readonly profileSource: "repo" | "global";
+    readonly profileScope: "repo" | "global";
     readonly profile: ResolvedPiAgentProfile;
   }[];
 };

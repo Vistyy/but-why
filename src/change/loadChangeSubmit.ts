@@ -2,6 +2,7 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 
 import { repoAgentEnvironment } from "../agent/agentEnvironment.js";
+import { RepoConfigValidationFailed } from "../contracts/configErrors.js";
 import { Effect } from "effect";
 
 import type { ReviewerAgentRuntime } from "../agent/reviewerAgentRuntime.js";
@@ -77,12 +78,27 @@ export const loadChangeSubmit = (input: {
       persistence: changePersistence,
       taskPersistence,
       reconciliation,
-      resolvePolicy: (taskBacked) =>
-        resolveCandidateValidationPolicy({
-          context,
-          globalConfigPath: input.globalConfigPath,
-          taskBacked,
-        }),
+      resolvePolicy: (taskBacked, worktreePath) => {
+        const managedConfig = readRepoConfig(join(worktreePath, ".but-why", "config.json"));
+        return managedConfig.ok
+          ? resolveCandidateValidationPolicy({
+              context,
+              globalConfigPath: input.globalConfigPath,
+              taskBacked,
+              repoConfig: managedConfig.config,
+              repoRoot: worktreePath,
+            })
+          : {
+              ok: false,
+              error: new RepoConfigValidationFailed({
+                ...(managedConfig.error.path === undefined
+                  ? {}
+                  : { path: managedConfig.error.path }),
+                diagnostics: managedConfig.error.diagnostics,
+                message: managedConfig.error.message,
+              }),
+            };
+      },
       resolveAgentEnvironment: (worktreePath): AgentEnvironmentResolution => {
         const config = readRepoConfig(join(worktreePath, ".but-why", "config.json"));
         if (!config.ok) {

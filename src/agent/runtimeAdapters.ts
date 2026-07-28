@@ -1,10 +1,5 @@
 export const agentRuntimeAdapters = {
-  pi: { supportsHarnessDefaultModel: false },
-  "claude-code": { supportsHarnessDefaultModel: false },
-  codex: { supportsHarnessDefaultModel: false },
-  cursor: { supportsHarnessDefaultModel: false },
-  opencode: { supportsHarnessDefaultModel: false },
-  copilot: { supportsHarnessDefaultModel: false },
+  pi: { supportsHarnessDefaultModel: true },
 } as const;
 
 export type SupportedAgentRuntime = keyof typeof agentRuntimeAdapters;
