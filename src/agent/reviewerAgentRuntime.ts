@@ -3,19 +3,21 @@ import {
   chmodSync,
   cpSync,
   existsSync,
-  mkdirSync,
   mkdtempSync,
   readFileSync,
-  readdirSync,
+  renameSync,
   rmSync,
-  statSync,
   writeFileSync,
 } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { Effect } from "effect";
 
-import { prependAgentEnvironment, type AgentEnvironmentCommand } from "./agentEnvironment.js";
+import {
+  prependAgentEnvironment,
+  shellQuote,
+  type AgentEnvironmentCommand,
+} from "./agentEnvironment.js";
 import { piResourceFlags } from "./piRuntime.js";
 import type { ResolvedPiAgentProfile } from "./agentProfiles.js";
 import { parseTaggedReviewerOutput } from "./reviewerOutputWire.js";
@@ -72,18 +74,22 @@ const reviewWithPi = (input: ReviewerAgentInput): Effect.Effect<ReviewerAgentRes
       input.resumeSession === undefined || input.sessionStorageRoot === undefined
         ? undefined
         : snapshotSessionRoot(input.sessionStorageRoot);
-    const restoreSession = () => {
+    const resetSession = () => {
       if (sessionSnapshot !== undefined) restoreSessionRoot(sessionSnapshot);
     };
+    const restoreSession = () => {
+      resetSession();
+      cleanupSessionSnapshot(sessionSnapshot);
+    };
+    const agent = isolatedPiReviewerAgent(
+      input.profile,
+      input.resourceRoot ?? input.commandCwd ?? ".",
+      input.agentEnvironment,
+      input.sessionStorageRoot,
+    );
     const initial = yield* Effect.either(
-      runSandbox(() => {
-        const agent = isolatedPiReviewerAgent(
-          input.profile,
-          input.resourceRoot ?? input.commandCwd ?? ".",
-          input.agentEnvironment,
-          input.sessionStorageRoot,
-        );
-        return preparePiSession(
+      runSandbox(() =>
+        prepareHostPiSession(
           agent,
           input.commandCwd ?? input.resourceRoot ?? ".",
           input.resumeSession,
@@ -95,11 +101,11 @@ const reviewWithPi = (input: ReviewerAgentInput): Effect.Effect<ReviewerAgentRes
             maxIterations: 1,
             name: `${input.reviewer} Review`,
           }),
-        );
-      }),
+        ),
+      ),
     );
     if (initial._tag === "Left" && /session capture failed/i.test(initial.left.message)) {
-      restoreSession();
+      resetSession();
       const recovered = yield* Effect.either(
         runSandbox(() =>
           input.sandbox.run({
@@ -121,7 +127,13 @@ const reviewWithPi = (input: ReviewerAgentInput): Effect.Effect<ReviewerAgentRes
         const decoded = yield* Effect.either(validateRunResult(input, recovered.right, 1));
         if (decoded._tag === "Right") {
           cleanupSessionSnapshot(sessionSnapshot);
-          return { ok: true, report: decoded.right, attempts: 1, stdout: recovered.right.stdout };
+          return {
+            ok: true,
+            report: decoded.right,
+            attempts: 1,
+            stdout: recovered.right.stdout,
+            ...(yield* sessionMetadata(agent, recovered.right)),
+          };
         }
         restoreSession();
         return { ok: false, failure: decoded.left, attempts: 1, stdout: recovered.right.stdout };
@@ -140,7 +152,7 @@ const reviewWithPi = (input: ReviewerAgentInput): Effect.Effect<ReviewerAgentRes
         report: first.right,
         attempts: 1,
         stdout: initial.right.stdout,
-        ...sessionMetadata(initial.right),
+        ...(yield* sessionMetadata(agent, initial.right)),
       };
     }
     const resume = initial.right.resume;
@@ -151,7 +163,7 @@ const reviewWithPi = (input: ReviewerAgentInput): Effect.Effect<ReviewerAgentRes
         failure: first.left,
         attempts: 1,
         stdout: initial.right.stdout,
-        ...sessionMetadata(initial.right),
+        ...(yield* sessionMetadata(agent, initial.right)),
       };
     }
 
@@ -164,25 +176,24 @@ const reviewWithPi = (input: ReviewerAgentInput): Effect.Effect<ReviewerAgentRes
     }
 
     const second = yield* Effect.either(validateRunResult(input, corrected.right, 2));
-    return second._tag === "Right"
-      ? (cleanupSessionSnapshot(sessionSnapshot),
-        {
-          ok: true,
-          report: second.right,
-          attempts: 2,
-          stdout: corrected.right.stdout,
-          ...sessionMetadata(corrected.right),
-        })
-      : (() => {
-          restoreSession();
-          return {
-            ok: false,
-            failure: second.left,
-            attempts: 2,
-            stdout: corrected.right.stdout,
-            ...sessionMetadata(corrected.right),
-          };
-        })();
+    if (second._tag === "Right") {
+      cleanupSessionSnapshot(sessionSnapshot);
+      return {
+        ok: true,
+        report: second.right,
+        attempts: 2,
+        stdout: corrected.right.stdout,
+        ...(yield* sessionMetadata(agent, corrected.right)),
+      };
+    }
+    restoreSession();
+    return {
+      ok: false,
+      failure: second.left,
+      attempts: 2,
+      stdout: corrected.right.stdout,
+      ...(yield* sessionMetadata(agent, corrected.right)),
+    };
   });
 
 export const piReviewerAgentRuntime: ReviewerAgentRuntime = {
@@ -223,7 +234,7 @@ const isolatedPiReviewerAgent = (
       return {
         ...command,
         command: prependAgentEnvironment(
-          `${command.command}${resourceFlags.length === 0 ? "" : ` ${resourceFlags}`}`,
+          `${command.command}${sessionStorageRoot === undefined ? "" : ` --session-dir ${shellQuote(sessionStorageRoot)}`}${resourceFlags.length === 0 ? "" : ` ${resourceFlags}`}`,
           agentEnvironment,
         ),
       };
@@ -266,7 +277,7 @@ const sandcastleFailure = (
   stdout: string,
 ): ReviewerAgentResult => ({ ok: false, failure, attempts, stdout });
 
-const preparePiSession = async (
+const prepareHostPiSession = async (
   agent: AgentProvider,
   cwd: string,
   sessionId: string | undefined,
@@ -274,28 +285,25 @@ const preparePiSession = async (
   if (sessionId === undefined || agent.sessionStorage === undefined) return;
   const located = await agent.sessionStorage.findByIdOnHost(sessionId);
   if (located.path === undefined) return;
-  const targetDirectory = agent.sessionStorage.hostSessionFilePath(cwd, sessionId);
-  if (targetDirectory === undefined) return;
-  const filename = located.path.split("/").pop() ?? `${sessionId}.jsonl`;
-  const content = readFileSync(located.path, "utf8").replace(
-    /"cwd":"(?:\\\\.|[^"\\\\])*"/g,
-    `"cwd":${JSON.stringify(cwd)}`,
-  );
-  removeMatchingSessionFiles(agent.sessionStorage.hostSessionFilePath(cwd, sessionId), filename);
-  mkdirSync(targetDirectory, { recursive: true, mode: 0o700 });
-  chmodSync(targetDirectory, 0o700);
-  const target = join(targetDirectory, filename);
-  writeFileSync(target, content, { mode: 0o600 });
-  chmodSync(target, 0o600);
-};
-
-const removeMatchingSessionFiles = (root: string | undefined, filename: string): void => {
-  if (root === undefined || !existsSync(root)) return;
-  for (const entry of readdirSync(root)) {
-    const path = join(root, entry);
-    if (statSync(path).isDirectory()) removeMatchingSessionFiles(path, filename);
-    else if (entry === filename) rmSync(path, { force: true });
-  }
+  const content = readFileSync(located.path, "utf8");
+  const rewritten = content
+    .split("\n")
+    .map((line) => {
+      if (line === "") return line;
+      try {
+        const entry = JSON.parse(line) as { type?: unknown; cwd?: unknown };
+        if (entry.type !== "session" || typeof entry.cwd !== "string") return line;
+        return JSON.stringify({ ...entry, cwd });
+      } catch {
+        return line;
+      }
+    })
+    .join("\n");
+  if (rewritten === content) return;
+  const temporaryPath = `${located.path}.but-why-tmp`;
+  writeFileSync(temporaryPath, rewritten, { mode: 0o600 });
+  chmodSync(temporaryPath, 0o600);
+  renameSync(temporaryPath, located.path);
 };
 
 const snapshotSessionRoot = (
@@ -317,20 +325,22 @@ const restoreSessionRoot = (value: { readonly root: string; readonly snapshot: s
   const source = join(value.snapshot, "sessions");
   rmSync(value.root, { recursive: true, force: true });
   cpSync(source, value.root, { recursive: true });
-  rmSync(value.snapshot, { recursive: true, force: true });
 };
 
-const sessionMetadata = (result: SandboxRunResult) => {
-  const iteration = result.iterations[result.iterations.length - 1];
-  return iteration?.sessionId === undefined
-    ? {}
-    : {
-        sessionReference: iteration.sessionId,
-        ...(iteration.sessionFilePath === undefined
-          ? {}
-          : { sessionFilePath: iteration.sessionFilePath }),
-      };
-};
+const sessionMetadata = (
+  agent: AgentProvider,
+  result: SandboxRunResult,
+): Effect.Effect<{ readonly sessionReference?: string; readonly sessionFilePath?: string }> =>
+  Effect.promise(async () => {
+    const iteration = result.iterations[result.iterations.length - 1];
+    if (iteration?.sessionId === undefined || agent.sessionStorage === undefined) return {};
+    const located = await agent.sessionStorage.findByIdOnHost(iteration.sessionId);
+    if (located.path === undefined) return {};
+    return {
+      sessionReference: iteration.sessionId,
+      sessionFilePath: located.path,
+    };
+  });
 
 const errorMessage = (error: unknown): string =>
   error instanceof Error ? error.message : String(error);

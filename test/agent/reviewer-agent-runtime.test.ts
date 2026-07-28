@@ -88,6 +88,51 @@ describe("Pi reviewer agent runtime", () => {
     }),
   );
 
+  it.effect("stores host-run Pi sessions in the Change-owned session directory", () =>
+    Effect.gen(function* () {
+      const sessionRoot = mkdtempSync(join(tmpdir(), "but-why-reviewer-sessions-"));
+      const workspace = "/validation-workspace-two";
+      const sessionId = "123e4567-e89b-42d3-a456-426614174001";
+      let command = "";
+      const run: Pick<Sandbox, "run">["run"] = async (options) => {
+        command = options.agent.buildPrintCommand({
+          prompt: options.prompt ?? "",
+          dangerouslySkipPermissions: true,
+        }).command;
+        const directory = options.agent.sessionStorage?.hostSessionFilePath(workspace, sessionId);
+        if (directory === undefined) throw new Error("Pi session storage unavailable");
+        mkdirSync(directory, { recursive: true });
+        writeFileSync(join(directory, `review_${sessionId}.jsonl`), '{"type":"session"}\n');
+        return {
+          ...runResult('<reviewer-output>{"findings":[]}</reviewer-output>'),
+          iterations: [{ sessionId }],
+        };
+      };
+
+      try {
+        const result = yield* piReviewerAgentRuntime.review({
+          sandbox: { run } as unknown as Pick<Sandbox, "run">,
+          reviewer: "acceptance",
+          validationRunId: "123e4567-e89b-42d3-a456-426614174000",
+          availableArtifactRefs: [],
+          prompt: "Review the Candidate.",
+          profile,
+          commandCwd: workspace,
+          sessionStorageRoot: sessionRoot,
+        });
+
+        expect(command).toContain(`--session-dir '${sessionRoot}'`);
+        expect(result).toMatchObject({
+          ok: true,
+          sessionReference: sessionId,
+          sessionFilePath: expect.stringContaining(`review_${sessionId}.jsonl`),
+        });
+      } finally {
+        rmSync(sessionRoot, { recursive: true, force: true });
+      }
+    }),
+  );
+
   it.effect("resolves Repo resources from the Managed Worktree root", () =>
     Effect.gen(function* () {
       let command = "";

@@ -44,6 +44,7 @@ Task commands manage intent and lifecycle.
 Change commands manage implementation, validation, delivery, and reconciliation.
 Submission executes the host-only Validation Gate against a Candidate.
 Sandcastle provides the internal disposable Validation Workspace and host process adapter.
+Current dependency constraints and workarounds are recorded in [Sandcastle integration notes](sandcastle-integration-notes.md).
 The Validation Gate reports its results through Change-owned interfaces.
 
 Task and Change own their persistence interfaces.
