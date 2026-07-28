@@ -959,7 +959,10 @@ const implementResult = (result: ChangeImplementResult): CliResult => {
             : { evidence: result.evidence }
           : {}),
       },
-      help: ["Confirm Herdr is installed and running, then retry Change Implement."],
+      help:
+        result.code === "launch_indeterminate"
+          ? ["Inspect the existing Herdr session, then retry only after launch state is resolved."]
+          : ["Confirm Herdr is installed and running, then retry Change Implement."],
     });
   }
   throw new Error("Unhandled Change Implement result");

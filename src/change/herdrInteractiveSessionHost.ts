@@ -64,6 +64,9 @@ const launchHerdrSession = async (
       message: `Start Herdr before launching ${sessionName}: ${agents.message}`,
     };
   }
+  if (!isValidAgentList(agents.stdout)) {
+    return launchFailure("Herdr returned malformed agent-list output.");
+  }
   if (hasActiveSession(agents.stdout, input, sessionName)) {
     return { ok: true, host: "herdr", status: "already_active" };
   }
@@ -87,7 +90,9 @@ const launchHerdrSession = async (
       signal,
       options.observationRetries,
     );
-    if (state.ok) worktree = await command(worktreeArgs, signal);
+    if (state.ok && worktreeMatchesTarget(state.stdout, input.worktreePath)) {
+      worktree = await command(worktreeArgs, signal);
+    }
   }
   if (!worktree.ok) {
     return worktree.message.includes("timed out")
@@ -168,27 +173,26 @@ const launchInOpenedWorktree = async (
       if (!renamed.ok && renamed.message.includes("timed out")) {
         const retried = await execute(["agent", "rename", opened.rootPaneId, sessionName], signal);
         if (retried.ok && renamedSession(retried.stdout, input, sessionName, opened.rootPaneId)) {
-          return { ok: true, host: "herdr", status: "started" };
+          // Continue through the readiness observation below.
+        } else {
+          await execute(["pane", "send-keys", opened.rootPaneId, "ctrl-c"], signal);
+          if (!opened.alreadyOpen) await closeWorkspace(execute, opened.workspaceId, signal);
+          return launchFailure(
+            "Herdr did not confirm the named Pi session after retrying the rename.",
+          );
         }
+      } else {
+        await execute(["pane", "send-keys", opened.rootPaneId, "ctrl-c"], signal);
+        if (!opened.alreadyOpen) await closeWorkspace(execute, opened.workspaceId, signal);
+        return launchFailure(
+          renamed.ok
+            ? "Herdr did not confirm the named Pi session in the worktree root pane."
+            : renamed.message,
+        );
       }
-      await execute(["pane", "send-keys", opened.rootPaneId, "ctrl-c"], signal);
-      if (!opened.alreadyOpen) await closeWorkspace(execute, opened.workspaceId, signal);
-      return launchFailure(
-        renamed.ok
-          ? "Herdr did not confirm the named Pi session in the worktree root pane."
-          : renamed.message,
-      );
     }
   }
-  const ready = await waitForSession(
-    execute,
-    input,
-    sessionName,
-    signal,
-    options,
-    true,
-    opened.alreadyOpen && hasDoneAgent(listedAgents, input, sessionName),
-  );
+  const ready = await waitForSession(execute, input, sessionName, signal, options);
   if (ready.kind === "exited") {
     const evidence = await launchEvidence(execute, opened.rootPaneId, signal);
     if (!opened.alreadyOpen) await closeWorkspace(execute, opened.workspaceId, signal);
@@ -233,8 +237,6 @@ const waitForSession = async (
   sessionName: string,
   signal: AbortSignal | undefined,
   options: ResolvedOptions,
-  fallbackReady = false,
-  ignoreDone = false,
 ): Promise<SessionObservation> => {
   const deadline = performance.now() + options.readinessTimeoutMs;
   let last: SessionObservation = { kind: "absent" };
@@ -242,15 +244,15 @@ const waitForSession = async (
     const listed = await observe(execute, ["agent", "list"], signal, options.observationRetries);
     if (!listed.ok) {
       last = { kind: "unknown" };
+    } else if (!isValidAgentList(listed.stdout)) {
+      last = { kind: "unknown" };
     } else {
       const agent = findSession(listed.stdout, input, sessionName);
       if (agent === undefined) {
-        if (fallbackReady) return { kind: "ready" };
         last = { kind: "absent" };
       } else if (isActiveAgentStatus(recordValue(agent, "agent_status"))) {
         return { kind: "ready" };
       } else if (recordValue(agent, "agent_status") === "done") {
-        if (ignoreDone) return { kind: "ready" };
         return { kind: "exited", message: "Herdr reported the hosted process as done." };
       } else {
         last = { kind: "unknown" };
@@ -286,7 +288,11 @@ const observe = async (
   retries: number,
 ): Promise<Awaited<ReturnType<HerdrCommandExecutor>>> => {
   let result = await execute(args, signal);
-  for (let attempt = 0; !result.ok && attempt < retries; attempt += 1) {
+  for (
+    let attempt = 0;
+    !result.ok && isTransientObservationFailure(result.message) && attempt < retries;
+    attempt += 1
+  ) {
     result = await execute(args, signal);
   }
   return result;
@@ -319,6 +325,30 @@ const boundedExecutor =
   };
 
 type HerdrCommandExecutorResult = Awaited<ReturnType<HerdrCommandExecutor>>;
+
+const isTransientObservationFailure = (message: string): boolean =>
+  /timed out|temporar|try again|connection reset|busy/i.test(message);
+
+const isValidAgentList = (source: string): boolean => {
+  const result = herdrResult(source);
+  return result !== undefined && Array.isArray(recordValue(result, "agents"));
+};
+
+const worktreeMatchesTarget = (source: string, targetPath: string): boolean => {
+  const response = parseJson(source);
+  const result = isRecord(response) ? recordValue(response, "result") : undefined;
+  const worktrees = isRecord(result) ? recordValue(result, "worktrees") : undefined;
+  return (
+    Array.isArray(worktrees) &&
+    worktrees.some(
+      (worktree) =>
+        isRecord(worktree) &&
+        (recordValue(worktree, "path") === targetPath ||
+          recordValue(worktree, "worktree_path") === targetPath ||
+          recordValue(worktree, "cwd") === targetPath),
+    )
+  );
+};
 
 const launchEvidence = async (
   execute: HerdrCommandExecutor,
@@ -392,15 +422,6 @@ const hasActiveSession = (
     Array.isArray(agents) &&
     agents.some((agent) => matchesSession(agent, input, sessionName, undefined, true))
   );
-};
-
-const hasDoneAgent = (
-  source: string,
-  input: InteractiveSessionLaunchInput,
-  sessionName: string,
-): boolean => {
-  const agent = findSession(source, input, sessionName);
-  return agent !== undefined && recordValue(agent, "agent_status") === "done";
 };
 
 const hasActiveAgentInWorktree = (
