@@ -6,6 +6,7 @@ import type { Effect } from "effect";
 import type { AgentEnvironmentCommand } from "../../agent/agentEnvironment.js";
 import type { ResolvedPiAgentProfile } from "../../agent/agentProfiles.js";
 import type { TaskContextSnapshotV1 } from "../validationRun/taskContextSnapshot.js";
+import type { RepositoryStorageError } from "../../contracts/repositoryStorageError.js";
 
 export type ReviewerSessionIdentity = {
   readonly changeId: string;
@@ -28,9 +29,11 @@ export type ReviewerSessionRecord = {
 };
 
 export type ReviewerSessionStore = {
-  readonly get: (changeId: string) => Effect.Effect<ReviewerSessionRecord | undefined, any>;
-  readonly save: (input: ReviewerSessionRecord) => Effect.Effect<void, any>;
-  readonly remove: (changeId: string) => Effect.Effect<void, any>;
+  readonly get: (
+    changeId: string,
+  ) => Effect.Effect<ReviewerSessionRecord | undefined, RepositoryStorageError>;
+  readonly save: (input: ReviewerSessionRecord) => Effect.Effect<void, RepositoryStorageError>;
+  readonly remove: (changeId: string) => Effect.Effect<void, RepositoryStorageError>;
 };
 
 export type ReviewerContinuity = "fresh" | "resumed" | "restarted";
