@@ -54,4 +54,4 @@ const resolvePiResource = (source: string, context: PiRuntimeResourceContext): s
 };
 
 const isPiPackageSource = (source: string): boolean =>
-  source.startsWith("npm:") || source.startsWith("git:") || source.startsWith("github:");
+  /^(?:npm|git|github|https?|ssh):/u.test(source);

@@ -128,6 +128,45 @@ describe("Pi reviewer agent runtime", () => {
     }),
   );
 
+  it.effect("preserves Global Pi package URL sources", () =>
+    Effect.gen(function* () {
+      let command = "";
+      const run: Pick<Sandbox, "run">["run"] = async (options) => {
+        command = options.agent.buildPrintCommand({
+          prompt: options.prompt ?? "",
+          dangerouslySkipPermissions: true,
+        }).command;
+        return runResult('<reviewer-output>{"findings":[]}</reviewer-output>');
+      };
+
+      const result = yield* piReviewerAgentRuntime.review({
+        sandbox: { run } as unknown as Pick<Sandbox, "run">,
+        reviewer: "acceptance",
+        validationRunId: "123e4567-e89b-42d3-a456-426614174000",
+        availableArtifactRefs: [],
+        prompt: "Review the Candidate.",
+        profile: {
+          ...profile,
+          profile: {
+            ...profile.profile,
+            runtimeConfig: {
+              ...profile.profile.runtimeConfig,
+              extensions: [
+                "https://github.com/user/reviewer-extension",
+                "ssh://git@github.com/user/another-extension",
+              ],
+            },
+          },
+        },
+      });
+
+      expect(result).toMatchObject({ ok: true, attempts: 1 });
+      expect(command).toContain("--extension 'https://github.com/user/reviewer-extension'");
+      expect(command).toContain("--extension 'ssh://git@github.com/user/another-extension'");
+      expect(command).not.toContain(".config");
+    }),
+  );
+
   it.effect("stops after a configured Agent Environment launch failure", () =>
     Effect.gen(function* () {
       let attempts = 0;
