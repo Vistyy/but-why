@@ -35,4 +35,3 @@ export const agentProfileSchema = piAgentConfigSchema;
 export type AgentProfileReference = Schema.Schema.Type<typeof agentProfileReferenceSchema>;
 export type PiRuntimeConfig = Schema.Schema.Type<typeof piRuntimeConfigSchema>;
 export type PiAgentProfileConfig = Schema.Schema.Type<typeof piAgentConfigSchema>;
-export type AgentProfileConfig = Schema.Schema.Type<typeof agentProfileSchema>;
