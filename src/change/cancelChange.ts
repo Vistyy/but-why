@@ -36,10 +36,12 @@ export type CancellationDependencies = {
   > &
     Partial<Pick<ChangePersistence, "removeReviewerSession">>;
   readonly github: Pick<GitHubPullRequestGateway, "getPullRequest" | "closePullRequest">;
+  readonly reviewerSessionPathFor?: (changeId: string) => string;
   readonly cleanup: (input: {
     readonly repositoryCommonDirectory: string;
     readonly worktreePath: string | null;
     readonly branchRef: string;
+    readonly reviewerSessionPath?: string;
   }) => ChangeCleanupOperationResult;
 };
 
@@ -364,13 +366,13 @@ const cleanupClosedChange = (
 > =>
   Effect.gen(function* () {
     if (change.cleanup.state === "complete") return { change, cleanup: change.cleanup };
-    if (dependencies.changes.removeReviewerSession !== undefined) {
-      yield* dependencies.changes.removeReviewerSession(change.id);
-    }
     const result = dependencies.cleanup({
       repositoryCommonDirectory: change.repositoryCommonDirectory,
       worktreePath: change.worktreePath,
       branchRef: change.branchRef,
+      ...(dependencies.reviewerSessionPathFor === undefined
+        ? {}
+        : { reviewerSessionPath: dependencies.reviewerSessionPathFor(change.id) }),
     });
     const cleanup: ChangeCleanup =
       result.state === "complete"
@@ -383,5 +385,11 @@ const cleanupClosedChange = (
     });
     if (!recorded.ok)
       return yield* Effect.die(new Error(`Unable to record cleanup: ${recorded.code}`));
+    if (
+      recorded.change.cleanup.state === "complete" &&
+      dependencies.changes.removeReviewerSession !== undefined
+    ) {
+      yield* dependencies.changes.removeReviewerSession(change.id);
+    }
     return { change: recorded.change, cleanup: recorded.change.cleanup };
   });

@@ -1,4 +1,5 @@
 import { existsSync } from "node:fs";
+import { join } from "node:path";
 import { Effect } from "effect";
 
 import { repositoryStorageErrorResult, repoStateLoadError, type CliResult } from "../cliResults.js";
@@ -39,9 +40,7 @@ export const withCancellation = <A, R>(
   }
 
   const program = Effect.all({
-    changes: openSqliteChangePersistence({
-      reviewerSessionsRoot: context.context.paths.operationalDir,
-    }),
+    changes: openSqliteChangePersistence(),
     tasks: openSqliteTaskPersistence(context.context.taskPrefix),
   }).pipe(
     Effect.flatMap(({ changes, tasks }) =>
@@ -52,6 +51,8 @@ export const withCancellation = <A, R>(
           tasks,
           github: localGitHubPullRequestGateway({ cwd: context.context.root }),
           cleanup: cleanupChangeResources,
+          reviewerSessionPathFor: (changeId) =>
+            join(context.context.paths.operationalDir, changeId),
         }),
       ),
     ),

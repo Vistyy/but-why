@@ -1,6 +1,4 @@
 import type * as SqlClient from "@effect/sql/SqlClient";
-import { existsSync, rmSync } from "node:fs";
-import { join } from "node:path";
 import { Effect } from "effect";
 
 import {
@@ -66,9 +64,11 @@ const columns = [
   "closed_at AS closedAt",
 ].join(", ");
 
-export const openSqliteChangePersistence = (
-  input: { readonly reviewerSessionsRoot?: string } = {},
-): Effect.Effect<ChangePersistence, never, RepositorySql> =>
+export const openSqliteChangePersistence = (): Effect.Effect<
+  ChangePersistence,
+  never,
+  RepositorySql
+> =>
   Effect.map(RepositorySql, (repository) => ({
     getChangeById: (changeId) =>
       repository.transaction("read Change", (sql) => getById(sql, changeId)),
@@ -133,15 +133,7 @@ export const openSqliteChangePersistence = (
       ),
     removeReviewerSession: (changeId) =>
       repository.transactionImmediate("remove Reviewer Session", (sql) =>
-        Effect.asVoid(sql`DELETE FROM reviewer_sessions WHERE change_id = ${changeId}`).pipe(
-          Effect.tap(() =>
-            Effect.sync(() => {
-              if (input.reviewerSessionsRoot === undefined) return;
-              const path = join(input.reviewerSessionsRoot, changeId);
-              if (existsSync(path)) rmSync(path, { recursive: true, force: true });
-            }),
-          ),
-        ),
+        Effect.asVoid(sql`DELETE FROM reviewer_sessions WHERE change_id = ${changeId}`),
       ),
     beginPublication: (input) =>
       repository.transactionImmediate("begin Change publication", (sql) =>

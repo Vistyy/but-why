@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { existsSync, lstatSync, rmdirSync, rmSync, readdirSync, statSync } from "node:fs";
+import { existsSync, lstatSync, rmdirSync, rmSync } from "node:fs";
 import { basename, dirname } from "node:path";
 
 export type ChangeCleanupResult =
@@ -23,7 +23,7 @@ export const cleanupChangeResources = (input: {
   readonly repositoryCommonDirectory: string;
   readonly worktreePath: string | null;
   readonly branchRef: string;
-  readonly reviewerSessionsRoot?: string;
+  readonly reviewerSessionPath?: string;
 }): ChangeCleanupResult => {
   if (input.worktreePath !== null && !isWorktreePathSafe(input.worktreePath)) {
     return { state: "pending", blockingReason: "worktree_path_unsafe" };
@@ -50,8 +50,8 @@ export const cleanupChangeResources = (input: {
   }
 
   if (
-    input.reviewerSessionsRoot !== undefined &&
-    !removeReviewerSessions(input.reviewerSessionsRoot)
+    input.reviewerSessionPath !== undefined &&
+    !removeReviewerSession(input.reviewerSessionPath)
   ) {
     return { state: "pending", blockingReason: "reviewer_session_removal_failed" };
   }
@@ -118,14 +118,10 @@ const removeEmptySiblingContainers = (worktreePath: string): boolean => {
   }
 };
 
-const removeReviewerSessions = (root: string): boolean => {
+const removeReviewerSession = (path: string): boolean => {
   try {
-    if (!existsSync(root)) return true;
-    for (const name of readdirSync(root)) {
-      const path = `${root}/${name}`;
-      if (statSync(path).isFile()) rmSync(path);
-      else rmSync(path, { recursive: true, force: true });
-    }
+    if (!existsSync(path)) return true;
+    rmSync(path, { recursive: true, force: true });
     return true;
   } catch {
     return false;

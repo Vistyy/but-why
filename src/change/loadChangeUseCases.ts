@@ -1,4 +1,5 @@
 import { existsSync } from "node:fs";
+import { join } from "node:path";
 import { Effect } from "effect";
 
 import { openHerdrInteractiveSessionHost } from "./herdrInteractiveSessionHost.js";
@@ -46,9 +47,7 @@ export const withChangeUseCases = <A, E, R>(
 
   return Effect.all({
     startPersistence: openSqliteChangeStartPersistence(),
-    changePersistence: openSqliteChangePersistence({
-      reviewerSessionsRoot: repoContext.context.paths.operationalDir,
-    }),
+    changePersistence: openSqliteChangePersistence(),
   }).pipe(
     Effect.flatMap(({ startPersistence, changePersistence }) =>
       use(
@@ -66,6 +65,8 @@ export const withChangeUseCases = <A, E, R>(
             persistence: changePersistence,
             github: localGitHubPullRequestGateway(),
             cleanup: cleanupChangeResources,
+            reviewerSessionPathFor: (changeId) =>
+              join(repoContext.context.paths.operationalDir, changeId),
           }),
           input.interactiveSessionHost ??
             openHerdrInteractiveSessionHost(undefined, {

@@ -71,6 +71,7 @@ export const loadChangeSubmit = (input: {
       persistence: changePersistence,
       github: localGitHubPullRequestGateway({ cwd: context.root }),
       cleanup: cleanupChangeResources,
+      reviewerSessionPathFor: (changeId) => join(context.paths.operationalDir, changeId),
     });
     return openChangeSubmit({
       repositoryCommonDirectory: context.commonDirectory,
@@ -159,9 +160,7 @@ export const loadChangeSubmit = (input: {
         Effect.all({
           capture: openSqliteCandidateCapturePersistence(),
           validation: openSqliteChangeValidationPersistence(),
-          change: openSqliteChangePersistence({
-            reviewerSessionsRoot: context.paths.operationalDir,
-          }),
+          change: openSqliteChangePersistence(),
           task: openSqliteTaskPersistence(context.taskPrefix),
         }).pipe(
           Effect.flatMap(({ capture, validation, change, task }) =>

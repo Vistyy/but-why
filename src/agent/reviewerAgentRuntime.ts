@@ -89,7 +89,7 @@ const reviewWithPi = (input: ReviewerAgentInput): Effect.Effect<ReviewerAgentRes
               input.profile,
               input.resourceRoot ?? input.commandCwd ?? ".",
               input.agentEnvironment,
-              undefined,
+              input.sessionStorageRoot,
               false,
             ),
             prompt: input.prompt,

@@ -44,7 +44,9 @@ export const openChangeReconciliation = (input: {
     readonly repositoryCommonDirectory: string;
     readonly worktreePath: string | null;
     readonly branchRef: string;
+    readonly reviewerSessionPath?: string;
   }) => ChangeCleanupOperationResult;
+  readonly reviewerSessionPathFor?: (changeId: string) => string;
 }): ChangeReconciliation => ({
   reconcile: (reconciliationInput) => reconcile(input, reconciliationInput),
 });
@@ -77,10 +79,7 @@ const reconcileOne = (
   now: string,
 ): Effect.Effect<ReconciledChange, RepositoryStorageError> =>
   Effect.gen(function* () {
-    if (change.state === "closed") {
-      yield* dependencies.persistence.removeReviewerSession(change.id);
-      return yield* reconcileCleanup(dependencies, change, now);
-    }
+    if (change.state === "closed") return yield* reconcileCleanup(dependencies, change, now);
     const observation = observePullRequest(dependencies.github, change);
     if (!observation.merged) return observation.result;
 
@@ -89,7 +88,6 @@ const reconcileOne = (
       now,
     });
     if (!completed.ok) return rejected(change.id, completed.code);
-    yield* dependencies.persistence.removeReviewerSession(change.id);
     const cleanup = yield* reconcileCleanup(dependencies, completed.change, now);
     return { ...cleanup, status: "completed", pullRequest: observation.pullRequest };
   });
@@ -187,6 +185,9 @@ const reconcileCleanup = (
       repositoryCommonDirectory: change.repositoryCommonDirectory,
       worktreePath: change.worktreePath,
       branchRef: change.branchRef,
+      ...(dependencies.reviewerSessionPathFor === undefined
+        ? {}
+        : { reviewerSessionPath: dependencies.reviewerSessionPathFor(change.id) }),
     });
     const cleanup = cleanupRecord(result);
     const recorded = yield* dependencies.persistence.recordCleanup({
@@ -195,6 +196,8 @@ const reconcileCleanup = (
       now,
     });
     if (!recorded.ok) return rejected(change.id, recorded.code);
+    if (cleanup.state === "complete")
+      yield* dependencies.persistence.removeReviewerSession(change.id);
     return {
       changeId: change.id,
       status: cleanupStatus(cleanup),
