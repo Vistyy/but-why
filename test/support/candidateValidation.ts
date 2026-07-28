@@ -5,6 +5,7 @@ import {
   type ReviewerAgentRuntime,
 } from "../../src/agent/reviewerAgentRuntime.js";
 import type { ChangeValidationPersistence } from "../../src/change/validation/changeValidationPersistence.js";
+import type { ReviewerSessionStore } from "../../src/change/reviewerSession/reviewerSession.js";
 import {
   CandidateValidationLive,
   CandidateValidationPaths,
@@ -19,6 +20,8 @@ export const candidateValidationForTest = (input: {
   readonly artifactsRoot: string;
   readonly repository: RepositorySqlConfig;
   readonly reviewerAgentRuntime?: ReviewerAgentRuntime;
+  readonly reviewerSessionsRoot?: string;
+  readonly sessionStore?: ReviewerSessionStore;
 }) => {
   const repositoryLayer = repositorySqlLayer(input.repository);
   const persistenceLayer = Layer.effect(
@@ -31,6 +34,10 @@ export const candidateValidationForTest = (input: {
         Layer.succeed(CandidateValidationPaths, {
           localRepositoryMainCheckoutRoot: input.localRepositoryMainCheckoutRoot,
           artifactsRoot: input.artifactsRoot,
+          ...(input.reviewerSessionsRoot === undefined
+            ? {}
+            : { reviewerSessionsRoot: input.reviewerSessionsRoot }),
+          ...(input.sessionStore === undefined ? {} : { sessionStore: input.sessionStore }),
         }),
         persistenceLayer,
         Layer.succeed(
