@@ -119,6 +119,9 @@ const launchHerdrSession = async (
     if (hasActiveSession(agents.stdout, input, sessionName)) {
       return { ok: true, host: "herdr", status: "already_active" };
     }
+    if (hasUnknownSession(agents.stdout, input, sessionName)) {
+      return launchIndeterminate("Herdr could not determine the existing session state.");
+    }
   }
   if (!worktree.ok) {
     return worktree.message.includes("timed out")
@@ -199,7 +202,7 @@ const launchInOpenedWorktree = async (
     }
     if (renamedSession(renamedState.stdout, input, sessionName, opened.rootPaneId)) {
       // The mutation succeeded even though its response was lost.
-    } else if (hasNamedAgentConflict(renamedState.stdout, input, sessionName, opened.rootPaneId)) {
+    } else if (hasNamedAgentConflict(renamedState.stdout, sessionName, opened.rootPaneId)) {
       await execute(["pane", "send-keys", opened.rootPaneId, "ctrl-c"], signal);
       if (!opened.alreadyOpen) await closeWorkspace(execute, opened.workspaceId, signal);
       return launchFailure("Herdr reported a naming conflict for the Interactive Session.");
@@ -391,7 +394,8 @@ const isValidAgentList = (source: string): boolean => {
         (recordValue(agent, "name") === undefined ||
           typeof recordValue(agent, "name") === "string") &&
         (recordValue(agent, "agent") === undefined ||
-          typeof recordValue(agent, "agent") === "string"),
+          typeof recordValue(agent, "agent") === "string") &&
+        typeof recordValue(agent, "pane_id") === "string",
     )
   );
 };
@@ -513,12 +517,7 @@ const hasActiveAgentInWorktree = (
   );
 };
 
-const hasNamedAgentConflict = (
-  source: string,
-  input: InteractiveSessionLaunchInput,
-  sessionName: string,
-  paneId: string,
-): boolean => {
+const hasNamedAgentConflict = (source: string, sessionName: string, paneId: string): boolean => {
   const result = herdrResult(source);
   const agents = result === undefined ? undefined : recordValue(result, "agents");
   return (
@@ -528,7 +527,6 @@ const hasNamedAgentConflict = (
         isRecord(agent) &&
         (recordValue(agent, "name") === sessionName ||
           recordValue(agent, "agent") === sessionName) &&
-        recordValue(agent, "cwd") === input.worktreePath &&
         recordValue(agent, "pane_id") !== undefined &&
         recordValue(agent, "pane_id") !== paneId,
     )
@@ -562,7 +560,7 @@ const matchesSession = (
   return (
     (name === sessionName || agent === sessionName) &&
     cwd === input.worktreePath &&
-    (paneId === undefined || reportedPaneId === undefined || reportedPaneId === paneId) &&
+    (paneId === undefined ? true : reportedPaneId === paneId) &&
     (!requireActive || isActiveAgentStatus(status))
   );
 };
