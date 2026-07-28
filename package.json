@@ -55,8 +55,11 @@
   },
   "pnpm": {
     "onlyBuiltDependencies": [
+      "@ast-grep/cli",
       "@parcel/watcher",
-      "better-sqlite3"
+      "better-sqlite3",
+      "esbuild",
+      "msgpackr-extract"
     ]
   }
 }
