@@ -230,6 +230,7 @@ export const runAcceptanceReviewPhase = (
       findings,
       now: input.now,
     });
+    if (result.sessionFilePath !== undefined) chmodSessionFile(result.sessionFilePath);
     if (!result.ok) return yield* Effect.fail(result.failure);
     if (input.sessionStore !== undefined) {
       if (result.sessionFilePath !== undefined) chmodSessionFile(result.sessionFilePath);

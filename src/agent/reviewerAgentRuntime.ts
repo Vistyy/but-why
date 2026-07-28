@@ -70,6 +70,32 @@ const reviewWithPi = (input: ReviewerAgentInput): Effect.Effect<ReviewerAgentRes
         }),
       ),
     );
+    if (initial._tag === "Left" && /session capture failed/i.test(initial.left.message)) {
+      const recovered = yield* Effect.either(
+        runSandbox(() =>
+          input.sandbox.run({
+            agent: isolatedPiReviewerAgent(
+              input.profile,
+              input.resourceRoot ?? input.commandCwd ?? ".",
+              input.agentEnvironment,
+              undefined,
+              false,
+            ),
+            prompt: input.prompt,
+            ...(input.resumeSession === undefined ? {} : { resumeSession: input.resumeSession }),
+            maxIterations: 1,
+            name: `${input.reviewer} Review without session capture`,
+          }),
+        ),
+      );
+      if (recovered._tag === "Right") {
+        const decoded = yield* Effect.either(validateRunResult(input, recovered.right, 1));
+        if (decoded._tag === "Right") {
+          return { ok: true, report: decoded.right, attempts: 1, stdout: recovered.right.stdout };
+        }
+        return { ok: false, failure: decoded.left, attempts: 1, stdout: recovered.right.stdout };
+      }
+    }
     if (initial._tag === "Left") return sandcastleFailure(initial.left, 1, "");
 
     const first = yield* Effect.either(validateRunResult(input, initial.right, 1));
@@ -127,6 +153,7 @@ const isolatedPiReviewerAgent = (
   resourceRoot: string,
   agentEnvironment: AgentEnvironmentCommand | undefined,
   sessionStorageRoot: string | undefined,
+  captureSessions = true,
 ) => {
   const model = profile.profile.runtimeConfig?.model;
   if (model === undefined) throw new Error("Reviewer Pi Agent Profile has no model.");
@@ -142,6 +169,7 @@ const isolatedPiReviewerAgent = (
   );
   const base = pi(model, {
     ...(thinking === undefined ? {} : { thinking }),
+    captureSessions,
     ...(sessionStorageRoot === undefined
       ? {}
       : { sessionStorage: { hostSessionsDir: sessionStorageRoot } }),
