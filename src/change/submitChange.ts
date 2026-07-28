@@ -296,6 +296,7 @@ const validateAndCompleteNoChange = (
     const validation = yield* CandidateValidation;
     const validationResult = yield* validation.validateNoChange({
       ...candidateIdentity(candidate),
+      resourceRoot: change.worktreePath,
       noChange: true,
       acceptanceContext: change.acceptanceContext,
       policy: withAgentEnvironment(policy.resolved.policy, agentEnvironment),
