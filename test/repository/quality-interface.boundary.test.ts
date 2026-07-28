@@ -7,6 +7,7 @@ import { afterEach, describe, expect, test } from "vitest";
 
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const runner = join(repositoryRoot, "scripts/with-capacity-lock.sh");
+const qualityRunner = join(repositoryRoot, "scripts/run-quality-workload.sh");
 const temporaryPaths: string[] = [];
 const coverageArtifact = join(repositoryRoot, "coverage/coverage-final.json");
 
@@ -46,9 +47,14 @@ const startRunner = (lockFile: string, args: string[]) => {
 const runRunner = (lockFile: string, args: string[]): Promise<CommandResult> =>
   startRunner(lockFile, args).done;
 
-const startJust = (lockFile: string, args: string[], environment: NodeJS.ProcessEnv = {}) => {
+const startJust = (
+  lockFile: string,
+  args: string[],
+  environment: NodeJS.ProcessEnv = {},
+  cwd = repositoryRoot,
+) => {
   const child = spawn("just", args, {
-    cwd: repositoryRoot,
+    cwd,
     detached: true,
     env: {
       ...process.env,
@@ -175,6 +181,27 @@ fi
 `,
   );
   chmodSync(pnpm, 0o755);
+};
+
+const createQualityFixture = (directory: string): void => {
+  writeFileSync(
+    join(directory, "justfile"),
+    `quality:
+    @exec ${JSON.stringify(qualityRunner)} quality
+
+full-quality:
+    @exec ${JSON.stringify(qualityRunner)} full-quality
+
+_quality-static-routine:
+    @true
+
+build:
+    @true
+
+test:
+    @pnpm exec vitest
+`,
+  );
 };
 
 const startHeldRunner = (lockFile: string, directory: string, workload: string) => {
@@ -378,9 +405,15 @@ describe("quality interface", () => {
     const readyFile = join(directory, `${qualityCommand}-ready`);
     const descendantPidFile = join(directory, `${qualityCommand}-descendant-pid`);
     createBlockingPnpm(directory, readyFile, descendantPidFile);
-    const justProcess = startJust(lockFile, [qualityCommand], {
-      PATH: `${directory}:${Reflect.get(process.env, "PATH") ?? ""}`,
-    });
+    createQualityFixture(directory);
+    const justProcess = startJust(
+      lockFile,
+      [qualityCommand],
+      {
+        PATH: `${directory}:${Reflect.get(process.env, "PATH") ?? ""}`,
+      },
+      directory,
+    );
 
     try {
       await waitForFile(readyFile);
