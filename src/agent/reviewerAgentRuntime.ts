@@ -126,13 +126,12 @@ const reviewWithPi = (input: ReviewerAgentInput): Effect.Effect<ReviewerAgentRes
       if (recovered._tag === "Right") {
         const decoded = yield* Effect.either(validateRunResult(input, recovered.right, 1));
         if (decoded._tag === "Right") {
-          cleanupSessionSnapshot(sessionSnapshot);
+          restoreSession();
           return {
             ok: true,
             report: decoded.right,
             attempts: 1,
             stdout: recovered.right.stdout,
-            ...(yield* sessionMetadata(agent, recovered.right)),
           };
         }
         restoreSession();

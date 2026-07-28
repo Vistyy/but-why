@@ -130,6 +130,49 @@ describe("Pi reviewer agent runtime", () => {
     }),
   );
 
+  it.effect("does not promote session metadata after capture-failure recovery", () =>
+    Effect.gen(function* () {
+      const sessionRoot = mkdtempSync(join(tmpdir(), "but-why-uncaptured-reviewer-session-"));
+      const sessionId = "123e4567-e89b-42d3-a456-426614174003";
+      let attempts = 0;
+      const run: Pick<Sandbox, "run">["run"] = async () => {
+        attempts += 1;
+        writeFileSync(
+          join(sessionRoot, `review_${sessionId}.jsonl`),
+          `{"type":"session","id":"${sessionId}","cwd":"/validation-workspace"}\n`,
+        );
+        if (attempts === 1) throw new Error("Session capture failed");
+        return {
+          ...runResult('<reviewer-output>{"findings":[]}</reviewer-output>'),
+          iterations: [{ sessionId }],
+        };
+      };
+
+      try {
+        const result = yield* piReviewerAgentRuntime.review({
+          sandbox: { run } as unknown as Pick<Sandbox, "run">,
+          reviewer: "acceptance",
+          validationRunId: "123e4567-e89b-42d3-a456-426614174000",
+          availableArtifactRefs: [],
+          prompt: "Review the Candidate.",
+          profile,
+          commandCwd: "/validation-workspace",
+          sessionStorageRoot: sessionRoot,
+        });
+
+        expect(result).toEqual({
+          ok: true,
+          report: { findings: [] },
+          attempts: 1,
+          stdout: '<reviewer-output>{"findings":[]}</reviewer-output>',
+        });
+        expect(attempts).toBe(2);
+      } finally {
+        rmSync(sessionRoot, { recursive: true, force: true });
+      }
+    }),
+  );
+
   it.effect("rejects a corrupt stored Pi session before resume", () =>
     Effect.gen(function* () {
       const sessionRoot = mkdtempSync(join(tmpdir(), "but-why-corrupt-reviewer-session-"));
