@@ -31,8 +31,15 @@ This step is complete when the committed Candidate satisfies the accepted intent
 
 Run `<but-why> change submit <change-id>`.
 Change Submit owns Acceptance Review, configured Specialists, the Validation Gate, and eligible publication.
+Treat Change Submit as a long-running command.
+Run it without a caller timeout when the execution harness supports that behavior.
+When the execution harness requires a finite timeout, allow at least 30 minutes.
+Increase the timeout when configured phase limits or reviewer duration require more time.
 Do not run or delegate a separate review for a Change.
 Route all Change review through Change Submit.
+
+If the caller times out or loses the response, inspect the Change, Validation Runs, Findings, and active processes before retrying.
+Do not assume that Change Submit stopped when its caller ended.
 
 When Change Submit returns Findings, run `<but-why> change findings <change-id>`.
 Fix every applicable Finding in the Managed Worktree.
