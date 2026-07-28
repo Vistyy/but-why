@@ -56,7 +56,7 @@ const launchHerdrSession = async (
   const options = { ...defaultOptions, ...environment };
   const command = boundedExecutor(execute, options.commandTimeoutMs);
   const sessionName = herdrSessionName(input.changeId);
-  const agents = await observe(command, ["agent", "list"], signal, options.observationRetries);
+  let agents = await observe(command, ["agent", "list"], signal, options.observationRetries);
   if (!agents.ok) {
     return {
       ok: false,
@@ -83,6 +83,7 @@ const launchHerdrSession = async (
     "--no-focus",
   ] as const;
   let worktree = await command(worktreeArgs, signal);
+  let recoveredWorktree = false;
   if (!worktree.ok && worktree.message.includes("timed out")) {
     const state = await observe(
       command,
@@ -92,6 +93,18 @@ const launchHerdrSession = async (
     );
     if (state.ok && worktreeMatchesTarget(state.stdout, input.worktreePath)) {
       worktree = await command(worktreeArgs, signal);
+      recoveredWorktree = true;
+    }
+  }
+  if (recoveredWorktree) {
+    agents = await observe(command, ["agent", "list"], signal, options.observationRetries);
+    if (!agents.ok || !isValidAgentList(agents.stdout)) {
+      return launchIndeterminate(
+        "Herdr did not provide a trustworthy post-recovery session observation.",
+      );
+    }
+    if (hasActiveSession(agents.stdout, input, sessionName)) {
+      return { ok: true, host: "herdr", status: "already_active" };
     }
   }
   if (!worktree.ok) {
@@ -172,7 +185,12 @@ const launchInOpenedWorktree = async (
     ) {
       if (!renamed.ok && renamed.message.includes("timed out")) {
         const retried = await execute(["agent", "rename", opened.rootPaneId, sessionName], signal);
-        if (retried.ok && renamedSession(retried.stdout, input, sessionName, opened.rootPaneId)) {
+        if (
+          renamedState.ok &&
+          isValidAgentList(renamedState.stdout) &&
+          retried.ok &&
+          renamedSession(retried.stdout, input, sessionName, opened.rootPaneId)
+        ) {
           // Continue through the readiness observation below.
         } else {
           await execute(["pane", "send-keys", opened.rootPaneId, "ctrl-c"], signal);
@@ -331,7 +349,20 @@ const isTransientObservationFailure = (message: string): boolean =>
 
 const isValidAgentList = (source: string): boolean => {
   const result = herdrResult(source);
-  return result !== undefined && Array.isArray(recordValue(result, "agents"));
+  const agents = result === undefined ? undefined : recordValue(result, "agents");
+  return (
+    Array.isArray(agents) &&
+    agents.every(
+      (agent) =>
+        isRecord(agent) &&
+        typeof recordValue(agent, "cwd") === "string" &&
+        typeof recordValue(agent, "agent_status") === "string" &&
+        (recordValue(agent, "name") === undefined ||
+          typeof recordValue(agent, "name") === "string") &&
+        (recordValue(agent, "agent") === undefined ||
+          typeof recordValue(agent, "agent") === "string"),
+    )
+  );
 };
 
 const worktreeMatchesTarget = (source: string, targetPath: string): boolean => {
@@ -474,7 +505,7 @@ const matchesSession = (
 };
 
 const isActiveAgentStatus = (status: unknown): boolean =>
-  status === "idle" || status === "working" || status === "blocked" || status === "unknown";
+  status === "idle" || status === "working" || status === "blocked";
 
 const closeWorkspace = async (
   execute: HerdrCommandExecutor,
