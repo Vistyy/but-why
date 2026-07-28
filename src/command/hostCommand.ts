@@ -1,4 +1,5 @@
 import * as Command from "@effect/platform/Command";
+import * as CommandExecutor from "@effect/platform/CommandExecutor";
 import { NodeCommandExecutor, NodeFileSystem } from "@effect/platform-node";
 import { Chunk, Effect, Layer, Stream } from "effect";
 
@@ -30,7 +31,10 @@ const collectText = (stream: Stream.Stream<Uint8Array, unknown>) =>
     Effect.map((chunks) => Buffer.concat(Chunk.toReadonlyArray(chunks)).toString("utf8")),
   );
 
-const runCommand = (input: HostCommandInput): Effect.Effect<HostCommandResult, unknown, never> =>
+const runCommand = (
+  input: HostCommandInput,
+  executorLayer: Layer.Layer<CommandExecutor.CommandExecutor>,
+): Effect.Effect<HostCommandResult, unknown, never> =>
   Effect.scoped(
     Effect.gen(function* () {
       const baseCommand = Command.make(input.command, ...(input.args ?? []));
@@ -47,10 +51,13 @@ const runCommand = (input: HostCommandInput): Effect.Effect<HostCommandResult, u
       );
       return { exitCode: Number(exitCode), stdout, stderr };
     }),
-  ).pipe(Effect.provide(commandLayer));
+  ).pipe(Effect.provide(executorLayer));
 
-export const executeHostCommandEffect = (input: HostCommandInput) =>
-  runCommand(input).pipe(
+export const executeHostCommandEffect = (
+  input: HostCommandInput,
+  executorLayer: Layer.Layer<CommandExecutor.CommandExecutor> = commandLayer,
+) =>
+  runCommand(input, executorLayer).pipe(
     Effect.mapError((error) => new HostCommandError(commandErrorMessage(input, error), error)),
   );
 
