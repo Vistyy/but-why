@@ -81,6 +81,7 @@ const reviewWithPi = (input: ReviewerAgentInput): Effect.Effect<ReviewerAgentRes
       ),
     );
     if (initial._tag === "Left" && /session capture failed/i.test(initial.left.message)) {
+      restoreSession();
       const recovered = yield* Effect.either(
         runSandbox(() =>
           input.sandbox.run({

@@ -77,6 +77,7 @@ export type ReviewerContinuityEvidence = {
 export type RunAcceptanceReviewPhaseResult = {
   readonly findings: 0 | 1;
   readonly reviewerEvidence?: ReviewerContinuityEvidence;
+  readonly toolingFailure?: ValidationToolingFailure;
 };
 
 export const runAcceptanceReviewPhase = (
@@ -198,6 +199,11 @@ export const runAcceptanceReviewPhase = (
     if (result.ok && result.sessionReference === undefined && restartReason === undefined) {
       restartReason = "session_capture_unavailable";
     }
+    const sessionPermissionsOk =
+      result.sessionFilePath === undefined || chmodSessionFile(result.sessionFilePath);
+    if (!sessionPermissionsOk && restartReason === undefined) {
+      restartReason = "session_permissions_unavailable";
+    }
     const artifacts = yield* writeReviewerArtifacts({
       validationRunId: input.validationRunId,
       phase: validationPhase.acceptanceReview,
@@ -230,10 +236,19 @@ export const runAcceptanceReviewPhase = (
       findings,
       now: input.now,
     });
-    if (result.sessionFilePath !== undefined) chmodSessionFile(result.sessionFilePath);
-    if (!result.ok) return yield* Effect.fail(result.failure);
-    if (input.sessionStore !== undefined) {
-      if (result.sessionFilePath !== undefined) chmodSessionFile(result.sessionFilePath);
+    if (!result.ok) {
+      return {
+        findings: 0,
+        reviewerEvidence: {
+          continuity,
+          identityFingerprint: fingerprint,
+          ...(restartReason === undefined ? {} : { restartReason }),
+          durationMs: (yield* Clock.currentTimeMillis) - startedAt,
+        },
+        toolingFailure: result.failure,
+      };
+    }
+    if (input.sessionStore !== undefined && sessionPermissionsOk) {
       yield* input.sessionStore.save({
         identity,
         fingerprint,
@@ -252,16 +267,19 @@ export const runAcceptanceReviewPhase = (
     };
   });
 
-const chmodSessionFile = (path: string): void => {
+const chmodSessionFile = (path: string): boolean => {
   try {
     chmodSync(path, 0o700);
     if (statSync(path).isDirectory()) {
-      for (const entry of readdirSync(path)) chmodSessionFile(`${path}/${entry}`);
+      for (const entry of readdirSync(path)) {
+        if (!chmodSessionFile(`${path}/${entry}`)) return false;
+      }
     } else {
       chmodSync(path, 0o600);
     }
+    return true;
   } catch {
-    // Missing capture is handled by the session reference check on the next run.
+    return false;
   }
 };
 

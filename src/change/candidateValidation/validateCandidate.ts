@@ -283,6 +283,7 @@ const runCandidatePhases = (
 ): Effect.Effect<
   {
     readonly validationFindings: 0 | 1;
+    readonly reviewerEvidence?: ReviewerContinuityEvidence;
     readonly toolingFailures?: readonly ValidationToolingFailure[];
   },
   ValidationToolingFailure | RepositoryStorageError
@@ -323,7 +324,10 @@ const runCandidatePhases = (
       });
       return {
         validationFindings: acceptance.findings,
-        reviewerEvidence: acceptance.reviewerEvidence,
+        ...(acceptance.reviewerEvidence === undefined
+          ? {}
+          : { reviewerEvidence: acceptance.reviewerEvidence }),
+        toolingFailures: acceptance.toolingFailure === undefined ? [] : [acceptance.toolingFailure],
       };
     }
     if (input.policy.prepare !== undefined) {
@@ -378,7 +382,18 @@ const runCandidatePhases = (
         ...sessionOptions,
       });
       reviewerEvidence = acceptance.reviewerEvidence;
-      if (acceptance.findings === 1) return { validationFindings: 1 as const, reviewerEvidence };
+      if (acceptance.toolingFailure !== undefined) {
+        return {
+          validationFindings: 0 as const,
+          ...(reviewerEvidence === undefined ? {} : { reviewerEvidence }),
+          toolingFailures: [acceptance.toolingFailure],
+        };
+      }
+      if (acceptance.findings === 1)
+        return {
+          validationFindings: 1 as const,
+          ...(reviewerEvidence === undefined ? {} : { reviewerEvidence }),
+        };
     }
     const specialists = yield* runSpecialistReviewPhase({
       validationRunId,
@@ -400,7 +415,7 @@ const runCandidatePhases = (
     });
     return {
       validationFindings: specialists.findings,
-      reviewerEvidence,
+      ...(reviewerEvidence === undefined ? {} : { reviewerEvidence }),
       toolingFailures: specialists.toolingFailures,
     };
   })();
