@@ -67,7 +67,7 @@ describe("Pi reviewer agent runtime", () => {
 
       expect(result).toMatchObject({ ok: true, attempts: 1 });
       expect(command).toBe(
-        "'nix' 'develop' '-c' pi -p --mode json --model 'openai-codex/gpt-5.5' --thinking high --no-extensions --no-skills --no-prompt-templates --no-themes --extension ~/.pi/agent/extensions/package-manager-policy --extension ~/.pi/agent/extensions/web-search --skill ~/.pi/agent/skills/codebase-design --tools read,bash,grep,find,ls,web_search,web_fetch,web_content_get",
+        "'nix' 'develop' '-c' pi -p --mode json --model 'openai-codex/gpt-5.5' --thinking high --no-extensions --no-skills --no-prompt-templates --no-themes --extension ~/.pi/agent/extensions/package-manager-policy --extension ~/.pi/agent/extensions/web-search --extension ~/.pi/agent/extensions/openai-remote-compaction --skill ~/.pi/agent/skills/codebase-design --tools read,bash,grep,find,ls,web_search,web_fetch,web_content_get",
       );
       expect(command).not.toContain("--subagent");
       expect(command).not.toContain("--edit");
@@ -117,6 +117,7 @@ describe("Pi reviewer agent runtime", () => {
       const extensionDir = join(home, ".pi", "agent", "extensions");
       const curatedPolicyDir = join(extensionDir, "package-manager-policy");
       const curatedWebSearchDir = join(extensionDir, "web-search");
+      const curatedRemoteCompactionDir = join(extensionDir, "openai-remote-compaction");
       const probeExtension = join(home, "probe.ts");
       const probeOutput = join(home, "probe.json");
       const skillDir = join(home, ".pi", "agent", "skills", "user-normal-skill");
@@ -126,6 +127,7 @@ describe("Pi reviewer agent runtime", () => {
       mkdirSync(extensionDir, { recursive: true });
       mkdirSync(curatedPolicyDir, { recursive: true });
       mkdirSync(curatedWebSearchDir, { recursive: true });
+      mkdirSync(curatedRemoteCompactionDir, { recursive: true });
       mkdirSync(skillDir, { recursive: true });
       mkdirSync(curatedSkillDir, { recursive: true });
       mkdirSync(promptDir, { recursive: true });
@@ -162,6 +164,14 @@ describe("Pi reviewer agent runtime", () => {
           '  pi.registerCommand("web-search-status", { description: "web search", handler: async () => {} });',
           "}\n",
         ].join("\n"),
+      );
+      writeFileSync(
+        join(curatedRemoteCompactionDir, "package.json"),
+        JSON.stringify({ type: "module", pi: { extensions: ["./index.ts"] } }),
+      );
+      writeFileSync(
+        join(curatedRemoteCompactionDir, "index.ts"),
+        "export default function remoteCompaction() {}\n",
       );
       writeFileSync(
         join(curatedSkillDir, "SKILL.md"),
@@ -225,6 +235,7 @@ describe("Pi reviewer agent runtime", () => {
         expect(command).not.toContain("--no-context-files");
         expect(command).toContain("--extension ~/.pi/agent/extensions/package-manager-policy");
         expect(command).toContain("--extension ~/.pi/agent/extensions/web-search");
+        expect(command).toContain("--extension ~/.pi/agent/extensions/openai-remote-compaction");
         expect(command).toContain("--skill ~/.pi/agent/skills/codebase-design");
         const probe = JSON.parse(readFileSync(probeOutput, "utf8")) as {
           readonly prompt: string;
