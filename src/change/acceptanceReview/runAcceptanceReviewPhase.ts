@@ -1,5 +1,5 @@
 import type { Sandbox } from "@ai-hero/sandcastle";
-import { Effect } from "effect";
+import { Clock, Effect } from "effect";
 import type { AgentEnvironmentCommand } from "../../agent/agentEnvironment.js";
 import type { AcceptanceReviewPolicy } from "./acceptanceReviewConfig.js";
 import type { ReviewerAgentRuntime } from "../../agent/reviewerAgentRuntime.js";
@@ -77,7 +77,7 @@ export const runAcceptanceReviewPhase = (
 > =>
   Effect.gen(function* () {
     yield* verifyIntegrity(input);
-    const startedAt = Date.now();
+    const startedAt = yield* Clock.currentTimeMillis;
     const availableArtifactRefs = (yield* input.listArtifacts(input.validationRunId)).map(
       (artifact) => artifact.ref,
     );
@@ -194,7 +194,7 @@ export const runAcceptanceReviewPhase = (
         continuity,
         identityFingerprint: fingerprint,
         ...(restartReason === undefined ? {} : { restartReason }),
-        durationMs: Date.now() - startedAt,
+        durationMs: (yield* Clock.currentTimeMillis) - startedAt,
       },
     });
     const findings = result.ok

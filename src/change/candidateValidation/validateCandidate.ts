@@ -91,11 +91,6 @@ export class CandidateReviewerAgentRuntime extends Context.Tag("CandidateReviewe
   ReviewerAgentRuntime
 >() {}
 
-export class CandidateReviewerSessionStore extends Context.Tag("CandidateReviewerSessionStore")<
-  CandidateReviewerSessionStore,
-  ReviewerSessionStore
->() {}
-
 export type CandidateValidationService = {
   readonly validateCandidate: (
     input: ValidateCandidateInput,

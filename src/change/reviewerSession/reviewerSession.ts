@@ -75,15 +75,3 @@ export const continuationPrompt = (input: {
     JSON.stringify({ findings: input.previousFindings }),
     "Return only the required reviewer output.",
   ].join("\n");
-
-export const reviewerSessionEvidence = (input: {
-  readonly continuity: ReviewerContinuity;
-  readonly fingerprint: string;
-  readonly restartReason?: string;
-  readonly durationMs: number;
-}) => ({
-  continuity: input.continuity,
-  identityFingerprint: input.fingerprint,
-  ...(input.restartReason === undefined ? {} : { restartReason: input.restartReason }),
-  durationMs: input.durationMs,
-});
