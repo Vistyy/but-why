@@ -35,7 +35,22 @@ afterAll(() => {
   releaseTestWorkspace(unreadyRepositoryTemplate);
 });
 
-const readyRepository = () => cloneInitializedTestRepository(readyRepositoryTemplate);
+const readyRepository = () =>
+  Effect.map(cloneInitializedTestRepository(readyRepositoryTemplate), (root) => {
+    writeFileSync(
+      join(root, ".test-global-config.json"),
+      JSON.stringify({
+        defaultAgentProfile: { scope: "global", name: "implementation" },
+        agentProfiles: {
+          implementation: {
+            agentRuntime: "pi",
+            runtimeConfig: { model: "openai-codex/gpt-5.6-luna", thinking: "high" },
+          },
+        },
+      }),
+    );
+    return root;
+  });
 const unreadyRepository = () => cloneInitializedTestRepository(unreadyRepositoryTemplate);
 
 const invalidHandoffCases = [
@@ -137,6 +152,8 @@ describe("by change implement", () => {
         worktreePath: change.worktreePath,
         host: "herdr",
         status: "started",
+        agentProfile: "implementation",
+        profileScope: "global",
       });
       expect(launches).toHaveLength(1);
       expect(launches[0]).toMatchObject({
@@ -188,6 +205,18 @@ describe("by change implement", () => {
         cwd: root,
         encoding: "utf8",
       });
+      writeFileSync(
+        join(linkedCheckout, ".test-global-config.json"),
+        JSON.stringify({
+          defaultAgentProfile: { scope: "global", name: "implementation" },
+          agentProfiles: {
+            implementation: {
+              agentRuntime: "pi",
+              runtimeConfig: { model: "openai-codex/gpt-5.6-luna", thinking: "high" },
+            },
+          },
+        }),
+      );
 
       try {
         const started = yield* runByInProcessEffect(
@@ -295,6 +324,7 @@ describe("by change implement", () => {
   );
 
   it.effect.each([
+    ["no selection", {}, "not configured"],
     [
       "missing",
       {

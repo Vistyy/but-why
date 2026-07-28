@@ -246,6 +246,15 @@ const implementChange = (
         change,
       };
     }
+    const resolvedAgentProfile = agentProfile.profile;
+    if (resolvedAgentProfile === undefined) {
+      return {
+        ok: false,
+        code: "agent_profile_invalid",
+        message: "Interactive Session Agent Profile is not configured.",
+        change,
+      };
+    }
     const agentEnvironment = repoAgentEnvironment(managedRepoConfig.config);
     const launched = yield* Effect.tryPromise({
       try: () =>
@@ -258,7 +267,7 @@ const implementChange = (
             worktreePath: change.worktreePath,
             ...(handoff === undefined ? {} : { handoff }),
           }),
-          ...(agentProfile.profile === undefined ? {} : { agentProfile: agentProfile.profile }),
+          agentProfile: resolvedAgentProfile,
           globalConfigDirectory: dirname(globalConfigPath),
           ...(agentEnvironment === undefined ? {} : { agentEnvironment }),
         }),
@@ -273,12 +282,8 @@ const implementChange = (
       ? {
           change,
           ...launched.result,
-          ...(agentProfile.profile === undefined
-            ? {}
-            : {
-                agentProfile: agentProfile.profile.agentProfile,
-                profileScope: agentProfile.profile.scope,
-              }),
+          agentProfile: resolvedAgentProfile.agentProfile,
+          profileScope: resolvedAgentProfile.scope,
         }
       : { ok: false, code: "launch_failed", message: launched.message, change };
   });
