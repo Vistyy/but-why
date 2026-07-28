@@ -1,4 +1,7 @@
 import { pi, type Sandbox, type SandboxRunResult } from "@ai-hero/sandcastle";
+import { cpSync, existsSync, mkdtempSync, rmSync } from "node:fs";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
 import { Effect } from "effect";
 
 import { prependAgentEnvironment, type AgentEnvironmentCommand } from "./agentEnvironment.js";
@@ -54,6 +57,13 @@ export type ReviewerAgentResult =
 
 const reviewWithPi = (input: ReviewerAgentInput): Effect.Effect<ReviewerAgentResult> =>
   Effect.gen(function* () {
+    const sessionSnapshot =
+      input.resumeSession === undefined || input.sessionStorageRoot === undefined
+        ? undefined
+        : snapshotSessionRoot(input.sessionStorageRoot);
+    const restoreSession = () => {
+      if (sessionSnapshot !== undefined) restoreSessionRoot(sessionSnapshot);
+    };
     const initial = yield* Effect.either(
       runSandbox(() =>
         input.sandbox.run({
@@ -91,15 +101,21 @@ const reviewWithPi = (input: ReviewerAgentInput): Effect.Effect<ReviewerAgentRes
       if (recovered._tag === "Right") {
         const decoded = yield* Effect.either(validateRunResult(input, recovered.right, 1));
         if (decoded._tag === "Right") {
+          cleanupSessionSnapshot(sessionSnapshot);
           return { ok: true, report: decoded.right, attempts: 1, stdout: recovered.right.stdout };
         }
+        restoreSession();
         return { ok: false, failure: decoded.left, attempts: 1, stdout: recovered.right.stdout };
       }
     }
-    if (initial._tag === "Left") return sandcastleFailure(initial.left, 1, "");
+    if (initial._tag === "Left") {
+      restoreSession();
+      return sandcastleFailure(initial.left, 1, "");
+    }
 
     const first = yield* Effect.either(validateRunResult(input, initial.right, 1));
     if (first._tag === "Right") {
+      cleanupSessionSnapshot(sessionSnapshot);
       return {
         ok: true,
         report: first.right,
@@ -110,6 +126,7 @@ const reviewWithPi = (input: ReviewerAgentInput): Effect.Effect<ReviewerAgentRes
     }
     const resume = initial.right.resume;
     if (resume === undefined) {
+      restoreSession();
       return {
         ok: false,
         failure: first.left,
@@ -123,25 +140,30 @@ const reviewWithPi = (input: ReviewerAgentInput): Effect.Effect<ReviewerAgentRes
       runSandbox(() => resume(buildReviewerOutputCorrectionPrompt(first.left))),
     );
     if (corrected._tag === "Left") {
+      restoreSession();
       return sandcastleFailure(corrected.left, 2, initial.right.stdout);
     }
 
     const second = yield* Effect.either(validateRunResult(input, corrected.right, 2));
     return second._tag === "Right"
-      ? {
+      ? (cleanupSessionSnapshot(sessionSnapshot),
+        {
           ok: true,
           report: second.right,
           attempts: 2,
           stdout: corrected.right.stdout,
           ...sessionMetadata(corrected.right),
-        }
-      : {
-          ok: false,
-          failure: second.left,
-          attempts: 2,
-          stdout: corrected.right.stdout,
-          ...sessionMetadata(corrected.right),
-        };
+        })
+      : (() => {
+          restoreSession();
+          return {
+            ok: false,
+            failure: second.left,
+            attempts: 2,
+            stdout: corrected.right.stdout,
+            ...sessionMetadata(corrected.right),
+          };
+        })();
   });
 
 export const piReviewerAgentRuntime: ReviewerAgentRuntime = {
@@ -224,6 +246,28 @@ const sandcastleFailure = (
   attempts: number,
   stdout: string,
 ): ReviewerAgentResult => ({ ok: false, failure, attempts, stdout });
+
+const snapshotSessionRoot = (
+  root: string,
+): { readonly root: string; readonly snapshot: string } | undefined => {
+  if (!existsSync(root)) return undefined;
+  const snapshot = mkdtempSync(join(tmpdir(), "but-why-reviewer-session-"));
+  cpSync(root, join(snapshot, "sessions"), { recursive: true });
+  return { root, snapshot };
+};
+
+const cleanupSessionSnapshot = (
+  value: { readonly root: string; readonly snapshot: string } | undefined,
+): void => {
+  if (value !== undefined) rmSync(value.snapshot, { recursive: true, force: true });
+};
+
+const restoreSessionRoot = (value: { readonly root: string; readonly snapshot: string }): void => {
+  const source = join(value.snapshot, "sessions");
+  rmSync(value.root, { recursive: true, force: true });
+  cpSync(source, value.root, { recursive: true });
+  rmSync(value.snapshot, { recursive: true, force: true });
+};
 
 const sessionMetadata = (result: SandboxRunResult) => {
   const iteration = result.iterations[result.iterations.length - 1];

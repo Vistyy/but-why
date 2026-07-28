@@ -26,7 +26,7 @@ import {
 
 export type RunAcceptanceReviewPhaseInput = {
   readonly validationRunId: string;
-  readonly changeId?: string;
+  readonly changeId: string;
   readonly candidate: {
     readonly candidateId: string;
     readonly changeBaseSha: string;

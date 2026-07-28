@@ -302,6 +302,7 @@ const runCandidatePhases = (
     if ("noChange" in input) {
       const acceptance = yield* runAcceptanceReviewPhase({
         validationRunId,
+        changeId: input.changeId as string,
         candidate: candidateIdentity(input),
         acceptanceContext: input.acceptanceContext,
         policy: input.policy.acceptanceReview,
@@ -357,6 +358,7 @@ const runCandidatePhases = (
     if ("acceptanceContext" in input) {
       const acceptance = yield* runAcceptanceReviewPhase({
         validationRunId,
+        changeId: input.changeId as string,
         candidate: candidateIdentity(input),
         acceptanceContext: input.acceptanceContext,
         policy: input.policy.acceptanceReview,
