@@ -44,13 +44,21 @@ export const reviewerSessionFingerprint = (identity: ReviewerSessionIdentity): s
 export const sessionIdentityMatches = (
   record: ReviewerSessionRecord,
   identity: ReviewerSessionIdentity,
-): boolean =>
-  typeof record.fingerprint === "string" &&
-  typeof record.sessionReference === "string" &&
-  record.identity !== null &&
-  typeof record.identity === "object" &&
-  record.fingerprint === reviewerSessionFingerprint(identity) &&
-  record.identity.changeId === identity.changeId;
+): boolean => {
+  try {
+    return (
+      typeof record.fingerprint === "string" &&
+      typeof record.sessionReference === "string" &&
+      record.identity !== null &&
+      typeof record.identity === "object" &&
+      record.fingerprint === reviewerSessionFingerprint(record.identity) &&
+      record.fingerprint === reviewerSessionFingerprint(identity) &&
+      record.identity.changeId === identity.changeId
+    );
+  } catch {
+    return false;
+  }
+};
 
 export const reviewerSessionsPath = (operationalDir: string): string => {
   const path = join(operationalDir, "reviewer-sessions");
