@@ -77,7 +77,10 @@ const reconcileOne = (
   now: string,
 ): Effect.Effect<ReconciledChange, RepositoryStorageError> =>
   Effect.gen(function* () {
-    if (change.state === "closed") return yield* reconcileCleanup(dependencies, change, now);
+    if (change.state === "closed") {
+      yield* dependencies.persistence.removeReviewerSession(change.id);
+      return yield* reconcileCleanup(dependencies, change, now);
+    }
     const observation = observePullRequest(dependencies.github, change);
     if (!observation.merged) return observation.result;
 
@@ -86,6 +89,7 @@ const reconcileOne = (
       now,
     });
     if (!completed.ok) return rejected(change.id, completed.code);
+    yield* dependencies.persistence.removeReviewerSession(change.id);
     const cleanup = yield* reconcileCleanup(dependencies, completed.change, now);
     return { ...cleanup, status: "completed", pullRequest: observation.pullRequest };
   });

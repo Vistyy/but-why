@@ -1,4 +1,6 @@
 import type * as SqlClient from "@effect/sql/SqlClient";
+import { existsSync, rmSync } from "node:fs";
+import { join } from "node:path";
 import { Effect } from "effect";
 
 import {
@@ -64,11 +66,9 @@ const columns = [
   "closed_at AS closedAt",
 ].join(", ");
 
-export const openSqliteChangePersistence = (): Effect.Effect<
-  ChangePersistence,
-  never,
-  RepositorySql
-> =>
+export const openSqliteChangePersistence = (
+  input: { readonly reviewerSessionsRoot?: string } = {},
+): Effect.Effect<ChangePersistence, never, RepositorySql> =>
   Effect.map(RepositorySql, (repository) => ({
     getChangeById: (changeId) =>
       repository.transaction("read Change", (sql) => getById(sql, changeId)),
@@ -103,15 +103,18 @@ export const openSqliteChangePersistence = (): Effect.Effect<
           (rows) => {
             const row = rows[0];
             if (row === undefined) return Effect.succeed(undefined);
-            return Effect.sync(
-              () =>
-                ({
+            return Effect.sync(() => {
+              try {
+                return {
                   identity: JSON.parse(row.identity),
                   fingerprint: row.fingerprint,
                   sessionReference: row.sessionReference,
                   lastCandidateId: row.lastCandidateId,
-                }) as ReviewerSessionRecord,
-            );
+                } as ReviewerSessionRecord;
+              } catch {
+                return undefined;
+              }
+            });
           },
         ),
       ),
@@ -125,7 +128,15 @@ export const openSqliteChangePersistence = (): Effect.Effect<
       ),
     removeReviewerSession: (changeId) =>
       repository.transactionImmediate("remove Reviewer Session", (sql) =>
-        Effect.asVoid(sql`DELETE FROM reviewer_sessions WHERE change_id = ${changeId}`),
+        Effect.asVoid(sql`DELETE FROM reviewer_sessions WHERE change_id = ${changeId}`).pipe(
+          Effect.tap(() =>
+            Effect.sync(() => {
+              if (input.reviewerSessionsRoot === undefined) return;
+              const path = join(input.reviewerSessionsRoot, "reviewer-sessions", changeId);
+              if (existsSync(path)) rmSync(path, { recursive: true, force: true });
+            }),
+          ),
+        ),
       ),
     beginPublication: (input) =>
       repository.transactionImmediate("begin Change publication", (sql) =>

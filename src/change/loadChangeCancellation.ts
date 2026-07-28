@@ -39,7 +39,9 @@ export const withCancellation = <A, R>(
   }
 
   const program = Effect.all({
-    changes: openSqliteChangePersistence(),
+    changes: openSqliteChangePersistence({
+      reviewerSessionsRoot: context.context.paths.operationalDir,
+    }),
     tasks: openSqliteTaskPersistence(context.context.taskPrefix),
   }).pipe(
     Effect.flatMap(({ changes, tasks }) =>

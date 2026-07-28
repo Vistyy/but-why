@@ -159,7 +159,9 @@ export const loadChangeSubmit = (input: {
         Effect.all({
           capture: openSqliteCandidateCapturePersistence(),
           validation: openSqliteChangeValidationPersistence(),
-          change: openSqliteChangePersistence(),
+          change: openSqliteChangePersistence({
+            reviewerSessionsRoot: context.paths.operationalDir,
+          }),
           task: openSqliteTaskPersistence(context.taskPrefix),
         }).pipe(
           Effect.flatMap(({ capture, validation, change, task }) =>

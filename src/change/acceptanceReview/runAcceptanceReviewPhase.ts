@@ -1,11 +1,11 @@
 import type { Sandbox } from "@ai-hero/sandcastle";
+import { chmodSync } from "node:fs";
 import { Clock, Effect } from "effect";
 import type { AgentEnvironmentCommand } from "../../agent/agentEnvironment.js";
 import type { AcceptanceReviewPolicy } from "./acceptanceReviewConfig.js";
 import type { ReviewerAgentRuntime } from "../../agent/reviewerAgentRuntime.js";
 import {
   buildAcceptanceReviewerPrompt,
-  buildReviewerRevisionPrompt,
   reviewerFindingHistory,
 } from "../../agent/reviewerPrompts.js";
 import type { TaskContextSnapshotV1 } from "../validationRun/taskContextSnapshot.js";
@@ -126,6 +126,9 @@ export const runAcceptanceReviewPhase = (
         : "restarted";
     let restartReason: string | undefined =
       stored === undefined ? undefined : compatible ? undefined : "identity_mismatch";
+    if (stored !== undefined && !compatible && input.sessionStore !== undefined) {
+      yield* input.sessionStore.remove(identity.changeId);
+    }
     const review = (resumeSession?: string) =>
       input.runtime.review({
         sandbox: input.sandbox,
@@ -149,40 +152,27 @@ export const runAcceptanceReviewPhase = (
           : { agentEnvironment: input.agentEnvironment }),
         ...(input.sessionStorageRoot === undefined
           ? {}
-          : { sessionStorageRoot: reviewerSessionsPath(input.sessionStorageRoot) }),
+          : {
+              sessionStorageRoot: reviewerSessionsPath(
+                `${input.sessionStorageRoot}/${identity.changeId}`,
+              ),
+            }),
         ...(resumeSession === undefined ? {} : { resumeSession }),
       });
     let provisional = yield* review(compatible ? stored?.sessionReference : undefined);
     if (!provisional.ok && compatible) {
-      continuity = "restarted";
-      restartReason = "session_unusable";
-      provisional = yield* review();
+      const sessionFailure =
+        provisional.failure._tag === "SandcastleToolingFailed" &&
+        /session|resume/i.test(provisional.failure.message);
+      if (sessionFailure) {
+        continuity = "restarted";
+        restartReason = "session_unusable";
+        if (input.sessionStore !== undefined) yield* input.sessionStore.remove(identity.changeId);
+        provisional = yield* review();
+      }
     }
     yield* verifyIntegrity(input);
-    const result =
-      provisional.ok && continuity !== "resumed" && earlierFindings.length > 0
-        ? yield* input.runtime.review({
-            sandbox: input.sandbox,
-            reviewer: "acceptance",
-            validationRunId: input.validationRunId,
-            availableArtifactRefs,
-            prompt: buildReviewerRevisionPrompt({
-              reviewPrompt: prompt,
-              provisionalReport: provisional.report,
-              earlierFindings,
-            }),
-            profile: input.policy.profile,
-            commandCwd: input.commandCwd,
-            ...(input.resourceRoot === undefined ? {} : { resourceRoot: input.resourceRoot }),
-            ...(input.agentEnvironment === undefined
-              ? {}
-              : { agentEnvironment: input.agentEnvironment }),
-            ...(input.sessionStorageRoot === undefined
-              ? {}
-              : { sessionStorageRoot: reviewerSessionsPath(input.sessionStorageRoot) }),
-          })
-        : provisional;
-    if (result !== provisional) yield* verifyIntegrity(input);
+    const result = provisional;
     const artifacts = yield* writeReviewerArtifacts({
       validationRunId: input.validationRunId,
       phase: validationPhase.acceptanceReview,
@@ -216,15 +206,25 @@ export const runAcceptanceReviewPhase = (
       now: input.now,
     });
     if (!result.ok) return yield* Effect.fail(result.failure);
-    if (input.sessionStore !== undefined && result.sessionReference !== undefined)
+    if (input.sessionStore !== undefined && result.sessionReference !== undefined) {
+      if (result.sessionFilePath !== undefined) chmodSessionFile(result.sessionFilePath);
       yield* input.sessionStore.save({
         identity,
         fingerprint,
         sessionReference: result.sessionReference,
         lastCandidateId: input.candidate.candidateId,
       });
+    }
     return { findings: findings.length === 0 ? 0 : 1 };
   });
+
+const chmodSessionFile = (path: string): void => {
+  try {
+    chmodSync(path, 0o600);
+  } catch {
+    // Missing capture is handled by the session reference check on the next run.
+  }
+};
 
 const verifyIntegrity = (
   input: RunAcceptanceReviewPhaseInput,

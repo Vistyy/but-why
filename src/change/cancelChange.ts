@@ -33,7 +33,8 @@ export type CancellationDependencies = {
     | "completeMergedChange"
     | "cancelChange"
     | "recordCleanup"
-  >;
+  > &
+    Partial<Pick<ChangePersistence, "removeReviewerSession">>;
   readonly github: Pick<GitHubPullRequestGateway, "getPullRequest" | "closePullRequest">;
   readonly cleanup: (input: {
     readonly repositoryCommonDirectory: string;
@@ -363,6 +364,9 @@ const cleanupClosedChange = (
 > =>
   Effect.gen(function* () {
     if (change.cleanup.state === "complete") return { change, cleanup: change.cleanup };
+    if (dependencies.changes.removeReviewerSession !== undefined) {
+      yield* dependencies.changes.removeReviewerSession(change.id);
+    }
     const result = dependencies.cleanup({
       repositoryCommonDirectory: change.repositoryCommonDirectory,
       worktreePath: change.worktreePath,

@@ -46,7 +46,9 @@ export const withChangeUseCases = <A, E, R>(
 
   return Effect.all({
     startPersistence: openSqliteChangeStartPersistence(),
-    changePersistence: openSqliteChangePersistence(),
+    changePersistence: openSqliteChangePersistence({
+      reviewerSessionsRoot: repoContext.context.paths.operationalDir,
+    }),
   }).pipe(
     Effect.flatMap(({ startPersistence, changePersistence }) =>
       use(
