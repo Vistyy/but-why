@@ -73,6 +73,7 @@ export type ChangeSubmitResult =
       readonly candidateId: string;
       readonly validationRunId: string;
       readonly findings: readonly CandidateValidationFinding[];
+      readonly reviewerEvidence?: ReviewerContinuityEvidence;
     }
   | {
       readonly ok: false;
@@ -81,6 +82,7 @@ export type ChangeSubmitResult =
       readonly candidateId: string;
       readonly validationRunId: string;
       readonly toolingFailures: readonly CandidateValidationToolingFailure[];
+      readonly reviewerEvidence?: ReviewerContinuityEvidence;
     }
   | { readonly ok: false; readonly code: "change_not_found" | "change_not_open" }
   | { readonly ok: false; readonly code: "change_not_ready"; readonly change: ChangeRecord }
@@ -472,7 +474,11 @@ const blockedValidationResult = (
   dependencies: Parameters<typeof openChangeSubmit>[0],
   change: ReadyChange,
   candidate: CapturedCandidate,
-  validation: { readonly outcome: "blocked" | "tooling_failed"; readonly validationRunId: string },
+  validation: {
+    readonly outcome: "blocked" | "tooling_failed";
+    readonly validationRunId: string;
+    readonly reviewerEvidence?: ReviewerContinuityEvidence;
+  },
   now: string,
 ): Effect.Effect<ChangeSubmitResult, RepositoryStorageError> =>
   Effect.gen(function* () {
@@ -490,6 +496,9 @@ const blockedValidationResult = (
           candidateId: candidate.candidateId,
           validationRunId: validation.validationRunId,
           findings: yield* candidateValidation.listFindings(validation.validationRunId),
+          ...(validation.reviewerEvidence === undefined
+            ? {}
+            : { reviewerEvidence: validation.reviewerEvidence }),
         }
       : {
           ok: false,
@@ -500,6 +509,9 @@ const blockedValidationResult = (
           toolingFailures: yield* candidateValidation.listToolingFailures(
             validation.validationRunId,
           ),
+          ...(validation.reviewerEvidence === undefined
+            ? {}
+            : { reviewerEvidence: validation.reviewerEvidence }),
         };
   });
 

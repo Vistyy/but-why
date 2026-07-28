@@ -112,7 +112,12 @@ export const openSqliteChangePersistence = (
                   lastCandidateId: row.lastCandidateId,
                 } as ReviewerSessionRecord;
               } catch {
-                return undefined;
+                return {
+                  identity: {} as ReviewerSessionRecord["identity"],
+                  fingerprint: "",
+                  sessionReference: "",
+                  lastCandidateId: "",
+                };
               }
             });
           },

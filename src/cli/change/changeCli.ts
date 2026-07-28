@@ -664,6 +664,9 @@ const submitResult = (result: ChangeSubmitResult): CliResult => {
         candidateId: result.candidateId,
         validationRunId: result.validationRunId,
         findings: result.findings,
+        ...(result.reviewerEvidence === undefined
+          ? {}
+          : { reviewerEvidence: result.reviewerEvidence }),
       },
       help: ["Fix the Findings in the Managed Worktree, commit them, then retry Change Submit."],
     });
@@ -677,6 +680,9 @@ const submitResult = (result: ChangeSubmitResult): CliResult => {
         candidateId: result.candidateId,
         validationRunId: result.validationRunId,
         toolingFailures: result.toolingFailures,
+        ...(result.reviewerEvidence === undefined
+          ? {}
+          : { reviewerEvidence: result.reviewerEvidence }),
       },
       help: ["Fix the validation tooling failure, then retry Change Submit."],
     });

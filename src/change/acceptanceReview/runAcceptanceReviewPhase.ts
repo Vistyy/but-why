@@ -183,6 +183,9 @@ export const runAcceptanceReviewPhase = (
     }
     yield* verifyIntegrity(input);
     const result = provisional;
+    if (result.ok && result.sessionReference === undefined && restartReason === undefined) {
+      restartReason = "session_capture_unavailable";
+    }
     const artifacts = yield* writeReviewerArtifacts({
       validationRunId: input.validationRunId,
       phase: validationPhase.acceptanceReview,
