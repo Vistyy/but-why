@@ -192,35 +192,32 @@ const launchInOpenedWorktree = async (
       signal,
       options.observationRetries,
     );
-    if (
-      !renamedState.ok ||
-      !renamedSession(renamedState.stdout, input, sessionName, opened.rootPaneId)
-    ) {
-      if (!renamed.ok && renamed.message.includes("timed out")) {
-        const retried = await execute(["agent", "rename", opened.rootPaneId, sessionName], signal);
-        if (
-          renamedState.ok &&
-          isValidAgentList(renamedState.stdout) &&
-          retried.ok &&
-          renamedSession(retried.stdout, input, sessionName, opened.rootPaneId)
-        ) {
-          // Continue through the readiness observation below.
-        } else {
-          await execute(["pane", "send-keys", opened.rootPaneId, "ctrl-c"], signal);
-          if (!opened.alreadyOpen) await closeWorkspace(execute, opened.workspaceId, signal);
-          return launchFailure(
-            "Herdr did not confirm the named Pi session after retrying the rename.",
-          );
-        }
-      } else {
+    const safeToRetry =
+      renamedState.ok &&
+      isValidAgentList(renamedState.stdout) &&
+      !renamedSession(renamedState.stdout, input, sessionName, opened.rootPaneId);
+    if (!safeToRetry) {
+      await execute(["pane", "send-keys", opened.rootPaneId, "ctrl-c"], signal);
+      if (!opened.alreadyOpen) await closeWorkspace(execute, opened.workspaceId, signal);
+      return launchFailure("Herdr did not provide a safe rename reconciliation.");
+    }
+    if (!renamed.ok && renamed.message.includes("timed out")) {
+      const retried = await execute(["agent", "rename", opened.rootPaneId, sessionName], signal);
+      if (!retried.ok || !renamedSession(retried.stdout, input, sessionName, opened.rootPaneId)) {
         await execute(["pane", "send-keys", opened.rootPaneId, "ctrl-c"], signal);
         if (!opened.alreadyOpen) await closeWorkspace(execute, opened.workspaceId, signal);
         return launchFailure(
-          renamed.ok
-            ? "Herdr did not confirm the named Pi session in the worktree root pane."
-            : renamed.message,
+          "Herdr did not confirm the named Pi session after retrying the rename.",
         );
       }
+    } else {
+      await execute(["pane", "send-keys", opened.rootPaneId, "ctrl-c"], signal);
+      if (!opened.alreadyOpen) await closeWorkspace(execute, opened.workspaceId, signal);
+      return launchFailure(
+        renamed.ok
+          ? "Herdr did not confirm the named Pi session in the worktree root pane."
+          : renamed.message,
+      );
     }
   }
   const ready = await waitForSession(
@@ -342,7 +339,14 @@ const delay = (milliseconds: number, signal: AbortSignal | undefined): Promise<v
   new Promise((resolve) => {
     if (signal?.aborted) return resolve();
     const timer = setTimeout(resolve, milliseconds);
-    signal?.addEventListener("abort", () => clearTimeout(timer), { once: true });
+    signal?.addEventListener(
+      "abort",
+      () => {
+        clearTimeout(timer);
+        resolve();
+      },
+      { once: true },
+    );
   });
 
 const boundedExecutor =
@@ -399,7 +403,8 @@ const worktreeMatchesTarget = (source: string, targetPath: string): boolean => {
     worktrees.some(
       (worktree) =>
         isRecord(worktree) &&
-        typeof recordValue(worktree, "workspace_id") === "string" &&
+        (typeof recordValue(worktree, "workspace_id") === "string" ||
+          typeof recordValue(worktree, "open_workspace_id") === "string") &&
         (recordValue(worktree, "path") === targetPath ||
           recordValue(worktree, "worktree_path") === targetPath ||
           recordValue(worktree, "cwd") === targetPath),
@@ -500,9 +505,10 @@ const hasActiveAgentInWorktree = (
     Array.isArray(agents) &&
     agents.some(
       (agent) =>
-        isRecord(agent) &&
-        recordValue(agent, "cwd") === input.worktreePath &&
-        isActiveAgentStatus(recordValue(agent, "agent_status")),
+        (isRecord(agent) &&
+          recordValue(agent, "cwd") === input.worktreePath &&
+          isActiveAgentStatus(recordValue(agent, "agent_status"))) ||
+        recordValue(agent, "agent_status") === "unknown",
     )
   );
 };
