@@ -192,16 +192,18 @@ const launchInOpenedWorktree = async (
       signal,
       options.observationRetries,
     );
-    const safeToRetry =
-      renamedState.ok &&
-      isValidAgentList(renamedState.stdout) &&
-      !renamedSession(renamedState.stdout, input, sessionName, opened.rootPaneId);
-    if (!safeToRetry) {
+    if (!renamedState.ok || !isValidAgentList(renamedState.stdout)) {
       await execute(["pane", "send-keys", opened.rootPaneId, "ctrl-c"], signal);
       if (!opened.alreadyOpen) await closeWorkspace(execute, opened.workspaceId, signal);
       return launchFailure("Herdr did not provide a safe rename reconciliation.");
     }
-    if (!renamed.ok && renamed.message.includes("timed out")) {
+    if (renamedSession(renamedState.stdout, input, sessionName, opened.rootPaneId)) {
+      // The mutation succeeded even though its response was lost.
+    } else if (hasNamedAgentConflict(renamedState.stdout, input, sessionName, opened.rootPaneId)) {
+      await execute(["pane", "send-keys", opened.rootPaneId, "ctrl-c"], signal);
+      if (!opened.alreadyOpen) await closeWorkspace(execute, opened.workspaceId, signal);
+      return launchFailure("Herdr reported a naming conflict for the Interactive Session.");
+    } else if (!renamed.ok && renamed.message.includes("timed out")) {
       const retried = await execute(["agent", "rename", opened.rootPaneId, sessionName], signal);
       if (!retried.ok || !renamedSession(retried.stdout, input, sessionName, opened.rootPaneId)) {
         await execute(["pane", "send-keys", opened.rootPaneId, "ctrl-c"], signal);
@@ -403,8 +405,6 @@ const worktreeMatchesTarget = (source: string, targetPath: string): boolean => {
     worktrees.some(
       (worktree) =>
         isRecord(worktree) &&
-        (typeof recordValue(worktree, "workspace_id") === "string" ||
-          typeof recordValue(worktree, "open_workspace_id") === "string") &&
         (recordValue(worktree, "path") === targetPath ||
           recordValue(worktree, "worktree_path") === targetPath ||
           recordValue(worktree, "cwd") === targetPath),
@@ -505,10 +505,32 @@ const hasActiveAgentInWorktree = (
     Array.isArray(agents) &&
     agents.some(
       (agent) =>
-        (isRecord(agent) &&
-          recordValue(agent, "cwd") === input.worktreePath &&
-          isActiveAgentStatus(recordValue(agent, "agent_status"))) ||
-        recordValue(agent, "agent_status") === "unknown",
+        isRecord(agent) &&
+        recordValue(agent, "cwd") === input.worktreePath &&
+        (isActiveAgentStatus(recordValue(agent, "agent_status")) ||
+          recordValue(agent, "agent_status") === "unknown"),
+    )
+  );
+};
+
+const hasNamedAgentConflict = (
+  source: string,
+  input: InteractiveSessionLaunchInput,
+  sessionName: string,
+  paneId: string,
+): boolean => {
+  const result = herdrResult(source);
+  const agents = result === undefined ? undefined : recordValue(result, "agents");
+  return (
+    Array.isArray(agents) &&
+    agents.some(
+      (agent) =>
+        isRecord(agent) &&
+        (recordValue(agent, "name") === sessionName ||
+          recordValue(agent, "agent") === sessionName) &&
+        recordValue(agent, "cwd") === input.worktreePath &&
+        recordValue(agent, "pane_id") !== undefined &&
+        recordValue(agent, "pane_id") !== paneId,
     )
   );
 };
