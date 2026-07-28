@@ -74,6 +74,21 @@ _Avoid_: Candidate, retry Attempt, generic job
 The state of a Validation Run: running or complete.
 _Avoid_: Task state, phase result
 
+**Active Validation Run**:
+The sole running Validation Run for one Change.
+A Submission must not start another Validation Run while the Change has an Active Validation Run.
+_Avoid_: Concurrent Validation Runs, Submission process lock
+
+**Abandoned Validation Run**:
+An Active Validation Run whose owning Submission ended without completing it.
+It remains active until Validation Run Abandonment completes it as tooling-failed and handles its exact validation resources.
+_Avoid_: Stale Active Validation Run, PID-based liveness inference, concurrent recovery
+
+**Validation Run Abandonment**:
+The explicit operator recovery operation used after the operator stops every process from an Abandoned Validation Run.
+It completes the run as tooling-failed and handles its exact resources, but it does not detect or terminate orphaned processes.
+_Avoid_: Automatic recovery, direct Shared Repository State editing, process termination
+
 **Validation Run Outcome**:
 The completed result of a Validation Run: passed, blocked by Findings, or failed because of tooling.
 _Avoid_: Needs Input, reviewer status, Task state
@@ -237,9 +252,20 @@ _Avoid_: Task Worktree, Interactive Session
 A failure in But Why? or its validation tooling that prevents a trustworthy judgment of the Candidate.
 _Avoid_: Finding, failed Check result
 
-**Reviewer Revision Session**:
-A two-request review of a new Candidate where the first request is blind and the second produces the final report after seeing earlier Findings.
-_Avoid_: Finding reconciliation graph, continued old conversation
+**Reviewer Session**:
+A continuing reviewer conversation owned by one Change and one Reviewer Session Identity.
+It resumes across that Change's Candidates and disposable Validation Workspaces so each turn can reuse repository orientation while making a complete judgment of the exact current Candidate.
+_Avoid_: Reviewer Revision Session, fresh reviewer session per Candidate, cross-Change reviewer conversation
+
+**Reviewer Session Identity**:
+The Change, Producer, resolved Agent Profile, reviewer instructions, Agent Environment, and curated agent resources that determine whether a Reviewer Session can safely continue.
+Candidate, Validation Run, Acceptance Context version, Validation Workspace, and prior Findings do not belong to this identity.
+_Avoid_: Session file path, Candidate identity, Validation Run identity
+
+**Reviewer Session Restart**:
+A recorded non-blocking replacement of a Reviewer Session when validation cannot safely continue the existing conversation and instead performs a fresh complete review.
+Its reason appears in Change Submit output and Validation Run evidence; it becomes a Validation Tooling Failure only when the fresh review also cannot run.
+_Avoid_: Silent fallback, Finding, Reviewer Output Contract Failure
 
 **Reviewer Output Contract Failure**:
 A Validation Tooling Failure where reviewer output cannot be interpreted as a trustworthy Finding report.

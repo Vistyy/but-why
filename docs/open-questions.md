@@ -44,9 +44,6 @@ The design must also decide which controls belong to Global Config, Repo Config,
 Evaluate whether Sandcastle can support that design through extension, requires a maintained fork, or should be replaced by another execution boundary.
 Keep Sandcastle behind its current domain seams until evidence justifies that decision.
 
-Persistent reviewer sessions require a separate decision.
-That decision must define session ownership, identity, retention, security, recovery, Candidate transitions, and the trade-off between fresh review and reused repository orientation.
-
 ## What role should Task Comments have before Start?
 
 Task Comments currently append Markdown to Task Context before Change Start and become part of approved Acceptance Context.
@@ -127,6 +124,8 @@ Use named conditions instead of a generic workflow language.
 V1 supports host execution only.
 Containerized reviewer execution is unsupported in v1 and deferred until after v1.
 The Agent Environment configures the repository toolchain for host-run agents.
+Sandcastle host cancellation can return while Pi reviewer descendants continue running.
+Automatic interrupted-run recovery remains unsupported until an execution provider proves bounded descendant ownership.
 
 Before reconsidering containerized reviewers after v1, define the maintained image and toolchain, writable mounts, Git access, credential exposure, network access, process ownership, cleanup, and resource limits.
 Measure whether CPU limits prevent reviewer experiments or repository Checks from monopolizing the development host.
