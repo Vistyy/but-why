@@ -129,7 +129,10 @@ export const runAcceptanceReviewPhase = (
         ? undefined
         : yield* input.sessionStore.get(identity.changeId);
     const identityCompatible = stored !== undefined && sessionIdentityMatches(stored, identity);
-    const compatible = identityCompatible && stored.sessionReference.length > 0;
+    const compatible =
+      identityCompatible &&
+      typeof stored.sessionReference === "string" &&
+      stored.sessionReference.length > 0;
     let continuity: ReviewerContinuity = compatible
       ? "resumed"
       : stored === undefined
@@ -138,7 +141,9 @@ export const runAcceptanceReviewPhase = (
     let restartReason: string | undefined =
       stored === undefined
         ? undefined
-        : identityCompatible && stored.sessionReference.length === 0
+        : identityCompatible &&
+            typeof stored.sessionReference === "string" &&
+            stored.sessionReference.length === 0
           ? "session_capture_unavailable"
           : compatible
             ? undefined

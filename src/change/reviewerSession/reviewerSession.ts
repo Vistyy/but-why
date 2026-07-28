@@ -45,6 +45,10 @@ export const sessionIdentityMatches = (
   record: ReviewerSessionRecord,
   identity: ReviewerSessionIdentity,
 ): boolean =>
+  typeof record.fingerprint === "string" &&
+  typeof record.sessionReference === "string" &&
+  record.identity !== null &&
+  typeof record.identity === "object" &&
   record.fingerprint === reviewerSessionFingerprint(identity) &&
   record.identity.changeId === identity.changeId;
 
