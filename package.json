@@ -33,6 +33,8 @@
   },
   "dependencies": {
     "@ai-hero/sandcastle": "0.12.0",
+    "@effect/platform": "0.95.0",
+    "@effect/platform-node": "0.105.0",
     "@effect/sql": "0.50.0",
     "@effect/sql-sqlite-node": "0.51.0",
     "@toon-format/toon": "^2.3.0",
@@ -50,5 +52,14 @@
     "tsx": "^4.20.3",
     "typescript": "^7.0.2",
     "vitest": "^3.2.4"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "@ast-grep/cli",
+      "@parcel/watcher",
+      "better-sqlite3",
+      "esbuild",
+      "msgpackr-extract"
+    ]
   }
 }

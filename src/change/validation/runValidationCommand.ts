@@ -1,7 +1,20 @@
+import { Effect } from "effect";
+
+export type ValidationCommandResultData = {
+  readonly exitCode: number;
+  readonly stdout: string;
+  readonly stderr: string;
+};
+
 export type ValidationCommandExecutor = (
   command: string,
   options?: { readonly cwd?: string },
-) => Promise<{ readonly exitCode: number; readonly stdout: string; readonly stderr: string }>;
+) => Promise<ValidationCommandResultData>;
+
+export type ValidationCommandEffectExecutor = (
+  command: string,
+  options?: { readonly cwd?: string },
+) => Effect.Effect<ValidationCommandResultData, unknown>;
 
 export type ValidationCommandResult = {
   readonly exitCode: number;
@@ -11,6 +24,32 @@ export type ValidationCommandResult = {
 };
 
 const timeoutExitCode = 124;
+
+export const runValidationCommandEffect = (input: {
+  readonly command: string;
+  readonly timeoutSeconds: number;
+  readonly completionMarker: string;
+  readonly missingTimeoutMessage: string;
+  readonly exec: ValidationCommandEffectExecutor;
+  readonly cwd?: string;
+}): Effect.Effect<ValidationCommandResult, unknown> =>
+  Effect.gen(function* () {
+    const options = input.cwd === undefined ? undefined : { cwd: input.cwd };
+    const available = yield* input.exec("command -v timeout >/dev/null 2>&1", options);
+    if (available.exitCode !== 0) return yield* Effect.fail(new Error(input.missingTimeoutMessage));
+
+    const result = yield* input.exec(
+      timeoutWrappedCommand(input.command, input.timeoutSeconds, input.completionMarker),
+      options,
+    );
+    const parsed = parseCompletionMarker(result.stderr, input.completionMarker);
+    return {
+      exitCode: parsed.completed ? parsed.exitCode : timeoutExitCode,
+      stdout: result.stdout,
+      stderr: parsed.stderr,
+      timedOut: !parsed.completed,
+    };
+  });
 
 export const runValidationCommand = async (input: {
   readonly command: string;

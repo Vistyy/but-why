@@ -1,4 +1,4 @@
-import { spawn } from "node:child_process";
+import { executeHostCommand } from "../command/hostCommand.js";
 
 import { prependAgentEnvironment, shellQuote } from "../agent/agentEnvironment.js";
 import { piResourceFlags } from "../agent/piRuntime.js";
@@ -10,6 +10,7 @@ import type {
 
 export type HerdrCommandExecutor = (
   args: readonly string[],
+  signal?: AbortSignal,
 ) => Promise<
   { readonly ok: true; readonly stdout: string } | { readonly ok: false; readonly message: string }
 >;
@@ -18,7 +19,7 @@ export const openHerdrInteractiveSessionHost = (
   execute: HerdrCommandExecutor = executeHerdr,
   environment: { readonly path?: string } = {},
 ): InteractiveSessionHost => ({
-  launch: async (input) => launchHerdrSession(execute, input, environment.path),
+  launch: async (input, signal) => launchHerdrSession(execute, input, environment.path, signal),
 });
 
 export const herdrSessionName = (changeId: string): string => `but-why-${changeId}`;
@@ -27,9 +28,10 @@ const launchHerdrSession = async (
   execute: HerdrCommandExecutor,
   input: InteractiveSessionLaunchInput,
   path: string | undefined,
+  signal: AbortSignal | undefined,
 ): Promise<InteractiveSessionLaunchResult> => {
   const sessionName = herdrSessionName(input.changeId);
-  const agents = await execute(["agent", "list"]);
+  const agents = await execute(["agent", "list"], signal);
   if (!agents.ok) {
     return {
       ok: false,
@@ -41,23 +43,26 @@ const launchHerdrSession = async (
     return { ok: true, host: "herdr", status: "already_active" };
   }
 
-  const worktree = await execute([
-    "worktree",
-    "open",
-    "--cwd",
-    input.repositoryPath,
-    "--path",
-    input.worktreePath,
-    "--label",
-    sessionName,
-    "--no-focus",
-  ]);
+  const worktree = await execute(
+    [
+      "worktree",
+      "open",
+      "--cwd",
+      input.repositoryPath,
+      "--path",
+      input.worktreePath,
+      "--label",
+      sessionName,
+      "--no-focus",
+    ],
+    signal,
+  );
   if (!worktree.ok) return launchFailure(worktree.message);
   const opened = openedWorktree(worktree.stdout);
   if (opened === undefined) {
     return launchFailure("Herdr did not return a worktree root pane.");
   }
-  return launchInOpenedWorktree(execute, input, path, sessionName, agents.stdout, opened);
+  return launchInOpenedWorktree(execute, input, path, sessionName, agents.stdout, opened, signal);
 };
 
 const launchInOpenedWorktree = async (
@@ -67,24 +72,28 @@ const launchInOpenedWorktree = async (
   sessionName: string,
   listedAgents: string,
   opened: OpenedWorktree,
+  signal: AbortSignal | undefined,
 ): Promise<InteractiveSessionLaunchResult> => {
   if (opened.alreadyOpen && hasActiveAgentInWorktree(listedAgents, input)) {
     return launchFailure("Another Interactive Session is already active in this worktree.");
   }
 
-  const launched = await execute(["pane", "run", opened.rootPaneId, piCommand(input, path)]);
+  const launched = await execute(
+    ["pane", "run", opened.rootPaneId, piCommand(input, path)],
+    signal,
+  );
   if (!launched.ok) {
-    if (!opened.alreadyOpen) await closeWorkspace(execute, opened.workspaceId);
+    if (!opened.alreadyOpen) await closeWorkspace(execute, opened.workspaceId, signal);
     return launchFailure(launched.message);
   }
 
-  const renamed = await execute(["agent", "rename", opened.rootPaneId, sessionName]);
+  const renamed = await execute(["agent", "rename", opened.rootPaneId, sessionName], signal);
   if (renamed.ok && renamedSession(renamed.stdout, input, sessionName, opened.rootPaneId)) {
     return { ok: true, host: "herdr", status: "started" };
   }
 
-  await execute(["pane", "send-keys", opened.rootPaneId, "ctrl-c"]);
-  if (!opened.alreadyOpen) await closeWorkspace(execute, opened.workspaceId);
+  await execute(["pane", "send-keys", opened.rootPaneId, "ctrl-c"], signal);
+  if (!opened.alreadyOpen) await closeWorkspace(execute, opened.workspaceId, signal);
   return launchFailure(
     renamed.ok
       ? "Herdr did not confirm the named Pi session in the worktree root pane."
@@ -194,8 +203,9 @@ const isActiveAgentStatus = (status: unknown): boolean =>
 const closeWorkspace = async (
   execute: HerdrCommandExecutor,
   workspaceId: string,
+  signal: AbortSignal | undefined,
 ): Promise<void> => {
-  await execute(["workspace", "close", workspaceId]);
+  await execute(["workspace", "close", workspaceId], signal);
 };
 
 type OpenedWorktree = {
@@ -237,27 +247,20 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 
 const recordValue = (record: Record<string, unknown>, key: string): unknown => record[key];
 
-const executeHerdr: HerdrCommandExecutor = (args) =>
-  new Promise((resolve) => {
-    const child = spawn("herdr", [...args], { stdio: ["ignore", "pipe", "pipe"] });
-    let stdout = "";
-    let stderr = "";
-    child.stdout.setEncoding("utf8");
-    child.stderr.setEncoding("utf8");
-    child.stdout.on("data", (chunk: string) => {
-      stdout += chunk;
+const executeHerdr: HerdrCommandExecutor = async (args, signal) => {
+  try {
+    const result = await executeHostCommand({
+      command: "herdr",
+      args,
+      ...(signal === undefined ? {} : { signal }),
     });
-    child.stderr.on("data", (chunk: string) => {
-      stderr += chunk;
-    });
-    child.once("error", (error) => {
-      resolve({ ok: false, message: error.message });
-    });
-    child.once("close", (code) => {
-      resolve(
-        code === 0
-          ? { ok: true, stdout }
-          : { ok: false, message: stderr.trim() || `Herdr exited with status ${code ?? 1}.` },
-      );
-    });
-  });
+    return result.exitCode === 0
+      ? { ok: true, stdout: result.stdout }
+      : {
+          ok: false,
+          message: result.stderr.trim() || `Herdr exited with status ${result.exitCode}.`,
+        };
+  } catch (error) {
+    return { ok: false, message: error instanceof Error ? error.message : String(error) };
+  }
+};

@@ -1,28 +1,17 @@
-import { spawn } from "node:child_process";
+import { executeHostCommand, executeHostCommandEffect } from "../command/hostCommand.js";
+import type { RepositoryPreparationEffectExecutor } from "./runRepositoryPreparation.js";
 
-import type { RepositoryPreparationExecutor } from "./runRepositoryPreparation.js";
+const commandInput = (command: string, cwd: string | undefined) => ({
+  command: "sh",
+  args: ["-c", command],
+  ...(cwd === undefined ? {} : { cwd }),
+});
 
-export const executeLocalRepositoryPreparation: RepositoryPreparationExecutor = (
-  command,
-  options,
-) =>
-  new Promise((resolve, reject) => {
-    const child = spawn("sh", ["-c", command], {
-      cwd: options?.cwd,
-      stdio: ["ignore", "pipe", "pipe"],
-    });
-    let stdout = "";
-    let stderr = "";
-    child.stdout.setEncoding("utf8");
-    child.stderr.setEncoding("utf8");
-    child.stdout.on("data", (chunk: string) => {
-      stdout += chunk;
-    });
-    child.stderr.on("data", (chunk: string) => {
-      stderr += chunk;
-    });
-    child.once("error", reject);
-    child.once("close", (code) => {
-      resolve({ exitCode: code ?? 1, stdout, stderr });
-    });
-  });
+export const executeLocalRepositoryPreparation: RepositoryPreparationEffectExecutor = Object.assign(
+  (command: string, options?: { readonly cwd?: string }) =>
+    executeHostCommand(commandInput(command, options?.cwd)),
+  {
+    effect: (command: string, options?: { readonly cwd?: string }) =>
+      executeHostCommandEffect(commandInput(command, options?.cwd)),
+  },
+);

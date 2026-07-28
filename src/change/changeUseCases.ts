@@ -10,8 +10,8 @@ import { readRepoConfig } from "../init/repoConfig.js";
 import type { RepositoryStorageError } from "../contracts/repositoryStorageError.js";
 import { parseRemoteChangeBaseRef } from "../submissionEnvironment/remoteChangeBase.js";
 import {
-  runRepositoryPreparation,
-  type RepositoryPreparationExecutor,
+  runRepositoryPreparationEffect,
+  type RepositoryPreparationEffectExecutor,
 } from "../repositoryPreparation/runRepositoryPreparation.js";
 import { taskSlugForId, type PublicTaskId } from "../task/taskId.js";
 import { changeReadiness, changeState, type ChangePrepareFailure } from "./change.js";
@@ -94,7 +94,7 @@ export const openChangeUseCases = (
   context: RepoLocalContext,
   store: ChangeStartPersistence,
   git: ChangeStartGitOperations,
-  executor: RepositoryPreparationExecutor,
+  executor: RepositoryPreparationEffectExecutor,
   reconciliation: ChangeReconciliation,
   interactiveSessionHost: InteractiveSessionHost,
   globalConfigPath: string,
@@ -121,7 +121,7 @@ export const openChangeUseCases = (
 const startChange = (
   store: ChangeStartPersistence,
   git: ChangeStartGitOperations,
-  executor: RepositoryPreparationExecutor,
+  executor: RepositoryPreparationEffectExecutor,
   input: { readonly taskId?: PublicTaskId; readonly baseBranch?: string; readonly now: string },
 ): Effect.Effect<ChangeStartResult, RepositoryStorageError> =>
   Effect.gen(function* () {
@@ -157,7 +157,7 @@ const startChange = (
 const resumeTaskChange = (
   store: ChangeStartPersistence,
   git: ChangeStartGitOperations,
-  executor: RepositoryPreparationExecutor,
+  executor: RepositoryPreparationEffectExecutor,
   taskId: PublicTaskId,
   requestedBaseBranch: string | undefined,
   now: string,
@@ -186,7 +186,7 @@ const resumeTaskChange = (
 const prepareChange = (
   store: ChangeStartPersistence,
   git: ChangeStartGitOperations,
-  executor: RepositoryPreparationExecutor,
+  executor: RepositoryPreparationEffectExecutor,
   changeId: string,
   now: string,
 ): Effect.Effect<ChangePrepareResult, RepositoryStorageError> =>
@@ -257,20 +257,23 @@ const implementChange = (
     }
     const agentEnvironment = repoAgentEnvironment(managedRepoConfig.config);
     const launched = yield* Effect.tryPromise({
-      try: () =>
-        interactiveSessionHost.launch({
-          changeId: change.id,
-          repositoryPath: context.mainCheckoutRoot,
-          worktreePath: change.worktreePath,
-          initialPrompt: buildImplementerPrompt({
+      try: (signal) =>
+        interactiveSessionHost.launch(
+          {
             changeId: change.id,
+            repositoryPath: context.mainCheckoutRoot,
             worktreePath: change.worktreePath,
-            ...(handoff === undefined ? {} : { handoff }),
-          }),
-          agentProfile: resolvedAgentProfile,
-          globalConfigDirectory: dirname(globalConfigPath),
-          ...(agentEnvironment === undefined ? {} : { agentEnvironment }),
-        }),
+            initialPrompt: buildImplementerPrompt({
+              changeId: change.id,
+              worktreePath: change.worktreePath,
+              ...(handoff === undefined ? {} : { handoff }),
+            }),
+            agentProfile: resolvedAgentProfile,
+            globalConfigDirectory: dirname(globalConfigPath),
+            ...(agentEnvironment === undefined ? {} : { agentEnvironment }),
+          },
+          signal,
+        ),
       catch: (error) => (error instanceof Error ? error.message : String(error)),
     }).pipe(
       Effect.match({
@@ -311,7 +314,7 @@ type PreparationResult =
 
 const prepareExisting = (
   store: ChangeStartPersistence,
-  executor: RepositoryPreparationExecutor,
+  executor: RepositoryPreparationEffectExecutor,
   change: ChangeStartRecord,
   now: string,
 ): Effect.Effect<PreparationResult, RepositoryStorageError> =>
@@ -322,21 +325,28 @@ const prepareExisting = (
       return { ok: true as const, change: ready };
     }
 
-    const outcome = yield* Effect.tryPromise({
-      try: () => runRepositoryPreparation({ prepare, exec: executor, cwd: change.worktreePath }),
-      catch: (error): ChangePrepareFailure => ({
-        command: prepare.command,
-        exitCode: 1,
-        timedOut: false,
-        stdout: "",
-        stderr: error instanceof Error ? error.message : String(error),
-      }),
-    }).pipe(
-      Effect.match({
-        onFailure: (failure) => ({ ok: false as const, failure }),
-        onSuccess: (result) => ({ ok: true as const, result }),
-      }),
-    );
+    const outcome = yield* runRepositoryPreparationEffect({
+      prepare,
+      exec: executor,
+      cwd: change.worktreePath,
+    })
+      .pipe(
+        Effect.mapError(
+          (error): ChangePrepareFailure => ({
+            command: prepare.command,
+            exitCode: 1,
+            timedOut: false,
+            stdout: "",
+            stderr: error instanceof Error ? error.message : String(error),
+          }),
+        ),
+      )
+      .pipe(
+        Effect.match({
+          onFailure: (failure) => ({ ok: false as const, failure }),
+          onSuccess: (result) => ({ ok: true as const, result }),
+        }),
+      );
 
     if (outcome.ok && outcome.result.exitCode === 0) {
       const ready = yield* store.markReady(change.id, now);
