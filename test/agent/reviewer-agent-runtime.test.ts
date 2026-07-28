@@ -134,13 +134,17 @@ describe("Pi reviewer agent runtime", () => {
     Effect.gen(function* () {
       const sessionRoot = mkdtempSync(join(tmpdir(), "but-why-uncaptured-reviewer-session-"));
       const sessionId = "123e4567-e89b-42d3-a456-426614174003";
+      const sessionFile = join(sessionRoot, `review_${sessionId}.jsonl`);
+      writeFileSync(
+        sessionFile,
+        `{"type":"session","id":"${sessionId}","cwd":"/removed-workspace"}\n`,
+      );
+      const observedCwds: string[] = [];
       let attempts = 0;
       const run: Pick<Sandbox, "run">["run"] = async () => {
         attempts += 1;
-        writeFileSync(
-          join(sessionRoot, `review_${sessionId}.jsonl`),
-          `{"type":"session","id":"${sessionId}","cwd":"/validation-workspace"}\n`,
-        );
+        const header = JSON.parse(readFileSync(sessionFile, "utf8")) as { cwd: string };
+        observedCwds.push(header.cwd);
         if (attempts === 1) throw new Error("Session capture failed");
         return {
           ...runResult('<reviewer-output>{"findings":[]}</reviewer-output>'),
@@ -158,6 +162,7 @@ describe("Pi reviewer agent runtime", () => {
           profile,
           commandCwd: "/validation-workspace",
           sessionStorageRoot: sessionRoot,
+          resumeSession: sessionId,
         });
 
         expect(result).toEqual({
@@ -167,6 +172,8 @@ describe("Pi reviewer agent runtime", () => {
           stdout: '<reviewer-output>{"findings":[]}</reviewer-output>',
         });
         expect(attempts).toBe(2);
+        expect(observedCwds).toEqual(["/validation-workspace", "/validation-workspace"]);
+        expect(readFileSync(sessionFile, "utf8")).toContain('"cwd":"/removed-workspace"');
       } finally {
         rmSync(sessionRoot, { recursive: true, force: true });
       }

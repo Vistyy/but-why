@@ -106,21 +106,28 @@ const reviewWithPi = (input: ReviewerAgentInput): Effect.Effect<ReviewerAgentRes
     );
     if (initial._tag === "Left" && /session capture failed/i.test(initial.left.message)) {
       resetSession();
+      const recoveryAgent = isolatedPiReviewerAgent(
+        input.profile,
+        input.resourceRoot ?? input.commandCwd ?? ".",
+        input.agentEnvironment,
+        input.sessionStorageRoot,
+        false,
+      );
       const recovered = yield* Effect.either(
         runSandbox(() =>
-          input.sandbox.run({
-            agent: isolatedPiReviewerAgent(
-              input.profile,
-              input.resourceRoot ?? input.commandCwd ?? ".",
-              input.agentEnvironment,
-              input.sessionStorageRoot,
-              false,
-            ),
-            prompt: input.prompt,
-            ...(input.resumeSession === undefined ? {} : { resumeSession: input.resumeSession }),
-            maxIterations: 1,
-            name: `${input.reviewer} Review without session capture`,
-          }),
+          prepareHostPiSession(
+            recoveryAgent,
+            input.commandCwd ?? input.resourceRoot ?? ".",
+            input.resumeSession,
+          ).then(() =>
+            input.sandbox.run({
+              agent: recoveryAgent,
+              prompt: input.prompt,
+              ...(input.resumeSession === undefined ? {} : { resumeSession: input.resumeSession }),
+              maxIterations: 1,
+              name: `${input.reviewer} Review without session capture`,
+            }),
+          ),
         ),
       );
       if (recovered._tag === "Right") {
