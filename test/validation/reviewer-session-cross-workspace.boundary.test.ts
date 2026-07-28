@@ -62,10 +62,8 @@ if [ -n "$session_id" ]; then
   mode=resumed
 else
   session_id=123e4567-e89b-42d3-a456-426614174099
-  encoded=$(pwd | sed 's#^[/\\]##; s#[/\\:]#-#g')
-  session_dir="$PI_CODING_AGENT_SESSION_DIR/--$encoded--"
-  mkdir -p "$session_dir"
-  session_file="$session_dir/review_$session_id.jsonl"
+  mkdir -p "$PI_CODING_AGENT_SESSION_DIR"
+  session_file="$PI_CODING_AGENT_SESSION_DIR/review_$session_id.jsonl"
   mode=fresh
 fi
 printf '{"type":"session","id":"%s","cwd":"%s"}\n' "$session_id" "$(pwd)" >> "$session_file"

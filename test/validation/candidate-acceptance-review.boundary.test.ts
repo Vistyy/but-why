@@ -904,6 +904,7 @@ const runTaskBackedCandidate = (
   Effect.gen(function* () {
     const validation = yield* CandidateValidation;
     return yield* validation.validateTaskBackedCandidate({
+      changeId: captured.changeId,
       candidateId: captured.candidateId,
       changeBaseSha: captured.changeBaseSha,
       headSha: captured.headSha,
@@ -920,6 +921,7 @@ const runNoChangeCandidate = (ready: AcceptanceReadyRepo, captured = ready.captu
       return yield* Effect.dieMessage("Acceptance-only validation is unavailable");
     }
     return yield* validation.validateNoChange({
+      changeId: captured.changeId,
       candidateId: captured.candidateId,
       changeBaseSha: captured.changeBaseSha,
       headSha: captured.headSha,

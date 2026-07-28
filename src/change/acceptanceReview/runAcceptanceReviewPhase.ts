@@ -107,7 +107,7 @@ export const runAcceptanceReviewPhase = (
       }),
     );
     const identity = {
-      changeId: input.changeId ?? input.candidate.candidateId,
+      changeId: input.changeId,
       producer: "acceptance" as const,
       agentProfile: input.policy.profile,
       instructions: input.policy.instructions,

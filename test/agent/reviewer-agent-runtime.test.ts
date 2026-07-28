@@ -99,10 +99,7 @@ describe("Pi reviewer agent runtime", () => {
           prompt: options.prompt ?? "",
           dangerouslySkipPermissions: true,
         }).command;
-        const directory = options.agent.sessionStorage?.hostSessionFilePath(workspace, sessionId);
-        if (directory === undefined) throw new Error("Pi session storage unavailable");
-        mkdirSync(directory, { recursive: true });
-        writeFileSync(join(directory, `review_${sessionId}.jsonl`), '{"type":"session"}\n');
+        writeFileSync(join(sessionRoot, `review_${sessionId}.jsonl`), '{"type":"session"}\n');
         return {
           ...runResult('<reviewer-output>{"findings":[]}</reviewer-output>'),
           iterations: [{ sessionId }],
@@ -127,6 +124,42 @@ describe("Pi reviewer agent runtime", () => {
           sessionReference: sessionId,
           sessionFilePath: expect.stringContaining(`review_${sessionId}.jsonl`),
         });
+      } finally {
+        rmSync(sessionRoot, { recursive: true, force: true });
+      }
+    }),
+  );
+
+  it.effect("rejects a corrupt stored Pi session before resume", () =>
+    Effect.gen(function* () {
+      const sessionRoot = mkdtempSync(join(tmpdir(), "but-why-corrupt-reviewer-session-"));
+      const sessionId = "123e4567-e89b-42d3-a456-426614174002";
+      writeFileSync(join(sessionRoot, `review_${sessionId}.jsonl`), "not-json\n");
+      const run = vi.fn<Pick<Sandbox, "run">["run"]>(() =>
+        Promise.resolve(runResult('<reviewer-output>{"findings":[]}</reviewer-output>')),
+      );
+
+      try {
+        const result = yield* piReviewerAgentRuntime.review({
+          sandbox: { run } as unknown as Pick<Sandbox, "run">,
+          reviewer: "acceptance",
+          validationRunId: "123e4567-e89b-42d3-a456-426614174000",
+          availableArtifactRefs: [],
+          prompt: "Review the Candidate.",
+          profile,
+          commandCwd: "/validation-workspace",
+          sessionStorageRoot: sessionRoot,
+          resumeSession: sessionId,
+        });
+
+        expect(result).toMatchObject({
+          ok: false,
+          failure: {
+            _tag: "SandcastleToolingFailed",
+            message: "Reviewer Session JSONL is corrupt.",
+          },
+        });
+        expect(run).not.toHaveBeenCalled();
       } finally {
         rmSync(sessionRoot, { recursive: true, force: true });
       }

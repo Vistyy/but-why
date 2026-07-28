@@ -31,7 +31,7 @@ The agent process therefore runs directly on the host in a disposable Git worktr
 
 **Current But Why behavior:** Pi writes directly to the Change-owned session directory under the Local Repository operational directory.
 The Pi command receives the documented `--session-dir` option.
-Sandcastle receives the same path as `sessionStorage.hostSessionsDir` for resume prechecks and session lookup.
+Sandcastle receives the parent of that path as `sessionStorage.hostSessionsDir` for resume prechecks and session lookup.
 
 **Replacement opportunity:** A replacement execution Adapter can expose one host-session interface instead of coordinating separate Pi and Sandcastle storage settings.
 
@@ -43,8 +43,9 @@ The setting does not add Pi's `--session-dir` option and does not set `PI_CODING
 **Consequence:** If But Why configures only `hostSessionsDir`, Pi writes under its default `~/.pi/agent/sessions` directory while Sandcastle searches the Change-owned operational directory.
 A streamed session ID can then exist without a reusable JSONL at the configured Sandcastle path.
 
-**Current But Why behavior:** `src/agent/reviewerAgentRuntime.ts` supplies the same Change-owned path to Pi through `--session-dir` and to Sandcastle through `hostSessionsDir`.
-But Why persists a session reference only after the session file is found in that directory.
+**Current But Why behavior:** `src/agent/reviewerAgentRuntime.ts` supplies the Change-owned path to Pi through `--session-dir`.
+The runtime supplies the path's parent to Sandcastle through `hostSessionsDir` because Sandcastle treats each immediate child as one Pi project directory.
+But Why persists a session reference only after the session file is found in the Change-owned directory.
 
 **Replacement opportunity:** Remove the duplicated storage-path configuration when one Adapter owns process launch and session lookup.
 
@@ -136,7 +137,7 @@ When But Why replaces Sandcastle, inspect and remove or simplify these integrati
 
 - Replace `createSandbox()` and `noSandbox()` in `src/change/validation/createValidationWorkspace.ts`.
 - Replace Sandcastle `Sandbox` and `SandboxRunResult` types at the validation and reviewer Adapter seams.
-- Remove the paired Pi `--session-dir` and Sandcastle `hostSessionsDir` configuration.
+- Remove the paired Pi `--session-dir` and parent-level Sandcastle `hostSessionsDir` configuration.
 - Remove the fallback host session lookup that compensates for an absent `sessionFilePath`.
 - Re-evaluate local reviewer-output correction if the replacement owns trustworthy same-conversation correction.
 - Replace `.sandcastle` path handling, logs, cleanup, ignore rules, tests, and public documentation.

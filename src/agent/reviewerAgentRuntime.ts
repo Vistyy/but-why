@@ -9,7 +9,7 @@ import {
   rmSync,
   writeFileSync,
 } from "node:fs";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import { Effect } from "effect";
 
@@ -224,7 +224,7 @@ const isolatedPiReviewerAgent = (
     captureSessions,
     ...(sessionStorageRoot === undefined
       ? {}
-      : { sessionStorage: { hostSessionsDir: sessionStorageRoot } }),
+      : { sessionStorage: { hostSessionsDir: dirname(sessionStorageRoot) } }),
   });
 
   return {
@@ -286,19 +286,26 @@ const prepareHostPiSession = async (
   const located = await agent.sessionStorage.findByIdOnHost(sessionId);
   if (located.path === undefined) return;
   const content = readFileSync(located.path, "utf8");
+  let sessionHeaderFound = false;
   const rewritten = content
     .split("\n")
     .map((line) => {
       if (line === "") return line;
+      let entry: { type?: unknown; id?: unknown; cwd?: unknown };
       try {
-        const entry = JSON.parse(line) as { type?: unknown; cwd?: unknown };
-        if (entry.type !== "session" || typeof entry.cwd !== "string") return line;
-        return JSON.stringify({ ...entry, cwd });
+        entry = JSON.parse(line) as { type?: unknown; id?: unknown; cwd?: unknown };
       } catch {
-        return line;
+        throw new Error("Reviewer Session JSONL is corrupt.");
       }
+      if (entry.type !== "session") return line;
+      if (sessionHeaderFound || entry.id !== sessionId || typeof entry.cwd !== "string") {
+        throw new Error("Reviewer Session header is incompatible.");
+      }
+      sessionHeaderFound = true;
+      return JSON.stringify({ ...entry, cwd });
     })
     .join("\n");
+  if (!sessionHeaderFound) throw new Error("Reviewer Session header is missing.");
   if (rewritten === content) return;
   const temporaryPath = `${located.path}.but-why-tmp`;
   writeFileSync(temporaryPath, rewritten, { mode: 0o600 });

@@ -39,7 +39,7 @@ export type TaskBackedCandidateValidationPolicy = CandidateValidationPolicy & {
 };
 
 export type ValidateCandidateInput = {
-  readonly changeId?: string;
+  readonly changeId: string;
   readonly candidateId: string;
   readonly changeBaseSha: string;
   readonly headSha: string;
@@ -49,7 +49,7 @@ export type ValidateCandidateInput = {
 };
 
 type ValidateTaskBackedCandidateInput = {
-  readonly changeId?: string;
+  readonly changeId: string;
   readonly candidateId: string;
   readonly changeBaseSha: string;
   readonly headSha: string;
@@ -303,7 +303,7 @@ const runCandidatePhases = (
     if ("noChange" in input) {
       const acceptance = yield* runAcceptanceReviewPhase({
         validationRunId,
-        changeId: input.changeId as string,
+        changeId: input.changeId,
         candidate: candidateIdentity(input),
         acceptanceContext: input.acceptanceContext,
         policy: input.policy.acceptanceReview,
@@ -362,7 +362,7 @@ const runCandidatePhases = (
     if ("acceptanceContext" in input) {
       const acceptance = yield* runAcceptanceReviewPhase({
         validationRunId,
-        changeId: input.changeId as string,
+        changeId: input.changeId,
         candidate: candidateIdentity(input),
         acceptanceContext: input.acceptanceContext,
         policy: input.policy.acceptanceReview,
