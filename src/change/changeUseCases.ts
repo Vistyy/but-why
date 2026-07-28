@@ -257,20 +257,23 @@ const implementChange = (
     }
     const agentEnvironment = repoAgentEnvironment(managedRepoConfig.config);
     const launched = yield* Effect.tryPromise({
-      try: () =>
-        interactiveSessionHost.launch({
-          changeId: change.id,
-          repositoryPath: context.mainCheckoutRoot,
-          worktreePath: change.worktreePath,
-          initialPrompt: buildImplementerPrompt({
+      try: (signal) =>
+        interactiveSessionHost.launch(
+          {
             changeId: change.id,
+            repositoryPath: context.mainCheckoutRoot,
             worktreePath: change.worktreePath,
-            ...(handoff === undefined ? {} : { handoff }),
-          }),
-          agentProfile: resolvedAgentProfile,
-          globalConfigDirectory: dirname(globalConfigPath),
-          ...(agentEnvironment === undefined ? {} : { agentEnvironment }),
-        }),
+            initialPrompt: buildImplementerPrompt({
+              changeId: change.id,
+              worktreePath: change.worktreePath,
+              ...(handoff === undefined ? {} : { handoff }),
+            }),
+            agentProfile: resolvedAgentProfile,
+            globalConfigDirectory: dirname(globalConfigPath),
+            ...(agentEnvironment === undefined ? {} : { agentEnvironment }),
+          },
+          signal,
+        ),
       catch: (error) => (error instanceof Error ? error.message : String(error)),
     }).pipe(
       Effect.match({

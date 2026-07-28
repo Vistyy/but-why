@@ -7,6 +7,7 @@ export type HostCommandInput = {
   readonly command: string;
   readonly args?: readonly string[];
   readonly cwd?: string;
+  readonly signal?: AbortSignal;
 };
 
 export type HostCommandResult = {
@@ -63,7 +64,9 @@ export const executeHostCommandEffect = (
 
 export const executeHostCommand = async (input: HostCommandInput): Promise<HostCommandResult> => {
   try {
-    return await Effect.runPromise(executeHostCommandEffect(input));
+    return await Effect.runPromise(executeHostCommandEffect(input), {
+      ...(input.signal === undefined ? {} : { signal: input.signal }),
+    });
   } catch (error) {
     throw new HostCommandError(commandErrorMessage(input, error), error);
   }

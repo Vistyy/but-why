@@ -4,6 +4,7 @@ import type { AgentEnvironmentCommand } from "../agent/agentEnvironment.js";
 export type InteractiveSessionHost = {
   readonly launch: (
     input: InteractiveSessionLaunchInput,
+    signal?: AbortSignal,
   ) => Promise<InteractiveSessionLaunchResult>;
 };
 
