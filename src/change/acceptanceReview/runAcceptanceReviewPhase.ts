@@ -33,6 +33,7 @@ export type RunAcceptanceReviewPhaseInput = {
   readonly artifactsRoot: string;
   readonly artifactMaxBytes?: number;
   readonly commandCwd: string;
+  readonly resourceRoot?: string;
   readonly allowedUntrackedFiles: readonly string[];
   readonly now: string;
   readonly listArtifacts: (
@@ -95,6 +96,7 @@ export const runAcceptanceReviewPhase = (
       prompt,
       profile: input.policy.profile,
       commandCwd: input.commandCwd,
+      ...(input.resourceRoot === undefined ? {} : { resourceRoot: input.resourceRoot }),
       ...(input.agentEnvironment === undefined ? {} : { agentEnvironment: input.agentEnvironment }),
     });
     yield* verifyIntegrity(input);
@@ -112,6 +114,7 @@ export const runAcceptanceReviewPhase = (
             }),
             profile: input.policy.profile,
             commandCwd: input.commandCwd,
+            ...(input.resourceRoot === undefined ? {} : { resourceRoot: input.resourceRoot }),
             ...(input.agentEnvironment === undefined
               ? {}
               : { agentEnvironment: input.agentEnvironment }),

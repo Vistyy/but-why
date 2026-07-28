@@ -88,6 +88,46 @@ describe("Pi reviewer agent runtime", () => {
     }),
   );
 
+  it.effect("resolves Repo resources from the Managed Worktree root", () =>
+    Effect.gen(function* () {
+      let command = "";
+      const run: Pick<Sandbox, "run">["run"] = async (options) => {
+        command = options.agent.buildPrintCommand({
+          prompt: options.prompt ?? "",
+          dangerouslySkipPermissions: true,
+        }).command;
+        return runResult('<reviewer-output>{"findings":[]}</reviewer-output>');
+      };
+
+      const result = yield* piReviewerAgentRuntime.review({
+        sandbox: { run } as unknown as Pick<Sandbox, "run">,
+        reviewer: "acceptance",
+        validationRunId: "123e4567-e89b-42d3-a456-426614174000",
+        availableArtifactRefs: [],
+        prompt: "Review the Candidate.",
+        profile: {
+          ...profile,
+          scope: "repo",
+          profile: {
+            ...profile.profile,
+            runtimeConfig: {
+              ...profile.profile.runtimeConfig,
+              extensions: ["extensions/reviewer"],
+              skills: ["skills/reviewer"],
+            },
+          },
+        },
+        commandCwd: "/validation-workspace",
+        resourceRoot: "/managed-worktree",
+      });
+
+      expect(result).toMatchObject({ ok: true, attempts: 1 });
+      expect(command).toContain("--extension '/managed-worktree/extensions/reviewer'");
+      expect(command).toContain("--skill '/managed-worktree/skills/reviewer'");
+      expect(command).not.toContain("/validation-workspace");
+    }),
+  );
+
   it.effect("stops after a configured Agent Environment launch failure", () =>
     Effect.gen(function* () {
       let attempts = 0;

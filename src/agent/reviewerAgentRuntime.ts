@@ -28,6 +28,7 @@ export type ReviewerAgentInput = {
   readonly prompt: string;
   readonly profile: ResolvedPiAgentProfile;
   readonly commandCwd?: string;
+  readonly resourceRoot?: string;
   readonly agentEnvironment?: AgentEnvironmentCommand;
 };
 
@@ -52,7 +53,7 @@ const reviewWithPi = (input: ReviewerAgentInput): Effect.Effect<ReviewerAgentRes
         input.sandbox.run({
           agent: isolatedPiReviewerAgent(
             input.profile,
-            input.commandCwd ?? ".",
+            input.resourceRoot ?? input.commandCwd ?? ".",
             input.agentEnvironment,
           ),
           prompt: input.prompt,
@@ -91,7 +92,7 @@ export const piReviewerAgentRuntime: ReviewerAgentRuntime = {
 
 const isolatedPiReviewerAgent = (
   profile: ResolvedPiAgentProfile,
-  commandCwd: string,
+  resourceRoot: string,
   agentEnvironment: AgentEnvironmentCommand | undefined,
 ) => {
   const model = profile.profile.runtimeConfig?.model;
@@ -101,7 +102,7 @@ const isolatedPiReviewerAgent = (
     profile.profile.runtimeConfig,
     {
       scope: profile.scope,
-      repoRoot: commandCwd,
+      repoRoot: resourceRoot,
       globalConfigDirectory: profile.globalConfigDirectory,
     },
     { reviewerHygiene: true },

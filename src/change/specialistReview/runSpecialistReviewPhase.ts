@@ -31,6 +31,7 @@ export type RunSpecialistReviewPhaseInput = {
   readonly artifactsRoot: string;
   readonly artifactMaxBytes?: number;
   readonly commandCwd: string;
+  readonly resourceRoot?: string;
   readonly allowedUntrackedFiles: readonly string[];
   readonly now: string;
   readonly listArtifacts: (
@@ -118,6 +119,7 @@ const runSpecialist = (
       prompt,
       profile: policy.profile,
       commandCwd: input.commandCwd,
+      ...(input.resourceRoot === undefined ? {} : { resourceRoot: input.resourceRoot }),
       ...(input.agentEnvironment === undefined ? {} : { agentEnvironment: input.agentEnvironment }),
     });
     yield* verifyIntegrity(input);
@@ -135,6 +137,7 @@ const runSpecialist = (
             }),
             profile: policy.profile,
             commandCwd: input.commandCwd,
+            ...(input.resourceRoot === undefined ? {} : { resourceRoot: input.resourceRoot }),
             ...(input.agentEnvironment === undefined
               ? {}
               : { agentEnvironment: input.agentEnvironment }),

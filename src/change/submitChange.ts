@@ -401,12 +401,14 @@ const validateAndPublish = (
       policy.resolved.taskBacked && change.acceptanceContext !== null
         ? yield* validation.validateTaskBackedCandidate({
             ...candidateIdentity(candidate),
+            resourceRoot: change.worktreePath,
             acceptanceContext: change.acceptanceContext,
             policy: withAgentEnvironment(policy.resolved.policy, agentEnvironment),
             now,
           })
         : yield* validation.validateCandidate({
             ...candidateIdentity(candidate),
+            resourceRoot: change.worktreePath,
             policy: withAgentEnvironment(policy.resolved.policy, agentEnvironment),
             now,
           });
