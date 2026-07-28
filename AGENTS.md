@@ -4,7 +4,7 @@
 - But Why? is task-based.
 - `by` is an agent-first, non-interactive AXI CLI.
 - This repository is unreleased.
-- State storage uses one current Effect SQL schema baseline.
+- State storage uses immutable ordered Effect SQL migrations beginning with `0001_baseline`.
 - SQLite Tasks are the source of truth for new active work.
   Treat `docs/issues/` as historical implementation records.
 - Use current domain terms in code, storage, and documentation.

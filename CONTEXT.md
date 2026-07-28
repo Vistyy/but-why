@@ -129,8 +129,9 @@ Resolving the blocker returns the Task to Implementing.
 _Avoid_: Todo Task blocked by a Task Dependency, Validation Run blocked by Findings
 
 **Task Dependency**:
-A directed prerequisite relationship that blocks the dependent Task from starting until the prerequisite is Done.
-_Avoid_: Queue priority, Git base relationship
+A directed prerequisite relationship required because the dependent Task cannot be implemented or verified until the prerequisite Task is Done.
+Related work, shared files, likely conflicts, preferred sequence, and relative importance do not establish a Task Dependency.
+_Avoid_: Queue priority, implementation preference, Git base relationship
 
 **New Task**:
 A Task whose intent has not been approved.
@@ -151,6 +152,11 @@ _Avoid_: Done Task, deleted Task
 **Shared Repository State**:
 SQLite and other local operational state resolved through Git's common directory so every linked worktree sees the same facts.
 _Avoid_: Copied state file, tracked Repo Config, per-worktree database
+
+**Task Archive**:
+An immutable portable recovery copy of Tasks, Task Comments, and Task Dependencies stored outside Shared Repository State.
+But Why retains append-only Task Archives so an operator can restore durable Task intent without recovering Changes, Candidates, Validation Runs, Findings, or publication evidence.
+_Avoid_: Shared Repository State backup, rotating backup, Change recovery, SQLite copy
 
 **Managed Worktree**:
 The persistent But Why-owned Git branch and linked worktree belonging to one open Change.
