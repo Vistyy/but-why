@@ -236,7 +236,7 @@ const waitForSession = async (
   fallbackReady = false,
   ignoreDone = false,
 ): Promise<SessionObservation> => {
-  const deadline = Date.now() + options.readinessTimeoutMs;
+  const deadline = performance.now() + options.readinessTimeoutMs;
   let last: SessionObservation = { kind: "absent" };
   do {
     const listed = await observe(execute, ["agent", "list"], signal, options.observationRetries);
@@ -256,9 +256,12 @@ const waitForSession = async (
         last = { kind: "unknown" };
       }
     }
-    if (Date.now() >= deadline) break;
-    await delay(Math.min(options.readinessPollMs, Math.max(0, deadline - Date.now())), signal);
-  } while (Date.now() < deadline);
+    if (performance.now() >= deadline) break;
+    await delay(
+      Math.min(options.readinessPollMs, Math.max(0, deadline - performance.now())),
+      signal,
+    );
+  } while (performance.now() < deadline);
   return last;
 };
 
@@ -322,7 +325,7 @@ const launchEvidence = async (
   paneId: string,
   signal: AbortSignal | undefined,
 ): Promise<InteractiveSessionLaunchEvidence | undefined> => {
-  const [output, process] = await Promise.all([
+  const [output, processInfo] = await Promise.all([
     execute(
       [
         "pane",
@@ -341,7 +344,7 @@ const launchEvidence = async (
   ]);
   const startupOutput = output.ok && output.stdout.trim() !== "" ? output.stdout.trim() : undefined;
   const exitEvidence =
-    process.ok && process.stdout.trim() !== "" ? process.stdout.trim() : undefined;
+    processInfo.ok && processInfo.stdout.trim() !== "" ? processInfo.stdout.trim() : undefined;
   return startupOutput === undefined && exitEvidence === undefined
     ? undefined
     : {
