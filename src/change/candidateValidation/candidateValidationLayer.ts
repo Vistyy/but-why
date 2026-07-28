@@ -18,6 +18,8 @@ export const candidateValidationLayer = (input: {
   readonly artifactsRoot: string;
   readonly persistence: ChangeValidationPersistence;
   readonly reviewerAgentRuntime?: ReviewerAgentRuntime;
+  readonly sessionStore?: unknown;
+  readonly reviewerSessionsRoot?: string;
 }): Layer.Layer<CandidateValidation, never, never> =>
   CandidateValidationLive.pipe(
     Layer.provideMerge(
@@ -25,6 +27,15 @@ export const candidateValidationLayer = (input: {
         Layer.succeed(CandidateValidationPaths, {
           localRepositoryMainCheckoutRoot: input.localRepositoryMainCheckoutRoot,
           artifactsRoot: input.artifactsRoot,
+          ...(input.reviewerSessionsRoot === undefined
+            ? {}
+            : { reviewerSessionsRoot: input.reviewerSessionsRoot }),
+          ...(input.sessionStore === undefined
+            ? {}
+            : {
+                sessionStore:
+                  input.sessionStore as import("../reviewerSession/reviewerSession.js").ReviewerSessionStore,
+              }),
         }),
         Layer.succeed(CandidateValidationPersistence, input.persistence),
         Layer.succeed(

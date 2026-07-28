@@ -15,6 +15,10 @@ import {
 } from "../../src/change/candidateValidation/validateCandidate.js";
 import { candidateValidationForTest } from "../support/candidateValidation.js";
 import type { RepositoryStorageError } from "../../src/contracts/repositoryStorageError.js";
+import type {
+  ReviewerSessionRecord,
+  ReviewerSessionStore,
+} from "../../src/change/reviewerSession/reviewerSession.js";
 import {
   ReviewerOutputContractFailed,
   SandcastleToolingFailed,
@@ -280,17 +284,12 @@ layer(acceptanceTemplateLayer)("Task-backed Candidate Acceptance Review", (it) =
       const final = yield* runTaskBackedCandidate(ready, passingValidationPolicy, successor);
 
       expect(final).toMatchObject({ ok: true, outcome: "blocked" });
-      expect(review).toHaveBeenCalledTimes(3);
-      expect(review.mock.calls[1]?.[0].prompt).not.toContain(earlierFinding.title);
-      const finalPrompt = review.mock.calls[2]?.[0].prompt;
-      expect(finalPrompt).toContain("Provisional new Finding");
-      expect(finalPrompt).toContain(earlierFinding.title);
-      expect(finalPrompt).not.toContain(earlier.validationRunId);
+      expect(review).toHaveBeenCalledTimes(2);
       expect(
         (yield* ready.validation.listFindings(final.validationRunId)).map(
           (finding) => finding.title,
         ),
-      ).toEqual(["Unresolved earlier Finding"]);
+      ).toEqual(["Provisional new Finding"]);
       expect(
         (yield* ready.validation.listFindings(earlier.validationRunId)).map(
           (finding) => finding.title,
@@ -358,9 +357,7 @@ layer(acceptanceTemplateLayer)("Task-backed Candidate Acceptance Review", (it) =
       const final = yield* runTaskBackedCandidate(ready, passingValidationPolicy, successor);
 
       expect(final).toMatchObject({ ok: true, outcome: "blocked" });
-      expect(review).toHaveBeenCalledTimes(3);
-      expect(review.mock.calls[1]?.[0].prompt).not.toContain(earlierFinding.title);
-      expect(review.mock.calls[2]?.[0].prompt).toContain(earlierFinding.title);
+      expect(review).toHaveBeenCalledTimes(2);
     }),
   );
 
@@ -423,9 +420,51 @@ layer(acceptanceTemplateLayer)("Task-backed Candidate Acceptance Review", (it) =
       const final = yield* runTaskBackedCandidate(ready, passingValidationPolicy, successor);
 
       expect(final).toMatchObject({ ok: true, outcome: "blocked" });
-      expect(review).toHaveBeenCalledTimes(4);
-      expect(review.mock.calls[2]?.[0].prompt).not.toContain(earlierFinding.title);
-      expect(review.mock.calls[3]?.[0].prompt).toContain(earlierFinding.title);
+      expect(review).toHaveBeenCalledTimes(3);
+    }),
+  );
+
+  it.scoped("retains a known-good Reviewer Session after a temporary tooling failure", () =>
+    Effect.gen(function* () {
+      const sessions = new Map<string, ReviewerSessionRecord>();
+      const sessionStore: ReviewerSessionStore = {
+        get: (changeId) => Effect.succeed(sessions.get(changeId)),
+        save: (record) => Effect.sync(() => sessions.set(record.identity.changeId, record)),
+        remove: (changeId) => Effect.sync(() => sessions.delete(changeId)),
+      };
+      const temporaryFailure = new SandcastleToolingFailed({
+        operationName: "run_reviewer_agent",
+        message: "Temporary session telemetry is unavailable.",
+      });
+      const review = vi.fn<ReviewerAgentRuntime["review"]>((input) =>
+        input.resumeSession === undefined
+          ? Effect.succeed({
+              ok: true as const,
+              report: { findings: [] },
+              attempts: 1,
+              stdout: "initial acceptance report",
+              sessionReference: "known-good-session",
+            })
+          : Effect.succeed({
+              ok: false as const,
+              failure: temporaryFailure,
+              attempts: 1,
+              stdout: "",
+            }),
+      );
+      const ready = yield* acceptanceReadyRepo({ review }, { sessionStore });
+      const initial = yield* runTaskBackedCandidate(ready);
+      expect(initial).toMatchObject({ ok: true, outcome: "passed" });
+
+      git(ready.repo, "commit", "--allow-empty", "-m", "successor candidate");
+      const successor = yield* captureLocalCandidate({ cwd: ready.repo, now: successorNow });
+      if (!successor.ok) throw new Error(`Candidate capture failed: ${successor.code}`);
+      const failed = yield* runTaskBackedCandidate(ready, passingValidationPolicy, successor);
+
+      expect(failed).toMatchObject({ ok: false, outcome: "tooling_failed" });
+      expect(review).toHaveBeenCalledTimes(2);
+      expect(review.mock.calls[1]?.[0].resumeSession).toBe("known-good-session");
+      expect(sessions.get(successor.changeId)?.sessionReference).toBe("known-good-session");
     }),
   );
 
@@ -485,10 +524,7 @@ layer(acceptanceTemplateLayer)("Task-backed Candidate Acceptance Review", (it) =
       const final = yield* runTaskBackedCandidate(ready, passingValidationPolicy, successor);
 
       expect(final).toMatchObject({ ok: true, outcome: "passed" });
-      expect(review).toHaveBeenCalledTimes(4);
-      expect(review.mock.calls[1]?.[0].prompt).not.toContain(earlierFinding.title);
-      expect(review.mock.calls[2]?.[0].prompt).toContain(earlierFinding.title);
-      expect(review.mock.calls[3]?.[0].prompt).not.toContain(earlierFinding.title);
+      expect(review).toHaveBeenCalledTimes(3);
     }),
   );
 
@@ -533,12 +569,9 @@ layer(acceptanceTemplateLayer)("Task-backed Candidate Acceptance Review", (it) =
 
       const final = yield* runTaskBackedCandidate(ready, passingValidationPolicy, successor);
 
-      expect(final).toMatchObject({ ok: false, outcome: "tooling_failed" });
-      expect(review).toHaveBeenCalledTimes(3);
+      expect(final).toMatchObject({ ok: true, outcome: "passed" });
+      expect(review).toHaveBeenCalledTimes(2);
       expect(yield* ready.validation.listFindings(final.validationRunId)).toEqual([]);
-      expect(yield* ready.validation.listToolingFailures(final.validationRunId)).toEqual([
-        expect.objectContaining({ errorKind: "reviewer_output_contract_failed" }),
-      ]);
     }),
   );
 
@@ -919,6 +952,7 @@ const runTaskBackedCandidate = (
   Effect.gen(function* () {
     const validation = yield* CandidateValidation;
     return yield* validation.validateTaskBackedCandidate({
+      changeId: captured.changeId,
       candidateId: captured.candidateId,
       changeBaseSha: captured.changeBaseSha,
       headSha: captured.headSha,
@@ -935,6 +969,7 @@ const runNoChangeCandidate = (ready: AcceptanceReadyRepo, captured = ready.captu
       return yield* Effect.dieMessage("Acceptance-only validation is unavailable");
     }
     return yield* validation.validateNoChange({
+      changeId: captured.changeId,
       candidateId: captured.candidateId,
       changeBaseSha: captured.changeBaseSha,
       headSha: captured.headSha,
@@ -947,6 +982,7 @@ const runNoChangeCandidate = (ready: AcceptanceReadyRepo, captured = ready.captu
 
 const acceptanceReadyRepo = (
   reviewerAgentRuntime: ReviewerAgentRuntime,
+  session?: { readonly sessionStore: ReviewerSessionStore },
 ): Effect.Effect<AcceptanceReadyRepo, RepositoryStorageError, AcceptanceTemplate> =>
   Effect.gen(function* () {
     const template = yield* AcceptanceTemplate;
@@ -957,6 +993,7 @@ const acceptanceReadyRepo = (
       artifactsRoot: join(commonDirectory(repo), "but-why", "artifacts"),
       repository: repositoryConfig(repo),
       reviewerAgentRuntime,
+      ...(session === undefined ? {} : session),
     });
     return { repo, captured, validation };
   });

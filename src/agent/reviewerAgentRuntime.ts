@@ -1,7 +1,23 @@
-import { pi, type Sandbox, type SandboxRunResult } from "@ai-hero/sandcastle";
+import { pi, type AgentProvider, type Sandbox, type SandboxRunResult } from "@ai-hero/sandcastle";
+import {
+  chmodSync,
+  cpSync,
+  existsSync,
+  mkdtempSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
+import { dirname, join } from "node:path";
+import { tmpdir } from "node:os";
 import { Effect } from "effect";
 
-import { prependAgentEnvironment, type AgentEnvironmentCommand } from "./agentEnvironment.js";
+import {
+  prependAgentEnvironment,
+  shellQuote,
+  type AgentEnvironmentCommand,
+} from "./agentEnvironment.js";
 import { piResourceFlags } from "./piRuntime.js";
 import type { ResolvedPiAgentProfile } from "./agentProfiles.js";
 import { parseTaggedReviewerOutput } from "./reviewerOutputWire.js";
@@ -30,6 +46,8 @@ export type ReviewerAgentInput = {
   readonly commandCwd?: string;
   readonly resourceRoot?: string;
   readonly agentEnvironment?: AgentEnvironmentCommand;
+  readonly sessionStorageRoot?: string;
+  readonly resumeSession?: string;
 };
 
 export type ReviewerAgentResult =
@@ -38,52 +56,150 @@ export type ReviewerAgentResult =
       readonly report: ReviewerOutput;
       readonly attempts: number;
       readonly stdout: string;
+      readonly sessionReference?: string;
+      readonly sessionFilePath?: string;
     }
   | {
       readonly ok: false;
       readonly failure: ValidationToolingFailure;
       readonly attempts: number;
       readonly stdout: string;
+      readonly sessionReference?: string;
+      readonly sessionFilePath?: string;
     };
 
 const reviewWithPi = (input: ReviewerAgentInput): Effect.Effect<ReviewerAgentResult> =>
   Effect.gen(function* () {
+    const sessionSnapshot =
+      input.resumeSession === undefined || input.sessionStorageRoot === undefined
+        ? undefined
+        : snapshotSessionRoot(input.sessionStorageRoot);
+    const resetSession = () => {
+      if (sessionSnapshot !== undefined) restoreSessionRoot(sessionSnapshot);
+    };
+    const restoreSession = () => {
+      resetSession();
+      cleanupSessionSnapshot(sessionSnapshot);
+    };
+    const agent = isolatedPiReviewerAgent(
+      input.profile,
+      input.resourceRoot ?? input.commandCwd ?? ".",
+      input.agentEnvironment,
+      input.sessionStorageRoot,
+    );
     const initial = yield* Effect.either(
       runSandbox(() =>
-        input.sandbox.run({
-          agent: isolatedPiReviewerAgent(
-            input.profile,
-            input.resourceRoot ?? input.commandCwd ?? ".",
-            input.agentEnvironment,
-          ),
-          prompt: input.prompt,
-          maxIterations: 1,
-          name: `${input.reviewer} Review`,
-        }),
+        prepareHostPiSession(
+          agent,
+          input.commandCwd ?? input.resourceRoot ?? ".",
+          input.resumeSession,
+        ).then(() =>
+          input.sandbox.run({
+            agent,
+            prompt: input.prompt,
+            ...(input.resumeSession === undefined ? {} : { resumeSession: input.resumeSession }),
+            maxIterations: 1,
+            name: `${input.reviewer} Review`,
+          }),
+        ),
       ),
     );
-    if (initial._tag === "Left") return sandcastleFailure(initial.left, 1, "");
+    if (initial._tag === "Left" && /session capture failed/i.test(initial.left.message)) {
+      resetSession();
+      const recoveryAgent = isolatedPiReviewerAgent(
+        input.profile,
+        input.resourceRoot ?? input.commandCwd ?? ".",
+        input.agentEnvironment,
+        input.sessionStorageRoot,
+        false,
+      );
+      const recovered = yield* Effect.either(
+        runSandbox(() =>
+          prepareHostPiSession(
+            recoveryAgent,
+            input.commandCwd ?? input.resourceRoot ?? ".",
+            input.resumeSession,
+          ).then(() =>
+            input.sandbox.run({
+              agent: recoveryAgent,
+              prompt: input.prompt,
+              ...(input.resumeSession === undefined ? {} : { resumeSession: input.resumeSession }),
+              maxIterations: 1,
+              name: `${input.reviewer} Review without session capture`,
+            }),
+          ),
+        ),
+      );
+      if (recovered._tag === "Right") {
+        const decoded = yield* Effect.either(validateRunResult(input, recovered.right, 1));
+        if (decoded._tag === "Right") {
+          restoreSession();
+          return {
+            ok: true,
+            report: decoded.right,
+            attempts: 1,
+            stdout: recovered.right.stdout,
+          };
+        }
+        restoreSession();
+        return { ok: false, failure: decoded.left, attempts: 1, stdout: recovered.right.stdout };
+      }
+    }
+    if (initial._tag === "Left") {
+      restoreSession();
+      return sandcastleFailure(initial.left, 1, "");
+    }
 
     const first = yield* Effect.either(validateRunResult(input, initial.right, 1));
     if (first._tag === "Right") {
-      return { ok: true, report: first.right, attempts: 1, stdout: initial.right.stdout };
+      cleanupSessionSnapshot(sessionSnapshot);
+      return {
+        ok: true,
+        report: first.right,
+        attempts: 1,
+        stdout: initial.right.stdout,
+        ...(yield* sessionMetadata(agent, initial.right)),
+      };
     }
     const resume = initial.right.resume;
     if (resume === undefined) {
-      return { ok: false, failure: first.left, attempts: 1, stdout: initial.right.stdout };
+      restoreSession();
+      return {
+        ok: false,
+        failure: first.left,
+        attempts: 1,
+        stdout: initial.right.stdout,
+        ...(yield* sessionMetadata(agent, initial.right)),
+      };
     }
 
     const corrected = yield* Effect.either(
       runSandbox(() => resume(buildReviewerOutputCorrectionPrompt(first.left))),
     );
     if (corrected._tag === "Left") {
+      restoreSession();
       return sandcastleFailure(corrected.left, 2, initial.right.stdout);
     }
 
     const second = yield* Effect.either(validateRunResult(input, corrected.right, 2));
-    return second._tag === "Right"
-      ? { ok: true, report: second.right, attempts: 2, stdout: corrected.right.stdout }
-      : { ok: false, failure: second.left, attempts: 2, stdout: corrected.right.stdout };
+    if (second._tag === "Right") {
+      cleanupSessionSnapshot(sessionSnapshot);
+      return {
+        ok: true,
+        report: second.right,
+        attempts: 2,
+        stdout: corrected.right.stdout,
+        ...(yield* sessionMetadata(agent, corrected.right)),
+      };
+    }
+    restoreSession();
+    return {
+      ok: false,
+      failure: second.left,
+      attempts: 2,
+      stdout: corrected.right.stdout,
+      ...(yield* sessionMetadata(agent, corrected.right)),
+    };
   });
 
 export const piReviewerAgentRuntime: ReviewerAgentRuntime = {
@@ -94,6 +210,8 @@ const isolatedPiReviewerAgent = (
   profile: ResolvedPiAgentProfile,
   resourceRoot: string,
   agentEnvironment: AgentEnvironmentCommand | undefined,
+  sessionStorageRoot: string | undefined,
+  captureSessions = true,
 ) => {
   const model = profile.profile.runtimeConfig?.model;
   if (model === undefined) throw new Error("Reviewer Pi Agent Profile has no model.");
@@ -109,6 +227,10 @@ const isolatedPiReviewerAgent = (
   );
   const base = pi(model, {
     ...(thinking === undefined ? {} : { thinking }),
+    captureSessions,
+    ...(sessionStorageRoot === undefined
+      ? {}
+      : { sessionStorage: { hostSessionsDir: dirname(sessionStorageRoot) } }),
   });
 
   return {
@@ -118,7 +240,7 @@ const isolatedPiReviewerAgent = (
       return {
         ...command,
         command: prependAgentEnvironment(
-          `${command.command}${resourceFlags.length === 0 ? "" : ` ${resourceFlags}`}`,
+          `${command.command}${sessionStorageRoot === undefined ? "" : ` --session-dir ${shellQuote(sessionStorageRoot)}`}${resourceFlags.length === 0 ? "" : ` ${resourceFlags}`}`,
           agentEnvironment,
         ),
       };
@@ -160,6 +282,78 @@ const sandcastleFailure = (
   attempts: number,
   stdout: string,
 ): ReviewerAgentResult => ({ ok: false, failure, attempts, stdout });
+
+const prepareHostPiSession = async (
+  agent: AgentProvider,
+  cwd: string,
+  sessionId: string | undefined,
+): Promise<void> => {
+  if (sessionId === undefined || agent.sessionStorage === undefined) return;
+  const located = await agent.sessionStorage.findByIdOnHost(sessionId);
+  if (located.path === undefined) return;
+  const content = readFileSync(located.path, "utf8");
+  let sessionHeaderFound = false;
+  const rewritten = content
+    .split("\n")
+    .map((line) => {
+      if (line === "") return line;
+      let entry: { type?: unknown; id?: unknown; cwd?: unknown };
+      try {
+        entry = JSON.parse(line) as { type?: unknown; id?: unknown; cwd?: unknown };
+      } catch {
+        throw new Error("Reviewer Session JSONL is corrupt.");
+      }
+      if (entry.type !== "session") return line;
+      if (sessionHeaderFound || entry.id !== sessionId || typeof entry.cwd !== "string") {
+        throw new Error("Reviewer Session header is incompatible.");
+      }
+      sessionHeaderFound = true;
+      return JSON.stringify({ ...entry, cwd });
+    })
+    .join("\n");
+  if (!sessionHeaderFound) throw new Error("Reviewer Session header is missing.");
+  if (rewritten === content) return;
+  const temporaryPath = `${located.path}.but-why-tmp`;
+  writeFileSync(temporaryPath, rewritten, { mode: 0o600 });
+  chmodSync(temporaryPath, 0o600);
+  renameSync(temporaryPath, located.path);
+};
+
+const snapshotSessionRoot = (
+  root: string,
+): { readonly root: string; readonly snapshot: string } | undefined => {
+  if (!existsSync(root)) return undefined;
+  const snapshot = mkdtempSync(join(tmpdir(), "but-why-reviewer-session-"));
+  cpSync(root, join(snapshot, "sessions"), { recursive: true });
+  return { root, snapshot };
+};
+
+const cleanupSessionSnapshot = (
+  value: { readonly root: string; readonly snapshot: string } | undefined,
+): void => {
+  if (value !== undefined) rmSync(value.snapshot, { recursive: true, force: true });
+};
+
+const restoreSessionRoot = (value: { readonly root: string; readonly snapshot: string }): void => {
+  const source = join(value.snapshot, "sessions");
+  rmSync(value.root, { recursive: true, force: true });
+  cpSync(source, value.root, { recursive: true });
+};
+
+const sessionMetadata = (
+  agent: AgentProvider,
+  result: SandboxRunResult,
+): Effect.Effect<{ readonly sessionReference?: string; readonly sessionFilePath?: string }> =>
+  Effect.promise(async () => {
+    const iteration = result.iterations[result.iterations.length - 1];
+    if (iteration?.sessionId === undefined || agent.sessionStorage === undefined) return {};
+    const located = await agent.sessionStorage.findByIdOnHost(iteration.sessionId);
+    if (located.path === undefined) return {};
+    return {
+      sessionReference: iteration.sessionId,
+      sessionFilePath: located.path,
+    };
+  });
 
 const errorMessage = (error: unknown): string =>
   error instanceof Error ? error.message : String(error);

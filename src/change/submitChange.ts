@@ -2,6 +2,7 @@ import { Effect } from "effect";
 
 import type { AgentEnvironmentCommand } from "../agent/agentEnvironment.js";
 import type { CandidateValidationPolicyResolution } from "./candidateValidation/resolveCandidateValidationPolicy.js";
+import type { ReviewerContinuityEvidence } from "./acceptanceReview/runAcceptanceReviewPhase.js";
 import type {
   CandidateValidationFinding,
   CandidateValidationToolingFailure,
@@ -48,6 +49,7 @@ export type ChangeSubmitResult =
       readonly candidateId: string;
       readonly validationRunId: string;
       readonly completionKind: "no_change";
+      readonly reviewerEvidence?: ReviewerContinuityEvidence;
     }
   | {
       readonly ok: true;
@@ -57,6 +59,7 @@ export type ChangeSubmitResult =
       readonly validationRunId: string;
       readonly created: boolean;
       readonly pullRequest: { readonly number: number; readonly url: string };
+      readonly reviewerEvidence?: ReviewerContinuityEvidence;
     }
   | {
       readonly ok: true;
@@ -70,6 +73,7 @@ export type ChangeSubmitResult =
       readonly candidateId: string;
       readonly validationRunId: string;
       readonly findings: readonly CandidateValidationFinding[];
+      readonly reviewerEvidence?: ReviewerContinuityEvidence;
     }
   | {
       readonly ok: false;
@@ -78,6 +82,7 @@ export type ChangeSubmitResult =
       readonly candidateId: string;
       readonly validationRunId: string;
       readonly toolingFailures: readonly CandidateValidationToolingFailure[];
+      readonly reviewerEvidence?: ReviewerContinuityEvidence;
     }
   | { readonly ok: false; readonly code: "change_not_found" | "change_not_open" }
   | { readonly ok: false; readonly code: "change_not_ready"; readonly change: ChangeRecord }
@@ -295,6 +300,7 @@ const validateAndCompleteNoChange = (
     }
     const validation = yield* CandidateValidation;
     const validationResult = yield* validation.validateNoChange({
+      changeId: change.id,
       ...candidateIdentity(candidate),
       resourceRoot: change.worktreePath,
       noChange: true,
@@ -311,6 +317,9 @@ const validateAndCompleteNoChange = (
         {
           validationRunId: validationResult.validationRunId,
           outcome: validationResult.outcome === "blocked" ? "blocked" : "tooling_failed",
+          ...(validationResult.reviewerEvidence === undefined
+            ? {}
+            : { reviewerEvidence: validationResult.reviewerEvidence }),
         },
         now,
       );
@@ -330,6 +339,9 @@ const validateAndCompleteNoChange = (
       candidateId: candidate.candidateId,
       validationRunId: validationResult.validationRunId,
       completionKind: "no_change",
+      ...(validationResult.reviewerEvidence === undefined
+        ? {}
+        : { reviewerEvidence: validationResult.reviewerEvidence }),
     } as const;
   });
 
@@ -401,6 +413,7 @@ const validateAndPublish = (
     const validationResult =
       policy.resolved.taskBacked && change.acceptanceContext !== null
         ? yield* validation.validateTaskBackedCandidate({
+            changeId: change.id,
             ...candidateIdentity(candidate),
             resourceRoot: change.worktreePath,
             acceptanceContext: change.acceptanceContext,
@@ -408,6 +421,7 @@ const validateAndPublish = (
             now,
           })
         : yield* validation.validateCandidate({
+            changeId: change.id,
             ...candidateIdentity(candidate),
             resourceRoot: change.worktreePath,
             policy: withAgentEnvironment(policy.resolved.policy, agentEnvironment),
@@ -422,6 +436,9 @@ const validateAndPublish = (
         {
           validationRunId: validationResult.validationRunId,
           outcome: validationResult.outcome === "blocked" ? "blocked" : "tooling_failed",
+          ...(validationResult.reviewerEvidence === undefined
+            ? {}
+            : { reviewerEvidence: validationResult.reviewerEvidence }),
         },
         now,
       );
@@ -452,6 +469,9 @@ const validateAndPublish = (
       validationRunId: validationResult.validationRunId,
       created: publication.created,
       pullRequest: publication.pullRequest,
+      ...(validationResult.reviewerEvidence === undefined
+        ? {}
+        : { reviewerEvidence: validationResult.reviewerEvidence }),
     } as const;
   });
 
@@ -460,7 +480,11 @@ const blockedValidationResult = (
   dependencies: Parameters<typeof openChangeSubmit>[0],
   change: ReadyChange,
   candidate: CapturedCandidate,
-  validation: { readonly outcome: "blocked" | "tooling_failed"; readonly validationRunId: string },
+  validation: {
+    readonly outcome: "blocked" | "tooling_failed";
+    readonly validationRunId: string;
+    readonly reviewerEvidence?: ReviewerContinuityEvidence;
+  },
   now: string,
 ): Effect.Effect<ChangeSubmitResult, RepositoryStorageError> =>
   Effect.gen(function* () {
@@ -478,6 +502,9 @@ const blockedValidationResult = (
           candidateId: candidate.candidateId,
           validationRunId: validation.validationRunId,
           findings: yield* candidateValidation.listFindings(validation.validationRunId),
+          ...(validation.reviewerEvidence === undefined
+            ? {}
+            : { reviewerEvidence: validation.reviewerEvidence }),
         }
       : {
           ok: false,
@@ -488,6 +515,9 @@ const blockedValidationResult = (
           toolingFailures: yield* candidateValidation.listToolingFailures(
             validation.validationRunId,
           ),
+          ...(validation.reviewerEvidence === undefined
+            ? {}
+            : { reviewerEvidence: validation.reviewerEvidence }),
         };
   });
 

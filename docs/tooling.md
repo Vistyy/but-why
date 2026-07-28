@@ -14,6 +14,8 @@ Corepack is not part of the repository toolchain.
 A non-Nix environment may run repository commands when it provides Node.js 24.x, pnpm 10.28.0, Just, and the installed project dependencies.
 Only the locked Nix environment provides authoritative verification.
 
+[Sandcastle integration notes](sandcastle-integration-notes.md) records confirmed runtime constraints and current But Why workarounds.
+
 ## Quality tools
 
 The project uses:

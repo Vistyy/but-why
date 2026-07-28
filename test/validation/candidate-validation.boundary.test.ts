@@ -48,6 +48,7 @@ describe("Candidate validation", () => {
           repository: repositoryConfig(mainCheckout),
         });
         const result = yield* validateCandidate(validation, {
+          changeId: captured.changeId,
           candidateId: captured.candidateId,
           changeBaseSha: captured.changeBaseSha,
           headSha: captured.headSha,

@@ -392,6 +392,7 @@ validationSetup:
               { name: "candidates" },
               { name: "changes" },
               { name: "effect_sql_migrations" },
+              { name: "reviewer_sessions" },
               { name: "shared_state_identity" },
               { name: "task_comments" },
               { name: "task_dependencies" },
@@ -433,7 +434,10 @@ validationSetup:
           `,
         ),
       );
-      expect(migrations).toEqual([{ migration_id: 1, name: "baseline" }]);
+      expect(migrations).toEqual([
+        { migration_id: 1, name: "baseline" },
+        { migration_id: 2, name: "reviewer_sessions" },
+      ]);
     }),
   );
 

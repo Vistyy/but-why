@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { existsSync, lstatSync, rmdirSync } from "node:fs";
+import { existsSync, lstatSync, rmdirSync, rmSync } from "node:fs";
 import { basename, dirname } from "node:path";
 
 export type ChangeCleanupResult =
@@ -15,13 +15,15 @@ export type ChangeCleanupResult =
         | "branch_ref_invalid"
         | "branch_reachability_unavailable"
         | "branch_not_reachable_from_another_ref"
-        | "branch_deletion_failed";
+        | "branch_deletion_failed"
+        | "reviewer_session_removal_failed";
     };
 
 export const cleanupChangeResources = (input: {
   readonly repositoryCommonDirectory: string;
   readonly worktreePath: string | null;
   readonly branchRef: string;
+  readonly reviewerSessionPath?: string;
 }): ChangeCleanupResult => {
   if (input.worktreePath !== null && !isWorktreePathSafe(input.worktreePath)) {
     return { state: "pending", blockingReason: "worktree_path_unsafe" };
@@ -45,6 +47,13 @@ export const cleanupChangeResources = (input: {
 
   if (input.worktreePath !== null && !removeEmptySiblingContainers(input.worktreePath)) {
     return { state: "pending", blockingReason: "worktree_container_removal_failed" };
+  }
+
+  if (
+    input.reviewerSessionPath !== undefined &&
+    !removeReviewerSession(input.reviewerSessionPath)
+  ) {
+    return { state: "pending", blockingReason: "reviewer_session_removal_failed" };
   }
 
   const branchName = branchNameForRef(input.branchRef);
@@ -106,6 +115,16 @@ const removeEmptySiblingContainers = (worktreePath: string): boolean => {
     return true;
   } catch (error) {
     return isFileSystemError(error, "ENOTEMPTY") || isFileSystemError(error, "ENOENT");
+  }
+};
+
+const removeReviewerSession = (path: string): boolean => {
+  try {
+    if (!existsSync(path)) return true;
+    rmSync(path, { recursive: true, force: true });
+    return true;
+  } catch {
+    return false;
   }
 };
 

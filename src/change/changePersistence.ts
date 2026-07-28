@@ -2,6 +2,7 @@ import type { Effect } from "effect";
 
 import type { RepositoryStorageError } from "../contracts/repositoryStorageError.js";
 import type { ChangeRecord } from "./change.js";
+import type { ReviewerSessionRecord } from "./reviewerSession/reviewerSession.js";
 import type {
   BeginChangePublicationInput,
   BeginChangePublicationResult,
@@ -48,6 +49,11 @@ export type ChangePersistence = {
   readonly recordCleanup: (
     input: RecordChangeCleanupInput,
   ) => StorageEffect<RecordChangeCleanupResult>;
+  readonly getReviewerSession: (
+    changeId: string,
+  ) => StorageEffect<ReviewerSessionRecord | undefined>;
+  readonly saveReviewerSession: (input: ReviewerSessionRecord) => StorageEffect<void>;
+  readonly removeReviewerSession: (changeId: string) => StorageEffect<void>;
   readonly beginPublication: (
     input: BeginChangePublicationInput,
   ) => StorageEffect<BeginChangePublicationResult>;

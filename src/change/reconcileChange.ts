@@ -44,7 +44,9 @@ export const openChangeReconciliation = (input: {
     readonly repositoryCommonDirectory: string;
     readonly worktreePath: string | null;
     readonly branchRef: string;
+    readonly reviewerSessionPath?: string;
   }) => ChangeCleanupOperationResult;
+  readonly reviewerSessionPathFor?: (changeId: string) => string;
 }): ChangeReconciliation => ({
   reconcile: (reconciliationInput) => reconcile(input, reconciliationInput),
 });
@@ -183,6 +185,9 @@ const reconcileCleanup = (
       repositoryCommonDirectory: change.repositoryCommonDirectory,
       worktreePath: change.worktreePath,
       branchRef: change.branchRef,
+      ...(dependencies.reviewerSessionPathFor === undefined
+        ? {}
+        : { reviewerSessionPath: dependencies.reviewerSessionPathFor(change.id) }),
     });
     const cleanup = cleanupRecord(result);
     const recorded = yield* dependencies.persistence.recordCleanup({
@@ -191,6 +196,8 @@ const reconcileCleanup = (
       now,
     });
     if (!recorded.ok) return rejected(change.id, recorded.code);
+    if (cleanup.state === "complete")
+      yield* dependencies.persistence.removeReviewerSession(change.id);
     return {
       changeId: change.id,
       status: cleanupStatus(cleanup),

@@ -1,6 +1,7 @@
 import type { Sandbox } from "@ai-hero/sandcastle";
 
 import type { CleanupState } from "../validationRun/cleanup.js";
+import type { ReviewerContinuityEvidence } from "../acceptanceReview/runAcceptanceReviewPhase.js";
 
 export type ValidationWorkspaceCleanupResult = {
   readonly worktree: CleanupState;
@@ -14,6 +15,7 @@ export type ActiveValidationWorkspace = {
 
 export type ActiveValidationWorkspaceResult = {
   readonly validationFindings: 0 | 1;
+  readonly reviewerEvidence?: ReviewerContinuityEvidence;
 };
 
 export type ValidationWorkspaceSetup = {

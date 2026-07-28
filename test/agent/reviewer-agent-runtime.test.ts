@@ -88,6 +88,134 @@ describe("Pi reviewer agent runtime", () => {
     }),
   );
 
+  it.effect("stores host-run Pi sessions in the Change-owned session directory", () =>
+    Effect.gen(function* () {
+      const sessionRoot = mkdtempSync(join(tmpdir(), "but-why-reviewer-sessions-"));
+      const workspace = "/validation-workspace-two";
+      const sessionId = "123e4567-e89b-42d3-a456-426614174001";
+      let command = "";
+      const run: Pick<Sandbox, "run">["run"] = async (options) => {
+        command = options.agent.buildPrintCommand({
+          prompt: options.prompt ?? "",
+          dangerouslySkipPermissions: true,
+        }).command;
+        writeFileSync(join(sessionRoot, `review_${sessionId}.jsonl`), '{"type":"session"}\n');
+        return {
+          ...runResult('<reviewer-output>{"findings":[]}</reviewer-output>'),
+          iterations: [{ sessionId }],
+        };
+      };
+
+      try {
+        const result = yield* piReviewerAgentRuntime.review({
+          sandbox: { run } as unknown as Pick<Sandbox, "run">,
+          reviewer: "acceptance",
+          validationRunId: "123e4567-e89b-42d3-a456-426614174000",
+          availableArtifactRefs: [],
+          prompt: "Review the Candidate.",
+          profile,
+          commandCwd: workspace,
+          sessionStorageRoot: sessionRoot,
+        });
+
+        expect(command).toContain(`--session-dir '${sessionRoot}'`);
+        expect(result).toMatchObject({
+          ok: true,
+          sessionReference: sessionId,
+          sessionFilePath: expect.stringContaining(`review_${sessionId}.jsonl`),
+        });
+      } finally {
+        rmSync(sessionRoot, { recursive: true, force: true });
+      }
+    }),
+  );
+
+  it.effect("does not promote session metadata after capture-failure recovery", () =>
+    Effect.gen(function* () {
+      const sessionRoot = mkdtempSync(join(tmpdir(), "but-why-uncaptured-reviewer-session-"));
+      const sessionId = "123e4567-e89b-42d3-a456-426614174003";
+      const sessionFile = join(sessionRoot, `review_${sessionId}.jsonl`);
+      writeFileSync(
+        sessionFile,
+        `{"type":"session","id":"${sessionId}","cwd":"/removed-workspace"}\n`,
+      );
+      const observedCwds: string[] = [];
+      let attempts = 0;
+      const run: Pick<Sandbox, "run">["run"] = async () => {
+        attempts += 1;
+        const header = JSON.parse(readFileSync(sessionFile, "utf8")) as { cwd: string };
+        observedCwds.push(header.cwd);
+        if (attempts === 1) throw new Error("Session capture failed");
+        return {
+          ...runResult('<reviewer-output>{"findings":[]}</reviewer-output>'),
+          iterations: [{ sessionId }],
+        };
+      };
+
+      try {
+        const result = yield* piReviewerAgentRuntime.review({
+          sandbox: { run } as unknown as Pick<Sandbox, "run">,
+          reviewer: "acceptance",
+          validationRunId: "123e4567-e89b-42d3-a456-426614174000",
+          availableArtifactRefs: [],
+          prompt: "Review the Candidate.",
+          profile,
+          commandCwd: "/validation-workspace",
+          sessionStorageRoot: sessionRoot,
+          resumeSession: sessionId,
+        });
+
+        expect(result).toEqual({
+          ok: true,
+          report: { findings: [] },
+          attempts: 1,
+          stdout: '<reviewer-output>{"findings":[]}</reviewer-output>',
+        });
+        expect(attempts).toBe(2);
+        expect(observedCwds).toEqual(["/validation-workspace", "/validation-workspace"]);
+        expect(readFileSync(sessionFile, "utf8")).toContain('"cwd":"/removed-workspace"');
+      } finally {
+        rmSync(sessionRoot, { recursive: true, force: true });
+      }
+    }),
+  );
+
+  it.effect("rejects a corrupt stored Pi session before resume", () =>
+    Effect.gen(function* () {
+      const sessionRoot = mkdtempSync(join(tmpdir(), "but-why-corrupt-reviewer-session-"));
+      const sessionId = "123e4567-e89b-42d3-a456-426614174002";
+      writeFileSync(join(sessionRoot, `review_${sessionId}.jsonl`), "not-json\n");
+      const run = vi.fn<Pick<Sandbox, "run">["run"]>(() =>
+        Promise.resolve(runResult('<reviewer-output>{"findings":[]}</reviewer-output>')),
+      );
+
+      try {
+        const result = yield* piReviewerAgentRuntime.review({
+          sandbox: { run } as unknown as Pick<Sandbox, "run">,
+          reviewer: "acceptance",
+          validationRunId: "123e4567-e89b-42d3-a456-426614174000",
+          availableArtifactRefs: [],
+          prompt: "Review the Candidate.",
+          profile,
+          commandCwd: "/validation-workspace",
+          sessionStorageRoot: sessionRoot,
+          resumeSession: sessionId,
+        });
+
+        expect(result).toMatchObject({
+          ok: false,
+          failure: {
+            _tag: "SandcastleToolingFailed",
+            message: "Reviewer Session JSONL is corrupt.",
+          },
+        });
+        expect(run).not.toHaveBeenCalled();
+      } finally {
+        rmSync(sessionRoot, { recursive: true, force: true });
+      }
+    }),
+  );
+
   it.effect("resolves Repo resources from the Managed Worktree root", () =>
     Effect.gen(function* () {
       let command = "";

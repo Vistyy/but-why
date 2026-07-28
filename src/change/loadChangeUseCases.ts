@@ -1,4 +1,5 @@
 import { existsSync } from "node:fs";
+import { join } from "node:path";
 import { Effect } from "effect";
 
 import { openHerdrInteractiveSessionHost } from "./herdrInteractiveSessionHost.js";
@@ -64,6 +65,8 @@ export const withChangeUseCases = <A, E, R>(
             persistence: changePersistence,
             github: localGitHubPullRequestGateway(),
             cleanup: cleanupChangeResources,
+            reviewerSessionPathFor: (changeId) =>
+              join(repoContext.context.paths.operationalDir, changeId),
           }),
           input.interactiveSessionHost ??
             openHerdrInteractiveSessionHost(undefined, {
