@@ -57,7 +57,9 @@ export const resolveInteractiveSessionAgentProfile = (input: {
   });
   return selection.ok
     ? { ok: true, profile: selection.resolved }
-    : selection.error._tag === "MissingAgentProfile" && selection.error.selection === "default"
+    : selection.error._tag === "MissingAgentProfile" &&
+        selection.error.selection === "default" &&
+        input.globalConfig.defaultAgentProfile === undefined
       ? { ok: true, profile: undefined }
       : selection;
 };

@@ -72,6 +72,26 @@ describe("Agent Profiles", () => {
     });
   });
 
+  it("rejects a configured but missing Global default profile", () => {
+    expect(
+      resolveInteractiveSessionAgentProfile({
+        repoConfig: { taskPrefix: "BY" },
+        globalConfig: {
+          defaultAgentProfile: { scope: "global", name: "missing" },
+          agentProfiles: {},
+        },
+      }),
+    ).toMatchObject({
+      ok: false,
+      error: {
+        _tag: "MissingAgentProfile",
+        profileName: "missing",
+        scope: "global",
+        selection: "default",
+      },
+    });
+  });
+
   it("preserves Pi defaults when no profile is selected", () => {
     expect(
       resolveInteractiveSessionAgentProfile({
