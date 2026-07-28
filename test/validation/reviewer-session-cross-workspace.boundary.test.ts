@@ -28,6 +28,7 @@ it.effect(
       const sessionRoot = join(repository, ".reviewer-sessions");
       const fakeBin = join(repository, ".fake-bin");
       const trace = join(repository, "reviewer-trace.txt");
+      const sandcastleGitConfig = join(repository, "sandcastle.gitconfig");
       mkdirSync(fakeBin);
       const fakePi = join(fakeBin, "pi");
       writeFileSync(
@@ -74,11 +75,17 @@ printf '%s\n' '{"type":"agent_end","messages":[{"role":"assistant","content":[{"
       );
       chmodSync(fakePi, 0o700);
       git(repository, ["init"]);
-      git(repository, ["config", "user.email", "test@example.com"]);
-      git(repository, ["config", "user.name", "Test"]);
       writeFileSync(join(repository, "candidate.txt"), "base\n");
       git(repository, ["add", "."]);
-      git(repository, ["commit", "-m", "base"]);
+      git(repository, [
+        "-c",
+        "user.email=test@example.com",
+        "-c",
+        "user.name=Test",
+        "commit",
+        "-m",
+        "base",
+      ]);
       git(repository, ["branch", "validation-one"]);
       git(repository, ["branch", "validation-two"]);
 
@@ -94,7 +101,7 @@ printf '%s\n' '{"type":"agent_end","messages":[{"role":"assistant","content":[{"
           createSandbox({
             cwd: repository,
             branch: "refs/heads/validation-one",
-            sandbox: noSandbox(),
+            sandbox: noSandbox({ env: { GIT_CONFIG_GLOBAL: sandcastleGitConfig } }),
           }),
         );
         firstWorkspacePath = firstWorkspace.worktreePath;
@@ -125,7 +132,7 @@ printf '%s\n' '{"type":"agent_end","messages":[{"role":"assistant","content":[{"
           createSandbox({
             cwd: repository,
             branch: "refs/heads/validation-two",
-            sandbox: noSandbox(),
+            sandbox: noSandbox({ env: { GIT_CONFIG_GLOBAL: sandcastleGitConfig } }),
           }),
         );
         const second = yield* piReviewerAgentRuntime.review({

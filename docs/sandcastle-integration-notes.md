@@ -109,6 +109,21 @@ The broader decision remains in [Open Questions](open-questions.md#how-should-re
 
 **Replacement opportunity:** A replacement process Adapter should own a process group and provide bounded termination evidence.
 
+### No-sandbox setup writes Git safe-directory entries globally
+
+**Observed behavior:** Sandcastle 0.12.0 runs `git config --global --add safe.directory` while it creates a `noSandbox()` workspace.
+A focused test proved that this command modifies the invoking user's global Git config.
+When the temporary repository had a fixture-local identity, the global write also copied that identity into `~/.gitconfig` with the installed Git version.
+
+**Consequence:** A real-boundary test can pollute the developer's Git config and can override the developer's author identity for later commits.
+Production Validation Workspace creation also accumulates Sandcastle safe-directory entries in the user's global Git config.
+
+**Current But Why behavior:** The real cross-workspace test supplies an isolated `GIT_CONFIG_GLOBAL` file through the no-sandbox provider.
+The broader production-side global Git config mutation remains a Sandcastle integration issue.
+
+**Replacement opportunity:** A replacement workspace Adapter must not modify user-global Git configuration.
+Workspace trust configuration must remain scoped to the disposable process or workspace.
+
 ### Validation Workspace placement is controlled by Sandcastle
 
 **Observed behavior:** Sandcastle places current Validation Workspaces under the consumer repository's `.sandcastle` runtime directory.
