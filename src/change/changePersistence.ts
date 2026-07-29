@@ -114,9 +114,11 @@ export type ChangePersistence = {
   ) => StorageEffect<RecordChangeCleanupResult>;
   readonly getReviewerSession: (
     changeId: string,
+    producer: string,
   ) => StorageEffect<ReviewerSessionRecord | undefined>;
   readonly saveReviewerSession: (input: ReviewerSessionRecord) => StorageEffect<void>;
-  readonly removeReviewerSession: (changeId: string) => StorageEffect<void>;
+  readonly removeReviewerSession: (changeId: string, producer: string) => StorageEffect<void>;
+  readonly removeReviewerSessions: (changeId: string) => StorageEffect<void>;
   readonly beginPublication: (
     input: BeginChangePublicationInput,
   ) => StorageEffect<BeginChangePublicationResult>;

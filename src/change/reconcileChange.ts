@@ -197,7 +197,7 @@ const reconcileCleanup = (
     });
     if (!recorded.ok) return rejected(change.id, recorded.code);
     if (cleanup.state === "complete")
-      yield* dependencies.persistence.removeReviewerSession(change.id);
+      yield* dependencies.persistence.removeReviewerSessions(change.id);
     return {
       changeId: change.id,
       status: cleanupStatus(cleanup),

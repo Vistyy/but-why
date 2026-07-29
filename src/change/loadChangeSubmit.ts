@@ -143,11 +143,11 @@ export const loadChangeSubmit = (input: {
       sessionStore: {
         get: changePersistence.getReviewerSession,
         save: changePersistence.saveReviewerSession,
-        remove: (changeId: string) =>
-          changePersistence.removeReviewerSession(changeId).pipe(
+        remove: (changeId: string, producer: string) =>
+          changePersistence.removeReviewerSession(changeId, producer).pipe(
             Effect.tap(() =>
               Effect.sync(() =>
-                rmSync(join(context.paths.operationalDir, changeId), {
+                rmSync(join(context.paths.operationalDir, changeId, producer), {
                   recursive: true,
                   force: true,
                 }),

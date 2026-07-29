@@ -3,6 +3,7 @@ import { Effect } from "effect";
 import type { AgentEnvironmentCommand } from "../agent/agentEnvironment.js";
 import type { CandidateValidationPolicyResolution } from "./candidateValidation/resolveCandidateValidationPolicy.js";
 import type { ReviewerContinuityEvidence } from "./acceptanceReview/runAcceptanceReviewPhase.js";
+import type { SpecialistReviewerContinuityEvidence } from "./specialistReview/runSpecialistReviewPhase.js";
 import type {
   CandidateValidationFinding,
   CandidateValidationToolingFailure,
@@ -50,6 +51,7 @@ export type ChangeSubmitResult =
       readonly validationRunId: string;
       readonly completionKind: "no_change";
       readonly reviewerEvidence?: ReviewerContinuityEvidence;
+      readonly specialistReviewerEvidence?: readonly SpecialistReviewerContinuityEvidence[];
     }
   | {
       readonly ok: true;
@@ -60,6 +62,7 @@ export type ChangeSubmitResult =
       readonly created: boolean;
       readonly pullRequest: { readonly number: number; readonly url: string };
       readonly reviewerEvidence?: ReviewerContinuityEvidence;
+      readonly specialistReviewerEvidence?: readonly SpecialistReviewerContinuityEvidence[];
     }
   | {
       readonly ok: true;
@@ -74,6 +77,7 @@ export type ChangeSubmitResult =
       readonly validationRunId: string;
       readonly findings: readonly CandidateValidationFinding[];
       readonly reviewerEvidence?: ReviewerContinuityEvidence;
+      readonly specialistReviewerEvidence?: readonly SpecialistReviewerContinuityEvidence[];
     }
   | {
       readonly ok: false;
@@ -83,6 +87,7 @@ export type ChangeSubmitResult =
       readonly validationRunId: string;
       readonly toolingFailures: readonly CandidateValidationToolingFailure[];
       readonly reviewerEvidence?: ReviewerContinuityEvidence;
+      readonly specialistReviewerEvidence?: readonly SpecialistReviewerContinuityEvidence[];
     }
   | { readonly ok: false; readonly code: "change_not_found" | "change_not_open" | "change_blocked" }
   | { readonly ok: false; readonly code: "change_not_ready"; readonly change: ChangeRecord }
@@ -329,6 +334,9 @@ const validateAndCompleteNoChange = (
           ...(validationResult.reviewerEvidence === undefined
             ? {}
             : { reviewerEvidence: validationResult.reviewerEvidence }),
+          ...(validationResult.specialistReviewerEvidence === undefined
+            ? {}
+            : { specialistReviewerEvidence: validationResult.specialistReviewerEvidence }),
         },
         now,
       );
@@ -351,6 +359,9 @@ const validateAndCompleteNoChange = (
       ...(validationResult.reviewerEvidence === undefined
         ? {}
         : { reviewerEvidence: validationResult.reviewerEvidence }),
+      ...(validationResult.specialistReviewerEvidence === undefined
+        ? {}
+        : { specialistReviewerEvidence: validationResult.specialistReviewerEvidence }),
     } as const;
   });
 
@@ -457,6 +468,9 @@ const validateAndPublish = (
           ...(validationResult.reviewerEvidence === undefined
             ? {}
             : { reviewerEvidence: validationResult.reviewerEvidence }),
+          ...(validationResult.specialistReviewerEvidence === undefined
+            ? {}
+            : { specialistReviewerEvidence: validationResult.specialistReviewerEvidence }),
         },
         now,
       );
@@ -498,6 +512,9 @@ const validateAndPublish = (
       ...(validationResult.reviewerEvidence === undefined
         ? {}
         : { reviewerEvidence: validationResult.reviewerEvidence }),
+      ...(validationResult.specialistReviewerEvidence === undefined
+        ? {}
+        : { specialistReviewerEvidence: validationResult.specialistReviewerEvidence }),
     } as const;
   });
 
@@ -510,6 +527,7 @@ const blockedValidationResult = (
     readonly outcome: "blocked" | "tooling_failed";
     readonly validationRunId: string;
     readonly reviewerEvidence?: ReviewerContinuityEvidence;
+    readonly specialistReviewerEvidence?: readonly SpecialistReviewerContinuityEvidence[];
   },
   now: string,
 ): Effect.Effect<ChangeSubmitResult, RepositoryStorageError> =>
@@ -531,6 +549,9 @@ const blockedValidationResult = (
           ...(validation.reviewerEvidence === undefined
             ? {}
             : { reviewerEvidence: validation.reviewerEvidence }),
+          ...(validation.specialistReviewerEvidence === undefined
+            ? {}
+            : { specialistReviewerEvidence: validation.specialistReviewerEvidence }),
         }
       : {
           ok: false,
@@ -544,6 +565,9 @@ const blockedValidationResult = (
           ...(validation.reviewerEvidence === undefined
             ? {}
             : { reviewerEvidence: validation.reviewerEvidence }),
+          ...(validation.specialistReviewerEvidence === undefined
+            ? {}
+            : { specialistReviewerEvidence: validation.specialistReviewerEvidence }),
         };
   });
 

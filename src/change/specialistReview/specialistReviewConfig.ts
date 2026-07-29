@@ -30,6 +30,7 @@ export const resolveSpecialistReviewPolicies = (input: {
     input.repoConfig.review?.specialists ?? input.globalConfig.review?.specialists ?? [];
   const seen = new Set<string>();
   for (const id of active) {
+    if (id === "acceptance") return invalid("Specialist is reserved: acceptance");
     if (seen.has(id)) return invalid(`Duplicate Specialist: ${id}`);
     seen.add(id);
   }

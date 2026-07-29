@@ -124,10 +124,10 @@ export const openSqliteChangePersistence = (): Effect.Effect<
       repository.transactionImmediate("cancel Change", (sql) => cancelChange(sql, input)),
     recordCleanup: (input) =>
       repository.transactionImmediate("record Change cleanup", (sql) => recordCleanup(sql, input)),
-    getReviewerSession: (changeId) =>
+    getReviewerSession: (changeId, producer) =>
       repository.operation("read Reviewer Session", (sql) =>
         Effect.flatMap(
-          sql<ReviewerSessionRow>`SELECT identity, fingerprint, session_reference AS sessionReference, last_candidate_id AS lastCandidateId FROM reviewer_sessions WHERE change_id = ${changeId}`,
+          sql<ReviewerSessionRow>`SELECT identity, fingerprint, session_reference AS sessionReference, last_candidate_id AS lastCandidateId FROM reviewer_sessions WHERE change_id = ${changeId} AND producer = ${producer}`,
           (rows) => {
             const row = rows[0];
             if (row === undefined) return Effect.succeed(undefined);
@@ -154,13 +154,19 @@ export const openSqliteChangePersistence = (): Effect.Effect<
     saveReviewerSession: (input) =>
       repository.transactionImmediate("save Reviewer Session", (sql) =>
         Effect.asVoid(sql`
-      INSERT INTO reviewer_sessions (change_id, identity, fingerprint, session_reference, last_candidate_id, updated_at)
-      VALUES (${input.identity.changeId}, ${JSON.stringify(input.identity)}, ${input.fingerprint}, ${input.sessionReference}, ${input.lastCandidateId}, datetime('now'))
-      ON CONFLICT(change_id) DO UPDATE SET identity = excluded.identity, fingerprint = excluded.fingerprint, session_reference = excluded.session_reference, last_candidate_id = excluded.last_candidate_id, updated_at = excluded.updated_at
+      INSERT INTO reviewer_sessions (change_id, producer, identity, fingerprint, session_reference, last_candidate_id, updated_at)
+      VALUES (${input.identity.changeId}, ${input.identity.producer}, ${JSON.stringify(input.identity)}, ${input.fingerprint}, ${input.sessionReference}, ${input.lastCandidateId}, datetime('now'))
+      ON CONFLICT(change_id, producer) DO UPDATE SET identity = excluded.identity, fingerprint = excluded.fingerprint, session_reference = excluded.session_reference, last_candidate_id = excluded.last_candidate_id, updated_at = excluded.updated_at
     `),
       ),
-    removeReviewerSession: (changeId) =>
+    removeReviewerSession: (changeId, producer) =>
       repository.transactionImmediate("remove Reviewer Session", (sql) =>
+        Effect.asVoid(
+          sql`DELETE FROM reviewer_sessions WHERE change_id = ${changeId} AND producer = ${producer}`,
+        ),
+      ),
+    removeReviewerSessions: (changeId) =>
+      repository.transactionImmediate("remove Reviewer Sessions", (sql) =>
         Effect.asVoid(sql`DELETE FROM reviewer_sessions WHERE change_id = ${changeId}`),
       ),
     beginPublication: (input) =>

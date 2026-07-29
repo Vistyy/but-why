@@ -12,7 +12,7 @@ import type { RepositoryStorageError } from "../../contracts/repositoryStorageEr
 
 export type ReviewerSessionIdentity = {
   readonly changeId: string;
-  readonly producer: "acceptance";
+  readonly producer: string;
   readonly agentProfile: ResolvedPiAgentProfile;
   readonly instructions: string;
   readonly agentEnvironment?: AgentEnvironmentCommand;
@@ -33,9 +33,13 @@ export type ReviewerSessionRecord = {
 export type ReviewerSessionStore = {
   readonly get: (
     changeId: string,
+    producer: string,
   ) => Effect.Effect<ReviewerSessionRecord | undefined, RepositoryStorageError>;
   readonly save: (input: ReviewerSessionRecord) => Effect.Effect<void, RepositoryStorageError>;
-  readonly remove: (changeId: string) => Effect.Effect<void, RepositoryStorageError>;
+  readonly remove: (
+    changeId: string,
+    producer: string,
+  ) => Effect.Effect<void, RepositoryStorageError>;
 };
 
 export type ReviewerContinuity = "fresh" | "resumed" | "restarted";

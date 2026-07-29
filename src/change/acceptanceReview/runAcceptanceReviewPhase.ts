@@ -134,7 +134,7 @@ export const runAcceptanceReviewPhase = (
     const stored =
       input.sessionStore === undefined
         ? undefined
-        : yield* input.sessionStore.get(identity.changeId);
+        : yield* input.sessionStore.get(identity.changeId, identity.producer);
     const identityCompatible = stored !== undefined && sessionIdentityMatches(stored, identity);
     const compatible =
       identityCompatible &&
@@ -156,7 +156,7 @@ export const runAcceptanceReviewPhase = (
             ? undefined
             : "identity_mismatch";
     if (stored !== undefined && !identityCompatible && input.sessionStore !== undefined) {
-      yield* input.sessionStore.remove(identity.changeId);
+      yield* input.sessionStore.remove(identity.changeId, identity.producer);
     }
     const review = (resumeSession?: string) =>
       input.runtime.review({
@@ -198,7 +198,8 @@ export const runAcceptanceReviewPhase = (
       if (sessionFailure) {
         continuity = "restarted";
         restartReason = "session_unusable";
-        if (input.sessionStore !== undefined) yield* input.sessionStore.remove(identity.changeId);
+        if (input.sessionStore !== undefined)
+          yield* input.sessionStore.remove(identity.changeId, identity.producer);
         provisional = yield* review();
       }
     }

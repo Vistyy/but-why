@@ -12,7 +12,10 @@ import {
   type ReviewerContinuityEvidence,
 } from "../acceptanceReview/runAcceptanceReviewPhase.js";
 import type { SpecialistReviewPolicy } from "../specialistReview/specialistReviewConfig.js";
-import { runSpecialistReviewPhase } from "../specialistReview/runSpecialistReviewPhase.js";
+import {
+  runSpecialistReviewPhase,
+  type SpecialistReviewerContinuityEvidence,
+} from "../specialistReview/runSpecialistReviewPhase.js";
 import type { SubmitCheckConfig, SubmitPrepareConfig } from "../submit/submitRepoConfig.js";
 import { createValidationWorkspace } from "../validation/createValidationWorkspace.js";
 import { runCheckPhase } from "../validation/runCheckRound.js";
@@ -75,12 +78,14 @@ type ValidateCandidateResult =
       readonly validationRunId: string;
       readonly outcome: CandidateValidationOutcome;
       readonly reviewerEvidence?: ReviewerContinuityEvidence;
+      readonly specialistReviewerEvidence?: readonly SpecialistReviewerContinuityEvidence[];
     }
   | {
       readonly ok: false;
       readonly validationRunId: string;
       readonly outcome: "tooling_failed";
       readonly reviewerEvidence?: ReviewerContinuityEvidence;
+      readonly specialistReviewerEvidence?: readonly SpecialistReviewerContinuityEvidence[];
     };
 
 type CandidateValidationPathsValue = {
@@ -255,6 +260,9 @@ const makeCandidateValidation = (dependencies: {
           ...(activeResult?.reviewerEvidence === undefined
             ? {}
             : { reviewerEvidence: activeResult.reviewerEvidence }),
+          ...(activeResult?.specialistReviewerEvidence === undefined
+            ? {}
+            : { specialistReviewerEvidence: activeResult.specialistReviewerEvidence }),
         } as const)
       : ({
           ok: true,
@@ -264,6 +272,9 @@ const makeCandidateValidation = (dependencies: {
           ...(activeResult?.reviewerEvidence === undefined
             ? {}
             : { reviewerEvidence: activeResult.reviewerEvidence }),
+          ...(activeResult?.specialistReviewerEvidence === undefined
+            ? {}
+            : { specialistReviewerEvidence: activeResult.specialistReviewerEvidence }),
         } as const);
   });
 
@@ -298,6 +309,7 @@ const runCandidatePhases = (
   {
     readonly validationFindings: 0 | 1;
     readonly reviewerEvidence?: ReviewerContinuityEvidence;
+    readonly specialistReviewerEvidence?: readonly SpecialistReviewerContinuityEvidence[];
     readonly toolingFailures?: readonly ValidationToolingFailure[];
   },
   ValidationToolingFailure | RepositoryStorageError
@@ -415,6 +427,7 @@ const runCandidatePhases = (
     }
     const specialists = yield* runSpecialistReviewPhase({
       validationRunId,
+      changeId: input.changeId,
       candidate: candidateIdentity(input),
       policies: input.policy.specialistReviews,
       ...(agentEnvironment === undefined ? {} : { agentEnvironment }),
@@ -430,10 +443,14 @@ const runCandidatePhases = (
       listPreviousCandidateReviewerFindings:
         dependencies.persistence.listPreviousCandidateReviewerFindings,
       recordSpecialistRound: dependencies.persistence.recordSpecialistRound,
+      ...sessionOptions,
     });
     return {
       validationFindings: specialists.findings,
       ...(reviewerEvidence === undefined ? {} : { reviewerEvidence }),
+      ...(specialists.reviewerEvidence.length === 0
+        ? {}
+        : { specialistReviewerEvidence: specialists.reviewerEvidence }),
       toolingFailures: specialists.toolingFailures,
     };
   })();
