@@ -204,17 +204,6 @@ const implementationDecisions = Effect.gen(function* () {
 
 const implementationBlockers = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
-  yield* sql.unsafe("PRAGMA writable_schema = ON");
-  yield* sql.unsafe(
-    "UPDATE sqlite_master SET sql = replace(sql, \"state IN ('open', 'closed')\", \"state IN ('open', 'blocked', 'closed')\") WHERE type = 'table' AND name = 'changes'",
-  );
-  yield* sql.unsafe(
-    "UPDATE sqlite_master SET sql = replace(sql, \"state IN ('new', 'todo', 'implementing', 'validating', 'ready', 'done', 'cancelled')\", \"state IN ('new', 'todo', 'implementing', 'blocked', 'validating', 'ready', 'done', 'cancelled')\") WHERE type = 'table' AND name = 'tasks'",
-  );
-  yield* sql.unsafe(
-    "UPDATE sqlite_master SET sql = replace(sql, \"state = 'open' AND close_reason IS NULL\", \"state IN ('open', 'blocked') AND close_reason IS NULL\") WHERE type = 'table' AND name = 'changes'",
-  );
-  yield* sql.unsafe("PRAGMA writable_schema = OFF");
   yield* sql.unsafe(`
     CREATE TABLE implementation_blockers (
       sequence INTEGER PRIMARY KEY AUTOINCREMENT,
