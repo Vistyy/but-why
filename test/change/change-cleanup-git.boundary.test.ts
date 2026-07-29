@@ -1,10 +1,10 @@
-import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, symlinkSync, writeFileSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import { cleanupChangeResources } from "../../src/change/localChangeCleanupGit.js";
 import { createTestWorkspace } from "../support/testWorkspace.js";
+import { runTestProcessOrThrow } from "../support/testProcess.js";
 
 describe("Change cleanup Git adapter", () => {
   it("removes empty sibling containers after the final Managed Worktree", () => {
@@ -219,4 +219,4 @@ const initializedRepository = (): string => {
 };
 
 const git = (cwd: string, ...args: readonly string[]): string =>
-  execFileSync("git", args, { cwd, encoding: "utf8" }).trim();
+  runTestProcessOrThrow("git", args, { cwd });

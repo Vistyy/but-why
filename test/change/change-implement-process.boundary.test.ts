@@ -1,8 +1,8 @@
 import { chmodSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { spawnSync } from "node:child_process";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
+import { runTestProcess } from "../support/testProcess.js";
 import {
   builtByExecutable,
   commitButWhyConfigAndRecordDefault,
@@ -99,7 +99,7 @@ exit 1
       "--output",
       "json",
     );
-    expect(piped.status).toBe(0);
+    expect(piped.status, `${piped.stdout}${piped.stderr}`).toBe(0);
     expect(readFileSync(capture, "utf8")).toContain("Handoff from piped stdin");
   }, 30_000);
 
@@ -123,18 +123,15 @@ exit 1
       error: { code: "invalid_handoff_encoding" },
     });
 
-    const terminal = spawnSync(
+    const terminal = runTestProcess(
       "script",
+
       [
         "-qec",
         `${process.execPath} ${builtByExecutable()} change implement change-1 --handoff-file - --output json`,
         "/dev/null",
       ],
-      {
-        cwd: root,
-        encoding: "utf8",
-        env: { ...process.env, FORCE_COLOR: "0", NO_COLOR: "1" },
-      },
+      { cwd: root },
     );
     expect(terminal.status).toBe(2);
     expect(JSON.parse(terminal.stdout.trim())).toMatchObject({

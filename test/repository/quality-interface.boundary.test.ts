@@ -1,15 +1,24 @@
-import { spawn } from "node:child_process";
-import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  cpSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, test } from "vitest";
 
+import { builtByExecutable } from "../support/by-cli.js";
+import { startTestProcess } from "../support/testProcess.js";
+
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const runner = join(repositoryRoot, "scripts/with-capacity-lock.sh");
 const qualityRunner = join(repositoryRoot, "scripts/run-quality-workload.sh");
 const temporaryPaths: string[] = [];
-const coverageArtifact = join(repositoryRoot, "coverage/coverage-final.json");
 
 type CommandResult = {
   status: number | null;
@@ -17,10 +26,9 @@ type CommandResult = {
 };
 
 const startRunner = (lockFile: string, args: string[]) => {
-  const child = spawn("bash", [runner, ...args], {
-    cwd: repositoryRoot,
+  const child = startTestProcess("bash", [runner, ...args], {
+    cwd: dirname(lockFile),
     env: {
-      ...process.env,
       BY_CAPACITY_LOCK_FILE: lockFile,
       BY_CAPACITY_LOCK_HELD: "0",
     },
@@ -51,13 +59,12 @@ const startJust = (
   lockFile: string,
   args: string[],
   environment: NodeJS.ProcessEnv = {},
-  cwd = repositoryRoot,
+  cwd = dirname(lockFile),
 ) => {
-  const child = spawn("just", args, {
+  const child = startTestProcess("just", args, {
     cwd,
     detached: true,
     env: {
-      ...process.env,
       BY_CAPACITY_LOCK_FILE: lockFile,
       BY_CAPACITY_LOCK_HELD: "0",
       BY_TEST_SUITE: "routine",
@@ -84,7 +91,9 @@ const startJust = (
 };
 
 const runJust = (lockFile: string, args: string[]): Promise<CommandResult> =>
-  startJust(lockFile, args).done;
+  startJust(lockFile, args, {
+    PATH: `${dirname(lockFile)}:${Reflect.get(process.env, "PATH") ?? ""}`,
+  }).done;
 
 const stopRunner = async (runnerProcess: ReturnType<typeof startRunner>): Promise<void> => {
   if (runnerProcess.child.exitCode === null) runnerProcess.child.kill("SIGTERM");
@@ -103,22 +112,10 @@ const stopJust = async (justProcess: ReturnType<typeof startJust>): Promise<void
 
 const runVitest = (fixtureRoot: string, fixture: string): Promise<CommandResult> =>
   new Promise<CommandResult>((resolveResult) => {
-    const child = spawn(
-      "pnpm",
-      [
-        "exec",
-        "vitest",
-        "run",
-        "--config",
-        join(repositoryRoot, "vitest.config.ts"),
-        "--root",
-        fixtureRoot,
-        fixture,
-      ],
-      {
-        cwd: repositoryRoot,
-        env: { ...process.env, BY_TEST_SUITE: "" },
-      },
+    const child = startTestProcess(
+      join(repositoryRoot, "node_modules/.bin/vitest"),
+      ["run", "--config", join(repositoryRoot, "vitest.config.ts"), "--root", fixtureRoot, fixture],
+      { cwd: fixtureRoot, env: { BY_TEST_SUITE: "" } },
     );
     let output = "";
     child.stdout.on("data", (chunk: Buffer) => {
@@ -155,9 +152,27 @@ const waitForProcessExit = async (pidFile: string): Promise<void> => {
   throw new Error(`The descendant process is still running: ${pid}`);
 };
 
+const createWorkloadJustfile = (directory: string): void => {
+  cpSync(join(repositoryRoot, "package.json"), join(directory, "package.json"));
+  symlinkSync(join(repositoryRoot, "node_modules"), join(directory, "node_modules"), "dir");
+  symlinkSync(join(repositoryRoot, "scripts"), join(directory, "scripts"), "dir");
+  writeFileSync(
+    join(directory, "justfile"),
+    `set positional-arguments := true
+
+test *args:
+    @exec ${JSON.stringify(join(repositoryRoot, "scripts/run-test-workload.sh"))} test "$@"
+
+coverage *args:
+    @exec ${JSON.stringify(join(repositoryRoot, "scripts/run-test-workload.sh"))} coverage "$@"
+`,
+  );
+};
+
 const createCompletingPnpm = (directory: string): void => {
+  createWorkloadJustfile(directory);
   const pnpm = join(directory, "pnpm");
-  writeFileSync(pnpm, "#!/usr/bin/env bash\nexit 0\n");
+  writeFileSync(pnpm, "#!/usr/bin/env bash\nprintf '1 passed\\n'\nexit 0\n");
   chmodSync(pnpm, 0o755);
 };
 
@@ -166,6 +181,7 @@ const createBlockingPnpm = (
   readyFile: string,
   descendantPidFile: string,
 ): void => {
+  createWorkloadJustfile(directory);
   const pnpm = join(directory, "pnpm");
   writeFileSync(
     pnpm,
@@ -200,6 +216,41 @@ build:
 
 test:
     @pnpm exec vitest
+`,
+  );
+};
+
+const createBuildRaceQualityFixture = (
+  directory: string,
+  readyFile: string,
+  releaseFile: string,
+  buildOutput: string,
+): void => {
+  writeFileSync(
+    join(directory, "build.sh"),
+    `#!/usr/bin/env bash
+set -euo pipefail
+printf ready > ${JSON.stringify(readyFile)}
+while [[ ! -f ${JSON.stringify(releaseFile)} ]]; do sleep 0.01; done
+rm -rf ${JSON.stringify(buildOutput)}
+mkdir -p ${JSON.stringify(buildOutput)}
+printf complete > ${JSON.stringify(join(buildOutput, "main.js"))}
+`,
+  );
+  chmodSync(join(directory, "build.sh"), 0o755);
+  writeFileSync(
+    join(directory, "justfile"),
+    `quality:
+    @exec ${JSON.stringify(qualityRunner)} quality
+
+_quality-static-routine:
+    @true
+
+build:
+    @exec ./build.sh
+
+test:
+    @true
 `,
   );
 };
@@ -510,6 +561,49 @@ describe("quality interface", () => {
     expect(result.output).toContain("nested-success");
   });
 
+  test("keeps a built CLI consumer isolated while nested quality replaces build output", async () => {
+    const qualityDirectory = mkdtempSync(join(tmpdir(), "but-why-quality-race-"));
+    const consumerDirectory = mkdtempSync(join(tmpdir(), "but-why-cli-consumer-"));
+    temporaryPaths.push(qualityDirectory, consumerDirectory);
+    const readyFile = join(qualityDirectory, "build-ready");
+    const releaseFile = join(qualityDirectory, "build-release");
+    const sharedBuildOutput = join(qualityDirectory, "build-output");
+    createBuildRaceQualityFixture(qualityDirectory, readyFile, releaseFile, sharedBuildOutput);
+    const lockFile = join(qualityDirectory, "capacity.lock");
+    const quality = startJust(lockFile, ["quality"], {}, qualityDirectory);
+    const executable = builtByExecutable();
+    const consumer = startTestProcess(
+      process.execPath,
+      [executable, "--output", "json", "--help"],
+      {
+        cwd: consumerDirectory,
+      },
+    );
+    let consumerOutput = "";
+    consumer.stdout.on("data", (chunk: Buffer) => {
+      consumerOutput += chunk.toString();
+    });
+    consumer.stderr.on("data", (chunk: Buffer) => {
+      consumerOutput += chunk.toString();
+    });
+
+    try {
+      await waitForFile(readyFile);
+      const consumerStatus = await new Promise<number | null>((resolveResult) =>
+        consumer.on("close", resolveResult),
+      );
+      expect(consumerStatus, consumerOutput).toBe(0);
+      expect(consumerOutput).toContain('"usage"');
+      writeFileSync(releaseFile, "release");
+      const qualityResult = await quality.done;
+      expect(qualityResult.status, qualityResult.output).toBe(0);
+      expect(readFileSync(join(sharedBuildOutput, "main.js"), "utf8")).toBe("complete");
+    } finally {
+      if (consumer.exitCode === null) consumer.kill("SIGTERM");
+      if (quality.child.exitCode === null) await stopJust(quality);
+    }
+  }, 30_000);
+
   test("keeps successful output concise and failed diagnostics complete", async () => {
     const fixtureRoot = mkdtempSync(join(tmpdir(), "but-why-quality-fixtures-"));
     temporaryPaths.push(fixtureRoot);
@@ -543,6 +637,8 @@ describe("quality interface", () => {
       const directory = mkdtempSync(join(tmpdir(), "but-why-quality-lock-"));
       temporaryPaths.push(directory);
       const lockFile = join(directory, "capacity.lock");
+      const coverageArtifact = join(directory, "coverage/coverage-final.json");
+      createWorkloadJustfile(directory);
       const { holder, readyFile, releaseFile } = startHeldRunner(
         lockFile,
         directory,

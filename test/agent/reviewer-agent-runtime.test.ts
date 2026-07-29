@@ -1,5 +1,4 @@
 import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Sandbox, SandboxRunResult } from "@ai-hero/sandcastle";
@@ -8,6 +7,7 @@ import { Effect } from "effect";
 import { describe, expect, vi } from "vitest";
 
 import { piReviewerAgentRuntime } from "../../src/agent/reviewerAgentRuntime.js";
+import { runTestProcess } from "../support/testProcess.js";
 
 const profile = {
   agentProfile: "review",
@@ -421,12 +421,11 @@ describe("Pi reviewer agent runtime", () => {
         });
         command = built.command;
         const rpcCommand = `${built.command.replace("pi -p --mode json", "pi --mode rpc --no-session")} --extension ${probeExtension}`;
-        const spawned = spawnSync("sh", ["-c", rpcCommand], {
+        const spawned = runTestProcess("sh", ["-c", rpcCommand], {
           cwd: workspace,
-          env: { ...process.env, HOME: home, PI_OFFLINE: "1", PROBE_OUTPUT: probeOutput },
+          env: { HOME: home, PI_OFFLINE: "1", PROBE_OUTPUT: probeOutput },
           input:
             '{"type":"get_commands","id":"commands"}\n{"type":"prompt","message":"/probe-command","id":"probe"}\n',
-          encoding: "utf8",
           timeout: 10_000,
         });
         if (spawned.error) throw spawned.error;

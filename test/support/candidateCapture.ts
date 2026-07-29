@@ -1,4 +1,3 @@
-import { spawnSync } from "node:child_process";
 import { realpathSync } from "node:fs";
 import { join } from "node:path";
 import { Effect } from "effect";
@@ -11,14 +10,16 @@ import {
 import { localCandidateCaptureGit } from "../../src/change/candidateCapture/localGitCandidate.js";
 import { repositorySqlLayer } from "../../src/sqlite/repositorySql.js";
 import { openSqliteCandidateCapturePersistence } from "../../src/sqlite/sqliteCandidateCapturePersistence.js";
+import { runTestProcess } from "./testProcess.js";
 
 export const captureLocalCandidate = (input: CaptureLocalCandidateInput) =>
   Effect.flatMap(localCandidateCaptureGit.readWorkspace(input.cwd), (workspace) => {
     if (!workspace.ok) return Effect.succeed<CaptureLocalCandidateResult>(workspace);
-    const result = spawnSync("git", ["rev-parse", "--path-format=absolute", "--git-common-dir"], {
-      cwd: input.cwd,
-      encoding: "utf8",
-    });
+    const result = runTestProcess(
+      "git",
+      ["rev-parse", "--path-format=absolute", "--git-common-dir"],
+      { cwd: input.cwd },
+    );
     if (result.status !== 0) {
       return Effect.succeed<CaptureLocalCandidateResult>({ ok: false, code: "git_tooling_error" });
     }

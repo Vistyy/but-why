@@ -1,4 +1,3 @@
-import { execFileSync } from "node:child_process";
 import { chmodSync, existsSync, mkdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 
@@ -16,6 +15,7 @@ import {
   createInitializedRepo,
 } from "../support/initializedRepo.js";
 import { withTestRepository } from "../support/repository.js";
+import { runTestProcessOrThrow } from "../support/testProcess.js";
 import {
   acquireTestWorkspace,
   createTestWorkspace,
@@ -686,4 +686,4 @@ const createTask = (root: string, title: string, description: string) =>
 const escapeRegExp = (value: string): string => value.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
 
 const git = (cwd: string, ...args: readonly string[]): string =>
-  execFileSync("git", args, { cwd, encoding: "utf8" }).trim();
+  runTestProcessOrThrow("git", args, { cwd });

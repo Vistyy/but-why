@@ -102,6 +102,7 @@ files:
 ignores:
   - test/support/by-cli.ts
   - test/support/initializedRepo.ts
+  - test/repository/quality-interface.boundary.test.ts
   - test/task/task-cli-process.boundary.test.ts
   - test/change/change-implement-process.boundary.test.ts
   - test/change/change-implement-main-checkout-failure.test.ts
@@ -113,6 +114,26 @@ rule:
     - pattern: runBy($$$ARGS)
     - pattern: runJustBy($$$ARGS)
     - pattern: builtByExecutable()
+---
+# Test process creation owns the one isolated subprocess Adapter.
+id: test-child-processes-use-test-process-adapter
+language: TypeScript
+severity: error
+message: Do not create test child processes directly because shared checkout state, user state, and temporary files can race; use the Adapter in test/support/testProcess.ts with an explicit cwd and controlled environment.
+files:
+  - test/**/*.ts
+ignores:
+  - test/support/testProcess.ts
+rule:
+  any:
+    - all:
+        - kind: import_statement
+        - regex: '[\\s\\S]*["`]node:child_process["`][\\s\\S]*'
+    - all:
+        - kind: import_statement
+        - regex: '[\\s\\S]*["`]child_process["`][\\s\\S]*'
+    - pattern: require("node:child_process")
+    - pattern: require("child_process")
 ---
 # Package inspection owns the one external package contract.
 id: package-installation-belongs-to-package-contract

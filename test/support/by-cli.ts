@@ -1,11 +1,11 @@
-import { spawnSync } from "node:child_process";
-import { existsSync, writeFileSync } from "node:fs";
+import { cpSync, symlinkSync, writeFileSync } from "node:fs";
 import { Effect } from "effect";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { expect } from "vitest";
+import { expect, onTestFinished } from "vitest";
 
 import { createTestWorkspace } from "./testWorkspace.js";
+import { runTestProcess } from "./testProcess.js";
 
 import { runCli, type CliResult } from "../../src/cli.js";
 import type { InteractiveSessionHost } from "../../src/change/interactiveSessionHost.js";
@@ -18,13 +18,32 @@ import type { TextInputStdin } from "../../src/cli/input/textInput.js";
 export const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 export const byExecutable = join(repoRoot, "bin/by");
 
+let builtExecutable: string | undefined;
+
 export const builtByExecutable = (): string => {
-  const executable = join(repoRoot, "dist/main.js");
-  if (!existsSync(executable)) {
-    const built = spawnSync("just", ["build"], { cwd: repoRoot, encoding: "utf8" });
-    if (built.status !== 0) throw new Error(built.stderr || built.stdout);
-  }
-  return executable;
+  if (builtExecutable !== undefined) return builtExecutable;
+
+  const fixture = createTestWorkspace();
+  cpSync(join(repoRoot, "src"), join(fixture, "src"), { recursive: true });
+  cpSync(join(repoRoot, "package.json"), join(fixture, "package.json"));
+  cpSync(join(repoRoot, "docs/public"), join(fixture, "docs/public"), { recursive: true });
+  cpSync(join(repoRoot, "tsconfig.json"), join(fixture, "tsconfig.json"));
+  cpSync(join(repoRoot, "tsconfig.build.json"), join(fixture, "tsconfig.build.json"));
+  symlinkSync(join(repoRoot, "node_modules"), join(fixture, "node_modules"), "dir");
+  const built = runTestProcess(
+    join(repoRoot, "node_modules/.bin/tsc"),
+    ["-p", "tsconfig.build.json"],
+    {
+      cwd: fixture,
+    },
+  );
+  if (built.status !== 0) throw new Error(built.stderr || built.stdout);
+
+  builtExecutable = join(fixture, "dist/main.js");
+  onTestFinished(() => {
+    builtExecutable = undefined;
+  });
+  return builtExecutable;
 };
 
 export const runBuiltByWithEnv = (
@@ -32,16 +51,9 @@ export const runBuiltByWithEnv = (
   env: NodeJS.ProcessEnv,
   ...args: readonly string[]
 ) =>
-  spawnSync(process.execPath, [builtByExecutable(), ...args], {
+  runTestProcess(process.execPath, [builtByExecutable(), ...args], {
     cwd,
-    encoding: "utf8",
-    env: {
-      ...process.env,
-      ...env,
-      BUT_WHY_EXECUTABLE_PATH: byExecutable,
-      FORCE_COLOR: "0",
-      NO_COLOR: "1",
-    },
+    env: { ...env, BUT_WHY_EXECUTABLE_PATH: byExecutable },
   });
 
 export const runBuiltByWithInput = (
@@ -50,32 +62,16 @@ export const runBuiltByWithInput = (
   env: NodeJS.ProcessEnv = {},
   ...args: readonly string[]
 ) =>
-  spawnSync(process.execPath, [builtByExecutable(), ...args], {
+  runTestProcess(process.execPath, [builtByExecutable(), ...args], {
     cwd,
     input,
-    encoding: "utf8",
-    env: {
-      ...process.env,
-      ...env,
-      BUT_WHY_EXECUTABLE_PATH: byExecutable,
-      FORCE_COLOR: "0",
-      NO_COLOR: "1",
-    },
+    env: { ...env, BUT_WHY_EXECUTABLE_PATH: byExecutable },
   });
 
 export const runBy = (cwd: string, ...args: readonly string[]) => runByWithEnv(cwd, {}, ...args);
 
 export const runByWithEnv = (cwd: string, env: NodeJS.ProcessEnv, ...args: readonly string[]) =>
-  spawnSync(byExecutable, [...args], {
-    cwd,
-    encoding: "utf8",
-    env: {
-      ...process.env,
-      ...env,
-      FORCE_COLOR: "0",
-      NO_COLOR: "1",
-    },
-  });
+  runTestProcess(byExecutable, args, { cwd, env });
 
 export const runJustBy = (...args: readonly string[]) => {
   const root = createGitRepo();
@@ -85,15 +81,7 @@ export const runJustBy = (...args: readonly string[]) => {
     `set positional-arguments\n\n[no-exit-message]\nby *args:\n    @${byExecutable} "$@"\n`,
   );
 
-  return spawnSync("just", ["by", ...args], {
-    cwd: root,
-    encoding: "utf8",
-    env: {
-      ...process.env,
-      FORCE_COLOR: "0",
-      NO_COLOR: "1",
-    },
-  });
+  return runTestProcess("just", ["by", ...args], { cwd: root });
 };
 
 type InProcessCliResult = {
@@ -142,7 +130,7 @@ export const runByInProcessEffect = (
   }).pipe(Effect.map(cliResultToInProcessResult));
 
 export const createGitRepo = (root = createTestWorkspace()) => {
-  const result = spawnSync("git", ["init", "-q"], { cwd: root, encoding: "utf8" });
+  const result = runTestProcess("git", ["init", "-q"], { cwd: root });
 
   expect(result.status).toBe(0);
   expect(result.stderr).toBe("");
@@ -164,6 +152,6 @@ export const commitButWhyConfigAndRecordDefault = (root: string): void => {
 };
 
 const runGit = (cwd: string, ...args: readonly string[]): void => {
-  const result = spawnSync("git", args, { cwd, encoding: "utf8" });
+  const result = runTestProcess("git", args, { cwd });
   expect(result.status, result.stderr).toBe(0);
 };

@@ -72,6 +72,9 @@ ast-grep blocks these syntax contracts:
 - Sandcastle factories belong to workspace creation.
 - Task identity branding belongs to `taskId.ts`.
 - Wall-clock reads belong to the CLI entry point.
+- Test child processes use `test/support/testProcess.ts`.
+- The test-process Adapter requires an explicit working directory and controlled environment.
+- The test-process Adapter isolates `HOME`, `TMPDIR`, and XDG state and rejects the shared checkout as a working directory.
 - Built CLI and process helpers belong to focused process-boundary tests.
 - Package inspection belongs to the package contract test.
 - Live Herdr helpers belong to focused live-agent tests.

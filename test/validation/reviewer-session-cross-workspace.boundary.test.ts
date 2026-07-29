@@ -1,7 +1,6 @@
 import { chmodSync, mkdtempSync, mkdirSync, rmSync, writeFileSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { spawnSync } from "node:child_process";
 
 import { createSandbox } from "@ai-hero/sandcastle";
 import { noSandbox } from "@ai-hero/sandcastle/sandboxes/no-sandbox";
@@ -10,6 +9,7 @@ import { Effect } from "effect";
 import { expect } from "vitest";
 
 import { piReviewerAgentRuntime } from "../../src/agent/reviewerAgentRuntime.js";
+import { runTestProcess } from "../support/testProcess.js";
 
 const profile = {
   agentProfile: "reviewer",
@@ -172,6 +172,6 @@ printf '%s\n' '{"type":"agent_end","messages":[{"role":"assistant","content":[{"
 );
 
 const git = (cwd: string, args: readonly string[]): void => {
-  const result = spawnSync("git", args, { cwd, encoding: "utf8" });
+  const result = runTestProcess("git", args, { cwd });
   if (result.status !== 0) throw new Error(result.stderr || `git ${args.join(" ")} failed`);
 };
