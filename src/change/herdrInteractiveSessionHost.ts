@@ -430,10 +430,11 @@ const worktreeMatchesTarget = (
         isRecord(worktree) &&
         (recordValue(worktree, "path") === targetPath ||
           recordValue(worktree, "worktree_path") === targetPath) &&
-        typeof recordValue(worktree, "worktree_id") === "string" &&
-        (recordValue(worktree, "repository_path") === repositoryPath ||
-          recordValue(worktree, "repo_path") === repositoryPath ||
-          typeof recordValue(worktree, "branch") === "string"),
+        typeof recordValue(worktree, "branch") === "string" &&
+        (recordValue(worktree, "repository_path") === undefined ||
+          recordValue(worktree, "repository_path") === repositoryPath) &&
+        (recordValue(worktree, "open_workspace_id") === undefined ||
+          typeof recordValue(worktree, "open_workspace_id") === "string"),
     )
   );
 };

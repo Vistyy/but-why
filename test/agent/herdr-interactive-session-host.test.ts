@@ -343,6 +343,62 @@ describe("Herdr Interactive Session Host", () => {
     ).resolves.toEqual({ ok: true, host: "herdr", status: "already_active" });
   });
 
+  it("reconciles an uncertain worktree open before retrying the mutation", async () => {
+    const commands: string[][] = [];
+    const execute: HerdrCommandExecutor = async (args) => {
+      commands.push([...args]);
+      if (args[0] === "agent" && args[1] === "list") {
+        return commands.some(([command, operation]) => command === "pane" && operation === "run")
+          ? {
+              ok: true,
+              stdout:
+                '{"result":{"agents":[{"name":"but-why-change-123","cwd":"/workspace/change-123","pane_id":"workspace-1:pane-1","agent_status":"working"}]}}',
+            }
+          : { ok: true, stdout: '{"result":{"agents":[]}}' };
+      }
+      if (args[0] === "worktree" && args[1] === "open") {
+        const opens = commands.filter(
+          ([command, operation]) => command === "worktree" && operation === "open",
+        ).length;
+        return opens === 1
+          ? { ok: false, message: "response lost" }
+          : {
+              ok: true,
+              stdout:
+                '{"result":{"workspace":{"workspace_id":"workspace-1"},"root_pane":{"pane_id":"workspace-1:pane-1"},"already_open":false}}',
+            };
+      }
+      if (args[0] === "worktree" && args[1] === "list") {
+        return {
+          ok: true,
+          stdout:
+            '{"result":{"worktrees":[{"path":"/workspace/change-123","branch":"but-why/change-123"}]}}',
+        };
+      }
+      if (args[0] === "agent" && args[1] === "rename") {
+        return {
+          ok: true,
+          stdout:
+            '{"result":{"agent":{"name":"but-why-change-123","pane_id":"workspace-1:pane-1","cwd":"/workspace/change-123"}}}',
+        };
+      }
+      if (args[0] === "pane" && args[1] === "run") return { ok: true, stdout: "{}" };
+      return { ok: true, stdout: "{}" };
+    };
+
+    await expect(
+      openHerdrInteractiveSessionHost(execute).launch({
+        changeId: "change-123",
+        repositoryPath: "/repository",
+        worktreePath: "/workspace/change-123",
+        initialPrompt: undefined,
+      }),
+    ).resolves.toEqual({ ok: true, host: "herdr", status: "started" });
+    expect(
+      commands.filter(([command, operation]) => command === "worktree" && operation === "open"),
+    ).toHaveLength(2);
+  });
+
   it("does not retry an uncertain pane run and preserves early-exit evidence", async () => {
     const commands: string[][] = [];
     const execute: HerdrCommandExecutor = async (args) => {
