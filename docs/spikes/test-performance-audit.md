@@ -122,14 +122,21 @@ Vitest 3.2.6 already uses `BaseSequencer` to run cached longer files first.
 The five-file workload ran in parallel, so its aggregate test time must not be summed as wall time.
 The audit found no evidence that a worker-scheduling configuration change would improve the fixed three-worker model.
 
+## BY-48 Acceptance Context version 3 completion baseline
+
 The accepted main baseline is a 6.461 s three-run routine-test median and a 35.640 s three-run complete-test median.
 The final three-run measurements used uncontended supported commands, and each command reported zero queue time.
 
 | Command | Run 1 execution | Run 2 execution | Run 3 execution | Median execution | Queue time |
 | --- | ---: | ---: | ---: | ---: | ---: |
 | `just quality` | 10.449 s | 10.606 s | 11.377 s | 10.606 s | 0 s each |
-| `just full-quality` | 38.733 s | 37.224 s | 37.031 s | 37.224 s | 0 s each |
+| `just full-quality` | 38.733 s | 34.921 s | 37.031 s | 37.031 s | 0 s each |
 
-The routine result is within the 15-second completion limit but above the 10-second operating target.
-The complete result is above both the 20-second median target and the 30-second per-run limit.
-All six commands passed and left the working tree unchanged.
+Validation Run `71e376f6-42ff-4360-a59b-1b2f40be43d5` also completed `just full-quality` in 35.517 s.
+That Check passed with 63 test files, 489 passing tests, and one skipped test.
+The Check retained the existing 30-second advisory warning.
+
+The routine result meets the version 3 completion limit of an 11-second median and a 15-second maximum.
+The complete result meets the version 3 completion limit of a 38-second median and a 40-second maximum.
+The complete result remains above the maintained 30-second advisory operating budget.
+All six measured commands passed and left the working tree unchanged.
