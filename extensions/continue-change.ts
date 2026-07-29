@@ -294,9 +294,6 @@ export default function continueChange(pi: ExtensionAPI): void {
   pi.on("session_compact", (event) => {
     automaticCompactionActive = event.reason !== "manual";
     pendingThresholdCompaction = event.reason === "threshold";
-    if (automaticCompactionActive && persisted?.paused) {
-      saveState({ ...persisted, paused: false });
-    }
   });
 
   pi.on("agent_end", (event) => {
