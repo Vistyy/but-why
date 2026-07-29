@@ -13,7 +13,7 @@ const unavailableHerdr: HerdrCommandExecutor = async () => ({
 
 const workspaceFailure: HerdrCommandExecutor = async (args) =>
   args[0] === "agent"
-    ? { ok: true, stdout: '{"result":{"agents":[]}}' }
+    ? { ok: true, stdout: '{"result":{"type":"agent_list","agents":[]}}' }
     : { ok: false, message: "workspace unavailable" };
 
 describe("Herdr Interactive Session Host", () => {
@@ -23,7 +23,7 @@ describe("Herdr Interactive Session Host", () => {
       (commands as string[][]).push([...args]);
       if (args[0] === "agent" && args[1] === "list") {
         return commands.length === 1
-          ? { ok: true, stdout: '{"result":{"agents":[]}}' }
+          ? { ok: true, stdout: '{"result":{"type":"agent_list","agents":[]}}' }
           : {
               ok: true,
               stdout:
@@ -98,7 +98,7 @@ describe("Herdr Interactive Session Host", () => {
       (commands as string[][]).push([...args]);
       if (args[0] === "agent" && args[1] === "list") {
         return commands.length === 1
-          ? { ok: true, stdout: '{"result":{"agents":[]}}' }
+          ? { ok: true, stdout: '{"result":{"type":"agent_list","agents":[]}}' }
           : {
               ok: true,
               stdout:
