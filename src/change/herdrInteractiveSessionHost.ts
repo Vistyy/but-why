@@ -429,7 +429,7 @@ const isValidAgentList = (source: string): boolean => {
   const agents = result === undefined ? undefined : recordValue(result, "agents");
   return (
     result !== undefined &&
-    (recordValue(result, "type") === undefined || recordValue(result, "type") === "agent_list") &&
+    recordValue(result, "type") === "agent_list" &&
     Array.isArray(agents) &&
     agents.every(
       (agent) =>

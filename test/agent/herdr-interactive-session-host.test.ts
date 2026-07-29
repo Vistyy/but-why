@@ -158,7 +158,7 @@ describe("Herdr Interactive Session Host", () => {
     const execute: HerdrCommandExecutor = async (args) => {
       commands.push([...args]);
       if (args[0] === "agent" && args[1] === "list" && commands.length === 1) {
-        return { ok: true, stdout: '{"result":{"agents":[]}}' };
+        return { ok: true, stdout: '{"result":{"type":"agent_list","agents":[]}}' };
       }
       if (args[0] === "worktree") {
         return {
@@ -173,7 +173,7 @@ describe("Herdr Interactive Session Host", () => {
       if (args[0] === "agent" && args[1] === "list") {
         return {
           ok: true,
-          stdout: `{"result":{"agents":[{"agent":"${sessionName}","cwd":"/workspace/change-123","pane_id":"workspace-1:pane-1","agent_status":"working"}]}}`,
+          stdout: `{"result":{"type":"agent_list","agents":[{"agent":"${sessionName}","cwd":"/workspace/change-123","pane_id":"workspace-1:pane-1","agent_status":"working"}]}}`,
         };
       }
       return { ok: true, stdout: "{}" };
@@ -200,8 +200,8 @@ describe("Herdr Interactive Session Host", () => {
           stdout:
             commands.filter(([command, operation]) => command === "agent" && operation === "list")
               .length === 1
-              ? `{"result":{"agents":[{"agent":"${herdrSessionName("change-123")}","cwd":"/workspace/change-123","pane_id":"workspace-1:pane-1","agent_status":"done"}]}}`
-              : `{"result":{"agents":[{"agent":"${herdrSessionName("change-123")}","cwd":"/workspace/change-123","pane_id":"workspace-1:pane-1","agent_status":"working"}]}}`,
+              ? `{"result":{"type":"agent_list","agents":[{"agent":"${herdrSessionName("change-123")}","cwd":"/workspace/change-123","pane_id":"workspace-1:pane-1","agent_status":"done"}]}}`
+              : `{"result":{"type":"agent_list","agents":[{"agent":"${herdrSessionName("change-123")}","cwd":"/workspace/change-123","pane_id":"workspace-1:pane-1","agent_status":"working"}]}}`,
         };
       }
       if (args[0] === "worktree") {
@@ -247,7 +247,7 @@ describe("Herdr Interactive Session Host", () => {
     const execute: HerdrCommandExecutor = async (args) => {
       commands.push([...args]);
       if (args[0] === "agent" && args[1] === "list") {
-        return { ok: true, stdout: '{"result":{"agents":[]}}' };
+        return { ok: true, stdout: '{"result":{"type":"agent_list","agents":[]}}' };
       }
       if (args[0] === "worktree") {
         return {
@@ -281,11 +281,11 @@ describe("Herdr Interactive Session Host", () => {
       commands.push([...args]);
       if (args[0] === "agent" && args[1] === "list") {
         return paneRuns < 2
-          ? { ok: true, stdout: '{"result":{"agents":[]}}' }
+          ? { ok: true, stdout: '{"result":{"type":"agent_list","agents":[]}}' }
           : {
               ok: true,
               stdout:
-                '{"result":{"agents":[{"name":"but-why-change-123","cwd":"/workspace/change-123","pane_id":"workspace-1:pane-1","agent_status":"working"}]}}',
+                '{"result":{"type":"agent_list","agents":[{"name":"but-why-change-123","cwd":"/workspace/change-123","pane_id":"workspace-1:pane-1","agent_status":"working"}]}}',
             };
       }
       if (args[0] === "worktree") {
@@ -352,9 +352,9 @@ describe("Herdr Interactive Session Host", () => {
           ? {
               ok: true,
               stdout:
-                '{"result":{"agents":[{"name":"but-why-change-123","cwd":"/workspace/change-123","pane_id":"workspace-1:pane-1","agent_status":"working"}]}}',
+                '{"result":{"type":"agent_list","agents":[{"name":"but-why-change-123","cwd":"/workspace/change-123","pane_id":"workspace-1:pane-1","agent_status":"working"}]}}',
             }
-          : { ok: true, stdout: '{"result":{"agents":[]}}' };
+          : { ok: true, stdout: '{"result":{"type":"agent_list","agents":[]}}' };
       }
       if (args[0] === "worktree" && args[1] === "open") {
         const opens = commands.filter(
@@ -404,7 +404,7 @@ describe("Herdr Interactive Session Host", () => {
     const execute: HerdrCommandExecutor = async (args) => {
       commands.push([...args]);
       if (args[0] === "agent" && args[1] === "list") {
-        return { ok: true, stdout: '{"result":{"agents":[]}}' };
+        return { ok: true, stdout: '{"result":{"type":"agent_list","agents":[]}}' };
       }
       if (args[0] === "worktree" && args[1] === "open") {
         return { ok: false, message: "response lost" };
@@ -442,9 +442,9 @@ describe("Herdr Interactive Session Host", () => {
           ? {
               ok: true,
               stdout:
-                '{"result":{"agents":[{"name":"but-why-change-123","cwd":"/workspace/change-123","pane_id":"workspace-1:pane-1","agent_status":"working"}]}}',
+                '{"result":{"type":"agent_list","agents":[{"name":"but-why-change-123","cwd":"/workspace/change-123","pane_id":"workspace-1:pane-1","agent_status":"working"}]}}',
             }
-          : { ok: true, stdout: '{"result":{"agents":[]}}' };
+          : { ok: true, stdout: '{"result":{"type":"agent_list","agents":[]}}' };
       }
       if (args[0] === "worktree") {
         return {
@@ -478,12 +478,53 @@ describe("Herdr Interactive Session Host", () => {
     expect(renameAttempts).toBe(2);
   });
 
+  it("preserves evidence when Pi exits before rename", async () => {
+    const execute: HerdrCommandExecutor = async (args) => {
+      if (args[0] === "agent" && args[1] === "list") {
+        return { ok: true, stdout: '{"result":{"type":"agent_list","agents":[]}}' };
+      }
+      if (args[0] === "worktree") {
+        return {
+          ok: true,
+          stdout:
+            '{"result":{"workspace":{"workspace_id":"workspace-1"},"root_pane":{"pane_id":"workspace-1:pane-1"},"already_open":false}}',
+        };
+      }
+      if (args[0] === "pane" && args[1] === "run") return { ok: true, stdout: "{}" };
+      if (args[0] === "agent" && args[1] === "rename") {
+        return { ok: false, message: "lost response" };
+      }
+      if (args[0] === "pane" && args[1] === "read") {
+        return { ok: false, message: "pane no-such-pane not found" };
+      }
+      if (args[0] === "pane" && args[1] === "process-info") {
+        return { ok: false, message: "pane_not_found" };
+      }
+      return { ok: true, stdout: "{}" };
+    };
+
+    await expect(
+      openHerdrInteractiveSessionHost(execute).launch({
+        changeId: "change-123",
+        repositoryPath: "/repository",
+        worktreePath: "/workspace/change-123",
+        initialPrompt: undefined,
+      }),
+    ).resolves.toMatchObject({
+      ok: false,
+      code: "launch_failed",
+      evidence: {
+        exitEvidence: "Herdr process inspection failed: pane_not_found",
+      },
+    });
+  });
+
   it("does not retry an uncertain pane run and preserves early-exit evidence", async () => {
     const commands: string[][] = [];
     const execute: HerdrCommandExecutor = async (args) => {
       commands.push([...args]);
       if (args[0] === "agent" && args[1] === "list") {
-        return { ok: true, stdout: '{"result":{"agents":[]}}' };
+        return { ok: true, stdout: '{"result":{"type":"agent_list","agents":[]}}' };
       }
       if (args[0] === "worktree") {
         return {
