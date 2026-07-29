@@ -1,9 +1,13 @@
+import { mkdirSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import {
   resolveAgentProfile,
   resolveInteractiveSessionAgentProfile,
 } from "../../src/agent/agentProfiles.js";
+import { validatePiAgentProfileResources } from "../../src/agent/piRuntime.js";
+import { createTestWorkspace } from "../support/testWorkspace.js";
 
 const piProfile = (model?: string) => ({
   agentRuntime: "pi" as const,
@@ -90,6 +94,89 @@ describe("Agent Profiles", () => {
         selection: "default",
       },
     });
+  });
+
+  it("rejects a missing local resource with its profile and resolved path", () => {
+    const root = createTestWorkspace();
+    const globalConfigDirectory = join(root, "global");
+    mkdirSync(globalConfigDirectory, { recursive: true });
+    const resolved = resolveAgentProfile({
+      defaultSelection: { scope: "global", name: "review" },
+      globalProfiles: {
+        review: {
+          agentRuntime: "pi",
+          runtimeConfig: {
+            model: "review-model",
+            extensions: ["extensions/missing"],
+          },
+        },
+      },
+      globalConfigDirectory,
+    });
+
+    expect(resolved.ok).toBe(true);
+    if (!resolved.ok) return;
+
+    expect(validatePiAgentProfileResources(resolved.resolved, root)).toMatchObject({
+      ok: false,
+      error: {
+        _tag: "MissingAgentProfileResource",
+        profileName: "review",
+        scope: "global",
+        resourceType: "extension",
+        path: join(globalConfigDirectory, "extensions/missing"),
+      },
+    });
+  });
+
+  it("accepts local resources and skips Pi package sources", () => {
+    const root = createTestWorkspace();
+    const globalConfigDirectory = join(root, "global");
+    const extension = join(globalConfigDirectory, "extensions", "review.ts");
+    const skill = join(globalConfigDirectory, "skills", "review");
+    mkdirSync(join(globalConfigDirectory, "extensions"), { recursive: true });
+    mkdirSync(skill, { recursive: true });
+    writeFileSync(extension, "export default {};");
+    const resolved = resolveAgentProfile({
+      defaultSelection: { scope: "global", name: "review" },
+      globalProfiles: {
+        review: {
+          agentRuntime: "pi",
+          runtimeConfig: {
+            model: "review-model",
+            extensions: ["extensions/review.ts", extension, "npm:review-extension@1.0.0"],
+            skills: ["skills/review", "~/"],
+          },
+        },
+      },
+      globalConfigDirectory,
+    });
+
+    expect(resolved.ok).toBe(true);
+    if (!resolved.ok) return;
+
+    expect(validatePiAgentProfileResources(resolved.resolved, root)).toEqual({ ok: true });
+  });
+
+  it("resolves Repo resources from the supplied resource root", () => {
+    const root = createTestWorkspace();
+    const extension = join(root, "extensions", "review.ts");
+    mkdirSync(join(root, "extensions"), { recursive: true });
+    writeFileSync(extension, "export default {};");
+    const resolved = resolveAgentProfile({
+      repoSelection: { scope: "repo", name: "review" },
+      repoProfiles: {
+        review: {
+          agentRuntime: "pi",
+          runtimeConfig: { model: "review-model", extensions: ["extensions/review.ts"] },
+        },
+      },
+    });
+
+    expect(resolved.ok).toBe(true);
+    if (!resolved.ok) return;
+
+    expect(validatePiAgentProfileResources(resolved.resolved, root)).toEqual({ ok: true });
   });
 
   it("preserves Pi defaults when no profile is selected", () => {

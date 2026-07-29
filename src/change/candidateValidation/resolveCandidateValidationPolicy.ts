@@ -1,4 +1,5 @@
 import type { GlobalConfigValidationFailed } from "../../contracts/configErrors.js";
+import { validatePiAgentProfileResources } from "../../agent/piRuntime.js";
 import type { RepoConfig } from "../../contracts/repoConfig.js";
 import { readGlobalConfig } from "../../init/globalConfig.js";
 import type { RepoLocalContext } from "../../init/repoContext.js";
@@ -44,6 +45,11 @@ export const resolveCandidateValidationPolicy = (input: {
   });
   if (!specialistReviews.ok) return specialistReviews;
 
+  for (const specialist of specialistReviews.policies) {
+    const resources = validatePiAgentProfileResources(specialist.profile, repoRoot);
+    if (!resources.ok) return resources;
+  }
+
   const policy: CandidateValidationPolicy = {
     ...(submit.config.prepare === undefined ? {} : { prepare: submit.config.prepare }),
     checks: submit.config.checks,
@@ -58,13 +64,17 @@ export const resolveCandidateValidationPolicy = (input: {
     repoRoot,
     globalConfigPath: input.globalConfigPath,
   });
-  return acceptanceReview.ok
-    ? {
-        ok: true,
-        resolved: {
-          taskBacked: true,
-          policy: { ...policy, acceptanceReview: acceptanceReview.policy },
-        },
-      }
-    : acceptanceReview;
+  if (!acceptanceReview.ok) return acceptanceReview;
+  const acceptanceResources = validatePiAgentProfileResources(
+    acceptanceReview.policy.profile,
+    repoRoot,
+  );
+  if (!acceptanceResources.ok) return acceptanceResources;
+  return {
+    ok: true,
+    resolved: {
+      taskBacked: true,
+      policy: { ...policy, acceptanceReview: acceptanceReview.policy },
+    },
+  };
 };

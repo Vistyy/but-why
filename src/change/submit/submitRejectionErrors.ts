@@ -3,6 +3,7 @@ import { Data } from "effect";
 import type {
   MissingAgentModel,
   MissingAgentProfile,
+  MissingAgentProfileResource,
   UnsupportedAgentRuntime,
 } from "../../agent/agentProfileErrors.js";
 import { RepoConfigValidationFailed } from "../../contracts/configErrors.js";
@@ -21,4 +22,5 @@ export type SubmitRejectionError =
   | MissingAgentProfile
   | UnsupportedAgentRuntime
   | MissingAgentModel
+  | MissingAgentProfileResource
   | InvalidReviewerConfig;

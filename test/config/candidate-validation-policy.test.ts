@@ -9,6 +9,62 @@ import { decodeRepoConfig } from "../../src/contracts/repoConfig.js";
 import { createTestWorkspace } from "../support/testWorkspace.js";
 
 describe("Candidate validation policy configuration", () => {
+  it("rejects missing reviewer resources before resolving a Validation Run policy", () => {
+    const root = createTestWorkspace();
+    const globalConfigPath = join(root, "global-config.json");
+    writeFileSync(
+      globalConfigPath,
+      JSON.stringify({
+        agentProfiles: {
+          acceptance: {
+            agentRuntime: "pi",
+            runtimeConfig: { model: "acceptance-model", skills: ["skills/missing"] },
+          },
+        },
+      }),
+    );
+    const decoded = decodeRepoConfig({
+      taskPrefix: "BY",
+      validation: { checks: [{ id: "quality", command: "true" }] },
+      review: { acceptance: { agentProfile: { scope: "global", name: "acceptance" } } },
+    });
+    if (Either.isLeft(decoded)) throw new Error(decoded.left.message);
+
+    const result = resolveCandidateValidationPolicy({
+      context: {
+        root,
+        mainCheckoutRoot: root,
+        commonDirectory: root,
+        taskPrefix: "BY",
+        config: decoded.right,
+        paths: {
+          butWhyDir: join(root, ".but-why"),
+          operationalDir: join(root, "operational"),
+          configPath: join(root, ".but-why", "config.json"),
+          statePath: join(root, "state.sqlite"),
+          reviewersPath: join(root, ".but-why", "reviewers"),
+          artifactsPath: join(root, "artifacts"),
+          taskContextDraftsPath: join(root, "task-context-drafts"),
+          gitignorePath: join(root, ".gitignore"),
+        },
+      },
+      globalConfigPath,
+      taskBacked: true,
+    });
+
+    expect(result).toMatchObject({
+      ok: false,
+      error: {
+        _tag: "MissingAgentProfileResource",
+        profileName: "acceptance",
+        scope: "global",
+        resourceType: "skill",
+        path: join(root, "skills/missing"),
+        message: `Agent Profile "acceptance" in global scope has a missing skill resource at resolved path "${join(root, "skills/missing")}".`,
+      },
+    });
+  });
+
   it("uses configured Acceptance and Specialist Review selections", () => {
     const root = createTestWorkspace();
     const globalConfigPath = join(root, "global-config.json");
