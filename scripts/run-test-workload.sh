@@ -2,7 +2,7 @@
 set -euo pipefail
 
 if (( $# < 1 )); then
-    echo "usage: run-test-workload.sh <test|coverage> [vitest args...]" >&2
+    echo "error: a workload is required; use run-test-workload.sh <test|coverage> [vitest args...]" >&2
     exit 2
 fi
 
@@ -11,7 +11,7 @@ shift
 case "$workload" in
     test|coverage) ;;
     *)
-        echo "error: unsupported test workload: $workload" >&2
+        echo "error: unsupported test workload: $workload; use run-test-workload.sh test or run-test-workload.sh coverage" >&2
         exit 2
         ;;
 esac

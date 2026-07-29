@@ -2,7 +2,7 @@
 set -euo pipefail
 
 if (( $# < 2 )); then
-    echo "usage: with-capacity-lock.sh <workload-class> <command> [args...]" >&2
+    echo "error: workload class and command are required; use with-capacity-lock.sh <workload-class> <command> [args...]" >&2
     exit 2
 fi
 

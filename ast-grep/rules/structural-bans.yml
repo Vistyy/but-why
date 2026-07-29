@@ -1,7 +1,7 @@
 id: process-properties-belong-to-cli-entry
 language: TypeScript
 severity: error
-message: Direct process property access belongs in src/main.ts; other modules receive CLI environment values.
+message: Do not read process properties outside src/main.ts because CLI environment ownership keeps process access at the entry point; receive CLI environment values through the owning interface.
 files:
   - src/**/*.ts
 ignores:
@@ -14,7 +14,7 @@ rule:
 id: effect-tests-use-effect-vitest-runtime
 language: TypeScript
 severity: error
-message: Calls to runPromise, runSync, or related runtime-style methods bypass @effect/vitest execution.
+message: Do not call runtime-style Effect methods in tests because @effect/vitest must control Effect execution; use @effect/vitest APIs such as it.effect or it.scoped.
 files:
   - test/**/*.ts
 rule:
@@ -29,7 +29,7 @@ rule:
 id: toon-package-belongs-to-output-codec
 language: TypeScript
 severity: error
-message: Load @toon-format/toon only in src/output/toon.ts.
+message: Do not load @toon-format/toon outside src/output/toon.ts because output ownership keeps format dependencies at the codec; return structured results and let the codec encode them.
 files:
   - src/**/*.ts
 ignores:
@@ -45,7 +45,7 @@ rule:
 id: sandcastle-factories-belong-to-workspace
 language: TypeScript
 severity: error
-message: Load Sandcastle workspace factories only in src/change/validation/createValidationWorkspace.ts.
+message: Do not load Sandcastle workspace factories outside src/change/validation/createValidationWorkspace.ts because workspace creation owns sandbox lifecycle; use createValidationWorkspace.
 files:
   - src/**/*.ts
 ignores:
@@ -65,7 +65,7 @@ rule:
 id: task-identity-branding-belongs-to-task-id
 language: TypeScript
 severity: error
-message: Direct Task identity branding casts belong in src/task/taskId.ts.
+message: Do not cast values to PublicTaskId or TaskSlug outside src/task/taskId.ts because task identity invariants belong to the identity module; use publicTaskId, storedPublicTaskId, or taskSlugForId.
 files:
   - src/**/*.ts
 ignores:
@@ -78,7 +78,7 @@ rule:
 id: wall-clock-belongs-to-cli-entry
 language: TypeScript
 severity: error
-message: Direct wall-clock reads belong in src/main.ts; other modules receive timestamps.
+message: Do not read the wall clock outside src/main.ts because timestamp ownership keeps time nondeterminism at the CLI entry point; receive timestamps through the owning interface.
 files:
   - src/**/*.ts
 ignores:

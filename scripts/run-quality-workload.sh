@@ -2,7 +2,7 @@
 set -uo pipefail
 
 if (( $# != 1 )); then
-    echo "usage: run-quality-workload.sh <quality|full-quality>" >&2
+    echo "error: a quality workload is required; use run-quality-workload.sh <quality|full-quality>" >&2
     exit 2
 fi
 
@@ -11,7 +11,7 @@ source "$(dirname "${BASH_SOURCE[0]}")/process-tree.sh"
 case "$mode" in
     quality|full-quality) ;;
     *)
-        echo "error: unsupported quality workload: $mode" >&2
+        echo "error: unsupported quality workload: $mode; use run-quality-workload.sh quality or run-quality-workload.sh full-quality" >&2
         exit 2
         ;;
 esac

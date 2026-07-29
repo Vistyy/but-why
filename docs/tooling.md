@@ -72,6 +72,28 @@ ast-grep blocks these syntax contracts:
 - Task identity branding belongs to `taskId.ts`.
 - Wall-clock reads belong to the CLI entry point.
 
+## Repository-authored blocking diagnostics
+
+Repository-authored policy guardrails must make the prohibited approach, the invariant reason, and the supported replacement visible in the primary diagnostic.
+
+Repository-authored operational failures must state the failed condition and the next action when a next action exists.
+
+The repository owns the primary diagnostics for these controls:
+
+- ast-grep syntax contracts in `ast-grep/rules/`.
+- Fallow architecture rules in `fallow-rules/`.
+- Repository script argument and workload controls in `scripts/`.
+- Repository runtime checks in `justfile`, including the `just init` environment checks.
+
+The ast-grep and Fallow controls are policy guardrails.
+The repository scripts and `just init` checks are operational failures.
+
+Just delegates TypeScript, Biome, Vitest, Remark, ast-grep execution, and Fallow execution to their owning tools.
+Dependency-owned diagnostics remain unchanged.
+
+Diagnostic verification uses controlled violations and invalid invocations through the supported ast-grep, Fallow, and repository-script commands.
+Verification checks semantic content without asserting terminal layout, source offsets, or exact prose.
+
 Vitest measures executable statements in every `src/**/*.ts` module.
 Untested executable modules appear at zero coverage.
 TypeScript declaration-only modules have no executable output and therefore have no coverage measurement.
