@@ -57,6 +57,14 @@ Record active dependencies through `by task dependencies set`.
 - `src/submissionEnvironment/`: Git and GitHub submission-environment adapters.
 - `spikes/`: prototypes and spikes.
 
+## Repository synchronization
+
+Before starting a new investigation, Task design, or Change from the main checkout, fetch `origin/main` if it has not been fetched in the current session.
+If local `main` is clean and can fast-forward, fast-forward it.
+Refresh again after an external merge or before a new work item after a long session.
+Otherwise, preserve the checkout and report its state.
+Do not merge, rebase, or reset automatically.
+
 ## Commands
 
 Run `just` to list available recipes.
