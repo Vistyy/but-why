@@ -87,14 +87,14 @@ const launchHerdrSession = async (
   ] as const;
   let worktree = await command(worktreeArgs, signal);
   let recoveredWorktree = false;
-  if (!worktree.ok && worktree.message.includes("timed out")) {
+  if (!worktree.ok && isUncertainMutationFailure(worktree.message)) {
     const state = await observe(
       command,
       ["worktree", "list", "--cwd", input.worktreePath, "--json"],
       signal,
       options.observationRetries,
     );
-    if (state.ok && worktreeMatchesTarget(state.stdout, input.worktreePath)) {
+    if (state.ok && worktreeMatchesTarget(state.stdout, input.worktreePath, input.repositoryPath)) {
       agents = await observe(command, ["agent", "list"], signal, options.observationRetries);
       if (!agents.ok || !isValidAgentList(agents.stdout)) {
         return launchIndeterminate("Herdr did not provide session facts for worktree recovery.");
@@ -124,7 +124,7 @@ const launchHerdrSession = async (
     }
   }
   if (!worktree.ok) {
-    return worktree.message.includes("timed out")
+    return isUncertainMutationFailure(worktree.message)
       ? launchIndeterminate(
           `Herdr did not confirm opening the Managed Worktree: ${worktree.message}`,
         )
@@ -168,7 +168,7 @@ const launchInOpenedWorktree = async (
     signal,
   );
   if (!launched.ok) {
-    const observed = launched.message.includes("timed out")
+    const observed = isUncertainMutationFailure(launched.message)
       ? await waitForSession(execute, input, sessionName, opened.rootPaneId, signal, options)
       : ({ kind: "absent" } as const);
     if (observed.kind === "ready") {
@@ -180,7 +180,7 @@ const launchInOpenedWorktree = async (
     }
     return observed.kind === "exited"
       ? launchFailure(`Pi exited during startup: ${observed.message}`, evidence)
-      : launched.message.includes("timed out")
+      : isUncertainMutationFailure(launched.message)
         ? launchIndeterminate(
             `Herdr did not confirm whether Pi started: ${launched.message}`,
             evidence,
@@ -209,7 +209,7 @@ const launchInOpenedWorktree = async (
       await execute(["pane", "send-keys", opened.rootPaneId, "ctrl-c"], signal);
       if (!opened.alreadyOpen) await closeWorkspace(execute, opened.workspaceId, signal);
       return launchFailure("Herdr reported a naming conflict for the Interactive Session.");
-    } else if (!renamed.ok && renamed.message.includes("timed out")) {
+    } else if (!renamed.ok && isUncertainMutationFailure(renamed.message)) {
       const retried = await execute(["agent", "rename", opened.rootPaneId, sessionName], signal);
       if (!retried.ok || !renamedSession(retried.stdout, input, sessionName, opened.rootPaneId)) {
         await execute(["pane", "send-keys", opened.rootPaneId, "ctrl-c"], signal);
@@ -381,6 +381,9 @@ type HerdrCommandExecutorResult = Awaited<ReturnType<HerdrCommandExecutor>>;
 const isTransientObservationFailure = (message: string): boolean =>
   /timed out|temporar|try again|connection reset|busy/i.test(message);
 
+const isUncertainMutationFailure = (message: string): boolean =>
+  /timed out|connection reset|ECONNRESET|response.*lost|disconnected|broken pipe/i.test(message);
+
 const isValidAgentList = (source: string): boolean => {
   const result = herdrResult(source);
   const agents = result === undefined ? undefined : recordValue(result, "agents");
@@ -403,7 +406,11 @@ const isValidAgentList = (source: string): boolean => {
   );
 };
 
-const worktreeMatchesTarget = (source: string, targetPath: string): boolean => {
+const worktreeMatchesTarget = (
+  source: string,
+  targetPath: string,
+  repositoryPath: string,
+): boolean => {
   const response = parseJson(source);
   const result = isRecord(response) ? recordValue(response, "result") : undefined;
   const worktrees = isRecord(result) ? recordValue(result, "worktrees") : undefined;
@@ -413,11 +420,10 @@ const worktreeMatchesTarget = (source: string, targetPath: string): boolean => {
       (worktree) =>
         isRecord(worktree) &&
         (recordValue(worktree, "path") === targetPath ||
-          recordValue(worktree, "worktree_path") === targetPath ||
-          recordValue(worktree, "cwd") === targetPath) &&
-        ["branch", "worktree_id", "open_workspace_id", "repository_path"].some(
-          (key) => typeof recordValue(worktree, key) === "string",
-        ),
+          recordValue(worktree, "worktree_path") === targetPath) &&
+        (recordValue(worktree, "repository_path") === repositoryPath ||
+          recordValue(worktree, "repo_path") === repositoryPath ||
+          typeof recordValue(worktree, "branch") === "string"),
     )
   );
 };
