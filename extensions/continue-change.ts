@@ -14,6 +14,11 @@ export type ChangeInspectionSnapshot = {
   readonly findingCount: number;
   readonly toolingFailureCount: number;
   readonly pullRequest: Readonly<Record<string, unknown>> | null;
+  readonly publication?: {
+    readonly candidateId: string;
+    readonly expectedHeadSha: string;
+    readonly pullRequest: Readonly<Record<string, unknown>> | null;
+  } | null;
 };
 
 export type ContinuationDecision =
@@ -55,12 +60,26 @@ const findChangeId = (entries: readonly SessionEntry[]): string | undefined => {
   return undefined;
 };
 
-export const decideContinuation = (snapshot: ChangeInspectionSnapshot): ContinuationDecision => {
+export const decideContinuation = (
+  snapshot: ChangeInspectionSnapshot,
+  git?: { readonly head: string; readonly status: string },
+): ContinuationDecision => {
   if (snapshot.findingCount > 0) return { kind: "findings" };
+  const publication = snapshot.publication;
+  const currentCandidate = snapshot.currentCandidate;
+  const hasOwnedPullRequest =
+    git !== undefined &&
+    publication?.pullRequest !== null &&
+    publication?.pullRequest !== undefined &&
+    currentCandidate !== null &&
+    recordValue(currentCandidate, "id") === publication.candidateId &&
+    recordValue(currentCandidate, "headSha") === publication.expectedHeadSha &&
+    git.head === publication.expectedHeadSha &&
+    git.status.trim() === "";
   if (
     snapshot.change.state === "closed" ||
     snapshot.change.state === "blocked" ||
-    snapshot.pullRequest !== null ||
+    hasOwnedPullRequest ||
     snapshot.toolingFailureCount > 0
   ) {
     return { kind: "idle" };
@@ -112,6 +131,7 @@ const durableChangeFingerprint = (
         findingCount: snapshot.findingCount,
         toolingFailureCount: snapshot.toolingFailureCount,
         pullRequest: snapshot.pullRequest,
+        publication: snapshot.publication,
       }),
     )
     .digest("hex");
@@ -159,7 +179,11 @@ export default function continueChange(pi: ExtensionAPI): void {
     ctx: ExtensionContext,
     id: string,
   ): Promise<
-    { readonly snapshot: ChangeInspectionSnapshot; readonly fingerprint: string } | undefined
+    {
+      readonly snapshot: ChangeInspectionSnapshot;
+      readonly fingerprint: string;
+      readonly git: { readonly head: string; readonly status: string };
+    } | undefined
   > => {
     const [changeResult, headResult, statusResult] = await Promise.all([
       run("by", ["change", "show", id, "--output", "json"], ctx.cwd),
@@ -175,12 +199,11 @@ export default function continueChange(pi: ExtensionAPI): void {
       return undefined;
     }
     if (!isSnapshot(value)) return undefined;
+    const git = { head: headResult.stdout.trim(), status: statusResult.stdout };
     return {
       snapshot: value,
-      fingerprint: durableChangeFingerprint(value, {
-        head: headResult.stdout.trim(),
-        status: statusResult.stdout,
-      }),
+      fingerprint: durableChangeFingerprint(value, git),
+      git,
     };
   };
 
@@ -260,13 +283,13 @@ export default function continueChange(pi: ExtensionAPI): void {
         paused: false,
       };
       const retry = nextRetryState(previous, observed.fingerprint);
-      const decision = decideContinuation(observed.snapshot);
+      const decision = decideContinuation(observed.snapshot, observed.git);
       if (decision.kind === "idle") {
         pendingThresholdCompaction = false;
         saveState({ ...previous, ...retry, paused: false });
         return;
       }
-      if (retry.unchangedRestarts >= maxUnchangedRestarts) {
+      if (retry.unchangedRestarts > maxUnchangedRestarts) {
         pendingThresholdCompaction = false;
         saveState({ ...previous, ...retry, paused: false });
         ctx.ui.notify(
@@ -300,6 +323,15 @@ const isPersistedState = (value: unknown): value is PersistedContinuationState =
 const isSnapshot = (value: unknown): value is ChangeInspectionSnapshot => {
   if (!isRecord(value)) return false;
   const change = recordValue(value, "change");
+  const publication = recordValue(value, "publication");
+  const validPublication =
+    publication === undefined ||
+    publication === null ||
+    (isRecord(publication) &&
+      typeof recordValue(publication, "candidateId") === "string" &&
+      typeof recordValue(publication, "expectedHeadSha") === "string" &&
+      (recordValue(publication, "pullRequest") === null ||
+        isRecord(recordValue(publication, "pullRequest"))));
   return (
     isRecord(change) &&
     (recordValue(change, "state") === "open" ||
@@ -313,7 +345,8 @@ const isSnapshot = (value: unknown): value is ChangeInspectionSnapshot => {
       isRecord(recordValue(value, "currentValidationRun"))) &&
     typeof recordValue(value, "findingCount") === "number" &&
     typeof recordValue(value, "toolingFailureCount") === "number" &&
-    (recordValue(value, "pullRequest") === null || isRecord(recordValue(value, "pullRequest")))
+    (recordValue(value, "pullRequest") === null || isRecord(recordValue(value, "pullRequest"))) &&
+    validPublication
   );
 };
 

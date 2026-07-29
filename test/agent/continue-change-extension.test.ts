@@ -118,7 +118,12 @@ describe("packaged Change Implement continuation extension", () => {
     await harness.emit("agent_settled");
     await harness.emit("agent_settled");
 
-    expect(harness.sent).toHaveLength(2);
+    expect(harness.sent).toHaveLength(3);
+    expect(harness.notifications).toEqual([]);
+
+    await harness.emit("agent_settled");
+
+    expect(harness.sent).toHaveLength(3);
     expect(harness.notifications).toContain(
       "But Why automatic continuation stopped after three restarts without Git or Change progress. Take the next action manually.",
     );

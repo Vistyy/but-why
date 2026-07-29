@@ -30,10 +30,6 @@ describe("Change Implement continuation policy", () => {
     ["closed Change", { change: { state: "closed", closeReason: "completed" } } as const],
     ["blocked Change", { change: { state: "blocked", closeReason: null } } as const],
     [
-      "passing owned pull request",
-      { change: { state: "open", closeReason: null }, pullRequest: { number: 4 } } as const,
-    ],
-    [
       "tooling failure",
       { change: { state: "open", closeReason: null }, toolingFailureCount: 1 } as const,
     ],
@@ -48,6 +44,48 @@ describe("Change Implement continuation policy", () => {
         ...input,
       }),
     ).toEqual({ kind: "idle" });
+  });
+
+  it("permits idle state for an owned pull request matching the current Candidate and Git head", () => {
+    expect(
+      decideContinuation(
+        {
+          change: { state: "open", closeReason: null },
+          currentCandidate: { id: "candidate-1", headSha: "head-1" },
+          currentValidationRun: null,
+          findingCount: 0,
+          toolingFailureCount: 0,
+          pullRequest: { number: 4 },
+          publication: {
+            candidateId: "candidate-1",
+            expectedHeadSha: "head-1",
+            pullRequest: { number: 4 },
+          },
+        },
+        { head: "head-1", status: "" },
+      ),
+    ).toEqual({ kind: "idle" });
+  });
+
+  it("continues when a pull request does not match the current Git head", () => {
+    expect(
+      decideContinuation(
+        {
+          change: { state: "open", closeReason: null },
+          currentCandidate: { id: "candidate-1", headSha: "old-head" },
+          currentValidationRun: null,
+          findingCount: 0,
+          toolingFailureCount: 0,
+          pullRequest: { number: 4 },
+          publication: {
+            candidateId: "candidate-1",
+            expectedHeadSha: "old-head",
+            pullRequest: { number: 4 },
+          },
+        },
+        { head: "new-head", status: "" },
+      ),
+    ).toEqual({ kind: "general" });
   });
 
   it("continues after automatic threshold compaction with a recovery message", () => {
