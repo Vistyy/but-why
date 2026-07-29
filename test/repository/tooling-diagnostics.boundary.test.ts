@@ -43,6 +43,10 @@ describe("repository-authored blocking diagnostics", () => {
       "test-child-processes-use-test-process-adapter",
       'import { spawn } from "node:child_process";',
     ],
+    [
+      "test-child-processes-use-test-process-adapter",
+      'const childProcess = await import("node:child_process");',
+    ],
     ["toon-package-belongs-to-output-codec", 'import { encode } from "@toon-format/toon";'],
     [
       "sandcastle-factories-belong-to-workspace",
