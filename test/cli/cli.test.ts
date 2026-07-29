@@ -383,6 +383,7 @@ validationSetup:
         .pipe(
           Effect.tap((rows) => {
             expect(rows).toEqual([
+              { name: "acceptance_context_versions" },
               { name: "candidate_validation_artifacts" },
               { name: "candidate_validation_findings" },
               { name: "candidate_validation_rounds" },
@@ -392,6 +393,7 @@ validationSetup:
               { name: "candidates" },
               { name: "changes" },
               { name: "effect_sql_migrations" },
+              { name: "implementation_blockers" },
               { name: "implementation_decisions" },
               { name: "reviewer_sessions" },
               { name: "shared_state_identity" },
@@ -439,6 +441,8 @@ validationSetup:
         { migration_id: 1, name: "baseline" },
         { migration_id: 2, name: "reviewer_sessions" },
         { migration_id: 3, name: "implementation_decisions" },
+        { migration_id: 4, name: "implementation_blockers" },
+        { migration_id: 5, name: "acceptance_context_versions" },
       ]);
     }),
   );

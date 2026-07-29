@@ -51,6 +51,9 @@ const documentedCommands = [
   "by change reconcile [<change-id>]",
   "by change implement <change-id> [--handoff-file <path>]",
   "by change decision add <change-id> --file <path>",
+  "by change blocker raise <change-id> --file <path>",
+  "by change blocker resolve <change-id> --file <path>",
+  "by change blocker list <change-id>",
   "by change decision list <change-id>",
 ] as const;
 

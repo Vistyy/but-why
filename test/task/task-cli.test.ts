@@ -932,16 +932,16 @@ help[1]: "Run \`by task create --title \\"...\\" --description-file <file>\` to 
         "task",
         "list",
         "--state",
-        "blocked",
+        "not-a-state",
       ]);
 
       expect(result.status).toBe(2);
       expect(result.stderr).toBe("");
       expect(result.stdout).toBe(`error:
   code: invalid_task_state
-  message: Unknown task state blocked.
-  state: blocked
-help[1]: "Use one of: new, todo, implementing, validating, ready, done, cancelled."`);
+  message: Unknown task state not-a-state.
+  state: not-a-state
+help[1]: "Use one of: new, todo, implementing, blocked, validating, ready, done, cancelled."`);
     }),
   );
 

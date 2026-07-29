@@ -13,6 +13,7 @@ describe("Task lifecycle", () => {
       "new",
       "todo",
       "implementing",
+      "blocked",
       "validating",
       "ready",
       "done",
@@ -22,7 +23,8 @@ describe("Task lifecycle", () => {
     const expectedTransitions = new Map<TaskState, readonly TaskState[]>([
       ["new", ["todo"]],
       ["todo", ["implementing"]],
-      ["implementing", ["validating"]],
+      ["implementing", ["blocked", "validating"]],
+      ["blocked", ["implementing"]],
       ["validating", ["implementing", "ready"]],
       ["ready", ["validating", "done"]],
       ["done", []],
