@@ -154,14 +154,11 @@ SQLite and other local operational state resolved through Git's common directory
 _Avoid_: Copied state file, tracked Repo Config, per-worktree database
 
 **Trusted But Why Executable**:
-The accepted But Why version permitted to operate canonical Shared Repository State while But Why develops itself.
-Before npm publication it comes from the accepted main checkout, and after publication it comes from the published package.
-Candidate code uses disposable state and does not operate canonical Shared Repository State.
+The accepted But Why version selected to operate canonical Shared Repository State while But Why develops itself.
 _Avoid_: Candidate executable, current-worktree CLI, separate per-worktree state
 
 **Migration Fingerprint**:
-The deterministic identity of one immutable Shared Repository State migration's canonical content, recorded when the migration is applied and verified before the state can be used.
-An applied migration whose current content does not match its recorded Migration Fingerprint makes Shared Repository State unavailable until explicit recovery.
+The deterministic identity of one immutable Shared Repository State migration's canonical content.
 _Avoid_: Migration ID, mutable source hash, automatic migration repair
 
 **Task Archive**:
