@@ -483,13 +483,7 @@ describe("Herdr Interactive Session Host", () => {
     const execute: HerdrCommandExecutor = async (args) => {
       commands.push([...args]);
       if (args[0] === "agent" && args[1] === "list") {
-        return commands.filter(([command, operation]) => command === "pane" && operation === "run")
-          .length > 0
-          ? {
-              ok: true,
-              stdout: `{"result":{"agents":[{"agent":"${herdrSessionName("change-123")}","cwd":"/workspace/change-123","pane_id":"workspace-1:pane-1","agent_status":"done"}]}}`,
-            }
-          : { ok: true, stdout: '{"result":{"agents":[]}}' };
+        return { ok: true, stdout: '{"result":{"agents":[]}}' };
       }
       if (args[0] === "worktree") {
         return {

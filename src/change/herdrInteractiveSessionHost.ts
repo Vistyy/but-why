@@ -132,7 +132,17 @@ const launchHerdrSession = async (
   }
   const opened = openedWorktree(worktree.stdout);
   if (opened === undefined) {
-    return launchFailure("Herdr did not return a worktree root pane.");
+    const state = await observe(
+      command,
+      ["worktree", "list", "--cwd", input.worktreePath, "--json"],
+      signal,
+      options.observationRetries,
+    );
+    return state.ok && worktreeMatchesTarget(state.stdout, input.worktreePath)
+      ? launchIndeterminate(
+          "Herdr opened the Managed Worktree but returned incomplete workspace facts.",
+        )
+      : launchIndeterminate("Herdr returned malformed worktree-open output.");
   }
   return launchInOpenedWorktree(
     command,
@@ -183,8 +193,13 @@ const launchInOpenedWorktree = async (
     }
     return observed.kind === "malformed"
       ? launchIndeterminate(observed.message, evidence)
-      : observed.kind === "exited"
-        ? launchFailure(`Pi exited during startup: ${observed.message}`, evidence)
+      : observed.kind === "exited" || (observed.kind === "absent" && hasExitEvidence(evidence))
+        ? launchFailure(
+            observed.kind === "exited"
+              ? `Pi exited during startup: ${observed.message}`
+              : "Pi exited during startup.",
+            evidence,
+          )
         : isUncertainMutationFailure(launched.message)
           ? launchIndeterminate(
               `Herdr did not confirm whether Pi started: ${launched.message}`,
@@ -245,12 +260,25 @@ const launchInOpenedWorktree = async (
     const evidence = await launchEvidence(execute, opened.rootPaneId, signal);
     return launchIndeterminate(ready.message, evidence);
   }
-  if (ready.kind === "exited") {
+  if (ready.kind === "exited" || ready.kind === "absent") {
     const evidence = await launchEvidence(execute, opened.rootPaneId, signal);
-    if (!opened.alreadyOpen) await closeWorkspace(execute, opened.workspaceId, signal);
-    return launchFailure(`Pi exited during startup: ${ready.message}`, evidence);
+    if (ready.kind === "exited" || hasExitEvidence(evidence)) {
+      if (!opened.alreadyOpen) await closeWorkspace(execute, opened.workspaceId, signal);
+      return launchFailure(
+        ready.kind === "exited"
+          ? `Pi exited during startup: ${ready.message}`
+          : "Pi exited during startup.",
+        evidence,
+      );
+    }
+    if (ready.kind === "absent") {
+      return launchIndeterminate(
+        "Herdr did not confirm Pi readiness before the deadline.",
+        evidence,
+      );
+    }
   }
-  if (ready.kind === "unknown" || ready.kind === "absent") {
+  if (ready.kind === "unknown") {
     const evidence = await launchEvidence(execute, opened.rootPaneId, signal);
     return launchIndeterminate("Herdr did not confirm Pi readiness before the deadline.", evidence);
   }
@@ -438,6 +466,10 @@ const worktreeMatchesTarget = (source: string, targetPath: string): boolean => {
     )
   );
 };
+
+const hasExitEvidence = (evidence: InteractiveSessionLaunchEvidence | undefined): boolean =>
+  evidence?.exitEvidence !== undefined &&
+  /exit|exited|terminated|code/i.test(evidence.exitEvidence);
 
 const launchEvidence = async (
   execute: HerdrCommandExecutor,
