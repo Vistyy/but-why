@@ -39,6 +39,29 @@ afterAll(() => {
 });
 
 describe("Candidate-owned Validation Run inspection", () => {
+  it.effect("snapshots Implementation Decisions without changing policy reuse identity", () =>
+    Effect.gen(function* () {
+      const fixture = yield* candidateValidationFixture();
+      const decision = {
+        id: "decision-1",
+        changeId: "change-1",
+        sequence: 1,
+        recordedAt: now,
+        content: "Keep rationale separate from intent.",
+      };
+      const first = yield* fixture.runStore.startOrReuse({
+        candidateId: fixture.candidateId,
+        headSha: "head-sha",
+        policy,
+        implementationDecisions: [decision],
+        now,
+      });
+      expect(first.reused).toBe(false);
+      const stored = yield* fixture.runStore.getRunById(first.validationRunId);
+      expect(stored?.implementationDecisions).toEqual([decision]);
+    }),
+  );
+
   it.effect("shows the Candidate judgment and ordered evidence with bounded previews", () =>
     Effect.gen(function* () {
       const fixture = yield* candidateValidationFixture();
@@ -427,6 +450,10 @@ const candidateValidationFixture = () =>
       };
     };
     const runStore = {
+      startOrReuse: (input: Parameters<ChangeValidationPersistence["startOrReuse"]>[0]) =>
+        withPersistence((persistence) => persistence.startOrReuse(input)),
+      getRunById: (runId: string) =>
+        withPersistence((persistence) => persistence.getRunById(runId)),
       recordPrepareRound: (
         input: Parameters<ChangeValidationPersistence["recordPrepareRound"]>[0],
       ) => withPersistence((persistence) => persistence.recordPrepareRound(input)),

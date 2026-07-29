@@ -6,6 +6,7 @@ import type { Effect } from "effect";
 import type { AgentEnvironmentCommand } from "../../agent/agentEnvironment.js";
 import type { ResolvedPiAgentProfile } from "../../agent/agentProfiles.js";
 import type { TaskContextSnapshotV1 } from "../validationRun/taskContextSnapshot.js";
+import type { ImplementationDecision } from "../implementationDecision.js";
 import type { RepositoryStorageError } from "../../contracts/repositoryStorageError.js";
 
 export type ReviewerSessionIdentity = {
@@ -74,6 +75,7 @@ export const continuationPrompt = (input: {
     readonly headSha: string;
   };
   readonly acceptanceContext: TaskContextSnapshotV1;
+  readonly implementationDecisions: readonly ImplementationDecision[];
   readonly availableArtifactRefs: readonly string[];
   readonly previousFindings: readonly unknown[];
 }): string =>
@@ -84,6 +86,8 @@ export const continuationPrompt = (input: {
     JSON.stringify(input.candidate),
     "Complete authoritative Acceptance Context:",
     JSON.stringify(input.acceptanceContext),
+    "Implementer Implementation Decision Log (non-authoritative rationale):",
+    JSON.stringify(input.implementationDecisions),
     "Available Check and Validation evidence:",
     JSON.stringify(input.availableArtifactRefs),
     "Previous final Acceptance Findings:",

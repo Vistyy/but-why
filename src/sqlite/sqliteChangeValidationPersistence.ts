@@ -3,6 +3,7 @@ import { Effect } from "effect";
 import { randomUUID } from "node:crypto";
 
 import type { CandidateRecord } from "../change/candidate/candidate.js";
+import type { ImplementationDecision } from "../change/implementationDecision.js";
 import type {
   CandidateValidationArtifact,
   CandidateValidationFinding,
@@ -197,9 +198,9 @@ const startOrReuse = (sql: SqlClient.SqlClient, input: StartCandidateValidationR
     const validationRunId = randomUUID();
     yield* sql`
       INSERT INTO candidate_validation_runs (
-        id, candidate_id, policy_snapshot, state, created_at, updated_at
+        id, candidate_id, policy_snapshot, implementation_decisions, state, created_at, updated_at
       ) VALUES (
-        ${validationRunId}, ${input.candidateId}, ${policySnapshot}, 'running',
+        ${validationRunId}, ${input.candidateId}, ${policySnapshot}, ${JSON.stringify(input.implementationDecisions ?? [])}, 'running',
         ${input.now}, ${input.now}
       )
     `;
@@ -210,7 +211,7 @@ const getRunById = (sql: SqlClient.SqlClient, validationRunId: string) =>
   Effect.map(
     sql<CandidateValidationRunRow>`
       SELECT id, candidate_id AS candidateId, policy_snapshot AS policySnapshot,
-        state, outcome, created_at AS createdAt, updated_at AS updatedAt
+        implementation_decisions AS implementationDecisions, state, outcome, created_at AS createdAt, updated_at AS updatedAt
       FROM candidate_validation_runs WHERE id = ${validationRunId}
     `,
     (rows) => rows[0],
@@ -219,7 +220,7 @@ const getRunById = (sql: SqlClient.SqlClient, validationRunId: string) =>
 const listRunsForCandidate = (sql: SqlClient.SqlClient, candidateId: string) =>
   sql<CandidateValidationRunRow>`
     SELECT id, candidate_id AS candidateId, policy_snapshot AS policySnapshot,
-      state, outcome, created_at AS createdAt, updated_at AS updatedAt
+      implementation_decisions AS implementationDecisions, state, outcome, created_at AS createdAt, updated_at AS updatedAt
     FROM candidate_validation_runs
     WHERE candidate_id = ${candidateId}
     ORDER BY created_at ASC, id ASC
@@ -417,6 +418,9 @@ const decodeRun = (row: CandidateValidationRunRow) =>
       id: row.id,
       candidateId: row.candidateId,
       policy: decodeSqliteCandidateValidationPolicy(row.policySnapshot),
+      implementationDecisions: JSON.parse(
+        row.implementationDecisions,
+      ) as readonly ImplementationDecision[],
       state: row.state,
       outcome: row.outcome,
       createdAt: row.createdAt,
@@ -456,8 +460,12 @@ type CandidateIdentityRow = {
   readonly headSha: string;
   readonly changeBaseSha: string;
 };
-type CandidateValidationRunRow = Omit<CandidateValidationRunRecord, "policy"> & {
+type CandidateValidationRunRow = Omit<
+  CandidateValidationRunRecord,
+  "policy" | "implementationDecisions"
+> & {
   readonly policySnapshot: string;
+  readonly implementationDecisions: string;
 };
 type CandidateValidationFindingRow = Omit<
   CandidateValidationFinding,

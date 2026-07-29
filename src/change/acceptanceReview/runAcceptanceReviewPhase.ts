@@ -9,6 +9,7 @@ import {
   reviewerFindingHistory,
 } from "../../agent/reviewerPrompts.js";
 import type { TaskContextSnapshotV1 } from "../validationRun/taskContextSnapshot.js";
+import type { ImplementationDecision } from "../implementationDecision.js";
 import { validationPhase } from "../validationRun/validationRun.js";
 import { writeReviewerArtifacts } from "../validationRun/reviewerArtifacts.js";
 import type { RecordCandidateAcceptanceRoundInput } from "../candidateValidation/candidateValidationRunStore.js";
@@ -33,6 +34,7 @@ export type RunAcceptanceReviewPhaseInput = {
     readonly headSha: string;
   };
   readonly acceptanceContext: TaskContextSnapshotV1;
+  readonly implementationDecisions: readonly ImplementationDecision[] | undefined;
   readonly policy: AcceptanceReviewPolicy;
   readonly agentEnvironment?: AgentEnvironmentCommand;
   readonly runtime: ReviewerAgentRuntime;
@@ -98,6 +100,7 @@ export const runAcceptanceReviewPhase = (
       availableArtifactRefs,
       candidate: input.candidate,
       acceptanceContext: input.acceptanceContext,
+      implementationDecisions: input.implementationDecisions ?? [],
     });
     const earlierFindings = reviewerFindingHistory(
       yield* input.listPreviousCandidateReviewerFindings({
@@ -163,6 +166,7 @@ export const runAcceptanceReviewPhase = (
             ? continuationPrompt({
                 candidate: input.candidate,
                 acceptanceContext: input.acceptanceContext,
+                implementationDecisions: input.implementationDecisions ?? [],
                 availableArtifactRefs,
                 previousFindings: earlierFindings,
               })

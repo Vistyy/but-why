@@ -50,6 +50,8 @@ const documentedCommands = [
   "by change cancel <change-id>",
   "by change reconcile [<change-id>]",
   "by change implement <change-id> [--handoff-file <path>]",
+  "by change decision add <change-id> --file <path>",
+  "by change decision list <change-id>",
 ] as const;
 
 describe("public command documentation", () => {

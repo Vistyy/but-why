@@ -1,5 +1,6 @@
 import type * as SqlClient from "@effect/sql/SqlClient";
 import { Effect } from "effect";
+import { randomUUID } from "node:crypto";
 
 import {
   changeState,
@@ -27,6 +28,8 @@ import {
 } from "./sqliteChangePublication.js";
 import { decodeSqliteTaskContextSnapshot } from "./sqliteTaskContextSnapshot.js";
 import type { ReviewerSessionRecord } from "../change/reviewerSession/reviewerSession.js";
+import type { ImplementationDecision } from "../change/implementationDecision.js";
+import type { RecordImplementationDecisionInput } from "../change/changePersistence.js";
 
 const columns = [
   "id",
@@ -74,6 +77,12 @@ export const openSqliteChangePersistence = (): Effect.Effect<
       repository.transaction("read Change", (sql) => getById(sql, changeId)),
     getChangeByTaskId: (taskId) =>
       repository.transaction("read Change by Task", (sql) => getByTaskId(sql, taskId)),
+    listImplementationDecisions: (changeId) =>
+      repository.operation("list Implementation Decisions", (sql) => listDecisions(sql, changeId)),
+    recordImplementationDecision: (input) =>
+      repository.transactionImmediate("record Implementation Decision", (sql) =>
+        recordDecision(sql, input),
+      ),
     getPassingPublicationEvidence: (changeId) =>
       repository.transaction("read passing Change publication evidence", (sql) =>
         getPassingPublicationEvidence(sql, changeId),
@@ -152,13 +161,48 @@ export const openSqliteChangePersistence = (): Effect.Effect<
 const getById = (sql: SqlClient.SqlClient, changeId: string) =>
   Effect.flatMap(
     sql.unsafe<ChangeRow>(`SELECT ${columns} FROM changes WHERE id = ?`, [changeId]),
-    (rows) => mapRow(rows[0], "read Change"),
+    (rows) => mapRow(rows[0], "read Change", sql),
   );
+
+const listDecisions = (sql: SqlClient.SqlClient, changeId: string) =>
+  sql<ImplementationDecision>`
+    SELECT id, change_id AS changeId, sequence, recorded_at AS recordedAt, content
+    FROM implementation_decisions WHERE change_id = ${changeId}
+    ORDER BY sequence ASC
+  `;
+
+const recordDecision = (sql: SqlClient.SqlClient, input: RecordImplementationDecisionInput) =>
+  Effect.gen(function* () {
+    const changes = yield* sql<{
+      readonly state: string;
+      readonly publicationPrNumber: number | null;
+    }>`
+      SELECT state, publication_pr_number AS publicationPrNumber FROM changes WHERE id = ${input.changeId}
+    `;
+    const change = changes[0];
+    if (change === undefined) return { ok: false as const, code: "change_not_found" as const };
+    if (change.state !== "open") return { ok: false as const, code: "change_not_open" as const };
+    if (change.publicationPrNumber !== null)
+      return { ok: false as const, code: "change_published" as const };
+    const id = randomUUID();
+    yield* sql`
+      INSERT INTO implementation_decisions (id, change_id, recorded_at, content)
+      VALUES (${id}, ${input.changeId}, ${input.now}, ${input.content})
+    `;
+    const rows = yield* sql<ImplementationDecision>`
+      SELECT id, change_id AS changeId, sequence, recorded_at AS recordedAt, content
+      FROM implementation_decisions WHERE id = ${id}
+    `;
+    const decision = rows[0];
+    if (decision === undefined)
+      return yield* invalidData("record Implementation Decision", "Decision disappeared");
+    return { ok: true as const, decision };
+  });
 
 const getByTaskId = (sql: SqlClient.SqlClient, taskId: string) =>
   Effect.flatMap(
     sql.unsafe<ChangeRow>(`SELECT ${columns} FROM changes WHERE task_id = ?`, [taskId]),
-    (rows) => mapRow(rows[0], "read Change by Task"),
+    (rows) => mapRow(rows[0], "read Change by Task", sql),
   );
 
 const getPassingPublicationEvidence = (sql: SqlClient.SqlClient, changeId: string) =>
@@ -190,7 +234,7 @@ const listChanges = (sql: SqlClient.SqlClient, input: ListChangesInput) =>
       `SELECT ${columns} FROM changes WHERE repository_common_directory = ? AND (? = 1 OR state = 'open') ORDER BY created_at ASC, id ASC`,
       [input.repositoryCommonDirectory, input.includeClosed ? 1 : 0],
     ),
-    (rows) => Effect.forEach(rows, (row) => mapRequiredRow(row, "list Changes")),
+    (rows) => Effect.forEach(rows, (row) => mapRequiredRow(row, "list Changes", sql)),
   );
 
 const listForReconciliation = (sql: SqlClient.SqlClient, commonDirectory: string) =>
@@ -199,7 +243,8 @@ const listForReconciliation = (sql: SqlClient.SqlClient, commonDirectory: string
       `SELECT ${columns} FROM changes WHERE repository_common_directory = ? AND ((state = 'open' AND publication_pr_number IS NOT NULL) OR (state = 'closed' AND cleanup_state = 'pending')) ORDER BY created_at ASC, id ASC`,
       [commonDirectory],
     ),
-    (rows) => Effect.forEach(rows, (row) => mapRequiredRow(row, "list Changes for reconciliation")),
+    (rows) =>
+      Effect.forEach(rows, (row) => mapRequiredRow(row, "list Changes for reconciliation", sql)),
   );
 
 const beginPublication = (sql: SqlClient.SqlClient, input: BeginChangePublicationInput) =>
@@ -468,57 +513,61 @@ const sameTarget = (
   left.baseBranch === right.baseBranch &&
   left.remoteName === right.remoteName;
 
-const mapRequiredRow = (row: ChangeRow, operationName: string) =>
-  Effect.flatMap(mapRow(row, operationName), (change) =>
+const mapRequiredRow = (row: ChangeRow, operationName: string, sql: SqlClient.SqlClient) =>
+  Effect.flatMap(mapRow(row, operationName, sql), (change) =>
     change === undefined
       ? invalidData(operationName, "Change row disappeared")
       : Effect.succeed(change),
   );
-const mapRow = (row: ChangeRow | undefined, operationName: string) =>
+const mapRow = (row: ChangeRow | undefined, operationName: string, sql: SqlClient.SqlClient) =>
   row === undefined
     ? Effect.succeed(undefined)
-    : Effect.try({
-        try: (): ChangeRecord => ({
-          id: row.id,
-          repositoryCommonDirectory: row.repositoryCommonDirectory,
-          branchRef: row.branchRef,
-          baseRef: row.baseRef,
-          baseRemoteUrl: row.baseRemoteUrl,
-          taskId: row.taskId === null ? null : storedPublicTaskId(row.taskId),
-          startingCommit: row.startingCommit,
-          worktreePath: row.worktreePath,
-          acceptanceContext:
-            row.acceptanceContext === null
-              ? null
-              : decodeSqliteTaskContextSnapshot(row.acceptanceContext),
-          readiness: row.readiness,
-          prepare:
-            row.prepareCommand === null || row.prepareTimeoutSeconds === null
-              ? null
-              : { command: row.prepareCommand, timeoutSeconds: row.prepareTimeoutSeconds },
-          prepareFailure:
-            row.prepareFailure === null
-              ? null
-              : decodeSqliteChangePrepareFailure(row.prepareFailure),
-          publication: decodeSqliteChangePublication(row),
-          noChangeCompletion:
-            row.noChangeCandidateId === null ||
-            row.noChangeValidationRunId === null ||
-            row.noChangeChangeBaseSha === null
-              ? null
-              : {
-                  candidateId: row.noChangeCandidateId,
-                  validationRunId: row.noChangeValidationRunId,
-                  changeBaseSha: row.noChangeChangeBaseSha,
-                },
-          cleanup: { state: row.cleanupState, blockingReason: row.cleanupBlockingReason },
-          state: row.state,
-          closeReason: row.closeReason,
-          createdAt: row.createdAt,
-          updatedAt: row.updatedAt,
-          closedAt: row.closedAt,
-        }),
-        catch: (cause) => new RepositoryPersistedDataInvalid({ operationName, cause }),
+    : Effect.gen(function* () {
+        const decisions = yield* listDecisions(sql, row.id);
+        return yield* Effect.try({
+          try: (): ChangeRecord => ({
+            id: row.id,
+            repositoryCommonDirectory: row.repositoryCommonDirectory,
+            branchRef: row.branchRef,
+            baseRef: row.baseRef,
+            baseRemoteUrl: row.baseRemoteUrl,
+            taskId: row.taskId === null ? null : storedPublicTaskId(row.taskId),
+            startingCommit: row.startingCommit,
+            worktreePath: row.worktreePath,
+            acceptanceContext:
+              row.acceptanceContext === null
+                ? null
+                : decodeSqliteTaskContextSnapshot(row.acceptanceContext),
+            implementationDecisions: decisions,
+            readiness: row.readiness,
+            prepare:
+              row.prepareCommand === null || row.prepareTimeoutSeconds === null
+                ? null
+                : { command: row.prepareCommand, timeoutSeconds: row.prepareTimeoutSeconds },
+            prepareFailure:
+              row.prepareFailure === null
+                ? null
+                : decodeSqliteChangePrepareFailure(row.prepareFailure),
+            publication: decodeSqliteChangePublication(row),
+            noChangeCompletion:
+              row.noChangeCandidateId === null ||
+              row.noChangeValidationRunId === null ||
+              row.noChangeChangeBaseSha === null
+                ? null
+                : {
+                    candidateId: row.noChangeCandidateId,
+                    validationRunId: row.noChangeValidationRunId,
+                    changeBaseSha: row.noChangeChangeBaseSha,
+                  },
+            cleanup: { state: row.cleanupState, blockingReason: row.cleanupBlockingReason },
+            state: row.state,
+            closeReason: row.closeReason,
+            createdAt: row.createdAt,
+            updatedAt: row.updatedAt,
+            closedAt: row.closedAt,
+          }),
+          catch: (cause) => new RepositoryPersistedDataInvalid({ operationName, cause }),
+        });
       });
 const invalidData = (operationName: string, message: string) =>
   Effect.fail(new RepositoryPersistedDataInvalid({ operationName, cause: new Error(message) }));

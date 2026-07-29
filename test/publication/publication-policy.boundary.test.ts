@@ -217,6 +217,36 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
     ),
   );
 
+  it.scoped("publishes the latest Implementation Decision Log without claiming review", () =>
+    withFixture((fixture) =>
+      Effect.gen(function* () {
+        const requests: unknown[] = [];
+        const recorded = yield* fixture.changes.recordImplementationDecision({
+          changeId: fixture.captured.changeId,
+          content: "Keep the decision log separate from approved intent.",
+          now,
+        });
+        expect(recorded.ok).toBe(true);
+        const publication = openCandidatePublication({
+          changePersistence: fixture.changes,
+          validationPersistence: fixture.validation,
+          git: {
+            readBranchHead: () => fixture.captured.headSha,
+            readFirstNonMergeCommitSubject: () => ({ ok: true, subject: "Decision publication" }),
+          },
+          github: successfulCreation(requests),
+        });
+        expect(yield* publication.publish(input(fixture))).toMatchObject({ ok: true });
+        expect((requests[0] as { readonly body: string }).body).toContain(
+          "Keep the decision log separate from approved intent.",
+        );
+        expect((requests[0] as { readonly body: string }).body).toContain(
+          "Implementation Decision Log",
+        );
+      }),
+    ),
+  );
+
   it.scoped("publishes Task-backed metadata without reading commit history", () =>
     withFixture((fixture) =>
       Effect.gen(function* () {

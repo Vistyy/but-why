@@ -547,6 +547,7 @@ describe("repository SQL storage", () => {
         expect(migrations).toEqual([
           { migration_id: 1, name: "baseline" },
           { migration_id: 2, name: "reviewer_sessions" },
+          { migration_id: 3, name: "implementation_decisions" },
         ]);
         expect(identities).toEqual([{ common_directory: repositorySql.commonDirectory }]);
         expect(candidateColumns.map(({ name }) => name)).toEqual([
@@ -780,8 +781,8 @@ describe("repository SQL storage", () => {
         );
 
         return Effect.gen(function* () {
-          expect(yield* readMigrationCount).toBe(2);
-          expect(yield* readMigrationCount).toBe(2);
+          expect(yield* readMigrationCount).toBe(3);
+          expect(yield* readMigrationCount).toBe(3);
         });
       },
       (directory) => Effect.sync(() => rmSync(directory, { recursive: true, force: true })),
