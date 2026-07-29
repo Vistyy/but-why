@@ -91,3 +91,69 @@ rule:
     - pattern: globalThis.Date.now()
     - pattern: Date["now"]()
     - pattern: globalThis.Date["now"]()
+---
+# Expensive process startup belongs only to tests that prove an operating-system boundary.
+id: process-test-helpers-belong-to-process-boundaries
+language: TypeScript
+severity: error
+message: Do not use built CLI or process test helpers outside approved process-boundary tests because process startup is expensive; use the in-process CLI seam unless process isolation is the behavior under test.
+files:
+  - test/**/*.ts
+ignores:
+  - test/support/by-cli.ts
+  - test/task/task-cli-process.boundary.test.ts
+  - test/change/change-implement-process.boundary.test.ts
+  - test/change/change-implement-main-checkout-failure.test.ts
+rule:
+  any:
+    - pattern: runBuiltByWithEnv($$$ARGS)
+    - pattern: runBuiltByWithInput($$$ARGS)
+    - pattern: runByWithEnv($$$ARGS)
+    - pattern: builtByExecutable()
+---
+# Package inspection owns the one external package contract.
+id: package-installation-belongs-to-package-contract
+language: TypeScript
+severity: error
+message: Do not install or pack the package outside the package contract test because package setup is expensive; use source-level interfaces for behavior variations.
+files:
+  - test/**/*.ts
+ignores:
+  - test/repository/package-contents.test.ts
+rule:
+  any:
+    - pattern: spawnSync("npm", $$$ARGS)
+    - pattern: execFileSync("npm", $$$ARGS)
+    - pattern: spawnSync('npm', $$$ARGS)
+    - pattern: execFileSync('npm', $$$ARGS)
+---
+# The live Interactive Session contract owns the real Herdr helper.
+id: live-agent-helper-belongs-to-smoke
+language: TypeScript
+severity: error
+message: Do not use the live Herdr helper outside the opt-in smoke test because live-agent startup is an expensive external contract; use the Interactive Session interface with a test Adapter.
+files:
+  - test/**/*.ts
+ignores:
+  - test/agent/herdr-smoke.test.ts
+  - test/agent/herdr-interactive-session-host.test.ts
+rule:
+  any:
+    - pattern: openHerdrInteractiveSessionHost($$$ARGS)
+---
+# Validation workspace composition owns direct Sandcastle factories.
+id: direct-sandcastle-helpers-belong-to-validation-workspace
+language: TypeScript
+severity: error
+message: Do not use Sandcastle factories outside the focused cross-workspace boundary test because validation workspace composition owns Sandcastle setup; use the Candidate Validation seam for behavior variations.
+files:
+  - test/**/*.ts
+ignores:
+  - test/validation/reviewer-session-cross-workspace.boundary.test.ts
+rule:
+  any:
+    - all:
+        - kind: import_statement
+        - regex: '[\s\S]*(createSandbox|noSandbox)[\s\S]*from\s+["`]@ai-hero/sandcastle([^"`]*)?["`][\s\S]*'
+    - pattern: createSandbox($$$ARGS)
+    - pattern: noSandbox($$$ARGS)

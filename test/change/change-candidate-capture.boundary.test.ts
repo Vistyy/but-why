@@ -11,7 +11,10 @@ import {
 } from "../../src/change/candidateCapture/localGitCandidate.js";
 import { createGitRepo } from "../support/by-cli.js";
 import { captureLocalCandidate } from "../support/candidateCapture.js";
-import { createInitializedRepo } from "../support/initializedRepo.js";
+import {
+  cloneInitializedTestRepository,
+  createInitializedRepo,
+} from "../support/initializedRepo.js";
 import {
   acquireTestWorkspace,
   createTestWorkspace,
@@ -20,14 +23,18 @@ import {
 
 const now = "2026-07-12T10:00:00.000Z";
 let committedRepoTemplate: string;
+let captureReadyRepoTemplate: string;
 
 beforeAll(() => {
   committedRepoTemplate = acquireTestWorkspace();
   committedRepo(committedRepoTemplate);
+  captureReadyRepoTemplate = acquireTestWorkspace();
+  captureReadyRepo(captureReadyRepoTemplate);
 });
 
 afterAll(() => {
   releaseTestWorkspace(committedRepoTemplate);
+  releaseTestWorkspace(captureReadyRepoTemplate);
 });
 
 const committedRepoCopy = (): string => {
@@ -36,10 +43,12 @@ const committedRepoCopy = (): string => {
   return root;
 };
 
+const captureReadyRepoCopy = () => cloneInitializedTestRepository(captureReadyRepoTemplate);
+
 describe("Change Candidate capture boundaries", () => {
   it.effect("captures committed work against the recorded remote default", () =>
     Effect.gen(function* () {
-      const repo = captureReadyRepo();
+      const repo = yield* captureReadyRepoCopy();
       const mainSha = git(repo, "rev-parse", "refs/remotes/origin/main");
       const headSha = git(repo, "rev-parse", "HEAD");
 
@@ -97,7 +106,7 @@ describe("Change Candidate capture boundaries", () => {
     "rejects a divergent same-tree branch because every new Submission requires Change Base ancestry",
     () =>
       Effect.gen(function* () {
-        const repo = captureReadyRepo();
+        const repo = yield* captureReadyRepoCopy();
         const baseTree = git(repo, "rev-parse", "refs/remotes/origin/main^{tree}");
         const movedTarget = git(
           repo,
@@ -127,7 +136,7 @@ describe("Change Candidate capture boundaries", () => {
 
   it.effect("accepts a Repository Branch rebased onto the fetched Change Base", () =>
     Effect.gen(function* () {
-      const repo = captureReadyRepo();
+      const repo = yield* captureReadyRepoCopy();
       const tree = git(repo, "rev-parse", "refs/remotes/origin/main^{tree}");
       const movedTarget = git(
         repo,
@@ -153,7 +162,7 @@ describe("Change Candidate capture boundaries", () => {
 
   it.effect("reports tracked-tree equality against the current Change Base", () =>
     Effect.gen(function* () {
-      const repo = captureReadyRepo();
+      const repo = yield* captureReadyRepoCopy();
       const startingCommit = git(repo, "rev-parse", "refs/heads/main");
       const changed = yield* captureLocalCandidate({ cwd: repo, now });
       if (!changed.ok) return;
@@ -232,8 +241,8 @@ describe("Change Candidate capture boundaries", () => {
   );
 });
 
-const captureReadyRepo = (): string => {
-  const root = createInitializedRepo();
+const captureReadyRepo = (workspace?: string): string => {
+  const root = createInitializedRepo(workspace);
   configureGit(root);
   git(root, "checkout", "-b", "main");
   writeFileSync(join(root, "tracked.txt"), "main\n");

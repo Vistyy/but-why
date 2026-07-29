@@ -61,3 +61,34 @@ invalid:
   - globalThis.Date.now()
   - Date["now"]()
   - globalThis.Date["now"]()
+---
+id: process-test-helpers-belong-to-process-boundaries
+valid:
+  - runByInProcessEffect(root, ["task", "list"])
+invalid:
+  - runBuiltByWithEnv(root, {}, "task", "list")
+  - runBuiltByWithInput(root, "input", {}, "task", "list")
+  - runByWithEnv(root, {}, "task", "list")
+  - builtByExecutable()
+---
+id: package-installation-belongs-to-package-contract
+valid:
+  - spawnSync("git", ["status"])
+invalid:
+  - spawnSync("npm", ["pack"])
+  - execFileSync("npm", ["pack"])
+---
+id: live-agent-helper-belongs-to-smoke
+valid:
+  - openInteractiveSessionHost(adapter)
+invalid:
+  - openHerdrInteractiveSessionHost(undefined)
+---
+id: direct-sandcastle-helpers-belong-to-validation-workspace
+valid:
+  - createValidationWorkspace(input)
+invalid:
+  - import { createSandbox } from "@ai-hero/sandcastle";
+  - import { noSandbox } from "@ai-hero/sandcastle/sandboxes/no-sandbox";
+  - createSandbox(input)
+  - noSandbox()
