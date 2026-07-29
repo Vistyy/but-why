@@ -37,6 +37,8 @@ const createHarness = () => {
   const notifications: string[] = [];
   let currentSnapshot: TestSnapshot = snapshot();
   let inspectionFails = false;
+  let directByUnavailable = false;
+  const execCalls: Array<{ readonly command: string; readonly args: readonly string[] }> = [];
   const api = {
     on(event: string, handler: EventHandler) {
       handlers.set(event, handler);
@@ -55,9 +57,14 @@ const createHarness = () => {
       sent.push(message);
     },
     async exec(command: string, args: string[]) {
+      execCalls.push({ command, args });
       if (command === "by" && inspectionFails)
         return { stdout: "", stderr: "", code: 1, killed: true };
+      if (command === "by" && directByUnavailable)
+        return { stdout: "", stderr: "", code: 1, killed: false };
       if (command === "by") return result(JSON.stringify(currentSnapshot));
+      if (command === "just" && args[0] === "by" && directByUnavailable)
+        return result(JSON.stringify(currentSnapshot));
       if (command === "git" && args[0] === "rev-parse") return result("head\n");
       if (command === "git" && args[0] === "status") return result("");
       if (command === "git" && (args[0] === "diff" || args[0] === "ls-files")) return result("");
@@ -80,11 +87,15 @@ const createHarness = () => {
     entries,
     sent,
     notifications,
+    execCalls,
     setSnapshot(next: TestSnapshot) {
       currentSnapshot = next;
     },
     setInspectionFails(value: boolean) {
       inspectionFails = value;
+    },
+    setDirectByUnavailable(value: boolean) {
+      directByUnavailable = value;
     },
     async emit(event: string, value: unknown = {}) {
       const handler = handlers.get(event);
@@ -105,6 +116,20 @@ describe("packaged Change Implement continuation extension", () => {
 
     expect(harness.sent).toHaveLength(1);
     expect(harness.sent[0]).toContain("take the next concrete implementation action");
+  });
+
+  it("uses the local source CLI when the installed by executable is unavailable", async () => {
+    const harness = createHarness();
+    harness.setDirectByUnavailable(true);
+
+    await harness.emit("session_start", { type: "session_start", reason: "startup" });
+    await harness.emit("agent_settled");
+
+    expect(harness.sent).toHaveLength(1);
+    expect(harness.execCalls).toContainEqual({
+      command: "just",
+      args: ["by", "change", "show", changeId, "--output", "json"],
+    });
   });
 
   it("does not leave an inspection failure idle", async () => {

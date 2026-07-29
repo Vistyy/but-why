@@ -210,10 +210,24 @@ export default function continueChange(pi: ExtensionAPI): void {
     }
   };
 
+  const inspectChange = async (id: string, cwd: string): Promise<RunResult> => {
+    const args = ["change", "show", id, "--output", "json"];
+    const installed = await run("by", args, cwd);
+    if (
+      installed.ok ||
+      (installed.transient && !installed.message.startsWith("by could not run:")) ||
+      installed.stdout.trim() !== ""
+    ) {
+      return installed;
+    }
+    const local = await run("just", ["by", ...args], cwd);
+    return local.ok || local.stdout.trim() !== "" ? local : installed;
+  };
+
   const inspect = async (ctx: ExtensionContext, id: string): Promise<InspectionResult> => {
     const [changeResult, headResult, statusResult, unstagedResult, stagedResult, untrackedResult] =
       await Promise.all([
-        run("by", ["change", "show", id, "--output", "json"], ctx.cwd),
+        inspectChange(id, ctx.cwd),
         run("git", ["rev-parse", "HEAD"], ctx.cwd),
         run("git", ["status", "--porcelain=v1", "--untracked-files=all"], ctx.cwd),
         run("git", ["diff", "--no-ext-diff", "--binary"], ctx.cwd),
