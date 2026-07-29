@@ -124,6 +124,7 @@ Task-backed Changes are cancelled through `by task cancel <task-id> --reason <re
 CLI commands return structured data on stdout.
 TOON is the default output format.
 Callers that parse output pass `--output json`.
+[`docs/cli-output.md`](cli-output.md) defines the agent-first success schemas, evidence boundaries, expansion paths, limits, and diagnostic preservation policy.
 
 ## Configuration
 

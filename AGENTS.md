@@ -16,6 +16,7 @@
 
 - Canonical domain language: `CONTEXT.md`.
 - Current v1 architecture: `docs/architecture.md`.
+- Agent-first CLI output policy: `docs/cli-output.md`.
 - Current implementation order: `docs/issue-breakdown.md`.
 - Approved product specifications: `docs/specs/`.
 - Active implementation work: SQLite Tasks through `by task`.
