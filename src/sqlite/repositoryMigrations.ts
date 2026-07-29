@@ -9,7 +9,7 @@ const baselineStatements = [
       numeric_id INTEGER NOT NULL UNIQUE,
       title TEXT NOT NULL,
       description TEXT NOT NULL,
-      state TEXT NOT NULL CHECK (state IN ('new', 'todo', 'implementing', 'validating', 'ready', 'done', 'cancelled')),
+      state TEXT NOT NULL CHECK (state IN ('new', 'todo', 'implementing', 'blocked', 'validating', 'ready', 'done', 'cancelled')),
       completion_kind TEXT CHECK (completion_kind IS NULL OR completion_kind IN ('merged_pr', 'no_change')),
       cancel_reason TEXT,
       created_at TEXT NOT NULL,
@@ -43,7 +43,7 @@ const baselineStatements = [
       repository_common_directory TEXT NOT NULL,
       branch_ref TEXT NOT NULL,
       task_id TEXT UNIQUE,
-      state TEXT NOT NULL CHECK (state IN ('open', 'closed')),
+      state TEXT NOT NULL CHECK (state IN ('open', 'blocked', 'closed')),
       close_reason TEXT CHECK (close_reason IS NULL OR close_reason IN ('completed', 'cancelled')),
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL,
@@ -202,6 +202,30 @@ const implementationDecisions = Effect.gen(function* () {
   );
 });
 
+const implementationBlockers = Effect.gen(function* () {
+  const sql = yield* SqlClient.SqlClient;
+  yield* sql.unsafe(`
+    CREATE TABLE implementation_blockers (
+      sequence INTEGER PRIMARY KEY AUTOINCREMENT,
+      id TEXT NOT NULL UNIQUE,
+      change_id TEXT NOT NULL,
+      reported_at TEXT NOT NULL,
+      content TEXT NOT NULL,
+      resolved_at TEXT,
+      resolution_id TEXT,
+      resolution_recorded_at TEXT,
+      resolution_content TEXT,
+      FOREIGN KEY (change_id) REFERENCES changes(id)
+    )
+  `);
+  yield* sql.unsafe("CREATE UNIQUE INDEX implementation_blockers_active_idx ON implementation_blockers (change_id) WHERE resolved_at IS NULL");
+});
+
+const acceptanceContextVersions = Effect.gen(function* () {
+  const sql = yield* SqlClient.SqlClient;
+  yield* sql.unsafe(`CREATE TABLE acceptance_context_versions (change_id TEXT NOT NULL, version INTEGER NOT NULL, context TEXT NOT NULL, created_at TEXT NOT NULL, PRIMARY KEY (change_id, version), FOREIGN KEY (change_id) REFERENCES changes(id))`);
+});
+
 const reviewerSessions = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
   yield* sql.unsafe(`
@@ -225,5 +249,7 @@ export const migrateRepositoryState = Migrator.make({})({
     "0001_baseline": baseline,
     "0002_reviewer_sessions": reviewerSessions,
     "0003_implementation_decisions": implementationDecisions,
+    "0004_implementation_blockers": implementationBlockers,
+    "0005_acceptance_context_versions": acceptanceContextVersions,
   }),
 });

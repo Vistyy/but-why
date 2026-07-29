@@ -3,6 +3,7 @@ import type { Effect } from "effect";
 import type { RepositoryStorageError } from "../contracts/repositoryStorageError.js";
 import type { ChangeRecord } from "./change.js";
 import type { ImplementationDecision } from "./implementationDecision.js";
+import type { ImplementationBlockerHistory } from "./implementationBlocker.js";
 import type { ReviewerSessionRecord } from "./reviewerSession/reviewerSession.js";
 import type {
   BeginChangePublicationInput,
@@ -43,7 +44,16 @@ export type RecordImplementationDecisionResult =
       readonly code: "change_not_found" | "change_not_open" | "change_published";
     };
 
+export type RaiseImplementationBlockerInput = { readonly changeId: string; readonly content: string; readonly now: string };
+export type ResolveImplementationBlockerInput = { readonly changeId: string; readonly content: string; readonly now: string };
+export type ImplementationBlockerMutationResult =
+  | { readonly ok: true; readonly change: ChangeRecord; readonly blocker: import("./implementationBlocker.js").ImplementationBlocker }
+  | { readonly ok: false; readonly code: "change_not_found" | "change_not_open" | "change_blocked" | "change_published" | "change_candidate_passed" | "no_active_blocker" | "task_state_invalid" };
+
 export type ChangePersistence = {
+  readonly raiseImplementationBlocker: (input: RaiseImplementationBlockerInput) => StorageEffect<ImplementationBlockerMutationResult>;
+  readonly resolveImplementationBlocker: (input: ResolveImplementationBlockerInput) => StorageEffect<ImplementationBlockerMutationResult>;
+  readonly listImplementationBlockers: (changeId: string) => StorageEffect<ImplementationBlockerHistory | undefined>;
   readonly getChangeById: (changeId: string) => StorageEffect<ChangeRecord | undefined>;
   readonly getChangeByTaskId: (taskId: string) => StorageEffect<ChangeRecord | undefined>;
   readonly listImplementationDecisions: (

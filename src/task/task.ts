@@ -37,4 +37,5 @@ export type TaskContext = {
   readonly title: string;
   readonly description: string;
   readonly comments: readonly string[];
+  readonly resolutions?: readonly string[];
 };

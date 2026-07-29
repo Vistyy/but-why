@@ -22,6 +22,8 @@ Do not record routine coding choices.
 Implementation Decisions explain rationale only.
 They cannot amend Acceptance Context or justify a Candidate that does not satisfy approved intent.
 Continue through recoverable problems and local implementation choices.
+Raise an Implementation Blocker only when accepted implementation cannot safely continue without external authority or action.
+Do not raise a blocker for ordinary difficulty, Findings, tooling recovery, publication recovery, or autonomous Task cancellation.
 Stop and report when continuing requires human authority or when the approved intent appears wrong or impossible.
 Run only focused tests and relevant focused static checks during implementation.
 Do not manually run a repository-wide quality command, complete test suite, coverage workload, or review before Submission.
@@ -33,6 +35,16 @@ Never run the complete quality command manually during Change implementation.
 Commit one complete Candidate before Submission.
 
 This step is complete when the committed Candidate satisfies the accepted intent and focused verification passes without a manually duplicated blocking Check.
+If implementation is blocked, complete this step by raising the blocker and waiting for the main operator's approved Resolution.
+
+## Implementation Blockers
+
+Raise a blocker with `by change blocker raise <change-id> --file <path>`.
+The report is non-authoritative evidence and does not amend Acceptance Context.
+The main operator inspects the blocker with `by change blocker list <change-id>` and records an approved Resolution with `by change blocker resolve <change-id> --file <path>`.
+For a Task-backed Change, the Resolution creates a new Acceptance Context version.
+After resolution, the main operator manually tells the Implementer to continue in the same Managed Worktree.
+Do not detect, stop, message, or automatically wake an Interactive Session.
 
 ## 3. Submit the Candidate
 

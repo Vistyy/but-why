@@ -1,5 +1,6 @@
 import type { AgentEnvironmentCommand } from "../../agent/agentEnvironment.js";
 import type { ImplementationDecision } from "../implementationDecision.js";
+import type { TaskContextSnapshotV1 } from "../validationRun/taskContextSnapshot.js";
 import type { ResolvedPiAgentProfile } from "../../agent/agentProfiles.js";
 import type { ValidationToolingFailureRecordInput } from "../validation/validationToolingFailures.js";
 import type {
@@ -35,6 +36,7 @@ export type RecordCandidateValidationPrepareRoundInput = Omit<
 >;
 
 export type CandidateValidationPolicySnapshot = {
+  readonly acceptanceContext?: TaskContextSnapshotV1;
   readonly agentEnvironment?: AgentEnvironmentCommand;
   readonly prepare?: { readonly command: string; readonly timeoutSeconds: number };
   readonly checks: readonly {

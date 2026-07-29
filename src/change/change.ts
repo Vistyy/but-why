@@ -4,6 +4,7 @@ import type { ImplementationDecision } from "./implementationDecision.js";
 
 export const changeState = {
   open: "open",
+  blocked: "blocked",
   closed: "closed",
 } as const;
 
@@ -85,6 +86,7 @@ export type ChangeRecord = {
   readonly noChangeCompletion?: ChangeNoChangeCompletion | null;
   readonly cleanup: ChangeCleanup;
   readonly state: ChangeState;
+  readonly activeBlocker?: import("./implementationBlocker.js").ImplementationBlocker | null;
   readonly closeReason: ChangeCloseReason | null;
   readonly createdAt: string;
   readonly updatedAt: string;

@@ -11,6 +11,7 @@ import type { RepositoryStorageError } from "../contracts/repositoryStorageError
 import type { ChangeRecord } from "./change.js";
 import type { ChangePersistence, RecordImplementationDecisionResult } from "./changePersistence.js";
 import type { ImplementationDecision } from "./implementationDecision.js";
+import type { ImplementationBlockerHistory } from "./implementationBlocker.js";
 
 export type ChangeInspection = {
   readonly list: (input: {
@@ -32,6 +33,9 @@ export type ChangeInspection = {
   readonly decisions: (
     changeId: string,
   ) => Effect.Effect<readonly ImplementationDecision[] | undefined, RepositoryStorageError>;
+  readonly blockers: (changeId: string) => Effect.Effect<ImplementationBlockerHistory | undefined, RepositoryStorageError>;
+  readonly raiseBlocker: (input: { readonly changeId: string; readonly content: string; readonly now: string }) => Effect.Effect<import("./changePersistence.js").ImplementationBlockerMutationResult, RepositoryStorageError>;
+  readonly resolveBlocker: (input: { readonly changeId: string; readonly content: string; readonly now: string }) => Effect.Effect<import("./changePersistence.js").ImplementationBlockerMutationResult, RepositoryStorageError>;
   readonly addDecision: (input: {
     readonly changeId: string;
     readonly content: string;
@@ -90,6 +94,9 @@ export const openChangeInspection = (input: {
             : input.changePersistence.listImplementationDecisions(changeId),
         ),
       ),
+  blockers: input.changePersistence.listImplementationBlockers,
+  raiseBlocker: input.changePersistence.raiseImplementationBlocker,
+  resolveBlocker: input.changePersistence.resolveImplementationBlocker,
   addDecision: (decision) => input.changePersistence.recordImplementationDecision(decision),
 });
 

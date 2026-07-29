@@ -84,7 +84,7 @@ export type ChangeSubmitResult =
       readonly toolingFailures: readonly CandidateValidationToolingFailure[];
       readonly reviewerEvidence?: ReviewerContinuityEvidence;
     }
-  | { readonly ok: false; readonly code: "change_not_found" | "change_not_open" }
+  | { readonly ok: false; readonly code: "change_not_found" | "change_not_open" | "change_blocked" }
   | { readonly ok: false; readonly code: "change_not_ready"; readonly change: ChangeRecord }
   | {
       readonly ok: false;
@@ -562,13 +562,14 @@ const selectReadyChange = (
   | { readonly ok: true; readonly change: ChangeRecord & { readonly worktreePath: string } }
   | Extract<
       ChangeSubmitResult,
-      { readonly code: "change_not_found" | "change_not_open" | "change_not_ready" }
+      { readonly code: "change_not_found" | "change_not_open" | "change_blocked" | "change_not_ready" }
     >,
   RepositoryStorageError
 > =>
   Effect.gen(function* () {
     const change = yield* persistence.getChangeById(changeId);
     if (change === undefined) return { ok: false, code: "change_not_found" };
+    if (change.state === changeState.blocked) return { ok: false, code: "change_blocked" };
     if (change.state !== changeState.open) return { ok: false, code: "change_not_open" };
     if (change.readiness !== changeReadiness.ready || change.worktreePath === null) {
       return { ok: false, code: "change_not_ready", change };

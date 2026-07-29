@@ -150,7 +150,9 @@ const makeCandidateValidation = (dependencies: {
   const validate = Effect.fn("CandidateValidation.validate")(function* (
     input: ValidateCandidateInput | ValidateTaskBackedCandidateInput | ValidateNoChangeInput,
   ) {
-    const policy = "noChange" in input ? acceptanceOnlyPolicy(input.policy) : input.policy;
+    const policy = "acceptanceContext" in input
+      ? { ...("noChange" in input ? acceptanceOnlyPolicy(input.policy) : input.policy), acceptanceContext: input.acceptanceContext }
+      : input.policy;
     const started = yield* dependencies.persistence.startOrReuse({
       candidateId: input.candidateId,
       headSha: input.headSha,
