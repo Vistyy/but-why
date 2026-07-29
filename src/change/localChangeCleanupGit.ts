@@ -214,11 +214,18 @@ type RemoteRepositoryState = "matches" | "mismatch" | "unavailable";
 const remoteRepositoryState = (input: RemoteRepositoryInput): RemoteRepositoryState => {
   const configured = git(input.repositoryCommonDirectory, [
     "config",
-    "--get",
+    "--get-all",
     `remote.${input.remoteName}.url`,
   ]);
   if (!configured.ok || configured.stdout.trim().length === 0) return "unavailable";
-  if (!sameRemoteRepository(configured.stdout.trim(), input)) return "mismatch";
+  if (
+    !configured.stdout
+      .split("\n")
+      .filter((url) => url.length > 0)
+      .every((url) => sameRemoteRepository(url, input))
+  ) {
+    return "mismatch";
+  }
   const pushUrls = git(input.repositoryCommonDirectory, [
     "config",
     "--get-all",
