@@ -177,9 +177,10 @@ Cleanup removes a worktree only when it has no uncommitted changes.
 After the final Managed Worktree is removed, cleanup removes empty `but-why` and sibling `*-worktrees` containers.
 Cleanup preserves a container that contains any other entry.
 Cleanup deletes a Repository Branch only when its commits remain reachable through another ref.
-After an observed merged owned pull request, cleanup deletes the matching Remote Change Branch only when it still points to the exact published Candidate head.
+After an observed merged owned pull request, cleanup verifies the recorded publication remote identity before deleting the matching Remote Change Branch.
+It deletes the branch only when it still points to the exact published Candidate head.
 An absent Remote Change Branch is an idempotent cleanup success.
-A moved, unavailable, or failed Remote Change Branch cleanup remains pending and reports the blocking reason without preventing lifecycle closure.
+A moved, repointed, unavailable, or failed Remote Change Branch cleanup remains pending and reports the blocking reason without preventing lifecycle closure.
 Cancellation and unmerged pull request closure preserve the Remote Change Branch.
 Task linkage does not affect cleanup policy.
 V1 cancellation does not stop a human-managed Interactive Session.

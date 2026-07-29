@@ -228,7 +228,10 @@ describe("Change cleanup Git adapter", () => {
           worktreePath,
           branchRef: "refs/heads/feature",
           remoteChangeBranch: {
+            owner: "acme",
+            repo: "widgets",
             remoteName: "origin",
+            remoteUrl: "origin-url",
             branchName: "feature",
             expectedHeadSha,
           },
@@ -263,7 +266,10 @@ describe("Change cleanup Git adapter", () => {
           worktreePath: null,
           branchRef: "refs/heads/missing",
           remoteChangeBranch: {
+            owner: "acme",
+            repo: "widgets",
             remoteName: "origin",
+            remoteUrl: "origin-url",
             branchName: "feature",
             expectedHeadSha: "candidate-head",
           },
@@ -293,7 +299,10 @@ describe("Change cleanup Git adapter", () => {
           worktreePath: null,
           branchRef: "refs/heads/missing",
           remoteChangeBranch: {
+            owner: "acme",
+            repo: "widgets",
             remoteName: "origin",
+            remoteUrl: "origin-url",
             branchName: "feature",
             expectedHeadSha: "candidate-head",
           },
@@ -324,7 +333,10 @@ describe("Change cleanup Git adapter", () => {
           worktreePath: null,
           branchRef: "refs/heads/missing",
           remoteChangeBranch: {
+            owner: "acme",
+            repo: "widgets",
             remoteName: "origin",
+            remoteUrl: "origin-url",
             branchName: "feature",
             expectedHeadSha: "candidate-head",
           },
@@ -367,13 +379,52 @@ describe("Change cleanup Git adapter", () => {
         worktreePath,
         branchRef: "refs/heads/feature",
         remoteChangeBranch: {
+          owner: "acme",
+          repo: "widgets",
           remoteName: "origin",
+          remoteUrl: remoteRepository,
           branchName: "feature",
           expectedHeadSha,
         },
       }),
     ).toEqual({ state: "complete" });
     expect(() => git(remoteRepository, "show-ref", "--verify", "refs/heads/feature")).toThrow();
+  });
+
+  it("preserves a Remote Change Branch from a repointed remote", () => {
+    const repository = initializedRepository();
+
+    expect(
+      cleanupChangeResources(
+        {
+          repositoryCommonDirectory: git(
+            repository,
+            "rev-parse",
+            "--path-format=absolute",
+            "--git-common-dir",
+          ),
+          worktreePath: null,
+          branchRef: "refs/heads/missing",
+          remoteChangeBranch: {
+            owner: "acme",
+            repo: "widgets",
+            remoteName: "origin",
+            remoteUrl: "origin-url",
+            branchName: "feature",
+            expectedHeadSha: "candidate-head",
+          },
+        },
+        {
+          readRemoteBranchHead: () => ({ state: "mismatch" }),
+          deleteRemoteBranch: () => {
+            throw new Error("A repointed remote must not be deleted");
+          },
+        },
+      ),
+    ).toEqual({
+      state: "pending",
+      blockingReason: "remote_branch_repository_mismatch",
+    });
   });
 
   it("preserves a Remote Change Branch that moved to another commit", () => {
@@ -399,7 +450,10 @@ describe("Change cleanup Git adapter", () => {
           worktreePath,
           branchRef: "refs/heads/feature",
           remoteChangeBranch: {
+            owner: "acme",
+            repo: "widgets",
             remoteName: "origin",
+            remoteUrl: "origin-url",
             branchName: "feature",
             expectedHeadSha,
           },

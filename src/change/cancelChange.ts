@@ -371,7 +371,10 @@ const cleanupClosedChange = (
     const remoteChangeBranch =
       change.closeReason === "completed" && publication !== null && publication.pullRequest !== null
         ? {
+            owner: publication.target.owner,
+            repo: publication.target.repo,
             remoteName: publication.target.remoteName,
+            remoteUrl: change.baseRemoteUrl ?? "",
             branchName: publication.headBranch,
             expectedHeadSha: publication.expectedHeadSha,
           }

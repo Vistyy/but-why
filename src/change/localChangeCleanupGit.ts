@@ -7,17 +7,24 @@ import type { RemoteChangeBranch } from "./change.js";
 export type RemoteBranchHeadResult =
   | { readonly state: "missing" }
   | { readonly state: "present"; readonly headSha: string }
-  | { readonly state: "unavailable" };
+  | { readonly state: "unavailable" }
+  | { readonly state: "mismatch" };
 
 export type ChangeCleanupRemote = {
   readonly readRemoteBranchHead: (input: {
     readonly repositoryCommonDirectory: string;
+    readonly owner: string;
+    readonly repo: string;
     readonly remoteName: string;
+    readonly remoteUrl: string;
     readonly branchName: string;
   }) => RemoteBranchHeadResult;
   readonly deleteRemoteBranch: (input: {
     readonly repositoryCommonDirectory: string;
+    readonly owner: string;
+    readonly repo: string;
     readonly remoteName: string;
+    readonly remoteUrl: string;
     readonly branchName: string;
     readonly expectedHeadSha: string;
   }) => boolean;
@@ -38,6 +45,7 @@ export type ChangeCleanupResult =
         | "branch_not_reachable_from_another_ref"
         | "branch_deletion_failed"
         | "remote_branch_unavailable"
+        | "remote_branch_repository_mismatch"
         | "remote_branch_head_mismatch"
         | "remote_branch_deletion_failed"
         | "reviewer_session_removal_failed";
@@ -122,12 +130,18 @@ const cleanupRemoteChangeBranch = (
   if (branch === undefined) return { state: "complete" };
   const observed = remote.readRemoteBranchHead({
     repositoryCommonDirectory: input.repositoryCommonDirectory,
+    owner: branch.owner,
+    repo: branch.repo,
     remoteName: branch.remoteName,
+    remoteUrl: branch.remoteUrl,
     branchName: branch.branchName,
   });
   if (observed.state === "missing") return { state: "complete" };
   if (observed.state === "unavailable") {
     return { state: "pending", blockingReason: "remote_branch_unavailable" };
+  }
+  if (observed.state === "mismatch") {
+    return { state: "pending", blockingReason: "remote_branch_repository_mismatch" };
   }
   if (observed.headSha !== branch.expectedHeadSha) {
     return { state: "pending", blockingReason: "remote_branch_head_mismatch" };
@@ -135,7 +149,10 @@ const cleanupRemoteChangeBranch = (
   if (
     remote.deleteRemoteBranch({
       repositoryCommonDirectory: input.repositoryCommonDirectory,
+      owner: branch.owner,
+      repo: branch.repo,
       remoteName: branch.remoteName,
+      remoteUrl: branch.remoteUrl,
       branchName: branch.branchName,
       expectedHeadSha: branch.expectedHeadSha,
     })
@@ -144,10 +161,16 @@ const cleanupRemoteChangeBranch = (
   }
   const afterFailure = remote.readRemoteBranchHead({
     repositoryCommonDirectory: input.repositoryCommonDirectory,
+    owner: branch.owner,
+    repo: branch.repo,
     remoteName: branch.remoteName,
+    remoteUrl: branch.remoteUrl,
     branchName: branch.branchName,
   });
   if (afterFailure.state === "missing") return { state: "complete" };
+  if (afterFailure.state === "mismatch") {
+    return { state: "pending", blockingReason: "remote_branch_repository_mismatch" };
+  }
   if (afterFailure.state === "unavailable") {
     return { state: "pending", blockingReason: "remote_branch_unavailable" };
   }
@@ -158,6 +181,9 @@ const cleanupRemoteChangeBranch = (
 
 const localChangeCleanupRemote: ChangeCleanupRemote = {
   readRemoteBranchHead: (input) => {
+    const repository = remoteRepositoryState(input);
+    if (repository === "unavailable") return { state: "unavailable" };
+    if (repository === "mismatch") return { state: "mismatch" };
     const result = git(input.repositoryCommonDirectory, [
       "ls-remote",
       "--heads",
@@ -173,12 +199,56 @@ const localChangeCleanupRemote: ChangeCleanupRemote = {
       : { state: "present", headSha };
   },
   deleteRemoteBranch: (input) =>
+    remoteRepositoryState(input) === "matches" &&
     git(input.repositoryCommonDirectory, [
       "push",
       `--force-with-lease=refs/heads/${input.branchName}:${input.expectedHeadSha}`,
       input.remoteName,
       `:refs/heads/${input.branchName}`,
     ]).ok,
+};
+
+type RemoteRepositoryInput = Parameters<ChangeCleanupRemote["readRemoteBranchHead"]>[0];
+type RemoteRepositoryState = "matches" | "mismatch" | "unavailable";
+
+const remoteRepositoryState = (input: RemoteRepositoryInput): RemoteRepositoryState => {
+  const configured = git(input.repositoryCommonDirectory, [
+    "config",
+    "--get",
+    `remote.${input.remoteName}.url`,
+  ]);
+  if (!configured.ok || configured.stdout.trim().length === 0) return "unavailable";
+  return sameRemoteRepository(configured.stdout.trim(), input) ? "matches" : "mismatch";
+};
+
+const sameRemoteRepository = (configuredUrl: string, input: RemoteRepositoryInput): boolean => {
+  const configured = githubRepository(configuredUrl);
+  const expected = githubRepository(input.remoteUrl);
+  if (configured !== undefined && expected !== undefined) {
+    return (
+      configured.owner === input.owner &&
+      configured.repo === input.repo &&
+      expected.owner === input.owner &&
+      expected.repo === input.repo
+    );
+  }
+  return normalizeRemoteUrl(configuredUrl) === normalizeRemoteUrl(input.remoteUrl);
+};
+
+const githubRepository = (
+  url: string,
+): { readonly owner: string; readonly repo: string } | undefined => {
+  const normalized = normalizeRemoteUrl(url);
+  const match =
+    /^https:\/\/github\.com\/([^/]+)\/([^/]+)$/.exec(normalized) ??
+    /^git@github\.com:([^/]+)\/([^/]+)$/.exec(normalized) ??
+    /^ssh:\/\/git@github\.com\/([^/]+)\/([^/]+)$/.exec(normalized);
+  return match === null ? undefined : { owner: match[1] ?? "", repo: match[2] ?? "" };
+};
+
+const normalizeRemoteUrl = (url: string): string => {
+  const trimmed = url.trim().replace(/\/$/u, "");
+  return trimmed.endsWith(".git") ? trimmed.slice(0, -4) : trimmed;
 };
 
 const isWorktreePathSafe = (worktreePath: string): boolean => {

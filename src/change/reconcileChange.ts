@@ -227,7 +227,10 @@ const remoteChangeBranchFor = (change: ChangeRecord) => {
     publication !== null &&
     publication.pullRequest !== null
     ? {
+        owner: publication.target.owner,
+        repo: publication.target.repo,
         remoteName: publication.target.remoteName,
+        remoteUrl: change.baseRemoteUrl ?? "",
         branchName: publication.headBranch,
         expectedHeadSha: publication.expectedHeadSha,
       }
