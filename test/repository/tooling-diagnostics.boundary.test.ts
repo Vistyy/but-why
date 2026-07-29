@@ -5,6 +5,8 @@ import { spawnSync } from "node:child_process";
 import { afterEach, describe, expect, test } from "vitest";
 
 const repositoryRoot = resolve(import.meta.dirname, "../..");
+const astGrepRulePath = join(repositoryRoot, "ast-grep/rules/structural-bans.yml");
+const astGrepConfigPath = join(repositoryRoot, "sgconfig.yml");
 const fallowRulePath = join(repositoryRoot, "fallow-rules/architecture.json");
 const temporaryPaths: string[] = [];
 
@@ -45,9 +47,14 @@ describe("repository-authored blocking diagnostics", () => {
     ["task-identity-branding-belongs-to-task-id", "const value = input as PublicTaskId;"],
     ["wall-clock-belongs-to-cli-entry", "const value = Date.now();"],
   ])("ast-grep rule %s explains the supported path", (ruleId, source) => {
+    const fixtureRoot = mkdtempSync(join(tmpdir(), "but-why-diagnostic-ast-grep-"));
+    temporaryPaths.push(fixtureRoot);
     const fixtureDirectory = ruleId === "effect-tests-use-effect-vitest-runtime" ? "test" : "src";
-    const fixture = join(repositoryRoot, `${fixtureDirectory}/by-57-diagnostic-${process.pid}.ts`);
-    temporaryPaths.push(fixture);
+    mkdirSync(join(fixtureRoot, fixtureDirectory));
+    mkdirSync(join(fixtureRoot, "ast-grep/rules"), { recursive: true });
+    copyFileSync(astGrepRulePath, join(fixtureRoot, "ast-grep/rules/structural-bans.yml"));
+    copyFileSync(astGrepConfigPath, join(fixtureRoot, "sgconfig.yml"));
+    const fixture = join(fixtureRoot, fixtureDirectory, "diagnostic-fixture.ts");
     writeFileSync(fixture, `${source}\n`);
 
     const result = run("pnpm", [
@@ -55,7 +62,7 @@ describe("repository-authored blocking diagnostics", () => {
       "ast-grep",
       "scan",
       "--config",
-      join(repositoryRoot, "sgconfig.yml"),
+      join(fixtureRoot, "sgconfig.yml"),
       "--filter",
       `^${ruleId}$`,
       "--report-style",
