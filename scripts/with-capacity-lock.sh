@@ -29,8 +29,13 @@ terminate_child() {
 
     process_tree_terminate "$child_pid"
 }
-trap 'terminate_child 130' INT
-trap 'terminate_child 143' TERM
+
+report_interruption() {
+    echo "interrupted: $workload_class; rerun the same command to retry" >&2
+}
+
+trap 'terminate_child 130; report_interruption' INT
+trap 'terminate_child 143; report_interruption' TERM
 
 exec 9>"$lock_file"
 waiting=0

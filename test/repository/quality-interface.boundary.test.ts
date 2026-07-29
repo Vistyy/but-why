@@ -287,6 +287,7 @@ describe("quality interface", () => {
       expect(waiter.output).toContain("waiting: complete test is waiting for capacity");
       waiter.child.kill("SIGTERM");
       expect((await waiter.done).status).toBe(143);
+      expect(waiter.output).toContain("rerun the same command to retry");
       expect(() => readFileSync(acquiredFile)).toThrow();
     } finally {
       writeFileSync(releaseFile, "release");
@@ -384,6 +385,7 @@ describe("quality interface", () => {
       const interruptedAt = Date.now();
       signalJust(justProcess, signal);
       expect((await justProcess.done).status).toBe(expectedStatus);
+      expect(justProcess.output).toContain("rerun the same command to retry");
       expect(Date.now() - interruptedAt).toBeLessThan(3_000);
       const recovered = await runRunner(lockFile, ["complete coverage", "sh", "-c", "exit 0"]);
       expect(recovered.status).toBe(0);
@@ -422,6 +424,7 @@ describe("quality interface", () => {
       signalJust(justProcess, signal);
       expect((await justProcess.done).status).toBe(expectedStatus);
       expect(justProcess.output).toContain(`${qualityCommand} interrupted after`);
+      expect(justProcess.output).toContain(`rerun just ${qualityCommand} to retry`);
       expect(justProcess.output).not.toContain(`${qualityCommand} completed in`);
       expect(Date.now() - interruptedAt).toBeLessThan(3_000);
       const recovered = await runRunner(lockFile, ["complete test", "sh", "-c", "exit 0"]);

@@ -112,7 +112,7 @@ if (( elapsed_ms < 0 )); then
 fi
 printf -v elapsed '%d.%03d' "$((elapsed_ms / 1000))" "$((elapsed_ms % 1000))"
 if (( interrupted_status != 0 )); then
-    echo "$mode interrupted after ${elapsed}s" >&2
+    echo "$mode interrupted after ${elapsed}s; rerun just $mode to retry" >&2
 else
     echo "$mode completed in ${elapsed}s"
     if [[ "$mode" == "quality" && $elapsed_ms -gt 10000 ]]; then
