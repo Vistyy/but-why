@@ -17,6 +17,7 @@ import type {
   GitHubPullRequestRequest,
 } from "../ownedPullRequestGateway.js";
 import type { RepositoryStorageError } from "../../contracts/repositoryStorageError.js";
+import { implementationDecisionMarkdown } from "../implementationDecision.js";
 export type CommitSubjectResult =
   | { readonly ok: true; readonly subject: string | undefined }
   | { readonly ok: false };
@@ -537,6 +538,13 @@ const record = (
     },
   );
 
+const implementationDecisionSection = (
+  decisions: ChangeRecord["implementationDecisions"],
+): string =>
+  decisions === undefined || decisions.length === 0
+    ? ""
+    : `\n\n## Implementation Decision Log\n\n${implementationDecisionMarkdown(decisions)}`;
+
 const metadataFor = (
   change: ChangeRecord,
   candidateId: string,
@@ -549,7 +557,7 @@ const metadataFor = (
       ? { ok: false, code: "task_metadata_missing" }
       : {
           title: change.acceptanceContext.title,
-          body: `Task: ${change.taskId}\nCandidate: ${candidateId}\nValidation Run: ${validationRunId}`,
+          body: `Task: ${change.taskId}\nCandidate: ${candidateId}\nValidation Run: ${validationRunId}${implementationDecisionSection(change.implementationDecisions)}`,
         };
   if (change.startingCommit === null) return { ok: false, code: "commit_history_unavailable" };
   const subject = git.readFirstNonMergeCommitSubject(change.startingCommit, headSha);
@@ -557,7 +565,7 @@ const metadataFor = (
     ? { ok: false, code: "commit_history_unavailable" }
     : {
         title: subject.subject ?? `Change ${change.id.slice(0, 8)}`,
-        body: `Change: ${change.id}\nCandidate: ${candidateId}\nValidation Run: ${validationRunId}`,
+        body: `Change: ${change.id}\nCandidate: ${candidateId}\nValidation Run: ${validationRunId}${implementationDecisionSection(change.implementationDecisions)}`,
       };
 };
 

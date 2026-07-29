@@ -2,6 +2,7 @@ import type { Effect } from "effect";
 
 import type { RepositoryStorageError } from "../contracts/repositoryStorageError.js";
 import type { ChangeRecord } from "./change.js";
+import type { ImplementationDecision } from "./implementationDecision.js";
 import type { ReviewerSessionRecord } from "./reviewerSession/reviewerSession.js";
 import type {
   BeginChangePublicationInput,
@@ -29,9 +30,28 @@ export type ChangePublicationEvidence = {
   readonly headSha: string;
 };
 
+export type RecordImplementationDecisionInput = {
+  readonly changeId: string;
+  readonly content: string;
+  readonly now: string;
+};
+
+export type RecordImplementationDecisionResult =
+  | { readonly ok: true; readonly decision: ImplementationDecision }
+  | {
+      readonly ok: false;
+      readonly code: "change_not_found" | "change_not_open" | "change_published";
+    };
+
 export type ChangePersistence = {
   readonly getChangeById: (changeId: string) => StorageEffect<ChangeRecord | undefined>;
   readonly getChangeByTaskId: (taskId: string) => StorageEffect<ChangeRecord | undefined>;
+  readonly listImplementationDecisions: (
+    changeId: string,
+  ) => StorageEffect<readonly ImplementationDecision[]>;
+  readonly recordImplementationDecision: (
+    input: RecordImplementationDecisionInput,
+  ) => StorageEffect<RecordImplementationDecisionResult>;
   readonly getPassingPublicationEvidence: (
     changeId: string,
   ) => StorageEffect<ChangePublicationEvidence | undefined>;

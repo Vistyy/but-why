@@ -305,6 +305,9 @@ const validateAndCompleteNoChange = (
       resourceRoot: change.worktreePath,
       noChange: true,
       acceptanceContext: change.acceptanceContext,
+      ...(change.implementationDecisions === undefined
+        ? {}
+        : { implementationDecisions: change.implementationDecisions }),
       policy: withAgentEnvironment(policy.resolved.policy, agentEnvironment),
       now,
     });
@@ -417,6 +420,9 @@ const validateAndPublish = (
             ...candidateIdentity(candidate),
             resourceRoot: change.worktreePath,
             acceptanceContext: change.acceptanceContext,
+            ...(change.implementationDecisions === undefined
+              ? {}
+              : { implementationDecisions: change.implementationDecisions }),
             policy: withAgentEnvironment(policy.resolved.policy, agentEnvironment),
             now,
           })
@@ -424,6 +430,9 @@ const validateAndPublish = (
             changeId: change.id,
             ...candidateIdentity(candidate),
             resourceRoot: change.worktreePath,
+            ...(change.implementationDecisions === undefined
+              ? {}
+              : { implementationDecisions: change.implementationDecisions }),
             policy: withAgentEnvironment(policy.resolved.policy, agentEnvironment),
             now,
           });

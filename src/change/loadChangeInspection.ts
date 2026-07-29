@@ -53,6 +53,8 @@ export const loadChangeInspection = (input: {
       inspect: (changeId) => run((inspection) => inspection.inspect(changeId)),
       findings: (changeId) => run((inspection) => inspection.findings(changeId)),
       validationRuns: (changeId) => run((inspection) => inspection.validationRuns(changeId)),
+      decisions: (changeId) => run((inspection) => inspection.decisions(changeId)),
+      addDecision: (input) => run((inspection) => inspection.addDecision(input)),
     },
   };
 };

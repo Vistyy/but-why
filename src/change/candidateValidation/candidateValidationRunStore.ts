@@ -1,4 +1,5 @@
 import type { AgentEnvironmentCommand } from "../../agent/agentEnvironment.js";
+import type { ImplementationDecision } from "../implementationDecision.js";
 import type { ResolvedPiAgentProfile } from "../../agent/agentProfiles.js";
 import type { ValidationToolingFailureRecordInput } from "../validation/validationToolingFailures.js";
 import type {
@@ -64,6 +65,7 @@ export type StartCandidateValidationRunInput = {
   readonly headSha: string;
   readonly changeBaseSha?: string;
   readonly policy: CandidateValidationPolicySnapshot;
+  readonly implementationDecisions?: readonly ImplementationDecision[];
   readonly now: string;
 };
 
@@ -110,6 +112,7 @@ export type CandidateValidationRunRecord = {
   readonly id: string;
   readonly candidateId: string;
   readonly policy: CandidateValidationPolicySnapshot;
+  readonly implementationDecisions: readonly ImplementationDecision[];
   readonly state: "running" | "complete";
   readonly outcome: CandidateValidationOutcome | null;
   readonly createdAt: string;

@@ -9,7 +9,8 @@ import type {
 import type { ChangeValidationPersistence } from "./validation/changeValidationPersistence.js";
 import type { RepositoryStorageError } from "../contracts/repositoryStorageError.js";
 import type { ChangeRecord } from "./change.js";
-import type { ChangePersistence } from "./changePersistence.js";
+import type { ChangePersistence, RecordImplementationDecisionResult } from "./changePersistence.js";
+import type { ImplementationDecision } from "./implementationDecision.js";
 
 export type ChangeInspection = {
   readonly list: (input: {
@@ -28,6 +29,14 @@ export type ChangeInspection = {
   readonly validationRuns: (
     changeId: string,
   ) => Effect.Effect<ChangeValidationRunHistory | undefined, RepositoryStorageError>;
+  readonly decisions: (
+    changeId: string,
+  ) => Effect.Effect<readonly ImplementationDecision[] | undefined, RepositoryStorageError>;
+  readonly addDecision: (input: {
+    readonly changeId: string;
+    readonly content: string;
+    readonly now: string;
+  }) => Effect.Effect<RecordImplementationDecisionResult, RepositoryStorageError>;
 };
 
 export type ChangeTaskProjection = {
@@ -71,6 +80,17 @@ export const openChangeInspection = (input: {
     ),
   findings: (changeId) => inspectFindings(input, changeId),
   validationRuns: (changeId) => inspectValidationRuns(input, changeId),
+  decisions: (changeId) =>
+    input.changePersistence
+      .getChangeById(changeId)
+      .pipe(
+        Effect.flatMap((change) =>
+          change === undefined
+            ? Effect.succeed(undefined)
+            : input.changePersistence.listImplementationDecisions(changeId),
+        ),
+      ),
+  addDecision: (decision) => input.changePersistence.recordImplementationDecision(decision),
 });
 
 const inspectChange = (

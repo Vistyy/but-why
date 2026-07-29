@@ -12,6 +12,10 @@ import {
   type CliResult,
 } from "../../cliResults.js";
 import { readHandoffFile, type HandoffFileReadError } from "../../change/handoffFile.js";
+import {
+  readImplementationDecisionFile,
+  type ImplementationDecisionFileError,
+} from "../../change/implementationDecisionFile.js";
 import { loadChangeInspection } from "../../change/loadChangeInspection.js";
 import { withChangeUseCases } from "../../change/loadChangeUseCases.js";
 import { loadChangeSubmit } from "../../change/loadChangeSubmit.js";
@@ -94,6 +98,14 @@ export const routeChange = (
             command: "by change implement <change-id> [--handoff-file <path>]",
             description: "Launch an Interactive Session in a ready Change worktree.",
           },
+          {
+            command: "by change decision add <change-id> --file <path>",
+            description: "Record one Implementer Implementation Decision.",
+          },
+          {
+            command: "by change decision list <change-id>",
+            description: "List the Change Implementation Decision Log.",
+          },
         ],
         flags: withGlobalHelpFlags(),
       }),
@@ -107,6 +119,7 @@ export const routeChange = (
   if (subcommand === "findings") return runFindings(args.slice(1), environment);
   if (subcommand === "validation-runs") return runValidationRuns(args.slice(1), environment);
   if (subcommand === "implement") return runImplement(args.slice(1), environment);
+  if (subcommand === "decision") return runDecision(args.slice(1), environment);
   if (subcommand === "submit") return runSubmit(args.slice(1), environment);
   if (subcommand === "cancel") return runCancel(args.slice(1), environment);
   if (subcommand === "reconcile") return runReconcile(args.slice(1), environment);
@@ -285,6 +298,10 @@ const runShow = (
         ? changeNotFound()
         : success({
             change: changeInspectionView(detail.change),
+            ...(detail.change.implementationDecisions === undefined ||
+            detail.change.implementationDecisions.length === 0
+              ? {}
+              : { implementationDecisions: detail.change.implementationDecisions }),
             currentCandidate: detail.currentCandidate,
             currentValidationRun: structuredValue(detail.currentValidationRun),
             findings: detail.findings,
@@ -309,6 +326,9 @@ const changeInspectionView = (change: ChangeRecord) => ({
   startingCommit: change.startingCommit,
   createdAt: change.createdAt,
   closedAt: change.closedAt,
+  ...(change.implementationDecisions === undefined || change.implementationDecisions.length === 0
+    ? {}
+    : { implementationDecisions: change.implementationDecisions }),
 });
 
 const changeNotFound = (): CliResult =>
@@ -561,6 +581,147 @@ const handoffFileError = (error: HandoffFileReadError): CliResult => {
       });
   }
 };
+
+const runDecision = (
+  args: readonly string[],
+  environment: ChangeCommandEnvironment,
+): Effect.Effect<CliResult> => {
+  const action = args[0];
+  if (args.length === 1 && action === "--help") {
+    return Effect.succeed(
+      success({
+        usage: "by change decision <add|list> <change-id> [--file <path>]",
+        commands: [
+          {
+            command: "by change decision add <change-id> --file <path>",
+            description: "Append one Markdown decision.",
+          },
+          {
+            command: "by change decision list <change-id>",
+            description: "List decisions in sequence order.",
+          },
+        ],
+        flags: withGlobalHelpFlags(),
+      }),
+    );
+  }
+  if (action === "list") {
+    if (args.length === 2 && args[1] === "--help") {
+      return Effect.succeed(
+        success({
+          usage: "by change decision list <change-id>",
+          flags: withGlobalHelpFlags(),
+          examples: ["by change decision list <change-id>"],
+        }),
+      );
+    }
+    if (args.length === 2 && args[1] !== undefined && !args[1].startsWith("-")) {
+      const decisionChangeId = args[1];
+      const loaded = loadChangeInspection({ cwd: environment.cwd });
+      if (!loaded.ok) return Effect.succeed(loadError(loaded.error));
+      return loaded.inspection.decisions(decisionChangeId).pipe(
+        Effect.map((decisions) =>
+          decisions === undefined
+            ? changeNotFound()
+            : success({ changeId: decisionChangeId, count: decisions.length, decisions }),
+        ),
+        inspectionFailure,
+      );
+    }
+    return Effect.succeed(
+      usageError({
+        code: "invalid_arguments",
+        message: "Change Decision List requires one Change ID.",
+        help: ["Run `by change decision list <change-id>`."],
+      }),
+    );
+  }
+  if (action === "add") {
+    if (args.length === 2 && args[1] === "--help") {
+      return Effect.succeed(
+        success({
+          usage: "by change decision add <change-id> --file <path>",
+          flags: withGlobalHelpFlags([
+            { flag: "--file <path>", description: "UTF-8 Markdown file; use - for stdin." },
+          ]),
+          examples: [
+            "by change decision add <change-id> --file decision.md",
+            "printf 'Reason' | by change decision add <change-id> --file -",
+          ],
+        }),
+      );
+    }
+    const changeId = args[1];
+    const file = args[2] === "--file" ? args[3] : undefined;
+    if (
+      changeId === undefined ||
+      changeId.startsWith("-") ||
+      file === undefined ||
+      args.length !== 4
+    ) {
+      return Effect.succeed(
+        usageError({
+          code: "invalid_arguments",
+          message: "Change Decision Add requires <change-id> --file <path>.",
+          help: ["Run `by change decision add <change-id> --file <path>`."],
+        }),
+      );
+    }
+    const content = readImplementationDecisionFile(environment.cwd, file, environment.stdin);
+    if (!content.ok) return Effect.succeed(decisionFileError(content.error));
+    const loaded = loadChangeInspection({ cwd: environment.cwd });
+    if (!loaded.ok) return Effect.succeed(loadError(loaded.error));
+    return loaded.inspection
+      .addDecision({ changeId, content: content.content, now: environment.now().toISOString() })
+      .pipe(
+        Effect.map((result) =>
+          result.ok
+            ? success({ changeId, decision: result.decision })
+            : decisionMutationError(result.code, changeId),
+        ),
+        inspectionFailure,
+      );
+  }
+  return Effect.succeed(
+    usageError({
+      code: "unknown_command",
+      message: `Unknown decision command: ${action ?? ""}`,
+      help: ["Run `by change decision --help`."],
+    }),
+  );
+};
+
+const decisionMutationError = (code: string, changeId: string): CliResult =>
+  runtimeError({
+    code,
+    message:
+      code === "change_not_found"
+        ? "Change was not found."
+        : code === "change_published"
+          ? "The owned pull request is already published."
+          : "Change is closed.",
+    details: { changeId },
+    help: [
+      code === "change_published"
+        ? "Record decisions before Change Submit publishes the owned pull request."
+        : "Use an open unpublished Change ID.",
+    ],
+  });
+
+const decisionFileError = (error: ImplementationDecisionFileError): CliResult =>
+  runtimeError({
+    code: error.code,
+    message:
+      error.code === "stdin_is_terminal"
+        ? "Standard input is an interactive terminal."
+        : "Implementation Decision content could not be read.",
+    details: "path" in error ? { path: error.path } : {},
+    help: [
+      error.code === "stdin_is_terminal"
+        ? "Pipe UTF-8 Markdown or use a regular file."
+        : "Provide a bounded UTF-8 Markdown file with `--file <path>`.",
+    ],
+  });
 
 const runSubmit = (
   args: readonly string[],

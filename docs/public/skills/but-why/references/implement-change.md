@@ -16,6 +16,13 @@ This step is complete when the Change, accepted intent, readiness, and Managed W
 
 Follow the repository instructions in the Managed Worktree.
 Use test-driven development at the applicable public seams.
+Record each material Implementation Decision when it is made with `by change decision add <change-id> --file <path>`.
+A material decision affects observable behavior, an interface, stored data, failure handling, or a meaningful trade-off.
+Do not record routine coding choices.
+Implementation Decisions explain rationale only.
+They cannot amend Acceptance Context or justify a Candidate that does not satisfy approved intent.
+Continue through recoverable problems and local implementation choices.
+Stop and report when continuing requires human authority or when the approved intent appears wrong or impossible.
 Run only focused tests and relevant focused static checks during implementation.
 Do not manually run a repository-wide quality command, complete test suite, coverage workload, or review before Submission.
 Change Submit owns the configured blocking Checks and reviews.

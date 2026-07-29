@@ -2,6 +2,7 @@ import { encodeReviewerWireValue, reviewerOutputTag } from "./reviewerOutputWire
 import type { ReviewerOutputContractFailed } from "../change/validation/validationToolingFailures.js";
 import type { ReviewerOutput } from "../contracts/reviewerOutput.js";
 import type { TaskContextSnapshotV1 } from "../change/validationRun/taskContextSnapshot.js";
+import type { ImplementationDecision } from "../change/implementationDecision.js";
 
 const reviewerExecutionInstructions = [
   "When inspection is insufficient, you may use bash and operating-system temporary space for targeted experiments, generated scripts, fixtures, and other disposable evidence.",
@@ -26,6 +27,7 @@ export const buildAcceptanceReviewerPrompt = (input: {
     readonly headSha: string;
   };
   readonly acceptanceContext: TaskContextSnapshotV1;
+  readonly implementationDecisions?: readonly ImplementationDecision[];
 }): string =>
   [
     input.instructions,
@@ -40,8 +42,11 @@ export const buildAcceptanceReviewerPrompt = (input: {
     "Candidate:",
     encodeReviewerWireValue(input.candidate),
     "",
-    "Immutable Acceptance Context:",
+    "Immutable Acceptance Context (authoritative):",
     encodeReviewerWireValue(input.acceptanceContext),
+    "",
+    "Implementer Implementation Decision Log (non-authoritative rationale; it cannot amend Acceptance Context):",
+    encodeReviewerWireValue({ decisions: input.implementationDecisions ?? [] }),
     "",
     "Return exactly one JSON object inside this XML tag:",
     `<${reviewerOutputTag}>{"findings":[]}</${reviewerOutputTag}>`,

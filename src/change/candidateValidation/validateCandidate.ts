@@ -24,6 +24,7 @@ import {
 } from "../validation/validationToolingFailures.js";
 import { maxValidationArtifactBytes } from "../validationRun/artifactFiles.js";
 import type { TaskContextSnapshotV1 } from "../validationRun/taskContextSnapshot.js";
+import type { ImplementationDecision } from "../implementationDecision.js";
 import type { ReviewerSessionStore } from "../reviewerSession/reviewerSession.js";
 
 export type CandidateValidationPolicy = {
@@ -45,6 +46,7 @@ export type ValidateCandidateInput = {
   readonly headSha: string;
   readonly resourceRoot?: string;
   readonly policy: CandidateValidationPolicy;
+  readonly implementationDecisions?: readonly ImplementationDecision[];
   readonly now: string;
 };
 
@@ -56,6 +58,7 @@ type ValidateTaskBackedCandidateInput = {
   readonly resourceRoot?: string;
   readonly acceptanceContext: TaskContextSnapshotV1;
   readonly policy: TaskBackedCandidateValidationPolicy;
+  readonly implementationDecisions?: readonly ImplementationDecision[];
   readonly now: string;
 };
 
@@ -153,6 +156,9 @@ const makeCandidateValidation = (dependencies: {
       headSha: input.headSha,
       changeBaseSha: input.changeBaseSha,
       policy,
+      ...(input.implementationDecisions === undefined
+        ? {}
+        : { implementationDecisions: input.implementationDecisions }),
       now: input.now,
     });
     if (started.reused) return { ok: true, ...started } as const;
@@ -306,6 +312,7 @@ const runCandidatePhases = (
         changeId: input.changeId,
         candidate: candidateIdentity(input),
         acceptanceContext: input.acceptanceContext,
+        implementationDecisions: input.implementationDecisions,
         policy: input.policy.acceptanceReview,
         ...(agentEnvironment === undefined ? {} : { agentEnvironment }),
         runtime: dependencies.reviewerAgentRuntime,
@@ -365,6 +372,7 @@ const runCandidatePhases = (
         changeId: input.changeId,
         candidate: candidateIdentity(input),
         acceptanceContext: input.acceptanceContext,
+        implementationDecisions: input.implementationDecisions,
         policy: input.policy.acceptanceReview,
         ...(agentEnvironment === undefined ? {} : { agentEnvironment }),
         runtime: dependencies.reviewerAgentRuntime,
