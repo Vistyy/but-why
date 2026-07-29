@@ -167,7 +167,17 @@ const getTaskContextById = (sql: SqlClient.SqlClient, taskId: PublicTaskId) =>
       WHERE task_id = ${taskId}
       ORDER BY sequence ASC
     `;
-    return { ...task, comments: comments.map((row) => row.content) } satisfies TaskContext;
+    const resolutions = yield* sql<{ readonly content: string }>`
+      SELECT resolution_content AS content FROM implementation_blockers
+      JOIN changes ON changes.id = implementation_blockers.change_id
+      WHERE changes.task_id = ${taskId} AND resolution_content IS NOT NULL
+      ORDER BY implementation_blockers.sequence ASC
+    `;
+    return {
+      ...task,
+      comments: comments.map((row) => row.content),
+      ...(resolutions.length === 0 ? {} : { resolutions: resolutions.map((row) => row.content) }),
+    } satisfies TaskContext;
   });
 
 const approveTask = (sql: SqlClient.SqlClient, input: ApproveTaskInput) =>

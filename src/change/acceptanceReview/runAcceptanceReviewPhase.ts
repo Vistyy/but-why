@@ -9,6 +9,7 @@ import {
   reviewerFindingHistory,
 } from "../../agent/reviewerPrompts.js";
 import type { TaskContextSnapshotV1 } from "../validationRun/taskContextSnapshot.js";
+import type { ImplementationBlockerHistory } from "../implementationBlocker.js";
 import type { ImplementationDecision } from "../implementationDecision.js";
 import { validationPhase } from "../validationRun/validationRun.js";
 import { writeReviewerArtifacts } from "../validationRun/reviewerArtifacts.js";
@@ -35,6 +36,7 @@ export type RunAcceptanceReviewPhaseInput = {
   };
   readonly acceptanceContext: TaskContextSnapshotV1;
   readonly implementationDecisions: readonly ImplementationDecision[] | undefined;
+  readonly blockerHistory?: ImplementationBlockerHistory;
   readonly policy: AcceptanceReviewPolicy;
   readonly agentEnvironment?: AgentEnvironmentCommand;
   readonly runtime: ReviewerAgentRuntime;
@@ -101,6 +103,7 @@ export const runAcceptanceReviewPhase = (
       candidate: input.candidate,
       acceptanceContext: input.acceptanceContext,
       implementationDecisions: input.implementationDecisions ?? [],
+      ...(input.blockerHistory === undefined ? {} : { blockerHistory: input.blockerHistory }),
     });
     const earlierFindings = reviewerFindingHistory(
       yield* input.listPreviousCandidateReviewerFindings({
@@ -167,6 +170,9 @@ export const runAcceptanceReviewPhase = (
                 candidate: input.candidate,
                 acceptanceContext: input.acceptanceContext,
                 implementationDecisions: input.implementationDecisions ?? [],
+                ...(input.blockerHistory === undefined
+                  ? {}
+                  : { blockerHistory: input.blockerHistory }),
                 availableArtifactRefs,
                 previousFindings: earlierFindings,
               })

@@ -163,7 +163,7 @@ const listCandidatesForChange = (sql: SqlClient.SqlClient, changeId: string) =>
 const startOrReuse = (sql: SqlClient.SqlClient, input: StartCandidateValidationRunInput) =>
   Effect.gen(function* () {
     const candidates = yield* sql<CandidateIdentityRow>`
-      SELECT head_sha AS headSha, change_base_sha AS changeBaseSha
+      SELECT head_sha AS headSha, change_base_sha AS changeBaseSha, change_id AS changeId
       FROM candidates WHERE id = ${input.candidateId}
     `;
     const candidate = candidates[0];
@@ -178,6 +178,15 @@ const startOrReuse = (sql: SqlClient.SqlClient, input: StartCandidateValidationR
       });
     }
 
+    const changes = yield* sql<{
+      readonly state: string;
+    }>`SELECT state FROM changes WHERE id = ${candidate.changeId}`;
+    if (changes[0]?.state === "blocked") {
+      return yield* new RepositoryPersistedDataInvalid({
+        operationName: "start Candidate Validation Run",
+        cause: new Error("An active Implementation Blocker prevents Validation Run creation."),
+      });
+    }
     const policySnapshot = encodeSqliteCandidateValidationPolicy(input.policy);
     const reusable = yield* sql<{ readonly id: string }>`
       SELECT id FROM candidate_validation_runs
@@ -459,6 +468,7 @@ const decodeArtifact = (artifact: CandidateValidationArtifactRow): CandidateVali
 type CandidateIdentityRow = {
   readonly headSha: string;
   readonly changeBaseSha: string;
+  readonly changeId: string;
 };
 type CandidateValidationRunRow = Omit<
   CandidateValidationRunRecord,

@@ -100,6 +100,13 @@ export const repositorySqlLayer = (
     Effect.gen(function* () {
       const sql = yield* SqlClient.SqlClient;
 
+      yield* sql
+        .unsafe("PRAGMA foreign_keys = OFF")
+        .pipe(
+          Effect.mapError(
+            (cause) => new RepositoryStateUnavailable({ statePath: config.statePath, cause }),
+          ),
+        );
       yield* migrateRepositoryState.pipe(
         Effect.catchAllCause((cause) =>
           Effect.fail(
@@ -110,6 +117,13 @@ export const repositorySqlLayer = (
           ),
         ),
       );
+      yield* sql
+        .unsafe("PRAGMA foreign_keys = ON")
+        .pipe(
+          Effect.mapError(
+            (cause) => new RepositoryStateUnavailable({ statePath: config.statePath, cause }),
+          ),
+        );
       yield* ensureRepositoryIdentity(sql, config.commonDirectory).pipe(
         Effect.mapError((cause) =>
           cause instanceof RepositoryIdentityConflict

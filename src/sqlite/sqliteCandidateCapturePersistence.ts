@@ -97,7 +97,8 @@ const selectExpectedChange = (
   Effect.gen(function* () {
     const expected = yield* getChangeById(sql, expectedChangeId);
     if (expected === undefined) return { ok: false, code: "change_not_found" } as const;
-    if (expected.state === changeState.closed) return { ok: false, code: "change_closed" } as const;
+    if (expected.state === changeState.closed || expected.state === changeState.blocked)
+      return { ok: false, code: "change_closed" } as const;
     if (expected.repositoryCommonDirectory !== input.repositoryCommonDirectory) {
       return { ok: false, code: "change_binding_conflict" } as const;
     }

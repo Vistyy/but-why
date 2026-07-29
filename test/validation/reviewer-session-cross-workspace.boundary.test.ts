@@ -91,6 +91,7 @@ printf '%s\n' '{"type":"agent_end","messages":[{"role":"assistant","content":[{"
 
       const environment = [
         "env",
+        // biome-ignore lint/complexity/useLiteralKeys: ProcessEnv requires indexed access under the project TypeScript settings.
         `PATH=${fakeBin}:${process.env["PATH"] ?? ""}`,
         `FAKE_PI_TRACE=${trace}`,
       ] as const;

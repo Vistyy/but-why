@@ -153,6 +153,14 @@ _Avoid_: Done Task, deleted Task
 SQLite and other local operational state resolved through Git's common directory so every linked worktree sees the same facts.
 _Avoid_: Copied state file, tracked Repo Config, per-worktree database
 
+**Trusted But Why Executable**:
+The accepted But Why version selected to operate canonical Shared Repository State while But Why develops itself.
+_Avoid_: Candidate executable, current-worktree CLI, separate per-worktree state
+
+**Migration Fingerprint**:
+The deterministic identity of one immutable Shared Repository State migration's canonical content.
+_Avoid_: Migration ID, mutable source hash, automatic migration repair
+
 **Task Archive**:
 An immutable portable recovery copy of Tasks, Task Comments, and Task Dependencies stored outside Shared Repository State.
 But Why retains append-only Task Archives so an operator can restore durable Task intent without recovering Changes, Candidates, Validation Runs, Findings, or publication evidence.

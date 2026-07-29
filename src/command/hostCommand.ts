@@ -1,5 +1,5 @@
 import * as Command from "@effect/platform/Command";
-import * as CommandExecutor from "@effect/platform/CommandExecutor";
+import type * as CommandExecutor from "@effect/platform/CommandExecutor";
 import { NodeCommandExecutor, NodeFileSystem } from "@effect/platform-node";
 import { Chunk, Effect, Layer, Stream } from "effect";
 

@@ -6,6 +6,7 @@ export const encodeSqliteTaskContextSnapshot = (snapshot: TaskContextSnapshotV1)
     title: snapshot.title,
     description: snapshot.description,
     comments: [...snapshot.comments],
+    ...(snapshot.resolutions === undefined ? {} : { resolutions: [...snapshot.resolutions] }),
   });
 
 export const decodeSqliteTaskContextSnapshot = (encoded: string): TaskContextSnapshotV1 => {
@@ -32,5 +33,10 @@ export const decodeSqliteTaskContextSnapshot = (encoded: string): TaskContextSna
     title: value.title,
     description: value.description,
     comments: value.comments,
+    ...("resolutions" in value &&
+    Array.isArray(value.resolutions) &&
+    value.resolutions.every((resolution) => typeof resolution === "string")
+      ? { resolutions: value.resolutions }
+      : {}),
   };
 };

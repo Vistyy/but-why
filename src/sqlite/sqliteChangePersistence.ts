@@ -1,6 +1,7 @@
 import type * as SqlClient from "@effect/sql/SqlClient";
 import { Effect } from "effect";
 import { randomUUID } from "node:crypto";
+import { canTransition } from "../task/lifecycle.js";
 
 import {
   changeState,
@@ -29,6 +30,10 @@ import {
 import { decodeSqliteTaskContextSnapshot } from "./sqliteTaskContextSnapshot.js";
 import type { ReviewerSessionRecord } from "../change/reviewerSession/reviewerSession.js";
 import type { ImplementationDecision } from "../change/implementationDecision.js";
+import type {
+  ImplementationBlocker,
+  ImplementationBlockerHistory,
+} from "../change/implementationBlocker.js";
 import type { RecordImplementationDecisionInput } from "../change/changePersistence.js";
 
 const columns = [
@@ -73,6 +78,20 @@ export const openSqliteChangePersistence = (): Effect.Effect<
   RepositorySql
 > =>
   Effect.map(RepositorySql, (repository) => ({
+    raiseImplementationBlocker: (input) =>
+      repository.transactionImmediate("raise Implementation Blocker", (sql) =>
+        raiseBlocker(sql, input),
+      ),
+    resolveImplementationBlocker: (input) =>
+      repository.transactionImmediate("resolve Implementation Blocker", (sql) =>
+        resolveBlocker(sql, input),
+      ),
+    listImplementationBlockers: (changeId) =>
+      repository.operation("list Implementation Blockers", (sql) => listBlockers(sql, changeId)),
+    transitionLinkedTask: (input) =>
+      repository.transactionImmediate("transition linked Task", (sql) =>
+        transitionLinkedTask(sql, input),
+      ),
     getChangeById: (changeId) =>
       repository.transaction("read Change", (sql) => getById(sql, changeId)),
     getChangeByTaskId: (taskId) =>
@@ -158,6 +177,177 @@ export const openSqliteChangePersistence = (): Effect.Effect<
       ),
   }));
 
+const raiseBlocker = (
+  sql: SqlClient.SqlClient,
+  input: { readonly changeId: string; readonly content: string; readonly now: string },
+) =>
+  Effect.gen(function* () {
+    const change = yield* getById(sql, input.changeId);
+    if (change === undefined) return { ok: false as const, code: "change_not_found" as const };
+    if (change.state !== "open")
+      return {
+        ok: false as const,
+        code:
+          change.state === "blocked" ? ("change_blocked" as const) : ("change_not_open" as const),
+      };
+    if (change.publication !== null)
+      return { ok: false as const, code: "change_published" as const };
+    const passed = yield* sql<{
+      readonly found: number;
+    }>`SELECT 1 AS found FROM candidates c JOIN candidate_validation_runs r ON r.candidate_id = c.id WHERE c.id = (SELECT id FROM candidates WHERE change_id = ${input.changeId} ORDER BY created_at DESC, id DESC LIMIT 1) AND r.outcome = 'passed' LIMIT 1`;
+    if (passed.length > 0) return { ok: false as const, code: "change_candidate_passed" as const };
+    const id = randomUUID();
+    yield* sql`INSERT INTO implementation_blockers (id, change_id, reported_at, content) VALUES (${id}, ${input.changeId}, ${input.now}, ${input.content})`;
+    yield* sql`UPDATE changes SET state = 'blocked', updated_at = ${input.now} WHERE id = ${input.changeId}`;
+    if (change.taskId !== null)
+      yield* sql`UPDATE tasks SET state = 'blocked', updated_at = ${input.now} WHERE id = ${change.taskId}`;
+    const updated = yield* requireChange(sql, input.changeId, "raise Implementation Blocker");
+    const rows =
+      yield* sql<ImplementationBlockerRow>`SELECT sequence, id, change_id AS changeId, reported_at AS reportedAt, content, resolved_at AS resolvedAt FROM implementation_blockers WHERE id = ${id}`;
+    const stored = rows[0];
+    if (stored === undefined)
+      return yield* invalidData("raise Implementation Blocker", "Blocker disappeared");
+    return { ok: true as const, change: updated, blocker: mapBlocker(stored) };
+  });
+
+const resolveBlocker = (
+  sql: SqlClient.SqlClient,
+  input: { readonly changeId: string; readonly content: string; readonly now: string },
+) =>
+  Effect.gen(function* () {
+    const change = yield* getById(sql, input.changeId);
+    if (change === undefined) return { ok: false as const, code: "change_not_found" as const };
+    if (change.state !== "blocked")
+      return { ok: false as const, code: "no_active_blocker" as const };
+    const rows =
+      yield* sql<ImplementationBlockerRow>`SELECT sequence, id, change_id AS changeId, reported_at AS reportedAt, content, resolved_at AS resolvedAt FROM implementation_blockers WHERE change_id = ${input.changeId} AND resolved_at IS NULL LIMIT 1`;
+    const blocker = rows[0];
+    if (blocker === undefined) return { ok: false as const, code: "no_active_blocker" as const };
+    const resolutionId = randomUUID();
+    if (change.acceptanceContext !== null) {
+      const context = {
+        ...change.acceptanceContext,
+        resolutions: [...(change.acceptanceContext.resolutions ?? []), input.content],
+      };
+      const versions = yield* sql<{
+        readonly version: number | bigint;
+      }>`SELECT COALESCE(MAX(version), 0) + 1 AS version FROM acceptance_context_versions WHERE change_id = ${input.changeId}`;
+      const version = Number(versions[0]?.version ?? 1);
+      yield* sql`INSERT INTO acceptance_context_versions (change_id, version, context, created_at) VALUES (${input.changeId}, ${version}, ${JSON.stringify(context)}, ${input.now})`;
+    }
+    yield* sql`UPDATE implementation_blockers SET resolved_at = ${input.now}, resolution_id = ${resolutionId}, resolution_recorded_at = ${input.now}, resolution_content = ${input.content} WHERE id = ${blocker.id}`;
+    yield* sql`UPDATE changes SET state = 'open', acceptance_context = CASE WHEN task_id IS NULL THEN acceptance_context ELSE json_set(acceptance_context, '$.resolutions', json_insert(COALESCE(json_extract(acceptance_context, '$.resolutions'), '[]'), '$[#]', ${input.content})) END, updated_at = ${input.now} WHERE id = ${input.changeId}`;
+    if (change.taskId !== null)
+      yield* sql`UPDATE tasks SET state = 'implementing', updated_at = ${input.now} WHERE id = ${change.taskId}`;
+    const updated = yield* requireChange(sql, input.changeId, "resolve Implementation Blocker");
+    return {
+      ok: true as const,
+      change: updated,
+      blocker: {
+        ...mapBlocker(blocker),
+        resolvedAt: input.now,
+        resolution: {
+          id: resolutionId,
+          blockerId: blocker.id,
+          recordedAt: input.now,
+          content: input.content,
+        },
+      },
+    };
+  });
+
+const transitionLinkedTask = (
+  sql: SqlClient.SqlClient,
+  input: {
+    readonly changeId: string;
+    readonly taskId: string;
+    readonly to: string;
+    readonly now: string;
+  },
+) =>
+  Effect.gen(function* () {
+    const taskRows = yield* sql<{
+      readonly state: import("../task/lifecycle.js").TaskState;
+    }>`SELECT state FROM tasks WHERE id = ${input.taskId}`;
+    const current = taskRows[0];
+    if (
+      current === undefined ||
+      (current.state !== input.to &&
+        !canTransition(current.state, input.to as import("../task/lifecycle.js").TaskState))
+    )
+      return false;
+    if (input.to === "implementing") {
+      const blocked = yield* sql<{
+        readonly id: string;
+      }>`SELECT tasks.id FROM task_dependencies JOIN tasks ON tasks.id = task_dependencies.prerequisite_task_id WHERE task_dependencies.dependent_task_id = ${input.taskId} AND tasks.state <> 'done' LIMIT 1`;
+      if (blocked.length > 0) return false;
+    }
+    yield* sql`
+      UPDATE tasks SET state = ${input.to}, updated_at = ${input.now}
+      WHERE id = ${input.taskId}
+        AND EXISTS (SELECT 1 FROM changes WHERE id = ${input.changeId} AND state = 'open')
+    `;
+    const rows = yield* sql<{ readonly changed: number }>`SELECT changes() AS changed`;
+    return Number(rows[0]?.changed ?? 0) > 0;
+  });
+
+const listBlockers = (sql: SqlClient.SqlClient, changeId: string) =>
+  Effect.gen(function* () {
+    const exists = yield* sql`SELECT id FROM changes WHERE id = ${changeId}`;
+    if (exists.length === 0) return undefined;
+    const rows = yield* sql<
+      ImplementationBlockerRow & {
+        readonly resolutionId: string | null;
+        readonly resolutionRecordedAt: string | null;
+        readonly resolutionContent: string | null;
+      }
+    >`SELECT sequence, id, change_id AS changeId, reported_at AS reportedAt, content, resolved_at AS resolvedAt, resolution_id AS resolutionId, resolution_recorded_at AS resolutionRecordedAt, resolution_content AS resolutionContent FROM implementation_blockers WHERE change_id = ${changeId} ORDER BY sequence`;
+    const blockers = rows.map((row) => {
+      if (
+        row.resolutionId === null ||
+        row.resolutionRecordedAt === null ||
+        row.resolutionContent === null
+      ) {
+        return { ...mapBlocker(row), resolution: null };
+      }
+      return {
+        ...mapBlocker(row),
+        resolution: {
+          id: row.resolutionId,
+          blockerId: row.id,
+          recordedAt: row.resolutionRecordedAt,
+          content: row.resolutionContent,
+        },
+      };
+    });
+    return {
+      blockers,
+      resolutions: blockers.flatMap((blocker) =>
+        blocker.resolution === null ? [] : [blocker.resolution],
+      ),
+      active: blockers.find((blocker) => blocker.resolvedAt === null) ?? null,
+    } satisfies ImplementationBlockerHistory;
+  });
+
+const mapBlocker = (row: ImplementationBlockerRow): ImplementationBlocker => ({
+  id: row.id,
+  changeId: row.changeId,
+  sequence: Number(row.sequence),
+  reportedAt: row.reportedAt,
+  content: row.content,
+  resolvedAt: row.resolvedAt,
+  resolution: null,
+});
+
+type ImplementationBlockerRow = {
+  readonly sequence: number | bigint;
+  readonly id: string;
+  readonly changeId: string;
+  readonly reportedAt: string;
+  readonly content: string;
+  readonly resolvedAt: string | null;
+};
+
 const getById = (sql: SqlClient.SqlClient, changeId: string) =>
   Effect.flatMap(
     sql.unsafe<ChangeRow>(`SELECT ${columns} FROM changes WHERE id = ?`, [changeId]),
@@ -231,7 +421,7 @@ const getPassingPublicationEvidence = (sql: SqlClient.SqlClient, changeId: strin
 const listChanges = (sql: SqlClient.SqlClient, input: ListChangesInput) =>
   Effect.flatMap(
     sql.unsafe<ChangeRow>(
-      `SELECT ${columns} FROM changes WHERE repository_common_directory = ? AND (? = 1 OR state = 'open') ORDER BY created_at ASC, id ASC`,
+      `SELECT ${columns} FROM changes WHERE repository_common_directory = ? AND (? = 1 OR state IN ('open', 'blocked')) ORDER BY created_at ASC, id ASC`,
       [input.repositoryCommonDirectory, input.includeClosed ? 1 : 0],
     ),
     (rows) => Effect.forEach(rows, (row) => mapRequiredRow(row, "list Changes", sql)),
@@ -403,7 +593,7 @@ const cancelChange = (sql: SqlClient.SqlClient, input: CancelChangeInput) =>
         ? { ok: true as const, changed: false, change }
         : { ok: false as const, code: "change_already_completed" as const };
     }
-    yield* sql`UPDATE changes SET state = 'closed', close_reason = 'cancelled', cleanup_state = 'pending', cleanup_blocking_reason = NULL, updated_at = ${input.now}, closed_at = ${input.now} WHERE id = ${input.changeId} AND state = 'open'`;
+    yield* sql`UPDATE changes SET state = 'closed', close_reason = 'cancelled', cleanup_state = 'pending', cleanup_blocking_reason = NULL, updated_at = ${input.now}, closed_at = ${input.now} WHERE id = ${input.changeId} AND state IN ('open', 'blocked')`;
     if (change.taskId !== null)
       yield* sql`UPDATE tasks SET state = 'cancelled', cancel_reason = ${input.reason}, updated_at = ${input.now} WHERE id = ${change.taskId}`;
     return {
@@ -439,9 +629,12 @@ const selectOpenChange = (
   change: ChangeRecord | undefined,
 ):
   | { readonly ok: true; readonly change: ChangeRecord }
-  | { readonly ok: false; readonly code: "change_not_found" | "change_closed" } => {
+  | {
+      readonly ok: false;
+      readonly code: "change_not_found" | "change_closed";
+    } => {
   if (change === undefined) return { ok: false, code: "change_not_found" };
-  return change.state === changeState.closed
+  return change.state === changeState.closed || change.state === changeState.blocked
     ? { ok: false, code: "change_closed" }
     : { ok: true, change };
 };
@@ -524,6 +717,8 @@ const mapRow = (row: ChangeRow | undefined, operationName: string, sql: SqlClien
     ? Effect.succeed(undefined)
     : Effect.gen(function* () {
         const decisions = yield* listDecisions(sql, row.id);
+        const activeRows =
+          yield* sql<ImplementationBlockerRow>`SELECT sequence, id, change_id AS changeId, reported_at AS reportedAt, content, resolved_at AS resolvedAt FROM implementation_blockers WHERE change_id = ${row.id} AND resolved_at IS NULL LIMIT 1`;
         return yield* Effect.try({
           try: (): ChangeRecord => ({
             id: row.id,
@@ -561,6 +756,7 @@ const mapRow = (row: ChangeRow | undefined, operationName: string, sql: SqlClien
                   },
             cleanup: { state: row.cleanupState, blockingReason: row.cleanupBlockingReason },
             state: row.state,
+            activeBlocker: activeRows[0] === undefined ? null : mapBlocker(activeRows[0]),
             closeReason: row.closeReason,
             createdAt: row.createdAt,
             updatedAt: row.updatedAt,

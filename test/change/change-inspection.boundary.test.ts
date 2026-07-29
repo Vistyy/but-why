@@ -355,7 +355,7 @@ describe("Change inspection CLI", () => {
       ).toContainEqual(
         expect.objectContaining({
           id: "BY-1",
-          change: { id: changeId, state: "open", readiness: "ready" },
+          change: { id: changeId, state: "open", readiness: "ready", activeBlocker: null },
         }),
       );
 
