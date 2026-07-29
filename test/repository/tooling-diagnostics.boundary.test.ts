@@ -45,7 +45,7 @@ describe("repository-authored blocking diagnostics", () => {
     ],
     [
       "test-child-processes-use-test-process-adapter",
-      'const childProcess = await import("node:child_process");',
+      'const childProcess = await import("node:child_process/promises");',
     ],
     ["toon-package-belongs-to-output-codec", 'import { encode } from "@toon-format/toon";'],
     [

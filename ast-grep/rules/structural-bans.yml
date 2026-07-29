@@ -128,18 +128,24 @@ rule:
   any:
     - all:
         - kind: import_statement
-        - regex: '[\\s\\S]*["`]node:child_process["`][\\s\\S]*'
+        - regex: '[\\s\\S]*["`]node:child_process([^"`]*)?["`][\\s\\S]*'
     - all:
         - kind: import_statement
-        - regex: '[\\s\\S]*["`]child_process["`][\\s\\S]*'
+        - regex: '[\\s\\S]*["`]child_process([^"`]*)?["`][\\s\\S]*'
     - pattern: import("node:child_process")
     - pattern: import('node:child_process')
-    - pattern: import("child_process")
-    - pattern: import('child_process')
     - pattern: require("node:child_process")
     - pattern: require('node:child_process')
-    - pattern: require("child_process")
-    - pattern: require('child_process')
+    - all:
+        - kind: call_expression
+        - regex: '^(import|require)\\(["`]node:child_process([^"`]*)?["`]\\)$'
+    - pattern: import("node:child_process/promises")
+    - pattern: import('node:child_process/promises')
+    - pattern: require("node:child_process/promises")
+    - pattern: require('node:child_process/promises')
+    - all:
+        - kind: call_expression
+        - regex: '^(import|require)\\(["`]child_process([^"`]*)?["`]\\)$'
 ---
 # Package inspection owns the one external package contract.
 id: package-installation-belongs-to-package-contract

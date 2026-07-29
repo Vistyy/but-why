@@ -18,6 +18,13 @@ import type { TextInputStdin } from "../../src/cli/input/textInput.js";
 export const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 export const byExecutable = join(repoRoot, "bin/by");
 
+export const testProcessEnvironment = (environment: NodeJS.ProcessEnv) => {
+  const { HOME: isolatedHome, ...controlledEnvironment } = environment;
+  return isolatedHome === undefined
+    ? { env: controlledEnvironment }
+    : { env: controlledEnvironment, isolatedHome };
+};
+
 let builtExecutable: string | undefined;
 
 export const builtByExecutable = (): string => {
@@ -53,7 +60,7 @@ export const runBuiltByWithEnv = (
 ) =>
   runTestProcess(process.execPath, [builtByExecutable(), ...args], {
     cwd,
-    env: { ...env, BUT_WHY_EXECUTABLE_PATH: byExecutable },
+    ...testProcessEnvironment({ ...env, BUT_WHY_EXECUTABLE_PATH: byExecutable }),
   });
 
 export const runBuiltByWithInput = (
@@ -65,13 +72,13 @@ export const runBuiltByWithInput = (
   runTestProcess(process.execPath, [builtByExecutable(), ...args], {
     cwd,
     input,
-    env: { ...env, BUT_WHY_EXECUTABLE_PATH: byExecutable },
+    ...testProcessEnvironment({ ...env, BUT_WHY_EXECUTABLE_PATH: byExecutable }),
   });
 
 export const runBy = (cwd: string, ...args: readonly string[]) => runByWithEnv(cwd, {}, ...args);
 
 export const runByWithEnv = (cwd: string, env: NodeJS.ProcessEnv, ...args: readonly string[]) =>
-  runTestProcess(byExecutable, args, { cwd, env });
+  runTestProcess(byExecutable, args, { cwd, ...testProcessEnvironment(env) });
 
 export const runJustBy = (...args: readonly string[]) => {
   const root = createGitRepo();

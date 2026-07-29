@@ -13,6 +13,7 @@ const repositoryRoot = resolve(import.meta.dirname, "../..");
 type TestProcessOptions = {
   readonly cwd: string;
   readonly env?: NodeJS.ProcessEnv;
+  readonly isolatedHome?: string;
   readonly input?: string | Buffer;
   readonly timeout?: number;
   readonly detached?: boolean;
@@ -55,10 +56,12 @@ const acquireTestProcessEnvironment = (
   };
 };
 
-const isInSharedCheckout = (path: string): boolean => {
-  const relativePath = relative(repositoryRoot, path);
+const isInDirectory = (directory: string, path: string): boolean => {
+  const relativePath = relative(directory, path);
   return relativePath === "" || (!relativePath.startsWith("..") && !isAbsolute(relativePath));
 };
+
+const isInSharedCheckout = (path: string): boolean => isInDirectory(repositoryRoot, path);
 
 const checkedOutsideSharedCheckout = (path: string, label: string): string => {
   const lexicalPath = resolve(path);
@@ -83,11 +86,17 @@ const checkedOutsideSharedCheckout = (path: string, label: string): string => {
 const processOptions = (options: TestProcessOptions) => {
   const cwd = checkedOutsideSharedCheckout(realpathSync(options.cwd), "Test subprocess cwd");
   // biome-ignore lint/complexity/useLiteralKeys: ProcessEnv requires an index-signature lookup.
-  const requestedHome = options.env?.["HOME"];
+  const inheritedHome = options.env?.["HOME"];
+  if (inheritedHome !== undefined) {
+    throw new Error("Test subprocess HOME must be provided as isolatedHome, not env.HOME.");
+  }
   const checkedHome =
-    requestedHome === undefined
+    options.isolatedHome === undefined
       ? undefined
-      : checkedOutsideSharedCheckout(requestedHome, "Test subprocess HOME");
+      : checkedOutsideSharedCheckout(options.isolatedHome, "Test subprocess HOME");
+  if (checkedHome !== undefined && !isInDirectory(resolve(tmpdir()), checkedHome)) {
+    throw new Error("Test subprocess HOME must be an isolated temporary fixture.");
+  }
   const processEnvironment = acquireTestProcessEnvironment(options.env);
   // biome-ignore lint/complexity/useLiteralKeys: ProcessEnv requires an index-signature lookup.
   const defaultHome = processEnvironment.environment["HOME"];

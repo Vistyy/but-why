@@ -38,16 +38,22 @@ describe("test subprocess isolation", () => {
       "Test subprocess cwd must be isolated",
     );
     expect(() => runTestProcess("pwd", [], { cwd: fixture, env: { HOME: repoRoot } })).toThrow(
-      "Test subprocess HOME must be isolated",
+      "provided as isolatedHome",
     );
     expect(() =>
       runTestProcess("pwd", [], { cwd: fixture, env: { HOME: join(homeAlias, "new-home") } }),
+    ).toThrow("provided as isolatedHome");
+    expect(() =>
+      runTestProcess("pwd", [], {
+        cwd: fixture,
+        isolatedHome: join(homeAlias, "new-home"),
+      }),
     ).toThrow("Test subprocess HOME must be isolated");
 
     const requestedHome = join(fixture, "new-home");
     const homeResult = runTestProcess("sh", ["-c", "printf '%s' \"$HOME\""], {
       cwd: fixture,
-      env: { HOME: requestedHome },
+      isolatedHome: requestedHome,
     });
     expect(homeResult.stdout).toBe(requestedHome);
   });

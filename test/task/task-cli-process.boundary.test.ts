@@ -12,6 +12,7 @@ import {
   runBuiltByWithEnv,
   runBuiltByWithInput,
   runByInProcessEffect,
+  testProcessEnvironment,
 } from "../support/by-cli.js";
 import { createTestWorkspace } from "../support/testWorkspace.js";
 import { runTestProcessOrThrow, startTestProcess } from "../support/testProcess.js";
@@ -306,7 +307,7 @@ const runByAsync = (
   new Promise((resolve, reject) => {
     const child = startTestProcess(process.execPath, [executable, ...args], {
       cwd,
-      env: { ...env, BUT_WHY_EXECUTABLE_PATH: byExecutable },
+      ...testProcessEnvironment({ ...env, BUT_WHY_EXECUTABLE_PATH: byExecutable }),
     });
     const stdout: string[] = [];
     const stderr: string[] = [];

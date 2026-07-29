@@ -423,7 +423,8 @@ describe("Pi reviewer agent runtime", () => {
         const rpcCommand = `${built.command.replace("pi -p --mode json", "pi --mode rpc --no-session")} --extension ${probeExtension}`;
         const spawned = runTestProcess("sh", ["-c", rpcCommand], {
           cwd: workspace,
-          env: { HOME: home, PI_OFFLINE: "1", PROBE_OUTPUT: probeOutput },
+          env: { PI_OFFLINE: "1", PROBE_OUTPUT: probeOutput },
+          isolatedHome: home,
           input:
             '{"type":"get_commands","id":"commands"}\n{"type":"prompt","message":"/probe-command","id":"probe"}\n',
           timeout: 10_000,
