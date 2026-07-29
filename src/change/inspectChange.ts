@@ -63,6 +63,7 @@ export type ChangeTaskProjection = {
   readonly id: string;
   readonly state: ChangeRecord["state"];
   readonly readiness: ChangeRecord["readiness"];
+  readonly activeBlocker: import("./implementationBlocker.js").ImplementationBlocker | null;
 };
 
 export type ChangeDetail = {
@@ -96,7 +97,12 @@ export const openChangeInspection = (input: {
     Effect.map(input.changePersistence.getChangeByTaskId(taskId), (change) =>
       change === undefined
         ? null
-        : { id: change.id, state: change.state, readiness: change.readiness },
+        : {
+            id: change.id,
+            state: change.state,
+            readiness: change.readiness,
+            activeBlocker: change.activeBlocker ?? null,
+          },
     ),
   findings: (changeId) => inspectFindings(input, changeId),
   validationRuns: (changeId) => inspectValidationRuns(input, changeId),

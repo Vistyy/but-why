@@ -437,6 +437,7 @@ Commit topology and the Change starting commit do not determine No-Change.
 
 If implementation cannot safely continue without external authority or action, inspect the active blocker with `by change blocker list <change-id>`.
 Discuss the report with the Implementer, then record the approved Resolution with `by change blocker resolve <change-id> --file <path>`.
+If the Resolution conflicts with accepted intent, identify the earlier intent that the Resolution replaces.
 The Resolution preserves the same Change resources and creates a new Acceptance Context version for a Task-backed Change.
 Tell the Implementer to continue manually in the same Managed Worktree.
 Do not use an Implementation Blocker for Findings, tooling recovery, publication recovery, or ordinary implementation difficulty.

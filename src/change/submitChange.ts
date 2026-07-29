@@ -305,6 +305,11 @@ const validateAndCompleteNoChange = (
       resourceRoot: change.worktreePath,
       noChange: true,
       acceptanceContext: change.acceptanceContext,
+      blockerHistory: (yield* dependencies.persistence.listImplementationBlockers(change.id)) ?? {
+        blockers: [],
+        resolutions: [],
+        active: null,
+      },
       ...(change.implementationDecisions === undefined
         ? {}
         : { implementationDecisions: change.implementationDecisions }),
@@ -420,6 +425,9 @@ const validateAndPublish = (
             ...candidateIdentity(candidate),
             resourceRoot: change.worktreePath,
             acceptanceContext: change.acceptanceContext,
+            blockerHistory: (yield* dependencies.persistence.listImplementationBlockers(
+              change.id,
+            )) ?? { blockers: [], resolutions: [], active: null },
             ...(change.implementationDecisions === undefined
               ? {}
               : { implementationDecisions: change.implementationDecisions }),

@@ -42,6 +42,7 @@ If implementation is blocked, complete this step by raising the blocker and wait
 Raise a blocker with `by change blocker raise <change-id> --file <path>`.
 The report is non-authoritative evidence and does not amend Acceptance Context.
 The main operator inspects the blocker with `by change blocker list <change-id>` and records an approved Resolution with `by change blocker resolve <change-id> --file <path>`.
+If the Resolution conflicts with accepted intent, identify the earlier intent that the Resolution replaces.
 For a Task-backed Change, the Resolution creates a new Acceptance Context version.
 After resolution, the main operator manually tells the Implementer to continue in the same Managed Worktree.
 Do not detect, stop, message, or automatically wake an Interactive Session.

@@ -25,6 +25,7 @@ import {
 import { maxValidationArtifactBytes } from "../validationRun/artifactFiles.js";
 import type { TaskContextSnapshotV1 } from "../validationRun/taskContextSnapshot.js";
 import type { ImplementationDecision } from "../implementationDecision.js";
+import type { ImplementationBlockerHistory } from "../implementationBlocker.js";
 import type { ReviewerSessionStore } from "../reviewerSession/reviewerSession.js";
 
 export type CandidateValidationPolicy = {
@@ -57,6 +58,7 @@ type ValidateTaskBackedCandidateInput = {
   readonly headSha: string;
   readonly resourceRoot?: string;
   readonly acceptanceContext: TaskContextSnapshotV1;
+  readonly blockerHistory?: ImplementationBlockerHistory;
   readonly policy: TaskBackedCandidateValidationPolicy;
   readonly implementationDecisions?: readonly ImplementationDecision[];
   readonly now: string;
@@ -319,6 +321,7 @@ const runCandidatePhases = (
         candidate: candidateIdentity(input),
         acceptanceContext: input.acceptanceContext,
         implementationDecisions: input.implementationDecisions,
+        ...(input.blockerHistory === undefined ? {} : { blockerHistory: input.blockerHistory }),
         policy: input.policy.acceptanceReview,
         ...(agentEnvironment === undefined ? {} : { agentEnvironment }),
         runtime: dependencies.reviewerAgentRuntime,
@@ -379,6 +382,7 @@ const runCandidatePhases = (
         candidate: candidateIdentity(input),
         acceptanceContext: input.acceptanceContext,
         implementationDecisions: input.implementationDecisions,
+        ...(input.blockerHistory === undefined ? {} : { blockerHistory: input.blockerHistory }),
         policy: input.policy.acceptanceReview,
         ...(agentEnvironment === undefined ? {} : { agentEnvironment }),
         runtime: dependencies.reviewerAgentRuntime,

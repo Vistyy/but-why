@@ -73,7 +73,7 @@ const baselineStatements = [
       cleanup_blocking_reason TEXT,
       FOREIGN KEY (task_id) REFERENCES tasks(id),
       UNIQUE (repository_common_directory, branch_ref),
-      CHECK ((state = 'open' AND close_reason IS NULL AND closed_at IS NULL) OR (state = 'closed' AND close_reason IS NOT NULL AND closed_at IS NOT NULL))
+      CHECK ((state IN ('open', 'blocked') AND close_reason IS NULL AND closed_at IS NULL) OR (state = 'closed' AND close_reason IS NOT NULL AND closed_at IS NOT NULL))
     )
   `,
   "CREATE UNIQUE INDEX IF NOT EXISTS changes_worktree_path_unique_idx ON changes (worktree_path) WHERE worktree_path IS NOT NULL",

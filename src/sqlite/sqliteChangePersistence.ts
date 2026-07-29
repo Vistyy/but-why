@@ -190,7 +190,7 @@ const raiseBlocker = (
       return { ok: false as const, code: "change_published" as const };
     const passed = yield* sql<{
       readonly found: number;
-    }>`SELECT 1 AS found FROM candidates c JOIN candidate_validation_runs r ON r.candidate_id = c.id WHERE c.change_id = ${input.changeId} AND r.outcome = 'passed' ORDER BY r.updated_at DESC LIMIT 1`;
+    }>`SELECT 1 AS found FROM candidates c JOIN candidate_validation_runs r ON r.candidate_id = c.id WHERE c.id = (SELECT id FROM candidates WHERE change_id = ${input.changeId} ORDER BY created_at DESC, id DESC LIMIT 1) AND r.outcome = 'passed' LIMIT 1`;
     if (passed.length > 0) return { ok: false as const, code: "change_candidate_passed" as const };
     const id = randomUUID();
     yield* sql`INSERT INTO implementation_blockers (id, change_id, reported_at, content) VALUES (${id}, ${input.changeId}, ${input.now}, ${input.content})`;
@@ -382,7 +382,7 @@ const getPassingPublicationEvidence = (sql: SqlClient.SqlClient, changeId: strin
 const listChanges = (sql: SqlClient.SqlClient, input: ListChangesInput) =>
   Effect.flatMap(
     sql.unsafe<ChangeRow>(
-      `SELECT ${columns} FROM changes WHERE repository_common_directory = ? AND (? = 1 OR state = 'open') ORDER BY created_at ASC, id ASC`,
+      `SELECT ${columns} FROM changes WHERE repository_common_directory = ? AND (? = 1 OR state IN ('open', 'blocked')) ORDER BY created_at ASC, id ASC`,
       [input.repositoryCommonDirectory, input.includeClosed ? 1 : 0],
     ),
     (rows) => Effect.forEach(rows, (row) => mapRequiredRow(row, "list Changes", sql)),
@@ -590,7 +590,10 @@ const selectOpenChange = (
   change: ChangeRecord | undefined,
 ):
   | { readonly ok: true; readonly change: ChangeRecord }
-  | { readonly ok: false; readonly code: "change_not_found" | "change_closed" } => {
+  | {
+      readonly ok: false;
+      readonly code: "change_not_found" | "change_closed";
+    } => {
   if (change === undefined) return { ok: false, code: "change_not_found" };
   return change.state === changeState.closed
     ? { ok: false, code: "change_closed" }
@@ -714,7 +717,7 @@ const mapRow = (row: ChangeRow | undefined, operationName: string, sql: SqlClien
                   },
             cleanup: { state: row.cleanupState, blockingReason: row.cleanupBlockingReason },
             state: row.state,
-            ...(activeRows[0] === undefined ? {} : { activeBlocker: mapBlocker(activeRows[0]) }),
+            activeBlocker: activeRows[0] === undefined ? null : mapBlocker(activeRows[0]),
             closeReason: row.closeReason,
             createdAt: row.createdAt,
             updatedAt: row.updatedAt,
