@@ -595,7 +595,7 @@ const selectOpenChange = (
       readonly code: "change_not_found" | "change_closed";
     } => {
   if (change === undefined) return { ok: false, code: "change_not_found" };
-  return change.state === changeState.closed
+  return change.state === changeState.closed || change.state === changeState.blocked
     ? { ok: false, code: "change_closed" }
     : { ok: true, change };
 };
