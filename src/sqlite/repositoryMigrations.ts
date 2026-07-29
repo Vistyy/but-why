@@ -204,7 +204,7 @@ const implementationDecisions = Effect.gen(function* () {
 
 const implementationBlockers = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
-  yield* sql.unsafe("PRAGMA foreign_keys = OFF");
+  yield* sql.unsafe("PRAGMA defer_foreign_keys = ON");
   yield* sql.unsafe(`CREATE TABLE tasks_before_blockers (
     id TEXT NOT NULL UNIQUE, numeric_id INTEGER NOT NULL UNIQUE, title TEXT NOT NULL,
     description TEXT NOT NULL, state TEXT NOT NULL CHECK (state IN ('new', 'todo', 'implementing', 'blocked', 'validating', 'ready', 'done', 'cancelled')),
@@ -235,7 +235,6 @@ const implementationBlockers = Effect.gen(function* () {
   yield* sql.unsafe(
     "CREATE UNIQUE INDEX IF NOT EXISTS changes_worktree_path_unique_idx ON changes (worktree_path) WHERE worktree_path IS NOT NULL",
   );
-  yield* sql.unsafe("PRAGMA foreign_keys = ON");
   yield* sql.unsafe(`
     CREATE TABLE implementation_blockers (
       sequence INTEGER PRIMARY KEY AUTOINCREMENT,
