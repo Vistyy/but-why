@@ -63,7 +63,11 @@ const isInDirectory = (directory: string, path: string): boolean => {
 
 const isInSharedCheckout = (path: string): boolean => isInDirectory(repositoryRoot, path);
 
-const checkedOutsideSharedCheckout = (path: string, label: string): string => {
+const checkedOutsideSharedCheckout = (
+  path: string,
+  label: string,
+  allowedDirectory?: string,
+): string => {
   const lexicalPath = resolve(path);
   if (isInSharedCheckout(lexicalPath)) {
     throw new Error(`${label} must be isolated from the shared checkout.`);
@@ -80,6 +84,9 @@ const checkedOutsideSharedCheckout = (path: string, label: string): string => {
   if (isInSharedCheckout(canonicalPath)) {
     throw new Error(`${label} must be isolated from the shared checkout.`);
   }
+  if (allowedDirectory !== undefined && !isInDirectory(allowedDirectory, canonicalPath)) {
+    throw new Error(`${label} must be an isolated temporary fixture.`);
+  }
   return pathExists ? realpathSync(lexicalPath) : lexicalPath;
 };
 
@@ -93,10 +100,11 @@ const processOptions = (options: TestProcessOptions) => {
   const checkedHome =
     options.isolatedHome === undefined
       ? undefined
-      : checkedOutsideSharedCheckout(options.isolatedHome, "Test subprocess HOME");
-  if (checkedHome !== undefined && !isInDirectory(resolve(tmpdir()), checkedHome)) {
-    throw new Error("Test subprocess HOME must be an isolated temporary fixture.");
-  }
+      : checkedOutsideSharedCheckout(
+          options.isolatedHome,
+          "Test subprocess HOME",
+          realpathSync(tmpdir()),
+        );
   const processEnvironment = acquireTestProcessEnvironment(options.env);
   // biome-ignore lint/complexity/useLiteralKeys: ProcessEnv requires an index-signature lookup.
   const defaultHome = processEnvironment.environment["HOME"];
