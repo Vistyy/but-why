@@ -36,6 +36,19 @@ type PersistedContinuationState = RetryState & {
   readonly paused: boolean;
 };
 
+type RunResult =
+  | { readonly ok: true; readonly stdout: string }
+  | { readonly ok: false; readonly transient: boolean; readonly message: string };
+
+type InspectionResult =
+  | {
+      readonly ok: true;
+      readonly snapshot: ChangeInspectionSnapshot;
+      readonly fingerprint: string;
+      readonly git: { readonly head: string; readonly status: string };
+    }
+  | { readonly ok: false; readonly transient: boolean; readonly message: string };
+
 const stateEntry = "but-why-change-continuation";
 const maxUnchangedRestarts = 3;
 const changeIdPattern =
@@ -166,41 +179,63 @@ export default function continueChange(pi: ExtensionAPI): void {
     command: string,
     args: readonly string[],
     cwd: string,
-  ): Promise<{ readonly ok: true; readonly stdout: string } | { readonly ok: false }> => {
+  ): Promise<RunResult> => {
+    const label = [command, ...args].join(" ");
     try {
       const result = await pi.exec(command, [...args], { cwd, timeout: 15_000 });
-      return result.code === 0 ? { ok: true, stdout: result.stdout } : { ok: false };
-    } catch {
-      return { ok: false };
+      if (result.code === 0) return { ok: true, stdout: result.stdout };
+      const stderr = result.stderr.trim();
+      return {
+        ok: false,
+        transient: result.killed,
+        message: `${label} exited with code ${result.code}${stderr === "" ? "" : `: ${stderr.slice(0, 500)}`}`,
+      };
+    } catch (error) {
+      return {
+        ok: false,
+        transient: true,
+        message: `${label} could not run: ${error instanceof Error ? error.message : String(error)}`,
+      };
     }
   };
 
-  const inspect = async (
-    ctx: ExtensionContext,
-    id: string,
-  ): Promise<
-    {
-      readonly snapshot: ChangeInspectionSnapshot;
-      readonly fingerprint: string;
-      readonly git: { readonly head: string; readonly status: string };
-    } | undefined
-  > => {
+  const inspect = async (ctx: ExtensionContext, id: string): Promise<InspectionResult> => {
     const [changeResult, headResult, statusResult] = await Promise.all([
       run("by", ["change", "show", id, "--output", "json"], ctx.cwd),
       run("git", ["rev-parse", "HEAD"], ctx.cwd),
       run("git", ["status", "--porcelain=v1"], ctx.cwd),
     ]);
-    if (!changeResult.ok || !headResult.ok || !statusResult.ok) return undefined;
+    if (!changeResult.ok || !headResult.ok || !statusResult.ok) {
+      const failures = [changeResult, headResult, statusResult].filter(
+        (result): result is Extract<RunResult, { readonly ok: false }> => !result.ok,
+      );
+      return {
+        ok: false,
+        transient: failures.every((failure) => failure.transient),
+        message: failures.map((failure) => failure.message).join("; "),
+      };
+    }
 
     let value: unknown;
     try {
       value = JSON.parse(changeResult.stdout);
     } catch {
-      return undefined;
+      return {
+        ok: false,
+        transient: false,
+        message: "by change show returned malformed JSON",
+      };
     }
-    if (!isSnapshot(value)) return undefined;
+    if (!isSnapshot(value)) {
+      return {
+        ok: false,
+        transient: false,
+        message: "by change show returned an unsupported Change state shape",
+      };
+    }
     const git = { head: headResult.stdout.trim(), status: statusResult.stdout };
     return {
+      ok: true,
       snapshot: value,
       fingerprint: durableChangeFingerprint(value, git),
       git,
@@ -210,7 +245,7 @@ export default function continueChange(pi: ExtensionAPI): void {
   const initialize = async (ctx: ExtensionContext): Promise<void> => {
     if (changeId === undefined) return;
     const observed = await inspect(ctx, changeId);
-    if (observed === undefined) return;
+    if (!observed.ok) return;
     if (persisted === undefined || persisted.changeId !== changeId) {
       saveState({
         changeId,
@@ -257,9 +292,15 @@ export default function continueChange(pi: ExtensionAPI): void {
       event.messages.some(
         (message) => message.role === "assistant" && message.stopReason === "aborted",
       ) &&
-      persisted !== undefined
+      changeId !== undefined
     ) {
-      saveState({ ...persisted, paused: true });
+      const state = persisted ?? {
+        changeId,
+        fingerprint: "inspection-unavailable",
+        unchangedRestarts: 0,
+        paused: false,
+      };
+      saveState({ ...state, paused: true });
     }
   });
 
@@ -269,13 +310,22 @@ export default function continueChange(pi: ExtensionAPI): void {
     try {
       const id = changeId;
       const observed = await inspect(ctx, id);
-      if (observed === undefined) {
+      if (!observed.ok) {
         const previous = persisted ?? {
           changeId: id,
           fingerprint: "inspection-unavailable",
           unchangedRestarts: 0,
           paused: false,
         };
+        if (!observed.transient) {
+          pendingThresholdCompaction = false;
+          saveState({ ...previous, paused: true });
+          ctx.ui.notify(
+            `But Why inspection requires operator recovery and is paused: ${observed.message}`,
+            "warning",
+          );
+          return;
+        }
         const retry = {
           fingerprint: previous.fingerprint,
           unchangedRestarts: previous.unchangedRestarts + 1,

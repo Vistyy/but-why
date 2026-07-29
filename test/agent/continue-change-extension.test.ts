@@ -56,7 +56,7 @@ const createHarness = () => {
     },
     async exec(command: string, args: string[]) {
       if (command === "by" && inspectionFails)
-        return { stdout: "", stderr: "", code: 1, killed: false };
+        return { stdout: "", stderr: "", code: 1, killed: true };
       if (command === "by") return result(JSON.stringify(currentSnapshot));
       if (command === "git" && args[0] === "rev-parse") return result("head\n");
       if (command === "git" && args[0] === "status") return result("");
