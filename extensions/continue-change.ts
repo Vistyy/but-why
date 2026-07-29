@@ -158,7 +158,6 @@ export default function continueChange(pi: ExtensionAPI): void {
   let changeId: string | undefined;
   let persisted: PersistedContinuationState | undefined;
   let pendingThresholdCompaction = false;
-  let automaticCompactionActive = false;
   let settling = false;
 
   const restoreState = (ctx: ExtensionContext): void => {
@@ -292,12 +291,10 @@ export default function continueChange(pi: ExtensionAPI): void {
   });
 
   pi.on("session_compact", (event) => {
-    automaticCompactionActive = event.reason !== "manual";
     pendingThresholdCompaction = event.reason === "threshold";
   });
 
   pi.on("agent_end", (event) => {
-    if (automaticCompactionActive) return;
     if (
       event.messages.some(
         (message) => message.role === "assistant" && message.stopReason === "aborted",
@@ -390,7 +387,6 @@ export default function continueChange(pi: ExtensionAPI): void {
       pendingThresholdCompaction = false;
       pi.sendUserMessage(message);
     } finally {
-      automaticCompactionActive = false;
       settling = false;
     }
   });
