@@ -443,6 +443,7 @@ validationSetup:
         { migration_id: 3, name: "implementation_decisions" },
         { migration_id: 4, name: "implementation_blockers" },
         { migration_id: 5, name: "acceptance_context_versions" },
+        { migration_id: 6, name: "reconcile_implementation_blocker_storage" },
       ]);
     }),
   );
