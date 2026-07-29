@@ -114,6 +114,8 @@ by change submit <change-id>
 by change cancel <change-id>
 by change implement <change-id> [--handoff-file <path>]
 by change reconcile [<change-id>]
+by validation-run show <validation-run-id>
+by validation-run artifact <validation-run-id> <artifact-ref>
 ```
 
 `by change blocker raise` and `by change blocker resolve` manage the manual Implementation Blocker workflow.
@@ -125,6 +127,7 @@ CLI commands return structured data on stdout.
 TOON is the default output format.
 Callers that parse output pass `--output json`.
 [`docs/cli-output.md`](cli-output.md) defines the agent-first success schemas, evidence boundaries, expansion paths, limits, and diagnostic preservation policy.
+Inspection commands return decision-oriented projections and use their documented expansion commands for omitted evidence.
 
 ## Configuration
 

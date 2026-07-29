@@ -82,7 +82,10 @@ const candidateValidationArtifactView = (
   artifact: CandidateValidationArtifactInspection,
 ): StructuredObject => ({
   ...candidateValidationArtifactMetadataView(artifact),
-  preview: candidateValidationArtifactPreviewView(artifact, artifact.preview),
+  detailCommand: candidateValidationArtifactDetailCommand(artifact),
+  ...(artifact.preview === undefined
+    ? {}
+    : { preview: candidateValidationArtifactPreviewView(artifact.preview) }),
 });
 
 const candidateValidationArtifactMetadataView = (
@@ -100,11 +103,9 @@ const candidateValidationArtifactMetadataView = (
 });
 
 const candidateValidationArtifactPreviewView = (
-  artifact: CandidateValidationArtifactRecord,
   preview: CandidateValidationArtifactPreview,
 ): StructuredObject => ({
   ...preview,
-  detailCommand: candidateValidationArtifactDetailCommand(artifact),
 });
 
 const candidateValidationArtifactDetailCommand = (

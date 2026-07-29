@@ -22,7 +22,7 @@ export const runShowCommand = (
         usage: "by task show <task-id>",
         arguments: [{ argument: "<task-id>", description: "Public Task ID, such as BY-1" }],
         flags: withGlobalHelpFlags(),
-        examples: ["by task show BY-1"],
+        examples: ["by task show BY-1", "by task context BY-1"],
       }),
     );
   }
@@ -46,7 +46,6 @@ export const runShowCommand = (
         task: {
           id: task.id,
           title: task.title,
-          description: task.description,
           state: task.state,
           ...(task.completionKind == null ? {} : { completionKind: task.completionKind }),
           createdAt: task.createdAt,
@@ -57,6 +56,7 @@ export const runShowCommand = (
           dependents: task.dependents,
           change: projection,
         },
+        contextCommand: `by task context ${task.id}`,
       });
     });
   });

@@ -46,27 +46,28 @@ describe("by CLI", () => {
       expect(result.stdout).toBe(`bin: ${expectedBin}
 description: Validate completed code changes against approved human intent.
 usage: "by [--output <format>] [command] [--help]"
-commands[20]{command,description}:
+commands[21]{command,description}:
   by,Show workspace task dashboard
   by init --task-prefix <prefix>,Create repo-local But Why? state
   "by task create --title <title> --description-file <file> [--depends-on <task-id>]...",Create a repo-local Task
   "by task dependencies set <task-id> [--depends-on <task-id>]...",Replace direct Task prerequisites before Start
   "by task list [--all] [--state <state>]",List repo-local Tasks
-  by task show <task-id>,Show compact Task metadata
+  by task show <task-id>,Show decision-oriented Task metadata; use Task Context for the description
   by task approve <task-id>,Permanently approve Task intent
   by task context <task-id>,Show full Task Context
   by task cancel <task-id> --reason <reason>,Permanently cancel an unfinished Task
   "by change start [--task <task-id>] [--base <branch>]",Create a prepared Change worktree
   by change prepare <change-id>,Run or retry Repository Preparation
   "by change list [--all]",List Changes oldest first
-  by change show <change-id>,"Show Change implementation, validation, and delivery facts"
+  by change show <change-id>,Show decision-oriented Change state and expansion commands
   by change findings <change-id>,Show Findings for the current Change Candidate
-  by change validation-runs <change-id>,List Validation Run History for a Change
+  by change validation-runs <change-id>,List complete compact Validation Run History and expansion commands
   by change submit <change-id>,Validate and publish a ready Change
   by change cancel <change-id>,Cancel an open taskless Change
   "by change reconcile [<change-id>]",Read owned pull requests and clean up terminal Changes
   "by change implement <change-id> [--handoff-file <path>]",Launch an Interactive Session in a ready Change worktree
-  by validation-run show <validation-run-id>,Show full Validation Run details
+  by validation-run show <validation-run-id>,Show Validation Run policy and recorded evidence
+  by validation-run artifact <validation-run-id> <artifact-ref>,Show complete stored Artifact content
 flags[3]{flag,description}:
   "--output <format>",Set the stdout format to toon or json. The default is toon.
   "-o <format>","Alias for --output <format>. Valid formats: toon, json."
@@ -96,7 +97,7 @@ docs[2]{name,path}:
           { name: "config", path: expectedConfigDoc },
         ],
       });
-      expect(parsed.commands).toHaveLength(20);
+      expect(parsed.commands).toHaveLength(21);
       expect(parsed.flags).toHaveLength(3);
     }),
   );

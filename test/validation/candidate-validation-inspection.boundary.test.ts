@@ -222,6 +222,7 @@ describe("Candidate-owned Validation Run inspection", () => {
         artifacts: [
           expect.objectContaining({
             ref: `artifact:${fixture.validationRunId}/prepare/prepare/logs.txt`,
+            detailCommand: `by validation-run artifact ${fixture.validationRunId} artifact:${fixture.validationRunId}/prepare/prepare/logs.txt`,
             phase: "prepare",
             producer: "prepare",
             preview: {
@@ -230,7 +231,6 @@ describe("Candidate-owned Validation Run inspection", () => {
               bytes: 17,
               storedBytes: 17,
               truncated: false,
-              detailCommand: `by validation-run artifact ${fixture.validationRunId} artifact:${fixture.validationRunId}/prepare/prepare/logs.txt`,
             },
           }),
           expect.objectContaining({
@@ -240,6 +240,7 @@ describe("Candidate-owned Validation Run inspection", () => {
           }),
           expect.objectContaining({
             ref: `artifact:${fixture.validationRunId}/checks/types/stdout.txt`,
+            detailCommand: `by validation-run artifact ${fixture.validationRunId} artifact:${fixture.validationRunId}/checks/types/stdout.txt`,
             phase: "checks",
             producer: "types",
             preview: {
@@ -248,7 +249,6 @@ describe("Candidate-owned Validation Run inspection", () => {
               bytes: 1_000,
               storedBytes: 1_200,
               truncated: true,
-              detailCommand: `by validation-run artifact ${fixture.validationRunId} artifact:${fixture.validationRunId}/checks/types/stdout.txt`,
             },
           }),
           expect.objectContaining({
@@ -279,6 +279,14 @@ describe("Candidate-owned Validation Run inspection", () => {
   it.effect("keeps empty evidence distinct from unavailable artifact content", () =>
     Effect.gen(function* () {
       const empty = yield* candidateValidationFixture();
+      yield* empty.runStore.recordPrepareRound({
+        validationRunId: empty.validationRunId,
+        roundNumber: 1,
+        roundStatus: "passed",
+        phaseStatus: "passed",
+        artifactRecords: [empty.artifact("prepare", "prepare", "logs.txt", "prepare complete\n")],
+        now,
+      });
       yield* empty.runStore.complete({
         validationRunId: empty.validationRunId,
         outcome: "passed",
@@ -295,14 +303,39 @@ describe("Candidate-owned Validation Run inspection", () => {
       expect(emptyResult.status).toBe(0);
       expect(JSON.parse(emptyResult.stdout)).toMatchObject({
         phases: [
-          { phase: "prepare", rounds: [] },
+          {
+            phase: "prepare",
+            rounds: [
+              {
+                validationRunId: empty.validationRunId,
+                phase: "prepare",
+                producer: "prepare",
+                roundNumber: 1,
+                status: "passed",
+                createdAt: now,
+              },
+            ],
+          },
           { phase: "checks", rounds: [] },
           { phase: "acceptance_review", rounds: [] },
           { phase: "specialist_review", rounds: [] },
         ],
         findings: [],
         toolingFailures: [],
-        artifacts: [],
+        artifacts: [
+          {
+            ref: `artifact:${empty.validationRunId}/prepare/prepare/logs.txt`,
+            validationRunId: empty.validationRunId,
+            phase: "prepare",
+            producer: "prepare",
+            path: `${empty.validationRunId}/prepare/prepare/logs.txt`,
+            originalBytes: 17,
+            storedBytes: 17,
+            truncated: false,
+            createdAt: now,
+            detailCommand: `by validation-run artifact ${empty.validationRunId} artifact:${empty.validationRunId}/prepare/prepare/logs.txt`,
+          },
+        ],
       });
 
       const unavailable = yield* candidateValidationFixture();
@@ -326,9 +359,16 @@ describe("Candidate-owned Validation Run inspection", () => {
         "json",
       ]);
       expect(unavailableResult.status).toBe(0);
-      expect(JSON.parse(unavailableResult.stdout).artifacts[0].preview).toEqual({
-        status: "unavailable",
-        reason: "content_unavailable",
+      expect(JSON.parse(unavailableResult.stdout).artifacts[0]).toEqual({
+        ref: missing.ref,
+        validationRunId: unavailable.validationRunId,
+        phase: "checks",
+        producer: "types",
+        path: missing.path,
+        originalBytes: 7,
+        storedBytes: 7,
+        truncated: false,
+        createdAt: now,
         detailCommand: `by validation-run artifact ${unavailable.validationRunId} ${missing.ref}`,
       });
 
