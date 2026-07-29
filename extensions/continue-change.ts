@@ -64,6 +64,13 @@ export const decideContinuation = (
   snapshot: ChangeInspectionSnapshot,
   git?: { readonly head: string; readonly status: string },
 ): ContinuationDecision => {
+  if (
+    snapshot.change.state === "closed" ||
+    snapshot.change.state === "blocked" ||
+    snapshot.toolingFailureCount > 0
+  ) {
+    return { kind: "idle" };
+  }
   if (snapshot.findingCount > 0) return { kind: "findings" };
   const publication = snapshot.publication;
   const currentCandidate = snapshot.currentCandidate;
@@ -76,14 +83,7 @@ export const decideContinuation = (
     recordValue(currentCandidate, "headSha") === publication.expectedHeadSha &&
     git.head === publication.expectedHeadSha &&
     git.status.trim() === "";
-  if (
-    snapshot.change.state === "closed" ||
-    snapshot.change.state === "blocked" ||
-    hasOwnedPullRequest ||
-    snapshot.toolingFailureCount > 0
-  ) {
-    return { kind: "idle" };
-  }
+  if (hasOwnedPullRequest) return { kind: "idle" };
   return { kind: "general" };
 };
 
@@ -270,9 +270,20 @@ export default function continueChange(pi: ExtensionAPI): void {
       const id = changeId;
       const observed = await inspect(ctx, id);
       if (observed === undefined) {
+        if (persisted === undefined || persisted.changeId !== id) {
+          saveState({
+            changeId: id,
+            fingerprint: "inspection-unavailable",
+            unchangedRestarts: 0,
+            paused: false,
+          });
+        }
         ctx.ui.notify(
-          "But Why could not inspect the current Change state; automatic continuation is idle.",
+          "But Why could not inspect the current Change state; automatic continuation will keep trying until inspection recovers or the operator cancels it.",
           "warning",
+        );
+        pi.sendUserMessage(
+          `But Why could not inspect the current Change state for ${id}. Restore But Why CLI and Git access, then inspect the Change and Managed Worktree and continue. Do not assume a stopping condition.`,
         );
         return;
       }

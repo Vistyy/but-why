@@ -36,6 +36,7 @@ const createHarness = () => {
   const sent: string[] = [];
   const notifications: string[] = [];
   let currentSnapshot: TestSnapshot = snapshot();
+  let inspectionFails = false;
   const api = {
     on(event: string, handler: EventHandler) {
       handlers.set(event, handler);
@@ -54,6 +55,8 @@ const createHarness = () => {
       sent.push(message);
     },
     async exec(command: string, args: string[]) {
+      if (command === "by" && inspectionFails)
+        return { stdout: "", stderr: "", code: 1, killed: false };
       if (command === "by") return result(JSON.stringify(currentSnapshot));
       if (command === "git" && args[0] === "rev-parse") return result("head\n");
       if (command === "git" && args[0] === "status") return result("");
@@ -79,6 +82,9 @@ const createHarness = () => {
     setSnapshot(next: TestSnapshot) {
       currentSnapshot = next;
     },
+    setInspectionFails(value: boolean) {
+      inspectionFails = value;
+    },
     async emit(event: string, value: unknown = {}) {
       const handler = handlers.get(event);
       if (handler === undefined) throw new Error(`Missing ${event} handler`);
@@ -98,6 +104,18 @@ describe("packaged Change Implement continuation extension", () => {
 
     expect(harness.sent).toHaveLength(1);
     expect(harness.sent[0]).toContain("take the next concrete implementation action");
+  });
+
+  it("does not leave an inspection failure idle", async () => {
+    const harness = createHarness();
+    harness.setInspectionFails(true);
+
+    await harness.emit("session_start", { type: "session_start", reason: "startup" });
+    await harness.emit("agent_settled");
+
+    expect(harness.sent).toHaveLength(1);
+    expect(harness.sent[0]).toContain("Restore But Why CLI and Git access");
+    expect(harness.notifications[0]).toContain("automatic continuation will keep trying");
   });
 
   it("does not wake a session for durable stopping conditions", async () => {

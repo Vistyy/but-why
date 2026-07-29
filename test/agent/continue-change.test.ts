@@ -46,6 +46,19 @@ describe("Change Implement continuation policy", () => {
     ).toEqual({ kind: "idle" });
   });
 
+  it("permits idle state for a blocked Change even when Findings exist", () => {
+    expect(
+      decideContinuation({
+        change: { state: "blocked", closeReason: null },
+        currentCandidate: null,
+        currentValidationRun: null,
+        findingCount: 1,
+        toolingFailureCount: 0,
+        pullRequest: null,
+      }),
+    ).toEqual({ kind: "idle" });
+  });
+
   it("permits idle state for an owned pull request matching the current Candidate and Git head", () => {
     expect(
       decideContinuation(
