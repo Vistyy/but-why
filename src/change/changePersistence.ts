@@ -68,8 +68,7 @@ export type ImplementationBlockerMutationResult =
         | "change_blocked"
         | "change_published"
         | "change_candidate_passed"
-        | "no_active_blocker"
-        | "task_state_invalid";
+        | "no_active_blocker";
     };
 
 export type ChangePersistence = {
@@ -82,7 +81,7 @@ export type ChangePersistence = {
   readonly listImplementationBlockers: (
     changeId: string,
   ) => StorageEffect<ImplementationBlockerHistory | undefined>;
-  readonly transitionLinkedTask?: (input: {
+  readonly transitionLinkedTask: (input: {
     readonly changeId: string;
     readonly taskId: string;
     readonly to: import("../task/lifecycle.js").TaskState;

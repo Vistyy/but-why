@@ -65,7 +65,6 @@ const columns = [
   "(SELECT change_base_sha FROM candidates WHERE id = no_change_candidate_id) AS noChangeChangeBaseSha",
   "cleanup_state AS cleanupState",
   "cleanup_blocking_reason AS cleanupBlockingReason",
-  "(SELECT id FROM implementation_blockers WHERE change_id = changes.id AND resolved_at IS NULL LIMIT 1) AS activeBlockerId",
   "state",
   "close_reason AS closeReason",
   "created_at AS createdAt",

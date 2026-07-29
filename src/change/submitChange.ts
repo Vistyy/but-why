@@ -211,13 +211,7 @@ const submitChange = (
         ) {
           if (
             change.taskId !== null &&
-            !(yield* transitionTask(
-              dependencies.persistence,
-              dependencies.taskPersistence,
-              change,
-              "ready",
-              input.now,
-            ))
+            !(yield* transitionTask(dependencies.persistence, change, "ready", input.now))
           ) {
             return taskTransitionFailure(change);
           }
@@ -300,13 +294,7 @@ const validateAndCompleteNoChange = (
     const alreadyCompletedNoChange = task?.state === "done" && task.completionKind === "no_change";
     if (
       !alreadyCompletedNoChange &&
-      !(yield* transitionTask(
-        dependencies.persistence,
-        dependencies.taskPersistence,
-        change,
-        "validating",
-        now,
-      ))
+      !(yield* transitionTask(dependencies.persistence, change, "validating", now))
     ) {
       return taskTransitionFailure(change);
     }
@@ -425,13 +413,7 @@ const validateAndPublish = (
     }
     if (
       change.taskId !== null &&
-      !(yield* transitionTask(
-        dependencies.persistence,
-        dependencies.taskPersistence,
-        change,
-        "validating",
-        now,
-      ))
+      !(yield* transitionTask(dependencies.persistence, change, "validating", now))
     ) {
       return taskTransitionFailure(change);
     }
@@ -501,13 +483,7 @@ const validateAndPublish = (
     }
     if (
       change.taskId !== null &&
-      !(yield* transitionTask(
-        dependencies.persistence,
-        dependencies.taskPersistence,
-        change,
-        "ready",
-        now,
-      ))
+      !(yield* transitionTask(dependencies.persistence, change, "ready", now))
     ) {
       return taskTransitionFailure(change);
     }
@@ -540,13 +516,7 @@ const blockedValidationResult = (
   Effect.gen(function* () {
     if (
       change.taskId !== null &&
-      !(yield* transitionTask(
-        dependencies.persistence,
-        dependencies.taskPersistence,
-        change,
-        "implementing",
-        now,
-      ))
+      !(yield* transitionTask(dependencies.persistence, change, "implementing", now))
     ) {
       return taskTransitionFailure(change);
     }
@@ -584,13 +554,7 @@ const restoreImplementationThen = (
   now: string,
 ): Effect.Effect<ChangeSubmitResult, RepositoryStorageError> =>
   Effect.map(
-    transitionTask(
-      dependencies.persistence,
-      dependencies.taskPersistence,
-      change,
-      "implementing",
-      now,
-    ),
+    transitionTask(dependencies.persistence, change, "implementing", now),
     (transitioned) =>
       change.taskId !== null && !transitioned ? taskTransitionFailure(change) : result,
   );
@@ -651,27 +615,19 @@ const withAgentEnvironment = <Policy extends object>(
 });
 
 const transitionTask = (
-  changes: Pick<ChangePersistence, "getChangeById"> &
-    Pick<ChangePersistence, "transitionLinkedTask">,
-  persistence: Pick<TaskPersistence, "getTaskById" | "transitionTaskState">,
+  changes: Pick<ChangePersistence, "transitionLinkedTask">,
   change: ChangeRecord,
   to: TaskState,
   now: string,
 ): Effect.Effect<boolean, RepositoryStorageError> =>
-  Effect.gen(function* () {
-    if (change.taskId === null) return false;
-    if ((yield* changes.getChangeById(change.id))?.state === changeState.blocked) return false;
-    if ((yield* persistence.getTaskById(change.taskId))?.state === to) return true;
-    if (changes.transitionLinkedTask !== undefined) {
-      return yield* changes.transitionLinkedTask({
+  change.taskId === null
+    ? Effect.succeed(false)
+    : changes.transitionLinkedTask({
         changeId: change.id,
         taskId: change.taskId,
         to,
         now,
       });
-    }
-    return (yield* persistence.transitionTaskState({ taskId: change.taskId, to, now })).ok;
-  });
 
 const detectPublicationTarget = (
   dependencies: Parameters<typeof openChangeSubmit>[0],

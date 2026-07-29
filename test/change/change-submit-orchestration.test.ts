@@ -1207,6 +1207,12 @@ const dependencies = (input: {
         events.push("complete_no_change");
         return Effect.succeed({ ok: true as const, changed: true });
       },
+      transitionLinkedTask: ({ to }: { readonly to: string }) =>
+        Effect.sync(() => {
+          input.transitions?.push(to);
+          taskState = to;
+          return true;
+        }),
     } as unknown as ChangePersistence,
     taskPersistence: {
       getTaskById: () => Effect.succeed({ state: taskState }),
