@@ -156,7 +156,10 @@ const launchInOpenedWorktree = async (
   signal: AbortSignal | undefined,
   options: ResolvedOptions,
 ): Promise<InteractiveSessionLaunchResult> => {
-  if (hasUnknownSession(listedAgents, input, sessionName)) {
+  if (
+    hasUnknownSession(listedAgents, input, sessionName) ||
+    hasUnknownAgentInWorktree(listedAgents, input)
+  ) {
     return launchIndeterminate("Herdr could not determine the existing session state.");
   }
   if (opened.alreadyOpen && hasActiveAgentInWorktree(listedAgents, input)) {
@@ -424,6 +427,8 @@ const worktreeMatchesTarget = (
   const result = isRecord(response) ? recordValue(response, "result") : undefined;
   const worktrees = isRecord(result) ? recordValue(result, "worktrees") : undefined;
   return (
+    isRecord(result) &&
+    recordValue(result, "type") === "worktree_list" &&
     Array.isArray(worktrees) &&
     worktrees.some(
       (worktree) =>
@@ -520,6 +525,23 @@ const hasUnknownSession = (
 ): boolean => {
   const agent = findSession(source, input, sessionName);
   return agent !== undefined && recordValue(agent, "agent_status") === "unknown";
+};
+
+const hasUnknownAgentInWorktree = (
+  source: string,
+  input: InteractiveSessionLaunchInput,
+): boolean => {
+  const result = herdrResult(source);
+  const agents = result === undefined ? undefined : recordValue(result, "agents");
+  return (
+    Array.isArray(agents) &&
+    agents.some(
+      (agent) =>
+        isRecord(agent) &&
+        recordValue(agent, "cwd") === input.worktreePath &&
+        recordValue(agent, "agent_status") === "unknown",
+    )
+  );
 };
 
 const hasActiveAgentInWorktree = (
