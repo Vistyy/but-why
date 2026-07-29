@@ -936,6 +936,78 @@ layer(acceptanceTemplateLayer)("Task-backed Candidate Acceptance Review", (it) =
       );
     }),
   );
+
+  it.scoped("continues independent Specialist Reviewer Sessions in configured order", () =>
+    Effect.gen(function* () {
+      const sessions = new Map<string, ReviewerSessionRecord>();
+      const sessionStore: ReviewerSessionStore = {
+        get: (changeId, producer) => Effect.succeed(sessions.get(`${changeId}/${producer}`)),
+        save: (record) =>
+          Effect.sync(() =>
+            sessions.set(`${record.identity.changeId}/${record.identity.producer}`, record),
+          ),
+        remove: (changeId, producer) =>
+          Effect.sync(() => sessions.delete(`${changeId}/${producer}`)),
+      };
+      const review = vi.fn<ReviewerAgentRuntime["review"]>((input) =>
+        Effect.succeed({
+          ok: true as const,
+          report: { findings: [] },
+          attempts: 1,
+          stdout: `${input.reviewer} report`,
+          sessionReference: `${input.reviewer}-session`,
+        }),
+      );
+      const ready = yield* acceptanceReadyRepo({ review }, { sessionStore });
+      const policy = {
+        ...passingValidationPolicy,
+        specialistReviews: [specialistPolicy("alpha"), specialistPolicy("beta")],
+      };
+
+      const first = yield* runTaskBackedCandidate(ready, policy);
+      expect(first).toMatchObject({ ok: true, outcome: "passed" });
+      if (!first.ok) return;
+
+      git(ready.repo, "commit", "--allow-empty", "-m", "successor specialist candidate");
+      const successor = yield* captureLocalCandidate({ cwd: ready.repo, now: successorNow });
+      if (!successor.ok) throw new Error(`Candidate capture failed: ${successor.code}`);
+      const second = yield* runTaskBackedCandidate(ready, policy, successor);
+
+      expect(second).toMatchObject({
+        ok: true,
+        outcome: "passed",
+        specialistReviewerEvidence: [
+          { producer: "alpha", continuity: "resumed" },
+          { producer: "beta", continuity: "resumed" },
+        ],
+      });
+      expect(review.mock.calls.map(([input]) => input.reviewer)).toEqual([
+        "acceptance",
+        "alpha",
+        "beta",
+        "acceptance",
+        "alpha",
+        "beta",
+      ]);
+      expect(review.mock.calls.map(([input]) => input.resumeSession)).toEqual([
+        undefined,
+        undefined,
+        undefined,
+        "acceptance-session",
+        "alpha-session",
+        "beta-session",
+      ]);
+      for (const [input] of review.mock.calls.filter(([call]) => call.reviewer !== "acceptance")) {
+        expect(input.prompt).not.toContain(acceptanceContext.description);
+        if (input.reviewer === "alpha")
+          expect(input.prompt).not.toContain("beta review instructions");
+        if (input.reviewer === "beta")
+          expect(input.prompt).not.toContain("alpha review instructions");
+      }
+      expect(sessions.get(`${successor.changeId}/alpha`)?.sessionReference).toBe("alpha-session");
+      expect(sessions.get(`${successor.changeId}/beta`)?.sessionReference).toBe("beta-session");
+    }),
+  );
 });
 
 type AcceptanceReadyRepo = {

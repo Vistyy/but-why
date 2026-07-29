@@ -877,6 +877,9 @@ const submitResult = (result: ChangeSubmitResult): CliResult => {
         ...(result.reviewerEvidence === undefined
           ? {}
           : { reviewerEvidence: result.reviewerEvidence }),
+        ...(result.specialistReviewerEvidence === undefined
+          ? {}
+          : { specialistReviewerEvidence: result.specialistReviewerEvidence }),
       });
     return success({
       changeId: result.changeId,
@@ -888,6 +891,9 @@ const submitResult = (result: ChangeSubmitResult): CliResult => {
       ...(result.reviewerEvidence === undefined
         ? {}
         : { reviewerEvidence: result.reviewerEvidence }),
+      ...(result.specialistReviewerEvidence === undefined
+        ? {}
+        : { specialistReviewerEvidence: result.specialistReviewerEvidence }),
     });
   }
   if (
@@ -936,6 +942,9 @@ const submitResult = (result: ChangeSubmitResult): CliResult => {
         ...(result.reviewerEvidence === undefined
           ? {}
           : { reviewerEvidence: result.reviewerEvidence }),
+        ...(result.specialistReviewerEvidence === undefined
+          ? {}
+          : { specialistReviewerEvidence: result.specialistReviewerEvidence }),
       },
       help: ["Fix the Findings in the Managed Worktree, commit them, then retry Change Submit."],
     });
@@ -952,6 +961,9 @@ const submitResult = (result: ChangeSubmitResult): CliResult => {
         ...(result.reviewerEvidence === undefined
           ? {}
           : { reviewerEvidence: result.reviewerEvidence }),
+        ...(result.specialistReviewerEvidence === undefined
+          ? {}
+          : { specialistReviewerEvidence: result.specialistReviewerEvidence }),
       },
       help: ["Fix the validation tooling failure, then retry Change Submit."],
     });

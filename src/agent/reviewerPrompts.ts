@@ -92,6 +92,39 @@ export const buildSpecialistReviewerPrompt = (input: {
     "Each Finding must contain title, description, severity, evidence, files, and artifactRefs.",
   ].join("\n");
 
+export const buildSpecialistContinuationPrompt = (input: {
+  readonly specialist: string;
+  readonly instructions: string;
+  readonly validationRunId: string;
+  readonly availableArtifactRefs: readonly string[];
+  readonly candidate: {
+    readonly candidateId: string;
+    readonly changeBaseSha: string;
+    readonly headSha: string;
+  };
+  readonly previousFindings: readonly unknown[];
+}): string =>
+  [
+    input.instructions,
+    reviewerExecutionInstructions,
+    "",
+    `Specialist: ${input.specialist}`,
+    "Continue this Specialist Reviewer Session, but perform a complete fresh sweep of the exact current Candidate for the configured concern.",
+    "The previous Findings are evidence to recheck, not the only review target.",
+    "Available Validation Run evidence:",
+    encodeReviewerWireValue({
+      validationRunId: input.validationRunId,
+      availableArtifactRefs: input.availableArtifactRefs,
+    }),
+    "Candidate:",
+    encodeReviewerWireValue(input.candidate),
+    "Previous final Specialist Findings:",
+    encodeReviewerWireValue({ findings: input.previousFindings }),
+    "Return exactly one JSON object inside this XML tag:",
+    `<${reviewerOutputTag}>{"findings":[]}</${reviewerOutputTag}>`,
+    "Each Finding must contain title, description, severity, evidence, files, and artifactRefs.",
+  ].join("\n");
+
 export type ReviewerFindingHistory = {
   readonly title: string;
   readonly description: string;
