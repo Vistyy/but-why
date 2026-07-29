@@ -215,7 +215,6 @@ const implementationBlockers = Effect.gen(function* () {
     "UPDATE sqlite_master SET sql = replace(sql, \"state = 'open' AND close_reason IS NULL\", \"state IN ('open', 'blocked') AND close_reason IS NULL\") WHERE type = 'table' AND name = 'changes'",
   );
   yield* sql.unsafe("PRAGMA writable_schema = OFF");
-  yield* sql.unsafe("PRAGMA schema_version = 1");
   yield* sql.unsafe(`
     CREATE TABLE implementation_blockers (
       sequence INTEGER PRIMARY KEY AUTOINCREMENT,
