@@ -170,6 +170,9 @@ export const runAcceptanceReviewPhase = (
                 candidate: input.candidate,
                 acceptanceContext: input.acceptanceContext,
                 implementationDecisions: input.implementationDecisions ?? [],
+                ...(input.blockerHistory === undefined
+                  ? {}
+                  : { blockerHistory: input.blockerHistory }),
                 availableArtifactRefs,
                 previousFindings: earlierFindings,
               })

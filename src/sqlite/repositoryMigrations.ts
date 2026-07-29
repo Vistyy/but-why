@@ -204,6 +204,18 @@ const implementationDecisions = Effect.gen(function* () {
 
 const implementationBlockers = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
+  yield* sql.unsafe("PRAGMA writable_schema = ON");
+  yield* sql.unsafe(
+    "UPDATE sqlite_master SET sql = replace(sql, \"state IN ('open', 'closed')\", \"state IN ('open', 'blocked', 'closed')\") WHERE type = 'table' AND name = 'changes'",
+  );
+  yield* sql.unsafe(
+    "UPDATE sqlite_master SET sql = replace(sql, \"state IN ('new', 'todo', 'implementing', 'validating', 'ready', 'done', 'cancelled')\", \"state IN ('new', 'todo', 'implementing', 'blocked', 'validating', 'ready', 'done', 'cancelled')\") WHERE type = 'table' AND name = 'tasks'",
+  );
+  yield* sql.unsafe(
+    "UPDATE sqlite_master SET sql = replace(sql, \"state = 'open' AND close_reason IS NULL\", \"state IN ('open', 'blocked') AND close_reason IS NULL\") WHERE type = 'table' AND name = 'changes'",
+  );
+  yield* sql.unsafe("PRAGMA writable_schema = OFF");
+  yield* sql.unsafe("PRAGMA schema_version = 1");
   yield* sql.unsafe(`
     CREATE TABLE implementation_blockers (
       sequence INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -227,6 +239,9 @@ const acceptanceContextVersions = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
   yield* sql.unsafe(
     `CREATE TABLE acceptance_context_versions (change_id TEXT NOT NULL, version INTEGER NOT NULL, context TEXT NOT NULL, created_at TEXT NOT NULL, PRIMARY KEY (change_id, version), FOREIGN KEY (change_id) REFERENCES changes(id))`,
+  );
+  yield* sql.unsafe(
+    `INSERT INTO acceptance_context_versions (change_id, version, context, created_at) SELECT id, 1, acceptance_context, created_at FROM changes WHERE task_id IS NOT NULL AND acceptance_context IS NOT NULL`,
   );
 });
 
