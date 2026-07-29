@@ -651,7 +651,8 @@ const withAgentEnvironment = <Policy extends object>(
 });
 
 const transitionTask = (
-  changes: Pick<ChangePersistence, "getChangeById">,
+  changes: Pick<ChangePersistence, "getChangeById"> &
+    Pick<ChangePersistence, "transitionLinkedTask">,
   persistence: Pick<TaskPersistence, "getTaskById" | "transitionTaskState">,
   change: ChangeRecord,
   to: TaskState,
@@ -661,6 +662,14 @@ const transitionTask = (
     if (change.taskId === null) return false;
     if ((yield* changes.getChangeById(change.id))?.state === changeState.blocked) return false;
     if ((yield* persistence.getTaskById(change.taskId))?.state === to) return true;
+    if (changes.transitionLinkedTask !== undefined) {
+      return yield* changes.transitionLinkedTask({
+        changeId: change.id,
+        taskId: change.taskId,
+        to,
+        now,
+      });
+    }
     return (yield* persistence.transitionTaskState({ taskId: change.taskId, to, now })).ok;
   });
 

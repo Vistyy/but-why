@@ -88,6 +88,10 @@ export const openSqliteChangePersistence = (): Effect.Effect<
       ),
     listImplementationBlockers: (changeId) =>
       repository.operation("list Implementation Blockers", (sql) => listBlockers(sql, changeId)),
+    transitionLinkedTask: (input) =>
+      repository.transactionImmediate("transition linked Task", (sql) =>
+        transitionLinkedTask(sql, input),
+      ),
     getChangeById: (changeId) =>
       repository.transaction("read Change", (sql) => getById(sql, changeId)),
     getChangeByTaskId: (taskId) =>
@@ -250,6 +254,25 @@ const resolveBlocker = (
         },
       },
     };
+  });
+
+const transitionLinkedTask = (
+  sql: SqlClient.SqlClient,
+  input: {
+    readonly changeId: string;
+    readonly taskId: string;
+    readonly to: string;
+    readonly now: string;
+  },
+) =>
+  Effect.gen(function* () {
+    yield* sql`
+      UPDATE tasks SET state = ${input.to}, updated_at = ${input.now}
+      WHERE id = ${input.taskId}
+        AND EXISTS (SELECT 1 FROM changes WHERE id = ${input.changeId} AND state = 'open')
+    `;
+    const rows = yield* sql<{ readonly changed: number }>`SELECT changes() AS changed`;
+    return Number(rows[0]?.changed ?? 0) > 0;
   });
 
 const listBlockers = (sql: SqlClient.SqlClient, changeId: string) =>

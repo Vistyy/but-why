@@ -82,6 +82,12 @@ export type ChangePersistence = {
   readonly listImplementationBlockers: (
     changeId: string,
   ) => StorageEffect<ImplementationBlockerHistory | undefined>;
+  readonly transitionLinkedTask?: (input: {
+    readonly changeId: string;
+    readonly taskId: string;
+    readonly to: import("../task/lifecycle.js").TaskState;
+    readonly now: string;
+  }) => StorageEffect<boolean>;
   readonly getChangeById: (changeId: string) => StorageEffect<ChangeRecord | undefined>;
   readonly getChangeByTaskId: (taskId: string) => StorageEffect<ChangeRecord | undefined>;
   readonly listImplementationDecisions: (
