@@ -25,6 +25,7 @@ import type { InteractiveSessionHost } from "../../change/interactiveSessionHost
 import type { ReviewerAgentRuntime } from "../../agent/reviewerAgentRuntime.js";
 import type { PublicTaskId } from "../../task/taskId.js";
 import type { ChangeRecord } from "../../change/change.js";
+import type { CandidateValidationRunRecord } from "../../change/candidateValidation/candidateValidationRunStore.js";
 import type { ChangeReconciliationResult } from "../../change/reconcileChange.js";
 import type { ChangeSubmitResult } from "../../change/submitChange.js";
 import type {
@@ -72,7 +73,7 @@ export const routeChange = (
           },
           {
             command: "by change show <change-id>",
-            description: "Show Change implementation, validation, and delivery facts.",
+            description: "Show decision-oriented Change state and expansion commands.",
           },
           {
             command: "by change findings <change-id>",
@@ -80,7 +81,7 @@ export const routeChange = (
           },
           {
             command: "by change validation-runs <change-id>",
-            description: "List Validation Run History for a Change.",
+            description: "List complete compact Validation Run History and expansion commands.",
           },
           {
             command: "by change submit <change-id>",
@@ -288,7 +289,12 @@ const runShow = (
         usage: "by change show <change-id>",
         arguments: [{ argument: "<change-id>", description: "Change ID returned by Change Start" }],
         flags: withGlobalHelpFlags(),
-        examples: ["by change show <change-id>", "by change show <change-id> --output json"],
+        examples: [
+          "by change show <change-id>",
+          "by change show <change-id> --output json",
+          "by change findings <change-id>",
+          "by validation-run show <validation-run-id>",
+        ],
       }),
     );
   }
@@ -316,9 +322,17 @@ const runShow = (
               ? {}
               : { implementationDecisions: detail.change.implementationDecisions }),
             currentCandidate: detail.currentCandidate,
-            currentValidationRun: structuredValue(detail.currentValidationRun),
-            findings: detail.findings,
-            toolingFailures: detail.toolingFailures,
+            currentValidationRun: compactValidationRunView(detail.currentValidationRun),
+            findingCount: detail.findings.length,
+            toolingFailureCount: detail.toolingFailures.length,
+            ...(detail.findings.length === 0
+              ? {}
+              : { findingsCommand: `by change findings ${detail.change.id}` }),
+            ...(detail.currentValidationRun?.outcome === "tooling_failed"
+              ? {
+                  validationRunCommand: `by validation-run show ${detail.currentValidationRun.id}`,
+                }
+              : {}),
             pullRequest: detail.change.publication?.pullRequest ?? null,
             cleanup: detail.change.cleanup,
           }),
@@ -339,10 +353,35 @@ const changeInspectionView = (change: ChangeRecord) => ({
   startingCommit: change.startingCommit,
   createdAt: change.createdAt,
   closedAt: change.closedAt,
-  ...(change.implementationDecisions === undefined || change.implementationDecisions.length === 0
-    ? {}
-    : { implementationDecisions: change.implementationDecisions }),
 });
+
+const compactValidationRunView = (run: CandidateValidationRunRecord | null) =>
+  run === null
+    ? null
+    : {
+        id: run.id,
+        candidateId: run.candidateId,
+        state: run.state,
+        outcome: run.outcome,
+        createdAt: run.createdAt,
+        updatedAt: run.updatedAt,
+      };
+
+const validationRunHistoryView = (runs: readonly CandidateValidationRunRecord[]) => {
+  const outcomeCounts: Record<string, number> = {};
+  let runningCount = 0;
+  for (const run of runs) {
+    if (run.state === "running") runningCount += 1;
+    if (run.outcome !== null) outcomeCounts[run.outcome] = (outcomeCounts[run.outcome] ?? 0) + 1;
+  }
+  return {
+    count: runs.length,
+    outcomeCounts,
+    runningCount,
+    validationRuns: runs.map(compactValidationRunView),
+    ...(runs.length === 0 ? {} : { detailCommand: "by validation-run show <validation-run-id>" }),
+  };
+};
 
 const changeNotFound = (): CliResult =>
   runtimeError({
@@ -392,7 +431,7 @@ const runValidationRuns = (
     Effect.map((result) =>
       result === undefined
         ? changeNotFound()
-        : success({ validationRuns: structuredValue(result.validationRuns) }),
+        : success(validationRunHistoryView(result.validationRuns)),
     ),
     inspectionFailure,
   );

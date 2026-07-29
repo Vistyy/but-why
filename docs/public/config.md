@@ -212,6 +212,8 @@ by change list [--all]
 by change show <change-id>
 by change findings <change-id>
 by change validation-runs <change-id>
+by validation-run show <validation-run-id>
+by validation-run artifact <validation-run-id> <artifact-ref>
 by change submit <change-id>
 by change cancel <change-id>
 by change reconcile [<change-id>]
@@ -229,6 +231,13 @@ All command groups support these global output and help flags:
 `--output` accepts `toon` or `json`.
 
 TOON is the default.
+
+Inspection commands use decision-oriented default schemas.
+`by task show` omits the description and reports the exact `by task context <task-id>` expansion command.
+`by change show` reports compact current Validation Run state and Finding and tooling-failure counts.
+`by change validation-runs` reports complete compact history with counts and the Validation Run detail-command pattern.
+`by validation-run show` retains the immutable policy and evidence.
+It includes Artifact previews only when a Finding references them or the Validation Run has a tooling failure.
 
 ## Agent Profiles
 

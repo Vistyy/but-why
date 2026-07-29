@@ -33,7 +33,7 @@ export type CandidateValidationRunInspection = {
 };
 
 export type CandidateValidationArtifactInspection = CandidateValidationArtifact & {
-  readonly preview: CandidateValidationArtifactPreview;
+  readonly preview?: CandidateValidationArtifactPreview;
 };
 
 export type CandidateValidationArtifactPreview =
@@ -96,6 +96,9 @@ const inspectRun = (
     const toolingFailures = yield* dependencies.persistence.listToolingFailures(validationRunId);
     const artifacts = yield* dependencies.persistence.listArtifacts(validationRunId);
 
+    const findingArtifactRefs = new Set(findings.flatMap((finding) => finding.artifactRefs));
+    const includeAllAvailablePreviews = toolingFailures.length > 0;
+
     return {
       validationRun,
       change,
@@ -106,10 +109,16 @@ const inspectRun = (
       specialistRounds: rounds.filter((round) => round.phase === validationPhase.specialistReview),
       findings,
       toolingFailures,
-      artifacts: artifacts.map((artifact) => ({
-        ...artifact,
-        preview: readPreview(dependencies.artifactsRoot, artifact),
-      })),
+      artifacts: artifacts.map((artifact) => {
+        const referencedByFinding = findingArtifactRefs.has(artifact.ref);
+        if (!referencedByFinding && !includeAllAvailablePreviews) return artifact;
+
+        const preview = readPreview(dependencies.artifactsRoot, artifact);
+        return {
+          ...artifact,
+          ...(referencedByFinding || preview.status === "available" ? { preview } : {}),
+        };
+      }),
     };
   });
 

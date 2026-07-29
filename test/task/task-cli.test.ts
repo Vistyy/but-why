@@ -290,7 +290,7 @@ help[1]: "Run \`by task create --title \\"...\\" --description-file <file>\` to 
     }),
   );
 
-  it.effect("shows compact Task metadata without Task Context", () =>
+  it.effect("shows compact Task metadata with Task Context expansion", () =>
     Effect.gen(function* () {
       const result = yield* runByInProcessEffect(
         createTestWorkspace(),
@@ -309,14 +309,14 @@ help[1]: "Run \`by task create --title \\"...\\" --description-file <file>\` to 
       expect(result.stdout).toBe(`task:
   id: BY-1
   title: Inspect task
-  description: Description
   state: ready
   createdAt: "${firstNow}"
   updatedAt: "${secondNow}"
   commentCount: 0
   prerequisites: []
   dependents: []
-  change: null`);
+  change: null
+contextCommand: by task context BY-1`);
     }),
   );
 
@@ -616,14 +616,14 @@ help[1]: "Run \`by task create --title \\"...\\" --description-file <file>\` to 
         expect((yield* runByInProcessEffect(root, ["task", "show", "BY-1"])).stdout).toBe(`task:
   id: BY-1
   title: Commented task
-  description: Description for Commented task
   state: todo
   createdAt: "${firstNow}"
   updatedAt: "2026-06-30T12:15:00.000Z"
   commentCount: 2
   prerequisites: []
   dependents: []
-  change: null`);
+  change: null
+contextCommand: by task context BY-1`);
         expect((yield* runByInProcessEffect(root, ["task", "context", "BY-1"])).stdout).toBe(`task:
   id: BY-1
   title: Commented task
