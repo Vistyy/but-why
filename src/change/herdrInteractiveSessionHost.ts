@@ -469,7 +469,9 @@ const worktreeMatchesTarget = (source: string, targetPath: string): boolean => {
 
 const hasExitEvidence = (evidence: InteractiveSessionLaunchEvidence | undefined): boolean =>
   evidence?.exitEvidence !== undefined &&
-  /exit|exited|terminated|code/i.test(evidence.exitEvidence);
+  /exit|exited|terminated|code|pane[_ ]?not[_ ]?found|not[_ ]?found.*pane/i.test(
+    evidence.exitEvidence,
+  );
 
 const launchEvidence = async (
   execute: HerdrCommandExecutor,

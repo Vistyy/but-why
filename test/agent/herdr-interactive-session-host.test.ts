@@ -494,9 +494,9 @@ describe("Herdr Interactive Session Host", () => {
       }
       if (args[0] === "pane" && args[1] === "run") return new Promise(() => {});
       if (args[0] === "pane" && args[1] === "read")
-        return { ok: true, stdout: "Pi startup output" };
+        return { ok: false, message: "pane no-such-pane not found" };
       if (args[0] === "pane" && args[1] === "process-info")
-        return { ok: true, stdout: "exit code 2" };
+        return { ok: false, message: "pane_not_found" };
       return { ok: true, stdout: "{}" };
     };
 
@@ -515,7 +515,10 @@ describe("Herdr Interactive Session Host", () => {
       ok: false,
       code: "launch_failed",
       message: expect.stringContaining("exited during startup"),
-      evidence: { startupOutput: "Pi startup output", exitEvidence: "exit code 2" },
+      evidence: {
+        startupOutput: "Herdr pane read failed: pane no-such-pane not found",
+        exitEvidence: "Herdr process inspection failed: pane_not_found",
+      },
     });
     expect(
       commands.filter(([command, operation]) => command === "pane" && operation === "run"),
