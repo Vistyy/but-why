@@ -493,9 +493,12 @@ const launchEvidence = async (
     ),
     execute(["pane", "process-info", "--pane", paneId], signal),
   ]);
-  const startupOutput = output.ok && output.stdout.trim() !== "" ? output.stdout.trim() : undefined;
-  const exitEvidence =
-    processInfo.ok && processInfo.stdout.trim() !== "" ? processInfo.stdout.trim() : undefined;
+  const startupOutput = output.ok
+    ? output.stdout.trim() || undefined
+    : `Herdr pane read failed: ${output.message}`;
+  const exitEvidence = processInfo.ok
+    ? processInfo.stdout.trim() || undefined
+    : `Herdr process inspection failed: ${processInfo.message}`;
   return startupOutput === undefined && exitEvidence === undefined
     ? undefined
     : {
