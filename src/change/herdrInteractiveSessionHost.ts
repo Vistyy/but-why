@@ -429,7 +429,7 @@ const isValidAgentList = (source: string): boolean => {
   const agents = result === undefined ? undefined : recordValue(result, "agents");
   return (
     result !== undefined &&
-    recordValue(result, "type") === "agent_list" &&
+    (recordValue(result, "type") === undefined || recordValue(result, "type") === "agent_list") &&
     Array.isArray(agents) &&
     agents.every(
       (agent) =>
@@ -663,7 +663,12 @@ type OpenedWorktree = {
 
 const openedWorktree = (source: string): OpenedWorktree | undefined => {
   const result = herdrResult(source);
-  const workspace = result === undefined ? undefined : recordValue(result, "workspace");
+  if (
+    result === undefined ||
+    (recordValue(result, "type") !== undefined && recordValue(result, "type") !== "worktree_open")
+  )
+    return undefined;
+  const workspace = recordValue(result, "workspace");
   const rootPane = result === undefined ? undefined : recordValue(result, "root_pane");
   const workspaceId = isRecord(workspace) ? recordValue(workspace, "workspace_id") : undefined;
   const rootPaneId = isRecord(rootPane) ? recordValue(rootPane, "pane_id") : undefined;
