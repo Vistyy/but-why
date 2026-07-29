@@ -179,6 +179,13 @@ describe("Change inspection CLI", () => {
           now: commandNow,
         }),
       );
+      yield* withValidationPersistence(root, (persistence) =>
+        persistence.complete({
+          validationRunId: olderCandidateRun.validationRunId,
+          outcome: "passed",
+          now: commandNow,
+        }),
+      );
       const findings = yield* runByInProcessEffect(root, [
         "change",
         "findings",
@@ -211,8 +218,8 @@ describe("Change inspection CLI", () => {
       });
       expect(JSON.parse(history.stdout)).toMatchObject({
         count: 2,
-        outcomeCounts: {},
-        runningCount: 2,
+        outcomeCounts: { passed: 1 },
+        runningCount: 1,
         detailCommand: "by validation-run show <validation-run-id>",
         validationRuns: [
           {
@@ -226,8 +233,8 @@ describe("Change inspection CLI", () => {
           {
             id: olderCandidateRun.validationRunId,
             candidateId: firstCandidate.id,
-            state: "running",
-            outcome: null,
+            state: "complete",
+            outcome: "passed",
             createdAt: commandNow,
             updatedAt: commandNow,
           },
