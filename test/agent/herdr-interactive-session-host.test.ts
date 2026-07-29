@@ -207,7 +207,11 @@ describe("Herdr Interactive Session Host", () => {
             commands.filter(([command, operation]) => command === "agent" && operation === "list")
               .length === 1
               ? `{"result":{"type":"agent_list","agents":[{"agent":"${herdrSessionName("change-123")}","cwd":"/workspace/change-123","pane_id":"workspace-1:pane-1","agent_status":"done"}]}}`
-              : `{"result":{"type":"agent_list","agents":[{"agent":"${herdrSessionName("change-123")}","cwd":"/workspace/change-123","pane_id":"workspace-1:pane-1","agent_status":"working"}]}}`,
+              : commands.filter(
+                    ([command, operation]) => command === "agent" && operation === "list",
+                  ).length === 2
+                ? `{"result":{"type":"agent_list","agents":[]}}`
+                : `{"result":{"type":"agent_list","agents":[{"agent":"${herdrSessionName("change-123")}","cwd":"/workspace/change-123","pane_id":"workspace-1:pane-1","agent_status":"working"}]}}`,
         };
       }
       if (args[0] === "worktree") {

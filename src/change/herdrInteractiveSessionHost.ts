@@ -144,9 +144,12 @@ const launchHerdrSession = async (
         )
       : launchIndeterminate("Herdr returned malformed worktree-open output.");
   }
-  const currentAgents = opened.alreadyOpen
-    ? agents
-    : await observe(command, ["agent", "list"], signal, options.observationRetries);
+  const currentAgents = await observe(
+    command,
+    ["agent", "list"],
+    signal,
+    options.observationRetries,
+  );
   if (!currentAgents.ok || !isValidAgentList(currentAgents.stdout)) {
     return launchIndeterminate(
       "Herdr did not provide a trustworthy pre-launch session observation.",
