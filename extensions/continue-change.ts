@@ -270,14 +270,23 @@ export default function continueChange(pi: ExtensionAPI): void {
       const id = changeId;
       const observed = await inspect(ctx, id);
       if (observed === undefined) {
-        if (persisted === undefined || persisted.changeId !== id) {
-          saveState({
-            changeId: id,
-            fingerprint: "inspection-unavailable",
-            unchangedRestarts: 0,
-            paused: false,
-          });
+        const previous = persisted ?? {
+          changeId: id,
+          fingerprint: "inspection-unavailable",
+          unchangedRestarts: 0,
+          paused: false,
+        };
+        const retry = nextRetryState(previous, "inspection-unavailable");
+        pendingThresholdCompaction = false;
+        if (retry.unchangedRestarts > maxUnchangedRestarts) {
+          saveState({ ...previous, ...retry, paused: false });
+          ctx.ui.notify(
+            "But Why automatic continuation stopped after three inspection failures without durable state progress. Restore CLI and Git access, then take the next action manually.",
+            "warning",
+          );
+          return;
         }
+        saveState({ ...previous, ...retry, paused: false });
         ctx.ui.notify(
           "But Why could not inspect the current Change state; automatic continuation will keep trying until inspection recovers or the operator cancels it.",
           "warning",

@@ -112,10 +112,17 @@ describe("packaged Change Implement continuation extension", () => {
 
     await harness.emit("session_start", { type: "session_start", reason: "startup" });
     await harness.emit("agent_settled");
+    await harness.emit("agent_settled");
+    await harness.emit("agent_settled");
 
-    expect(harness.sent).toHaveLength(1);
+    expect(harness.sent).toHaveLength(3);
     expect(harness.sent[0]).toContain("Restore But Why CLI and Git access");
     expect(harness.notifications[0]).toContain("automatic continuation will keep trying");
+
+    await harness.emit("agent_settled");
+
+    expect(harness.sent).toHaveLength(3);
+    expect(harness.notifications.at(-1)).toContain("stopped after three inspection failures");
   });
 
   it("does not wake a session for durable stopping conditions", async () => {
