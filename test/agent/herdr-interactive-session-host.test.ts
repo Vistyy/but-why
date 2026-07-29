@@ -409,6 +409,48 @@ describe("Herdr Interactive Session Host", () => {
     ).toHaveLength(2);
   });
 
+  it("accepts a session registered during final reconciliation after the readiness deadline", async () => {
+    let agentLists = 0;
+    const execute: HerdrCommandExecutor = async (args) => {
+      if (args[0] === "agent" && args[1] === "list") {
+        agentLists += 1;
+        return agentLists < 3
+          ? { ok: true, stdout: '{"result":{"type":"agent_list","agents":[]}}' }
+          : {
+              ok: true,
+              stdout:
+                '{"result":{"type":"agent_list","agents":[{"name":"but-why-change-123","cwd":"/workspace/change-123","pane_id":"workspace-1:pane-1","agent_status":"working"}]}}',
+            };
+      }
+      if (args[0] === "worktree") {
+        return {
+          ok: true,
+          stdout:
+            '{"result":{"type":"worktree_opened","workspace":{"workspace_id":"workspace-1"},"root_pane":{"pane_id":"workspace-1:pane-1"},"already_open":false}}',
+        };
+      }
+      if (args[0] === "pane" && args[1] === "run") return { ok: true, stdout: "{}" };
+      if (args[0] === "agent" && args[1] === "rename") {
+        return {
+          ok: true,
+          stdout:
+            '{"result":{"agent":{"name":"but-why-change-123","cwd":"/workspace/change-123","pane_id":"workspace-1:pane-1"}}}',
+        };
+      }
+      return { ok: true, stdout: "{}" };
+    };
+
+    await expect(
+      openHerdrInteractiveSessionHost(execute, { readinessTimeoutMs: 0 }).launch({
+        changeId: "change-123",
+        repositoryPath: "/repository",
+        worktreePath: "/workspace/change-123",
+        initialPrompt: undefined,
+      }),
+    ).resolves.toEqual({ ok: true, host: "herdr", status: "started" });
+    expect(agentLists).toBe(3);
+  });
+
   it("retries a transient readiness observation", async () => {
     let agentLists = 0;
     const execute: HerdrCommandExecutor = async (args) => {
