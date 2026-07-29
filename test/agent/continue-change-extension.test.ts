@@ -60,6 +60,7 @@ const createHarness = () => {
       if (command === "by") return result(JSON.stringify(currentSnapshot));
       if (command === "git" && args[0] === "rev-parse") return result("head\n");
       if (command === "git" && args[0] === "status") return result("");
+      if (command === "git" && (args[0] === "diff" || args[0] === "ls-files")) return result("");
       return { stdout: "", stderr: "", code: 1, killed: false };
     },
   } as unknown as ExtensionAPI;

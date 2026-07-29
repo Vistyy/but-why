@@ -45,12 +45,20 @@ type RunResult =
       readonly stdout: string;
     };
 
+type GitInspection = {
+  readonly head: string;
+  readonly status: string;
+  readonly unstagedDiff: string;
+  readonly stagedDiff: string;
+  readonly untrackedFiles: readonly { readonly path: string; readonly hash: string }[];
+};
+
 type InspectionResult =
   | {
       readonly ok: true;
       readonly snapshot: ChangeInspectionSnapshot;
       readonly fingerprint: string;
-      readonly git: { readonly head: string; readonly status: string };
+      readonly git: GitInspection;
     }
   | { readonly ok: false; readonly transient: boolean; readonly message: string };
 
@@ -135,10 +143,7 @@ export const nextRetryState = (previous: RetryState, fingerprint: string): Retry
     ? { fingerprint, unchangedRestarts: previous.unchangedRestarts + 1 }
     : { fingerprint, unchangedRestarts: 0 };
 
-const durableChangeFingerprint = (
-  snapshot: ChangeInspectionSnapshot,
-  git: { readonly head: string; readonly status: string },
-): string =>
+const durableChangeFingerprint = (snapshot: ChangeInspectionSnapshot, git: GitInspection): string =>
   createHash("sha256")
     .update(
       JSON.stringify({
@@ -206,13 +211,31 @@ export default function continueChange(pi: ExtensionAPI): void {
   };
 
   const inspect = async (ctx: ExtensionContext, id: string): Promise<InspectionResult> => {
-    const [changeResult, headResult, statusResult] = await Promise.all([
-      run("by", ["change", "show", id, "--output", "json"], ctx.cwd),
-      run("git", ["rev-parse", "HEAD"], ctx.cwd),
-      run("git", ["status", "--porcelain=v1"], ctx.cwd),
-    ]);
-    if (!changeResult.ok || !headResult.ok || !statusResult.ok) {
-      const failures = [changeResult, headResult, statusResult].filter(
+    const [changeResult, headResult, statusResult, unstagedResult, stagedResult, untrackedResult] =
+      await Promise.all([
+        run("by", ["change", "show", id, "--output", "json"], ctx.cwd),
+        run("git", ["rev-parse", "HEAD"], ctx.cwd),
+        run("git", ["status", "--porcelain=v1", "--untracked-files=all"], ctx.cwd),
+        run("git", ["diff", "--no-ext-diff", "--binary"], ctx.cwd),
+        run("git", ["diff", "--cached", "--no-ext-diff", "--binary"], ctx.cwd),
+        run("git", ["ls-files", "--others", "--exclude-standard", "-z"], ctx.cwd),
+      ]);
+    if (
+      !changeResult.ok ||
+      !headResult.ok ||
+      !statusResult.ok ||
+      !unstagedResult.ok ||
+      !stagedResult.ok ||
+      !untrackedResult.ok
+    ) {
+      const failures = [
+        changeResult,
+        headResult,
+        statusResult,
+        unstagedResult,
+        stagedResult,
+        untrackedResult,
+      ].filter(
         (result): result is Extract<RunResult, { readonly ok: false }> => !result.ok,
       );
       return {
@@ -225,6 +248,19 @@ export default function continueChange(pi: ExtensionAPI): void {
               : `${failure.message}: ${failure.stdout.trim().slice(0, 500)}`,
           )
           .join("; "),
+      };
+    }
+
+    const untrackedPaths = untrackedResult.stdout.split("\0").filter((path) => path !== "");
+    const untrackedHashResult =
+      untrackedPaths.length === 0
+        ? ({ ok: true, stdout: "" } as const)
+        : await run("git", ["hash-object", "--", ...untrackedPaths], ctx.cwd);
+    if (!untrackedHashResult.ok) {
+      return {
+        ok: false,
+        transient: untrackedHashResult.transient,
+        message: untrackedHashResult.message,
       };
     }
 
@@ -245,7 +281,17 @@ export default function continueChange(pi: ExtensionAPI): void {
         message: "by change show returned an unsupported Change state shape",
       };
     }
-    const git = { head: headResult.stdout.trim(), status: statusResult.stdout };
+    const untrackedHashes = untrackedHashResult.stdout.split("\n").filter((hash) => hash !== "");
+    const git: GitInspection = {
+      head: headResult.stdout.trim(),
+      status: statusResult.stdout,
+      unstagedDiff: unstagedResult.stdout,
+      stagedDiff: stagedResult.stdout,
+      untrackedFiles: untrackedPaths.map((path, index) => ({
+        path,
+        hash: untrackedHashes[index] ?? "",
+      })),
+    };
     return {
       ok: true,
       snapshot: value,
