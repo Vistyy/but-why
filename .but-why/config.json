@@ -15,5 +15,14 @@
         "timeoutSeconds": 1200
       }
     ]
+  },
+  "review": {
+    "specialists": ["standards"]
+  },
+  "reviewers": {
+    "standards": {
+      "instructionsFile": ".but-why/reviewers/standards.md",
+      "agentProfile": { "scope": "global", "name": "reviewer" }
+    }
   }
 }
