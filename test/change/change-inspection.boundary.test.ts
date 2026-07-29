@@ -261,6 +261,49 @@ describe("Change inspection CLI", () => {
     }),
   );
 
+  it.effect("records and lists an ordered Implementation Decision Log through Change CLI", () =>
+    Effect.gen(function* () {
+      const root = yield* initializedRepoCopy();
+      const change = yield* createChangeFixture(root, "refs/heads/decisions", firstNow);
+      writeFileSync(join(root, "decision.md"), "Use an append-only record for material choices.\n");
+
+      const added = yield* runByInProcessEffect(
+        root,
+        ["change", "decision", "add", change.id, "--file", "decision.md", "--output", "json"],
+        commandNow,
+      );
+      const listed = yield* runByInProcessEffect(root, [
+        "change",
+        "decision",
+        "list",
+        change.id,
+        "--output",
+        "json",
+      ]);
+      const shown = yield* runByInProcessEffect(root, [
+        "change",
+        "show",
+        change.id,
+        "--output",
+        "json",
+      ]);
+
+      expect(added.status).toBe(0);
+      expect(JSON.parse(listed.stdout)).toMatchObject({
+        changeId: change.id,
+        count: 1,
+        decisions: [
+          {
+            changeId: change.id,
+            sequence: 1,
+            content: "Use an append-only record for material choices.\n",
+          },
+        ],
+      });
+      expect(JSON.parse(shown.stdout).implementationDecisions).toHaveLength(1);
+    }),
+  );
+
   it.effect("projects linked Change progress through Task inspection", () =>
     Effect.gen(function* () {
       const root = yield* initializedRepoCopy();

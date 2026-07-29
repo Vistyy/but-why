@@ -22,6 +22,15 @@ describe("reviewer prompts", () => {
         description: "Description",
         comments: [],
       },
+      implementationDecisions: [
+        {
+          id: "decision-1",
+          changeId: "change-1",
+          sequence: 1,
+          recordedAt: "2026-01-01T00:00:00.000Z",
+          content: "Choose the explicit storage shape.",
+        },
+      ],
     });
     const specialist = buildSpecialistReviewerPrompt({
       specialist: "security",
@@ -36,6 +45,9 @@ describe("reviewer prompts", () => {
       expect(prompt).toContain("Check Artifacts");
       expect(prompt).toContain("must not modify the Candidate");
       expect(prompt).toContain("operating-system temporary space");
+      expect(acceptance).toContain("non-authoritative rationale");
+      expect(acceptance).toContain("Choose the explicit storage shape.");
+      expect(specialist).not.toContain("Choose the explicit storage shape.");
     }
   });
 });
