@@ -178,14 +178,16 @@ const launchInOpenedWorktree = async (
     if (!opened.alreadyOpen && observed.kind === "absent") {
       await closeWorkspace(execute, opened.workspaceId, signal);
     }
-    return observed.kind === "exited"
-      ? launchFailure(`Pi exited during startup: ${observed.message}`, evidence)
-      : isUncertainMutationFailure(launched.message)
-        ? launchIndeterminate(
-            `Herdr did not confirm whether Pi started: ${launched.message}`,
-            evidence,
-          )
-        : launchFailure(launched.message, evidence);
+    return observed.kind === "malformed"
+      ? launchFailure(observed.message, evidence)
+      : observed.kind === "exited"
+        ? launchFailure(`Pi exited during startup: ${observed.message}`, evidence)
+        : isUncertainMutationFailure(launched.message)
+          ? launchIndeterminate(
+              `Herdr did not confirm whether Pi started: ${launched.message}`,
+              evidence,
+            )
+          : launchFailure(launched.message, evidence);
   }
 
   const renamed = await execute(["agent", "rename", opened.rootPaneId, sessionName], signal);
@@ -236,6 +238,10 @@ const launchInOpenedWorktree = async (
     signal,
     options,
   );
+  if (ready.kind === "malformed") {
+    const evidence = await launchEvidence(execute, opened.rootPaneId, signal);
+    return launchFailure(ready.message, evidence);
+  }
   if (ready.kind === "exited") {
     const evidence = await launchEvidence(execute, opened.rootPaneId, signal);
     if (!opened.alreadyOpen) await closeWorkspace(execute, opened.workspaceId, signal);
@@ -272,7 +278,8 @@ type SessionObservation =
   | { readonly kind: "ready" }
   | { readonly kind: "exited"; readonly message: string }
   | { readonly kind: "absent" }
-  | { readonly kind: "unknown" };
+  | { readonly kind: "unknown" }
+  | { readonly kind: "malformed"; readonly message: string };
 
 const waitForSession = async (
   execute: HerdrCommandExecutor,
@@ -289,7 +296,7 @@ const waitForSession = async (
     if (!listed.ok) {
       last = { kind: "unknown" };
     } else if (!isValidAgentList(listed.stdout)) {
-      last = { kind: "unknown" };
+      return { kind: "malformed", message: "Herdr returned malformed agent-list output." };
     } else {
       const agent = findSession(listed.stdout, input, sessionName, paneId);
       if (agent === undefined) {
@@ -382,7 +389,9 @@ const isTransientObservationFailure = (message: string): boolean =>
   /timed out|temporar|try again|connection reset|busy/i.test(message);
 
 const isUncertainMutationFailure = (message: string): boolean =>
-  /timed out|connection reset|ECONNRESET|response.*lost|disconnected|broken pipe/i.test(message);
+  /timed out|connection reset|ECONNRESET|response.*lost|lost response|no response|transport|connection.*closed|disconnected|broken pipe|eof/i.test(
+    message,
+  );
 
 const isValidAgentList = (source: string): boolean => {
   const result = herdrResult(source);
@@ -421,6 +430,7 @@ const worktreeMatchesTarget = (
         isRecord(worktree) &&
         (recordValue(worktree, "path") === targetPath ||
           recordValue(worktree, "worktree_path") === targetPath) &&
+        typeof recordValue(worktree, "worktree_id") === "string" &&
         (recordValue(worktree, "repository_path") === repositoryPath ||
           recordValue(worktree, "repo_path") === repositoryPath ||
           typeof recordValue(worktree, "branch") === "string"),
