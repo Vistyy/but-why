@@ -125,6 +125,20 @@ describe("packaged Change Implement continuation extension", () => {
     expect(harness.notifications.at(-1)).toContain("stopped after three inspection failures");
   });
 
+  it("keeps the restart limit when inspection fails after progress was observed", async () => {
+    const harness = createHarness();
+    await harness.emit("session_start", { type: "session_start", reason: "startup" });
+    await harness.emit("agent_settled");
+    harness.setInspectionFails(true);
+
+    await harness.emit("agent_settled");
+    await harness.emit("agent_settled");
+    await harness.emit("agent_settled");
+
+    expect(harness.sent).toHaveLength(3);
+    expect(harness.notifications.at(-1)).toContain("stopped after three inspection failures");
+  });
+
   it("does not wake a session for durable stopping conditions", async () => {
     const harness = createHarness();
     await harness.emit("session_start", { type: "session_start", reason: "startup" });

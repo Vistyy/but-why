@@ -276,7 +276,10 @@ export default function continueChange(pi: ExtensionAPI): void {
           unchangedRestarts: 0,
           paused: false,
         };
-        const retry = nextRetryState(previous, "inspection-unavailable");
+        const retry = {
+          fingerprint: previous.fingerprint,
+          unchangedRestarts: previous.unchangedRestarts + 1,
+        };
         pendingThresholdCompaction = false;
         if (retry.unchangedRestarts > maxUnchangedRestarts) {
           saveState({ ...previous, ...retry, paused: false });
