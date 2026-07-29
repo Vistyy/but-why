@@ -466,7 +466,15 @@ const validateAndPublish = (
       changeId: change.id,
       candidateId: candidate.candidateId,
       validationRunId: validationResult.validationRunId,
-      policy: withAgentEnvironment(policy.resolved.policy, agentEnvironment),
+      policy: withAgentEnvironment(
+        {
+          ...policy.resolved.policy,
+          ...(change.acceptanceContext === null
+            ? {}
+            : { acceptanceContext: change.acceptanceContext }),
+        },
+        agentEnvironment,
+      ),
       target,
       now,
     });
