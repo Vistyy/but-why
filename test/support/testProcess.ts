@@ -4,9 +4,9 @@ import {
   type ChildProcessByStdio,
   type SpawnSyncReturns,
 } from "node:child_process";
-import { mkdirSync, mkdtempSync, realpathSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { isAbsolute, join, relative, resolve } from "node:path";
+import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import type { Readable } from "node:stream";
 const repositoryRoot = resolve(import.meta.dirname, "../..");
 
@@ -66,12 +66,13 @@ const checkedOutsideSharedCheckout = (path: string, label: string): string => {
     throw new Error(`${label} must be isolated from the shared checkout.`);
   }
 
-  let canonicalPath = lexicalPath;
-  try {
-    canonicalPath = realpathSync(path);
-  } catch {
-    // The process or the environment may create a new path after startup.
+  let existingAncestor = lexicalPath;
+  while (!existsSync(existingAncestor)) {
+    const parent = dirname(existingAncestor);
+    if (parent === existingAncestor) break;
+    existingAncestor = parent;
   }
+  const canonicalPath = realpathSync(existingAncestor);
   if (isInSharedCheckout(canonicalPath)) {
     throw new Error(`${label} must be isolated from the shared checkout.`);
   }

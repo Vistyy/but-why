@@ -27,7 +27,9 @@ describe("test subprocess isolation", () => {
   test("rejects shared checkout paths and HOME overrides", () => {
     const fixture = createTestWorkspace();
     const checkoutAlias = join(fixture, "checkout-alias");
+    const homeAlias = join(fixture, "home-alias");
     symlinkSync(repoRoot, checkoutAlias, "dir");
+    symlinkSync(repoRoot, homeAlias, "dir");
 
     expect(() => runTestProcess("pwd", [], { cwd: repoRoot })).toThrow(
       "Test subprocess cwd must be isolated",
@@ -38,5 +40,8 @@ describe("test subprocess isolation", () => {
     expect(() => runTestProcess("pwd", [], { cwd: fixture, env: { HOME: repoRoot } })).toThrow(
       "Test subprocess HOME must be isolated",
     );
+    expect(() =>
+      runTestProcess("pwd", [], { cwd: fixture, env: { HOME: join(homeAlias, "new-home") } }),
+    ).toThrow("Test subprocess HOME must be isolated");
   });
 });
