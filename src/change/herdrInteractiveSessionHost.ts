@@ -340,7 +340,14 @@ const waitForSession = async (
   const deadline = performance.now() + options.readinessTimeoutMs;
   let last: SessionObservation = { kind: "absent" };
   do {
-    const listed = await observe(execute, ["agent", "list"], signal, options.observationRetries);
+    const remaining = deadline - performance.now();
+    if (remaining <= 0) break;
+    const listed = await observe(
+      boundedExecutor(execute, Math.max(1, remaining)),
+      ["agent", "list"],
+      signal,
+      0,
+    );
     if (!listed.ok) {
       last = { kind: "unknown" };
     } else if (!isValidAgentList(listed.stdout)) {
