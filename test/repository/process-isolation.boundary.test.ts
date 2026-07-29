@@ -43,5 +43,12 @@ describe("test subprocess isolation", () => {
     expect(() =>
       runTestProcess("pwd", [], { cwd: fixture, env: { HOME: join(homeAlias, "new-home") } }),
     ).toThrow("Test subprocess HOME must be isolated");
+
+    const requestedHome = join(fixture, "new-home");
+    const homeResult = runTestProcess("sh", ["-c", "printf '%s' \"$HOME\""], {
+      cwd: fixture,
+      env: { HOME: requestedHome },
+    });
+    expect(homeResult.stdout).toBe(requestedHome);
   });
 });

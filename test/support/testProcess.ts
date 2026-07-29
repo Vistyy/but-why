@@ -66,6 +66,7 @@ const checkedOutsideSharedCheckout = (path: string, label: string): string => {
     throw new Error(`${label} must be isolated from the shared checkout.`);
   }
 
+  const pathExists = existsSync(lexicalPath);
   let existingAncestor = lexicalPath;
   while (!existsSync(existingAncestor)) {
     const parent = dirname(existingAncestor);
@@ -76,7 +77,7 @@ const checkedOutsideSharedCheckout = (path: string, label: string): string => {
   if (isInSharedCheckout(canonicalPath)) {
     throw new Error(`${label} must be isolated from the shared checkout.`);
   }
-  return canonicalPath;
+  return pathExists ? realpathSync(lexicalPath) : lexicalPath;
 };
 
 const processOptions = (options: TestProcessOptions) => {
