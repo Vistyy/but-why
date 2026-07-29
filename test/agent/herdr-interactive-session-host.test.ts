@@ -372,7 +372,7 @@ describe("Herdr Interactive Session Host", () => {
         return {
           ok: true,
           stdout:
-            '{"result":{"type":"worktree_list","worktrees":[{"path":"/workspace/change-123","branch":"but-why/change-123"}]}}',
+            '{"result":{"type":"worktree_list","worktrees":[{"path":"/workspace/change-123","branch":"but-why/change-123","repository_path":"/repository"}]}}',
         };
       }
       if (args[0] === "agent" && args[1] === "rename") {
@@ -394,6 +394,39 @@ describe("Herdr Interactive Session Host", () => {
         initialPrompt: undefined,
       }),
     ).resolves.toEqual({ ok: true, host: "herdr", status: "started" });
+    expect(
+      commands.filter(([command, operation]) => command === "worktree" && operation === "open"),
+    ).toHaveLength(2);
+  });
+
+  it("returns indeterminate after an uncertain worktree retry remains unresolved", async () => {
+    const commands: string[][] = [];
+    const execute: HerdrCommandExecutor = async (args) => {
+      commands.push([...args]);
+      if (args[0] === "agent" && args[1] === "list") {
+        return { ok: true, stdout: '{"result":{"agents":[]}}' };
+      }
+      if (args[0] === "worktree" && args[1] === "open") {
+        return { ok: false, message: "response lost" };
+      }
+      if (args[0] === "worktree" && args[1] === "list") {
+        return {
+          ok: true,
+          stdout:
+            '{"result":{"type":"worktree_list","worktrees":[{"path":"/workspace/change-123","branch":"but-why/change-123","repository_path":"/repository"}]}}',
+        };
+      }
+      return { ok: true, stdout: "{}" };
+    };
+
+    await expect(
+      openHerdrInteractiveSessionHost(execute).launch({
+        changeId: "change-123",
+        repositoryPath: "/repository",
+        worktreePath: "/workspace/change-123",
+        initialPrompt: undefined,
+      }),
+    ).resolves.toMatchObject({ ok: false, code: "launch_indeterminate" });
     expect(
       commands.filter(([command, operation]) => command === "worktree" && operation === "open"),
     ).toHaveLength(2);

@@ -162,7 +162,7 @@ const launchInOpenedWorktree = async (
   ) {
     return launchIndeterminate("Herdr could not determine the existing session state.");
   }
-  if (opened.alreadyOpen && hasActiveAgentInWorktree(listedAgents, input)) {
+  if (hasActiveAgentInWorktree(listedAgents, input)) {
     return launchFailure("Another Interactive Session is already active in this worktree.");
   }
 
@@ -436,8 +436,8 @@ const worktreeMatchesTarget = (
         (recordValue(worktree, "path") === targetPath ||
           recordValue(worktree, "worktree_path") === targetPath) &&
         typeof recordValue(worktree, "branch") === "string" &&
-        (recordValue(worktree, "repository_path") === undefined ||
-          recordValue(worktree, "repository_path") === repositoryPath) &&
+        (recordValue(worktree, "branch") as string).trim() !== "" &&
+        recordValue(worktree, "repository_path") === repositoryPath &&
         (recordValue(worktree, "open_workspace_id") === undefined ||
           typeof recordValue(worktree, "open_workspace_id") === "string"),
     )
