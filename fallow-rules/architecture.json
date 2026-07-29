@@ -19,7 +19,7 @@
         "node:sqlite"
       ],
       "zones": ["domain"],
-      "message": "Domain modules receive values through their interfaces instead of importing Node infrastructure.",
+      "message": "Do not import Node infrastructure in domain modules because domain invariants must depend on owned interfaces; use the domain interface and provide Node behavior through a composition or CLI Adapter.",
       "severity": "error"
     }
   ]

@@ -2,7 +2,7 @@
 set -uo pipefail
 
 if (( $# != 1 )); then
-    echo "usage: run-quality-workload.sh <quality|full-quality>" >&2
+    echo "error: a quality workload is required; use run-quality-workload.sh <quality|full-quality>" >&2
     exit 2
 fi
 
@@ -11,7 +11,7 @@ source "$(dirname "${BASH_SOURCE[0]}")/process-tree.sh"
 case "$mode" in
     quality|full-quality) ;;
     *)
-        echo "error: unsupported quality workload: $mode" >&2
+        echo "error: unsupported quality workload: $mode; use run-quality-workload.sh quality or run-quality-workload.sh full-quality" >&2
         exit 2
         ;;
 esac
@@ -112,7 +112,7 @@ if (( elapsed_ms < 0 )); then
 fi
 printf -v elapsed '%d.%03d' "$((elapsed_ms / 1000))" "$((elapsed_ms % 1000))"
 if (( interrupted_status != 0 )); then
-    echo "$mode interrupted after ${elapsed}s" >&2
+    echo "$mode interrupted after ${elapsed}s; rerun just $mode to retry" >&2
 else
     echo "$mode completed in ${elapsed}s"
     if [[ "$mode" == "quality" && $elapsed_ms -gt 10000 ]]; then
