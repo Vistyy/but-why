@@ -204,6 +204,38 @@ const implementationDecisions = Effect.gen(function* () {
 
 const implementationBlockers = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
+  yield* sql.unsafe("PRAGMA foreign_keys = OFF");
+  yield* sql.unsafe(`CREATE TABLE tasks_before_blockers (
+    id TEXT NOT NULL UNIQUE, numeric_id INTEGER NOT NULL UNIQUE, title TEXT NOT NULL,
+    description TEXT NOT NULL, state TEXT NOT NULL CHECK (state IN ('new', 'todo', 'implementing', 'blocked', 'validating', 'ready', 'done', 'cancelled')),
+    completion_kind TEXT CHECK (completion_kind IS NULL OR completion_kind IN ('merged_pr', 'no_change')),
+    cancel_reason TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+  )`);
+  yield* sql.unsafe("INSERT INTO tasks_before_blockers SELECT * FROM tasks");
+  yield* sql.unsafe("DROP TABLE tasks");
+  yield* sql.unsafe("ALTER TABLE tasks_before_blockers RENAME TO tasks");
+  yield* sql.unsafe(`CREATE TABLE changes_before_blockers (
+    id TEXT PRIMARY KEY, repository_common_directory TEXT NOT NULL, branch_ref TEXT NOT NULL, task_id TEXT UNIQUE,
+    state TEXT NOT NULL CHECK (state IN ('open', 'blocked', 'closed')),
+    close_reason TEXT CHECK (close_reason IS NULL OR close_reason IN ('completed', 'cancelled')),
+    created_at TEXT NOT NULL, updated_at TEXT NOT NULL, closed_at TEXT, base_ref TEXT, base_remote_url TEXT,
+    starting_commit TEXT, worktree_path TEXT, acceptance_context TEXT, readiness TEXT CHECK (readiness IS NULL OR readiness IN ('pending', 'ready', 'prepare_failed')),
+    prepare_command TEXT, prepare_timeout_seconds INTEGER, prepare_failure TEXT, publication_candidate_id TEXT,
+    publication_validation_run_id TEXT, publication_owner TEXT, publication_repo TEXT, publication_base_branch TEXT,
+    publication_remote_name TEXT, publication_head_branch TEXT, publication_expected_head_sha TEXT,
+    publication_pr_number INTEGER, publication_pr_url TEXT, no_change_candidate_id TEXT, no_change_validation_run_id TEXT,
+    cleanup_state TEXT NOT NULL DEFAULT 'complete' CHECK (cleanup_state IN ('complete', 'pending')),
+    cleanup_blocking_reason TEXT, FOREIGN KEY (task_id) REFERENCES tasks(id),
+    UNIQUE (repository_common_directory, branch_ref),
+    CHECK ((state IN ('open', 'blocked') AND close_reason IS NULL AND closed_at IS NULL) OR (state = 'closed' AND close_reason IS NOT NULL AND closed_at IS NOT NULL))
+  )`);
+  yield* sql.unsafe("INSERT INTO changes_before_blockers SELECT * FROM changes");
+  yield* sql.unsafe("DROP TABLE changes");
+  yield* sql.unsafe("ALTER TABLE changes_before_blockers RENAME TO changes");
+  yield* sql.unsafe(
+    "CREATE UNIQUE INDEX IF NOT EXISTS changes_worktree_path_unique_idx ON changes (worktree_path) WHERE worktree_path IS NOT NULL",
+  );
+  yield* sql.unsafe("PRAGMA foreign_keys = ON");
   yield* sql.unsafe(`
     CREATE TABLE implementation_blockers (
       sequence INTEGER PRIMARY KEY AUTOINCREMENT,
