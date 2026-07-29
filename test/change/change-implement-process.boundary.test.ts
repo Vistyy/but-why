@@ -49,7 +49,7 @@ if [ "$1" = "agent" ] && [ "$2" = "list" ]; then
   exit 0
 fi
 if [ "$1" = "worktree" ] && [ "$2" = "open" ]; then
-  printf '{"result":{"type":"worktree_open","workspace":{"workspace_id":"workspace"},"root_pane":{"pane_id":"pane"},"already_open":false}}\\n'
+  printf '{"result":{"type":"worktree_opened","workspace":{"workspace_id":"workspace"},"root_pane":{"pane_id":"pane"},"already_open":false}}\\n'
   exit 0
 fi
 if [ "$1" = "pane" ] && [ "$2" = "run" ]; then

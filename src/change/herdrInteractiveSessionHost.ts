@@ -695,7 +695,7 @@ type OpenedWorktree = {
 
 const openedWorktree = (source: string): OpenedWorktree | undefined => {
   const result = herdrResult(source);
-  if (result === undefined || recordValue(result, "type") !== "worktree_open") return undefined;
+  if (result === undefined || recordValue(result, "type") !== "worktree_opened") return undefined;
   const workspace = recordValue(result, "workspace");
   const rootPane = result === undefined ? undefined : recordValue(result, "root_pane");
   const workspaceId = isRecord(workspace) ? recordValue(workspace, "workspace_id") : undefined;
