@@ -94,7 +94,7 @@ const launchHerdrSession = async (
       signal,
       options.observationRetries,
     );
-    if (state.ok && worktreeMatchesTarget(state.stdout, input.worktreePath, input.repositoryPath)) {
+    if (state.ok && worktreeMatchesTarget(state.stdout, input.worktreePath)) {
       agents = await observe(command, ["agent", "list"], signal, options.observationRetries);
       if (!agents.ok || !isValidAgentList(agents.stdout)) {
         return launchIndeterminate("Herdr did not provide session facts for worktree recovery.");
@@ -182,7 +182,7 @@ const launchInOpenedWorktree = async (
       await closeWorkspace(execute, opened.workspaceId, signal);
     }
     return observed.kind === "malformed"
-      ? launchFailure(observed.message, evidence)
+      ? launchIndeterminate(observed.message, evidence)
       : observed.kind === "exited"
         ? launchFailure(`Pi exited during startup: ${observed.message}`, evidence)
         : isUncertainMutationFailure(launched.message)
@@ -389,7 +389,7 @@ const boundedExecutor =
 type HerdrCommandExecutorResult = Awaited<ReturnType<HerdrCommandExecutor>>;
 
 const isTransientObservationFailure = (message: string): boolean =>
-  /timed out|temporar|try again|connection reset|busy/i.test(message);
+  /timed out|temporar|try again|connection reset|ECONNRESET|busy/i.test(message);
 
 const isUncertainMutationFailure = (message: string): boolean =>
   /timed out|connection reset|ECONNRESET|response.*lost|lost response|no response|transport|connection.*closed|disconnected|broken pipe|eof/i.test(
@@ -418,11 +418,7 @@ const isValidAgentList = (source: string): boolean => {
   );
 };
 
-const worktreeMatchesTarget = (
-  source: string,
-  targetPath: string,
-  repositoryPath: string,
-): boolean => {
+const worktreeMatchesTarget = (source: string, targetPath: string): boolean => {
   const response = parseJson(source);
   const result = isRecord(response) ? recordValue(response, "result") : undefined;
   const worktrees = isRecord(result) ? recordValue(result, "worktrees") : undefined;
@@ -437,7 +433,6 @@ const worktreeMatchesTarget = (
           recordValue(worktree, "worktree_path") === targetPath) &&
         typeof recordValue(worktree, "branch") === "string" &&
         (recordValue(worktree, "branch") as string).trim() !== "" &&
-        recordValue(worktree, "repository_path") === repositoryPath &&
         (recordValue(worktree, "open_workspace_id") === undefined ||
           typeof recordValue(worktree, "open_workspace_id") === "string"),
     )
