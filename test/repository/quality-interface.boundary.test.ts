@@ -204,6 +204,24 @@ test:
   );
 };
 
+const createObservableQualityFixture = (directory: string): void => {
+  writeFileSync(
+    join(directory, "justfile"),
+    `quality:
+    @exec ${JSON.stringify(qualityRunner)} quality
+
+_quality-static-routine:
+    @printf static > "$QUALITY_STATIC_FILE"
+
+build:
+    @printf build > "$QUALITY_BUILD_FILE"
+
+test:
+    @printf test > "$QUALITY_TEST_FILE"
+`,
+  );
+};
+
 const startHeldRunner = (lockFile: string, directory: string, workload: string) => {
   const readyFile = join(directory, "ready");
   const releaseFile = join(directory, "release");
@@ -226,6 +244,54 @@ afterEach(() => {
 });
 
 describe("quality interface", () => {
+  test("waits before starting a complete quality workload", async () => {
+    const directory = mkdtempSync(join(tmpdir(), "but-why-quality-lock-"));
+    temporaryPaths.push(directory);
+    const lockFile = join(directory, "capacity.lock");
+    const staticFile = join(directory, "static");
+    const buildFile = join(directory, "build");
+    const testFile = join(directory, "test");
+    const { holder, readyFile, releaseFile } = startHeldRunner(
+      lockFile,
+      directory,
+      "complete test",
+    );
+    createObservableQualityFixture(directory);
+    let quality: ReturnType<typeof startJust> | undefined;
+
+    try {
+      await waitForFile(readyFile);
+      quality = startJust(
+        lockFile,
+        ["quality"],
+        {
+          QUALITY_STATIC_FILE: staticFile,
+          QUALITY_BUILD_FILE: buildFile,
+          QUALITY_TEST_FILE: testFile,
+        },
+        directory,
+      );
+      await new Promise((resolveDelay) => setTimeout(resolveDelay, 100));
+
+      expect(quality.child.exitCode).toBeNull();
+      expect(quality.output).toContain("waiting: complete quality is waiting for capacity");
+      expect(() => readFileSync(staticFile)).toThrow();
+      expect(() => readFileSync(buildFile)).toThrow();
+      expect(() => readFileSync(testFile)).toThrow();
+
+      writeFileSync(releaseFile, "release");
+      const result = await quality.done;
+      expect(result.status, result.output).toBe(0);
+      expect(result.output).toContain("quality completed in");
+      expect(readFileSync(staticFile, "utf8")).toBe("static");
+      expect(readFileSync(buildFile, "utf8")).toBe("build");
+      expect(readFileSync(testFile, "utf8")).toBe("test");
+    } finally {
+      if (quality?.child.exitCode === null) await stopJust(quality);
+      await stopRunner(holder);
+    }
+  });
+
   test("waits for complete workloads while targeted tests remain unlocked", async () => {
     const directory = mkdtempSync(join(tmpdir(), "but-why-quality-lock-"));
     temporaryPaths.push(directory);

@@ -37,6 +37,17 @@ report_interruption() {
 trap 'terminate_child 130; report_interruption' INT
 trap 'terminate_child 143; report_interruption' TERM
 
+lock_owned=0
+cleanup() {
+    if (( lock_owned == 1 )); then
+        rm -f "$status_file"
+    fi
+    if [[ -n "${BY_CAPACITY_LOCK_ACQUIRED_AT_FILE:-}" ]]; then
+        rm -f "$BY_CAPACITY_LOCK_ACQUIRED_AT_FILE"
+    fi
+}
+trap cleanup EXIT
+
 exec 9>"$lock_file"
 waiting=0
 while ! flock -n 9; do
@@ -51,10 +62,7 @@ while ! flock -n 9; do
     sleep 0.1 || true
 done
 
-cleanup() {
-    rm -f "$status_file"
-}
-trap cleanup EXIT
+lock_owned=1
 if (( interrupted_status != 0 )); then
     exit "$interrupted_status"
 fi

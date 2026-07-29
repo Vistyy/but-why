@@ -107,7 +107,7 @@ A change that exceeds an operating budget must restore headroom by optimizing, c
 
 ### Heavy-workload coordination
 
-All supported commands that start a complete test or coverage workload use one internal capacity runner.
+All supported commands that run complete quality, test, or coverage workloads use one internal capacity runner.
 The capacity runner acquires one shared lock and waits when another heavy workload holds it.
 The lock records the active workload class for operational inspection.
 Nested internal recipes execute under the existing lock and do not reacquire it.

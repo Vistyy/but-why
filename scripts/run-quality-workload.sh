@@ -16,14 +16,25 @@ case "$mode" in
         ;;
 esac
 
+script_directory=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+if [[ "${BY_CAPACITY_LOCK_HELD:-0}" != "1" ]]; then
+    started_at_ns=$(date +%s%N)
+    lock_acquired_at_file=$(mktemp "${TMPDIR:-/tmp}/but-why-quality-lock-acquired.XXXXXX")
+    export BY_QUALITY_STARTED_AT_NS="$started_at_ns"
+    export BY_CAPACITY_LOCK_ACQUIRED_AT_FILE="$lock_acquired_at_file"
+    exec "$script_directory/with-capacity-lock.sh" "complete $mode" "$script_directory/run-quality-workload.sh" "$mode"
+fi
+
 child_pids=()
 interrupted_status=0
 lock_wait_ms=0
-lock_acquired_at_file=$(mktemp "${TMPDIR:-/tmp}/but-why-quality-lock-acquired.XXXXXX")
-cleanup_lock_timing() {
-    rm -f "$lock_acquired_at_file"
-}
-trap cleanup_lock_timing EXIT
+started_at_ns=${BY_QUALITY_STARTED_AT_NS:-$(date +%s%N)}
+if [[ -s "${BY_CAPACITY_LOCK_ACQUIRED_AT_FILE:-}" ]]; then
+    lock_acquired_at_ns=$(<"$BY_CAPACITY_LOCK_ACQUIRED_AT_FILE")
+    if (( lock_acquired_at_ns > started_at_ns )); then
+        lock_wait_ms=$(( (lock_acquired_at_ns - started_at_ns) / 1000000 ))
+    fi
+fi
 
 start_child() {
     setsid --wait "$@" &
@@ -56,25 +67,14 @@ wait_for_child() {
 
 run_test_child() {
     local suite=$1
-    local test_started_at_ns
     local test_status
-    rm -f "$lock_acquired_at_file"
-    test_started_at_ns=$(date +%s%N)
-    start_child env BY_TEST_SUITE="$suite" BY_CAPACITY_LOCK_ACQUIRED_AT_FILE="$lock_acquired_at_file" just test
+    start_child env BY_TEST_SUITE="$suite" just test
     test_pid=${child_pids[-1]}
     wait_for_child "$test_pid"
     test_status=$?
-    if [[ -s "$lock_acquired_at_file" ]]; then
-        local lock_acquired_at_ns
-        lock_acquired_at_ns=$(<"$lock_acquired_at_file")
-        if (( lock_acquired_at_ns > test_started_at_ns )); then
-            lock_wait_ms=$((lock_wait_ms + (lock_acquired_at_ns - test_started_at_ns) / 1000000))
-        fi
-    fi
     return "$test_status"
 }
 
-started_at_ns=$(date +%s%N)
 status=0
 start_child just _quality-static-routine
 static_pid=${child_pids[-1]}
