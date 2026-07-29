@@ -75,6 +75,8 @@ The Candidate capture boundary fixture changed from repeated repository initiali
 | `test/change/change-candidate-capture.boundary.test.ts` | 8.503 s | 4.457 s | 47.6% faster |
 | `test/validation/candidate-acceptance-review.boundary.test.ts` | 13.509 s | 12.498 s | 7.5% faster wall time; 26.2% faster Vitest test time |
 | `test/publication/publication-policy.boundary.test.ts` | 5.796 s | 3.630 s | 37.4% faster |
+| `test/repository/quality-interface.boundary.test.ts` | 12.935 s | 8.780 s | 32.1% faster |
+| `test/task/task-cli-process.boundary.test.ts` | 12.028 s | 10.840 s | 9.9% faster wall time; 12.4% faster Vitest test time |
 
 The Acceptance Review rewrite uses the owning Acceptance Review and Specialist Review phase seams for result variations.
 One complete Candidate Validation path remains for Validation Workspace composition and prerequisite-check behavior.

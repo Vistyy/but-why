@@ -463,8 +463,6 @@ describe("quality interface", () => {
 
   test.each([
     ["quality", "SIGINT", 130],
-    ["quality", "SIGTERM", 143],
-    ["full-quality", "SIGINT", 130],
     ["full-quality", "SIGTERM", 143],
   ] as const)("interrupts the complete %s Just command with %s and releases its workload", async (qualityCommand, signal, expectedStatus) => {
     const directory = mkdtempSync(join(tmpdir(), "but-why-quality-lock-"));

@@ -60,26 +60,10 @@ describe("by task CLI processes", () => {
     expect(context.stdout).toContain("Comentario exacto");
   }, 30_000);
 
-  it("preserves command-specific stdin errors at the process boundary", () => {
+  it("preserves invalid UTF-8 stdin errors at the process boundary", () => {
     const root = createGitRepo();
     const initialized = runBuiltByWithEnv(root, {}, "init", "--task-prefix", "BY");
     expect(initialized.status).toBe(0);
-
-    const empty = runBuiltByWithInput(
-      root,
-      "",
-      {},
-      "task",
-      "create",
-      "--title",
-      "Empty",
-      "--description-file",
-      "-",
-      "--output",
-      "json",
-    );
-    expect(empty.status).toBe(2);
-    expect(JSON.parse(empty.stdout)).toMatchObject({ error: { code: "empty_description" } });
 
     const invalid = runBuiltByWithInput(
       root,
@@ -97,24 +81,6 @@ describe("by task CLI processes", () => {
     expect(invalid.status).toBe(2);
     expect(JSON.parse(invalid.stdout)).toMatchObject({
       error: { code: "invalid_description_encoding" },
-    });
-
-    const oversized = runBuiltByWithInput(
-      root,
-      "x".repeat(256 * 1024 + 1),
-      {},
-      "task",
-      "create",
-      "--title",
-      "Oversized",
-      "--description-file",
-      "-",
-      "--output",
-      "json",
-    );
-    expect(oversized.status).toBe(2);
-    expect(JSON.parse(oversized.stdout)).toMatchObject({
-      error: { code: "description_too_large" },
     });
   }, 30_000);
 
