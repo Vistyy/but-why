@@ -173,7 +173,11 @@ const getTaskContextById = (sql: SqlClient.SqlClient, taskId: PublicTaskId) =>
       WHERE changes.task_id = ${taskId} AND resolution_content IS NOT NULL
       ORDER BY implementation_blockers.sequence ASC
     `;
-    return { ...task, comments: comments.map((row) => row.content), resolutions: resolutions.map((row) => row.content) } satisfies TaskContext;
+    return {
+      ...task,
+      comments: comments.map((row) => row.content),
+      ...(resolutions.length === 0 ? {} : { resolutions: resolutions.map((row) => row.content) }),
+    } satisfies TaskContext;
   });
 
 const approveTask = (sql: SqlClient.SqlClient, input: ApproveTaskInput) =>

@@ -33,9 +33,25 @@ export type ChangeInspection = {
   readonly decisions: (
     changeId: string,
   ) => Effect.Effect<readonly ImplementationDecision[] | undefined, RepositoryStorageError>;
-  readonly blockers: (changeId: string) => Effect.Effect<ImplementationBlockerHistory | undefined, RepositoryStorageError>;
-  readonly raiseBlocker: (input: { readonly changeId: string; readonly content: string; readonly now: string }) => Effect.Effect<import("./changePersistence.js").ImplementationBlockerMutationResult, RepositoryStorageError>;
-  readonly resolveBlocker: (input: { readonly changeId: string; readonly content: string; readonly now: string }) => Effect.Effect<import("./changePersistence.js").ImplementationBlockerMutationResult, RepositoryStorageError>;
+  readonly blockers: (
+    changeId: string,
+  ) => Effect.Effect<ImplementationBlockerHistory | undefined, RepositoryStorageError>;
+  readonly raiseBlocker: (input: {
+    readonly changeId: string;
+    readonly content: string;
+    readonly now: string;
+  }) => Effect.Effect<
+    import("./changePersistence.js").ImplementationBlockerMutationResult,
+    RepositoryStorageError
+  >;
+  readonly resolveBlocker: (input: {
+    readonly changeId: string;
+    readonly content: string;
+    readonly now: string;
+  }) => Effect.Effect<
+    import("./changePersistence.js").ImplementationBlockerMutationResult,
+    RepositoryStorageError
+  >;
   readonly addDecision: (input: {
     readonly changeId: string;
     readonly content: string;

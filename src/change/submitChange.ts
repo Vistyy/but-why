@@ -562,7 +562,13 @@ const selectReadyChange = (
   | { readonly ok: true; readonly change: ChangeRecord & { readonly worktreePath: string } }
   | Extract<
       ChangeSubmitResult,
-      { readonly code: "change_not_found" | "change_not_open" | "change_blocked" | "change_not_ready" }
+      {
+        readonly code:
+          | "change_not_found"
+          | "change_not_open"
+          | "change_blocked"
+          | "change_not_ready";
+      }
     >,
   RepositoryStorageError
 > =>

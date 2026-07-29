@@ -218,12 +218,16 @@ const implementationBlockers = Effect.gen(function* () {
       FOREIGN KEY (change_id) REFERENCES changes(id)
     )
   `);
-  yield* sql.unsafe("CREATE UNIQUE INDEX implementation_blockers_active_idx ON implementation_blockers (change_id) WHERE resolved_at IS NULL");
+  yield* sql.unsafe(
+    "CREATE UNIQUE INDEX implementation_blockers_active_idx ON implementation_blockers (change_id) WHERE resolved_at IS NULL",
+  );
 });
 
 const acceptanceContextVersions = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
-  yield* sql.unsafe(`CREATE TABLE acceptance_context_versions (change_id TEXT NOT NULL, version INTEGER NOT NULL, context TEXT NOT NULL, created_at TEXT NOT NULL, PRIMARY KEY (change_id, version), FOREIGN KEY (change_id) REFERENCES changes(id))`);
+  yield* sql.unsafe(
+    `CREATE TABLE acceptance_context_versions (change_id TEXT NOT NULL, version INTEGER NOT NULL, context TEXT NOT NULL, created_at TEXT NOT NULL, PRIMARY KEY (change_id, version), FOREIGN KEY (change_id) REFERENCES changes(id))`,
+  );
 });
 
 const reviewerSessions = Effect.gen(function* () {

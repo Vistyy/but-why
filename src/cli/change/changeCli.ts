@@ -600,29 +600,82 @@ const runBlocker = (
   environment: ChangeCommandEnvironment,
 ): Effect.Effect<CliResult> => {
   const action = args[0];
-  if (args.length === 1 && action === "--help") return Effect.succeed(success({
-    usage: "by change blocker <raise|resolve|list> <change-id> [--file <path>]",
-    commands: [
-      { command: "by change blocker raise <change-id> --file <path>", description: "Report a blocker." },
-      { command: "by change blocker resolve <change-id> --file <path>", description: "Approve a resolution." },
-      { command: "by change blocker list <change-id>", description: "List blocker history." },
-    ], flags: withGlobalHelpFlags(),
-  }));
+  if (args.length === 1 && action === "--help")
+    return Effect.succeed(
+      success({
+        usage: "by change blocker <raise|resolve|list> <change-id> [--file <path>]",
+        commands: [
+          {
+            command: "by change blocker raise <change-id> --file <path>",
+            description: "Report a blocker.",
+          },
+          {
+            command: "by change blocker resolve <change-id> --file <path>",
+            description: "Approve a resolution.",
+          },
+          { command: "by change blocker list <change-id>", description: "List blocker history." },
+        ],
+        flags: withGlobalHelpFlags(),
+      }),
+    );
   const changeId = args[1];
   if (action === "list") {
-    if (changeId === undefined || args.length !== 2) return Effect.succeed(usageError({ code: "invalid_arguments", message: "Blocker List requires one Change ID.", help: ["Run `by change blocker list <change-id>`." ] }));
+    if (changeId === undefined || args.length !== 2)
+      return Effect.succeed(
+        usageError({
+          code: "invalid_arguments",
+          message: "Blocker List requires one Change ID.",
+          help: ["Run `by change blocker list <change-id>`."],
+        }),
+      );
     const loaded = loadChangeInspection({ cwd: environment.cwd });
     if (!loaded.ok) return Effect.succeed(loadError(loaded.error));
-    return loaded.inspection.blockers(changeId).pipe(Effect.map((history) => history === undefined ? changeNotFound() : success({ changeId, ...history })), inspectionFailure);
+    return loaded.inspection.blockers(changeId).pipe(
+      Effect.map((history) =>
+        history === undefined ? changeNotFound() : success({ changeId, ...history }),
+      ),
+      inspectionFailure,
+    );
   }
-  if (action !== "raise" && action !== "resolve") return Effect.succeed(usageError({ code: "unknown_command", message: `Unknown blocker command: ${action ?? ""}`, help: ["Run `by change blocker --help`." ] }));
-  if (changeId === undefined || args.length !== 4 || args[2] !== "--file" || args[3] === undefined) return Effect.succeed(usageError({ code: "invalid_arguments", message: "Blocker mutation requires <change-id> --file <path>.", help: [`Run by change blocker ${action} <change-id> --file <path>.`] }));
+  if (action !== "raise" && action !== "resolve")
+    return Effect.succeed(
+      usageError({
+        code: "unknown_command",
+        message: `Unknown blocker command: ${action ?? ""}`,
+        help: ["Run `by change blocker --help`."],
+      }),
+    );
+  if (changeId === undefined || args.length !== 4 || args[2] !== "--file" || args[3] === undefined)
+    return Effect.succeed(
+      usageError({
+        code: "invalid_arguments",
+        message: "Blocker mutation requires <change-id> --file <path>.",
+        help: [`Run by change blocker ${action} <change-id> --file <path>.`],
+      }),
+    );
   const content = readImplementationDecisionFile(environment.cwd, args[3], environment.stdin);
   if (!content.ok) return Effect.succeed(decisionFileError(content.error));
   const loaded = loadChangeInspection({ cwd: environment.cwd });
   if (!loaded.ok) return Effect.succeed(loadError(loaded.error));
-  const operation = action === "raise" ? loaded.inspection.raiseBlocker : loaded.inspection.resolveBlocker;
-  return operation({ changeId, content: content.content, now: environment.now().toISOString() }).pipe(Effect.map((result) => result.ok ? success({ changeId, blocker: result.blocker, change: result.change }) : runtimeError({ code: result.code, message: `Cannot ${action} an Implementation Blocker in this Change.`, details: { changeId }, help: ["Inspect the Change and use the applicable blocker lifecycle command."] })), inspectionFailure);
+  const operation =
+    action === "raise" ? loaded.inspection.raiseBlocker : loaded.inspection.resolveBlocker;
+  return operation({
+    changeId,
+    content: content.content,
+    now: environment.now().toISOString(),
+  }).pipe(
+    Effect.map((result) =>
+      result.ok
+        ? success({ changeId, blocker: result.blocker, change: result.change })
+        : runtimeError({
+            code: result.code,
+            message: `Cannot ${action} an Implementation Blocker in this Change.`,
+            details: { changeId },
+            help: ["Inspect the Change and use the applicable blocker lifecycle command."],
+          }),
+    ),
+    inspectionFailure,
+  );
 };
 
 const runDecision = (
