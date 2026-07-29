@@ -130,7 +130,7 @@ Setup must set `interactiveSession.agentProfile` to `{ "scope": "global", "name"
 
 The reviewer profile must configure the current curated reviewer model, thinking level, extension list, skill list, and exact reviewer tool list.
 
-The Implementer profile must configure this exact extension allowlist:
+The Implementer profile must configure these required extensions:
 
 - `inline-skills`.
 - `openai-remote-compaction`.
@@ -144,8 +144,6 @@ The Implementer profile must configure this exact extension allowlist:
 - `codex-usage.ts`.
 - `codex-resets.ts`.
 - `npm:@ogulcancelik/pi-auto-permissions@0.1.2`.
-
-See [Optional Change Implement continuation](config.md#optional-change-implement-continuation) for the opt-in setup.
 
 The Implementer profile must omit `skills`, `tools`, and `contextFileDiscovery`.
 

@@ -188,8 +188,6 @@ An empty configured array disables that resource type.
 Repo extension and skill paths resolve from the Managed Worktree and remain inside the repository.
 Global paths resolve from the Global Config directory, with supported absolute paths and Pi package sources allowed.
 
-See [Optional Change Implement continuation](public/config.md#optional-change-implement-continuation) for the opt-in extension setup.
-
 Acceptance Review and Specialist Review use the resolved profile resources.
 Prompt templates and themes remain fixed background-agent hygiene and are not Agent Profile settings.
 Profile validation is lazy so unrelated commands remain usable when an unused profile is invalid.

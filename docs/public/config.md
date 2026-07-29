@@ -354,8 +354,4 @@ No compatibility parser or automatic migration is provided.
 
 `ignorePatterns` is not supported.
 
-## Optional Change Implement continuation
-
-The package contains `docs/public/extensions/continue-change.ts`.
-Add that extension to the Global `implementer` profile only when you want automatic continuation.
-Do not add it to another profile.
+For opt-in Change Implement continuation, add the packaged `dist/agent/continueChange.js` extension to the Global `implementer` profile only.
