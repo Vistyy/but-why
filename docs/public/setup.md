@@ -420,7 +420,7 @@ User-owned implementation uses the Managed Worktree and repeated Change Submit.
 
 Inspect decision-oriented Change state with `by change show <change-id>`.
 Use `findingsCommand` when the result reports Findings.
-Use `validationRunCommand` when the result reports a tooling-failed Validation Run.
+Use `validationRunCommand` when the result reports recorded Tooling Failures.
 Use `by change validation-runs <change-id>` for complete compact Validation Run History.
 Use the reported Validation Run detail command to retrieve the immutable policy and evidence.
 Use `by validation-run artifact <validation-run-id> <artifact-ref>` for complete stored Artifact content.

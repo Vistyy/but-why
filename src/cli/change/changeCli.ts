@@ -328,11 +328,11 @@ const runShow = (
             ...(detail.findings.length === 0
               ? {}
               : { findingsCommand: `by change findings ${detail.change.id}` }),
-            ...(detail.currentValidationRun?.outcome === "tooling_failed"
-              ? {
-                  validationRunCommand: `by validation-run show ${detail.currentValidationRun.id}`,
-                }
-              : {}),
+            ...(detail.toolingFailures.length === 0
+              ? {}
+              : {
+                  validationRunCommand: `by validation-run show ${detail.currentValidationRun?.id}`,
+                }),
             pullRequest: detail.change.publication?.pullRequest ?? null,
             cleanup: detail.change.cleanup,
           }),

@@ -179,14 +179,6 @@ describe("Change inspection CLI", () => {
           now: commandNow,
         }),
       );
-      yield* withValidationPersistence(root, (persistence) =>
-        persistence.complete({
-          validationRunId: newerRun.validationRunId,
-          outcome: "tooling_failed",
-          now: commandNow,
-        }),
-      );
-
       const findings = yield* runByInProcessEffect(root, [
         "change",
         "findings",
@@ -212,24 +204,24 @@ describe("Change inspection CLI", () => {
       expect(JSON.parse(findings.stdout)).toMatchObject({
         change: { id: change.id },
         candidate: { id: secondCandidate.id },
-        validationRun: { id: newerRun.validationRunId, outcome: "tooling_failed" },
+        validationRun: { id: newerRun.validationRunId, state: "running", outcome: null },
         findings: [{ id: `${newerRun.validationRunId}-F1`, files: ["src/main.ts"] }],
         toolingFailures: [{ operationName: "cleanup_validation_worktree" }],
         count: 1,
       });
       expect(JSON.parse(history.stdout)).toMatchObject({
         count: 2,
-        outcomeCounts: { tooling_failed: 1 },
-        runningCount: 1,
+        outcomeCounts: {},
+        runningCount: 2,
         detailCommand: "by validation-run show <validation-run-id>",
         validationRuns: [
           {
             id: newerRun.validationRunId,
             candidateId: secondCandidate.id,
-            state: "complete",
-            outcome: "tooling_failed",
+            state: "running",
+            outcome: null,
             createdAt: secondNow,
-            updatedAt: commandNow,
+            updatedAt: secondNow,
           },
           {
             id: olderCandidateRun.validationRunId,
@@ -245,10 +237,10 @@ describe("Change inspection CLI", () => {
         currentValidationRun: {
           id: newerRun.validationRunId,
           candidateId: secondCandidate.id,
-          state: "complete",
-          outcome: "tooling_failed",
+          state: "running",
+          outcome: null,
           createdAt: secondNow,
-          updatedAt: commandNow,
+          updatedAt: secondNow,
         },
         findingCount: 1,
         toolingFailureCount: 1,

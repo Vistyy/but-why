@@ -94,7 +94,7 @@ It returns `contextCommand` with the exact `by task context <task-id>` command.
 It omits the Validation Policy Snapshot from the compact current Validation Run.
 It returns `findingCount` and `toolingFailureCount` instead of complete diagnostic records.
 It returns `findingsCommand` only when `findingCount` is nonzero.
-It returns `validationRunCommand` when the current Validation Run outcome is `tooling_failed`.
+It returns `validationRunCommand` when the current Validation Run has recorded Tooling Failures.
 
 `by change validation-runs` returns every Validation Run identity, Candidate identity, state, outcome, and timestamp.
 It returns `count`, `outcomeCounts`, `runningCount`, and the `by validation-run show <validation-run-id>` detail-command pattern.
