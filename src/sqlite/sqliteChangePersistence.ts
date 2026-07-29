@@ -1,6 +1,7 @@
 import type * as SqlClient from "@effect/sql/SqlClient";
 import { Effect } from "effect";
 import { randomUUID } from "node:crypto";
+import { canTransition } from "../task/lifecycle.js";
 
 import {
   changeState,
@@ -266,6 +267,22 @@ const transitionLinkedTask = (
   },
 ) =>
   Effect.gen(function* () {
+    const taskRows = yield* sql<{
+      readonly state: import("../task/lifecycle.js").TaskState;
+    }>`SELECT state FROM tasks WHERE id = ${input.taskId}`;
+    const current = taskRows[0];
+    if (
+      current === undefined ||
+      (current.state !== input.to &&
+        !canTransition(current.state, input.to as import("../task/lifecycle.js").TaskState))
+    )
+      return false;
+    if (input.to === "implementing") {
+      const blocked = yield* sql<{
+        readonly id: string;
+      }>`SELECT tasks.id FROM task_dependencies JOIN tasks ON tasks.id = task_dependencies.prerequisite_task_id WHERE task_dependencies.dependent_task_id = ${input.taskId} AND tasks.state <> 'done' LIMIT 1`;
+      if (blocked.length > 0) return false;
+    }
     yield* sql`
       UPDATE tasks SET state = ${input.to}, updated_at = ${input.now}
       WHERE id = ${input.taskId}
