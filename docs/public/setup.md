@@ -145,6 +145,8 @@ The Implementer profile must configure this exact extension allowlist:
 - `codex-resets.ts`.
 - `npm:@ogulcancelik/pi-auto-permissions@0.1.2`.
 
+See [Optional Change Implement continuation](config.md#optional-change-implement-continuation) for the opt-in setup.
+
 The Implementer profile must omit `skills`, `tools`, and `contextFileDiscovery`.
 
 Subagent, Lavish, and session-recall extensions must be absent from the Implementer extension list.
