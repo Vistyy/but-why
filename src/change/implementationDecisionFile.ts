@@ -2,7 +2,7 @@ import { resolve } from "node:path";
 import type { TextInputStdin } from "../cli/input/textInput.js";
 import { readTextInput } from "../cli/input/textInput.js";
 
-export const maxImplementationDecisionBytes = 256 * 1024;
+const maxImplementationDecisionBytes = 256 * 1024;
 export type ImplementationDecisionFileError =
   | { readonly code: "decision_file_not_found"; readonly path: string }
   | { readonly code: "decision_file_unreadable"; readonly path: string }

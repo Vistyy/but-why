@@ -415,13 +415,17 @@ by change submit <change-id>
 
 User-owned implementation uses the Managed Worktree and repeated Change Submit.
 
-Inspect the implementation, validation, and delivery facts with these installed command templates:
+Inspect the implementation, validation, and delivery facts with these installed command templates.
+
+The installed command templates are:
 
 ```text
 by change list [--all]
 by change show <change-id>
 by change findings <change-id>
 by change validation-runs <change-id>
+by change decision add <change-id> --file <path>
+by change decision list <change-id>
 ```
 
 A taskless Change whose Repository Branch has the same tracked tree as the fetched Change Base returns `nothing_to_submit` and remains open.
