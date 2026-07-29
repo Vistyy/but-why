@@ -1,6 +1,7 @@
 import {
   chmodSync,
   cpSync,
+  mkdirSync,
   mkdtempSync,
   readFileSync,
   rmSync,
@@ -567,14 +568,27 @@ describe("quality interface", () => {
     temporaryPaths.push(qualityDirectory, consumerDirectory);
     const readyFile = join(qualityDirectory, "build-ready");
     const releaseFile = join(qualityDirectory, "build-release");
-    const sharedBuildOutput = join(qualityDirectory, "build-output");
+    const sharedBuildOutput = join(qualityDirectory, "dist");
+    const executable = builtByExecutable();
+    const consumerBuildOutput = join(consumerDirectory, "dist");
+    mkdirSync(sharedBuildOutput, { recursive: true });
+    mkdirSync(consumerBuildOutput, { recursive: true });
+    cpSync(dirname(executable), sharedBuildOutput, { recursive: true });
+    cpSync(dirname(executable), consumerBuildOutput, { recursive: true });
+    cpSync(join(repositoryRoot, "docs/public"), join(consumerDirectory, "docs/public"), {
+      recursive: true,
+    });
+    symlinkSync(
+      join(repositoryRoot, "node_modules"),
+      join(consumerDirectory, "node_modules"),
+      "dir",
+    );
     createBuildRaceQualityFixture(qualityDirectory, readyFile, releaseFile, sharedBuildOutput);
     const lockFile = join(qualityDirectory, "capacity.lock");
     const quality = startJust(lockFile, ["quality"], {}, qualityDirectory);
-    const executable = builtByExecutable();
     const consumer = startTestProcess(
       process.execPath,
-      [executable, "--output", "json", "--help"],
+      [join(consumerBuildOutput, "main.js"), "--output", "json", "--help"],
       {
         cwd: consumerDirectory,
       },
@@ -586,12 +600,13 @@ describe("quality interface", () => {
     consumer.stderr.on("data", (chunk: Buffer) => {
       consumerOutput += chunk.toString();
     });
+    const consumerDone = new Promise<number | null>((resolveResult) =>
+      consumer.on("close", resolveResult),
+    );
 
     try {
       await waitForFile(readyFile);
-      const consumerStatus = await new Promise<number | null>((resolveResult) =>
-        consumer.on("close", resolveResult),
-      );
+      const consumerStatus = await consumerDone;
       expect(consumerStatus, consumerOutput).toBe(0);
       expect(consumerOutput).toContain('"usage"');
       writeFileSync(releaseFile, "release");

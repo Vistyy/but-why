@@ -1,3 +1,5 @@
+import { symlinkSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, test } from "vitest";
 
 import { repoRoot } from "../support/by-cli.js";
@@ -22,9 +24,19 @@ describe("test subprocess isolation", () => {
     expect(stateDirectory).toMatch(/but-why-process-/u);
   });
 
-  test("rejects the shared checkout as a subprocess working directory", () => {
+  test("rejects shared checkout paths and HOME overrides", () => {
+    const fixture = createTestWorkspace();
+    const checkoutAlias = join(fixture, "checkout-alias");
+    symlinkSync(repoRoot, checkoutAlias, "dir");
+
     expect(() => runTestProcess("pwd", [], { cwd: repoRoot })).toThrow(
-      "Test subprocesses must run in an isolated fixture",
+      "Test subprocess cwd must be isolated",
+    );
+    expect(() => runTestProcess("pwd", [], { cwd: checkoutAlias })).toThrow(
+      "Test subprocess cwd must be isolated",
+    );
+    expect(() => runTestProcess("pwd", [], { cwd: fixture, env: { HOME: repoRoot } })).toThrow(
+      "Test subprocess HOME must be isolated",
     );
   });
 });

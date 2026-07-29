@@ -4,7 +4,7 @@ import {
   type ChildProcessByStdio,
   type SpawnSyncReturns,
 } from "node:child_process";
-import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, realpathSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { isAbsolute, join, relative, resolve } from "node:path";
 import type { Readable } from "node:stream";
@@ -24,8 +24,7 @@ const acquireTestProcessEnvironment = (
   overrides: TestProcessEnvironmentOptions = {},
 ): { readonly environment: NodeJS.ProcessEnv; readonly cleanup: () => void } => {
   const isolationRoot = mkdtempSync(join(tmpdir(), "but-why-process-"));
-  // biome-ignore lint/complexity/useLiteralKeys: ProcessEnv requires an index-signature lookup.
-  const home = overrides["HOME"] ?? join(isolationRoot, "home");
+  const home = join(isolationRoot, "home");
   const temporaryDirectory = join(isolationRoot, "tmp");
   const xdgConfigHome = join(isolationRoot, "xdg", "config");
   const xdgCacheHome = join(isolationRoot, "xdg", "cache");
@@ -56,19 +55,47 @@ const acquireTestProcessEnvironment = (
   };
 };
 
-const processOptions = (options: TestProcessOptions) => {
-  const relativeCwd = relative(repositoryRoot, resolve(options.cwd));
-  if (relativeCwd === "" || (!relativeCwd.startsWith("..") && !isAbsolute(relativeCwd))) {
-    throw new Error(
-      "Test subprocesses must run in an isolated fixture, not the shared checkout; create a test workspace and pass its path as cwd.",
-    );
+const isInSharedCheckout = (path: string): boolean => {
+  const relativePath = relative(repositoryRoot, path);
+  return relativePath === "" || (!relativePath.startsWith("..") && !isAbsolute(relativePath));
+};
+
+const checkedOutsideSharedCheckout = (path: string, label: string): string => {
+  const lexicalPath = resolve(path);
+  if (isInSharedCheckout(lexicalPath)) {
+    throw new Error(`${label} must be isolated from the shared checkout.`);
   }
 
+  let canonicalPath = lexicalPath;
+  try {
+    canonicalPath = realpathSync(path);
+  } catch {
+    // The process or the environment may create a new path after startup.
+  }
+  if (isInSharedCheckout(canonicalPath)) {
+    throw new Error(`${label} must be isolated from the shared checkout.`);
+  }
+  return canonicalPath;
+};
+
+const processOptions = (options: TestProcessOptions) => {
+  const cwd = checkedOutsideSharedCheckout(realpathSync(options.cwd), "Test subprocess cwd");
+  // biome-ignore lint/complexity/useLiteralKeys: ProcessEnv requires an index-signature lookup.
+  const requestedHome = options.env?.["HOME"];
+  const checkedHome =
+    requestedHome === undefined
+      ? undefined
+      : checkedOutsideSharedCheckout(requestedHome, "Test subprocess HOME");
   const processEnvironment = acquireTestProcessEnvironment(options.env);
+  // biome-ignore lint/complexity/useLiteralKeys: ProcessEnv requires an index-signature lookup.
+  const defaultHome = processEnvironment.environment["HOME"];
+  if (defaultHome === undefined) throw new Error("Test subprocess HOME could not be created.");
+  const home = checkedHome ?? defaultHome;
+  const environment = { ...processEnvironment.environment, HOME: home };
   return {
     options: {
-      cwd: options.cwd,
-      env: processEnvironment.environment,
+      cwd,
+      env: environment,
       ...(options.timeout === undefined ? {} : { timeout: options.timeout }),
       ...(options.detached === undefined ? {} : { detached: options.detached }),
     },
