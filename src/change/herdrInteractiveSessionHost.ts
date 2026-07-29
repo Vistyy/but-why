@@ -342,11 +342,12 @@ const waitForSession = async (
   do {
     const remaining = deadline - performance.now();
     if (remaining <= 0) break;
+    const attemptTimeout = Math.max(1, remaining / (options.observationRetries + 1));
     const listed = await observe(
-      boundedExecutor(execute, Math.max(1, remaining)),
+      boundedExecutor(execute, attemptTimeout),
       ["agent", "list"],
       signal,
-      0,
+      options.observationRetries,
     );
     if (!listed.ok) {
       last = { kind: "unknown" };
