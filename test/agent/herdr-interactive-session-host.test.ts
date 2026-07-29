@@ -22,13 +22,13 @@ describe("Herdr Interactive Session Host", () => {
     const execute: HerdrCommandExecutor = async (args) => {
       (commands as string[][]).push([...args]);
       if (args[0] === "agent" && args[1] === "list") {
-        return commands.length === 1
-          ? { ok: true, stdout: '{"result":{"type":"agent_list","agents":[]}}' }
-          : {
+        return commands.some(([command, operation]) => command === "pane" && operation === "run")
+          ? {
               ok: true,
               stdout:
                 '{"result":{"type":"agent_list","agents":[{"name":"but-why-change-123","cwd":"/workspace/change-123","pane_id":"workspace-1:pane-1","agent_status":"working"}]}}',
-            };
+            }
+          : { ok: true, stdout: '{"result":{"type":"agent_list","agents":[]}}' };
       }
       if (args[0] === "worktree") {
         return {
@@ -81,6 +81,7 @@ describe("Herdr Interactive Session Host", () => {
         sessionName,
         "--no-focus",
       ],
+      ["agent", "list"],
       [
         "pane",
         "run",
@@ -97,13 +98,13 @@ describe("Herdr Interactive Session Host", () => {
     const execute: HerdrCommandExecutor = async (args) => {
       (commands as string[][]).push([...args]);
       if (args[0] === "agent" && args[1] === "list") {
-        return commands.length === 1
-          ? { ok: true, stdout: '{"result":{"type":"agent_list","agents":[]}}' }
-          : {
+        return commands.some(([command, operation]) => command === "pane" && operation === "run")
+          ? {
               ok: true,
               stdout:
                 '{"result":{"type":"agent_list","agents":[{"name":"but-why-change-123","cwd":"/workspace/change-123","pane_id":"workspace-1:pane-1","agent_status":"working"}]}}',
-            };
+            }
+          : { ok: true, stdout: '{"result":{"type":"agent_list","agents":[]}}' };
       }
       if (args[0] === "worktree") {
         return {
@@ -145,11 +146,11 @@ describe("Herdr Interactive Session Host", () => {
       }),
     ).resolves.toEqual({ ok: true, host: "herdr", status: "started" });
 
-    expect(commands[2]?.[3]).toContain(
+    expect(commands[3]?.[3]).toContain(
       "--no-extensions --extension '/workspace/change-123/extensions/one.ts'",
     );
-    expect(commands[2]?.[3]).toContain("--no-skills --skill '/workspace/change-123/skills/one'");
-    expect(commands[2]?.[3]).toContain("--tools '' --no-context-files");
+    expect(commands[3]?.[3]).toContain("--no-skills --skill '/workspace/change-123/skills/one'");
+    expect(commands[3]?.[3]).toContain("--tools '' --no-context-files");
   });
 
   it("returns a retryable failure when a concurrent launch claims the session name", async () => {
@@ -157,7 +158,12 @@ describe("Herdr Interactive Session Host", () => {
     const sessionName = herdrSessionName("change-123");
     const execute: HerdrCommandExecutor = async (args) => {
       commands.push([...args]);
-      if (args[0] === "agent" && args[1] === "list" && commands.length === 1) {
+      if (
+        args[0] === "agent" &&
+        args[1] === "list" &&
+        commands.filter(([command, operation]) => command === "agent" && operation === "list")
+          .length <= 2
+      ) {
         return { ok: true, stdout: '{"result":{"type":"agent_list","agents":[]}}' };
       }
       if (args[0] === "worktree") {
@@ -173,7 +179,7 @@ describe("Herdr Interactive Session Host", () => {
       if (args[0] === "agent" && args[1] === "list") {
         return {
           ok: true,
-          stdout: `{"result":{"type":"agent_list","agents":[{"agent":"${sessionName}","cwd":"/workspace/change-123","pane_id":"workspace-1:pane-1","agent_status":"working"}]}}`,
+          stdout: `{"result":{"type":"agent_list","agents":[{"agent":"${sessionName}","cwd":"/workspace/change-123","pane_id":"other-pane","agent_status":"working"}]}}`,
         };
       }
       return { ok: true, stdout: "{}" };

@@ -144,12 +144,26 @@ const launchHerdrSession = async (
         )
       : launchIndeterminate("Herdr returned malformed worktree-open output.");
   }
+  const currentAgents = opened.alreadyOpen
+    ? agents
+    : await observe(command, ["agent", "list"], signal, options.observationRetries);
+  if (!currentAgents.ok || !isValidAgentList(currentAgents.stdout)) {
+    return launchIndeterminate(
+      "Herdr did not provide a trustworthy pre-launch session observation.",
+    );
+  }
+  if (hasActiveSession(currentAgents.stdout, input, sessionName)) {
+    return { ok: true, host: "herdr", status: "already_active" };
+  }
+  if (hasUnknownSession(currentAgents.stdout, input, sessionName)) {
+    return launchIndeterminate("Herdr could not determine the existing session state.");
+  }
   return launchInOpenedWorktree(
     command,
     input,
     environment.path,
     sessionName,
-    agents.stdout,
+    currentAgents.stdout,
     opened,
     signal,
     options,
@@ -229,7 +243,7 @@ const launchInOpenedWorktree = async (
     if (!renamedState.ok || !isValidAgentList(renamedState.stdout)) {
       return failedRename("Herdr did not provide a safe rename reconciliation.");
     }
-    if (renamedSession(renamedState.stdout, input, sessionName, opened.rootPaneId)) {
+    if (renamedSessionInList(renamedState.stdout, input, sessionName, opened.rootPaneId)) {
       // The mutation succeeded even though its response was lost.
     } else if (hasNamedAgentConflict(renamedState.stdout, sessionName, opened.rootPaneId)) {
       return failedRename("Herdr reported a naming conflict for the Interactive Session.");
@@ -611,6 +625,13 @@ const hasNamedAgentConflict = (source: string, sessionName: string, paneId: stri
     )
   );
 };
+
+const renamedSessionInList = (
+  source: string,
+  input: InteractiveSessionLaunchInput,
+  sessionName: string,
+  rootPaneId: string,
+): boolean => findSession(source, input, sessionName, rootPaneId) !== undefined;
 
 const renamedSession = (
   source: string,

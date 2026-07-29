@@ -286,14 +286,18 @@ const implementChange = (
         onSuccess: (result) => ({ ok: true as const, result }),
       }),
     );
-    return launched.ok
-      ? {
-          change,
-          ...launched.result,
-          agentProfile: resolvedAgentProfile.agentProfile,
-          profileScope: resolvedAgentProfile.scope,
-        }
-      : { ok: false, code: "launch_failed", message: launched.message, change };
+    if (!launched.ok) {
+      return { ok: false, code: "launch_failed", message: launched.message, change };
+    }
+    if (!launched.result.ok) {
+      return { change, ...launched.result };
+    }
+    return {
+      change,
+      ...launched.result,
+      agentProfile: resolvedAgentProfile.agentProfile,
+      profileScope: resolvedAgentProfile.scope,
+    };
   });
 
 const agentProfileErrorMessage = (error: {
