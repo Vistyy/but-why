@@ -424,6 +424,9 @@ by change list [--all]
 by change show <change-id>
 by change findings <change-id>
 by change validation-runs <change-id>
+by change blocker raise <change-id> --file <path>
+by change blocker resolve <change-id> --file <path>
+by change blocker list <change-id>
 by change decision add <change-id> --file <path>
 by change decision list <change-id>
 ```
@@ -431,6 +434,12 @@ by change decision list <change-id>
 A taskless Change whose Repository Branch has the same tracked tree as the fetched Change Base returns `nothing_to_submit` and remains open.
 A Task-backed Change with the same tracked tree runs Acceptance Review and completes without a pull request when it passes.
 Commit topology and the Change starting commit do not determine No-Change.
+
+If implementation cannot safely continue without external authority or action, inspect the active blocker with `by change blocker list <change-id>`.
+Discuss the report with the Implementer, then record the approved Resolution with `by change blocker resolve <change-id> --file <path>`.
+The Resolution preserves the same Change resources and creates a new Acceptance Context version for a Task-backed Change.
+Tell the Implementer to continue manually in the same Managed Worktree.
+Do not use an Implementation Blocker for Findings, tooling recovery, publication recovery, or ordinary implementation difficulty.
 
 Cancel that unchanged taskless Change with:
 

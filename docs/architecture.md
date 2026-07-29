@@ -107,12 +107,18 @@ by change list [--all]
 by change show <change-id>
 by change findings <change-id>
 by change validation-runs <change-id>
+by change blocker raise <change-id> --file <path|->
+by change blocker resolve <change-id> --file <path|->
+by change blocker list <change-id>
 by change submit <change-id>
 by change cancel <change-id>
 by change implement <change-id> [--handoff-file <path>]
 by change reconcile [<change-id>]
 ```
 
+`by change blocker raise` and `by change blocker resolve` manage the manual Implementation Blocker workflow.
+An active blocker moves a Change and its linked Task to `blocked`.
+An approved Resolution returns them to `open` and `implementing` while preserving the same resources.
 `by change cancel` accepts only open taskless Changes.
 Task-backed Changes are cancelled through `by task cancel <task-id> --reason <reason>`.
 CLI commands return structured data on stdout.
