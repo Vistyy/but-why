@@ -82,4 +82,13 @@ The Acceptance Review rewrite uses the owning Acceptance Review and Specialist R
 One complete Candidate Validation path remains for Validation Workspace composition and prerequisite-check behavior.
 
 The accepted main baseline is a 6.461 s three-run routine-test median and a 35.640 s three-run complete-test median.
-The final three-run `just quality` and `just full-quality` results, including queue and execution time, are recorded below after the Candidate passes its blocking checks.
+The final three-run measurements used uncontended supported commands, and each command reported zero queue time.
+
+| Command | Run 1 execution | Run 2 execution | Run 3 execution | Median execution | Queue time |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| `just quality` | 10.449 s | 10.606 s | 11.377 s | 10.606 s | 0 s each |
+| `just full-quality` | 38.733 s | 37.224 s | 37.031 s | 37.224 s | 0 s each |
+
+The routine result is within the 15-second completion limit but above the 10-second operating target.
+The complete result is above both the 20-second median target and the 30-second per-run limit.
+All six commands passed and left the working tree unchanged.
