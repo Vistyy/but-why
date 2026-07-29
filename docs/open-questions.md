@@ -53,8 +53,13 @@ Keep current behavior until observed planning or review usage establishes whethe
 
 ## Does Task readiness need another gate?
 
-Dogfooding may justify an optional Task Preflight or a disposable feasibility prototype.
-Keep either capability separate from completed-code validation.
+A Task can depend on uncertain external integration or runtime behavior.
+Fake adapters and local unit tests can leave that uncertainty unresolved until Change Submit exercises the real system.
+
+After v1, evaluate an optional Task Preflight that runs a bounded Feasibility Spike before the Task becomes Ready.
+The Feasibility Spike should test the real uncertain seam and record evidence that later planning and implementation can use.
+Define who identifies a consequential uncertainty, which evidence resolves it, where the result is stored, and whether unresolved uncertainty blocks Task readiness.
+Keep Task Preflight separate from completed-code validation.
 
 ## How should cancelled Tasks relate to successor work and dependents?
 
