@@ -38,7 +38,12 @@ type PersistedContinuationState = RetryState & {
 
 type RunResult =
   | { readonly ok: true; readonly stdout: string }
-  | { readonly ok: false; readonly transient: boolean; readonly message: string };
+  | {
+      readonly ok: false;
+      readonly transient: boolean;
+      readonly message: string;
+      readonly stdout: string;
+    };
 
 type InspectionResult =
   | {
@@ -189,12 +194,14 @@ export default function continueChange(pi: ExtensionAPI): void {
         ok: false,
         transient: result.killed,
         message: `${label} exited with code ${result.code}${stderr === "" ? "" : `: ${stderr.slice(0, 500)}`}`,
+        stdout: result.stdout,
       };
     } catch (error) {
       return {
         ok: false,
         transient: true,
         message: `${label} could not run: ${error instanceof Error ? error.message : String(error)}`,
+        stdout: "",
       };
     }
   };
@@ -212,7 +219,13 @@ export default function continueChange(pi: ExtensionAPI): void {
       return {
         ok: false,
         transient: failures.every((failure) => failure.transient),
-        message: failures.map((failure) => failure.message).join("; "),
+        message: failures
+          .map((failure) =>
+            failure.stdout.trim() === ""
+              ? failure.message
+              : `${failure.message}: ${failure.stdout.trim().slice(0, 500)}`,
+          )
+          .join("; "),
       };
     }
 
