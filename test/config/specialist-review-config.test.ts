@@ -90,7 +90,7 @@ describe("Specialist Review configuration", () => {
     });
   });
 
-  it("accepts an empty Repo list and rejects duplicate or unresolved Specialists", () => {
+  it("accepts an empty Repo list and rejects duplicate, reserved, or unresolved Specialists", () => {
     const root = configRoot();
     const globalConfig = {
       review: { specialists: ["standards"] },
@@ -106,6 +106,15 @@ describe("Specialist Review configuration", () => {
     ).toMatchObject({
       ok: false,
       error: { _tag: "InvalidReviewerConfig", message: "Specialist is not defined: missing" },
+    });
+    const reserved = resolve(
+      root,
+      { taskPrefix: "BY", review: { specialists: ["acceptance"] } },
+      { reviewers: { acceptance: { instructionsFile: "acceptance.md" } } },
+    );
+    expect(reserved).toMatchObject({
+      ok: false,
+      error: { _tag: "InvalidReviewerConfig", message: "Specialist is reserved: acceptance" },
     });
     const duplicate = resolve(
       root,
