@@ -1,6 +1,7 @@
 {
   "$schema": "https://raw.githubusercontent.com/fallow-rs/fallow/main/config-schema.json",
   "entry": ["src/main.ts", "test/**/*.ts"],
+  "ignoreDependencies": ["@earendil-works/pi-coding-agent"],
   "ignorePatterns": ["spikes/**", "dist/**", "build/**", "coverage/**"],
   "rulePacks": ["./fallow-rules/architecture.json"],
   "rules": {
