@@ -307,6 +307,16 @@ describe("by change reconcile", () => {
           changes: [{ changeId: created.change.id, status: "cleanup_complete" }],
         });
         expect(cleanupAttempts).toBe(2);
+        expect(
+          yield* reconciliation.reconcile({
+            repositoryCommonDirectory: input.commonDirectory,
+            now,
+          }),
+        ).toMatchObject({
+          rejected: false,
+          changes: [{ changeId: created.change.id, status: "cleanup_complete" }],
+        });
+        expect(cleanupAttempts).toBe(3);
         expect(yield* changes.getChangeById(created.change.id)).toMatchObject({
           state: "closed",
           closeReason: "completed",

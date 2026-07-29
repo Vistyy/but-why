@@ -436,7 +436,7 @@ const listChanges = (sql: SqlClient.SqlClient, input: ListChangesInput) =>
 const listForReconciliation = (sql: SqlClient.SqlClient, commonDirectory: string) =>
   Effect.flatMap(
     sql.unsafe<ChangeRow>(
-      `SELECT ${columns} FROM changes WHERE repository_common_directory = ? AND ((state = 'open' AND publication_pr_number IS NOT NULL) OR (state = 'closed' AND cleanup_state = 'pending')) ORDER BY created_at ASC, id ASC`,
+      `SELECT ${columns} FROM changes WHERE repository_common_directory = ? AND ((state = 'open' AND publication_pr_number IS NOT NULL) OR (state = 'closed' AND (cleanup_state = 'pending' OR (cleanup_state = 'complete' AND close_reason = 'completed' AND publication_pr_number IS NOT NULL)))) ORDER BY created_at ASC, id ASC`,
       [commonDirectory],
     ),
     (rows) =>
