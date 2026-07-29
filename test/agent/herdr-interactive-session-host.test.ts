@@ -27,7 +27,7 @@ describe("Herdr Interactive Session Host", () => {
           : {
               ok: true,
               stdout:
-                '{"result":{"agents":[{"name":"but-why-change-123","cwd":"/workspace/change-123","pane_id":"workspace-1:pane-1","agent_status":"working"}]}}',
+                '{"result":{"type":"agent_list","agents":[{"name":"but-why-change-123","cwd":"/workspace/change-123","pane_id":"workspace-1:pane-1","agent_status":"working"}]}}',
             };
       }
       if (args[0] === "worktree") {
@@ -102,7 +102,7 @@ describe("Herdr Interactive Session Host", () => {
           : {
               ok: true,
               stdout:
-                '{"result":{"agents":[{"name":"but-why-change-123","cwd":"/workspace/change-123","pane_id":"workspace-1:pane-1","agent_status":"working"}]}}',
+                '{"result":{"type":"agent_list","agents":[{"name":"but-why-change-123","cwd":"/workspace/change-123","pane_id":"workspace-1:pane-1","agent_status":"working"}]}}',
             };
       }
       if (args[0] === "worktree") {
