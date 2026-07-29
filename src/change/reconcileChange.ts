@@ -1,7 +1,12 @@
 import { Effect } from "effect";
 
 import type { RepositoryStorageError } from "../contracts/repositoryStorageError.js";
-import type { ChangeCleanup, ChangeOwnedPullRequest, ChangeRecord } from "./change.js";
+import type {
+  ChangeCleanup,
+  ChangeOwnedPullRequest,
+  ChangeRecord,
+  RemoteChangeBranch,
+} from "./change.js";
 import type { ChangePersistence } from "./changePersistence.js";
 import type { GitHubPullRequest, GitHubPullRequestGateway } from "./ownedPullRequestGateway.js";
 
@@ -44,6 +49,7 @@ export const openChangeReconciliation = (input: {
     readonly repositoryCommonDirectory: string;
     readonly worktreePath: string | null;
     readonly branchRef: string;
+    readonly remoteChangeBranch?: RemoteChangeBranch;
     readonly reviewerSessionPath?: string;
   }) => ChangeCleanupOperationResult;
   readonly reviewerSessionPathFor?: (changeId: string) => string;
@@ -181,10 +187,12 @@ const reconcileCleanup = (
     if (change.cleanup.state === "complete") {
       return { changeId: change.id, status: "cleanup_complete", cleanup: change.cleanup };
     }
+    const remoteChangeBranch = remoteChangeBranchFor(change);
     const result = dependencies.cleanup({
       repositoryCommonDirectory: change.repositoryCommonDirectory,
       worktreePath: change.worktreePath,
       branchRef: change.branchRef,
+      ...(remoteChangeBranch === undefined ? {} : { remoteChangeBranch }),
       ...(dependencies.reviewerSessionPathFor === undefined
         ? {}
         : { reviewerSessionPath: dependencies.reviewerSessionPathFor(change.id) }),
@@ -212,6 +220,19 @@ const cleanupRecord = (result: ChangeCleanupOperationResult): ChangeCleanup =>
 
 const cleanupStatus = (cleanup: ChangeCleanup): "cleanup_complete" | "cleanup_pending" =>
   cleanup.state === "complete" ? "cleanup_complete" : "cleanup_pending";
+
+const remoteChangeBranchFor = (change: ChangeRecord) => {
+  const publication = change.publication;
+  return change.closeReason === "completed" &&
+    publication !== null &&
+    publication.pullRequest !== null
+    ? {
+        remoteName: publication.target.remoteName,
+        branchName: publication.headBranch,
+        expectedHeadSha: publication.expectedHeadSha,
+      }
+    : undefined;
+};
 
 const unexpectedPullRequestFact = (
   change: ChangeRecord,

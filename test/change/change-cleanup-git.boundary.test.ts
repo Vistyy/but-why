@@ -204,6 +204,217 @@ describe("Change cleanup Git adapter", () => {
     expect(existsSync(worktreePath)).toBe(false);
     expect(git(repository, "branch", "--list", "feature")).toBe("");
   });
+
+  it("deletes an exact Remote Change Branch after local cleanup", () => {
+    const repository = initializedRepository();
+    const worktreePath = join(repository, "feature-worktree");
+    git(repository, "worktree", "add", "-b", "feature", worktreePath, "main");
+    writeFileSync(join(worktreePath, "feature.txt"), "merged work\n");
+    git(worktreePath, "add", "feature.txt");
+    git(worktreePath, "commit", "-m", "Feature");
+    const expectedHeadSha = git(worktreePath, "rev-parse", "HEAD");
+    git(repository, "merge", "--ff-only", "feature");
+    const calls: string[] = [];
+
+    expect(
+      cleanupChangeResources(
+        {
+          repositoryCommonDirectory: git(
+            repository,
+            "rev-parse",
+            "--path-format=absolute",
+            "--git-common-dir",
+          ),
+          worktreePath,
+          branchRef: "refs/heads/feature",
+          remoteChangeBranch: {
+            remoteName: "origin",
+            branchName: "feature",
+            expectedHeadSha,
+          },
+        },
+        {
+          readRemoteBranchHead: () => {
+            calls.push("read");
+            return { state: "present", headSha: expectedHeadSha };
+          },
+          deleteRemoteBranch: () => {
+            calls.push("delete");
+            return true;
+          },
+        },
+      ),
+    ).toEqual({ state: "complete" });
+    expect(calls).toEqual(["read", "delete"]);
+  });
+
+  it("treats an already absent Remote Change Branch as complete", () => {
+    const repository = initializedRepository();
+
+    expect(
+      cleanupChangeResources(
+        {
+          repositoryCommonDirectory: git(
+            repository,
+            "rev-parse",
+            "--path-format=absolute",
+            "--git-common-dir",
+          ),
+          worktreePath: null,
+          branchRef: "refs/heads/missing",
+          remoteChangeBranch: {
+            remoteName: "origin",
+            branchName: "feature",
+            expectedHeadSha: "candidate-head",
+          },
+        },
+        {
+          readRemoteBranchHead: () => ({ state: "missing" }),
+          deleteRemoteBranch: () => {
+            throw new Error("An absent branch must not be deleted");
+          },
+        },
+      ),
+    ).toEqual({ state: "complete" });
+  });
+
+  it("keeps cleanup pending when the Remote Change Branch cannot be read", () => {
+    const repository = initializedRepository();
+
+    expect(
+      cleanupChangeResources(
+        {
+          repositoryCommonDirectory: git(
+            repository,
+            "rev-parse",
+            "--path-format=absolute",
+            "--git-common-dir",
+          ),
+          worktreePath: null,
+          branchRef: "refs/heads/missing",
+          remoteChangeBranch: {
+            remoteName: "origin",
+            branchName: "feature",
+            expectedHeadSha: "candidate-head",
+          },
+        },
+        {
+          readRemoteBranchHead: () => ({ state: "unavailable" }),
+          deleteRemoteBranch: () => {
+            throw new Error("An unreadable branch must not be deleted");
+          },
+        },
+      ),
+    ).toEqual({ state: "pending", blockingReason: "remote_branch_unavailable" });
+  });
+
+  it("reports a Remote Change Branch deletion failure for retry", () => {
+    const repository = initializedRepository();
+    let reads = 0;
+
+    expect(
+      cleanupChangeResources(
+        {
+          repositoryCommonDirectory: git(
+            repository,
+            "rev-parse",
+            "--path-format=absolute",
+            "--git-common-dir",
+          ),
+          worktreePath: null,
+          branchRef: "refs/heads/missing",
+          remoteChangeBranch: {
+            remoteName: "origin",
+            branchName: "feature",
+            expectedHeadSha: "candidate-head",
+          },
+        },
+        {
+          readRemoteBranchHead: () => {
+            reads += 1;
+            return { state: "present", headSha: "candidate-head" };
+          },
+          deleteRemoteBranch: () => false,
+        },
+      ),
+    ).toEqual({ state: "pending", blockingReason: "remote_branch_deletion_failed" });
+    expect(reads).toBe(2);
+  });
+
+  it("deletes the exact Remote Change Branch through Git with a lease", () => {
+    const repository = initializedRepository();
+    const remoteRepository = createTestWorkspace();
+    git(remoteRepository, "init", "--bare", "-q");
+    git(repository, "remote", "add", "origin", remoteRepository);
+    git(repository, "push", "origin", "main");
+    const worktreePath = join(repository, "feature-worktree");
+    git(repository, "worktree", "add", "-b", "feature", worktreePath, "main");
+    writeFileSync(join(worktreePath, "feature.txt"), "merged work\n");
+    git(worktreePath, "add", "feature.txt");
+    git(worktreePath, "commit", "-m", "Feature");
+    const expectedHeadSha = git(worktreePath, "rev-parse", "HEAD");
+    git(worktreePath, "push", "origin", "feature");
+    git(repository, "merge", "--ff-only", "feature");
+
+    expect(
+      cleanupChangeResources({
+        repositoryCommonDirectory: git(
+          repository,
+          "rev-parse",
+          "--path-format=absolute",
+          "--git-common-dir",
+        ),
+        worktreePath,
+        branchRef: "refs/heads/feature",
+        remoteChangeBranch: {
+          remoteName: "origin",
+          branchName: "feature",
+          expectedHeadSha,
+        },
+      }),
+    ).toEqual({ state: "complete" });
+    expect(() => git(remoteRepository, "show-ref", "--verify", "refs/heads/feature")).toThrow();
+  });
+
+  it("preserves a Remote Change Branch that moved to another commit", () => {
+    const repository = initializedRepository();
+    const worktreePath = join(repository, "feature-worktree");
+    git(repository, "worktree", "add", "-b", "feature", worktreePath, "main");
+    writeFileSync(join(worktreePath, "feature.txt"), "merged work\n");
+    git(worktreePath, "add", "feature.txt");
+    git(worktreePath, "commit", "-m", "Feature");
+    const expectedHeadSha = git(worktreePath, "rev-parse", "HEAD");
+    git(repository, "merge", "--ff-only", "feature");
+    let deleted = false;
+
+    expect(
+      cleanupChangeResources(
+        {
+          repositoryCommonDirectory: git(
+            repository,
+            "rev-parse",
+            "--path-format=absolute",
+            "--git-common-dir",
+          ),
+          worktreePath,
+          branchRef: "refs/heads/feature",
+          remoteChangeBranch: {
+            remoteName: "origin",
+            branchName: "feature",
+            expectedHeadSha,
+          },
+        },
+        {
+          readRemoteBranchHead: () => ({ state: "present", headSha: "another-head" }),
+          deleteRemoteBranch: () => {
+            deleted = true;
+            return true;
+          },
+        },
+      ),
+    ).toEqual({ state: "pending", blockingReason: "remote_branch_head_mismatch" });
+    expect(deleted).toBe(false);
+  });
 });
 
 const initializedRepository = (): string => {

@@ -2,6 +2,27 @@ import { spawnSync } from "node:child_process";
 import { existsSync, lstatSync, rmdirSync, rmSync } from "node:fs";
 import { basename, dirname } from "node:path";
 
+import type { RemoteChangeBranch } from "./change.js";
+
+export type RemoteBranchHeadResult =
+  | { readonly state: "missing" }
+  | { readonly state: "present"; readonly headSha: string }
+  | { readonly state: "unavailable" };
+
+export type ChangeCleanupRemote = {
+  readonly readRemoteBranchHead: (input: {
+    readonly repositoryCommonDirectory: string;
+    readonly remoteName: string;
+    readonly branchName: string;
+  }) => RemoteBranchHeadResult;
+  readonly deleteRemoteBranch: (input: {
+    readonly repositoryCommonDirectory: string;
+    readonly remoteName: string;
+    readonly branchName: string;
+    readonly expectedHeadSha: string;
+  }) => boolean;
+};
+
 export type ChangeCleanupResult =
   | { readonly state: "complete" }
   | {
@@ -16,15 +37,22 @@ export type ChangeCleanupResult =
         | "branch_reachability_unavailable"
         | "branch_not_reachable_from_another_ref"
         | "branch_deletion_failed"
+        | "remote_branch_unavailable"
+        | "remote_branch_head_mismatch"
+        | "remote_branch_deletion_failed"
         | "reviewer_session_removal_failed";
     };
 
-export const cleanupChangeResources = (input: {
-  readonly repositoryCommonDirectory: string;
-  readonly worktreePath: string | null;
-  readonly branchRef: string;
-  readonly reviewerSessionPath?: string;
-}): ChangeCleanupResult => {
+export const cleanupChangeResources = (
+  input: {
+    readonly repositoryCommonDirectory: string;
+    readonly worktreePath: string | null;
+    readonly branchRef: string;
+    readonly remoteChangeBranch?: RemoteChangeBranch;
+    readonly reviewerSessionPath?: string;
+  },
+  remote: ChangeCleanupRemote = localChangeCleanupRemote,
+): ChangeCleanupResult => {
   if (input.worktreePath !== null && !isWorktreePathSafe(input.worktreePath)) {
     return { state: "pending", blockingReason: "worktree_path_unsafe" };
   }
@@ -63,26 +91,94 @@ export const cleanupChangeResources = (input: {
     "--verify",
     `${input.branchRef}^{commit}`,
   ]);
-  if (!branchHead.ok) return { state: "complete" };
+  if (branchHead.ok) {
+    const containingRefs = git(input.repositoryCommonDirectory, [
+      "for-each-ref",
+      "--contains",
+      branchHead.stdout.trim(),
+      "--format=%(refname)",
+    ]);
+    if (!containingRefs.ok) {
+      return { state: "pending", blockingReason: "branch_reachability_unavailable" };
+    }
+    const reachableElsewhere = containingRefs.stdout
+      .split("\n")
+      .some((ref) => ref.length > 0 && ref !== input.branchRef);
+    if (!reachableElsewhere) {
+      return { state: "pending", blockingReason: "branch_not_reachable_from_another_ref" };
+    }
+    if (!git(input.repositoryCommonDirectory, ["branch", "-D", "--", branchName]).ok) {
+      return { state: "pending", blockingReason: "branch_deletion_failed" };
+    }
+  }
+  return cleanupRemoteChangeBranch(input, remote);
+};
 
-  const containingRefs = git(input.repositoryCommonDirectory, [
-    "for-each-ref",
-    "--contains",
-    branchHead.stdout.trim(),
-    "--format=%(refname)",
-  ]);
-  if (!containingRefs.ok) {
-    return { state: "pending", blockingReason: "branch_reachability_unavailable" };
+const cleanupRemoteChangeBranch = (
+  input: Parameters<typeof cleanupChangeResources>[0],
+  remote: ChangeCleanupRemote,
+): ChangeCleanupResult => {
+  const branch = input.remoteChangeBranch;
+  if (branch === undefined) return { state: "complete" };
+  const observed = remote.readRemoteBranchHead({
+    repositoryCommonDirectory: input.repositoryCommonDirectory,
+    remoteName: branch.remoteName,
+    branchName: branch.branchName,
+  });
+  if (observed.state === "missing") return { state: "complete" };
+  if (observed.state === "unavailable") {
+    return { state: "pending", blockingReason: "remote_branch_unavailable" };
   }
-  const reachableElsewhere = containingRefs.stdout
-    .split("\n")
-    .some((ref) => ref.length > 0 && ref !== input.branchRef);
-  if (!reachableElsewhere) {
-    return { state: "pending", blockingReason: "branch_not_reachable_from_another_ref" };
+  if (observed.headSha !== branch.expectedHeadSha) {
+    return { state: "pending", blockingReason: "remote_branch_head_mismatch" };
   }
-  return git(input.repositoryCommonDirectory, ["branch", "-D", "--", branchName]).ok
-    ? { state: "complete" }
-    : { state: "pending", blockingReason: "branch_deletion_failed" };
+  if (
+    remote.deleteRemoteBranch({
+      repositoryCommonDirectory: input.repositoryCommonDirectory,
+      remoteName: branch.remoteName,
+      branchName: branch.branchName,
+      expectedHeadSha: branch.expectedHeadSha,
+    })
+  ) {
+    return { state: "complete" };
+  }
+  const afterFailure = remote.readRemoteBranchHead({
+    repositoryCommonDirectory: input.repositoryCommonDirectory,
+    remoteName: branch.remoteName,
+    branchName: branch.branchName,
+  });
+  if (afterFailure.state === "missing") return { state: "complete" };
+  if (afterFailure.state === "unavailable") {
+    return { state: "pending", blockingReason: "remote_branch_unavailable" };
+  }
+  return afterFailure.headSha === branch.expectedHeadSha
+    ? { state: "pending", blockingReason: "remote_branch_deletion_failed" }
+    : { state: "pending", blockingReason: "remote_branch_head_mismatch" };
+};
+
+const localChangeCleanupRemote: ChangeCleanupRemote = {
+  readRemoteBranchHead: (input) => {
+    const result = git(input.repositoryCommonDirectory, [
+      "ls-remote",
+      "--heads",
+      input.remoteName,
+      `refs/heads/${input.branchName}`,
+    ]);
+    if (!result.ok) return { state: "unavailable" };
+    const output = result.stdout.trim();
+    if (output.length === 0) return { state: "missing" };
+    const headSha = output.split(/\s+/, 1)[0];
+    return headSha === undefined || headSha.length === 0
+      ? { state: "unavailable" }
+      : { state: "present", headSha };
+  },
+  deleteRemoteBranch: (input) =>
+    git(input.repositoryCommonDirectory, [
+      "push",
+      `--force-with-lease=refs/heads/${input.branchName}:${input.expectedHeadSha}`,
+      input.remoteName,
+      `:refs/heads/${input.branchName}`,
+    ]).ok,
 };
 
 const isWorktreePathSafe = (worktreePath: string): boolean => {

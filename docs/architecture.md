@@ -81,6 +81,8 @@ Current configuration applies to future or unfinished Submissions.
 
 `by change reconcile [<change-id>]` observes owned pull requests.
 A merged owned pull request closes the Change and completes its linked Task.
+Cleanup then deletes the Remote Change Branch only when it still points to the exact published Candidate head.
+Missing Remote Change Branches are an idempotent success, while moved or unavailable branches remain pending.
 
 ## Storage
 
