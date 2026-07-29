@@ -208,6 +208,14 @@ const launchInOpenedWorktree = async (
           : launchFailure(launched.message, evidence);
   }
 
+  const failedRename = async (message: string): Promise<InteractiveSessionLaunchResult> => {
+    await execute(["pane", "send-keys", opened.rootPaneId, "ctrl-c"], signal);
+    if (!opened.alreadyOpen) await closeWorkspace(execute, opened.workspaceId, signal);
+    const evidence = await launchEvidence(execute, opened.rootPaneId, signal);
+    return hasExitEvidence(evidence)
+      ? launchFailure("Pi exited during startup.", evidence)
+      : launchFailure(message, evidence);
+  };
   const renamed = await execute(["agent", "rename", opened.rootPaneId, sessionName], signal);
   const renameConfirmed =
     renamed.ok && renamedSession(renamed.stdout, input, sessionName, opened.rootPaneId);
@@ -219,29 +227,21 @@ const launchInOpenedWorktree = async (
       options.observationRetries,
     );
     if (!renamedState.ok || !isValidAgentList(renamedState.stdout)) {
-      await execute(["pane", "send-keys", opened.rootPaneId, "ctrl-c"], signal);
-      if (!opened.alreadyOpen) await closeWorkspace(execute, opened.workspaceId, signal);
-      return launchFailure("Herdr did not provide a safe rename reconciliation.");
+      return failedRename("Herdr did not provide a safe rename reconciliation.");
     }
     if (renamedSession(renamedState.stdout, input, sessionName, opened.rootPaneId)) {
       // The mutation succeeded even though its response was lost.
     } else if (hasNamedAgentConflict(renamedState.stdout, sessionName, opened.rootPaneId)) {
-      await execute(["pane", "send-keys", opened.rootPaneId, "ctrl-c"], signal);
-      if (!opened.alreadyOpen) await closeWorkspace(execute, opened.workspaceId, signal);
-      return launchFailure("Herdr reported a naming conflict for the Interactive Session.");
+      return failedRename("Herdr reported a naming conflict for the Interactive Session.");
     } else if (!renamed.ok && isUncertainMutationFailure(renamed.message)) {
       const retried = await execute(["agent", "rename", opened.rootPaneId, sessionName], signal);
       if (!retried.ok || !renamedSession(retried.stdout, input, sessionName, opened.rootPaneId)) {
-        await execute(["pane", "send-keys", opened.rootPaneId, "ctrl-c"], signal);
-        if (!opened.alreadyOpen) await closeWorkspace(execute, opened.workspaceId, signal);
-        return launchFailure(
+        return failedRename(
           "Herdr did not confirm the named Pi session after retrying the rename.",
         );
       }
     } else {
-      await execute(["pane", "send-keys", opened.rootPaneId, "ctrl-c"], signal);
-      if (!opened.alreadyOpen) await closeWorkspace(execute, opened.workspaceId, signal);
-      return launchFailure(
+      return failedRename(
         renamed.ok
           ? "Herdr did not confirm the named Pi session in the worktree root pane."
           : renamed.message,
