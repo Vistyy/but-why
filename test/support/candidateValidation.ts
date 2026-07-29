@@ -70,5 +70,6 @@ export const candidateValidationForTest = (input: {
       withPersistence((persistence) => persistence.listArtifacts(validationRunId)),
     listToolingFailures: (validationRunId: string) =>
       withPersistence((persistence) => persistence.listToolingFailures(validationRunId)),
+    runWithPersistence: withPersistence,
   };
 };

@@ -101,6 +101,7 @@ files:
   - test/**/*.ts
 ignores:
   - test/support/by-cli.ts
+  - test/support/initializedRepo.ts
   - test/task/task-cli-process.boundary.test.ts
   - test/change/change-implement-process.boundary.test.ts
   - test/change/change-implement-main-checkout-failure.test.ts
@@ -109,6 +110,8 @@ rule:
     - pattern: runBuiltByWithEnv($$$ARGS)
     - pattern: runBuiltByWithInput($$$ARGS)
     - pattern: runByWithEnv($$$ARGS)
+    - pattern: runBy($$$ARGS)
+    - pattern: runJustBy($$$ARGS)
     - pattern: builtByExecutable()
 ---
 # Package inspection owns the one external package contract.

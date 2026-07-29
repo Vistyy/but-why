@@ -69,6 +69,8 @@ invalid:
   - runBuiltByWithEnv(root, {}, "task", "list")
   - runBuiltByWithInput(root, "input", {}, "task", "list")
   - runByWithEnv(root, {}, "task", "list")
+  - runBy(root, "init", "--task-prefix", "BY")
+  - runJustBy("task", "list")
   - builtByExecutable()
 ---
 id: package-installation-belongs-to-package-contract

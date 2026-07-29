@@ -63,3 +63,20 @@ Do not move a test to the slow suite only because its current fixture is ineffic
 Measure the next largest critical-path file after each slice.
 Re-run the complete suite after each slice because isolated savings do not add directly under Vitest parallelism.
 Add the 15-second and 30-second soft warnings only after the suite commands and membership are implemented.
+
+## BY-48 measurement record
+
+The fixed measurement method is a focused `just test <file>` invocation in the locked development environment with no competing workload.
+
+The Candidate capture boundary fixture changed from repeated repository initialization to one initialized template and isolated clones.
+
+| Hotspot | Before | After | Change |
+| --- | ---: | ---: | ---: |
+| `test/change/change-candidate-capture.boundary.test.ts` | 8.503 s | 4.457 s | 47.6% faster |
+| `test/validation/candidate-acceptance-review.boundary.test.ts` | 13.509 s | 12.498 s | 7.5% faster wall time; 26.2% faster Vitest test time |
+
+The Acceptance Review rewrite uses the owning Acceptance Review and Specialist Review phase seams for result variations.
+One complete Candidate Validation path remains for Validation Workspace composition and prerequisite-check behavior.
+
+The accepted main baseline is a 6.461 s three-run routine-test median and a 35.640 s three-run complete-test median.
+The final three-run `just quality` and `just full-quality` results, including queue and execution time, are recorded below after the Candidate passes its blocking checks.
