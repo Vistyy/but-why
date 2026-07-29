@@ -240,7 +240,7 @@ const launchInOpenedWorktree = async (
   );
   if (ready.kind === "malformed") {
     const evidence = await launchEvidence(execute, opened.rootPaneId, signal);
-    return launchFailure(ready.message, evidence);
+    return launchIndeterminate(ready.message, evidence);
   }
   if (ready.kind === "exited") {
     const evidence = await launchEvidence(execute, opened.rootPaneId, signal);

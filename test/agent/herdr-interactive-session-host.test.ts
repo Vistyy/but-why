@@ -399,6 +399,52 @@ describe("Herdr Interactive Session Host", () => {
     ).toHaveLength(2);
   });
 
+  it("reconciles a lost rename response before retrying", async () => {
+    let renameAttempts = 0;
+    const commands: string[][] = [];
+    const execute: HerdrCommandExecutor = async (args) => {
+      commands.push([...args]);
+      if (args[0] === "agent" && args[1] === "list") {
+        return renameAttempts > 1
+          ? {
+              ok: true,
+              stdout:
+                '{"result":{"agents":[{"name":"but-why-change-123","cwd":"/workspace/change-123","pane_id":"workspace-1:pane-1","agent_status":"working"}]}}',
+            }
+          : { ok: true, stdout: '{"result":{"agents":[]}}' };
+      }
+      if (args[0] === "worktree") {
+        return {
+          ok: true,
+          stdout:
+            '{"result":{"workspace":{"workspace_id":"workspace-1"},"root_pane":{"pane_id":"workspace-1:pane-1"},"already_open":false}}',
+        };
+      }
+      if (args[0] === "pane" && args[1] === "run") return { ok: true, stdout: "{}" };
+      if (args[0] === "agent" && args[1] === "rename") {
+        renameAttempts += 1;
+        return renameAttempts === 1
+          ? { ok: false, message: "lost response" }
+          : {
+              ok: true,
+              stdout:
+                '{"result":{"agent":{"name":"but-why-change-123","cwd":"/workspace/change-123","pane_id":"workspace-1:pane-1"}}}',
+            };
+      }
+      return { ok: true, stdout: "{}" };
+    };
+
+    await expect(
+      openHerdrInteractiveSessionHost(execute).launch({
+        changeId: "change-123",
+        repositoryPath: "/repository",
+        worktreePath: "/workspace/change-123",
+        initialPrompt: undefined,
+      }),
+    ).resolves.toEqual({ ok: true, host: "herdr", status: "started" });
+    expect(renameAttempts).toBe(2);
+  });
+
   it("does not retry an uncertain pane run and preserves early-exit evidence", async () => {
     const commands: string[][] = [];
     const execute: HerdrCommandExecutor = async (args) => {
