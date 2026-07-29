@@ -28,6 +28,7 @@ describe("CLI package contents", () => {
     cpSync(join(repoRoot, "package.json"), join(fixture, "package.json"));
     cpSync(join(repoRoot, "README.md"), join(fixture, "README.md"));
     cpSync(join(repoRoot, "CHANGELOG.md"), join(fixture, "CHANGELOG.md"));
+    cpSync(join(repoRoot, "extensions"), join(fixture, "extensions"), { recursive: true });
     mkdirSync(join(fixture, "docs"));
     cpSync(join(repoRoot, "docs", "public"), join(fixture, "docs", "public"), {
       recursive: true,
@@ -59,7 +60,7 @@ describe("CLI package contents", () => {
       version: "0.0.1",
       private: false,
       bin: { by: "./dist/main.js" },
-      files: ["dist", "docs/public", "README.md", "CHANGELOG.md"],
+      files: ["dist", "extensions", "docs/public", "README.md", "CHANGELOG.md"],
       repository: { type: "git", url: "git+https://github.com/Vistyy/but-why.git" },
     });
 
@@ -88,6 +89,7 @@ describe("CLI package contents", () => {
           path === "README.md" ||
           path === "CHANGELOG.md" ||
           path.startsWith("dist/") ||
+          path.startsWith("extensions/") ||
           path.startsWith("docs/public/"),
       ),
     ).toBe(true);
@@ -100,6 +102,7 @@ describe("CLI package contents", () => {
     expect(files).toContain("CHANGELOG.md");
     expect(files).toContain("docs/public/config.md");
     expect(files).toContain("docs/public/setup.md");
+    expect(files).toContain("extensions/continue-change.ts");
     expect(files).toContain("docs/public/skills/but-why/SKILL.md");
     expect(files).toContain("docs/public/skills/but-why/references/implement-change.md");
     expect(files.some((path) => path.startsWith("skills/"))).toBe(false);

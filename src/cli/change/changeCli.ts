@@ -333,6 +333,16 @@ const runShow = (
               : {
                   validationRunCommand: `by validation-run show ${detail.currentValidationRun?.id}`,
                 }),
+            ...(detail.change.publication === null
+              ? {}
+              : {
+                  publication: {
+                    candidateId: detail.change.publication.candidateId,
+                    validationRunId: detail.change.publication.validationRunId,
+                    expectedHeadSha: detail.change.publication.expectedHeadSha,
+                    pullRequest: detail.change.publication.pullRequest,
+                  },
+                }),
             pullRequest: detail.change.publication?.pullRequest ?? null,
             cleanup: detail.change.cleanup,
           }),

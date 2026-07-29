@@ -353,3 +353,5 @@ Configuration with an unknown key is invalid.
 No compatibility parser or automatic migration is provided.
 
 `ignorePatterns` is not supported.
+
+For opt-in Change Implement continuation, add the packaged `extensions/continue-change.ts` extension to the Global `implementer` profile only.
