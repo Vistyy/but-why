@@ -41,15 +41,20 @@ exit 1
       join(tools, "herdr"),
       `#!/usr/bin/env sh
 if [ "$1" = "agent" ] && [ "$2" = "list" ]; then
-  printf '{"result":{"agents":[]}}\\n'
+  if [ -n "$BY_FAKE_CAPTURE" ] && [ -f "$BY_FAKE_CAPTURE.started" ]; then
+    printf '{"result":{"type":"agent_list","agents":[{"name":"%s","cwd":"%s","pane_id":"pane","agent_status":"working"}]}}\\n' "$BY_FAKE_SESSION" "$BY_FAKE_WORKTREE"
+  else
+    printf '{"result":{"type":"agent_list","agents":[]}}\\n'
+  fi
   exit 0
 fi
 if [ "$1" = "worktree" ] && [ "$2" = "open" ]; then
-  printf '{"result":{"workspace":{"workspace_id":"workspace"},"root_pane":{"pane_id":"pane"},"already_open":false}}\\n'
+  printf '{"result":{"type":"worktree_open","workspace":{"workspace_id":"workspace"},"root_pane":{"pane_id":"pane"},"already_open":false}}\\n'
   exit 0
 fi
 if [ "$1" = "pane" ] && [ "$2" = "run" ]; then
   printf '%s\\n' "$4" > "$BY_FAKE_CAPTURE"
+  : > "$BY_FAKE_CAPTURE.started"
   printf '{"result":{}}\\n'
   exit 0
 fi
@@ -79,6 +84,7 @@ exit 1
       ...baseEnv,
       BY_FAKE_CAPTURE: capture,
       BY_FAKE_WORKTREE: change.worktreePath,
+      BY_FAKE_SESSION: `but-why-${change.change.id}`,
     };
 
     const piped = runBuiltByWithInput(
