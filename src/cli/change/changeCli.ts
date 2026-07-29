@@ -890,11 +890,23 @@ const submitResult = (result: ChangeSubmitResult): CliResult => {
         : { reviewerEvidence: result.reviewerEvidence }),
     });
   }
-  if (result.code === "change_not_found" || result.code === "change_not_open") {
+  if (
+    result.code === "change_not_found" ||
+    result.code === "change_not_open" ||
+    result.code === "change_blocked"
+  ) {
     return runtimeError({
       code: result.code,
-      message: result.code === "change_not_found" ? "Change was not found." : "Change is closed.",
-      help: ["Use a Change ID returned by `by change start --output json`."],
+      message:
+        result.code === "change_not_found"
+          ? "Change was not found."
+          : result.code === "change_blocked"
+            ? "Change is blocked by an active Implementation Blocker."
+            : "Change is closed.",
+      help:
+        result.code === "change_blocked"
+          ? ["Inspect and resolve the blocker, or cancel the Change."]
+          : ["Use a Change ID returned by `by change start --output json`."],
     });
   }
   if (result.code === "change_not_ready") {

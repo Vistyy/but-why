@@ -214,7 +214,8 @@ const selectSuppliedChange = (
   Effect.gen(function* () {
     const change = yield* changes.getChangeById(changeId);
     if (change === undefined) return { ok: false, code: "change_not_found" };
-    if (change.state === "closed") return { ok: false, code: "change_closed" };
+    if (change.state === "closed" || change.state === "blocked")
+      return { ok: false, code: "change_closed" };
     if (change.repositoryCommonDirectory !== workspace.repositoryCommonDirectory) {
       return { ok: false, code: "change_from_different_repository" };
     }
