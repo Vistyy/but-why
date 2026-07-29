@@ -1,7 +1,7 @@
 import type { ExtensionAPI, ExtensionContext, SessionEntry } from "@earendil-works/pi-coding-agent";
 import { describe, expect, it } from "vitest";
 
-import continueChange from "../../src/agent/continueChange.js";
+import continueChange from "../../extensions/continue-change.js";
 
 const changeId = "de32d32a-ecd8-46b4-b2d8-5a08d2128869";
 

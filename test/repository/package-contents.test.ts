@@ -43,10 +43,6 @@ describe("CLI package contents", () => {
     writeFileSync(join(fixture, "dist", "sqlite", "repositoryMigrations.js"), "export {};\n");
     writeFileSync(join(fixture, "dist", "agent", "reviewerPrompts.js"), "export {};\n");
     writeFileSync(
-      join(fixture, "dist", "agent", "continueChange.js"),
-      "export default () => {};\n",
-    );
-    writeFileSync(
       join(fixture, "dist", "acceptanceReview", "acceptanceReviewPrompt.js"),
       "export {};\n",
     );
@@ -106,7 +102,6 @@ describe("CLI package contents", () => {
     expect(files).toContain("CHANGELOG.md");
     expect(files).toContain("docs/public/config.md");
     expect(files).toContain("docs/public/setup.md");
-    expect(files).toContain("dist/agent/continueChange.js");
     expect(files).toContain("extensions/continue-change.ts");
     expect(files).toContain("docs/public/skills/but-why/SKILL.md");
     expect(files).toContain("docs/public/skills/but-why/references/implement-change.md");

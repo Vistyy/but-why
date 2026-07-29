@@ -5,7 +5,7 @@ import {
   decideContinuation,
   extractChangeId,
   nextRetryState,
-} from "../../src/agent/continueChange.js";
+} from "../../extensions/continue-change.js";
 
 describe("Change Implement continuation policy", () => {
   it("continues an unfinished Change with Findings instructions", () => {
