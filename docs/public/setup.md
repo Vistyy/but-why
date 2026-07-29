@@ -213,6 +213,9 @@ by task show <task-id>
 by task context <task-id>
 ```
 
+`by task show` returns decision-oriented Task metadata without the Task description.
+Use the reported `contextCommand` to retrieve the complete Task Context.
+
 Before approval, use the context draft or append a comment when the intent needs editing or clarification:
 
 ```text
@@ -415,7 +418,12 @@ by change submit <change-id>
 
 User-owned implementation uses the Managed Worktree and repeated Change Submit.
 
-Inspect the implementation, validation, and delivery facts with these installed command templates.
+Inspect decision-oriented Change state with `by change show <change-id>`.
+Use `findingsCommand` when the result reports Findings.
+Use `validationRunCommand` when the result reports recorded Tooling Failures.
+Use `by change validation-runs <change-id>` for complete compact Validation Run History.
+Use the reported Validation Run detail command to retrieve the immutable policy and evidence.
+Use `by validation-run artifact <validation-run-id> <artifact-ref>` for complete stored Artifact content.
 
 The installed command templates are:
 
@@ -424,6 +432,8 @@ by change list [--all]
 by change show <change-id>
 by change findings <change-id>
 by change validation-runs <change-id>
+by validation-run show <validation-run-id>
+by validation-run artifact <validation-run-id> <artifact-ref>
 by change blocker raise <change-id> --file <path>
 by change blocker resolve <change-id> --file <path>
 by change blocker list <change-id>

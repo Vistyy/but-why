@@ -84,6 +84,26 @@ Validation Run History must report total, outcome, and running counts.
 Validation Run History must provide the `by validation-run show <validation-run-id>` expansion pattern.
 Validation Run History does not require a limit until observed history size justifies one.
 
+## Current inspection projections
+
+`by task show` returns Task identity, title, lifecycle, completion or cancellation facts, timestamps, comment count, complete prerequisite and dependent summaries, and linked Change state.
+It omits the Task description.
+It returns `contextCommand` with the exact `by task context <task-id>` command.
+
+`by change show` returns Change facts, the Current Candidate, compact current Validation Run state, pull request, Managed Worktree, readiness, and cleanup facts.
+It omits the Validation Policy Snapshot from the compact current Validation Run.
+It returns `findingCount` and `toolingFailureCount` instead of complete diagnostic records.
+It returns `findingsCommand` only when `findingCount` is nonzero.
+It returns `validationRunCommand` when the current Validation Run has recorded Tooling Failures.
+
+`by change validation-runs` returns every Validation Run identity, Candidate identity, state, outcome, and timestamp.
+It returns `count`, `outcomeCounts`, `runningCount`, and the `by validation-run show <validation-run-id>` detail-command pattern.
+
+`by validation-run show` returns every Artifact metadata field and its `detailCommand`.
+It returns an Artifact preview when a Finding references the Artifact.
+It returns available Artifact previews for a tooling-failed Validation Run.
+It omits unrelated previews for a successful Validation Run.
+
 ## Exceptions and verification
 
 A command may retain additional detail only when repository evidence shows that the detail changes the normal next decision or prevents an additional diagnostic query.

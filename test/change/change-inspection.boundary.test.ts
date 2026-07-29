@@ -100,8 +100,8 @@ describe("Change inspection CLI", () => {
         },
         currentCandidate: null,
         currentValidationRun: null,
-        findings: [],
-        toolingFailures: [],
+        findingCount: 0,
+        toolingFailureCount: 0,
         pullRequest: null,
         cleanup: { state: "complete", blockingReason: null },
       });
@@ -181,12 +181,11 @@ describe("Change inspection CLI", () => {
       );
       yield* withValidationPersistence(root, (persistence) =>
         persistence.complete({
-          validationRunId: newerRun.validationRunId,
-          outcome: "blocked",
+          validationRunId: olderCandidateRun.validationRunId,
+          outcome: "passed",
           now: commandNow,
         }),
       );
-
       const findings = yield* runByInProcessEffect(root, [
         "change",
         "findings",
@@ -201,18 +200,61 @@ describe("Change inspection CLI", () => {
         "--output",
         "json",
       ]);
+      const shown = yield* runByInProcessEffect(root, [
+        "change",
+        "show",
+        change.id,
+        "--output",
+        "json",
+      ]);
 
       expect(JSON.parse(findings.stdout)).toMatchObject({
         change: { id: change.id },
         candidate: { id: secondCandidate.id },
-        validationRun: { id: newerRun.validationRunId, outcome: "blocked" },
+        validationRun: { id: newerRun.validationRunId, state: "running", outcome: null },
         findings: [{ id: `${newerRun.validationRunId}-F1`, files: ["src/main.ts"] }],
         toolingFailures: [{ operationName: "cleanup_validation_worktree" }],
         count: 1,
       });
-      expect(
-        JSON.parse(history.stdout).validationRuns.map((run: { id: string }) => run.id),
-      ).toEqual([newerRun.validationRunId, olderCandidateRun.validationRunId]);
+      expect(JSON.parse(history.stdout)).toMatchObject({
+        count: 2,
+        outcomeCounts: { passed: 1 },
+        runningCount: 1,
+        detailCommand: "by validation-run show <validation-run-id>",
+        validationRuns: [
+          {
+            id: newerRun.validationRunId,
+            candidateId: secondCandidate.id,
+            state: "running",
+            outcome: null,
+            createdAt: secondNow,
+            updatedAt: secondNow,
+          },
+          {
+            id: olderCandidateRun.validationRunId,
+            candidateId: firstCandidate.id,
+            state: "complete",
+            outcome: "passed",
+            createdAt: commandNow,
+            updatedAt: commandNow,
+          },
+        ],
+      });
+      expect(JSON.parse(shown.stdout)).toMatchObject({
+        currentValidationRun: {
+          id: newerRun.validationRunId,
+          candidateId: secondCandidate.id,
+          state: "running",
+          outcome: null,
+          createdAt: secondNow,
+          updatedAt: secondNow,
+        },
+        findingCount: 1,
+        toolingFailureCount: 1,
+        findingsCommand: `by change findings ${change.id}`,
+        validationRunCommand: `by validation-run show ${newerRun.validationRunId}`,
+      });
+      expect(JSON.parse(shown.stdout).currentValidationRun.policy).toBeUndefined();
     }),
   );
 
@@ -343,7 +385,6 @@ describe("Change inspection CLI", () => {
         task: {
           id: "BY-1",
           title: "Task-backed Change",
-          description: "Inspect progress",
           state: "implementing",
           change: { id: changeId, state: "open", readiness: "ready" },
         },

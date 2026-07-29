@@ -231,7 +231,7 @@ const helpView = (bin: string, docs: PublicDocs): StructuredObject =>
       },
       {
         command: "by task show <task-id>",
-        description: "Show compact Task metadata",
+        description: "Show decision-oriented Task metadata; use Task Context for the description",
       },
       {
         command: "by task approve <task-id>",
@@ -259,7 +259,7 @@ const helpView = (bin: string, docs: PublicDocs): StructuredObject =>
       },
       {
         command: "by change show <change-id>",
-        description: "Show Change implementation, validation, and delivery facts",
+        description: "Show decision-oriented Change state and expansion commands",
       },
       {
         command: "by change findings <change-id>",
@@ -267,7 +267,7 @@ const helpView = (bin: string, docs: PublicDocs): StructuredObject =>
       },
       {
         command: "by change validation-runs <change-id>",
-        description: "List Validation Run History for a Change",
+        description: "List complete compact Validation Run History and expansion commands",
       },
       {
         command: "by change submit <change-id>",
@@ -287,7 +287,11 @@ const helpView = (bin: string, docs: PublicDocs): StructuredObject =>
       },
       {
         command: "by validation-run show <validation-run-id>",
-        description: "Show full Validation Run details",
+        description: "Show Validation Run policy and recorded evidence",
+      },
+      {
+        command: "by validation-run artifact <validation-run-id> <artifact-ref>",
+        description: "Show complete stored Artifact content",
       },
     ],
     flags: withGlobalHelpFlags(),

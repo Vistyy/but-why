@@ -104,7 +104,7 @@ const taskHelpView = (): StructuredObject => ({
     },
     {
       command: "by task show <task-id>",
-      description: "Show compact Task metadata",
+      description: "Show decision-oriented Task metadata; use Task Context for the description",
     },
     {
       command: "by task approve <task-id>",

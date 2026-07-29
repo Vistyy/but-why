@@ -145,11 +145,11 @@ const validationRunHelpView = (): StructuredObject => ({
   commands: [
     {
       command: "by validation-run show <validation-run-id>",
-      description: "Show one Candidate-owned Validation Run and its evidence.",
+      description: "Show one Candidate-owned Validation Run policy and evidence.",
     },
     {
       command: "by validation-run artifact <validation-run-id> <artifact-ref>",
-      description: "Show stored Artifact content.",
+      description: "Show complete stored Artifact content.",
     },
   ],
   flags: withGlobalHelpFlags(),
