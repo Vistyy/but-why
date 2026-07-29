@@ -61,9 +61,7 @@ describe("by task CLI processes", () => {
   }, 30_000);
 
   it("preserves invalid UTF-8 stdin errors at the process boundary", () => {
-    const root = createGitRepo();
-    const initialized = runBuiltByWithEnv(root, {}, "init", "--task-prefix", "BY");
-    expect(initialized.status).toBe(0);
+    const root = createTestWorkspace();
 
     const invalid = runBuiltByWithInput(
       root,
