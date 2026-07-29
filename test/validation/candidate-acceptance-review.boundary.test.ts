@@ -1,3 +1,4 @@
+import type { Sandbox } from "@ai-hero/sandcastle";
 import { join } from "node:path";
 import { expect, layer } from "@effect/vitest";
 import { Context, Effect, Layer } from "effect";
@@ -9,10 +10,15 @@ import type {
 } from "../../src/agent/reviewerAgentRuntime.js";
 import type { CaptureLocalCandidateResult } from "../../src/change/candidateCapture/captureLocalCandidate.js";
 import { captureLocalCandidate } from "../support/candidateCapture.js";
+import { runAcceptanceReviewPhase } from "../../src/change/acceptanceReview/runAcceptanceReviewPhase.js";
+import { runSpecialistReviewPhase } from "../../src/change/specialistReview/runSpecialistReviewPhase.js";
 import {
   CandidateValidation,
   type TaskBackedCandidateValidationPolicy,
 } from "../../src/change/candidateValidation/validateCandidate.js";
+import type { CandidateValidationPolicySnapshot } from "../../src/change/candidateValidation/candidateValidationRunStore.js";
+import { maxValidationArtifactBytes } from "../../src/change/validationRun/artifactFiles.js";
+import { validationToolingFailureRecord } from "../../src/change/validation/validationToolingFailures.js";
 import { candidateValidationForTest } from "../support/candidateValidation.js";
 import type { RepositoryStorageError } from "../../src/contracts/repositoryStorageError.js";
 import type {
@@ -118,7 +124,7 @@ layer(acceptanceTemplateLayer)("Task-backed Candidate Acceptance Review", (it) =
         const ready = yield* acceptanceReadyRepo({ review });
         const { captured, validation } = ready;
 
-        const result = yield* runTaskBackedCandidate(ready);
+        const result = yield* runFullTaskBackedCandidate(ready);
 
         expect(result).toMatchObject({ ok: true, reused: false, outcome: "passed" });
         if (!result.ok) return;
@@ -191,7 +197,7 @@ layer(acceptanceTemplateLayer)("Task-backed Candidate Acceptance Review", (it) =
           checks: [{ id: "fails", command: "false", timeoutSeconds: 1 }],
         },
       ]) {
-        const result = yield* runTaskBackedCandidate(ready, policy);
+        const result = yield* runFullTaskBackedCandidate(ready, policy);
         expect(result).toMatchObject({ ok: true, outcome: "blocked" });
       }
 
@@ -320,7 +326,7 @@ layer(acceptanceTemplateLayer)("Task-backed Candidate Acceptance Review", (it) =
         now: "2026-07-15T10:02:00.000Z",
       });
       if (!intermediate.ok) throw new Error(`Candidate capture failed: ${intermediate.code}`);
-      const skipped = yield* runTaskBackedCandidate(
+      const skipped = yield* runFullTaskBackedCandidate(
         ready,
         {
           ...passingValidationPolicy,
@@ -695,7 +701,7 @@ layer(acceptanceTemplateLayer)("Task-backed Candidate Acceptance Review", (it) =
         now: "2026-07-15T10:02:00.000Z",
       });
       if (!intermediate.ok) throw new Error(`Candidate capture failed: ${intermediate.code}`);
-      const skipped = yield* runTaskBackedCandidate(
+      const skipped = yield* runFullTaskBackedCandidate(
         ready,
         { ...policy, checks: [{ id: "fails", command: "false", timeoutSeconds: 1 }] },
         intermediate,
@@ -1014,9 +1020,11 @@ type AcceptanceReadyRepo = {
   readonly repo: string;
   readonly captured: Captured;
   readonly validation: ReturnType<typeof candidateValidationForTest>;
+  readonly reviewerAgentRuntime: ReviewerAgentRuntime;
+  readonly sessionStore?: ReviewerSessionStore;
 };
 
-const runTaskBackedCandidate = (
+const runFullTaskBackedCandidate = (
   ready: AcceptanceReadyRepo,
   policy: TaskBackedCandidateValidationPolicy = passingValidationPolicy,
   captured = ready.captured,
@@ -1034,23 +1042,203 @@ const runTaskBackedCandidate = (
     });
   }).pipe(Effect.provide(ready.validation.layer));
 
+const runTaskBackedCandidate = (
+  ready: AcceptanceReadyRepo,
+  policy: TaskBackedCandidateValidationPolicy = passingValidationPolicy,
+  captured = ready.captured,
+) => runReviewPhases(ready, policy, captured, false);
+
 const runNoChangeCandidate = (ready: AcceptanceReadyRepo, captured = ready.captured) =>
-  Effect.gen(function* () {
-    const validation = yield* CandidateValidation;
-    if (validation.validateNoChange === undefined) {
-      return yield* Effect.dieMessage("Acceptance-only validation is unavailable");
-    }
-    return yield* validation.validateNoChange({
-      changeId: captured.changeId,
-      candidateId: captured.candidateId,
-      changeBaseSha: captured.changeBaseSha,
-      headSha: captured.headSha,
-      acceptanceContext,
-      policy: passingValidationPolicy,
-      noChange: true,
-      now,
-    });
-  }).pipe(Effect.provide(ready.validation.layer));
+  runReviewPhases(ready, passingValidationPolicy, captured, true);
+
+const runReviewPhases = (
+  ready: AcceptanceReadyRepo,
+  policy: TaskBackedCandidateValidationPolicy,
+  captured: Captured,
+  noChange: boolean,
+) =>
+  ready.validation.runWithPersistence((persistence) =>
+    Effect.gen(function* () {
+      const policySnapshot: CandidateValidationPolicySnapshot = noChange
+        ? {
+            checks: [],
+            copyFiles: policy.copyFiles,
+            specialistReviews: [],
+            acceptanceReview: policy.acceptanceReview,
+            acceptanceContext,
+          }
+        : { ...policy, acceptanceContext };
+      const started = yield* persistence.startOrReuse({
+        candidateId: captured.candidateId,
+        headSha: captured.headSha,
+        changeBaseSha: captured.changeBaseSha,
+        policy: policySnapshot,
+        now,
+      });
+      if (started.reused) return { ok: true as const, ...started, outcome: "passed" as const };
+
+      if (!noChange) {
+        yield* persistence.recordCheckRound({
+          validationRunId: started.validationRunId,
+          producer: "quality",
+          roundNumber: 1,
+          roundStatus: "passed",
+          phaseStatus: "passed",
+          artifactRecords: [
+            {
+              ref: `artifact:${started.validationRunId}/checks/quality/stdout.txt`,
+              validationRunId: started.validationRunId,
+              phase: "checks",
+              producer: "quality",
+              path: "stdout.txt",
+              originalBytes: 0,
+              storedBytes: 0,
+              truncated: false,
+            },
+          ],
+          now,
+        });
+      }
+      const sandbox: Pick<Sandbox, "exec" | "run"> = {
+        exec: async () => ({ exitCode: 0, stdout: `${captured.headSha}\n`, stderr: "" }),
+        run: async () => {
+          throw new Error("Reviewer test runtime must not call Sandbox.run");
+        },
+      };
+      const acceptance = yield* runAcceptanceReviewPhase({
+        validationRunId: started.validationRunId,
+        changeId: captured.changeId,
+        candidate: {
+          candidateId: captured.candidateId,
+          changeBaseSha: captured.changeBaseSha,
+          headSha: captured.headSha,
+        },
+        acceptanceContext,
+        implementationDecisions: undefined,
+        policy: policy.acceptanceReview,
+        ...(policy.agentEnvironment === undefined
+          ? {}
+          : { agentEnvironment: policy.agentEnvironment }),
+        runtime: ready.reviewerAgentRuntime,
+        ...(ready.sessionStore === undefined ? {} : { sessionStore: ready.sessionStore }),
+        sandbox,
+        artifactsRoot: join(commonDirectory(ready.repo), "but-why", "artifacts"),
+        artifactMaxBytes: maxValidationArtifactBytes,
+        commandCwd: ready.repo,
+        resourceRoot: ready.repo,
+        allowedUntrackedFiles: [],
+        now,
+        listArtifacts: persistence.listArtifacts,
+        listPreviousCandidateReviewerFindings: persistence.listPreviousCandidateReviewerFindings,
+        recordAcceptanceRound: persistence.recordAcceptanceRound,
+      });
+      if (acceptance.toolingFailure !== undefined) {
+        yield* persistence.recordToolingFailure({
+          validationRunId: started.validationRunId,
+          ...validationToolingFailureRecord(acceptance.toolingFailure),
+          now,
+        });
+        yield* persistence.complete({
+          validationRunId: started.validationRunId,
+          outcome: "tooling_failed",
+          now,
+        });
+        return {
+          ok: false as const,
+          validationRunId: started.validationRunId,
+          outcome: "tooling_failed" as const,
+        };
+      }
+      if (acceptance.findings === 1) {
+        yield* persistence.complete({
+          validationRunId: started.validationRunId,
+          outcome: "blocked",
+          now,
+        });
+        return {
+          ok: true as const,
+          reused: false as const,
+          validationRunId: started.validationRunId,
+          outcome: "blocked" as const,
+        };
+      }
+      if (noChange || policy.specialistReviews.length === 0) {
+        yield* persistence.complete({
+          validationRunId: started.validationRunId,
+          outcome: "passed",
+          now,
+        });
+        return {
+          ok: true as const,
+          reused: false as const,
+          validationRunId: started.validationRunId,
+          outcome: "passed" as const,
+          ...(acceptance.reviewerEvidence === undefined
+            ? {}
+            : { reviewerEvidence: acceptance.reviewerEvidence }),
+        };
+      }
+      const specialists = yield* runSpecialistReviewPhase({
+        validationRunId: started.validationRunId,
+        changeId: captured.changeId,
+        candidate: {
+          candidateId: captured.candidateId,
+          changeBaseSha: captured.changeBaseSha,
+          headSha: captured.headSha,
+        },
+        policies: policy.specialistReviews,
+        ...(policy.agentEnvironment === undefined
+          ? {}
+          : { agentEnvironment: policy.agentEnvironment }),
+        runtime: ready.reviewerAgentRuntime,
+        ...(ready.sessionStore === undefined ? {} : { sessionStore: ready.sessionStore }),
+        sandbox,
+        artifactsRoot: join(commonDirectory(ready.repo), "but-why", "artifacts"),
+        artifactMaxBytes: maxValidationArtifactBytes,
+        commandCwd: ready.repo,
+        resourceRoot: ready.repo,
+        allowedUntrackedFiles: [],
+        now,
+        listArtifacts: persistence.listArtifacts,
+        listPreviousCandidateReviewerFindings: persistence.listPreviousCandidateReviewerFindings,
+        recordSpecialistRound: persistence.recordSpecialistRound,
+      });
+      for (const toolingFailure of specialists.toolingFailures) {
+        yield* persistence.recordToolingFailure({
+          validationRunId: started.validationRunId,
+          ...validationToolingFailureRecord(toolingFailure),
+          now,
+        });
+      }
+      const outcome =
+        specialists.toolingFailures.length > 0
+          ? "tooling_failed"
+          : specialists.findings === 1
+            ? "blocked"
+            : "passed";
+      yield* persistence.complete({ validationRunId: started.validationRunId, outcome, now });
+      return outcome === "tooling_failed"
+        ? {
+            ok: false as const,
+            validationRunId: started.validationRunId,
+            outcome: "tooling_failed" as const,
+            ...(acceptance.reviewerEvidence === undefined
+              ? {}
+              : { reviewerEvidence: acceptance.reviewerEvidence }),
+            specialistReviewerEvidence: specialists.reviewerEvidence,
+          }
+        : {
+            ok: true as const,
+            reused: false as const,
+            validationRunId: started.validationRunId,
+            outcome,
+            ...(acceptance.reviewerEvidence === undefined
+              ? {}
+              : { reviewerEvidence: acceptance.reviewerEvidence }),
+            specialistReviewerEvidence: specialists.reviewerEvidence,
+          };
+    }),
+  );
 
 const acceptanceReadyRepo = (
   reviewerAgentRuntime: ReviewerAgentRuntime,
@@ -1067,7 +1255,13 @@ const acceptanceReadyRepo = (
       reviewerAgentRuntime,
       ...(session === undefined ? {} : session),
     });
-    return { repo, captured, validation };
+    return {
+      repo,
+      captured,
+      validation,
+      reviewerAgentRuntime,
+      ...(session === undefined ? {} : session),
+    };
   });
 
 const repositoryConfig = (root: string) => ({

@@ -1,6 +1,6 @@
 # ast-grep rule tests
 
-`structural-bans-test.yml` verifies six TypeScript syntax contracts:
+`structural-bans-test.yml` verifies ten TypeScript syntax contracts:
 
 - Process properties belong to the CLI entry point.
 - Effect tests use the Effect Vitest runtime.
@@ -8,6 +8,10 @@
 - Sandcastle factories belong to workspace creation.
 - Task identity branding belongs to `taskId.ts`.
 - Wall-clock reads belong to the CLI entry point.
+- Built CLI and process helpers belong to process-boundary tests.
+- Package inspection belongs to the package contract test.
+- Live Herdr helpers belong to the opt-in smoke test.
+- Direct Sandcastle helpers belong to the focused validation workspace test.
 
 Each rule has valid and invalid examples.
 The fixtures verify whether the named syntax matches without pinning diagnostic formatting or source offsets.

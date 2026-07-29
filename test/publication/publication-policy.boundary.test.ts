@@ -1,4 +1,5 @@
 import { expect, layer } from "@effect/vitest";
+import { join } from "node:path";
 import { Context, Effect, Layer } from "effect";
 import { afterAll, beforeAll } from "vitest";
 
@@ -13,9 +14,10 @@ import { openCandidatePublication } from "../../src/change/publication/candidate
 import { RepositorySql } from "../../src/sqlite/repositorySql.js";
 import { openSqliteChangePersistence } from "../../src/sqlite/sqliteChangePersistence.js";
 import { openSqliteChangeValidationPersistence } from "../../src/sqlite/sqliteChangeValidationPersistence.js";
+import { openSqliteCandidateCapturePersistence } from "../../src/sqlite/sqliteCandidateCapturePersistence.js";
 import { captureLocalCandidate } from "../support/candidateCapture.js";
 import { candidateReadyRepo, git } from "../support/candidateReadyRepo.js";
-import { cloneInitializedTestRepository } from "../support/initializedRepo.js";
+import { cloneInitializedRepositoryState } from "../support/initializedRepo.js";
 import { withTestRepository } from "../support/repository.js";
 import { acquireTestWorkspace, releaseTestWorkspace } from "../support/testWorkspace.js";
 
@@ -635,7 +637,7 @@ type Fixture = {
 const withFixture = <A, E>(use: (fixture: Fixture) => Effect.Effect<A, E, RepositorySql>) =>
   Effect.gen(function* () {
     const template = yield* PublicationTemplate;
-    const root = yield* cloneInitializedTestRepository(candidateRepoTemplate);
+    const root = yield* cloneInitializedRepositoryState(candidateRepoTemplate);
     return yield* withTestRepository(
       root,
       Effect.gen(function* () {
@@ -676,9 +678,27 @@ function completeValidation(
 
 const nextCandidate = (fixture: Fixture, subject: string, at: string) =>
   Effect.gen(function* () {
-    git(fixture.root, "commit", "--allow-empty", "-m", subject);
-    const captured = yield* captureLocalCandidate({ cwd: fixture.root, now: at });
-    if (!captured.ok) throw new Error(captured.code);
+    const headSha = `${subject}-head`;
+    const capture = yield* openSqliteCandidateCapturePersistence();
+    const result = yield* capture.commitCapture({
+      repositoryCommonDirectory: join(fixture.root, ".git"),
+      branchRef: "refs/heads/feature",
+      expectedChangeId: fixture.captured.changeId,
+      baseRef: "refs/remotes/origin/main",
+      changeBaseSha: fixture.captured.changeBaseSha,
+      headSha,
+      now: at,
+    });
+    if (!result.ok) throw new Error(result.code);
+    const captured: Captured = {
+      ok: true,
+      changeId: result.changeId,
+      candidateId: result.candidateId,
+      branchRef: "refs/heads/feature",
+      changeBaseSha: fixture.captured.changeBaseSha,
+      headSha,
+      trackedTreeMatchesChangeBase: false,
+    };
     const validationRunId = yield* completeValidation(fixture.validation, captured, at);
     return { captured, validationRunId };
   });
