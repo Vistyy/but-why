@@ -24,7 +24,7 @@ The project uses:
 - Biome for formatting and linting.
 - TypeScript for strict type checking.
 - Fallow for dependencies, dead code, import boundaries, duplication, and code health.
-- ast-grep for six exact TypeScript syntax contracts.
+- ast-grep for exact TypeScript syntax contracts.
 - Remark for Markdown link and anchor validation.
 - Effect SQL with the `@effect/sql-sqlite-node` Adapter for SQLite access.
 
@@ -72,6 +72,10 @@ ast-grep blocks these syntax contracts:
 - Sandcastle factories belong to workspace creation.
 - Task identity branding belongs to `taskId.ts`.
 - Wall-clock reads belong to the CLI entry point.
+- Built CLI and process helpers belong to focused process-boundary tests.
+- Package inspection belongs to the package contract test.
+- Live Herdr helpers belong to focused live-agent tests.
+- Direct Sandcastle helpers belong to the focused validation workspace test.
 
 ## Repository-authored blocking diagnostics
 
