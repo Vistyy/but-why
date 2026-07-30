@@ -4,7 +4,7 @@ import { basename, dirname } from "node:path";
 
 import type { RemoteChangeBranch } from "./change.js";
 
-export type RemoteUrlRewrite = {
+type RemoteUrlRewrite = {
   readonly base: string;
   readonly pattern: string;
   readonly kind: "insteadOf" | "pushInsteadOf";
