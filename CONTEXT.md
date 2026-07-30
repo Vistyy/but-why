@@ -157,6 +157,11 @@ _Avoid_: Copied state file, tracked Repo Config, per-worktree database
 The accepted But Why version selected to operate canonical Shared Repository State while But Why develops itself.
 _Avoid_: Candidate executable, current-worktree CLI, separate per-worktree state
 
+**Migration Artifact**:
+One numbered source artifact that defines an ordered Shared Repository State migration.
+Existing Migration Artifacts are immutable, and a schema change adds the next Migration Artifact.
+_Avoid_: Migration file, migration script, editable migration
+
 **Migration Fingerprint**:
 The deterministic identity of one immutable Shared Repository State migration's canonical content.
 _Avoid_: Migration ID, mutable source hash, automatic migration repair
