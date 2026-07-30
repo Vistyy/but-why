@@ -256,6 +256,17 @@ exit 1
           "Add validated change",
         );
 
+        const toonSubmitted = runBuiltByWithEnv(
+          root,
+          processEnvironment,
+          "change",
+          "submit",
+          change.change.id,
+        );
+        expect(toonSubmitted.status).toBe(1);
+        expect(toonSubmitted.stdout).toContain("authority: change_submit");
+        expect(toonSubmitted.stdout).toContain("action: fix_validation_findings");
+
         const submitted = runBuiltByWithEnv(
           root,
           processEnvironment,
@@ -267,7 +278,16 @@ exit 1
         );
         expect(submitted.status).toBe(1);
         expect(JSON.parse(submitted.stdout)).toMatchObject({
-          error: { code: "validation_findings", changeId: change.change.id },
+          error: {
+            code: "validation_findings",
+            changeId: change.change.id,
+            recovery: {
+              authority: "change_submit",
+              changeId: change.change.id,
+              action: "fix_validation_findings",
+              retryCommand: `by change submit ${change.change.id}`,
+            },
+          },
         });
 
         const inspected = runBuiltByWithEnv(
@@ -283,6 +303,43 @@ exit 1
         expect(JSON.parse(inspected.stdout)).toMatchObject({
           change: { id: change.change.id, taskId: "BY-1", state: "open" },
           currentValidationRun: { outcome: "blocked" },
+        });
+
+        writeFileSync(join(root, "blocker.md"), "Waiting for an external decision.\n");
+        const blocked = runBuiltByWithEnv(
+          root,
+          processEnvironment,
+          "change",
+          "blocker",
+          "raise",
+          change.change.id,
+          "--file",
+          "blocker.md",
+          "--output",
+          "json",
+        );
+        expect(blocked.status).toBe(0);
+
+        const submitBlocked = runBuiltByWithEnv(
+          root,
+          processEnvironment,
+          "change",
+          "submit",
+          change.change.id,
+          "--output",
+          "json",
+        );
+        expect(submitBlocked.status).toBe(1);
+        expect(JSON.parse(submitBlocked.stdout)).toEqual({
+          error: {
+            code: "change_blocked",
+            message: "Change is blocked by an active Implementation Blocker.",
+            changeId: change.change.id,
+            blockerCommand: `by change blocker list ${change.change.id}`,
+          },
+          help: [
+            `Inspect the existing Implementation Blocker with \`by change blocker list ${change.change.id}\`, then report it and wait.`,
+          ],
         });
       }),
     30_000,

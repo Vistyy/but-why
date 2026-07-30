@@ -577,6 +577,9 @@ const piCommand = (input: InteractiveSessionLaunchInput, path: string | undefine
   return [
     ...(path === undefined ? [] : [`PATH=${shellQuote(path)}`]),
     `exec ${prependAgentEnvironment("pi", input.agentEnvironment)}`,
+    ...(input.systemPrompt === undefined
+      ? []
+      : ["--system-prompt", shellQuote(input.systemPrompt)]),
     "--name",
     shellQuote(herdrSessionName(input.changeId)),
     ...(model === undefined ? [] : ["--model", shellQuote(model)]),

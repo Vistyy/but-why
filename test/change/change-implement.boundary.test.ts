@@ -162,22 +162,28 @@ describe("by change implement", () => {
         worktreePath: change.worktreePath,
         agentEnvironment: ["nix", "develop", "-c"],
       });
-      const prompt = (launches[0] as { readonly initialPrompt: string }).initialPrompt;
+      const launch = launches[0] as {
+        readonly initialPrompt: string;
+        readonly systemPrompt: string;
+      };
       const skill = readFileSync("docs/public/skills/but-why/SKILL.md", "utf8").trim();
       const implementationReference = readFileSync(
         "docs/public/skills/but-why/references/implement-change.md",
         "utf8",
       ).trim();
-      expect(prompt).toContain(skill);
-      expect(prompt).toContain(implementationReference);
-      expect(prompt.indexOf(skill)).toBe(0);
-      expect(prompt.indexOf(implementationReference)).toBeGreaterThan(prompt.indexOf(skill));
-      expect(prompt.indexOf(`Change identity: ${change.change.id}.`)).toBeGreaterThan(
-        prompt.indexOf(implementationReference),
+      expect(launch.systemPrompt).toContain(skill);
+      expect(launch.systemPrompt).toContain(implementationReference);
+      expect(launch.systemPrompt.indexOf(skill)).toBe(0);
+      expect(launch.systemPrompt.indexOf(implementationReference)).toBeGreaterThan(
+        launch.systemPrompt.indexOf(skill),
       );
-      expect(prompt).toContain(`Managed Worktree: ${change.worktreePath}.`);
-      expect(prompt.match(/# But Why/g)).toHaveLength(1);
-      expect(prompt.match(/# Implement a Change/g)).toHaveLength(1);
+      expect(launch.systemPrompt.match(/# But Why/g)).toHaveLength(1);
+      expect(launch.systemPrompt.match(/# Implement a Change/g)).toHaveLength(1);
+      expect(launch.initialPrompt).toBe(
+        [`Change identity: ${change.change.id}.`, `Managed Worktree: ${change.worktreePath}.`].join(
+          "\n\n",
+        ),
+      );
 
       const handoff = "x".repeat(contractMaxHandoffBytes);
       const handoffPath = join(root, "handoff.md");
@@ -206,7 +212,13 @@ describe("by change implement", () => {
       );
       expect(handoffResult.status).toBe(0);
       expect(received).toHaveLength(1);
-      expect(received[0]).toContain(handoff);
+      expect(received[0]).toBe(
+        [
+          `Change identity: ${change.change.id}.`,
+          `Managed Worktree: ${change.worktreePath}.`,
+          handoff,
+        ].join("\n\n"),
+      );
     }),
   );
 
@@ -511,6 +523,24 @@ describe("by change implement", () => {
       const failure = JSON.parse(started.stdout) as {
         readonly error: { readonly changeId: string };
       };
+      const submit = yield* runByInProcessEffect(
+        root,
+        ["change", "submit", failure.error.changeId, "--output", "json"],
+        now,
+      );
+      expect(submit.status).toBe(1);
+      expect(JSON.parse(submit.stdout)).toMatchObject({
+        error: {
+          code: "change_not_ready",
+          changeId: failure.error.changeId,
+          recovery: {
+            authority: "change_submit",
+            action: "prepare_change",
+            retryCommand: `by change submit ${failure.error.changeId}`,
+          },
+        },
+      });
+
       const host: InteractiveSessionHost = {
         launch: async () => {
           throw new Error("Change Implement must not launch an unready Change");
@@ -537,7 +567,29 @@ describe("by change implement", () => {
         ["change", "start", "--output", "json"],
         now,
       );
-      const change = JSON.parse(started.stdout) as { readonly change: { readonly id: string } };
+      const change = JSON.parse(started.stdout) as {
+        readonly change: { readonly id: string };
+        readonly worktreePath: string;
+      };
+      writeFileSync(join(change.worktreePath, "dirty.txt"), "uncommitted\n");
+      const submit = yield* runByInProcessEffect(
+        root,
+        ["change", "submit", change.change.id, "--output", "json"],
+        now,
+      );
+      expect(submit.status).toBe(1);
+      expect(JSON.parse(submit.stdout)).toMatchObject({
+        error: {
+          code: "dirty_work",
+          changeId: change.change.id,
+          recovery: {
+            authority: "change_submit",
+            action: "resolve_dirty_work",
+            retryCommand: `by change submit ${change.change.id}`,
+          },
+        },
+      });
+
       const cases: readonly {
         readonly host: InteractiveSessionHost;
         readonly status: 0 | 1;

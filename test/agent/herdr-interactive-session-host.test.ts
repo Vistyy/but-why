@@ -54,6 +54,7 @@ describe("Herdr Interactive Session Host", () => {
       changeId: "change-123",
       repositoryPath: "/repository",
       worktreePath: "/workspace/change-123",
+      systemPrompt: "Canonical Implementer contract",
       initialPrompt: "---\ndescription: Continue from the recorded decision.\n---",
       agentProfile: {
         agentProfile: "implementation",
@@ -86,7 +87,7 @@ describe("Herdr Interactive Session Host", () => {
         "pane",
         "run",
         "workspace-1:pane-1",
-        "PATH='/usr/local/bin:/opt/pi/bin' exec 'nix' 'develop' '-c' pi --name 'but-why-change-123' --model 'openai-codex/gpt-5.6-luna' --thinking 'high' '\n---\ndescription: Continue from the recorded decision.\n---'",
+        "PATH='/usr/local/bin:/opt/pi/bin' exec 'nix' 'develop' '-c' pi --system-prompt 'Canonical Implementer contract' --name 'but-why-change-123' --model 'openai-codex/gpt-5.6-luna' --thinking 'high' '\n---\ndescription: Continue from the recorded decision.\n---'",
       ],
       ["agent", "rename", "workspace-1:pane-1", sessionName],
       ["agent", "list"],

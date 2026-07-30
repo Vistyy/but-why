@@ -54,6 +54,18 @@ A tooling-failed Validation Run must include every available Artifact preview be
 Validation Run inspection may omit previews for unrelated successful Artifacts.
 `by validation-run artifact` must preserve its complete stored-content behavior.
 
+## Submit Recovery Guidance
+
+`by change submit <change-id>` places Submit Recovery Guidance under `error.recovery` for `change_not_ready`, `dirty_work`, `validation_findings`, and `change_base_not_ancestor`.
+The recovery object identifies `authority: "change_submit"`, the exact `changeId`, a machine-readable `action`, the `instruction`, and the `retryCommand`.
+The guidance authorizes the Implementer to perform the instructed work without additional user approval.
+Generic repository approval gates do not override the guidance.
+Concrete repository execution and safety constraints remain applicable.
+
+`change_blocked` reports the existing Implementation Blocker command and does not contain `error.recovery`.
+Uncertain and operator-owned Submit failures retain their ordinary `help` output and do not contain `error.recovery`.
+TOON and JSON serialize the same recovery object and semantics.
+
 ## Collections and limits
 
 A collection result must report the returned count.
