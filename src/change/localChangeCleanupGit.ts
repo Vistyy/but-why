@@ -1,6 +1,7 @@
 import { spawnSync } from "node:child_process";
-import { existsSync, lstatSync, rmdirSync, rmSync } from "node:fs";
-import { basename, dirname } from "node:path";
+import { existsSync, lstatSync, mkdtempSync, rmdirSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { basename, dirname, join } from "node:path";
 
 import type { RemoteChangeBranch } from "./change.js";
 
@@ -195,7 +196,7 @@ const localChangeCleanupRemote: ChangeCleanupRemote = {
   readRemoteBranchHead: (input) => {
     const repository = resolveRemoteRepository(input);
     if (repository.state !== "matches") return { state: repository.state };
-    const result = git(input.repositoryCommonDirectory, [
+    const result = gitAtResolvedRemote([
       "ls-remote",
       "--heads",
       repository.fetchUrl,
@@ -214,7 +215,7 @@ const localChangeCleanupRemote: ChangeCleanupRemote = {
         };
   },
   deleteRemoteBranch: (input) =>
-    git(input.repositoryCommonDirectory, [
+    gitAtResolvedRemote([
       "push",
       `--force-with-lease=refs/heads/${input.branchName}:${input.expectedHeadSha}`,
       input.resolvedRemoteUrl,
@@ -306,19 +307,11 @@ const rewriteRemoteUrl = (
   url: string,
   rewrites: readonly RemoteUrlRewrite[],
   direction: "fetch" | "push",
-): string | undefined => {
-  let current = url;
-  const seen = new Set<string>();
-  for (let attempt = 0; attempt <= rewrites.length; attempt += 1) {
-    if (seen.has(current)) return undefined;
-    seen.add(current);
-    const pushRewrite =
-      direction === "push" ? longestRewrite(current, rewrites, "pushInsteadOf") : undefined;
-    const rewrite = pushRewrite ?? longestRewrite(current, rewrites, "insteadOf");
-    if (rewrite === undefined) return current;
-    current = rewrite.base + current.slice(rewrite.pattern.length);
-  }
-  return undefined;
+): string => {
+  const pushRewrite =
+    direction === "push" ? longestRewrite(url, rewrites, "pushInsteadOf") : undefined;
+  const rewrite = pushRewrite ?? longestRewrite(url, rewrites, "insteadOf");
+  return rewrite === undefined ? url : rewrite.base + url.slice(rewrite.pattern.length);
 };
 
 const longestRewrite = (
@@ -414,10 +407,30 @@ const git = (commonDirectory: string, args: readonly string[]): GitResult =>
 const gitAtWorktree = (worktreePath: string, args: readonly string[]): GitResult =>
   runGit(["-C", worktreePath, ...args]);
 
-const runGit = (args: readonly string[]): GitResult => {
+const gitAtResolvedRemote = (args: readonly string[]): GitResult => {
+  const temporaryGitDirectory = mkdtempSync(join(tmpdir(), "but-why-remote-cleanup-"));
+  const environment = {
+    ...process.env,
+    GIT_CONFIG_GLOBAL: "/dev/null",
+    GIT_CONFIG_NOSYSTEM: "1",
+  };
+  try {
+    const initialized = runGitCommand(["init", "--bare", "-q", temporaryGitDirectory], environment);
+    return initialized.ok
+      ? runGitCommand([`--git-dir=${temporaryGitDirectory}`, ...args], environment)
+      : initialized;
+  } finally {
+    rmSync(temporaryGitDirectory, { recursive: true, force: true });
+  }
+};
+
+const runGit = (args: readonly string[]): GitResult => runGitCommand(args, process.env);
+
+const runGitCommand = (args: readonly string[], environment: NodeJS.ProcessEnv): GitResult => {
   const result = spawnSync("git", args, {
     encoding: "utf8",
     stdio: ["ignore", "pipe", "ignore"],
+    env: environment,
   });
   return result.status === 0 ? { ok: true, stdout: result.stdout } : { ok: false };
 };
