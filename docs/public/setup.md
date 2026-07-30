@@ -22,10 +22,12 @@ But Why requires Node.js 24.
 Resolve one supported command prefix before continuing.
 Use `pnpx but-why` or `npx -y but-why` when you use the published package.
 Use `just by` from the But Why source checkout.
-Verify the resolved prefix with:
+Verify the selected command prefix with one of these commands:
 
 ```bash
-by --help
+pnpx but-why --help
+npx -y but-why --help
+just by --help
 ```
 
 In every command below, replace the leading `by` placeholder with the resolved prefix.
