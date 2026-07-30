@@ -17,9 +17,11 @@ const snapshot = (overrides: Record<string, unknown> = {}) => ({
 
 type TestSnapshot = ReturnType<typeof snapshot>;
 type EventHandler = (event: unknown, context: ExtensionContext) => unknown;
+type CommandHandler = (args: string, context: ExtensionContext) => unknown;
 
 const createHarness = () => {
   const handlers = new Map<string, EventHandler>();
+  const commands = new Map<string, CommandHandler>();
   const entries: SessionEntry[] = [
     {
       type: "message",
@@ -35,6 +37,7 @@ const createHarness = () => {
   ];
   const sent: string[] = [];
   const notifications: string[] = [];
+  const widgets: Array<{ readonly name: string; readonly value: unknown }> = [];
   let currentSnapshot: TestSnapshot = snapshot();
   let inspectionFails = false;
   let directByUnavailable = false;
@@ -42,6 +45,9 @@ const createHarness = () => {
   const api = {
     on(event: string, handler: EventHandler) {
       handlers.set(event, handler);
+    },
+    registerCommand(name: string, options: { handler: CommandHandler }) {
+      commands.set(name, options.handler);
     },
     appendEntry(_type: string, data: unknown) {
       entries.push({
@@ -79,15 +85,27 @@ const createHarness = () => {
       notify(message: string) {
         notifications.push(message);
       },
+      setWidget(name: string, value: unknown) {
+        widgets.push({ name, value });
+      },
     },
   } as unknown as ExtensionContext;
   return {
     handlers,
     context,
     entries,
+    async runCommand(name: string) {
+      const handler = commands.get(name);
+      if (handler === undefined) throw new Error(`Missing ${name} command`);
+      await handler("", context);
+    },
     sent,
     notifications,
+    widgets,
     execCalls,
+    getExecCallCount() {
+      return execCalls.length;
+    },
     setSnapshot(next: TestSnapshot) {
       currentSnapshot = next;
     },
@@ -194,7 +212,7 @@ describe("packaged Change Implement continuation extension", () => {
     );
   });
 
-  it("pauses after manual cancellation until operator input", async () => {
+  it("pauses after manual cancellation until the operator toggles continuation", async () => {
     const harness = createHarness();
     await harness.emit("session_start", { type: "session_start", reason: "startup" });
     await harness.emit("agent_end", {
@@ -215,7 +233,63 @@ describe("packaged Change Implement continuation extension", () => {
 
     await harness.emit("input", { text: "Continue", source: "interactive" });
     await harness.emit("agent_settled");
-    expect(harness.sent).toHaveLength(1);
+    expect(harness.sent).toEqual([]);
+
+    await harness.runCommand("continue-change");
+    expect(harness.sent).toEqual([
+      expect.stringContaining("Automatic threshold compaction completed"),
+    ]);
+  });
+
+  it("keeps automatic continuation paused while the operator discusses the Change", async () => {
+    const harness = createHarness();
+    await harness.emit("session_start", { type: "session_start", reason: "startup" });
+    expect(harness.widgets.at(-1)).toEqual({
+      name: "but-why-change-watcher",
+      value: [`● Watching Change ${changeId.slice(0, 8)}…`],
+    });
+
+    await harness.runCommand("continue-change");
+    expect(harness.widgets.at(-1)).toEqual({
+      name: "but-why-change-watcher",
+      value: ["○ Paused"],
+    });
+    expect(harness.entries.at(-1)).toMatchObject({
+      data: { changeId, unchangedRestarts: 0, paused: true },
+    });
+
+    const execCallCount = harness.getExecCallCount();
+    await harness.emit("input", { text: "Why is this approach safe?", source: "interactive" });
+    await harness.emit("agent_settled");
+    expect(harness.sent).toEqual([]);
+    expect(harness.getExecCallCount()).toBe(execCallCount);
+
+    await harness.runCommand("continue-change");
+    expect(harness.entries.at(-1)).toMatchObject({
+      data: { changeId, paused: false },
+    });
+    expect(harness.sent).toEqual([
+      expect.stringContaining(`The Change ${changeId} is still unfinished.`),
+    ]);
+    expect(harness.widgets.at(-1)).toEqual({
+      name: "but-why-change-watcher",
+      value: [`● Watching Change ${changeId.slice(0, 8)}…`],
+    });
+  });
+
+  it("does not send a continuation message when resumed after the Change is closed", async () => {
+    const harness = createHarness();
+    await harness.emit("session_start", { type: "session_start", reason: "startup" });
+
+    await harness.runCommand("continue-change");
+    harness.setSnapshot(snapshot({ change: { state: "closed", closeReason: "completed" } }));
+    await harness.runCommand("continue-change");
+
+    expect(harness.sent).toEqual([]);
+    expect(harness.widgets.at(-1)).toEqual({
+      name: "but-why-change-watcher",
+      value: ["✓ Change is complete"],
+    });
   });
 
   it("uses hidden session entries for retry state", async () => {

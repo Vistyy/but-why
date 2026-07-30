@@ -36,6 +36,16 @@ type PersistedContinuationState = RetryState & {
   readonly paused: boolean;
 };
 
+type WatcherDisplay =
+  | { readonly kind: "watching" }
+  | { readonly kind: "checking" }
+  | { readonly kind: "paused" }
+  | { readonly kind: "complete" }
+  | { readonly kind: "idle" }
+  | { readonly kind: "blocked" }
+  | { readonly kind: "recovery" }
+  | { readonly kind: "stopped" };
+
 type RunResult =
   | { readonly ok: true; readonly stdout: string }
   | {
@@ -63,6 +73,7 @@ type InspectionResult =
   | { readonly ok: false; readonly transient: boolean; readonly message: string };
 
 const stateEntry = "but-why-change-continuation";
+const watcherWidget = "but-why-change-watcher";
 const maxUnchangedRestarts = 3;
 const changeIdPattern =
   /^\s*Change identity:\s*([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.?\s*$/imu;
@@ -164,6 +175,42 @@ export default function continueChange(pi: ExtensionAPI): void {
   let persisted: PersistedContinuationState | undefined;
   let pendingThresholdCompaction = false;
   let settling = false;
+  let watcherDisplay: WatcherDisplay = { kind: "watching" };
+
+  const showWatcher = (ctx: ExtensionContext, display: WatcherDisplay): void => {
+    watcherDisplay = display;
+    if (changeId === undefined) {
+      ctx.ui.setWidget(watcherWidget, undefined);
+      return;
+    }
+    const text = (() => {
+      switch (display.kind) {
+        case "watching":
+          return `● Watching Change ${changeId.slice(0, 8)}…`;
+        case "checking":
+          return "◐ Checking Change state…";
+        case "paused":
+          return "○ Paused";
+        case "complete":
+          return "✓ Change is complete";
+        case "idle":
+          return "✓ No action needed";
+        case "blocked":
+          return "! Change is blocked";
+        case "recovery":
+          return "! Paused - inspection needs recovery";
+        case "stopped":
+          return "! Watching stopped - no progress";
+      }
+    })();
+    ctx.ui.setWidget(watcherWidget, [text]);
+  };
+
+  const idleWatcherDisplay = (snapshot: ChangeInspectionSnapshot): WatcherDisplay => {
+    if (snapshot.change.state === "closed") return { kind: "complete" };
+    if (snapshot.change.state === "blocked") return { kind: "blocked" };
+    return { kind: "idle" };
+  };
 
   const restoreState = (ctx: ExtensionContext): void => {
     const entries = ctx.sessionManager.getBranch();
@@ -315,21 +362,32 @@ export default function continueChange(pi: ExtensionAPI): void {
   };
 
   const initialize = async (ctx: ExtensionContext): Promise<void> => {
-    if (changeId === undefined) return;
-    const observed = await inspect(ctx, changeId);
-    if (!observed.ok) return;
-    if (persisted === undefined || persisted.changeId !== changeId) {
-      saveState({
-        changeId,
-        fingerprint: observed.fingerprint,
-        unchangedRestarts: 0,
-        paused: false,
-      });
+    if (changeId === undefined) {
+      showWatcher(ctx, { kind: "watching" });
       return;
     }
-    if (persisted.paused) return;
-    if (persisted.fingerprint !== observed.fingerprint) {
-      saveState({ ...persisted, fingerprint: observed.fingerprint, unchangedRestarts: 0 });
+    if (persisted?.paused) {
+      showWatcher(ctx, { kind: "paused" });
+      return;
+    }
+    showWatcher(ctx, { kind: "checking" });
+    try {
+      const observed = await inspect(ctx, changeId);
+      if (!observed.ok) return;
+      if (persisted === undefined || persisted.changeId !== changeId) {
+        saveState({
+          changeId,
+          fingerprint: observed.fingerprint,
+          unchangedRestarts: 0,
+          paused: false,
+        });
+        return;
+      }
+      if (persisted.fingerprint !== observed.fingerprint) {
+        saveState({ ...persisted, fingerprint: observed.fingerprint, unchangedRestarts: 0 });
+      }
+    } finally {
+      if (watcherDisplay.kind === "checking") showWatcher(ctx, { kind: "watching" });
     }
   };
 
@@ -339,13 +397,38 @@ export default function continueChange(pi: ExtensionAPI): void {
     await initialize(ctx);
   });
 
+  pi.registerCommand("continue-change", {
+    description: "Pause or resume the Change watcher",
+    handler: async (_args, ctx) => {
+      if (changeId === undefined) {
+        ctx.ui.notify("But Why automatic continuation is unavailable because this session has no Change.", "warning");
+        return;
+      }
+      const state = persisted ?? {
+        changeId,
+        fingerprint: "inspection-unavailable",
+        unchangedRestarts: 0,
+        paused: false,
+      };
+      if (!state.paused) {
+        saveState({ ...state, paused: true });
+        showWatcher(ctx, { kind: "paused" });
+        ctx.ui.notify(
+          "But Why Change watcher is paused. Discuss the Change, then run /continue-change to resume.",
+          "info",
+        );
+        return;
+      }
+      saveState({ ...state, paused: false, unchangedRestarts: 0 });
+      ctx.ui.notify("But Why Change watcher is resumed.", "info");
+      await continueWatching(ctx);
+    },
+  });
+
   pi.on("input", async (event, ctx) => {
     if (event.source !== "extension") {
       const inputChangeId = extractChangeId(event.text);
       if (inputChangeId !== undefined) changeId = inputChangeId;
-      if (persisted?.paused) {
-        saveState({ ...persisted, paused: false, unchangedRestarts: 0 });
-      }
       await initialize(ctx);
     }
   });
@@ -354,7 +437,7 @@ export default function continueChange(pi: ExtensionAPI): void {
     pendingThresholdCompaction = event.reason === "threshold";
   });
 
-  pi.on("agent_end", (event) => {
+  pi.on("agent_end", (event, ctx) => {
     if (
       event.messages.some(
         (message) => message.role === "assistant" && message.stopReason === "aborted",
@@ -368,12 +451,22 @@ export default function continueChange(pi: ExtensionAPI): void {
         paused: false,
       };
       saveState({ ...state, paused: true });
+      showWatcher(ctx, { kind: "paused" });
     }
   });
 
-  pi.on("agent_settled", async (_event, ctx) => {
-    if (settling || changeId === undefined || persisted?.paused) return;
+  const continueWatching = async (ctx: ExtensionContext): Promise<void> => {
+    if (settling) return;
+    if (changeId === undefined) {
+      showWatcher(ctx, { kind: "watching" });
+      return;
+    }
+    if (persisted?.paused) {
+      showWatcher(ctx, { kind: "paused" });
+      return;
+    }
     settling = true;
+    showWatcher(ctx, { kind: "checking" });
     try {
       const id = changeId;
       const observed = await inspect(ctx, id);
@@ -387,6 +480,7 @@ export default function continueChange(pi: ExtensionAPI): void {
         if (!observed.transient) {
           pendingThresholdCompaction = false;
           saveState({ ...previous, paused: true });
+          showWatcher(ctx, { kind: "recovery" });
           ctx.ui.notify(
             `But Why inspection requires operator recovery and is paused: ${observed.message}`,
             "warning",
@@ -400,6 +494,7 @@ export default function continueChange(pi: ExtensionAPI): void {
         pendingThresholdCompaction = false;
         if (retry.unchangedRestarts > maxUnchangedRestarts) {
           saveState({ ...previous, ...retry, paused: false });
+          showWatcher(ctx, { kind: "stopped" });
           ctx.ui.notify(
             "But Why automatic continuation stopped after three inspection failures without durable state progress. Restore CLI and Git access, then take the next action manually.",
             "warning",
@@ -407,6 +502,7 @@ export default function continueChange(pi: ExtensionAPI): void {
           return;
         }
         saveState({ ...previous, ...retry, paused: false });
+        showWatcher(ctx, { kind: "watching" });
         ctx.ui.notify(
           "But Why could not inspect the current Change state; automatic continuation will keep trying until inspection recovers or the operator cancels it.",
           "warning",
@@ -427,11 +523,13 @@ export default function continueChange(pi: ExtensionAPI): void {
       if (decision.kind === "idle") {
         pendingThresholdCompaction = false;
         saveState({ ...previous, ...retry, paused: false });
+        showWatcher(ctx, idleWatcherDisplay(observed.snapshot));
         return;
       }
       if (retry.unchangedRestarts > maxUnchangedRestarts) {
         pendingThresholdCompaction = false;
         saveState({ ...previous, ...retry, paused: false });
+        showWatcher(ctx, { kind: "stopped" });
         ctx.ui.notify(
           "But Why automatic continuation stopped after three restarts without Git or Change progress. Take the next action manually.",
           "warning",
@@ -445,10 +543,16 @@ export default function continueChange(pi: ExtensionAPI): void {
         pendingThresholdCompaction ? "threshold" : undefined,
       );
       pendingThresholdCompaction = false;
+      showWatcher(ctx, { kind: "watching" });
       pi.sendUserMessage(message);
     } finally {
       settling = false;
+      if (watcherDisplay.kind === "checking") showWatcher(ctx, { kind: "watching" });
     }
+  };
+
+  pi.on("agent_settled", async (_event, ctx) => {
+    await continueWatching(ctx);
   });
 }
 
