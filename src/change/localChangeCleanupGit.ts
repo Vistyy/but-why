@@ -212,39 +212,96 @@ type RemoteRepositoryInput = Parameters<ChangeCleanupRemote["readRemoteBranchHea
 type RemoteRepositoryState = "matches" | "mismatch" | "unavailable";
 
 const remoteRepositoryState = (input: RemoteRepositoryInput): RemoteRepositoryState => {
-  const rewrites = git(input.repositoryCommonDirectory, [
+  const rewrites = readRemoteUrlRewrites(input.repositoryCommonDirectory);
+  if (rewrites === undefined) return "unavailable";
+  const configured = readRemoteUrls(input.repositoryCommonDirectory, input.remoteName, "url");
+  if (configured === undefined || configured.length === 0) return "unavailable";
+  if (
+    !configured.every((url) =>
+      sameRemoteRepository(rewriteRemoteUrl(url, rewrites, "fetch"), input),
+    )
+  ) {
+    return "mismatch";
+  }
+  const pushUrls = readRemoteUrls(input.repositoryCommonDirectory, input.remoteName, "pushurl");
+  if (pushUrls === undefined) return "matches";
+  const effectivePushUrls = pushUrls.length === 0 ? configured : pushUrls;
+  return effectivePushUrls.every((url) =>
+    sameRemoteRepository(rewriteRemoteUrl(url, rewrites, "push"), input),
+  )
+    ? "matches"
+    : "mismatch";
+};
+
+type RemoteUrlRewrite = {
+  readonly base: string;
+  readonly pattern: string;
+  readonly kind: "insteadOf" | "pushInsteadOf";
+};
+
+const readRemoteUrlRewrites = (
+  repositoryCommonDirectory: string,
+): readonly RemoteUrlRewrite[] | undefined => {
+  const result = git(repositoryCommonDirectory, [
     "config",
     "--get-regexp",
     "^url\\..*\\.(insteadOf|pushInsteadOf)$",
   ]);
-  if (rewrites.ok && rewrites.stdout.trim().length > 0) return "mismatch";
-  const configured = git(input.repositoryCommonDirectory, [
-    "config",
-    "--get-all",
-    `remote.${input.remoteName}.url`,
-  ]);
-  if (!configured.ok || configured.stdout.trim().length === 0) return "unavailable";
-  if (
-    !configured.stdout
-      .split("\n")
-      .filter((url) => url.length > 0)
-      .every((url) => sameRemoteRepository(url, input))
-  ) {
-    return "mismatch";
-  }
-  const pushUrls = git(input.repositoryCommonDirectory, [
-    "config",
-    "--get-all",
-    `remote.${input.remoteName}.pushurl`,
-  ]);
-  if (!pushUrls.ok || pushUrls.stdout.trim().length === 0) return "matches";
-  return pushUrls.stdout
+  if (!result.ok || result.stdout.trim().length === 0) return [];
+  const rewrites = result.stdout
+    .trim()
     .split("\n")
-    .filter((url) => url.length > 0)
-    .every((url) => sameRemoteRepository(url, input))
-    ? "matches"
-    : "mismatch";
+    .map((line) => {
+      const match = /^url\.(.+)\.(insteadOf|pushInsteadOf)\s+(.+)$/u.exec(line);
+      return match === null
+        ? undefined
+        : {
+            base: match[1] ?? "",
+            kind: match[2] as "insteadOf" | "pushInsteadOf",
+            pattern: match[3] ?? "",
+          };
+    });
+  return rewrites.every((rewrite): rewrite is RemoteUrlRewrite => rewrite !== undefined)
+    ? rewrites
+    : undefined;
 };
+
+const readRemoteUrls = (
+  repositoryCommonDirectory: string,
+  remoteName: string,
+  kind: "url" | "pushurl",
+): readonly string[] | undefined => {
+  const result = git(repositoryCommonDirectory, [
+    "config",
+    "--get-all",
+    `remote.${remoteName}.${kind}`,
+  ]);
+  if (!result.ok) return kind === "pushurl" ? [] : undefined;
+  return result.stdout
+    .split("\n")
+    .map((url) => url.trim())
+    .filter((url) => url.length > 0);
+};
+
+const rewriteRemoteUrl = (
+  url: string,
+  rewrites: readonly RemoteUrlRewrite[],
+  direction: "fetch" | "push",
+): string => {
+  const pushRewrite =
+    direction === "push" ? longestRewrite(url, rewrites, "pushInsteadOf") : undefined;
+  const rewrite = pushRewrite ?? longestRewrite(url, rewrites, "insteadOf");
+  return rewrite === undefined ? url : rewrite.base + url.slice(rewrite.pattern.length);
+};
+
+const longestRewrite = (
+  url: string,
+  rewrites: readonly RemoteUrlRewrite[],
+  kind: RemoteUrlRewrite["kind"],
+): RemoteUrlRewrite | undefined =>
+  rewrites
+    .filter((rewrite) => rewrite.kind === kind && url.startsWith(rewrite.pattern))
+    .sort((left, right) => right.pattern.length - left.pattern.length)[0];
 
 const sameRemoteRepository = (configuredUrl: string, input: RemoteRepositoryInput): boolean => {
   const configured = githubRepository(configuredUrl);
