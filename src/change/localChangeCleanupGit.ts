@@ -196,7 +196,7 @@ const localChangeCleanupRemote: ChangeCleanupRemote = {
   readRemoteBranchHead: (input) => {
     const repository = resolveRemoteRepository(input);
     if (repository.state !== "matches") return { state: repository.state };
-    const result = gitAtResolvedRemote([
+    const result = gitAtResolvedRemote(input.repositoryCommonDirectory, [
       "ls-remote",
       "--heads",
       repository.fetchUrl,
@@ -215,7 +215,7 @@ const localChangeCleanupRemote: ChangeCleanupRemote = {
         };
   },
   deleteRemoteBranch: (input) =>
-    gitAtResolvedRemote([
+    gitAtResolvedRemote(input.repositoryCommonDirectory, [
       "push",
       `--force-with-lease=refs/heads/${input.branchName}:${input.expectedHeadSha}`,
       input.resolvedRemoteUrl,
@@ -407,16 +407,41 @@ const git = (commonDirectory: string, args: readonly string[]): GitResult =>
 const gitAtWorktree = (worktreePath: string, args: readonly string[]): GitResult =>
   runGit(["-C", worktreePath, ...args]);
 
-const gitAtResolvedRemote = (args: readonly string[]): GitResult => {
+const gitAtResolvedRemote = (commonDirectory: string, args: readonly string[]): GitResult => {
   const temporaryGitDirectory = mkdtempSync(join(tmpdir(), "but-why-remote-cleanup-"));
   try {
     const initialized = runGitCommand(["init", "--bare", "-q", temporaryGitDirectory]);
-    return initialized.ok
+    if (!initialized.ok) return initialized;
+    const configured = runGitCommand([
+      `--git-dir=${commonDirectory}`,
+      "config",
+      "--null",
+      "--list",
+    ]);
+    if (!configured.ok) return configured;
+    const copied = copyGitConfiguration(configured.stdout, join(temporaryGitDirectory, "config"));
+    return copied
       ? runGitWithoutUrlRewrites([`--git-dir=${temporaryGitDirectory}`, ...args])
-      : initialized;
+      : { ok: false };
   } finally {
     rmSync(temporaryGitDirectory, { recursive: true, force: true });
   }
+};
+
+const copyGitConfiguration = (value: string, destination: string): boolean => {
+  for (const entry of value.split("\0").filter((item) => item.length > 0)) {
+    const separator = entry.indexOf("\n");
+    if (separator < 0) return false;
+    const key = entry.slice(0, separator);
+    const setting = entry.slice(separator + 1);
+    if (key.startsWith("include") || /^url\..*\.(insteadof|pushinsteadof)$/u.test(key)) {
+      continue;
+    }
+    if (!runGitCommand(["config", "--file", destination, "--add", key, setting]).ok) {
+      return false;
+    }
+  }
+  return true;
 };
 
 const runGit = (args: readonly string[]): GitResult => runGitCommand(args);
