@@ -33,7 +33,7 @@ describe("CLI package contents", () => {
     cpSync(join(repoRoot, "docs", "public"), join(fixture, "docs", "public"), {
       recursive: true,
     });
-    for (const directory of ["dist", "src", "test", "spikes", "docs/issues"]) {
+    for (const directory of ["dist", "src", "test", "spikes"]) {
       mkdirSync(join(fixture, directory), { recursive: true });
     }
     writeFileSync(join(fixture, "dist", "main.js"), "#!/usr/bin/env node\n");
@@ -49,7 +49,6 @@ describe("CLI package contents", () => {
     writeFileSync(join(fixture, "src", "main.ts"), "export {};\n");
     writeFileSync(join(fixture, "test", "main.test.ts"), "export {};\n");
     writeFileSync(join(fixture, "spikes", "prototype.ts"), "export {};\n");
-    writeFileSync(join(fixture, "docs", "issues", "draft.md"), "# Draft\n");
     writeFileSync(join(fixture, "justfile"), "default:\n");
 
     const manifest = JSON.parse(
@@ -107,11 +106,9 @@ describe("CLI package contents", () => {
     expect(files.some((path) => path.startsWith("src/"))).toBe(false);
     expect(files.some((path) => path.startsWith("test/"))).toBe(false);
     expect(files.some((path) => path.startsWith("spikes/"))).toBe(false);
-    expect(files.some((path) => path.startsWith("docs/issues/"))).toBe(false);
-    expect(files.some((path) => path.startsWith("docs/prds/"))).toBe(false);
-    expect(files.some((path) => path.startsWith("docs/adr/"))).toBe(false);
-    expect(files.some((path) => path.startsWith("docs/spikes/"))).toBe(false);
-    expect(files).not.toContain("docs/open-questions.md");
+    expect(
+      files.every((path) => !path.startsWith("docs/") || path.startsWith("docs/public/")),
+    ).toBe(true);
     expect(files).not.toContain("bin/by");
     expect(files).not.toContain("justfile");
     expect(readFileSync(join(fixture, "CHANGELOG.md"), "utf8")).toContain("Source tag: `v0.0.1`");

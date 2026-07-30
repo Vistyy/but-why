@@ -1,125 +1,67 @@
-# Agent-first CLI output
+# CLI Output
 
-Status: Current engineering standard
-
-This document defines the output policy for the `by` command interface.
-It refines the general AXI guidance for But Why's Task, Change, Validation Run, and Artifact records.
+This document defines the current output contract for the `by` CLI.
+The audience is an agent or program that must choose the next repository action from command output.
 
 ## Output boundary
 
-Each command must construct one structured result before serialization.
-TOON and JSON must serialize the same result fields and semantics.
-TOON remains the default format for direct agent use.
-Programmatic callers must request JSON with `--output json`.
-Domain modules must not depend on either serialization format.
+Each command constructs one structured result before serialization.
+TOON and JSON serialize the same result fields and semantics.
+TOON is the default stdout format.
+Programmatic callers request JSON with `--output json` before the command.
+Domain modules do not depend on either serialization format.
 
-## Default success schema
+## Result design
 
-Each command must have one default success schema.
-The default schema must contain the smallest set of facts that supports the command's normal next decision.
-A command must not serialize a complete persistence record or domain record unless every returned field supports that decision.
-A command must not provide lean and full modes when another command already owns the omitted detail.
+Each command returns the smallest default schema that supports its normal next decision.
+Navigation commands return identities, lifecycle state, readiness, aggregate counts, durable references, and valid next commands.
+They omit bodies, repeated evidence, and historical detail owned by another command.
 
-Navigation and state commands must prefer identities, lifecycle state, readiness, aggregate counts, durable references, and valid next commands.
-Navigation and state commands must omit bodies, resolved configuration, repeated evidence, and historical detail that another command owns.
+Mutation results report the resulting state and durable identifiers needed to verify the mutation.
+An empty successful result states its applied scope and reports a zero count.
 
-Evidence commands must return the evidence necessary for their stated inspection job.
-An evidence command may omit content owned by a narrower evidence command when it retains the durable reference and exact expansion command.
+When a result omits detail, it includes the exact public command that retrieves the detail.
+A complete result omits unnecessary expansion guidance.
 
-Mutation results must report the resulting state and the durable identifiers needed to verify the mutation.
-Mutation results must not repeat unrelated prior state.
+## Findings and Validation Runs
 
-An empty successful result must state the applied scope or filter and report a zero count.
+Finding inspection and failed Submission results preserve complete Findings, diagnostic details, and Artifact references needed for recovery.
+A Validation Run retains its immutable Validation Policy Snapshot, phase outcomes, Findings, Tooling Failures, and Artifact metadata.
+`by validation-run show` provides Artifact detail commands and previews for Findings or tooling-failed runs.
+`by validation-run artifact` returns complete stored Artifact content.
 
-## Expansion paths
+`by change show` reports Finding and Validation Tooling Failure counts instead of repeating complete diagnostic records.
+A nonzero Finding count includes `by change findings <change-id>`.
+A tooling-failed current Validation Run includes `by validation-run show <validation-run-id>`.
 
-When a command omits detail owned by another command, the result must include the exact command that retrieves that detail.
-Expansion guidance must preserve selected identifiers and repository-scoping arguments.
-A command must not require an agent to infer an identifier that the result does not provide.
-A complete result must omit unnecessary expansion guidance.
-
-Omitted detail must remain reachable through the public CLI.
-Do not remove the only public representation of immutable historical evidence.
-
-## Findings, failures, and Artifacts
-
-Finding inspection and failed Submission results must preserve complete Findings and Artifact references.
-Failure results must preserve the exact error code, decisive diagnostics, valid recovery command, and exit code.
-Output reduction must not replace a specific failure with a generic summary.
-
-Validation Run inspection must preserve its immutable Validation Policy Snapshot, phase rounds, Findings, and Validation Tooling Failures.
-Validation Run inspection must preserve metadata, references, and exact detail commands for every Artifact.
-Validation Run inspection must include previews for Artifacts referenced by Findings.
-A tooling-failed Validation Run must include every available Artifact preview because Validation Tooling Failures do not identify Artifact references.
-Validation Run inspection may omit previews for unrelated successful Artifacts.
-`by validation-run artifact` must preserve its complete stored-content behavior.
+`by change validation-runs` reports every Validation Run identity, Candidate identity, state, outcome, and timestamp.
+It also reports total, outcome, and running counts.
 
 ## Submit Recovery Guidance
 
-`by change submit <change-id>` places Submit Recovery Guidance under `error.recovery` for `change_not_ready`, `dirty_work`, `validation_findings`, and `change_base_not_ancestor`.
-The recovery object identifies `authority: "change_submit"`, the exact `changeId`, a machine-readable `action`, the `instruction`, and the `retryCommand`.
-The guidance authorizes the Implementer to perform the instructed work without additional user approval.
-Generic repository approval gates do not override the guidance.
-Concrete repository execution and safety constraints remain applicable.
+Change Submit places Submit Recovery Guidance under `error.recovery` for `change_not_ready`, `dirty_work`, `validation_findings`, and `change_base_not_ancestor`.
+The recovery object contains `authority: "change_submit"`, the exact `changeId`, a machine-readable action, an instruction, and a retry command.
+The guidance authorizes the Implementer to perform that exact recovery without additional user approval.
+Concrete repository safety constraints still apply.
 
 `change_blocked` reports the existing Implementation Blocker command and does not contain `error.recovery`.
-Uncertain and operator-owned Submit failures retain their ordinary `help` output and do not contain `error.recovery`.
-TOON and JSON serialize the same recovery object and semantics.
+Uncertain and operator-owned Submit failures retain ordinary help and do not authorize Implementer recovery.
 
-## Collections and limits
+## Collections
 
-A collection result must report the returned count.
-A bounded collection must also report the total matching count before the limit.
-Filtering and deterministic ordering must occur before limiting.
-A truncated collection must include the exact command that retrieves the complete matching inventory.
-
-Do not add a limit without observed collection size or usage evidence.
-Do not add pagination when one bounded result and one complete-inventory command satisfy the observed job.
+A collection result reports the returned count.
+A bounded collection also reports the total matching count before the limit.
+Filtering and deterministic ordering occur before limiting.
+A truncated collection includes the exact command that retrieves the complete matching inventory.
 
 ## Command ownership
 
-`by task show` owns Task lifecycle, dependency, and linked Change metadata.
-`by task context` owns the complete Task title, description, comments, and approved Resolution context.
+- `by task show` owns Task lifecycle, dependency, and linked Change metadata.
+- `by task context` owns the complete Task title, description, comments, and approved Resolution context.
+- `by change show` owns current implementation, validation, delivery, blocker, and cleanup state.
+- `by change findings` owns complete Findings for the current Candidate.
+- `by change validation-runs` owns compact complete Validation Run History.
+- `by validation-run show` owns one Validation Run's policy and recorded evidence.
+- `by validation-run artifact` owns complete stored Artifact content.
 
-`by change show` owns current implementation, validation, delivery, blocker, and cleanup state.
-`by change findings` owns complete Findings for the current Candidate.
-`by change validation-runs` owns compact complete Validation Run History.
-`by validation-run show` owns one Validation Run's immutable policy and recorded evidence.
-`by validation-run artifact` owns complete stored Artifact content.
-
-`by change show` must report Finding and Validation Tooling Failure counts instead of repeating their complete records.
-A nonzero Finding count must provide the exact `by change findings <change-id>` command.
-A tooling-failed current Validation Run must provide the exact `by validation-run show <validation-run-id>` command.
-
-Validation Run History must retain every Run's identity, Candidate identity, state, outcome, and timestamps.
-Validation Run History must report total, outcome, and running counts.
-Validation Run History must provide the `by validation-run show <validation-run-id>` expansion pattern.
-Validation Run History does not require a limit until observed history size justifies one.
-
-## Current inspection projections
-
-`by task show` returns Task identity, title, lifecycle, completion or cancellation facts, timestamps, comment count, complete prerequisite and dependent summaries, and linked Change state.
-It omits the Task description.
-It returns `contextCommand` with the exact `by task context <task-id>` command.
-
-`by change show` returns Change facts, the Current Candidate, compact current Validation Run state, pull request, Managed Worktree, readiness, and cleanup facts.
-It omits the Validation Policy Snapshot from the compact current Validation Run.
-It returns `findingCount` and `toolingFailureCount` instead of complete diagnostic records.
-It returns `findingsCommand` only when `findingCount` is nonzero.
-It returns `validationRunCommand` when the current Validation Run has recorded Tooling Failures.
-
-`by change validation-runs` returns every Validation Run identity, Candidate identity, state, outcome, and timestamp.
-It returns `count`, `outcomeCounts`, `runningCount`, and the `by validation-run show <validation-run-id>` detail-command pattern.
-
-`by validation-run show` returns every Artifact metadata field and its `detailCommand`.
-It returns an Artifact preview when a Finding references the Artifact.
-It returns available Artifact previews for a tooling-failed Validation Run.
-It omits unrelated previews for a successful Validation Run.
-
-## Exceptions and verification
-
-A command may retain additional detail only when repository evidence shows that the detail changes the normal next decision or prevents an additional diagnostic query.
-The applicable command documentation or test must make that reason observable.
-
-CLI boundary verification must cover equivalent TOON and JSON semantics, empty results, success results, errors, exit codes, aggregate counts, truncation, and every expansion path.
-Diagnostic verification must prove that omitted evidence remains reachable and that failure output retains the information required for recovery.
+The applicable command help and public tests are the executable interface contract.

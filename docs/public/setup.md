@@ -1,8 +1,9 @@
 # Agent-Assisted Setup and Manual Change Workflow
 
-Use this guide to install But Why for one repository, configure its Agent Profile, and run the supported manual workflow.
+This guide is for a user or agent installing But Why in one Git repository.
+It answers how to install the unreleased CLI candidate, initialize repository policy, configure agents, and submit a Change.
 
-## Copyable prompt
+## Copyable setup prompt
 
 ```text
 Set up But Why for this repository.
@@ -10,28 +11,23 @@ Follow docs/public/setup.md in this repository.
 Identify your current agent harness from your execution context.
 Ask whether I want to use that harness or another supported harness.
 Do not scan my machine for harnesses.
-Detect my existing skill conventions before proposing a skill location.
+Detect existing skill conventions before proposing a skill location.
 Configure recursive formatter, linter, test, and analysis tools to exclude `.sandcastle/**`.
 Ask where to install the skill.
 ```
 
-## Provide the CLI
+## Install and initialize
 
 But Why requires Node.js 24.
-
-Use an installed `by` executable and confirm that this succeeds:
+Use an installed `by` executable and verify it with:
 
 ```bash
 by --help
 ```
 
-The package is not available from the npm registry yet.
+The package is not available from the npm registry in this unreleased Candidate.
 
-Before publication, this guide does not define a package-installation workflow.
-
-## Initialize the repository
-
-From the target repository root, run:
+From the target repository root, initialize But Why:
 
 ```bash
 by init --task-prefix BY
@@ -39,46 +35,24 @@ by init --task-prefix BY
 
 Replace `BY` with a repository-specific uppercase Task prefix.
 
-`by init` adds Git ignore rules for `.sandcastle/worktrees/`, `.sandcastle/logs/`, `.sandcastle/patches/`, and `.sandcastle/.env`.
-It does not edit formatter, linter, test, or analysis configuration.
+`by init` creates `.but-why/config.json` and `.but-why/reviewers/`.
+It adds Git ignore rules for Sandcastle runtime files under `.sandcastle/`.
+It stores SQLite state and Artifacts under `<git-common-dir>/but-why/` so linked worktrees share them.
 
-The command creates `.but-why/config.json` and `.but-why/reviewers/` in the worktree.
+Configure recursive formatter, linter, test, and analysis tools to exclude `.sandcastle/**`.
+Sandcastle creates disposable Validation Workspaces below that directory.
 
-It stores SQLite state and Artifacts under `<git-common-dir>/but-why/` so every linked worktree shares them.
+Inspect repository tooling before editing `.but-why/config.json`.
+Add at least one `validation.checks` entry.
+Add top-level `prepare` when dependency installation or another setup action is required.
+See [But Why Config](config.md) for the schema.
 
-New Managed Worktrees use `<main-checkout-parent>/<main-checkout-name>-worktrees/but-why/<change-slug>`.
-But Why asks Git for the canonical main checkout, so Change Start uses the same sibling root from the main checkout and every linked worktree.
-Existing Changes continue to use their recorded absolute Managed Worktree paths.
-
-But Why requires a normal main checkout with tracked project files and Repo Config.
-Bare repositories, repository relocation, and `git worktree repair` are not supported.
-After a manual repository move or rename, existing Changes retain their recorded absolute paths without repair or migration.
-New Changes can use the sibling root for the new canonical main-checkout location.
-
-Inspect the repository tooling before you edit `.but-why/config.json`.
-
-Configure every recursive formatter, linter, test, and analysis tool to exclude `.sandcastle/**`.
-Sandcastle creates Validation Workspaces under `.sandcastle/worktrees/`.
-A recursive tool can otherwise discover nested configuration or test files in a Validation Workspace.
-Do not move Validation Workspaces as part of setup.
-
-Add `validation.checks`.
-
-Configure top-level `prepare` when the repository needs dependency installation or other setup.
-
-See [config.md](config.md) for the schema and the shared preparation and validation workflow.
-
-## Configure the repository
+## Configure agents
 
 Repo Config is tracked at `.but-why/config.json`.
+Global Config is stored at `~/.config/but-why/config.json`.
 
-Put dependency installation, restoration, synchronization, or fetch work in top-level `prepare`.
-
-Put verification commands in `validation.checks`.
-
-Commit `.but-why/config.json` so the policy is reviewable with the repository.
-
-To use repository development tools for host-run agents, add one Agent Environment command list:
+Set `agentEnvironment.command` when host-run agents must enter the repository's development environment:
 
 ```json
 {
@@ -88,407 +62,168 @@ To use repository development tools for host-run agents, add one Agent Environme
 }
 ```
 
-Change Implement and host-run reviewers prepend this command to their complete Pi invocation.
-
+But Why prepends this command to the complete Pi invocation for the Implementer and host-run reviewers.
 Change Implement and Change Submit read the setting from the Change Managed Worktree.
+Omit it to preserve direct Pi launch.
+A configured wrapper failure does not trigger an unwrapped retry.
+The wrapper does not alter Repository Preparation or Checks.
 
-Omit the setting to preserve direct Pi launch.
-
-Fix an invalid setting before retrying the applicable command.
-
-But Why does not retry without a configured wrapper after the wrapper fails.
-
-The Agent Environment does not alter Repository Preparation or Checks.
-
-Top-level `prepare` runs when But Why creates a Managed Worktree and before Checks run in a Validation Workspace.
-
-A successful Change Start reports `readiness: ready`.
-
-If preparation fails, But Why preserves the Change and Managed Worktree so you can fix the policy or environment and retry.
-
-See [config.md](config.md#repository-preparation) for the configuration contract and retry example.
-
-## Choose the Default Agent Profile
-
-The setup agent must identify Pi from its execution context.
-
-It must not scan the machine for other harnesses.
+The setup agent must identify Pi from its execution context and must not scan the machine for harnesses.
 
 <!-- supported-agent-runtimes:start -->
 - `pi`
 <!-- supported-agent-runtimes:end -->
 
-See [Agent Profiles](config.md#agent-profiles) for the Pi runtime configuration.
+Setup must preserve existing Global Config settings and Agent Profiles.
+Create separate editable Global `reviewer` and `implementer` profiles when they are absent.
+Set `defaultAgentProfile` to `{ "scope": "global", "name": "reviewer" }`.
+Set `interactiveSession.agentProfile` to `{ "scope": "global", "name": "implementer" }`.
 
-The setup agent must preserve every existing setting and Agent Profile in `~/.config/but-why/config.json`.
-
-Setup must create or update separate editable Global `reviewer` and `implementer` profiles.
-
-Setup must set `defaultAgentProfile` to `{ "scope": "global", "name": "reviewer" }`.
-
-Setup must set `interactiveSession.agentProfile` to `{ "scope": "global", "name": "implementer" }`.
-
-The reviewer profile must configure the current curated reviewer model, thinking level, extension list, skill list, and exact reviewer tool list.
-
-The Implementer profile must configure these required extensions:
-
-- `inline-skills`.
-- `openai-remote-compaction`.
-- `package-manager-policy`.
-- `web-search`.
-- `herdr-agent-state.ts`.
-- `openai-fast.ts`.
-- `output-style.ts`.
-- `statusline.ts`.
-- `fuzzy-files/`.
-- `codex-usage.ts`.
-- `codex-resets.ts`.
-- `npm:@ogulcancelik/pi-auto-permissions@0.1.2`.
-
-The Implementer profile must omit `skills`, `tools`, and `contextFileDiscovery`.
-
-Subagent, Lavish, and session-recall extensions must be absent from the Implementer extension list.
-
+The reviewer profile must define the current reviewer model, thinking level, and required resource allowlists.
+The Implementer profile must define the current Implementer extensions, including `inline-skills`, `package-manager-policy`, `web-search`, `herdr-agent-state.ts`, `openai-fast.ts`, `statusline.ts`, `fuzzy-files/`, `codex-usage.ts`, `codex-resets.ts`, and `npm:@ogulcancelik/pi-auto-permissions@0.1.2`.
+Do not configure `skills`, `tools`, or `contextFileDiscovery` in the Implementer profile.
 Users may edit or replace either generated profile.
 
-Setup does not verify that Pi can run.
+See [Global Config and Agent Profiles](config.md#global-config-and-agent-profiles) for profile selection and resource rules.
 
-If a launch fails, But Why reports a typed error with a recovery action.
-
-## Run the manual Change workflow
+## Start a Change
 
 Task commands manage intent and Task lifecycle.
-
 Change commands manage implementation, validation, delivery, and reconciliation.
+Human-facing commands omit `--output` and use default TOON output.
+Programmatic callers put `--output json` before the command.
 
-Human-facing commands below omit `--output`, so they retain the default TOON output.
-
-Programmatic callers must add `--output json` and parse structured stdout.
-
-### Task-backed Changes
-
-Use a Task-backed Change when the work has approved human intent.
-
-#### 1. Create and shape the Task
-
-Create a description file, then create the Task:
+Create and approve a Task when the work needs durable intent:
 
 ```bash
 by task create --title "Add the login flow" --description-file task.md
+by task approve BY-3
 ```
 
-The installed command template is:
-
-```text
-by task create --title <title> --description-file <file> [--depends-on <task-id>]...
-```
-
-Use the exact file value `-` to read the Task description from piped or heredoc UTF-8 standard input.
-Omit `--description-file` when the command must not read standard input.
-The command rejects `-` immediately when standard input is an interactive terminal.
-
-Set or replace direct prerequisites before approval:
+Set prerequisites before approval:
 
 ```bash
 by task dependencies set BY-3 --depends-on BY-1 --depends-on BY-2
 ```
 
-The installed command template is:
-
-```text
-by task dependencies set <task-id> [--depends-on <task-id>]...
-```
-
-Inspect the Task and its full context:
+Inspect Task metadata and complete Task Context:
 
 ```bash
 by task show BY-3
 by task context BY-3
 ```
 
+Start a Task-backed Change:
+
+```bash
+by --output json change start --task BY-3
+```
+
+Start a taskless Change when no approved Task intent is required:
+
+```bash
+by --output json change start
+```
+
+Change Start fetches the detected publication remote.
+Without `--base`, it uses the remote default branch.
+With `--base <branch>`, it uses that remote branch.
+Local branches cannot supply a Change Base.
+
+Read `worktreePath` from the result and implement only in that Managed Worktree.
+Change Start runs Repository Preparation before it reports `readiness: ready`.
+
+## Submit and inspect
+
+Commit the Candidate in the Managed Worktree, then submit it:
+
+```bash
+by change submit <change-id>
+```
+
+Change Submit first reconciles an existing owned pull request.
+A new Submission fetches the recorded Change Base before Candidate capture.
+The Repository Branch must contain the fetched Change Base commit.
+If it does not, merge or rebase the Change Base into the Repository Branch and retry.
+The fetch and ancestry rejection do not modify the Managed Worktree or Repository Branch.
+
+A Task-backed Submission runs Acceptance Review.
+A taskless Submission runs code-based validation without Acceptance Review.
+Both paths run Repository Preparation, Checks, configured Specialists, and publication policy.
+
+If Change Submit returns `error.recovery`, follow the exact recovery instruction for that Change without additional user approval.
+If it returns Findings, inspect them, fix the Managed Worktree, commit the fixes, and submit again.
+
 The installed command templates are:
 
 ```text
+by task create --title <title> --description-file <file> [--depends-on <task-id>]...
+by task dependencies set <task-id> [--depends-on <task-id>]...
+by task list [--all] [--state <state>]
 by task show <task-id>
+by task approve <task-id>
 by task context <task-id>
-```
-
-`by task show` returns decision-oriented Task metadata without the Task description.
-Use the reported `contextCommand` to retrieve the complete Task Context.
-
-Before approval, use the context draft or append a comment when the intent needs editing or clarification:
-
-```text
 by task context draft <task-id>
 by task context apply <task-id>
 by task comment <task-id> --file <file>
-```
-
-Use the exact file value `-` to read the Task comment from piped or heredoc UTF-8 standard input.
-Omit `--file` when the command must not read standard input.
-The command rejects `-` immediately when standard input is an interactive terminal.
-
-#### 2. Approve the intent
-
-Approve the Task only after its title, description, comments, and prerequisites express the intended outcome:
-
-```bash
-by task approve BY-3
-```
-
-The installed command template is:
-
-```text
-by task approve <task-id>
-```
-
-Approval does not create a worktree or launch implementation.
-
-#### 3. Start the Change
-
-Start the approved Task-backed Change with a programmatic JSON result so an agent can capture the Change ID and Managed Worktree path:
-
-```bash
-by change start --task BY-3 --output json
-```
-
-The installed command template is:
-
-```text
+by task cancel <task-id> --reason <reason>
 by change start [--task <task-id>] [--base <branch>]
-```
-
-Change Start fetches the detected publication remote before it records the Change.
-Without `--base`, it uses the exact fetched remote default branch commit.
-With `--base <branch>`, it uses that exact fetched remote branch commit.
-The selected remote branch becomes the recorded Change Base and pull request target.
-Local branches cannot be Change Bases, so publish local commits before Change Start if the Change needs them.
-The result records the Change ID, optional Task ID, branch, base ref, starting commit, and `worktreePath`.
-
-If But Why cannot create or safely use the sibling path, Change Start reports the attempted path.
-Make the parent writable, create the expected directory with suitable ownership, or move the repository to a writable parent.
-But Why does not select a fallback location.
-Retry the recorded Change after you correct the path failure.
-
-A Task-backed Change captures immutable Acceptance Context from the approved Task.
-
-Its later Submission includes Acceptance Review.
-
-### Taskless Changes
-
-Use a taskless Change for work that does not need Task intent.
-
-Start it directly from the freshly fetched publication-remote default branch:
-
-```bash
-by change start --output json
-```
-
-The command creates a Change without a Task or Acceptance Context.
-
-It still creates and prepares a Managed Worktree.
-
-Its later Submission runs Repository Preparation, Checks, configured Specialists, and publication policy without Acceptance Review.
-Submit first reconciles an existing owned pull request.
-For a new Submission, Submit fetches the recorded remote Change Base before Candidate capture.
-The Repository Branch must contain the exact fetched Change Base commit.
-If the ancestry check fails, Submit creates no Candidate or Validation Run and does not change Task progress or publication.
-Merge or rebase the Change Base into the Repository Branch before retrying.
-Fetch and ancestry inspection do not modify the Managed Worktree or Repository Branch.
-
-The taskless Change remains eligible for code-based validation and publication.
-
-### Repository Preparation
-
-Change Start runs the configured top-level `prepare` command before it reports the Change as ready.
-
-You can run or retry preparation explicitly with:
-
-```text
 by change prepare <change-id>
-```
-
-A successful human invocation looks like:
-
-```text
-$ by change prepare <change-id>
-change:
-  id: chg_01J...
-  taskId: null
-  readiness: ready
-worktreePath: /path/to/repository-worktrees/but-why/change-chg_01J...
-```
-
-For a programmatic caller, request JSON:
-
-```bash
-by change prepare <change-id> --output json
-```
-
-A failed preparation preserves the Change and worktree and returns retryable evidence:
-
-```json
-{
-  "error": {
-    "code": "prepare_failed",
-    "message": "Repository Preparation failed; the Change and worktree were preserved.",
-    "changeId": "chg_01J...",
-    "readiness": "prepare_failed",
-    "worktreePath": "/path/to/repository-worktrees/but-why/change-chg_01J...",
-    "command": "pnpm install --frozen-lockfile",
-    "exitCode": 1,
-    "timedOut": false,
-    "stdout": "",
-    "stderr": "lockfile is out of date"
-  },
-  "help": [
-    "Fix the preparation failure, then run `by change prepare chg_01J...`."
-  ]
-}
-```
-
-Fix the preparation problem, then retry `by change prepare <change-id>`.
-
-Do not start implementation until the Change reports `readiness: ready`.
-
-### Implement in the Managed Worktree
-
-The portable manual path is to use the recorded Managed Worktree directly.
-
-Read `worktreePath` from the Change Start JSON result, change into that directory, edit files, and commit the implementation there:
-
-```bash
-cd <worktreePath>
-# edit files
-git add <paths>
-git commit -m "Add the login flow"
-```
-
-The caller checkout is not the implementation workspace for a Change.
-
-A ready Change can also launch a fresh Herdr-hosted Pi session in the recorded Managed Worktree.
-Run Change Implement from the Local Repository's main checkout or any linked worktree.
-But Why uses the canonical main checkout as Herdr's repository source and continues to open the recorded Managed Worktree.
-The caller checkout does not change the Change identity, Change Base, or Managed Worktree.
-
-```text
-by change implement <change-id> [--handoff-file <path>]
-```
-
-For a programmatic caller:
-
-```bash
-by change implement <change-id> --handoff-file /tmp/handoff.md --output json
-```
-
-The result reports `changeId`, `worktreePath`, `host: "herdr"`, and `status: "started"` or `status: "already_active"`.
-
-Preparation and Change Implement are separate operations.
-
-The handoff file must be a non-empty regular UTF-8 file no larger than 256 KiB.
-Use the exact value `-` for `--handoff-file` to read the handoff from piped or heredoc UTF-8 standard input.
-Omit `--handoff-file` when the command must not read standard input.
-The command rejects `-` immediately when standard input is an interactive terminal.
-
-### Submit, inspect, and reconcile
-
-Submit the current committed work from the Change Managed Worktree:
-
-```text
-by change submit <change-id>
-```
-
-For programmatic callers:
-
-```bash
-by change submit <change-id> --output json
-```
-
-A task-backed Submission runs Acceptance Review.
-
-A taskless Submission omits Acceptance Review.
-
-Both paths run Repository Preparation, Checks, configured Specialists, and publication policy before an eligible Candidate is published.
-
-If Change Submit returns `error.recovery`, follow the reported Submit Recovery Guidance for that exact Change without additional user approval.
-The guidance covers preparation, dirty work, validation Findings, and Change Base ancestry.
-Concrete repository execution and safety constraints remain applicable.
-If validation returns Findings, fix them in the Managed Worktree, commit the fixes, and run Change Submit again:
-
-```bash
-by change submit <change-id>
-```
-
-User-owned implementation uses the Managed Worktree and repeated Change Submit.
-
-Inspect decision-oriented Change state with `by change show <change-id>`.
-Use `findingsCommand` when the result reports Findings.
-Use `validationRunCommand` when the result reports recorded Tooling Failures.
-Use `by change validation-runs <change-id>` for complete compact Validation Run History.
-Use the reported Validation Run detail command to retrieve the immutable policy and evidence.
-Use `by validation-run artifact <validation-run-id> <artifact-ref>` for complete stored Artifact content.
-
-The installed command templates are:
-
-```text
 by change list [--all]
 by change show <change-id>
 by change findings <change-id>
 by change validation-runs <change-id>
 by validation-run show <validation-run-id>
 by validation-run artifact <validation-run-id> <artifact-ref>
+by change submit <change-id>
+by change cancel <change-id>
+by change reconcile [<change-id>]
+by change implement <change-id> [--handoff-file <path>]
+by change decision add <change-id> --file <path>
 by change blocker raise <change-id> --file <path>
 by change blocker resolve <change-id> --file <path>
 by change blocker list <change-id>
-by change decision add <change-id> --file <path>
 by change decision list <change-id>
 ```
 
-A taskless Change whose Repository Branch has the same tracked tree as the fetched Change Base returns `nothing_to_submit` and remains open.
-A Task-backed Change with the same tracked tree runs Acceptance Review and completes without a pull request when it passes.
-Commit topology and the Change starting commit do not determine No-Change.
+Use `by task show` for Task metadata and `by task context` for the complete Task Context.
+Use `by change show` for current Change state and its reported expansion commands.
+Use `by change findings` for current Findings.
+Use `by change validation-runs` for compact Validation Run History.
+Use `by validation-run show` for one Validation Run's policy and recorded evidence.
+Use `by validation-run artifact` for complete stored Artifact content.
 
-If implementation cannot safely continue without external authority or action, inspect the active blocker with `by change blocker list <change-id>`.
-Discuss the report with the Implementer, then record the approved Resolution with `by change blocker resolve <change-id> --file <path>`.
-If the Resolution conflicts with accepted intent, identify the earlier intent that the Resolution replaces.
-The Resolution preserves the same Change resources and creates a new Acceptance Context version for a Task-backed Change.
-Tell the Implementer to continue manually in the same Managed Worktree.
+A taskless Change with no tracked tree change returns `nothing_to_submit` and remains open.
+A Task-backed no-change Submission runs Acceptance Review and can complete without a pull request.
+
+If implementation cannot safely continue without external authority or action, inspect the blocker and wait for an approved Resolution:
+
+```text
+by change blocker list <change-id>
+by change blocker resolve <change-id> --file <path>
+```
+
 Do not use an Implementation Blocker for Findings, tooling recovery, publication recovery, or ordinary implementation difficulty.
 
-Cancel that unchanged taskless Change with:
+After Submission publishes an owned pull request, stop for human merge.
+But Why does not merge pull requests.
+After the human merge, reconcile the Change:
 
-```text
-by change cancel <change-id>
+```bash
+by change reconcile <change-id>
 ```
 
-Cancel a Task-backed Change through its Task:
-
-```text
-by task cancel <task-id> --reason <reason>
-```
-
-After Submission publishes the owned pull request, stop and ask a human to merge it.
-
-But Why? never merges the pull request.
-
-After the human merge, observe the owned pull request and complete cleanup with:
-
-```text
-by change reconcile [<change-id>]
-```
-
-Use the repository-wide form to reconcile all eligible Changes or the targeted form to reconcile one Change.
+Reconciliation closes the Change and completes its linked Task when the owned pull request is merged.
 
 ## Install the optional agent skill
 
 The packaged skill is `docs/public/skills/but-why/SKILL.md`.
 
-1. Inspect project documentation, repository configuration, user agent configuration, and existing skill locations for skill conventions.
+1. Inspect project documentation, repository configuration, user agent configuration, and existing skill locations.
 2. Show the detected conventions.
 3. Ask the user to choose project scope, user scope, or no installation.
 4. Show the source, destination, and a short summary.
-5. Ask for confirmation.
-6. Copy the skill after the user confirms.
+5. Copy the skill only after confirmation.
 
 Preserve this path under the chosen skill root:
 
@@ -496,10 +231,5 @@ Preserve this path under the chosen skill root:
 <chosen-skill-root>/but-why/SKILL.md
 ```
 
-If the destination exists, show a diff or concise overwrite summary.
-
-Overwrite the destination only after the user confirms.
-
+If the destination exists, show a diff or concise overwrite summary before requesting confirmation.
 `by init` does not install the skill.
-
-But Why does not provide a command for skill or harness configuration.

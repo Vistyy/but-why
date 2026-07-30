@@ -1,11 +1,11 @@
-# But Why? Domain Context
+# But Why Domain Context
 
-This glossary defines canonical language for the Change-centered v1 target.
-`docs/architecture.md` documents the current implementation.
-Detailed behavior belongs in approved specifications, accepted ADRs, and implementation Tasks.
+This glossary defines canonical language for the Change-centered v1 system.
+`docs/architecture.md` documents current ownership and workflow behavior.
+Detailed behavior belongs in executable sources, accepted ADRs, and SQLite Tasks.
 
 **Change**:
-The durable owner of one code lineage, Managed Worktree, Candidates, Validation Runs, Findings, and owned PR, optionally linked to one Task.
+The durable owner of one code lineage, Managed Worktree, Candidates, Validation Runs, Findings, and owned pull request, optionally linked to one Task.
 _Avoid_: Task, branch, pull request, generic workflow
 
 **Task-backed Change**:
@@ -62,7 +62,7 @@ _Avoid_: Latest historical Candidate, dirty workspace
 **Acceptance Context**:
 One immutable version of the approved Task intent supplied only to Acceptance Review.
 The initial version is captured when the Task starts.
-Each approved Implementation Blocker Resolution creates a new version by appending the resolution to the original approved intent and earlier resolutions.
+Each approved Implementation Blocker Resolution creates a new version by appending the Resolution to the original approved intent and earlier Resolutions.
 A Validation Run retains the exact Acceptance Context version it reviewed.
 _Avoid_: Current mutable Task text, Specialist instructions, inferred intent, Implementation Blocker report
 
@@ -73,21 +73,6 @@ _Avoid_: Candidate, retry Attempt, generic job
 **Validation Run State**:
 The state of a Validation Run: running or complete.
 _Avoid_: Task state, phase result
-
-**Active Validation Run**:
-The sole running Validation Run for one Change.
-A Submission must not start another Validation Run while the Change has an Active Validation Run.
-_Avoid_: Concurrent Validation Runs, Submission process lock
-
-**Abandoned Validation Run**:
-An Active Validation Run whose owning Submission ended without completing it.
-It remains active until Validation Run Abandonment completes it as tooling-failed and handles its exact validation resources.
-_Avoid_: Stale Active Validation Run, PID-based liveness inference, concurrent recovery
-
-**Validation Run Abandonment**:
-The explicit operator recovery operation used after the operator stops every process from an Abandoned Validation Run.
-It completes the run as tooling-failed and handles its exact resources, but it does not detect or terminate orphaned processes.
-_Avoid_: Automatic recovery, direct Shared Repository State editing, process termination
 
 **Validation Run Outcome**:
 The completed result of a Validation Run: passed, blocked by Findings, or failed because of tooling.
@@ -102,9 +87,34 @@ The immutable resolved Prepare, Checks, reviewer instructions, Agent Profiles, a
 Later configuration changes do not alter the snapshot or its historical Validation Run.
 _Avoid_: Mutable current config, raw config hash, retroactive policy
 
+**Reviewer Session**:
+A continuing reviewer conversation owned by one Change and one Reviewer Session identity.
+It can resume across that Change's Candidates and disposable Validation Workspaces so a reviewer can reuse repository orientation.
+_Avoid_: Fresh reviewer session per Candidate, cross-Change reviewer conversation
+
+**Reviewer Session Identity**:
+The Change, Producer, resolved Agent Profile, reviewer instructions, Agent Environment, and curated resources that determine whether a Reviewer Session can safely continue.
+_Avoid_: Session file path, Candidate identity, Validation Run identity
+
+**Artifact**:
+A durable reference to bounded validation evidence with explicit Run, phase, producer, storage, and truncation metadata.
+_Avoid_: Untracked file, copied secret content, console-only output
+
 **Task**:
 The durable record of one requested outcome, its approved intent, dependencies, and user-facing progress.
 _Avoid_: Change, issue draft, implementation session
+
+**Task Context**:
+The current Task title, description, and ordered comments before Change Start.
+_Avoid_: Acceptance Context, operational metadata
+
+**Task Comment**:
+An ordered Markdown addition to Task Context before Change Start.
+_Avoid_: Finding, cancellation reason, Implementation Decision
+
+**Task Context Draft**:
+A disposable editable copy of Task Context prepared before its proposed changes are applied.
+_Avoid_: Task Worktree, durable Task Context, Artifact
 
 **Task Slug**:
 The canonical filesystem-safe operational name derived from a Task ID.
@@ -123,142 +133,63 @@ _Avoid_: Agent launch alone, validation, arbitrary state assignment
 The user-facing progress of a Task through New, Todo, Implementing, Blocked, Validating, Ready, Done, or Cancelled.
 _Avoid_: Validation Run state, generic pipeline
 
-**Blocked Task**:
-A temporary Task state reflecting that its linked Change has an active Implementation Blocker.
-Resolving the blocker returns the Task to Implementing.
-_Avoid_: Todo Task blocked by a Task Dependency, Validation Run blocked by Findings
-
 **Task Dependency**:
 A directed prerequisite relationship required because the dependent Task cannot be implemented or verified until the prerequisite Task is Done.
 Related work, shared files, likely conflicts, preferred sequence, and relative importance do not establish a Task Dependency.
 _Avoid_: Queue priority, implementation preference, Git base relationship
 
-**New Task**:
-A Task whose intent has not been approved.
-_Avoid_: Todo Task, draft Markdown issue
-
-**Todo Task**:
-An approved Task whose implementation has not started.
-_Avoid_: New Task, Ready Task
-
-**Done Task**:
-A terminal Task completed by an observed merged owned PR or passing No-Change Submission.
-_Avoid_: Ready Task, Cancelled Task
-
-**Cancelled Task**:
-A terminal Task whose work was ended without satisfying its dependencies.
-_Avoid_: Done Task, deleted Task
-
 **Shared Repository State**:
 SQLite and other local operational state resolved through Git's common directory so every linked worktree sees the same facts.
 _Avoid_: Copied state file, tracked Repo Config, per-worktree database
-
-**Trusted But Why Executable**:
-The accepted But Why version selected to operate canonical Shared Repository State while But Why develops itself.
-_Avoid_: Candidate executable, current-worktree CLI, separate per-worktree state
 
 **Migration Artifact**:
 One numbered source artifact that defines an ordered Shared Repository State migration.
 Existing Migration Artifacts are immutable, and a schema change adds the next Migration Artifact.
 _Avoid_: Migration file, migration script, editable migration
 
-**Migration Fingerprint**:
-The deterministic identity of one immutable Shared Repository State migration's canonical content.
-_Avoid_: Migration ID, mutable source hash, automatic migration repair
-
-**Task Archive**:
-An immutable portable recovery copy of Tasks, Task Comments, and Task Dependencies stored outside Shared Repository State.
-But Why retains append-only Task Archives so an operator can restore durable Task intent without recovering Changes, Candidates, Validation Runs, Findings, or publication evidence.
-_Avoid_: Shared Repository State backup, rotating backup, Change recovery, SQLite copy
-
 **Managed Worktree**:
 The persistent But Why-owned Git branch and linked worktree belonging to one open Change.
 _Avoid_: Validation Workspace, caller checkout, temporary agent worktree, Task Worktree
 
 **Interactive Session**:
-An optional visible external-agent process hosted in a Managed Worktree, with Herdr as the temporary v1 integration.
+An optional visible external-agent process hosted in a Managed Worktree, with Herdr as the current v1 integration.
 _Avoid_: Task state, Validation Run, background Supervisor worker
 
 **Agent Environment**:
 The optional command wrapper read from Repo Config that starts each host-run Implementer and reviewer with the repository's required development tools.
 The same Agent Environment applies in the Managed Worktree and in a host-run Validation Workspace.
-It does not alter Repository Preparation, Checks, or containerized reviewer execution.
+It does not alter Repository Preparation or Checks.
 If the configured wrapper fails, But Why stops the agent operation without an unwrapped retry.
 _Avoid_: Interactive Session Environment, Reviewer Environment, Caller-checkout config, Global Config preference, Repository Preparation, Herdr configuration
 
-**Interactive Session Host**:
-An external tool that opens and presents an Interactive Session in a supplied Managed Worktree.
-_Avoid_: Git worktree manager, validation runner, generic agent provider
-
-**Active Interactive Session**:
-The one running Interactive Session associated with an open Change.
-An open Change has at most one.
-_Avoid_: Active Implementer, current Validation Run
-
 **Submission**:
-The point-in-time act of asking But Why? to fetch the Change Base, inspect a Change's Managed Worktree, select its Candidate or no-change state, validate it, and publish when eligible.
+The point-in-time act of asking But Why to fetch the Change Base, inspect a Change's Managed Worktree, select its Candidate or no-change state, validate it, and publish when eligible.
 Later Change Base advancement does not alter a completed Submission or invalidate its Candidate automatically.
-A repeated Submit command returns stored success without fetching a newer Change Base only when durable evidence proves that the unchanged Repository Branch head is the exact passing Candidate confirmed on the owned pull request.
-Otherwise the command begins a new Submission and fetches the current Change Base.
-At most one Submission may execute for a Change at a time.
-Current configuration applies to a future or unfinished Submission but does not invalidate a completed Submission.
-_Avoid_: Push, Candidate, Validation Run, head-commit-only retry, retroactive configuration invalidation, continuous merge gate
-
-**Submit Recovery Guidance**:
-The structured recovery authorization returned by Change Submit for `change_not_ready`, `dirty_work`, `validation_findings`, and `change_base_not_ancestor`.
-Submit Recovery Guidance authorizes the exact instructed work for the identified Change without additional user approval.
-Generic repository approval gates do not override Submit Recovery Guidance.
-Concrete repository execution and safety constraints remain applicable.
-Uncertain and operator-owned Submit failures do not provide Submit Recovery Guidance.
-A `change_blocked` result reports an existing Implementation Blocker without Submit Recovery Guidance.
-_Avoid_: Generic approval, unrestricted recovery, operator-owned recovery
+_Avoid_: Push, Candidate, Validation Run, continuous merge gate
 
 **No-Change Submission**:
-A Submission whose Repository Branch head has the same tracked file tree as the exact fetched Change Base and therefore runs Acceptance Review only against that current base.
-A passing No-Change Submission is terminal and remains complete when the Change Base later advances.
-_Avoid_: Empty commit, comparison with the Change's original starting tree, reopened completion, caller assertion, cancelled Task
+A Submission whose Repository Branch has the same tracked file tree as the exact fetched Change Base after the ancestry check passes.
+A Task-backed No-Change Submission runs Acceptance Review and can complete without a pull request.
+A taskless no-change result remains open.
+_Avoid_: Empty commit, comparison with the Change's starting tree, caller assertion
 
-**Submit Rejection Error**:
-A failure that rejects Submission before Candidate creation, a Validation Run, Task progress, or publication mutation.
-Authoritative owned pull request facts observed by earlier reconciliation remain recorded.
-_Avoid_: Finding, Validation Tooling Failure, partial Submission
-
-**Submission Environment**:
-The Managed Worktree and repository facts from which Submission reads the committed code and local validation environment.
-_Avoid_: Validation Workspace, current caller checkout
-
-**GitHub PR Target**:
-The authenticated GitHub repository and base branch where But Why? may publish an exact passing Candidate.
-GitHub is the only supported publication provider in v1.
-_Avoid_: Git remote name, owned PR
-
-**Owned Pull Request URL**:
-The URL identifying a Change's owned pull request.
-It is normally the browser-facing GitHub URL, with the GitHub API URL accepted only when GitHub does not provide the browser-facing URL.
-_Avoid_: Remote Change Branch
-
-**Implementer**:
-The human or external interactive agent responsible for writing and committing Change work and addressing returned Findings.
-_Avoid_: Acceptance Reviewer, Specialist Reviewer, But Why Fixer
+**Finding**:
+An immutable problem report produced by Prepare, a Check, Acceptance Review, or a Specialist for one Candidate or no-change review.
+_Avoid_: Tooling Failure, Task Comment, mutable issue
 
 **Implementation Decision**:
 An immutable Implementer-authored record of one material choice and its reasoning during a Change.
-But Why assigns its sequence and timestamp when the decision is recorded.
-Implementation Decisions form the Change's chronological Implementation Decision Log and may contradict earlier entries as reasoning evolves.
-They are non-authoritative rationale supplied separately from Acceptance Context to Acceptance Review and publication.
+Implementation Decisions are non-authoritative rationale supplied separately from Acceptance Context.
 _Avoid_: Task Comment, Acceptance Context amendment, ADR, Finding
 
 **Implementation Blocker**:
 An immutable Implementer-authored problem report for one Open Change when implementation cannot safely continue under the accepted intent without an external decision or action.
-An active Implementation Blocker moves the Change and its linked Task to Blocked and prevents Submission until the blocker is resolved or the work is cancelled.
-The report is non-authoritative evidence and does not amend Acceptance Context.
+An active Implementation Blocker moves a Change and its linked Task to Blocked and prevents Submission until it is resolved or the work is cancelled.
 _Avoid_: Finding, Validation Tooling Failure, Task Dependency, Implementation Decision, cancellation
 
 **Implementation Blocker Resolution**:
-An immutable user-approved answer to one active Implementation Blocker.
-It returns the Change to Open and its linked Task to Implementing.
-For a Task-backed Change, every Resolution creates a new Acceptance Context version and is authoritative when it conflicts with earlier accepted intent.
-For a taskless Change, the Resolution remains Change history without creating Acceptance Context.
+A user-approved answer to one active Implementation Blocker that returns the Change to Open and its linked Task to Implementing.
+For a Task-backed Change, the Resolution creates a new Acceptance Context version when it conflicts with earlier accepted intent.
 _Avoid_: Implementation Decision, Task Comment, silent Task edit, automatic recovery
 
 **Validation Gate**:
@@ -278,81 +209,22 @@ An isolated disposable workspace in which one Validation Run judges the exact Ca
 _Avoid_: Task Worktree, Interactive Session
 
 **Validation Tooling Failure**:
-A failure in But Why? or its validation tooling that prevents a trustworthy judgment of the Candidate.
+A failure in But Why or its validation tooling that prevents a trustworthy judgment of the Candidate.
 _Avoid_: Finding, failed Check result
-
-**Reviewer Session**:
-A continuing reviewer conversation owned by one Change and one Reviewer Session Identity.
-It resumes across that Change's Candidates and disposable Validation Workspaces so each turn can reuse repository orientation while making a complete judgment of the exact current Candidate.
-_Avoid_: Reviewer Revision Session, fresh reviewer session per Candidate, cross-Change reviewer conversation
-
-**Reviewer Session Identity**:
-The Change, Producer, resolved Agent Profile, reviewer instructions, Agent Environment, and curated agent resources that determine whether a Reviewer Session can safely continue.
-Candidate, Validation Run, Acceptance Context version, Validation Workspace, and prior Findings do not belong to this identity.
-_Avoid_: Session file path, Candidate identity, Validation Run identity
-
-**Reviewer Session Restart**:
-A recorded non-blocking replacement of a Reviewer Session when validation cannot safely continue the existing conversation and instead performs a fresh complete review.
-Its reason appears in Change Submit output and Validation Run evidence; it becomes a Validation Tooling Failure only when the fresh review also cannot run.
-_Avoid_: Silent fallback, Finding, Reviewer Output Contract Failure
-
-**Reviewer Output Contract Failure**:
-A Validation Tooling Failure where reviewer output cannot be interpreted as a trustworthy Finding report.
-_Avoid_: Finding, Candidate problem
-
-**Finding**:
-An immutable problem report produced by Prepare, a Check, Acceptance Review, or a Specialist for one Candidate or no-change review.
-_Avoid_: Tooling Failure, Task Comment, mutable issue
-
-**Phase**:
-A named subdivision of the Validation Gate that gives validation work, Findings, and Artifacts stable context.
-_Avoid_: Publication step, generic job
 
 **Repository Preparation**:
 The configured setup that establishes dependencies or tools in a new Managed Worktree or Validation Workspace.
 _Avoid_: Validation-only setup, package-manager-specific install stage
-
-**Prepare Phase**:
-The optional first Validation Run phase that applies Repository Preparation for later validation phases.
-_Avoid_: Check, implementation-worktree readiness
-
-**Producer**:
-The configured Check or Reviewer identity that produced validation evidence.
-_Avoid_: Agent Profile, process ID
-
-**Artifact**:
-A durable reference to bounded validation evidence with explicit Run, phase, producer, storage, and truncation metadata.
-_Avoid_: Untracked file, copied secret content, console-only output
-
-**Task Comment**:
-An ordered Markdown addition to Task Context before Task Start.
-_Avoid_: Finding, cancellation reason, implementation decision
-
-**Task Context**:
-The current Task title, description, and ordered comments before Start.
-_Avoid_: Acceptance Context, operational metadata
-
-**Task Context Draft**:
-A disposable editable copy of Task Context prepared before its proposed changes are applied.
-_Avoid_: Task Worktree, durable Task Context, Artifact
-
-**Task Context Snapshot**:
-The immutable stored copy of Task Context captured as Acceptance Context at Start.
-_Avoid_: Live Task text, prompt transcript
 
 **Repo Config**:
 Tracked repository configuration for Prepare, Checks, local validation files, reviewer overrides, Specialists, and Repo Agent Profiles.
 _Avoid_: Global user preference, detected Git fact
 
 **Global Config**:
-User-level local configuration for reusable Agent Profiles, Acceptance overrides, Specialist defaults, and optional interactive-session preferences.
-_Avoid_: Repository policy, project-tracked config
+User-level local configuration for reusable Agent Profiles, reviewer defaults, and Interactive Session preferences.
+_Avoid_: Repository policy, detected Git fact
 
 **Agent Profile**:
 A named reusable configuration of an agent runtime, including its model, thinking level, and runtime-specific execution resources.
 An Agent Profile does not define an agent role's lifecycle or safety invariants.
 _Avoid_: Reviewer instructions, agent role, validation phase
-
-**Default Agent Profile**:
-The Global Agent Profile used when a reviewer does not select another profile explicitly.
-_Avoid_: Repo-local fallback with the same name

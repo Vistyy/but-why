@@ -16,10 +16,9 @@ Sandcastle provides the v1 disposable Validation Workspace and host process exec
 
 ## Consequences
 
-But Why owns Validation Runs, phases, Findings, Artifacts, temporary Git refs, and tooling-failure diagnostics.
+But Why owns Validation Runs, phases, Findings, Artifacts, Reviewer Sessions, temporary Git refs, and tooling-failure diagnostics.
 Sandcastle owns disposable workspace and process mechanics exposed by its supported API.
-But Why retains local behavior that Sandcastle does not support, including Reviewer Session ownership, reviewer-output correction, and domain-specific evidence recording.
+But Why retains reviewer-output correction and domain-specific evidence recording that Sandcastle does not own.
 Reviewer Sessions belong to one Change and persist independently from disposable Validation Workspaces so successor Candidates can reuse repository orientation.
-Sandcastle host cancellation does not prove that the reviewer process tree stopped.
-V1 therefore supports explicit Validation Run Abandonment after the operator stops remaining processes and defers automatic interrupted-run recovery until an execution provider supplies bounded descendant ownership.
-The Sandcastle integration must remain behind domain-specific seams so another provider can replace it without changing Validation Gate behavior.
+Sandcastle host cancellation does not prove that the reviewer process tree stopped, so interrupted reviewer recovery is not automatic.
+The Sandcastle integration remains behind domain-specific seams so another provider can replace it without changing Validation Gate behavior.
