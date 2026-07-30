@@ -215,6 +215,7 @@ _Avoid_: Validation Workspace, current caller checkout
 
 **GitHub PR Target**:
 The authenticated GitHub repository and base branch where But Why? may publish an exact passing Candidate.
+GitHub is the only supported publication provider in v1.
 _Avoid_: Git remote name, owned PR
 
 **Owned Pull Request URL**:
