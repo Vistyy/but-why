@@ -19,19 +19,17 @@ Ask where to install the skill.
 ## Install and initialize
 
 But Why requires Node.js 24.
-Resolve one supported command prefix before continuing.
-Use `pnpx but-why` or `npx -y but-why` when you use the published package.
-Use `just by` from the But Why source checkout.
-Verify the selected command prefix with one of these commands:
+This Candidate is unreleased, so use `just by` from the But Why source checkout.
+After publication, use `pnpx but-why` or `npx -y but-why` from the published package.
+Verify the applicable command prefix with:
 
 ```bash
-pnpx but-why --help
-npx -y but-why --help
 just by --help
 ```
 
+After publication, verify a published package with `pnpx but-why --help` or `npx -y but-why --help`.
 In every command below, replace the leading `by` placeholder with the resolved prefix.
-For example, use `just by init --task-prefix BY` from the source checkout or `pnpx but-why init --task-prefix BY` with the published package.
+For example, use `just by init --task-prefix BY` from the source checkout or `pnpx but-why init --task-prefix BY` after publication.
 
 From the target repository root, initialize But Why:
 
@@ -52,6 +50,16 @@ Inspect repository tooling before editing `.but-why/config.json`.
 Add at least one `validation.checks` entry.
 Add top-level `prepare` when dependency installation or another setup action is required.
 See [But Why Config](config.md) for the schema.
+
+Before starting a Change, commit and push `.but-why/config.json` and any configured reviewer files to the remote branch that will be the Change Base:
+
+```bash
+git add .but-why/config.json .but-why/reviewers
+git commit -m "Configure But Why"
+git push origin <base-branch>
+```
+
+Change Start reads Repo Config from the fetched Change Base commit.
 
 ## Configure agents
 
