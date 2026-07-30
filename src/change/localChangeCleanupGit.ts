@@ -241,7 +241,10 @@ const resolveRemoteRepository = (input: RemoteRepositoryInput): RemoteRepository
     return { state: "mismatch" };
   }
   const fetchUrl = rewriteRemoteUrl(configured[0] as string, rewrites, "fetch");
-  if (fetchUrl === undefined || !transportRepositoryMatches(fetchUrl, input)) {
+  if (
+    fetchUrl === undefined ||
+    !transportRepositoryMatches(fetchUrl, configured[0] as string, input)
+  ) {
     return { state: "mismatch" };
   }
   const configuredPushUrls = readRemoteUrls(
@@ -256,7 +259,7 @@ const resolveRemoteRepository = (input: RemoteRepositoryInput): RemoteRepository
       : rewriteRemoteUrl(configured[0] as string, rewrites, "push");
   return configuredPushUrls.length > 1 ||
     pushUrl === undefined ||
-    !transportRepositoryMatches(pushUrl, input)
+    !transportRepositoryMatches(pushUrl, (configuredPushUrls[0] ?? configured[0]) as string, input)
     ? { state: "mismatch" }
     : { state: "matches", fetchUrl, pushUrl };
 };
@@ -339,11 +342,15 @@ const sameRemoteRepository = (configuredUrl: string, input: RemoteRepositoryInpu
   return normalizeRemoteUrl(configuredUrl) === normalizeRemoteUrl(input.remoteUrl);
 };
 
-const transportRepositoryMatches = (url: string, input: RemoteRepositoryInput): boolean => {
+const transportRepositoryMatches = (
+  url: string,
+  configuredUrl: string,
+  input: RemoteRepositoryInput,
+): boolean => {
   const repository = githubRepository(url);
-  return (
-    repository === undefined || (repository.owner === input.owner && repository.repo === input.repo)
-  );
+  return repository === undefined
+    ? normalizeRemoteUrl(url) === normalizeRemoteUrl(configuredUrl)
+    : repository.owner === input.owner && repository.repo === input.repo;
 };
 
 const githubRepository = (
