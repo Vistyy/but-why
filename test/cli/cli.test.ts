@@ -188,7 +188,7 @@ describe("by CLI", () => {
       expect(result.status).toBe(2);
       expect(result.stderr).toBe("");
       expect(result.stdout).toContain("code: invalid_usage");
-      expect(result.stdout).toContain("Unknown flag: --bad");
+      expect(result.stdout).toContain("Received unknown argument: '--bad'");
     }),
   );
 
@@ -232,6 +232,27 @@ describe("by CLI", () => {
       expect(result.stderr).toBe("");
       expect(JSON.parse(result.stdout)).toMatchObject({
         error: { code: "invalid_usage" },
+      });
+    }),
+  );
+
+  it.effect("rejects trailing output selectors with attached values", () =>
+    Effect.gen(function* () {
+      const result = yield* runByInProcessEffectUnnormalized(repoRoot, [
+        "--output",
+        "json",
+        "task",
+        "list",
+        "--output=json",
+      ]);
+
+      expect(result.status).toBe(2);
+      expect(result.stderr).toBe("");
+      expect(JSON.parse(result.stdout)).toMatchObject({
+        error: {
+          code: "invalid_usage",
+          message: "Global output options must appear before the command.",
+        },
       });
     }),
   );

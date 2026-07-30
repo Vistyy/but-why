@@ -6,8 +6,9 @@ import * as CommandDescriptor from "@effect/cli/CommandDescriptor";
 import * as CommandDirective from "@effect/cli/CommandDirective";
 import * as HelpDoc from "@effect/cli/HelpDoc";
 import * as Options from "@effect/cli/Options";
+import * as ValidationError from "@effect/cli/ValidationError";
 import { NodeFileSystem, NodePath, NodeTerminal } from "@effect/platform-node";
-import { Effect, Layer } from "effect";
+import { Console, Effect, Layer } from "effect";
 
 import type { CliEnvironment } from "./cli.js";
 import { success, usageError, type CliResult } from "./cliResults.js";
@@ -231,21 +232,7 @@ const directiveResult = (
   }
 
   if (directive.leftover.length > 0) {
-    const leftover = directive.leftover[0] ?? "";
-    const message =
-      leftover === "--output" || leftover === "-o"
-        ? "Global output options must appear before the command."
-        : leftover.startsWith("-")
-          ? `Unknown flag: ${leftover}`
-          : `Unknown argument: ${leftover}`;
-    return Effect.succeed({
-      ...usageError({
-        code: "invalid_usage",
-        message,
-        help: ["Run `by --help` for generated command help."],
-      }),
-      outputFormat: outputFormatFromLeadingArgs(originalArgs),
-    });
+    return generatedLeftoverUsage(originalArgs);
   }
 
   const command = commandValue(directive.value);
@@ -471,7 +458,9 @@ const invalidUsage = (message: string): Effect.Effect<CliResult> =>
 
 const trailingOutputUsage = (args: readonly string[]): Effect.Effect<CliResult> | undefined => {
   const outputIndex = args.findIndex(
-    (arg, index) => index > 1 && (arg === "--output" || arg === "-o"),
+    (arg, index) =>
+      index > 1 &&
+      (arg === "--output" || arg === "-o" || arg.startsWith("--output=") || arg.startsWith("-o=")),
   );
   if (outputIndex === -1) return undefined;
   return Effect.succeed({
@@ -492,6 +481,37 @@ const parserArgs = (args: readonly string[]): readonly string[] =>
         : args
       : args
     : args;
+
+const generatedLeftoverUsage = (args: readonly string[]): Effect.Effect<CliResult> =>
+  Effect.either(
+    Console.consoleWith((console) =>
+      Console.withConsole({
+        ...console,
+        error: () => Effect.void,
+      })(
+        Command.run(commandTree, { executable: "by", name: "by", version: "0.0.0" })([
+          "by",
+          "by",
+          ...parserArgs(args),
+        ]).pipe(Effect.provide(parserLayer)),
+      ),
+    ),
+  ).pipe(
+    Effect.map((result) => {
+      const message =
+        result._tag === "Left" && ValidationError.isValidationError(result.left)
+          ? generatedText(result.left.error)
+          : "Invalid command syntax.";
+      return {
+        ...usageError({
+          code: "invalid_usage",
+          message,
+          help: ["Run `by --help` for generated command help."],
+        }),
+        outputFormat: outputFormatFromLeadingArgs(args),
+      };
+    }),
+  );
 
 const outputFormatFromLeadingArgs = (args: readonly string[]): OutputFormat =>
   args[0] === "--output" || args[0] === "-o" ? (args[1] === "json" ? "json" : "toon") : "toon";
