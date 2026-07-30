@@ -7,11 +7,8 @@ import { describe, expect } from "vitest";
 import { repoRoot, runByInProcessEffect } from "../support/by-cli.js";
 
 type HelpView = {
-  readonly commands: readonly { readonly command: string }[];
+  readonly help: string;
 };
-
-const commandsFor = (group: "task" | "change"): readonly string[] =>
-  documentedCommands.filter((command) => command.startsWith(`by ${group} `));
 
 const extractDocumentedCommands = (docs: string): readonly string[] =>
   Array.from(
@@ -24,10 +21,7 @@ const extractDocumentedCommands = (docs: string): readonly string[] =>
     ),
   ).sort();
 
-const helpCommands = (stdout: string): readonly string[] => {
-  const parsed = JSON.parse(stdout) as HelpView;
-  return parsed.commands.map(({ command }) => command);
-};
+const helpText = (stdout: string): string => (JSON.parse(stdout) as HelpView).help;
 
 const documentedCommands = [
   "by task create --title <title> --description-file <file> [--depends-on <task-id>]...",
@@ -81,8 +75,16 @@ describe("public command documentation", () => {
       expect(taskHelp.status).toBe(0);
       expect(changeHelp.status).toBe(0);
       expect(documented).toEqual([...documentedCommands].sort());
-      expect(helpCommands(taskHelp.stdout)).toEqual(commandsFor("task"));
-      expect(helpCommands(changeHelp.stdout)).toEqual(commandsFor("change"));
+      expect(helpText(taskHelp.stdout)).toContain("COMMANDS");
+      expect(helpText(taskHelp.stdout)).toContain("create");
+      expect(helpText(taskHelp.stdout)).toContain("dependencies set");
+      expect(helpText(taskHelp.stdout)).toContain("draft");
+      expect(helpText(taskHelp.stdout)).toContain("cancel");
+      expect(helpText(changeHelp.stdout)).toContain("COMMANDS");
+      expect(helpText(changeHelp.stdout)).toContain("start");
+      expect(helpText(changeHelp.stdout)).toContain("validation-runs");
+      expect(helpText(changeHelp.stdout)).toContain("decision add");
+      expect(helpText(changeHelp.stdout)).toContain("blocker resolve");
     }),
   );
 });

@@ -608,7 +608,7 @@ describe("quality interface", () => {
       await waitForFile(readyFile);
       const consumerStatus = await consumerDone;
       expect(consumerStatus, consumerOutput).toBe(0);
-      expect(consumerOutput).toContain('"usage"');
+      expect(consumerOutput).toContain('"help"');
       writeFileSync(releaseFile, "release");
       const qualityResult = await quality.done;
       expect(qualityResult.status, qualityResult.output).toBe(0);

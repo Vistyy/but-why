@@ -14,7 +14,7 @@ import {
   byExecutable,
   commitButWhyConfigAndRecordDefault,
   createGitRepo,
-  runByInProcessEffect,
+  runByInProcessEffect as runByInProcessEffectRaw,
 } from "../support/by-cli.js";
 import { createTestWorkspace } from "../support/testWorkspace.js";
 import { fakeTaskUseCases } from "../support/taskUseCases.js";
@@ -23,6 +23,23 @@ const expectedBin = collapseHome(byExecutable);
 const firstNow = "2026-06-30T12:00:00.000Z";
 const secondNow = "2026-06-30T12:05:00.000Z";
 const thirdNow = "2026-06-30T12:10:00.000Z";
+
+const normalizeOutputSelector = (args: readonly string[]): readonly string[] => {
+  const index = args.findIndex((arg) => arg === "--output" || arg === "-o");
+  const selector = args[index];
+  const format = args[index + 1];
+  if (index <= 0 || selector === undefined || format === undefined) return args;
+  return [selector, format, ...args.slice(0, index), ...args.slice(index + 2)];
+};
+
+type RunOptions = NonNullable<Parameters<typeof runByInProcessEffectRaw>[3]>;
+
+const runByInProcessEffect = (
+  cwd: string,
+  args: readonly string[],
+  now: string = "2026-06-30T12:00:00.000Z",
+  options: RunOptions = {},
+) => runByInProcessEffectRaw(cwd, normalizeOutputSelector(args), now, options);
 
 describe("by task CLI", () => {
   it.effect(
@@ -211,7 +228,7 @@ tasks[2]:
     Effect.gen(function* () {
       const result = yield* runByInProcessEffect(
         createTestWorkspace(),
-        ["task", "list", "--output", "json"],
+        ["--output", "json", "task", "list"],
         firstNow,
         { taskUseCases: fakeTaskUseCases({ listTasks: () => listedTasks }) },
       );
@@ -267,15 +284,15 @@ help[1]: "Run \`by task create --title \\"...\\" --description-file <file>\` to 
         },
       });
 
-      yield* runByInProcessEffect(root, ["task", "list", "--output", "json"], firstNow, {
+      yield* runByInProcessEffect(root, ["--output", "json", "task", "list"], firstNow, {
         taskUseCases,
       });
-      yield* runByInProcessEffect(root, ["task", "list", "--all", "--output", "json"], firstNow, {
+      yield* runByInProcessEffect(root, ["--output", "json", "task", "list", "--all"], firstNow, {
         taskUseCases,
       });
       yield* runByInProcessEffect(
         root,
-        ["task", "list", "--state", "done", "--output", "json"],
+        ["--output", "json", "task", "list", "--state", "done"],
         firstNow,
         {
           taskUseCases,
@@ -458,7 +475,7 @@ contextCommand: by task context BY-1`);
 
       const result = yield* runByInProcessEffect(
         root,
-        ["task", "context", "apply", "BY-1", "--output", "json"],
+        ["--output", "json", "task", "context", "apply", "BY-1"],
         secondNow,
       );
 

@@ -9,7 +9,7 @@ import { provisionChangeWorktree } from "../../src/change/changeStartGit.js";
 import { refreshRemoteChangeBase } from "../../src/submissionEnvironment/remoteChangeBase.js";
 import type { ChangeStartRecord } from "../../src/change/changeStartStore.js";
 import { openSqliteChangeStartPersistence } from "../../src/sqlite/sqliteChangeStartPersistence.js";
-import { runByInProcessEffect } from "../support/by-cli.js";
+import { runByInProcessEffect as runByInProcessEffectRaw } from "../support/by-cli.js";
 import {
   cloneInitializedTestRepository,
   createInitializedRepo,
@@ -23,6 +23,24 @@ import {
 } from "../support/testWorkspace.js";
 
 const now = "2026-06-30T12:00:00.000Z";
+
+const normalizeOutputSelector = (args: readonly string[]): readonly string[] => {
+  const index = args.findIndex((arg) => arg === "--output" || arg === "-o");
+  const selector = args[index];
+  const format = args[index + 1];
+  if (index <= 0 || selector === undefined || format === undefined) return args;
+  return [selector, format, ...args.slice(0, index), ...args.slice(index + 2)];
+};
+
+type RunOptions = NonNullable<Parameters<typeof runByInProcessEffectRaw>[3]>;
+
+const runByInProcessEffect = (
+  cwd: string,
+  args: readonly string[],
+  now: string = "2026-06-30T12:00:00.000Z",
+  options: RunOptions = {},
+) => runByInProcessEffectRaw(cwd, normalizeOutputSelector(args), now, options);
+
 let initializedRepositoryTemplate: string;
 
 beforeAll(() => {
@@ -503,7 +521,7 @@ describe("Change Start Managed Worktree boundaries", () => {
         "json",
       ]);
       expect(retired.status).toBe(2);
-      expect(JSON.parse(retired.stdout)).toMatchObject({ error: { code: "unknown_command" } });
+      expect(JSON.parse(retired.stdout)).toMatchObject({ error: { code: "invalid_usage" } });
     }),
   );
 
