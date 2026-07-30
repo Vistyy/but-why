@@ -450,6 +450,7 @@ validationSetup:
         { migration_id: 5, name: "acceptance_context_versions" },
         { migration_id: 6, name: "reconcile_implementation_blocker_storage" },
         { migration_id: 7, name: "reviewer_sessions_per_producer" },
+        { migration_id: 8, name: "recover_published_remote_branch_cleanup" },
       ]);
     }),
   );

@@ -405,6 +405,13 @@ const specialistReviewerSessions = Effect.gen(function* () {
   );
 });
 
+const recoverPublishedRemoteBranchCleanup = Effect.gen(function* () {
+  const sql = yield* SqlClient.SqlClient;
+  yield* sql.unsafe(
+    "UPDATE changes SET cleanup_state = 'pending', cleanup_blocking_reason = NULL WHERE state = 'closed' AND close_reason = 'completed' AND publication_pr_number IS NOT NULL AND cleanup_state = 'complete'",
+  );
+});
+
 export const migrateRepositoryState = Migrator.make({})({
   loader: Migrator.fromRecord({
     "0001_baseline": baseline,
@@ -414,5 +421,6 @@ export const migrateRepositoryState = Migrator.make({})({
     "0005_acceptance_context_versions": acceptanceContextVersions,
     "0006_reconcile_implementation_blocker_storage": reconcileImplementationBlockerStorage,
     "0007_reviewer_sessions_per_producer": specialistReviewerSessions,
+    "0008_recover_published_remote_branch_cleanup": recoverPublishedRemoteBranchCleanup,
   }),
 });

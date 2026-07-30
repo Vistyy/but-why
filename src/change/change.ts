@@ -43,6 +43,15 @@ export type ChangePublicationTarget = {
   readonly remoteName: string;
 };
 
+export type RemoteChangeBranch = {
+  readonly owner: string;
+  readonly repo: string;
+  readonly remoteName: string;
+  readonly remoteUrl: string;
+  readonly branchName: string;
+  readonly expectedHeadSha: string;
+};
+
 export type ChangeOwnedPullRequest = {
   readonly number: number;
   readonly url: string;

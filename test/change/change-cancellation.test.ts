@@ -231,6 +231,7 @@ describe("Change cancellation", () => {
 
   it.effect("closes an owned open pull request before recording cancellation", () => {
     const events: string[] = [];
+    const cleanupRemoteBranches: (object | undefined)[] = [];
     const task = taskRecord("implementing");
     const change = changeRecord(publicTaskId(task.id));
     const dependencies = cancellationDependencies({
@@ -238,6 +239,7 @@ describe("Change cancellation", () => {
       change,
       pullRequest: pullRequest("open", false),
       closePullRequest: { ok: true, pullRequest: pullRequest("closed", false) },
+      cleanupRemoteBranches,
       events,
     });
 
@@ -256,6 +258,7 @@ describe("Change cancellation", () => {
             "record-cleanup",
             "read-task",
           ]);
+          expect(cleanupRemoteBranches).toEqual([undefined]);
           return result;
         }),
       );
@@ -419,6 +422,7 @@ const cancellationDependencies = (input: {
   readonly cleanupResult?:
     | { readonly state: "complete"; readonly blockingReason: null }
     | { readonly state: "pending"; readonly blockingReason: string };
+  readonly cleanupRemoteBranches?: (object | undefined)[];
   readonly events: string[];
 }): CancellationDependencies => {
   let currentTask = input.task;
@@ -473,8 +477,9 @@ const cancellationDependencies = (input: {
         return input.closePullRequest ?? { ok: true, pullRequest: pullRequest("closed", false) };
       },
     },
-    cleanup: () => {
+    cleanup: (cleanupInput) => {
       input.events.push("cleanup");
+      input.cleanupRemoteBranches?.push(cleanupInput.remoteChangeBranch);
       return input.cleanupResult ?? { state: "complete", blockingReason: null };
     },
   };

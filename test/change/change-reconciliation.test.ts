@@ -240,6 +240,16 @@ describe("by change reconcile", () => {
         });
         if (!recorded.ok) throw new Error(recorded.code);
 
+        let cleanupInput:
+          | {
+              readonly remoteChangeBranch?: {
+                readonly remoteName: string;
+                readonly branchName: string;
+                readonly expectedHeadSha: string;
+              };
+            }
+          | undefined;
+        let cleanupAttempts = 0;
         const reconciliation = openChangeReconciliation({
           persistence: changes,
           github: {
@@ -261,7 +271,13 @@ describe("by change reconcile", () => {
               throw new Error("Reconciliation must not update a pull request");
             },
           },
-          cleanup: () => ({ state: "complete" }),
+          cleanup: (input) => {
+            cleanupInput = input;
+            cleanupAttempts += 1;
+            return cleanupAttempts === 1
+              ? { state: "pending", blockingReason: "remote_branch_unavailable" }
+              : { state: "complete" };
+          },
         });
 
         expect(
@@ -272,8 +288,35 @@ describe("by change reconcile", () => {
           }),
         ).toMatchObject({
           rejected: false,
-          changes: [{ changeId: created.change.id, status: "completed" }],
+          changes: [
+            {
+              changeId: created.change.id,
+              status: "completed",
+              cleanup: { state: "pending", blockingReason: "remote_branch_unavailable" },
+            },
+          ],
         });
+        expect(
+          yield* reconciliation.reconcile({
+            repositoryCommonDirectory: input.commonDirectory,
+            changeId: created.change.id,
+            now,
+          }),
+        ).toMatchObject({
+          rejected: false,
+          changes: [{ changeId: created.change.id, status: "cleanup_complete" }],
+        });
+        expect(cleanupAttempts).toBe(2);
+        expect(
+          yield* reconciliation.reconcile({
+            repositoryCommonDirectory: input.commonDirectory,
+            now,
+          }),
+        ).toMatchObject({
+          rejected: false,
+          changes: [],
+        });
+        expect(cleanupAttempts).toBe(2);
         expect(yield* changes.getChangeById(created.change.id)).toMatchObject({
           state: "closed",
           closeReason: "completed",
@@ -281,6 +324,13 @@ describe("by change reconcile", () => {
         });
         const completedTask = yield* tasks.getTaskById(taskId);
         expect(completedTask).toMatchObject({ state: "done" });
+        expect(cleanupInput).toMatchObject({
+          remoteChangeBranch: {
+            remoteName: "origin",
+            branchName: "change-1",
+            expectedHeadSha: "head",
+          },
+        });
       }),
     ),
   );

@@ -4,7 +4,7 @@ import type { RepositoryStorageError } from "../contracts/repositoryStorageError
 import type { TaskRecord } from "../task/task.js";
 import type { PublicTaskId } from "../task/taskId.js";
 import type { RepoTaskIdResolution } from "../task/repoTaskIds.js";
-import type { ChangeCleanup, ChangeRecord } from "./change.js";
+import type { ChangeCleanup, ChangeRecord, RemoteChangeBranch } from "./change.js";
 import type { ChangePersistence } from "./changePersistence.js";
 import type { ChangeCleanupOperationResult } from "./reconcileChange.js";
 import type { TaskPersistence } from "../task/taskPersistence.js";
@@ -41,6 +41,7 @@ export type CancellationDependencies = {
     readonly repositoryCommonDirectory: string;
     readonly worktreePath: string | null;
     readonly branchRef: string;
+    readonly remoteChangeBranch?: RemoteChangeBranch;
     readonly reviewerSessionPath?: string;
   }) => ChangeCleanupOperationResult;
 };
@@ -366,10 +367,23 @@ const cleanupClosedChange = (
 > =>
   Effect.gen(function* () {
     if (change.cleanup.state === "complete") return { change, cleanup: change.cleanup };
+    const publication = change.publication;
+    const remoteChangeBranch =
+      change.closeReason === "completed" && publication !== null && publication.pullRequest !== null
+        ? {
+            owner: publication.target.owner,
+            repo: publication.target.repo,
+            remoteName: publication.target.remoteName,
+            remoteUrl: change.baseRemoteUrl ?? "",
+            branchName: publication.headBranch,
+            expectedHeadSha: publication.expectedHeadSha,
+          }
+        : undefined;
     const result = dependencies.cleanup({
       repositoryCommonDirectory: change.repositoryCommonDirectory,
       worktreePath: change.worktreePath,
       branchRef: change.branchRef,
+      ...(remoteChangeBranch === undefined ? {} : { remoteChangeBranch }),
       ...(dependencies.reviewerSessionPathFor === undefined
         ? {}
         : { reviewerSessionPath: dependencies.reviewerSessionPathFor(change.id) }),
