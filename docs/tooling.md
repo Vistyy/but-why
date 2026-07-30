@@ -1,126 +1,57 @@
 # Tooling
 
+The audience is a But Why contributor.
+This document answers which supported commands verify a repository change and which checks own each concern.
+
 ## Runtime
 
-The repository uses ESM TypeScript on Node.js 24.x.
-
-Nix provides the authoritative development environment.
-Direnv enters the locked Nix development shell when a developer enters the repository directory.
+The authoritative development environment uses Node.js 24.x, pnpm 10.28.0, Just, and the locked Nix environment.
+Enter the repository through direnv or use `nix develop -c just <recipe>`.
 Run `just init` after entering the environment.
-The tracked pnpm workspace policy permits build scripts only for exact versions of required native dependencies and rejects unapproved dependency build scripts.
-Review and update that allowlist explicitly when a dependency upgrade changes the required build packages.
-Corepack is not part of the repository toolchain.
 
-A non-Nix environment may run repository commands when it provides Node.js 24.x, pnpm 10.28.0, Just, and the installed project dependencies.
-Only the locked Nix environment provides authoritative verification.
+The repository uses ESM TypeScript, Effect, Effect SQL SQLite, Vitest, Biome, TypeScript, Fallow, ast-grep, and Remark.
 
-[Sandcastle integration notes](sandcastle-integration-notes.md) records confirmed runtime constraints and current But Why workarounds.
+## Supported commands
 
-## Quality tools
+Run `just` to list recipes.
+Use Just recipes instead of direct package-manager commands for repository workflows.
 
-The project uses:
+- `just test <focused-path-or-selection>` runs focused tests without the complete-workload lock.
+- `just typecheck` runs the TypeScript checker.
+- `just lint` runs Biome linting.
+- `just format-check` checks Just and Biome formatting.
+- `just docs-check` validates links and anchors in tracked and non-ignored Markdown files.
+- `just ast-grep-check` checks structural TypeScript contracts.
+- `just fallow-check` checks dead code and named architecture contracts with coverage.
+- `just quality` runs the blocking routine test, static-check, and build workflow.
+- `just full-quality` runs the complete selected test suite with the same blocking checks.
 
-- Vitest for tests and coverage.
-- Biome for formatting and linting.
-- TypeScript for strict type checking.
-- Fallow for dependencies, dead code, import boundaries, duplication, and code health.
-- ast-grep for exact TypeScript syntax contracts.
-- Remark for Markdown link and anchor validation.
-- Effect SQL with the `@effect/sql-sqlite-node` Adapter for SQLite access.
+Change Submit owns the configured blocking Check and review phases.
+Do not duplicate those broad checks manually during Change implementation.
+Use focused tests and focused static checks while implementing.
 
-## Blocking quality policy
+Complete quality, test, and coverage workloads wait for the repository capacity lock.
+The runners supervise their process trees and preserve interruption exit codes after bounded cleanup.
+Targeted test selections remain unlocked.
 
-`just quality` is the blocking routine acceptance command.
-It runs routine tests, formatting, linting, type checking, documentation validation, ast-grep, blocking Fallow checks, and the production build.
-`just full-quality` runs the complete selected test suite plus the same static checks and production build.
-Neither blocking quality command generates coverage.
+## Structural contracts
 
-`just quality` and `just full-quality` use `scripts/with-capacity-lock.sh` before starting their complete process trees.
-They supervise their complete process trees during interruption and return 130 for SIGINT or 143 for SIGTERM after bounded cleanup.
-Their reported elapsed time and operating-budget warnings exclude time spent waiting for the shared capacity lock.
-
-Complete invocations of `just test` and `just coverage` also use `scripts/with-capacity-lock.sh` to acquire the same repository-local capacity lock.
-The runner waits when another complete quality, test, or coverage workload already holds the lock, reports the active workload class on stderr, and forwards the child exit status.
-SIGINT and SIGTERM terminate the complete workload process tree with bounded TERM-to-KILL escalation before the lock is released, returning 130 or 143 respectively.
-Nested commands bypass lock reacquisition.
-Targeted invocations with a test file path, test-name selection, or related-test selection remain unlocked.
-Option-only invocations remain complete workloads and use the lock.
-
-Vitest selects the routine suite when `BY_TEST_SUITE=routine`, the boundary suite when `BY_TEST_SUITE=boundary`, and the complete selected suite when the variable is empty.
-`just quality` uses the routine suite, while `just full-quality` uses the complete selected suite.
-Run `BY_TEST_SUITE=boundary just test` to exercise the focused external-boundary suite directly.
-
-Vitest uses its compact dot reporter for successful runs.
-Failed runs retain test names, assertion differences, stack traces, and captured output.
-
-Fallow blocks dead code, dependency errors, cycles, invalid suppressions, and named architecture contracts.
-Coverage-based complexity, CRAP, and maintainability results are advisory health evidence.
-
-Fallow enforces three architecture contracts:
+Fallow enforces these architecture contracts:
 
 - Change workflows use ports instead of concrete Adapters or composition.
 - CLI modules do not import storage.
 - Domain modules do not import Node infrastructure.
 
-Files outside the named Fallow zones receive no architecture claim.
+ast-grep enforces syntax contracts for process ownership, Effect tests, TOON output, workspace creation, Task identity, wall-clock reads, test subprocess isolation, package inspection, live-agent tests, and Validation Workspace tests.
+Repository-authored diagnostics state the prohibited approach, the invariant reason, and the supported replacement.
 
-ast-grep blocks these syntax contracts:
+## Quality ownership
 
-- Process properties belong to the CLI entry point.
-- Effect tests use the Effect Vitest runtime.
-- TOON belongs to the output codec.
-- Sandcastle factories belong to workspace creation.
-- Task identity branding belongs to `taskId.ts`.
-- Wall-clock reads belong to the CLI entry point.
-- Test child processes use `test/support/testProcess.ts`.
-- The test-process Adapter requires an explicit working directory and controlled environment.
-- The test-process Adapter isolates `HOME`, `TMPDIR`, and XDG state and rejects the shared checkout as a working directory.
-- Built CLI and process helpers belong to focused process-boundary tests.
-- Package inspection belongs to the package contract test.
-- Live Herdr helpers belong to focused live-agent tests.
-- Direct Sandcastle helpers belong to the focused validation workspace test.
+Behavior tests own runtime contracts at the supported interface.
+The CLI output codec owns TOON and JSON serialization.
+The package contract test owns package inspection.
+Documentation tests own current reader-visible command and setup contracts.
+Fallow and ast-grep own their named structural contracts.
 
-## Repository-authored blocking diagnostics
-
-Repository-authored policy guardrails must make the prohibited approach, the invariant reason, and the supported replacement visible in the primary diagnostic.
-
-Repository-authored operational failures must state the failed condition and the next action when a next action exists.
-
-The repository owns the primary diagnostics for these controls:
-
-- ast-grep syntax contracts in `ast-grep/rules/`.
-- Fallow architecture rules in `fallow-rules/`.
-- Repository script argument and workload controls in `scripts/`.
-- Repository runtime checks in `justfile`, including the `just init` environment checks.
-
-The ast-grep and Fallow controls are policy guardrails.
-The repository scripts and `just init` checks are operational failures.
-
-Just delegates TypeScript, Biome, Vitest, Remark, ast-grep execution, and Fallow execution to their owning tools.
-Dependency-owned diagnostics remain unchanged.
-
-Diagnostic verification uses controlled violations and invalid invocations through the supported ast-grep, Fallow, and repository-script commands.
-Verification checks semantic content without asserting terminal layout, source offsets, or exact prose.
-
-Vitest measures executable statements in every `src/**/*.ts` module.
-Untested executable modules appear at zero coverage.
-TypeScript declaration-only modules have no executable output and therefore have no coverage measurement.
-The current coverage policy has no percentage threshold.
-
-## Advisory health reports
-
-`just health` runs coverage before producing Fallow health and duplication reports.
-The reports include complexity, CRAP, function size, composite scores, hotspots, coverage gaps, and duplication.
-Advisory reports do not determine the `just quality` result.
-A report becomes implementation work only when repository evidence establishes a concrete defect or maintenance cost.
-
-## Verification environment
-
-The locked Nix environment is authoritative for repository verification.
-Enter the environment through direnv, then run `just init` and `just quality`.
-Non-interactive local automation can run `nix develop -c just <recipe>`.
-
-## Commands
-
-Run `just` to list available recipes.
-Use Just recipes because they define the repository's supported toolchain.
+`just health` produces advisory coverage, complexity, duplication, and code-health reports.
+Advisory findings become implementation work only when repository evidence shows a concrete defect or maintenance cost.
