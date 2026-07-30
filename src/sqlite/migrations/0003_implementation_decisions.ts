@@ -1,7 +1,7 @@
 import * as SqlClient from "@effect/sql/SqlClient";
 import { Effect } from "effect";
 
-export const migration = Effect.gen(function* () {
+export const implementationDecisionsMigration = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
   yield* sql.unsafe(
     "ALTER TABLE candidate_validation_runs ADD COLUMN implementation_decisions TEXT NOT NULL DEFAULT '[]'",

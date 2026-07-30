@@ -1,7 +1,7 @@
 import * as SqlClient from "@effect/sql/SqlClient";
 import { Effect } from "effect";
 
-export const migration = Effect.gen(function* () {
+export const implementationBlockersMigration = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
   yield* sql.unsafe(`
     CREATE TABLE implementation_blockers (

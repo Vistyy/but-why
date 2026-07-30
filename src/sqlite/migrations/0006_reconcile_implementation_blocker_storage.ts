@@ -1,7 +1,7 @@
 import * as SqlClient from "@effect/sql/SqlClient";
 import { Effect } from "effect";
 
-export const migration = Effect.gen(function* () {
+export const reconcileImplementationBlockerStorageMigration = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
   const taskCounts = yield* sql<{
     readonly count: number | bigint;

@@ -176,7 +176,7 @@ const baselineStatements = [
   `,
 ] as const;
 
-export const migration = Effect.gen(function* () {
+export const baselineMigration = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
   for (const statement of baselineStatements) yield* sql.unsafe(statement);
 });
