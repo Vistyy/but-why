@@ -28,6 +28,9 @@ Verify the resolved prefix with:
 by --help
 ```
 
+In every command below, replace the leading `by` placeholder with the resolved prefix.
+For example, use `just by init --task-prefix BY` from the source checkout or `pnpx but-why init --task-prefix BY` with the published package.
+
 From the target repository root, initialize But Why:
 
 ```bash
