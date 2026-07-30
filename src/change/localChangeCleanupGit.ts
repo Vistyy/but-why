@@ -409,29 +409,35 @@ const gitAtWorktree = (worktreePath: string, args: readonly string[]): GitResult
 
 const gitAtResolvedRemote = (args: readonly string[]): GitResult => {
   const temporaryGitDirectory = mkdtempSync(join(tmpdir(), "but-why-remote-cleanup-"));
-  const environment = {
-    ...process.env,
-    GIT_CONFIG_GLOBAL: "/dev/null",
-    GIT_CONFIG_NOSYSTEM: "1",
-  };
   try {
-    const initialized = runGitCommand(["init", "--bare", "-q", temporaryGitDirectory], environment);
+    const initialized = runGitCommand(["init", "--bare", "-q", temporaryGitDirectory]);
     return initialized.ok
-      ? runGitCommand([`--git-dir=${temporaryGitDirectory}`, ...args], environment)
+      ? runGitWithoutUrlRewrites([`--git-dir=${temporaryGitDirectory}`, ...args])
       : initialized;
   } finally {
     rmSync(temporaryGitDirectory, { recursive: true, force: true });
   }
 };
 
-const runGit = (args: readonly string[]): GitResult => runGitCommand(args, process.env);
+const runGit = (args: readonly string[]): GitResult => runGitCommand(args);
 
-const runGitCommand = (args: readonly string[], environment: NodeJS.ProcessEnv): GitResult => {
+const runGitCommand = (args: readonly string[]): GitResult => {
   const result = spawnSync("git", args, {
     encoding: "utf8",
     stdio: ["ignore", "pipe", "ignore"],
-    env: environment,
   });
+  return result.status === 0 ? { ok: true, stdout: result.stdout } : { ok: false };
+};
+
+const runGitWithoutUrlRewrites = (args: readonly string[]): GitResult => {
+  const result = spawnSync(
+    "env",
+    ["GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_NOSYSTEM=1", "git", ...args],
+    {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+    },
+  );
   return result.status === 0 ? { ok: true, stdout: result.stdout } : { ok: false };
 };
 
