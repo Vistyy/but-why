@@ -212,6 +212,12 @@ type RemoteRepositoryInput = Parameters<ChangeCleanupRemote["readRemoteBranchHea
 type RemoteRepositoryState = "matches" | "mismatch" | "unavailable";
 
 const remoteRepositoryState = (input: RemoteRepositoryInput): RemoteRepositoryState => {
+  const rewrites = git(input.repositoryCommonDirectory, [
+    "config",
+    "--get-regexp",
+    "^url\\..*\\.(insteadOf|pushInsteadOf)$",
+  ]);
+  if (rewrites.ok && rewrites.stdout.trim().length > 0) return "mismatch";
   const configured = git(input.repositoryCommonDirectory, [
     "config",
     "--get-all",
