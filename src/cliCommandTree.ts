@@ -11,6 +11,8 @@ import { NodeFileSystem, NodePath, NodeTerminal } from "@effect/platform-node";
 import { Console, Context, Effect, Layer } from "effect";
 
 import type { CliEnvironment } from "./cli.js";
+import { collapseHome } from "./cli/cliPath.js";
+import { dashboard } from "./cli/task/dashboard.js";
 import { success, usageError, type CliResult } from "./cliResults.js";
 import { runInitCommand } from "./cli/initCli.js";
 import { runApproveCommand, type TaskIdCommand } from "./cli/task/commands/approve.js";
@@ -248,10 +250,12 @@ const directiveResult = (
 ): Effect.Effect<CliResult> => {
   if (CommandDirective.isBuiltIn(directive)) {
     if (BuiltInOptions.isShowHelp(directive.option)) {
-      return Effect.succeed({
-        ...success({ help: rootHelpCorrection(generatedText(directive.option.helpDoc)) }),
-        outputFormat: outputFormatFromLeadingArgs(originalArgs),
-      });
+      return originalArgs.length === 0
+        ? dashboardResult(environment, "toon")
+        : Effect.succeed({
+            ...success({ help: rootHelpCorrection(generatedText(directive.option.helpDoc)) }),
+            outputFormat: outputFormatFromLeadingArgs(originalArgs),
+          });
     }
     return Effect.succeed(
       usageError({
@@ -267,10 +271,22 @@ const directiveResult = (
   }
 
   const command = commandValue(directive.value);
-  return dispatchCommand(command.path, command.config, environment).pipe(
-    Effect.map((result) => ({ ...result, outputFormat: command.output })),
-  );
+  return command.path.length === 1
+    ? dashboardResult(environment, command.output)
+    : dispatchCommand(command.path, command.config, environment).pipe(
+        Effect.map((result) => ({ ...result, outputFormat: command.output })),
+      );
 };
+
+const dashboardResult = (
+  environment: CliEnvironment,
+  outputFormat: OutputFormat,
+): Effect.Effect<CliResult> =>
+  dashboard(
+    collapseHome(environment.executablePath),
+    "Validate completed code changes against approved human intent.",
+    environment,
+  ).pipe(Effect.map((result) => ({ ...result, outputFormat })));
 
 type ParsedCommandValue = {
   readonly path: readonly string[];
@@ -506,14 +522,19 @@ const hasTrailingOutput = (args: readonly string[]): boolean =>
       (arg === "--output" || arg === "-o" || arg.startsWith("--output=") || arg.startsWith("-o=")),
   );
 
-const parserArgs = (args: readonly string[]): readonly string[] =>
-  args[0] === "--output" || args[0] === "-o"
-    ? args[1] === "toon" || args[1] === "json"
-      ? args[2] === "--help" || args[2] === "-h"
-        ? args.slice(2)
+const parserArgs = (args: readonly string[]): readonly string[] => {
+  const parsedArgs =
+    args[0] === "--output" || args[0] === "-o"
+      ? args[1] === "toon" || args[1] === "json"
+        ? args[2] === "--help" || args[2] === "-h"
+          ? args.slice(2)
+          : args
         : args
-      : args
-    : args;
+      : args;
+  return hasTrailingOutput(args) && parsedArgs.some((arg) => arg === "--help" || arg === "-h")
+    ? parsedArgs.filter((arg) => arg !== "--help" && arg !== "-h")
+    : parsedArgs;
+};
 
 const generatedLeftoverUsage = (args: readonly string[]): Effect.Effect<CliResult> =>
   Effect.either(
