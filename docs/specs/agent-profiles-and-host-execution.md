@@ -157,13 +157,8 @@ Users may edit or replace either generated profile.
 
 ### Implementer instruction delivery
 
-Change Implement constructs one initial Pi prompt in this order:
-
-1. The body of the shipped But Why skill.
-2. The shipped Implement a Change reference.
-3. The Change identity and Managed Worktree handoff.
-4. Any optional user handoff content.
-
+Change Implement constructs Pi system instructions from the body of the shipped But Why skill and the shipped Implement a Change reference.
+Change Implement constructs the initial Pi prompt from the Change identity, Managed Worktree handoff, and optional user handoff content.
 The shipped files are the canonical instruction source for both manual skill use and Change Implement.
 Change Implement reads and expands their content directly instead of asking Pi to discover the skill or sending `/skill:but-why`.
 The Agent Profile skill configuration therefore does not need to include the But Why skill.
