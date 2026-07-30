@@ -247,11 +247,10 @@ const resolveRemoteRepository = (input: RemoteRepositoryInput): RemoteRepository
     "pushurl",
   );
   if (configuredPushUrls === undefined) return { state: "unavailable" };
-  const pushUrl = rewriteRemoteUrl(
-    (configuredPushUrls[0] ?? configured[0]) as string,
-    rewrites,
-    "push",
-  );
+  const pushUrl =
+    configuredPushUrls.length > 0
+      ? (configuredPushUrls[0] as string)
+      : rewriteRemoteUrl(configured[0] as string, rewrites, "push");
   return configuredPushUrls.length > 1 ||
     pushUrl === undefined ||
     !sameRemoteRepository(pushUrl, input)
