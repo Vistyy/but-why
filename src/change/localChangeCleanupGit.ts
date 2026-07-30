@@ -245,19 +245,19 @@ const readRemoteUrlRewrites = (
   const result = git(repositoryCommonDirectory, [
     "config",
     "--get-regexp",
-    "^url\\..*\\.(insteadOf|pushInsteadOf)$",
+    "^url\\..*\\.(insteadof|pushinsteadof)$",
   ]);
   if (!result.ok || result.stdout.trim().length === 0) return [];
   const rewrites = result.stdout
     .trim()
     .split("\n")
     .map((line) => {
-      const match = /^url\.(.+)\.(insteadOf|pushInsteadOf)\s+(.+)$/u.exec(line);
+      const match = /^url\.(.+)\.(insteadof|pushinsteadof)\s+(.+)$/u.exec(line);
       return match === null
         ? undefined
         : {
             base: match[1] ?? "",
-            kind: match[2] as "insteadOf" | "pushInsteadOf",
+            kind: match[2] === "insteadof" ? ("insteadOf" as const) : ("pushInsteadOf" as const),
             pattern: match[3] ?? "",
           };
     });
