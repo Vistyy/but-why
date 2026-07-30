@@ -62,11 +62,7 @@ Set `agentEnvironment.command` when host-run agents must enter the repository's 
 }
 ```
 
-But Why prepends this command to the complete Pi invocation for the Implementer and host-run reviewers.
-Change Implement and Change Submit read the setting from the Change Managed Worktree.
-Omit it to preserve direct Pi launch.
-A configured wrapper failure does not trigger an unwrapped retry.
-The wrapper does not alter Repository Preparation or Checks.
+See [But Why Config](config.md#agent-environment) for wrapper configuration and behavior.
 
 The setup agent must identify Pi from its execution context and must not scan the machine for harnesses.
 
@@ -74,17 +70,12 @@ The setup agent must identify Pi from its execution context and must not scan th
 - `pi`
 <!-- supported-agent-runtimes:end -->
 
-Setup must preserve existing Global Config settings and Agent Profiles.
+Preserve existing Global Config settings and Agent Profiles.
 Create separate editable Global `reviewer` and `implementer` profiles when they are absent.
-Set `defaultAgentProfile` to `{ "scope": "global", "name": "reviewer" }`.
-Set `interactiveSession.agentProfile` to `{ "scope": "global", "name": "implementer" }`.
+Set the two role selections as required for review and interactive implementation.
+Users may edit or replace either profile.
 
-The reviewer profile must define the current reviewer model, thinking level, and required resource allowlists.
-The Implementer profile must define the current Implementer extensions, including `inline-skills`, `package-manager-policy`, `web-search`, `herdr-agent-state.ts`, `openai-fast.ts`, `statusline.ts`, `fuzzy-files/`, `codex-usage.ts`, `codex-resets.ts`, and `npm:@ogulcancelik/pi-auto-permissions@0.1.2`.
-Do not configure `skills`, `tools`, or `contextFileDiscovery` in the Implementer profile.
-Users may edit or replace either generated profile.
-
-See [Global Config and Agent Profiles](config.md#global-config-and-agent-profiles) for profile selection and resource rules.
+See [Global Config and Agent Profiles](config.md#global-config-and-agent-profiles) for profile fields, selection, and resource rules.
 
 ## Start a Change
 
@@ -195,6 +186,21 @@ Use `by validation-run artifact` for complete stored Artifact content.
 
 A taskless Change with no tracked tree change returns `nothing_to_submit` and remains open.
 A Task-backed no-change Submission runs Acceptance Review and can complete without a pull request.
+
+Cancel an open taskless Change when the work is no longer needed:
+
+```bash
+by change cancel <change-id>
+```
+
+Cancel a Task-backed Change through its unfinished Task:
+
+```bash
+by task cancel <task-id> --reason <reason>
+```
+
+Cancellation is permanent.
+Task cancellation records the reason and prevents the Task from completing through the cancelled Change.
 
 If implementation cannot safely continue without external authority or action, inspect the blocker and wait for an approved Resolution:
 

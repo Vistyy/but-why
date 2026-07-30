@@ -100,9 +100,11 @@ Any Check Finding stops reviewer phases for that Candidate.
 
 ## Copied local files
 
-`validationWorkspace.copyFiles` contains normalized paths relative to the Local Repository's main checkout.
+`validationWorkspace.copyFiles` is optional.
+When present, it must be a non-empty list of normalized paths relative to the Local Repository's main checkout.
 Each path must identify an existing regular file.
-Directories, symbolic links, non-regular files, duplicates, missing paths, and paths outside the repository reject Submission.
+Directories, symbolic links, non-regular files, missing paths, and paths outside the repository reject Submission.
+Duplicate entries are accepted but do not identify additional files.
 
 But Why copies each file once into the Validation Workspace.
 Copied files are local environment inputs, not Candidate content.
