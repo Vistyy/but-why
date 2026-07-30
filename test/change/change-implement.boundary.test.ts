@@ -210,6 +210,59 @@ describe("by change implement", () => {
     }),
   );
 
+  it.effect("rejects missing profile resources before launching Herdr", () =>
+    Effect.gen(function* () {
+      const root = yield* readyRepository();
+      writeFileSync(
+        join(root, ".test-global-config.json"),
+        JSON.stringify({
+          defaultAgentProfile: { scope: "global", name: "implementation" },
+          agentProfiles: {
+            implementation: {
+              agentRuntime: "pi",
+              runtimeConfig: {
+                model: "openai-codex/gpt-5.6-luna",
+                extensions: ["extensions/missing"],
+              },
+            },
+          },
+        }),
+      );
+      const started = yield* runByInProcessEffect(
+        root,
+        ["change", "start", "--output", "json"],
+        now,
+      );
+      const change = JSON.parse(started.stdout) as {
+        readonly change: { readonly id: string };
+        readonly worktreePath: string;
+      };
+      let launches = 0;
+      const result = yield* runByInProcessEffect(
+        root,
+        ["change", "implement", change.change.id, "--output", "json"],
+        now,
+        {
+          interactiveSessionHost: {
+            launch: async () => {
+              launches += 1;
+              return { ok: true, host: "herdr", status: "started" };
+            },
+          },
+        },
+      );
+
+      expect(result.status).toBe(1);
+      expect(JSON.parse(result.stdout)).toMatchObject({
+        error: {
+          code: "agent_profile_invalid",
+          message: `Agent Profile "implementation" in global scope has a missing extension resource at resolved path "${join(root, "extensions/missing")}".`,
+        },
+      });
+      expect(launches).toBe(0);
+    }),
+  );
+
   it.effect("uses the canonical main checkout from a linked caller checkout", () =>
     Effect.gen(function* () {
       const root = yield* readyRepository();

@@ -4,6 +4,7 @@ import { Effect } from "effect";
 
 import { repoAgentEnvironment } from "../agent/agentEnvironment.js";
 import { resolveInteractiveSessionAgentProfile } from "../agent/agentProfiles.js";
+import { validatePiAgentProfileResources } from "../agent/piRuntime.js";
 import type { RepoLocalContext } from "../init/repoContext.js";
 import { readGlobalConfig } from "../init/globalConfig.js";
 import { readRepoConfig } from "../init/repoConfig.js";
@@ -257,6 +258,15 @@ const implementChange = (
         ok: false,
         code: "agent_profile_invalid",
         message: "Interactive Session Agent Profile is not configured.",
+        change,
+      };
+    }
+    const resources = validatePiAgentProfileResources(resolvedAgentProfile, change.worktreePath);
+    if (!resources.ok) {
+      return {
+        ok: false,
+        code: "agent_profile_invalid",
+        message: resources.error.message,
         change,
       };
     }
