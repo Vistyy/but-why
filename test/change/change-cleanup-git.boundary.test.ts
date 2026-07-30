@@ -239,7 +239,7 @@ describe("Change cleanup Git adapter", () => {
         {
           readRemoteBranchHead: () => {
             calls.push("read");
-            return { state: "present", headSha: expectedHeadSha };
+            return { state: "present", headSha: expectedHeadSha, remoteUrl: "origin-url" };
           },
           deleteRemoteBranch: () => {
             calls.push("delete");
@@ -344,7 +344,7 @@ describe("Change cleanup Git adapter", () => {
         {
           readRemoteBranchHead: () => {
             reads += 1;
-            return { state: "present", headSha: "candidate-head" };
+            return { state: "present", headSha: "candidate-head", remoteUrl: "origin-url" };
           },
           deleteRemoteBranch: () => false,
         },
@@ -459,7 +459,11 @@ describe("Change cleanup Git adapter", () => {
           },
         },
         {
-          readRemoteBranchHead: () => ({ state: "present", headSha: "another-head" }),
+          readRemoteBranchHead: () => ({
+            state: "present",
+            headSha: "another-head",
+            remoteUrl: "origin-url",
+          }),
           deleteRemoteBranch: () => {
             deleted = true;
             return true;

@@ -6,7 +6,7 @@ import type { RemoteChangeBranch } from "./change.js";
 
 export type RemoteBranchHeadResult =
   | { readonly state: "missing" }
-  | { readonly state: "present"; readonly headSha: string }
+  | { readonly state: "present"; readonly headSha: string; readonly remoteUrl: string }
   | { readonly state: "unavailable" }
   | { readonly state: "mismatch" };
 
@@ -27,6 +27,7 @@ export type ChangeCleanupRemote = {
     readonly remoteUrl: string;
     readonly branchName: string;
     readonly expectedHeadSha: string;
+    readonly resolvedRemoteUrl: string;
   }) => boolean;
 };
 
@@ -155,6 +156,7 @@ const cleanupRemoteChangeBranch = (
       remoteUrl: branch.remoteUrl,
       branchName: branch.branchName,
       expectedHeadSha: branch.expectedHeadSha,
+      resolvedRemoteUrl: observed.remoteUrl,
     })
   ) {
     return { state: "complete" };
@@ -181,13 +183,12 @@ const cleanupRemoteChangeBranch = (
 
 const localChangeCleanupRemote: ChangeCleanupRemote = {
   readRemoteBranchHead: (input) => {
-    const repository = remoteRepositoryState(input);
-    if (repository === "unavailable") return { state: "unavailable" };
-    if (repository === "mismatch") return { state: "mismatch" };
+    const repository = resolveRemoteRepository(input);
+    if (repository.state !== "matches") return { state: repository.state };
     const result = git(input.repositoryCommonDirectory, [
       "ls-remote",
       "--heads",
-      input.remoteName,
+      repository.fetchUrl,
       `refs/heads/${input.branchName}`,
     ]);
     if (!result.ok) return { state: "unavailable" };
@@ -196,41 +197,43 @@ const localChangeCleanupRemote: ChangeCleanupRemote = {
     const headSha = output.split(/\s+/, 1)[0];
     return headSha === undefined || headSha.length === 0
       ? { state: "unavailable" }
-      : { state: "present", headSha };
+      : { state: "present", headSha, remoteUrl: repository.pushUrl };
   },
   deleteRemoteBranch: (input) =>
-    remoteRepositoryState(input) === "matches" &&
     git(input.repositoryCommonDirectory, [
       "push",
       `--force-with-lease=refs/heads/${input.branchName}:${input.expectedHeadSha}`,
-      input.remoteName,
+      input.resolvedRemoteUrl,
       `:refs/heads/${input.branchName}`,
     ]).ok,
 };
 
 type RemoteRepositoryInput = Parameters<ChangeCleanupRemote["readRemoteBranchHead"]>[0];
-type RemoteRepositoryState = "matches" | "mismatch" | "unavailable";
+type RemoteRepositoryResolution =
+  | { readonly state: "matches"; readonly fetchUrl: string; readonly pushUrl: string }
+  | { readonly state: "mismatch" | "unavailable" };
 
-const remoteRepositoryState = (input: RemoteRepositoryInput): RemoteRepositoryState => {
+const resolveRemoteRepository = (input: RemoteRepositoryInput): RemoteRepositoryResolution => {
   const rewrites = readRemoteUrlRewrites(input.repositoryCommonDirectory);
-  if (rewrites === undefined) return "unavailable";
+  if (rewrites === undefined) return { state: "unavailable" };
   const configured = readRemoteUrls(input.repositoryCommonDirectory, input.remoteName, "url");
-  if (configured === undefined || configured.length === 0) return "unavailable";
-  if (
-    !configured.every((url) =>
-      sameRemoteRepository(rewriteRemoteUrl(url, rewrites, "fetch"), input),
-    )
-  ) {
-    return "mismatch";
-  }
-  const pushUrls = readRemoteUrls(input.repositoryCommonDirectory, input.remoteName, "pushurl");
-  if (pushUrls === undefined) return "matches";
-  const effectivePushUrls = pushUrls.length === 0 ? configured : pushUrls;
-  return effectivePushUrls.every((url) =>
-    sameRemoteRepository(rewriteRemoteUrl(url, rewrites, "push"), input),
-  )
-    ? "matches"
-    : "mismatch";
+  if (configured === undefined || configured.length !== 1) return { state: "mismatch" };
+  const fetchUrl = rewriteRemoteUrl(configured[0] as string, rewrites, "fetch");
+  if (!sameRemoteRepository(fetchUrl, input)) return { state: "mismatch" };
+  const configuredPushUrls = readRemoteUrls(
+    input.repositoryCommonDirectory,
+    input.remoteName,
+    "pushurl",
+  );
+  if (configuredPushUrls === undefined) return { state: "unavailable" };
+  const pushUrl = rewriteRemoteUrl(
+    (configuredPushUrls[0] ?? configured[0]) as string,
+    rewrites,
+    "push",
+  );
+  return configuredPushUrls.length > 1 || !sameRemoteRepository(pushUrl, input)
+    ? { state: "mismatch" }
+    : { state: "matches", fetchUrl, pushUrl };
 };
 
 type RemoteUrlRewrite = {
