@@ -518,7 +518,7 @@ const generatedCommandUsage = (command: AnyCommand): Effect.Effect<CliResult> =>
 const hasTrailingOutput = (args: readonly string[]): boolean =>
   args.some(
     (arg, index) =>
-      index > 1 &&
+      index > 0 &&
       (arg === "--output" || arg === "-o" || arg.startsWith("--output=") || arg.startsWith("-o=")),
   );
 
