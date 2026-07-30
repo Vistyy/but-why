@@ -80,33 +80,37 @@ const repeatedText = (name: string) => Options.repeated(Options.text(name));
 const taskIdArgument = Args.text({ name: "task-id" });
 const changeIdArgument = Args.text({ name: "change-id" });
 
+const taskDependenciesCommand = group("dependencies", "Manage direct Task prerequisites.", [
+  leaf("set", "Replace direct Task prerequisites before Start.", {
+    taskId: taskIdArgument,
+    dependsOn: repeatedText("depends-on"),
+  }),
+]);
+
+const taskContextCommand = group(
+  "context",
+  "Show or edit Task Context.",
+  [
+    leaf("draft", "Create an editable Task Context draft.", { taskId: taskIdArgument }),
+    leaf("apply", "Apply a Task Context draft.", { taskId: taskIdArgument }),
+  ],
+  { taskId: Args.optional(taskIdArgument) },
+);
+
 const taskCommand = group("task", "Manage repo-local Tasks.", [
   leaf("create", "Create a repo-local Task.", {
     title: Options.text("title"),
     descriptionFile: Options.text("description-file"),
     dependsOn: repeatedText("depends-on"),
   }),
-  group("dependencies", "Manage direct Task prerequisites.", [
-    leaf("set", "Replace direct Task prerequisites before Start.", {
-      taskId: taskIdArgument,
-      dependsOn: repeatedText("depends-on"),
-    }),
-  ]),
+  taskDependenciesCommand,
   leaf("list", "List repo-local Tasks.", {
     all: Options.boolean("all"),
     state: Options.choice("state", taskStates).pipe(Options.optional),
   }),
   leaf("show", "Show decision-oriented Task metadata.", { taskId: taskIdArgument }),
   leaf("approve", "Permanently approve Task intent.", { taskId: taskIdArgument }),
-  group(
-    "context",
-    "Show or edit Task Context.",
-    [
-      leaf("draft", "Create an editable Task Context draft.", { taskId: taskIdArgument }),
-      leaf("apply", "Apply a Task Context draft.", { taskId: taskIdArgument }),
-    ],
-    { taskId: Args.optional(taskIdArgument) },
-  ),
+  taskContextCommand,
   leaf("comment", "Append a Markdown Task comment.", {
     taskId: taskIdArgument,
     file: Options.text("file"),
@@ -115,6 +119,28 @@ const taskCommand = group("task", "Manage repo-local Tasks.", [
     taskId: taskIdArgument,
     reason: Options.text("reason"),
   }),
+]);
+
+const changeDecisionCommand = group("decision", "Manage Implementation Decisions.", [
+  leaf("add", "Record one Implementer Implementation Decision.", {
+    changeId: changeIdArgument,
+    file: Options.text("file"),
+  }),
+  leaf("list", "List the Change Implementation Decision Log.", {
+    changeId: changeIdArgument,
+  }),
+]);
+
+const changeBlockerCommand = group("blocker", "Manage Implementation Blockers.", [
+  leaf("raise", "Report an Implementation Blocker.", {
+    changeId: changeIdArgument,
+    file: Options.text("file"),
+  }),
+  leaf("resolve", "Record an approved Implementation Blocker Resolution.", {
+    changeId: changeIdArgument,
+    file: Options.text("file"),
+  }),
+  leaf("list", "List blocker and Resolution history.", { changeId: changeIdArgument }),
 ]);
 
 const changeCommand = group("change", "Manage Changes and their Candidates.", [
@@ -140,26 +166,8 @@ const changeCommand = group("change", "Manage Changes and their Candidates.", [
     changeId: changeIdArgument,
     handoffFile: optionalText("handoff-file"),
   }),
-  group("decision", "Manage Implementation Decisions.", [
-    leaf("add", "Record one Implementer Implementation Decision.", {
-      changeId: changeIdArgument,
-      file: Options.text("file"),
-    }),
-    leaf("list", "List the Change Implementation Decision Log.", {
-      changeId: changeIdArgument,
-    }),
-  ]),
-  group("blocker", "Manage Implementation Blockers.", [
-    leaf("raise", "Report an Implementation Blocker.", {
-      changeId: changeIdArgument,
-      file: Options.text("file"),
-    }),
-    leaf("resolve", "Record an approved Implementation Blocker Resolution.", {
-      changeId: changeIdArgument,
-      file: Options.text("file"),
-    }),
-    leaf("list", "List blocker and Resolution history.", { changeId: changeIdArgument }),
-  ]),
+  changeDecisionCommand,
+  changeBlockerCommand,
 ]);
 
 const validationRunCommand = group("validation-run", "Inspect Validation Runs and Artifacts.", [
@@ -283,6 +291,10 @@ const dispatchCommand = (
   switch (command) {
     case "init":
       return runInitCommand({ taskPrefix: requiredString(values, "taskPrefix") }, environment);
+    case "task":
+      return generatedCommandUsage(taskCommand);
+    case "task dependencies":
+      return generatedCommandUsage(taskDependenciesCommand);
     case "task create":
       return runCreateCommand(
         {
@@ -315,7 +327,7 @@ const dispatchCommand = (
     case "task context": {
       const taskId = optionalString(values, "taskId");
       return taskId === undefined
-        ? invalidUsage("A Task ID is required for `by task context`.")
+        ? generatedCommandUsage(taskContextCommand)
         : runContextCommand({ taskId }, environment);
     }
     case "task context draft":
@@ -332,6 +344,12 @@ const dispatchCommand = (
         { taskId: requiredString(values, "taskId"), reason: requiredString(values, "reason") },
         environment,
       );
+    case "change":
+      return generatedCommandUsage(changeCommand);
+    case "change decision":
+      return generatedCommandUsage(changeDecisionCommand);
+    case "change blocker":
+      return generatedCommandUsage(changeBlockerCommand);
     case "change start":
       return runStart(
         {
@@ -396,6 +414,8 @@ const dispatchCommand = (
         { action: "list", changeId: requiredString(values, "changeId") },
         environment as ChangeCommandEnvironment,
       );
+    case "validation-run":
+      return generatedCommandUsage(validationRunCommand);
     case "validation-run show":
       return runValidationRunShowCommand(
         { validationRunId: requiredString(values, "validationRunId") },
@@ -410,7 +430,7 @@ const dispatchCommand = (
         environment,
       );
     default:
-      return invalidUsage(`Unknown command: ${command}`);
+      return generatedCommandUsage(commandTree as unknown as AnyCommand);
   }
 };
 
@@ -447,11 +467,11 @@ const optionalValue = (value: unknown): unknown => {
   return property(value, "_tag") === "Some" ? property(value, "value") : undefined;
 };
 
-const invalidUsage = (message: string): Effect.Effect<CliResult> =>
+const generatedCommandUsage = (command: AnyCommand): Effect.Effect<CliResult> =>
   Effect.succeed(
     usageError({
       code: "invalid_usage",
-      message,
+      message: rootHelpCorrection(generatedText(Command.getHelp(command, cliConfig))),
       help: ["Run `by --help` for generated command help."],
     }),
   );
@@ -513,8 +533,17 @@ const generatedLeftoverUsage = (args: readonly string[]): Effect.Effect<CliResul
     }),
   );
 
-const outputFormatFromLeadingArgs = (args: readonly string[]): OutputFormat =>
-  args[0] === "--output" || args[0] === "-o" ? (args[1] === "json" ? "json" : "toon") : "toon";
+const outputFormatFromLeadingArgs = (args: readonly string[]): OutputFormat => {
+  const selector = args[0];
+  if (selector === "--output" || selector === "-o") {
+    return args[1] === "json" ? "json" : "toon";
+  }
+  return selector?.startsWith("--output=") || selector?.startsWith("-o=")
+    ? selector.split("=", 2)[1] === "json"
+      ? "json"
+      : "toon"
+    : "toon";
+};
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null;
