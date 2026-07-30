@@ -1,4 +1,3 @@
-import { spawnSync } from "node:child_process";
 import { cpSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, it } from "@effect/vitest";
@@ -11,6 +10,7 @@ import {
 } from "../../src/change/candidateCapture/localGitCandidate.js";
 import { createGitRepo } from "../support/by-cli.js";
 import { captureLocalCandidate } from "../support/candidateCapture.js";
+import { runTestProcess } from "../support/testProcess.js";
 import {
   cloneInitializedTestRepository,
   createInitializedRepo,
@@ -273,7 +273,7 @@ const configureGit = (root: string): void => {
 };
 
 const git = (cwd: string, ...args: readonly string[]): string => {
-  const result = spawnSync("git", args, { cwd, encoding: "utf8" });
+  const result = runTestProcess("git", args, { cwd });
   if (result.status !== 0) throw new Error(result.stderr);
   return result.stdout.trim();
 };

@@ -1,5 +1,5 @@
-import { spawnSync } from "node:child_process";
 import { join } from "node:path";
+import { runTestProcess } from "./testProcess.js";
 import { createInitializedRepo } from "./initializedRepo.js";
 
 export const candidateReadyRepo = (workspace?: string): string => {
@@ -19,7 +19,7 @@ export const candidateReadyRepo = (workspace?: string): string => {
 };
 
 export const git = (cwd: string, ...args: readonly string[]): string => {
-  const result = spawnSync("git", args, { cwd, encoding: "utf8" });
+  const result = runTestProcess("git", args, { cwd });
   if (result.status !== 0) throw new Error(result.stderr);
   return result.stdout.trim();
 };

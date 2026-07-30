@@ -1,4 +1,3 @@
-import { execFileSync, spawn } from "node:child_process";
 import { chmodSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, it } from "@effect/vitest";
@@ -13,8 +12,10 @@ import {
   runBuiltByWithEnv,
   runBuiltByWithInput,
   runByInProcessEffect,
+  testProcessEnvironment,
 } from "../support/by-cli.js";
 import { createTestWorkspace } from "../support/testWorkspace.js";
+import { runTestProcessOrThrow, startTestProcess } from "../support/testProcess.js";
 
 const now = "2026-06-30T12:00:00.000Z";
 const concurrentWriterCount = 2;
@@ -289,7 +290,7 @@ exit 1
 });
 
 const git = (cwd: string, ...args: readonly string[]): string =>
-  execFileSync("git", args, { cwd, encoding: "utf8" }).trim();
+  runTestProcessOrThrow("git", args, { cwd });
 
 type AsyncCliResult = {
   readonly status: number | null;
@@ -304,16 +305,9 @@ const runByAsync = (
   ...args: readonly string[]
 ): Promise<AsyncCliResult> =>
   new Promise((resolve, reject) => {
-    const child = spawn(process.execPath, [executable, ...args], {
+    const child = startTestProcess(process.execPath, [executable, ...args], {
       cwd,
-      env: {
-        ...process.env,
-        ...env,
-        BUT_WHY_EXECUTABLE_PATH: byExecutable,
-        FORCE_COLOR: "0",
-        NO_COLOR: "1",
-      },
-      stdio: ["ignore", "pipe", "pipe"],
+      ...testProcessEnvironment({ ...env, BUT_WHY_EXECUTABLE_PATH: byExecutable }),
     });
     const stdout: string[] = [];
     const stderr: string[] = [];

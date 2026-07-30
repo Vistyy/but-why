@@ -1,10 +1,10 @@
-import { spawnSync } from "node:child_process";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import { repoRoot } from "../support/by-cli.js";
 import { createTestWorkspace } from "../support/testWorkspace.js";
+import { runTestProcess } from "../support/testProcess.js";
 
 const biomeExecutable = join(repoRoot, "node_modules/.bin/biome");
 const vitestExecutable = join(repoRoot, "node_modules/.bin/vitest");
@@ -15,10 +15,10 @@ const nestedTestMarker = "nested Validation Workspace test was discovered";
 describe("recursive repository tooling exclusions", () => {
   it("ignores a nested Validation Workspace during Biome and Vitest discovery", () => {
     const fixture = createToolingFixture();
-    const result = spawnSync(
+    const result = runTestProcess(
       "just",
       ["--justfile", join(fixture, "justfile"), "--working-directory", fixture, "tooling-check"],
-      { encoding: "utf8" },
+      { cwd: fixture },
     );
     const output = `${result.stdout}${result.stderr}`;
 

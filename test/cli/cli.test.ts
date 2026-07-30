@@ -1,4 +1,3 @@
-import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
@@ -13,6 +12,7 @@ import { RepositorySql, repositorySqlLayer } from "../../src/sqlite/repositorySq
 import { encodeToon } from "../../src/output/toon.js";
 import { createGitRepo, repoRoot, runByInProcessEffect } from "../support/by-cli.js";
 import { createTestWorkspace } from "../support/testWorkspace.js";
+import { runTestProcess } from "../support/testProcess.js";
 
 const expectedBin = collapseHome(join(repoRoot, "bin/by"));
 const expectedConfigDoc = join(repoRoot, "docs/public/config.md");
@@ -345,10 +345,14 @@ validationSetup:
       expect(readFileSync(join(root, ".gitignore"), "utf8")).toBe(managedGitignoreBlock);
       yield* expectInitializedSchema(root);
       expect(
-        spawnSync("git", ["check-ignore", "-q", ".but-why/config.json"], { cwd: root }).status,
+        runTestProcess("git", ["check-ignore", "-q", ".but-why/config.json"], {
+          cwd: root,
+        }).status,
       ).toBe(1);
       expect(
-        spawnSync("git", ["check-ignore", "-q", ".but-why/reviewers/"], { cwd: root }).status,
+        runTestProcess("git", ["check-ignore", "-q", ".but-why/reviewers/"], {
+          cwd: root,
+        }).status,
       ).toBe(1);
     }),
   );

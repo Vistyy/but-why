@@ -1,4 +1,3 @@
-import { spawnSync } from "node:child_process";
 import { existsSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
@@ -9,6 +8,7 @@ import { describe } from "vitest";
 import { RepositorySql, repositorySqlLayer } from "../../src/sqlite/repositorySql.js";
 import { createGitRepo, runByInProcessEffect } from "../support/by-cli.js";
 import { createTestWorkspace } from "../support/testWorkspace.js";
+import { runTestProcess } from "../support/testProcess.js";
 
 const now = "2026-06-30T12:00:00.000Z";
 
@@ -140,7 +140,7 @@ const initializedRepo = (): Effect.Effect<string> =>
 const sharedStatePath = (root: string): string => join(root, ".git", "but-why", "state.sqlite");
 
 const git = (cwd: string, ...args: readonly string[]): string => {
-  const result = spawnSync("git", args, { cwd, encoding: "utf8" });
+  const result = runTestProcess("git", args, { cwd });
 
   if (result.status !== 0) throw new Error(result.stderr);
   return result.stdout.trim();

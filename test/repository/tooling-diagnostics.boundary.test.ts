@@ -1,7 +1,7 @@
 import { copyFileSync, mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { spawnSync } from "node:child_process";
+import { runTestProcess } from "../support/testProcess.js";
 import { afterEach, describe, expect, test } from "vitest";
 
 const repositoryRoot = resolve(import.meta.dirname, "../..");
@@ -15,8 +15,8 @@ type CommandResult = {
   readonly output: string;
 };
 
-const run = (command: string, args: string[], cwd = repositoryRoot): CommandResult => {
-  const result = spawnSync(command, args, { cwd, encoding: "utf8" });
+const run = (command: string, args: string[], cwd: string): CommandResult => {
+  const result = runTestProcess(command, args, { cwd });
   return {
     status: result.status,
     output: `${result.stdout}${result.stderr}`,
@@ -39,6 +39,14 @@ describe("repository-authored blocking diagnostics", () => {
   test.each([
     ["process-properties-belong-to-cli-entry", "export const value = process.env.TEST;"],
     ["effect-tests-use-effect-vitest-runtime", "const value = Effect.runPromise(work);"],
+    [
+      "test-child-processes-use-test-process-adapter",
+      'import { spawn } from "node:child_process";',
+    ],
+    [
+      "test-child-processes-use-test-process-adapter",
+      'const childProcess = await import("node:child_process/promises");',
+    ],
     ["toon-package-belongs-to-output-codec", 'import { encode } from "@toon-format/toon";'],
     [
       "sandcastle-factories-belong-to-workspace",
@@ -49,7 +57,11 @@ describe("repository-authored blocking diagnostics", () => {
   ])("ast-grep rule %s explains the supported path", (ruleId, source) => {
     const fixtureRoot = mkdtempSync(join(tmpdir(), "but-why-diagnostic-ast-grep-"));
     temporaryPaths.push(fixtureRoot);
-    const fixtureDirectory = ruleId === "effect-tests-use-effect-vitest-runtime" ? "test" : "src";
+    const fixtureDirectory =
+      ruleId === "effect-tests-use-effect-vitest-runtime" ||
+      ruleId === "test-child-processes-use-test-process-adapter"
+        ? "test"
+        : "src";
     mkdirSync(join(fixtureRoot, fixtureDirectory));
     mkdirSync(join(fixtureRoot, "ast-grep/rules"), { recursive: true });
     copyFileSync(astGrepRulePath, join(fixtureRoot, "ast-grep/rules/structural-bans.yml"));
@@ -57,20 +69,26 @@ describe("repository-authored blocking diagnostics", () => {
     const fixture = join(fixtureRoot, fixtureDirectory, "diagnostic-fixture.ts");
     writeFileSync(fixture, `${source}\n`);
 
-    const result = run("pnpm", [
-      "exec",
-      "ast-grep",
-      "scan",
-      "--config",
-      join(fixtureRoot, "sgconfig.yml"),
-      "--filter",
-      `^${ruleId}$`,
-      "--report-style",
-      "short",
-      "--color",
-      "never",
-      fixture,
-    ]);
+    const result = run(
+      "pnpm",
+      [
+        "--dir",
+        repositoryRoot,
+        "exec",
+        "ast-grep",
+        "scan",
+        "--config",
+        join(fixtureRoot, "sgconfig.yml"),
+        "--filter",
+        `^${ruleId}$`,
+        "--report-style",
+        "short",
+        "--color",
+        "never",
+        fixture,
+      ],
+      fixtureRoot,
+    );
 
     expect(result.status).not.toBe(0);
     expectActionablePolicyDiagnostic(result.output);
@@ -97,16 +115,11 @@ describe("repository-authored blocking diagnostics", () => {
       }),
     );
 
-    const result = run("pnpm", [
-      "exec",
-      "fallow",
-      "dead-code",
-      "--no-production",
-      "--no-cache",
-      "--fail-on-issues",
-      "--root",
+    const result = run(
+      join(repositoryRoot, "node_modules/.bin/fallow"),
+      ["dead-code", "--no-production", "--no-cache", "--fail-on-issues", "--root", fixtureRoot],
       fixtureRoot,
-    ]);
+    );
 
     expect(result.status).not.toBe(0);
     expectActionablePolicyDiagnostic(result.output);
@@ -119,7 +132,9 @@ describe("repository-authored blocking diagnostics", () => {
     ["scripts/run-quality-workload.sh", ["invalid"], /quality|full-quality/],
     ["scripts/with-capacity-lock.sh", [], /workload-class|command/],
   ])("repository script %s reports its next action", (script, args, expectedAction) => {
-    const result = run("bash", [join(repositoryRoot, script), ...args]);
+    const fixtureRoot = mkdtempSync(join(tmpdir(), "but-why-diagnostic-script-"));
+    temporaryPaths.push(fixtureRoot);
+    const result = run("bash", [join(repositoryRoot, script), ...args], fixtureRoot);
 
     expect(result.status).toBe(2);
     expect(result.output).toMatch(/error|usage/i);

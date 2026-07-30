@@ -1,4 +1,3 @@
-import { execFileSync } from "node:child_process";
 import { closeSync, mkdirSync, openSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 
@@ -17,6 +16,7 @@ import {
   createTestWorkspace,
   releaseTestWorkspace,
 } from "../support/testWorkspace.js";
+import { runTestProcessOrThrow } from "../support/testProcess.js";
 
 const now = "2026-06-30T12:00:00.000Z";
 const contractMaxHandoffBytes = 256 * 1024;
@@ -267,10 +267,11 @@ describe("by change implement", () => {
     Effect.gen(function* () {
       const root = yield* readyRepository();
       const linkedCheckout = join(dirname(root), `${basename(root)}-linked-caller`);
-      execFileSync("git", ["worktree", "add", "-b", "linked-caller", linkedCheckout, "main"], {
-        cwd: root,
-        encoding: "utf8",
-      });
+      runTestProcessOrThrow(
+        "git",
+        ["worktree", "add", "-b", "linked-caller", linkedCheckout, "main"],
+        { cwd: root },
+      );
       writeFileSync(
         join(linkedCheckout, ".test-global-config.json"),
         JSON.stringify({
@@ -330,9 +331,8 @@ describe("by change implement", () => {
           }),
         ]);
       } finally {
-        execFileSync("git", ["worktree", "remove", "--force", linkedCheckout], {
+        runTestProcessOrThrow("git", ["worktree", "remove", "--force", linkedCheckout], {
           cwd: root,
-          encoding: "utf8",
         });
       }
     }),

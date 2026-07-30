@@ -1,4 +1,3 @@
-import { execFileSync } from "node:child_process";
 import { chmodSync, writeFileSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 
@@ -15,6 +14,7 @@ import {
   cloneInitializedTestRepository,
   createInitializedRepo,
 } from "../support/initializedRepo.js";
+import { runTestProcessOrThrow } from "../support/testProcess.js";
 import {
   acquireTestWorkspace,
   createTestWorkspace,
@@ -41,10 +41,11 @@ describe("Change Implement canonical main checkout failures", () => {
     Effect.gen(function* () {
       const root = yield* readyRepository();
       const linkedCheckout = join(dirname(root), `${basename(root)}-linked-caller`);
-      execFileSync("git", ["worktree", "add", "-b", "linked-caller", linkedCheckout, "main"], {
-        cwd: root,
-        encoding: "utf8",
-      });
+      runTestProcessOrThrow(
+        "git",
+        ["worktree", "add", "-b", "linked-caller", linkedCheckout, "main"],
+        { cwd: root },
+      );
       const started = yield* runByInProcessEffect(
         root,
         ["change", "start", "--output", "json"],
@@ -58,7 +59,7 @@ describe("Change Implement canonical main checkout failures", () => {
       );
       const fakeGitDirectory = createTestWorkspace();
       const fakeGitPath = join(fakeGitDirectory, "git");
-      const realGitPath = execFileSync("which", ["git"], { encoding: "utf8" }).trim();
+      const realGitPath = runTestProcessOrThrow("which", ["git"], { cwd: root });
       writeFileSync(
         fakeGitPath,
         `#!/bin/sh
@@ -92,9 +93,8 @@ exec ${realGitPath} "$@"
           help: ["Restore the canonical main checkout, then retry Change Implement."],
         });
       } finally {
-        execFileSync("git", ["worktree", "remove", "--force", linkedCheckout], {
+        runTestProcessOrThrow("git", ["worktree", "remove", "--force", linkedCheckout], {
           cwd: root,
-          encoding: "utf8",
         });
       }
 

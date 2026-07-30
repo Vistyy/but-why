@@ -1,10 +1,10 @@
-import { spawnSync } from "node:child_process";
 import { cpSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import { repoRoot } from "../support/by-cli.js";
 import { createTestWorkspace } from "../support/testWorkspace.js";
+import { runTestProcess } from "../support/testProcess.js";
 
 type PackedPackageMetadata = {
   readonly id: string;
@@ -64,10 +64,8 @@ describe("CLI package contents", () => {
       repository: { type: "git", url: "git+https://github.com/Vistyy/but-why.git" },
     });
 
-    const result = spawnSync("npm", ["pack", "--dry-run", "--json", "--ignore-scripts"], {
+    const result = runTestProcess("npm", ["pack", "--dry-run", "--json", "--ignore-scripts"], {
       cwd: fixture,
-      encoding: "utf8",
-      env: { ...process.env, FORCE_COLOR: "0", NO_COLOR: "1" },
     });
 
     expect(result.error).toBeUndefined();
