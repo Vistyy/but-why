@@ -128,7 +128,7 @@ exit 1
 
       [
         "-qec",
-        `${process.execPath} ${builtByExecutable()} change implement change-1 --handoff-file - --output json`,
+        `${process.execPath} ${builtByExecutable()} --output json change implement change-1 --handoff-file -`,
         "/dev/null",
       ],
       { cwd: root },
