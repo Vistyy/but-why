@@ -12,6 +12,7 @@ export type InteractiveSessionLaunchInput = {
   readonly changeId: string;
   readonly repositoryPath: string;
   readonly worktreePath: string;
+  readonly systemPrompt?: string;
   readonly initialPrompt: string | undefined;
   readonly agentProfile?: InteractiveSessionAgentProfile;
   readonly globalConfigDirectory?: string;

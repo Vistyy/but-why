@@ -30,7 +30,8 @@ Setup will create separate editable Global profiles for reviewers and the Implem
 The reviewer default will preserve the current curated BY-27 resources.
 The Implementer profile will use the approved extension allowlist while leaving skills, tools, and context-file discovery at normal Pi behavior.
 
-Change Implement will place the shipped But Why skill body and Implement a Change reference directly into the initial Pi prompt before the Change handoff.
+Change Implement will place the shipped But Why skill body and Implement a Change reference directly into Pi system instructions.
+The initial Pi prompt will contain only the Change identity, Managed Worktree, and optional handoff.
 The workflow will not depend on Pi skill discovery or slash-command invocation.
 
 V1 validation and agent execution will run on the host only.
@@ -185,16 +186,17 @@ Its host path remains an implementation adapter and is not exposed as a configur
 
 ## Testing Decisions
 
-The required external behavior is that valid scoped Pi profiles control Interactive Session and reviewer launches, invalid profiles fail before launch, Implementer instructions arrive in the initial prompt, and validation offers no Docker or Podman configuration path.
+The required external behavior is that valid scoped Pi profiles control Interactive Session and reviewer launches, invalid profiles fail before launch, Implementer instructions arrive as system instructions, and validation offers no Docker or Podman configuration path.
 
 The primary acceptance seam is the in-process public CLI boundary for `by change implement` and `by change submit`.
 Acceptance tests will exercise config loading, scoped profile resolution, structured output, Interactive Session launch, reviewer execution, and failure behavior while replacing only external host and agent adapters.
+Change Submit recovery tests will verify that only the four authorized recovery errors contain structured Submit Recovery Guidance, while blocked, uncertain, and operator-owned failures do not authorize Implementer recovery.
 A Change Submit acceptance case will invoke the command from a checkout whose Repo Config differs from the Managed Worktree and prove that the complete Repo-owned Validation Policy comes from the Managed Worktree.
 
 Supporting config-contract tests will cover the Pi `runtimeConfig` shape, explicit scoped references, Repo-over-Global role selection, exact allowlist semantics, old-profile rejection, non-Pi rejection, and rejection of the removed sandbox setting.
 
 Supporting Pi command tests will cover exact extension and resource flags for reviewers and the Implementer.
-The Interactive Session host seam will verify that the initial prompt contains the shipped skill body, implementation reference, Change handoff, and optional user handoff in the required order.
+The Interactive Session host seam will verify that system instructions contain the shipped skill body and implementation reference, and that the initial prompt contains the Change handoff and optional user handoff in the required order.
 
 Supporting Validation Workspace lifecycle tests will prove that host workspace creation, execution, integrity verification, and cleanup remain functional after Docker and Podman removal.
 Container-provider and mount tests will be deleted because they protect retired behavior rather than a supported prohibition.

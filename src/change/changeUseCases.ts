@@ -20,7 +20,10 @@ import type {
   InteractiveSessionHost,
   InteractiveSessionLaunchEvidence,
 } from "./interactiveSessionHost.js";
-import { buildImplementerPrompt } from "./implementerPrompt.js";
+import {
+  buildImplementerInitialPrompt,
+  buildImplementerSystemPrompt,
+} from "./implementerPrompt.js";
 import type { ChangeReconciliation, ChangeReconciliationResult } from "./reconcileChange.js";
 import type {
   ChangeStartGitOperations,
@@ -278,7 +281,8 @@ const implementChange = (
             changeId: change.id,
             repositoryPath: context.mainCheckoutRoot,
             worktreePath: change.worktreePath,
-            initialPrompt: buildImplementerPrompt({
+            systemPrompt: buildImplementerSystemPrompt(),
+            initialPrompt: buildImplementerInitialPrompt({
               changeId: change.id,
               worktreePath: change.worktreePath,
               ...(handoff === undefined ? {} : { handoff }),

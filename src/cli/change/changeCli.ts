@@ -900,12 +900,36 @@ const runSubmit = (
   });
   if (!loaded.ok) return Effect.succeed(loadError(loaded.error));
   return loaded.submit.submit({ changeId: args[0], now: environment.now().toISOString() }).pipe(
-    Effect.map(submitResult),
+    Effect.map((result) => submitResult(result, args[0] as string)),
     Effect.catchAll((error) => Effect.succeed(repositoryStorageErrorResult(error))),
   );
 };
 
-const submitResult = (result: ChangeSubmitResult): CliResult => {
+type SubmitRecoveryAction =
+  | "prepare_change"
+  | "resolve_dirty_work"
+  | "fix_validation_findings"
+  | "integrate_change_base";
+
+const submitRecovery = (
+  changeId: string,
+  action: SubmitRecoveryAction,
+  instruction: string,
+): {
+  readonly authority: "change_submit";
+  readonly changeId: string;
+  readonly action: SubmitRecoveryAction;
+  readonly instruction: string;
+  readonly retryCommand: string;
+} => ({
+  authority: "change_submit",
+  changeId,
+  action,
+  instruction,
+  retryCommand: `by change submit ${changeId}`,
+});
+
+const submitResult = (result: ChangeSubmitResult, changeId: string): CliResult => {
   if (result.ok) {
     if (result.status === "nothing_to_submit") {
       return success({
@@ -958,9 +982,19 @@ const submitResult = (result: ChangeSubmitResult): CliResult => {
           : result.code === "change_blocked"
             ? "Change is blocked by an active Implementation Blocker."
             : "Change is closed.",
+      ...(result.code === "change_blocked"
+        ? {
+            details: {
+              changeId,
+              blockerCommand: `by change blocker list ${changeId}`,
+            },
+          }
+        : {}),
       help:
         result.code === "change_blocked"
-          ? ["Inspect and resolve the blocker, or cancel the Change."]
+          ? [
+              `Inspect the existing Implementation Blocker with \`by change blocker list ${changeId}\`, then report it and wait.`,
+            ]
           : ["Use a Change ID returned by `by change start --output json`."],
     });
   }
@@ -968,7 +1002,15 @@ const submitResult = (result: ChangeSubmitResult): CliResult => {
     return runtimeError({
       code: result.code,
       message: "Change is not ready for Submission.",
-      details: { changeId: result.change.id, readiness: result.change.readiness },
+      details: {
+        changeId: result.change.id,
+        readiness: result.change.readiness,
+        recovery: submitRecovery(
+          result.change.id,
+          "prepare_change",
+          `Run \`by change prepare ${result.change.id}\`, then retry Change Submit.`,
+        ),
+      },
       help: [`Run \`by change prepare ${result.change.id}\`, then retry Change Submit.`],
     });
   }
@@ -976,6 +1018,14 @@ const submitResult = (result: ChangeSubmitResult): CliResult => {
     return runtimeError({
       code: result.code,
       message: "The Change Managed Worktree has uncommitted Git-visible state.",
+      details: {
+        changeId,
+        recovery: submitRecovery(
+          changeId,
+          "resolve_dirty_work",
+          "Commit or remove the Git-visible changes, then retry Change Submit.",
+        ),
+      },
       help: ["Commit or remove the visible changes, then retry Change Submit."],
     });
   }
@@ -994,6 +1044,11 @@ const submitResult = (result: ChangeSubmitResult): CliResult => {
         ...(result.specialistReviewerEvidence === undefined
           ? {}
           : { specialistReviewerEvidence: result.specialistReviewerEvidence }),
+        recovery: submitRecovery(
+          result.changeId,
+          "fix_validation_findings",
+          "Fix every applicable Finding in the Managed Worktree, commit the fixes, then retry Change Submit.",
+        ),
       },
       help: ["Fix the Findings in the Managed Worktree, commit them, then retry Change Submit."],
     });
@@ -1022,10 +1077,16 @@ const submitResult = (result: ChangeSubmitResult): CliResult => {
       code: result.code,
       message: "The Repository Branch does not contain the freshly fetched Change Base.",
       details: {
+        changeId,
         branchRef: result.branchRef,
         headSha: result.headSha,
         changeBaseRef: result.changeBaseRef,
         changeBaseSha: result.changeBaseSha,
+        recovery: submitRecovery(
+          changeId,
+          "integrate_change_base",
+          "Merge or rebase the Change Base into the Repository Branch, then retry Change Submit.",
+        ),
       },
       help: [
         "Merge or rebase the Change Base into the Repository Branch, then retry Change Submit.",

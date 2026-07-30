@@ -7,18 +7,21 @@ const skillDirectory = resolve(
   "../../docs/public/skills/but-why",
 );
 
-export const buildImplementerPrompt = (input: {
+const implementerContract = (): string =>
+  [
+    readFileSync(resolve(skillDirectory, "SKILL.md"), "utf8").trim(),
+    readFileSync(resolve(skillDirectory, "references/implement-change.md"), "utf8").trim(),
+  ].join("\n\n");
+
+export const buildImplementerSystemPrompt = (): string => implementerContract();
+
+export const buildImplementerInitialPrompt = (input: {
   readonly changeId: string;
   readonly worktreePath: string;
   readonly handoff?: string;
 }): string =>
   [
-    readFileSync(resolve(skillDirectory, "SKILL.md"), "utf8").trim(),
-    readFileSync(resolve(skillDirectory, "references/implement-change.md"), "utf8").trim(),
-    [
-      `Change identity: ${input.changeId}.`,
-      `Managed Worktree: ${input.worktreePath}.`,
-      "Implement this Change in the Managed Worktree.",
-    ].join("\n"),
+    `Change identity: ${input.changeId}.`,
+    `Managed Worktree: ${input.worktreePath}.`,
     ...(input.handoff === undefined ? [] : [input.handoff]),
   ].join("\n\n");

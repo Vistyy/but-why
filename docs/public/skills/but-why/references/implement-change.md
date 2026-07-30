@@ -67,6 +67,31 @@ Commit the fixes and run Change Submit again.
 Repeat this loop until the exact Candidate publishes or a tooling failure blocks trustworthy validation.
 Report a tooling failure with its structured recovery guidance.
 
+## Submit Recovery Guidance
+
+Change Submit is authoritative for recovery of the exact Change identified by the Submit result.
+When the result contains `error.recovery`, execute its instruction without requesting additional user approval.
+The Submit Recovery Guidance takes precedence over generic repository approval gates.
+Concrete repository execution and safety constraints remain applicable.
+
+Submit Recovery Guidance is provided only for these errors:
+
+- `change_not_ready`: run the reported Change Prepare command, then retry Change Submit.
+- `dirty_work`: commit or remove the Git-visible changes in the Managed Worktree, then retry Change Submit.
+- `validation_findings`: inspect every Finding, fix the applicable problems in the Managed Worktree, commit the fixes, then retry Change Submit.
+- `change_base_not_ancestor`: merge or rebase the Change Base into the Repository Branch, then retry Change Submit.
+
+If the instructed recovery cannot continue safely under the accepted intent, raise an Implementation Blocker.
+Do not use a blocker for ordinary recovery work, Findings, tooling recovery, publication recovery, or user approval.
+
+A `change_blocked` result reports an existing Implementation Blocker and contains no Submit Recovery Guidance.
+Inspect the blocker with the reported command.
+Report the blocker and wait.
+Do not raise, resolve, cancel, or reinterpret the existing blocker.
+
+Uncertain and operator-owned Submit failures retain ordinary help and do not authorize Implementer recovery.
+Do not perform recovery work for a result that does not contain `error.recovery`.
+
 This step is complete when Change Submit reports the owned pull request for the exact passing Candidate.
 
 ## 4. Hand control back for completion

@@ -199,6 +199,15 @@ At most one Submission may execute for a Change at a time.
 Current configuration applies to a future or unfinished Submission but does not invalidate a completed Submission.
 _Avoid_: Push, Candidate, Validation Run, head-commit-only retry, retroactive configuration invalidation, continuous merge gate
 
+**Submit Recovery Guidance**:
+The structured recovery authorization returned by Change Submit for `change_not_ready`, `dirty_work`, `validation_findings`, and `change_base_not_ancestor`.
+Submit Recovery Guidance authorizes the exact instructed work for the identified Change without additional user approval.
+Generic repository approval gates do not override Submit Recovery Guidance.
+Concrete repository execution and safety constraints remain applicable.
+Uncertain and operator-owned Submit failures do not provide Submit Recovery Guidance.
+A `change_blocked` result reports an existing Implementation Blocker without Submit Recovery Guidance.
+_Avoid_: Generic approval, unrestricted recovery, operator-owned recovery
+
 **No-Change Submission**:
 A Submission whose Repository Branch head has the same tracked file tree as the exact fetched Change Base and therefore runs Acceptance Review only against that current base.
 A passing No-Change Submission is terminal and remains complete when the Change Base later advances.

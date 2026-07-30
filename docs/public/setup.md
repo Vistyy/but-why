@@ -410,6 +410,9 @@ A taskless Submission omits Acceptance Review.
 
 Both paths run Repository Preparation, Checks, configured Specialists, and publication policy before an eligible Candidate is published.
 
+If Change Submit returns `error.recovery`, follow the reported Submit Recovery Guidance for that exact Change without additional user approval.
+The guidance covers preparation, dirty work, validation Findings, and Change Base ancestry.
+Concrete repository execution and safety constraints remain applicable.
 If validation returns Findings, fix them in the Managed Worktree, commit the fixes, and run Change Submit again:
 
 ```bash
