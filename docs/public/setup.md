@@ -19,13 +19,14 @@ Ask where to install the skill.
 ## Install and initialize
 
 But Why requires Node.js 24.
-Use an installed `by` executable and verify it with:
+Resolve one supported command prefix before continuing.
+Use `pnpx but-why` or `npx -y but-why` when you use the published package.
+Use `just by` from the But Why source checkout.
+Verify the resolved prefix with:
 
 ```bash
 by --help
 ```
-
-The package is not available from the npm registry in this unreleased Candidate.
 
 From the target repository root, initialize But Why:
 
