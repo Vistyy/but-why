@@ -10,6 +10,21 @@ import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import type { Readable } from "node:stream";
 const repositoryRoot = resolve(import.meta.dirname, "../..");
 
+const isInDirectory = (directory: string, path: string): boolean => {
+  const relativePath = relative(directory, path);
+  return relativePath === "" || (!relativePath.startsWith("..") && !isAbsolute(relativePath));
+};
+
+const isInSharedCheckout = (path: string): boolean => isInDirectory(repositoryRoot, path);
+
+const safeTemporaryDirectory = (): string => {
+  const temporaryDirectory = realpathSync(resolve(tmpdir()));
+  if (isInSharedCheckout(temporaryDirectory)) {
+    throw new Error("Test process temporary state must be outside the shared checkout.");
+  }
+  return temporaryDirectory;
+};
+
 type TestProcessOptions = {
   readonly cwd: string;
   readonly env?: NodeJS.ProcessEnv;
@@ -24,7 +39,7 @@ type TestProcessEnvironmentOptions = NodeJS.ProcessEnv;
 const acquireTestProcessEnvironment = (
   overrides: TestProcessEnvironmentOptions = {},
 ): { readonly environment: NodeJS.ProcessEnv; readonly cleanup: () => void } => {
-  const isolationRoot = mkdtempSync(join(tmpdir(), "but-why-process-"));
+  const isolationRoot = mkdtempSync(join(safeTemporaryDirectory(), "but-why-process-"));
   const home = join(isolationRoot, "home");
   const temporaryDirectory = join(isolationRoot, "tmp");
   const xdgConfigHome = join(isolationRoot, "xdg", "config");
@@ -55,13 +70,6 @@ const acquireTestProcessEnvironment = (
     cleanup: () => rmSync(isolationRoot, { recursive: true, force: true }),
   };
 };
-
-const isInDirectory = (directory: string, path: string): boolean => {
-  const relativePath = relative(directory, path);
-  return relativePath === "" || (!relativePath.startsWith("..") && !isAbsolute(relativePath));
-};
-
-const isInSharedCheckout = (path: string): boolean => isInDirectory(repositoryRoot, path);
 
 const checkedOutsideSharedCheckout = (
   path: string,
@@ -103,7 +111,7 @@ const processOptions = (options: TestProcessOptions) => {
       : checkedOutsideSharedCheckout(
           options.isolatedHome,
           "Test subprocess HOME",
-          realpathSync(tmpdir()),
+          safeTemporaryDirectory(),
         );
   const processEnvironment = acquireTestProcessEnvironment(options.env);
   // biome-ignore lint/complexity/useLiteralKeys: ProcessEnv requires an index-signature lookup.
