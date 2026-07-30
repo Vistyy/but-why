@@ -15,10 +15,8 @@
 - Read `docs/cli-output.md` for structured CLI output contracts.
 - Read `docs/tooling.md` for contributor verification and architecture checks.
 - Read accepted decisions in `docs/adr/` when a change affects their constraints.
-- Read the `writing-instructions` and `technical-prose` skills before changing documentation.
-- Treat SQLite Tasks as the authority for proposed work, progress, dependencies, and acceptance evidence.
-- Treat version control as the authority for implementation chronology.
-- Do not add task summaries, completion notes, implementation chronology, or history archives to repository documentation.
+- Read the shared Documentation policy in `writing-instructions` before changing documentation.
+  It governs documentation admission, authoritative media, current-system description, and authority maintenance.
 
 ## Code map
 
