@@ -241,6 +241,16 @@ describe("packaged Change Implement continuation extension", () => {
     ]);
   });
 
+  it("does not inspect the Change before a normal prompt starts", async () => {
+    const harness = createHarness();
+    await harness.emit("session_start", { type: "session_start", reason: "startup" });
+
+    const execCallCount = harness.getExecCallCount();
+    await harness.emit("input", { text: "Explain the current approach.", source: "interactive" });
+
+    expect(harness.getExecCallCount()).toBe(execCallCount);
+  });
+
   it("keeps automatic continuation paused while the operator discusses the Change", async () => {
     const harness = createHarness();
     await harness.emit("session_start", { type: "session_start", reason: "startup" });

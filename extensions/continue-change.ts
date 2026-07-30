@@ -425,11 +425,12 @@ export default function continueChange(pi: ExtensionAPI): void {
     },
   });
 
-  pi.on("input", async (event, ctx) => {
+  pi.on("input", (event, ctx) => {
     if (event.source !== "extension") {
       const inputChangeId = extractChangeId(event.text);
-      if (inputChangeId !== undefined) changeId = inputChangeId;
-      await initialize(ctx);
+      if (inputChangeId === undefined) return;
+      changeId = inputChangeId;
+      showWatcher(ctx, persisted?.paused ? { kind: "paused" } : { kind: "watching" });
     }
   });
 
