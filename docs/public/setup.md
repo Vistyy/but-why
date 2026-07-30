@@ -69,10 +69,13 @@ Before starting a Change, commit and push `.but-why/config.json` and any configu
 ```bash
 git add .but-why/config.json .but-why/reviewers
 git commit -m "Configure But Why"
-git push origin <base-branch>
+git push <publication-remote> <base-branch>
 ```
 
-Change Start reads Repo Config from the fetched Change Base commit.
+Replace `<publication-remote>` with the GitHub remote selected by But Why for this repository.
+Inspect configured remotes with `git remote -v`.
+When multiple GitHub remotes exist, But Why prefers the main checkout's upstream remote, then `origin`; otherwise it reports an ambiguous publication remote.
+Use the same remote that Change Start will select, because Change Start reads Repo Config from the fetched Change Base commit.
 
 ## Configure agents
 

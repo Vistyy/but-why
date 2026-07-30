@@ -92,6 +92,10 @@ A continuing reviewer conversation owned by one Change and one Reviewer Session 
 It can resume across that Change's Candidates and disposable Validation Workspaces so a reviewer can reuse repository orientation.
 _Avoid_: Fresh reviewer session per Candidate, cross-Change reviewer conversation
 
+**Producer**:
+The named reviewer identity that creates a Reviewer Session and its review evidence.
+_Avoid_: Agent Profile, Reviewer Session, Validation Run
+
 **Reviewer Session Identity**:
 The Change, Producer, resolved Agent Profile, reviewer instructions, Agent Environment, and curated resources that determine whether a Reviewer Session can safely continue.
 _Avoid_: Session file path, Candidate identity, Validation Run identity
@@ -154,6 +158,10 @@ _Avoid_: Validation Workspace, caller checkout, temporary agent worktree, Task W
 **Interactive Session**:
 An optional visible external-agent process hosted in a Managed Worktree, with Herdr as the current v1 integration.
 _Avoid_: Task state, Validation Run, background Supervisor worker
+
+**Implementer**:
+The coding agent that changes a Change's Managed Worktree and may author Implementation Decisions or Implementation Blockers.
+_Avoid_: Acceptance Reviewer, Specialist Reviewer, reviewer process
 
 **Agent Environment**:
 The optional command wrapper read from Repo Config that starts each host-run Implementer and reviewer with the repository's required development tools.

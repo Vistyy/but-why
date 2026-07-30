@@ -143,6 +143,38 @@ The Agent Environment does not alter Repository Preparation or Checks.
 
 ## Global Config and Agent Profiles
 
+Global review settings
+
+Global Config may define Acceptance Review and Specialist settings:
+
+```json
+{
+  "review": {
+    "acceptance": {
+      "agentProfile": { "scope": "global", "name": "reviewer" },
+      "instructionsFile": "review/acceptance.md"
+    },
+    "specialists": ["standards"]
+  },
+  "reviewers": {
+    "standards": {
+      "instructionsFile": "review/standards.md",
+      "agentProfile": { "scope": "global", "name": "reviewer" }
+    }
+  }
+}
+```
+
+`review.acceptance.agentProfile` selects the Global Acceptance Review profile.
+`review.acceptance.instructionsFile` selects Global Acceptance Review instructions relative to the Global Config directory.
+`review.specialists` is the ordered Global Specialist list.
+A Repo Config Specialist list replaces this list, and an empty Repo Config list disables inherited Specialists.
+`reviewers` maps Specialist names to definitions.
+Each Global definition requires `instructionsFile` relative to the Global Config directory and may select an Agent Profile.
+A Repo Config definition takes precedence for a Specialist with the same name.
+Global Agent Profiles referenced by these settings must be defined in Global Config.
+Reviewer and Specialist profile selections resolve from Repo Config, then Global Config, then Global `defaultAgentProfile`.
+
 Global Config may define reusable profiles and role selections:
 
 ```json
