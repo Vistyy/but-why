@@ -190,6 +190,7 @@ export const runCommandTree = (
   args: readonly string[],
   environment: CliEnvironment,
 ): Effect.Effect<CliResult> =>
+  trailingOutputUsage(args) ??
   Effect.either(
     CommandDescriptor.parse(commandTree.descriptor, ["by", ...parserArgs(args)], cliConfig),
   ).pipe(
@@ -467,6 +468,21 @@ const invalidUsage = (message: string): Effect.Effect<CliResult> =>
       help: ["Run `by --help` for generated command help."],
     }),
   );
+
+const trailingOutputUsage = (args: readonly string[]): Effect.Effect<CliResult> | undefined => {
+  const outputIndex = args.findIndex(
+    (arg, index) => index > 1 && (arg === "--output" || arg === "-o"),
+  );
+  if (outputIndex === -1) return undefined;
+  return Effect.succeed({
+    ...usageError({
+      code: "invalid_usage",
+      message: "Global output options must appear before the command.",
+      help: ["Run `by --help` for generated command help."],
+    }),
+    outputFormat: outputFormatFromLeadingArgs(args),
+  });
+};
 
 const parserArgs = (args: readonly string[]): readonly string[] =>
   args[0] === "--output" || args[0] === "-o"
