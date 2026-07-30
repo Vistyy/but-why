@@ -202,7 +202,7 @@ _Avoid_: Finding, Validation Tooling Failure, Task Dependency, Implementation De
 
 **Implementation Blocker Resolution**:
 A user-approved answer to one active Implementation Blocker that returns the Change to Open and its linked Task to Implementing.
-For a Task-backed Change, the Resolution creates a new Acceptance Context version when it conflicts with earlier accepted intent.
+For a Task-backed Change, the Resolution creates a new Acceptance Context version.
 _Avoid_: Implementation Decision, Task Comment, silent Task edit, automatic recovery
 
 **Validation Gate**:
