@@ -16,7 +16,6 @@ export type RemoteBranchHeadResult =
       readonly state: "present";
       readonly headSha: string;
       readonly remoteUrl: string;
-      readonly remoteUrlRewrites: readonly RemoteUrlRewrite[];
     }
   | { readonly state: "unavailable" }
   | { readonly state: "mismatch" };
@@ -39,7 +38,6 @@ export type ChangeCleanupRemote = {
     readonly branchName: string;
     readonly expectedHeadSha: string;
     readonly resolvedRemoteUrl: string;
-    readonly remoteUrlRewrites: readonly RemoteUrlRewrite[];
   }) => boolean;
 };
 
@@ -169,7 +167,6 @@ const cleanupRemoteChangeBranch = (
       branchName: branch.branchName,
       expectedHeadSha: branch.expectedHeadSha,
       resolvedRemoteUrl: observed.remoteUrl,
-      remoteUrlRewrites: observed.remoteUrlRewrites,
     })
   ) {
     return { state: "complete" };
@@ -198,11 +195,12 @@ const localChangeCleanupRemote: ChangeCleanupRemote = {
   readRemoteBranchHead: (input) => {
     const repository = resolveRemoteRepository(input);
     if (repository.state !== "matches") return { state: repository.state };
-    const result = gitWithoutRemoteUrlRewrites(
-      input.repositoryCommonDirectory,
-      repository.rewrites,
-      ["ls-remote", "--heads", repository.fetchUrl, `refs/heads/${input.branchName}`],
-    );
+    const result = git(input.repositoryCommonDirectory, [
+      "ls-remote",
+      "--heads",
+      repository.fetchUrl,
+      `refs/heads/${input.branchName}`,
+    ]);
     if (!result.ok) return { state: "unavailable" };
     const output = result.stdout.trim();
     if (output.length === 0) return { state: "missing" };
@@ -213,11 +211,10 @@ const localChangeCleanupRemote: ChangeCleanupRemote = {
           state: "present",
           headSha,
           remoteUrl: repository.pushUrl,
-          remoteUrlRewrites: repository.rewrites,
         };
   },
   deleteRemoteBranch: (input) =>
-    gitWithoutRemoteUrlRewrites(input.repositoryCommonDirectory, input.remoteUrlRewrites, [
+    git(input.repositoryCommonDirectory, [
       "push",
       `--force-with-lease=refs/heads/${input.branchName}:${input.expectedHeadSha}`,
       input.resolvedRemoteUrl,
@@ -231,7 +228,6 @@ type RemoteRepositoryResolution =
       readonly state: "matches";
       readonly fetchUrl: string;
       readonly pushUrl: string;
-      readonly rewrites: readonly RemoteUrlRewrite[];
     }
   | { readonly state: "mismatch" | "unavailable" };
 
@@ -241,7 +237,9 @@ const resolveRemoteRepository = (input: RemoteRepositoryInput): RemoteRepository
   const configured = readRemoteUrls(input.repositoryCommonDirectory, input.remoteName, "url");
   if (configured === undefined || configured.length !== 1) return { state: "mismatch" };
   const fetchUrl = rewriteRemoteUrl(configured[0] as string, rewrites, "fetch");
-  if (!sameRemoteRepository(fetchUrl, input)) return { state: "mismatch" };
+  if (fetchUrl === undefined || !sameRemoteRepository(fetchUrl, input)) {
+    return { state: "mismatch" };
+  }
   const configuredPushUrls = readRemoteUrls(
     input.repositoryCommonDirectory,
     input.remoteName,
@@ -253,9 +251,11 @@ const resolveRemoteRepository = (input: RemoteRepositoryInput): RemoteRepository
     rewrites,
     "push",
   );
-  return configuredPushUrls.length > 1 || !sameRemoteRepository(pushUrl, input)
+  return configuredPushUrls.length > 1 ||
+    pushUrl === undefined ||
+    !sameRemoteRepository(pushUrl, input)
     ? { state: "mismatch" }
-    : { state: "matches", fetchUrl, pushUrl, rewrites };
+    : { state: "matches", fetchUrl, pushUrl };
 };
 
 const readRemoteUrlRewrites = (
@@ -306,11 +306,19 @@ const rewriteRemoteUrl = (
   url: string,
   rewrites: readonly RemoteUrlRewrite[],
   direction: "fetch" | "push",
-): string => {
-  const pushRewrite =
-    direction === "push" ? longestRewrite(url, rewrites, "pushInsteadOf") : undefined;
-  const rewrite = pushRewrite ?? longestRewrite(url, rewrites, "insteadOf");
-  return rewrite === undefined ? url : rewrite.base + url.slice(rewrite.pattern.length);
+): string | undefined => {
+  let current = url;
+  const seen = new Set<string>();
+  for (let attempt = 0; attempt <= rewrites.length; attempt += 1) {
+    if (seen.has(current)) return undefined;
+    seen.add(current);
+    const pushRewrite =
+      direction === "push" ? longestRewrite(current, rewrites, "pushInsteadOf") : undefined;
+    const rewrite = pushRewrite ?? longestRewrite(current, rewrites, "insteadOf");
+    if (rewrite === undefined) return current;
+    current = rewrite.base + current.slice(rewrite.pattern.length);
+  }
+  return undefined;
 };
 
 const longestRewrite = (
@@ -402,17 +410,6 @@ type GitResult = { readonly ok: true; readonly stdout: string } | { readonly ok:
 
 const git = (commonDirectory: string, args: readonly string[]): GitResult =>
   runGit([`--git-dir=${commonDirectory}`, ...args]);
-
-const gitWithoutRemoteUrlRewrites = (
-  commonDirectory: string,
-  rewrites: readonly RemoteUrlRewrite[],
-  args: readonly string[],
-): GitResult =>
-  runGit([
-    `--git-dir=${commonDirectory}`,
-    ...rewrites.flatMap((rewrite) => ["-c", `url.${rewrite.base}.${rewrite.kind}=`]),
-    ...args,
-  ]);
 
 const gitAtWorktree = (worktreePath: string, args: readonly string[]): GitResult =>
   runGit(["-C", worktreePath, ...args]);
