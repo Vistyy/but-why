@@ -166,19 +166,27 @@ describe("by change implement", () => {
         readonly initialPrompt: string;
         readonly systemPrompt: string;
       };
-      const skill = readFileSync("docs/public/skills/but-why/SKILL.md", "utf8").trim();
+      const commandGuidance = readFileSync(
+        "docs/public/skills/but-why/references/command-guidance.md",
+        "utf8",
+      ).trim();
       const implementationReference = readFileSync(
         "docs/public/skills/but-why/references/implement-change.md",
         "utf8",
       ).trim();
-      expect(launch.systemPrompt).toContain(skill);
+      expect(launch.systemPrompt).toContain(commandGuidance);
       expect(launch.systemPrompt).toContain(implementationReference);
-      expect(launch.systemPrompt.indexOf(skill)).toBe(0);
+      expect(launch.systemPrompt.indexOf(commandGuidance)).toBe(0);
       expect(launch.systemPrompt.indexOf(implementationReference)).toBeGreaterThan(
-        launch.systemPrompt.indexOf(skill),
+        launch.systemPrompt.indexOf(commandGuidance),
       );
-      expect(launch.systemPrompt.match(/# But Why/g)).toHaveLength(1);
-      expect(launch.systemPrompt.match(/# Implement a Change/g)).toHaveLength(1);
+      expect(launch.systemPrompt).not.toContain(
+        "# But Why\n\nBefore setup or workflow guidance, read",
+      );
+      expect(launch.systemPrompt).not.toContain("docs/public/setup.md");
+      expect(launch.systemPrompt).toContain(
+        "The Implementer must not return a final progress report.",
+      );
       expect(launch.initialPrompt).toBe(
         [`Change identity: ${change.change.id}.`, `Managed Worktree: ${change.worktreePath}.`].join(
           "\n\n",

@@ -1,7 +1,19 @@
 # Implement a Change
 
 The handoff identifies one ready Change and its Managed Worktree.
-Let `<but-why>` represent the command prefix resolved by the `but-why` skill.
+Let `<but-why>` represent the command prefix resolved by the But Why command guidance.
+
+## Completion control
+
+The Implementer must continue until a return condition applies.
+The Implementer must not return a final progress report.
+The Implementer may return control only when one of these conditions applies:
+
+- Change Submit reports a ready owned pull request or a passing No-Change Submission.
+- An Implementation Blocker requires operator authority.
+- A Tooling Failure prevents trustworthy validation.
+- An uncertain or operator-owned Submit failure provides no Submit Recovery Guidance.
+Incomplete design, routine implementation, focused Check failure, Findings, and authorized Submit recovery do not permit the Implementer to return control.
 
 ## 1. Read the accepted context
 
@@ -64,7 +76,7 @@ Do not assume that Change Submit stopped when its caller ended.
 When Change Submit returns Findings, run `<but-why> change findings <change-id>`.
 Fix every applicable Finding in the Managed Worktree.
 Commit the fixes and run Change Submit again.
-Repeat this loop until the exact Candidate publishes or a tooling failure blocks trustworthy validation.
+Repeat this loop until the exact Candidate publishes, a No-Change Submission passes, or a return condition applies.
 Report a tooling failure with its structured recovery guidance.
 
 ## Submit Recovery Guidance
@@ -91,17 +103,22 @@ Do not raise, resolve, cancel, or reinterpret the existing blocker.
 
 Uncertain and operator-owned Submit failures retain ordinary help and do not authorize Implementer recovery.
 Do not perform recovery work for a result that does not contain `error.recovery`.
+Report the structured error and its help, then wait for the main operator.
 
-This step is complete when Change Submit reports the owned pull request for the exact passing Candidate.
+This step is complete when Change Submit reports the owned pull request for the exact passing Candidate or a passing No-Change Submission.
+If another return condition applies, this step is complete when the applicable blocker or failure is reported to the main operator.
 
 ## 4. Hand control back for completion
 
-Report the ready owned pull request and wait.
+When Change Submit reports a ready owned pull request, report its URL and wait.
 But Why does not merge pull requests.
 The main operator session owns completion after human merge.
 The user closes the Herdr Interactive Session manually before reconciliation.
 The main operator runs `<but-why> change reconcile <change-id>` after the human confirms the merge.
 The main operator inspects the Task and Change when reconciliation reports pending or unsafe cleanup.
 
-The implementation workflow is complete when the ready owned pull request is reported.
-The Change workflow is complete when the main operator records durable completion through reconciliation.
+When Change Submit reports a passing No-Change Submission, report that result and wait.
+Do not create a commit or pull request only to replace a passing No-Change Submission.
+
+The implementation workflow is complete when the ready owned pull request or passing No-Change Submission is reported.
+The Change workflow is complete when But Why records durable completion through the applicable successful Submission or reconciliation path.

@@ -279,7 +279,7 @@ export default function continueChange(pi: ExtensionAPI): void {
   };
 
   const inspectChange = async (id: string, cwd: string): Promise<RunResult> => {
-    const args = ["change", "show", id, "--output", "json"];
+    const args = ["--output", "json", "change", "show", id];
     const installed = await run("by", args, cwd);
     if (
       installed.ok ||

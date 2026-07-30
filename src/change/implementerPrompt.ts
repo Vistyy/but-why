@@ -9,7 +9,7 @@ const skillDirectory = resolve(
 
 const implementerContract = (): string =>
   [
-    readFileSync(resolve(skillDirectory, "SKILL.md"), "utf8").trim(),
+    readFileSync(resolve(skillDirectory, "references/command-guidance.md"), "utf8").trim(),
     readFileSync(resolve(skillDirectory, "references/implement-change.md"), "utf8").trim(),
   ].join("\n\n");
 

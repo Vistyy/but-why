@@ -173,7 +173,7 @@ describe("packaged Change Implement continuation extension", () => {
     expect(harness.sent).toHaveLength(1);
     expect(harness.execCalls).toContainEqual({
       command: "just",
-      args: ["by", "change", "show", changeId, "--output", "json"],
+      args: ["by", "--output", "json", "change", "show", changeId],
     });
   });
 
