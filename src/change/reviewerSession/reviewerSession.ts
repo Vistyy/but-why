@@ -5,6 +5,7 @@ import { join } from "node:path";
 import type { Effect } from "effect";
 import type { AgentEnvironmentCommand } from "../../agent/agentEnvironment.js";
 import type { ResolvedPiAgentProfile } from "../../agent/agentProfiles.js";
+import { currentCandidateReReviewInstructions } from "../../agent/reviewerPrompts.js";
 import type { TaskContextSnapshotV1 } from "../validationRun/taskContextSnapshot.js";
 import type { ImplementationDecision } from "../implementationDecision.js";
 import type { ImplementationBlockerHistory } from "../implementationBlocker.js";
@@ -86,8 +87,8 @@ export const continuationPrompt = (input: {
   readonly previousFindings: readonly unknown[];
 }): string =>
   [
-    "Continue the Acceptance Reviewer Session, but perform a complete fresh sweep of the exact current Candidate.",
-    "The previous Findings are evidence to recheck, not the only review target.",
+    "Continue the Acceptance Reviewer Session.",
+    currentCandidateReReviewInstructions,
     "Current Candidate:",
     JSON.stringify(input.candidate),
     "Complete authoritative Acceptance Context:",

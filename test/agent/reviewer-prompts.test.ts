@@ -2,8 +2,10 @@ import { describe, expect, it } from "vitest";
 
 import {
   buildAcceptanceReviewerPrompt,
+  buildSpecialistContinuationPrompt,
   buildSpecialistReviewerPrompt,
 } from "../../src/agent/reviewerPrompts.js";
+import { continuationPrompt } from "../../src/change/reviewerSession/reviewerSession.js";
 
 describe("reviewer prompts", () => {
   it("allows targeted scratch experiments and reuses broad Check Artifacts", () => {
@@ -48,6 +50,49 @@ describe("reviewer prompts", () => {
       expect(acceptance).toContain("non-authoritative rationale");
       expect(acceptance).toContain("Choose the explicit storage shape.");
       expect(specialist).not.toContain("Choose the explicit storage shape.");
+    }
+  });
+
+  it("re-reviews the current Candidate without repeating repository orientation by default", () => {
+    const acceptance = continuationPrompt({
+      candidate: {
+        candidateId: "candidate-2",
+        changeBaseSha: "base",
+        headSha: "head-2",
+      },
+      acceptanceContext: {
+        version: 1,
+        title: "Intent",
+        description: "Description",
+        comments: [],
+      },
+      implementationDecisions: [],
+      availableArtifactRefs: [],
+      previousFindings: [],
+    });
+    const specialist = buildSpecialistContinuationPrompt({
+      specialist: "standards",
+      instructions: "Standards instructions",
+      validationRunId: "123e4567-e89b-42d3-a456-426614174000",
+      availableArtifactRefs: [],
+      candidate: {
+        candidateId: "candidate-2",
+        changeBaseSha: "base",
+        headSha: "head-2",
+      },
+      previousFindings: [],
+    });
+
+    for (const prompt of [acceptance, specialist]) {
+      expect(prompt).toContain("Re-anchor the review to the exact current Candidate");
+      expect(prompt).toContain("Candidate delta");
+      expect(prompt).toContain("directly affected callers, tests, and owning modules");
+      expect(prompt).toContain("do not limit the review to them");
+      expect(prompt).toContain("Return every material Finding");
+      expect(prompt).toContain(
+        "Reuse prior repository orientation unless current evidence requires additional exploration",
+      );
+      expect(prompt).not.toContain("complete fresh sweep");
     }
   });
 });

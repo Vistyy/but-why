@@ -11,6 +11,14 @@ const reviewerExecutionInstructions = [
   "You must not modify the Candidate. Candidate integrity verification by But Why is authoritative.",
 ].join("\n");
 
+export const currentCandidateReReviewInstructions = [
+  "Re-anchor the review to the exact current Candidate.",
+  "Inspect the Candidate delta, changed files, and directly affected callers, tests, and owning modules.",
+  "Recheck the previous Findings, but do not limit the review to them.",
+  "Return every material Finding that applies to the exact current Candidate.",
+  "Reuse prior repository orientation unless current evidence requires additional exploration.",
+].join("\n");
+
 export const defaultAcceptanceInstructions = [
   "Review the exact Candidate against the supplied immutable Acceptance Context.",
   "Inspect the repository and Candidate diff before deciding.",
@@ -109,8 +117,8 @@ export const buildSpecialistContinuationPrompt = (input: {
     reviewerExecutionInstructions,
     "",
     `Specialist: ${input.specialist}`,
-    "Continue this Specialist Reviewer Session, but perform a complete fresh sweep of the exact current Candidate for the configured concern.",
-    "The previous Findings are evidence to recheck, not the only review target.",
+    "Continue this Specialist Reviewer Session for the configured concern.",
+    currentCandidateReReviewInstructions,
     "Available Validation Run evidence:",
     encodeReviewerWireValue({
       validationRunId: input.validationRunId,
