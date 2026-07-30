@@ -1,7 +1,6 @@
 import { Effect } from "effect";
 
 import { parseCliTaskIdValue } from "../../cliTaskId.js";
-import { withGlobalHelpFlags } from "../../cliHelp.js";
 import {
   repositoryStorageErrorResult,
   repoStateLoadError,
@@ -23,7 +22,6 @@ import type { ChangeCancellationResult, CancellationUseCases } from "../../chang
 import { withCancellation } from "../../change/loadChangeCancellation.js";
 import type { InteractiveSessionHost } from "../../change/interactiveSessionHost.js";
 import type { ReviewerAgentRuntime } from "../../agent/reviewerAgentRuntime.js";
-import type { PublicTaskId } from "../../task/taskId.js";
 import type { ChangeRecord } from "../../change/change.js";
 import type { CandidateValidationRunRecord } from "../../change/candidateValidation/candidateValidationRunStore.js";
 import type { ChangeReconciliationResult } from "../../change/reconcileChange.js";
@@ -50,139 +48,24 @@ export type ChangeCommandEnvironment = {
   readonly cancellationUseCases?: CancellationUseCases;
 };
 
-export const routeChange = (
-  args: readonly string[],
-  environment: ChangeCommandEnvironment,
-): Effect.Effect<CliResult> => {
-  if (args.length === 0 || (args.length === 1 && args[0] === "--help")) {
-    return Effect.succeed(
-      success({
-        usage: "by change <command> [--help]",
-        commands: [
-          {
-            command: "by change start [--task <task-id>] [--base <branch>]",
-            description: "Create a prepared Change worktree.",
-          },
-          {
-            command: "by change prepare <change-id>",
-            description: "Run or retry Repository Preparation.",
-          },
-          {
-            command: "by change list [--all]",
-            description: "List Changes oldest first.",
-          },
-          {
-            command: "by change show <change-id>",
-            description: "Show decision-oriented Change state and expansion commands.",
-          },
-          {
-            command: "by change findings <change-id>",
-            description: "Show Findings for the current Change Candidate.",
-          },
-          {
-            command: "by change validation-runs <change-id>",
-            description: "List complete compact Validation Run History and expansion commands.",
-          },
-          {
-            command: "by change submit <change-id>",
-            description: "Validate and publish a ready Change.",
-          },
-          {
-            command: "by change cancel <change-id>",
-            description: "Cancel an open taskless Change.",
-          },
-          {
-            command: "by change reconcile [<change-id>]",
-            description: "Read owned pull requests and clean up terminal Changes.",
-          },
-          {
-            command: "by change implement <change-id> [--handoff-file <path>]",
-            description: "Launch an Interactive Session in a ready Change worktree.",
-          },
-          {
-            command: "by change decision add <change-id> --file <path>",
-            description: "Record one Implementer Implementation Decision.",
-          },
-          {
-            command: "by change blocker raise <change-id> --file <path>",
-            description: "Report an Implementation Blocker.",
-          },
-          {
-            command: "by change blocker resolve <change-id> --file <path>",
-            description: "Record an approved Implementation Blocker Resolution.",
-          },
-          {
-            command: "by change blocker list <change-id>",
-            description: "List blocker and Resolution history.",
-          },
-          {
-            command: "by change decision list <change-id>",
-            description: "List the Change Implementation Decision Log.",
-          },
-        ],
-        flags: withGlobalHelpFlags(),
-      }),
-    );
-  }
-  const subcommand = args[0];
-  if (subcommand === "start") return runStart(args.slice(1), environment);
-  if (subcommand === "prepare") return runPrepare(args.slice(1), environment);
-  if (subcommand === "list") return runList(args.slice(1), environment);
-  if (subcommand === "show") return runShow(args.slice(1), environment);
-  if (subcommand === "findings") return runFindings(args.slice(1), environment);
-  if (subcommand === "validation-runs") return runValidationRuns(args.slice(1), environment);
-  if (subcommand === "implement") return runImplement(args.slice(1), environment);
-  if (subcommand === "decision") return runDecision(args.slice(1), environment);
-  if (subcommand === "blocker") return runBlocker(args.slice(1), environment);
-  if (subcommand === "submit") return runSubmit(args.slice(1), environment);
-  if (subcommand === "cancel") return runCancel(args.slice(1), environment);
-  if (subcommand === "reconcile") return runReconcile(args.slice(1), environment);
-  return Effect.succeed(
-    usageError({
-      code: subcommand?.startsWith("-") === true ? "unknown_flag" : "unknown_command",
-      message:
-        subcommand?.startsWith("-") === true
-          ? `Unknown flag: ${subcommand}`
-          : `Unknown change command: ${subcommand ?? ""}`,
-      help: ["Run `by change --help`."],
-    }),
-  );
+export type ChangeStartCommand = {
+  readonly taskId: string | undefined;
+  readonly baseBranch: string | undefined;
 };
 
-const runStart = (
-  args: readonly string[],
+export const runStart = (
+  command: ChangeStartCommand,
   environment: ChangeCommandEnvironment,
 ): Effect.Effect<CliResult> => {
-  if (args.length === 1 && args[0] === "--help") {
-    return Effect.succeed(
-      success({
-        usage: "by change start [--task <task-id>] [--base <branch>]",
-        flags: withGlobalHelpFlags([
-          {
-            flag: "--task <task-id>",
-            description: "Link one approved Task with satisfied prerequisites.",
-          },
-          {
-            flag: "--base <branch>",
-            description: "Use this freshly fetched publication-remote branch as the Change Base.",
-          },
-        ]),
-        examples: [
-          "by change start",
-          "by change start --task BY-1",
-          "by change start --base release --output json",
-        ],
-      }),
-    );
-  }
-  const parsed = parseStartArgs(args);
-  if (!parsed.ok) return Effect.succeed(parsed.result);
+  const parsedTaskId =
+    command.taskId === undefined ? undefined : parseCliTaskIdValue(command.taskId);
+  if (parsedTaskId !== undefined && !parsedTaskId.ok) return Effect.succeed(parsedTaskId.result);
 
   return withChanges(environment, (changes) =>
     Effect.map(
       changes.start({
-        ...(parsed.taskId === undefined ? {} : { taskId: parsed.taskId }),
-        ...(parsed.baseBranch === undefined ? {} : { baseBranch: parsed.baseBranch }),
+        ...(parsedTaskId === undefined ? {} : { taskId: parsedTaskId.taskId }),
+        ...(command.baseBranch === undefined ? {} : { baseBranch: command.baseBranch }),
         now: environment.now().toISOString(),
       }),
       startResult,
@@ -190,65 +73,10 @@ const runStart = (
   );
 };
 
-type StartArgsParseResult =
-  | {
-      readonly ok: true;
-      readonly taskId: PublicTaskId | undefined;
-      readonly baseBranch: string | undefined;
-    }
-  | { readonly ok: false; readonly result: CliResult };
-
-const parseStartArgs = (args: readonly string[]): StartArgsParseResult => {
-  let taskId: PublicTaskId | undefined;
-  let baseBranch: string | undefined;
-  for (let index = 0; index < args.length; index += 2) {
-    const flag = args[index];
-    const value = args[index + 1];
-    if (value === undefined || value.startsWith("-")) return invalidStartArgs();
-    if (flag === "--task" && taskId === undefined) {
-      const parsed = parseCliTaskIdValue(value);
-      if (!parsed.ok) return { ok: false, result: parsed.result };
-      taskId = parsed.taskId;
-    } else if (flag === "--base" && baseBranch === undefined) {
-      baseBranch = value;
-    } else {
-      return invalidStartArgs();
-    }
-  }
-  return { ok: true, taskId, baseBranch };
-};
-
-const invalidStartArgs = (): StartArgsParseResult => ({
-  ok: false,
-  result: usageError({
-    code: "invalid_arguments",
-    message: "Change Start accepts optional --task <task-id> and --base <branch> flags.",
-    help: ["Run `by change start [--task <task-id>] [--base <branch>]`."],
-  }),
-});
-
-const runList = (
-  args: readonly string[],
+export const runList = (
+  command: { readonly all: boolean },
   environment: ChangeCommandEnvironment,
 ): Effect.Effect<CliResult> => {
-  if (args.length === 1 && args[0] === "--help") {
-    return Effect.succeed(
-      success({
-        usage: "by change list [--all]",
-        flags: withGlobalHelpFlags([{ flag: "--all", description: "Include closed Changes." }]),
-        examples: ["by change list", "by change list --all", "by change list --output json"],
-      }),
-    );
-  }
-  if (args.length > 1 || (args.length === 1 && args[0] !== "--all")) {
-    return Effect.succeed(
-      usageError({
-        code: "invalid_arguments",
-        message: "Change List accepts only an optional --all flag.",
-        help: ["Run `by change list [--all]`."],
-      }),
-    );
-  }
   const loaded = loadChangeInspection({
     cwd: environment.cwd,
   });
@@ -257,7 +85,7 @@ const runList = (
   return loaded.inspection
     .list({
       repositoryCommonDirectory: loaded.commonDirectory,
-      includeClosed: args[0] === "--all",
+      includeClosed: command.all,
     })
     .pipe(
       Effect.map((changes) =>
@@ -279,39 +107,15 @@ const runList = (
     );
 };
 
-const runShow = (
-  args: readonly string[],
+export const runShow = (
+  command: { readonly changeId: string },
   environment: ChangeCommandEnvironment,
 ): Effect.Effect<CliResult> => {
-  if (args.length === 1 && args[0] === "--help") {
-    return Effect.succeed(
-      success({
-        usage: "by change show <change-id>",
-        arguments: [{ argument: "<change-id>", description: "Change ID returned by Change Start" }],
-        flags: withGlobalHelpFlags(),
-        examples: [
-          "by change show <change-id>",
-          "by change show <change-id> --output json",
-          "by change findings <change-id>",
-          "by validation-run show <validation-run-id>",
-        ],
-      }),
-    );
-  }
-  if (args.length !== 1 || args[0] === undefined || args[0].startsWith("-")) {
-    return Effect.succeed(
-      usageError({
-        code: "invalid_arguments",
-        message: "Change Show requires one Change ID.",
-        help: ["Run `by change show <change-id>`."],
-      }),
-    );
-  }
   const loaded = loadChangeInspection({
     cwd: environment.cwd,
   });
   if (!loaded.ok) return Effect.succeed(loadError(loaded.error));
-  return loaded.inspection.inspect(args[0]).pipe(
+  return loaded.inspection.inspect(command.changeId).pipe(
     Effect.map((detail) =>
       detail === undefined
         ? changeNotFound()
@@ -400,17 +204,16 @@ const changeNotFound = (): CliResult =>
     help: ["Use a Change ID returned by `by change list --all --output json`."],
   });
 
-const runFindings = (
-  args: readonly string[],
+export const runFindings = (
+  command: { readonly changeId: string },
   environment: ChangeCommandEnvironment,
 ): Effect.Effect<CliResult> => {
-  const changeId = changeIdArgument(args, "findings");
-  if (!changeId.ok) return Effect.succeed(changeId.result);
+  const changeId = command.changeId;
   const loaded = loadChangeInspection({
     cwd: environment.cwd,
   });
   if (!loaded.ok) return Effect.succeed(loadError(loaded.error));
-  return loaded.inspection.findings(changeId.changeId).pipe(
+  return loaded.inspection.findings(changeId).pipe(
     Effect.map((result) =>
       result === undefined
         ? changeNotFound()
@@ -427,17 +230,16 @@ const runFindings = (
   );
 };
 
-const runValidationRuns = (
-  args: readonly string[],
+export const runValidationRuns = (
+  command: { readonly changeId: string },
   environment: ChangeCommandEnvironment,
 ): Effect.Effect<CliResult> => {
-  const changeId = changeIdArgument(args, "validation-runs");
-  if (!changeId.ok) return Effect.succeed(changeId.result);
+  const changeId = command.changeId;
   const loaded = loadChangeInspection({
     cwd: environment.cwd,
   });
   if (!loaded.ok) return Effect.succeed(loadError(loaded.error));
-  return loaded.inspection.validationRuns(changeId.changeId).pipe(
+  return loaded.inspection.validationRuns(changeId).pipe(
     Effect.map((result) =>
       result === undefined
         ? changeNotFound()
@@ -455,108 +257,31 @@ const inspectionFailure = <A>(
     Effect.catchAllCause(() => Effect.succeed(stateStoreUnavailable("repository"))),
   );
 
-type ChangeIdArgumentResult =
-  | { readonly ok: true; readonly changeId: string }
-  | { readonly ok: false; readonly result: CliResult };
-
-const changeIdArgument = (
-  args: readonly string[],
-  command: "findings" | "validation-runs",
-): ChangeIdArgumentResult => {
-  if (args.length === 1 && args[0] === "--help") {
-    return {
-      ok: false,
-      result: success({
-        usage: `by change ${command} <change-id>`,
-        arguments: [{ argument: "<change-id>", description: "Change ID returned by Change Start" }],
-        flags: withGlobalHelpFlags(),
-        examples: [
-          `by change ${command} <change-id>`,
-          `by change ${command} <change-id> --output json`,
-        ],
-      }),
-    };
-  }
-  if (args.length !== 1 || args[0] === undefined || args[0].startsWith("-")) {
-    return {
-      ok: false,
-      result: usageError({
-        code: "invalid_arguments",
-        message: `Change ${command === "findings" ? "Findings" : "Validation Runs"} requires one Change ID.`,
-        help: [`Run \`by change ${command} <change-id>\`.`],
-      }),
-    };
-  }
-  return { ok: true, changeId: args[0] };
-};
-
-const runPrepare = (
-  args: readonly string[],
+export const runPrepare = (
+  command: { readonly changeId: string },
   environment: ChangeCommandEnvironment,
 ): Effect.Effect<CliResult> => {
-  if (args.length === 1 && args[0] === "--help") {
-    return Effect.succeed(
-      success({
-        usage: "by change prepare <change-id>",
-        arguments: [{ argument: "<change-id>", description: "Change ID returned by Change Start" }],
-        flags: withGlobalHelpFlags(),
-        examples: ["by change prepare <change-id>", "by change prepare <change-id> --output json"],
-      }),
-    );
-  }
-  if (args.length !== 1 || args[0] === undefined || args[0].startsWith("-")) {
-    return Effect.succeed(
-      usageError({
-        code: "invalid_arguments",
-        message: "Change Prepare requires one Change ID.",
-        help: ["Run `by change prepare <change-id>`."],
-      }),
-    );
-  }
-  const changeId = args[0];
+  const changeId = command.changeId;
   return withChanges(environment, (changes) =>
     Effect.map(changes.prepare(changeId, environment.now().toISOString()), prepareResult),
   );
 };
 
-const runImplement = (
-  args: readonly string[],
+export const runImplement = (
+  command: { readonly changeId: string; readonly handoffFile: string | undefined },
   environment: ChangeCommandEnvironment,
 ): Effect.Effect<CliResult> => {
-  if (args.length === 1 && args[0] === "--help") {
-    return Effect.succeed(
-      success({
-        usage: "by change implement <change-id> [--handoff-file <path>]",
-        arguments: [
-          { argument: "<change-id>", description: "Ready Change ID returned by Change Start" },
-        ],
-        flags: withGlobalHelpFlags([
-          {
-            flag: "--handoff-file <path>",
-            description: "Optional compact UTF-8 handoff file; use - for piped stdin",
-          },
-        ]),
-        examples: [
-          "by change implement <change-id>",
-          "by change implement <change-id> --handoff-file /tmp/handoff.md --output json",
-          'printf "Handoff" | by change implement <change-id> --handoff-file -',
-        ],
-      }),
-    );
-  }
-  const parsed = parseImplementArgs(args);
-  if (!parsed.ok) return Effect.succeed(parsed.result);
   const handoff =
-    parsed.handoffFile === undefined
+    command.handoffFile === undefined
       ? undefined
-      : readHandoffFile(environment.cwd, parsed.handoffFile, environment.stdin);
+      : readHandoffFile(environment.cwd, command.handoffFile, environment.stdin);
   if (handoff !== undefined && !handoff.ok) return Effect.succeed(handoffFileError(handoff.error));
 
   return withChanges(
     environment,
     (changes) =>
       Effect.map(
-        changes.implement(parsed.changeId, handoff === undefined ? undefined : handoff.content),
+        changes.implement(command.changeId, handoff === undefined ? undefined : handoff.content),
         implementResult,
       ),
     () =>
@@ -566,36 +291,6 @@ const runImplement = (
         help: ["Confirm Herdr is running, then retry Change Implement."],
       }),
   );
-};
-
-type ImplementArgsParseResult =
-  | { readonly ok: true; readonly changeId: string; readonly handoffFile: string | undefined }
-  | { readonly ok: false; readonly result: CliResult };
-
-const parseImplementArgs = (args: readonly string[]): ImplementArgsParseResult => {
-  const changeId = args[0];
-  if (changeId === undefined || changeId.startsWith("-")) {
-    return {
-      ok: false,
-      result: usageError({
-        code: "invalid_arguments",
-        message: "Change Implement requires one Change ID.",
-        help: ["Run `by change implement <change-id> [--handoff-file <path>]`."],
-      }),
-    };
-  }
-  if (args.length === 1) return { ok: true, changeId, handoffFile: undefined };
-  if (args.length === 3 && args[1] === "--handoff-file" && args[2] !== undefined) {
-    return { ok: true, changeId, handoffFile: args[2] };
-  }
-  return {
-    ok: false,
-    result: usageError({
-      code: "invalid_arguments",
-      message: "Change Implement accepts one Change ID and an optional --handoff-file <path>.",
-      help: ["Run `by change implement <change-id> [--handoff-file <path>]`."],
-    }),
-  };
 };
 
 const handoffFileError = (error: HandoffFileReadError): CliResult => {
@@ -644,39 +339,17 @@ const handoffFileError = (error: HandoffFileReadError): CliResult => {
   }
 };
 
-const runBlocker = (
-  args: readonly string[],
+export type ChangeBlockerCommand =
+  | { readonly action: "list"; readonly changeId: string }
+  | { readonly action: "raise" | "resolve"; readonly changeId: string; readonly file: string };
+
+export const runBlocker = (
+  command: ChangeBlockerCommand,
   environment: ChangeCommandEnvironment,
 ): Effect.Effect<CliResult> => {
-  const action = args[0];
-  if (args.length === 1 && action === "--help")
-    return Effect.succeed(
-      success({
-        usage: "by change blocker <raise|resolve|list> <change-id> [--file <path>]",
-        commands: [
-          {
-            command: "by change blocker raise <change-id> --file <path>",
-            description: "Report a blocker.",
-          },
-          {
-            command: "by change blocker resolve <change-id> --file <path>",
-            description: "Approve a resolution.",
-          },
-          { command: "by change blocker list <change-id>", description: "List blocker history." },
-        ],
-        flags: withGlobalHelpFlags(),
-      }),
-    );
-  const changeId = args[1];
+  const action = command.action;
+  const changeId = command.changeId;
   if (action === "list") {
-    if (changeId === undefined || args.length !== 2)
-      return Effect.succeed(
-        usageError({
-          code: "invalid_arguments",
-          message: "Blocker List requires one Change ID.",
-          help: ["Run `by change blocker list <change-id>`."],
-        }),
-      );
     const loaded = loadChangeInspection({ cwd: environment.cwd });
     if (!loaded.ok) return Effect.succeed(loadError(loaded.error));
     return loaded.inspection.blockers(changeId).pipe(
@@ -686,23 +359,7 @@ const runBlocker = (
       inspectionFailure,
     );
   }
-  if (action !== "raise" && action !== "resolve")
-    return Effect.succeed(
-      usageError({
-        code: "unknown_command",
-        message: `Unknown blocker command: ${action ?? ""}`,
-        help: ["Run `by change blocker --help`."],
-      }),
-    );
-  if (changeId === undefined || args.length !== 4 || args[2] !== "--file" || args[3] === undefined)
-    return Effect.succeed(
-      usageError({
-        code: "invalid_arguments",
-        message: "Blocker mutation requires <change-id> --file <path>.",
-        help: [`Run by change blocker ${action} <change-id> --file <path>.`],
-      }),
-    );
-  const content = readImplementationDecisionFile(environment.cwd, args[3], environment.stdin);
+  const content = readImplementationDecisionFile(environment.cwd, command.file, environment.stdin);
   if (!content.ok) return Effect.succeed(decisionFileError(content.error));
   const loaded = loadChangeInspection({ cwd: environment.cwd });
   if (!loaded.ok) return Effect.succeed(loadError(loaded.error));
@@ -727,113 +384,51 @@ const runBlocker = (
   );
 };
 
-const runDecision = (
-  args: readonly string[],
+export type ChangeDecisionCommand =
+  | { readonly action: "list"; readonly changeId: string }
+  | { readonly action: "add"; readonly changeId: string; readonly file: string };
+
+export const runDecision = (
+  command: ChangeDecisionCommand,
   environment: ChangeCommandEnvironment,
 ): Effect.Effect<CliResult> => {
-  const action = args[0];
-  if (args.length === 1 && action === "--help") {
-    return Effect.succeed(
-      success({
-        usage: "by change decision <add|list> <change-id> [--file <path>]",
-        commands: [
-          {
-            command: "by change decision add <change-id> --file <path>",
-            description: "Append one Markdown decision.",
-          },
-          {
-            command: "by change decision list <change-id>",
-            description: "List decisions in sequence order.",
-          },
-        ],
-        flags: withGlobalHelpFlags(),
-      }),
-    );
-  }
+  const action = command.action;
   if (action === "list") {
-    if (args.length === 2 && args[1] === "--help") {
-      return Effect.succeed(
-        success({
-          usage: "by change decision list <change-id>",
-          flags: withGlobalHelpFlags(),
-          examples: ["by change decision list <change-id>"],
-        }),
-      );
-    }
-    if (args.length === 2 && args[1] !== undefined && !args[1].startsWith("-")) {
-      const decisionChangeId = args[1];
-      const loaded = loadChangeInspection({ cwd: environment.cwd });
-      if (!loaded.ok) return Effect.succeed(loadError(loaded.error));
-      return loaded.inspection.decisions(decisionChangeId).pipe(
-        Effect.map((decisions) =>
-          decisions === undefined
-            ? changeNotFound()
-            : success({ changeId: decisionChangeId, count: decisions.length, decisions }),
-        ),
-        inspectionFailure,
-      );
-    }
-    return Effect.succeed(
-      usageError({
-        code: "invalid_arguments",
-        message: "Change Decision List requires one Change ID.",
-        help: ["Run `by change decision list <change-id>`."],
-      }),
+    const loaded = loadChangeInspection({ cwd: environment.cwd });
+    if (!loaded.ok) return Effect.succeed(loadError(loaded.error));
+    return loaded.inspection.decisions(command.changeId).pipe(
+      Effect.map((decisions) =>
+        decisions === undefined
+          ? changeNotFound()
+          : success({ changeId: command.changeId, count: decisions.length, decisions }),
+      ),
+      inspectionFailure,
     );
   }
-  if (action === "add") {
-    if (args.length === 2 && args[1] === "--help") {
-      return Effect.succeed(
-        success({
-          usage: "by change decision add <change-id> --file <path>",
-          flags: withGlobalHelpFlags([
-            { flag: "--file <path>", description: "UTF-8 Markdown file; use - for stdin." },
-          ]),
-          examples: [
-            "by change decision add <change-id> --file decision.md",
-            "printf 'Reason' | by change decision add <change-id> --file -",
-          ],
-        }),
-      );
-    }
-    const changeId = args[1];
-    const file = args[2] === "--file" ? args[3] : undefined;
-    if (
-      changeId === undefined ||
-      changeId.startsWith("-") ||
-      file === undefined ||
-      args.length !== 4
-    ) {
-      return Effect.succeed(
-        usageError({
-          code: "invalid_arguments",
-          message: "Change Decision Add requires <change-id> --file <path>.",
-          help: ["Run `by change decision add <change-id> --file <path>`."],
-        }),
-      );
-    }
-    const content = readImplementationDecisionFile(environment.cwd, file, environment.stdin);
+  {
+    const content = readImplementationDecisionFile(
+      environment.cwd,
+      command.file,
+      environment.stdin,
+    );
     if (!content.ok) return Effect.succeed(decisionFileError(content.error));
     const loaded = loadChangeInspection({ cwd: environment.cwd });
     if (!loaded.ok) return Effect.succeed(loadError(loaded.error));
     return loaded.inspection
-      .addDecision({ changeId, content: content.content, now: environment.now().toISOString() })
+      .addDecision({
+        changeId: command.changeId,
+        content: content.content,
+        now: environment.now().toISOString(),
+      })
       .pipe(
         Effect.map((result) =>
           result.ok
-            ? success({ changeId, decision: result.decision })
-            : decisionMutationError(result.code, changeId),
+            ? success({ changeId: command.changeId, decision: result.decision })
+            : decisionMutationError(result.code, command.changeId),
         ),
         inspectionFailure,
       );
   }
-  return Effect.succeed(
-    usageError({
-      code: "unknown_command",
-      message: `Unknown decision command: ${action ?? ""}`,
-      help: ["Run `by change decision --help`."],
-    }),
-  );
 };
 
 const decisionMutationError = (code: string, changeId: string): CliResult =>
@@ -868,29 +463,10 @@ const decisionFileError = (error: ImplementationDecisionFileError): CliResult =>
     ],
   });
 
-const runSubmit = (
-  args: readonly string[],
+export const runSubmit = (
+  command: { readonly changeId: string },
   environment: ChangeCommandEnvironment,
 ): Effect.Effect<CliResult> => {
-  if (args.length === 1 && args[0] === "--help") {
-    return Effect.succeed(
-      success({
-        usage: "by change submit <change-id>",
-        arguments: [{ argument: "<change-id>", description: "Ready Change ID" }],
-        flags: withGlobalHelpFlags(),
-        examples: ["by change submit <change-id>", "by change submit <change-id> --output json"],
-      }),
-    );
-  }
-  if (args.length !== 1 || args[0] === undefined || args[0].startsWith("-")) {
-    return Effect.succeed(
-      usageError({
-        code: "invalid_arguments",
-        message: "Change Submit requires one Change ID.",
-        help: ["Run `by change submit <change-id>`."],
-      }),
-    );
-  }
   const loaded = loadChangeSubmit({
     cwd: environment.cwd,
     globalConfigPath: environment.globalConfigPath,
@@ -899,10 +475,12 @@ const runSubmit = (
       : { reviewerAgentRuntime: environment.reviewerAgentRuntime }),
   });
   if (!loaded.ok) return Effect.succeed(loadError(loaded.error));
-  return loaded.submit.submit({ changeId: args[0], now: environment.now().toISOString() }).pipe(
-    Effect.map((result) => submitResult(result, args[0] as string)),
-    Effect.catchAll((error) => Effect.succeed(repositoryStorageErrorResult(error))),
-  );
+  return loaded.submit
+    .submit({ changeId: command.changeId, now: environment.now().toISOString() })
+    .pipe(
+      Effect.map((result) => submitResult(result, command.changeId)),
+      Effect.catchAll((error) => Effect.succeed(repositoryStorageErrorResult(error))),
+    );
 };
 
 type SubmitRecoveryAction =
@@ -1119,29 +697,10 @@ const submitResult = (result: ChangeSubmitResult, changeId: string): CliResult =
   });
 };
 
-const runCancel = (
-  args: readonly string[],
+export const runCancel = (
+  command: { readonly changeId: string },
   environment: ChangeCommandEnvironment,
 ): Effect.Effect<CliResult> => {
-  if (args.length === 1 && args[0] === "--help") {
-    return Effect.succeed(
-      success({
-        usage: "by change cancel <change-id>",
-        arguments: [{ argument: "<change-id>", description: "Open taskless Change ID" }],
-        flags: withGlobalHelpFlags(),
-        examples: ["by change cancel <change-id>", "by change cancel <change-id> --output json"],
-      }),
-    );
-  }
-  if (args.length !== 1 || args[0] === undefined || args[0].startsWith("-")) {
-    return Effect.succeed(
-      usageError({
-        code: "invalid_arguments",
-        message: "Change Cancel requires one Change ID.",
-        help: ["Run `by change cancel <change-id>`."],
-      }),
-    );
-  }
   return withCancellation(
     {
       cwd: environment.cwd,
@@ -1152,7 +711,7 @@ const runCancel = (
     (cancellation) =>
       Effect.map(
         cancellation.cancelChange({
-          changeId: args[0] as string,
+          changeId: command.changeId,
           now: environment.now().toISOString(),
         }),
         changeCancelResult,
@@ -1225,50 +784,17 @@ const changeCancelResult = (result: ChangeCancellationResult): CliResult => {
   });
 };
 
-const runReconcile = (
-  args: readonly string[],
+export const runReconcile = (
+  command: { readonly changeId: string | undefined },
   environment: ChangeCommandEnvironment,
 ): Effect.Effect<CliResult> => {
-  if (isReconcileHelp(args)) return Effect.succeed(reconcileHelp());
-  if (hasInvalidReconcileArguments(args)) {
-    return Effect.succeed(
-      usageError({
-        code: "invalid_arguments",
-        message: "Change Reconcile accepts at most one Change ID.",
-        help: ["Run `by change reconcile [<change-id>]`."],
-      }),
-    );
-  }
-  const changeId = args[0];
+  const changeId = command.changeId;
   return withChanges(environment, (changes) =>
     Effect.map(changes.reconcile(changeId, environment.now().toISOString()), (result) =>
       reconcileResult(changeId, result),
     ),
   );
 };
-
-const isReconcileHelp = (args: readonly string[]): boolean =>
-  args.length === 1 && args[0] === "--help";
-
-const hasInvalidReconcileArguments = (args: readonly string[]): boolean =>
-  args.length > 1 || args[0]?.startsWith("-") === true;
-
-const reconcileHelp = (): CliResult =>
-  success({
-    usage: "by change reconcile [<change-id>]",
-    arguments: [
-      {
-        argument: "<change-id>",
-        description: "Optional Change ID. Without one, reconcile all eligible Changes.",
-      },
-    ],
-    flags: withGlobalHelpFlags(),
-    examples: [
-      "by change reconcile",
-      "by change reconcile <change-id>",
-      "by change reconcile --output json",
-    ],
-  });
 
 const reconcileResult = (
   changeId: string | undefined,

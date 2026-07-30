@@ -730,7 +730,7 @@ contextCommand: by task context BY-1`);
           name: "missing file flag",
           args: ["task", "comment", "BY-1"],
           status: 2,
-          code: "missing_comment_file",
+          code: "invalid_usage",
         },
         {
           name: "remote-backed task ID",
@@ -807,7 +807,7 @@ contextCommand: by task context BY-1`);
 
       expect(result.status).toBe(2);
       expect(result.stderr).toBe("");
-      expect(result.stdout).toContain("code: missing_task_id");
+      expect(result.stdout).toContain("code: invalid_usage");
       expect(result.stdout).toContain("help[1]");
     }),
   );
@@ -955,10 +955,9 @@ help[1]: "Run \`by task create --title \\"...\\" --description-file <file>\` to 
       expect(result.status).toBe(2);
       expect(result.stderr).toBe("");
       expect(result.stdout).toBe(`error:
-  code: invalid_task_state
-  message: Unknown task state not-a-state.
-  state: not-a-state
-help[1]: "Use one of: new, todo, implementing, blocked, validating, ready, done, cancelled."`);
+  code: invalid_usage
+  message: "Expected one of the following cases: new, todo, implementing, blocked, validating, ready, done, cancelled"
+help[1]: Run \`by --help\` for generated command help.`);
     }),
   );
 
@@ -982,17 +981,13 @@ help[1]: "Use one of: new, todo, implementing, blocked, validating, ready, done,
   );
 
   it.effect.each([
-    ["missing title", ["task", "create", "--description-file", "task.md"], "missing_title"],
+    ["missing title", ["task", "create", "--description-file", "task.md"], "invalid_usage"],
     [
       "empty title",
       ["task", "create", "--title", "   ", "--description-file", "task.md"],
       "empty_title",
     ],
-    [
-      "missing description file",
-      ["task", "create", "--title", "Title"],
-      "missing_description_file",
-    ],
+    ["missing description file", ["task", "create", "--title", "Title"], "invalid_usage"],
   ] as const)("prints %s as a usage error", ([_name, args, code]) =>
     Effect.gen(function* () {
       const root = createTestWorkspace();

@@ -85,7 +85,7 @@ describe("by CLI", () => {
       expect(result.stderr).toBe("");
       const parsed = JSON.parse(result.stdout);
       expect(parsed.help).toContain("Create repo-local But Why? state.");
-      expect(parsed.help).toContain("ARGUMENTS");
+      expect(parsed.help).toContain("--task-prefix text");
     }),
   );
 
@@ -478,7 +478,7 @@ help[1]: "Run git init first, or cd into an existing Git repository."`);
     }),
   );
 
-  it.effect("prints missing_task_prefix in non-interactive init", () =>
+  it.effect("prints invalid_usage for missing task prefix in non-interactive init", () =>
     Effect.gen(function* () {
       const root = createGitRepo();
       const result = yield* runByInProcessEffect(root, ["init"]);
@@ -486,9 +486,9 @@ help[1]: "Run git init first, or cd into an existing Git repository."`);
       expect(result.status).toBe(2);
       expect(result.stderr).toBe("");
       expect(result.stdout).toBe(`error:
-  code: missing_task_prefix
-  message: "--task-prefix is required in non-interactive init."
-help[1]: Run by init --task-prefix BY.`);
+  code: invalid_usage
+  message: "Expected to find option: '--task-prefix'"
+help[1]: Run \`by --help\` for generated command help.`);
     }),
   );
 

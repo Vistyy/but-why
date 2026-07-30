@@ -2,32 +2,21 @@ import { Effect } from "effect";
 
 import type { CliResult } from "../../../cliResults.js";
 import { stateStoreUnavailable, success } from "../../../cliResults.js";
-import { withGlobalHelpFlags } from "../../../cliHelp.js";
 import { loadChangeInspection } from "../../../change/loadChangeInspection.js";
+import { parseCliTaskIdValue } from "../../../cliTaskId.js";
 import {
-  parseTaskIdArg,
   resolveTaskId,
   taskNotFound,
   withTasks,
   type TaskCommandEnvironment,
 } from "../taskCliSupport.js";
+import type { TaskIdCommand } from "./approve.js";
 
-export const runShowCommand = (
-  args: readonly string[],
+export const runTaskShowCommand = (
+  command: TaskIdCommand,
   environment: TaskCommandEnvironment,
 ): Effect.Effect<CliResult> => {
-  if (args.length === 1 && args[0] === "--help") {
-    return Effect.succeed(
-      success({
-        usage: "by task show <task-id>",
-        arguments: [{ argument: "<task-id>", description: "Public Task ID, such as BY-1" }],
-        flags: withGlobalHelpFlags(),
-        examples: ["by task show BY-1", "by task context BY-1"],
-      }),
-    );
-  }
-
-  const parsed = parseTaskIdArg(args, "by task show <task-id>");
+  const parsed = parseCliTaskIdValue(command.taskId);
   if (!parsed.ok) return Effect.succeed(parsed.result);
   return withTasks(environment, false, (tasks) => {
     const taskId = resolveTaskId(tasks, parsed.taskId);
