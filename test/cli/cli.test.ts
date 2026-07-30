@@ -214,7 +214,7 @@ describe("by CLI", () => {
       expect(result.status).toBe(2);
       expect(result.stderr).toBe("");
       expect(result.stdout).toContain("code: invalid_usage");
-      expect(result.stdout).toContain("Global output options must appear before the command.");
+      expect(result.stdout).toContain("Received unknown argument: '--output'");
     }),
   );
 

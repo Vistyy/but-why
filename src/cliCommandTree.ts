@@ -8,7 +8,7 @@ import * as HelpDoc from "@effect/cli/HelpDoc";
 import * as Options from "@effect/cli/Options";
 import * as ValidationError from "@effect/cli/ValidationError";
 import { NodeFileSystem, NodePath, NodeTerminal } from "@effect/platform-node";
-import { Console, Effect, Layer } from "effect";
+import { Console, Context, Effect, Layer } from "effect";
 
 import type { CliEnvironment } from "./cli.js";
 import { success, usageError, type CliResult } from "./cliResults.js";
@@ -45,8 +45,26 @@ import {
 import { outputFormats, type OutputFormat } from "./output/structured.js";
 import { taskStates, type TaskState } from "./task/lifecycle.js";
 
+class RawCliArgs extends Context.Tag("@but-why/RawCliArgs")<RawCliArgs, readonly string[]>() {}
+
 const globalOutput = Options.withAlias(
-  Options.withDefault(Options.choice("output", outputFormats), "toon"),
+  Options.withDefault(
+    Options.choice("output", outputFormats).pipe(
+      Options.mapEffect(
+        (value) =>
+          Effect.contextWithEffect((context) =>
+            hasTrailingOutput(Context.get(context, RawCliArgs))
+              ? Effect.fail(
+                  ValidationError.invalidValue(
+                    HelpDoc.p("Global output options must appear before the command."),
+                  ),
+                )
+              : Effect.succeed(value),
+          ) as unknown as Effect.Effect<OutputFormat, ValidationError.ValidationError, never>,
+      ),
+    ),
+    "toon",
+  ),
   "o",
 );
 
@@ -193,13 +211,18 @@ const commandTree = Command.make("by", { output: globalOutput }).pipe(
 );
 
 const cliConfig = CliConfig.defaultConfig;
-const parserLayer = Layer.mergeAll(NodeFileSystem.layer, NodePath.layer, NodeTerminal.layer);
+const parserLayer = (args: readonly string[]) =>
+  Layer.mergeAll(
+    NodeFileSystem.layer,
+    NodePath.layer,
+    NodeTerminal.layer,
+    Layer.succeed(RawCliArgs, args),
+  );
 
 export const runCommandTree = (
   args: readonly string[],
   environment: CliEnvironment,
 ): Effect.Effect<CliResult> =>
-  trailingOutputUsage(args) ??
   Effect.either(
     CommandDescriptor.parse(commandTree.descriptor, ["by", ...parserArgs(args)], cliConfig),
   ).pipe(
@@ -215,7 +238,7 @@ export const runCommandTree = (
           })
         : directiveResult(parsed.right, args, environment),
     ),
-    Effect.provide(parserLayer),
+    Effect.provide(parserLayer(args)),
   );
 
 const directiveResult = (
@@ -476,22 +499,12 @@ const generatedCommandUsage = (command: AnyCommand): Effect.Effect<CliResult> =>
     }),
   );
 
-const trailingOutputUsage = (args: readonly string[]): Effect.Effect<CliResult> | undefined => {
-  const outputIndex = args.findIndex(
+const hasTrailingOutput = (args: readonly string[]): boolean =>
+  args.some(
     (arg, index) =>
       index > 1 &&
       (arg === "--output" || arg === "-o" || arg.startsWith("--output=") || arg.startsWith("-o=")),
   );
-  if (outputIndex === -1) return undefined;
-  return Effect.succeed({
-    ...usageError({
-      code: "invalid_usage",
-      message: "Global output options must appear before the command.",
-      help: ["Run `by --help` for generated command help."],
-    }),
-    outputFormat: outputFormatFromLeadingArgs(args),
-  });
-};
 
 const parserArgs = (args: readonly string[]): readonly string[] =>
   args[0] === "--output" || args[0] === "-o"
@@ -513,7 +526,7 @@ const generatedLeftoverUsage = (args: readonly string[]): Effect.Effect<CliResul
           "by",
           "by",
           ...parserArgs(args),
-        ]).pipe(Effect.provide(parserLayer)),
+        ]).pipe(Effect.provide(parserLayer(args))),
       ),
     ),
   ).pipe(
