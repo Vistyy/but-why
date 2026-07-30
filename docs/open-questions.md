@@ -96,7 +96,8 @@ Any future automation must define session identity, ownership, stop semantics, w
 
 ## Which GitHub events should drive automation?
 
-V1 refreshes PR facts only through Submit.
+V1 has no event-driven PR refresh.
+Change Submit, Change Reconcile, and Change cancellation read owned pull-request facts explicitly.
 But Why does not treat GitHub-authored text as implementation instructions.
 
 Future work may consider webhooks, CI remediation, requested-change workflows, and merge-conflict remediation.
