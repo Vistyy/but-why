@@ -4,9 +4,20 @@ import { basename, dirname } from "node:path";
 
 import type { RemoteChangeBranch } from "./change.js";
 
+export type RemoteUrlRewrite = {
+  readonly base: string;
+  readonly pattern: string;
+  readonly kind: "insteadOf" | "pushInsteadOf";
+};
+
 export type RemoteBranchHeadResult =
   | { readonly state: "missing" }
-  | { readonly state: "present"; readonly headSha: string; readonly remoteUrl: string }
+  | {
+      readonly state: "present";
+      readonly headSha: string;
+      readonly remoteUrl: string;
+      readonly remoteUrlRewrites: readonly RemoteUrlRewrite[];
+    }
   | { readonly state: "unavailable" }
   | { readonly state: "mismatch" };
 
@@ -28,6 +39,7 @@ export type ChangeCleanupRemote = {
     readonly branchName: string;
     readonly expectedHeadSha: string;
     readonly resolvedRemoteUrl: string;
+    readonly remoteUrlRewrites: readonly RemoteUrlRewrite[];
   }) => boolean;
 };
 
@@ -157,6 +169,7 @@ const cleanupRemoteChangeBranch = (
       branchName: branch.branchName,
       expectedHeadSha: branch.expectedHeadSha,
       resolvedRemoteUrl: observed.remoteUrl,
+      remoteUrlRewrites: observed.remoteUrlRewrites,
     })
   ) {
     return { state: "complete" };
@@ -185,22 +198,26 @@ const localChangeCleanupRemote: ChangeCleanupRemote = {
   readRemoteBranchHead: (input) => {
     const repository = resolveRemoteRepository(input);
     if (repository.state !== "matches") return { state: repository.state };
-    const result = git(input.repositoryCommonDirectory, [
-      "ls-remote",
-      "--heads",
-      repository.fetchUrl,
-      `refs/heads/${input.branchName}`,
-    ]);
+    const result = gitWithoutRemoteUrlRewrites(
+      input.repositoryCommonDirectory,
+      repository.rewrites,
+      ["ls-remote", "--heads", repository.fetchUrl, `refs/heads/${input.branchName}`],
+    );
     if (!result.ok) return { state: "unavailable" };
     const output = result.stdout.trim();
     if (output.length === 0) return { state: "missing" };
     const headSha = output.split(/\s+/, 1)[0];
     return headSha === undefined || headSha.length === 0
       ? { state: "unavailable" }
-      : { state: "present", headSha, remoteUrl: repository.pushUrl };
+      : {
+          state: "present",
+          headSha,
+          remoteUrl: repository.pushUrl,
+          remoteUrlRewrites: repository.rewrites,
+        };
   },
   deleteRemoteBranch: (input) =>
-    git(input.repositoryCommonDirectory, [
+    gitWithoutRemoteUrlRewrites(input.repositoryCommonDirectory, input.remoteUrlRewrites, [
       "push",
       `--force-with-lease=refs/heads/${input.branchName}:${input.expectedHeadSha}`,
       input.resolvedRemoteUrl,
@@ -210,7 +227,12 @@ const localChangeCleanupRemote: ChangeCleanupRemote = {
 
 type RemoteRepositoryInput = Parameters<ChangeCleanupRemote["readRemoteBranchHead"]>[0];
 type RemoteRepositoryResolution =
-  | { readonly state: "matches"; readonly fetchUrl: string; readonly pushUrl: string }
+  | {
+      readonly state: "matches";
+      readonly fetchUrl: string;
+      readonly pushUrl: string;
+      readonly rewrites: readonly RemoteUrlRewrite[];
+    }
   | { readonly state: "mismatch" | "unavailable" };
 
 const resolveRemoteRepository = (input: RemoteRepositoryInput): RemoteRepositoryResolution => {
@@ -233,13 +255,7 @@ const resolveRemoteRepository = (input: RemoteRepositoryInput): RemoteRepository
   );
   return configuredPushUrls.length > 1 || !sameRemoteRepository(pushUrl, input)
     ? { state: "mismatch" }
-    : { state: "matches", fetchUrl, pushUrl };
-};
-
-type RemoteUrlRewrite = {
-  readonly base: string;
-  readonly pattern: string;
-  readonly kind: "insteadOf" | "pushInsteadOf";
+    : { state: "matches", fetchUrl, pushUrl, rewrites };
 };
 
 const readRemoteUrlRewrites = (
@@ -386,6 +402,17 @@ type GitResult = { readonly ok: true; readonly stdout: string } | { readonly ok:
 
 const git = (commonDirectory: string, args: readonly string[]): GitResult =>
   runGit([`--git-dir=${commonDirectory}`, ...args]);
+
+const gitWithoutRemoteUrlRewrites = (
+  commonDirectory: string,
+  rewrites: readonly RemoteUrlRewrite[],
+  args: readonly string[],
+): GitResult =>
+  runGit([
+    `--git-dir=${commonDirectory}`,
+    ...rewrites.flatMap((rewrite) => ["-c", `url.${rewrite.base}.${rewrite.kind}=`]),
+    ...args,
+  ]);
 
 const gitAtWorktree = (worktreePath: string, args: readonly string[]): GitResult =>
   runGit(["-C", worktreePath, ...args]);
