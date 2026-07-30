@@ -1,139 +1,84 @@
 # Architecture
 
-But Why? is a repository-scoped validation workflow for agent-assisted code work.
+But Why is a repository-scoped validation workflow for agent-assisted code work.
 It is task-based, not pipeline-based.
-
-## Source hierarchy
-
-`src/change/` owns Change workflows.
-It contains Change records, Candidates, Candidate capture, Candidate validation, Validation Runs, validation phases, publication, submission, and Change composition.
-
-`src/task/` owns Task intent and Task lifecycle.
-It contains Task records, lifecycle rules, Task identity, Task persistence interfaces, Task files, and Task composition.
-
-The following top-level source folders have shared roles:
-
-- `src/agent/` contains reviewer-agent execution adapters and agent-profile resolution.
-- `src/cli/` and `src/cli.ts` contain CLI routing and command adapters.
-- `src/contracts/` contains configuration, output, and repository-storage error contracts.
-- `src/init/` contains Local Repository initialization and repository-context adapters.
-- `src/output/` contains structured output codecs and serializers.
-- `src/repositoryPreparation/` contains the shared Repository Preparation adapter.
-- `src/sqlite/` contains SQLite persistence adapters.
-- `src/submissionEnvironment/` contains Git and GitHub submission-environment adapters.
-
-Acceptance Review and Specialist Review use their resolved Pi Agent Profile resources.
-Configured extension, skill, and tool arrays are exact allowlists.
-Omitted resource fields preserve normal Pi behavior.
-Prompt templates and themes remain fixed background-agent hygiene.
-Repo Config may additionally define one Agent Environment command list for the Implementer and host-run reviewers.
-The Agent Environment does not apply to Repository Preparation or Checks.
-Change Implement resolves Repo and Global Agent Profiles from the Managed Worktree and Global Config.
-The remaining agent execution identity design is tracked in [Open Questions: How should agent execution identities work?](open-questions.md#how-should-agent-execution-identities-work).
-
-No top-level source folder represents a migration stage.
-Change and Task composition modules stay inside their owning domain instead of using `local*` folders.
 
 ## Ownership
 
-A Task owns requested outcome, approved intent, dependencies, and user-facing lifecycle.
+A Task owns requested intent, dependencies, and user-facing lifecycle.
 A Change owns one code lineage, Managed Worktree, Candidates, Validation Runs, Findings, and an owned pull request.
 A Change may link to one Task.
 
 Task commands manage intent and lifecycle.
 Change commands manage implementation, validation, delivery, and reconciliation.
-Submission executes the host-only Validation Gate against a Candidate.
-Sandcastle provides the internal disposable Validation Workspace and host process adapter.
-Current dependency constraints and workarounds are recorded in [Sandcastle integration notes](sandcastle-integration-notes.md).
-The Validation Gate reports its results through Change-owned interfaces.
+Submission executes the fixed Validation Gate against a Candidate.
 
-Task and Change own their persistence interfaces.
-Repository storage composition owns database lifecycle and constructs SQLite adapters.
-Each workflow receives only the persistence operations it requires.
-See [ADR 0006](adr/0006-use-domain-centered-modules-and-module-owned-persistence.md).
+The source hierarchy follows these owners:
 
-## Change lifecycle
+- `src/task/` owns Task records, lifecycle rules, identity, persistence interfaces, files, and composition.
+- `src/change/` owns Change records, Candidates, Candidate capture, Validation Runs, validation phases, publication, submission, and composition.
+- `src/agent/` owns reviewer-agent execution Adapters and Agent Profile resolution.
+- `src/cli/` and `src/cli.ts` own CLI routing and command Adapters.
+- `src/contracts/` owns configuration, output, and shared error contracts.
+- `src/init/` owns Local Repository initialization and repository-context Adapters.
+- `src/output/` owns structured output codecs and serializers.
+- `src/repositoryPreparation/` owns the shared Repository Preparation Adapter.
+- `src/sqlite/` owns SQLite persistence Adapters.
+- `src/submissionEnvironment/` owns Git and GitHub submission-environment Adapters.
 
-`by change start [--task <task-id>] [--base <branch>]` creates a Change from a freshly fetched branch on the detected publication remote.
+CLI modules select operations and translate results.
+They do not construct storage or coordinate persistence.
+Task and Change modules own the narrow persistence operations that preserve their invariants.
+Repository storage composition owns database lifecycle and constructs SQLite Adapters.
+
+## Change workflow
+
+`by change start [--task <task-id>] [--base <branch>]` fetches a publication-remote branch and creates a Managed Worktree.
 Without `--base`, Change Start uses the remote default branch.
 With `--base`, Change Start uses the named remote branch.
-Local branches never supply a v1 Change Base.
-It asks Git for the canonical main checkout and creates the Managed Worktree at `<main-checkout-parent>/<main-checkout-name>-worktrees/but-why/<change-slug>`.
-Change Start resolves the same Managed Worktree root from the main checkout and every linked worktree.
-It then runs Repository Preparation.
+Local branches cannot supply a Change Base.
+
+New Managed Worktrees use `<main-checkout-parent>/<main-checkout-name>-worktrees/but-why/<change-slug>`.
+But Why resolves the root from the canonical main checkout, including when Change Start runs from a linked worktree.
+Existing Changes retain their recorded absolute paths.
+Change Start runs Repository Preparation before it reports the Change as ready.
 A Task-backed Change captures immutable Acceptance Context.
 A taskless Change has no Acceptance Context.
 
-`by change submit <change-id>` first returns a stored terminal No-Change completion or reconciles an existing owned pull request.
-Merged or closed pull request facts take precedence over current Change Base ancestry.
-An unchanged Repository Branch head returns stored publication success only when the owned pull request confirms the exact passing Candidate.
-Otherwise Submit fetches the recorded Change Base and requires `changeBaseSha` to be an ancestor of `headSha` before Candidate creation.
-The fetch updates only the remote-tracking ref and does not modify the Managed Worktree or Repository Branch.
-A Candidate is identified by `changeId`, `changeBaseSha`, and `headSha`.
-Validation compares the Candidate head directly with `changeBaseSha`.
-After the ancestry gate passes, tracked-tree equality between `headSha` and `changeBaseSha` defines No-Change regardless of later commit topology or the starting commit.
-A divergent same-tree Repository Branch still fails the mandatory Change Base ancestry gate.
-Submit runs Repository Preparation, Checks, Acceptance Review for Task-backed Changes, configured Specialists, and publication policy.
-Validation Runs belong to Candidates.
-Findings and artifacts belong to the Validation Run for that Candidate.
-Completed Submissions retain their point-in-time Candidate, publication, and Validation Policy Snapshot evidence.
-Current configuration applies to future or unfinished Submissions.
+`by change submit <change-id>` reconciles an existing owned pull request before starting a new Submission.
+A new Submission fetches the recorded Change Base and requires the Repository Branch to contain the fetched commit before Candidate creation.
+The fetch updates only the remote-tracking ref.
+It does not modify the Managed Worktree or Repository Branch.
+
+A Candidate is identified by its Change, `changeBaseSha`, and `headSha`.
+Tracked-tree equality with the fetched Change Base defines No-Change after the ancestry check passes.
+A task-backed No-Change Submission runs Acceptance Review and can complete without a pull request.
+A changed Candidate passes through Repository Preparation, Checks, Acceptance Review when task-backed, configured Specialists, and publication policy.
 
 `by change reconcile [<change-id>]` observes owned pull requests.
 A merged owned pull request closes the Change and completes its linked Task.
-Cleanup verifies the recorded publication remote identity before deleting the Remote Change Branch.
-It deletes the branch only when it still points to the exact published Candidate head.
-Missing Remote Change Branches are an idempotent success, while moved, repointed, or unavailable branches remain pending.
+Cleanup deletes a Remote Change Branch only when it still identifies the exact published Candidate head.
 
 ## Storage
 
-But Why stores Shared Repository State under `<git-common-dir>/but-why/`.
-SQLite, Artifacts, and other operational state do not move with Managed Worktrees.
-Repo Config remains tracked at `.but-why/config.json` in each worktree.
-Shared Repository State identifies the Local Repository by its Git common directory.
-Existing Changes continue to use their recorded absolute Managed Worktree paths.
+Shared Repository State lives under `<git-common-dir>/but-why/`.
+SQLite, Artifacts, and other operational state are shared by linked worktrees.
+Repo Config remains tracked at `.but-why/config.json`.
 
 State databases initialize through immutable ordered Effect SQL migrations beginning with `0001_baseline`.
-Schema changes append forward migrations before and after the first public release.
-The first public release freezes the complete migration chain shipped in that release.
-See [ADR 0009](adr/0009-use-forward-schema-migrations-before-release.md).
+A schema change appends a new Migration Artifact instead of rewriting an applied migration.
+The migration chain shipped in the first public release remains frozen after release.
 
-## CLI
+## CLI and configuration
 
 The public CLI is `by`.
-The Change command surface includes:
+It returns structured results on stdout.
+TOON is the default format.
+Callers that parse output request JSON with `--output json`.
+The output ownership and expansion rules are defined in [CLI output](cli-output.md).
 
-```text
-by change start [--task <task-id>] [--base <branch>]
-by change prepare <change-id>
-by change list [--all]
-by change show <change-id>
-by change findings <change-id>
-by change validation-runs <change-id>
-by change blocker raise <change-id> --file <path|->
-by change blocker resolve <change-id> --file <path|->
-by change blocker list <change-id>
-by change submit <change-id>
-by change cancel <change-id>
-by change implement <change-id> [--handoff-file <path>]
-by change reconcile [<change-id>]
-by validation-run show <validation-run-id>
-by validation-run artifact <validation-run-id> <artifact-ref>
-```
-
-`by change blocker raise` and `by change blocker resolve` manage the manual Implementation Blocker workflow.
-An active blocker moves a Change and its linked Task to `blocked`.
-An approved Resolution returns them to `open` and `implementing` while preserving the same resources.
-`by change cancel` accepts only open taskless Changes.
-Task-backed Changes are cancelled through `by task cancel <task-id> --reason <reason>`.
-CLI commands return structured data on stdout.
-TOON is the default output format.
-Callers that parse output pass `--output json`.
-[`docs/cli-output.md`](cli-output.md) defines the agent-first success schemas, evidence boundaries, expansion paths, limits, and diagnostic preservation policy.
-Inspection commands return decision-oriented projections and use their documented expansion commands for omitted evidence.
-
-## Configuration
-
-Repo Config owns Repository Preparation, Checks, validation workspaces, review policy, and the Agent Environment.
+Repo Config owns Repository Preparation, Checks, Validation Workspace inputs, review policy, and the Agent Environment.
 Global Config owns Agent Profiles, reviewer defaults, and Interactive Session preferences.
-See [`docs/config.md`](config.md) for the configuration contract.
+The public configuration contract is in [But Why Config](public/config.md).
+
+Accepted decisions that constrain this design are recorded in [ADRs](adr/).
