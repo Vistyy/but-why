@@ -39,7 +39,6 @@
 - `src/repositoryPreparation/`: shared Repository Preparation Adapter.
 - `src/sqlite/`: SQLite persistence Adapters.
 - `src/submissionEnvironment/`: Git and GitHub submission-environment Adapters.
-- `spikes/`: prototypes that are not part of the product package.
 
 ## Repository synchronization
 
