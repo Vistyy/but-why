@@ -10,7 +10,12 @@ import { collapseHome, mapRuntimeError } from "../../src/cli.js";
 import { butWhyGitignoreBlock } from "../../src/init/gitignore.js";
 import { RepositorySql, repositorySqlLayer } from "../../src/sqlite/repositorySql.js";
 import { encodeToon } from "../../src/output/toon.js";
-import { createGitRepo, repoRoot, runByInProcessEffect } from "../support/by-cli.js";
+import {
+  createGitRepo,
+  repoRoot,
+  runByInProcessEffect,
+  runByInProcessEffectUnnormalized,
+} from "../support/by-cli.js";
 import { createTestWorkspace } from "../support/testWorkspace.js";
 import { runTestProcess } from "../support/testProcess.js";
 
@@ -199,7 +204,11 @@ describe("by CLI", () => {
 
   it.effect("prints missing output selector values as TOON usage errors", () =>
     Effect.gen(function* () {
-      const result = yield* runByInProcessEffect(repoRoot, ["task", "list", "--output"]);
+      const result = yield* runByInProcessEffectUnnormalized(repoRoot, [
+        "task",
+        "list",
+        "--output",
+      ]);
 
       expect(result.status).toBe(2);
       expect(result.stderr).toBe("");
@@ -210,7 +219,7 @@ describe("by CLI", () => {
 
   it.effect("prints duplicate output selectors as TOON usage errors", () =>
     Effect.gen(function* () {
-      const result = yield* runByInProcessEffect(repoRoot, [
+      const result = yield* runByInProcessEffectUnnormalized(repoRoot, [
         "--output",
         "json",
         "init",
