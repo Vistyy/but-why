@@ -1,7 +1,10 @@
 # Open Questions
 
-This file tracks unresolved product and architecture questions outside the reduced manual v1 contract.
-Settled behavior belongs in approved specifications, `CONTEXT.md`, accepted ADRs, and active Tasks.
+This file is the repository's explicit exception for unresolved product and architecture questions that are intentionally deferred outside the current Task model.
+It helps maintainers decide whether later evidence warrants formal design work.
+These questions do not approve implementation, establish priority, or define active work.
+Current implementation work and accepted intent belong in SQLite Tasks.
+Settled behavior belongs in `CONTEXT.md`, accepted ADRs, and current system documentation.
 
 ## How should reviewer quality be measured?
 
@@ -166,7 +169,7 @@ Design this capability only after dogfooding the manual workflow and optional He
 
 ## How should agents navigate large Task collections?
 
-V1 bounds default `by task list` output through Task BY-18 while preserving oldest-first ordering and explicit access to the complete matching inventory.
+V1 returns the complete matching Task inventory in oldest-first order.
 Do not add Task text search, saved views, relationship discovery, or another navigation command before post-v1 evidence establishes the required jobs.
 
 Post-v1 design should distinguish exact Task lookup, bounded inventory browsing, relevance-ranked text search, and agent reasoning about possible Task relationships.
