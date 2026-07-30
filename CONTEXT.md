@@ -93,11 +93,16 @@ It can resume across that Change's Candidates and disposable Validation Workspac
 _Avoid_: Fresh reviewer session per Candidate, cross-Change reviewer conversation
 
 **Producer**:
-The named reviewer identity that creates a Reviewer Session and its review evidence.
+The named source of validation evidence, such as Prepare, a Check, Acceptance Review, or a Specialist Review.
+A Producer identifies the source that creates an Artifact or Finding.
 _Avoid_: Agent Profile, Reviewer Session, Validation Run
 
+**Reviewer Producer**:
+A Producer identifier for an Acceptance Reviewer or Specialist Reviewer that owns a continuing Reviewer Session.
+_Avoid_: Agent Profile, generic validation phase, cross-Change reviewer
+
 **Reviewer Session Identity**:
-The Change, Producer, resolved Agent Profile, reviewer instructions, Agent Environment, and curated resources that determine whether a Reviewer Session can safely continue.
+The Change, Reviewer Producer, resolved Agent Profile, reviewer instructions, Agent Environment, and curated resources that determine whether a Reviewer Session can safely continue.
 _Avoid_: Session file path, Candidate identity, Validation Run identity
 
 **Artifact**:
