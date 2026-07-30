@@ -138,9 +138,10 @@ The Repository Branch must contain the fetched Change Base commit.
 If it does not, merge or rebase the Change Base into the Repository Branch and retry.
 The fetch and ancestry rejection do not modify the Managed Worktree or Repository Branch.
 
-A Task-backed Submission runs Acceptance Review.
-A taskless Submission runs code-based validation without Acceptance Review.
-Both paths run Repository Preparation, Checks, configured Specialists, and publication policy.
+A changed Task-backed Candidate runs Repository Preparation, Checks, Acceptance Review, configured Specialists, and publication policy.
+A changed taskless Candidate runs Repository Preparation, Checks, configured Specialists, and publication policy without Acceptance Review.
+An unchanged taskless Change returns `nothing_to_submit` before validation.
+An unchanged Task-backed Change uses the acceptance-only policy: it runs Acceptance Review without Checks or configured Specialists and can complete without a pull request.
 
 If Change Submit returns `error.recovery`, follow the exact recovery instruction for that Change without additional user approval.
 If it returns Findings, inspect them, fix the Managed Worktree, commit the fixes, and submit again.
@@ -184,8 +185,8 @@ Use `by change validation-runs` for compact Validation Run History.
 Use `by validation-run show` for one Validation Run's policy and recorded evidence.
 Use `by validation-run artifact` for complete stored Artifact content.
 
-A taskless Change with no tracked tree change returns `nothing_to_submit` and remains open.
-A Task-backed no-change Submission runs Acceptance Review and can complete without a pull request.
+A taskless Change with no tracked tree change returns `nothing_to_submit` before validation and remains open.
+A Task-backed no-change Submission uses the acceptance-only policy: it runs Acceptance Review without Checks or configured Specialists and can complete without a pull request.
 
 Cancel an open taskless Change when the work is no longer needed:
 

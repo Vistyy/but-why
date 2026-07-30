@@ -102,8 +102,10 @@ Any Check Finding stops reviewer phases for that Candidate.
 
 `validationWorkspace.copyFiles` is optional.
 When present, it must be a non-empty list of normalized paths relative to the Local Repository's main checkout.
-Each path must identify an existing regular file.
-Directories, symbolic links, non-regular files, missing paths, and paths outside the repository reject Submission.
+The Repo Config schema rejects paths that are not repo-relative or that use parent traversal.
+During Validation Workspace setup, each path must identify an existing regular file.
+A missing path, directory, symbolic link, or other non-regular path creates a Validation Tooling Failure.
+Change Submit reports `validation_tooling_failed`; fix the path or the validation tooling, then retry Change Submit.
 Duplicate entries are accepted but do not identify additional files.
 
 But Why copies each file once into the Validation Workspace.
