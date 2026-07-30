@@ -203,7 +203,28 @@ export default function continueChange(pi: ExtensionAPI): void {
           return "! Watching stopped - no progress";
       }
     })();
-    ctx.ui.setWidget(watcherWidget, [text]);
+    ctx.ui.setWidget(
+      watcherWidget,
+      (_tui, theme) => ({
+        render(width) {
+          return [
+            theme.fg(
+              display.kind === "paused" || display.kind === "recovery"
+                ? "warning"
+                : display.kind === "blocked" || display.kind === "stopped"
+                  ? "error"
+                  : display.kind === "complete" || display.kind === "idle"
+                    ? "success"
+                    : display.kind === "checking"
+                      ? "muted"
+                      : "accent",
+              text.slice(0, Math.max(width, 0)),
+            ),
+          ];
+        },
+        invalidate() {},
+      }),
+    );
   };
 
   const idleWatcherDisplay = (snapshot: ChangeInspectionSnapshot): WatcherDisplay => {
@@ -457,7 +478,7 @@ export default function continueChange(pi: ExtensionAPI): void {
   });
 
   const continueWatching = async (ctx: ExtensionContext): Promise<void> => {
-    if (settling) return;
+    if (!ctx.isIdle() || settling) return;
     if (changeId === undefined) {
       showWatcher(ctx, { kind: "watching" });
       return;
@@ -508,9 +529,11 @@ export default function continueChange(pi: ExtensionAPI): void {
           "But Why could not inspect the current Change state; automatic continuation will keep trying until inspection recovers or the operator cancels it.",
           "warning",
         );
-        pi.sendUserMessage(
-          `But Why could not inspect the current Change state for ${id}. Restore But Why CLI and Git access, then inspect the Change and Managed Worktree and continue. Do not assume a stopping condition.`,
-        );
+        if (ctx.isIdle()) {
+          pi.sendUserMessage(
+            `But Why could not inspect the current Change state for ${id}. Restore But Why CLI and Git access, then inspect the Change and Managed Worktree and continue. Do not assume a stopping condition.`,
+          );
+        }
         return;
       }
       const previous = persisted ?? {
@@ -545,7 +568,7 @@ export default function continueChange(pi: ExtensionAPI): void {
       );
       pendingThresholdCompaction = false;
       showWatcher(ctx, { kind: "watching" });
-      pi.sendUserMessage(message);
+      if (ctx.isIdle()) pi.sendUserMessage(message);
     } finally {
       settling = false;
       if (watcherDisplay.kind === "checking") showWatcher(ctx, { kind: "watching" });

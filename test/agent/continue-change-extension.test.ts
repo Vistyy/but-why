@@ -41,6 +41,7 @@ const createHarness = () => {
   let currentSnapshot: TestSnapshot = snapshot();
   let inspectionFails = false;
   let directByUnavailable = false;
+  let idle = true;
   const execCalls: Array<{ readonly command: string; readonly args: readonly string[] }> = [];
   const api = {
     on(event: string, handler: EventHandler) {
@@ -81,6 +82,7 @@ const createHarness = () => {
   const context = {
     cwd: "/managed/change",
     sessionManager: { getBranch: () => [...entries] },
+    isIdle: () => idle,
     ui: {
       notify(message: string) {
         notifications.push(message);
@@ -115,6 +117,19 @@ const createHarness = () => {
     setDirectByUnavailable(value: boolean) {
       directByUnavailable = value;
     },
+    setIdle(value: boolean) {
+      idle = value;
+    },
+    latestWidgetText() {
+      const value = widgets.at(-1)?.value;
+      if (typeof value !== "function") return value;
+      return value(undefined, { fg: (_color: string, text: string) => text }).render(80);
+    },
+    latestWidgetColor() {
+      const value = widgets.at(-1)?.value;
+      if (typeof value !== "function") return undefined;
+      return value(undefined, { fg: (color: string) => color }).render(80);
+    },
     async emit(event: string, value: unknown = {}) {
       const handler = handlers.get(event);
       if (handler === undefined) throw new Error(`Missing ${event} handler`);
@@ -134,6 +149,18 @@ describe("packaged Change Implement continuation extension", () => {
 
     expect(harness.sent).toHaveLength(1);
     expect(harness.sent[0]).toContain("take the next concrete implementation action");
+  });
+
+  it("does not queue a continuation while another agent run is active", async () => {
+    const harness = createHarness();
+    await harness.emit("session_start", { type: "session_start", reason: "startup" });
+    const execCallCount = harness.getExecCallCount();
+    harness.setIdle(false);
+
+    await harness.emit("agent_settled");
+
+    expect(harness.sent).toEqual([]);
+    expect(harness.getExecCallCount()).toBe(execCallCount);
   });
 
   it("uses the local source CLI when the installed by executable is unavailable", async () => {
@@ -254,16 +281,12 @@ describe("packaged Change Implement continuation extension", () => {
   it("keeps automatic continuation paused while the operator discusses the Change", async () => {
     const harness = createHarness();
     await harness.emit("session_start", { type: "session_start", reason: "startup" });
-    expect(harness.widgets.at(-1)).toEqual({
-      name: "but-why-change-watcher",
-      value: [`● Watching Change ${changeId.slice(0, 8)}…`],
-    });
+    expect(harness.widgets.at(-1)?.name).toBe("but-why-change-watcher");
+    expect(harness.latestWidgetText()).toEqual([`● Watching Change ${changeId.slice(0, 8)}…`]);
 
     await harness.runCommand("continue-change");
-    expect(harness.widgets.at(-1)).toEqual({
-      name: "but-why-change-watcher",
-      value: ["○ Paused"],
-    });
+    expect(harness.latestWidgetText()).toEqual(["○ Paused"]);
+    expect(harness.latestWidgetColor()).toEqual(["warning"]);
     expect(harness.entries.at(-1)).toMatchObject({
       data: { changeId, unchangedRestarts: 0, paused: true },
     });
@@ -281,10 +304,7 @@ describe("packaged Change Implement continuation extension", () => {
     expect(harness.sent).toEqual([
       expect.stringContaining(`The Change ${changeId} is still unfinished.`),
     ]);
-    expect(harness.widgets.at(-1)).toEqual({
-      name: "but-why-change-watcher",
-      value: [`● Watching Change ${changeId.slice(0, 8)}…`],
-    });
+    expect(harness.latestWidgetText()).toEqual([`● Watching Change ${changeId.slice(0, 8)}…`]);
   });
 
   it("does not send a continuation message when resumed after the Change is closed", async () => {
@@ -296,10 +316,8 @@ describe("packaged Change Implement continuation extension", () => {
     await harness.runCommand("continue-change");
 
     expect(harness.sent).toEqual([]);
-    expect(harness.widgets.at(-1)).toEqual({
-      name: "but-why-change-watcher",
-      value: ["✓ Change is complete"],
-    });
+    expect(harness.latestWidgetText()).toEqual(["✓ Change is complete"]);
+    expect(harness.latestWidgetColor()).toEqual(["success"]);
   });
 
   it("uses hidden session entries for retry state", async () => {
