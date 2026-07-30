@@ -168,6 +168,7 @@ export const runTestProcessOrThrow = (
   options: TestProcessOptions,
 ): string => {
   const result = runTestProcess(command, args, options);
+  if (result.error !== undefined) throw result.error;
   if (result.status !== 0) throw new Error(result.stderr || result.stdout);
   return result.stdout.trim();
 };
