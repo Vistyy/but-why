@@ -6,7 +6,8 @@ import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
 import { describe, it as ordinaryIt } from "vitest";
 
-import { collapseHome, mapRuntimeError } from "../../src/cli.js";
+import { mapRuntimeError } from "../../src/cli.js";
+import { collapseHome } from "../../src/cli/cliPath.js";
 import { butWhyGitignoreBlock } from "../../src/init/gitignore.js";
 import { RepositorySql, repositorySqlLayer } from "../../src/sqlite/repositorySql.js";
 import { encodeToon } from "../../src/output/toon.js";

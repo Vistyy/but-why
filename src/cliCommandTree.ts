@@ -41,11 +41,11 @@ import {
   runArtifactCommand,
   runShowCommand as runValidationRunShowCommand,
 } from "./cli/validationRun/validationRunCli.js";
-import type { OutputFormat } from "./output/structured.js";
+import { outputFormats, type OutputFormat } from "./output/structured.js";
 import { taskStates, type TaskState } from "./task/lifecycle.js";
 
 const globalOutput = Options.withAlias(
-  Options.withDefault(Options.choice("output", ["toon", "json"]), "toon"),
+  Options.withDefault(Options.choice("output", outputFormats), "toon"),
   "o",
 );
 

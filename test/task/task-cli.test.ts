@@ -5,7 +5,7 @@ import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
 import { describe } from "vitest";
 
-import { collapseHome } from "../../src/cli.js";
+import { collapseHome } from "../../src/cli/cliPath.js";
 import { RepositorySql, repositorySqlLayer } from "../../src/sqlite/repositorySql.js";
 import type { TaskState } from "../../src/task/lifecycle.js";
 import type { TaskRecord, TaskSummary } from "../../src/task/task.js";

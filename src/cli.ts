@@ -1,4 +1,4 @@
-import { Effect } from "effect";
+import type { Effect } from "effect";
 
 import { runCommandTree } from "./cliCommandTree.js";
 import { runtimeError, type CliResult } from "./cliResults.js";
@@ -12,8 +12,6 @@ import type { CancellationUseCases } from "./change/cancelChange.js";
 import type { TextInputStdin } from "./cli/input/textInput.js";
 
 export type { CliResult } from "./cliResults.js";
-export { collapseHome } from "./cli/cliPath.js";
-
 export type CliEnvironment = {
   readonly executablePath: string;
   readonly cwd: string;

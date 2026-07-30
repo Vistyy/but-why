@@ -5,7 +5,7 @@ import { stateStoreUnavailable, success } from "../../../cliResults.js";
 import { loadChangeInspection } from "../../../change/loadChangeInspection.js";
 import type { StructuredValue } from "../../../output/structured.js";
 import type { RepositoryStorageError } from "../../../contracts/repositoryStorageError.js";
-import { type TaskState } from "../../../task/lifecycle.js";
+import type { TaskState } from "../../../task/lifecycle.js";
 import type { TaskSummary } from "../../../task/task.js";
 import { withTasks, type TaskCommandEnvironment } from "../taskCliSupport.js";
 
