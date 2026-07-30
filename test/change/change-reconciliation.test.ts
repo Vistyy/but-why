@@ -314,9 +314,9 @@ describe("by change reconcile", () => {
           }),
         ).toMatchObject({
           rejected: false,
-          changes: [{ changeId: created.change.id, status: "cleanup_complete" }],
+          changes: [],
         });
-        expect(cleanupAttempts).toBe(3);
+        expect(cleanupAttempts).toBe(2);
         expect(yield* changes.getChangeById(created.change.id)).toMatchObject({
           state: "closed",
           closeReason: "completed",

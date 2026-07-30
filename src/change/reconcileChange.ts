@@ -184,10 +184,10 @@ const reconcileCleanup = (
   now: string,
 ): Effect.Effect<ReconciledChange, RepositoryStorageError> =>
   Effect.gen(function* () {
-    const remoteChangeBranch = remoteChangeBranchFor(change);
-    if (change.cleanup.state === "complete" && remoteChangeBranch === undefined) {
+    if (change.cleanup.state === "complete") {
       return { changeId: change.id, status: "cleanup_complete", cleanup: change.cleanup };
     }
+    const remoteChangeBranch = remoteChangeBranchFor(change);
     const result = dependencies.cleanup({
       repositoryCommonDirectory: change.repositoryCommonDirectory,
       worktreePath: change.worktreePath,
