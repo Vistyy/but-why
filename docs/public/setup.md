@@ -20,6 +20,18 @@ Ask where to install the skill.
 
 But Why requires Node.js 24.
 This Candidate is unreleased, so use `just by` from the But Why source checkout.
+From that checkout, enter the locked environment:
+
+```bash
+nix develop
+```
+
+Initialize the source checkout before verifying the command prefix:
+
+```bash
+just init
+```
+
 After publication, use `pnpx but-why` or `npx -y but-why` from the published package.
 Verify the applicable command prefix with:
 
