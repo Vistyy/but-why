@@ -172,7 +172,9 @@ A Repo Config Specialist list replaces this list, and an empty Repo Config list 
 `reviewers` maps Specialist names to definitions.
 Each Global definition requires `instructionsFile` relative to the Global Config directory and may select an Agent Profile.
 A Repo Config definition takes precedence for a Specialist with the same name.
-Global Agent Profiles referenced by these settings must be defined in Global Config.
+Each Agent Profile reference resolves only within its declared scope.
+A `repo` reference must be defined in Repo Config, and a `global` reference must be defined in Global Config.
+Global review settings may reference a Repo Config profile when that repository supplies the matching definition.
 Reviewer and Specialist profile selections resolve from Repo Config, then Global Config, then Global `defaultAgentProfile`.
 
 Global Config may define reusable profiles and role selections:
