@@ -19,8 +19,10 @@ Ask where to install the skill.
 ## Install and initialize
 
 But Why requires Node.js 24.
-This Candidate is unreleased, so use `just by` from the But Why source checkout.
-From that checkout, enter the locked environment:
+This Candidate is unreleased, so the But Why source checkout must also be the target repository.
+Run all unreleased `just by` commands from that checkout.
+After publication, use `pnpx but-why` or `npx -y but-why` from a separate target repository.
+From the source checkout, enter the locked environment:
 
 ```bash
 nix develop
@@ -32,8 +34,7 @@ Initialize the source checkout before verifying the command prefix:
 just init
 ```
 
-After publication, use `pnpx but-why` or `npx -y but-why` from the published package.
-Verify the applicable command prefix with:
+Verify the unreleased command prefix with:
 
 ```bash
 just by --help
@@ -41,9 +42,9 @@ just by --help
 
 After publication, verify a published package with `pnpx but-why --help` or `npx -y but-why --help`.
 In every command below, replace the leading `by` placeholder with the resolved prefix.
-For example, use `just by init --task-prefix BY` from the source checkout or `pnpx but-why init --task-prefix BY` after publication.
+For example, use `just by init --task-prefix BY` in the source checkout or `pnpx but-why init --task-prefix BY` after publication.
 
-From the target repository root, initialize But Why:
+Initialize But Why in the source checkout:
 
 ```bash
 by init --task-prefix BY
