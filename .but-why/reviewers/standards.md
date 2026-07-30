@@ -37,6 +37,9 @@ Apply a lens only when the Candidate changes its relevant area:
   Preserve documented CLI, TOON, JSON, configuration, and error contracts.
 - **Small coherent design**: Add a module, port, abstraction, or generic policy only when it reduces caller knowledge for a current variation or ownership need.
   Keep phase-specific policy separate from shared mechanics.
+- **Cohesion and coordination cost**: Treat a change as a design concern only when the changed behavior has no clear owning Module, or a Module combines independently changing responsibilities and creates coordination cost.
+  Identify the owner, callers, added edit locations or coordination steps, and concrete harm.
+  Apply the Materiality gate. Coordination cost alone is not a Finding.
 - **Reviewer evidence integrity**: Preserve immutable Findings, exact Artifact evidence, independent Reviewer Sessions, and complete current-Candidate review.
 - **Public interface compatibility**: Preserve documented command grammar, structured-output semantics, and configuration behavior.
 
