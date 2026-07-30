@@ -1,7 +1,7 @@
 import type * as SqlClient from "@effect/sql/SqlClient";
 import { Effect } from "effect";
 import { randomUUID } from "node:crypto";
-import { canTransition } from "../task/lifecycle.js";
+import { canTransition, type TaskState } from "../task/lifecycle.js";
 
 import {
   changeState,
@@ -202,6 +202,12 @@ const raiseBlocker = (
       readonly found: number;
     }>`SELECT 1 AS found FROM candidates c JOIN candidate_validation_runs r ON r.candidate_id = c.id WHERE c.id = (SELECT id FROM candidates WHERE change_id = ${input.changeId} ORDER BY created_at DESC, id DESC LIMIT 1) AND r.outcome = 'passed' LIMIT 1`;
     if (passed.length > 0) return { ok: false as const, code: "change_candidate_passed" as const };
+    if (change.taskId !== null)
+      yield* requireLinkedTaskState(sql, {
+        taskId: change.taskId,
+        expected: "implementing",
+        operationName: "raise Implementation Blocker",
+      });
     const id = randomUUID();
     yield* sql`INSERT INTO implementation_blockers (id, change_id, reported_at, content) VALUES (${id}, ${input.changeId}, ${input.now}, ${input.content})`;
     yield* sql`UPDATE changes SET state = 'blocked', updated_at = ${input.now} WHERE id = ${input.changeId}`;
@@ -229,6 +235,12 @@ const resolveBlocker = (
       yield* sql<ImplementationBlockerRow>`SELECT sequence, id, change_id AS changeId, reported_at AS reportedAt, content, resolved_at AS resolvedAt FROM implementation_blockers WHERE change_id = ${input.changeId} AND resolved_at IS NULL LIMIT 1`;
     const blocker = rows[0];
     if (blocker === undefined) return { ok: false as const, code: "no_active_blocker" as const };
+    if (change.taskId !== null)
+      yield* requireLinkedTaskState(sql, {
+        taskId: change.taskId,
+        expected: "blocked",
+        operationName: "resolve Implementation Blocker",
+      });
     const resolutionId = randomUUID();
     if (change.acceptanceContext !== null) {
       const context = {
@@ -260,6 +272,22 @@ const resolveBlocker = (
         },
       },
     };
+  });
+
+const requireLinkedTaskState = (
+  sql: SqlClient.SqlClient,
+  input: {
+    readonly taskId: string;
+    readonly expected: TaskState;
+    readonly operationName: string;
+  },
+) =>
+  Effect.gen(function* () {
+    const rows = yield* sql<{ readonly state: TaskState }>`
+      SELECT state FROM tasks WHERE id = ${input.taskId}
+    `;
+    if (rows[0]?.state !== input.expected)
+      return yield* invalidData(input.operationName, `Linked Task must be ${input.expected}`);
   });
 
 const transitionLinkedTask = (

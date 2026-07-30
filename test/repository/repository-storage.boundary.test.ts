@@ -104,6 +104,193 @@ describe("repository SQL storage", () => {
     ),
   );
 
+  it.scoped("rejects a Task-backed blocker when its linked Task is not Implementing", () =>
+    withTemporaryState((input) =>
+      Effect.gen(function* () {
+        const tasks = yield* openSqliteTaskPersistence("BY");
+        const starts = yield* openSqliteChangeStartPersistence();
+        const changes = yield* openSqliteChangePersistence();
+        const created = yield* tasks.createTask({
+          title: "Reject mismatched blocker",
+          description: "Keep the Change unchanged when its Task state is inconsistent.",
+          now: "2026-07-17T22:53:00.000Z",
+        });
+        if (!created.ok) return;
+        const taskId = storedPublicTaskId(created.task.id);
+        yield* tasks.approveTask({ taskId, now: "2026-07-17T22:54:00.000Z" });
+        const started = yield* starts.create({
+          id: "change-mismatched-blocker",
+          repositoryCommonDirectory: input.commonDirectory,
+          branchRef: "refs/heads/but-why/by-1-mismatched-blocker",
+          baseRef: "main",
+          baseRemoteUrl: "https://github.com/acme/repo.git",
+          startingCommit: "1111111111111111111111111111111111111111",
+          worktreePath: join(input.commonDirectory, "worktrees", "by-1-mismatched-blocker"),
+          taskId,
+          now: "2026-07-17T22:55:00.000Z",
+        });
+        if (!started.ok) return;
+
+        const repository = yield* RepositorySql;
+        yield* repository.operation(
+          "create mismatched linked Task state",
+          (sql) => sql`UPDATE tasks SET state = 'blocked' WHERE id = ${taskId}`,
+        );
+
+        const error = yield* changes
+          .raiseImplementationBlocker({
+            changeId: started.change.id,
+            content: "This blocker must not be recorded.",
+            now: "2026-07-17T22:56:00.000Z",
+          })
+          .pipe(Effect.flip);
+
+        expect(error).toBeInstanceOf(RepositoryPersistedDataInvalid);
+        expect(error).toMatchObject({ operationName: "raise Implementation Blocker" });
+        expect(yield* changes.getChangeById(started.change.id)).toMatchObject({
+          state: "open",
+          activeBlocker: null,
+        });
+        expect(yield* tasks.getTaskById(taskId)).toMatchObject({ state: "blocked" });
+        expect(yield* changes.listImplementationBlockers(started.change.id)).toEqual({
+          blockers: [],
+          resolutions: [],
+          active: null,
+        });
+      }),
+    ),
+  );
+
+  it.scoped("rejects a Resolution when its linked Task is not Blocked", () =>
+    withTemporaryState((input) =>
+      Effect.gen(function* () {
+        const tasks = yield* openSqliteTaskPersistence("BY");
+        const starts = yield* openSqliteChangeStartPersistence();
+        const changes = yield* openSqliteChangePersistence();
+        const created = yield* tasks.createTask({
+          title: "Reject mismatched Resolution",
+          description: "Keep the blocker active when its Task state is inconsistent.",
+          now: "2026-07-17T22:57:00.000Z",
+        });
+        if (!created.ok) return;
+        const taskId = storedPublicTaskId(created.task.id);
+        yield* tasks.approveTask({ taskId, now: "2026-07-17T22:58:00.000Z" });
+        const started = yield* starts.create({
+          id: "change-mismatched-resolution",
+          repositoryCommonDirectory: input.commonDirectory,
+          branchRef: "refs/heads/but-why/by-1-mismatched-resolution",
+          baseRef: "main",
+          baseRemoteUrl: "https://github.com/acme/repo.git",
+          startingCommit: "1111111111111111111111111111111111111111",
+          worktreePath: join(input.commonDirectory, "worktrees", "by-1-mismatched-resolution"),
+          taskId,
+          now: "2026-07-17T22:59:00.000Z",
+        });
+        if (!started.ok) return;
+        const raised = yield* changes.raiseImplementationBlocker({
+          changeId: started.change.id,
+          content: "Wait for approved intent.",
+          now: "2026-07-17T23:00:00.000Z",
+        });
+        if (!raised.ok) return;
+
+        const repository = yield* RepositorySql;
+        yield* repository.operation(
+          "create mismatched linked Task state",
+          (sql) => sql`UPDATE tasks SET state = 'implementing' WHERE id = ${taskId}`,
+        );
+
+        const error = yield* changes
+          .resolveImplementationBlocker({
+            changeId: started.change.id,
+            content: "Use the approved approach.",
+            now: "2026-07-17T23:01:00.000Z",
+          })
+          .pipe(Effect.flip);
+
+        expect(error).toBeInstanceOf(RepositoryPersistedDataInvalid);
+        expect(error).toMatchObject({ operationName: "resolve Implementation Blocker" });
+        const unchanged = yield* changes.getChangeById(started.change.id);
+        expect(unchanged).toMatchObject({
+          state: "blocked",
+          activeBlocker: { id: raised.blocker.id, resolvedAt: null },
+        });
+        expect(unchanged?.acceptanceContext).toEqual({
+          version: 1,
+          title: "Reject mismatched Resolution",
+          description: "Keep the blocker active when its Task state is inconsistent.",
+          comments: [],
+        });
+        expect(yield* tasks.getTaskById(taskId)).toMatchObject({ state: "implementing" });
+        expect(yield* changes.listImplementationBlockers(started.change.id)).toMatchObject({
+          resolutions: [],
+          active: { id: raised.blocker.id, resolvedAt: null },
+        });
+      }),
+    ),
+  );
+
+  it.scoped("resolves a Task-backed blocker and returns its linked Task to Implementing", () =>
+    withTemporaryState((input) =>
+      Effect.gen(function* () {
+        const tasks = yield* openSqliteTaskPersistence("BY");
+        const starts = yield* openSqliteChangeStartPersistence();
+        const changes = yield* openSqliteChangePersistence();
+        const created = yield* tasks.createTask({
+          title: "Resolve blocker",
+          description: "Resume implementation with approved intent.",
+          now: "2026-07-17T23:02:00.000Z",
+        });
+        if (!created.ok) return;
+        const taskId = storedPublicTaskId(created.task.id);
+        yield* tasks.approveTask({ taskId, now: "2026-07-17T23:03:00.000Z" });
+        const started = yield* starts.create({
+          id: "change-resolve-blocker",
+          repositoryCommonDirectory: input.commonDirectory,
+          branchRef: "refs/heads/but-why/by-1-resolve-blocker",
+          baseRef: "main",
+          baseRemoteUrl: "https://github.com/acme/repo.git",
+          startingCommit: "1111111111111111111111111111111111111111",
+          worktreePath: join(input.commonDirectory, "worktrees", "by-1-resolve-blocker"),
+          taskId,
+          now: "2026-07-17T23:04:00.000Z",
+        });
+        if (!started.ok) return;
+        const raised = yield* changes.raiseImplementationBlocker({
+          changeId: started.change.id,
+          content: "Wait for approved intent.",
+          now: "2026-07-17T23:05:00.000Z",
+        });
+        if (!raised.ok) return;
+
+        const resolved = yield* changes.resolveImplementationBlocker({
+          changeId: started.change.id,
+          content: "Use the approved approach.",
+          now: "2026-07-17T23:06:00.000Z",
+        });
+
+        expect(resolved).toMatchObject({
+          ok: true,
+          change: {
+            state: "open",
+            activeBlocker: null,
+            acceptanceContext: { resolutions: ["Use the approved approach."] },
+          },
+          blocker: {
+            id: raised.blocker.id,
+            resolvedAt: "2026-07-17T23:06:00.000Z",
+            resolution: { content: "Use the approved approach." },
+          },
+        });
+        expect(yield* tasks.getTaskById(taskId)).toMatchObject({ state: "implementing" });
+        expect(yield* changes.listImplementationBlockers(started.change.id)).toMatchObject({
+          active: null,
+          resolutions: [{ content: "Use the approved approach." }],
+        });
+      }),
+    ),
+  );
+
   it.scoped("atomically completes a merged Task-backed Change", () =>
     withTemporaryState((input) =>
       Effect.gen(function* () {

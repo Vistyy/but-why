@@ -201,8 +201,8 @@ An active Implementation Blocker moves a Change and its linked Task to Blocked a
 _Avoid_: Finding, Validation Tooling Failure, Task Dependency, Implementation Decision, cancellation
 
 **Implementation Blocker Resolution**:
-A user-approved answer to one active Implementation Blocker that returns the Change to Open and its linked Task to Implementing.
-For a Task-backed Change, the Resolution creates a new Acceptance Context version.
+A user-approved answer to one active Implementation Blocker that returns the Change to Open.
+For a Task-backed Change, the Resolution succeeds only when the linked Task is Blocked, returns the Task to Implementing, and creates a new Acceptance Context version.
 _Avoid_: Implementation Decision, Task Comment, silent Task edit, automatic recovery
 
 **Validation Gate**:
