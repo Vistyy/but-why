@@ -38,9 +38,9 @@ const description = "Validate completed code changes against approved human inte
 export const runCli = (
   args: readonly string[],
   environment: CliEnvironment,
-): Effect.Effect<CliResult> => runCommandTree(args, environment);
+): Effect.Effect<CliResult> => runCommandTree(args, environment, routeCommandArgs);
 
-export const routeCommandArgs = (
+const routeCommandArgs = (
   args: readonly string[],
   environment: CliEnvironment,
 ): Effect.Effect<CliResult> => {

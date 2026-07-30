@@ -10,7 +10,6 @@ import { NodeFileSystem, NodePath, NodeTerminal } from "@effect/platform-node";
 import { Effect, Layer } from "effect";
 
 import type { CliEnvironment } from "./cli.js";
-import { routeCommandArgs } from "./cli.js";
 import { success, usageError, type CliResult } from "./cliResults.js";
 import type { OutputFormat } from "./output/structured.js";
 
@@ -26,10 +25,19 @@ const globalOutput = Options.withAlias(
   "o",
 );
 
-type AnyCommand = Command.Command<any, never, never, any>;
+type AnyCommand = Command.Command<string, never, never, unknown>;
+type Subcommands = readonly [AnyCommand, ...AnyCommand[]];
+type SubcommandBuilder = <Name extends string, R, E, A>(
+  self: Command.Command<Name, R, E, A>,
+) => Command.Command<Name, R, E, A>;
+
+const withSubcommands = (children: Subcommands): SubcommandBuilder =>
+  (Command.withSubcommands as unknown as (children: Subcommands) => SubcommandBuilder)(children);
 
 const leaf = (name: string, description: string): AnyCommand =>
-  Command.make(name, { args: commandArguments }).pipe(Command.withDescription(description));
+  Command.make(name, { args: commandArguments }).pipe(
+    Command.withDescription(description),
+  ) as unknown as AnyCommand;
 
 const group = (
   name: string,
@@ -39,8 +47,8 @@ const group = (
 ): AnyCommand =>
   Command.make(name, acceptsArguments ? { args: commandArguments } : {}).pipe(
     Command.withDescription(description),
-    Command.withSubcommands(children as [AnyCommand, ...AnyCommand[]]),
-  );
+    withSubcommands(children as Subcommands),
+  ) as unknown as AnyCommand;
 
 const taskCommand = group("task", "Manage repo-local Tasks.", [
   leaf("create", "Create a repo-local Task."),
@@ -53,7 +61,10 @@ const taskCommand = group("task", "Manage repo-local Tasks.", [
   group(
     "context",
     "Show or edit Task Context.",
-    [leaf("draft", "Create an editable Task Context draft."), leaf("apply", "Apply a Task Context draft.")],
+    [
+      leaf("draft", "Create an editable Task Context draft."),
+      leaf("apply", "Apply a Task Context draft."),
+    ],
     true,
   ),
   leaf("comment", "Append a Markdown Task comment."),
@@ -89,7 +100,7 @@ const validationRunCommand = group("validation-run", "Inspect Validation Runs an
 
 const commandTree = Command.make("by", { output: globalOutput }).pipe(
   Command.withDescription("Validate completed code changes against approved human intent."),
-  Command.withSubcommands([
+  withSubcommands([
     leaf("init", "Create repo-local But Why? state."),
     taskCommand,
     changeCommand,
@@ -100,9 +111,15 @@ const commandTree = Command.make("by", { output: globalOutput }).pipe(
 const cliConfig = CliConfig.defaultConfig;
 const parserLayer = Layer.mergeAll(NodeFileSystem.layer, NodePath.layer, NodeTerminal.layer);
 
+type CommandRouter = (
+  args: readonly string[],
+  environment: CliEnvironment,
+) => Effect.Effect<CliResult>;
+
 export const runCommandTree = (
   args: readonly string[],
   environment: CliEnvironment,
+  routeCommandArgs: CommandRouter,
 ): Effect.Effect<CliResult> =>
   Effect.either(
     CommandDescriptor.parse(commandTree.descriptor, ["by", ...parserArgs(args)], cliConfig),
@@ -117,7 +134,7 @@ export const runCommandTree = (
             }),
             outputFormat: outputFormatFromLeadingArgs(args),
           })
-        : directiveResult(parsed.right, args, environment),
+        : directiveResult(parsed.right, args, environment, routeCommandArgs),
     ),
     Effect.provide(parserLayer),
   );
@@ -126,6 +143,7 @@ const directiveResult = (
   directive: CommandDirective.CommandDirective<unknown>,
   originalArgs: readonly string[],
   environment: CliEnvironment,
+  routeCommandArgs: CommandRouter,
 ): Effect.Effect<CliResult> => {
   if (CommandDirective.isBuiltIn(directive)) {
     if (BuiltInOptions.isShowHelp(directive.option)) {
@@ -143,7 +161,7 @@ const directiveResult = (
     );
   }
 
-  const command = commandValueForTesting(directive.value);
+  const command = commandValue(directive.value);
   const routeArgs = [...command.path.slice(1), ...command.args];
 
   return routeCommandArgs(routeArgs, environment).pipe(
@@ -160,40 +178,42 @@ type ParsedCommandValue = {
   readonly output: OutputFormat;
 };
 
-export const commandValueForTesting = (value: unknown): ParsedCommandValue => {
+const commandValue = (value: unknown): ParsedCommandValue => {
   const path: string[] = ["by"];
   let current: unknown = value;
   let output: OutputFormat = "toon";
   let args: readonly string[] = [];
 
   while (isRecord(current)) {
-    const parsedOutput = current["output"];
+    const parsedOutput = property(current, "output");
     if (parsedOutput === "toon" || parsedOutput === "json") output = parsedOutput;
-    const parsedArgs = current["args"];
+    const parsedArgs = property(current, "args");
     if (Array.isArray(parsedArgs)) {
       args = parsedArgs.filter((item): item is string => typeof item === "string");
     }
-    const subcommand = current["subcommand"];
-    if (!isRecord(subcommand) || !Array.isArray(subcommand["value"])) {
+    const subcommand = property(current, "subcommand");
+    if (!isRecord(subcommand) || !Array.isArray(property(subcommand, "value"))) {
       break;
     }
-    const key = subcommand["value"][0];
-    if (isRecord(key) && typeof key["key"] === "string") {
-      const match = /\(([^()]*)\)$/u.exec(key["key"]);
+    const subcommandValue = property(subcommand, "value");
+    if (!Array.isArray(subcommandValue)) break;
+    const key = subcommandValue[0];
+    if (isRecord(key) && typeof property(key, "key") === "string") {
+      const match = /\(([^()]*)\)$/u.exec(property(key, "key") as string);
       if (match?.[1] !== undefined) path.push(match[1]);
     }
-    current = subcommand["value"][1];
+    current = subcommandValue[1];
   }
 
   return { path, args, output };
 };
 
 const normalizeUsageResult = (result: CliResult): CliResult => {
-  const error = result.stdout["error"];
+  const error = property(result.stdout, "error");
   if (
     result.exitCode !== 2 ||
     !isRecord(error) ||
-    (error["code"] !== "unknown_flag" && error["code"] !== "unknown_argument")
+    (property(error, "code") !== "unknown_flag" && property(error, "code") !== "unknown_argument")
   ) {
     return result;
   }
@@ -220,19 +240,19 @@ const parserArgs = (args: readonly string[]): readonly string[] =>
     : args;
 
 const outputFormatFromLeadingArgs = (args: readonly string[]): OutputFormat =>
-  args[0] === "--output" || args[0] === "-o"
-    ? args[1] === "json"
-      ? "json"
-      : "toon"
-    : "toon";
+  args[0] === "--output" || args[0] === "-o" ? (args[1] === "json" ? "json" : "toon") : "toon";
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null;
 
-const generatedText = (help: HelpDoc.HelpDoc): string =>
-  HelpDoc.toAnsiText(help).replaceAll(/\u001b\[[0-9;]*m/gu, "").trim();
+const property = (record: Record<string, unknown>, key: string): unknown => record[key];
+
+const generatedText = (help: HelpDoc.HelpDoc): string => {
+  const ansiEscape = String.fromCharCode(27);
+  return HelpDoc.toAnsiText(help)
+    .replaceAll(new RegExp(`${ansiEscape}\\[[0-9;]*m`, "gu"), "")
+    .trim();
+};
 
 const rootHelpCorrection = (help: string): string =>
   help.replaceAll(/\b(task|change|validation-run) \1\b/gu, "$1");
-
-export const commandTreeForTesting = commandTree;

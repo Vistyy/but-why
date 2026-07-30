@@ -43,8 +43,10 @@ describe("by CLI", () => {
 
       expect(result.status).toBe(0);
       expect(result.stderr).toBe("");
-      expect(result.stdout).toContain("help: \"DESCRIPTION");
-      expect(result.stdout).toContain("Validate completed code changes against approved human intent.");
+      expect(result.stdout).toContain('help: "DESCRIPTION');
+      expect(result.stdout).toContain(
+        "Validate completed code changes against approved human intent.",
+      );
       expect(result.stdout).toContain("COMMANDS");
       expect(result.stdout).not.toContain("task task");
       expect(result.stdout).not.toContain("change change");
@@ -61,7 +63,9 @@ describe("by CLI", () => {
       expect(result.stdout.trimEnd()).not.toContain("\n");
       const parsed = JSON.parse(result.stdout);
 
-      expect(parsed.help).toContain("Validate completed code changes against approved human intent.");
+      expect(parsed.help).toContain(
+        "Validate completed code changes against approved human intent.",
+      );
       expect(parsed.help).toContain("COMMANDS");
       expect(parsed.help).not.toContain("task task");
       expect(parsed.help).not.toContain("change change");
@@ -134,7 +138,7 @@ describe("by CLI", () => {
 
       expect(result.status).toBe(0);
       expect(result.stderr).toBe("");
-      expect(result.stdout).toContain("help: \"DESCRIPTION");
+      expect(result.stdout).toContain('help: "DESCRIPTION');
       expect(() => JSON.parse(result.stdout)).toThrow();
     }),
   );
@@ -228,7 +232,7 @@ describe("by CLI", () => {
 
       expect(result.status).toBe(0);
       expect(result.stderr).toBe("");
-      expect(result.stdout).toContain("help: \"DESCRIPTION");
+      expect(result.stdout).toContain('help: "DESCRIPTION');
       expect(result.stdout).toContain("Create repo-local But Why? state.");
     }),
   );
