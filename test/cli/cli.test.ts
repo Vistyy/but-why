@@ -86,14 +86,14 @@ describe("by CLI", () => {
       expect(result.stdout).not.toContain("task task");
       expect(result.stdout).not.toContain("change change");
       expect(result.stdout).toContain("(-h, --help)");
-      expect(result.stdout).not.toContain("--version");
-      expect(result.stdout).not.toContain("--wizard");
-      expect(result.stdout).not.toContain("--completions");
-      expect(result.stdout).not.toContain("--log-level");
+      expect(result.stdout).toContain("--version");
+      expect(result.stdout).toContain("--wizard");
+      expect(result.stdout).toContain("--completions");
+      expect(result.stdout).toContain("--log-level");
     }),
   );
 
-  it.effect("rejects trailing arguments after help", () =>
+  it.effect("uses native help behavior for trailing arguments", () =>
     Effect.gen(function* () {
       const result = yield* runByInProcessEffect(repoRoot, [
         "--output",
@@ -103,19 +103,13 @@ describe("by CLI", () => {
         "extra",
       ]);
 
-      expect(result.status).toBe(2);
+      expect(result.status).toBe(0);
       expect(result.stderr).toBe("");
-      expect(JSON.parse(result.stdout)).toMatchObject({
-        error: {
-          code: "invalid_usage",
-          message:
-            "Invalid subcommand for by - use one of 'init', 'task', 'change', 'validation-run'",
-        },
-      });
+      expect(JSON.parse(result.stdout).help).toContain("Manage repo-local Tasks.");
     }),
   );
 
-  it.effect("identifies trailing arguments after leaf help", () =>
+  it.effect("uses native leaf help behavior for trailing arguments", () =>
     Effect.gen(function* () {
       const result = yield* runByInProcessEffect(repoRoot, [
         "--output",
@@ -126,18 +120,13 @@ describe("by CLI", () => {
         "extra",
       ]);
 
-      expect(result.status).toBe(2);
+      expect(result.status).toBe(0);
       expect(result.stderr).toBe("");
-      expect(JSON.parse(result.stdout)).toMatchObject({
-        error: {
-          code: "invalid_usage",
-          message: "Received unknown argument: 'extra'",
-        },
-      });
+      expect(JSON.parse(result.stdout).help).toContain("List repo-local Tasks.");
     }),
   );
 
-  it.effect("identifies trailing options after leaf help", () =>
+  it.effect("uses native help behavior for trailing options", () =>
     Effect.gen(function* () {
       const result = yield* runByInProcessEffect(repoRoot, [
         "--output",
@@ -149,20 +138,15 @@ describe("by CLI", () => {
         "bad",
       ]);
 
-      expect(result.status).toBe(2);
+      expect(result.status).toBe(0);
       expect(result.stderr).toBe("");
-      expect(JSON.parse(result.stdout)).toMatchObject({
-        error: {
-          code: "invalid_usage",
-          message: "Received unknown argument: '--state'",
-        },
-      });
+      expect(JSON.parse(result.stdout).help).toContain("List repo-local Tasks.");
     }),
   );
 
-  it.effect("prints JSON help when selected before the command", () =>
+  it.effect("prints JSON help when selected after help", () =>
     Effect.gen(function* () {
-      const result = yield* runByInProcessEffect(repoRoot, ["--output", "json", "--help"]);
+      const result = yield* runByInProcessEffect(repoRoot, ["--help", "--output", "json"]);
 
       expect(result.status).toBe(0);
       expect(result.stderr).toBe("");
@@ -231,9 +215,9 @@ describe("by CLI", () => {
     }),
   );
 
-  it.effect("prints JSON help when selected before help", () =>
+  it.effect("prints JSON help when selected after help", () =>
     Effect.gen(function* () {
-      const result = yield* runByInProcessEffect(repoRoot, ["--output", "json", "--help"]);
+      const result = yield* runByInProcessEffect(repoRoot, ["--help", "--output", "json"]);
 
       expect(result.status).toBe(0);
       expect(result.stderr).toBe("");
@@ -245,7 +229,7 @@ describe("by CLI", () => {
 
   it.effect("keeps TOON output when selected explicitly", () =>
     Effect.gen(function* () {
-      const result = yield* runByInProcessEffect(repoRoot, ["-o", "toon", "--help"]);
+      const result = yield* runByInProcessEffect(repoRoot, ["--help", "-o", "toon"]);
 
       expect(result.status).toBe(0);
       expect(result.stderr).toBe("");
@@ -339,7 +323,7 @@ help[1]: Run \`by --help\` for generated command help.`);
     }),
   );
 
-  it.effect("rejects trailing output selectors with attached values", () =>
+  it.effect("rejects duplicate output selectors through native parsing", () =>
     Effect.gen(function* () {
       const result = yield* runByInProcessEffect(repoRoot, [
         "--output",
@@ -354,7 +338,7 @@ help[1]: Run \`by --help\` for generated command help.`);
       expect(JSON.parse(result.stdout)).toMatchObject({
         error: {
           code: "invalid_usage",
-          message: "Global output options must appear before the command.",
+          message: "Received unknown argument: '--output=json'",
         },
       });
     }),

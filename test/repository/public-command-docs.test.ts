@@ -59,18 +59,18 @@ describe("public command documentation", () => {
       const setup = readFileSync(join(repoRoot, "docs/public/setup.md"), "utf8");
       const config = readFileSync(join(repoRoot, "docs/public/config.md"), "utf8");
       const documented = extractDocumentedCommands(`${setup}\n${config}`);
-      const rootHelp = yield* runByInProcessEffect(repoRoot, ["--output", "json", "--help"]);
+      const rootHelp = yield* runByInProcessEffect(repoRoot, ["--help", "--output", "json"]);
       const taskHelp = yield* runByInProcessEffect(repoRoot, [
-        "--output",
-        "json",
         "task",
         "--help",
-      ]);
-      const changeHelp = yield* runByInProcessEffect(repoRoot, [
         "--output",
         "json",
+      ]);
+      const changeHelp = yield* runByInProcessEffect(repoRoot, [
         "change",
         "--help",
+        "--output",
+        "json",
       ]);
 
       expect(rootHelp.status).toBe(0);

@@ -588,7 +588,7 @@ describe("quality interface", () => {
     const quality = startJust(lockFile, ["quality"], {}, qualityDirectory);
     const consumer = startTestProcess(
       process.execPath,
-      [join(consumerBuildOutput, "main.js"), "--output", "json", "--help"],
+      [join(consumerBuildOutput, "main.js"), "--help", "--output", "json"],
       {
         cwd: consumerDirectory,
       },

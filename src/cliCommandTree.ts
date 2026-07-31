@@ -1,21 +1,18 @@
 import * as Args from "@effect/cli/Args";
-import * as BuiltInOptions from "@effect/cli/BuiltInOptions";
 import * as CliConfig from "@effect/cli/CliConfig";
 import * as Command from "@effect/cli/Command";
-import * as CommandDescriptor from "@effect/cli/CommandDescriptor";
-import * as CommandDirective from "@effect/cli/CommandDirective";
 import * as HelpDoc from "@effect/cli/HelpDoc";
 import * as Options from "@effect/cli/Options";
 import * as ValidationError from "@effect/cli/ValidationError";
 import { NodeFileSystem, NodePath, NodeTerminal } from "@effect/platform-node";
-import { Console, Context, Effect, Layer } from "effect";
+import { Console, Context, Effect, Layer, Ref } from "effect";
 
 import type { CliEnvironment } from "./cli.js";
 import { collapseHome } from "./cli/cliPath.js";
 import { dashboard } from "./cli/task/dashboard.js";
 import { success, usageError, type CliResult } from "./cliResults.js";
 import { runInitCommand } from "./cli/initCli.js";
-import { runApproveCommand, type TaskIdCommand } from "./cli/task/commands/approve.js";
+import { runApproveCommand } from "./cli/task/commands/approve.js";
 import { runCancelCommand } from "./cli/task/commands/cancel.js";
 import { runCommentCommand } from "./cli/task/commands/comment.js";
 import { runContextApplyCommand } from "./cli/task/commands/contextApply.js";
@@ -27,14 +24,14 @@ import { runListCommand } from "./cli/task/commands/list.js";
 import { runTaskShowCommand } from "./cli/task/commands/show.js";
 import {
   runBlocker,
-  runCancel,
+  runCancel as runChangeCancel,
   runDecision,
   runFindings,
   runImplement,
-  runList,
+  runList as runChangeList,
   runPrepare,
   runReconcile,
-  runShow,
+  runShow as runChangeShow,
   runStart,
   runSubmit,
   runValidationRuns,
@@ -47,32 +44,23 @@ import {
 import { outputFormats, type OutputFormat } from "./output/structured.js";
 import { taskStates, type TaskState } from "./task/lifecycle.js";
 
-class RawCliArgs extends Context.Tag("@but-why/RawCliArgs")<RawCliArgs, readonly string[]>() {}
+class CliEnvironmentContext extends Context.Tag("@but-why/CliEnvironment")<
+  CliEnvironmentContext,
+  CliEnvironment
+>() {}
 
-const globalOutput = Options.withAlias(
-  Options.withDefault(
-    Options.choice("output", outputFormats).pipe(
-      Options.mapEffect(
-        (value) =>
-          Effect.contextWithEffect((context) =>
-            hasTrailingOutput(Context.get(context, RawCliArgs))
-              ? Effect.fail(
-                  ValidationError.invalidValue(
-                    HelpDoc.p("Global output options must appear before the command."),
-                  ),
-                )
-              : Effect.succeed(value),
-          ) as unknown as Effect.Effect<OutputFormat, ValidationError.ValidationError, never>,
-      ),
-    ),
-    "toon",
-  ),
-  "o",
-);
+class CliResultSink extends Context.Tag("@but-why/CliResultSink")<
+  CliResultSink,
+  (result: CliResult) => Effect.Effect<void>
+>() {}
 
 type AnyCommand = Command.Command<string, never, never, unknown>;
 type Subcommands = readonly [AnyCommand, ...AnyCommand[]];
 type CommandConfig = Record<string, Args.Args<unknown> | Options.Options<unknown>>;
+type CliOperation = (
+  values: Record<string, unknown>,
+  environment: CliEnvironment,
+) => Effect.Effect<CliResult>;
 
 type SubcommandBuilder = <Name extends string, R, E, A>(
   self: Command.Command<Name, R, E, A>,
@@ -89,10 +77,22 @@ const group = (
   description: string,
   children: readonly AnyCommand[],
   config: CommandConfig = {},
-): AnyCommand =>
-  Command.make(name, config).pipe(
+  operation?: CliOperation,
+): AnyCommand => {
+  const base = Command.make(name, config).pipe(
     Command.withDescription(description),
-    withSubcommands(children as Subcommands),
+  ) as unknown as AnyCommand;
+  const handled = operation === undefined ? base : withCliHandler(base, operation);
+  return handled.pipe(withSubcommands(children as Subcommands)) as unknown as AnyCommand;
+};
+
+const withCliHandler = (command: AnyCommand, operation: CliOperation): AnyCommand =>
+  Command.withHandler(command, (value: unknown) =>
+    Effect.contextWithEffect((context) =>
+      operation(isRecord(value) ? value : {}, Context.get(context, CliEnvironmentContext)).pipe(
+        Effect.flatMap((result) => Context.get(context, CliResultSink)(result)),
+      ),
+    ),
   ) as unknown as AnyCommand;
 
 const optionalText = (name: string) => Options.text(name).pipe(Options.optional);
@@ -100,277 +100,59 @@ const repeatedText = (name: string) => Options.repeated(Options.text(name));
 const taskIdArgument = Args.text({ name: "task-id" });
 const changeIdArgument = Args.text({ name: "change-id" });
 
-const taskDependenciesCommand = group("dependencies", "Manage direct Task prerequisites.", [
+const taskDependenciesSetCommand = withCliHandler(
   leaf("set", "Replace direct Task prerequisites before Start.", {
     taskId: taskIdArgument,
     dependsOn: repeatedText("depends-on"),
   }),
-]);
-
-const taskContextCommand = group(
-  "context",
-  "Show or edit Task Context.",
-  [
-    leaf("draft", "Create an editable Task Context draft.", { taskId: taskIdArgument }),
-    leaf("apply", "Apply a Task Context draft.", { taskId: taskIdArgument }),
-  ],
-  { taskId: Args.optional(taskIdArgument) },
+  (values, environment) =>
+    runDependenciesCommand(
+      {
+        taskId: requiredString(values, "taskId"),
+        dependsOn: strings(values, "dependsOn"),
+      },
+      environment,
+    ),
 );
 
-const taskCommand = group("task", "Manage repo-local Tasks.", [
+let taskDependenciesCommand: AnyCommand;
+taskDependenciesCommand = group(
+  "dependencies",
+  "Manage direct Task prerequisites.",
+  [taskDependenciesSetCommand],
+  {},
+  () => generatedCommandUsage(taskDependenciesCommand),
+);
+
+const taskContextDraftCommand = withCliHandler(
+  leaf("draft", "Create an editable Task Context draft.", { taskId: taskIdArgument }),
+  (values, environment) => runContextDraftCommand(taskId(values), environment),
+);
+const taskContextApplyCommand = withCliHandler(
+  leaf("apply", "Apply a Task Context draft.", { taskId: taskIdArgument }),
+  (values, environment) => runContextApplyCommand(taskId(values), environment),
+);
+let taskContextCommand: AnyCommand;
+taskContextCommand = group(
+  "context",
+  "Show or edit Task Context.",
+  [taskContextDraftCommand, taskContextApplyCommand],
+  { taskId: Args.optional(taskIdArgument) },
+  (values, environment) => {
+    const taskId = optionalString(values, "taskId");
+    return taskId === undefined
+      ? generatedCommandUsage(taskContextCommand)
+      : runContextCommand({ taskId }, environment);
+  },
+);
+
+const taskCreateCommand = withCliHandler(
   leaf("create", "Create a repo-local Task.", {
     title: Options.text("title"),
     descriptionFile: Options.text("description-file"),
     dependsOn: repeatedText("depends-on"),
   }),
-  taskDependenciesCommand,
-  leaf("list", "List repo-local Tasks.", {
-    all: Options.boolean("all"),
-    state: Options.choice("state", taskStates).pipe(Options.optional),
-  }),
-  leaf("show", "Show decision-oriented Task metadata.", { taskId: taskIdArgument }),
-  leaf("approve", "Permanently approve Task intent.", { taskId: taskIdArgument }),
-  taskContextCommand,
-  leaf("comment", "Append a Markdown Task comment.", {
-    taskId: taskIdArgument,
-    file: Options.text("file"),
-  }),
-  leaf("cancel", "Permanently cancel an unfinished Task.", {
-    taskId: taskIdArgument,
-    reason: Options.text("reason"),
-  }),
-]);
-
-const changeDecisionCommand = group("decision", "Manage Implementation Decisions.", [
-  leaf("add", "Record one Implementer Implementation Decision.", {
-    changeId: changeIdArgument,
-    file: Options.text("file"),
-  }),
-  leaf("list", "List the Change Implementation Decision Log.", {
-    changeId: changeIdArgument,
-  }),
-]);
-
-const changeBlockerCommand = group("blocker", "Manage Implementation Blockers.", [
-  leaf("raise", "Report an Implementation Blocker.", {
-    changeId: changeIdArgument,
-    file: Options.text("file"),
-  }),
-  leaf("resolve", "Record an approved Implementation Blocker Resolution.", {
-    changeId: changeIdArgument,
-    file: Options.text("file"),
-  }),
-  leaf("list", "List blocker and Resolution history.", { changeId: changeIdArgument }),
-]);
-
-const changeCommand = group("change", "Manage Changes and their Candidates.", [
-  leaf("start", "Create a prepared Change worktree.", {
-    task: optionalText("task"),
-    base: optionalText("base"),
-  }),
-  leaf("prepare", "Run or retry Repository Preparation.", { changeId: changeIdArgument }),
-  leaf("list", "List Changes oldest first.", { all: Options.boolean("all") }),
-  leaf("show", "Show decision-oriented Change state.", { changeId: changeIdArgument }),
-  leaf("findings", "Show Findings for the current Change Candidate.", {
-    changeId: changeIdArgument,
-  }),
-  leaf("validation-runs", "List complete Validation Run history.", {
-    changeId: changeIdArgument,
-  }),
-  leaf("submit", "Validate and publish a ready Change.", { changeId: changeIdArgument }),
-  leaf("cancel", "Cancel an open taskless Change.", { changeId: changeIdArgument }),
-  leaf("reconcile", "Read owned pull requests and clean up terminal Changes.", {
-    changeId: Args.optional(changeIdArgument),
-  }),
-  leaf("implement", "Launch an Interactive Session in a ready Change worktree.", {
-    changeId: changeIdArgument,
-    handoffFile: optionalText("handoff-file"),
-  }),
-  changeDecisionCommand,
-  changeBlockerCommand,
-]);
-
-const validationRunCommand = group("validation-run", "Inspect Validation Runs and Artifacts.", [
-  leaf("show", "Show Validation Run policy and recorded evidence.", {
-    validationRunId: Args.text({ name: "validation-run-id" }),
-  }),
-  leaf("artifact", "Show complete stored Artifact content.", {
-    validationRunId: Args.text({ name: "validation-run-id" }),
-    artifactRef: Args.text({ name: "artifact-ref" }),
-  }),
-]);
-
-const commandTree = Command.make("by", { output: globalOutput }).pipe(
-  Command.withDescription("Validate completed code changes against approved human intent."),
-  withSubcommands([
-    leaf("init", "Create repo-local But Why? state.", {
-      taskPrefix: Options.text("task-prefix"),
-    }),
-    taskCommand,
-    changeCommand,
-    validationRunCommand,
-  ]),
-);
-
-const cliConfig = CliConfig.make({ showBuiltIns: true });
-const parserLayer = (args: readonly string[]) =>
-  Layer.mergeAll(
-    NodeFileSystem.layer,
-    NodePath.layer,
-    NodeTerminal.layer,
-    Layer.succeed(RawCliArgs, args),
-  );
-
-export const runCommandTree = (
-  args: readonly string[],
-  environment: CliEnvironment,
-): Effect.Effect<CliResult> =>
-  Effect.either(
-    CommandDescriptor.parse(commandTree.descriptor, ["by", ...parserArgs(args)], cliConfig),
-  ).pipe(
-    Effect.flatMap((parsed) =>
-      parsed._tag === "Left"
-        ? Effect.succeed({
-            ...usageError({
-              code: "invalid_usage",
-              message: generatedText(parsed.left.error),
-              help: ["Run `by --help` for generated command help."],
-            }),
-            outputFormat: outputFormatForArgs(args),
-          })
-        : directiveResult(parsed.right, args, environment),
-    ),
-    Effect.provide(parserLayer(args)),
-  );
-
-const directiveResult = (
-  directive: CommandDirective.CommandDirective<unknown>,
-  originalArgs: readonly string[],
-  environment: CliEnvironment,
-): Effect.Effect<CliResult> => {
-  if (CommandDirective.isUserDefined(directive) && directive.leftover.length > 0) {
-    return generatedLeftoverUsage(originalArgs);
-  }
-
-  if (CommandDirective.isBuiltIn(directive)) {
-    if (BuiltInOptions.isShowHelp(directive.option)) {
-      return findTrailingHelpArgument(originalArgs) === undefined
-        ? originalArgs.length === 0
-          ? dashboardResult(environment, "toon")
-          : Effect.succeed({
-              ...success({ help: rootHelpCorrection(generatedText(directive.option.helpDoc)) }),
-              outputFormat: outputFormatForArgs(originalArgs),
-            })
-        : generatedHelpLeftoverUsage(originalArgs);
-    }
-    return Effect.succeed(
-      usageError({
-        code: "invalid_usage",
-        message: "Only command help is supported.",
-        help: ["Run `by --help` for generated command help."],
-      }),
-    );
-  }
-
-  const command = commandValue(directive.value);
-  return command.path.length === 1
-    ? dashboardResult(environment, command.output)
-    : dispatchCommand(command.path, command.config, environment).pipe(
-        Effect.map((result) => ({ ...result, outputFormat: command.output })),
-      );
-};
-
-const dashboardResult = (
-  environment: CliEnvironment,
-  outputFormat: OutputFormat,
-): Effect.Effect<CliResult> =>
-  dashboard(
-    collapseHome(environment.executablePath),
-    "Validate completed code changes against approved human intent.",
-    environment,
-  ).pipe(Effect.map((result) => ({ ...result, outputFormat })));
-
-type CommandPath =
-  | "init"
-  | "task"
-  | "task create"
-  | "task dependencies"
-  | "task dependencies set"
-  | "task list"
-  | "task show"
-  | "task approve"
-  | "task context"
-  | "task context draft"
-  | "task context apply"
-  | "task comment"
-  | "task cancel"
-  | "change"
-  | "change start"
-  | "change prepare"
-  | "change list"
-  | "change show"
-  | "change findings"
-  | "change validation-runs"
-  | "change submit"
-  | "change cancel"
-  | "change reconcile"
-  | "change implement"
-  | "change decision"
-  | "change decision add"
-  | "change decision list"
-  | "change blocker"
-  | "change blocker raise"
-  | "change blocker resolve"
-  | "change blocker list"
-  | "validation-run"
-  | "validation-run show"
-  | "validation-run artifact";
-
-const commandPath = (path: readonly string[]): CommandPath =>
-  path.slice(1).join(" ") as CommandPath;
-
-type ParsedCommandValue = {
-  readonly path: readonly string[];
-  readonly config: unknown;
-  readonly output: OutputFormat;
-};
-
-const commandValue = (value: unknown): ParsedCommandValue => {
-  const path: string[] = ["by"];
-  let current: unknown = value;
-  let output: OutputFormat = "toon";
-
-  while (isRecord(current)) {
-    const parsedOutput = property(current, "output");
-    if (parsedOutput === "toon" || parsedOutput === "json") output = parsedOutput;
-    const subcommand = property(current, "subcommand");
-    if (!isRecord(subcommand) || !Array.isArray(property(subcommand, "value"))) {
-      break;
-    }
-    const subcommandValue = property(subcommand, "value");
-    if (!Array.isArray(subcommandValue)) break;
-    const key = subcommandValue[0];
-    if (isRecord(key) && typeof property(key, "key") === "string") {
-      const match = /\(([^()]*)\)$/u.exec(property(key, "key") as string);
-      if (match?.[1] !== undefined) path.push(match[1]);
-    }
-    current = subcommandValue[1];
-  }
-
-  return { path, config: current, output };
-};
-
-type CommandHandler = (
-  values: Record<string, unknown>,
-  environment: CliEnvironment,
-) => Effect.Effect<CliResult>;
-
-const commandHandlers: Record<CommandPath, CommandHandler> = {
-  init: (values, environment) =>
-    runInitCommand({ taskPrefix: requiredString(values, "taskPrefix") }, environment),
-  task: () => generatedCommandUsage(taskCommand),
-  "task dependencies": () => generatedCommandUsage(taskDependenciesCommand),
-  "task create": (values, environment) =>
+  (values, environment) =>
     runCreateCommand(
       {
         title: requiredString(values, "title"),
@@ -379,15 +161,13 @@ const commandHandlers: Record<CommandPath, CommandHandler> = {
       },
       environment,
     ),
-  "task dependencies set": (values, environment) =>
-    runDependenciesCommand(
-      {
-        taskId: requiredString(values, "taskId"),
-        dependsOn: strings(values, "dependsOn"),
-      },
-      environment,
-    ),
-  "task list": (values, environment) =>
+);
+const taskListCommand = withCliHandler(
+  leaf("list", "List repo-local Tasks.", {
+    all: Options.boolean("all"),
+    state: Options.choice("state", taskStates).pipe(Options.optional),
+  }),
+  (values, environment) =>
     runListCommand(
       {
         all: boolean(values, "all"),
@@ -395,67 +175,61 @@ const commandHandlers: Record<CommandPath, CommandHandler> = {
       },
       environment,
     ),
-  "task show": (values, environment) => runTaskShowCommand(taskId(values), environment),
-  "task approve": (values, environment) => runApproveCommand(taskId(values), environment),
-  "task context": (values, environment) => {
-    const taskId = optionalString(values, "taskId");
-    return taskId === undefined
-      ? generatedCommandUsage(taskContextCommand)
-      : runContextCommand({ taskId }, environment);
-  },
-  "task context draft": (values, environment) =>
-    runContextDraftCommand(taskId(values), environment),
-  "task context apply": (values, environment) =>
-    runContextApplyCommand(taskId(values), environment),
-  "task comment": (values, environment) =>
+);
+const taskShowCommand = withCliHandler(
+  leaf("show", "Show decision-oriented Task metadata.", { taskId: taskIdArgument }),
+  (values, environment) => runTaskShowCommand(taskId(values), environment),
+);
+const taskApproveCommand = withCliHandler(
+  leaf("approve", "Permanently approve Task intent.", { taskId: taskIdArgument }),
+  (values, environment) => runApproveCommand(taskId(values), environment),
+);
+const taskCommentCommand = withCliHandler(
+  leaf("comment", "Append a Markdown Task comment.", {
+    taskId: taskIdArgument,
+    file: Options.text("file"),
+  }),
+  (values, environment) =>
     runCommentCommand(
       { taskId: requiredString(values, "taskId"), file: requiredString(values, "file") },
       environment,
     ),
-  "task cancel": (values, environment) =>
+);
+const taskCancelCommand = withCliHandler(
+  leaf("cancel", "Permanently cancel an unfinished Task.", {
+    taskId: taskIdArgument,
+    reason: Options.text("reason"),
+  }),
+  (values, environment) =>
     runCancelCommand(
       { taskId: requiredString(values, "taskId"), reason: requiredString(values, "reason") },
       environment,
     ),
-  change: () => generatedCommandUsage(changeCommand),
-  "change decision": () => generatedCommandUsage(changeDecisionCommand),
-  "change blocker": () => generatedCommandUsage(changeBlockerCommand),
-  "change start": (values, environment) =>
-    runStart(
-      {
-        taskId: optionalString(values, "task"),
-        baseBranch: optionalString(values, "base"),
-      },
-      environment as ChangeCommandEnvironment,
-    ),
-  "change prepare": (values, environment) =>
-    runPrepare(changeId(values), environment as ChangeCommandEnvironment),
-  "change list": (values, environment) =>
-    runList({ all: boolean(values, "all") }, environment as ChangeCommandEnvironment),
-  "change show": (values, environment) =>
-    runShow(changeId(values), environment as ChangeCommandEnvironment),
-  "change findings": (values, environment) =>
-    runFindings(changeId(values), environment as ChangeCommandEnvironment),
-  "change validation-runs": (values, environment) =>
-    runValidationRuns(changeId(values), environment as ChangeCommandEnvironment),
-  "change submit": (values, environment) =>
-    runSubmit(changeId(values), environment as ChangeCommandEnvironment),
-  "change cancel": (values, environment) =>
-    runCancel(changeId(values), environment as ChangeCommandEnvironment),
-  "change reconcile": (values, environment) =>
-    runReconcile(
-      { changeId: optionalString(values, "changeId") },
-      environment as ChangeCommandEnvironment,
-    ),
-  "change implement": (values, environment) =>
-    runImplement(
-      {
-        changeId: requiredString(values, "changeId"),
-        handoffFile: optionalString(values, "handoffFile"),
-      },
-      environment as ChangeCommandEnvironment,
-    ),
-  "change decision add": (values, environment) =>
+);
+let taskCommand: AnyCommand;
+taskCommand = group(
+  "task",
+  "Manage repo-local Tasks.",
+  [
+    taskCreateCommand,
+    taskDependenciesCommand,
+    taskListCommand,
+    taskShowCommand,
+    taskApproveCommand,
+    taskContextCommand,
+    taskCommentCommand,
+    taskCancelCommand,
+  ],
+  {},
+  () => generatedCommandUsage(taskCommand),
+);
+
+const changeDecisionAddCommand = withCliHandler(
+  leaf("add", "Record one Implementer Implementation Decision.", {
+    changeId: changeIdArgument,
+    file: Options.text("file"),
+  }),
+  (values, environment) =>
     runDecision(
       {
         action: "add",
@@ -464,12 +238,32 @@ const commandHandlers: Record<CommandPath, CommandHandler> = {
       },
       environment as ChangeCommandEnvironment,
     ),
-  "change decision list": (values, environment) =>
+);
+const changeDecisionListCommand = withCliHandler(
+  leaf("list", "List the Change Implementation Decision Log.", {
+    changeId: changeIdArgument,
+  }),
+  (values, environment) =>
     runDecision(
       { action: "list", changeId: requiredString(values, "changeId") },
       environment as ChangeCommandEnvironment,
     ),
-  "change blocker raise": (values, environment) =>
+);
+let changeDecisionCommand: AnyCommand;
+changeDecisionCommand = group(
+  "decision",
+  "Manage Implementation Decisions.",
+  [changeDecisionAddCommand, changeDecisionListCommand],
+  {},
+  () => generatedCommandUsage(changeDecisionCommand),
+);
+
+const changeBlockerRaiseCommand = withCliHandler(
+  leaf("raise", "Report an Implementation Blocker.", {
+    changeId: changeIdArgument,
+    file: Options.text("file"),
+  }),
+  (values, environment) =>
     runBlocker(
       {
         action: "raise",
@@ -478,7 +272,13 @@ const commandHandlers: Record<CommandPath, CommandHandler> = {
       },
       environment as ChangeCommandEnvironment,
     ),
-  "change blocker resolve": (values, environment) =>
+);
+const changeBlockerResolveCommand = withCliHandler(
+  leaf("resolve", "Record an approved Implementation Blocker Resolution.", {
+    changeId: changeIdArgument,
+    file: Options.text("file"),
+  }),
+  (values, environment) =>
     runBlocker(
       {
         action: "resolve",
@@ -487,18 +287,135 @@ const commandHandlers: Record<CommandPath, CommandHandler> = {
       },
       environment as ChangeCommandEnvironment,
     ),
-  "change blocker list": (values, environment) =>
+);
+const changeBlockerListCommand = withCliHandler(
+  leaf("list", "List blocker and Resolution history.", { changeId: changeIdArgument }),
+  (values, environment) =>
     runBlocker(
       { action: "list", changeId: requiredString(values, "changeId") },
       environment as ChangeCommandEnvironment,
     ),
-  "validation-run": () => generatedCommandUsage(validationRunCommand),
-  "validation-run show": (values, environment) =>
+);
+let changeBlockerCommand: AnyCommand;
+changeBlockerCommand = group(
+  "blocker",
+  "Manage Implementation Blockers.",
+  [changeBlockerRaiseCommand, changeBlockerResolveCommand, changeBlockerListCommand],
+  {},
+  () => generatedCommandUsage(changeBlockerCommand),
+);
+
+const changeStartCommand = withCliHandler(
+  leaf("start", "Create a prepared Change worktree.", {
+    task: optionalText("task"),
+    base: optionalText("base"),
+  }),
+  (values, environment) =>
+    runStart(
+      {
+        taskId: optionalString(values, "task"),
+        baseBranch: optionalString(values, "base"),
+      },
+      environment as ChangeCommandEnvironment,
+    ),
+);
+const changePrepareCommand = withCliHandler(
+  leaf("prepare", "Run or retry Repository Preparation.", { changeId: changeIdArgument }),
+  (values, environment) => runPrepare(changeId(values), environment as ChangeCommandEnvironment),
+);
+const changeListCommand = withCliHandler(
+  leaf("list", "List Changes oldest first.", { all: Options.boolean("all") }),
+  (values, environment) =>
+    runChangeList({ all: boolean(values, "all") }, environment as ChangeCommandEnvironment),
+);
+const changeShowCommand = withCliHandler(
+  leaf("show", "Show decision-oriented Change state.", { changeId: changeIdArgument }),
+  (values, environment) => runChangeShow(changeId(values), environment as ChangeCommandEnvironment),
+);
+const changeFindingsCommand = withCliHandler(
+  leaf("findings", "Show Findings for the current Change Candidate.", {
+    changeId: changeIdArgument,
+  }),
+  (values, environment) => runFindings(changeId(values), environment as ChangeCommandEnvironment),
+);
+const changeValidationRunsCommand = withCliHandler(
+  leaf("validation-runs", "List complete Validation Run history.", {
+    changeId: changeIdArgument,
+  }),
+  (values, environment) =>
+    runValidationRuns(changeId(values), environment as ChangeCommandEnvironment),
+);
+const changeSubmitCommand = withCliHandler(
+  leaf("submit", "Validate and publish a ready Change.", { changeId: changeIdArgument }),
+  (values, environment) => runSubmit(changeId(values), environment as ChangeCommandEnvironment),
+);
+const changeCancelCommand = withCliHandler(
+  leaf("cancel", "Cancel an open taskless Change.", { changeId: changeIdArgument }),
+  (values, environment) =>
+    runChangeCancel(changeId(values), environment as ChangeCommandEnvironment),
+);
+const changeReconcileCommand = withCliHandler(
+  leaf("reconcile", "Read owned pull requests and clean up terminal Changes.", {
+    changeId: Args.optional(changeIdArgument),
+  }),
+  (values, environment) =>
+    runReconcile(
+      { changeId: optionalString(values, "changeId") },
+      environment as ChangeCommandEnvironment,
+    ),
+);
+const changeImplementCommand = withCliHandler(
+  leaf("implement", "Launch an Interactive Session in a ready Change worktree.", {
+    changeId: changeIdArgument,
+    handoffFile: optionalText("handoff-file"),
+  }),
+  (values, environment) =>
+    runImplement(
+      {
+        changeId: requiredString(values, "changeId"),
+        handoffFile: optionalString(values, "handoffFile"),
+      },
+      environment as ChangeCommandEnvironment,
+    ),
+);
+let changeCommand: AnyCommand;
+changeCommand = group(
+  "change",
+  "Manage Changes and their Candidates.",
+  [
+    changeStartCommand,
+    changePrepareCommand,
+    changeListCommand,
+    changeShowCommand,
+    changeFindingsCommand,
+    changeValidationRunsCommand,
+    changeSubmitCommand,
+    changeCancelCommand,
+    changeReconcileCommand,
+    changeImplementCommand,
+    changeDecisionCommand,
+    changeBlockerCommand,
+  ],
+  {},
+  () => generatedCommandUsage(changeCommand),
+);
+
+const validationRunShowCommand = withCliHandler(
+  leaf("show", "Show Validation Run policy and recorded evidence.", {
+    validationRunId: Args.text({ name: "validation-run-id" }),
+  }),
+  (values, environment) =>
     runValidationRunShowCommand(
       { validationRunId: requiredString(values, "validationRunId") },
       environment,
     ),
-  "validation-run artifact": (values, environment) =>
+);
+const validationRunArtifactCommand = withCliHandler(
+  leaf("artifact", "Show complete stored Artifact content.", {
+    validationRunId: Args.text({ name: "validation-run-id" }),
+    artifactRef: Args.text({ name: "artifact-ref" }),
+  }),
+  (values, environment) =>
     runArtifactCommand(
       {
         validationRunId: requiredString(values, "validationRunId"),
@@ -506,51 +423,117 @@ const commandHandlers: Record<CommandPath, CommandHandler> = {
       },
       environment,
     ),
-};
+);
+let validationRunCommand: AnyCommand;
+validationRunCommand = group(
+  "validation-run",
+  "Inspect Validation Runs and Artifacts.",
+  [validationRunShowCommand, validationRunArtifactCommand],
+  {},
+  () => generatedCommandUsage(validationRunCommand),
+);
 
-const dispatchCommand = (
-  path: readonly string[],
-  config: unknown,
+const initCommand = withCliHandler(
+  leaf("init", "Create repo-local But Why? state.", {
+    taskPrefix: Options.text("task-prefix"),
+  }),
+  (values, environment) =>
+    runInitCommand({ taskPrefix: requiredString(values, "taskPrefix") }, environment),
+);
+
+const globalOutput = Options.withAlias(
+  Options.withDefault(Options.choice("output", outputFormats), "toon"),
+  "o",
+);
+
+const commandRootBase = Command.make("by", { output: globalOutput }).pipe(
+  Command.withDescription("Validate completed code changes against approved human intent."),
+) as unknown as AnyCommand;
+const commandRootWithHandler = withCliHandler(commandRootBase, (_values, environment) =>
+  dashboardResult(environment),
+);
+const commandTree = commandRootWithHandler.pipe(
+  withSubcommands([initCommand, taskCommand, changeCommand, validationRunCommand]),
+) as unknown as AnyCommand;
+
+const cliConfig = CliConfig.make({});
+const runtimeLayer = Layer.mergeAll(NodeFileSystem.layer, NodePath.layer, NodeTerminal.layer);
+
+export const runCommandTree = (
+  args: readonly string[],
   environment: CliEnvironment,
-): Effect.Effect<CliResult> => {
-  const handler = commandHandlers[commandPath(path)];
-  return handler === undefined
-    ? generatedCommandUsage(commandTree as unknown as AnyCommand)
-    : handler(isRecord(config) ? config : {}, environment);
-};
+): Effect.Effect<CliResult> =>
+  Effect.gen(function* () {
+    const resultRef = yield* Ref.make<CliResult | undefined>(undefined);
+    const helpOutput: string[] = [];
+    const run = Command.run(commandTree, { executable: "by", name: "by", version: "0.0.0" })([
+      "by",
+      "by",
+      ...args,
+    ]);
+    const commandResult = yield* Effect.either(
+      Console.consoleWith((console) =>
+        Console.withConsole({
+          ...console,
+          log: (message) => Effect.sync(() => void helpOutput.push(String(message))),
+          error: () => Effect.void,
+        })(
+          run.pipe(
+            Effect.provide(
+              Layer.mergeAll(
+                runtimeLayer,
+                Layer.succeed(CliEnvironmentContext, environment),
+                Layer.succeed(CliResultSink, (result) =>
+                  Ref.set(resultRef, {
+                    ...result,
+                    outputFormat: outputFormatForArgs(args),
+                  }),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
 
-const taskId = (values: Record<string, unknown>): TaskIdCommand => ({
-  taskId: requiredString(values, "taskId"),
-});
+    if (commandResult._tag === "Left") {
+      if (ValidationError.isValidationError(commandResult.left)) {
+        return {
+          ...usageError({
+            code: "invalid_usage",
+            message: generatedText(commandResult.left.error),
+            help: ["Run `by --help` for generated command help."],
+          }),
+          outputFormat: outputFormatForArgs(args),
+        };
+      }
+      return yield* Effect.fail(commandResult.left);
+    }
 
-const changeId = (values: Record<string, unknown>): { readonly changeId: string } => ({
-  changeId: requiredString(values, "changeId"),
-});
+    const captured = yield* Ref.get(resultRef);
+    if (captured !== undefined) return captured;
+    if (helpOutput.length > 0) {
+      return {
+        ...success({ help: rootHelpCorrection(nativeHelpText(helpOutput.join("\n"))) }),
+        outputFormat: outputFormatForArgs(args),
+      };
+    }
+    return {
+      ...usageError({
+        code: "invalid_usage",
+        message: "The command did not produce a result.",
+        help: ["Run `by --help` for generated command help."],
+      }),
+      outputFormat: outputFormatForArgs(args),
+    };
+  });
 
-const requiredString = (values: Record<string, unknown>, key: string): string => {
-  const value = optionalValue(property(values, key));
-  return typeof value === "string" ? value : "";
-};
-
-const optionalString = (values: Record<string, unknown>, key: string): string | undefined => {
-  const value = optionalValue(property(values, key));
-  return typeof value === "string" ? value : undefined;
-};
-
-const strings = (values: Record<string, unknown>, key: string): readonly string[] => {
-  const value = property(values, key);
-  return Array.isArray(value)
-    ? value.filter((item): item is string => typeof item === "string")
-    : [];
-};
-
-const boolean = (values: Record<string, unknown>, key: string): boolean =>
-  property(values, key) === true;
-
-const optionalValue = (value: unknown): unknown => {
-  if (!isRecord(value)) return value;
-  return property(value, "_tag") === "Some" ? property(value, "value") : undefined;
-};
+const dashboardResult = (environment: CliEnvironment): Effect.Effect<CliResult> =>
+  dashboard(
+    collapseHome(environment.executablePath),
+    "Validate completed code changes against approved human intent.",
+    environment,
+  );
 
 const generatedCommandUsage = (command: AnyCommand): Effect.Effect<CliResult> =>
   Effect.succeed(
@@ -561,139 +544,53 @@ const generatedCommandUsage = (command: AnyCommand): Effect.Effect<CliResult> =>
     }),
   );
 
-const hasTrailingOutput = (args: readonly string[]): boolean => {
-  const separatorIndex = args.indexOf("--");
-  const helpIndex = args.findIndex((arg) => arg === "--help" || arg === "-h");
-  return args.some(
-    (arg, index) =>
-      index > 0 &&
-      (separatorIndex < 0 || index < separatorIndex) &&
-      (helpIndex < 0 || index < helpIndex) &&
-      (arg === "--output" || arg === "-o" || arg.startsWith("--output=") || arg.startsWith("-o=")),
-  );
+const requiredString = (values: Record<string, unknown>, key: string): string => {
+  const value = optionalValue(values[key]);
+  return typeof value === "string" ? value : "";
 };
 
-const findTrailingHelpArgument = (args: readonly string[]): string | undefined => {
-  const helpIndex = args.findIndex((arg) => arg === "--help" || arg === "-h");
-  return helpIndex >= 0 ? args[helpIndex + 1] : undefined;
+const optionalString = (values: Record<string, unknown>, key: string): string | undefined => {
+  const value = optionalValue(values[key]);
+  return typeof value === "string" ? value : undefined;
 };
 
-const parserArgs = (args: readonly string[]): readonly string[] => {
-  const parsedArgs =
-    args[0] === "--output" || args[0] === "-o"
-      ? args[1] === "toon" || args[1] === "json"
-        ? args[2] === "--help" || args[2] === "-h"
-          ? args.slice(2)
-          : args
-        : args
-      : args;
-  return hasTrailingOutput(args) && parsedArgs.some((arg) => arg === "--help" || arg === "-h")
-    ? parsedArgs.filter((arg) => arg !== "--help" && arg !== "-h")
-    : parsedArgs;
+const strings = (values: Record<string, unknown>, key: string): readonly string[] => {
+  const value = values[key];
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === "string")
+    : [];
 };
 
-const generatedHelpLeftoverUsage = (args: readonly string[]): Effect.Effect<CliResult> => {
-  const helpIndex = args.findIndex((arg) => arg === "--help" || arg === "-h");
-  const prefixArgs = args.slice(0, Math.max(helpIndex, 0));
-  const trailingArgs = helpIndex < 0 ? [] : args.slice(helpIndex + 1);
-  const firstTrailingArg = trailingArgs[0];
-  const candidateArgs =
-    firstTrailingArg === undefined ? prefixArgs : [...prefixArgs, firstTrailingArg];
+const boolean = (values: Record<string, unknown>, key: string): boolean => values[key] === true;
 
-  return parseCommandDescriptor(candidateArgs).pipe(
-    Effect.flatMap((candidate) => {
-      const candidateHelp =
-        candidate._tag === "Left" && ValidationError.isValidationError(candidate.left)
-          ? generatedText(candidate.left.error)
-          : "";
-      const isSubcommand =
-        firstTrailingArg !== undefined &&
-        !firstTrailingArg.startsWith("-") &&
-        ((candidate._tag === "Right" &&
-          CommandDirective.isUserDefined(candidate.right) &&
-          candidate.right.leftover.length === 0) ||
-          candidateHelp.startsWith("Missing"));
-      const forcedFirstArg =
-        firstTrailingArg === "--"
-          ? "---"
-          : isSubcommand
-            ? `--${firstTrailingArg}`
-            : firstTrailingArg;
-      const forcedTrailingArgs =
-        forcedFirstArg === undefined ? [] : [forcedFirstArg, ...trailingArgs.slice(1)];
-      const forcedArgs = [...prefixArgs, "--", ...forcedTrailingArgs];
-
-      return parseCommandDescriptor(forcedArgs).pipe(
-        Effect.flatMap((result) =>
-          result._tag === "Left"
-            ? Effect.succeed({
-                ...usageError({
-                  code: "invalid_usage",
-                  message: generatedText(result.left.error),
-                  help: ["Run `by --help` for generated command help."],
-                }),
-                outputFormat: outputFormatForArgs(args),
-              })
-            : generatedLeftoverUsage(forcedArgs),
-        ),
-      );
-    }),
-  );
+const optionalValue = (value: unknown): unknown => {
+  if (!isRecord(value)) return value;
+  return value["_tag"] === "Some" ? value["value"] : undefined;
 };
 
-const parseCommandDescriptor = (args: readonly string[]) =>
-  Effect.either(
-    CommandDescriptor.parse(commandTree.descriptor, ["by", ...parserArgs(args)], cliConfig),
-  ).pipe(Effect.provide(parserLayer(args)));
+const taskId = (values: Record<string, unknown>): { readonly taskId: string } => ({
+  taskId: requiredString(values, "taskId"),
+});
 
-const generatedLeftoverUsage = (args: readonly string[]): Effect.Effect<CliResult> =>
-  Effect.either(
-    Console.consoleWith((console) =>
-      Console.withConsole({
-        ...console,
-        error: () => Effect.void,
-        log: () => Effect.void,
-      })(
-        Command.run(commandTree, { executable: "by", name: "by", version: "0.0.0" })([
-          "by",
-          "by",
-          ...parserArgs(args),
-        ]).pipe(Effect.provide(parserLayer(args))),
-      ),
-    ),
-  ).pipe(
-    Effect.map((result) => {
-      const message =
-        result._tag === "Left" && ValidationError.isValidationError(result.left)
-          ? generatedText(result.left.error)
-          : "Invalid command syntax.";
-      return {
-        ...usageError({
-          code: "invalid_usage",
-          message,
-          help: ["Run `by --help` for generated command help."],
-        }),
-        outputFormat: outputFormatForArgs(args),
-      };
-    }),
-  );
-
-export const outputFormatForArgs = (args: readonly string[]): OutputFormat => {
-  const selector = args[0];
-  if (selector === "--output" || selector === "-o") {
-    return args[1] === "json" ? "json" : "toon";
-  }
-  return selector?.startsWith("--output=") || selector?.startsWith("-o=")
-    ? selector.split("=", 2)[1] === "json"
-      ? "json"
-      : "toon"
-    : "toon";
-};
+const changeId = (values: Record<string, unknown>): { readonly changeId: string } => ({
+  changeId: requiredString(values, "changeId"),
+});
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null;
 
-const property = (record: Record<string, unknown>, key: string): unknown => record[key];
+export const outputFormatForArgs = (args: readonly string[]): OutputFormat => {
+  for (let index = 0; index < args.length; index += 1) {
+    const selector = args[index];
+    if (selector === "--output" || selector === "-o") {
+      return args[index + 1] === "json" ? "json" : "toon";
+    }
+    if (selector?.startsWith("--output=") || selector?.startsWith("-o=")) {
+      return selector.split("=", 2)[1] === "json" ? "json" : "toon";
+    }
+  }
+  return "toon";
+};
 
 const generatedText = (help: HelpDoc.HelpDoc): string => {
   const ansiEscape = String.fromCharCode(27);
@@ -702,26 +599,14 @@ const generatedText = (help: HelpDoc.HelpDoc): string => {
     .trim();
 };
 
+const nativeHelpText = (help: string): string => {
+  const ansiEscape = String.fromCharCode(27);
+  const plain = help.replaceAll(new RegExp(`${ansiEscape}\\[[0-9;]*m`, "gu"), "").trim();
+  const descriptionIndex = plain.indexOf("DESCRIPTION");
+  return descriptionIndex < 0 ? plain : plain.slice(descriptionIndex);
+};
+
 const rootHelpCorrection = (help: string): string =>
-  hideUnsupportedBuiltIns(help)
+  help
     .replaceAll(/\b(task|change|validation-run) \1\b/gu, "$1")
     .replaceAll(/\[<task-id>\] (?=(draft|apply) <task-id>)/gu, "");
-
-const hideUnsupportedBuiltIns = (help: string): string => {
-  const lines = help.split("\n");
-  const filtered: string[] = [];
-  let hiding = false;
-
-  for (const line of lines) {
-    if (/^(--completions|--log-level|--wizard|--version)(?:\s|$)/u.test(line)) {
-      hiding = true;
-      continue;
-    }
-    if (hiding && (line.startsWith("(-h,") || line === "COMMANDS")) {
-      hiding = false;
-    }
-    if (!hiding) filtered.push(line);
-  }
-
-  return filtered.join("\n");
-};
