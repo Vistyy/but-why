@@ -378,7 +378,7 @@ describe("Change Start Managed Worktree boundaries", () => {
       });
       const locked = yield* runByInProcessEffect(
         root,
-        ["--output", "json", "task", "dependencies", "set", taskId],
+        ["--output", "json", "task", "dependencies", "add", taskId, "--depends-on", "BY-404"],
         now,
       );
       expect(JSON.parse(locked.stdout)).toMatchObject({
@@ -468,7 +468,7 @@ describe("Change Start Managed Worktree boundaries", () => {
             "json",
             "task",
             "dependencies",
-            "set",
+            "add",
             dependent,
             "--depends-on",
             prerequisite,

@@ -22,7 +22,8 @@ import type {
   CreateTaskInput,
   ListTasksInput,
   ListTasksResult,
-  ReplaceTaskDependenciesResult,
+  EditTaskDependenciesInput,
+  EditTaskDependenciesResult,
   TaskApprovalResult,
   TaskStateTransitionResult,
   TransitionTaskStateInput,
@@ -34,10 +35,9 @@ export type TaskUseCases = {
   readonly createTask: (
     input: CreateTaskInput,
   ) => Effect.Effect<CreateTaskPersistenceResult, RepositoryStorageError>;
-  readonly replaceTaskDependencies: (
-    taskId: PublicTaskId,
-    prerequisiteTaskIds: readonly PublicTaskId[],
-  ) => Effect.Effect<RepoReplaceTaskDependenciesResult, RepositoryStorageError>;
+  readonly editTaskDependencies: (
+    input: EditTaskDependenciesInput,
+  ) => Effect.Effect<RepoEditTaskDependenciesResult, RepositoryStorageError>;
   readonly listTasks: (
     input: ListTasksInput,
   ) => Effect.Effect<ListTasksResult, RepositoryStorageError>;
@@ -90,7 +90,7 @@ export type ApplyTaskContextDraftResult =
 
 export type RepoTaskStateTransitionResult = TaskStateTransitionResult;
 export type RepoTaskApprovalResult = TaskApprovalResult;
-export type RepoReplaceTaskDependenciesResult = ReplaceTaskDependenciesResult;
+export type RepoEditTaskDependenciesResult = EditTaskDependenciesResult;
 
 export const openTaskUseCases = (
   context: RepoLocalContext,
@@ -99,8 +99,7 @@ export const openTaskUseCases = (
   taskPrefix: context.taskPrefix,
   resolveTaskId: (taskId) => resolveRepoTaskId(context, taskId),
   createTask: tasks.createTask,
-  replaceTaskDependencies: (taskId, prerequisiteTaskIds) =>
-    tasks.replaceTaskDependencies({ taskId, prerequisiteTaskIds }),
+  editTaskDependencies: (input) => tasks.editTaskDependencies(input),
   listTasks: tasks.listTasks,
   listActionableTasks: tasks.listActionableTasks,
   getTaskById: tasks.getTaskById,

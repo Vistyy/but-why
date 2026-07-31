@@ -102,16 +102,36 @@ const repeatedText = (name: string) => Options.repeated(Options.text(name));
 const taskIdArgument = Args.text({ name: "task-id" });
 const changeIdArgument = Args.text({ name: "change-id" });
 
-const taskDependenciesSetCommand = withCliHandler(
-  leaf("set", "Replace direct Task prerequisites before Start.", {
+const taskDependenciesOperationCommand = (
+  operation: "add" | "remove" | "replace",
+  description: string,
+) =>
+  withCliHandler(
+    leaf(operation, description, {
+      taskId: taskIdArgument,
+      dependsOn: repeatedText("depends-on"),
+    }),
+    (values, environment) =>
+      runDependenciesCommand(
+        {
+          operation,
+          taskId: requiredString(values, "taskId"),
+          dependsOn: strings(values, "dependsOn"),
+        },
+        environment,
+      ),
+  );
+
+const taskDependenciesClearCommand = withCliHandler(
+  leaf("clear", "Remove all direct Task prerequisites before Start.", {
     taskId: taskIdArgument,
-    dependsOn: repeatedText("depends-on"),
   }),
   (values, environment) =>
     runDependenciesCommand(
       {
+        operation: "clear",
         taskId: requiredString(values, "taskId"),
-        dependsOn: strings(values, "dependsOn"),
+        dependsOn: [],
       },
       environment,
     ),
@@ -121,7 +141,15 @@ let taskDependenciesCommand: AnyCommand;
 taskDependenciesCommand = group(
   "dependencies",
   "Manage direct Task prerequisites.",
-  [taskDependenciesSetCommand],
+  [
+    taskDependenciesOperationCommand("add", "Add direct Task prerequisites before Start."),
+    taskDependenciesOperationCommand("remove", "Remove direct Task prerequisites before Start."),
+    taskDependenciesOperationCommand(
+      "replace",
+      "Replace all direct Task prerequisites before Start.",
+    ),
+    taskDependenciesClearCommand,
+  ],
   {},
   () => generatedCommandUsage(taskDependenciesCommand),
 );

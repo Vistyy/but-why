@@ -19,7 +19,7 @@ import type {
   CancelTaskResult,
   CreateTaskInput,
   ListTasksInput,
-  ReplaceTaskDependenciesInput,
+  EditTaskDependenciesInput,
   StoredTaskRecord,
   TaskStateTransitionResult,
   TransitionTaskStateInput,
@@ -34,9 +34,9 @@ export const openSqliteTaskPersistence = (
   Effect.map(RepositorySql, (repository) => ({
     createTask: (input) =>
       repository.transactionImmediate("create Task", (sql) => createTask(sql, taskPrefix, input)),
-    replaceTaskDependencies: (input) =>
-      repository.transactionImmediate("replace Task dependencies", (sql) =>
-        replaceTaskDependencies(sql, input),
+    editTaskDependencies: (input) =>
+      repository.transactionImmediate("edit Task dependencies", (sql) =>
+        editTaskDependencies(sql, input),
       ),
     listTasks: (input) => repository.operation("list Tasks", (sql) => listTasks(sql, input)),
     listActionableTasks: () => repository.operation("list actionable Tasks", listActionableTasks),
@@ -79,26 +79,77 @@ const createTask = (sql: SqlClient.SqlClient, taskPrefix: string, input: CreateT
     return { ok: true as const, task: created };
   });
 
-const replaceTaskDependencies = (sql: SqlClient.SqlClient, input: ReplaceTaskDependenciesInput) =>
+const editTaskDependencies = (sql: SqlClient.SqlClient, input: EditTaskDependenciesInput) =>
   Effect.gen(function* () {
-    const target = yield* taskDependencyReplacementTarget(sql, input.taskId);
+    const target = yield* taskDependencyEditTarget(sql, input.taskId);
     if (!target.ok) return target;
 
-    const dependencyError = yield* validateDependencies(
-      sql,
-      input.taskId,
-      input.prerequisiteTaskIds,
-      true,
-    );
+    if (input.operation === "replace" && input.prerequisiteTaskIds.length === 0) {
+      return { ok: false as const, code: "replace_requires_dependency" as const };
+    }
+
+    const dependencyError =
+      input.operation === "clear"
+        ? undefined
+        : yield* validateDependencies(sql, input.taskId, input.prerequisiteTaskIds, true);
     if (dependencyError !== undefined) return dependencyError;
 
-    yield* sql`DELETE FROM task_dependencies WHERE dependent_task_id = ${input.taskId}`;
-    yield* insertDependencies(sql, input.taskId, input.prerequisiteTaskIds);
+    const currentIds = target.task.prerequisites.map((dependency) => dependency.id as PublicTaskId);
+    const requestedIds = input.prerequisiteTaskIds;
+    const currentSet = new Set(currentIds);
+    const requestedSet = new Set(requestedIds);
+    const desiredIds =
+      input.operation === "add"
+        ? [...currentIds, ...requestedIds.filter((taskId) => !currentSet.has(taskId))]
+        : input.operation === "remove"
+          ? currentIds.filter((taskId) => !requestedSet.has(taskId))
+          : input.operation === "replace"
+            ? requestedIds
+            : [];
+    const added = desiredIds.filter((taskId) => !currentSet.has(taskId));
+    const removed = currentIds.filter((taskId) => !desiredIds.includes(taskId));
+    const unchanged =
+      input.operation === "add"
+        ? requestedIds.filter((taskId) => currentSet.has(taskId))
+        : input.operation === "remove"
+          ? requestedIds.filter((taskId) => !currentSet.has(taskId))
+          : input.operation === "replace"
+            ? desiredIds.filter((taskId) => currentSet.has(taskId))
+            : [];
+
+    if (input.operation === "add") {
+      yield* insertDependencies(
+        sql,
+        input.taskId,
+        requestedIds.filter((taskId) => !currentSet.has(taskId)),
+      );
+    } else if (input.operation === "remove") {
+      yield* Effect.forEach(
+        requestedIds,
+        (prerequisiteTaskId) => sql`
+          DELETE FROM task_dependencies
+          WHERE dependent_task_id = ${input.taskId}
+            AND prerequisite_task_id = ${prerequisiteTaskId}
+        `,
+        { discard: true },
+      );
+    } else {
+      yield* sql`DELETE FROM task_dependencies WHERE dependent_task_id = ${input.taskId}`;
+      yield* insertDependencies(sql, input.taskId, desiredIds);
+    }
+
     const updated = yield* getTaskById(sql, input.taskId);
     if (updated === undefined) {
-      return yield* invalidData("replace Task dependencies", "Task disappeared");
+      return yield* invalidData("edit Task dependencies", "Task disappeared");
     }
-    return { ok: true as const, task: updated };
+    return {
+      ok: true as const,
+      operation: input.operation,
+      task: updated,
+      added,
+      removed,
+      unchanged,
+    };
   });
 
 const listTasks = (sql: SqlClient.SqlClient, input: ListTasksInput) =>
@@ -333,11 +384,11 @@ const persistTaskTransition = (sql: SqlClient.SqlClient, input: TransitionTaskSt
 const taskDependenciesAreEditable = (state: TaskState): boolean =>
   state === "new" || state === "todo";
 
-const taskDependencyReplacementTarget = (sql: SqlClient.SqlClient, taskId: PublicTaskId) =>
+const taskDependencyEditTarget = (sql: SqlClient.SqlClient, taskId: PublicTaskId) =>
   Effect.map(getTaskById(sql, taskId), (current) => {
     if (current === undefined) return { ok: false as const, code: "task_not_found" as const };
     return taskDependenciesAreEditable(current.state)
-      ? { ok: true as const }
+      ? { ok: true as const, task: current }
       : { ok: false as const, code: "dependencies_locked" as const, state: current.state };
   });
 

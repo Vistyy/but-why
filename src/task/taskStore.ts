@@ -16,15 +16,29 @@ export type CreateTaskInput = {
   readonly dependsOn?: readonly PublicTaskId[];
 };
 
-export type ReplaceTaskDependenciesInput = {
+export type TaskDependencyOperation = "add" | "remove" | "replace" | "clear";
+
+export type EditTaskDependenciesInput = {
   readonly taskId: PublicTaskId;
+  readonly operation: TaskDependencyOperation;
   readonly prerequisiteTaskIds: readonly PublicTaskId[];
 };
 
-export type ReplaceTaskDependenciesResult =
-  | { readonly ok: true; readonly task: StoredTaskRecord }
+export type EditTaskDependenciesResult =
+  | {
+      readonly ok: true;
+      readonly operation: TaskDependencyOperation;
+      readonly task: StoredTaskRecord;
+      readonly added: readonly PublicTaskId[];
+      readonly removed: readonly PublicTaskId[];
+      readonly unchanged: readonly PublicTaskId[];
+    }
   | { readonly ok: false; readonly code: "task_not_found" }
-  | { readonly ok: false; readonly code: DependencyValidationCode; readonly taskId?: PublicTaskId }
+  | {
+      readonly ok: false;
+      readonly code: DependencyValidationCode | "replace_requires_dependency";
+      readonly taskId?: PublicTaskId;
+    }
   | { readonly ok: false; readonly code: "dependencies_locked"; readonly state: TaskState };
 
 export type TaskListLimit = number | "all";

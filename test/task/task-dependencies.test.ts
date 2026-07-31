@@ -6,6 +6,7 @@ import { Effect } from "effect";
 import { describe } from "vitest";
 
 import type { TaskUseCases } from "../../src/task/taskUseCases.js";
+import { publicTaskId } from "../../src/task/taskId.js";
 import { runByInProcessEffect } from "../support/by-cli.js";
 import { createInitializedRepo } from "../support/initializedRepo.js";
 import { fakeTaskUseCases } from "../support/taskUseCases.js";
@@ -81,6 +82,126 @@ const dependencyErrorTaskUseCases = (overrides: Partial<TaskUseCases>): TaskUseC
 });
 
 describe("Task dependency CLI", () => {
+  it.effect("applies explicit dependency operations and reports retry-safe changes", () =>
+    Effect.gen(function* () {
+      const root = createInitializedRepo();
+      yield* createTask(root, "First");
+      yield* createTask(root, "Second");
+      yield* createTask(root, "Third");
+      yield* createTask(root, "Dependent", ["BY-1"]);
+
+      const added = yield* runByInProcessEffect(
+        root,
+        [
+          "--output",
+          "json",
+          "task",
+          "dependencies",
+          "add",
+          "BY-4",
+          "--depends-on",
+          "BY-1",
+          "--depends-on",
+          "BY-2",
+        ],
+        now,
+      );
+      expect(added.status).toBe(0);
+      expect(JSON.parse(added.stdout)).toMatchObject({
+        operation: "add",
+        added: ["BY-2"],
+        removed: [],
+        unchanged: ["BY-1"],
+        prerequisites: [{ id: "BY-1" }, { id: "BY-2" }],
+      });
+
+      const removed = yield* runByInProcessEffect(
+        root,
+        [
+          "--output",
+          "json",
+          "task",
+          "dependencies",
+          "remove",
+          "BY-4",
+          "--depends-on",
+          "BY-2",
+          "--depends-on",
+          "BY-3",
+        ],
+        now,
+      );
+      expect(removed.status).toBe(0);
+      expect(JSON.parse(removed.stdout)).toMatchObject({
+        operation: "remove",
+        added: [],
+        removed: ["BY-2"],
+        unchanged: ["BY-3"],
+        prerequisites: [{ id: "BY-1" }],
+      });
+
+      const invalidBatch = yield* runByInProcessEffect(
+        root,
+        [
+          "--output",
+          "json",
+          "task",
+          "dependencies",
+          "add",
+          "BY-4",
+          "--depends-on",
+          "BY-3",
+          "--depends-on",
+          "BY-404",
+        ],
+        now,
+      );
+      expect(invalidBatch.status).toBe(1);
+      expect(JSON.parse(invalidBatch.stdout)).toMatchObject({
+        error: { code: "dependency_unknown_task" },
+      });
+      const afterInvalidBatch = yield* runByInProcessEffect(
+        root,
+        ["--output", "json", "task", "show", "BY-4"],
+        now,
+      );
+      expect(JSON.parse(afterInvalidBatch.stdout)).toMatchObject({
+        task: { prerequisites: [{ id: "BY-1" }] },
+      });
+
+      const missingReplace = yield* runByInProcessEffect(
+        root,
+        ["--output", "json", "task", "dependencies", "replace", "BY-4"],
+        now,
+      );
+      expect(missingReplace.status).toBe(2);
+      expect(JSON.parse(missingReplace.stdout)).toMatchObject({
+        error: { code: "replace_requires_dependency" },
+        help: ["Use `by task dependencies clear <task-id>` to remove all prerequisites."],
+      });
+
+      const cleared = yield* runByInProcessEffect(
+        root,
+        ["--output", "json", "task", "dependencies", "clear", "BY-4"],
+        now,
+      );
+      expect(cleared.status).toBe(0);
+      expect(JSON.parse(cleared.stdout)).toMatchObject({
+        operation: "clear",
+        added: [],
+        removed: ["BY-1"],
+        unchanged: [],
+        prerequisites: [],
+      });
+      const shown = yield* runByInProcessEffect(
+        root,
+        ["--output", "json", "task", "show", "BY-4"],
+        now,
+      );
+      expect(JSON.parse(shown.stdout)).toMatchObject({ task: { prerequisites: [] } });
+    }),
+  );
+
   it.effect("passes repeated dependency options through the in-process CLI", () =>
     Effect.gen(function* () {
       const root = createTestWorkspace();
@@ -134,7 +255,7 @@ describe("Task dependency CLI", () => {
           "json",
           "task",
           "dependencies",
-          "set",
+          "replace",
           "BY-3",
           "--depends-on",
           "BY-1",
@@ -144,10 +265,14 @@ describe("Task dependency CLI", () => {
         now,
         {
           taskUseCases: fakeTaskUseCases({
-            replaceTaskDependencies: (_taskId, prerequisiteTaskIds) => {
-              replacementDependencies = prerequisiteTaskIds;
+            editTaskDependencies: (input) => {
+              replacementDependencies = input.prerequisiteTaskIds;
               return {
                 ok: true,
+                operation: "replace",
+                added: [],
+                removed: [],
+                unchanged: [publicTaskId("BY-1"), publicTaskId("BY-2")],
                 task: {
                   id: "BY-3",
                   title: "Dependent",
@@ -173,13 +298,15 @@ describe("Task dependency CLI", () => {
       expect(replacement.status).toBe(0);
       expect(replacementDependencies).toEqual(["BY-1", "BY-2"]);
       expect(JSON.parse(replacement.stdout)).toEqual({
-        task: {
-          id: "BY-3",
-          prerequisites: [
-            { id: "BY-1", title: "First", state: "new" },
-            { id: "BY-2", title: "Second", state: "new" },
-          ],
-        },
+        task: { id: "BY-3" },
+        operation: "replace",
+        added: [],
+        removed: [],
+        unchanged: ["BY-1", "BY-2"],
+        prerequisites: [
+          { id: "BY-1", title: "First", state: "new" },
+          { id: "BY-2", title: "Second", state: "new" },
+        ],
       });
     }),
   );
@@ -328,7 +455,7 @@ describe("Task dependency CLI", () => {
             "json",
             "task",
             "dependencies",
-            "set",
+            "replace",
             testCase.taskId,
             ...testCase.dependencies.flatMap((dependency) => ["--depends-on", dependency]),
           ],
@@ -342,7 +469,7 @@ describe("Task dependency CLI", () => {
 
       const missing = yield* runByInProcessEffect(
         root,
-        ["--output", "json", "task", "dependencies", "set", "BY-404"],
+        ["--output", "json", "task", "dependencies", "replace", "BY-404", "--depends-on", "BY-1"],
         now,
       );
       expectJsonError(missing, {

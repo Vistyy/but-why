@@ -121,11 +121,17 @@ by task create --title "Add the login flow" --description-file task.md
 by task approve BY-3
 ```
 
-Set prerequisites before approval:
+Set or edit prerequisites before approval with an operation that states its complete graph effect:
 
 ```bash
-by task dependencies set BY-3 --depends-on BY-1 --depends-on BY-2
+by task dependencies replace BY-3 --depends-on BY-1 --depends-on BY-2
+by task dependencies add BY-3 --depends-on BY-4
+by task dependencies remove BY-3 --depends-on BY-1
+by task dependencies clear BY-3
 ```
+
+The live dependency graph is authoritative.
+Do not duplicate prerequisite lists in Task Context.
 
 Inspect Task metadata and complete Task Context:
 
@@ -184,7 +190,10 @@ The installed command templates are:
 
 ```text
 by task create --title <title> --description-file <file> [--depends-on <task-id>]...
-by task dependencies set <task-id> [--depends-on <task-id>]...
+by task dependencies add <task-id> --depends-on <task-id> [--depends-on <task-id>]...
+by task dependencies remove <task-id> --depends-on <task-id> [--depends-on <task-id>]...
+by task dependencies replace <task-id> --depends-on <task-id> [--depends-on <task-id>]...
+by task dependencies clear <task-id>
 by task list [--all] [--state <state>] [--limit <positive integer | all>]
 by task show <task-id>
 by task approve <task-id>
