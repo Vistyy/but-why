@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
-import { existsSync } from "node:fs";
-import { fileURLToPath } from "node:url";
+import { accessSync, constants, readFileSync } from "node:fs";
+import { join } from "node:path";
 
 import type { ExtensionAPI, ExtensionContext, SessionEntry } from "@earendil-works/pi-coding-agent";
 
@@ -99,11 +99,7 @@ const changeIdPattern =
   /^\s*Change identity:\s*([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.?\s*$/imu;
 type ButWhyCommandPrefix = "just by" | "npx -y but-why";
 
-const sourceCheckoutGuard = existsSync(fileURLToPath(new URL("../justfile", import.meta.url)));
-const sourceCheckoutRoot = fileURLToPath(new URL("..", import.meta.url));
-const defaultCommandPrefix: ButWhyCommandPrefix = sourceCheckoutGuard
-  ? "just by"
-  : "npx -y but-why";
+const defaultCommandPrefix: ButWhyCommandPrefix = "npx -y but-why";
 const butWhyCommand = (prefix: ButWhyCommandPrefix, ...args: readonly string[]): string =>
   [prefix, ...args].join(" ");
 
@@ -278,14 +274,17 @@ export default function continueChange(pi: ExtensionAPI): void {
   const displayFor = (
     snapshot: ChangeInspectionSnapshot,
     git: GitInspection,
+    blockerHistory: BlockerHistory,
   ): WatcherDisplay => {
+    if (blockerHistory.active !== null || snapshot.change.state === "blocked") {
+      return { kind: "blocked" };
+    }
     if (snapshot.change.state === "closed") {
       if (snapshot.cleanup?.state === "pending") return { kind: "cleanup-needed" };
       return snapshot.change.closeReason === "cancelled"
         ? { kind: "cancelled" }
         : { kind: "complete" };
     }
-    if (snapshot.change.state === "blocked") return { kind: "blocked" };
     if (snapshot.toolingFailureCount > 0) return { kind: "stopped" };
     const decision = decideContinuation(snapshot, git);
     if (decision.kind === "idle") {
@@ -351,15 +350,18 @@ export default function continueChange(pi: ExtensionAPI): void {
     }
   };
 
-  const commandPrefixFor = async (cwd: string): Promise<ButWhyCommandPrefix> => {
-    if (!sourceCheckoutGuard) return "npx -y but-why";
-    const [sourceGit, targetGit] = await Promise.all([
-      run("git", ["rev-parse", "--path-format=absolute", "--git-common-dir"], sourceCheckoutRoot),
-      run("git", ["rev-parse", "--path-format=absolute", "--git-common-dir"], cwd),
-    ]);
-    return sourceGit.ok && targetGit.ok && sourceGit.stdout.trim() === targetGit.stdout.trim()
-      ? "just by"
-      : "npx -y but-why";
+  const commandPrefixFor = (cwd: string): ButWhyCommandPrefix => {
+    try {
+      accessSync(join(cwd, "justfile"), constants.R_OK);
+      accessSync(join(cwd, "bin/by"), constants.X_OK);
+      const launcher = readFileSync(join(cwd, "bin/by"), "utf8");
+      return launcher.includes("main_checkout_unavailable") &&
+          launcher.includes("trusted_executable_unavailable")
+        ? "just by"
+        : "npx -y but-why";
+    } catch {
+      return "npx -y but-why";
+    }
   };
 
   const cliInvocation = (
@@ -372,7 +374,7 @@ export default function continueChange(pi: ExtensionAPI): void {
     commandArgs: readonly string[],
     cwd: string,
   ): Promise<RunResult> => {
-    const prefix = await commandPrefixFor(cwd);
+    const prefix = commandPrefixFor(cwd);
     const [command, ...args] = cliInvocation(prefix, commandArgs);
     return run(command, args, cwd);
   };
@@ -546,7 +548,7 @@ export default function continueChange(pi: ExtensionAPI): void {
       resolutionId: latest,
       pendingResolutionId: pendingResolution,
     });
-    showWatcher(ctx, displayFor(observed.snapshot, observed.git));
+    showWatcher(ctx, displayFor(observed.snapshot, observed.git, observed.blockerHistory));
   };
 
   const pause = (ctx: ExtensionContext): void => {
@@ -636,7 +638,7 @@ export default function continueChange(pi: ExtensionAPI): void {
         return;
       }
 
-      const commandPrefix = await commandPrefixFor(ctx.cwd);
+      const commandPrefix = commandPrefixFor(ctx.cwd);
       const previous = persisted ?? {
         changeId: id,
         fingerprint: observed.fingerprint,
@@ -665,9 +667,14 @@ export default function continueChange(pi: ExtensionAPI): void {
           : previous.pendingResolutionId ?? null,
       });
 
+      if (observed.blockerHistory.active !== null) {
+        pendingThresholdCompaction = false;
+        showWatcher(ctx, { kind: "blocked" });
+        return;
+      }
       if (!explicit && (resolutionChanged || pendingResolution)) {
         pendingThresholdCompaction = false;
-        showWatcher(ctx, displayFor(observed.snapshot, observed.git));
+        showWatcher(ctx, displayFor(observed.snapshot, observed.git, observed.blockerHistory));
         return;
       }
       if (explicit && (resolutionChanged || pendingResolution) && currentResolution !== null) {
@@ -689,7 +696,7 @@ export default function continueChange(pi: ExtensionAPI): void {
             ),
           );
         } else {
-          showWatcher(ctx, displayFor(observed.snapshot, observed.git));
+          showWatcher(ctx, displayFor(observed.snapshot, observed.git, observed.blockerHistory));
         }
         return;
       }
@@ -703,7 +710,7 @@ export default function continueChange(pi: ExtensionAPI): void {
       const decision = decideContinuation(observed.snapshot, observed.git);
       if (decision.kind === "idle") {
         pendingThresholdCompaction = false;
-        showWatcher(ctx, displayFor(observed.snapshot, observed.git));
+        showWatcher(ctx, displayFor(observed.snapshot, observed.git, observed.blockerHistory));
         return;
       }
       if (!explicit && retry.unchangedRestarts > maxUnchangedRestarts) {

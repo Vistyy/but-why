@@ -74,7 +74,7 @@ const createHarness = (cwd = sourceCwd) => {
     sendUserMessage(message: string) {
       sent.push(message);
     },
-    async exec(command: string, args: string[], options?: { readonly cwd?: string }) {
+    async exec(command: string, args: string[]) {
       execCalls.push({ command, args });
       const sourceCli = command === "just" && args[0] === "by";
       const publishedCli = command === "npx" && args[0] === "-y" && args[1] === "but-why";
@@ -84,10 +84,6 @@ const createHarness = (cwd = sourceCwd) => {
       if ((sourceCli || publishedCli) && args.includes("blocker"))
         return result(JSON.stringify(currentBlockerHistory));
       if (sourceCli || publishedCli) return result(JSON.stringify(currentSnapshot));
-      if (command === "git" && args[0] === "rev-parse" && args.includes("--git-common-dir"))
-        return result(
-          `${options?.cwd?.replace(/\/$/u, "") === sourceCwd.replace(/\/$/u, "") ? "/repo/.git" : "/other/.git"}\n`,
-        );
       if (command === "git" && args[0] === "rev-parse") return result("head\n");
       if (command === "git" && args[0] === "status") return result("");
       if (command === "git" && (args[0] === "diff" || args[0] === "ls-files")) return result("");
@@ -357,6 +353,21 @@ describe("packaged Change Implement continuation extension", () => {
 
     expect(harness.sent).toHaveLength(2);
     expect(harness.entries.at(-1)).toMatchObject({ data: { paused: false } });
+  });
+
+  it("stops when blocker history is active even if the Change snapshot is open", async () => {
+    const harness = createHarness();
+    harness.setBlockerHistory({
+      blockers: [{ id: "blocker-1" }],
+      resolutions: [],
+      active: { id: "blocker-1" },
+    });
+
+    await harness.emit("session_start", { type: "session_start", reason: "startup" });
+    await harness.emit("agent_settled");
+
+    expect(harness.sent).toEqual([]);
+    expect(harness.latestWidgetText()).toEqual(["! Change is blocked"]);
   });
 
   it("does not wake after an external blocker Resolution and explains it before old Findings", async () => {
