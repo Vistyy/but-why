@@ -317,7 +317,7 @@ const implementChange = (
   });
 
 const herdrNameForChange = (change: ChangeStartRecord): string =>
-  change.taskId === null ? `change-${change.id.slice(0, 8)}` : change.taskId;
+  change.taskId === null ? `change-${change.id.slice(0, 8)}` : taskSlugForId(change.taskId);
 
 const piSessionNameForChange = (change: ChangeStartRecord): string =>
   change.taskId === null || change.acceptanceContext === null
