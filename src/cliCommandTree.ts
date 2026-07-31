@@ -261,7 +261,7 @@ const directiveResult = (
               ...success({ help: rootHelpCorrection(generatedText(directive.option.helpDoc)) }),
               outputFormat: outputFormatForArgs(originalArgs),
             })
-        : generatedHelpLeftoverUsage(originalArgs);
+        : generatedLeftoverUsage(originalArgs);
     }
     return Effect.succeed(
       usageError({
@@ -593,6 +593,7 @@ const generatedLeftoverUsage = (args: readonly string[]): Effect.Effect<CliResul
       Console.withConsole({
         ...console,
         error: () => Effect.void,
+        log: () => Effect.void,
       })(
         Command.run(commandTree, { executable: "by", name: "by", version: "0.0.0" })([
           "by",
@@ -616,21 +617,6 @@ const generatedLeftoverUsage = (args: readonly string[]): Effect.Effect<CliResul
         outputFormat: outputFormatForArgs(args),
       };
     }),
-  );
-
-const generatedHelpLeftoverUsage = (args: readonly string[]): Effect.Effect<CliResult> =>
-  Effect.either(
-    CommandDescriptor.parse(commandTree.descriptor, ["by", ...parserArgs(args)], cliConfig),
-  ).pipe(
-    Effect.map(() => ({
-      ...usageError({
-        code: "invalid_usage",
-        message: "Invalid command syntax.",
-        help: ["Run `by --help` for generated command help."],
-      }),
-      outputFormat: outputFormatForArgs(args),
-    })),
-    Effect.provide(parserLayer(args)),
   );
 
 export const outputFormatForArgs = (args: readonly string[]): OutputFormat => {
