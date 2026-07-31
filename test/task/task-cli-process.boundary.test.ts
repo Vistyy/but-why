@@ -46,7 +46,7 @@ describe("by task CLI processes", () => {
 
     expect(result.status).toBe(0);
     expect(result.stderr).toBe("");
-    expect(result.stdout).toBe("version: 0.0.1");
+    expect(result.stdout).toBe("version: 0.0.1\n");
   });
 
   it("returns the package version in JSON when output is selected first", () => {
