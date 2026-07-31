@@ -236,6 +236,11 @@ Before publication, it is the executable in the canonical main checkout.
 Published executable selection is governed by the post-publication compatibility policy.
 _Avoid_: Candidate CLI, current-worktree executable
 
+**Source Checkout Guard**:
+A temporary pre-publication command path used only because the published But Why package is unavailable.
+It does not define normal installation behavior.
+_Avoid_: source mode, development installation
+
 **Migration Artifact**:
 One numbered source artifact that defines an ordered Shared Repository State migration.
 Existing Migration Artifacts are immutable, and a schema change adds the next Migration Artifact.

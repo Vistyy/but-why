@@ -1,6 +1,3 @@
-import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import type { ExtensionAPI, ExtensionContext, SessionEntry } from "@earendil-works/pi-coding-agent";
@@ -80,15 +77,11 @@ const createHarness = (cwd = sourceCwd) => {
     async exec(command: string, args: string[]) {
       execCalls.push({ command, args });
       const sourceCli = command === "just" && args[0] === "by";
-      const publishedCli = command === "npx" && args[0] === "-y" && args[1] === "but-why";
-      if ((sourceCli || publishedCli) && inspectionGate !== undefined) await inspectionGate;
-      if ((sourceCli || publishedCli) && inspectionFails)
-        return { stdout: "", stderr: "", code: 1, killed: true };
-      if ((sourceCli || publishedCli) && args.includes("blocker"))
+      if (sourceCli && inspectionGate !== undefined) await inspectionGate;
+      if (sourceCli && inspectionFails) return { stdout: "", stderr: "", code: 1, killed: true };
+      if (sourceCli && args.includes("blocker"))
         return result(JSON.stringify(currentBlockerHistory));
-      if (sourceCli || publishedCli) return result(JSON.stringify(currentSnapshot));
-      if (command === "git" && args[0] === "config")
-        return result("git+ssh://git@github.com/Vistyy/but-why.git\n");
+      if (sourceCli) return result(JSON.stringify(currentSnapshot));
       if (command === "git" && args[0] === "rev-parse") return result("head\n");
       if (command === "git" && args[0] === "status") return result("");
       if (command === "git" && (args[0] === "diff" || args[0] === "ls-files")) return result("");
@@ -204,46 +197,6 @@ describe("packaged Change Implement continuation extension", () => {
       command: "just",
       args: ["by", "--output", "json", "change", "blocker", "list", changeId],
     });
-  });
-
-  it("uses the published But Why executable for a packaged target", async () => {
-    const harness = createHarness("/managed/change");
-
-    await harness.emit("session_start", { type: "session_start", reason: "startup" });
-    await harness.emit("agent_settled");
-
-    expect(harness.execCalls).toContainEqual({
-      command: "npx",
-      args: ["-y", "but-why", "--output", "json", "change", "show", changeId],
-    });
-    expect(harness.sent[0]).toContain(`npx -y but-why change show ${changeId}`);
-  });
-
-  it("does not treat unrelated target tooling as the source repository", async () => {
-    const target = mkdtempSync(join(tmpdir(), "but-why-extension-target-"));
-    mkdirSync(join(target, "bin"));
-    writeFileSync(join(target, "justfile"), "by:\n  @true\n");
-    writeFileSync(join(target, "bin/by"), "#!/bin/sh\n");
-    chmodSync(join(target, "bin/by"), 0o755);
-    writeFileSync(
-      join(target, "package.json"),
-      JSON.stringify({
-        name: "but-why",
-        repository: { type: "git", url: "https://example.com/unrelated.git" },
-      }),
-    );
-
-    try {
-      const harness = createHarness(target);
-      await harness.emit("session_start", { type: "session_start", reason: "startup" });
-
-      expect(harness.execCalls).toContainEqual({
-        command: "npx",
-        args: ["-y", "but-why", "--output", "json", "change", "show", changeId],
-      });
-    } finally {
-      rmSync(target, { recursive: true, force: true });
-    }
   });
 
   it("does not leave an inspection failure idle", async () => {

@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
-import { accessSync, constants, readFileSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 
 import type { ExtensionAPI, ExtensionContext, SessionEntry } from "@earendil-works/pi-coding-agent";
 
@@ -97,24 +97,14 @@ const watcherWidget = "but-why-change-watcher";
 const maxUnchangedRestarts = 3;
 const changeIdPattern =
   /^\s*Change identity:\s*([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.?\s*$/imu;
-type ButWhyCommandPrefix = "just by" | "npx -y but-why";
+export type ButWhyCommandPrefix = "just by" | "npx -y but-why";
 
-const normalizeRepositoryUrl = (value: string): string => {
-  const trimmed = value.trim().replace(/^git\+/u, "");
-  const scpRemote = trimmed.match(/^git@([^:]+):(.+)$/u);
-  const candidate =
-    scpRemote === null ? trimmed : `ssh://git@${scpRemote[1]}/${scpRemote[2]}`;
-  try {
-    const parsed = new URL(candidate);
-    return `${parsed.hostname}${parsed.pathname}`
-      .replace(/\.git$/u, "")
-      .replace(/\/$/u, "")
-      .toLowerCase();
-  } catch {
-    return candidate.replace(/\.git$/u, "").replace(/\/$/u, "").toLowerCase();
-  }
-};
+export const commandPrefixForSourceCheckout = (
+  sourceCheckout: boolean,
+): ButWhyCommandPrefix => (sourceCheckout ? "just by" : "npx -y but-why");
 
+const sourceCheckoutGuard = existsSync(fileURLToPath(new URL("../justfile", import.meta.url)));
+const resolvedCommandPrefix = commandPrefixForSourceCheckout(sourceCheckoutGuard);
 const butWhyCommand = (prefix: ButWhyCommandPrefix, ...args: readonly string[]): string =>
   [prefix, ...args].join(" ");
 
@@ -168,7 +158,7 @@ export const buildContinuationMessage = (
   decision: ContinuationDecision,
   changeId: string,
   compactionReason: "threshold" | undefined = undefined,
-  commandPrefix: ButWhyCommandPrefix = "just by",
+  commandPrefix: ButWhyCommandPrefix = resolvedCommandPrefix,
 ): string => {
   if (decision.kind === "idle") return "";
   if (decision.kind === "findings") {
@@ -362,39 +352,16 @@ export default function continueChange(pi: ExtensionAPI): void {
     }
   };
 
-  const commandPrefixFor = async (cwd: string): Promise<ButWhyCommandPrefix> => {
-    try {
-      accessSync(join(cwd, "justfile"), constants.R_OK);
-      accessSync(join(cwd, "bin/by"), constants.X_OK);
-      const packageJson = JSON.parse(readFileSync(join(cwd, "package.json"), "utf8")) as {
-        readonly repository?: Readonly<{ readonly url?: unknown }> | string;
-      };
-      const packageRepository =
-        typeof packageJson.repository === "string"
-          ? packageJson.repository
-          : packageJson.repository?.url;
-      if (typeof packageRepository !== "string") return "npx -y but-why";
-      const remote = await run("git", ["config", "--get", "remote.origin.url"], cwd);
-      return remote.ok && normalizeRepositoryUrl(packageRepository) === normalizeRepositoryUrl(remote.stdout)
-        ? "just by"
-        : "npx -y but-why";
-    } catch {
-      return "npx -y but-why";
-    }
-  };
-
-  const cliInvocation = (
-    prefix: ButWhyCommandPrefix,
-    args: readonly string[],
-  ): readonly [string, ...string[]] =>
-    prefix === "just by" ? ["just", "by", ...args] : ["npx", "-y", "but-why", ...args];
+  const cliInvocation = (args: readonly string[]): readonly [string, ...string[]] =>
+    resolvedCommandPrefix === "just by"
+      ? ["just", "by", ...args]
+      : ["npx", "-y", "but-why", ...args];
 
   const inspectCommand = async (
     commandArgs: readonly string[],
     cwd: string,
   ): Promise<RunResult> => {
-    const prefix = await commandPrefixFor(cwd);
-    const [command, ...args] = cliInvocation(prefix, commandArgs);
+    const [command, ...args] = cliInvocation(commandArgs);
     return run(command, args, cwd);
   };
 
@@ -657,7 +624,6 @@ export default function continueChange(pi: ExtensionAPI): void {
         return;
       }
 
-      const commandPrefix = await commandPrefixFor(ctx.cwd);
       const previous = persisted ?? {
         changeId: id,
         fingerprint: observed.fingerprint,
@@ -706,7 +672,7 @@ export default function continueChange(pi: ExtensionAPI): void {
               id,
               currentResolution,
               observed.snapshot.findingCount > 0,
-              commandPrefix,
+              resolvedCommandPrefix,
             ),
           );
         } else {
@@ -717,7 +683,7 @@ export default function continueChange(pi: ExtensionAPI): void {
       if (explicit && observed.snapshot.toolingFailureCount > 0) {
         pendingThresholdCompaction = false;
         showWatcher(ctx, { kind: "stopped" });
-        pi.sendUserMessage(validationFailureMessage(id, observed.snapshot, commandPrefix));
+        pi.sendUserMessage(validationFailureMessage(id, observed.snapshot, resolvedCommandPrefix));
         return;
       }
 
@@ -740,7 +706,7 @@ export default function continueChange(pi: ExtensionAPI): void {
         decision,
         id,
         pendingThresholdCompaction ? "threshold" : undefined,
-        commandPrefix,
+        resolvedCommandPrefix,
       );
       pendingThresholdCompaction = false;
       showWatcher(ctx, { kind: "watching" });
