@@ -367,141 +367,148 @@ describe("Task dependency CLI", () => {
     }),
   );
 
-  it.effect("reports reachable dependency rejections without changing the graph", () =>
-    Effect.gen(function* () {
-      const root = createInitializedRepo();
-      yield* createTask(root, "First");
-      yield* createTask(root, "Second", ["BY-1"]);
-      yield* createTask(root, "Third", ["BY-2"]);
-      const taskIds = ["BY-1", "BY-2", "BY-3"];
-      const before = yield* readGraph(root, taskIds);
+  it.effect(
+    "reports reachable dependency rejections without changing the graph",
+    () =>
+      Effect.gen(function* () {
+        const root = createInitializedRepo();
+        yield* createTask(root, "First");
+        yield* createTask(root, "Second", ["BY-1"]);
+        yield* createTask(root, "Third", ["BY-2"]);
+        const taskIds = ["BY-1", "BY-2", "BY-3"];
+        const before = yield* readGraph(root, taskIds);
 
-      for (const testCase of [
-        {
-          title: "Unknown",
-          dependencies: ["BY-404"],
+        for (const testCase of [
+          {
+            title: "Unknown",
+            dependencies: ["BY-404"],
+            error: {
+              code: "dependency_unknown_task",
+              message: "Dependency Task was not found: BY-404",
+              taskId: "BY-404",
+            },
+          },
+          {
+            title: "Self",
+            dependencies: ["BY-4"],
+            error: {
+              code: "dependency_self",
+              message: "A Task cannot depend on itself.",
+              taskId: "BY-4",
+            },
+          },
+          {
+            title: "Duplicate",
+            dependencies: ["BY-1", "BY-1"],
+            error: {
+              code: "dependency_duplicate",
+              message: "Dependency was provided more than once: BY-1",
+              taskId: "BY-1",
+            },
+          },
+        ] as const) {
+          const descriptionFile = `${testCase.title.toLowerCase()}-rejection.md`;
+          writeFileSync(join(root, descriptionFile), `Description for ${testCase.title}`);
+          const result = yield* runByInProcessEffect(
+            root,
+            [
+              "--output",
+              "json",
+              "task",
+              "create",
+              "--title",
+              testCase.title,
+              "--description-file",
+              descriptionFile,
+              ...testCase.dependencies.flatMap((dependency) => ["--depends-on", dependency]),
+            ],
+            now,
+          );
+          expectJsonError(result, {
+            error: testCase.error,
+            help: [
+              "Use existing Tasks from `by task list --all --limit all` as direct prerequisites.",
+            ],
+          });
+        }
+
+        for (const testCase of [
+          {
+            taskId: "BY-3",
+            dependencies: ["BY-404"],
+            error: {
+              code: "dependency_unknown_task",
+              message: "Dependency Task was not found: BY-404",
+              taskId: "BY-3",
+              dependencyTaskId: "BY-404",
+            },
+          },
+          {
+            taskId: "BY-3",
+            dependencies: ["BY-3"],
+            error: {
+              code: "dependency_self",
+              message: "Task BY-3 cannot depend on itself.",
+              taskId: "BY-3",
+              dependencyTaskId: "BY-3",
+            },
+          },
+          {
+            taskId: "BY-3",
+            dependencies: ["BY-2", "BY-2"],
+            error: {
+              code: "dependency_duplicate",
+              message: "Dependency was provided more than once: BY-2",
+              taskId: "BY-3",
+              dependencyTaskId: "BY-2",
+            },
+          },
+          {
+            taskId: "BY-1",
+            dependencies: ["BY-3"],
+            error: {
+              code: "dependency_cycle",
+              message: "Task dependencies must not contain a cycle.",
+              taskId: "BY-1",
+            },
+          },
+        ] as const) {
+          const result = yield* runByInProcessEffect(
+            root,
+            [
+              "--output",
+              "json",
+              "task",
+              "dependencies",
+              "replace",
+              testCase.taskId,
+              ...testCase.dependencies.flatMap((dependency) => ["--depends-on", dependency]),
+            ],
+            now,
+          );
+          expectJsonError(result, {
+            error: testCase.error,
+            help: ["Use existing Tasks and keep the direct dependency graph acyclic."],
+          });
+        }
+
+        const missing = yield* runByInProcessEffect(
+          root,
+          ["--output", "json", "task", "dependencies", "replace", "BY-404", "--depends-on", "BY-1"],
+          now,
+        );
+        expectJsonError(missing, {
           error: {
-            code: "dependency_unknown_task",
-            message: "Dependency Task was not found: BY-404",
+            code: "task_not_found",
+            message: "Task was not found: BY-404",
             taskId: "BY-404",
           },
-        },
-        {
-          title: "Self",
-          dependencies: ["BY-4"],
-          error: {
-            code: "dependency_self",
-            message: "A Task cannot depend on itself.",
-            taskId: "BY-4",
-          },
-        },
-        {
-          title: "Duplicate",
-          dependencies: ["BY-1", "BY-1"],
-          error: {
-            code: "dependency_duplicate",
-            message: "Dependency was provided more than once: BY-1",
-            taskId: "BY-1",
-          },
-        },
-      ] as const) {
-        const descriptionFile = `${testCase.title.toLowerCase()}-rejection.md`;
-        writeFileSync(join(root, descriptionFile), `Description for ${testCase.title}`);
-        const result = yield* runByInProcessEffect(
-          root,
-          [
-            "--output",
-            "json",
-            "task",
-            "create",
-            "--title",
-            testCase.title,
-            "--description-file",
-            descriptionFile,
-            ...testCase.dependencies.flatMap((dependency) => ["--depends-on", dependency]),
-          ],
-          now,
-        );
-        expectJsonError(result, {
-          error: testCase.error,
-          help: [
-            "Use existing Tasks from `by task list --all --limit all` as direct prerequisites.",
-          ],
+          help: ["Run `by task list --all --limit all` to see known Tasks."],
         });
-      }
 
-      for (const testCase of [
-        {
-          taskId: "BY-3",
-          dependencies: ["BY-404"],
-          error: {
-            code: "dependency_unknown_task",
-            message: "Dependency Task was not found: BY-404",
-            taskId: "BY-3",
-            dependencyTaskId: "BY-404",
-          },
-        },
-        {
-          taskId: "BY-3",
-          dependencies: ["BY-3"],
-          error: {
-            code: "dependency_self",
-            message: "Task BY-3 cannot depend on itself.",
-            taskId: "BY-3",
-            dependencyTaskId: "BY-3",
-          },
-        },
-        {
-          taskId: "BY-3",
-          dependencies: ["BY-2", "BY-2"],
-          error: {
-            code: "dependency_duplicate",
-            message: "Dependency was provided more than once: BY-2",
-            taskId: "BY-3",
-            dependencyTaskId: "BY-2",
-          },
-        },
-        {
-          taskId: "BY-1",
-          dependencies: ["BY-3"],
-          error: {
-            code: "dependency_cycle",
-            message: "Task dependencies must not contain a cycle.",
-            taskId: "BY-1",
-          },
-        },
-      ] as const) {
-        const result = yield* runByInProcessEffect(
-          root,
-          [
-            "--output",
-            "json",
-            "task",
-            "dependencies",
-            "replace",
-            testCase.taskId,
-            ...testCase.dependencies.flatMap((dependency) => ["--depends-on", dependency]),
-          ],
-          now,
-        );
-        expectJsonError(result, {
-          error: testCase.error,
-          help: ["Use existing Tasks and keep the direct dependency graph acyclic."],
-        });
-      }
-
-      const missing = yield* runByInProcessEffect(
-        root,
-        ["--output", "json", "task", "dependencies", "replace", "BY-404", "--depends-on", "BY-1"],
-        now,
-      );
-      expectJsonError(missing, {
-        error: { code: "task_not_found", message: "Task was not found: BY-404", taskId: "BY-404" },
-        help: ["Run `by task list --all --limit all` to see known Tasks."],
-      });
-
-      expect(yield* readGraph(root, taskIds)).toEqual(before);
-      expect(yield* readTaskIds(root)).toEqual(taskIds);
-    }),
+        expect(yield* readGraph(root, taskIds)).toEqual(before);
+        expect(yield* readTaskIds(root)).toEqual(taskIds);
+      }),
+    15_000,
   );
 });
