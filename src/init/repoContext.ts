@@ -76,6 +76,8 @@ export type InitRepoError =
       readonly code: "shared_state_identity_conflict";
     };
 
+export type RepoLocalSubmissionContext = Omit<RepoLocalContext, "config" | "taskPrefix">;
+
 export type LoadRepoLocalContextResult =
   | {
       readonly ok: true;
@@ -238,6 +240,36 @@ export const initRepoLocalContext = (input: InitRepoInput): Effect.Effect<InitRe
       onSuccess: () => Effect.sync(() => completeRepoInitialization(prepared, stateChange)),
     }),
   );
+};
+
+export const loadRepoLocalSubmissionContext = (
+  cwd: string,
+):
+  | { readonly ok: true; readonly context: RepoLocalSubmissionContext }
+  | { readonly ok: false; readonly error: LoadRepoLocalContextError } => {
+  const gitRoot = findGitRoot(cwd);
+
+  if (!gitRoot.ok) {
+    return {
+      ok: false,
+      error:
+        gitRoot.code === "main_checkout_unavailable"
+          ? { code: gitRoot.code, ...(gitRoot.path === undefined ? {} : { path: gitRoot.path }) }
+          : { code: "not_initialized" },
+    };
+  }
+
+  const paths = repoLocalPaths(gitRoot.root, gitRoot.commonDirectory);
+
+  return {
+    ok: true,
+    context: {
+      root: gitRoot.root,
+      mainCheckoutRoot: gitRoot.mainCheckoutRoot,
+      commonDirectory: gitRoot.commonDirectory,
+      paths,
+    },
+  };
 };
 
 export const loadRepoLocalContext = (cwd: string): LoadRepoLocalContextResult => {

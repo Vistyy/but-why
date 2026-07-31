@@ -1,7 +1,10 @@
 import { Effect } from "effect";
 
-import type { AgentEnvironmentCommand } from "../agent/agentEnvironment.js";
-import type { CandidateValidationPolicyResolution } from "./candidateValidation/resolveCandidateValidationPolicy.js";
+import type { RepoConfig } from "../contracts/repoConfig.js";
+import type {
+  CandidateValidationPolicyResolution,
+  ResolvedCandidateValidationPolicy,
+} from "./candidateValidation/resolveCandidateValidationPolicy.js";
 import type { ReviewerContinuityEvidence } from "./acceptanceReview/runAcceptanceReviewPhase.js";
 import type { SpecialistReviewerContinuityEvidence } from "./specialistReview/runSpecialistReviewPhase.js";
 import type {
@@ -126,16 +129,15 @@ export type PublicationTargetDetectionResult =
       readonly code: "PR_TARGET_NOT_FOUND" | "GITHUB_TOOLING_ERROR";
     };
 
+export type ManagedRepoConfigResolution =
+  | { readonly ok: true; readonly config: RepoConfig }
+  | { readonly ok: false; readonly message: string };
+
 export type ChangeSubmitInput = {
   readonly changeId: string;
   readonly now: string;
   readonly progress?: SubmitProgress;
 };
-
-export type AgentEnvironmentResolution =
-  | { readonly ok: true }
-  | { readonly ok: true; readonly command: AgentEnvironmentCommand }
-  | { readonly ok: false; readonly message: string };
 
 export type ChangeSubmit = {
   readonly submit: (
@@ -159,11 +161,12 @@ export const openChangeSubmit = (dependencies: {
   readonly persistence: ChangePersistence;
   readonly taskPersistence: Pick<TaskPersistence, "getTaskById" | "transitionTaskState">;
   readonly reconciliation: ChangeReconciliation;
+  readonly loadRepoConfig: (worktreePath: string) => ManagedRepoConfigResolution;
   readonly resolvePolicy: (
     taskBacked: boolean,
+    repoConfig: RepoConfig,
     worktreePath: string,
   ) => CandidateValidationPolicyResolution;
-  readonly resolveAgentEnvironment?: (worktreePath: string) => AgentEnvironmentResolution;
   readonly publicationFor: (cwd: string) => CandidatePublication;
   readonly refreshBase: (
     cwd: string,
@@ -266,13 +269,14 @@ const submitChange = (
         }
       }
     }
-    const agentEnvironment =
-      dependencies.resolveAgentEnvironment?.(change.worktreePath) ?? ({ ok: true } as const);
-    if (!agentEnvironment.ok) {
-      return { ok: false, code: "validation_policy_invalid", message: agentEnvironment.message };
+    const managedRepoConfig = dependencies.loadRepoConfig(change.worktreePath);
+    if (!managedRepoConfig.ok) {
+      return {
+        ok: false,
+        code: "validation_policy_invalid",
+        message: managedRepoConfig.message,
+      } as const;
     }
-    const agentEnvironmentCommand =
-      "command" in agentEnvironment ? agentEnvironment.command : undefined;
     const refreshedBase = dependencies.refreshBase(
       dependencies.repositoryPath,
       change.baseRef,
@@ -291,15 +295,46 @@ const submitChange = (
         return { ok: true, status: "nothing_to_submit", changeId: change.id } as const;
       }
       if (change.publication === null) {
+        const policy = dependencies.resolvePolicy(
+          true,
+          managedRepoConfig.config,
+          change.worktreePath,
+        );
+        if (!policy.ok) {
+          return {
+            ok: false,
+            code: "validation_policy_invalid",
+            message: policy.error.message,
+          } as const;
+        }
+        if (!policy.resolved.taskBacked) {
+          return {
+            ok: false,
+            code: "validation_policy_invalid",
+            message: "Task-backed no-change submission requires a Task-backed validation policy.",
+          } as const;
+        }
         return yield* validateAndCompleteNoChange(
           dependencies,
           change,
           candidate,
+          policy.resolved,
           input.now,
-          agentEnvironmentCommand,
           input.progress,
         );
       }
+    }
+    const policy = dependencies.resolvePolicy(
+      change.acceptanceContext !== null,
+      managedRepoConfig.config,
+      change.worktreePath,
+    );
+    if (!policy.ok) {
+      return {
+        ok: false,
+        code: "validation_policy_invalid",
+        message: policy.error.message,
+      } as const;
     }
     const target = detectPublicationTarget(dependencies, change, candidate);
     if (!target.ok) return githubTargetFailure(target);
@@ -307,9 +342,9 @@ const submitChange = (
       dependencies,
       change,
       candidate,
+      policy.resolved,
       target.target,
       input.now,
-      agentEnvironmentCommand,
       input.progress,
     );
   });
@@ -318,8 +353,8 @@ const validateAndCompleteNoChange = (
   dependencies: Parameters<typeof openChangeSubmit>[0],
   change: ReadyChange,
   candidate: CapturedCandidate,
+  policy: Extract<ResolvedCandidateValidationPolicy, { readonly taskBacked: true }>,
   now: string,
-  agentEnvironment: AgentEnvironmentCommand | undefined,
   progress: SubmitProgress | undefined,
 ): Effect.Effect<ChangeSubmitResult, RepositoryStorageError, CandidateValidation> =>
   Effect.gen(function* () {
@@ -330,14 +365,11 @@ const validateAndCompleteNoChange = (
         message: "Task-backed no-change submission requires Acceptance Context.",
       } as const;
     }
-    const policy = dependencies.resolvePolicy(true, change.worktreePath);
-    if (!policy.ok || !policy.resolved.taskBacked) {
+    if (!policy.taskBacked) {
       return {
         ok: false,
         code: "validation_policy_invalid",
-        message: policy.ok
-          ? "Task-backed no-change submission requires a Task-backed validation policy."
-          : policy.error.message,
+        message: "Task-backed no-change submission requires a Task-backed validation policy.",
       } as const;
     }
     const task = yield* dependencies.taskPersistence.getTaskById(change.taskId);
@@ -365,7 +397,7 @@ const validateAndCompleteNoChange = (
       ...(change.implementationDecisions === undefined
         ? {}
         : { implementationDecisions: change.implementationDecisions }),
-      policy: withAgentEnvironment(policy.resolved.policy, agentEnvironment),
+      policy: policy.policy,
       now,
     });
     if ("code" in validationResult) {
@@ -463,23 +495,12 @@ const validateAndPublish = (
   dependencies: Parameters<typeof openChangeSubmit>[0],
   change: ReadyChange,
   candidate: CapturedCandidate,
+  policy: ResolvedCandidateValidationPolicy,
   target: ChangePublicationTarget,
   now: string,
-  agentEnvironment: AgentEnvironmentCommand | undefined,
   progress: SubmitProgress | undefined,
 ): Effect.Effect<ChangeSubmitResult, RepositoryStorageError, CandidateValidation> =>
   Effect.gen(function* () {
-    const policy = dependencies.resolvePolicy(
-      change.acceptanceContext !== null,
-      change.worktreePath,
-    );
-    if (!policy.ok) {
-      return {
-        ok: false,
-        code: "validation_policy_invalid",
-        message: policy.error.message,
-      } as const;
-    }
     if (
       change.taskId !== null &&
       !(yield* transitionTask(dependencies.persistence, change, "validating", now))
@@ -489,7 +510,7 @@ const validateAndPublish = (
 
     const validation = yield* CandidateValidation;
     const validationResult =
-      policy.resolved.taskBacked && change.acceptanceContext !== null
+      policy.taskBacked && change.acceptanceContext !== null
         ? yield* validation.validateTaskBackedCandidate({
             changeId: change.id,
             ...candidateIdentity(candidate),
@@ -501,7 +522,7 @@ const validateAndPublish = (
             ...(change.implementationDecisions === undefined
               ? {}
               : { implementationDecisions: change.implementationDecisions }),
-            policy: withAgentEnvironment(policy.resolved.policy, agentEnvironment),
+            policy: policy.policy,
             ...(progress === undefined ? {} : { progress }),
             now,
           })
@@ -512,7 +533,7 @@ const validateAndPublish = (
             ...(change.implementationDecisions === undefined
               ? {}
               : { implementationDecisions: change.implementationDecisions }),
-            policy: withAgentEnvironment(policy.resolved.policy, agentEnvironment),
+            policy: policy.policy,
             ...(progress === undefined ? {} : { progress }),
             now,
           });
@@ -551,15 +572,12 @@ const validateAndPublish = (
       changeId: change.id,
       candidateId: candidate.candidateId,
       validationRunId: validationResult.validationRunId,
-      policy: withAgentEnvironment(
-        {
-          ...policy.resolved.policy,
-          ...(change.acceptanceContext === null
-            ? {}
-            : { acceptanceContext: change.acceptanceContext }),
-        },
-        agentEnvironment,
-      ),
+      policy: {
+        ...policy.policy,
+        ...(change.acceptanceContext === null
+          ? {}
+          : { acceptanceContext: change.acceptanceContext }),
+      },
       target,
       now,
     });
@@ -699,14 +717,6 @@ const candidateIdentity = (candidate: CapturedCandidate) => ({
   candidateId: candidate.candidateId,
   changeBaseSha: candidate.changeBaseSha,
   headSha: candidate.headSha,
-});
-
-const withAgentEnvironment = <Policy extends object>(
-  policy: Policy,
-  agentEnvironment: AgentEnvironmentCommand | undefined,
-): Policy & { readonly agentEnvironment?: AgentEnvironmentCommand } => ({
-  ...policy,
-  ...(agentEnvironment === undefined ? {} : { agentEnvironment }),
 });
 
 const transitionTask = (

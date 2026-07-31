@@ -4,6 +4,7 @@ import { describe } from "vitest";
 
 import { CandidateValidation } from "../../src/change/candidateValidation/validateCandidate.js";
 import type { ChangeRecord } from "../../src/change/change.js";
+import type { RepoConfig } from "../../src/contracts/repoConfig.js";
 import type { ChangePersistence } from "../../src/change/changePersistence.js";
 import type { ChangeReconciliation } from "../../src/change/reconcileChange.js";
 import { openChangeSubmit } from "../../src/change/submitChange.js";
@@ -20,6 +21,7 @@ import { publicTaskId } from "../../src/task/taskId.js";
 import type { RemoteChangeBaseResult } from "../../src/submissionEnvironment/remoteChangeBase.js";
 import type { ChangeValidationPersistence } from "../../src/change/validation/changeValidationPersistence.js";
 import { ExecutionLockUnavailable, type ExecutionLock } from "../../src/contracts/executionLock.js";
+import { RepoConfigValidationFailed } from "../../src/contracts/configErrors.js";
 
 const now = "2026-06-30T12:00:00.000Z";
 const candidate = {
@@ -169,6 +171,55 @@ describe("Change Submit orchestration", () => {
         expect(events).toEqual([
           "reconcile",
           "capture",
+          "detect_target",
+          "validate_taskless",
+          "publish",
+        ]);
+      }),
+  );
+
+  it.effect(
+    "loads Repo Config before Candidate capture and resolves policy once before validation",
+    () =>
+      Effect.gen(function* () {
+        const events: string[] = [];
+        const submit = openChangeSubmit(
+          dependencies({
+            events,
+            change: readyChange(),
+            trackPolicyResolution: true,
+            refreshResult: { ok: true, base: refreshedBase },
+          }),
+        );
+        const validationLayer = Layer.succeed(CandidateValidation, {
+          validateCandidate: () =>
+            Effect.sync(() => {
+              events.push("validate_taskless");
+              return {
+                ok: true,
+                reused: false,
+                validationRunId: "run-1",
+                outcome: "passed",
+              } as const;
+            }),
+          validateTaskBackedCandidate: () => Effect.die("Acceptance Review was not expected"),
+          validateNoChange: () => Effect.die("Acceptance-only validation was not expected"),
+          listFindings: () => Effect.succeed([]),
+          listToolingFailures: () => Effect.succeed([]),
+          listRounds: () => Effect.succeed([]),
+        });
+
+        const result = yield* submit
+          .submit({ changeId: "change-1", now })
+          .pipe(Effect.provide(validationLayer));
+
+        expect(result).toMatchObject({ ok: true, status: "published" });
+        expect(events).toEqual([
+          "reconcile",
+          "load_repo_config",
+          "refresh_base",
+          "capture",
+          "resolve_policy",
           "detect_target",
           "validate_taskless",
           "publish",
@@ -1221,6 +1272,7 @@ const dependencies = (input: {
   readonly taskBacked?: boolean;
   readonly agentEnvironment?: readonly string[];
   readonly agentEnvironmentError?: string;
+  readonly trackPolicyResolution?: boolean;
   readonly findings?: readonly (typeof finding)[];
   readonly toolingFailures?: readonly (typeof toolingFailure)[];
   readonly publication?: PublicationFixture;
@@ -1323,14 +1375,24 @@ const dependencies = (input: {
           };
         }),
     } satisfies ChangeReconciliation,
-    resolveAgentEnvironment: () =>
-      input.agentEnvironmentError === undefined
-        ? input.agentEnvironment === undefined
-          ? { ok: true as const }
-          : { ok: true as const, command: input.agentEnvironment }
-        : { ok: false as const, message: input.agentEnvironmentError },
-    resolvePolicy: () =>
-      input.taskBacked
+    loadRepoConfig: () => {
+      if (input.trackPolicyResolution) events.push("load_repo_config");
+      return input.agentEnvironmentError === undefined
+        ? { ok: true as const, config: { taskPrefix: "BY" } }
+        : { ok: false as const, message: input.agentEnvironmentError };
+    },
+    resolvePolicy: (_taskBacked: boolean, _repoConfig: RepoConfig, _worktreePath: string) => {
+      if (input.trackPolicyResolution) events.push("resolve_policy");
+      if (input.agentEnvironmentError !== undefined) {
+        return {
+          ok: false as const,
+          error: new RepoConfigValidationFailed({
+            diagnostics: [],
+            message: input.agentEnvironmentError,
+          }),
+        };
+      }
+      return input.taskBacked
         ? ({
             ok: true,
             resolved: {
@@ -1351,7 +1413,19 @@ const dependencies = (input: {
               },
             },
           } as const)
-        : ({ ok: true, resolved: { taskBacked: false, policy: tasklessPolicy } } as const),
+        : ({
+            ok: true,
+            resolved: {
+              taskBacked: false,
+              policy: {
+                ...tasklessPolicy,
+                ...(input.agentEnvironment === undefined
+                  ? {}
+                  : { agentEnvironment: input.agentEnvironment }),
+              },
+            },
+          } as const);
+    },
     publicationFor: () => {
       const publication =
         input.publication ??

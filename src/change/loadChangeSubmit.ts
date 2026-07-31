@@ -1,8 +1,6 @@
 import { existsSync, rmSync } from "node:fs";
 import { join } from "node:path";
 
-import { repoAgentEnvironment } from "../agent/agentEnvironment.js";
-import { RepoConfigValidationFailed } from "../contracts/configErrors.js";
 import { Effect } from "effect";
 
 import type { ReviewerAgentRuntime } from "../agent/reviewerAgentRuntime.js";
@@ -18,11 +16,14 @@ import { cleanupChangeResources } from "./localChangeCleanupGit.js";
 import { openChangeReconciliation } from "./reconcileChange.js";
 import {
   openChangeSubmit,
-  type AgentEnvironmentResolution,
   type ChangeSubmit,
   type ChangeSubmitResult,
+  type ManagedRepoConfigResolution,
 } from "./submitChange.js";
-import { loadRepoLocalContext, type LoadRepoLocalContextError } from "../init/repoContext.js";
+import {
+  loadRepoLocalSubmissionContext,
+  type LoadRepoLocalContextError,
+} from "../init/repoContext.js";
 import { readRepoConfig } from "../init/repoConfig.js";
 import { candidateValidationLayer } from "./candidateValidation/candidateValidationLayer.js";
 import { localCandidatePublicationGit } from "./publication/localCandidatePublicationGit.js";
@@ -42,9 +43,7 @@ export type LoadChangeSubmitResult =
   | { readonly ok: true; readonly submit: ChangeSubmit }
   | {
       readonly ok: false;
-      readonly error:
-        | LoadRepoLocalContextError
-        | { readonly code: "state_store_unavailable"; readonly taskPrefix: string };
+      readonly error: LoadRepoLocalContextError | { readonly code: "state_store_unavailable" };
     };
 
 export const loadChangeSubmit = (input: {
@@ -52,13 +51,13 @@ export const loadChangeSubmit = (input: {
   readonly globalConfigPath: string;
   readonly reviewerAgentRuntime?: ReviewerAgentRuntime;
 }): LoadChangeSubmitResult => {
-  const repoContext = loadRepoLocalContext(input.cwd);
+  const repoContext = loadRepoLocalSubmissionContext(input.cwd);
   if (!repoContext.ok) return repoContext;
   const context = repoContext.context;
   if (!existsSync(context.paths.statePath)) {
     return {
       ok: false,
-      error: { code: "state_store_unavailable", taskPrefix: context.taskPrefix },
+      error: { code: "state_store_unavailable" },
     };
   }
 
@@ -75,43 +74,28 @@ export const loadChangeSubmit = (input: {
       reviewerSessionPathFor: (changeId) => join(context.paths.operationalDir, changeId),
     });
     return openChangeSubmit({
+      loadRepoConfig: (worktreePath): ManagedRepoConfigResolution => {
+        const managedConfig = readRepoConfig(join(worktreePath, ".but-why", "config.json"));
+        return managedConfig.ok
+          ? managedConfig
+          : {
+              ok: false,
+              message: `Managed Worktree Repo Config is invalid: ${managedConfig.error.message}`,
+            };
+      },
       repositoryCommonDirectory: context.commonDirectory,
       repositoryPath: context.root,
       persistence: changePersistence,
       taskPersistence,
       reconciliation,
-      resolvePolicy: (taskBacked, worktreePath) => {
-        const managedConfig = readRepoConfig(join(worktreePath, ".but-why", "config.json"));
-        return managedConfig.ok
-          ? resolveCandidateValidationPolicy({
-              context,
-              globalConfigPath: input.globalConfigPath,
-              taskBacked,
-              repoConfig: managedConfig.config,
-              repoRoot: worktreePath,
-            })
-          : {
-              ok: false,
-              error: new RepoConfigValidationFailed({
-                ...(managedConfig.error.path === undefined
-                  ? {}
-                  : { path: managedConfig.error.path }),
-                diagnostics: managedConfig.error.diagnostics,
-                message: managedConfig.error.message,
-              }),
-            };
-      },
-      resolveAgentEnvironment: (worktreePath): AgentEnvironmentResolution => {
-        const config = readRepoConfig(join(worktreePath, ".but-why", "config.json"));
-        if (!config.ok) {
-          return {
-            ok: false,
-            message: `Managed Worktree Repo Config is invalid: ${config.error.message}`,
-          };
-        }
-        const command = repoAgentEnvironment(config.config);
-        return command === undefined ? { ok: true } : { ok: true, command };
-      },
+      resolvePolicy: (taskBacked, repoConfig, worktreePath) =>
+        resolveCandidateValidationPolicy({
+          context,
+          globalConfigPath: input.globalConfigPath,
+          taskBacked,
+          repoConfig,
+          repoRoot: worktreePath,
+        }),
       publicationFor: (cwd) =>
         openCandidatePublication({
           changePersistence,
@@ -137,7 +121,7 @@ export const loadChangeSubmit = (input: {
     changePersistence: import("./changePersistence.js").ChangePersistence,
   ) =>
     candidateValidationLayer({
-      localRepositoryMainCheckoutRoot: context.root,
+      localRepositoryMainCheckoutRoot: context.mainCheckoutRoot,
       artifactsRoot: context.paths.artifactsPath,
       persistence,
       ...(input.reviewerAgentRuntime === undefined
@@ -174,7 +158,7 @@ export const loadChangeSubmit = (input: {
           capture: openSqliteCandidateCapturePersistence(),
           validation: openSqliteChangeValidationPersistence(),
           change: openSqliteChangePersistence(),
-          task: openSqliteTaskPersistence(context.taskPrefix),
+          task: openSqliteTaskPersistence(""),
         }).pipe(
           Effect.flatMap(({ capture, validation, change, task }) =>
             programFor(capture, validation, change, task)

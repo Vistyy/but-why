@@ -13,12 +13,17 @@ import type { ChangeValidationPersistence } from "../../src/change/validation/ch
 import { RepositorySql, repositorySqlLayer } from "../../src/sqlite/repositorySql.js";
 import { openSqliteChangeValidationPersistence } from "../../src/sqlite/sqliteChangeValidationPersistence.js";
 import { openSqliteTaskPersistence } from "../../src/sqlite/sqliteTaskPersistence.js";
-import { commitButWhyConfigAndRecordDefault, runByInProcessEffect } from "../support/by-cli.js";
+import {
+  commitButWhyConfigAndRecordDefault,
+  createGitRepo,
+  runByInProcessEffect,
+} from "../support/by-cli.js";
 import {
   cloneInitializedTestRepository,
   createInitializedRepo,
 } from "../support/initializedRepo.js";
 import { withTestRepository } from "../support/repository.js";
+import { runTestProcessOrThrow } from "../support/testProcess.js";
 import { acquireTestWorkspace, releaseTestWorkspace } from "../support/testWorkspace.js";
 
 const firstNow = "2026-07-18T10:00:00.000Z";
@@ -38,6 +43,24 @@ afterAll(() => {
 const initializedRepoCopy = () => cloneInitializedTestRepository(initializedRepoTemplate);
 
 describe("Change inspection CLI", () => {
+  it.effect("reports unavailable shared state before Change Submit accesses a Change", () =>
+    Effect.gen(function* () {
+      const root = createGitRepo();
+      const result = yield* runByInProcessEffect(root, [
+        "--output",
+        "json",
+        "change",
+        "submit",
+        randomUUID(),
+      ]);
+
+      expect(result.status).toBe(1);
+      expect(JSON.parse(result.stdout)).toMatchObject({
+        error: { code: "state_store_unavailable" },
+      });
+    }),
+  );
+
   it.effect("infers the Change from its Managed Worktree and rejects the main checkout", () =>
     Effect.gen(function* () {
       const root = yield* initializedRepoCopy();
@@ -354,6 +377,67 @@ describe("Change inspection CLI", () => {
         status: "nothing_to_submit",
         help: [`Run \`by change cancel ${change.change.id}\` to cancel this unchanged Change.`],
       });
+    }),
+  );
+
+  it.effect("submits with Managed Worktree Repo Config from a different caller checkout", () =>
+    Effect.gen(function* () {
+      const root = yield* initializedRepoCopy();
+      commitButWhyConfigAndRecordDefault(root);
+      const started = yield* runByInProcessEffect(
+        root,
+        ["--output", "json", "change", "start"],
+        firstNow,
+      );
+      const change = JSON.parse(started.stdout) as {
+        readonly change: { readonly id: string };
+        readonly worktreePath: string;
+      };
+
+      writeFileSync(
+        join(root, ".but-why", "config.json"),
+        `${JSON.stringify(
+          { taskPrefix: "BY", validation: { checks: [{ id: "caller", command: "true" }] } },
+          null,
+          2,
+        )}\n`,
+      );
+      writeFileSync(
+        join(change.worktreePath, ".but-why", "config.json"),
+        `${JSON.stringify(
+          { taskPrefix: "BY", validation: { checks: [{ id: "managed", command: "false" }] } },
+          null,
+          2,
+        )}\n`,
+      );
+      runTestProcessOrThrow("git", ["config", "user.name", "But Why Test"], {
+        cwd: change.worktreePath,
+      });
+      runTestProcessOrThrow("git", ["config", "user.email", "but-why@example.test"], {
+        cwd: change.worktreePath,
+      });
+      runTestProcessOrThrow("git", ["add", ".but-why/config.json"], {
+        cwd: change.worktreePath,
+      });
+      runTestProcessOrThrow("git", ["commit", "-m", "Use Managed Worktree validation policy"], {
+        cwd: change.worktreePath,
+      });
+
+      const result = yield* runByInProcessEffect(
+        root,
+        ["--output", "json", "change", "submit", change.change.id],
+        firstNow,
+      );
+      const output = JSON.parse(result.stdout) as {
+        readonly error: {
+          readonly code: string;
+          readonly details?: { readonly findings?: readonly { readonly evidence: string }[] };
+        };
+      };
+
+      expect(result.status).toBe(1);
+      expect(output.error.code).toBe("validation_findings");
+      expect(result.stdout).toContain("command: false");
     }),
   );
 

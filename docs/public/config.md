@@ -13,6 +13,10 @@ It contains reusable Agent Profiles and user-level Agent Profile selections.
 
 Both files are validated when But Why reads them.
 
+Change Submit reads Repo Config exactly once from the selected Change's recorded Managed Worktree.
+The caller checkout is used only for Local Repository identity, Shared Repository State, and Change selection, so its Repo Config does not supply submission policy.
+Global Config remains resolved from the configured user path.
+
 ## Repo Config
 
 A complete example is:
@@ -135,7 +139,7 @@ Every entry must be a non-empty string.
 But Why prepends the list to the complete Pi invocation after it resolves the Agent Profile.
 
 Change Implement reads the setting from the Change Managed Worktree.
-Change Submit records the setting in the Validation Policy Snapshot.
+Change Submit resolves the setting from the selected Change's Managed Worktree and records it in the Validation Policy Snapshot.
 Missing configuration preserves direct Pi launch.
 An invalid configuration rejects the applicable command before agent launch.
 A configured wrapper failure stops the operation without an unwrapped retry.
@@ -226,8 +230,8 @@ Reviewer operations require `runtimeConfig.model`.
 
 Selections use `{ "scope": "repo" | "global", "name": "..." }`.
 An explicit selection resolves only the declared scope.
-Reviewer selection uses Repo Config, then Global Config, then Global `defaultAgentProfile`.
-Interactive Session selection uses Repo Config, then Global Config, then Global `defaultAgentProfile`.
+Reviewer and Specialist profile selections resolve from the selected Change's Managed Worktree Repo Config, then Global Config, then Global `defaultAgentProfile`.
+Interactive Session selection uses the Change Managed Worktree Repo Config, then Global Config, then Global `defaultAgentProfile`.
 
 Configured resource arrays are exact allowlists.
 An empty array disables that resource type.
