@@ -212,10 +212,6 @@ const commandTree = Command.make("by", { output: globalOutput }).pipe(
   ]),
 );
 
-const leftoverDiagnosticCommand = Command.make("by", {
-  value: Args.choice([["valid", "valid"]]),
-});
-
 const cliConfig = CliConfig.make({ showBuiltIns: true });
 const parserLayer = (args: readonly string[]) =>
   Layer.mergeAll(
@@ -594,22 +590,25 @@ const parserArgs = (args: readonly string[]): readonly string[] => {
 const generatedHelpLeftoverUsage = (args: readonly string[]): Effect.Effect<CliResult> =>
   Effect.either(
     CommandDescriptor.parse(
-      leftoverDiagnosticCommand.descriptor,
-      ["by", findTrailingHelpArgument(args) ?? ""],
+      commandTree.descriptor,
+      ["by", ...args.filter((arg) => arg !== "--help" && arg !== "-h")],
       cliConfig,
     ),
   ).pipe(
-    Effect.map((result) => ({
-      ...usageError({
-        code: "invalid_usage",
-        message:
-          result._tag === "Left"
-            ? generatedText(result.left.error)
-            : generatedText(Command.getHelp(leftoverDiagnosticCommand, cliConfig)),
-        help: ["Run `by --help` for generated command help."],
-      }),
-      outputFormat: outputFormatForArgs(args),
-    })),
+    Effect.map((result) => {
+      const message =
+        result._tag === "Left" && ValidationError.isValidationError(result.left)
+          ? generatedText(result.left.error)
+          : generatedText(Command.getHelp(commandTree, cliConfig));
+      return {
+        ...usageError({
+          code: "invalid_usage",
+          message,
+          help: ["Run `by --help` for generated command help."],
+        }),
+        outputFormat: outputFormatForArgs(args),
+      };
+    }),
     Effect.provide(parserLayer(args)),
   );
 

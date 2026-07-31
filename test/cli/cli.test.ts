@@ -108,7 +108,8 @@ describe("by CLI", () => {
       expect(JSON.parse(result.stdout)).toMatchObject({
         error: {
           code: "invalid_usage",
-          message: "Expected one of the following cases: valid",
+          message:
+            "Invalid subcommand for by - use one of 'init', 'task', 'change', 'validation-run'",
         },
       });
     }),
