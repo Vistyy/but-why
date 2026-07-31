@@ -13,59 +13,34 @@
 
 ## Evidence ownership
 
-- Supported runtime behavior: behavior tests at the supported interface.
-- CLI results, exit status, TOON, and JSON: CLI boundary checks against result construction and output codecs.
-- Package contents: the package contract test.
-- Reader-visible command and setup behavior: documentation checks and documentation tests.
-- Named architecture and structural contracts: Fallow and ast-grep.
-- Local Repository identity, migrations, source-workflow isolation, and recovery boundaries: focused repository and workflow boundary checks.
+[Tooling](docs/tooling.md#quality-ownership) defines current ownership for runtime, output, package, documentation, and structural evidence.
+
+- Claims about Local Repository identity, Git, Shared Repository State, migrations, process ownership, source-workflow isolation, and recovery require focused boundary evidence at the real applicable seam.
+- Use lower-cost behavior or static evidence for variations that do not require a real boundary.
+- Use an expensive end-to-end mechanism only when integration across its complete path is part of the claim.
 
 ## Supported mechanisms
 
-### Focused evidence
-
-Use `just test <focused-path-or-selection>` and focused static checks for implementation feedback.
-
-Limits: A focused selection does not establish complete-suite behavior.
+Use the commands and ownership defined in [Tooling](docs/tooling.md#supported-commands).
+Use focused tests and focused static checks during implementation.
+A focused selection does not establish complete-suite behavior.
+Static, documentation, package, and structural checks do not replace runtime evidence at the supported interface.
 A durable automated test is not required unless accepted requirements or this strategy require one.
-
-### Routine quality
-
-Use `just quality` for the blocking routine tests, static checks, and production build.
-
-Limits: The routine suite excludes `*.boundary.test.ts` and does not run coverage or slow external boundaries.
-
-### Complete quality
-
-Use `just full-quality` for the complete selected test suite with the same static checks and production build.
-
-Limits: This is an expensive complete workload.
-It does not establish live external-agent behavior when an applicable opt-in smoke test is skipped.
-
-### Static and contract checks
-
-Use `just typecheck`, `just lint`, `just format-check`, `just docs-check`, `just ast-grep-check`, and `just fallow-check` for their documented concerns.
-
-Limits: Static, documentation, package, and structural checks do not replace runtime evidence at the supported interface.
-
-### Change Submit
-
-Change Submit owns the configured blocking Check and review phases.
-The current Repo Config runs `just full-quality` as its blocking Check and enables the `standards` Specialist.
-
-Limits: Focused implementation evidence does not replace Change Submit.
-Implementers must not manually duplicate its broad Check or review phases.
 
 ## Mandatory gates
 
-- `just quality`: Run the routine contributor gate for repository changes that do not use Change Submit.
-- Change Submit: Run the configured Check and review phases before publication or accepted No-Change completion.
+- For repository changes outside Change Submit, run the blocking routine contributor workflow defined in [Tooling](docs/tooling.md#supported-commands).
+- For a changed Candidate, Change Submit must run the Check and review phases resolved from [Repo Config](.but-why/config.json).
+- For a task-backed No-Change Submission, Change Submit must run Acceptance Review without configured Checks or Specialists.
+- A taskless No-Change Submission must return `nothing_to_submit` before Validation and remain open.
+
+Change Submit owns its broad Check and review phases.
+Implementers must not duplicate them manually.
 
 ## Budgets
 
-- Complete test, coverage, quality, and full-quality workloads use the repository capacity lock.
-- Targeted test selections remain unlocked.
-- `just quality` has a 10-second warning target.
-- `just full-quality` has a 30-second warning target.
+- Complete workloads use the repository capacity lock, while targeted test selections remain unlocked.
+- The routine quality workload has a 10-second warning target.
+- The complete quality workload has a 30-second warning target.
 - These runtime targets warn but do not fail the workload.
 - The project has no accepted hard stability budget.
