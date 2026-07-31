@@ -736,8 +736,17 @@ const missingDependencyOperation = (
     "--wizard",
     "--version",
     "--help",
+    "-h",
   ]);
-  if (args.some((arg) => arg.startsWith("--") && !globalOptions.has(arg))) {
+  if (
+    args.some(
+      (arg) =>
+        arg.startsWith("-") &&
+        !globalOptions.has(arg) &&
+        !arg.startsWith("--output=") &&
+        !arg.startsWith("-o="),
+    )
+  ) {
     return undefined;
   }
   const taskIndex = args.indexOf("task");

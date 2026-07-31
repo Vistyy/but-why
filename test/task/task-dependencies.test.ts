@@ -203,6 +203,16 @@ describe("Task dependency CLI", () => {
         error: { code: "invalid_usage" },
       });
 
+      const invalidShortReplace = yield* runByInProcessEffect(
+        root,
+        ["--output", "json", "task", "dependencies", "replace", "BY-4", "-x"],
+        now,
+      );
+      expect(invalidShortReplace.status).toBe(2);
+      expect(JSON.parse(invalidShortReplace.stdout)).toMatchObject({
+        error: { code: "invalid_usage" },
+      });
+
       const cleared = yield* runByInProcessEffect(
         root,
         ["--output", "json", "task", "dependencies", "clear", "BY-4"],
