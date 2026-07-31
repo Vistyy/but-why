@@ -151,7 +151,6 @@ describe("Herdr Interactive Session Host", () => {
         "PATH='/usr/local/bin:/opt/pi/bin' exec 'nix' 'develop' '-c' pi --system-prompt 'Canonical Implementer contract' --name 'but-why-change-123' --model 'openai-codex/gpt-5.6-luna' --thinking 'high' '\n---\ndescription: Continue from the recorded decision.\n---'",
       ],
       ["agent", "rename", "workspace-1:pane-1", sessionName],
-      ["agent", "list"],
     ]);
   });
 
@@ -473,61 +472,12 @@ describe("Herdr Interactive Session Host", () => {
     ).toHaveLength(2);
   });
 
-  it("accepts a session registered during final reconciliation after the readiness deadline", async () => {
+  it("reports dispatch after Herdr confirms the session name without waiting for Pi readiness", async () => {
     let agentLists = 0;
     const execute: HerdrCommandExecutor = async (args) => {
       if (args[0] === "agent" && args[1] === "list") {
         agentLists += 1;
-        return agentLists < 3
-          ? { ok: true, stdout: '{"result":{"type":"agent_list","agents":[]}}' }
-          : {
-              ok: true,
-              stdout:
-                '{"result":{"type":"agent_list","agents":[{"name":"but-why-change-123","cwd":"/workspace/change-123","pane_id":"workspace-1:pane-1","agent_status":"working"}]}}',
-            };
-      }
-      if (args[0] === "worktree") {
-        return {
-          ok: true,
-          stdout:
-            '{"result":{"type":"worktree_opened","workspace":{"workspace_id":"workspace-1"},"root_pane":{"pane_id":"workspace-1:pane-1"},"already_open":false}}',
-        };
-      }
-      if (args[0] === "pane" && args[1] === "run") return { ok: true, stdout: "{}" };
-      if (args[0] === "agent" && args[1] === "rename") {
-        return {
-          ok: true,
-          stdout:
-            '{"result":{"agent":{"name":"but-why-change-123","cwd":"/workspace/change-123","pane_id":"workspace-1:pane-1"}}}',
-        };
-      }
-      return { ok: true, stdout: "{}" };
-    };
-
-    await expect(
-      openHerdrInteractiveSessionHost(execute, { readinessTimeoutMs: 0 }).launch({
-        changeId: "change-123",
-        repositoryPath: "/repository",
-        worktreePath: "/workspace/change-123",
-        initialPrompt: undefined,
-      }),
-    ).resolves.toEqual({ ok: true, host: "herdr", status: "started" });
-    expect(agentLists).toBe(3);
-  });
-
-  it("retries a transient readiness observation", async () => {
-    let agentLists = 0;
-    const execute: HerdrCommandExecutor = async (args) => {
-      if (args[0] === "agent" && args[1] === "list") {
-        agentLists += 1;
-        if (agentLists === 3) return { ok: false, message: "temporarily unavailable" };
-        return agentLists > 3
-          ? {
-              ok: true,
-              stdout:
-                '{"result":{"type":"agent_list","agents":[{"name":"but-why-change-123","cwd":"/workspace/change-123","pane_id":"workspace-1:pane-1","agent_status":"working"}]}}',
-            }
-          : { ok: true, stdout: '{"result":{"type":"agent_list","agents":[]}}' };
+        return { ok: true, stdout: '{"result":{"type":"agent_list","agents":[]}}' };
       }
       if (args[0] === "worktree") {
         return {
@@ -555,7 +505,7 @@ describe("Herdr Interactive Session Host", () => {
         initialPrompt: undefined,
       }),
     ).resolves.toEqual({ ok: true, host: "herdr", status: "started" });
-    expect(agentLists).toBeGreaterThan(2);
+    expect(agentLists).toBe(2);
   });
 
   it("returns indeterminate after an uncertain worktree retry remains unresolved", async () => {
