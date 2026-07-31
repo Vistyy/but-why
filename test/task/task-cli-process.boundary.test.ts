@@ -1,6 +1,7 @@
 import { chmodSync, mkdirSync, writeFileSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import { join } from "node:path";
+import { decode } from "@toon-format/toon";
 import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
 import { describe } from "vitest";
@@ -21,6 +22,12 @@ import { runTestProcessOrThrow, startTestProcess } from "../support/testProcess.
 const now = "2026-06-30T12:00:00.000Z";
 const concurrentWriterCount = 2;
 
+const expectExactlyOneTrailingLineFeed = (stdout: string): void => {
+  const bytes = Buffer.from(stdout, "utf8");
+  expect(bytes.at(-1)).toBe(0x0a);
+  expect(bytes.at(-2)).not.toBe(0x0a);
+};
+
 describe("by task CLI processes", () => {
   it("keeps JSON stdout structured when native logging is enabled", () => {
     const root = createGitRepo();
@@ -34,6 +41,32 @@ describe("by task CLI processes", () => {
     expect(result.stderr).toContain("level=");
     expect(() => JSON.parse(result.stdout)).not.toThrow();
   });
+
+  it("terminates TOON and JSON success and error results with one line feed", () => {
+    const root = createTestWorkspace();
+    const cases = [
+      { format: "toon", args: ["--output", "toon", "task", "--help"] as const, status: 0 },
+      { format: "json", args: ["--output", "json", "task", "--help"] as const, status: 0 },
+      { format: "toon", args: ["--output", "toon", "task", "--bad"] as const, status: 2 },
+      { format: "json", args: ["--output", "json", "task", "--bad"] as const, status: 2 },
+    ] as const;
+    const results = cases.map(({ args }) => runBuiltByWithEnv(root, {}, ...args));
+
+    for (const [index, result] of results.entries()) {
+      expect(result.status, cases[index]?.format).toBe(cases[index]?.status);
+      expect(result.stderr, cases[index]?.format).toBe("");
+      expectExactlyOneTrailingLineFeed(result.stdout);
+      expect(result.stdout.endsWith("\n\n"), cases[index]?.format).toBe(false);
+      if (cases[index]?.format === "json") {
+        expect(() => JSON.parse(result.stdout)).not.toThrow();
+      } else {
+        expect(() => decode(result.stdout)).not.toThrow();
+      }
+    }
+
+    expect(decode(results[0]?.stdout ?? "")).toEqual(JSON.parse(results[1]?.stdout ?? ""));
+    expect(decode(results[2]?.stdout ?? "")).toEqual(JSON.parse(results[3]?.stdout ?? ""));
+  }, 120_000);
 
   it("reads piped UTF-8 stdin for Task descriptions and comments", () => {
     const root = createGitRepo();

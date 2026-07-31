@@ -46,7 +46,8 @@ describe("by task CLI", () => {
   state: new
   createdAt: "${firstNow}"
   updatedAt: "${firstNow}"
-help[1]: Run \`by task list\` to see open tasks.`);
+help[1]: Run \`by task list\` to see open tasks.
+`);
       }),
   );
 
@@ -95,14 +96,16 @@ help[1]: Run \`by task list\` to see open tasks.`);
   id: BY-1
   state: todo
   changed: true
-  updatedAt: "${secondNow}"`);
+  updatedAt: "${secondNow}"
+`);
         expect(repeatedApproval.status).toBe(0);
         expect(repeatedApproval.stderr).toBe("");
         expect(repeatedApproval.stdout).toBe(`task:
   id: BY-1
   state: todo
   changed: false
-  updatedAt: "${secondNow}"`);
+  updatedAt: "${secondNow}"
+`);
       }),
   );
 
@@ -207,7 +210,8 @@ tasks[2]:
     updatedAt: "${thirdNow}"
     startable: false
     blockedBy: []
-    change: null`);
+    change: null
+`);
     }),
   );
 
@@ -334,7 +338,8 @@ tasks[2]:
 description: Validate completed code changes against approved human intent.
 count: 0
 tasks: []
-help[1]: "Run \`by task create --title \\"...\\" --description-file <file>\` to create a task."`);
+help[1]: "Run \`by task create --title \\"...\\" --description-file <file>\` to create a task."
+`);
     }),
   );
 
@@ -398,7 +403,8 @@ help[1]: "Run \`by task create --title \\"...\\" --description-file <file>\` to 
   prerequisites: []
   dependents: []
   change: null
-contextCommand: by task context BY-1`);
+contextCommand: by task context BY-1
+`);
     }),
   );
 
@@ -426,7 +432,8 @@ contextCommand: by task context BY-1`);
   id: BY-1
   title: Use context
   description: "Full intent\\n\\nWith details."
-  comments: []`);
+  comments: []
+`);
     }),
   );
 
@@ -689,11 +696,13 @@ contextCommand: by task context BY-1`);
         expect(firstResult.stderr).toBe("");
         expect(firstResult.stdout).toBe(`task:
   id: BY-1
-  commentCount: 1`);
+  commentCount: 1
+`);
         expect(duplicateResult.status).toBe(0);
         expect(duplicateResult.stdout).toBe(`task:
   id: BY-1
-  commentCount: 2`);
+  commentCount: 2
+`);
 
         expect((yield* runByInProcessEffect(root, ["task", "show", "BY-1"])).stdout).toBe(`task:
   id: BY-1
@@ -705,12 +714,14 @@ contextCommand: by task context BY-1`);
   prerequisites: []
   dependents: []
   change: null
-contextCommand: by task context BY-1`);
+contextCommand: by task context BY-1
+`);
         expect((yield* runByInProcessEffect(root, ["task", "context", "BY-1"])).stdout).toBe(`task:
   id: BY-1
   title: Commented task
   description: Description for Commented task
-  comments[2]: "First comment\\n\\nWith Markdown.\\n","First comment\\n\\nWith Markdown.\\n"`);
+  comments[2]: "First comment\\n\\nWith Markdown.\\n","First comment\\n\\nWith Markdown.\\n"
+`);
       }),
   );
 
@@ -929,7 +940,8 @@ contextCommand: by task context BY-1`);
   code: task_not_found
   message: "Task was not found: BY-999"
   taskId: BY-999
-help[1]: Run \`by task list --all --limit all\` to see known Tasks.`);
+help[1]: Run \`by task list --all --limit all\` to see known Tasks.
+`);
       }),
   );
 
@@ -951,7 +963,8 @@ help[1]: Run \`by task list --all --limit all\` to see known Tasks.`);
       expect(result.stdout).toBe(`count: 0
 total: 0
 tasks: []
-help[1]: "Run \`by task create --title \\"...\\" --description-file <file>\` to create a task."`);
+help[1]: "Run \`by task create --title \\"...\\" --description-file <file>\` to create a task."
+`);
     }),
   );
 
@@ -991,7 +1004,8 @@ count: 3
 tasks[3]{id,title,state,createdAt,updatedAt}:
   BY-2,Ready,ready,"${secondNow}","${secondNow}"
   BY-4,Todo new,todo,"${firstNow}","${thirdNow}"
-  BY-1,Todo old,todo,"${firstNow}","${firstNow}"`);
+  BY-1,Todo old,todo,"${firstNow}","${firstNow}"
+`);
     }),
   );
 
@@ -1007,7 +1021,8 @@ tasks[3]{id,title,state,createdAt,updatedAt}:
 description: Validate completed code changes against approved human intent.
 count: 0
 tasks: []
-help[1]: "Run \`by task create --title \\"...\\" --description-file <file>\` to create a task."`);
+help[1]: "Run \`by task create --title \\"...\\" --description-file <file>\` to create a task."
+`);
     }),
   );
 
@@ -1025,7 +1040,8 @@ help[1]: "Run \`by task create --title \\"...\\" --description-file <file>\` to 
       expect(result.stdout).toBe(`error:
   code: invalid_usage
   message: "Expected one of the following cases: new, todo, implementing, blocked, validating, ready, done, cancelled"
-help[1]: Run \`by --help\` for generated command help.`);
+help[1]: Run \`by --help\` for generated command help.
+`);
     }),
   );
 
@@ -1109,7 +1125,8 @@ help[1]: Run \`by --help\` for generated command help.`);
       expect(result.stdout).toBe(`error:
   code: not_initialized
   message: This workspace is not initialized for But Why?.
-help[1]: Run \`by init --task-prefix BY\` in the repository root.`);
+help[1]: Run \`by init --task-prefix BY\` in the repository root.
+`);
     }),
   );
 
@@ -1141,7 +1158,8 @@ help[1]: Run \`by init --task-prefix BY\` in the repository root.`);
       expect(result.stdout).toBe(`error:
   code: state_store_unavailable
   message: Shared But Why? state is unavailable.
-help[1]: "Restore <git-common-dir>/but-why/state.sqlite, then run \`by init --task-prefix BY\`."`);
+help[1]: "Restore <git-common-dir>/but-why/state.sqlite, then run \`by init --task-prefix BY\`."
+`);
     }),
   );
 });
