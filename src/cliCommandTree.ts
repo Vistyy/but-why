@@ -561,12 +561,17 @@ const generatedCommandUsage = (command: AnyCommand): Effect.Effect<CliResult> =>
     }),
   );
 
-const hasTrailingOutput = (args: readonly string[]): boolean =>
-  args.some(
+const hasTrailingOutput = (args: readonly string[]): boolean => {
+  const separatorIndex = args.indexOf("--");
+  const helpIndex = args.findIndex((arg) => arg === "--help" || arg === "-h");
+  return args.some(
     (arg, index) =>
       index > 0 &&
+      (separatorIndex < 0 || index < separatorIndex) &&
+      (helpIndex < 0 || index < helpIndex) &&
       (arg === "--output" || arg === "-o" || arg.startsWith("--output=") || arg.startsWith("-o=")),
   );
+};
 
 const findTrailingHelpArgument = (args: readonly string[]): string | undefined => {
   const helpIndex = args.findIndex((arg) => arg === "--help" || arg === "-h");
@@ -589,15 +594,57 @@ const parserArgs = (args: readonly string[]): readonly string[] => {
 
 const generatedHelpLeftoverUsage = (args: readonly string[]): Effect.Effect<CliResult> => {
   const helpIndex = args.findIndex((arg) => arg === "--help" || arg === "-h");
-  const outputPrefix =
-    args[0] === "--output" || args[0] === "-o"
-      ? args.slice(0, 2)
-      : args[0]?.startsWith("--output=") || args[0]?.startsWith("-o=")
-        ? args.slice(0, 1)
-        : [];
+  const prefixArgs = args.slice(0, Math.max(helpIndex, 0));
   const trailingArgs = helpIndex < 0 ? [] : args.slice(helpIndex + 1);
-  return generatedLeftoverUsage([...outputPrefix, "task", "list", "--", ...trailingArgs]);
+  const firstTrailingArg = trailingArgs[0];
+  const candidateArgs =
+    firstTrailingArg === undefined ? prefixArgs : [...prefixArgs, firstTrailingArg];
+
+  return parseCommandDescriptor(candidateArgs).pipe(
+    Effect.flatMap((candidate) => {
+      const candidateHelp =
+        candidate._tag === "Left" && ValidationError.isValidationError(candidate.left)
+          ? generatedText(candidate.left.error)
+          : "";
+      const isSubcommand =
+        firstTrailingArg !== undefined &&
+        !firstTrailingArg.startsWith("-") &&
+        ((candidate._tag === "Right" &&
+          CommandDirective.isUserDefined(candidate.right) &&
+          candidate.right.leftover.length === 0) ||
+          candidateHelp.startsWith("Missing"));
+      const forcedFirstArg =
+        firstTrailingArg === "--"
+          ? "---"
+          : isSubcommand
+            ? `--${firstTrailingArg}`
+            : firstTrailingArg;
+      const forcedTrailingArgs =
+        forcedFirstArg === undefined ? [] : [forcedFirstArg, ...trailingArgs.slice(1)];
+      const forcedArgs = [...prefixArgs, "--", ...forcedTrailingArgs];
+
+      return parseCommandDescriptor(forcedArgs).pipe(
+        Effect.flatMap((result) =>
+          result._tag === "Left"
+            ? Effect.succeed({
+                ...usageError({
+                  code: "invalid_usage",
+                  message: generatedText(result.left.error),
+                  help: ["Run `by --help` for generated command help."],
+                }),
+                outputFormat: outputFormatForArgs(args),
+              })
+            : generatedLeftoverUsage(forcedArgs),
+        ),
+      );
+    }),
+  );
 };
+
+const parseCommandDescriptor = (args: readonly string[]) =>
+  Effect.either(
+    CommandDescriptor.parse(commandTree.descriptor, ["by", ...parserArgs(args)], cliConfig),
+  ).pipe(Effect.provide(parserLayer(args)));
 
 const generatedLeftoverUsage = (args: readonly string[]): Effect.Effect<CliResult> =>
   Effect.either(
