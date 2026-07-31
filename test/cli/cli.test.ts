@@ -85,6 +85,32 @@ describe("by CLI", () => {
       }
       expect(result.stdout).not.toContain("task task");
       expect(result.stdout).not.toContain("change change");
+      expect(result.stdout).toContain("(-h, --help)");
+      expect(result.stdout).not.toContain("--version");
+      expect(result.stdout).not.toContain("--wizard");
+      expect(result.stdout).not.toContain("--completions");
+      expect(result.stdout).not.toContain("--log-level");
+    }),
+  );
+
+  it.effect("rejects trailing arguments after help", () =>
+    Effect.gen(function* () {
+      const result = yield* runByInProcessEffect(repoRoot, [
+        "--output",
+        "json",
+        "task",
+        "--help",
+        "extra",
+      ]);
+
+      expect(result.status).toBe(2);
+      expect(result.stderr).toBe("");
+      expect(JSON.parse(result.stdout)).toMatchObject({
+        error: {
+          code: "invalid_usage",
+          message: "Received unknown argument: 'extra'",
+        },
+      });
     }),
   );
 

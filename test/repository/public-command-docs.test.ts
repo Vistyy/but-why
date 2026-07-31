@@ -81,8 +81,29 @@ describe("public command documentation", () => {
       const rootHelpText = helpText(rootHelp.stdout);
       expect(rootHelpText).toContain("COMMANDS");
       for (const documentedCommand of documentedCommands) {
-        const commandPath = documentedCommand.replace(/^by /u, "").split(/\s(?=--|<|\[)/u, 1)[0];
-        expect(rootHelpText, documentedCommand).toContain(`- ${commandPath}`);
+        const words = documentedCommand.replace(/^by /u, "").split(/\s+/u);
+        const syntaxStart = words.findIndex(
+          (word) => word.startsWith("--") || word.startsWith("<") || word.startsWith("["),
+        );
+        const commandPath = words.slice(0, syntaxStart).join(" ");
+        const usageLine = rootHelpText
+          .split("\n")
+          .find((line) => line.trimStart().startsWith(`- ${commandPath}`));
+
+        expect(usageLine, documentedCommand).toBeDefined();
+        for (const option of documentedCommand.matchAll(/--[a-z-]+/gu)) {
+          expect(usageLine, documentedCommand).toContain(option[0]);
+        }
+        for (let index = syntaxStart; index < words.length; index += 1) {
+          const word = words[index];
+          const previousWord = words[index - 1] ?? "";
+          if (word?.startsWith("<") && !previousWord.includes("--")) {
+            expect(usageLine, documentedCommand).toContain(word.replaceAll(/[\[\]]/gu, ""));
+          }
+        }
+        if (documentedCommand.includes("...")) {
+          expect(usageLine, documentedCommand).toContain("...");
+        }
       }
 
       expect(helpText(taskHelp.stdout)).toContain("COMMANDS");

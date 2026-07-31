@@ -212,7 +212,7 @@ const commandTree = Command.make("by", { output: globalOutput }).pipe(
   ]),
 );
 
-const cliConfig = CliConfig.make({ showBuiltIns: false });
+const cliConfig = CliConfig.make({ showBuiltIns: true });
 const parserLayer = (args: readonly string[]) =>
   Layer.mergeAll(
     NodeFileSystem.layer,
@@ -224,30 +224,47 @@ const parserLayer = (args: readonly string[]) =>
 export const runCommandTree = (
   args: readonly string[],
   environment: CliEnvironment,
-): Effect.Effect<CliResult> =>
-  Effect.either(
-    CommandDescriptor.parse(commandTree.descriptor, ["by", ...parserArgs(args)], cliConfig),
-  ).pipe(
-    Effect.flatMap((parsed) =>
-      parsed._tag === "Left"
-        ? Effect.succeed({
-            ...usageError({
-              code: "invalid_usage",
-              message: generatedText(parsed.left.error),
-              help: ["Run `by --help` for generated command help."],
-            }),
-            outputFormat: outputFormatForArgs(args),
-          })
-        : directiveResult(parsed.right, args, environment),
-    ),
-    Effect.provide(parserLayer(args)),
-  );
+): Effect.Effect<CliResult> => {
+  const trailingHelpArgument = findTrailingHelpArgument(args);
+  const result =
+    trailingHelpArgument === undefined
+      ? Effect.either(
+          CommandDescriptor.parse(commandTree.descriptor, ["by", ...parserArgs(args)], cliConfig),
+        ).pipe(
+          Effect.flatMap((parsed) =>
+            parsed._tag === "Left"
+              ? Effect.succeed({
+                  ...usageError({
+                    code: "invalid_usage",
+                    message: generatedText(parsed.left.error),
+                    help: ["Run `by --help` for generated command help."],
+                  }),
+                  outputFormat: outputFormatForArgs(args),
+                })
+              : directiveResult(parsed.right, args, environment),
+          ),
+        )
+      : Effect.succeed({
+          ...usageError({
+            code: "invalid_usage",
+            message: `Received unknown argument: '${trailingHelpArgument}'`,
+            help: ["Run `by --help` for generated command help."],
+          }),
+          outputFormat: outputFormatForArgs(args),
+        });
+
+  return result.pipe(Effect.provide(parserLayer(args)));
+};
 
 const directiveResult = (
   directive: CommandDirective.CommandDirective<unknown>,
   originalArgs: readonly string[],
   environment: CliEnvironment,
 ): Effect.Effect<CliResult> => {
+  if (CommandDirective.isUserDefined(directive) && directive.leftover.length > 0) {
+    return generatedLeftoverUsage(originalArgs);
+  }
+
   if (CommandDirective.isBuiltIn(directive)) {
     if (BuiltInOptions.isShowHelp(directive.option)) {
       return originalArgs.length === 0
@@ -264,10 +281,6 @@ const directiveResult = (
         help: ["Run `by --help` for generated command help."],
       }),
     );
-  }
-
-  if (directive.leftover.length > 0) {
-    return generatedLeftoverUsage(originalArgs);
   }
 
   const command = commandValue(directive.value);
@@ -566,6 +579,11 @@ const hasTrailingOutput = (args: readonly string[]): boolean =>
       (arg === "--output" || arg === "-o" || arg.startsWith("--output=") || arg.startsWith("-o=")),
   );
 
+const findTrailingHelpArgument = (args: readonly string[]): string | undefined => {
+  const helpIndex = args.findIndex((arg) => arg === "--help" || arg === "-h");
+  return helpIndex >= 0 ? args[helpIndex + 1] : undefined;
+};
+
 const parserArgs = (args: readonly string[]): readonly string[] => {
   const parsedArgs =
     args[0] === "--output" || args[0] === "-o"
@@ -636,6 +654,25 @@ const generatedText = (help: HelpDoc.HelpDoc): string => {
 };
 
 const rootHelpCorrection = (help: string): string =>
-  help
+  hideUnsupportedBuiltIns(help)
     .replaceAll(/\b(task|change|validation-run) \1\b/gu, "$1")
     .replaceAll(/\[<task-id>\] (?=(draft|apply) <task-id>)/gu, "");
+
+const hideUnsupportedBuiltIns = (help: string): string => {
+  const lines = help.split("\n");
+  const filtered: string[] = [];
+  let hiding = false;
+
+  for (const line of lines) {
+    if (/^(--completions|--log-level|--wizard|--version)(?:\s|$)/u.test(line)) {
+      hiding = true;
+      continue;
+    }
+    if (hiding && (line.startsWith("(-h,") || line === "COMMANDS")) {
+      hiding = false;
+    }
+    if (!hiding) filtered.push(line);
+  }
+
+  return filtered.join("\n");
+};
