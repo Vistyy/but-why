@@ -68,7 +68,17 @@ _Avoid_: Current mutable Task text, Specialist instructions, inferred intent, Im
 
 **Validation Run**:
 One durable execution and judgment of one Candidate under one resolved validation policy.
+Only a passed Validation Run is reusable because unchanged validation can produce new execution evidence.
 _Avoid_: Candidate, retry Attempt, generic job
+
+**Active Validation Run**:
+The sole running Validation Run durably related to one Change until it completes or an operator explicitly abandons it.
+Its Change and linked Task cannot be cancelled while it remains active.
+_Avoid_: Process lock, reviewer process, current Submission
+
+**Validation Run Abandonment**:
+The explicit operator recovery that completes an interrupted Active Validation Run as tooling-failed after its processes stop and its exact resources are handled.
+_Avoid_: Automatic cleanup, process termination, cancellation
 
 **Validation Run State**:
 The state of a Validation Run: running or complete.
@@ -84,7 +94,7 @@ _Avoid_: Mutable current report, Task comments
 
 **Validation Policy Snapshot**:
 The immutable resolved Prepare, Checks, reviewer instructions, Agent Profiles, and output contract used by one Validation Run.
-Later configuration changes do not alter the snapshot or its historical Validation Run.
+Later configuration changes do not alter the snapshot or its historical Validation Run, and Validation Run reuse requires an exact snapshot match.
 _Avoid_: Mutable current config, raw config hash, retroactive policy
 
 **Reviewer Session**:
@@ -129,9 +139,77 @@ _Avoid_: Task Worktree, durable Task Context, Artifact
 The canonical filesystem-safe operational name derived from a Task ID.
 _Avoid_: Display title, raw Task ID in process names
 
+**Task Submission**:
+The point-in-time operation that asks But Why to judge one Planning Proposal Snapshot against one Planning Base and resolved planning policy.
+Explicit resubmission of a Todo Task whose Planning Base is no longer valid returns it to New until a new Planning Run passes.
+_Avoid_: Task Approval, Change Submission, Task edit
+
+**Planning Proposal Snapshot**:
+The immutable Task Context, dependency edges, and exact direct-related-Task evidence supplied to one Planning Run.
+A concurrent change to that evidence makes an active Task Submission stale before approval.
+_Avoid_: Acceptance Context, mutable Task view, repository evidence
+
+**Planning Base**:
+The exact local default-branch commit and tree against which one Planning Run judges a Task proposal.
+_Avoid_: Change Base, remote default branch, arbitrary caller HEAD
+
+**Planning Run**:
+One durable execution and judgment of one Task proposal under one resolved planning policy that begins only after Task Submission eligibility and preflight succeed.
+A passed or Finding-blocked Planning Run is reusable while its proposal and policy match and its Planning Base remains valid.
+_Avoid_: Validation Run, Task Submission attempt, generic job
+
+**Active Planning Run**:
+The sole running Planning Run durably related to one Task until it completes or an operator explicitly abandons it.
+Its Task cannot be cancelled while it remains active.
+_Avoid_: Process lock, reviewer process, current Task Submission
+
+**Planning Run Abandonment**:
+The explicit operator recovery that completes an interrupted Active Planning Run as tooling-failed after its processes stop and its exact resources are handled.
+_Avoid_: Automatic cleanup, process termination, cancellation
+
+**Planning Run State**:
+The state of a Planning Run: running or complete.
+_Avoid_: Task state, review result
+
+**Planning Run Outcome**:
+The completed result of a Planning Run: passed, blocked by Planning Findings, or failed because of tooling.
+_Avoid_: Task state, reviewer status, abandonment
+
+**Planning Run History**:
+The ordered immutable Planning Runs retained for one Task.
+_Avoid_: Mutable planning report, Task comments
+
+**Planning Policy Snapshot**:
+The immutable resolved Repository Preparation, Planning Reviewer instructions, Agent Profile, and output contract used by one Planning Run.
+Later configuration changes do not alter the snapshot or its historical Planning Run, and Planning Run reuse requires an exact snapshot match.
+_Avoid_: Mutable current config, raw config hash, Validation Policy Snapshot
+
+**Planning Reviewer**:
+The coding agent that judges whether one Task proposal is ready for implementation against repository and authoritative external evidence.
+_Avoid_: Acceptance Reviewer, Implementer, Task approver
+
+**Planning Reviewer Session**:
+A continuing reviewer conversation owned by one Task and resumed across its Planning Runs and disposable Planning Workspaces.
+_Avoid_: Fresh reviewer session per Task Submission, cross-Task reviewer conversation
+
+**Planning Finding**:
+An immutable report that states one material problem and the evidence that prevents approval of the reviewed Task proposal.
+Every Planning Finding is blocking, so it has no severity classification.
+_Avoid_: Task Comment, implementation detail, optional refinement
+
+**Planning Workspace**:
+An isolated disposable workspace in which one Planning Run judges its exact Planning Base without changing it.
+_Avoid_: Validation Workspace, Managed Worktree, caller checkout
+
+**Planning Tooling Failure**:
+A failure after Planning Run creation in But Why or its planning tooling that prevents a trustworthy judgment of the Task proposal.
+Preflight rejection is not a Planning Tooling Failure.
+_Avoid_: Planning Finding, reviewer rejection
+
 **Task Approval**:
-The permanent confirmation that a New Task's intent is approved for implementation.
-_Avoid_: Change Start, reviewer approval
+The current confirmation that one exact Planning Proposal Snapshot passed Planning Review against its recorded Planning Base.
+It becomes invalid when that Planning Base is no longer an ancestor of the fetched Change Base.
+_Avoid_: Change Start, permanent approval, operator-only assertion
 
 **Change Start**:
 The operation that creates a Change, its Managed Worktree, and its starting commit.
@@ -144,6 +222,7 @@ _Avoid_: Validation Run state, generic pipeline
 
 **Task Dependency**:
 A directed prerequisite relationship required because the dependent Task cannot be implemented or verified until the prerequisite Task is Done.
+An unfinished prerequisite does not prevent Task Submission, but Planning Review can report a Planning Finding when that prerequisite prevents trustworthy planning.
 Related work, shared files, likely conflicts, preferred sequence, and relative importance do not establish a Task Dependency.
 _Avoid_: Queue priority, implementation preference, Git base relationship
 
@@ -187,7 +266,8 @@ A taskless no-change result remains open.
 _Avoid_: Empty commit, comparison with the Change's starting tree, caller assertion
 
 **Finding**:
-An immutable problem report produced by Prepare, a Check, Acceptance Review, or a Specialist for one Candidate or no-change review.
+An immutable report that states one material problem and its evidence from Prepare, a Check, Acceptance Review, or a Specialist for one Candidate or no-change review.
+Every Finding is blocking, so it has no severity classification.
 _Avoid_: Tooling Failure, Task Comment, mutable issue
 
 **Implementation Decision**:
