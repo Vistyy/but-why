@@ -230,6 +230,12 @@ _Avoid_: Queue priority, implementation preference, Git base relationship
 SQLite and other local operational state resolved through Git's common directory so every linked worktree sees the same facts.
 _Avoid_: Copied state file, tracked Repo Config, per-worktree database
 
+**Trusted But Why Executable**:
+The command executable authorized to operate a Local Repository's Shared Repository State.
+Before publication, it is the executable in the canonical main checkout.
+Published executable selection is governed by the post-publication compatibility policy.
+_Avoid_: Candidate CLI, current-worktree executable
+
 **Migration Artifact**:
 One numbered source artifact that defines an ordered Shared Repository State migration.
 Existing Migration Artifacts are immutable, and a schema change adds the next Migration Artifact.

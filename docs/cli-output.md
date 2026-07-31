@@ -59,6 +59,7 @@ A truncated collection includes the exact command that retrieves the complete ma
 - `by task show` owns Task lifecycle, dependency, and linked Change metadata.
 - `by task context` owns the complete Task title, description, comments, and approved Resolution context.
 - `by change show` owns current implementation, validation, delivery, blocker, and cleanup state.
+- `by change blocker list` owns complete Implementation Blocker and Implementation Blocker Resolution history.
 - `by change findings` owns complete Findings for the current Candidate.
 - `by change validation-runs` owns compact complete Validation Run History.
 - `by validation-run show` owns one Validation Run's policy and recorded evidence.

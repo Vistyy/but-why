@@ -1,8 +1,15 @@
 import { createHash } from "node:crypto";
+import { existsSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 
 import type { ExtensionAPI, ExtensionContext, SessionEntry } from "@earendil-works/pi-coding-agent";
 
 type ChangeState = "open" | "blocked" | "closed";
+
+type ChangeCleanup = {
+  readonly state: "complete" | "pending";
+  readonly blockingReason: string | null;
+};
 
 export type ChangeInspectionSnapshot = {
   readonly change: {
@@ -14,11 +21,18 @@ export type ChangeInspectionSnapshot = {
   readonly findingCount: number;
   readonly toolingFailureCount: number;
   readonly pullRequest: Readonly<Record<string, unknown>> | null;
+  readonly cleanup?: ChangeCleanup;
   readonly publication?: {
     readonly candidateId: string;
     readonly expectedHeadSha: string;
     readonly pullRequest: Readonly<Record<string, unknown>> | null;
   } | null;
+};
+
+type BlockerHistory = {
+  readonly blockers: readonly Readonly<Record<string, unknown>>[];
+  readonly resolutions: readonly Readonly<Record<string, unknown>>[];
+  readonly active: Readonly<Record<string, unknown>> | null;
 };
 
 export type ContinuationDecision =
@@ -34,6 +48,8 @@ export type RetryState = {
 type PersistedContinuationState = RetryState & {
   readonly changeId: string;
   readonly paused: boolean;
+  readonly resolutionId?: string | null;
+  readonly pendingResolutionId?: string | null;
 };
 
 type WatcherDisplay =
@@ -41,10 +57,13 @@ type WatcherDisplay =
   | { readonly kind: "checking" }
   | { readonly kind: "paused" }
   | { readonly kind: "complete" }
+  | { readonly kind: "cancelled" }
+  | { readonly kind: "cleanup-needed" }
   | { readonly kind: "idle" }
   | { readonly kind: "blocked" }
-  | { readonly kind: "recovery" }
-  | { readonly kind: "stopped" };
+  | { readonly kind: "inspection-failed" }
+  | { readonly kind: "stopped" }
+  | { readonly kind: "waiting-for-human-merge" };
 
 type RunResult =
   | { readonly ok: true; readonly stdout: string }
@@ -67,6 +86,7 @@ type InspectionResult =
   | {
       readonly ok: true;
       readonly snapshot: ChangeInspectionSnapshot;
+      readonly blockerHistory: BlockerHistory;
       readonly fingerprint: string;
       readonly git: GitInspection;
     }
@@ -77,6 +97,7 @@ const watcherWidget = "but-why-change-watcher";
 const maxUnchangedRestarts = 3;
 const changeIdPattern =
   /^\s*Change identity:\s*([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.?\s*$/imu;
+const sourceRepository = existsSync(fileURLToPath(new URL("../justfile", import.meta.url)));
 
 export const extractChangeId = (text: string): string | undefined =>
   text.match(changeIdPattern)?.[1];
@@ -91,8 +112,8 @@ const findChangeId = (entries: readonly SessionEntry[]): string | undefined => {
             .filter((part) => part.type === "text")
             .map((part) => part.text)
             .join("");
-    const changeId = extractChangeId(text);
-    if (changeId !== undefined) return changeId;
+    const found = extractChangeId(text);
+    if (found !== undefined) return found;
   }
   return undefined;
 };
@@ -154,7 +175,11 @@ export const nextRetryState = (previous: RetryState, fingerprint: string): Retry
     ? { fingerprint, unchangedRestarts: previous.unchangedRestarts + 1 }
     : { fingerprint, unchangedRestarts: 0 };
 
-const durableChangeFingerprint = (snapshot: ChangeInspectionSnapshot, git: GitInspection): string =>
+const durableChangeFingerprint = (
+  snapshot: ChangeInspectionSnapshot,
+  blockerHistory: BlockerHistory,
+  git: GitInspection,
+): string =>
   createHash("sha256")
     .update(
       JSON.stringify({
@@ -166,6 +191,8 @@ const durableChangeFingerprint = (snapshot: ChangeInspectionSnapshot, git: GitIn
         toolingFailureCount: snapshot.toolingFailureCount,
         pullRequest: snapshot.pullRequest,
         publication: snapshot.publication,
+        cleanup: snapshot.cleanup,
+        blockerHistory,
       }),
     )
     .digest("hex");
@@ -175,6 +202,7 @@ export default function continueChange(pi: ExtensionAPI): void {
   let persisted: PersistedContinuationState | undefined;
   let pendingThresholdCompaction = false;
   let settling = false;
+  let pauseGeneration = 0;
   let watcherDisplay: WatcherDisplay = { kind: "watching" };
 
   const showWatcher = (ctx: ExtensionContext, display: WatcherDisplay): void => {
@@ -193,14 +221,20 @@ export default function continueChange(pi: ExtensionAPI): void {
           return "○ Paused";
         case "complete":
           return "✓ Change is complete";
+        case "cancelled":
+          return "✕ Change was cancelled";
+        case "cleanup-needed":
+          return "! Change cleanup is needed";
         case "idle":
           return "✓ No action needed";
         case "blocked":
           return "! Change is blocked";
-        case "recovery":
-          return "! Paused - inspection needs recovery";
+        case "inspection-failed":
+          return "! Change inspection failed";
         case "stopped":
           return "! Watching stopped - no progress";
+        case "waiting-for-human-merge":
+          return "◌ Waiting for human merge";
       }
     })();
     ctx.ui.setWidget(
@@ -209,11 +243,16 @@ export default function continueChange(pi: ExtensionAPI): void {
         render(width) {
           return [
             theme.fg(
-              display.kind === "paused" || display.kind === "recovery"
+              display.kind === "paused" || display.kind === "inspection-failed"
                 ? "warning"
-                : display.kind === "blocked" || display.kind === "stopped"
+                : display.kind === "blocked" ||
+                    display.kind === "stopped" ||
+                    display.kind === "cancelled" ||
+                    display.kind === "cleanup-needed"
                   ? "error"
-                  : display.kind === "complete" || display.kind === "idle"
+                  : display.kind === "complete" ||
+                      display.kind === "idle" ||
+                      display.kind === "waiting-for-human-merge"
                     ? "success"
                     : display.kind === "checking"
                       ? "muted"
@@ -227,24 +266,49 @@ export default function continueChange(pi: ExtensionAPI): void {
     );
   };
 
-  const idleWatcherDisplay = (snapshot: ChangeInspectionSnapshot): WatcherDisplay => {
-    if (snapshot.change.state === "closed") return { kind: "complete" };
+  const displayFor = (
+    snapshot: ChangeInspectionSnapshot,
+    git: GitInspection,
+  ): WatcherDisplay => {
+    if (snapshot.change.state === "closed") {
+      if (snapshot.cleanup?.state === "pending") return { kind: "cleanup-needed" };
+      return snapshot.change.closeReason === "cancelled"
+        ? { kind: "cancelled" }
+        : { kind: "complete" };
+    }
     if (snapshot.change.state === "blocked") return { kind: "blocked" };
-    return { kind: "idle" };
+    if (snapshot.toolingFailureCount > 0) return { kind: "stopped" };
+    const decision = decideContinuation(snapshot, git);
+    if (decision.kind === "idle") {
+      const publication = snapshot.publication;
+      const currentCandidate = snapshot.currentCandidate;
+      if (
+        publication?.pullRequest !== null &&
+        publication?.pullRequest !== undefined &&
+        currentCandidate !== null &&
+        recordValue(currentCandidate, "id") === publication.candidateId &&
+        recordValue(currentCandidate, "headSha") === publication.expectedHeadSha &&
+        git.head === publication.expectedHeadSha &&
+        git.status.trim() === ""
+      ) {
+        return { kind: "waiting-for-human-merge" };
+      }
+      return { kind: "idle" };
+    }
+    return { kind: "watching" };
   };
 
   const restoreState = (ctx: ExtensionContext): void => {
-    const entries = ctx.sessionManager.getBranch();
-    const latest = entries
+    const latest = ctx.sessionManager
+      .getBranch()
       .filter(
         (entry): entry is Extract<SessionEntry, { type: "custom" }> =>
           entry.type === "custom" && entry.customType === stateEntry,
       )
       .at(-1);
-    const data = latest?.data;
-    if (!isPersistedState(data)) return;
-    persisted = data;
-    changeId ??= data.changeId;
+    if (!isPersistedState(latest?.data)) return;
+    persisted = latest.data;
+    changeId ??= latest.data.changeId;
   };
 
   const saveState = (state: PersistedContinuationState): void => {
@@ -278,46 +342,41 @@ export default function continueChange(pi: ExtensionAPI): void {
     }
   };
 
-  const inspectChange = async (id: string, cwd: string): Promise<RunResult> => {
-    const args = ["--output", "json", "change", "show", id];
-    const installed = await run("by", args, cwd);
-    if (
-      installed.ok ||
-      (installed.transient && !installed.message.startsWith("by could not run:")) ||
-      installed.stdout.trim() !== ""
-    ) {
-      return installed;
-    }
-    const local = await run("just", ["by", ...args], cwd);
-    return local.ok || local.stdout.trim() !== "" ? local : installed;
+  const cliInvocation = (args: readonly string[]): readonly [string, ...string[]] =>
+    sourceRepository ? ["just", "by", ...args] : ["npx", "-y", "but-why", ...args];
+
+  const inspectCommand = async (
+    commandArgs: readonly string[],
+    cwd: string,
+  ): Promise<RunResult> => {
+    const [command, ...args] = cliInvocation(commandArgs);
+    return run(command, args, cwd);
   };
 
   const inspect = async (ctx: ExtensionContext, id: string): Promise<InspectionResult> => {
-    const [changeResult, headResult, statusResult, unstagedResult, stagedResult, untrackedResult] =
+    const args = ["--output", "json", "change", "show", id];
+    const blockerArgs = ["--output", "json", "change", "blocker", "list", id];
+    const [changeResult, blockerResult, headResult, statusResult, unstagedResult, stagedResult, untrackedResult] =
       await Promise.all([
-        inspectChange(id, ctx.cwd),
+        inspectCommand(args, ctx.cwd),
+        inspectCommand(blockerArgs, ctx.cwd),
         run("git", ["rev-parse", "HEAD"], ctx.cwd),
         run("git", ["status", "--porcelain=v1", "--untracked-files=all"], ctx.cwd),
         run("git", ["diff", "--no-ext-diff", "--binary"], ctx.cwd),
         run("git", ["diff", "--cached", "--no-ext-diff", "--binary"], ctx.cwd),
         run("git", ["ls-files", "--others", "--exclude-standard", "-z"], ctx.cwd),
       ]);
-    if (
-      !changeResult.ok ||
-      !headResult.ok ||
-      !statusResult.ok ||
-      !unstagedResult.ok ||
-      !stagedResult.ok ||
-      !untrackedResult.ok
-    ) {
-      const failures = [
-        changeResult,
-        headResult,
-        statusResult,
-        unstagedResult,
-        stagedResult,
-        untrackedResult,
-      ].filter(
+    const results = [
+      changeResult,
+      blockerResult,
+      headResult,
+      statusResult,
+      unstagedResult,
+      stagedResult,
+      untrackedResult,
+    ];
+    if (results.some((result) => !result.ok)) {
+      const failures = results.filter(
         (result): result is Extract<RunResult, { readonly ok: false }> => !result.ok,
       );
       return {
@@ -346,21 +405,26 @@ export default function continueChange(pi: ExtensionAPI): void {
       };
     }
 
-    let value: unknown;
+    let snapshotValue: unknown;
+    let blockerValue: unknown;
     try {
-      value = JSON.parse(changeResult.stdout);
+      snapshotValue = JSON.parse(changeResult.stdout);
+      blockerValue = JSON.parse(blockerResult.stdout);
     } catch {
+      return { ok: false, transient: false, message: "But Why inspection returned malformed JSON" };
+    }
+    if (!isSnapshot(snapshotValue)) {
       return {
         ok: false,
         transient: false,
-        message: "by change show returned malformed JSON",
+        message: "But Why inspection returned an unsupported Change state shape",
       };
     }
-    if (!isSnapshot(value)) {
+    if (!isBlockerHistory(blockerValue)) {
       return {
         ok: false,
         transient: false,
-        message: "by change show returned an unsupported Change state shape",
+        message: "But Why inspection returned an unsupported blocker history shape",
       };
     }
     const untrackedHashes = untrackedHashResult.stdout.split("\n").filter((hash) => hash !== "");
@@ -376,15 +440,52 @@ export default function continueChange(pi: ExtensionAPI): void {
     };
     return {
       ok: true,
-      snapshot: value,
-      fingerprint: durableChangeFingerprint(value, git),
+      snapshot: snapshotValue,
+      blockerHistory: blockerValue,
+      fingerprint: durableChangeFingerprint(snapshotValue, blockerValue, git),
       git,
     };
   };
 
+  const latestResolution = (history: BlockerHistory): Readonly<Record<string, unknown>> | null =>
+    history.resolutions.at(-1) ?? null;
+
+  const resolutionId = (resolution: Readonly<Record<string, unknown>> | null): string | null => {
+    const id = resolution === null ? undefined : recordValue(resolution, "id");
+    return typeof id === "string" ? id : null;
+  };
+
+  const resolutionMessage = (
+    id: string,
+    resolution: Readonly<Record<string, unknown>>,
+    hasFindings: boolean,
+  ): string => {
+    const content = recordValue(resolution, "content");
+    const explanation = typeof content === "string" ? content : "The approved Resolution has no recorded text.";
+    const next = hasFindings
+      ? `Now inspect the earlier Findings with \`by change findings ${id}\`, fix every applicable problem in the Managed Worktree, commit the fixes, and submit again with \`by change submit ${id}\`.`
+      : `Now inspect \`by change show ${id}\` and the Managed Worktree, then take the next concrete implementation action.`;
+    return `An Implementation Blocker Resolution was recorded for Change ${id}: ${explanation} ${next}`;
+  };
+
+  const validationFailureMessage = (
+    id: string,
+    snapshot: ChangeInspectionSnapshot,
+  ): string => {
+    const runId =
+      snapshot.currentValidationRun === null
+        ? undefined
+        : recordValue(snapshot.currentValidationRun, "id");
+    const detail =
+      typeof runId === "string"
+        ? `Inspect the Validation Tooling Failure with \`by validation-run show ${runId}\`.`
+        : `Inspect the Validation Tooling Failure with \`by change show ${id}\`.`;
+    return `The Change ${id} has a Validation Tooling Failure. ${detail} Recover the validation tooling, then submit the Change again with \`by change submit ${id}\`.`;
+  };
+
   const initialize = async (ctx: ExtensionContext): Promise<void> => {
     if (changeId === undefined) {
-      showWatcher(ctx, { kind: "watching" });
+      ctx.ui.setWidget(watcherWidget, undefined);
       return;
     }
     if (persisted?.paused) {
@@ -392,117 +493,75 @@ export default function continueChange(pi: ExtensionAPI): void {
       return;
     }
     showWatcher(ctx, { kind: "checking" });
-    try {
-      const observed = await inspect(ctx, changeId);
-      if (!observed.ok) return;
-      if (persisted === undefined || persisted.changeId !== changeId) {
-        saveState({
-          changeId,
-          fingerprint: observed.fingerprint,
-          unchangedRestarts: 0,
-          paused: false,
-        });
-        return;
-      }
-      if (persisted.fingerprint !== observed.fingerprint) {
-        saveState({ ...persisted, fingerprint: observed.fingerprint, unchangedRestarts: 0 });
-      }
-    } finally {
-      if (watcherDisplay.kind === "checking") showWatcher(ctx, { kind: "watching" });
+    const observed = await inspect(ctx, changeId);
+    if (!observed.ok) {
+      showWatcher(ctx, { kind: "inspection-failed" });
+      return;
     }
+    const latest = resolutionId(latestResolution(observed.blockerHistory));
+    saveState({
+      changeId,
+      fingerprint: observed.fingerprint,
+      unchangedRestarts: 0,
+      paused: false,
+      resolutionId: latest,
+    });
+    showWatcher(ctx, displayFor(observed.snapshot, observed.git));
   };
 
-  pi.on("session_start", async (_event, ctx) => {
-    restoreState(ctx);
-    changeId ??= findChangeId(ctx.sessionManager.getBranch());
-    await initialize(ctx);
-  });
-
-  pi.registerCommand("continue-change", {
-    description: "Pause or resume the Change watcher",
-    handler: async (_args, ctx) => {
-      if (changeId === undefined) {
-        ctx.ui.notify("But Why automatic continuation is unavailable because this session has no Change.", "warning");
-        return;
-      }
-      const state = persisted ?? {
-        changeId,
-        fingerprint: "inspection-unavailable",
-        unchangedRestarts: 0,
-        paused: false,
-      };
-      if (!state.paused) {
-        saveState({ ...state, paused: true });
-        showWatcher(ctx, { kind: "paused" });
-        ctx.ui.notify(
-          "But Why Change watcher is paused. Discuss the Change, then run /continue-change to resume.",
-          "info",
-        );
-        return;
-      }
-      saveState({ ...state, paused: false, unchangedRestarts: 0 });
-      ctx.ui.notify("But Why Change watcher is resumed.", "info");
-      await continueWatching(ctx);
-    },
-  });
-
-  pi.on("input", (event, ctx) => {
-    if (event.source !== "extension") {
-      const inputChangeId = extractChangeId(event.text);
-      if (inputChangeId === undefined) return;
-      changeId = inputChangeId;
-      showWatcher(ctx, persisted?.paused ? { kind: "paused" } : { kind: "watching" });
+  const pause = (ctx: ExtensionContext): void => {
+    if (changeId === undefined) {
+      ctx.ui.notify("But Why automatic continuation is unavailable because this session has no Change.", "warning");
+      return;
     }
-  });
+    pauseGeneration += 1;
+    const state = persisted ?? {
+      changeId,
+      fingerprint: "inspection-unavailable",
+      unchangedRestarts: 0,
+      paused: false,
+      resolutionId: null,
+    };
+    saveState({ ...state, paused: true });
+    showWatcher(ctx, { kind: "paused" });
+    ctx.ui.notify(
+      "But Why Change continuation is paused. Discuss the Change, then run /continue-change to refresh and continue.",
+      "info",
+    );
+  };
 
-  pi.on("session_compact", (event) => {
-    pendingThresholdCompaction = event.reason === "threshold";
-  });
-
-  pi.on("agent_end", (event, ctx) => {
-    if (
-      event.messages.some(
-        (message) => message.role === "assistant" && message.stopReason === "aborted",
-      ) &&
-      changeId !== undefined
-    ) {
-      const state = persisted ?? {
-        changeId,
-        fingerprint: "inspection-unavailable",
-        unchangedRestarts: 0,
-        paused: false,
-      };
-      saveState({ ...state, paused: true });
-      showWatcher(ctx, { kind: "paused" });
-    }
-  });
-
-  const continueWatching = async (ctx: ExtensionContext): Promise<void> => {
+  const continueWatching = async (ctx: ExtensionContext, explicit: boolean): Promise<void> => {
     if (!ctx.isIdle() || settling) return;
     if (changeId === undefined) {
       showWatcher(ctx, { kind: "watching" });
       return;
     }
-    if (persisted?.paused) {
+    if (!explicit && persisted?.paused) {
       showWatcher(ctx, { kind: "paused" });
       return;
     }
+    const id = changeId;
+    const startedAtPauseGeneration = pauseGeneration;
     settling = true;
     showWatcher(ctx, { kind: "checking" });
     try {
-      const id = changeId;
       const observed = await inspect(ctx, id);
+      if (persisted?.paused || startedAtPauseGeneration !== pauseGeneration) {
+        showWatcher(ctx, { kind: "paused" });
+        return;
+      }
       if (!observed.ok) {
         const previous = persisted ?? {
           changeId: id,
           fingerprint: "inspection-unavailable",
           unchangedRestarts: 0,
           paused: false,
+          resolutionId: null,
         };
         if (!observed.transient) {
           pendingThresholdCompaction = false;
           saveState({ ...previous, paused: true });
-          showWatcher(ctx, { kind: "recovery" });
+          showWatcher(ctx, { kind: "inspection-failed" });
           ctx.ui.notify(
             `But Why inspection requires operator recovery and is paused: ${observed.message}`,
             "warning",
@@ -524,35 +583,89 @@ export default function continueChange(pi: ExtensionAPI): void {
           return;
         }
         saveState({ ...previous, ...retry, paused: false });
-        showWatcher(ctx, { kind: "watching" });
+        showWatcher(ctx, { kind: "inspection-failed" });
         ctx.ui.notify(
-          "But Why could not inspect the current Change state; automatic continuation will keep trying until inspection recovers or the operator cancels it.",
+          "But Why could not inspect the current Change state; automatic continuation will keep trying until inspection recovers or the operator pauses it.",
           "warning",
         );
-        if (ctx.isIdle()) {
+        if (!explicit && ctx.isIdle()) {
           pi.sendUserMessage(
             `But Why could not inspect the current Change state for ${id}. Restore But Why CLI and Git access, then inspect the Change and Managed Worktree and continue. Do not assume a stopping condition.`,
           );
         }
         return;
       }
+
       const previous = persisted ?? {
         changeId: id,
         fingerprint: observed.fingerprint,
         unchangedRestarts: 0,
         paused: false,
+        resolutionId: null,
       };
-      const retry = nextRetryState(previous, observed.fingerprint);
+      const currentResolution = latestResolution(observed.blockerHistory);
+      const currentResolutionId = resolutionId(currentResolution);
+      const resolutionChanged =
+        previous.resolutionId !== undefined &&
+        currentResolutionId !== null &&
+        currentResolutionId !== previous.resolutionId;
+      const pendingResolution =
+        currentResolutionId !== null && previous.pendingResolutionId === currentResolutionId;
+      const retry = explicit
+        ? { fingerprint: observed.fingerprint, unchangedRestarts: 0 }
+        : nextRetryState(previous, observed.fingerprint);
+      saveState({
+        ...previous,
+        ...retry,
+        paused: false,
+        resolutionId: currentResolutionId,
+        pendingResolutionId: resolutionChanged
+          ? currentResolutionId
+          : previous.pendingResolutionId ?? null,
+      });
+
+      if (!explicit && resolutionChanged) {
+        pendingThresholdCompaction = false;
+        showWatcher(ctx, displayFor(observed.snapshot, observed.git));
+        return;
+      }
+      if (explicit && (resolutionChanged || pendingResolution) && currentResolution !== null) {
+        pendingThresholdCompaction = false;
+        showWatcher(ctx, { kind: "watching" });
+        if (observed.snapshot.change.state === "open") {
+          saveState({
+            ...previous,
+            ...retry,
+            resolutionId: currentResolutionId,
+            pendingResolutionId: null,
+          });
+          pi.sendUserMessage(
+            resolutionMessage(
+              id,
+              currentResolution,
+              observed.snapshot.findingCount > 0,
+            ),
+          );
+        } else {
+          showWatcher(ctx, displayFor(observed.snapshot, observed.git));
+        }
+        return;
+      }
+      if (explicit && observed.snapshot.toolingFailureCount > 0) {
+        pendingThresholdCompaction = false;
+        showWatcher(ctx, { kind: "stopped" });
+        pi.sendUserMessage(validationFailureMessage(id, observed.snapshot));
+        return;
+      }
+
       const decision = decideContinuation(observed.snapshot, observed.git);
       if (decision.kind === "idle") {
         pendingThresholdCompaction = false;
-        saveState({ ...previous, ...retry, paused: false });
-        showWatcher(ctx, idleWatcherDisplay(observed.snapshot));
+        showWatcher(ctx, displayFor(observed.snapshot, observed.git));
         return;
       }
-      if (retry.unchangedRestarts > maxUnchangedRestarts) {
+      if (!explicit && retry.unchangedRestarts > maxUnchangedRestarts) {
         pendingThresholdCompaction = false;
-        saveState({ ...previous, ...retry, paused: false });
         showWatcher(ctx, { kind: "stopped" });
         ctx.ui.notify(
           "But Why automatic continuation stopped after three restarts without Git or Change progress. Take the next action manually.",
@@ -560,7 +673,6 @@ export default function continueChange(pi: ExtensionAPI): void {
         );
         return;
       }
-      saveState({ ...previous, ...retry, paused: false });
       const message = buildContinuationMessage(
         decision,
         id,
@@ -575,8 +687,61 @@ export default function continueChange(pi: ExtensionAPI): void {
     }
   };
 
+  pi.on("session_start", async (_event, ctx) => {
+    changeId ??= findChangeId(ctx.sessionManager.getBranch());
+    restoreState(ctx);
+    await initialize(ctx);
+  });
+
+  pi.registerCommand("pause-change", {
+    description: "Pause automatic Change continuation",
+    handler: async (_args, ctx) => pause(ctx),
+  });
+
+  pi.registerCommand("continue-change", {
+    description: "Refresh and continue the Change watcher",
+    handler: async (_args, ctx) => {
+      if (changeId === undefined) {
+        ctx.ui.notify("But Why automatic continuation is unavailable because this session has no Change.", "warning");
+        return;
+      }
+      if (settling) {
+        ctx.ui.notify("But Why Change inspection is already in progress.", "info");
+        return;
+      }
+      if (persisted?.paused) {
+        pauseGeneration += 1;
+        saveState({ ...persisted, paused: false, unchangedRestarts: 0 });
+      }
+      await continueWatching(ctx, true);
+    },
+  });
+
+  pi.on("input", (event, ctx) => {
+    if (event.source === "extension") return;
+    const inputChangeId = extractChangeId(event.text);
+    if (inputChangeId === undefined || changeId !== undefined) return;
+    changeId = inputChangeId;
+    showWatcher(ctx, persisted?.paused ? { kind: "paused" } : { kind: "watching" });
+  });
+
+  pi.on("session_compact", (event) => {
+    pendingThresholdCompaction = event.reason === "threshold";
+  });
+
+  pi.on("agent_end", (event, ctx) => {
+    if (
+      event.messages.some(
+        (message) => message.role === "assistant" && message.stopReason === "aborted",
+      ) &&
+      changeId !== undefined
+    ) {
+      pause(ctx);
+    }
+  });
+
   pi.on("agent_settled", async (_event, ctx) => {
-    await continueWatching(ctx);
+    await continueWatching(ctx, false);
   });
 }
 
@@ -585,12 +750,19 @@ const isPersistedState = (value: unknown): value is PersistedContinuationState =
   typeof recordValue(value, "changeId") === "string" &&
   typeof recordValue(value, "fingerprint") === "string" &&
   typeof recordValue(value, "unchangedRestarts") === "number" &&
-  typeof recordValue(value, "paused") === "boolean";
+  typeof recordValue(value, "paused") === "boolean" &&
+  (recordValue(value, "resolutionId") === undefined ||
+    recordValue(value, "resolutionId") === null ||
+    typeof recordValue(value, "resolutionId") === "string") &&
+  (recordValue(value, "pendingResolutionId") === undefined ||
+    recordValue(value, "pendingResolutionId") === null ||
+    typeof recordValue(value, "pendingResolutionId") === "string");
 
 const isSnapshot = (value: unknown): value is ChangeInspectionSnapshot => {
   if (!isRecord(value)) return false;
   const change = recordValue(value, "change");
   const publication = recordValue(value, "publication");
+  const cleanup = recordValue(value, "cleanup");
   const validPublication =
     publication === undefined ||
     publication === null ||
@@ -613,9 +785,22 @@ const isSnapshot = (value: unknown): value is ChangeInspectionSnapshot => {
     typeof recordValue(value, "findingCount") === "number" &&
     typeof recordValue(value, "toolingFailureCount") === "number" &&
     (recordValue(value, "pullRequest") === null || isRecord(recordValue(value, "pullRequest"))) &&
+    (cleanup === undefined ||
+      (isRecord(cleanup) &&
+        (recordValue(cleanup, "state") === "complete" || recordValue(cleanup, "state") === "pending") &&
+        (typeof recordValue(cleanup, "blockingReason") === "string" ||
+          recordValue(cleanup, "blockingReason") === null))) &&
     validPublication
   );
 };
+
+const isBlockerHistory = (value: unknown): value is BlockerHistory =>
+  isRecord(value) &&
+  Array.isArray(recordValue(value, "blockers")) &&
+  Array.isArray(recordValue(value, "resolutions")) &&
+  (recordValue(value, "active") === null || isRecord(recordValue(value, "active"))) &&
+  (recordValue(value, "blockers") as unknown[]).every(isRecord) &&
+  (recordValue(value, "resolutions") as unknown[]).every(isRecord);
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null;
