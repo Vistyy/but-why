@@ -152,6 +152,13 @@ OpenShell, Gondolin, or another provider requires an adapter and conformance tes
 Dogfooding should determine whether Validation Run history, Change activity, agent-session inspection, and external tracing justify their maintenance cost.
 Usage reporting must distinguish unknown values from zero.
 
+## How should optional Effect CLI built-ins fit the public interface?
+
+`--wizard`, `--completions`, and `--log-level` have interaction and output behavior that can conflict with an agent-first, non-interactive CLI and structured stdout.
+If an Effect CLI migration exposes these built-ins, leave the library behavior unchanged instead of adding local parsing, routing, or help filtering.
+Reconsider them only when a concrete need exists or Effect CLI provides selective built-in configuration through its public interface.
+Before supporting them deliberately, define terminal interaction, raw shell-script output, and diagnostic output channels.
+
 ## What CLI startup latency matters?
 
 Dogfooding measured approximately 730 ms for the source launcher and 400 ms for the compiled CLI.
