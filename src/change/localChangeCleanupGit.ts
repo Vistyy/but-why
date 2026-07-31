@@ -76,18 +76,38 @@ export const cleanupChangeResources = (
   if (input.worktreePath !== null && !isWorktreePathSafe(input.worktreePath)) {
     return { state: "pending", blockingReason: "worktree_path_unsafe" };
   }
-  if (input.worktreePath !== null && existsSync(input.worktreePath)) {
-    const status = gitAtWorktree(input.worktreePath, [
-      "status",
-      "--porcelain=v1",
-      "--untracked-files=normal",
-    ]);
-    if (!status.ok) return { state: "pending", blockingReason: "worktree_status_unavailable" };
-    if (status.stdout.trim().length > 0) {
-      return { state: "pending", blockingReason: "worktree_has_uncommitted_changes" };
+  if (input.worktreePath !== null) {
+    if (existsSync(input.worktreePath)) {
+      const status = gitAtWorktree(input.worktreePath, [
+        "status",
+        "--porcelain=v1",
+        "--untracked-files=normal",
+      ]);
+      if (!status.ok) return { state: "pending", blockingReason: "worktree_status_unavailable" };
+      if (status.stdout.trim().length > 0) {
+        return { state: "pending", blockingReason: "worktree_has_uncommitted_changes" };
+      }
     }
+
+    const registration = git(input.repositoryCommonDirectory, ["worktree", "list", "--porcelain"]);
+    if (!registration.ok) {
+      return { state: "pending", blockingReason: "worktree_removal_failed" };
+    }
+    const registered = registration.stdout
+      .split("\n")
+      .some((line) => line === `worktree ${input.worktreePath}`);
     if (
+      registered &&
       !git(input.repositoryCommonDirectory, ["worktree", "remove", "--", input.worktreePath]).ok
+    ) {
+      return { state: "pending", blockingReason: "worktree_removal_failed" };
+    }
+
+    const afterRemoval = git(input.repositoryCommonDirectory, ["worktree", "list", "--porcelain"]);
+    if (
+      !afterRemoval.ok ||
+      existsSync(input.worktreePath) ||
+      afterRemoval.stdout.split("\n").some((line) => line === `worktree ${input.worktreePath}`)
     ) {
       return { state: "pending", blockingReason: "worktree_removal_failed" };
     }

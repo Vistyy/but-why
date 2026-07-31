@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, symlinkSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { describe, expect, it } from "vitest";
@@ -226,6 +226,29 @@ describe("Change cleanup Git adapter", () => {
     ).toEqual({ state: "complete" });
     expect(existsSync(worktreePath)).toBe(false);
     expect(git(repository, "branch", "--list", "feature")).toBe("");
+  });
+
+  it("removes a stale Managed Worktree registration when its path is absent", () => {
+    const repository = initializedRepository();
+    const commonDirectory = git(
+      repository,
+      "rev-parse",
+      "--path-format=absolute",
+      "--git-common-dir",
+    );
+    const worktreePath = join(repository, "feature-worktree");
+    git(repository, "worktree", "add", "-b", "feature", worktreePath, "main");
+    rmSync(worktreePath, { recursive: true, force: true });
+    git(repository, "update-ref", "-d", "refs/heads/feature");
+
+    expect(
+      cleanupChangeResources({
+        repositoryCommonDirectory: commonDirectory,
+        worktreePath,
+        branchRef: "refs/heads/feature",
+      }),
+    ).toEqual({ state: "complete" });
+    expect(git(repository, "worktree", "list", "--porcelain")).not.toContain(worktreePath);
   });
 
   it("deletes the local Repository Branch when cleanup runs inside its Managed Worktree", () => {
