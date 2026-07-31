@@ -5,7 +5,7 @@ import * as HelpDoc from "@effect/cli/HelpDoc";
 import * as Options from "@effect/cli/Options";
 import * as ValidationError from "@effect/cli/ValidationError";
 import { NodeFileSystem, NodePath, NodeTerminal } from "@effect/platform-node";
-import { Console, Context, Effect, Layer, Ref } from "effect";
+import { Console, Context, Effect, Layer, Logger, Ref } from "effect";
 
 import type { CliEnvironment } from "./cli.js";
 import { collapseHome } from "./cli/cliPath.js";
@@ -457,7 +457,15 @@ const commandTree = commandRootWithHandler.pipe(
 ) as unknown as AnyCommand;
 
 const cliConfig = CliConfig.make({});
-const runtimeLayer = Layer.mergeAll(NodeFileSystem.layer, NodePath.layer, NodeTerminal.layer);
+const stderrLogger = Logger.make(({ logLevel, message }) => {
+  process.stderr.write(`level=${logLevel.label} message=${String(message)}\n`);
+});
+const runtimeLayer = Layer.mergeAll(
+  NodeFileSystem.layer,
+  NodePath.layer,
+  NodeTerminal.layer,
+  Logger.replace(Logger.defaultLogger, stderrLogger),
+);
 
 export const runCommandTree = (
   args: readonly string[],
