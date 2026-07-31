@@ -84,7 +84,7 @@ exit 1
       ...baseEnv,
       BY_FAKE_CAPTURE: capture,
       BY_FAKE_WORKTREE: change.worktreePath,
-      BY_FAKE_SESSION: `but-why-${change.change.id}`,
+      BY_FAKE_SESSION: `change-${change.change.id.slice(0, 8)}`,
     };
 
     const piped = runBuiltByWithInput(
