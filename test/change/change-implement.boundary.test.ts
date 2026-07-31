@@ -235,7 +235,11 @@ describe("by change implement", () => {
   it.effect("names a Task-backed session from its Task ID and immutable title", () =>
     Effect.gen(function* () {
       const root = yield* readyRepository();
-      const taskId = yield* createTask(root, "Record cancellation reasons", "Implement this Change.\n");
+      const taskId = yield* createTask(
+        root,
+        "Record cancellation reasons",
+        "Implement this Change.\n",
+      );
       expect((yield* runByInProcessEffect(root, ["task", "approve", taskId], now)).status).toBe(0);
       const started = yield* runByInProcessEffect(
         root,
