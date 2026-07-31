@@ -26,6 +26,7 @@ import type { ChangeRecord } from "../../change/change.js";
 import type { CandidateValidationRunRecord } from "../../change/candidateValidation/candidateValidationRunStore.js";
 import type { ChangeReconciliationResult } from "../../change/reconcileChange.js";
 import type { ChangeSubmitResult } from "../../change/submitChange.js";
+import { stderrSubmitProgress } from "../../change/validation/submitProgress.js";
 import type {
   ChangeImplementResult,
   ChangePrepareResult,
@@ -43,6 +44,7 @@ export type ChangeCommandEnvironment = {
   readonly globalConfigPath: string;
   readonly now: () => Date;
   readonly stdin: TextInputStdin;
+  readonly writeStderr?: (message: string) => void;
   readonly reviewerAgentRuntime?: ReviewerAgentRuntime;
   readonly interactiveSessionHost?: InteractiveSessionHost;
   readonly interactiveSessionPath?: string;
@@ -492,10 +494,18 @@ export const runSubmit = (
         : { reviewerAgentRuntime: environment.reviewerAgentRuntime }),
     });
     if (!loaded.ok) return Effect.succeed(loadError(loaded.error));
-    return loaded.submit.submit({ changeId, now: environment.now().toISOString() }).pipe(
-      Effect.map((result) => submitResult(result, changeId)),
-      Effect.catchAll((error) => Effect.succeed(repositoryStorageErrorResult(error))),
-    );
+    return loaded.submit
+      .submit({
+        changeId,
+        now: environment.now().toISOString(),
+        ...(environment.writeStderr === undefined
+          ? {}
+          : { progress: stderrSubmitProgress(environment.writeStderr) }),
+      })
+      .pipe(
+        Effect.map((result) => submitResult(result, changeId)),
+        Effect.catchAll((error) => Effect.succeed(repositoryStorageErrorResult(error))),
+      );
   });
 
 type SubmitRecoveryAction =

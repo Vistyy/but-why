@@ -11,6 +11,22 @@ TOON is the default stdout format.
 Programmatic callers request JSON with `--output json` before the command.
 Domain modules do not depend on either serialization format.
 
+## Change Submit progress
+
+`by change submit` writes concise human-readable phase progress to stderr while it runs.
+The progress is not part of the structured result.
+The command continues to write one structured TOON or JSON result to stdout.
+
+Progress reports only phases that run for the Submission.
+A changed Candidate can report Prepare, each configured Check, Acceptance Review for a Task-backed Change, and each configured Specialist Review.
+A Taskless or no-change Submission does not report phases that it does not run.
+
+Each phase reports one start line and one completion line.
+Each completion line contains `passed` or `failed` and the elapsed duration.
+Reviewer start lines contain the Agent Profile name, complete model identifier, and thinking level.
+Progress does not stream command output or reviewer reasoning.
+Progress does not include Candidate, Change, Validation Run, or other durable UUIDs.
+
 ## Result design
 
 Each command returns the smallest default schema that supports its normal next decision.
