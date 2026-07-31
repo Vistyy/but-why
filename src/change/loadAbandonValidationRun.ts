@@ -9,7 +9,6 @@ import { openSqliteChangeValidationPersistence } from "../sqlite/sqliteChangeVal
 import { openSqliteExecutionLock } from "../sqlite/sqliteExecutionLock.js";
 import {
   deleteValidationTempRef,
-  expectedSandcastleWorktreePath,
   validationTempRefName,
   removeValidationWorktree,
 } from "./validation/validationGitGlue.js";
@@ -51,8 +50,6 @@ export const loadAbandonValidationRun = (input: {
             executionLock: openSqliteExecutionLock({ commonDirectory: context.commonDirectory }),
             workspaceCleanup: {
               tempRefName: validationTempRefName,
-              expectedWorktreePath: (tempRefName) =>
-                expectedSandcastleWorktreePath(context.mainCheckoutRoot, tempRefName),
               removeWorktree: (worktreePath) =>
                 removeValidationWorktree(context.mainCheckoutRoot, worktreePath),
               deleteTempRef: (tempRefName) =>

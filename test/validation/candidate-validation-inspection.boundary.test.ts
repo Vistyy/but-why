@@ -42,6 +42,16 @@ describe("Candidate-owned Validation Run inspection", () => {
   it.effect("abandons an interrupted Validation Run and is idempotent", () =>
     Effect.gen(function* () {
       const fixture = yield* candidateValidationFixture();
+      yield* fixture.runStore.recordWorkspaceSetup({
+        validationRunId: fixture.validationRunId,
+        tempRefName: `refs/but-why/validation-runs/${fixture.validationRunId}/validation`,
+        submittedSha: "head-sha",
+        worktreeHead: "head-sha",
+        worktreePath: join(fixture.root, ".sandcastle", "validation-workspace"),
+        cleanupWorktree: "not_created",
+        cleanupTempRef: "not_created",
+        now,
+      });
       const abandoned = yield* runByInProcessEffect(fixture.root, [
         "validation-run",
         "abandon",

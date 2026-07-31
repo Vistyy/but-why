@@ -119,18 +119,36 @@ const abandonWhileLocked = (
 
     const tempRefName =
       context.tempRefName ?? input.workspaceCleanup.tempRefName(command.validationRunId);
-    const worktreePath =
-      context.worktreePath ?? input.workspaceCleanup.expectedWorktreePath(tempRefName);
-    const worktree =
-      context.cleanupWorktree === "removed"
-        ? "removed"
-        : input.workspaceCleanup.removeWorktree(worktreePath)
-          ? "removed"
-          : "failed";
     const tempRef =
       context.cleanupTempRef === "removed"
         ? "removed"
         : input.workspaceCleanup.deleteTempRef(tempRefName);
+    const worktreePath = context.worktreePath;
+    if (worktreePath === undefined && context.cleanupWorktree !== "removed") {
+      const cleanup = { worktree: "failed", tempRef } as const;
+      yield* input.persistence.recordToolingFailure({
+        validationRunId: command.validationRunId,
+        errorKind: "infrastructure_tooling_failed",
+        operationName: "abandon_validation_run_cleanup",
+        errorMessage: `${command.reason} Cleanup worktree=failed; temporary ref=${tempRef}. Validation Workspace path was not recorded.`,
+        now: command.now,
+      });
+      return {
+        ok: false,
+        status: "cleanup_failed",
+        validationRunId: command.validationRunId,
+        changeId: context.changeId,
+        cleanup,
+      } as const;
+    }
+    const worktree =
+      context.cleanupWorktree === "removed"
+        ? "removed"
+        : worktreePath === undefined
+          ? "failed"
+          : input.workspaceCleanup.removeWorktree(worktreePath)
+            ? "removed"
+            : "failed";
     const cleanup = { worktree, tempRef } as const;
     if (worktree === "failed" || tempRef === "failed") {
       yield* input.persistence.recordToolingFailure({
