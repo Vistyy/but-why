@@ -599,7 +599,11 @@ const generatedHelpLeftoverUsage = (args: readonly string[]): Effect.Effect<CliR
       const message =
         result._tag === "Left" && ValidationError.isValidationError(result.left)
           ? generatedText(result.left.error)
-          : generatedText(Command.getHelp(commandTree, cliConfig));
+          : generatedText(
+              ValidationError.invalidArgument(
+                HelpDoc.p(`Received unknown argument: '${findTrailingHelpArgument(args) ?? ""}'`),
+              ).error,
+            );
       return {
         ...usageError({
           code: "invalid_usage",
