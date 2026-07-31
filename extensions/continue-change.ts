@@ -661,7 +661,7 @@ export default function continueChange(pi: ExtensionAPI): void {
           : previous.pendingResolutionId ?? null,
       });
 
-      if (!explicit && resolutionChanged) {
+      if (!explicit && (resolutionChanged || pendingResolution)) {
         pendingThresholdCompaction = false;
         showWatcher(ctx, displayFor(observed.snapshot, observed.git));
         return;

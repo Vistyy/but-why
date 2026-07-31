@@ -367,6 +367,7 @@ describe("packaged Change Implement continuation extension", () => {
       active: null,
     });
     await harness.emit("agent_settled");
+    await harness.emit("agent_settled");
 
     expect(harness.sent).toEqual([]);
     expect(harness.latestWidgetText()).toEqual([`● Watching Change ${changeId.slice(0, 8)}…`]);
