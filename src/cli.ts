@@ -21,6 +21,7 @@ export type CliEnvironment = {
   readonly reviewerAgentRuntime?: ReviewerAgentRuntime;
   readonly interactiveSessionHost?: InteractiveSessionHost;
   readonly interactiveSessionPath?: string;
+  readonly writeStderr?: (message: string) => void;
 };
 
 export const runCli = (

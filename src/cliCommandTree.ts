@@ -457,15 +457,11 @@ const commandTree = commandRootWithHandler.pipe(
 ) as unknown as AnyCommand;
 
 const cliConfig = CliConfig.make({});
-const stderrLogger = Logger.make(({ logLevel, message }) => {
-  process.stderr.write(`level=${logLevel.label} message=${String(message)}\n`);
-});
-const runtimeLayer = Layer.mergeAll(
-  NodeFileSystem.layer,
-  NodePath.layer,
-  NodeTerminal.layer,
-  Logger.replace(Logger.defaultLogger, stderrLogger),
-);
+const stderrLogger = (writeStderr: (message: string) => void) =>
+  Logger.make(({ logLevel, message }) => {
+    writeStderr(`level=${logLevel.label} message=${String(message)}\n`);
+  });
+const runtimeLayer = Layer.mergeAll(NodeFileSystem.layer, NodePath.layer, NodeTerminal.layer);
 
 export const runCommandTree = (
   args: readonly string[],
@@ -490,6 +486,10 @@ export const runCommandTree = (
             Effect.provide(
               Layer.mergeAll(
                 runtimeLayer,
+                Logger.replace(
+                  Logger.defaultLogger,
+                  stderrLogger(environment.writeStderr ?? (() => undefined)),
+                ),
                 Layer.succeed(CliEnvironmentContext, environment),
                 Layer.succeed(CliResultSink, (result) =>
                   Ref.set(resultRef, {
