@@ -51,7 +51,8 @@ A new Submission selects the Change from Shared Repository State, then reads Rep
 The caller checkout supplies only Local Repository identity, Shared Repository State, and Change selection.
 The caller checkout's Repo Config is not a Change Submit policy source.
 The selected Managed Worktree Repo Config supplies Repository Preparation, Checks, Validation Workspace inputs, reviewer policy, Repo Agent Profiles, and the Agent Environment.
-After policy resolution, Submission fetches the recorded Change Base and requires the Repository Branch to contain the fetched commit before Candidate creation.
+Submission loads that Repo Config before fetching the Change Base and creating a Candidate.
+It resolves the complete Validation Policy from the loaded config before validation starts.
 The fetch updates only the remote-tracking ref.
 It does not modify the Managed Worktree or Repository Branch.
 

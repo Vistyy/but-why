@@ -178,6 +178,55 @@ describe("Change Submit orchestration", () => {
       }),
   );
 
+  it.effect(
+    "loads Repo Config before Candidate capture and resolves policy once before validation",
+    () =>
+      Effect.gen(function* () {
+        const events: string[] = [];
+        const submit = openChangeSubmit(
+          dependencies({
+            events,
+            change: readyChange(),
+            trackPolicyResolution: true,
+            refreshResult: { ok: true, base: refreshedBase },
+          }),
+        );
+        const validationLayer = Layer.succeed(CandidateValidation, {
+          validateCandidate: () =>
+            Effect.sync(() => {
+              events.push("validate_taskless");
+              return {
+                ok: true,
+                reused: false,
+                validationRunId: "run-1",
+                outcome: "passed",
+              } as const;
+            }),
+          validateTaskBackedCandidate: () => Effect.die("Acceptance Review was not expected"),
+          validateNoChange: () => Effect.die("Acceptance-only validation was not expected"),
+          listFindings: () => Effect.succeed([]),
+          listToolingFailures: () => Effect.succeed([]),
+          listRounds: () => Effect.succeed([]),
+        });
+
+        const result = yield* submit
+          .submit({ changeId: "change-1", now })
+          .pipe(Effect.provide(validationLayer));
+
+        expect(result).toMatchObject({ ok: true, status: "published" });
+        expect(events).toEqual([
+          "reconcile",
+          "load_repo_config",
+          "refresh_base",
+          "capture",
+          "resolve_policy",
+          "detect_target",
+          "validate_taskless",
+          "publish",
+        ]);
+      }),
+  );
+
   it.effect("rejects invalid Managed Worktree Agent Environment before Candidate capture", () =>
     Effect.gen(function* () {
       const events: string[] = [];
@@ -1223,6 +1272,7 @@ const dependencies = (input: {
   readonly taskBacked?: boolean;
   readonly agentEnvironment?: readonly string[];
   readonly agentEnvironmentError?: string;
+  readonly trackPolicyResolution?: boolean;
   readonly findings?: readonly (typeof finding)[];
   readonly toolingFailures?: readonly (typeof toolingFailure)[];
   readonly publication?: PublicationFixture;
@@ -1325,11 +1375,14 @@ const dependencies = (input: {
           };
         }),
     } satisfies ChangeReconciliation,
-    loadRepoConfig: () =>
-      input.agentEnvironmentError === undefined
+    loadRepoConfig: () => {
+      if (input.trackPolicyResolution) events.push("load_repo_config");
+      return input.agentEnvironmentError === undefined
         ? { ok: true as const, config: { taskPrefix: "BY" } }
-        : { ok: false as const, message: input.agentEnvironmentError },
+        : { ok: false as const, message: input.agentEnvironmentError };
+    },
     resolvePolicy: (_taskBacked: boolean, _repoConfig: RepoConfig, _worktreePath: string) => {
+      if (input.trackPolicyResolution) events.push("resolve_policy");
       if (input.agentEnvironmentError !== undefined) {
         return {
           ok: false as const,
