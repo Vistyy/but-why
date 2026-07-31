@@ -152,7 +152,7 @@ test("source workflow preserves a newline in the canonical checkout path", () =>
     error: {
       code: "trusted_executable_unavailable",
       message: "The canonical main-checkout Trusted But Why Executable is unavailable.",
-      details: { path: trustedExecutable },
+      path: trustedExecutable,
     },
     help: [
       "Restore the canonical main-checkout Trusted But Why Executable, then retry the command.",

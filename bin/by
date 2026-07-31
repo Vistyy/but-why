@@ -86,7 +86,7 @@ function fail(failure) {
     error: {
       code: failure.code,
       message: failure.message,
-      ...(failure.details === undefined ? {} : { details: failure.details }),
+      ...(failure.details ?? {}),
     },
     help: [failure.help],
   };
@@ -115,8 +115,8 @@ function toonFailure(result) {
     `  code: ${result.error.code}`,
     `  message: ${JSON.stringify(result.error.message)}`,
   ];
-  if (result.error.details !== undefined) {
-    lines.push("  details:", `    path: ${JSON.stringify(result.error.details.path)}`);
+  if (result.error.path !== undefined) {
+    lines.push(`  path: ${JSON.stringify(result.error.path)}`);
   }
   lines.push(`help[${result.help.length}]: ${JSON.stringify(result.help[0])}`);
   return `${lines.join("\n")}\n`;
