@@ -47,7 +47,11 @@ A Task-backed Change captures immutable Acceptance Context.
 A taskless Change has no Acceptance Context.
 
 `by change submit <change-id>` reconciles an existing owned pull request before starting a new Submission.
-A new Submission fetches the recorded Change Base and requires the Repository Branch to contain the fetched commit before Candidate creation.
+A new Submission selects the Change from Shared Repository State, then reads Repo Config exactly once from the selected Change's Managed Worktree.
+The caller checkout supplies only Local Repository identity, Shared Repository State, and Change selection.
+The caller checkout's Repo Config is not a Change Submit policy source.
+The selected Managed Worktree Repo Config supplies Repository Preparation, Checks, Validation Workspace inputs, reviewer policy, Repo Agent Profiles, and the Agent Environment.
+After policy resolution, Submission fetches the recorded Change Base and requires the Repository Branch to contain the fetched commit before Candidate creation.
 The fetch updates only the remote-tracking ref.
 It does not modify the Managed Worktree or Repository Branch.
 
@@ -78,8 +82,10 @@ TOON is the default format.
 Callers that parse output request JSON with `--output json`.
 The output ownership and expansion rules are defined in [CLI output](cli-output.md).
 
-Repo Config owns Repository Preparation, Checks, Validation Workspace inputs, review policy, and the Agent Environment.
-Global Config owns Agent Profiles, reviewer defaults, and Interactive Session preferences.
+Repo Config owns Repository Preparation, Checks, Validation Workspace inputs, review policy, Repo Agent Profiles, and the Agent Environment.
+Global Config owns Global Agent Profiles, reviewer defaults, and Interactive Session preferences.
+Change Submit resolves Repo Config from the selected Change's Managed Worktree and resolves Global Config from the configured user path.
+It constructs one resolved Validation Policy before validation and reuses that policy for Validation Policy Snapshot evidence and eligible publication.
 The public configuration contract is in [But Why Config](public/config.md).
 
 Accepted decisions that constrain this design are recorded in [ADRs](adr/).

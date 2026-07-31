@@ -1,7 +1,6 @@
 import { existsSync, rmSync } from "node:fs";
 import { join } from "node:path";
 
-import { repoAgentEnvironment } from "../agent/agentEnvironment.js";
 import { RepoConfigValidationFailed } from "../contracts/configErrors.js";
 import { Effect } from "effect";
 
@@ -16,13 +15,11 @@ import {
 } from "./candidateCapture/localGitCandidate.js";
 import { cleanupChangeResources } from "./localChangeCleanupGit.js";
 import { openChangeReconciliation } from "./reconcileChange.js";
+import { openChangeSubmit, type ChangeSubmit, type ChangeSubmitResult } from "./submitChange.js";
 import {
-  openChangeSubmit,
-  type AgentEnvironmentResolution,
-  type ChangeSubmit,
-  type ChangeSubmitResult,
-} from "./submitChange.js";
-import { loadRepoLocalContext, type LoadRepoLocalContextError } from "../init/repoContext.js";
+  loadRepoLocalSubmissionContext,
+  type LoadRepoLocalContextError,
+} from "../init/repoContext.js";
 import { readRepoConfig } from "../init/repoConfig.js";
 import { candidateValidationLayer } from "./candidateValidation/candidateValidationLayer.js";
 import { localCandidatePublicationGit } from "./publication/localCandidatePublicationGit.js";
@@ -42,9 +39,7 @@ export type LoadChangeSubmitResult =
   | { readonly ok: true; readonly submit: ChangeSubmit }
   | {
       readonly ok: false;
-      readonly error:
-        | LoadRepoLocalContextError
-        | { readonly code: "state_store_unavailable"; readonly taskPrefix: string };
+      readonly error: LoadRepoLocalContextError | { readonly code: "state_store_unavailable" };
     };
 
 export const loadChangeSubmit = (input: {
@@ -52,13 +47,13 @@ export const loadChangeSubmit = (input: {
   readonly globalConfigPath: string;
   readonly reviewerAgentRuntime?: ReviewerAgentRuntime;
 }): LoadChangeSubmitResult => {
-  const repoContext = loadRepoLocalContext(input.cwd);
+  const repoContext = loadRepoLocalSubmissionContext(input.cwd);
   if (!repoContext.ok) return repoContext;
   const context = repoContext.context;
   if (!existsSync(context.paths.statePath)) {
     return {
       ok: false,
-      error: { code: "state_store_unavailable", taskPrefix: context.taskPrefix },
+      error: { code: "state_store_unavailable" },
     };
   }
 
@@ -101,17 +96,6 @@ export const loadChangeSubmit = (input: {
               }),
             };
       },
-      resolveAgentEnvironment: (worktreePath): AgentEnvironmentResolution => {
-        const config = readRepoConfig(join(worktreePath, ".but-why", "config.json"));
-        if (!config.ok) {
-          return {
-            ok: false,
-            message: `Managed Worktree Repo Config is invalid: ${config.error.message}`,
-          };
-        }
-        const command = repoAgentEnvironment(config.config);
-        return command === undefined ? { ok: true } : { ok: true, command };
-      },
       publicationFor: (cwd) =>
         openCandidatePublication({
           changePersistence,
@@ -137,7 +121,7 @@ export const loadChangeSubmit = (input: {
     changePersistence: import("./changePersistence.js").ChangePersistence,
   ) =>
     candidateValidationLayer({
-      localRepositoryMainCheckoutRoot: context.root,
+      localRepositoryMainCheckoutRoot: context.mainCheckoutRoot,
       artifactsRoot: context.paths.artifactsPath,
       persistence,
       ...(input.reviewerAgentRuntime === undefined
@@ -174,7 +158,7 @@ export const loadChangeSubmit = (input: {
           capture: openSqliteCandidateCapturePersistence(),
           validation: openSqliteChangeValidationPersistence(),
           change: openSqliteChangePersistence(),
-          task: openSqliteTaskPersistence(context.taskPrefix),
+          task: openSqliteTaskPersistence(""),
         }).pipe(
           Effect.flatMap(({ capture, validation, change, task }) =>
             programFor(capture, validation, change, task)

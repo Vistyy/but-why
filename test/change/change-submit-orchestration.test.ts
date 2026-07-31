@@ -20,6 +20,7 @@ import { publicTaskId } from "../../src/task/taskId.js";
 import type { RemoteChangeBaseResult } from "../../src/submissionEnvironment/remoteChangeBase.js";
 import type { ChangeValidationPersistence } from "../../src/change/validation/changeValidationPersistence.js";
 import { ExecutionLockUnavailable, type ExecutionLock } from "../../src/contracts/executionLock.js";
+import { RepoConfigValidationFailed } from "../../src/contracts/configErrors.js";
 
 const now = "2026-06-30T12:00:00.000Z";
 const candidate = {
@@ -204,7 +205,7 @@ describe("Change Submit orchestration", () => {
         code: "validation_policy_invalid",
         message: "Managed Worktree Repo Config is invalid.",
       });
-      expect(events).toEqual(["reconcile"]);
+      expect(events).toEqual(["reconcile", "capture"]);
     }),
   );
 
@@ -1323,14 +1324,17 @@ const dependencies = (input: {
           };
         }),
     } satisfies ChangeReconciliation,
-    resolveAgentEnvironment: () =>
-      input.agentEnvironmentError === undefined
-        ? input.agentEnvironment === undefined
-          ? { ok: true as const }
-          : { ok: true as const, command: input.agentEnvironment }
-        : { ok: false as const, message: input.agentEnvironmentError },
-    resolvePolicy: () =>
-      input.taskBacked
+    resolvePolicy: () => {
+      if (input.agentEnvironmentError !== undefined) {
+        return {
+          ok: false as const,
+          error: new RepoConfigValidationFailed({
+            diagnostics: [],
+            message: input.agentEnvironmentError,
+          }),
+        };
+      }
+      return input.taskBacked
         ? ({
             ok: true,
             resolved: {
@@ -1351,7 +1355,19 @@ const dependencies = (input: {
               },
             },
           } as const)
-        : ({ ok: true, resolved: { taskBacked: false, policy: tasklessPolicy } } as const),
+        : ({
+            ok: true,
+            resolved: {
+              taskBacked: false,
+              policy: {
+                ...tasklessPolicy,
+                ...(input.agentEnvironment === undefined
+                  ? {}
+                  : { agentEnvironment: input.agentEnvironment }),
+              },
+            },
+          } as const);
+    },
     publicationFor: () => {
       const publication =
         input.publication ??
