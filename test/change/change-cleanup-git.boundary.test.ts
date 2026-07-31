@@ -154,6 +154,28 @@ describe("Change cleanup Git adapter", () => {
     expect(git(repository, "rev-parse", "refs/heads/feature")).not.toBe("");
   });
 
+  it("keeps cleanup pending when local Repository Branch verification fails", () => {
+    const repository = initializedRepository();
+    const commonDirectory = git(
+      repository,
+      "rev-parse",
+      "--path-format=absolute",
+      "--git-common-dir",
+    );
+    const branchPath = join(commonDirectory, "refs", "heads", "feature");
+    mkdirSync(dirname(branchPath), { recursive: true });
+    writeFileSync(branchPath, `${"1".repeat(40)}\n`);
+
+    expect(
+      cleanupChangeResources({
+        repositoryCommonDirectory: commonDirectory,
+        worktreePath: null,
+        branchRef: "refs/heads/feature",
+      }),
+    ).toEqual({ state: "pending", blockingReason: "branch_reachability_unavailable" });
+    expect(existsSync(branchPath)).toBe(true);
+  });
+
   it("removes a clean Managed Worktree but retains an unreachable branch", () => {
     const repository = initializedRepository();
     const worktreePath = join(repository, "feature-worktree");

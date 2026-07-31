@@ -111,7 +111,17 @@ export const cleanupChangeResources = (
     "--verify",
     `${input.branchRef}^{commit}`,
   ]);
-  if (branchHead.ok) {
+  if (!branchHead.ok) {
+    const branchRef = git(input.repositoryCommonDirectory, [
+      "show-ref",
+      "--verify",
+      "--quiet",
+      input.branchRef,
+    ]);
+    if (branchRef.ok || branchRef.status !== 1) {
+      return { state: "pending", blockingReason: "branch_reachability_unavailable" };
+    }
+  } else {
     const containingRefs = git(input.repositoryCommonDirectory, [
       "for-each-ref",
       "--contains",
@@ -415,7 +425,9 @@ const removeReviewerSession = (path: string): boolean => {
 const isFileSystemError = (error: unknown, code: string): boolean =>
   error instanceof Error && "code" in error && error.code === code;
 
-type GitResult = { readonly ok: true; readonly stdout: string } | { readonly ok: false };
+type GitResult =
+  | { readonly ok: true; readonly stdout: string }
+  | { readonly ok: false; readonly status: number | null };
 
 const git = (commonDirectory: string, args: readonly string[]): GitResult =>
   runGit([`--git-dir=${commonDirectory}`, ...args], commonDirectory);
@@ -443,7 +455,7 @@ const gitAtResolvedRemote = (commonDirectory: string, args: readonly string[]): 
     );
     return copied
       ? runGitWithoutUrlRewrites([`--git-dir=${temporaryGitDirectory}`, ...args], commonDirectory)
-      : { ok: false };
+      : { ok: false, status: null };
   } finally {
     rmSync(temporaryGitDirectory, { recursive: true, force: true });
   }
@@ -473,7 +485,9 @@ const runGitCommand = (args: readonly string[], cwd: string): GitResult => {
     encoding: "utf8",
     stdio: ["ignore", "pipe", "ignore"],
   });
-  return result.status === 0 ? { ok: true, stdout: result.stdout } : { ok: false };
+  return result.status === 0
+    ? { ok: true, stdout: result.stdout }
+    : { ok: false, status: result.status };
 };
 
 const runGitWithoutUrlRewrites = (args: readonly string[], cwd: string): GitResult => {
@@ -486,7 +500,9 @@ const runGitWithoutUrlRewrites = (args: readonly string[], cwd: string): GitResu
       stdio: ["ignore", "pipe", "ignore"],
     },
   );
-  return result.status === 0 ? { ok: true, stdout: result.stdout } : { ok: false };
+  return result.status === 0
+    ? { ok: true, stdout: result.stdout }
+    : { ok: false, status: result.status };
 };
 
 const branchNameForRef = (branchRef: string): string | undefined => {

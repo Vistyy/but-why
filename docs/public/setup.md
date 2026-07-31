@@ -253,7 +253,7 @@ by change blocker resolve <change-id> --file <path>
 
 Do not use an Implementation Blocker for Findings, tooling recovery, publication recovery, or ordinary implementation difficulty.
 
-After Submission publishes an owned pull request, stop for human merge.
+After Change Submit reports a ready owned pull request, the implementation agent reports its URL and waits for human merge.
 But Why does not merge pull requests.
 After the human merge, the user closes the Herdr Interactive Session manually.
 Then the main operator session runs Reconcile:
