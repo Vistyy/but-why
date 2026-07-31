@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { accessSync, constants } from "node:fs";
+import { accessSync, constants, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import type { ExtensionAPI, ExtensionContext, SessionEntry } from "@earendil-works/pi-coding-agent";
@@ -103,7 +103,10 @@ const commandPrefixFor = (cwd: string): ButWhyCommandPrefix => {
   try {
     accessSync(join(cwd, "justfile"), constants.R_OK);
     accessSync(join(cwd, "bin/by"), constants.X_OK);
-    return "just by";
+    const packageJson = JSON.parse(readFileSync(join(cwd, "package.json"), "utf8")) as {
+      readonly name?: unknown;
+    };
+    return packageJson.name === "but-why" ? "just by" : "npx -y but-why";
   } catch {
     return "npx -y but-why";
   }

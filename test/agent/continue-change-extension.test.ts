@@ -1,3 +1,6 @@
+import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import type { ExtensionAPI, ExtensionContext, SessionEntry } from "@earendil-works/pi-coding-agent";
@@ -212,6 +215,27 @@ describe("packaged Change Implement continuation extension", () => {
       args: ["-y", "but-why", "--output", "json", "change", "show", changeId],
     });
     expect(harness.sent[0]).toContain(`npx -y but-why change show ${changeId}`);
+  });
+
+  it("does not treat unrelated target tooling as the source repository", async () => {
+    const target = mkdtempSync(join(tmpdir(), "but-why-extension-target-"));
+    mkdirSync(join(target, "bin"));
+    writeFileSync(join(target, "justfile"), "by:\n  @true\n");
+    writeFileSync(join(target, "bin/by"), "#!/bin/sh\n");
+    chmodSync(join(target, "bin/by"), 0o755);
+    writeFileSync(join(target, "package.json"), JSON.stringify({ name: "unrelated-target" }));
+
+    try {
+      const harness = createHarness(target);
+      await harness.emit("session_start", { type: "session_start", reason: "startup" });
+
+      expect(harness.execCalls).toContainEqual({
+        command: "npx",
+        args: ["-y", "but-why", "--output", "json", "change", "show", changeId],
+      });
+    } finally {
+      rmSync(target, { recursive: true, force: true });
+    }
   });
 
   it("does not leave an inspection failure idle", async () => {
