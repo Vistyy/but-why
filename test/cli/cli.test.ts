@@ -108,8 +108,7 @@ describe("by CLI", () => {
       expect(JSON.parse(result.stdout)).toMatchObject({
         error: {
           code: "invalid_usage",
-          message:
-            "Invalid subcommand for by - use one of 'init', 'task', 'change', 'validation-run'",
+          message: "Received unknown argument: 'extra'",
         },
       });
     }),

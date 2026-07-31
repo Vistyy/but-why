@@ -589,9 +589,14 @@ const parserArgs = (args: readonly string[]): readonly string[] => {
 
 const generatedHelpLeftoverUsage = (args: readonly string[]): Effect.Effect<CliResult> => {
   const helpIndex = args.findIndex((arg) => arg === "--help" || arg === "-h");
-  const forcedLeftoverArgs =
-    helpIndex < 0 ? args : [...args.slice(0, helpIndex), "--", ...args.slice(helpIndex + 1)];
-  return generatedLeftoverUsage(forcedLeftoverArgs);
+  const outputPrefix =
+    args[0] === "--output" || args[0] === "-o"
+      ? args.slice(0, 2)
+      : args[0]?.startsWith("--output=") || args[0]?.startsWith("-o=")
+        ? args.slice(0, 1)
+        : [];
+  const trailingArgs = helpIndex < 0 ? [] : args.slice(helpIndex + 1);
+  return generatedLeftoverUsage([...outputPrefix, "task", "list", "--", ...trailingArgs]);
 };
 
 const generatedLeftoverUsage = (args: readonly string[]): Effect.Effect<CliResult> =>
