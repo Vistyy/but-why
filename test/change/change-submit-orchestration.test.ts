@@ -4,6 +4,7 @@ import { describe } from "vitest";
 
 import { CandidateValidation } from "../../src/change/candidateValidation/validateCandidate.js";
 import type { ChangeRecord } from "../../src/change/change.js";
+import type { RepoConfig } from "../../src/contracts/repoConfig.js";
 import type { ChangePersistence } from "../../src/change/changePersistence.js";
 import type { ChangeReconciliation } from "../../src/change/reconcileChange.js";
 import { openChangeSubmit } from "../../src/change/submitChange.js";
@@ -1324,7 +1325,11 @@ const dependencies = (input: {
           };
         }),
     } satisfies ChangeReconciliation,
-    resolvePolicy: () => {
+    loadRepoConfig: () =>
+      input.agentEnvironmentError === undefined
+        ? { ok: true as const, config: { taskPrefix: "BY" } }
+        : { ok: false as const, message: input.agentEnvironmentError },
+    resolvePolicy: (_taskBacked: boolean, _repoConfig: RepoConfig, _worktreePath: string) => {
       if (input.agentEnvironmentError !== undefined) {
         return {
           ok: false as const,

@@ -1,5 +1,6 @@
 import { Effect } from "effect";
 
+import type { RepoConfig } from "../contracts/repoConfig.js";
 import type {
   CandidateValidationPolicyResolution,
   ResolvedCandidateValidationPolicy,
@@ -128,6 +129,10 @@ export type PublicationTargetDetectionResult =
       readonly code: "PR_TARGET_NOT_FOUND" | "GITHUB_TOOLING_ERROR";
     };
 
+export type ManagedRepoConfigResolution =
+  | { readonly ok: true; readonly config: RepoConfig }
+  | { readonly ok: false; readonly message: string };
+
 export type ChangeSubmitInput = {
   readonly changeId: string;
   readonly now: string;
@@ -156,8 +161,10 @@ export const openChangeSubmit = (dependencies: {
   readonly persistence: ChangePersistence;
   readonly taskPersistence: Pick<TaskPersistence, "getTaskById" | "transitionTaskState">;
   readonly reconciliation: ChangeReconciliation;
+  readonly loadRepoConfig: (worktreePath: string) => ManagedRepoConfigResolution;
   readonly resolvePolicy: (
     taskBacked: boolean,
+    repoConfig: RepoConfig,
     worktreePath: string,
   ) => CandidateValidationPolicyResolution;
   readonly publicationFor: (cwd: string) => CandidatePublication;
@@ -262,15 +269,12 @@ const submitChange = (
         }
       }
     }
-    const policy = dependencies.resolvePolicy(
-      change.acceptanceContext !== null,
-      change.worktreePath,
-    );
-    if (!policy.ok) {
+    const managedRepoConfig = dependencies.loadRepoConfig(change.worktreePath);
+    if (!managedRepoConfig.ok) {
       return {
         ok: false,
         code: "validation_policy_invalid",
-        message: policy.error.message,
+        message: managedRepoConfig.message,
       } as const;
     }
     const refreshedBase = dependencies.refreshBase(
@@ -291,6 +295,18 @@ const submitChange = (
         return { ok: true, status: "nothing_to_submit", changeId: change.id } as const;
       }
       if (change.publication === null) {
+        const policy = dependencies.resolvePolicy(
+          true,
+          managedRepoConfig.config,
+          change.worktreePath,
+        );
+        if (!policy.ok) {
+          return {
+            ok: false,
+            code: "validation_policy_invalid",
+            message: policy.error.message,
+          } as const;
+        }
         if (!policy.resolved.taskBacked) {
           return {
             ok: false,
@@ -307,6 +323,18 @@ const submitChange = (
           input.progress,
         );
       }
+    }
+    const policy = dependencies.resolvePolicy(
+      change.acceptanceContext !== null,
+      managedRepoConfig.config,
+      change.worktreePath,
+    );
+    if (!policy.ok) {
+      return {
+        ok: false,
+        code: "validation_policy_invalid",
+        message: policy.error.message,
+      } as const;
     }
     const target = detectPublicationTarget(dependencies, change, candidate);
     if (!target.ok) return githubTargetFailure(target);

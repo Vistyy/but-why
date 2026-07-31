@@ -1,7 +1,6 @@
 import { existsSync, rmSync } from "node:fs";
 import { join } from "node:path";
 
-import { RepoConfigValidationFailed } from "../contracts/configErrors.js";
 import { Effect } from "effect";
 
 import type { ReviewerAgentRuntime } from "../agent/reviewerAgentRuntime.js";
@@ -15,7 +14,12 @@ import {
 } from "./candidateCapture/localGitCandidate.js";
 import { cleanupChangeResources } from "./localChangeCleanupGit.js";
 import { openChangeReconciliation } from "./reconcileChange.js";
-import { openChangeSubmit, type ChangeSubmit, type ChangeSubmitResult } from "./submitChange.js";
+import {
+  openChangeSubmit,
+  type ChangeSubmit,
+  type ChangeSubmitResult,
+  type ManagedRepoConfigResolution,
+} from "./submitChange.js";
 import {
   loadRepoLocalSubmissionContext,
   type LoadRepoLocalContextError,
@@ -70,32 +74,28 @@ export const loadChangeSubmit = (input: {
       reviewerSessionPathFor: (changeId) => join(context.paths.operationalDir, changeId),
     });
     return openChangeSubmit({
+      loadRepoConfig: (worktreePath): ManagedRepoConfigResolution => {
+        const managedConfig = readRepoConfig(join(worktreePath, ".but-why", "config.json"));
+        return managedConfig.ok
+          ? managedConfig
+          : {
+              ok: false,
+              message: `Managed Worktree Repo Config is invalid: ${managedConfig.error.message}`,
+            };
+      },
       repositoryCommonDirectory: context.commonDirectory,
       repositoryPath: context.root,
       persistence: changePersistence,
       taskPersistence,
       reconciliation,
-      resolvePolicy: (taskBacked, worktreePath) => {
-        const managedConfig = readRepoConfig(join(worktreePath, ".but-why", "config.json"));
-        return managedConfig.ok
-          ? resolveCandidateValidationPolicy({
-              context,
-              globalConfigPath: input.globalConfigPath,
-              taskBacked,
-              repoConfig: managedConfig.config,
-              repoRoot: worktreePath,
-            })
-          : {
-              ok: false,
-              error: new RepoConfigValidationFailed({
-                ...(managedConfig.error.path === undefined
-                  ? {}
-                  : { path: managedConfig.error.path }),
-                diagnostics: managedConfig.error.diagnostics,
-                message: managedConfig.error.message,
-              }),
-            };
-      },
+      resolvePolicy: (taskBacked, repoConfig, worktreePath) =>
+        resolveCandidateValidationPolicy({
+          context,
+          globalConfigPath: input.globalConfigPath,
+          taskBacked,
+          repoConfig,
+          repoRoot: worktreePath,
+        }),
       publicationFor: (cwd) =>
         openCandidatePublication({
           changePersistence,
