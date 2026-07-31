@@ -798,7 +798,12 @@ const changeCancelResult = (result: ChangeCancellationResult): CliResult => {
     return runtimeError({
       code: result.code,
       message: `Validation Run ${result.validationRunId} remains active for this Change.`,
-      details: { changeId: result.changeId },
+      details: {
+        changeId: result.changeId,
+        ...(result.validationRunId === undefined
+          ? {}
+          : { validationRunId: result.validationRunId }),
+      },
       help: [
         `After stopping every process from the run, execute \`by validation-run abandon ${result.validationRunId} --reason <reason>\`.`,
       ],
