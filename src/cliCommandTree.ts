@@ -20,7 +20,10 @@ import { runContextApplyCommand } from "./cli/task/commands/contextApply.js";
 import { runContextCommand } from "./cli/task/commands/context.js";
 import { runContextDraftCommand } from "./cli/task/commands/contextDraft.js";
 import { runCreateCommand } from "./cli/task/commands/create.js";
-import { runDependenciesCommand } from "./cli/task/commands/dependencies.js";
+import {
+  dependencyOptionRequiredError,
+  runDependenciesCommand,
+} from "./cli/task/commands/dependencies.js";
 import { defaultTaskListLimit, runListCommand } from "./cli/task/commands/list.js";
 import { runTaskShowCommand } from "./cli/task/commands/show.js";
 import {
@@ -610,13 +613,13 @@ export const runCommandTree = (
 
     if (commandResult._tag === "Left") {
       if (ValidationError.isValidationError(commandResult.left)) {
-        if (replaceWithoutPrerequisite(args)) {
+        const missingOperation = missingDependencyOperation(
+          args,
+          generatedText(commandResult.left.error),
+        );
+        if (missingOperation !== undefined) {
           return {
-            ...usageError({
-              code: "replace_requires_dependency",
-              message: "The replace operation requires at least one prerequisite.",
-              help: ["Use `by task dependencies clear <task-id>` to remove all prerequisites."],
-            }),
+            ...dependencyOptionRequiredError(missingOperation),
             outputFormat: outputFormatForArgs(args),
           };
         }
@@ -715,14 +718,34 @@ export const outputFormatForArgs = (args: readonly string[]): OutputFormat => {
   return "toon";
 };
 
-const replaceWithoutPrerequisite = (args: readonly string[]): boolean => {
+const missingDependencyOperation = (
+  args: readonly string[],
+  validationMessage: string,
+): "add" | "remove" | "replace" | undefined => {
+  if (
+    validationMessage !== "Expected at least 1 value(s) for option: '--depends-on'" ||
+    args.includes("--depends-on")
+  ) {
+    return undefined;
+  }
+  const globalOptions = new Set([
+    "--output",
+    "-o",
+    "--log-level",
+    "--completions",
+    "--wizard",
+    "--version",
+    "--help",
+  ]);
+  if (args.some((arg) => arg.startsWith("--") && !globalOptions.has(arg))) {
+    return undefined;
+  }
   const taskIndex = args.indexOf("task");
-  return (
-    taskIndex >= 0 &&
-    args[taskIndex + 1] === "dependencies" &&
-    args[taskIndex + 2] === "replace" &&
-    !args.includes("--depends-on")
-  );
+  const operation = args[taskIndex + 2];
+  return args[taskIndex + 1] === "dependencies" &&
+    (operation === "add" || operation === "remove" || operation === "replace")
+    ? operation
+    : undefined;
 };
 
 const generatedText = (help: HelpDoc.HelpDoc): string => {

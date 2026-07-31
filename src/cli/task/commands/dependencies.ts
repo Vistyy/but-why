@@ -19,32 +19,32 @@ export type TaskDependenciesCommand = {
   readonly dependsOn: readonly string[];
 };
 
+export const dependencyOptionRequiredError = (operation: "add" | "remove" | "replace"): CliResult =>
+  usageError({
+    code: operation === "replace" ? "replace_requires_dependency" : "depends_on_required",
+    message:
+      operation === "replace"
+        ? "The replace operation requires at least one prerequisite."
+        : `The ${operation} operation requires at least one --depends-on value.`,
+    help: [
+      operation === "replace"
+        ? "Use `by task dependencies clear <task-id>` to remove all prerequisites."
+        : `Use \`by task dependencies ${operation} <task-id> --depends-on <task-id>\`.`,
+    ],
+  });
+
 export const runDependenciesCommand = (
   command: TaskDependenciesCommand,
   environment: TaskCommandEnvironment,
 ): Effect.Effect<CliResult> => {
   if (command.operation === "replace" && command.dependsOn.length === 0) {
-    return Effect.succeed(
-      usageError({
-        code: "replace_requires_dependency",
-        message: "The replace operation requires at least one prerequisite.",
-        help: ["Use `by task dependencies clear <task-id>` to remove all prerequisites."],
-      }),
-    );
+    return Effect.succeed(dependencyOptionRequiredError("replace"));
   }
   if (
     (command.operation === "add" || command.operation === "remove") &&
     command.dependsOn.length === 0
   ) {
-    return Effect.succeed(
-      usageError({
-        code: "depends_on_required",
-        message: `The ${command.operation} operation requires at least one --depends-on value.`,
-        help: [
-          `Use \`by task dependencies ${command.operation} <task-id> --depends-on <task-id>\`.`,
-        ],
-      }),
-    );
+    return Effect.succeed(dependencyOptionRequiredError(command.operation));
   }
 
   const parsedDependent = parseCliTaskIdValue(command.taskId);

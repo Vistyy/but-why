@@ -180,6 +180,29 @@ describe("Task dependency CLI", () => {
         help: ["Use `by task dependencies clear <task-id>` to remove all prerequisites."],
       });
 
+      for (const operation of ["add", "remove"] as const) {
+        const missingDependency = yield* runByInProcessEffect(
+          root,
+          ["--output", "json", "task", "dependencies", operation, "BY-4"],
+          now,
+        );
+        expect(missingDependency.status).toBe(2);
+        expect(JSON.parse(missingDependency.stdout)).toMatchObject({
+          error: { code: "depends_on_required" },
+          help: [`Use \`by task dependencies ${operation} <task-id> --depends-on <task-id>\`.`],
+        });
+      }
+
+      const invalidReplace = yield* runByInProcessEffect(
+        root,
+        ["--output", "json", "task", "dependencies", "replace", "BY-4", "--bad"],
+        now,
+      );
+      expect(invalidReplace.status).toBe(2);
+      expect(JSON.parse(invalidReplace.stdout)).toMatchObject({
+        error: { code: "invalid_usage" },
+      });
+
       const cleared = yield* runByInProcessEffect(
         root,
         ["--output", "json", "task", "dependencies", "clear", "BY-4"],
