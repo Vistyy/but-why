@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
-import { existsSync } from "node:fs";
-import { fileURLToPath } from "node:url";
+import { accessSync, constants } from "node:fs";
+import { join } from "node:path";
 
 import type { ExtensionAPI, ExtensionContext, SessionEntry } from "@earendil-works/pi-coding-agent";
 
@@ -97,9 +97,20 @@ const watcherWidget = "but-why-change-watcher";
 const maxUnchangedRestarts = 3;
 const changeIdPattern =
   /^\s*Change identity:\s*([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.?\s*$/imu;
-const sourceRepository = existsSync(fileURLToPath(new URL("../justfile", import.meta.url)));
-const butWhyCommand = (...args: readonly string[]): string =>
-  [sourceRepository ? "just by" : "npx -y but-why", ...args].join(" ");
+type ButWhyCommandPrefix = "just by" | "npx -y but-why";
+
+const commandPrefixFor = (cwd: string): ButWhyCommandPrefix => {
+  try {
+    accessSync(join(cwd, "justfile"), constants.R_OK);
+    accessSync(join(cwd, "bin/by"), constants.X_OK);
+    return "just by";
+  } catch {
+    return "npx -y but-why";
+  }
+};
+
+const butWhyCommand = (prefix: ButWhyCommandPrefix, ...args: readonly string[]): string =>
+  [prefix, ...args].join(" ");
 
 export const extractChangeId = (text: string): string | undefined =>
   text.match(changeIdPattern)?.[1];
@@ -151,12 +162,13 @@ export const buildContinuationMessage = (
   decision: ContinuationDecision,
   changeId: string,
   compactionReason: "threshold" | undefined = undefined,
+  commandPrefix: ButWhyCommandPrefix = "just by",
 ): string => {
   if (decision.kind === "idle") return "";
   if (decision.kind === "findings") {
     return [
       `The Change ${changeId} has Findings.`,
-      `Inspect the Findings with \`${butWhyCommand("change", "findings", changeId)}\`, fix every applicable problem in the Managed Worktree, commit the fixes, and submit again with \`${butWhyCommand("change", "submit", changeId)}\`.`,
+      `Inspect the Findings with \`${butWhyCommand(commandPrefix, "change", "findings", changeId)}\`, fix every applicable problem in the Managed Worktree, commit the fixes, and submit again with \`${butWhyCommand(commandPrefix, "change", "submit", changeId)}\`.`,
     ].join(" ");
   }
   if (compactionReason === "threshold") {
@@ -168,7 +180,7 @@ export const buildContinuationMessage = (
   }
   return [
     `The Change ${changeId} is still unfinished.`,
-    `Inspect \`${butWhyCommand("change", "show", changeId)}\` and the Managed Worktree, then take the next concrete implementation action.`,
+    `Inspect \`${butWhyCommand(commandPrefix, "change", "show", changeId)}\` and the Managed Worktree, then take the next concrete implementation action.`,
   ].join(" ");
 };
 
@@ -344,14 +356,21 @@ export default function continueChange(pi: ExtensionAPI): void {
     }
   };
 
-  const cliInvocation = (args: readonly string[]): readonly [string, ...string[]] =>
-    sourceRepository ? ["just", "by", ...args] : ["npx", "-y", "but-why", ...args];
+  const cliInvocation = (
+    cwd: string,
+    args: readonly string[],
+  ): readonly [string, ...string[]] => {
+    const prefix = commandPrefixFor(cwd);
+    return prefix === "just by"
+      ? ["just", "by", ...args]
+      : ["npx", "-y", "but-why", ...args];
+  };
 
   const inspectCommand = async (
     commandArgs: readonly string[],
     cwd: string,
   ): Promise<RunResult> => {
-    const [command, ...args] = cliInvocation(commandArgs);
+    const [command, ...args] = cliInvocation(cwd, commandArgs);
     return run(command, args, cwd);
   };
 
@@ -461,18 +480,20 @@ export default function continueChange(pi: ExtensionAPI): void {
     id: string,
     resolution: Readonly<Record<string, unknown>>,
     hasFindings: boolean,
+    commandPrefix: ButWhyCommandPrefix,
   ): string => {
     const content = recordValue(resolution, "content");
     const explanation = typeof content === "string" ? content : "The approved Resolution has no recorded text.";
     const next = hasFindings
-      ? `Now inspect the earlier Findings with \`${butWhyCommand("change", "findings", id)}\`, fix every applicable problem in the Managed Worktree, commit the fixes, and submit again with \`${butWhyCommand("change", "submit", id)}\`.`
-      : `Now inspect \`${butWhyCommand("change", "show", id)}\` and the Managed Worktree, then take the next concrete implementation action.`;
+      ? `Now inspect the earlier Findings with \`${butWhyCommand(commandPrefix, "change", "findings", id)}\`, fix every applicable problem in the Managed Worktree, commit the fixes, and submit again with \`${butWhyCommand(commandPrefix, "change", "submit", id)}\`.`
+      : `Now inspect \`${butWhyCommand(commandPrefix, "change", "show", id)}\` and the Managed Worktree, then take the next concrete implementation action.`;
     return `An Implementation Blocker Resolution was recorded for Change ${id}: ${explanation} ${next}`;
   };
 
   const validationFailureMessage = (
     id: string,
     snapshot: ChangeInspectionSnapshot,
+    commandPrefix: ButWhyCommandPrefix,
   ): string => {
     const runId =
       snapshot.currentValidationRun === null
@@ -480,9 +501,9 @@ export default function continueChange(pi: ExtensionAPI): void {
         : recordValue(snapshot.currentValidationRun, "id");
     const detail =
       typeof runId === "string"
-        ? `Inspect the Validation Tooling Failure with \`${butWhyCommand("validation-run", "show", runId)}\`.`
-        : `Inspect the Validation Tooling Failure with \`${butWhyCommand("change", "show", id)}\`.`;
-    return `The Change ${id} has a Validation Tooling Failure. ${detail} Recover the validation tooling, then submit the Change again with \`${butWhyCommand("change", "submit", id)}\`.`;
+        ? `Inspect the Validation Tooling Failure with \`${butWhyCommand(commandPrefix, "validation-run", "show", runId)}\`.`
+        : `Inspect the Validation Tooling Failure with \`${butWhyCommand(commandPrefix, "change", "show", id)}\`.`;
+    return `The Change ${id} has a Validation Tooling Failure. ${detail} Recover the validation tooling, then submit the Change again with \`${butWhyCommand(commandPrefix, "change", "submit", id)}\`.`;
   };
 
   const initialize = async (ctx: ExtensionContext): Promise<void> => {
@@ -660,6 +681,7 @@ export default function continueChange(pi: ExtensionAPI): void {
               id,
               currentResolution,
               observed.snapshot.findingCount > 0,
+              commandPrefixFor(ctx.cwd),
             ),
           );
         } else {
@@ -670,7 +692,9 @@ export default function continueChange(pi: ExtensionAPI): void {
       if (explicit && observed.snapshot.toolingFailureCount > 0) {
         pendingThresholdCompaction = false;
         showWatcher(ctx, { kind: "stopped" });
-        pi.sendUserMessage(validationFailureMessage(id, observed.snapshot));
+        pi.sendUserMessage(
+          validationFailureMessage(id, observed.snapshot, commandPrefixFor(ctx.cwd)),
+        );
         return;
       }
 
@@ -693,6 +717,7 @@ export default function continueChange(pi: ExtensionAPI): void {
         decision,
         id,
         pendingThresholdCompaction ? "threshold" : undefined,
+        commandPrefixFor(ctx.cwd),
       );
       pendingThresholdCompaction = false;
       showWatcher(ctx, { kind: "watching" });

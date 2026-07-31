@@ -1,3 +1,5 @@
+import { fileURLToPath } from "node:url";
+
 import type { ExtensionAPI, ExtensionContext, SessionEntry } from "@earendil-works/pi-coding-agent";
 import { describe, expect, it } from "vitest";
 
@@ -24,7 +26,9 @@ type TestBlockerHistory = {
 type EventHandler = (event: unknown, context: ExtensionContext) => unknown;
 type CommandHandler = (args: string, context: ExtensionContext) => unknown;
 
-const createHarness = () => {
+const sourceCwd = fileURLToPath(new URL("../../", import.meta.url));
+
+const createHarness = (cwd = sourceCwd) => {
   const handlers = new Map<string, EventHandler>();
   const commands = new Map<string, CommandHandler>();
   const entries: SessionEntry[] = [
@@ -73,11 +77,13 @@ const createHarness = () => {
     async exec(command: string, args: string[]) {
       execCalls.push({ command, args });
       const sourceCli = command === "just" && args[0] === "by";
-      if (sourceCli && inspectionGate !== undefined) await inspectionGate;
-      if (sourceCli && inspectionFails) return { stdout: "", stderr: "", code: 1, killed: true };
-      if (sourceCli && args.includes("blocker"))
+      const publishedCli = command === "npx" && args[0] === "-y" && args[1] === "but-why";
+      if ((sourceCli || publishedCli) && inspectionGate !== undefined) await inspectionGate;
+      if ((sourceCli || publishedCli) && inspectionFails)
+        return { stdout: "", stderr: "", code: 1, killed: true };
+      if ((sourceCli || publishedCli) && args.includes("blocker"))
         return result(JSON.stringify(currentBlockerHistory));
-      if (sourceCli) return result(JSON.stringify(currentSnapshot));
+      if (sourceCli || publishedCli) return result(JSON.stringify(currentSnapshot));
       if (command === "git" && args[0] === "rev-parse") return result("head\n");
       if (command === "git" && args[0] === "status") return result("");
       if (command === "git" && (args[0] === "diff" || args[0] === "ls-files")) return result("");
@@ -86,7 +92,7 @@ const createHarness = () => {
   } as unknown as ExtensionAPI;
   continueChange(api);
   const context = {
-    cwd: "/managed/change",
+    cwd,
     sessionManager: { getBranch: () => [...entries] },
     isIdle: () => idle,
     ui: {
@@ -193,6 +199,19 @@ describe("packaged Change Implement continuation extension", () => {
       command: "just",
       args: ["by", "--output", "json", "change", "blocker", "list", changeId],
     });
+  });
+
+  it("uses the published But Why executable for a packaged target", async () => {
+    const harness = createHarness("/managed/change");
+
+    await harness.emit("session_start", { type: "session_start", reason: "startup" });
+    await harness.emit("agent_settled");
+
+    expect(harness.execCalls).toContainEqual({
+      command: "npx",
+      args: ["-y", "but-why", "--output", "json", "change", "show", changeId],
+    });
+    expect(harness.sent[0]).toContain(`npx -y but-why change show ${changeId}`);
   });
 
   it("does not leave an inspection failure idle", async () => {
