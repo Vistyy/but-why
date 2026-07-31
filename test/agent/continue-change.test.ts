@@ -2,18 +2,12 @@ import { describe, expect, it } from "vitest";
 
 import {
   buildContinuationMessage,
-  commandPrefixForSourceCheckout,
   decideContinuation,
   extractChangeId,
   nextRetryState,
 } from "../../extensions/continue-change.js";
 
 describe("Change Implement continuation policy", () => {
-  it("uses the published command outside the source checkout guard", () => {
-    expect(commandPrefixForSourceCheckout(false)).toBe("npx -y but-why");
-    expect(commandPrefixForSourceCheckout(true)).toBe("just by");
-  });
-
   it("continues an unfinished Change with Findings instructions", () => {
     const decision = decideContinuation({
       change: { state: "open", closeReason: null },

@@ -74,14 +74,20 @@ const createHarness = (cwd = sourceCwd) => {
     sendUserMessage(message: string) {
       sent.push(message);
     },
-    async exec(command: string, args: string[]) {
+    async exec(command: string, args: string[], options?: { readonly cwd?: string }) {
       execCalls.push({ command, args });
       const sourceCli = command === "just" && args[0] === "by";
-      if (sourceCli && inspectionGate !== undefined) await inspectionGate;
-      if (sourceCli && inspectionFails) return { stdout: "", stderr: "", code: 1, killed: true };
-      if (sourceCli && args.includes("blocker"))
+      const publishedCli = command === "npx" && args[0] === "-y" && args[1] === "but-why";
+      if ((sourceCli || publishedCli) && inspectionGate !== undefined) await inspectionGate;
+      if ((sourceCli || publishedCli) && inspectionFails)
+        return { stdout: "", stderr: "", code: 1, killed: true };
+      if ((sourceCli || publishedCli) && args.includes("blocker"))
         return result(JSON.stringify(currentBlockerHistory));
-      if (sourceCli) return result(JSON.stringify(currentSnapshot));
+      if (sourceCli || publishedCli) return result(JSON.stringify(currentSnapshot));
+      if (command === "git" && args[0] === "rev-parse" && args.includes("--git-common-dir"))
+        return result(
+          `${options?.cwd?.replace(/\/$/u, "") === sourceCwd.replace(/\/$/u, "") ? "/repo/.git" : "/other/.git"}\n`,
+        );
       if (command === "git" && args[0] === "rev-parse") return result("head\n");
       if (command === "git" && args[0] === "status") return result("");
       if (command === "git" && (args[0] === "diff" || args[0] === "ls-files")) return result("");
@@ -197,6 +203,19 @@ describe("packaged Change Implement continuation extension", () => {
       command: "just",
       args: ["by", "--output", "json", "change", "blocker", "list", changeId],
     });
+  });
+
+  it("uses the published executable for a separate target repository", async () => {
+    const harness = createHarness("/managed/change");
+
+    await harness.emit("session_start", { type: "session_start", reason: "startup" });
+    await harness.emit("agent_settled");
+
+    expect(harness.execCalls).toContainEqual({
+      command: "npx",
+      args: ["-y", "but-why", "--output", "json", "change", "show", changeId],
+    });
+    expect(harness.sent[0]).toContain(`npx -y but-why change show ${changeId}`);
   });
 
   it("does not leave an inspection failure idle", async () => {
