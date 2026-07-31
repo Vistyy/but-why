@@ -20,14 +20,16 @@ Incomplete design, routine implementation, focused Check failure, Findings, and 
 Run `<but-why> change show <change-id>`.
 For a Task-backed Change, run `<but-why> task context <task-id>`.
 Treat the Task Context captured at Change Start as the accepted implementation intent.
-Use the Managed Worktree reported by Change Show for every edit, test, and commit.
+Use the Managed Worktree reported by Change Show for every edit, verification command, and commit.
 
 This step is complete when the Change, accepted intent, readiness, and Managed Worktree are known.
 
 ## 2. Implement and commit
 
 Follow the repository instructions in the Managed Worktree.
-Use test-driven development at the applicable public seams.
+Use task-specific verification requirements in accepted Task Context when present.
+Otherwise, select focused evidence that is proportionate to the Candidate's material risks under the repository's accepted verification policy.
+Do not require a durable automated test unless accepted verification requirements require one.
 Record each material Implementation Decision when it is made with `by change decision add <change-id> --file <path>`.
 A material decision affects observable behavior, an interface, stored data, failure handling, or a meaningful trade-off.
 Do not record routine coding choices.
@@ -37,7 +39,7 @@ Continue through recoverable problems and local implementation choices.
 Raise an Implementation Blocker only when accepted implementation cannot safely continue without external authority or action.
 Do not raise a blocker for ordinary difficulty, Findings, tooling recovery, publication recovery, or autonomous Task cancellation.
 Stop and report when continuing requires human authority or when the approved intent appears wrong or impossible.
-Run only focused tests and relevant focused static checks during implementation.
+Collect only the focused evidence required for the Candidate during implementation.
 Do not manually run a repository-wide quality command, complete test suite, coverage workload, or review before Submission.
 Change Submit owns the configured blocking Checks and reviews.
 If Acceptance Context requires a blocking gate to pass, satisfy that requirement through Change Submit instead of running the gate manually.
