@@ -9,7 +9,7 @@ import type { ChangePersistence } from "./changePersistence.js";
 import type { ChangeCleanupOperationResult } from "./reconcileChange.js";
 import type { TaskPersistence } from "../task/taskPersistence.js";
 import type { GitHubPullRequest, GitHubPullRequestGateway } from "./ownedPullRequestGateway.js";
-import type { SqliteExecutionLock } from "../sqlite/sqliteExecutionLock.js";
+import type { ExecutionLock } from "../contracts/executionLock.js";
 import type { ChangeValidationPersistence } from "./validation/changeValidationPersistence.js";
 
 export type CancellationUseCases = {
@@ -40,7 +40,7 @@ export type CancellationDependencies = {
   readonly github: Pick<GitHubPullRequestGateway, "getPullRequest" | "closePullRequest">;
   readonly reviewerSessionPathFor?: (changeId: string) => string;
   readonly validation?: Pick<ChangeValidationPersistence, "getActiveForChange">;
-  readonly executionLock?: SqliteExecutionLock;
+  readonly executionLock?: ExecutionLock;
   readonly cleanup: (input: {
     readonly repositoryCommonDirectory: string;
     readonly worktreePath: string | null;

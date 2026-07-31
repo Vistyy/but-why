@@ -1,7 +1,7 @@
 import { Effect } from "effect";
 
 import type { RepositoryStorageError } from "../contracts/repositoryStorageError.js";
-import type { SqliteExecutionLock } from "../sqlite/sqliteExecutionLock.js";
+import type { ExecutionLock } from "../contracts/executionLock.js";
 import type { ChangeValidationPersistence } from "./validation/changeValidationPersistence.js";
 import {
   deleteValidationTempRef,
@@ -40,7 +40,7 @@ export type AbandonValidationRun = {
 
 export const openAbandonValidationRun = (input: {
   readonly persistence: ChangeValidationPersistence;
-  readonly executionLock: SqliteExecutionLock;
+  readonly executionLock: ExecutionLock;
   readonly repoRoot: string;
 }): AbandonValidationRun => ({
   abandon: (command) =>

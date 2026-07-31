@@ -2,10 +2,8 @@ import { expect, it } from "@effect/vitest";
 import { Deferred, Effect } from "effect";
 import { describe } from "vitest";
 
-import {
-  ExecutionLockUnavailable,
-  openSqliteExecutionLock,
-} from "../../src/sqlite/sqliteExecutionLock.js";
+import { ExecutionLockUnavailable } from "../../src/contracts/executionLock.js";
+import { openSqliteExecutionLock } from "../../src/sqlite/sqliteExecutionLock.js";
 import { createTestWorkspace } from "../support/testWorkspace.js";
 
 describe("SQLite execution lock", () => {

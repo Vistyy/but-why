@@ -18,7 +18,7 @@ import type {
 } from "./candidateCapture/captureLocalCandidate.js";
 import type { RepositoryBranchHeadResult } from "./candidateCapture/candidateCaptureGit.js";
 import type { RepositoryStorageError } from "../contracts/repositoryStorageError.js";
-import type { SqliteExecutionLock } from "../sqlite/sqliteExecutionLock.js";
+import type { ExecutionLock } from "../contracts/executionLock.js";
 import type { ChangeValidationPersistence } from "./validation/changeValidationPersistence.js";
 import type {
   CandidatePublication,
@@ -180,7 +180,7 @@ export const openChangeSubmit = (dependencies: {
   ) => PublicationTargetDetectionResult;
   readonly captureCandidate: CaptureCandidate;
   readonly validationPersistence?: Pick<ChangeValidationPersistence, "getActiveForChange">;
-  readonly executionLock?: SqliteExecutionLock;
+  readonly executionLock?: ExecutionLock;
 }): CandidateValidationChangeSubmit => ({
   submit: (input) => {
     const operation = submitChange(dependencies, input);

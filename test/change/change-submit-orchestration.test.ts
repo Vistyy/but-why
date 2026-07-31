@@ -19,10 +19,7 @@ import type { TaskPersistence } from "../../src/task/taskPersistence.js";
 import { publicTaskId } from "../../src/task/taskId.js";
 import type { RemoteChangeBaseResult } from "../../src/submissionEnvironment/remoteChangeBase.js";
 import type { ChangeValidationPersistence } from "../../src/change/validation/changeValidationPersistence.js";
-import {
-  ExecutionLockUnavailable,
-  type SqliteExecutionLock,
-} from "../../src/sqlite/sqliteExecutionLock.js";
+import { ExecutionLockUnavailable, type ExecutionLock } from "../../src/contracts/executionLock.js";
 
 const now = "2026-06-30T12:00:00.000Z";
 const candidate = {
@@ -79,7 +76,7 @@ describe("Change Submit orchestration", () => {
 
   it.effect("rejects a concurrent Submit before it reads Change state", () =>
     Effect.gen(function* () {
-      const lock: SqliteExecutionLock = {
+      const lock: ExecutionLock = {
         withLock: () =>
           Effect.fail(
             new ExecutionLockUnavailable({
@@ -1245,7 +1242,7 @@ const dependencies = (input: {
     readonly headSha: string;
   } | null;
   readonly validationPersistence?: Pick<ChangeValidationPersistence, "getActiveForChange">;
-  readonly executionLock?: SqliteExecutionLock;
+  readonly executionLock?: ExecutionLock;
   readonly refreshResults?: readonly RemoteChangeBaseResult[];
   readonly targetResult?:
     | { readonly ok: false; readonly code: "PR_TARGET_NOT_FOUND" }

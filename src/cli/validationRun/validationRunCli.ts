@@ -1,12 +1,6 @@
 import { Effect } from "effect";
 
-import { openAbandonValidationRun } from "../../change/abandonValidationRun.js";
-import { loadRepoLocalContext } from "../../init/repoContext.js";
-import { repositorySqlLayer } from "../../sqlite/repositorySql.js";
-import { openSqliteChangeValidationPersistence } from "../../sqlite/sqliteChangeValidationPersistence.js";
-import { openSqliteExecutionLock } from "../../sqlite/sqliteExecutionLock.js";
-import { existsSync } from "node:fs";
-
+import { loadAbandonValidationRun } from "../../change/loadAbandonValidationRun.js";
 import type { CliResult } from "../../cliResults.js";
 import {
   repoStateLoadError,
@@ -42,55 +36,39 @@ export const runAbandonCommand = (
       },
     });
   }
-  const loaded = loadRepoLocalContext(environment.cwd);
+  const loaded = loadAbandonValidationRun({ cwd: environment.cwd });
   if (!loaded.ok) return Effect.succeed(repoStateLoadError(loaded.error));
-  const context = loaded.context;
-  if (!existsSync(context.paths.statePath)) {
-    return Effect.succeed(stateStoreUnavailable(context.taskPrefix));
-  }
-  const program = Effect.all({
-    persistence: openSqliteChangeValidationPersistence(),
-  }).pipe(
-    Effect.flatMap(({ persistence }) =>
-      openAbandonValidationRun({
-        persistence,
-        executionLock: openSqliteExecutionLock({ commonDirectory: context.commonDirectory }),
-        repoRoot: context.mainCheckoutRoot,
-      }).abandon({
-        ...command,
-        now: environment.now().toISOString(),
-      }),
-    ),
-    Effect.map((result) => {
-      if (result.ok) return success(result);
-      if (result.status === "not_found") {
-        return validationRunNotFound(command.validationRunId);
-      }
-      if (result.status === "submission_in_progress") {
+  const program = loaded.abandon
+    .abandon({
+      ...command,
+      now: environment.now().toISOString(),
+    })
+    .pipe(
+      Effect.map((result) => {
+        if (result.ok) return success(result);
+        if (result.status === "not_found") {
+          return validationRunNotFound(command.validationRunId);
+        }
+        if (result.status === "submission_in_progress") {
+          return runtimeError({
+            code: result.status,
+            message: "Another Submission, cancellation, or abandonment already owns this Change.",
+            details: result,
+            help: ["Wait for the other operation to finish, then retry Validation Run Abandon."],
+          });
+        }
         return runtimeError({
-          code: result.status,
-          message: "Another Submission, cancellation, or abandonment already owns this Change.",
+          code: "validation_run_cleanup_failed",
+          message:
+            "Validation Run resources could not be cleaned up, so abandonment is incomplete.",
           details: result,
-          help: ["Wait for the other operation to finish, then retry Validation Run Abandon."],
+          help: [
+            `Stop every process, repair the reported resources, then retry \`by validation-run abandon ${command.validationRunId} --reason <reason>\`.`,
+          ],
         });
-      }
-      return runtimeError({
-        code: "validation_run_cleanup_failed",
-        message: "Validation Run resources could not be cleaned up, so abandonment is incomplete.",
-        details: result,
-        help: [
-          `Stop every process, repair the reported resources, then retry \`by validation-run abandon ${command.validationRunId} --reason <reason>\`.`,
-        ],
-      });
-    }),
-    Effect.provide(
-      repositorySqlLayer({
-        statePath: context.paths.statePath,
-        commonDirectory: context.commonDirectory,
       }),
-    ),
-    Effect.catchAll((error) => Effect.succeed(repositoryStorageErrorResult(error))),
-  );
+      Effect.catchAll((error) => Effect.succeed(repositoryStorageErrorResult(error))),
+    );
   return program;
 };
 

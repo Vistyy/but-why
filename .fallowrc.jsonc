@@ -57,6 +57,7 @@
         "patterns": [
           "src/change/candidateValidation/candidateValidationLayer.ts",
           "src/change/candidateValidation/loadCandidateValidationRunInspection.ts",
+          "src/change/loadAbandonValidationRun.ts",
           "src/change/loadChangeInspection.ts",
           "src/change/loadChangeSubmit.ts",
           "src/change/loadChangeUseCases.ts",
