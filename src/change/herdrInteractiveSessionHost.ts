@@ -55,7 +55,7 @@ const launchHerdrSession = async (
 ): Promise<InteractiveSessionLaunchResult> => {
   const options = { ...defaultOptions, ...environment };
   const command = boundedExecutor(execute, options.commandTimeoutMs);
-  const sessionName = herdrSessionName(input.changeId);
+  const sessionName = input.herdrName ?? herdrSessionName(input.changeId);
   let agents = await observe(command, ["agent", "list"], signal, options.observationRetries);
   if (!agents.ok) {
     return {
@@ -581,7 +581,7 @@ const piCommand = (input: InteractiveSessionLaunchInput, path: string | undefine
       ? []
       : ["--system-prompt", shellQuote(input.systemPrompt)]),
     "--name",
-    shellQuote(herdrSessionName(input.changeId)),
+    shellQuote(input.piSessionName ?? input.herdrName ?? herdrSessionName(input.changeId)),
     ...(model === undefined ? [] : ["--model", shellQuote(model)]),
     ...(thinking === undefined ? [] : ["--thinking", shellQuote(thinking)]),
     ...(profileFlags.length === 0 ? [] : [profileFlags]),

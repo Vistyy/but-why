@@ -279,6 +279,8 @@ const implementChange = (
         interactiveSessionHost.launch(
           {
             changeId: change.id,
+            herdrName: herdrNameForChange(change),
+            piSessionName: piSessionNameForChange(change),
             repositoryPath: context.mainCheckoutRoot,
             worktreePath: change.worktreePath,
             systemPrompt: buildImplementerSystemPrompt(),
@@ -313,6 +315,14 @@ const implementChange = (
       profileScope: resolvedAgentProfile.scope,
     };
   });
+
+const herdrNameForChange = (change: ChangeStartRecord): string =>
+  change.taskId === null ? `change-${change.id.slice(0, 8)}` : taskSlugForId(change.taskId);
+
+const piSessionNameForChange = (change: ChangeStartRecord): string =>
+  change.taskId === null || change.acceptanceContext === null
+    ? `Change ${change.id}`
+    : `${change.taskId} ${change.acceptanceContext.title}`;
 
 const agentProfileErrorMessage = (error: {
   readonly _tag: string;
