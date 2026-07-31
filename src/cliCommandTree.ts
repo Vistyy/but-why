@@ -722,23 +722,22 @@ const missingDependencyOperation = (
   args: readonly string[],
   validationMessage: string,
 ): "add" | "remove" | "replace" | undefined => {
-  if (
-    validationMessage !== "Expected at least 1 value(s) for option: '--depends-on'" ||
-    args.includes("--depends-on")
-  ) {
+  if (validationMessage !== "Expected at least 1 value(s) for option: '--depends-on'") {
     return undefined;
   }
-  const taskIndex = args.indexOf("task");
-  const operation = args[taskIndex + 2];
-  if (!validGlobalOptionSyntax(args, taskIndex + 3)) return undefined;
-  return args[taskIndex + 1] === "dependencies" &&
+  const positional = validGlobalOptionSyntax(args);
+  if (positional === undefined || positional.length !== 4) return undefined;
+  const [command, group, operation] = positional;
+  return command === "task" &&
+    group === "dependencies" &&
     (operation === "add" || operation === "remove" || operation === "replace")
     ? operation
     : undefined;
 };
 
-const validGlobalOptionSyntax = (args: readonly string[], taskIdIndex: number): boolean => {
+const validGlobalOptionSyntax = (args: readonly string[]): readonly string[] | undefined => {
   const seen = new Set<string>();
+  const positional: string[] = [];
   const valueOptions = new Map([
     ["--output", new Set(["toon", "json"])],
     [
@@ -751,25 +750,25 @@ const validGlobalOptionSyntax = (args: readonly string[], taskIdIndex: number): 
   const flags = new Set(["--wizard", "--version", "--help", "-h"]);
   for (let index = 0; index < args.length; index += 1) {
     const argument = args[index];
-    if (argument === undefined) return false;
+    if (argument === undefined) return undefined;
     if (!argument.startsWith("-")) {
-      if (index > taskIdIndex) return false;
+      positional.push(argument);
       continue;
     }
-    if (argument.includes("=")) return false;
+    if (argument.includes("=")) return undefined;
     const option = aliases.get(argument) ?? argument;
     if (flags.has(option)) {
-      if (seen.has(option)) return false;
+      if (seen.has(option)) return undefined;
       seen.add(option);
       continue;
     }
     const values = valueOptions.get(option);
-    if (values === undefined || seen.has(option)) return false;
+    if (values === undefined || seen.has(option)) return undefined;
     const value = args[++index];
-    if (value === undefined || value.startsWith("-") || !values.has(value)) return false;
+    if (value === undefined || value.startsWith("-") || !values.has(value)) return undefined;
     seen.add(option);
   }
-  return true;
+  return positional;
 };
 
 const generatedText = (help: HelpDoc.HelpDoc): string => {

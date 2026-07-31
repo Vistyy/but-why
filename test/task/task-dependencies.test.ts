@@ -223,6 +223,16 @@ describe("Task dependency CLI", () => {
         error: { code: "replace_requires_dependency" },
       });
 
+      const validLeadingGlobal = yield* runByInProcessEffect(
+        root,
+        ["task", "dependencies", "replace", "--output", "json", "BY-4"],
+        now,
+      );
+      expect(validLeadingGlobal.status).toBe(2);
+      expect(JSON.parse(validLeadingGlobal.stdout)).toMatchObject({
+        error: { code: "replace_requires_dependency" },
+      });
+
       for (const extraArgument of ["extra", "foo", "bar"] as const) {
         const extraPositional = yield* runByInProcessEffect(
           root,
