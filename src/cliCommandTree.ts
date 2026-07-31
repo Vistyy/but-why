@@ -212,7 +212,7 @@ const commandTree = Command.make("by", { output: globalOutput }).pipe(
   ]),
 );
 
-const cliConfig = CliConfig.defaultConfig;
+const cliConfig = CliConfig.make({ showBuiltIns: false });
 const parserLayer = (args: readonly string[]) =>
   Layer.mergeAll(
     NodeFileSystem.layer,
@@ -236,7 +236,7 @@ export const runCommandTree = (
               message: generatedText(parsed.left.error),
               help: ["Run `by --help` for generated command help."],
             }),
-            outputFormat: outputFormatFromLeadingArgs(args),
+            outputFormat: outputFormatForArgs(args),
           })
         : directiveResult(parsed.right, args, environment),
     ),
@@ -254,7 +254,7 @@ const directiveResult = (
         ? dashboardResult(environment, "toon")
         : Effect.succeed({
             ...success({ help: rootHelpCorrection(generatedText(directive.option.helpDoc)) }),
-            outputFormat: outputFormatFromLeadingArgs(originalArgs),
+            outputFormat: outputFormatForArgs(originalArgs),
           });
     }
     return Effect.succeed(
@@ -288,6 +288,45 @@ const dashboardResult = (
     environment,
   ).pipe(Effect.map((result) => ({ ...result, outputFormat })));
 
+type CommandPath =
+  | "init"
+  | "task"
+  | "task create"
+  | "task dependencies"
+  | "task dependencies set"
+  | "task list"
+  | "task show"
+  | "task approve"
+  | "task context"
+  | "task context draft"
+  | "task context apply"
+  | "task comment"
+  | "task cancel"
+  | "change"
+  | "change start"
+  | "change prepare"
+  | "change list"
+  | "change show"
+  | "change findings"
+  | "change validation-runs"
+  | "change submit"
+  | "change cancel"
+  | "change reconcile"
+  | "change implement"
+  | "change decision"
+  | "change decision add"
+  | "change decision list"
+  | "change blocker"
+  | "change blocker raise"
+  | "change blocker resolve"
+  | "change blocker list"
+  | "validation-run"
+  | "validation-run show"
+  | "validation-run artifact";
+
+const commandPath = (path: readonly string[]): CommandPath =>
+  path.slice(1).join(" ") as CommandPath;
+
 type ParsedCommandValue = {
   readonly path: readonly string[];
   readonly config: unknown;
@@ -319,158 +358,163 @@ const commandValue = (value: unknown): ParsedCommandValue => {
   return { path, config: current, output };
 };
 
+type CommandHandler = (
+  values: Record<string, unknown>,
+  environment: CliEnvironment,
+) => Effect.Effect<CliResult>;
+
+const commandHandlers: Record<CommandPath, CommandHandler> = {
+  init: (values, environment) =>
+    runInitCommand({ taskPrefix: requiredString(values, "taskPrefix") }, environment),
+  task: () => generatedCommandUsage(taskCommand),
+  "task dependencies": () => generatedCommandUsage(taskDependenciesCommand),
+  "task create": (values, environment) =>
+    runCreateCommand(
+      {
+        title: requiredString(values, "title"),
+        descriptionFile: requiredString(values, "descriptionFile"),
+        dependsOn: strings(values, "dependsOn"),
+      },
+      environment,
+    ),
+  "task dependencies set": (values, environment) =>
+    runDependenciesCommand(
+      {
+        taskId: requiredString(values, "taskId"),
+        dependsOn: strings(values, "dependsOn"),
+      },
+      environment,
+    ),
+  "task list": (values, environment) =>
+    runListCommand(
+      {
+        all: boolean(values, "all"),
+        state: optionalString(values, "state") as TaskState | undefined,
+      },
+      environment,
+    ),
+  "task show": (values, environment) => runTaskShowCommand(taskId(values), environment),
+  "task approve": (values, environment) => runApproveCommand(taskId(values), environment),
+  "task context": (values, environment) => {
+    const taskId = optionalString(values, "taskId");
+    return taskId === undefined
+      ? generatedCommandUsage(taskContextCommand)
+      : runContextCommand({ taskId }, environment);
+  },
+  "task context draft": (values, environment) =>
+    runContextDraftCommand(taskId(values), environment),
+  "task context apply": (values, environment) =>
+    runContextApplyCommand(taskId(values), environment),
+  "task comment": (values, environment) =>
+    runCommentCommand(
+      { taskId: requiredString(values, "taskId"), file: requiredString(values, "file") },
+      environment,
+    ),
+  "task cancel": (values, environment) =>
+    runCancelCommand(
+      { taskId: requiredString(values, "taskId"), reason: requiredString(values, "reason") },
+      environment,
+    ),
+  change: () => generatedCommandUsage(changeCommand),
+  "change decision": () => generatedCommandUsage(changeDecisionCommand),
+  "change blocker": () => generatedCommandUsage(changeBlockerCommand),
+  "change start": (values, environment) =>
+    runStart(
+      {
+        taskId: optionalString(values, "task"),
+        baseBranch: optionalString(values, "base"),
+      },
+      environment as ChangeCommandEnvironment,
+    ),
+  "change prepare": (values, environment) =>
+    runPrepare(changeId(values), environment as ChangeCommandEnvironment),
+  "change list": (values, environment) =>
+    runList({ all: boolean(values, "all") }, environment as ChangeCommandEnvironment),
+  "change show": (values, environment) =>
+    runShow(changeId(values), environment as ChangeCommandEnvironment),
+  "change findings": (values, environment) =>
+    runFindings(changeId(values), environment as ChangeCommandEnvironment),
+  "change validation-runs": (values, environment) =>
+    runValidationRuns(changeId(values), environment as ChangeCommandEnvironment),
+  "change submit": (values, environment) =>
+    runSubmit(changeId(values), environment as ChangeCommandEnvironment),
+  "change cancel": (values, environment) =>
+    runCancel(changeId(values), environment as ChangeCommandEnvironment),
+  "change reconcile": (values, environment) =>
+    runReconcile(
+      { changeId: optionalString(values, "changeId") },
+      environment as ChangeCommandEnvironment,
+    ),
+  "change implement": (values, environment) =>
+    runImplement(
+      {
+        changeId: requiredString(values, "changeId"),
+        handoffFile: optionalString(values, "handoffFile"),
+      },
+      environment as ChangeCommandEnvironment,
+    ),
+  "change decision add": (values, environment) =>
+    runDecision(
+      {
+        action: "add",
+        changeId: requiredString(values, "changeId"),
+        file: requiredString(values, "file"),
+      },
+      environment as ChangeCommandEnvironment,
+    ),
+  "change decision list": (values, environment) =>
+    runDecision(
+      { action: "list", changeId: requiredString(values, "changeId") },
+      environment as ChangeCommandEnvironment,
+    ),
+  "change blocker raise": (values, environment) =>
+    runBlocker(
+      {
+        action: "raise",
+        changeId: requiredString(values, "changeId"),
+        file: requiredString(values, "file"),
+      },
+      environment as ChangeCommandEnvironment,
+    ),
+  "change blocker resolve": (values, environment) =>
+    runBlocker(
+      {
+        action: "resolve",
+        changeId: requiredString(values, "changeId"),
+        file: requiredString(values, "file"),
+      },
+      environment as ChangeCommandEnvironment,
+    ),
+  "change blocker list": (values, environment) =>
+    runBlocker(
+      { action: "list", changeId: requiredString(values, "changeId") },
+      environment as ChangeCommandEnvironment,
+    ),
+  "validation-run": () => generatedCommandUsage(validationRunCommand),
+  "validation-run show": (values, environment) =>
+    runValidationRunShowCommand(
+      { validationRunId: requiredString(values, "validationRunId") },
+      environment,
+    ),
+  "validation-run artifact": (values, environment) =>
+    runArtifactCommand(
+      {
+        validationRunId: requiredString(values, "validationRunId"),
+        artifactRef: requiredString(values, "artifactRef"),
+      },
+      environment,
+    ),
+};
+
 const dispatchCommand = (
   path: readonly string[],
   config: unknown,
   environment: CliEnvironment,
 ): Effect.Effect<CliResult> => {
-  const values = isRecord(config) ? config : {};
-  const command = path.slice(1).join(" ");
-
-  switch (command) {
-    case "init":
-      return runInitCommand({ taskPrefix: requiredString(values, "taskPrefix") }, environment);
-    case "task":
-      return generatedCommandUsage(taskCommand);
-    case "task dependencies":
-      return generatedCommandUsage(taskDependenciesCommand);
-    case "task create":
-      return runCreateCommand(
-        {
-          title: requiredString(values, "title"),
-          descriptionFile: requiredString(values, "descriptionFile"),
-          dependsOn: strings(values, "dependsOn"),
-        },
-        environment,
-      );
-    case "task dependencies set":
-      return runDependenciesCommand(
-        {
-          taskId: requiredString(values, "taskId"),
-          dependsOn: strings(values, "dependsOn"),
-        },
-        environment,
-      );
-    case "task list":
-      return runListCommand(
-        {
-          all: boolean(values, "all"),
-          state: optionalString(values, "state") as TaskState | undefined,
-        },
-        environment,
-      );
-    case "task show":
-      return runTaskShowCommand(taskId(values), environment);
-    case "task approve":
-      return runApproveCommand(taskId(values), environment);
-    case "task context": {
-      const taskId = optionalString(values, "taskId");
-      return taskId === undefined
-        ? generatedCommandUsage(taskContextCommand)
-        : runContextCommand({ taskId }, environment);
-    }
-    case "task context draft":
-      return runContextDraftCommand(taskId(values), environment);
-    case "task context apply":
-      return runContextApplyCommand(taskId(values), environment);
-    case "task comment":
-      return runCommentCommand(
-        { taskId: requiredString(values, "taskId"), file: requiredString(values, "file") },
-        environment,
-      );
-    case "task cancel":
-      return runCancelCommand(
-        { taskId: requiredString(values, "taskId"), reason: requiredString(values, "reason") },
-        environment,
-      );
-    case "change":
-      return generatedCommandUsage(changeCommand);
-    case "change decision":
-      return generatedCommandUsage(changeDecisionCommand);
-    case "change blocker":
-      return generatedCommandUsage(changeBlockerCommand);
-    case "change start":
-      return runStart(
-        {
-          taskId: optionalString(values, "task"),
-          baseBranch: optionalString(values, "base"),
-        },
-        environment as ChangeCommandEnvironment,
-      );
-    case "change prepare":
-      return runPrepare(changeId(values), environment as ChangeCommandEnvironment);
-    case "change list":
-      return runList({ all: boolean(values, "all") }, environment as ChangeCommandEnvironment);
-    case "change show":
-      return runShow(changeId(values), environment as ChangeCommandEnvironment);
-    case "change findings":
-      return runFindings(changeId(values), environment as ChangeCommandEnvironment);
-    case "change validation-runs":
-      return runValidationRuns(changeId(values), environment as ChangeCommandEnvironment);
-    case "change submit":
-      return runSubmit(changeId(values), environment as ChangeCommandEnvironment);
-    case "change cancel":
-      return runCancel(changeId(values), environment as ChangeCommandEnvironment);
-    case "change reconcile":
-      return runReconcile(
-        { changeId: optionalString(values, "changeId") },
-        environment as ChangeCommandEnvironment,
-      );
-    case "change implement":
-      return runImplement(
-        {
-          changeId: requiredString(values, "changeId"),
-          handoffFile: optionalString(values, "handoffFile"),
-        },
-        environment as ChangeCommandEnvironment,
-      );
-    case "change decision add":
-      return runDecision(
-        {
-          action: "add",
-          changeId: requiredString(values, "changeId"),
-          file: requiredString(values, "file"),
-        },
-        environment as ChangeCommandEnvironment,
-      );
-    case "change decision list":
-      return runDecision(
-        { action: "list", changeId: requiredString(values, "changeId") },
-        environment as ChangeCommandEnvironment,
-      );
-    case "change blocker raise":
-    case "change blocker resolve":
-      return runBlocker(
-        {
-          action: path.at(-1) as "raise" | "resolve",
-          changeId: requiredString(values, "changeId"),
-          file: requiredString(values, "file"),
-        },
-        environment as ChangeCommandEnvironment,
-      );
-    case "change blocker list":
-      return runBlocker(
-        { action: "list", changeId: requiredString(values, "changeId") },
-        environment as ChangeCommandEnvironment,
-      );
-    case "validation-run":
-      return generatedCommandUsage(validationRunCommand);
-    case "validation-run show":
-      return runValidationRunShowCommand(
-        { validationRunId: requiredString(values, "validationRunId") },
-        environment,
-      );
-    case "validation-run artifact":
-      return runArtifactCommand(
-        {
-          validationRunId: requiredString(values, "validationRunId"),
-          artifactRef: requiredString(values, "artifactRef"),
-        },
-        environment,
-      );
-    default:
-      return generatedCommandUsage(commandTree as unknown as AnyCommand);
-  }
+  const handler = commandHandlers[commandPath(path)];
+  return handler === undefined
+    ? generatedCommandUsage(commandTree as unknown as AnyCommand)
+    : handler(isRecord(config) ? config : {}, environment);
 };
 
 const taskId = (values: Record<string, unknown>): TaskIdCommand => ({
@@ -562,12 +606,12 @@ const generatedLeftoverUsage = (args: readonly string[]): Effect.Effect<CliResul
           message,
           help: ["Run `by --help` for generated command help."],
         }),
-        outputFormat: outputFormatFromLeadingArgs(args),
+        outputFormat: outputFormatForArgs(args),
       };
     }),
   );
 
-const outputFormatFromLeadingArgs = (args: readonly string[]): OutputFormat => {
+export const outputFormatForArgs = (args: readonly string[]): OutputFormat => {
   const selector = args[0];
   if (selector === "--output" || selector === "-o") {
     return args[1] === "json" ? "json" : "toon";

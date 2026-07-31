@@ -59,6 +59,7 @@ describe("public command documentation", () => {
       const setup = readFileSync(join(repoRoot, "docs/public/setup.md"), "utf8");
       const config = readFileSync(join(repoRoot, "docs/public/config.md"), "utf8");
       const documented = extractDocumentedCommands(`${setup}\n${config}`);
+      const rootHelp = yield* runByInProcessEffect(repoRoot, ["--output", "json", "--help"]);
       const taskHelp = yield* runByInProcessEffect(repoRoot, [
         "--output",
         "json",
@@ -72,19 +73,20 @@ describe("public command documentation", () => {
         "--help",
       ]);
 
+      expect(rootHelp.status).toBe(0);
       expect(taskHelp.status).toBe(0);
       expect(changeHelp.status).toBe(0);
       expect(documented).toEqual([...documentedCommands].sort());
+
+      const rootHelpText = helpText(rootHelp.stdout);
+      expect(rootHelpText).toContain("COMMANDS");
+      for (const documentedCommand of documentedCommands) {
+        const commandPath = documentedCommand.replace(/^by /u, "").split(/\s(?=--|<|\[)/u, 1)[0];
+        expect(rootHelpText, documentedCommand).toContain(`- ${commandPath}`);
+      }
+
       expect(helpText(taskHelp.stdout)).toContain("COMMANDS");
-      expect(helpText(taskHelp.stdout)).toContain("create");
-      expect(helpText(taskHelp.stdout)).toContain("dependencies set");
-      expect(helpText(taskHelp.stdout)).toContain("draft");
-      expect(helpText(taskHelp.stdout)).toContain("cancel");
       expect(helpText(changeHelp.stdout)).toContain("COMMANDS");
-      expect(helpText(changeHelp.stdout)).toContain("start");
-      expect(helpText(changeHelp.stdout)).toContain("validation-runs");
-      expect(helpText(changeHelp.stdout)).toContain("decision add");
-      expect(helpText(changeHelp.stdout)).toContain("blocker resolve");
     }),
   );
 });

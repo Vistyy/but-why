@@ -18,14 +18,6 @@ import type { TextInputStdin } from "../../src/cli/input/textInput.js";
 export const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 export const byExecutable = join(repoRoot, "bin/by");
 
-const normalizeOutputSelector = (args: readonly string[]): readonly string[] => {
-  const index = args.findIndex((arg) => arg === "--output" || arg === "-o");
-  const selector = args[index];
-  const format = args[index + 1];
-  if (index <= 0 || selector === undefined || format === undefined) return args;
-  return [selector, format, ...args.slice(0, index), ...args.slice(index + 2)];
-};
-
 export const testProcessEnvironment = (environment: NodeJS.ProcessEnv) => {
   const { HOME: isolatedHome, ...controlledEnvironment } = environment;
   return isolatedHome === undefined
@@ -66,7 +58,7 @@ export const runBuiltByWithEnv = (
   env: NodeJS.ProcessEnv,
   ...args: readonly string[]
 ) =>
-  runTestProcess(process.execPath, [builtByExecutable(), ...normalizeOutputSelector(args)], {
+  runTestProcess(process.execPath, [builtByExecutable(), ...args], {
     cwd,
     ...testProcessEnvironment({ ...env, BUT_WHY_EXECUTABLE_PATH: byExecutable }),
   });
@@ -77,7 +69,7 @@ export const runBuiltByWithInput = (
   env: NodeJS.ProcessEnv = {},
   ...args: readonly string[]
 ) =>
-  runTestProcess(process.execPath, [builtByExecutable(), ...normalizeOutputSelector(args)], {
+  runTestProcess(process.execPath, [builtByExecutable(), ...args], {
     cwd,
     input,
     ...testProcessEnvironment({ ...env, BUT_WHY_EXECUTABLE_PATH: byExecutable }),
@@ -86,7 +78,7 @@ export const runBuiltByWithInput = (
 export const runBy = (cwd: string, ...args: readonly string[]) => runByWithEnv(cwd, {}, ...args);
 
 export const runByWithEnv = (cwd: string, env: NodeJS.ProcessEnv, ...args: readonly string[]) =>
-  runTestProcess(byExecutable, normalizeOutputSelector(args), {
+  runTestProcess(byExecutable, args, {
     cwd,
     ...testProcessEnvironment(env),
   });
@@ -99,7 +91,7 @@ export const runJustBy = (...args: readonly string[]) => {
     `set positional-arguments\n\n[no-exit-message]\nby *args:\n    @${byExecutable} "$@"\n`,
   );
 
-  return runTestProcess("just", ["by", ...normalizeOutputSelector(args)], { cwd: root });
+  return runTestProcess("just", ["by", ...args], { cwd: root });
 };
 
 type InProcessCliResult = {
@@ -147,15 +139,7 @@ const runByInProcessEffectRaw = (
       : { interactiveSessionHost: options.interactiveSessionHost }),
   }).pipe(Effect.map(cliResultToInProcessResult));
 
-export const runByInProcessEffect = (
-  cwd: string,
-  args: readonly string[],
-  now = "2026-06-30T12:00:00.000Z",
-  options: InProcessCliOptions = {},
-): Effect.Effect<InProcessCliResult> =>
-  runByInProcessEffectRaw(cwd, normalizeOutputSelector(args), now, options);
-
-export const runByInProcessEffectUnnormalized = runByInProcessEffectRaw;
+export const runByInProcessEffect = runByInProcessEffectRaw;
 
 export const createGitRepo = (root = createTestWorkspace()) => {
   const result = runTestProcess("git", ["init", "-q"], { cwd: root });

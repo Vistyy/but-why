@@ -14,7 +14,7 @@ import {
   byExecutable,
   commitButWhyConfigAndRecordDefault,
   createGitRepo,
-  runByInProcessEffect as runByInProcessEffectRaw,
+  runByInProcessEffect,
 } from "../support/by-cli.js";
 import { createTestWorkspace } from "../support/testWorkspace.js";
 import { fakeTaskUseCases } from "../support/taskUseCases.js";
@@ -23,23 +23,6 @@ const expectedBin = collapseHome(byExecutable);
 const firstNow = "2026-06-30T12:00:00.000Z";
 const secondNow = "2026-06-30T12:05:00.000Z";
 const thirdNow = "2026-06-30T12:10:00.000Z";
-
-const normalizeOutputSelector = (args: readonly string[]): readonly string[] => {
-  const index = args.findIndex((arg) => arg === "--output" || arg === "-o");
-  const selector = args[index];
-  const format = args[index + 1];
-  if (index <= 0 || selector === undefined || format === undefined) return args;
-  return [selector, format, ...args.slice(0, index), ...args.slice(index + 2)];
-};
-
-type RunOptions = NonNullable<Parameters<typeof runByInProcessEffectRaw>[3]>;
-
-const runByInProcessEffect = (
-  cwd: string,
-  args: readonly string[],
-  now: string = "2026-06-30T12:00:00.000Z",
-  options: RunOptions = {},
-) => runByInProcessEffectRaw(cwd, normalizeOutputSelector(args), now, options);
 
 describe("by task CLI", () => {
   it.effect(
@@ -372,12 +355,12 @@ contextCommand: by task context BY-1`);
       yield* createTask(root, firstNow, "Draft title");
 
       const result = yield* runByInProcessEffect(root, [
+        "--output",
+        "json",
         "task",
         "context",
         "draft",
         "BY-1",
-        "--output",
-        "json",
       ]);
 
       expect(result.status).toBe(0);
@@ -402,12 +385,12 @@ contextCommand: by task context BY-1`);
       writeFileSync(join(root, ".git", "but-why", "task-context-drafts"), "not a directory");
 
       const result = yield* runByInProcessEffect(root, [
+        "--output",
+        "json",
         "task",
         "context",
         "draft",
         "BY-1",
-        "--output",
-        "json",
       ]);
 
       expect(result.status).toBe(1);
@@ -424,12 +407,12 @@ contextCommand: by task context BY-1`);
       yield* createTask(root, firstNow, "Original title");
       const firstDraft = JSON.parse(
         (yield* runByInProcessEffect(root, [
+          "--output",
+          "json",
           "task",
           "context",
           "draft",
           "BY-1",
-          "--output",
-          "json",
         ])).stdout,
       ) as { draft: { path: string } };
       writeFileSync(firstDraft.draft.path, "# Current title\n\nCurrent description");
@@ -438,12 +421,12 @@ contextCommand: by task context BY-1`);
       ).toBe(0);
 
       const draftResult = yield* runByInProcessEffect(root, [
+        "--output",
+        "json",
         "task",
         "context",
         "draft",
         "BY-1",
-        "--output",
-        "json",
       ]);
       const draft = JSON.parse(draftResult.stdout) as { draft: { path: string } };
       writeFileSync(draft.draft.path, "Discard this draft");
@@ -463,12 +446,12 @@ contextCommand: by task context BY-1`);
       yield* createTask(root, firstNow, "Original title");
 
       const draftResult = yield* runByInProcessEffect(root, [
+        "--output",
+        "json",
         "task",
         "context",
         "draft",
         "BY-1",
-        "--output",
-        "json",
       ]);
       const draft = JSON.parse(draftResult.stdout) as { draft: { path: string } };
       writeFileSync(draft.draft.path, "#  Updated title  \n\nUpdated description\n\n");
@@ -504,12 +487,12 @@ contextCommand: by task context BY-1`);
       yield* createTask(root, firstNow, "Original title");
 
       const draftResult = yield* runByInProcessEffect(root, [
+        "--output",
+        "json",
         "task",
         "context",
         "draft",
         "BY-1",
-        "--output",
-        "json",
       ]);
       const draft = JSON.parse(draftResult.stdout) as { draft: { path: string } };
       writeFileSync(draft.draft.path, "Updated title\n\nUpdated description");
@@ -536,12 +519,12 @@ contextCommand: by task context BY-1`);
 
       yield* createTask(root, firstNow, "Original title");
       const draftResult = yield* runByInProcessEffect(root, [
+        "--output",
+        "json",
         "task",
         "context",
         "draft",
         "BY-1",
-        "--output",
-        "json",
       ]);
       const draft = JSON.parse(draftResult.stdout) as { draft: { path: string } };
       writeFileSync(draft.draft.path, "# Updated title\nUpdated description");
@@ -569,12 +552,12 @@ contextCommand: by task context BY-1`);
 
         yield* createTask(root, firstNow, "Original title");
         const draftResult = yield* runByInProcessEffect(root, [
+          "--output",
+          "json",
           "task",
           "context",
           "draft",
           "BY-1",
-          "--output",
-          "json",
         ]);
         const draft = JSON.parse(draftResult.stdout) as { draft: { path: string } };
         writeFileSync(draft.draft.path, "# Updated title\n\nUpdated description");

@@ -68,12 +68,12 @@ describe("shared repository state", () => {
         const linkedStatusBeforeDraft = git(linked, "status", "--short");
 
         const draftResult = yield* runByInProcessEffect(root, [
+          "--output",
+          "json",
           "task",
           "context",
           "draft",
           "BY-1",
-          "--output",
-          "json",
         ]);
         const draft = JSON.parse(draftResult.stdout) as { draft: { path: string } };
         writeFileSync(draft.draft.path, "# Shared updated\n\nUpdated from another worktree");

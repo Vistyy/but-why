@@ -11,12 +11,7 @@ import { collapseHome } from "../../src/cli/cliPath.js";
 import { butWhyGitignoreBlock } from "../../src/init/gitignore.js";
 import { RepositorySql, repositorySqlLayer } from "../../src/sqlite/repositorySql.js";
 import { encodeToon } from "../../src/output/toon.js";
-import {
-  createGitRepo,
-  repoRoot,
-  runByInProcessEffect,
-  runByInProcessEffectUnnormalized,
-} from "../support/by-cli.js";
+import { createGitRepo, repoRoot, runByInProcessEffect } from "../support/by-cli.js";
 import { createTestWorkspace } from "../support/testWorkspace.js";
 import { runTestProcess } from "../support/testProcess.js";
 
@@ -25,6 +20,36 @@ const expectedConfigDoc = join(repoRoot, "docs/public/config.md");
 const expectedSetupDoc = join(repoRoot, "docs/public/setup.md");
 const managedGitignoreBlock = `${butWhyGitignoreBlock}\n`;
 const sharedStatePath = (root: string): string => join(root, ".git", "but-why", "state.sqlite");
+const expectedCommandPaths = [
+  "init",
+  "task create",
+  "task dependencies set",
+  "task list",
+  "task show",
+  "task approve",
+  "task context",
+  "task context draft",
+  "task context apply",
+  "task comment",
+  "task cancel",
+  "change start",
+  "change prepare",
+  "change list",
+  "change show",
+  "change findings",
+  "change validation-runs",
+  "change submit",
+  "change cancel",
+  "change reconcile",
+  "change implement",
+  "change decision add",
+  "change decision list",
+  "change blocker raise",
+  "change blocker resolve",
+  "change blocker list",
+  "validation-run show",
+  "validation-run artifact",
+] as const;
 
 const withRepositorySql = <A, E>(
   root: string,
@@ -54,6 +79,10 @@ describe("by CLI", () => {
         "Validate completed code changes against approved human intent.",
       );
       expect(result.stdout).toContain("COMMANDS");
+      expect(result.stdout).toContain("(-o, --output toon | json)");
+      for (const commandPath of expectedCommandPaths) {
+        expect(result.stdout, commandPath).toContain(`- ${commandPath}`);
+      }
       expect(result.stdout).not.toContain("task task");
       expect(result.stdout).not.toContain("change change");
     }),
@@ -73,6 +102,10 @@ describe("by CLI", () => {
         "Validate completed code changes against approved human intent.",
       );
       expect(parsed.help).toContain("COMMANDS");
+      expect(parsed.help).toContain("(-o, --output toon | json)");
+      for (const commandPath of expectedCommandPaths) {
+        expect(parsed.help, commandPath).toContain(`- ${commandPath}`);
+      }
       expect(parsed.help).not.toContain("task task");
       expect(parsed.help).not.toContain("change change");
     }),
@@ -187,8 +220,10 @@ describe("by CLI", () => {
 
       expect(result.status).toBe(2);
       expect(result.stderr).toBe("");
-      expect(result.stdout).toContain("code: invalid_usage");
-      expect(result.stdout).toContain("Received unknown argument: '--bad'");
+      expect(result.stdout).toBe(`error:
+  code: invalid_usage
+  message: "Received unknown argument: '--bad'"
+help[1]: Run \`by --help\` for generated command help.`);
     }),
   );
 
@@ -205,11 +240,7 @@ describe("by CLI", () => {
 
   it.effect("prints missing output selector values as TOON usage errors", () =>
     Effect.gen(function* () {
-      const result = yield* runByInProcessEffectUnnormalized(repoRoot, [
-        "task",
-        "list",
-        "--output",
-      ]);
+      const result = yield* runByInProcessEffect(repoRoot, ["task", "list", "--output"]);
 
       expect(result.status).toBe(2);
       expect(result.stderr).toBe("");
@@ -220,7 +251,7 @@ describe("by CLI", () => {
 
   it.effect("prints duplicate output selectors as TOON usage errors", () =>
     Effect.gen(function* () {
-      const result = yield* runByInProcessEffectUnnormalized(repoRoot, [
+      const result = yield* runByInProcessEffect(repoRoot, [
         "--output",
         "json",
         "init",
@@ -238,7 +269,7 @@ describe("by CLI", () => {
 
   it.effect("rejects trailing output selectors with attached values", () =>
     Effect.gen(function* () {
-      const result = yield* runByInProcessEffectUnnormalized(repoRoot, [
+      const result = yield* runByInProcessEffect(repoRoot, [
         "--output",
         "json",
         "task",

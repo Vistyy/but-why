@@ -73,7 +73,7 @@ exit 1
       PATH: `${tools}:${process.env["PATH"] ?? ""}`,
     };
 
-    const started = runBuiltByWithEnv(root, baseEnv, "change", "start", "--output", "json");
+    const started = runBuiltByWithEnv(root, baseEnv, "--output", "json", "change", "start");
     expect(started.status).toBe(0);
     const change = JSON.parse(started.stdout) as {
       readonly change: { readonly id: string };
@@ -91,13 +91,13 @@ exit 1
       root,
       "Handoff from piped stdin\n",
       env,
+      "--output",
+      "json",
       "change",
       "implement",
       change.change.id,
       "--handoff-file",
       "-",
-      "--output",
-      "json",
     );
     expect(piped.status, `${piped.stdout}${piped.stderr}`).toBe(0);
     expect(readFileSync(capture, "utf8")).toContain("Handoff from piped stdin");
@@ -110,13 +110,13 @@ exit 1
       root,
       Buffer.from([0xff]),
       {},
+      "--output",
+      "json",
       "change",
       "implement",
       "change-1",
       "--handoff-file",
       "-",
-      "--output",
-      "json",
     );
     expect(invalid.status).toBe(2);
     expect(JSON.parse(invalid.stdout)).toMatchObject({

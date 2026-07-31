@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { Effect } from "effect";
 
 import { mapRuntimeError, runCli } from "./cli.js";
+import { outputFormatForArgs } from "./cliCommandTree.js";
 import { serializeOutput } from "./output/serialize.js";
 
 const executablePath =
@@ -35,7 +36,7 @@ Effect.runPromise(
     process.exitCode = result.exitCode;
   })
   .catch(() => {
-    const result = mapRuntimeError();
+    const result = mapRuntimeError(outputFormatForArgs(args));
     process.stdout.write(serializeOutput(result.stdout, result.outputFormat ?? "toon"));
     process.exitCode = result.exitCode;
   });
