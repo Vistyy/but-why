@@ -193,6 +193,17 @@ const makeCandidateValidation = (dependencies: {
       validationRunId: started.validationRunId,
       submittedSha: input.headSha,
       copyFiles: input.policy.copyFiles,
+      recordWorkspaceSetup: (setup) =>
+        dependencies.persistence.recordWorkspaceSetup({
+          validationRunId: setup.validationRunId,
+          tempRefName: setup.tempRefName,
+          submittedSha: setup.submittedSha,
+          worktreeHead: setup.worktreeHead,
+          ...(setup.worktreePath === undefined ? {} : { worktreePath: setup.worktreePath }),
+          cleanupWorktree: setup.cleanupResult.worktree,
+          cleanupTempRef: setup.cleanupResult.tempRef,
+          now: input.now,
+        }),
       runInWorkspace: (activeWorkspace) =>
         runCandidatePhases(dependencies, input, started.validationRunId, activeWorkspace),
     });

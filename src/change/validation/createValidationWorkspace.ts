@@ -28,6 +28,9 @@ export type CreateValidationWorkspaceInput = {
   readonly validationRunId: string;
   readonly submittedSha: string;
   readonly copyFiles: readonly string[];
+  readonly recordWorkspaceSetup?: (
+    setup: ValidationWorkspaceSetup,
+  ) => Effect.Effect<void, RepositoryStorageError>;
   readonly recordInterruptedCleanupResult?: (
     toolingError: ValidationWorkspaceToolingError,
   ) => Effect.Effect<void>;
@@ -304,6 +307,13 @@ const setupValidationWorkspaceScope = (
 
     if (!verifiedWorkspace.ok) {
       return verifiedWorkspace;
+    }
+
+    if (input.recordWorkspaceSetup !== undefined) {
+      yield* input.recordWorkspaceSetup({
+        ...verifiedWorkspace.setup,
+        cleanupResult: yield* Ref.get(cleanupResult),
+      });
     }
 
     const activeWorkspaceResult =

@@ -88,6 +88,14 @@ export const openSqliteChangeValidationPersistence = (): Effect.Effect<
             ${input.worktreeHead}, ${input.worktreePath ?? null},
             ${input.cleanupWorktree}, ${input.cleanupTempRef}, ${input.now}
           )
+          ON CONFLICT (validation_run_id) DO UPDATE SET
+            temp_ref_name = excluded.temp_ref_name,
+            submitted_sha = excluded.submitted_sha,
+            worktree_head = excluded.worktree_head,
+            worktree_path = excluded.worktree_path,
+            cleanup_worktree = excluded.cleanup_worktree,
+            cleanup_temp_ref = excluded.cleanup_temp_ref,
+            created_at = excluded.created_at
         `),
       ),
     recordToolingFailure: (input) =>
