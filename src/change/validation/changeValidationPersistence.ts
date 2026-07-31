@@ -2,11 +2,14 @@ import type { Effect } from "effect";
 
 import type { CandidateRecord } from "../candidate/candidate.js";
 import type {
+  ActiveCandidateValidationRun,
   CandidateValidationArtifact,
   CandidateValidationFinding,
+  CandidateValidationRunAbandonmentContext,
   CandidateValidationRound,
   CandidateValidationRunRecord,
   CandidateValidationToolingFailure,
+  AbandonCandidateValidationRunInput,
   CompleteCandidateValidationRunInput,
   RecordCandidateAcceptanceRoundInput,
   RecordCandidateSpecialistRoundInput,
@@ -29,6 +32,13 @@ export type ChangeValidationPersistence = {
     input: StartCandidateValidationRunInput,
   ) => StorageEffect<StartCandidateValidationRunResult>;
   readonly complete: (input: CompleteCandidateValidationRunInput) => StorageEffect<void>;
+  readonly getActiveForChange: (
+    changeId: string,
+  ) => StorageEffect<ActiveCandidateValidationRun | undefined>;
+  readonly getAbandonmentContext: (
+    validationRunId: string,
+  ) => StorageEffect<CandidateValidationRunAbandonmentContext | undefined>;
+  readonly abandon: (input: AbandonCandidateValidationRunInput) => StorageEffect<void>;
   readonly getRunById: (
     validationRunId: string,
   ) => StorageEffect<CandidateValidationRunRecord | undefined>;

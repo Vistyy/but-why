@@ -25,6 +25,7 @@ export type ValidationWorkspaceSetup = {
   readonly tempRefName: string;
   readonly submittedSha: string;
   readonly worktreeHead: string;
+  readonly worktreePath?: string;
   readonly cleanupResult: ValidationWorkspaceCleanupResult;
 };
 

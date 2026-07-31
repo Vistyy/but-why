@@ -18,6 +18,8 @@ import type {
 import type { TaskPersistence } from "../../src/task/taskPersistence.js";
 import { publicTaskId } from "../../src/task/taskId.js";
 import type { RemoteChangeBaseResult } from "../../src/submissionEnvironment/remoteChangeBase.js";
+import type { ChangeValidationPersistence } from "../../src/change/validation/changeValidationPersistence.js";
+import { ExecutionLockUnavailable, type ExecutionLock } from "../../src/contracts/executionLock.js";
 
 const now = "2026-06-30T12:00:00.000Z";
 const candidate = {
@@ -36,6 +38,80 @@ const tasklessPolicy = {
 } as const;
 
 describe("Change Submit orchestration", () => {
+  it.effect("reports the exact Active Validation Run before Candidate capture", () =>
+    Effect.gen(function* () {
+      const events: string[] = [];
+      const submit = openChangeSubmit(
+        dependencies({
+          events,
+          change: readyChange(),
+          validationPersistence: {
+            getActiveForChange: () =>
+              Effect.succeed({ validationRunId: "run-active", changeId: "change-1" }),
+          },
+        }),
+      );
+      const validationLayer = Layer.succeed(CandidateValidation, {
+        validateCandidate: () => Effect.die("Validation must not start"),
+        validateTaskBackedCandidate: () => Effect.die("Validation must not start"),
+        validateNoChange: () => Effect.die("Validation must not start"),
+        listFindings: () => Effect.succeed([]),
+        listToolingFailures: () => Effect.succeed([]),
+        listRounds: () => Effect.succeed([]),
+      });
+
+      const result = yield* submit
+        .submit({ changeId: "change-1", now })
+        .pipe(Effect.provide(validationLayer));
+
+      expect(result).toEqual({
+        ok: false,
+        code: "active_validation_run",
+        changeId: "change-1",
+        validationRunId: "run-active",
+      });
+      expect(events).toEqual(["reconcile"]);
+    }),
+  );
+
+  it.effect("rejects a concurrent Submit before it reads Change state", () =>
+    Effect.gen(function* () {
+      const lock: ExecutionLock = {
+        withLock: () =>
+          Effect.fail(
+            new ExecutionLockUnavailable({
+              owner: "change_submission",
+              key: "change-1",
+              lockPath: "/tmp/change-1.sqlite",
+              cause: new Error("busy"),
+            }),
+          ),
+      };
+      const submit = openChangeSubmit(
+        dependencies({ events: [], change: readyChange(), executionLock: lock }),
+      );
+      const result = yield* submit.submit({ changeId: "change-1", now }).pipe(
+        Effect.provide(
+          Layer.succeed(CandidateValidation, {
+            validateCandidate: () => Effect.die("Validation must not start"),
+            validateTaskBackedCandidate: () => Effect.die("Validation must not start"),
+            validateNoChange: () => Effect.die("Validation must not start"),
+            listFindings: () => Effect.succeed([]),
+            listToolingFailures: () => Effect.succeed([]),
+            listRounds: () => Effect.succeed([]),
+          }),
+        ),
+      );
+
+      expect(result).toEqual({
+        ok: false,
+        code: "submission_in_progress",
+        changeId: "change-1",
+        validationRunId: null,
+      });
+    }),
+  );
+
   it.effect(
     "reconciles before Candidate selection and publishes one passing taskless Candidate",
     () =>
@@ -1165,6 +1241,8 @@ const dependencies = (input: {
     readonly changeBaseSha: string;
     readonly headSha: string;
   } | null;
+  readonly validationPersistence?: Pick<ChangeValidationPersistence, "getActiveForChange">;
+  readonly executionLock?: ExecutionLock;
   readonly refreshResults?: readonly RemoteChangeBaseResult[];
   readonly targetResult?:
     | { readonly ok: false; readonly code: "PR_TARGET_NOT_FOUND" }
@@ -1327,6 +1405,10 @@ const dependencies = (input: {
         events.push("capture");
         return captureResults.shift() ?? input.captureResult ?? candidate;
       }),
+    ...(input.validationPersistence === undefined
+      ? {}
+      : { validationPersistence: input.validationPersistence }),
+    ...(input.executionLock === undefined ? {} : { executionLock: input.executionLock }),
   };
 };
 

@@ -18,6 +18,8 @@ import type {
 } from "./candidateCapture/captureLocalCandidate.js";
 import type { RepositoryBranchHeadResult } from "./candidateCapture/candidateCaptureGit.js";
 import type { RepositoryStorageError } from "../contracts/repositoryStorageError.js";
+import type { ExecutionLock } from "../contracts/executionLock.js";
+import type { ChangeValidationPersistence } from "./validation/changeValidationPersistence.js";
 import type {
   CandidatePublication,
   PublishCandidateResult,
@@ -89,6 +91,12 @@ export type ChangeSubmitResult =
       readonly toolingFailures: readonly CandidateValidationToolingFailure[];
       readonly reviewerEvidence?: ReviewerContinuityEvidence;
       readonly specialistReviewerEvidence?: readonly SpecialistReviewerContinuityEvidence[];
+    }
+  | {
+      readonly ok: false;
+      readonly code: "submission_in_progress" | "active_validation_run";
+      readonly changeId: string;
+      readonly validationRunId: string | null;
     }
   | { readonly ok: false; readonly code: "change_not_found" | "change_not_open" | "change_blocked" }
   | { readonly ok: false; readonly code: "change_not_ready"; readonly change: ChangeRecord }
@@ -173,8 +181,30 @@ export const openChangeSubmit = (dependencies: {
     baseRemoteUrl: string,
   ) => PublicationTargetDetectionResult;
   readonly captureCandidate: CaptureCandidate;
+  readonly validationPersistence?: Pick<ChangeValidationPersistence, "getActiveForChange">;
+  readonly executionLock?: ExecutionLock;
 }): CandidateValidationChangeSubmit => ({
-  submit: (input) => submitChange(dependencies, input),
+  submit: (input) => {
+    const operation = submitChange(dependencies, input);
+    const locked =
+      dependencies.executionLock === undefined
+        ? operation
+        : dependencies.executionLock.withLock({
+            owner: "change_submission",
+            key: input.changeId,
+            effect: operation,
+          });
+    return locked.pipe(
+      Effect.catchTag("ExecutionLockUnavailable", () =>
+        Effect.succeed({
+          ok: false,
+          code: "submission_in_progress",
+          changeId: input.changeId,
+          validationRunId: null,
+        } as const),
+      ),
+    );
+  },
 });
 
 type ReadyChange = ChangeRecord & { readonly worktreePath: string };
@@ -206,6 +236,16 @@ const submitChange = (
     }
     const reconciliation = yield* reconcileBeforeSubmission(dependencies, change, input.now);
     if (!reconciliation.proceed) return reconciliation.result;
+    const active = yield* dependencies.validationPersistence?.getActiveForChange(change.id) ??
+      Effect.succeed(undefined);
+    if (active !== undefined) {
+      return {
+        ok: false,
+        code: "active_validation_run",
+        changeId: change.id,
+        validationRunId: active.validationRunId,
+      } as const;
+    }
     if (change.publication !== null && reconciliation.reconciled.status === "open") {
       const branchHead = yield* dependencies.readBranchHead(change.worktreePath, change.branchRef);
       if (!branchHead.ok) return branchHead;
@@ -328,6 +368,14 @@ const validateAndCompleteNoChange = (
       policy: withAgentEnvironment(policy.resolved.policy, agentEnvironment),
       now,
     });
+    if ("code" in validationResult) {
+      return {
+        ok: false,
+        code: "active_validation_run",
+        changeId: change.id,
+        validationRunId: validationResult.validationRunId,
+      } as const;
+    }
     if (validationResult.outcome !== "passed") {
       return yield* blockedValidationResult(
         validation,
@@ -346,6 +394,9 @@ const validateAndCompleteNoChange = (
         },
         now,
       );
+    }
+    if (!validationResult.ok) {
+      return yield* Effect.die(new Error("Unexpected active Validation Run result."));
     }
     const completed = yield* dependencies.persistence.completeNoChange({
       changeId: change.id,
@@ -465,6 +516,14 @@ const validateAndPublish = (
             ...(progress === undefined ? {} : { progress }),
             now,
           });
+    if ("code" in validationResult) {
+      return {
+        ok: false,
+        code: "active_validation_run",
+        changeId: change.id,
+        validationRunId: validationResult.validationRunId,
+      } as const;
+    }
     if (validationResult.outcome !== "passed") {
       return yield* blockedValidationResult(
         validation,
@@ -483,6 +542,9 @@ const validateAndPublish = (
         },
         now,
       );
+    }
+    if (!validationResult.ok) {
+      return yield* Effect.die(new Error("Unexpected active Validation Run result."));
     }
 
     const publication = yield* dependencies.publicationFor(change.worktreePath).publish({

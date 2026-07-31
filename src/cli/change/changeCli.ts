@@ -572,6 +572,24 @@ const submitResult = (result: ChangeSubmitResult, changeId: string): CliResult =
         : { specialistReviewerEvidence: result.specialistReviewerEvidence }),
     });
   }
+  if (result.code === "submission_in_progress") {
+    return runtimeError({
+      code: result.code,
+      message: "Another Submission or cancellation already owns this Change.",
+      details: { changeId: result.changeId },
+      help: ["Wait for the other operation to finish, then retry."],
+    });
+  }
+  if (result.code === "active_validation_run") {
+    return runtimeError({
+      code: result.code,
+      message: `Validation Run ${result.validationRunId} remains active for this Change.`,
+      details: { changeId: result.changeId, validationRunId: result.validationRunId },
+      help: [
+        `After stopping every process from the run, execute \`by validation-run abandon ${result.validationRunId} --reason <reason>\`.`,
+      ],
+    });
+  }
   if (
     result.code === "change_not_found" ||
     result.code === "change_not_open" ||
@@ -776,6 +794,29 @@ const changeCancelResult = (result: ChangeCancellationResult): CliResult => {
         ...(result.taskId === undefined ? {} : { taskId: result.taskId }),
       },
       help: [`Run \`by task cancel ${result.taskId} --reason <reason>\`.`],
+    });
+  }
+  if (result.code === "submission_in_progress") {
+    return runtimeError({
+      code: result.code,
+      message: "Another Submission or cancellation already owns this Change.",
+      details: { changeId: result.changeId },
+      help: ["Wait for the other operation to finish, then retry."],
+    });
+  }
+  if (result.code === "active_validation_run") {
+    return runtimeError({
+      code: result.code,
+      message: `Validation Run ${result.validationRunId} remains active for this Change.`,
+      details: {
+        changeId: result.changeId,
+        ...(result.validationRunId === undefined
+          ? {}
+          : { validationRunId: result.validationRunId }),
+      },
+      help: [
+        `After stopping every process from the run, execute \`by validation-run abandon ${result.validationRunId} --reason <reason>\`.`,
+      ],
     });
   }
   if (result.code === "github_close_failed") {

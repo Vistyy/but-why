@@ -11,6 +11,8 @@ import { localGitHubPullRequestGateway } from "../submissionEnvironment/localGit
 import { repositorySqlLayer } from "../sqlite/repositorySql.js";
 import { openSqliteChangePersistence } from "../sqlite/sqliteChangePersistence.js";
 import { openSqliteTaskPersistence } from "../sqlite/sqliteTaskPersistence.js";
+import { openSqliteChangeValidationPersistence } from "../sqlite/sqliteChangeValidationPersistence.js";
+import { openSqliteExecutionLock } from "../sqlite/sqliteExecutionLock.js";
 import type { RepositoryStorageError } from "../contracts/repositoryStorageError.js";
 
 export type CancellationCommandEnvironment = {
@@ -42,13 +44,18 @@ export const withCancellation = <A, R>(
   const program = Effect.all({
     changes: openSqliteChangePersistence(),
     tasks: openSqliteTaskPersistence(context.context.taskPrefix),
+    validation: openSqliteChangeValidationPersistence(),
   }).pipe(
-    Effect.flatMap(({ changes, tasks }) =>
+    Effect.flatMap(({ changes, tasks, validation }) =>
       use(
         openCancellationUseCases({
           resolveTaskId: (taskId) => resolveRepoTaskId(context.context, taskId),
           changes,
           tasks,
+          validation,
+          executionLock: openSqliteExecutionLock({
+            commonDirectory: context.context.commonDirectory,
+          }),
           github: localGitHubPullRequestGateway({ cwd: context.context.root }),
           cleanup: cleanupChangeResources,
           reviewerSessionPathFor: (changeId) =>

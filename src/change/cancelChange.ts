@@ -9,6 +9,8 @@ import type { ChangePersistence } from "./changePersistence.js";
 import type { ChangeCleanupOperationResult } from "./reconcileChange.js";
 import type { TaskPersistence } from "../task/taskPersistence.js";
 import type { GitHubPullRequest, GitHubPullRequestGateway } from "./ownedPullRequestGateway.js";
+import type { ExecutionLock } from "../contracts/executionLock.js";
+import type { ChangeValidationPersistence } from "./validation/changeValidationPersistence.js";
 
 export type CancellationUseCases = {
   readonly resolveTaskId: (taskId: PublicTaskId) => RepoTaskIdResolution;
@@ -37,6 +39,8 @@ export type CancellationDependencies = {
     Partial<Pick<ChangePersistence, "removeReviewerSessions">>;
   readonly github: Pick<GitHubPullRequestGateway, "getPullRequest" | "closePullRequest">;
   readonly reviewerSessionPathFor?: (changeId: string) => string;
+  readonly validation?: Pick<ChangeValidationPersistence, "getActiveForChange">;
+  readonly executionLock?: ExecutionLock;
   readonly cleanup: (input: {
     readonly repositoryCommonDirectory: string;
     readonly worktreePath: string | null;
@@ -64,8 +68,11 @@ export type TaskCancellationResult =
         | "change_already_completed"
         | "github_pull_request_unavailable"
         | "owned_pull_request_mismatch"
-        | "github_close_failed";
+        | "github_close_failed"
+        | "submission_in_progress"
+        | "active_validation_run";
       readonly taskId: PublicTaskId;
+      readonly validationRunId?: string;
     };
 
 export type ChangeCancellationResult =
@@ -84,8 +91,11 @@ export type ChangeCancellationResult =
         | "task_backed_change"
         | "github_pull_request_unavailable"
         | "owned_pull_request_mismatch"
-        | "github_close_failed";
+        | "github_close_failed"
+        | "submission_in_progress"
+        | "active_validation_run";
       readonly changeId: string;
+      readonly validationRunId?: string;
       readonly taskId?: PublicTaskId;
     };
 
@@ -93,9 +103,67 @@ export const openCancellationUseCases = (
   dependencies: CancellationDependencies,
 ): CancellationUseCases => ({
   resolveTaskId: dependencies.resolveTaskId,
-  cancelTask: (input) => cancelTask(dependencies, input),
-  cancelChange: (input) => cancelChange(dependencies, input),
+  cancelTask: (input) => cancelTaskWithLock(dependencies, input),
+  cancelChange: (input) => cancelChangeWithLock(dependencies, input),
 });
+
+const cancelTaskWithLock = (
+  dependencies: CancellationDependencies,
+  input: Parameters<CancellationUseCases["cancelTask"]>[0],
+): Effect.Effect<TaskCancellationResult, RepositoryStorageError> =>
+  Effect.gen(function* () {
+    if (dependencies.executionLock === undefined) {
+      return yield* cancelTask(dependencies, input);
+    }
+    const change = yield* dependencies.changes.getChangeByTaskId(input.taskId);
+    if (change === undefined) {
+      return yield* cancelTask(dependencies, input);
+    }
+    return yield* dependencies.executionLock
+      .withLock({
+        owner: "change_submission",
+        key: change.id,
+        effect: cancelTask(dependencies, input),
+      })
+      .pipe(
+        Effect.catchTag("ExecutionLockUnavailable", () =>
+          Effect.succeed({
+            ok: false,
+            code: "submission_in_progress",
+            taskId: input.taskId,
+          } as const),
+        ),
+      );
+  });
+
+const cancelChangeWithLock = (
+  dependencies: CancellationDependencies,
+  input: Parameters<CancellationUseCases["cancelChange"]>[0],
+): Effect.Effect<ChangeCancellationResult, RepositoryStorageError> =>
+  Effect.gen(function* () {
+    if (dependencies.executionLock === undefined) {
+      return yield* cancelChange(dependencies, input);
+    }
+    const change = yield* dependencies.changes.getChangeById(input.changeId);
+    if (change === undefined) {
+      return yield* cancelChange(dependencies, input);
+    }
+    return yield* dependencies.executionLock
+      .withLock({
+        owner: "change_submission",
+        key: change.id,
+        effect: cancelChange(dependencies, input),
+      })
+      .pipe(
+        Effect.catchTag("ExecutionLockUnavailable", () =>
+          Effect.succeed({
+            ok: false,
+            code: "submission_in_progress",
+            changeId: input.changeId,
+          } as const),
+        ),
+      );
+  });
 
 const cancelTask = (
   dependencies: CancellationDependencies,
@@ -131,6 +199,16 @@ const cancelTask = (
             cleanup: null,
           }
         : { ok: false, code: cancelled.code, taskId: input.taskId };
+    }
+    const active = yield* dependencies.validation?.getActiveForChange(change.id) ??
+      Effect.succeed(undefined);
+    if (active !== undefined) {
+      return {
+        ok: false,
+        code: "active_validation_run",
+        taskId: input.taskId,
+        validationRunId: active.validationRunId,
+      } as const;
     }
     if (change.state === "closed") {
       if (change.closeReason === "completed") {
@@ -196,6 +274,16 @@ const cancelChange = (
         changeId: change.id,
         taskId: change.taskId,
       };
+    }
+    const active = yield* dependencies.validation?.getActiveForChange(change.id) ??
+      Effect.succeed(undefined);
+    if (active !== undefined) {
+      return {
+        ok: false,
+        code: "active_validation_run",
+        changeId: change.id,
+        validationRunId: active.validationRunId,
+      } as const;
     }
     if (change.state === "closed") {
       return change.closeReason === "cancelled"

@@ -5,11 +5,13 @@ import { randomUUID } from "node:crypto";
 import type { CandidateRecord } from "../change/candidate/candidate.js";
 import type { ImplementationDecision } from "../change/implementationDecision.js";
 import type {
+  ActiveCandidateValidationRun,
   CandidateValidationArtifact,
   CandidateValidationFinding,
   CandidateValidationRound,
   CandidateValidationRunRecord,
   CandidateValidationToolingFailure,
+  CandidateValidationRunAbandonmentContext,
   RecordCandidateValidationCommandRoundInput,
   StartCandidateValidationRunInput,
   StartCandidateValidationRunResult,
@@ -46,12 +48,24 @@ export const openSqliteChangeValidationPersistence = (): Effect.Effect<
         startOrReuse(sql, input),
       ),
     complete: (input) =>
-      repository.operation("complete Candidate Validation Run", (sql) =>
-        Effect.asVoid(sql`
-          UPDATE candidate_validation_runs
-          SET state = 'complete', outcome = ${input.outcome}, updated_at = ${input.now}
-          WHERE id = ${input.validationRunId}
-        `),
+      repository.transactionImmediate("complete Candidate Validation Run", (sql) =>
+        complete(sql, input),
+      ),
+    getActiveForChange: (changeId) =>
+      repository
+        .operation("read Active Candidate Validation Run", (sql) =>
+          getActiveForChange(sql, changeId),
+        )
+        .pipe(Effect.map((row) => row)),
+    getAbandonmentContext: (validationRunId) =>
+      repository
+        .operation("read Candidate Validation Run abandonment context", (sql) =>
+          getAbandonmentContext(sql, validationRunId),
+        )
+        .pipe(Effect.map((row) => row)),
+    abandon: (input) =>
+      repository.transactionImmediate("abandon Candidate Validation Run", (sql) =>
+        abandon(sql, input),
       ),
     getRunById: (validationRunId) =>
       repository
@@ -67,12 +81,21 @@ export const openSqliteChangeValidationPersistence = (): Effect.Effect<
       repository.operation("record Candidate validation workspace setup", (sql) =>
         Effect.asVoid(sql`
           INSERT INTO candidate_validation_workspace_setups (
-            validation_run_id, temp_ref_name, submitted_sha, worktree_head,
+            validation_run_id, temp_ref_name, submitted_sha, worktree_head, worktree_path,
             cleanup_worktree, cleanup_temp_ref, created_at
           ) VALUES (
             ${input.validationRunId}, ${input.tempRefName}, ${input.submittedSha},
-            ${input.worktreeHead}, ${input.cleanupWorktree}, ${input.cleanupTempRef}, ${input.now}
+            ${input.worktreeHead}, ${input.worktreePath ?? null},
+            ${input.cleanupWorktree}, ${input.cleanupTempRef}, ${input.now}
           )
+          ON CONFLICT (validation_run_id) DO UPDATE SET
+            temp_ref_name = excluded.temp_ref_name,
+            submitted_sha = excluded.submitted_sha,
+            worktree_head = excluded.worktree_head,
+            worktree_path = excluded.worktree_path,
+            cleanup_worktree = excluded.cleanup_worktree,
+            cleanup_temp_ref = excluded.cleanup_temp_ref,
+            created_at = excluded.created_at
         `),
       ),
     recordToolingFailure: (input) =>
@@ -204,7 +227,20 @@ const startOrReuse = (sql: SqlClient.SqlClient, input: StartCandidateValidationR
       } satisfies StartCandidateValidationRunResult;
     }
 
-    const validationRunId = randomUUID();
+    const validationRunId = input.validationRunId ?? randomUUID();
+    const active = yield* sql<{ readonly validationRunId: string }>`
+      SELECT validation_run_id AS validationRunId
+      FROM active_validation_runs
+      WHERE change_id = ${candidate.changeId}
+    `;
+    if (active[0] !== undefined) {
+      return {
+        reused: false,
+        active: true,
+        validationRunId: active[0].validationRunId,
+      } satisfies StartCandidateValidationRunResult;
+    }
+
     yield* sql`
       INSERT INTO candidate_validation_runs (
         id, candidate_id, policy_snapshot, implementation_decisions, state, created_at, updated_at
@@ -213,8 +249,111 @@ const startOrReuse = (sql: SqlClient.SqlClient, input: StartCandidateValidationR
         ${input.now}, ${input.now}
       )
     `;
+    yield* sql`
+      INSERT INTO active_validation_runs (change_id, validation_run_id, created_at)
+      VALUES (${candidate.changeId}, ${validationRunId}, ${input.now})
+    `;
+    if (input.workspaceSetup !== undefined) {
+      yield* sql`
+        INSERT INTO candidate_validation_workspace_setups (
+          validation_run_id, temp_ref_name, submitted_sha, worktree_head, worktree_path,
+          cleanup_worktree, cleanup_temp_ref, created_at
+        ) VALUES (
+          ${validationRunId}, ${input.workspaceSetup.tempRefName}, ${input.headSha}, ${input.headSha},
+          ${input.workspaceSetup.worktreePath}, 'not_created', 'not_created', ${input.now}
+        )
+      `;
+    }
     return { reused: false, validationRunId } satisfies StartCandidateValidationRunResult;
   });
+
+const complete = (
+  sql: SqlClient.SqlClient,
+  input: { readonly validationRunId: string; readonly outcome: string; readonly now: string },
+) =>
+  Effect.zipRight(
+    sql`
+      UPDATE candidate_validation_runs
+      SET state = 'complete', outcome = ${input.outcome}, updated_at = ${input.now}
+      WHERE id = ${input.validationRunId}
+    `,
+    sql`DELETE FROM active_validation_runs WHERE validation_run_id = ${input.validationRunId}`,
+  ).pipe(Effect.asVoid);
+
+const getActiveForChange = (sql: SqlClient.SqlClient, changeId: string) =>
+  Effect.map(
+    sql<ActiveCandidateValidationRun>`
+      SELECT validation_run_id AS validationRunId, change_id AS changeId
+      FROM active_validation_runs
+      WHERE change_id = ${changeId}
+    `,
+    (rows) => rows[0],
+  );
+
+const getAbandonmentContext = (sql: SqlClient.SqlClient, validationRunId: string) =>
+  Effect.map(
+    sql<
+      Omit<
+        CandidateValidationRunAbandonmentContext,
+        "tempRefName" | "worktreePath" | "cleanupWorktree" | "cleanupTempRef"
+      > & {
+        readonly tempRefName: string | null;
+        readonly worktreePath: string | null;
+        readonly cleanupWorktree: CandidateValidationRunAbandonmentContext["cleanupWorktree"];
+        readonly cleanupTempRef: CandidateValidationRunAbandonmentContext["cleanupTempRef"];
+      }
+    >`
+      SELECT run.id AS validationRunId,
+        candidate.change_id AS changeId,
+        candidate.id AS candidateId,
+        candidate.head_sha AS submittedSha,
+        setup.temp_ref_name AS tempRefName,
+        setup.worktree_path AS worktreePath,
+        setup.cleanup_worktree AS cleanupWorktree,
+        setup.cleanup_temp_ref AS cleanupTempRef
+      FROM candidate_validation_runs AS run
+      JOIN candidates AS candidate ON candidate.id = run.candidate_id
+      LEFT JOIN candidate_validation_workspace_setups AS setup
+        ON setup.validation_run_id = run.id
+      WHERE run.id = ${validationRunId}
+    `,
+    (rows) => {
+      const row = rows[0];
+      if (row === undefined) return undefined;
+      const { tempRefName, worktreePath, ...rest } = row;
+      return {
+        ...rest,
+        ...(tempRefName === null ? {} : { tempRefName }),
+        ...(worktreePath === null ? {} : { worktreePath }),
+      };
+    },
+  );
+
+const abandon = (
+  sql: SqlClient.SqlClient,
+  input: {
+    readonly validationRunId: string;
+    readonly errorKind: string;
+    readonly operationName: string;
+    readonly errorMessage: string;
+    readonly now: string;
+  },
+) =>
+  Effect.zipRight(
+    sql`
+      INSERT INTO candidate_validation_tooling_failures (
+        validation_run_id, error_kind, operation_name, error_message, created_at
+      ) VALUES (
+        ${input.validationRunId}, ${input.errorKind}, ${input.operationName},
+        ${input.errorMessage}, ${input.now}
+      )
+    `,
+    complete(sql, {
+      validationRunId: input.validationRunId,
+      outcome: "tooling_failed",
+      now: input.now,
+    }),
+  ).pipe(Effect.asVoid);
 
 const getRunById = (sql: SqlClient.SqlClient, validationRunId: string) =>
   Effect.map(

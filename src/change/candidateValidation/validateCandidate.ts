@@ -1,3 +1,5 @@
+import { randomUUID } from "node:crypto";
+
 import type { Sandbox } from "@ai-hero/sandcastle";
 import { Context, Effect, Layer } from "effect";
 
@@ -18,6 +20,10 @@ import {
 } from "../specialistReview/runSpecialistReviewPhase.js";
 import type { SubmitCheckConfig, SubmitPrepareConfig } from "../submit/submitRepoConfig.js";
 import { createValidationWorkspace } from "../validation/createValidationWorkspace.js";
+import {
+  expectedSandcastleWorktreePath,
+  validationTempRefName,
+} from "../validation/validationWorkspacePath.js";
 import { runCheckPhase } from "../validation/runCheckRound.js";
 import { runPreparePhase } from "../validation/runPreparePhase.js";
 import {
@@ -82,6 +88,11 @@ type ValidateCandidateResult =
       readonly outcome: CandidateValidationOutcome;
       readonly reviewerEvidence?: ReviewerContinuityEvidence;
       readonly specialistReviewerEvidence?: readonly SpecialistReviewerContinuityEvidence[];
+    }
+  | {
+      readonly ok: false;
+      readonly code: "active_validation_run";
+      readonly validationRunId: string;
     }
   | {
       readonly ok: false;
@@ -167,6 +178,8 @@ const makeCandidateValidation = (dependencies: {
             acceptanceContext: input.acceptanceContext,
           }
         : input.policy;
+    const validationRunId = randomUUID();
+    const tempRefName = validationTempRefName(validationRunId);
     const started = yield* dependencies.persistence.startOrReuse({
       candidateId: input.candidateId,
       headSha: input.headSha,
@@ -175,8 +188,23 @@ const makeCandidateValidation = (dependencies: {
       ...(input.implementationDecisions === undefined
         ? {}
         : { implementationDecisions: input.implementationDecisions }),
+      validationRunId,
+      workspaceSetup: {
+        tempRefName,
+        worktreePath: expectedSandcastleWorktreePath(
+          dependencies.localRepositoryMainCheckoutRoot,
+          tempRefName,
+        ),
+      },
       now: input.now,
     });
+    if ("active" in started && started.active === true) {
+      return {
+        ok: false,
+        code: "active_validation_run",
+        validationRunId: started.validationRunId,
+      } as const;
+    }
     if (started.reused) return { ok: true, ...started } as const;
 
     const workspace = yield* createValidationWorkspace({
@@ -184,6 +212,17 @@ const makeCandidateValidation = (dependencies: {
       validationRunId: started.validationRunId,
       submittedSha: input.headSha,
       copyFiles: input.policy.copyFiles,
+      recordWorkspaceSetup: (setup) =>
+        dependencies.persistence.recordWorkspaceSetup({
+          validationRunId: setup.validationRunId,
+          tempRefName: setup.tempRefName,
+          submittedSha: setup.submittedSha,
+          worktreeHead: setup.worktreeHead,
+          ...(setup.worktreePath === undefined ? {} : { worktreePath: setup.worktreePath }),
+          cleanupWorktree: setup.cleanupResult.worktree,
+          cleanupTempRef: setup.cleanupResult.tempRef,
+          now: input.now,
+        }),
       runInWorkspace: (activeWorkspace) =>
         runCandidatePhases(dependencies, input, started.validationRunId, activeWorkspace),
     });
@@ -226,6 +265,9 @@ const makeCandidateValidation = (dependencies: {
       tempRefName: workspace.setup.tempRefName,
       submittedSha: workspace.setup.submittedSha,
       worktreeHead: workspace.setup.worktreeHead,
+      ...(workspace.setup.worktreePath === undefined
+        ? {}
+        : { worktreePath: workspace.setup.worktreePath }),
       cleanupWorktree: workspace.setup.cleanupResult.worktree,
       cleanupTempRef: workspace.setup.cleanupResult.tempRef,
       now: input.now,

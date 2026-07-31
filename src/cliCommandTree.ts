@@ -38,6 +38,7 @@ import {
   type ChangeCommandEnvironment,
 } from "./cli/change/changeCli.js";
 import {
+  runAbandonCommand,
   runArtifactCommand,
   runShowCommand as runValidationRunShowCommand,
 } from "./cli/validationRun/validationRunCli.js";
@@ -440,6 +441,20 @@ const validationRunShowCommand = withCliHandler(
       environment,
     ),
 );
+const validationRunAbandonCommand = withCliHandler(
+  leaf("abandon", "Explicitly abandon an interrupted Validation Run.", {
+    validationRunId: Args.text({ name: "validation-run-id" }),
+    reason: Options.text("reason"),
+  }),
+  (values, environment) =>
+    runAbandonCommand(
+      {
+        validationRunId: requiredString(values, "validationRunId"),
+        reason: requiredString(values, "reason"),
+      },
+      environment,
+    ),
+);
 const validationRunArtifactCommand = withCliHandler(
   leaf("artifact", "Show complete stored Artifact content.", {
     validationRunId: Args.text({ name: "validation-run-id" }),
@@ -458,7 +473,7 @@ let validationRunCommand: AnyCommand;
 validationRunCommand = group(
   "validation-run",
   "Inspect Validation Runs and Artifacts.",
-  [validationRunShowCommand, validationRunArtifactCommand],
+  [validationRunShowCommand, validationRunAbandonCommand, validationRunArtifactCommand],
   {},
   () => generatedCommandUsage(validationRunCommand),
 );

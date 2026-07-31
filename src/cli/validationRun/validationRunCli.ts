@@ -1,5 +1,6 @@
 import { Effect } from "effect";
 
+import { loadAbandonValidationRun } from "../../change/loadAbandonValidationRun.js";
 import type { CliResult } from "../../cliResults.js";
 import {
   repoStateLoadError,
@@ -17,6 +18,58 @@ import {
 export type ValidationRunCommandEnvironment = {
   readonly cwd: string;
   readonly now: () => Date;
+};
+
+export const runAbandonCommand = (
+  command: { readonly validationRunId: string; readonly reason: string },
+  environment: ValidationRunCommandEnvironment,
+): Effect.Effect<CliResult> => {
+  if (command.reason.trim().length === 0) {
+    return Effect.succeed({
+      exitCode: 2,
+      stdout: {
+        error: {
+          code: "empty_reason",
+          message: "Validation Run abandonment requires a non-empty reason.",
+          help: ["Provide a non-empty value for `--reason`."],
+        },
+      },
+    });
+  }
+  const loaded = loadAbandonValidationRun({ cwd: environment.cwd });
+  if (!loaded.ok) return Effect.succeed(repoStateLoadError(loaded.error));
+  const program = loaded.abandon
+    .abandon({
+      ...command,
+      now: environment.now().toISOString(),
+    })
+    .pipe(
+      Effect.map((result) => {
+        if (result.ok) return success(result);
+        if (result.status === "not_found") {
+          return validationRunNotFound(command.validationRunId);
+        }
+        if (result.status === "submission_in_progress") {
+          return runtimeError({
+            code: result.status,
+            message: "Another Submission, cancellation, or abandonment already owns this Change.",
+            details: result,
+            help: ["Wait for the other operation to finish, then retry Validation Run Abandon."],
+          });
+        }
+        return runtimeError({
+          code: "validation_run_cleanup_failed",
+          message:
+            "Validation Run resources could not be cleaned up, so abandonment is incomplete.",
+          details: result,
+          help: [
+            `Stop every process, repair the reported resources, then retry \`by validation-run abandon ${command.validationRunId} --reason <reason>\`.`,
+          ],
+        });
+      }),
+      Effect.catchAll((error) => Effect.succeed(repositoryStorageErrorResult(error))),
+    );
+  return program;
 };
 
 export const runShowCommand = (
