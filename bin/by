@@ -1,48 +1,123 @@
-#!/usr/bin/env sh
-set -eu
+#!/usr/bin/env node
+import { spawnSync } from "node:child_process";
+import { accessSync, constants, realpathSync } from "node:fs";
+import { dirname, join, resolve } from "node:path";
 
-repo_dir=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd -P)
+const repoDir = realpathSync(resolve(dirname(process.argv[1]), ".."));
+const args = process.argv.slice(2);
+const outputFormat = outputFormatFor(args);
+const mainCheckout = findMainCheckout();
 
-print_main_checkout_error() {
-  if [ "$1" = "json" ]; then
-    printf '%s\n' "{\"error\":{\"code\":\"main_checkout_unavailable\",\"message\":\"The Local Repository's canonical main checkout is unavailable.\"},\"help\":[\"Restore the canonical main checkout, then retry the command.\"]}"
-    return
-  fi
-
-  cat <<'EOF'
-error:
-  code: main_checkout_unavailable
-  message: "The Local Repository's canonical main checkout is unavailable."
-help[1]: "Restore the canonical main checkout, then retry the command."
-EOF
+if (!mainCheckout.ok) {
+  fail({
+    code: "main_checkout_unavailable",
+    message: "The Local Repository's canonical main checkout is unavailable.",
+    ...(mainCheckout.path === undefined ? {} : { details: { path: mainCheckout.path } }),
+    help: "Restore the canonical main checkout, then retry the command.",
+  });
 }
 
-output_format=toon
-previous_argument=
-for argument in "$@"; do
-  if [ "$previous_argument" = "--output" ] || [ "$previous_argument" = "-o" ]; then
-    [ "$argument" = "json" ] && output_format=json
-  elif [ "$argument" = "--output=json" ] || [ "$argument" = "-o=json" ]; then
-    output_format=json
-  fi
-  previous_argument=$argument
-done
+const trustedExecutable = join(mainCheckout.path, "bin/by");
+try {
+  accessSync(trustedExecutable, constants.X_OK);
+} catch {
+  fail({
+    code: "trusted_executable_unavailable",
+    message: "The canonical main-checkout Trusted But Why Executable is unavailable.",
+    details: { path: trustedExecutable },
+    help: "Restore the canonical main-checkout Trusted But Why Executable, then retry the command.",
+  });
+}
 
-main_checkout=$(git worktree list --porcelain 2>/dev/null | sed -n 's/^worktree //p' | head -n 1 || true)
-if [ -z "$main_checkout" ] || ! main_checkout=$(CDPATH= cd -- "$main_checkout" 2>/dev/null && pwd -P); then
-  print_main_checkout_error "$output_format"
-  exit 1
-fi
+const child =
+  repoDir === mainCheckout.path
+    ? spawnSync(
+        process.execPath,
+        [
+          "--import",
+          join(repoDir, "node_modules/tsx/dist/loader.mjs"),
+          join(repoDir, "src/main.ts"),
+          ...args,
+        ],
+        {
+          env: { ...process.env, BUT_WHY_EXECUTABLE_PATH: join(repoDir, "bin/by") },
+          stdio: "inherit",
+        },
+      )
+    : spawnSync(trustedExecutable, args, {
+        env: { ...process.env, BUT_WHY_EXECUTABLE_PATH: trustedExecutable },
+        stdio: "inherit",
+      });
 
-if [ "$repo_dir" = "$main_checkout" ]; then
-  BUT_WHY_EXECUTABLE_PATH="$repo_dir/bin/by" exec node \
-    --import "$repo_dir/node_modules/tsx/dist/loader.mjs" \
-    "$repo_dir/src/main.ts" "$@"
-fi
+if (child.error !== undefined) {
+  fail({
+    code: "trusted_executable_unavailable",
+    message: "The canonical main-checkout Trusted But Why Executable is unavailable.",
+    details: { path: trustedExecutable },
+    help: "Restore the canonical main-checkout Trusted But Why Executable, then retry the command.",
+  });
+}
 
-if [ ! -x "$main_checkout/bin/by" ]; then
-  print_main_checkout_error "$output_format"
-  exit 1
-fi
+process.exitCode = child.status ?? 1;
 
-BUT_WHY_EXECUTABLE_PATH="$main_checkout/bin/by" exec "$main_checkout/bin/by" "$@"
+function findMainCheckout() {
+  const worktrees = spawnSync("git", ["worktree", "list", "--porcelain", "-z"], {
+    encoding: "buffer",
+    stdio: ["ignore", "pipe", "ignore"],
+  });
+  if (worktrees.status !== 0 || worktrees.stdout === null) return { ok: false };
+
+  const firstWorktree = worktrees.stdout.toString("utf8").split("\0\0", 1)[0] ?? "";
+  const rawPath = firstWorktree
+    .split("\0")
+    .find((field) => field.startsWith("worktree "))
+    ?.slice("worktree ".length);
+  if (rawPath === undefined || rawPath.length === 0) return { ok: false };
+
+  try {
+    return { ok: true, path: realpathSync(rawPath) };
+  } catch {
+    return { ok: false, path: rawPath };
+  }
+}
+
+function fail(failure) {
+  const result = {
+    error: {
+      code: failure.code,
+      message: failure.message,
+      ...(failure.details === undefined ? {} : { details: failure.details }),
+    },
+    help: [failure.help],
+  };
+  if (outputFormat === "json") {
+    process.stdout.write(`${JSON.stringify(result)}\n`);
+  } else {
+    process.stdout.write(toonFailure(result));
+  }
+  process.exit(1);
+}
+
+function outputFormatFor(arguments_) {
+  for (let index = 0; index < arguments_.length; index += 1) {
+    const argument = arguments_[index];
+    if ((argument === "--output" || argument === "-o") && arguments_[index + 1] === "json") {
+      return "json";
+    }
+    if (argument === "--output=json" || argument === "-o=json") return "json";
+  }
+  return "toon";
+}
+
+function toonFailure(result) {
+  const lines = [
+    "error:",
+    `  code: ${result.error.code}`,
+    `  message: ${JSON.stringify(result.error.message)}`,
+  ];
+  if (result.error.details !== undefined) {
+    lines.push("  details:", `    path: ${JSON.stringify(result.error.details.path)}`);
+  }
+  lines.push(`help[${result.help.length}]: ${JSON.stringify(result.help[0])}`);
+  return `${lines.join("\n")}\n`;
+}

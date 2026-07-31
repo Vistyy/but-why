@@ -1,4 +1,12 @@
-import { chmodSync, cpSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  cpSync,
+  mkdirSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import { join } from "node:path";
 import { expect, test } from "vitest";
@@ -128,6 +136,48 @@ test("source workflow fails without Candidate fallback when the main checkout is
 help[1]: "Restore the canonical main checkout, then retry the command."
 `);
 }, 30_000);
+
+test("source workflow preserves a newline in the canonical checkout path", () => {
+  const { main, candidate } = prepareLauncherRepository();
+  const trustedExecutable = join(main, "bin/by");
+  rmSync(trustedExecutable);
+
+  const result = runTestProcess("just", ["by", "--output", "json", "task", "list"], {
+    cwd: candidate,
+  });
+
+  expect(result.status).toBe(1);
+  expect(result.stderr).toBe("");
+  expect(JSON.parse(result.stdout)).toEqual({
+    error: {
+      code: "trusted_executable_unavailable",
+      message: "The canonical main-checkout Trusted But Why Executable is unavailable.",
+      details: { path: trustedExecutable },
+    },
+    help: [
+      "Restore the canonical main-checkout Trusted But Why Executable, then retry the command.",
+    ],
+  });
+}, 30_000);
+
+const prepareLauncherRepository = () => {
+  const main = join(createTestWorkspace(), "main\ncheckout");
+  const candidate = createTestWorkspace();
+  mkdirSync(main);
+  cpSync(join(repoRoot, "bin"), join(main, "bin"), { recursive: true });
+  cpSync(join(repoRoot, "package.json"), join(main, "package.json"));
+  cpSync(join(repoRoot, "justfile"), join(main, "justfile"));
+
+  git(main, "init", "-q");
+  git(main, "config", "user.name", "But Why Test");
+  git(main, "config", "user.email", "but-why@example.test");
+  git(main, "branch", "-M", "main");
+  git(main, "add", "bin", "package.json", "justfile");
+  git(main, "commit", "-m", "source launcher");
+  git(main, "worktree", "add", "-b", "candidate", candidate, "main");
+
+  return { main, candidate };
+};
 
 const readFile = (path: string): string => readFileSync(path, "utf8");
 

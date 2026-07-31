@@ -90,7 +90,7 @@ exec ${realGitPath} "$@"
             code: "main_checkout_unavailable",
             message: "The Local Repository's canonical main checkout is unavailable.",
           },
-          help: ["Restore the canonical main checkout, then retry Change Implement."],
+          help: ["Restore the canonical main checkout, then retry the command."],
         });
       } finally {
         runTestProcessOrThrow("git", ["worktree", "remove", "--force", linkedCheckout], {
