@@ -79,7 +79,7 @@ const cancelResult = (taskId: PublicTaskId, result: TaskCancellationResult): Cli
       code: result.code,
       message: `Task was not found: ${taskId}`,
       details: { taskId },
-      help: ["Run `by task list --all` to see known Tasks."],
+      help: ["Run `by task list --all --limit all` to see known Tasks."],
     });
   }
   const messages: Record<Exclude<TaskCancellationResult, { readonly ok: true }>["code"], string> = {

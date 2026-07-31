@@ -967,7 +967,7 @@ const startResult = (result: ChangeStartResult): CliResult => {
     return runtimeError({
       code: result.code,
       message: "Task was not found.",
-      help: ["Run `by task list --all` to see known Tasks."],
+      help: ["Run `by task list --all --limit all` to see known Tasks."],
     });
   }
   if (result.code === "invalid_task_state") {

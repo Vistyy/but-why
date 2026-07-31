@@ -161,26 +161,29 @@ help[1]: Run \`by task list\` to see open tasks.
     Effect.gen(function* () {
       const root = createTestWorkspace();
       const taskUseCases = fakeTaskUseCases({
-        listTasks: () => [
-          {
-            id: "BY-1",
-            title: "First",
-            state: "new",
-            createdAt: firstNow,
-            updatedAt: firstNow,
-            startable: false,
-            blockedBy: [],
-          },
-          {
-            id: "BY-2",
-            title: "Second",
-            state: "ready",
-            createdAt: secondNow,
-            updatedAt: thirdNow,
-            startable: false,
-            blockedBy: [],
-          },
-        ],
+        listTasks: () => ({
+          tasks: [
+            {
+              id: "BY-1",
+              title: "First",
+              state: "new",
+              createdAt: firstNow,
+              updatedAt: firstNow,
+              startable: false,
+              blockedBy: [],
+            },
+            {
+              id: "BY-2",
+              title: "Second",
+              state: "ready",
+              createdAt: secondNow,
+              updatedAt: thirdNow,
+              startable: false,
+              blockedBy: [],
+            },
+          ],
+          total: 2,
+        }),
       });
 
       const result = yield* runByInProcessEffect(root, ["task", "list"], firstNow, {
@@ -190,6 +193,7 @@ help[1]: Run \`by task list\` to see open tasks.
       expect(result.status).toBe(0);
       expect(result.stderr).toBe("");
       expect(result.stdout).toBe(`count: 2
+total: 2
 tasks[2]:
   - id: BY-1
     title: First
@@ -211,13 +215,90 @@ tasks[2]:
     }),
   );
 
+  it.effect("bounds default and explicit Task List results and reports truncation help", () =>
+    Effect.gen(function* () {
+      const tasks = Array.from({ length: 6 }, (_, index) =>
+        taskSummary({ id: `BY-${index + 1}`, title: `Task ${index + 1}` }),
+      );
+      const doneTasks = Array.from({ length: 3 }, (_, index) =>
+        taskSummary({ id: `BY-${index + 7}`, title: `Done ${index + 1}`, state: "done" }),
+      );
+      const taskUseCases = fakeTaskUseCases({
+        listTasks: (input) => {
+          const matching = input.state === "done" ? doneTasks : tasks;
+          const limit = input.limit === "all" ? matching.length : (input.limit ?? matching.length);
+          return { tasks: matching.slice(0, limit), total: matching.length };
+        },
+      });
+
+      const defaultResult = yield* runByInProcessEffect(
+        createTestWorkspace(),
+        ["--output", "json", "task", "list"],
+        firstNow,
+        { taskUseCases },
+      );
+      const numericResult = yield* runByInProcessEffect(
+        createTestWorkspace(),
+        ["--output", "json", "task", "list", "--limit", "2"],
+        firstNow,
+        { taskUseCases },
+      );
+      const unlimitedResult = yield* runByInProcessEffect(
+        createTestWorkspace(),
+        ["--output", "json", "task", "list", "--limit", "all"],
+        firstNow,
+        { taskUseCases },
+      );
+      const filteredResult = yield* runByInProcessEffect(
+        createTestWorkspace(),
+        ["--output", "json", "task", "list", "--state", "done", "--limit", "2"],
+        firstNow,
+        { taskUseCases },
+      );
+
+      expect(JSON.parse(defaultResult.stdout)).toMatchObject({ count: 5, total: 6 });
+      expect(JSON.parse(defaultResult.stdout).help[0]).toContain("--limit all");
+      expect(JSON.parse(numericResult.stdout)).toMatchObject({ count: 2, total: 6 });
+      expect(JSON.parse(numericResult.stdout).help[0]).toContain("--limit all");
+      expect(JSON.parse(unlimitedResult.stdout)).toMatchObject({ count: 6, total: 6 });
+      expect(JSON.parse(unlimitedResult.stdout).help).toBeUndefined();
+      expect(JSON.parse(filteredResult.stdout)).toMatchObject({ count: 2, total: 3 });
+      expect(JSON.parse(filteredResult.stdout).help[0]).toBe(
+        "Run `by task list --state done --limit all` to retrieve all matching Tasks.",
+      );
+    }),
+  );
+
+  it.effect("rejects an invalid Task List limit without reading state", () =>
+    Effect.gen(function* () {
+      const result = yield* runByInProcessEffect(
+        createTestWorkspace(),
+        ["--output", "json", "task", "list", "--limit", "0"],
+        firstNow,
+        { taskUseCases: fakeTaskUseCases({ listTasks: () => expect.fail("must not list") }) },
+      );
+
+      expect(result.status).toBe(2);
+      expect(JSON.parse(result.stdout)).toMatchObject({
+        error: {
+          code: "invalid_task_list_limit",
+          message: "Task list limit must be a positive integer or `all`.",
+        },
+      });
+    }),
+  );
+
   it.effect("lists Tasks as compact JSON when selected after the command", () =>
     Effect.gen(function* () {
       const result = yield* runByInProcessEffect(
         createTestWorkspace(),
         ["--output", "json", "task", "list"],
         firstNow,
-        { taskUseCases: fakeTaskUseCases({ listTasks: () => listedTasks }) },
+        {
+          taskUseCases: fakeTaskUseCases({
+            listTasks: () => ({ tasks: listedTasks, total: listedTasks.length }),
+          }),
+        },
       );
 
       expect(result.status).toBe(0);
@@ -226,6 +307,7 @@ tasks[2]:
       expect(result.stdout.trimEnd()).not.toContain("\n");
       expect(JSON.parse(result.stdout)).toEqual({
         count: 2,
+        total: 2,
         tasks: listedTasks.map((task) => ({ ...task, change: null })),
       });
     }),
@@ -268,7 +350,7 @@ help[1]: "Run \`by task create --title \\"...\\" --description-file <file>\` to 
       const taskUseCases = fakeTaskUseCases({
         listTasks: (input) => {
           inputs.push(input);
-          return listedTasks;
+          return { tasks: listedTasks, total: listedTasks.length };
         },
       });
 
@@ -288,9 +370,9 @@ help[1]: "Run \`by task create --title \\"...\\" --description-file <file>\` to 
       );
 
       expect(inputs).toEqual([
-        { includeDone: false },
-        { includeDone: true },
-        { includeDone: true, state: "done" },
+        { includeDone: false, limit: 5 },
+        { includeDone: true, limit: 5 },
+        { includeDone: true, state: "done", limit: 5 },
       ]);
     }),
   );
@@ -858,7 +940,7 @@ contextCommand: by task context BY-1
   code: task_not_found
   message: "Task was not found: BY-999"
   taskId: BY-999
-help[1]: Run \`by task list --all\` to see known Tasks.
+help[1]: Run \`by task list --all --limit all\` to see known Tasks.
 `);
       }),
   );
@@ -870,13 +952,16 @@ help[1]: Run \`by task list --all\` to see known Tasks.
         ["task", "list"],
         firstNow,
         {
-          taskUseCases: fakeTaskUseCases({ listTasks: () => [] }),
+          taskUseCases: fakeTaskUseCases({
+            listTasks: () => ({ tasks: [], total: 0 }),
+          }),
         },
       );
 
       expect(result.status).toBe(0);
       expect(result.stderr).toBe("");
       expect(result.stdout).toBe(`count: 0
+total: 0
 tasks: []
 help[1]: "Run \`by task create --title \\"...\\" --description-file <file>\` to create a task."
 `);

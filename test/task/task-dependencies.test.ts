@@ -212,7 +212,7 @@ describe("Task dependency CLI", () => {
 
       expectJsonError(result, {
         error: { code: "dependency_cycle", message: "Task dependencies must not contain a cycle." },
-        help: ["Use existing Tasks from `by task list --all` as direct prerequisites."],
+        help: ["Use existing Tasks from `by task list --all --limit all` as direct prerequisites."],
       });
     }),
   );
@@ -274,7 +274,9 @@ describe("Task dependency CLI", () => {
         );
         expectJsonError(result, {
           error: testCase.error,
-          help: ["Use existing Tasks from `by task list --all` as direct prerequisites."],
+          help: [
+            "Use existing Tasks from `by task list --all --limit all` as direct prerequisites.",
+          ],
         });
       }
 
@@ -345,7 +347,7 @@ describe("Task dependency CLI", () => {
       );
       expectJsonError(missing, {
         error: { code: "task_not_found", message: "Task was not found: BY-404", taskId: "BY-404" },
-        help: ["Run `by task list --all` to see known Tasks."],
+        help: ["Run `by task list --all --limit all` to see known Tasks."],
       });
 
       expect(yield* readGraph(root, taskIds)).toEqual(before);

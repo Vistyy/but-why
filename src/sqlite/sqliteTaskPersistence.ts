@@ -103,27 +103,52 @@ const replaceTaskDependencies = (sql: SqlClient.SqlClient, input: ReplaceTaskDep
 
 const listTasks = (sql: SqlClient.SqlClient, input: ListTasksInput) =>
   Effect.gen(function* () {
+    const limit = input.limit === "all" || input.limit === undefined ? -1 : input.limit;
     const rows = input.state
       ? yield* sql<TaskSummaryRow>`
-          SELECT id, title, state, completion_kind AS completionKind, created_at AS createdAt, updated_at AS updatedAt
+          SELECT id, title, state, completion_kind AS completionKind, created_at AS createdAt, updated_at AS updatedAt,
+            COUNT(*) OVER () AS totalCount
           FROM tasks
           WHERE state = ${input.state}
           ORDER BY created_at ASC, numeric_id ASC
+          LIMIT ${limit}
         `
       : input.includeDone
         ? yield* sql<TaskSummaryRow>`
-            SELECT id, title, state, completion_kind AS completionKind, created_at AS createdAt, updated_at AS updatedAt
+            SELECT id, title, state, completion_kind AS completionKind, created_at AS createdAt, updated_at AS updatedAt,
+              COUNT(*) OVER () AS totalCount
             FROM tasks
             ORDER BY created_at ASC, numeric_id ASC
+            LIMIT ${limit}
           `
         : yield* sql<TaskSummaryRow>`
-            SELECT id, title, state, completion_kind AS completionKind, created_at AS createdAt, updated_at AS updatedAt
+            SELECT id, title, state, completion_kind AS completionKind, created_at AS createdAt, updated_at AS updatedAt,
+              COUNT(*) OVER () AS totalCount
             FROM tasks
             WHERE state NOT IN ('done', 'cancelled')
             ORDER BY created_at ASC, numeric_id ASC
+            LIMIT ${limit}
           `;
-    return yield* Effect.forEach(rows, (row) => rowToTaskSummary(sql, row));
+    const tasks = yield* Effect.forEach(rows, (row) => rowToTaskSummary(sql, row));
+    return {
+      tasks,
+      total: Number(rows[0]?.totalCount ?? (yield* countTasks(sql, input))),
+    };
   });
+
+const countTasks = (sql: SqlClient.SqlClient, input: ListTasksInput) =>
+  Effect.map(
+    input.state
+      ? sql<{ readonly total: number | bigint }>`
+          SELECT COUNT(*) AS total FROM tasks WHERE state = ${input.state}
+        `
+      : input.includeDone
+        ? sql<{ readonly total: number | bigint }>`SELECT COUNT(*) AS total FROM tasks`
+        : sql<{ readonly total: number | bigint }>`
+            SELECT COUNT(*) AS total FROM tasks WHERE state NOT IN ('done', 'cancelled')
+          `,
+    (rows) => Number(rows[0]?.total ?? 0),
+  );
 
 const listActionableTasks = (sql: SqlClient.SqlClient) =>
   Effect.gen(function* () {
@@ -447,8 +472,9 @@ const nextTaskNumericId = (sql: SqlClient.SqlClient) =>
 
 const rowToTaskSummary = (sql: SqlClient.SqlClient, row: TaskSummaryRow) =>
   Effect.map(dependencyFacts(sql, row.id, "prerequisites"), (prerequisites): TaskSummary => {
+    const { totalCount: _totalCount, ...summary } = row;
     const blockedBy = prerequisites.filter((dependency) => dependency.state !== "done");
-    return { ...row, startable: row.state === "todo" && blockedBy.length === 0, blockedBy };
+    return { ...summary, startable: row.state === "todo" && blockedBy.length === 0, blockedBy };
   });
 
 const rowToStoredTaskRecord = (sql: SqlClient.SqlClient, row: StoredTaskRecordRow) =>
@@ -492,6 +518,7 @@ type TaskSummaryRow = {
   readonly completionKind: "merged_pr" | "no_change" | null;
   readonly createdAt: string;
   readonly updatedAt: string;
+  readonly totalCount?: number | bigint;
 };
 type StoredTaskRecordRow = TaskSummaryRow & {
   readonly description: string;

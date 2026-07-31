@@ -1,5 +1,10 @@
 import type { TaskState } from "./lifecycle.js";
-import type { DependencyValidationCode, TaskDependencyFact, TaskRecord } from "./task.js";
+import type {
+  DependencyValidationCode,
+  TaskDependencyFact,
+  TaskRecord,
+  TaskSummary,
+} from "./task.js";
 import type { PublicTaskId } from "./taskId.js";
 
 export type StoredTaskRecord = TaskRecord;
@@ -22,9 +27,17 @@ export type ReplaceTaskDependenciesResult =
   | { readonly ok: false; readonly code: DependencyValidationCode; readonly taskId?: PublicTaskId }
   | { readonly ok: false; readonly code: "dependencies_locked"; readonly state: TaskState };
 
+export type TaskListLimit = number | "all";
+
 export type ListTasksInput = {
   readonly includeDone: boolean;
   readonly state?: TaskState;
+  readonly limit?: TaskListLimit;
+};
+
+export type ListTasksResult = {
+  readonly tasks: readonly TaskSummary[];
+  readonly total: number;
 };
 
 export type ApproveTaskInput = {
