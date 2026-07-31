@@ -255,7 +255,8 @@ Do not use an Implementation Blocker for Findings, tooling recovery, publication
 
 After Submission publishes an owned pull request, stop for human merge.
 But Why does not merge pull requests.
-After the human merge, reconcile the Change:
+After the human merge, the user closes the Herdr Interactive Session manually.
+Then the main operator session runs Reconcile:
 
 ```bash
 by change reconcile <change-id>

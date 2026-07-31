@@ -1,5 +1,6 @@
 import { existsSync, mkdirSync, symlinkSync, writeFileSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
+import { pathToFileURL } from "node:url";
 import { describe, expect, it } from "vitest";
 
 import { cleanupChangeResources } from "../../src/change/localChangeCleanupGit.js";
@@ -202,6 +203,52 @@ describe("Change cleanup Git adapter", () => {
       }),
     ).toEqual({ state: "complete" });
     expect(existsSync(worktreePath)).toBe(false);
+    expect(git(repository, "branch", "--list", "feature")).toBe("");
+  });
+
+  it("deletes the local Repository Branch when cleanup runs inside its Managed Worktree", () => {
+    const repository = initializedRepository();
+    const commonDirectory = git(
+      repository,
+      "rev-parse",
+      "--path-format=absolute",
+      "--git-common-dir",
+    );
+    const worktreePath = join(repository, "feature-worktree");
+    git(repository, "worktree", "add", "-b", "feature", worktreePath, "main");
+    writeFileSync(join(worktreePath, "feature.txt"), "merged work\\n");
+    git(worktreePath, "add", "feature.txt");
+    git(worktreePath, "commit", "-m", "Feature");
+    git(repository, "merge", "--ff-only", "feature");
+
+    const script = createTestWorkspace();
+    const cleanupScript = join(script, "cleanup.mjs");
+    writeFileSync(
+      cleanupScript,
+      `const { cleanupChangeResources } = await import(${JSON.stringify(
+        pathToFileURL(join(import.meta.dirname, "../../src/change/localChangeCleanupGit.ts")).href,
+      )});
+const [repositoryCommonDirectory, worktreePath, branchRef] = process.argv.slice(2);
+console.log(JSON.stringify(cleanupChangeResources({ repositoryCommonDirectory, worktreePath, branchRef })));
+`,
+    );
+
+    expect(
+      runTestProcessOrThrow(
+        process.execPath,
+        [
+          "--import",
+          join(import.meta.dirname, "../../node_modules/tsx/dist/loader.mjs"),
+          cleanupScript,
+          commonDirectory,
+          worktreePath,
+          "refs/heads/feature",
+        ],
+        { cwd: worktreePath },
+      ),
+    ).toBe(JSON.stringify({ state: "complete" }));
+    expect(existsSync(worktreePath)).toBe(false);
+    expect(git(repository, "worktree", "list", "--porcelain")).not.toContain(worktreePath);
     expect(git(repository, "branch", "--list", "feature")).toBe("");
   });
 

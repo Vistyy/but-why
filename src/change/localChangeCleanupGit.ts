@@ -418,33 +418,38 @@ const isFileSystemError = (error: unknown, code: string): boolean =>
 type GitResult = { readonly ok: true; readonly stdout: string } | { readonly ok: false };
 
 const git = (commonDirectory: string, args: readonly string[]): GitResult =>
-  runGit([`--git-dir=${commonDirectory}`, ...args]);
+  runGit([`--git-dir=${commonDirectory}`, ...args], commonDirectory);
 
 const gitAtWorktree = (worktreePath: string, args: readonly string[]): GitResult =>
-  runGit(["-C", worktreePath, ...args]);
+  runGit(["-C", worktreePath, ...args], worktreePath);
 
 const gitAtResolvedRemote = (commonDirectory: string, args: readonly string[]): GitResult => {
   const temporaryGitDirectory = mkdtempSync(join(tmpdir(), "but-why-remote-cleanup-"));
   try {
-    const initialized = runGitCommand(["init", "--bare", "-q", temporaryGitDirectory]);
+    const initialized = runGitCommand(
+      ["init", "--bare", "-q", temporaryGitDirectory],
+      commonDirectory,
+    );
     if (!initialized.ok) return initialized;
-    const configured = runGitCommand([
-      `--git-dir=${commonDirectory}`,
-      "config",
-      "--null",
-      "--list",
-    ]);
+    const configured = runGitCommand(
+      [`--git-dir=${commonDirectory}`, "config", "--null", "--list"],
+      commonDirectory,
+    );
     if (!configured.ok) return configured;
-    const copied = copyGitConfiguration(configured.stdout, join(temporaryGitDirectory, "config"));
+    const copied = copyGitConfiguration(
+      configured.stdout,
+      join(temporaryGitDirectory, "config"),
+      commonDirectory,
+    );
     return copied
-      ? runGitWithoutUrlRewrites([`--git-dir=${temporaryGitDirectory}`, ...args])
+      ? runGitWithoutUrlRewrites([`--git-dir=${temporaryGitDirectory}`, ...args], commonDirectory)
       : { ok: false };
   } finally {
     rmSync(temporaryGitDirectory, { recursive: true, force: true });
   }
 };
 
-const copyGitConfiguration = (value: string, destination: string): boolean => {
+const copyGitConfiguration = (value: string, destination: string, cwd: string): boolean => {
   for (const entry of value.split("\0").filter((item) => item.length > 0)) {
     const separator = entry.indexOf("\n");
     if (separator < 0) return false;
@@ -453,28 +458,30 @@ const copyGitConfiguration = (value: string, destination: string): boolean => {
     if (key.startsWith("include") || /^url\..*\.(insteadof|pushinsteadof)$/u.test(key)) {
       continue;
     }
-    if (!runGitCommand(["config", "--file", destination, "--add", key, setting]).ok) {
+    if (!runGitCommand(["config", "--file", destination, "--add", key, setting], cwd).ok) {
       return false;
     }
   }
   return true;
 };
 
-const runGit = (args: readonly string[]): GitResult => runGitCommand(args);
+const runGit = (args: readonly string[], cwd: string): GitResult => runGitCommand(args, cwd);
 
-const runGitCommand = (args: readonly string[]): GitResult => {
+const runGitCommand = (args: readonly string[], cwd: string): GitResult => {
   const result = spawnSync("git", args, {
+    cwd,
     encoding: "utf8",
     stdio: ["ignore", "pipe", "ignore"],
   });
   return result.status === 0 ? { ok: true, stdout: result.stdout } : { ok: false };
 };
 
-const runGitWithoutUrlRewrites = (args: readonly string[]): GitResult => {
+const runGitWithoutUrlRewrites = (args: readonly string[], cwd: string): GitResult => {
   const result = spawnSync(
     "env",
     ["GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_NOSYSTEM=1", "git", ...args],
     {
+      cwd,
       encoding: "utf8",
       stdio: ["ignore", "pipe", "ignore"],
     },
