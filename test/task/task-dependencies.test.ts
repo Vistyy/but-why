@@ -223,6 +223,18 @@ describe("Task dependency CLI", () => {
         error: { code: "replace_requires_dependency" },
       });
 
+      for (const extraArgument of ["extra", "foo", "bar"] as const) {
+        const extraPositional = yield* runByInProcessEffect(
+          root,
+          ["--output", "json", "task", "dependencies", "replace", "BY-4", extraArgument],
+          now,
+        );
+        expect(extraPositional.status).toBe(2);
+        expect(JSON.parse(extraPositional.stdout)).toMatchObject({
+          error: { code: "invalid_usage" },
+        });
+      }
+
       for (const invalidOption of [
         "--output=xml",
         "--output=json",

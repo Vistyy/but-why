@@ -730,14 +730,14 @@ const missingDependencyOperation = (
   }
   const taskIndex = args.indexOf("task");
   const operation = args[taskIndex + 2];
-  if (!validGlobalOptionSyntax(args)) return undefined;
+  if (!validGlobalOptionSyntax(args, taskIndex + 3)) return undefined;
   return args[taskIndex + 1] === "dependencies" &&
     (operation === "add" || operation === "remove" || operation === "replace")
     ? operation
     : undefined;
 };
 
-const validGlobalOptionSyntax = (args: readonly string[]): boolean => {
+const validGlobalOptionSyntax = (args: readonly string[], taskIdIndex: number): boolean => {
   const seen = new Set<string>();
   const valueOptions = new Map([
     ["--output", new Set(["toon", "json"])],
@@ -751,7 +751,11 @@ const validGlobalOptionSyntax = (args: readonly string[]): boolean => {
   const flags = new Set(["--wizard", "--version", "--help", "-h"]);
   for (let index = 0; index < args.length; index += 1) {
     const argument = args[index];
-    if (argument === undefined || !argument.startsWith("-")) continue;
+    if (argument === undefined) return false;
+    if (!argument.startsWith("-")) {
+      if (index > taskIdIndex) return false;
+      continue;
+    }
     if (argument.includes("=")) return false;
     const option = aliases.get(argument) ?? argument;
     if (flags.has(option)) {
