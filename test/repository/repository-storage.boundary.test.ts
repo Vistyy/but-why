@@ -744,6 +744,7 @@ describe("repository SQL storage", () => {
           { migration_id: 8, name: "recover_published_remote_branch_cleanup" },
           { migration_id: 9, name: "active_validation_runs" },
           { migration_id: 10, name: "validation_workspace_paths" },
+          { migration_id: 11, name: "backfill_active_validation_runs" },
         ]);
         expect(identities).toEqual([{ common_directory: repositorySql.commonDirectory }]);
         expect(candidateColumns.map(({ name }) => name)).toEqual([
@@ -1029,7 +1030,7 @@ describe("repository SQL storage", () => {
                 (sql) => sql`PRAGMA foreign_key_check`,
               );
 
-              expect(migrations).toEqual([{ count: 10 }]);
+              expect(migrations).toEqual([{ count: 11 }]);
               expect(tasks).toEqual([
                 { id: "BY-1", state: "implementing", title: "Blocked work" },
                 { id: "BY-2", state: "done", title: "Prerequisite" },
@@ -1094,7 +1095,7 @@ describe("repository SQL storage", () => {
             }).pipe(Effect.provide(repositorySqlLayer({ commonDirectory: directory, statePath }))),
           );
 
-          expect(result).toEqual([{ migrations: 10, tasks: 2, changes: 1, versions: 1 }]);
+          expect(result).toEqual([{ migrations: 11, tasks: 2, changes: 1, versions: 1 }]);
         });
       },
       (directory) => Effect.sync(() => rmSync(directory, { recursive: true, force: true })),
@@ -1137,7 +1138,7 @@ describe("repository SQL storage", () => {
             }).pipe(Effect.provide(repositorySqlLayer({ commonDirectory: directory, statePath }))),
           );
 
-          expect(result).toEqual([{ blockers: 1, migrations: 10, versions: 1 }]);
+          expect(result).toEqual([{ blockers: 1, migrations: 11, versions: 1 }]);
         });
       },
       (directory) => Effect.sync(() => rmSync(directory, { recursive: true, force: true })),
@@ -1203,8 +1204,8 @@ describe("repository SQL storage", () => {
         );
 
         return Effect.gen(function* () {
-          expect(yield* readMigrationCount).toBe(10);
-          expect(yield* readMigrationCount).toBe(10);
+          expect(yield* readMigrationCount).toBe(11);
+          expect(yield* readMigrationCount).toBe(11);
         });
       },
       (directory) => Effect.sync(() => rmSync(directory, { recursive: true, force: true })),

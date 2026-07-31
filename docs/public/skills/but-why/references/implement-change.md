@@ -73,6 +73,11 @@ Route all Change review through Change Submit.
 If the caller times out or loses the response, inspect the Change, Validation Runs, Findings, and active processes before retrying.
 Do not assume that Change Submit stopped when its caller ended.
 
+If an Active Validation Run remains after its Submit process stops, stop every process from that Validation Run.
+Run `<but-why> validation-run abandon <validation-run-id> --reason <reason>`.
+Validation Run Abandonment does not inspect process state or stop processes.
+Retry Change Submit only after abandonment reports success.
+
 When Change Submit returns Findings, run `<but-why> change findings <change-id>`.
 Fix every applicable Finding in the Managed Worktree.
 Commit the fixes and run Change Submit again.

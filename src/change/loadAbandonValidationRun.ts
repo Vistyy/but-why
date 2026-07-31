@@ -7,6 +7,12 @@ import { loadRepoLocalContext, type LoadRepoLocalContextError } from "../init/re
 import { repositorySqlLayer } from "../sqlite/repositorySql.js";
 import { openSqliteChangeValidationPersistence } from "../sqlite/sqliteChangeValidationPersistence.js";
 import { openSqliteExecutionLock } from "../sqlite/sqliteExecutionLock.js";
+import {
+  deleteValidationTempRef,
+  expectedSandcastleWorktreePath,
+  validationTempRefName,
+  removeValidationWorktree,
+} from "./validation/validationGitGlue.js";
 
 export type LoadAbandonValidationRunResult =
   | { readonly ok: true; readonly abandon: AbandonValidationRun }
@@ -43,7 +49,15 @@ export const loadAbandonValidationRun = (input: {
           openAbandonValidationRun({
             persistence,
             executionLock: openSqliteExecutionLock({ commonDirectory: context.commonDirectory }),
-            repoRoot: context.mainCheckoutRoot,
+            workspaceCleanup: {
+              tempRefName: validationTempRefName,
+              expectedWorktreePath: (tempRefName) =>
+                expectedSandcastleWorktreePath(context.mainCheckoutRoot, tempRefName),
+              removeWorktree: (worktreePath) =>
+                removeValidationWorktree(context.mainCheckoutRoot, worktreePath),
+              deleteTempRef: (tempRefName) =>
+                deleteValidationTempRef(context.mainCheckoutRoot, tempRefName),
+            },
           }).abandon(command),
         ).pipe(Effect.provide(repositoryLayer)),
     },

@@ -201,6 +201,7 @@ by change findings [<change-id>]
 by change validation-runs [<change-id>]
 by validation-run show <validation-run-id>
 by validation-run artifact <validation-run-id> <artifact-ref>
+by validation-run abandon <validation-run-id> --reason <reason>
 by change submit [<change-id>]
 by change cancel [<change-id>]
 by change reconcile [<change-id>]

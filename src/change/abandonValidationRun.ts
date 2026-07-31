@@ -3,12 +3,7 @@ import { Effect } from "effect";
 import type { RepositoryStorageError } from "../contracts/repositoryStorageError.js";
 import type { ExecutionLock } from "../contracts/executionLock.js";
 import type { ChangeValidationPersistence } from "./validation/changeValidationPersistence.js";
-import {
-  deleteValidationTempRef,
-  expectedSandcastleWorktreePath,
-  removeValidationWorktree,
-  validationTempRefName,
-} from "./validation/validationGitGlue.js";
+import type { ValidationWorkspaceCleanup } from "./validation/validationWorkspaceCleanup.js";
 
 export type AbandonValidationRunResult =
   | {
@@ -38,10 +33,15 @@ export type AbandonValidationRun = {
   }) => Effect.Effect<AbandonValidationRunResult, RepositoryStorageError>;
 };
 
+export type AbandonValidationPersistence = Pick<
+  ChangeValidationPersistence,
+  "getAbandonmentContext" | "getRunById" | "recordToolingFailure" | "abandon"
+>;
+
 export const openAbandonValidationRun = (input: {
-  readonly persistence: ChangeValidationPersistence;
+  readonly persistence: AbandonValidationPersistence;
   readonly executionLock: ExecutionLock;
-  readonly repoRoot: string;
+  readonly workspaceCleanup: ValidationWorkspaceCleanup;
 }): AbandonValidationRun => ({
   abandon: (command) =>
     Effect.gen(function* () {
@@ -85,8 +85,8 @@ export const openAbandonValidationRun = (input: {
 
 const abandonWhileLocked = (
   input: {
-    readonly persistence: ChangeValidationPersistence;
-    readonly repoRoot: string;
+    readonly persistence: AbandonValidationPersistence;
+    readonly workspaceCleanup: ValidationWorkspaceCleanup;
   },
   command: { readonly validationRunId: string; readonly reason: string; readonly now: string },
 ): Effect.Effect<AbandonValidationRunResult, RepositoryStorageError> =>
@@ -117,19 +117,20 @@ const abandonWhileLocked = (
       } as const;
     }
 
-    const tempRefName = context.tempRefName ?? validationTempRefName(command.validationRunId);
+    const tempRefName =
+      context.tempRefName ?? input.workspaceCleanup.tempRefName(command.validationRunId);
     const worktreePath =
-      context.worktreePath ?? expectedSandcastleWorktreePath(input.repoRoot, tempRefName);
+      context.worktreePath ?? input.workspaceCleanup.expectedWorktreePath(tempRefName);
     const worktree =
       context.cleanupWorktree === "removed"
         ? "removed"
-        : removeValidationWorktree(input.repoRoot, worktreePath)
+        : input.workspaceCleanup.removeWorktree(worktreePath)
           ? "removed"
           : "failed";
     const tempRef =
       context.cleanupTempRef === "removed"
         ? "removed"
-        : deleteValidationTempRef(input.repoRoot, tempRefName);
+        : input.workspaceCleanup.deleteTempRef(tempRefName);
     const cleanup = { worktree, tempRef } as const;
     if (worktree === "failed" || tempRef === "failed") {
       yield* input.persistence.recordToolingFailure({
