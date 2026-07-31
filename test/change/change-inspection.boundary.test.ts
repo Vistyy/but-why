@@ -13,7 +13,11 @@ import type { ChangeValidationPersistence } from "../../src/change/validation/ch
 import { RepositorySql, repositorySqlLayer } from "../../src/sqlite/repositorySql.js";
 import { openSqliteChangeValidationPersistence } from "../../src/sqlite/sqliteChangeValidationPersistence.js";
 import { openSqliteTaskPersistence } from "../../src/sqlite/sqliteTaskPersistence.js";
-import { commitButWhyConfigAndRecordDefault, runByInProcessEffect } from "../support/by-cli.js";
+import {
+  commitButWhyConfigAndRecordDefault,
+  createGitRepo,
+  runByInProcessEffect,
+} from "../support/by-cli.js";
 import {
   cloneInitializedTestRepository,
   createInitializedRepo,
@@ -39,6 +43,24 @@ afterAll(() => {
 const initializedRepoCopy = () => cloneInitializedTestRepository(initializedRepoTemplate);
 
 describe("Change inspection CLI", () => {
+  it.effect("reports unavailable shared state before Change Submit accesses a Change", () =>
+    Effect.gen(function* () {
+      const root = createGitRepo();
+      const result = yield* runByInProcessEffect(root, [
+        "--output",
+        "json",
+        "change",
+        "submit",
+        randomUUID(),
+      ]);
+
+      expect(result.status).toBe(1);
+      expect(JSON.parse(result.stdout)).toMatchObject({
+        error: { code: "state_store_unavailable" },
+      });
+    }),
+  );
+
   it.effect("infers the Change from its Managed Worktree and rejects the main checkout", () =>
     Effect.gen(function* () {
       const root = yield* initializedRepoCopy();

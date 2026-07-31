@@ -260,7 +260,6 @@ export const loadRepoLocalSubmissionContext = (
   }
 
   const paths = repoLocalPaths(gitRoot.root, gitRoot.commonDirectory);
-  if (!existsSync(paths.statePath)) return { ok: false, error: { code: "not_initialized" } };
 
   return {
     ok: true,
