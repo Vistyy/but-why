@@ -158,6 +158,8 @@ describe("by change implement", () => {
       expect(launches).toHaveLength(1);
       expect(launches[0]).toMatchObject({
         changeId: change.change.id,
+        herdrName: `change-${change.change.id.slice(0, 8)}`,
+        piSessionName: `Change ${change.change.id}`,
         repositoryPath: root,
         worktreePath: change.worktreePath,
         agentEnvironment: ["nix", "develop", "-c"],
@@ -227,6 +229,44 @@ describe("by change implement", () => {
           handoff,
         ].join("\n\n"),
       );
+    }),
+  );
+
+  it.effect("names a Task-backed session from its Task ID and immutable title", () =>
+    Effect.gen(function* () {
+      const root = yield* readyRepository();
+      const taskId = yield* createTask(root, "Record cancellation reasons", "Implement this Change.\n");
+      expect((yield* runByInProcessEffect(root, ["task", "approve", taskId], now)).status).toBe(0);
+      const started = yield* runByInProcessEffect(
+        root,
+        ["--output", "json", "change", "start", "--task", taskId],
+        now,
+      );
+      const change = JSON.parse(started.stdout) as {
+        readonly change: { readonly id: string };
+        readonly worktreePath: string;
+      };
+      let launchInput: unknown;
+      const result = yield* runByInProcessEffect(
+        root,
+        ["--output", "json", "change", "implement", change.change.id],
+        now,
+        {
+          interactiveSessionHost: {
+            launch: async (input) => {
+              launchInput = input;
+              return { ok: true, host: "herdr", status: "started" };
+            },
+          },
+        },
+      );
+
+      expect(result.status).toBe(0);
+      expect(launchInput).toMatchObject({
+        changeId: change.change.id,
+        herdrName: taskId,
+        piSessionName: `${taskId} Record cancellation reasons`,
+      });
     }),
   );
 
@@ -747,6 +787,28 @@ describe("by change implement", () => {
       }),
   );
 });
+
+const createTask = (root: string, title: string, description: string) =>
+  Effect.gen(function* () {
+    const descriptionPath = join(root, `.task-${title.toLowerCase().replaceAll(" ", "-")}.md`);
+    writeFileSync(descriptionPath, description);
+    const created = yield* runByInProcessEffect(
+      root,
+      [
+        "--output",
+        "json",
+        "task",
+        "create",
+        "--title",
+        title,
+        "--description-file",
+        descriptionPath,
+      ],
+      now,
+    );
+    expect(created.status).toBe(0);
+    return (JSON.parse(created.stdout) as { readonly task: { readonly id: string } }).task.id;
+  });
 
 const initializedRepository = (prepare?: string, workspace?: string): string => {
   const root = createInitializedRepo(workspace);
