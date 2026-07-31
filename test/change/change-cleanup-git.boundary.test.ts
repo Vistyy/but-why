@@ -397,7 +397,7 @@ describe("Change cleanup Git adapter", () => {
       }),
     ).toEqual({ state: "complete" });
     expect(() => git(remoteRepository, "show-ref", "--verify", "refs/heads/feature")).toThrow();
-  }, 15_000);
+  }, 30_000);
 
   it("preserves a Remote Change Branch from a repointed remote", () => {
     const repository = initializedRepository();

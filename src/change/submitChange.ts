@@ -36,6 +36,7 @@ import type {
   RemoteChangeBaseError,
   RemoteChangeBaseResult,
 } from "../submissionEnvironment/remoteChangeBase.js";
+import type { SubmitProgress } from "./validation/submitProgress.js";
 
 export type ChangeSubmitResult =
   | {
@@ -120,6 +121,7 @@ export type PublicationTargetDetectionResult =
 export type ChangeSubmitInput = {
   readonly changeId: string;
   readonly now: string;
+  readonly progress?: SubmitProgress;
 };
 
 export type AgentEnvironmentResolution =
@@ -255,6 +257,7 @@ const submitChange = (
           candidate,
           input.now,
           agentEnvironmentCommand,
+          input.progress,
         );
       }
     }
@@ -267,6 +270,7 @@ const submitChange = (
       target.target,
       input.now,
       agentEnvironmentCommand,
+      input.progress,
     );
   });
 
@@ -276,6 +280,7 @@ const validateAndCompleteNoChange = (
   candidate: CapturedCandidate,
   now: string,
   agentEnvironment: AgentEnvironmentCommand | undefined,
+  progress: SubmitProgress | undefined,
 ): Effect.Effect<ChangeSubmitResult, RepositoryStorageError, CandidateValidation> =>
   Effect.gen(function* () {
     if (change.taskId === null || change.acceptanceContext === null) {
@@ -310,6 +315,7 @@ const validateAndCompleteNoChange = (
       resourceRoot: change.worktreePath,
       noChange: true,
       acceptanceContext: change.acceptanceContext,
+      ...(progress === undefined ? {} : { progress }),
       blockerHistory: (yield* dependencies.persistence.listImplementationBlockers?.(change.id) ??
         Effect.succeed(undefined)) ?? {
         blockers: [],
@@ -409,6 +415,7 @@ const validateAndPublish = (
   target: ChangePublicationTarget,
   now: string,
   agentEnvironment: AgentEnvironmentCommand | undefined,
+  progress: SubmitProgress | undefined,
 ): Effect.Effect<ChangeSubmitResult, RepositoryStorageError, CandidateValidation> =>
   Effect.gen(function* () {
     const policy = dependencies.resolvePolicy(
@@ -444,6 +451,7 @@ const validateAndPublish = (
               ? {}
               : { implementationDecisions: change.implementationDecisions }),
             policy: withAgentEnvironment(policy.resolved.policy, agentEnvironment),
+            ...(progress === undefined ? {} : { progress }),
             now,
           })
         : yield* validation.validateCandidate({
@@ -454,6 +462,7 @@ const validateAndPublish = (
               ? {}
               : { implementationDecisions: change.implementationDecisions }),
             policy: withAgentEnvironment(policy.resolved.policy, agentEnvironment),
+            ...(progress === undefined ? {} : { progress }),
             now,
           });
     if (validationResult.outcome !== "passed") {

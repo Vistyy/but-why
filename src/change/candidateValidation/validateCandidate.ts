@@ -30,6 +30,7 @@ import type { TaskContextSnapshotV1 } from "../validationRun/taskContextSnapshot
 import type { ImplementationDecision } from "../implementationDecision.js";
 import type { ImplementationBlockerHistory } from "../implementationBlocker.js";
 import type { ReviewerSessionStore } from "../reviewerSession/reviewerSession.js";
+import type { SubmitProgress } from "../validation/submitProgress.js";
 
 export type CandidateValidationPolicy = {
   readonly agentEnvironment?: AgentEnvironmentCommand;
@@ -50,6 +51,7 @@ export type ValidateCandidateInput = {
   readonly headSha: string;
   readonly resourceRoot?: string;
   readonly policy: CandidateValidationPolicy;
+  readonly progress?: SubmitProgress;
   readonly implementationDecisions?: readonly ImplementationDecision[];
   readonly now: string;
 };
@@ -61,6 +63,7 @@ type ValidateTaskBackedCandidateInput = {
   readonly headSha: string;
   readonly resourceRoot?: string;
   readonly acceptanceContext: TaskContextSnapshotV1;
+  readonly progress?: SubmitProgress;
   readonly blockerHistory?: ImplementationBlockerHistory;
   readonly policy: TaskBackedCandidateValidationPolicy;
   readonly implementationDecisions?: readonly ImplementationDecision[];
@@ -335,6 +338,7 @@ const runCandidatePhases = (
         implementationDecisions: input.implementationDecisions,
         ...(input.blockerHistory === undefined ? {} : { blockerHistory: input.blockerHistory }),
         policy: input.policy.acceptanceReview,
+        ...(input.progress === undefined ? {} : { progress: input.progress }),
         ...(agentEnvironment === undefined ? {} : { agentEnvironment }),
         runtime: dependencies.reviewerAgentRuntime,
         sandbox: activeWorkspace.sandbox,
@@ -368,6 +372,7 @@ const runCandidatePhases = (
         commandCwd: activeWorkspace.worktreePath,
         expectedHeadSha: input.headSha,
         allowedUntrackedFiles: input.policy.copyFiles,
+        ...(input.progress === undefined ? {} : { progress: input.progress }),
         now: input.now,
         recordPrepareRound: dependencies.persistence.recordPrepareRound,
       });
@@ -382,6 +387,7 @@ const runCandidatePhases = (
       commandCwd: activeWorkspace.worktreePath,
       expectedHeadSha: input.headSha,
       allowedUntrackedFiles: input.policy.copyFiles,
+      ...(input.progress === undefined ? {} : { progress: input.progress }),
       now: input.now,
       continueAfterFinding: true,
       recordCheckRound: dependencies.persistence.recordCheckRound,
@@ -396,6 +402,7 @@ const runCandidatePhases = (
         implementationDecisions: input.implementationDecisions,
         ...(input.blockerHistory === undefined ? {} : { blockerHistory: input.blockerHistory }),
         policy: input.policy.acceptanceReview,
+        ...(input.progress === undefined ? {} : { progress: input.progress }),
         ...(agentEnvironment === undefined ? {} : { agentEnvironment }),
         runtime: dependencies.reviewerAgentRuntime,
         sandbox: activeWorkspace.sandbox,
@@ -430,6 +437,7 @@ const runCandidatePhases = (
       changeId: input.changeId,
       candidate: candidateIdentity(input),
       policies: input.policy.specialistReviews,
+      ...(input.progress === undefined ? {} : { progress: input.progress }),
       ...(agentEnvironment === undefined ? {} : { agentEnvironment }),
       runtime: dependencies.reviewerAgentRuntime,
       sandbox: activeWorkspace.sandbox,
