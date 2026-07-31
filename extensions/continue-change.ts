@@ -98,6 +98,8 @@ const maxUnchangedRestarts = 3;
 const changeIdPattern =
   /^\s*Change identity:\s*([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.?\s*$/imu;
 const sourceRepository = existsSync(fileURLToPath(new URL("../justfile", import.meta.url)));
+const butWhyCommand = (...args: readonly string[]): string =>
+  [sourceRepository ? "just by" : "npx -y but-why", ...args].join(" ");
 
 export const extractChangeId = (text: string): string | undefined =>
   text.match(changeIdPattern)?.[1];
@@ -154,7 +156,7 @@ export const buildContinuationMessage = (
   if (decision.kind === "findings") {
     return [
       `The Change ${changeId} has Findings.`,
-      `Inspect the Findings with \`by change findings ${changeId}\`, fix every applicable problem in the Managed Worktree, commit the fixes, and submit again with \`by change submit ${changeId}\`.`,
+      `Inspect the Findings with \`${butWhyCommand("change", "findings", changeId)}\`, fix every applicable problem in the Managed Worktree, commit the fixes, and submit again with \`${butWhyCommand("change", "submit", changeId)}\`.`,
     ].join(" ");
   }
   if (compactionReason === "threshold") {
@@ -166,7 +168,7 @@ export const buildContinuationMessage = (
   }
   return [
     `The Change ${changeId} is still unfinished.`,
-    `Inspect \`by change show ${changeId}\` and the Managed Worktree, then take the next concrete implementation action.`,
+    `Inspect \`${butWhyCommand("change", "show", changeId)}\` and the Managed Worktree, then take the next concrete implementation action.`,
   ].join(" ");
 };
 
@@ -463,8 +465,8 @@ export default function continueChange(pi: ExtensionAPI): void {
     const content = recordValue(resolution, "content");
     const explanation = typeof content === "string" ? content : "The approved Resolution has no recorded text.";
     const next = hasFindings
-      ? `Now inspect the earlier Findings with \`by change findings ${id}\`, fix every applicable problem in the Managed Worktree, commit the fixes, and submit again with \`by change submit ${id}\`.`
-      : `Now inspect \`by change show ${id}\` and the Managed Worktree, then take the next concrete implementation action.`;
+      ? `Now inspect the earlier Findings with \`${butWhyCommand("change", "findings", id)}\`, fix every applicable problem in the Managed Worktree, commit the fixes, and submit again with \`${butWhyCommand("change", "submit", id)}\`.`
+      : `Now inspect \`${butWhyCommand("change", "show", id)}\` and the Managed Worktree, then take the next concrete implementation action.`;
     return `An Implementation Blocker Resolution was recorded for Change ${id}: ${explanation} ${next}`;
   };
 
@@ -478,9 +480,9 @@ export default function continueChange(pi: ExtensionAPI): void {
         : recordValue(snapshot.currentValidationRun, "id");
     const detail =
       typeof runId === "string"
-        ? `Inspect the Validation Tooling Failure with \`by validation-run show ${runId}\`.`
-        : `Inspect the Validation Tooling Failure with \`by change show ${id}\`.`;
-    return `The Change ${id} has a Validation Tooling Failure. ${detail} Recover the validation tooling, then submit the Change again with \`by change submit ${id}\`.`;
+        ? `Inspect the Validation Tooling Failure with \`${butWhyCommand("validation-run", "show", runId)}\`.`
+        : `Inspect the Validation Tooling Failure with \`${butWhyCommand("change", "show", id)}\`.`;
+    return `The Change ${id} has a Validation Tooling Failure. ${detail} Recover the validation tooling, then submit the Change again with \`${butWhyCommand("change", "submit", id)}\`.`;
   };
 
   const initialize = async (ctx: ExtensionContext): Promise<void> => {
@@ -504,14 +506,21 @@ export default function continueChange(pi: ExtensionAPI): void {
       previousResolutionId !== undefined &&
       latest !== null &&
       latest !== previousResolutionId;
+    const pendingResolutionId = persisted?.pendingResolutionId;
+    const pendingResolution =
+      resolutionChanged ||
+      (pendingResolutionId !== undefined &&
+        pendingResolutionId !== null &&
+        pendingResolutionId !== latest)
+        ? latest
+        : (pendingResolutionId ?? null);
     saveState({
       changeId,
       fingerprint: observed.fingerprint,
       unchangedRestarts: 0,
       paused: false,
       resolutionId: latest,
-      pendingResolutionId:
-        persisted?.pendingResolutionId ?? (resolutionChanged ? latest : null),
+      pendingResolutionId: pendingResolution,
     });
     showWatcher(ctx, displayFor(observed.snapshot, observed.git));
   };
