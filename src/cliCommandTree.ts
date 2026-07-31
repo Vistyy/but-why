@@ -522,11 +522,17 @@ export const runCommandTree = (
     const run = Command.run(commandTree, { executable: "by", name: "by", version: packageVersion })(
       ["by", "by", ...args],
     );
-    const runWithConfig = (config: CliConfig.CliConfig) =>
+    const runWithConfig = (config: CliConfig.CliConfig, versionProbe = false) =>
       Console.consoleWith((console) =>
         Console.withConsole({
           ...console,
-          log: (message) => Effect.sync(() => void helpOutput.push(String(message))),
+          log: (message) => {
+            const text = String(message);
+            if (versionProbe && nativeHelpText(text) !== packageVersion) {
+              return Effect.fail("not_version_output") as unknown as Effect.Effect<void>;
+            }
+            return Effect.sync(() => void helpOutput.push(text));
+          },
           error: () => Effect.void,
         })(
           run.pipe(
@@ -555,12 +561,13 @@ export const runCommandTree = (
     if (
       initialCommandResult._tag === "Left" &&
       ValidationError.isValidationError(initialCommandResult.left) &&
-      outputFormatForArgs(args) === "json" &&
       !generatedText(initialCommandResult.left.error).includes(
         "Expected one of the following cases: toon, json",
       )
     ) {
-      const fallbackCommandResult = yield* Effect.either(runWithConfig(finalCheckBuiltInConfig));
+      const fallbackCommandResult = yield* Effect.either(
+        runWithConfig(finalCheckBuiltInConfig, true),
+      );
       if (
         fallbackCommandResult._tag === "Right" &&
         helpOutput.length > 0 &&
