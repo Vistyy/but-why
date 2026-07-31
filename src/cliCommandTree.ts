@@ -730,39 +730,38 @@ const missingDependencyOperation = (
   }
   const taskIndex = args.indexOf("task");
   const operation = args[taskIndex + 2];
-  if (!validTrailingGlobalOptions(args.slice(taskIndex + 4))) return undefined;
+  if (!validGlobalOptionSyntax(args)) return undefined;
   return args[taskIndex + 1] === "dependencies" &&
     (operation === "add" || operation === "remove" || operation === "replace")
     ? operation
     : undefined;
 };
 
-const validTrailingGlobalOptions = (args: readonly string[]): boolean => {
+const validGlobalOptionSyntax = (args: readonly string[]): boolean => {
   const seen = new Set<string>();
   const valueOptions = new Map([
     ["--output", new Set(["toon", "json"])],
-    ["-o", new Set(["toon", "json"])],
     [
       "--log-level",
       new Set(["all", "trace", "debug", "info", "warning", "error", "fatal", "none"]),
     ],
     ["--completions", new Set(["sh", "bash", "fish", "zsh"])],
   ]);
+  const aliases = new Map([["-o", "--output"]]);
   const flags = new Set(["--wizard", "--version", "--help", "-h"]);
   for (let index = 0; index < args.length; index += 1) {
     const argument = args[index];
-    if (argument === undefined) return false;
-    const equalsIndex = argument.indexOf("=");
-    const option = equalsIndex < 0 ? argument : argument.slice(0, equalsIndex);
-    const inlineValue = equalsIndex < 0 ? undefined : argument.slice(equalsIndex + 1);
+    if (argument === undefined || !argument.startsWith("-")) continue;
+    if (argument.includes("=")) return false;
+    const option = aliases.get(argument) ?? argument;
     if (flags.has(option)) {
-      if (inlineValue !== undefined || seen.has(option)) return false;
+      if (seen.has(option)) return false;
       seen.add(option);
       continue;
     }
     const values = valueOptions.get(option);
     if (values === undefined || seen.has(option)) return false;
-    const value = inlineValue ?? args[++index];
+    const value = args[++index];
     if (value === undefined || value.startsWith("-") || !values.has(value)) return false;
     seen.add(option);
   }

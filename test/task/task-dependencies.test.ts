@@ -223,7 +223,13 @@ describe("Task dependency CLI", () => {
         error: { code: "replace_requires_dependency" },
       });
 
-      for (const invalidOption of ["--output=xml", "--output", "--log-level"] as const) {
+      for (const invalidOption of [
+        "--output=xml",
+        "--output=json",
+        "-o=json",
+        "--output",
+        "--log-level",
+      ] as const) {
         const malformedGlobal = yield* runByInProcessEffect(
           root,
           ["--output", "json", "task", "dependencies", "replace", "BY-4", invalidOption],
