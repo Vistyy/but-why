@@ -575,6 +575,7 @@ describe("quality interface", () => {
     mkdirSync(consumerBuildOutput, { recursive: true });
     cpSync(dirname(executable), sharedBuildOutput, { recursive: true });
     cpSync(dirname(executable), consumerBuildOutput, { recursive: true });
+    cpSync(join(repositoryRoot, "package.json"), join(consumerDirectory, "package.json"));
     cpSync(join(repositoryRoot, "docs/public"), join(consumerDirectory, "docs/public"), {
       recursive: true,
     });

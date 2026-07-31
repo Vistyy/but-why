@@ -29,6 +29,34 @@ const expectExactlyOneTrailingLineFeed = (stdout: string): void => {
 };
 
 describe("by task CLI processes", () => {
+  it.each([
+    ["root", ["--help", "--output", "json"], "Validate completed code changes"],
+    ["group", ["task", "--help", "--output", "json"], "Manage repo-local Tasks"],
+    ["leaf", ["task", "list", "--help", "--output", "json"], "List repo-local Tasks"],
+  ] as const)("returns generated %s help in JSON", (_name, args, description) => {
+    const result = runBuiltByWithEnv(createTestWorkspace(), {}, ...args);
+
+    expect(result.status).toBe(0);
+    expect(result.stderr).toBe("");
+    expect(JSON.parse(result.stdout).help).toContain(description);
+  });
+
+  it("returns the package version in the default TOON envelope", () => {
+    const result = runBuiltByWithEnv(createTestWorkspace(), {}, "--version");
+
+    expect(result.status).toBe(0);
+    expect(result.stderr).toBe("");
+    expect(result.stdout).toBe("version: 0.0.1\n");
+  });
+
+  it("returns the package version in JSON when output is selected first", () => {
+    const result = runBuiltByWithEnv(createTestWorkspace(), {}, "--output", "json", "--version");
+
+    expect(result.status).toBe(0);
+    expect(result.stderr).toBe("");
+    expect(JSON.parse(result.stdout)).toEqual({ version: "0.0.1" });
+  });
+
   it("keeps JSON stdout structured when native logging is enabled", () => {
     const root = createGitRepo();
     const init = runBuiltByWithEnv(root, {}, "init", "--task-prefix", "BY");
