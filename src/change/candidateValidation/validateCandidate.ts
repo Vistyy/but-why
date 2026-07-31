@@ -23,7 +23,7 @@ import { createValidationWorkspace } from "../validation/createValidationWorkspa
 import {
   expectedSandcastleWorktreePath,
   validationTempRefName,
-} from "../validation/validationGitGlue.js";
+} from "../validation/validationWorkspacePath.js";
 import { runCheckPhase } from "../validation/runCheckRound.js";
 import { runPreparePhase } from "../validation/runPreparePhase.js";
 import {

@@ -1,17 +1,9 @@
 import { spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
-import { join } from "node:path";
-
 import type { CleanupState } from "../validationRun/cleanup.js";
 
 const zeroSha = "0000000000000000000000000000000000000000";
 const validationGitOperationTimeoutMs = 5_000;
-
-export const validationTempRefName = (validationRunId: string): string =>
-  `refs/but-why/validation-runs/${validationRunId}/validation`;
-
-export const expectedSandcastleWorktreePath = (repoRoot: string, tempRefName: string): string =>
-  join(repoRoot, ".sandcastle", "worktrees", tempRefName.replaceAll("/", "-"));
 
 export const ensureValidationTempRef = (
   repoRoot: string,

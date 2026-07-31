@@ -8,11 +8,13 @@ import { Effect, Option, Ref, type Scope } from "effect";
 import {
   deleteValidationTempRef,
   ensureValidationTempRef,
-  expectedSandcastleWorktreePath,
   inspectExistingWorktree,
   removeValidationWorktree,
-  validationTempRefName,
 } from "./validationGitGlue.js";
+import {
+  expectedSandcastleWorktreePath,
+  validationTempRefName,
+} from "./validationWorkspacePath.js";
 import type { RepositoryStorageError } from "../../contracts/repositoryStorageError.js";
 import type { ValidationToolingFailure } from "./validationToolingFailures.js";
 import type {

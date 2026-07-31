@@ -9,9 +9,9 @@ import { openSqliteChangeValidationPersistence } from "../sqlite/sqliteChangeVal
 import { openSqliteExecutionLock } from "../sqlite/sqliteExecutionLock.js";
 import {
   deleteValidationTempRef,
-  validationTempRefName,
   removeValidationWorktree,
 } from "./validation/validationGitGlue.js";
+import { validationTempRefName } from "./validation/validationWorkspacePath.js";
 
 export type LoadAbandonValidationRunResult =
   | { readonly ok: true; readonly abandon: AbandonValidationRun }
