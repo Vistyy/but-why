@@ -88,7 +88,7 @@ const createHarness = (cwd = sourceCwd) => {
         return result(JSON.stringify(currentBlockerHistory));
       if (sourceCli || publishedCli) return result(JSON.stringify(currentSnapshot));
       if (command === "git" && args[0] === "config")
-        return result("git+https://github.com/Vistyy/but-why.git\n");
+        return result("git@github.com:Vistyy/but-why.git\n");
       if (command === "git" && args[0] === "rev-parse") return result("head\n");
       if (command === "git" && args[0] === "status") return result("");
       if (command === "git" && (args[0] === "diff" || args[0] === "ls-files")) return result("");

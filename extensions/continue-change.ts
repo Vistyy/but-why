@@ -100,7 +100,13 @@ const changeIdPattern =
 type ButWhyCommandPrefix = "just by" | "npx -y but-why";
 
 const normalizeRepositoryUrl = (value: string): string =>
-  value.trim().replace(/^git\+/u, "").replace(/\.git$/u, "").replace(/\/$/u, "").toLowerCase();
+  value
+    .trim()
+    .replace(/^git\+/u, "")
+    .replace(/^git@([^:]+):/u, "https://$1/")
+    .replace(/\.git$/u, "")
+    .replace(/\/$/u, "")
+    .toLowerCase();
 
 const butWhyCommand = (prefix: ButWhyCommandPrefix, ...args: readonly string[]): string =>
   [prefix, ...args].join(" ");
