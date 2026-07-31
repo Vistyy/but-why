@@ -1,5 +1,48 @@
 #!/usr/bin/env sh
 set -eu
 
-repo_dir=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
-BUT_WHY_EXECUTABLE_PATH="$repo_dir/bin/by" exec node --import "$repo_dir/node_modules/tsx/dist/loader.mjs" "$repo_dir/src/main.ts" "$@"
+repo_dir=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd -P)
+
+print_main_checkout_error() {
+  if [ "$1" = "json" ]; then
+    printf '%s\n' "{\"error\":{\"code\":\"main_checkout_unavailable\",\"message\":\"The Local Repository's canonical main checkout is unavailable.\"},\"help\":[\"Restore the canonical main checkout, then retry the command.\"]}"
+    return
+  fi
+
+  cat <<'EOF'
+error:
+  code: main_checkout_unavailable
+  message: "The Local Repository's canonical main checkout is unavailable."
+help[1]: "Restore the canonical main checkout, then retry the command."
+EOF
+}
+
+output_format=toon
+previous_argument=
+for argument in "$@"; do
+  if [ "$previous_argument" = "--output" ] || [ "$previous_argument" = "-o" ]; then
+    [ "$argument" = "json" ] && output_format=json
+  elif [ "$argument" = "--output=json" ] || [ "$argument" = "-o=json" ]; then
+    output_format=json
+  fi
+  previous_argument=$argument
+done
+
+main_checkout=$(git worktree list --porcelain 2>/dev/null | sed -n 's/^worktree //p' | head -n 1 || true)
+if [ -z "$main_checkout" ] || ! main_checkout=$(CDPATH= cd -- "$main_checkout" 2>/dev/null && pwd -P); then
+  print_main_checkout_error "$output_format"
+  exit 1
+fi
+
+if [ "$repo_dir" = "$main_checkout" ]; then
+  BUT_WHY_EXECUTABLE_PATH="$repo_dir/bin/by" exec node \
+    --import "$repo_dir/node_modules/tsx/dist/loader.mjs" \
+    "$repo_dir/src/main.ts" "$@"
+fi
+
+if [ ! -x "$main_checkout/bin/by" ]; then
+  print_main_checkout_error "$output_format"
+  exit 1
+fi
+
+BUT_WHY_EXECUTABLE_PATH="$main_checkout/bin/by" exec "$main_checkout/bin/by" "$@"

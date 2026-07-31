@@ -85,10 +85,11 @@ export const runByWithEnv = (cwd: string, env: NodeJS.ProcessEnv, ...args: reado
 
 export const runJustBy = (...args: readonly string[]) => {
   const root = createGitRepo();
+  const candidateExecutable = builtByExecutable();
 
   writeFileSync(
     join(root, "justfile"),
-    `set positional-arguments\n\n[no-exit-message]\nby *args:\n    @${byExecutable} "$@"\n`,
+    `set positional-arguments\n\n[no-exit-message]\nby *args:\n    @${process.execPath} ${candidateExecutable} "$@"\n`,
   );
 
   return runTestProcess("just", ["by", ...args], { cwd: root });
