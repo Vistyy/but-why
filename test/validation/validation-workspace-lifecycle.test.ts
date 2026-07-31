@@ -348,6 +348,7 @@ describe("Validation Workspace scoped lifecycle", () => {
     Effect.gen(function* () {
       const events: string[] = [];
       const recordedCleanupResults: unknown[] = [];
+      const recordedSetups: unknown[] = [];
       let resolveWorktreeAcquired: () => void = () => {};
       const worktreeAcquired = new Promise<void>((resolve) => {
         resolveWorktreeAcquired = resolve;
@@ -363,6 +364,10 @@ describe("Validation Workspace scoped lifecycle", () => {
         const fiber = yield* Effect.fork(
           createValidationWorkspace({
             ...input,
+            recordWorkspaceSetup: (setup) =>
+              Effect.sync(() => {
+                recordedSetups.push(setup);
+              }),
             recordInterruptedCleanupResult: (toolingError) =>
               Effect.sync(() => {
                 recordedCleanupResults.push(toolingError.cleanupResult);
@@ -382,6 +387,16 @@ describe("Validation Workspace scoped lifecycle", () => {
         "release:temp_ref",
       ]);
       expect(recordedCleanupResults).toEqual([{ worktree: "removed", tempRef: "removed" }]);
+      expect(recordedSetups).toMatchObject([
+        {
+          validationRunId: input.validationRunId,
+          tempRefName,
+          submittedSha: input.submittedSha,
+          worktreeHead: input.submittedSha,
+          worktreePath: expectedWorktreePath,
+          cleanupResult: { worktree: "not_created", tempRef: "not_created" },
+        },
+      ]);
     }),
   );
 

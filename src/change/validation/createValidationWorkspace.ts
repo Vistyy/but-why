@@ -175,6 +175,17 @@ const createValidationWorkspaceWithAdapters = (
       worktreePath: undefined,
     };
 
+    if (input.recordWorkspaceSetup !== undefined) {
+      yield* input.recordWorkspaceSetup({
+        validationRunId: input.validationRunId,
+        tempRefName,
+        submittedSha: input.submittedSha,
+        worktreeHead: input.submittedSha,
+        worktreePath: expectedWorktreePath,
+        cleanupResult: yield* Ref.get(cleanupResult),
+      });
+    }
+
     const scopedSetup = Effect.scoped(
       setupValidationWorkspaceScope(input, state, adapters, cleanupResult),
     );
@@ -425,7 +436,7 @@ const acquireSandcastleWorktree = (
   cleanupResult: Ref.Ref<ValidationWorkspaceCleanupResult>,
 ): Effect.Effect<
   { readonly ok: true; readonly sandbox: SandboxLike } | WorkspaceSetupFailure,
-  never,
+  RepositoryStorageError,
   Scope.Scope
 > =>
   Effect.gen(function* () {
@@ -448,6 +459,17 @@ const acquireSandcastleWorktree = (
 
     state.sandbox = worktree.sandbox;
     state.worktreePath = worktree.worktreePath;
+
+    if (input.recordWorkspaceSetup !== undefined) {
+      yield* input.recordWorkspaceSetup({
+        validationRunId: input.validationRunId,
+        tempRefName: state.tempRefName,
+        submittedSha: input.submittedSha,
+        worktreeHead: input.submittedSha,
+        worktreePath: worktree.worktreePath,
+        cleanupResult: yield* Ref.get(cleanupResult),
+      });
+    }
 
     return { ok: true, sandbox: worktree.sandbox };
   });
