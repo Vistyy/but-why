@@ -445,15 +445,19 @@ const validationRunAbandonCommand = withCliHandler(
   leaf("abandon", "Explicitly abandon an interrupted Validation Run.", {
     validationRunId: Args.text({ name: "validation-run-id" }),
     reason: Options.text("reason"),
+    worktreePath: optionalText("worktree-path"),
   }),
-  (values, environment) =>
-    runAbandonCommand(
+  (values, environment) => {
+    const worktreePath = optionalString(values, "worktreePath");
+    return runAbandonCommand(
       {
         validationRunId: requiredString(values, "validationRunId"),
         reason: requiredString(values, "reason"),
+        ...(worktreePath === undefined ? {} : { worktreePath }),
       },
       environment,
-    ),
+    );
+  },
 );
 const validationRunArtifactCommand = withCliHandler(
   leaf("artifact", "Show complete stored Artifact content.", {

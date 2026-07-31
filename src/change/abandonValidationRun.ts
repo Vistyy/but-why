@@ -29,6 +29,7 @@ export type AbandonValidationRun = {
   readonly abandon: (input: {
     readonly validationRunId: string;
     readonly reason: string;
+    readonly worktreePath?: string;
     readonly now: string;
   }) => Effect.Effect<AbandonValidationRunResult, RepositoryStorageError>;
 };
@@ -88,7 +89,12 @@ const abandonWhileLocked = (
     readonly persistence: AbandonValidationPersistence;
     readonly workspaceCleanup: ValidationWorkspaceCleanup;
   },
-  command: { readonly validationRunId: string; readonly reason: string; readonly now: string },
+  command: {
+    readonly validationRunId: string;
+    readonly reason: string;
+    readonly worktreePath?: string;
+    readonly now: string;
+  },
 ): Effect.Effect<AbandonValidationRunResult, RepositoryStorageError> =>
   Effect.gen(function* () {
     const context = yield* input.persistence.getAbandonmentContext(command.validationRunId);
@@ -123,7 +129,7 @@ const abandonWhileLocked = (
       context.cleanupTempRef === "removed"
         ? "removed"
         : input.workspaceCleanup.deleteTempRef(tempRefName);
-    const worktreePath = context.worktreePath;
+    const worktreePath = command.worktreePath ?? context.worktreePath;
     if (worktreePath === undefined && context.cleanupWorktree !== "removed") {
       const cleanup = { worktree: "failed", tempRef } as const;
       yield* input.persistence.recordToolingFailure({

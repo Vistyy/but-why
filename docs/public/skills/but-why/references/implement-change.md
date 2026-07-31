@@ -75,6 +75,7 @@ Do not assume that Change Submit stopped when its caller ended.
 
 If an Active Validation Run remains after its Submit process stops, stop every process from that Validation Run.
 Run `<but-why> validation-run abandon <validation-run-id> --reason <reason>`.
+If the Validation Workspace path was not recorded, provide the exact path with `--worktree-path <path>`.
 Validation Run Abandonment does not inspect process state or stop processes.
 Retry Change Submit only after abandonment reports success.
 
