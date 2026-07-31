@@ -224,37 +224,24 @@ const parserLayer = (args: readonly string[]) =>
 export const runCommandTree = (
   args: readonly string[],
   environment: CliEnvironment,
-): Effect.Effect<CliResult> => {
-  const trailingHelpArgument = findTrailingHelpArgument(args);
-  const result =
-    trailingHelpArgument === undefined
-      ? Effect.either(
-          CommandDescriptor.parse(commandTree.descriptor, ["by", ...parserArgs(args)], cliConfig),
-        ).pipe(
-          Effect.flatMap((parsed) =>
-            parsed._tag === "Left"
-              ? Effect.succeed({
-                  ...usageError({
-                    code: "invalid_usage",
-                    message: generatedText(parsed.left.error),
-                    help: ["Run `by --help` for generated command help."],
-                  }),
-                  outputFormat: outputFormatForArgs(args),
-                })
-              : directiveResult(parsed.right, args, environment),
-          ),
-        )
-      : Effect.succeed({
-          ...usageError({
-            code: "invalid_usage",
-            message: `Received unknown argument: '${trailingHelpArgument}'`,
-            help: ["Run `by --help` for generated command help."],
-          }),
-          outputFormat: outputFormatForArgs(args),
-        });
-
-  return result.pipe(Effect.provide(parserLayer(args)));
-};
+): Effect.Effect<CliResult> =>
+  Effect.either(
+    CommandDescriptor.parse(commandTree.descriptor, ["by", ...parserArgs(args)], cliConfig),
+  ).pipe(
+    Effect.flatMap((parsed) =>
+      parsed._tag === "Left"
+        ? Effect.succeed({
+            ...usageError({
+              code: "invalid_usage",
+              message: generatedText(parsed.left.error),
+              help: ["Run `by --help` for generated command help."],
+            }),
+            outputFormat: outputFormatForArgs(args),
+          })
+        : directiveResult(parsed.right, args, environment),
+    ),
+    Effect.provide(parserLayer(args)),
+  );
 
 const directiveResult = (
   directive: CommandDirective.CommandDirective<unknown>,
@@ -267,12 +254,14 @@ const directiveResult = (
 
   if (CommandDirective.isBuiltIn(directive)) {
     if (BuiltInOptions.isShowHelp(directive.option)) {
-      return originalArgs.length === 0
-        ? dashboardResult(environment, "toon")
-        : Effect.succeed({
-            ...success({ help: rootHelpCorrection(generatedText(directive.option.helpDoc)) }),
-            outputFormat: outputFormatForArgs(originalArgs),
-          });
+      return findTrailingHelpArgument(originalArgs) === undefined
+        ? originalArgs.length === 0
+          ? dashboardResult(environment, "toon")
+          : Effect.succeed({
+              ...success({ help: rootHelpCorrection(generatedText(directive.option.helpDoc)) }),
+              outputFormat: outputFormatForArgs(originalArgs),
+            })
+        : generatedHelpLeftoverUsage(originalArgs);
     }
     return Effect.succeed(
       usageError({
@@ -627,6 +616,21 @@ const generatedLeftoverUsage = (args: readonly string[]): Effect.Effect<CliResul
         outputFormat: outputFormatForArgs(args),
       };
     }),
+  );
+
+const generatedHelpLeftoverUsage = (args: readonly string[]): Effect.Effect<CliResult> =>
+  Effect.either(
+    CommandDescriptor.parse(commandTree.descriptor, ["by", ...parserArgs(args)], cliConfig),
+  ).pipe(
+    Effect.map(() => ({
+      ...usageError({
+        code: "invalid_usage",
+        message: "Invalid command syntax.",
+        help: ["Run `by --help` for generated command help."],
+      }),
+      outputFormat: outputFormatForArgs(args),
+    })),
+    Effect.provide(parserLayer(args)),
   );
 
 export const outputFormatForArgs = (args: readonly string[]): OutputFormat => {

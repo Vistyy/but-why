@@ -108,7 +108,7 @@ describe("by CLI", () => {
       expect(JSON.parse(result.stdout)).toMatchObject({
         error: {
           code: "invalid_usage",
-          message: "Received unknown argument: 'extra'",
+          message: "Invalid command syntax.",
         },
       });
     }),
