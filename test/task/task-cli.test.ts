@@ -929,7 +929,7 @@ contextCommand: by task context BY-1`);
   code: task_not_found
   message: "Task was not found: BY-999"
   taskId: BY-999
-help[1]: Run \`by task list --all\` to see known Tasks.`);
+help[1]: Run \`by task list --all --limit all\` to see known Tasks.`);
       }),
   );
 

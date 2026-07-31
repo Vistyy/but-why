@@ -100,7 +100,7 @@ const dependencyError = (error: {
     code: error.code,
     message: dependencyErrorMessage(error),
     ...(error.taskId === undefined ? {} : { details: { taskId: error.taskId } }),
-    help: ["Use existing Tasks from `by task list --all` as direct prerequisites."],
+    help: ["Use existing Tasks from `by task list --all --limit all` as direct prerequisites."],
   });
 
 const dependencyErrorMessage = (error: {

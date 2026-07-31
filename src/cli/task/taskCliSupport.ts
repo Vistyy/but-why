@@ -68,5 +68,5 @@ export const taskNotFound = (taskId: string): CliResult =>
     code: "task_not_found",
     message: `Task was not found: ${taskId}`,
     details: { taskId },
-    help: ["Run `by task list --all` to see known Tasks."],
+    help: ["Run `by task list --all --limit all` to see known Tasks."],
   });
