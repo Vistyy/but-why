@@ -11,7 +11,11 @@ import type {
   TaskDependencyFact,
   TaskSummary,
 } from "../task/task.js";
-import { generatedPublicTaskId, type PublicTaskId } from "../task/taskId.js";
+import {
+  generatedPublicTaskId,
+  storedPublicTaskId,
+  type PublicTaskId,
+} from "../task/taskId.js";
 import type {
   AppendTaskCommentInput,
   ApproveTaskInput,
@@ -94,7 +98,9 @@ const editTaskDependencies = (sql: SqlClient.SqlClient, input: EditTaskDependenc
         : yield* validateDependencies(sql, input.taskId, input.prerequisiteTaskIds, true);
     if (dependencyError !== undefined) return dependencyError;
 
-    const currentIds = target.task.prerequisites.map((dependency) => dependency.id as PublicTaskId);
+    const currentIds = target.task.prerequisites.map((dependency) =>
+      storedPublicTaskId(dependency.id),
+    );
     const requestedIds = input.prerequisiteTaskIds;
     const currentSet = new Set(currentIds);
     const requestedSet = new Set(requestedIds);
