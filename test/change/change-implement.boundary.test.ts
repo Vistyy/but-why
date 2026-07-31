@@ -6,6 +6,7 @@ import { Effect } from "effect";
 import { afterAll, beforeAll, describe } from "vitest";
 
 import type { InteractiveSessionHost } from "../../src/change/interactiveSessionHost.js";
+import { publicTaskId, taskSlugForId } from "../../src/task/taskId.js";
 import { commitButWhyConfigAndRecordDefault, runByInProcessEffect } from "../support/by-cli.js";
 import {
   cloneInitializedTestRepository,
@@ -268,7 +269,7 @@ describe("by change implement", () => {
       expect(result.status).toBe(0);
       expect(launchInput).toMatchObject({
         changeId: change.change.id,
-        herdrName: taskId,
+        herdrName: taskSlugForId(publicTaskId(taskId)),
         piSessionName: `${taskId} Record cancellation reasons`,
       });
     }),
