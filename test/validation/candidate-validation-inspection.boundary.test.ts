@@ -39,9 +39,74 @@ afterAll(() => {
 });
 
 describe("Candidate-owned Validation Run inspection", () => {
+  it.effect("abandons an interrupted Validation Run and is idempotent", () =>
+    Effect.gen(function* () {
+      const fixture = yield* candidateValidationFixture();
+      const abandoned = yield* runByInProcessEffect(fixture.root, [
+        "validation-run",
+        "abandon",
+        fixture.validationRunId,
+        "--reason",
+        "Validation process terminated.",
+      ]);
+
+      expect(abandoned.status).toBe(0);
+      expect(abandoned.stdout).toContain("status: abandoned");
+      expect(abandoned.stdout).toContain(`validationRunId: ${fixture.validationRunId}`);
+      expect(yield* fixture.runStore.getRunById(fixture.validationRunId)).toMatchObject({
+        state: "complete",
+        outcome: "tooling_failed",
+      });
+
+      const repeated = yield* runByInProcessEffect(fixture.root, [
+        "validation-run",
+        "abandon",
+        fixture.validationRunId,
+        "--reason",
+        "Repeated cleanup.",
+      ]);
+      expect(repeated.status).toBe(0);
+      expect(repeated.stdout).toContain("status: already_complete");
+    }),
+  );
+
+  it.effect("rejects a second Active Validation Run and clears the relation on completion", () =>
+    Effect.gen(function* () {
+      const fixture = yield* candidateValidationFixture();
+      const second = yield* fixture.runStore.startOrReuse({
+        candidateId: fixture.candidateId,
+        headSha: "head-sha",
+        policy,
+        now,
+      });
+      expect(second.reused).toBe(false);
+      expect("active" in second && second.active).toBe(true);
+      expect(second.validationRunId).toBe(fixture.validationRunId);
+
+      yield* fixture.runStore.complete({
+        validationRunId: fixture.validationRunId,
+        outcome: "tooling_failed",
+        now: later,
+      });
+      const third = yield* fixture.runStore.startOrReuse({
+        candidateId: fixture.candidateId,
+        headSha: "head-sha",
+        policy,
+        now: later,
+      });
+      expect(third.reused).toBe(false);
+      expect(third.validationRunId).not.toBe(fixture.validationRunId);
+    }),
+  );
+
   it.effect("snapshots Implementation Decisions without changing policy reuse identity", () =>
     Effect.gen(function* () {
       const fixture = yield* candidateValidationFixture();
+      yield* fixture.runStore.complete({
+        validationRunId: fixture.validationRunId,
+        outcome: "tooling_failed",
+        now,
+      });
       const decision = {
         id: "decision-1",
         changeId: "change-1",

@@ -466,6 +466,7 @@ validationSetup:
           Effect.tap((rows) => {
             expect(rows).toEqual([
               { name: "acceptance_context_versions" },
+              { name: "active_validation_runs" },
               { name: "candidate_validation_artifacts" },
               { name: "candidate_validation_findings" },
               { name: "candidate_validation_rounds" },
@@ -528,6 +529,7 @@ validationSetup:
         { migration_id: 6, name: "reconcile_implementation_blocker_storage" },
         { migration_id: 7, name: "reviewer_sessions_per_producer" },
         { migration_id: 8, name: "recover_published_remote_branch_cleanup" },
+        { migration_id: 9, name: "active_validation_runs" },
       ]);
     }),
   );

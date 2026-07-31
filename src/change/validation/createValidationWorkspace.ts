@@ -476,6 +476,7 @@ const verifyWorktreeHead = (
         tempRefName: state.tempRefName,
         submittedSha: input.submittedSha,
         worktreeHead,
+        worktreePath: state.worktreePath ?? state.expectedWorktreePath,
       },
     } satisfies WorkspaceSetupAttempt;
   });

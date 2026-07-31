@@ -36,6 +36,7 @@ import { openCandidatePublication } from "./publication/candidatePublication.js"
 import { detectGitHubPrTarget } from "../submissionEnvironment/githubTarget.js";
 import { refreshRemoteChangeBase } from "../submissionEnvironment/remoteChangeBase.js";
 import { localGitHubPullRequestGateway } from "../submissionEnvironment/localGitHubPullRequestGateway.js";
+import { openSqliteExecutionLock } from "../sqlite/sqliteExecutionLock.js";
 
 export type LoadChangeSubmitResult =
   | { readonly ok: true; readonly submit: ChangeSubmit }
@@ -127,6 +128,8 @@ export const loadChangeSubmit = (input: {
         persistence: capturePersistence,
         git: localCandidateCaptureGit,
       }).capture,
+      validationPersistence,
+      executionLock: openSqliteExecutionLock({ commonDirectory: context.commonDirectory }),
     });
   };
   const layerFor = (

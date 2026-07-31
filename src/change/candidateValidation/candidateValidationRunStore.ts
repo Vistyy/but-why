@@ -73,7 +73,8 @@ export type StartCandidateValidationRunInput = {
 
 export type StartCandidateValidationRunResult =
   | { readonly reused: true; readonly validationRunId: string; readonly outcome: "passed" }
-  | { readonly reused: false; readonly validationRunId: string };
+  | { readonly reused: false; readonly validationRunId: string }
+  | { readonly reused: false; readonly active: true; readonly validationRunId: string };
 
 export type CompleteCandidateValidationRunInput = {
   readonly validationRunId: string;
@@ -100,14 +101,39 @@ export type RecordCandidateWorkspaceSetupInput = {
   readonly tempRefName: string;
   readonly submittedSha: string;
   readonly worktreeHead: string;
+  readonly worktreePath?: string;
   readonly cleanupWorktree: string;
   readonly cleanupTempRef: string;
+  readonly now: string;
+};
+
+export type AbandonCandidateValidationRunInput = {
+  readonly validationRunId: string;
+  readonly errorKind: string;
+  readonly operationName: string;
+  readonly errorMessage: string;
   readonly now: string;
 };
 
 export type RecordCandidateToolingFailureInput = ValidationToolingFailureRecordInput & {
   readonly validationRunId: string;
   readonly now: string;
+};
+
+export type ActiveCandidateValidationRun = {
+  readonly validationRunId: string;
+  readonly changeId: string;
+};
+
+export type CandidateValidationRunAbandonmentContext = {
+  readonly validationRunId: string;
+  readonly changeId: string;
+  readonly candidateId: string;
+  readonly submittedSha: string;
+  readonly tempRefName?: string;
+  readonly worktreePath?: string;
+  readonly cleanupWorktree: "removed" | "not_created" | "failed" | null;
+  readonly cleanupTempRef: "removed" | "not_created" | "failed" | null;
 };
 
 export type CandidateValidationRunRecord = {

@@ -82,6 +82,11 @@ type ValidateCandidateResult =
     }
   | {
       readonly ok: false;
+      readonly code: "active_validation_run";
+      readonly validationRunId: string;
+    }
+  | {
+      readonly ok: false;
       readonly validationRunId: string;
       readonly outcome: "tooling_failed";
       readonly reviewerEvidence?: ReviewerContinuityEvidence;
@@ -174,6 +179,13 @@ const makeCandidateValidation = (dependencies: {
         : { implementationDecisions: input.implementationDecisions }),
       now: input.now,
     });
+    if ("active" in started && started.active === true) {
+      return {
+        ok: false,
+        code: "active_validation_run",
+        validationRunId: started.validationRunId,
+      } as const;
+    }
     if (started.reused) return { ok: true, ...started } as const;
 
     const workspace = yield* createValidationWorkspace({
@@ -223,6 +235,9 @@ const makeCandidateValidation = (dependencies: {
       tempRefName: workspace.setup.tempRefName,
       submittedSha: workspace.setup.submittedSha,
       worktreeHead: workspace.setup.worktreeHead,
+      ...(workspace.setup.worktreePath === undefined
+        ? {}
+        : { worktreePath: workspace.setup.worktreePath }),
       cleanupWorktree: workspace.setup.cleanupResult.worktree,
       cleanupTempRef: workspace.setup.cleanupResult.tempRef,
       now: input.now,
