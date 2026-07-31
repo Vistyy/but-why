@@ -11,6 +11,15 @@ Run `just init` after entering the environment.
 
 The repository uses ESM TypeScript, Effect, Effect SQL SQLite, Vitest, Biome, TypeScript, Fallow, ast-grep, and Remark.
 
+## Source-repository workflow executable
+
+Before npm publication, `just by ...` runs through the canonical main checkout's Trusted But Why Executable.
+The launcher resolves the canonical main checkout from Git worktree metadata.
+It does not load CLI or migration code from the Candidate worktree.
+If the canonical main checkout is unavailable, the command fails with `main_checkout_unavailable`.
+If the canonical main-checkout Trusted But Why Executable is unavailable, the command fails with `trusted_executable_unavailable`.
+Run Candidate CLI and migration tests through the supported test seams with an independent temporary Git repository and disposable Shared Repository State.
+
 ## Supported commands
 
 Run `just` to list recipes.

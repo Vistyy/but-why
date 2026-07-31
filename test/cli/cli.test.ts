@@ -11,7 +11,7 @@ import { collapseHome } from "../../src/cli/cliPath.js";
 import { butWhyGitignoreBlock } from "../../src/init/gitignore.js";
 import { RepositorySql, repositorySqlLayer } from "../../src/sqlite/repositorySql.js";
 import { encodeToon } from "../../src/output/toon.js";
-import { byExecutable, createGitRepo, repoRoot, runByInProcessEffect } from "../support/by-cli.js";
+import { createGitRepo, repoRoot, runByInProcessEffect } from "../support/by-cli.js";
 import { createTestWorkspace } from "../support/testWorkspace.js";
 import { runTestProcess } from "../support/testProcess.js";
 
@@ -237,21 +237,6 @@ describe("by CLI", () => {
       expect(() => JSON.parse(result.stdout)).toThrow();
     }),
   );
-
-  ordinaryIt("keeps JSON stdout structured when native logging is enabled", () => {
-    const root = createGitRepo();
-    const init = runTestProcess(byExecutable, ["init", "--task-prefix", "BY"], { cwd: root });
-    expect(init.status).toBe(0);
-
-    const result = runTestProcess(byExecutable, ["--log-level", "debug", "--output", "json"], {
-      cwd: root,
-    });
-
-    expect(result.status).toBe(0);
-    expect(result.stdout).not.toContain("level=");
-    expect(result.stderr).toContain("level=");
-    expect(() => JSON.parse(result.stdout)).not.toThrow();
-  });
 
   it.effect("prints JSON usage errors after a valid JSON selector", () =>
     Effect.gen(function* () {
