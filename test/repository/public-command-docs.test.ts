@@ -26,7 +26,7 @@ const helpText = (stdout: string): string => (JSON.parse(stdout) as HelpView).he
 const documentedCommands = [
   "by task create --title <title> --description-file <file> [--depends-on <task-id>]...",
   "by task dependencies set <task-id> [--depends-on <task-id>]...",
-  "by task list [--all] [--state <state>]",
+  "by task list [--all] [--state <state>] [--limit <positive integer | all>]",
   "by task show <task-id>",
   "by task approve <task-id>",
   "by task context <task-id>",

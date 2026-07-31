@@ -20,7 +20,7 @@ import { runContextCommand } from "./cli/task/commands/context.js";
 import { runContextDraftCommand } from "./cli/task/commands/contextDraft.js";
 import { runCreateCommand } from "./cli/task/commands/create.js";
 import { runDependenciesCommand } from "./cli/task/commands/dependencies.js";
-import { runListCommand } from "./cli/task/commands/list.js";
+import { defaultTaskListLimit, runListCommand } from "./cli/task/commands/list.js";
 import { runTaskShowCommand } from "./cli/task/commands/show.js";
 import {
   runBlocker,
@@ -167,12 +167,14 @@ const taskListCommand = withCliHandler(
   leaf("list", "List repo-local Tasks.", {
     all: Options.boolean("all"),
     state: Options.choice("state", taskStates).pipe(Options.optional),
+    limit: Options.withDefault(Options.text("limit"), String(defaultTaskListLimit)),
   }),
   (values, environment) =>
     runListCommand(
       {
         all: boolean(values, "all"),
         state: optionalString(values, "state") as TaskState | undefined,
+        limit: requiredString(values, "limit"),
       },
       environment,
     ),

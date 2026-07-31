@@ -105,7 +105,9 @@ it.scoped("returns direct Task dependency facts and start eligibility", () =>
       expect(yield* tasks.getTaskById(publicTaskId("BY-2"))).toMatchObject({
         dependents: [{ id: "BY-3", title: "Dependent", state: "todo" }],
       });
-      expect(yield* tasks.listTasks({ includeDone: true })).toContainEqual(
+      const listed = yield* tasks.listTasks({ includeDone: true });
+      expect(listed.total).toBe(3);
+      expect(listed.tasks).toContainEqual(
         expect.objectContaining({
           id: "BY-3",
           startable: false,

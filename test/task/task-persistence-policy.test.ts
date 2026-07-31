@@ -49,6 +49,30 @@ it.scoped("preserves closed Task policy", () => {
   );
 });
 
+it.scoped("bounds Task lists after filtering and preserves the matching total", () => {
+  return withTemporaryRepositoryState(() =>
+    Effect.gen(function* () {
+      const tasks = yield* openSqliteTaskPersistence("BY");
+      yield* tasks.createTask({ title: "First", description: "First", now: firstNow });
+      yield* tasks.createTask({ title: "Second", description: "Second", now: firstNow });
+      yield* tasks.createTask({ title: "Third", description: "Third", now: firstNow });
+
+      expect(yield* tasks.listTasks({ includeDone: false, limit: 2 })).toMatchObject({
+        total: 3,
+        tasks: [{ id: "BY-1" }, { id: "BY-2" }],
+      });
+      expect(yield* tasks.listTasks({ includeDone: false, limit: "all" })).toMatchObject({
+        total: 3,
+        tasks: [{ id: "BY-1" }, { id: "BY-2" }, { id: "BY-3" }],
+      });
+      expect(yield* tasks.listTasks({ includeDone: false, state: "done", limit: 2 })).toEqual({
+        total: 0,
+        tasks: [],
+      });
+    }),
+  );
+});
+
 it.scoped("preserves Task ordering and rejects invalid state transitions", () => {
   return withTemporaryRepositoryState(() =>
     Effect.gen(function* () {
@@ -56,10 +80,9 @@ it.scoped("preserves Task ordering and rejects invalid state transitions", () =>
       yield* tasks.createTask({ title: "First", description: "First", now: firstNow });
       yield* tasks.createTask({ title: "Second", description: "Second", now: firstNow });
 
-      expect((yield* tasks.listTasks({ includeDone: false })).map((task) => task.id)).toEqual([
-        "BY-1",
-        "BY-2",
-      ]);
+      expect((yield* tasks.listTasks({ includeDone: false })).tasks.map((task) => task.id)).toEqual(
+        ["BY-1", "BY-2"],
+      );
       expect(
         yield* tasks.transitionTaskState({
           taskId: publicTaskId("BY-1"),

@@ -9,6 +9,7 @@ import type {
   CancelTaskResult,
   CreateTaskInput,
   ListTasksInput,
+  ListTasksResult,
   ReplaceTaskDependenciesInput,
   ReplaceTaskDependenciesResult,
   StoredTaskRecord,
@@ -38,7 +39,7 @@ export type TaskPersistence = {
   ) => Effect.Effect<ReplaceTaskDependenciesResult, RepositoryStorageError>;
   readonly listTasks: (
     input: ListTasksInput,
-  ) => Effect.Effect<readonly TaskSummary[], RepositoryStorageError>;
+  ) => Effect.Effect<ListTasksResult, RepositoryStorageError>;
   readonly listActionableTasks: () => Effect.Effect<readonly TaskSummary[], RepositoryStorageError>;
   readonly getTaskById: (
     taskId: PublicTaskId,
