@@ -108,7 +108,7 @@ describe("by CLI", () => {
       expect(JSON.parse(result.stdout)).toMatchObject({
         error: {
           code: "invalid_usage",
-          message: "Invalid command syntax.",
+          message: "Expected one of the following cases: valid",
         },
       });
     }),
