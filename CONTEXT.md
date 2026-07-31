@@ -141,7 +141,7 @@ _Avoid_: Display title, raw Task ID in process names
 
 **Task Submission**:
 The point-in-time operation that asks But Why to judge one Planning Proposal Snapshot against one Planning Base and resolved planning policy.
-Explicit resubmission of a Todo Task whose Planning Base is no longer valid returns it to New until a new Planning Run passes.
+Explicit resubmission of a Todo Task under a different policy or invalid Planning Base replaces its prior approval only after preflight succeeds.
 _Avoid_: Task Approval, Change Submission, Task edit
 
 **Planning Proposal Snapshot**:
@@ -180,7 +180,7 @@ The ordered immutable Planning Runs retained for one Task.
 _Avoid_: Mutable planning report, Task comments
 
 **Planning Policy Snapshot**:
-The immutable resolved Repository Preparation, Planning Reviewer instructions, Agent Profile, and output contract used by one Planning Run.
+The immutable resolved Repository Preparation, Planning Reviewer instructions, Agent Profile, Agent Environment, and output contract used by one Planning Run.
 Later configuration changes do not alter the snapshot or its historical Planning Run, and Planning Run reuse requires an exact snapshot match.
 _Avoid_: Mutable current config, raw config hash, Validation Policy Snapshot
 
@@ -191,6 +191,11 @@ _Avoid_: Acceptance Reviewer, Implementer, Task approver
 **Planning Reviewer Session**:
 A continuing reviewer conversation owned by one Task and resumed across its Planning Runs and disposable Planning Workspaces.
 _Avoid_: Fresh reviewer session per Task Submission, cross-Task reviewer conversation
+
+**Planning Reviewer Session Identity**:
+The Task, Planning Reviewer producer, resolved Agent Profile, reviewer instructions, Agent Environment, and configured resources that determine whether a Planning Reviewer Session can safely continue.
+The Planning Base, Planning Proposal Snapshot, and Planning Run do not belong to this identity.
+_Avoid_: Planning Run identity, session file path, mutable Task proposal
 
 **Planning Finding**:
 An immutable report that states one material problem and the evidence that prevents approval of the reviewed Task proposal.
@@ -207,8 +212,8 @@ Preflight rejection is not a Planning Tooling Failure.
 _Avoid_: Planning Finding, reviewer rejection
 
 **Task Approval**:
-The current confirmation that one exact Planning Proposal Snapshot passed Planning Review against its recorded Planning Base.
-It becomes invalid when that Planning Base is no longer an ancestor of the fetched Change Base.
+The current confirmation that one exact Planning Proposal Snapshot passed Planning Review under its recorded Planning Policy Snapshot and Planning Base.
+Configuration changes do not invalidate it automatically, but explicit Task resubmission can replace it after preflight succeeds.
 _Avoid_: Change Start, permanent approval, operator-only assertion
 
 **Change Start**:

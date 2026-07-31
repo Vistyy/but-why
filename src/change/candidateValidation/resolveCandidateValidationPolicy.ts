@@ -1,4 +1,8 @@
-import type { GlobalConfigValidationFailed } from "../../contracts/configErrors.js";
+import { repoAgentEnvironment } from "../../agent/agentEnvironment.js";
+import {
+  RepoConfigValidationFailed,
+  type GlobalConfigValidationFailed,
+} from "../../contracts/configErrors.js";
 import { validatePiAgentProfileResources } from "../../agent/piRuntime.js";
 import type { RepoConfig } from "../../contracts/repoConfig.js";
 import { readGlobalConfig } from "../../init/globalConfig.js";
@@ -24,7 +28,7 @@ export type CandidateValidationPolicyResolution =
     };
 
 export const resolveCandidateValidationPolicy = (input: {
-  readonly context: RepoLocalContext;
+  readonly context: RepoLocalContext | { readonly root: string; readonly config?: RepoConfig };
   readonly globalConfigPath: string;
   readonly taskBacked: boolean;
   readonly repoConfig?: RepoConfig;
@@ -35,6 +39,16 @@ export const resolveCandidateValidationPolicy = (input: {
 
   const repoConfig = input.repoConfig ?? input.context.config;
   const repoRoot = input.repoRoot ?? input.context.root;
+  if (repoConfig === undefined) {
+    return {
+      ok: false,
+      error: new RepoConfigValidationFailed({
+        path: ".but-why/config.json",
+        diagnostics: [],
+        message: "Repo Config is required to resolve the Validation Policy.",
+      }),
+    };
+  }
   const submit = submitRepoConfig(repoConfig);
   if (!submit.ok) return submit;
   const specialistReviews = resolveSpecialistReviewPolicies({
@@ -50,7 +64,9 @@ export const resolveCandidateValidationPolicy = (input: {
     if (!resources.ok) return resources;
   }
 
+  const agentEnvironment = repoAgentEnvironment(repoConfig);
   const policy: CandidateValidationPolicy = {
+    ...(agentEnvironment === undefined ? {} : { agentEnvironment }),
     ...(submit.config.prepare === undefined ? {} : { prepare: submit.config.prepare }),
     checks: submit.config.checks,
     copyFiles: repoConfig.validationWorkspace?.copyFiles ?? [],

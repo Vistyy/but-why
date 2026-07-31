@@ -265,46 +265,6 @@ const launchInOpenedWorktree = async (
       );
     }
   }
-  let ready = await waitForSession(execute, input, sessionName, opened.rootPaneId, signal, options);
-  if (ready.kind === "absent" || ready.kind === "unknown") {
-    const reconciled = await reconcileSession(
-      execute,
-      input,
-      sessionName,
-      opened.rootPaneId,
-      signal,
-    );
-    if (reconciled.kind === "ready") {
-      return { ok: true, host: "herdr", status: "started" };
-    }
-    ready = reconciled;
-  }
-  if (ready.kind === "malformed") {
-    const evidence = await launchEvidence(execute, opened.rootPaneId, signal);
-    return launchIndeterminate(ready.message, evidence);
-  }
-  if (ready.kind === "exited" || ready.kind === "absent") {
-    const evidence = await launchEvidence(execute, opened.rootPaneId, signal);
-    if (ready.kind === "exited" || hasExitEvidence(evidence)) {
-      if (!opened.alreadyOpen) await closeWorkspace(execute, opened.workspaceId, signal);
-      return launchFailure(
-        ready.kind === "exited"
-          ? `Pi exited during startup: ${ready.message}`
-          : "Pi exited during startup.",
-        evidence,
-      );
-    }
-    if (ready.kind === "absent") {
-      return launchIndeterminate(
-        "Herdr did not confirm Pi readiness before the deadline.",
-        evidence,
-      );
-    }
-  }
-  if (ready.kind === "unknown") {
-    const evidence = await launchEvidence(execute, opened.rootPaneId, signal);
-    return launchIndeterminate("Herdr did not confirm Pi readiness before the deadline.", evidence);
-  }
   return { ok: true, host: "herdr", status: "started" };
 };
 
@@ -334,27 +294,6 @@ type SessionObservation =
   | { readonly kind: "absent" }
   | { readonly kind: "unknown" }
   | { readonly kind: "malformed"; readonly message: string };
-
-const reconcileSession = async (
-  execute: HerdrCommandExecutor,
-  input: InteractiveSessionLaunchInput,
-  sessionName: string,
-  paneId: string,
-  signal: AbortSignal | undefined,
-): Promise<SessionObservation> => {
-  const listed = await execute(["agent", "list"], signal);
-  if (!listed.ok) return { kind: "unknown" };
-  if (!isValidAgentList(listed.stdout)) {
-    return { kind: "malformed", message: "Herdr returned malformed agent-list output." };
-  }
-  const agent = findSession(listed.stdout, input, sessionName, paneId);
-  if (agent === undefined) return { kind: "absent" };
-  if (isActiveAgentStatus(recordValue(agent, "agent_status"))) return { kind: "ready" };
-  if (recordValue(agent, "agent_status") === "done") {
-    return { kind: "exited", message: "Herdr reported the hosted process as done." };
-  }
-  return { kind: "unknown" };
-};
 
 const waitForSession = async (
   execute: HerdrCommandExecutor,

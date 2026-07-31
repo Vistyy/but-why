@@ -817,12 +817,18 @@ const createTask = (root: string, title: string, description: string) =>
 
 const initializedRepository = (prepare?: string, workspace?: string): string => {
   const root = createInitializedRepo(workspace);
-  if (prepare !== undefined) {
-    writeFileSync(
-      join(root, ".but-why", "config.json"),
-      `${JSON.stringify({ taskPrefix: "BY", prepare: { command: prepare } }, null, 2)}\n`,
-    );
-  }
+  writeFileSync(
+    join(root, ".but-why", "config.json"),
+    `${JSON.stringify(
+      {
+        taskPrefix: "BY",
+        validation: { checks: [{ id: "quality", command: "true" }] },
+        ...(prepare === undefined ? {} : { prepare: { command: prepare } }),
+      },
+      null,
+      2,
+    )}\n`,
+  );
   commitButWhyConfigAndRecordDefault(root);
   return root;
 };

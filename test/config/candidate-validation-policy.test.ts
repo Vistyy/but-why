@@ -83,6 +83,7 @@ describe("Candidate validation policy configuration", () => {
 
     const decoded = decodeRepoConfig({
       taskPrefix: "BY",
+      agentEnvironment: { command: ["nix", "develop", "-c"] },
       validation: { checks: [{ id: "quality", command: "true" }] },
       review: {
         acceptance: { agentProfile: { scope: "global", name: "acceptance" } },
@@ -124,6 +125,7 @@ describe("Candidate validation policy configuration", () => {
       resolved: {
         taskBacked: true,
         policy: {
+          agentEnvironment: ["nix", "develop", "-c"],
           acceptanceReview: {
             profile: { profile: { runtimeConfig: { model: "acceptance-model" } } },
           },
