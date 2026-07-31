@@ -30,14 +30,14 @@ describe("by task CLI processes", () => {
       root,
       "Descripción exacta\n",
       {},
+      "--output",
+      "json",
       "task",
       "create",
       "--title",
       "Piped input",
       "--description-file",
       "-",
-      "--output",
-      "json",
     );
     expect(created.status).toBe(0);
 
@@ -45,13 +45,13 @@ describe("by task CLI processes", () => {
       root,
       "Comentario exacto\n",
       {},
+      "--output",
+      "json",
       "task",
       "comment",
       "BY-1",
       "--file",
       "-",
-      "--output",
-      "json",
     );
     expect(commented.status).toBe(0);
 
@@ -68,14 +68,14 @@ describe("by task CLI processes", () => {
       root,
       Buffer.from([0xff]),
       {},
+      "--output",
+      "json",
       "task",
       "create",
       "--title",
       "Invalid",
       "--description-file",
       "-",
-      "--output",
-      "json",
     );
     expect(invalid.status).toBe(2);
     expect(JSON.parse(invalid.stdout)).toMatchObject({
@@ -145,14 +145,14 @@ exit 1
                 executable,
                 root,
                 processEnvironment,
+                "--output",
+                "json",
                 "task",
                 "create",
                 "--title",
                 `Concurrent ${index}`,
                 "--description-file",
                 `description-${index}.md`,
-                "--output",
-                "json",
               ),
             ),
           ),
@@ -216,7 +216,7 @@ exit 1
         const context = yield* runByInProcessEffect(root, ["task", "context", "BY-1"], now);
         const shown = yield* runByInProcessEffect(
           root,
-          ["task", "show", "BY-2", "--output", "json"],
+          ["--output", "json", "task", "show", "BY-2"],
           now,
         );
         expect(context.stdout).toContain("First concurrent comment");
@@ -235,7 +235,7 @@ exit 1
         expect(approved.status).toBe(0);
         const started = yield* runByInProcessEffect(
           root,
-          ["change", "start", "--task", "BY-1", "--output", "json"],
+          ["--output", "json", "change", "start", "--task", "BY-1"],
           now,
         );
         expect(started.status).toBe(0);
@@ -270,11 +270,11 @@ exit 1
         const submitted = runBuiltByWithEnv(
           root,
           processEnvironment,
+          "--output",
+          "json",
           "change",
           "submit",
           change.change.id,
-          "--output",
-          "json",
         );
         expect(submitted.status).toBe(1);
         expect(JSON.parse(submitted.stdout)).toMatchObject({
@@ -293,11 +293,11 @@ exit 1
         const inspected = runBuiltByWithEnv(
           root,
           processEnvironment,
+          "--output",
+          "json",
           "change",
           "show",
           change.change.id,
-          "--output",
-          "json",
         );
         expect(inspected.status).toBe(0);
         expect(JSON.parse(inspected.stdout)).toMatchObject({
@@ -309,25 +309,25 @@ exit 1
         const blocked = runBuiltByWithEnv(
           root,
           processEnvironment,
+          "--output",
+          "json",
           "change",
           "blocker",
           "raise",
           change.change.id,
           "--file",
           "blocker.md",
-          "--output",
-          "json",
         );
         expect(blocked.status).toBe(0);
 
         const submitBlocked = runBuiltByWithEnv(
           root,
           processEnvironment,
+          "--output",
+          "json",
           "change",
           "submit",
           change.change.id,
-          "--output",
-          "json",
         );
         expect(submitBlocked.status).toBe(1);
         expect(JSON.parse(submitBlocked.stdout)).toEqual({

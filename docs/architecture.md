@@ -18,7 +18,8 @@ The source hierarchy follows these owners:
 - `src/task/` owns Task records, lifecycle rules, identity, persistence interfaces, files, and composition.
 - `src/change/` owns Change records, Candidates, Candidate capture, Validation Runs, validation phases, publication, submission, and composition.
 - `src/agent/` owns reviewer-agent execution Adapters and Agent Profile resolution.
-- `src/cli/` and `src/cli.ts` own CLI routing and command Adapters.
+- `src/cliCommandTree.ts` owns the Effect CLI command tree, routing, syntax, and generated help.
+- `src/cli/` owns command Adapters, and `src/cli.ts` owns the executable entry boundary.
 - `src/contracts/` owns configuration, output, and shared error contracts.
 - `src/init/` owns Local Repository initialization and repository-context Adapters.
 - `src/output/` owns structured output codecs and serializers.

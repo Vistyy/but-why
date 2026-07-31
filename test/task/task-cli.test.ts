@@ -5,7 +5,7 @@ import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
 import { describe } from "vitest";
 
-import { collapseHome } from "../../src/cli.js";
+import { collapseHome } from "../../src/cli/cliPath.js";
 import { RepositorySql, repositorySqlLayer } from "../../src/sqlite/repositorySql.js";
 import type { TaskState } from "../../src/task/lifecycle.js";
 import type { TaskRecord, TaskSummary } from "../../src/task/task.js";
@@ -211,7 +211,7 @@ tasks[2]:
     Effect.gen(function* () {
       const result = yield* runByInProcessEffect(
         createTestWorkspace(),
-        ["task", "list", "--output", "json"],
+        ["--output", "json", "task", "list"],
         firstNow,
         { taskUseCases: fakeTaskUseCases({ listTasks: () => listedTasks }) },
       );
@@ -267,15 +267,15 @@ help[1]: "Run \`by task create --title \\"...\\" --description-file <file>\` to 
         },
       });
 
-      yield* runByInProcessEffect(root, ["task", "list", "--output", "json"], firstNow, {
+      yield* runByInProcessEffect(root, ["--output", "json", "task", "list"], firstNow, {
         taskUseCases,
       });
-      yield* runByInProcessEffect(root, ["task", "list", "--all", "--output", "json"], firstNow, {
+      yield* runByInProcessEffect(root, ["--output", "json", "task", "list", "--all"], firstNow, {
         taskUseCases,
       });
       yield* runByInProcessEffect(
         root,
-        ["task", "list", "--state", "done", "--output", "json"],
+        ["--output", "json", "task", "list", "--state", "done"],
         firstNow,
         {
           taskUseCases,
@@ -355,12 +355,12 @@ contextCommand: by task context BY-1`);
       yield* createTask(root, firstNow, "Draft title");
 
       const result = yield* runByInProcessEffect(root, [
+        "--output",
+        "json",
         "task",
         "context",
         "draft",
         "BY-1",
-        "--output",
-        "json",
       ]);
 
       expect(result.status).toBe(0);
@@ -385,12 +385,12 @@ contextCommand: by task context BY-1`);
       writeFileSync(join(root, ".git", "but-why", "task-context-drafts"), "not a directory");
 
       const result = yield* runByInProcessEffect(root, [
+        "--output",
+        "json",
         "task",
         "context",
         "draft",
         "BY-1",
-        "--output",
-        "json",
       ]);
 
       expect(result.status).toBe(1);
@@ -407,12 +407,12 @@ contextCommand: by task context BY-1`);
       yield* createTask(root, firstNow, "Original title");
       const firstDraft = JSON.parse(
         (yield* runByInProcessEffect(root, [
+          "--output",
+          "json",
           "task",
           "context",
           "draft",
           "BY-1",
-          "--output",
-          "json",
         ])).stdout,
       ) as { draft: { path: string } };
       writeFileSync(firstDraft.draft.path, "# Current title\n\nCurrent description");
@@ -421,12 +421,12 @@ contextCommand: by task context BY-1`);
       ).toBe(0);
 
       const draftResult = yield* runByInProcessEffect(root, [
+        "--output",
+        "json",
         "task",
         "context",
         "draft",
         "BY-1",
-        "--output",
-        "json",
       ]);
       const draft = JSON.parse(draftResult.stdout) as { draft: { path: string } };
       writeFileSync(draft.draft.path, "Discard this draft");
@@ -446,19 +446,19 @@ contextCommand: by task context BY-1`);
       yield* createTask(root, firstNow, "Original title");
 
       const draftResult = yield* runByInProcessEffect(root, [
+        "--output",
+        "json",
         "task",
         "context",
         "draft",
         "BY-1",
-        "--output",
-        "json",
       ]);
       const draft = JSON.parse(draftResult.stdout) as { draft: { path: string } };
       writeFileSync(draft.draft.path, "#  Updated title  \n\nUpdated description\n\n");
 
       const result = yield* runByInProcessEffect(
         root,
-        ["task", "context", "apply", "BY-1", "--output", "json"],
+        ["--output", "json", "task", "context", "apply", "BY-1"],
         secondNow,
       );
 
@@ -487,12 +487,12 @@ contextCommand: by task context BY-1`);
       yield* createTask(root, firstNow, "Original title");
 
       const draftResult = yield* runByInProcessEffect(root, [
+        "--output",
+        "json",
         "task",
         "context",
         "draft",
         "BY-1",
-        "--output",
-        "json",
       ]);
       const draft = JSON.parse(draftResult.stdout) as { draft: { path: string } };
       writeFileSync(draft.draft.path, "Updated title\n\nUpdated description");
@@ -519,12 +519,12 @@ contextCommand: by task context BY-1`);
 
       yield* createTask(root, firstNow, "Original title");
       const draftResult = yield* runByInProcessEffect(root, [
+        "--output",
+        "json",
         "task",
         "context",
         "draft",
         "BY-1",
-        "--output",
-        "json",
       ]);
       const draft = JSON.parse(draftResult.stdout) as { draft: { path: string } };
       writeFileSync(draft.draft.path, "# Updated title\nUpdated description");
@@ -552,12 +552,12 @@ contextCommand: by task context BY-1`);
 
         yield* createTask(root, firstNow, "Original title");
         const draftResult = yield* runByInProcessEffect(root, [
+          "--output",
+          "json",
           "task",
           "context",
           "draft",
           "BY-1",
-          "--output",
-          "json",
         ]);
         const draft = JSON.parse(draftResult.stdout) as { draft: { path: string } };
         writeFileSync(draft.draft.path, "# Updated title\n\nUpdated description");
@@ -713,7 +713,7 @@ contextCommand: by task context BY-1`);
           name: "missing file flag",
           args: ["task", "comment", "BY-1"],
           status: 2,
-          code: "missing_comment_file",
+          code: "invalid_usage",
         },
         {
           name: "remote-backed task ID",
@@ -790,7 +790,7 @@ contextCommand: by task context BY-1`);
 
       expect(result.status).toBe(2);
       expect(result.stderr).toBe("");
-      expect(result.stdout).toContain("code: missing_task_id");
+      expect(result.stdout).toContain("code: invalid_usage");
       expect(result.stdout).toContain("help[1]");
     }),
   );
@@ -938,10 +938,9 @@ help[1]: "Run \`by task create --title \\"...\\" --description-file <file>\` to 
       expect(result.status).toBe(2);
       expect(result.stderr).toBe("");
       expect(result.stdout).toBe(`error:
-  code: invalid_task_state
-  message: Unknown task state not-a-state.
-  state: not-a-state
-help[1]: "Use one of: new, todo, implementing, blocked, validating, ready, done, cancelled."`);
+  code: invalid_usage
+  message: "Expected one of the following cases: new, todo, implementing, blocked, validating, ready, done, cancelled"
+help[1]: Run \`by --help\` for generated command help.`);
     }),
   );
 
@@ -965,17 +964,13 @@ help[1]: "Use one of: new, todo, implementing, blocked, validating, ready, done,
   );
 
   it.effect.each([
-    ["missing title", ["task", "create", "--description-file", "task.md"], "missing_title"],
+    ["missing title", ["task", "create", "--description-file", "task.md"], "invalid_usage"],
     [
       "empty title",
       ["task", "create", "--title", "   ", "--description-file", "task.md"],
       "empty_title",
     ],
-    [
-      "missing description file",
-      ["task", "create", "--title", "Title"],
-      "missing_description_file",
-    ],
+    ["missing description file", ["task", "create", "--title", "Title"], "invalid_usage"],
   ] as const)("prints %s as a usage error", ([_name, args, code]) =>
     Effect.gen(function* () {
       const root = createTestWorkspace();

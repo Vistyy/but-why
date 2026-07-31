@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { Effect } from "effect";
 
 import { mapRuntimeError, runCli } from "./cli.js";
-import { outputFormatForArgs } from "./cliOutputSelection.js";
+import { outputFormatForArgs } from "./cliCommandTree.js";
 import { serializeOutput } from "./output/serialize.js";
 
 const executablePath =
@@ -28,6 +28,7 @@ Effect.runPromise(
     globalConfigPath: join(homedir(), ".config/but-why/config.json"),
     now: fixedNow === undefined ? () => new Date() : () => new Date(fixedNow),
     stdin: { fd: 0, isTerminal: process.stdin.isTTY === true },
+    writeStderr: (message) => process.stderr.write(message),
     ...interactiveSessionPath(),
   }),
 )

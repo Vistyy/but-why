@@ -34,6 +34,7 @@
   },
   "dependencies": {
     "@ai-hero/sandcastle": "0.12.0",
+    "@effect/cli": "0.74.0",
     "@effect/platform": "0.95.0",
     "@effect/platform-node": "0.105.0",
     "@effect/sql": "0.50.0",

@@ -78,7 +78,10 @@ export const runBuiltByWithInput = (
 export const runBy = (cwd: string, ...args: readonly string[]) => runByWithEnv(cwd, {}, ...args);
 
 export const runByWithEnv = (cwd: string, env: NodeJS.ProcessEnv, ...args: readonly string[]) =>
-  runTestProcess(byExecutable, args, { cwd, ...testProcessEnvironment(env) });
+  runTestProcess(byExecutable, args, {
+    cwd,
+    ...testProcessEnvironment(env),
+  });
 
 export const runJustBy = (...args: readonly string[]) => {
   const root = createGitRepo();
@@ -112,7 +115,7 @@ const cliResultToInProcessResult = (result: CliResult): InProcessCliResult => ({
   stderr: "",
 });
 
-export const runByInProcessEffect = (
+const runByInProcessEffectRaw = (
   cwd: string,
   args: readonly string[],
   now = "2026-06-30T12:00:00.000Z",
@@ -135,6 +138,8 @@ export const runByInProcessEffect = (
       ? {}
       : { interactiveSessionHost: options.interactiveSessionHost }),
   }).pipe(Effect.map(cliResultToInProcessResult));
+
+export const runByInProcessEffect = runByInProcessEffectRaw;
 
 export const createGitRepo = (root = createTestWorkspace()) => {
   const result = runTestProcess("git", ["init", "-q"], { cwd: root });

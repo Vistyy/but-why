@@ -6,11 +6,7 @@ import {
   repositoryStorageErrorResult,
   runtimeError,
 } from "../../cliResults.js";
-import {
-  parseCliTaskIdArg,
-  taskIdResolutionError,
-  type CliTaskIdParseResult,
-} from "../../cliTaskId.js";
+import { taskIdResolutionError } from "../../cliTaskId.js";
 import { loadRepoLocalContext } from "../../init/repoContext.js";
 import { withTaskUseCases } from "../../task/loadTaskUseCases.js";
 import type { RepositoryStorageError } from "../../contracts/repositoryStorageError.js";
@@ -66,12 +62,6 @@ export const resolveTaskId = (tasks: TaskUseCases, taskId: PublicTaskId): Resolv
   }
   return { ok: true, tasks, taskId: resolvedTaskId.taskId };
 };
-
-export const parseTaskIdArg = (args: readonly string[], usage: string): CliTaskIdParseResult =>
-  parseCliTaskIdArg(args, {
-    missingHelp: `Run \`${usage}\`.`,
-    extraHelp: `Run \`${usage}\`.`,
-  });
 
 export const taskNotFound = (taskId: string): CliResult =>
   runtimeError({

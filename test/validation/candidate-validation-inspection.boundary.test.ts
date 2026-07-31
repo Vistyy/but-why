@@ -122,11 +122,11 @@ describe("Candidate-owned Validation Run inspection", () => {
       });
 
       const result = yield* runByInProcessEffect(fixture.root, [
+        "--output",
+        "json",
         "validation-run",
         "show",
         fixture.validationRunId,
-        "--output",
-        "json",
       ]);
 
       expect(result.status).toBe(0);
@@ -261,12 +261,12 @@ describe("Candidate-owned Validation Run inspection", () => {
 
       const artifactRef = `artifact:${fixture.validationRunId}/checks/types/stdout.txt`;
       const detail = yield* runByInProcessEffect(fixture.root, [
+        "--output",
+        "json",
         "validation-run",
         "artifact",
         fixture.validationRunId,
         artifactRef,
-        "--output",
-        "json",
       ]);
       expect(detail.status).toBe(0);
       expect(JSON.parse(detail.stdout)).toMatchObject({
@@ -294,11 +294,11 @@ describe("Candidate-owned Validation Run inspection", () => {
       });
 
       const emptyResult = yield* runByInProcessEffect(empty.root, [
+        "--output",
+        "json",
         "validation-run",
         "show",
         empty.validationRunId,
-        "--output",
-        "json",
       ]);
       expect(emptyResult.status).toBe(0);
       expect(JSON.parse(emptyResult.stdout)).toMatchObject({
@@ -352,11 +352,11 @@ describe("Candidate-owned Validation Run inspection", () => {
       rmSync(join(unavailable.artifactsRoot, missing.path));
 
       const unavailableResult = yield* runByInProcessEffect(unavailable.root, [
+        "--output",
+        "json",
         "validation-run",
         "show",
         unavailable.validationRunId,
-        "--output",
-        "json",
       ]);
       expect(unavailableResult.status).toBe(0);
       expect(JSON.parse(unavailableResult.stdout).artifacts[0]).toEqual({
@@ -373,27 +373,27 @@ describe("Candidate-owned Validation Run inspection", () => {
       });
 
       const unknownRun = yield* runByInProcessEffect(unavailable.root, [
+        "--output",
+        "json",
         "validation-run",
         "show",
         "missing-run",
-        "--output",
-        "json",
       ]);
       const unknownArtifact = yield* runByInProcessEffect(unavailable.root, [
+        "--output",
+        "json",
         "validation-run",
         "artifact",
         unavailable.validationRunId,
         "missing-artifact",
-        "--output",
-        "json",
       ]);
       const unavailableContent = yield* runByInProcessEffect(unavailable.root, [
+        "--output",
+        "json",
         "validation-run",
         "artifact",
         unavailable.validationRunId,
         missing.ref,
-        "--output",
-        "json",
       ]);
 
       expect(JSON.parse(unknownRun.stdout)).toMatchObject({

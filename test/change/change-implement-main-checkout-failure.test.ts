@@ -48,13 +48,13 @@ describe("Change Implement canonical main checkout failures", () => {
       );
       const started = yield* runByInProcessEffect(
         root,
-        ["change", "start", "--output", "json"],
+        ["--output", "json", "change", "start"],
         now,
       );
       const change = JSON.parse(started.stdout) as { readonly change: { readonly id: string } };
       const before = yield* runByInProcessEffect(
         root,
-        ["change", "show", change.change.id, "--output", "json"],
+        ["--output", "json", "change", "show", change.change.id],
         now,
       );
       const fakeGitDirectory = createTestWorkspace();
@@ -77,11 +77,11 @@ exec ${realGitPath} "$@"
         const result = runByWithEnv(
           linkedCheckout,
           { PATH: `${fakeGitDirectory}:${inheritedPath}` },
+          "--output",
+          "json",
           "change",
           "implement",
           change.change.id,
-          "--output",
-          "json",
         );
 
         expect(result.status).toBe(1);
@@ -100,7 +100,7 @@ exec ${realGitPath} "$@"
 
       const after = yield* runByInProcessEffect(
         root,
-        ["change", "show", change.change.id, "--output", "json"],
+        ["--output", "json", "change", "show", change.change.id],
         now,
       );
       expect(after.stdout).toBe(before.stdout);

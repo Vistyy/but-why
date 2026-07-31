@@ -1,6 +1,5 @@
 import { Effect } from "effect";
 
-import { withGlobalHelpFlags } from "../../cliHelp.js";
 import type { CliResult } from "../../cliResults.js";
 import {
   repoStateLoadError,
@@ -8,10 +7,8 @@ import {
   runtimeError,
   stateStoreUnavailable,
   success,
-  usageError,
 } from "../../cliResults.js";
 import { loadCandidateValidationRunInspection } from "../../change/candidateValidation/loadCandidateValidationRunInspection.js";
-import type { StructuredObject } from "../../output/structured.js";
 import {
   candidateValidationArtifactContentView,
   candidateValidationRunInspectionView,
@@ -22,67 +19,17 @@ export type ValidationRunCommandEnvironment = {
   readonly now: () => Date;
 };
 
-export const routeValidationRun = (
-  args: readonly string[],
+export const runShowCommand = (
+  command: { readonly validationRunId: string },
   environment: ValidationRunCommandEnvironment,
 ): Effect.Effect<CliResult> => {
-  if (args.length === 1 && args[0] === "--help") {
-    return Effect.succeed(success(validationRunHelpView()));
-  }
-
-  const subcommand = args[0];
-  if (subcommand === "show") return runShowCommand(args.slice(1), environment);
-  if (subcommand === "artifact") return runArtifactCommand(args.slice(1), environment);
-
-  if (subcommand?.startsWith("-")) {
-    return Effect.succeed(
-      usageError({
-        code: "unknown_flag",
-        message: `Unknown flag: ${subcommand}`,
-        help: ["Run `by validation-run --help`."],
-      }),
-    );
-  }
-
-  return Effect.succeed(
-    usageError({
-      code: "unknown_command",
-      message: `Unknown validation-run command: ${subcommand ?? ""}`,
-      help: ["Run `by validation-run --help`."],
-    }),
-  );
-};
-
-const runShowCommand = (
-  args: readonly string[],
-  environment: ValidationRunCommandEnvironment,
-): Effect.Effect<CliResult> => {
-  if (args.length === 1 && args[0] === "--help") {
-    return Effect.succeed(
-      success({
-        usage: "by validation-run show <validation-run-id>",
-        arguments: [
-          {
-            argument: "<validation-run-id>",
-            description: "Validation Run ID owned by a Candidate.",
-          },
-        ],
-        flags: withGlobalHelpFlags(),
-        examples: ["by validation-run show <validation-run-id>"],
-      }),
-    );
-  }
-
-  const parseResult = parseExactArgs(args, ["validationRunId"]);
-  if (!parseResult.ok) return Effect.succeed(parseResult.result);
-  const validationRunId = parseResult.values[0] ?? "";
   const inspectionLoad = loadInspection(environment);
   if (!inspectionLoad.ok) return Effect.succeed(repoStateLoadError(inspectionLoad.error));
 
-  return inspectionLoad.inspection.inspectRun(validationRunId).pipe(
+  return inspectionLoad.inspection.inspectRun(command.validationRunId).pipe(
     Effect.map((inspection) =>
       inspection === undefined
-        ? validationRunNotFound(validationRunId)
+        ? validationRunNotFound(command.validationRunId)
         : success(candidateValidationRunInspectionView(inspection)),
     ),
     Effect.catchAll((error) => Effect.succeed(repositoryStorageErrorResult(error))),
@@ -90,45 +37,20 @@ const runShowCommand = (
   );
 };
 
-const runArtifactCommand = (
-  args: readonly string[],
+export const runArtifactCommand = (
+  command: { readonly validationRunId: string; readonly artifactRef: string },
   environment: ValidationRunCommandEnvironment,
 ): Effect.Effect<CliResult> => {
-  if (args.length === 1 && args[0] === "--help") {
-    return Effect.succeed(
-      success({
-        usage: "by validation-run artifact <validation-run-id> <artifact-ref>",
-        arguments: [
-          {
-            argument: "<validation-run-id>",
-            description: "Validation Run ID owned by a Candidate.",
-          },
-          {
-            argument: "<artifact-ref>",
-            description: "Artifact reference returned by Validation Run inspection.",
-          },
-        ],
-        flags: withGlobalHelpFlags(),
-        examples: [
-          "by validation-run artifact <validation-run-id> artifact:<validation-run-id>/checks/<check-id>/stdout.txt",
-        ],
-      }),
-    );
-  }
-
-  const parseResult = parseExactArgs(args, ["validationRunId", "artifactRef"]);
-  if (!parseResult.ok) return Effect.succeed(parseResult.result);
-  const validationRunId = parseResult.values[0] ?? "";
-  const artifactRef = parseResult.values[1] ?? "";
   const inspectionLoad = loadInspection(environment);
   if (!inspectionLoad.ok) return Effect.succeed(repoStateLoadError(inspectionLoad.error));
 
-  return inspectionLoad.inspection.readArtifact(validationRunId, artifactRef).pipe(
+  return inspectionLoad.inspection.readArtifact(command.validationRunId, command.artifactRef).pipe(
     Effect.map((result) => {
-      if (result.ok)
+      if (result.ok) {
         return success(candidateValidationArtifactContentView(result.artifact, result.content));
+      }
 
-      return artifactReadFailure(result.code, validationRunId, artifactRef);
+      return artifactReadFailure(result.code, command.validationRunId, command.artifactRef);
     }),
     Effect.catchAll((error) => Effect.succeed(repositoryStorageErrorResult(error))),
     Effect.catchAllCause(() => Effect.succeed(stateStoreUnavailable(inspectionLoad.taskPrefix))),
@@ -139,63 +61,6 @@ const loadInspection = (environment: ValidationRunCommandEnvironment) =>
   loadCandidateValidationRunInspection({
     cwd: environment.cwd,
   });
-
-const validationRunHelpView = (): StructuredObject => ({
-  usage: "by validation-run <command> [--help]",
-  commands: [
-    {
-      command: "by validation-run show <validation-run-id>",
-      description: "Show one Candidate-owned Validation Run policy and evidence.",
-    },
-    {
-      command: "by validation-run artifact <validation-run-id> <artifact-ref>",
-      description: "Show complete stored Artifact content.",
-    },
-  ],
-  flags: withGlobalHelpFlags(),
-});
-
-type ParsedArgs =
-  | { readonly ok: true; readonly values: readonly string[] }
-  | { readonly ok: false; readonly result: CliResult };
-
-const parseExactArgs = (args: readonly string[], names: readonly string[]): ParsedArgs => {
-  const missingIndex = names.findIndex(
-    (_, index) => args[index] === undefined || args[index]?.startsWith("-"),
-  );
-  if (missingIndex !== -1) {
-    const name = names[missingIndex] ?? "argument";
-    return {
-      ok: false,
-      result: usageError({
-        code: `missing_${snakeCase(name)}`,
-        message: `${titleCase(name)} is required.`,
-        help: [commandUsage(names)],
-      }),
-    };
-  }
-  if (args.length > names.length) {
-    return {
-      ok: false,
-      result: usageError({
-        code: "unexpected_argument",
-        message: `Unexpected argument: ${args[names.length] ?? ""}`,
-        help: [commandUsage(names)],
-      }),
-    };
-  }
-  return { ok: true, values: args };
-};
-
-const commandUsage = (names: readonly string[]): string =>
-  names.length === 1
-    ? "Run `by validation-run show <validation-run-id>`."
-    : "Run `by validation-run artifact <validation-run-id> <artifact-ref>`.";
-
-const snakeCase = (value: string): string =>
-  value.replaceAll(/[A-Z]/g, (letter) => `_${letter.toLowerCase()}`);
-const titleCase = (value: string): string =>
-  value.replace(/^[a-z]/, (letter) => letter.toUpperCase()).replaceAll(/([A-Z])/g, " $1");
 
 const validationRunNotFound = (validationRunId: string): CliResult =>
   runtimeError({

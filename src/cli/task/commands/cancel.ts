@@ -3,39 +3,21 @@ import { Effect } from "effect";
 import type { CliResult } from "../../../cliResults.js";
 import { runtimeError, success, usageError } from "../../../cliResults.js";
 import { parseCliTaskIdValue, taskIdResolutionError } from "../../../cliTaskId.js";
-import { withGlobalHelpFlags } from "../../../cliHelp.js";
 import type { TaskCancellationResult } from "../../../change/cancelChange.js";
 import { withCancellation } from "../../../change/loadChangeCancellation.js";
 import type { PublicTaskId } from "../../../task/taskId.js";
 import type { TaskCommandEnvironment } from "../taskCliSupport.js";
 
+export type TaskCancelCommand = {
+  readonly taskId: string;
+  readonly reason: string;
+};
+
 export const runCancelCommand = (
-  args: readonly string[],
+  command: TaskCancelCommand,
   environment: TaskCommandEnvironment,
 ): Effect.Effect<CliResult> => {
-  if (args.length === 1 && args[0] === "--help") {
-    return Effect.succeed(
-      success({
-        usage: "by task cancel <task-id> --reason <reason>",
-        arguments: [{ argument: "<task-id>", description: "Public Task ID, such as BY-1" }],
-        flags: withGlobalHelpFlags([
-          { flag: "--reason <reason>", description: "Why the unfinished Task is being cancelled." },
-        ]),
-        examples: ['by task cancel BY-1 --reason "No longer needed"'],
-      }),
-    );
-  }
-
-  if (args.length !== 3 || args[1] !== "--reason" || args[2] === undefined) {
-    return Effect.succeed(
-      usageError({
-        code: "invalid_arguments",
-        message: "Task Cancel requires a Task ID and a non-empty --reason.",
-        help: ["Run `by task cancel <task-id> --reason <reason>`."],
-      }),
-    );
-  }
-  if (args[2].trim().length === 0) {
+  if (command.reason.trim().length === 0) {
     return Effect.succeed(
       usageError({
         code: "empty_reason",
@@ -45,7 +27,7 @@ export const runCancelCommand = (
     );
   }
 
-  const parsed = parseCliTaskIdValue(args[0] ?? "");
+  const parsed = parseCliTaskIdValue(command.taskId);
   if (!parsed.ok) return Effect.succeed(parsed.result);
   return withCancellation(
     {
@@ -60,7 +42,7 @@ export const runCancelCommand = (
       return Effect.map(
         cancellation.cancelTask({
           taskId: resolved.taskId,
-          reason: args[2] as string,
+          reason: command.reason,
           now: environment.now().toISOString(),
         }),
         (result) => cancelResult(resolved.taskId, result),

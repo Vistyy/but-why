@@ -7,11 +7,8 @@ import { describe, expect } from "vitest";
 import { repoRoot, runByInProcessEffect } from "../support/by-cli.js";
 
 type HelpView = {
-  readonly commands: readonly { readonly command: string }[];
+  readonly help: string;
 };
-
-const commandsFor = (group: "task" | "change"): readonly string[] =>
-  documentedCommands.filter((command) => command.startsWith(`by ${group} `));
 
 const extractDocumentedCommands = (docs: string): readonly string[] =>
   Array.from(
@@ -24,10 +21,7 @@ const extractDocumentedCommands = (docs: string): readonly string[] =>
     ),
   ).sort();
 
-const helpCommands = (stdout: string): readonly string[] => {
-  const parsed = JSON.parse(stdout) as HelpView;
-  return parsed.commands.map(({ command }) => command);
-};
+const helpText = (stdout: string): string => (JSON.parse(stdout) as HelpView).help;
 
 const documentedCommands = [
   "by task create --title <title> --description-file <file> [--depends-on <task-id>]...",
@@ -65,24 +59,55 @@ describe("public command documentation", () => {
       const setup = readFileSync(join(repoRoot, "docs/public/setup.md"), "utf8");
       const config = readFileSync(join(repoRoot, "docs/public/config.md"), "utf8");
       const documented = extractDocumentedCommands(`${setup}\n${config}`);
+      const rootHelp = yield* runByInProcessEffect(repoRoot, ["--help", "--output", "json"]);
       const taskHelp = yield* runByInProcessEffect(repoRoot, [
-        "--output",
-        "json",
         "task",
         "--help",
-      ]);
-      const changeHelp = yield* runByInProcessEffect(repoRoot, [
         "--output",
         "json",
+      ]);
+      const changeHelp = yield* runByInProcessEffect(repoRoot, [
         "change",
         "--help",
+        "--output",
+        "json",
       ]);
 
+      expect(rootHelp.status).toBe(0);
       expect(taskHelp.status).toBe(0);
       expect(changeHelp.status).toBe(0);
       expect(documented).toEqual([...documentedCommands].sort());
-      expect(helpCommands(taskHelp.stdout)).toEqual(commandsFor("task"));
-      expect(helpCommands(changeHelp.stdout)).toEqual(commandsFor("change"));
+
+      const rootHelpText = helpText(rootHelp.stdout);
+      expect(rootHelpText).toContain("COMMANDS");
+      for (const documentedCommand of documentedCommands) {
+        const words = documentedCommand.replace(/^by /u, "").split(/\s+/u);
+        const syntaxStart = words.findIndex(
+          (word) => word.startsWith("--") || word.startsWith("<") || word.startsWith("["),
+        );
+        const commandPath = words.slice(0, syntaxStart).join(" ");
+        const usageLine = rootHelpText
+          .split("\n")
+          .find((line) => line.trimStart().startsWith(`- ${commandPath}`));
+
+        expect(usageLine, documentedCommand).toBeDefined();
+        for (const option of documentedCommand.matchAll(/--[a-z-]+/gu)) {
+          expect(usageLine, documentedCommand).toContain(option[0]);
+        }
+        for (let index = syntaxStart; index < words.length; index += 1) {
+          const word = words[index];
+          const previousWord = words[index - 1] ?? "";
+          if (word?.startsWith("<") && !previousWord.includes("--")) {
+            expect(usageLine, documentedCommand).toContain(word.replaceAll(/[\[\]]/gu, ""));
+          }
+        }
+        if (documentedCommand.includes("...")) {
+          expect(usageLine, documentedCommand).toContain("...");
+        }
+      }
+
+      expect(helpText(taskHelp.stdout)).toContain("COMMANDS");
+      expect(helpText(changeHelp.stdout)).toContain("COMMANDS");
     }),
   );
 });

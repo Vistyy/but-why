@@ -25,6 +25,8 @@ const createTask = (root: string, title: string, dependencies: readonly string[]
     const result = yield* runByInProcessEffect(
       root,
       [
+        "--output",
+        "json",
         "task",
         "create",
         "--title",
@@ -32,8 +34,6 @@ const createTask = (root: string, title: string, dependencies: readonly string[]
         "--description-file",
         descriptionFile,
         ...dependencies.flatMap((dependency) => ["--depends-on", dependency]),
-        "--output",
-        "json",
       ],
       now,
     );
@@ -46,7 +46,7 @@ const readGraph = (root: string, taskIds: readonly string[]) =>
     for (const taskId of taskIds) {
       const result = yield* runByInProcessEffect(
         root,
-        ["task", "show", taskId, "--output", "json"],
+        ["--output", "json", "task", "show", taskId],
         now,
       );
       graph[taskId] = (JSON.parse(result.stdout) as { readonly task: TaskGraph }).task;
@@ -58,7 +58,7 @@ const readTaskIds = (root: string) =>
   Effect.gen(function* () {
     const result = yield* runByInProcessEffect(
       root,
-      ["task", "list", "--all", "--output", "json"],
+      ["--output", "json", "task", "list", "--all"],
       now,
     );
     return (
@@ -91,6 +91,8 @@ describe("Task dependency CLI", () => {
       const result = yield* runByInProcessEffect(
         root,
         [
+          "--output",
+          "json",
           "task",
           "create",
           "--title",
@@ -101,8 +103,6 @@ describe("Task dependency CLI", () => {
           "BY-1",
           "--depends-on",
           "BY-2",
-          "--output",
-          "json",
         ],
         now,
         {
@@ -130,6 +130,8 @@ describe("Task dependency CLI", () => {
       const replacement = yield* runByInProcessEffect(
         root,
         [
+          "--output",
+          "json",
           "task",
           "dependencies",
           "set",
@@ -138,8 +140,6 @@ describe("Task dependency CLI", () => {
           "BY-1",
           "--depends-on",
           "BY-2",
-          "--output",
-          "json",
         ],
         now,
         {
@@ -191,6 +191,8 @@ describe("Task dependency CLI", () => {
       const result = yield* runByInProcessEffect(
         root,
         [
+          "--output",
+          "json",
           "task",
           "create",
           "--title",
@@ -199,8 +201,6 @@ describe("Task dependency CLI", () => {
           "cycle.md",
           "--depends-on",
           "BY-1",
-          "--output",
-          "json",
         ],
         now,
         {
@@ -260,6 +260,8 @@ describe("Task dependency CLI", () => {
         const result = yield* runByInProcessEffect(
           root,
           [
+            "--output",
+            "json",
             "task",
             "create",
             "--title",
@@ -267,8 +269,6 @@ describe("Task dependency CLI", () => {
             "--description-file",
             descriptionFile,
             ...testCase.dependencies.flatMap((dependency) => ["--depends-on", dependency]),
-            "--output",
-            "json",
           ],
           now,
         );
@@ -322,13 +322,13 @@ describe("Task dependency CLI", () => {
         const result = yield* runByInProcessEffect(
           root,
           [
+            "--output",
+            "json",
             "task",
             "dependencies",
             "set",
             testCase.taskId,
             ...testCase.dependencies.flatMap((dependency) => ["--depends-on", dependency]),
-            "--output",
-            "json",
           ],
           now,
         );
@@ -340,7 +340,7 @@ describe("Task dependency CLI", () => {
 
       const missing = yield* runByInProcessEffect(
         root,
-        ["task", "dependencies", "set", "BY-404", "--output", "json"],
+        ["--output", "json", "task", "dependencies", "set", "BY-404"],
         now,
       );
       expectJsonError(missing, {

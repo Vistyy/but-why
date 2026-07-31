@@ -6,11 +6,12 @@ import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
 import { describe, it as ordinaryIt } from "vitest";
 
-import { collapseHome, mapRuntimeError } from "../../src/cli.js";
+import { mapRuntimeError } from "../../src/cli.js";
+import { collapseHome } from "../../src/cli/cliPath.js";
 import { butWhyGitignoreBlock } from "../../src/init/gitignore.js";
 import { RepositorySql, repositorySqlLayer } from "../../src/sqlite/repositorySql.js";
 import { encodeToon } from "../../src/output/toon.js";
-import { createGitRepo, repoRoot, runByInProcessEffect } from "../support/by-cli.js";
+import { byExecutable, createGitRepo, repoRoot, runByInProcessEffect } from "../support/by-cli.js";
 import { createTestWorkspace } from "../support/testWorkspace.js";
 import { runTestProcess } from "../support/testProcess.js";
 
@@ -19,6 +20,36 @@ const expectedConfigDoc = join(repoRoot, "docs/public/config.md");
 const expectedSetupDoc = join(repoRoot, "docs/public/setup.md");
 const managedGitignoreBlock = `${butWhyGitignoreBlock}\n`;
 const sharedStatePath = (root: string): string => join(root, ".git", "but-why", "state.sqlite");
+const expectedCommandPaths = [
+  "init",
+  "task create",
+  "task dependencies set",
+  "task list",
+  "task show",
+  "task approve",
+  "task context",
+  "task context draft",
+  "task context apply",
+  "task comment",
+  "task cancel",
+  "change start",
+  "change prepare",
+  "change list",
+  "change show",
+  "change findings",
+  "change validation-runs",
+  "change submit",
+  "change cancel",
+  "change reconcile",
+  "change implement",
+  "change decision add",
+  "change decision list",
+  "change blocker raise",
+  "change blocker resolve",
+  "change blocker list",
+  "validation-run show",
+  "validation-run artifact",
+] as const;
 
 const withRepositorySql = <A, E>(
   root: string,
@@ -37,50 +68,85 @@ const withRepositorySql = <A, E>(
   );
 
 describe("by CLI", () => {
-  it.effect("prints the help view", () =>
+  it.effect("prints the generated help view", () =>
     Effect.gen(function* () {
       const result = yield* runByInProcessEffect(repoRoot, ["--help"]);
 
       expect(result.status).toBe(0);
       expect(result.stderr).toBe("");
-      expect(result.stdout).toBe(`bin: ${expectedBin}
-description: Validate completed code changes against approved human intent.
-usage: "by [--output <format>] [command] [--help]"
-commands[21]{command,description}:
-  by,Show workspace task dashboard
-  by init --task-prefix <prefix>,Create repo-local But Why? state
-  "by task create --title <title> --description-file <file> [--depends-on <task-id>]...",Create a repo-local Task
-  "by task dependencies set <task-id> [--depends-on <task-id>]...",Replace direct Task prerequisites before Start
-  "by task list [--all] [--state <state>]",List repo-local Tasks
-  by task show <task-id>,Show decision-oriented Task metadata; use Task Context for the description
-  by task approve <task-id>,Permanently approve Task intent
-  by task context <task-id>,Show full Task Context
-  by task cancel <task-id> --reason <reason>,Permanently cancel an unfinished Task
-  "by change start [--task <task-id>] [--base <branch>]",Create a prepared Change worktree
-  by change prepare <change-id>,Run or retry Repository Preparation
-  "by change list [--all]",List Changes oldest first
-  by change show <change-id>,Show decision-oriented Change state and expansion commands
-  by change findings <change-id>,Show Findings for the current Change Candidate
-  by change validation-runs <change-id>,List complete compact Validation Run History and expansion commands
-  by change submit <change-id>,Validate and publish a ready Change
-  by change cancel <change-id>,Cancel an open taskless Change
-  "by change reconcile [<change-id>]",Read owned pull requests and clean up terminal Changes
-  "by change implement <change-id> [--handoff-file <path>]",Launch an Interactive Session in a ready Change worktree
-  by validation-run show <validation-run-id>,Show Validation Run policy and recorded evidence
-  by validation-run artifact <validation-run-id> <artifact-ref>,Show complete stored Artifact content
-flags[3]{flag,description}:
-  "--output <format>",Set the stdout format to toon or json. The default is toon.
-  "-o <format>","Alias for --output <format>. Valid formats: toon, json."
-  "--help",Show help for this command.
-docs[2]{name,path}:
-  setup,${expectedSetupDoc}
-  config,${expectedConfigDoc}`);
+      expect(result.stdout).toContain('help: "DESCRIPTION');
+      expect(result.stdout).toContain(
+        "Validate completed code changes against approved human intent.",
+      );
+      expect(result.stdout).toContain("COMMANDS");
+      expect(result.stdout).toContain("(-o, --output toon | json)");
+      for (const commandPath of expectedCommandPaths) {
+        expect(result.stdout, commandPath).toContain(`- ${commandPath}`);
+      }
+      expect(result.stdout).not.toContain("task task");
+      expect(result.stdout).not.toContain("change change");
+      expect(result.stdout).toContain("(-h, --help)");
+      expect(result.stdout).toContain("--version");
+      expect(result.stdout).toContain("--wizard");
+      expect(result.stdout).toContain("--completions");
+      expect(result.stdout).toContain("--log-level");
     }),
   );
 
-  it.effect("prints JSON help when selected before the command", () =>
+  it.effect("uses native help behavior for trailing arguments", () =>
     Effect.gen(function* () {
-      const result = yield* runByInProcessEffect(repoRoot, ["--output", "json", "--help"]);
+      const result = yield* runByInProcessEffect(repoRoot, [
+        "--output",
+        "json",
+        "task",
+        "--help",
+        "extra",
+      ]);
+
+      expect(result.status).toBe(0);
+      expect(result.stderr).toBe("");
+      expect(JSON.parse(result.stdout).help).toContain("Manage repo-local Tasks.");
+    }),
+  );
+
+  it.effect("uses native leaf help behavior for trailing arguments", () =>
+    Effect.gen(function* () {
+      const result = yield* runByInProcessEffect(repoRoot, [
+        "--output",
+        "json",
+        "task",
+        "list",
+        "--help",
+        "extra",
+      ]);
+
+      expect(result.status).toBe(0);
+      expect(result.stderr).toBe("");
+      expect(JSON.parse(result.stdout).help).toContain("List repo-local Tasks.");
+    }),
+  );
+
+  it.effect("uses native help behavior for trailing options", () =>
+    Effect.gen(function* () {
+      const result = yield* runByInProcessEffect(repoRoot, [
+        "--output",
+        "json",
+        "task",
+        "list",
+        "--help",
+        "--state",
+        "bad",
+      ]);
+
+      expect(result.status).toBe(0);
+      expect(result.stderr).toBe("");
+      expect(JSON.parse(result.stdout).help).toContain("List repo-local Tasks.");
+    }),
+  );
+
+  it.effect("prints JSON help when selected after help", () =>
+    Effect.gen(function* () {
+      const result = yield* runByInProcessEffect(repoRoot, ["--help", "--output", "json"]);
 
       expect(result.status).toBe(0);
       expect(result.stderr).toBe("");
@@ -88,17 +154,16 @@ docs[2]{name,path}:
       expect(result.stdout.trimEnd()).not.toContain("\n");
       const parsed = JSON.parse(result.stdout);
 
-      expect(parsed).toMatchObject({
-        bin: expectedBin,
-        description: "Validate completed code changes against approved human intent.",
-        usage: "by [--output <format>] [command] [--help]",
-        docs: [
-          { name: "setup", path: expectedSetupDoc },
-          { name: "config", path: expectedConfigDoc },
-        ],
-      });
-      expect(parsed.commands).toHaveLength(21);
-      expect(parsed.flags).toHaveLength(3);
+      expect(parsed.help).toContain(
+        "Validate completed code changes against approved human intent.",
+      );
+      expect(parsed.help).toContain("COMMANDS");
+      expect(parsed.help).toContain("(-o, --output toon | json)");
+      for (const commandPath of expectedCommandPaths) {
+        expect(parsed.help, commandPath).toContain(`- ${commandPath}`);
+      }
+      expect(parsed.help).not.toContain("task task");
+      expect(parsed.help).not.toContain("change change");
     }),
   );
 
@@ -108,27 +173,9 @@ docs[2]{name,path}:
 
       expect(result.status).toBe(0);
       expect(result.stderr).toBe("");
-      expect(JSON.parse(result.stdout)).toEqual({
-        usage: "by init --task-prefix <prefix>",
-        description: "Create repo policy files and then guide validation setup.",
-        flags: [
-          { flag: "--task-prefix <prefix>", description: "Required task ID prefix such as BY" },
-          {
-            flag: "--output <format>",
-            description: "Set the stdout format to toon or json. The default is toon.",
-          },
-          {
-            flag: "-o <format>",
-            description: "Alias for --output <format>. Valid formats: toon, json.",
-          },
-          { flag: "--help", description: "Show help for this command." },
-        ],
-        examples: ["by init --task-prefix BY"],
-        docs: [
-          { name: "setup", path: expectedSetupDoc },
-          { name: "config", path: expectedConfigDoc },
-        ],
-      });
+      const parsed = JSON.parse(result.stdout);
+      expect(parsed.help).toContain("Create repo-local But Why? state.");
+      expect(parsed.help).toContain("--task-prefix text");
     }),
   );
 
@@ -168,26 +215,43 @@ docs[2]{name,path}:
     }),
   );
 
-  it.effect("prints JSON help when selected after the command", () =>
+  it.effect("prints JSON help when selected after help", () =>
     Effect.gen(function* () {
-      const result = yield* runByInProcessEffect(repoRoot, ["--help", "-o", "json"]);
+      const result = yield* runByInProcessEffect(repoRoot, ["--help", "--output", "json"]);
 
       expect(result.status).toBe(0);
       expect(result.stderr).toBe("");
-      expect(JSON.parse(result.stdout).usage).toBe("by [--output <format>] [command] [--help]");
+      expect(JSON.parse(result.stdout).help).toContain(
+        "Validate completed code changes against approved human intent.",
+      );
     }),
   );
 
   it.effect("keeps TOON output when selected explicitly", () =>
     Effect.gen(function* () {
-      const result = yield* runByInProcessEffect(repoRoot, ["-o", "toon", "--help"]);
+      const result = yield* runByInProcessEffect(repoRoot, ["--help", "-o", "toon"]);
 
       expect(result.status).toBe(0);
       expect(result.stderr).toBe("");
-      expect(result.stdout).toContain('usage: "by [--output <format>] [command] [--help]"');
+      expect(result.stdout).toContain('help: "DESCRIPTION');
       expect(() => JSON.parse(result.stdout)).toThrow();
     }),
   );
+
+  ordinaryIt("keeps JSON stdout structured when native logging is enabled", () => {
+    const root = createGitRepo();
+    const init = runTestProcess(byExecutable, ["init", "--task-prefix", "BY"], { cwd: root });
+    expect(init.status).toBe(0);
+
+    const result = runTestProcess(byExecutable, ["--log-level", "debug", "--output", "json"], {
+      cwd: root,
+    });
+
+    expect(result.status).toBe(0);
+    expect(result.stdout).not.toContain("level=");
+    expect(result.stderr).toContain("level=");
+    expect(() => JSON.parse(result.stdout)).not.toThrow();
+  });
 
   it.effect("prints JSON usage errors after a valid JSON selector", () =>
     Effect.gen(function* () {
@@ -195,12 +259,11 @@ docs[2]{name,path}:
 
       expect(result.status).toBe(2);
       expect(result.stderr).toBe("");
-      expect(JSON.parse(result.stdout)).toEqual({
+      expect(JSON.parse(result.stdout)).toMatchObject({
         error: {
-          code: "unknown_flag",
-          message: "Unknown flag: --bad",
+          code: "invalid_usage",
         },
-        help: ["Run `by --help`"],
+        help: ["Run `by --help` for generated command help."],
       });
     }),
   );
@@ -222,17 +285,27 @@ docs[2]{name,path}:
     }),
   );
 
+  it.effect("normalizes leaf parser failures to invalid usage", () =>
+    Effect.gen(function* () {
+      const result = yield* runByInProcessEffect(repoRoot, ["task", "list", "--bad"]);
+
+      expect(result.status).toBe(2);
+      expect(result.stderr).toBe("");
+      expect(result.stdout).toBe(`error:
+  code: invalid_usage
+  message: "Received unknown argument: '--bad'"
+help[1]: Run \`by --help\` for generated command help.`);
+    }),
+  );
+
   it.effect("prints invalid output selectors as TOON usage errors", () =>
     Effect.gen(function* () {
       const result = yield* runByInProcessEffect(repoRoot, ["--output", "xml", "--help"]);
 
       expect(result.status).toBe(2);
       expect(result.stderr).toBe("");
-      expect(result.stdout).toBe(`error:
-  code: invalid_output_format
-  message: "Invalid output format: xml"
-  valid[2]: toon,json
-help[1]: Use --output toon or --output json.`);
+      expect(result.stdout).toContain("code: invalid_usage");
+      expect(result.stdout).toContain("Expected one of the following cases: toon, json");
     }),
   );
 
@@ -242,11 +315,8 @@ help[1]: Use --output toon or --output json.`);
 
       expect(result.status).toBe(2);
       expect(result.stderr).toBe("");
-      expect(result.stdout).toBe(`error:
-  code: invalid_output_format
-  message: Missing output format after --output.
-  valid[2]: toon,json
-help[1]: Use --output toon or --output json.`);
+      expect(result.stdout).toContain("code: invalid_usage");
+      expect(result.stdout).toContain("Received unknown argument: '--output'");
     }),
   );
 
@@ -255,17 +325,37 @@ help[1]: Use --output toon or --output json.`);
       const result = yield* runByInProcessEffect(repoRoot, [
         "--output",
         "json",
-        "--help",
-        "-o",
+        "init",
+        "--output",
         "toon",
       ]);
 
       expect(result.status).toBe(2);
       expect(result.stderr).toBe("");
-      expect(result.stdout).toBe(`error:
-  code: duplicate_output_selector
-  message: Only one output selector is allowed.
-help[1]: "Use either --output <format> or -o <format>, not both."`);
+      expect(JSON.parse(result.stdout)).toMatchObject({
+        error: { code: "invalid_usage" },
+      });
+    }),
+  );
+
+  it.effect("rejects duplicate output selectors through native parsing", () =>
+    Effect.gen(function* () {
+      const result = yield* runByInProcessEffect(repoRoot, [
+        "--output",
+        "json",
+        "task",
+        "list",
+        "--output=json",
+      ]);
+
+      expect(result.status).toBe(2);
+      expect(result.stderr).toBe("");
+      expect(JSON.parse(result.stdout)).toMatchObject({
+        error: {
+          code: "invalid_usage",
+          message: "Received unknown argument: '--output=json'",
+        },
+      });
     }),
   );
 
@@ -275,17 +365,8 @@ help[1]: "Use either --output <format> or -o <format>, not both."`);
 
       expect(result.status).toBe(0);
       expect(result.stderr).toBe("");
-      expect(result.stdout).toBe(`usage: by init --task-prefix <prefix>
-description: Create repo policy files and then guide validation setup.
-flags[4]{flag,description}:
-  "--task-prefix <prefix>",Required task ID prefix such as BY
-  "--output <format>",Set the stdout format to toon or json. The default is toon.
-  "-o <format>","Alias for --output <format>. Valid formats: toon, json."
-  "--help",Show help for this command.
-examples[1]: by init --task-prefix BY
-docs[2]{name,path}:
-  setup,${expectedSetupDoc}
-  config,${expectedConfigDoc}`);
+      expect(result.stdout).toContain('help: "DESCRIPTION');
+      expect(result.stdout).toContain("Create repo-local But Why? state.");
     }),
   );
 
@@ -295,10 +376,8 @@ docs[2]{name,path}:
 
       expect(result.status).toBe(2);
       expect(result.stderr).toBe("");
-      expect(result.stdout).toBe(`error:
-  code: unknown_command
-  message: "Unknown command: frobnicate"
-help[1]: Run \`by --help\``);
+      expect(result.stdout).toContain("code: invalid_usage");
+      expect(result.stdout).toContain("Invalid subcommand for by");
     }),
   );
 
@@ -308,10 +387,8 @@ help[1]: Run \`by --help\``);
 
       expect(result.status).toBe(2);
       expect(result.stderr).toBe("");
-      expect(result.stdout).toBe(`error:
-  code: unknown_flag
-  message: "Unknown flag: --bad"
-help[1]: Run \`by --help\``);
+      expect(result.stdout).toContain("code: invalid_usage");
+      expect(result.stdout).toContain("Invalid subcommand for by");
     }),
   );
 
@@ -525,7 +602,7 @@ help[1]: "Run git init first, or cd into an existing Git repository."`);
     }),
   );
 
-  it.effect("prints missing_task_prefix in non-interactive init", () =>
+  it.effect("prints invalid_usage for missing task prefix in non-interactive init", () =>
     Effect.gen(function* () {
       const root = createGitRepo();
       const result = yield* runByInProcessEffect(root, ["init"]);
@@ -533,9 +610,9 @@ help[1]: "Run git init first, or cd into an existing Git repository."`);
       expect(result.status).toBe(2);
       expect(result.stderr).toBe("");
       expect(result.stdout).toBe(`error:
-  code: missing_task_prefix
-  message: "--task-prefix is required in non-interactive init."
-help[1]: Run by init --task-prefix BY.`);
+  code: invalid_usage
+  message: "Expected to find option: '--task-prefix'"
+help[1]: Run \`by --help\` for generated command help.`);
     }),
   );
 
