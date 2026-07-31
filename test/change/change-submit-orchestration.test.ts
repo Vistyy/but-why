@@ -205,7 +205,7 @@ describe("Change Submit orchestration", () => {
         code: "validation_policy_invalid",
         message: "Managed Worktree Repo Config is invalid.",
       });
-      expect(events).toEqual(["reconcile", "capture"]);
+      expect(events).toEqual(["reconcile"]);
     }),
   );
 

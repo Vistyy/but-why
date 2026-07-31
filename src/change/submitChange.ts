@@ -262,12 +262,17 @@ const submitChange = (
         }
       }
     }
-    let policyResolution: CandidateValidationPolicyResolution | undefined;
-    const resolvePolicy = (): CandidateValidationPolicyResolution =>
-      (policyResolution ??= dependencies.resolvePolicy(
-        change.acceptanceContext !== null,
-        change.worktreePath,
-      ));
+    const policy = dependencies.resolvePolicy(
+      change.acceptanceContext !== null,
+      change.worktreePath,
+    );
+    if (!policy.ok) {
+      return {
+        ok: false,
+        code: "validation_policy_invalid",
+        message: policy.error.message,
+      } as const;
+    }
     const refreshedBase = dependencies.refreshBase(
       dependencies.repositoryPath,
       change.baseRef,
@@ -286,14 +291,6 @@ const submitChange = (
         return { ok: true, status: "nothing_to_submit", changeId: change.id } as const;
       }
       if (change.publication === null) {
-        const policy = resolvePolicy();
-        if (!policy.ok) {
-          return {
-            ok: false,
-            code: "validation_policy_invalid",
-            message: policy.error.message,
-          } as const;
-        }
         if (!policy.resolved.taskBacked) {
           return {
             ok: false,
@@ -310,14 +307,6 @@ const submitChange = (
           input.progress,
         );
       }
-    }
-    const policy = resolvePolicy();
-    if (!policy.ok) {
-      return {
-        ok: false,
-        code: "validation_policy_invalid",
-        message: policy.error.message,
-      } as const;
     }
     const target = detectPublicationTarget(dependencies, change, candidate);
     if (!target.ok) return githubTargetFailure(target);
