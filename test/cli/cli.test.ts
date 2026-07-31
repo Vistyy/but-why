@@ -137,6 +137,29 @@ describe("by CLI", () => {
     }),
   );
 
+  it.effect("identifies trailing options after leaf help", () =>
+    Effect.gen(function* () {
+      const result = yield* runByInProcessEffect(repoRoot, [
+        "--output",
+        "json",
+        "task",
+        "list",
+        "--help",
+        "--state",
+        "bad",
+      ]);
+
+      expect(result.status).toBe(2);
+      expect(result.stderr).toBe("");
+      expect(JSON.parse(result.stdout)).toMatchObject({
+        error: {
+          code: "invalid_usage",
+          message: "Received unknown argument: '--state'",
+        },
+      });
+    }),
+  );
+
   it.effect("prints JSON help when selected before the command", () =>
     Effect.gen(function* () {
       const result = yield* runByInProcessEffect(repoRoot, ["--output", "json", "--help"]);

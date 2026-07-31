@@ -587,34 +587,12 @@ const parserArgs = (args: readonly string[]): readonly string[] => {
     : parsedArgs;
 };
 
-const generatedHelpLeftoverUsage = (args: readonly string[]): Effect.Effect<CliResult> =>
-  Effect.either(
-    CommandDescriptor.parse(
-      commandTree.descriptor,
-      ["by", ...args.filter((arg) => arg !== "--help" && arg !== "-h")],
-      cliConfig,
-    ),
-  ).pipe(
-    Effect.map((result) => {
-      const message =
-        result._tag === "Left" && ValidationError.isValidationError(result.left)
-          ? generatedText(result.left.error)
-          : generatedText(
-              ValidationError.invalidArgument(
-                HelpDoc.p(`Received unknown argument: '${findTrailingHelpArgument(args) ?? ""}'`),
-              ).error,
-            );
-      return {
-        ...usageError({
-          code: "invalid_usage",
-          message,
-          help: ["Run `by --help` for generated command help."],
-        }),
-        outputFormat: outputFormatForArgs(args),
-      };
-    }),
-    Effect.provide(parserLayer(args)),
-  );
+const generatedHelpLeftoverUsage = (args: readonly string[]): Effect.Effect<CliResult> => {
+  const helpIndex = args.findIndex((arg) => arg === "--help" || arg === "-h");
+  const forcedLeftoverArgs =
+    helpIndex < 0 ? args : [...args.slice(0, helpIndex), "--", ...args.slice(helpIndex + 1)];
+  return generatedLeftoverUsage(forcedLeftoverArgs);
+};
 
 const generatedLeftoverUsage = (args: readonly string[]): Effect.Effect<CliResult> =>
   Effect.either(
