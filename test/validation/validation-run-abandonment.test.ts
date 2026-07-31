@@ -85,6 +85,43 @@ describe("Validation Run abandonment cleanup seam", () => {
     }),
   );
 
+  it.effect("rejects a workspace path that conflicts with persisted state", () =>
+    Effect.gen(function* () {
+      const calls: string[] = [];
+      const result = yield* openAbandonValidationRun({
+        persistence: persistenceFor({
+          recordToolingFailure: (input) => Effect.sync(() => calls.push(input.errorMessage)),
+        }),
+        executionLock: passThroughLock,
+        workspaceCleanup: {
+          tempRefName: () => tempRefName,
+          removeWorktree: () => {
+            calls.push("wrong-worktree");
+            return true;
+          },
+          deleteTempRef: () => {
+            calls.push("temp-ref");
+            return "removed";
+          },
+        },
+      }).abandon({
+        validationRunId,
+        reason: "The validation process terminated.",
+        worktreePath: "/wrong-worktree",
+        now: "2026-07-31T10:05:00.000Z",
+      });
+
+      expect(result).toMatchObject({
+        ok: false,
+        status: "cleanup_failed",
+        cleanup: { worktree: "failed", tempRef: "not_created" },
+      });
+      expect(calls).toEqual([
+        "The validation process terminated. The supplied Validation Workspace path does not match the persisted path.",
+      ]);
+    }),
+  );
+
   it.effect("does not guess a workspace path for a legacy run", () =>
     Effect.gen(function* () {
       const calls: string[] = [];
