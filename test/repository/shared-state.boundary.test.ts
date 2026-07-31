@@ -125,7 +125,8 @@ describe("shared repository state", () => {
       expect(result.stdout).toBe(`error:
   code: shared_state_identity_conflict
   message: Shared But Why? state belongs to a different Git repository.
-help[1]: "Restore the repository's own shared state, then run \`by init --task-prefix <prefix>\`."`);
+help[1]: "Restore the repository's own shared state, then run \`by init --task-prefix <prefix>\`."
+`);
     }),
   );
 });
