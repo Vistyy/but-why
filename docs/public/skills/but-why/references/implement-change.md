@@ -59,6 +59,23 @@ For a Task-backed Change, the Resolution creates a new Acceptance Context versio
 After resolution, the main operator manually tells the Implementer to continue in the same Managed Worktree.
 Do not detect, stop, message, or automatically wake an Interactive Session.
 
+## Change continuation
+
+Change continuation is optional.
+To use these commands, add the packaged `extensions/continue-change.ts` extension to the Global `implementer` profile as described in the configuration reference.
+
+Use `/pause-change` to pause automatic continuation before discussing a Change or taking an external action.
+
+Use `/continue-change` to refresh the Change state and continue the bound Change when continuation is safe.
+`/continue-change` is idempotent and does not toggle the pause state.
+
+After an external Implementation Blocker Resolution, run `/continue-change` manually.
+The extension does not poll for the Resolution or automatically wake the Implementer after the Resolution.
+The extension explains the Resolution before it directs the Implementer to Findings from an earlier Validation Run.
+
+If inspection fails, `/continue-change` retries the local inspection and reports the recovery action.
+A Validation Tooling Failure receives recovery guidance only after the operator runs `/continue-change`.
+
 ## 3. Submit the Candidate
 
 Run `<but-why> change submit <change-id>`.

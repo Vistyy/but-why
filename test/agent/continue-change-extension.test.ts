@@ -1,3 +1,5 @@
+import { fileURLToPath } from "node:url";
+
 import type { ExtensionAPI, ExtensionContext, SessionEntry } from "@earendil-works/pi-coding-agent";
 import { describe, expect, it } from "vitest";
 
@@ -16,10 +18,17 @@ const snapshot = (overrides: Record<string, unknown> = {}) => ({
 });
 
 type TestSnapshot = ReturnType<typeof snapshot>;
+type TestBlockerHistory = {
+  blockers: Record<string, unknown>[];
+  resolutions: Record<string, unknown>[];
+  active: Record<string, unknown> | null;
+};
 type EventHandler = (event: unknown, context: ExtensionContext) => unknown;
 type CommandHandler = (args: string, context: ExtensionContext) => unknown;
 
-const createHarness = () => {
+const sourceCwd = fileURLToPath(new URL("../../", import.meta.url));
+
+const createHarness = (cwd = sourceCwd) => {
   const handlers = new Map<string, EventHandler>();
   const commands = new Map<string, CommandHandler>();
   const entries: SessionEntry[] = [
@@ -39,8 +48,10 @@ const createHarness = () => {
   const notifications: string[] = [];
   const widgets: Array<{ readonly name: string; readonly value: unknown }> = [];
   let currentSnapshot: TestSnapshot = snapshot();
+  let currentBlockerHistory: TestBlockerHistory = { blockers: [], resolutions: [], active: null };
   let inspectionFails = false;
-  let directByUnavailable = false;
+  let inspectionGate: Promise<void> | undefined;
+  let releaseInspection: (() => void) | undefined;
   let idle = true;
   const execCalls: Array<{ readonly command: string; readonly args: readonly string[] }> = [];
   const api = {
@@ -65,13 +76,14 @@ const createHarness = () => {
     },
     async exec(command: string, args: string[]) {
       execCalls.push({ command, args });
-      if (command === "by" && inspectionFails)
+      const sourceCli = command === "just" && args[0] === "by";
+      const publishedCli = command === "npx" && args[0] === "-y" && args[1] === "but-why";
+      if ((sourceCli || publishedCli) && inspectionGate !== undefined) await inspectionGate;
+      if ((sourceCli || publishedCli) && inspectionFails)
         return { stdout: "", stderr: "", code: 1, killed: true };
-      if (command === "by" && directByUnavailable)
-        return { stdout: "", stderr: "", code: 1, killed: false };
-      if (command === "by") return result(JSON.stringify(currentSnapshot));
-      if (command === "just" && args[0] === "by" && directByUnavailable)
-        return result(JSON.stringify(currentSnapshot));
+      if ((sourceCli || publishedCli) && args.includes("blocker"))
+        return result(JSON.stringify(currentBlockerHistory));
+      if (sourceCli || publishedCli) return result(JSON.stringify(currentSnapshot));
       if (command === "git" && args[0] === "rev-parse") return result("head\n");
       if (command === "git" && args[0] === "status") return result("");
       if (command === "git" && (args[0] === "diff" || args[0] === "ls-files")) return result("");
@@ -80,7 +92,7 @@ const createHarness = () => {
   } as unknown as ExtensionAPI;
   continueChange(api);
   const context = {
-    cwd: "/managed/change",
+    cwd,
     sessionManager: { getBranch: () => [...entries] },
     isIdle: () => idle,
     ui: {
@@ -114,8 +126,17 @@ const createHarness = () => {
     setInspectionFails(value: boolean) {
       inspectionFails = value;
     },
-    setDirectByUnavailable(value: boolean) {
-      directByUnavailable = value;
+    blockInspection() {
+      inspectionGate = new Promise<void>((resolve) => {
+        releaseInspection = resolve;
+      });
+    },
+    releaseInspection() {
+      releaseInspection?.();
+      inspectionGate = undefined;
+    },
+    setBlockerHistory(next: TestBlockerHistory) {
+      currentBlockerHistory = next;
     },
     setIdle(value: boolean) {
       idle = value;
@@ -163,9 +184,8 @@ describe("packaged Change Implement continuation extension", () => {
     expect(harness.getExecCallCount()).toBe(execCallCount);
   });
 
-  it("uses the local source CLI when the installed by executable is unavailable", async () => {
+  it("uses the canonical source-repository Trusted But Why Executable", async () => {
     const harness = createHarness();
-    harness.setDirectByUnavailable(true);
 
     await harness.emit("session_start", { type: "session_start", reason: "startup" });
     await harness.emit("agent_settled");
@@ -175,6 +195,23 @@ describe("packaged Change Implement continuation extension", () => {
       command: "just",
       args: ["by", "--output", "json", "change", "show", changeId],
     });
+    expect(harness.execCalls).toContainEqual({
+      command: "just",
+      args: ["by", "--output", "json", "change", "blocker", "list", changeId],
+    });
+  });
+
+  it("uses the published executable for a separate target repository", async () => {
+    const harness = createHarness("/managed/change");
+
+    await harness.emit("session_start", { type: "session_start", reason: "startup" });
+    await harness.emit("agent_settled");
+
+    expect(harness.execCalls).toContainEqual({
+      command: "npx",
+      args: ["-y", "but-why", "--output", "json", "change", "show", changeId],
+    });
+    expect(harness.sent[0]).toContain(`npx -y but-why change show ${changeId}`);
   });
 
   it("does not leave an inspection failure idle", async () => {
@@ -239,7 +276,7 @@ describe("packaged Change Implement continuation extension", () => {
     );
   });
 
-  it("pauses after manual cancellation until the operator toggles continuation", async () => {
+  it("pauses after manual cancellation until the operator explicitly continues", async () => {
     const harness = createHarness();
     await harness.emit("session_start", { type: "session_start", reason: "startup" });
     await harness.emit("agent_end", {
@@ -284,7 +321,7 @@ describe("packaged Change Implement continuation extension", () => {
     expect(harness.widgets.at(-1)?.name).toBe("but-why-change-watcher");
     expect(harness.latestWidgetText()).toEqual([`● Watching Change ${changeId.slice(0, 8)}…`]);
 
-    await harness.runCommand("continue-change");
+    await harness.runCommand("pause-change");
     expect(harness.latestWidgetText()).toEqual(["○ Paused"]);
     expect(harness.latestWidgetColor()).toEqual(["warning"]);
     expect(harness.entries.at(-1)).toMatchObject({
@@ -307,11 +344,156 @@ describe("packaged Change Implement continuation extension", () => {
     expect(harness.latestWidgetText()).toEqual([`● Watching Change ${changeId.slice(0, 8)}…`]);
   });
 
-  it("does not send a continuation message when resumed after the Change is closed", async () => {
+  it("refreshes and continues without toggling when the operator runs continue twice", async () => {
     const harness = createHarness();
     await harness.emit("session_start", { type: "session_start", reason: "startup" });
 
     await harness.runCommand("continue-change");
+    await harness.runCommand("continue-change");
+
+    expect(harness.sent).toHaveLength(2);
+    expect(harness.entries.at(-1)).toMatchObject({ data: { paused: false } });
+  });
+
+  it("stops when blocker history is active even if the Change snapshot is open", async () => {
+    const harness = createHarness();
+    harness.setBlockerHistory({
+      blockers: [{ id: "blocker-1" }],
+      resolutions: [],
+      active: { id: "blocker-1" },
+    });
+
+    await harness.emit("session_start", { type: "session_start", reason: "startup" });
+    await harness.emit("agent_settled");
+
+    expect(harness.sent).toEqual([]);
+    expect(harness.latestWidgetText()).toEqual(["! Change is blocked"]);
+  });
+
+  it("does not wake after an external blocker Resolution and explains it before old Findings", async () => {
+    const harness = createHarness();
+    harness.setSnapshot(snapshot({ change: { state: "blocked", closeReason: null } }));
+    await harness.emit("session_start", { type: "session_start", reason: "startup" });
+
+    harness.setSnapshot(snapshot({ findingCount: 1 }));
+    harness.setBlockerHistory({
+      blockers: [{ id: "blocker-1" }],
+      resolutions: [{ id: "resolution-1", content: "Use the approved design." }],
+      active: null,
+    });
+    await harness.emit("agent_settled");
+    await harness.emit("agent_settled");
+
+    expect(harness.sent).toEqual([]);
+    expect(harness.latestWidgetText()).toEqual([`● Watching Change ${changeId.slice(0, 8)}…`]);
+
+    await harness.emit("session_start", { type: "session_start", reason: "resume" });
+    await harness.runCommand("continue-change");
+
+    expect(harness.sent).toHaveLength(1);
+    const message = harness.sent[0];
+    expect(message).toBeDefined();
+    expect(message).toContain("Use the approved design.");
+    expect(message?.indexOf("Use the approved design.")).toBeLessThan(
+      message?.indexOf("earlier Findings") ?? -1,
+    );
+  });
+
+  it("gives Validation Tooling Failure recovery guidance only on explicit continuation", async () => {
+    const harness = createHarness();
+    await harness.emit("session_start", { type: "session_start", reason: "startup" });
+    harness.setSnapshot(
+      snapshot({
+        toolingFailureCount: 1,
+        currentValidationRun: { id: "validation-run-1" },
+      }),
+    );
+
+    await harness.emit("agent_settled");
+    expect(harness.sent).toEqual([]);
+    expect(harness.latestWidgetText()).toEqual(["! Watching stopped - no progress"]);
+
+    await harness.runCommand("continue-change");
+    expect(harness.sent).toHaveLength(1);
+    expect(harness.sent[0]).toContain("Validation Tooling Failure");
+    expect(harness.sent[0]).toContain("by validation-run show validation-run-1");
+  });
+
+  it("keeps the first Change identity bound to the Pi session", async () => {
+    const harness = createHarness();
+    await harness.emit("session_start", { type: "session_start", reason: "startup" });
+    await harness.emit("input", {
+      text: "Change identity: 11111111-1111-4111-8111-111111111111.",
+      source: "interactive",
+    });
+    await harness.runCommand("continue-change");
+
+    expect(harness.execCalls.filter(({ command }) => command === "just").at(-1)).toMatchObject({
+      args: expect.arrayContaining([changeId]),
+    });
+    expect(harness.latestWidgetText()).toEqual([`● Watching Change ${changeId.slice(0, 8)}…`]);
+  });
+
+  it("reports waiting-for-human-merge for the published Candidate", async () => {
+    const harness = createHarness();
+    await harness.emit("session_start", { type: "session_start", reason: "startup" });
+    harness.setSnapshot(
+      snapshot({
+        currentCandidate: { id: "candidate-1", headSha: "head" },
+        publication: {
+          candidateId: "candidate-1",
+          expectedHeadSha: "head",
+          pullRequest: { number: 12 },
+        },
+        pullRequest: { number: 12 },
+      }),
+    );
+
+    await harness.runCommand("continue-change");
+
+    expect(harness.sent).toEqual([]);
+    expect(harness.latestWidgetText()).toEqual(["◌ Waiting for human merge"]);
+  });
+
+  it("reports cancelled and cleanup-needed terminal states", async () => {
+    const cancelled = createHarness();
+    await cancelled.emit("session_start", { type: "session_start", reason: "startup" });
+    cancelled.setSnapshot(snapshot({ change: { state: "closed", closeReason: "cancelled" } }));
+    await cancelled.runCommand("continue-change");
+    expect(cancelled.latestWidgetText()).toEqual(["✕ Change was cancelled"]);
+
+    const cleanup = createHarness();
+    await cleanup.emit("session_start", { type: "session_start", reason: "startup" });
+    cleanup.setSnapshot(
+      snapshot({
+        change: { state: "closed", closeReason: "completed" },
+        cleanup: { state: "pending", blockingReason: "worktree" },
+      }),
+    );
+    await cleanup.runCommand("continue-change");
+    expect(cleanup.latestWidgetText()).toEqual(["! Change cleanup is needed"]);
+  });
+
+  it("does not send after pause cancels an in-flight inspection", async () => {
+    const harness = createHarness();
+    await harness.emit("session_start", { type: "session_start", reason: "startup" });
+    harness.blockInspection();
+
+    const settled = harness.emit("agent_settled");
+    await Promise.resolve();
+    await harness.runCommand("pause-change");
+    harness.releaseInspection();
+    await settled;
+
+    expect(harness.sent).toEqual([]);
+    expect(harness.latestWidgetText()).toEqual(["○ Paused"]);
+  });
+
+  it("does not send a continuation message when resumed after the Change is closed", async () => {
+    const harness = createHarness();
+    await harness.emit("session_start", { type: "session_start", reason: "startup" });
+
+    await harness.runCommand("pause-change");
     harness.setSnapshot(snapshot({ change: { state: "closed", closeReason: "completed" } }));
     await harness.runCommand("continue-change");
 
@@ -327,7 +509,7 @@ describe("packaged Change Implement continuation extension", () => {
     expect(harness.entries.at(-1)).toMatchObject({
       type: "custom",
       customType: "but-why-change-continuation",
-      data: { changeId, unchangedRestarts: 0, paused: false },
+      data: { changeId, unchangedRestarts: 0, paused: false, resolutionId: null },
     });
   });
 });
