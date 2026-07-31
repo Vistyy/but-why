@@ -1,5 +1,5 @@
 ---
-status: provisional
+status: approved
 artifact_kind: working-plan
 remove_when: implementation slices are recorded as approved Tasks and applicable architecture
 ---
@@ -7,11 +7,11 @@ remove_when: implementation slices are recorded as approved Tasks and applicable
 # Task Submission planning gate
 
 > Non-authoritative working plan.
-> This file records provisional planning context and is not current product documentation or implementation authority.
+> This file records the approved implementation sequence but is not current product documentation or implementation authority.
 > Agents must use it only when the operator or an active Task explicitly identifies it as planning context.
 
-This plan defines the provisional pre-implementation planning gate for But Why.
-It is not current product behavior or an approved architecture decision.
+This plan defines the approved pre-implementation planning gate for But Why.
+It is not current product behavior or implementation authority.
 `CONTEXT.md` owns the resolved domain language.
 `docs/architecture.md`, accepted ADRs, executable sources, and SQLite Tasks remain authoritative for implemented behavior.
 
@@ -46,6 +46,11 @@ A separate `by task approve` command must not remain.
 
 Task Submission must accept a New Task.
 Task Submission may accept a Todo Task when its prior Task Approval needs revalidation.
+A configuration change alone must not invalidate Task Approval.
+Explicit Todo resubmission under a different policy must replace the old approval only after preflight succeeds.
+A matching passed Planning Run must keep or return the Task to Todo.
+A matching Finding-blocked Planning Run must return its Findings and move the Task to New.
+Otherwise, Task Submission must move the Task to New atomically with new Planning Run creation.
 A clean Planning Review must create Task Approval and move the Task to Todo.
 Planning Findings or Planning Tooling Failure must leave the Task New.
 
@@ -225,8 +230,7 @@ Repo Config paths must resolve from the repository root.
 Global Config paths must resolve from the Global Config directory.
 A missing or unreadable instructions file must reject Task Submission before reviewer execution.
 
-A Planning Policy Snapshot must contain the resolved Repository Preparation policy, reviewer instructions, Agent Profile, and output contract.
-Whether Agent Environment belongs in the Planning Policy Snapshot remains open before approval.
+A Planning Policy Snapshot must contain the resolved Repository Preparation policy, reviewer instructions, Agent Profile, Agent Environment, and output contract.
 Later configuration changes must not mutate historical Planning Runs.
 Planning Run reuse must require an exact Planning Policy Snapshot match.
 
@@ -245,6 +249,7 @@ Preflight must:
 8. Check for a reusable completed Planning Run.
 
 A preflight rejection must not create a Planning Run or Planning Tooling Failure.
+A preflight rejection during Todo resubmission must preserve the existing Task Approval and Todo state.
 A failure after Planning Run creation that prevents trustworthy judgment must become a Planning Tooling Failure.
 
 ## Planning Workspace and Repository Preparation
@@ -289,7 +294,8 @@ An unchanged Candidate with Findings must receive a new Validation Run because C
 
 One Planning Reviewer Session must belong to one Task and Planning Reviewer Session Identity.
 The session must continue across Task Submission attempts and disposable Planning Workspaces when its identity remains valid.
-The exact Planning Reviewer Session Identity fields remain open before approval.
+Planning Reviewer Session Identity must contain the Task ID, fixed Planning Reviewer producer, resolved Agent Profile, reviewer instructions, Agent Environment, and configured extensions, skills, and tools.
+Planning Base, Planning Proposal Snapshot, and Planning Run identity must not affect session continuity.
 
 Each new Planning Run must review the complete current Planning Proposal Snapshot.
 A continued reviewer must re-anchor to the exact current proposal and Planning Base.
@@ -459,6 +465,8 @@ This slice establishes the execution-lock and active-run primitives that Plannin
 
 ### Slice 2: One shared reviewer Finding contract
 
+Task: BY-83.
+
 Observable capability:
 Acceptance and Specialist Review return only material blocking Findings without severity classifications.
 
@@ -492,6 +500,10 @@ Observable variations must also prove:
 - Interrupted Planning Run inspection and Abandonment.
 - Concurrent Planning Proposal Snapshot mutation and stale-submission rejection.
 - Task cancellation rejection while Planning execution or recovery remains active.
+
+The Task Verification Contract must address the Material Risk that Task Context or dependency facts change after submission or approval.
+It must require evidence that Task Approval binds the exact Planning Proposal Snapshot and that concurrent mutation cannot create approval.
+Until Slice 4 provides confirmed approved-Task revision, the slice must reject mutation of approved Task intent.
 
 This slice owns:
 
@@ -528,6 +540,9 @@ Observable variations must also prove:
 - Change Start rejection when the Planning Base is not an ancestor of the fetched Change Base.
 - Explicit Todo resubmission and each pass, Finding, and tooling-failure result after invalid ancestry.
 
+The Task Verification Contract must require evidence that confirmed revision invalidates the exact prior Task Approval.
+It must also require evidence that Change Start captures only the newly approved intent.
+
 This slice owns:
 
 - Digest-bound confirmation for Task Context changes.
@@ -547,9 +562,9 @@ BY-54 already owns Slice 1.
 
 After the plan is approved:
 
-1. Amend BY-54 to include the accepted Validation cancellation behavior.
-2. Create Slice 2 as one Task.
-3. Create Slice 3 only after BY-54 and Slice 2 are Done.
+1. BY-54 owns the accepted Validation cancellation behavior and shared execution lock.
+2. BY-83 owns Slice 2.
+3. Create Slice 3 only after BY-54 and BY-83 are Done.
 4. Create Slice 4 only after Slice 3 is Done and has been dogfooded.
 5. Split a slice only when new evidence establishes an independently useful capability or a real blocker.
 
@@ -559,19 +574,10 @@ Slice 3 has a real dependency on BY-54 because it consumes BY-54's execution-own
 Slice 3 must depend on Slice 2 because it consumes the shared reviewer Finding contract.
 Slice 4 must depend on Slice 3 because it revises Task Approval created by Task Submission.
 
-## Required ADR disposition
+## ADR disposition
 
-The approved plan will replace ADR 0005's permanent Task Approval and direct approval operation.
-Before Slice 3 implementation, ADR 0005 must be superseded or revised through the repository ADR lifecycle.
-The replacement must define Task Submission as the approval operation and Task Approval as conditional on its exact reviewed proposal and Planning Base.
-
-## Open points before approval
-
-The grilling session must resolve these points before plan approval:
-
-- Whether Agent Environment belongs in the Planning Policy Snapshot and Planning Reviewer Session Identity.
-- The exact Planning Reviewer Session Identity fields.
-- What explicit Task Submission does when a Todo Task has a valid approval but the current Planning Policy Snapshot differs.
+ADR 0005 retains ownership of named Task lifecycle operations.
+The accepted ADR now defines Task Submission as the approval operation and Task Approval as conditional on its exact reviewed proposal, planning policy, and Planning Base.
 
 ## Deferred questions
 
@@ -603,7 +609,7 @@ Workspace creation and Repository Preparation duration belong to this question.
 
 ## Approval
 
-This plan remains provisional until the user explicitly approves it.
-After approval, evaluate each architectural decision against the ADR qualification rules.
-Record only qualifying decisions in the smallest applicable ADR or current architecture document.
-Do not copy the complete plan into multiple authoritative documents.
+The user approved this working plan.
+ADR 0005 records the qualifying lifecycle decision.
+The applicable SQLite Tasks must own implementation requirements.
+Remove this working plan after those Tasks and current architecture contain every accepted requirement.
