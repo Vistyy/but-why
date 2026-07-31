@@ -99,14 +99,21 @@ const changeIdPattern =
   /^\s*Change identity:\s*([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.?\s*$/imu;
 type ButWhyCommandPrefix = "just by" | "npx -y but-why";
 
-const normalizeRepositoryUrl = (value: string): string =>
-  value
-    .trim()
-    .replace(/^git\+/u, "")
-    .replace(/^git@([^:]+):/u, "https://$1/")
-    .replace(/\.git$/u, "")
-    .replace(/\/$/u, "")
-    .toLowerCase();
+const normalizeRepositoryUrl = (value: string): string => {
+  const trimmed = value.trim().replace(/^git\+/u, "");
+  const scpRemote = trimmed.match(/^git@([^:]+):(.+)$/u);
+  const candidate =
+    scpRemote === null ? trimmed : `ssh://git@${scpRemote[1]}/${scpRemote[2]}`;
+  try {
+    const parsed = new URL(candidate);
+    return `${parsed.hostname}${parsed.pathname}`
+      .replace(/\.git$/u, "")
+      .replace(/\/$/u, "")
+      .toLowerCase();
+  } catch {
+    return candidate.replace(/\.git$/u, "").replace(/\/$/u, "").toLowerCase();
+  }
+};
 
 const butWhyCommand = (prefix: ButWhyCommandPrefix, ...args: readonly string[]): string =>
   [prefix, ...args].join(" ");
