@@ -184,14 +184,6 @@ describe("Change inspection CLI", () => {
         "second-head",
         secondNow,
       );
-      const newerRun = yield* withValidationPersistence(root, (persistence) =>
-        persistence.startOrReuse({
-          candidateId: secondCandidate.id,
-          headSha: secondCandidate.headSha,
-          policy: { checks: [], copyFiles: [] },
-          now: secondNow,
-        }),
-      );
       const olderCandidateRun = yield* withValidationPersistence(root, (persistence) =>
         persistence.startOrReuse({
           candidateId: firstCandidate.id,
@@ -200,8 +192,23 @@ describe("Change inspection CLI", () => {
           now: commandNow,
         }),
       );
-      if (newerRun.reused || olderCandidateRun.reused)
-        throw new Error("Expected new Validation Runs");
+      if (olderCandidateRun.reused) throw new Error("Expected new Validation Run");
+      yield* withValidationPersistence(root, (persistence) =>
+        persistence.complete({
+          validationRunId: olderCandidateRun.validationRunId,
+          outcome: "passed",
+          now: commandNow,
+        }),
+      );
+      const newerRun = yield* withValidationPersistence(root, (persistence) =>
+        persistence.startOrReuse({
+          candidateId: secondCandidate.id,
+          headSha: secondCandidate.headSha,
+          policy: { checks: [], copyFiles: [] },
+          now: secondNow,
+        }),
+      );
+      if (newerRun.reused) throw new Error("Expected new Validation Run");
       yield* withValidationPersistence(root, (persistence) =>
         persistence.recordCheckRound({
           validationRunId: newerRun.validationRunId,
@@ -230,13 +237,6 @@ describe("Change inspection CLI", () => {
           errorKind: "validation_workspace_setup_failed",
           operationName: "cleanup_validation_worktree",
           errorMessage: "Could not remove worktree.",
-          now: commandNow,
-        }),
-      );
-      yield* withValidationPersistence(root, (persistence) =>
-        persistence.complete({
-          validationRunId: olderCandidateRun.validationRunId,
-          outcome: "passed",
           now: commandNow,
         }),
       );
