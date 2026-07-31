@@ -39,7 +39,7 @@ Implementers must not duplicate them manually.
 
 ## Budgets
 
-- Complete workloads use the repository capacity lock, while targeted test selections remain unlocked.
+- Complete quality, test, and coverage workloads use the repository capacity lock, while targeted test selections remain unlocked.
 - The routine quality workload has a 10-second warning target.
 - The complete quality workload has a 30-second warning target.
 - These runtime targets warn but do not fail the workload.
