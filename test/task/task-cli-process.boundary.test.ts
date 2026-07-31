@@ -21,6 +21,19 @@ const now = "2026-06-30T12:00:00.000Z";
 const concurrentWriterCount = 2;
 
 describe("by task CLI processes", () => {
+  it("keeps JSON stdout structured when native logging is enabled", () => {
+    const root = createGitRepo();
+    const init = runBuiltByWithEnv(root, {}, "init", "--task-prefix", "BY");
+    expect(init.status).toBe(0);
+
+    const result = runBuiltByWithEnv(root, {}, "--log-level", "debug", "--output", "json");
+
+    expect(result.status).toBe(0);
+    expect(result.stdout).not.toContain("level=");
+    expect(result.stderr).toContain("level=");
+    expect(() => JSON.parse(result.stdout)).not.toThrow();
+  });
+
   it("reads piped UTF-8 stdin for Task descriptions and comments", () => {
     const root = createGitRepo();
     const initialized = runBuiltByWithEnv(root, {}, "init", "--task-prefix", "BY");

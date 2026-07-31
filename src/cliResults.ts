@@ -77,7 +77,7 @@ const mainCheckoutUnavailable = (path: string | undefined): CliResult =>
     code: "main_checkout_unavailable",
     message: "The Local Repository's canonical main checkout is unavailable.",
     ...(path === undefined ? {} : { details: { path } }),
-    help: ["Restore the canonical main checkout, then retry Change Implement."],
+    help: ["Restore the canonical main checkout, then retry the command."],
   });
 
 const invalidRepoConfig = (
