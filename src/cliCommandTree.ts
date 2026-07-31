@@ -555,6 +555,7 @@ export const runCommandTree = (
     if (
       initialCommandResult._tag === "Left" &&
       ValidationError.isValidationError(initialCommandResult.left) &&
+      outputFormatForArgs(args) === "json" &&
       !generatedText(initialCommandResult.left.error).includes(
         "Expected one of the following cases: toon, json",
       )
