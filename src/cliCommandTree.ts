@@ -99,6 +99,7 @@ const withCliHandler = (command: AnyCommand, operation: CliOperation): AnyComman
 
 const optionalText = (name: string) => Options.text(name).pipe(Options.optional);
 const repeatedText = (name: string) => Options.repeated(Options.text(name));
+const requiredRepeatedText = (name: string) => Options.atLeast(1)(Options.text(name));
 const taskIdArgument = Args.text({ name: "task-id" });
 const changeIdArgument = Args.text({ name: "change-id" });
 
@@ -109,7 +110,7 @@ const taskDependenciesOperationCommand = (
   withCliHandler(
     leaf(operation, description, {
       taskId: taskIdArgument,
-      dependsOn: repeatedText("depends-on"),
+      dependsOn: requiredRepeatedText("depends-on"),
     }),
     (values, environment) =>
       runDependenciesCommand(
@@ -609,6 +610,16 @@ export const runCommandTree = (
 
     if (commandResult._tag === "Left") {
       if (ValidationError.isValidationError(commandResult.left)) {
+        if (replaceWithoutPrerequisite(args)) {
+          return {
+            ...usageError({
+              code: "replace_requires_dependency",
+              message: "The replace operation requires at least one prerequisite.",
+              help: ["Use `by task dependencies clear <task-id>` to remove all prerequisites."],
+            }),
+            outputFormat: outputFormatForArgs(args),
+          };
+        }
         return {
           ...usageError({
             code: "invalid_usage",
@@ -702,6 +713,16 @@ export const outputFormatForArgs = (args: readonly string[]): OutputFormat => {
     }
   }
   return "toon";
+};
+
+const replaceWithoutPrerequisite = (args: readonly string[]): boolean => {
+  const taskIndex = args.indexOf("task");
+  return (
+    taskIndex >= 0 &&
+    args[taskIndex + 1] === "dependencies" &&
+    args[taskIndex + 2] === "replace" &&
+    !args.includes("--depends-on")
+  );
 };
 
 const generatedText = (help: HelpDoc.HelpDoc): string => {

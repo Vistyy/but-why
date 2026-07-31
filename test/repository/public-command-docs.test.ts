@@ -108,6 +108,9 @@ describe("public command documentation", () => {
         if (documentedCommand.includes("...")) {
           expect(usageLine, documentedCommand).toContain("...");
         }
+        if (/task dependencies (add|remove|replace)/u.test(documentedCommand)) {
+          expect(usageLine, documentedCommand).not.toContain("[--depends-on");
+        }
       }
 
       expect(helpText(taskHelp.stdout)).toContain("COMMANDS");

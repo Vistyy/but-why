@@ -94,8 +94,15 @@ const editTaskDependencies = (sql: SqlClient.SqlClient, input: EditTaskDependenc
         : yield* validateDependencies(sql, input.taskId, input.prerequisiteTaskIds, true);
     if (dependencyError !== undefined) return dependencyError;
 
-    const currentIds = target.task.prerequisites.map((dependency) =>
-      storedPublicTaskId(dependency.id),
+    const currentIds = yield* Effect.forEach(target.task.prerequisites, (dependency) =>
+      Effect.try({
+        try: () => storedPublicTaskId(dependency.id),
+        catch: (cause) =>
+          new RepositoryPersistedDataInvalid({
+            operationName: "edit Task dependencies",
+            cause,
+          }),
+      }),
     );
     const requestedIds = input.prerequisiteTaskIds;
     const currentSet = new Set(currentIds);
