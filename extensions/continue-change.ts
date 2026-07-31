@@ -99,18 +99,8 @@ const changeIdPattern =
   /^\s*Change identity:\s*([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.?\s*$/imu;
 type ButWhyCommandPrefix = "just by" | "npx -y but-why";
 
-const commandPrefixFor = (cwd: string): ButWhyCommandPrefix => {
-  try {
-    accessSync(join(cwd, "justfile"), constants.R_OK);
-    accessSync(join(cwd, "bin/by"), constants.X_OK);
-    const packageJson = JSON.parse(readFileSync(join(cwd, "package.json"), "utf8")) as {
-      readonly name?: unknown;
-    };
-    return packageJson.name === "but-why" ? "just by" : "npx -y but-why";
-  } catch {
-    return "npx -y but-why";
-  }
-};
+const normalizeRepositoryUrl = (value: string): string =>
+  value.trim().replace(/^git\+/u, "").replace(/\.git$/u, "").replace(/\/$/u, "").toLowerCase();
 
 const butWhyCommand = (prefix: ButWhyCommandPrefix, ...args: readonly string[]): string =>
   [prefix, ...args].join(" ");
@@ -359,21 +349,39 @@ export default function continueChange(pi: ExtensionAPI): void {
     }
   };
 
-  const cliInvocation = (
-    cwd: string,
-    args: readonly string[],
-  ): readonly [string, ...string[]] => {
-    const prefix = commandPrefixFor(cwd);
-    return prefix === "just by"
-      ? ["just", "by", ...args]
-      : ["npx", "-y", "but-why", ...args];
+  const commandPrefixFor = async (cwd: string): Promise<ButWhyCommandPrefix> => {
+    try {
+      accessSync(join(cwd, "justfile"), constants.R_OK);
+      accessSync(join(cwd, "bin/by"), constants.X_OK);
+      const packageJson = JSON.parse(readFileSync(join(cwd, "package.json"), "utf8")) as {
+        readonly repository?: Readonly<{ readonly url?: unknown }> | string;
+      };
+      const packageRepository =
+        typeof packageJson.repository === "string"
+          ? packageJson.repository
+          : packageJson.repository?.url;
+      if (typeof packageRepository !== "string") return "npx -y but-why";
+      const remote = await run("git", ["config", "--get", "remote.origin.url"], cwd);
+      return remote.ok && normalizeRepositoryUrl(packageRepository) === normalizeRepositoryUrl(remote.stdout)
+        ? "just by"
+        : "npx -y but-why";
+    } catch {
+      return "npx -y but-why";
+    }
   };
+
+  const cliInvocation = (
+    prefix: ButWhyCommandPrefix,
+    args: readonly string[],
+  ): readonly [string, ...string[]] =>
+    prefix === "just by" ? ["just", "by", ...args] : ["npx", "-y", "but-why", ...args];
 
   const inspectCommand = async (
     commandArgs: readonly string[],
     cwd: string,
   ): Promise<RunResult> => {
-    const [command, ...args] = cliInvocation(cwd, commandArgs);
+    const prefix = await commandPrefixFor(cwd);
+    const [command, ...args] = cliInvocation(prefix, commandArgs);
     return run(command, args, cwd);
   };
 
@@ -636,6 +644,7 @@ export default function continueChange(pi: ExtensionAPI): void {
         return;
       }
 
+      const commandPrefix = await commandPrefixFor(ctx.cwd);
       const previous = persisted ?? {
         changeId: id,
         fingerprint: observed.fingerprint,
@@ -684,7 +693,7 @@ export default function continueChange(pi: ExtensionAPI): void {
               id,
               currentResolution,
               observed.snapshot.findingCount > 0,
-              commandPrefixFor(ctx.cwd),
+              commandPrefix,
             ),
           );
         } else {
@@ -695,9 +704,7 @@ export default function continueChange(pi: ExtensionAPI): void {
       if (explicit && observed.snapshot.toolingFailureCount > 0) {
         pendingThresholdCompaction = false;
         showWatcher(ctx, { kind: "stopped" });
-        pi.sendUserMessage(
-          validationFailureMessage(id, observed.snapshot, commandPrefixFor(ctx.cwd)),
-        );
+        pi.sendUserMessage(validationFailureMessage(id, observed.snapshot, commandPrefix));
         return;
       }
 
@@ -720,7 +727,7 @@ export default function continueChange(pi: ExtensionAPI): void {
         decision,
         id,
         pendingThresholdCompaction ? "threshold" : undefined,
-        commandPrefixFor(ctx.cwd),
+        commandPrefix,
       );
       pendingThresholdCompaction = false;
       showWatcher(ctx, { kind: "watching" });

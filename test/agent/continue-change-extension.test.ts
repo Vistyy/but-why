@@ -87,6 +87,8 @@ const createHarness = (cwd = sourceCwd) => {
       if ((sourceCli || publishedCli) && args.includes("blocker"))
         return result(JSON.stringify(currentBlockerHistory));
       if (sourceCli || publishedCli) return result(JSON.stringify(currentSnapshot));
+      if (command === "git" && args[0] === "config")
+        return result("git+https://github.com/Vistyy/but-why.git\n");
       if (command === "git" && args[0] === "rev-parse") return result("head\n");
       if (command === "git" && args[0] === "status") return result("");
       if (command === "git" && (args[0] === "diff" || args[0] === "ls-files")) return result("");
@@ -223,7 +225,13 @@ describe("packaged Change Implement continuation extension", () => {
     writeFileSync(join(target, "justfile"), "by:\n  @true\n");
     writeFileSync(join(target, "bin/by"), "#!/bin/sh\n");
     chmodSync(join(target, "bin/by"), 0o755);
-    writeFileSync(join(target, "package.json"), JSON.stringify({ name: "unrelated-target" }));
+    writeFileSync(
+      join(target, "package.json"),
+      JSON.stringify({
+        name: "but-why",
+        repository: { type: "git", url: "https://example.com/unrelated.git" },
+      }),
+    );
 
     try {
       const harness = createHarness(target);
