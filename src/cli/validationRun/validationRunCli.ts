@@ -21,11 +21,7 @@ export type ValidationRunCommandEnvironment = {
 };
 
 export const runAbandonCommand = (
-  command: {
-    readonly validationRunId: string;
-    readonly reason: string;
-    readonly worktreePath?: string;
-  },
+  command: { readonly validationRunId: string; readonly reason: string },
   environment: ValidationRunCommandEnvironment,
 ): Effect.Effect<CliResult> => {
   if (command.reason.trim().length === 0) {
@@ -67,7 +63,7 @@ export const runAbandonCommand = (
             "Validation Run resources could not be cleaned up, so abandonment is incomplete.",
           details: result,
           help: [
-            `Stop every process, repair the reported resources, then retry \`by validation-run abandon ${command.validationRunId} --reason <reason> [--worktree-path <path>]\`.`,
+            `Stop every process, repair the reported resources, then retry \`by validation-run abandon ${command.validationRunId} --reason <reason>\`.`,
           ],
         });
       }),

@@ -44,11 +44,10 @@ const passThroughLock: ExecutionLock = {
 };
 
 const persistenceFor = (overrides: {
-  readonly context?: CandidateValidationRunAbandonmentContext;
   readonly recordToolingFailure?: AbandonValidationPersistence["recordToolingFailure"];
   readonly abandon?: AbandonValidationPersistence["abandon"];
 }): AbandonValidationPersistence => ({
-  getAbandonmentContext: () => Effect.succeed(overrides.context ?? abandonmentContext),
+  getAbandonmentContext: () => Effect.succeed(abandonmentContext),
   getRunById: () => Effect.succeed(runningRun),
   recordToolingFailure: overrides.recordToolingFailure ?? (() => Effect.succeed(undefined)),
   abandon: overrides.abandon ?? (() => Effect.succeed(undefined)),
@@ -82,81 +81,6 @@ describe("Validation Run abandonment cleanup seam", () => {
 
       expect(abandoned).toEqual({ ok: true, status: "abandoned", validationRunId });
       expect(calls).toEqual([`temp-ref:${tempRefName}`, `worktree:${worktreePath}`, "abandon"]);
-    }),
-  );
-
-  it.effect("rejects a workspace path that conflicts with persisted state", () =>
-    Effect.gen(function* () {
-      const calls: string[] = [];
-      const result = yield* openAbandonValidationRun({
-        persistence: persistenceFor({
-          recordToolingFailure: (input) => Effect.sync(() => calls.push(input.errorMessage)),
-        }),
-        executionLock: passThroughLock,
-        workspaceCleanup: {
-          tempRefName: () => tempRefName,
-          removeWorktree: () => {
-            calls.push("wrong-worktree");
-            return true;
-          },
-          deleteTempRef: () => {
-            calls.push("temp-ref");
-            return "removed";
-          },
-        },
-      }).abandon({
-        validationRunId,
-        reason: "The validation process terminated.",
-        worktreePath: "/wrong-worktree",
-        now: "2026-07-31T10:05:00.000Z",
-      });
-
-      expect(result).toMatchObject({
-        ok: false,
-        status: "cleanup_failed",
-        cleanup: { worktree: "failed", tempRef: "not_created" },
-      });
-      expect(calls).toEqual([
-        "The validation process terminated. The supplied Validation Workspace path does not match the persisted path.",
-      ]);
-    }),
-  );
-
-  it.effect("does not guess a workspace path for a legacy run", () =>
-    Effect.gen(function* () {
-      const calls: string[] = [];
-      const { worktreePath: _worktreePath, ...legacyContext } = abandonmentContext;
-      const result = yield* openAbandonValidationRun({
-        persistence: persistenceFor({
-          context: {
-            ...legacyContext,
-            cleanupWorktree: null,
-          },
-          recordToolingFailure: (input) => Effect.sync(() => calls.push(input.errorMessage)),
-        }),
-        executionLock: passThroughLock,
-        workspaceCleanup: {
-          tempRefName: () => tempRefName,
-          removeWorktree: () => {
-            calls.push("wrong-worktree");
-            return true;
-          },
-          deleteTempRef: () => "removed",
-        },
-      }).abandon({
-        validationRunId,
-        reason: "The validation process terminated.",
-        now: "2026-07-31T10:05:00.000Z",
-      });
-
-      expect(result).toMatchObject({
-        ok: false,
-        status: "cleanup_failed",
-        cleanup: { worktree: "failed", tempRef: "removed" },
-      });
-      expect(calls).toEqual([
-        "The validation process terminated. Cleanup worktree=failed; temporary ref=removed. Validation Workspace path was not recorded.",
-      ]);
     }),
   );
 

@@ -1,5 +1,4 @@
 import { mkdtempSync, rmSync } from "node:fs";
-import { DatabaseSync } from "node:sqlite";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -21,7 +20,6 @@ import {
 } from "../../src/contracts/repositoryStorageError.js";
 import { RepositorySql, repositorySqlLayer } from "../../src/sqlite/repositorySql.js";
 import { withTemporaryRepositoryState as withTemporaryState } from "../support/repository.js";
-import { createInitialBlockerMigrationState } from "../support/initialBlockerMigrationState.js";
 
 const migrationCount = Effect.gen(function* () {
   const repositorySql = yield* RepositorySql;
@@ -744,7 +742,6 @@ describe("repository SQL storage", () => {
           { migration_id: 8, name: "recover_published_remote_branch_cleanup" },
           { migration_id: 9, name: "active_validation_runs" },
           { migration_id: 10, name: "validation_workspace_paths" },
-          { migration_id: 11, name: "backfill_active_validation_runs" },
         ]);
         expect(identities).toEqual([{ common_directory: repositorySql.commonDirectory }]);
         expect(candidateColumns.map(({ name }) => name)).toEqual([
@@ -965,232 +962,6 @@ describe("repository SQL storage", () => {
     ),
   );
 
-  it.effect("upgrades populated initial blocker migrations without losing supported facts", () =>
-    Effect.acquireUseRelease(
-      Effect.sync(() => mkdtempSync(join(tmpdir(), "but-why-initial-blocker-migrations-"))),
-      (directory) => {
-        const statePath = join(directory, "state.sqlite");
-        return Effect.gen(function* () {
-          yield* Effect.sync(() => createInitialBlockerMigrationState(statePath));
-          yield* Effect.scoped(
-            Effect.gen(function* () {
-              const repository = yield* RepositorySql;
-              const migrations = yield* repository.operation(
-                "read upgraded migration count",
-                (sql) =>
-                  sql<{
-                    readonly count: number;
-                  }>`SELECT COUNT(*) AS count FROM effect_sql_migrations`,
-              );
-              const tasks = yield* repository.operation(
-                "read upgraded Tasks",
-                (sql) =>
-                  sql<{
-                    readonly id: string;
-                    readonly state: string;
-                    readonly title: string;
-                  }>`SELECT id, state, title FROM tasks ORDER BY numeric_id`,
-              );
-              const changes = yield* repository.operation(
-                "read upgraded Changes",
-                (sql) =>
-                  sql<{
-                    readonly baseRemoteUrl: string;
-                    readonly startingCommit: string;
-                  }>`SELECT base_remote_url AS baseRemoteUrl, starting_commit AS startingCommit FROM changes`,
-              );
-              const relatedFacts = yield* repository.operation(
-                "read upgraded related facts",
-                (sql) => sql<{
-                  readonly candidates: number;
-                  readonly comments: number;
-                  readonly decisions: number;
-                  readonly dependencies: number;
-                  readonly sessions: number;
-                }>`
-                  SELECT
-                    (SELECT COUNT(*) FROM candidates) AS candidates,
-                    (SELECT COUNT(*) FROM task_comments) AS comments,
-                    (SELECT COUNT(*) FROM implementation_decisions) AS decisions,
-                    (SELECT COUNT(*) FROM task_dependencies) AS dependencies,
-                    (SELECT COUNT(*) FROM reviewer_sessions) AS sessions
-                `,
-              );
-              const versions = yield* repository.operation(
-                "read backfilled Acceptance Context versions",
-                (sql) =>
-                  sql<{
-                    readonly changeId: string;
-                    readonly version: number;
-                    readonly context: string;
-                  }>`SELECT change_id AS changeId, version, context FROM acceptance_context_versions`,
-              );
-              const foreignKeyFailures = yield* repository.operation(
-                "verify upgraded foreign keys",
-                (sql) => sql`PRAGMA foreign_key_check`,
-              );
-
-              expect(migrations).toEqual([{ count: 11 }]);
-              expect(tasks).toEqual([
-                { id: "BY-1", state: "implementing", title: "Blocked work" },
-                { id: "BY-2", state: "done", title: "Prerequisite" },
-              ]);
-              expect(changes).toEqual([
-                {
-                  baseRemoteUrl: "https://example.com/repository.git",
-                  startingCommit: "starting-sha",
-                },
-              ]);
-              expect(relatedFacts).toEqual([
-                { candidates: 1, comments: 1, decisions: 1, dependencies: 1, sessions: 1 },
-              ]);
-              expect(versions).toEqual([
-                {
-                  changeId: "change-1",
-                  version: 1,
-                  context:
-                    '{"version":1,"title":"Blocked work","description":"Preserve this Task.","comments":["Preserved comment."]}',
-                },
-              ]);
-              expect(foreignKeyFailures).toEqual([]);
-
-              yield* repository.operation("use blocked lifecycle states", (sql) =>
-                sql`UPDATE tasks SET state = 'blocked' WHERE id = 'BY-1'`.pipe(
-                  Effect.zipRight(sql`UPDATE changes SET state = 'blocked' WHERE id = 'change-1'`),
-                ),
-              );
-            }).pipe(Effect.provide(repositorySqlLayer({ commonDirectory: directory, statePath }))),
-          );
-        });
-      },
-      (directory) => Effect.sync(() => rmSync(directory, { recursive: true, force: true })),
-    ),
-  );
-
-  it.effect("upgrades populated migration 3 state through every forward migration", () =>
-    Effect.acquireUseRelease(
-      Effect.sync(() => mkdtempSync(join(tmpdir(), "but-why-migration-three-"))),
-      (directory) => {
-        const statePath = join(directory, "state.sqlite");
-        return Effect.gen(function* () {
-          yield* Effect.sync(() => createInitialBlockerMigrationState(statePath, { frontier: 3 }));
-          const result = yield* Effect.scoped(
-            Effect.gen(function* () {
-              const repository = yield* RepositorySql;
-              return yield* repository.operation(
-                "inspect fully upgraded migration 3 state",
-                (sql) => sql<{
-                  readonly migrations: number;
-                  readonly tasks: number;
-                  readonly changes: number;
-                  readonly versions: number;
-                }>`
-                  SELECT
-                    (SELECT COUNT(*) FROM effect_sql_migrations) AS migrations,
-                    (SELECT COUNT(*) FROM tasks) AS tasks,
-                    (SELECT COUNT(*) FROM changes) AS changes,
-                    (SELECT COUNT(*) FROM acceptance_context_versions) AS versions
-                `,
-              );
-            }).pipe(Effect.provide(repositorySqlLayer({ commonDirectory: directory, statePath }))),
-          );
-
-          expect(result).toEqual([{ migrations: 11, tasks: 2, changes: 1, versions: 1 }]);
-        });
-      },
-      (directory) => Effect.sync(() => rmSync(directory, { recursive: true, force: true })),
-    ),
-  );
-
-  it.effect("reconciles intended blocker storage without duplicating preserved history", () =>
-    Effect.acquireUseRelease(
-      Effect.sync(() => mkdtempSync(join(tmpdir(), "but-why-intended-blocker-state-"))),
-      (directory) => {
-        const statePath = join(directory, "state.sqlite");
-        return Effect.gen(function* () {
-          yield* Effect.sync(() =>
-            createInitialBlockerMigrationState(statePath, {
-              frontier: 5,
-              intendedLifecycle: true,
-            }),
-          );
-          const result = yield* Effect.scoped(
-            Effect.gen(function* () {
-              const repository = yield* RepositorySql;
-              yield* repository.operation("retain intended blocked lifecycle", (sql) =>
-                sql`UPDATE tasks SET state = 'blocked' WHERE id = 'BY-1'`.pipe(
-                  Effect.zipRight(sql`UPDATE changes SET state = 'blocked' WHERE id = 'change-1'`),
-                ),
-              );
-              return yield* repository.operation(
-                "inspect reconciled blocker history",
-                (sql) => sql<{
-                  readonly blockers: number;
-                  readonly migrations: number;
-                  readonly versions: number;
-                }>`
-                  SELECT
-                    (SELECT COUNT(*) FROM implementation_blockers) AS blockers,
-                    (SELECT COUNT(*) FROM effect_sql_migrations) AS migrations,
-                    (SELECT COUNT(*) FROM acceptance_context_versions) AS versions
-                `,
-              );
-            }).pipe(Effect.provide(repositorySqlLayer({ commonDirectory: directory, statePath }))),
-          );
-
-          expect(result).toEqual([{ blockers: 1, migrations: 11, versions: 1 }]);
-        });
-      },
-      (directory) => Effect.sync(() => rmSync(directory, { recursive: true, force: true })),
-    ),
-  );
-
-  it.effect("rolls back reconciliation when populated state violates foreign keys", () =>
-    Effect.acquireUseRelease(
-      Effect.sync(() => mkdtempSync(join(tmpdir(), "but-why-invalid-migration-state-"))),
-      (directory) => {
-        const statePath = join(directory, "state.sqlite");
-        return Effect.gen(function* () {
-          yield* Effect.sync(() =>
-            createInitialBlockerMigrationState(statePath, {
-              frontier: 5,
-              orphanCandidate: true,
-            }),
-          );
-          const error = yield* Effect.scoped(
-            RepositorySql.pipe(
-              Effect.provide(repositorySqlLayer({ commonDirectory: directory, statePath })),
-            ),
-          ).pipe(Effect.flip);
-
-          expect(error).toBeInstanceOf(RepositoryMigrationFailed);
-          const preserved = yield* Effect.sync(() => {
-            const database = new DatabaseSync(statePath, { readOnly: true });
-            try {
-              return {
-                migrations: database
-                  .prepare("SELECT COUNT(*) AS count FROM effect_sql_migrations")
-                  .get()?.["count"],
-                tasks: database.prepare("SELECT COUNT(*) AS count FROM tasks").get()?.["count"],
-                taskSchema: database
-                  .prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'tasks'")
-                  .get()?.["sql"],
-              };
-            } finally {
-              database.close();
-            }
-          });
-          expect(preserved).toEqual({
-            migrations: 5,
-            tasks: 2,
-            taskSchema: expect.not.stringContaining("'blocked'"),
-          });
-        });
-      },
-      (directory) => Effect.sync(() => rmSync(directory, { recursive: true, force: true })),
-    ),
-  );
-
   it.effect("closes and reopens the same migrated repository state", () =>
     Effect.acquireUseRelease(
       Effect.sync(() => mkdtempSync(join(tmpdir(), "but-why-repository-sql-"))),
@@ -1204,8 +975,8 @@ describe("repository SQL storage", () => {
         );
 
         return Effect.gen(function* () {
-          expect(yield* readMigrationCount).toBe(11);
-          expect(yield* readMigrationCount).toBe(11);
+          expect(yield* readMigrationCount).toBe(10);
+          expect(yield* readMigrationCount).toBe(10);
         });
       },
       (directory) => Effect.sync(() => rmSync(directory, { recursive: true, force: true })),
