@@ -18,6 +18,36 @@ export type GitRootResult =
       readonly path?: string;
     };
 
+export type CurrentWorktreeFacts = {
+  readonly worktreePath: string;
+  readonly branchRef: string;
+};
+
+export const findCurrentWorktreeFacts = (
+  cwd: string,
+): ({ readonly ok: true } & CurrentWorktreeFacts) | { readonly ok: false } => {
+  const root = findGitRoot(cwd);
+  if (!root.ok) return { ok: false };
+
+  const branch = spawnSync("git", ["rev-parse", "--symbolic-full-name", "HEAD"], {
+    cwd,
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "ignore"],
+  });
+  const branchRef = branch.stdout.trim();
+  if (branch.status !== 0 || branchRef.length === 0) return { ok: false };
+
+  try {
+    return {
+      ok: true,
+      worktreePath: realpathSync(root.root),
+      branchRef,
+    };
+  } catch {
+    return { ok: false };
+  }
+};
+
 export const findGitRoot = (cwd: string): GitRootResult => {
   const result = spawnSync(
     "git",

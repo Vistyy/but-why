@@ -320,8 +320,14 @@ const changeStartCommand = withCliHandler(
     ),
 );
 const changePrepareCommand = withCliHandler(
-  leaf("prepare", "Run or retry Repository Preparation.", { changeId: changeIdArgument }),
-  (values, environment) => runPrepare(changeId(values), environment as ChangeCommandEnvironment),
+  leaf("prepare", "Run or retry Repository Preparation.", {
+    changeId: Args.optional(changeIdArgument),
+  }),
+  (values, environment) =>
+    runPrepare(
+      { changeId: optionalString(values, "changeId") },
+      environment as ChangeCommandEnvironment,
+    ),
 );
 const changeListCommand = withCliHandler(
   leaf("list", "List Changes oldest first.", { all: Options.boolean("all") }),
@@ -329,30 +335,54 @@ const changeListCommand = withCliHandler(
     runChangeList({ all: boolean(values, "all") }, environment as ChangeCommandEnvironment),
 );
 const changeShowCommand = withCliHandler(
-  leaf("show", "Show decision-oriented Change state.", { changeId: changeIdArgument }),
-  (values, environment) => runChangeShow(changeId(values), environment as ChangeCommandEnvironment),
+  leaf("show", "Show decision-oriented Change state.", {
+    changeId: Args.optional(changeIdArgument),
+  }),
+  (values, environment) =>
+    runChangeShow(
+      { changeId: optionalString(values, "changeId") },
+      environment as ChangeCommandEnvironment,
+    ),
 );
 const changeFindingsCommand = withCliHandler(
   leaf("findings", "Show Findings for the current Change Candidate.", {
-    changeId: changeIdArgument,
+    changeId: Args.optional(changeIdArgument),
   }),
-  (values, environment) => runFindings(changeId(values), environment as ChangeCommandEnvironment),
+  (values, environment) =>
+    runFindings(
+      { changeId: optionalString(values, "changeId") },
+      environment as ChangeCommandEnvironment,
+    ),
 );
 const changeValidationRunsCommand = withCliHandler(
   leaf("validation-runs", "List complete Validation Run history.", {
-    changeId: changeIdArgument,
+    changeId: Args.optional(changeIdArgument),
   }),
   (values, environment) =>
-    runValidationRuns(changeId(values), environment as ChangeCommandEnvironment),
+    runValidationRuns(
+      { changeId: optionalString(values, "changeId") },
+      environment as ChangeCommandEnvironment,
+    ),
 );
 const changeSubmitCommand = withCliHandler(
-  leaf("submit", "Validate and publish a ready Change.", { changeId: changeIdArgument }),
-  (values, environment) => runSubmit(changeId(values), environment as ChangeCommandEnvironment),
+  leaf("submit", "Validate and publish a ready Change.", {
+    changeId: Args.optional(changeIdArgument),
+  }),
+  (values, environment) =>
+    runSubmit(
+      { changeId: optionalString(values, "changeId") },
+      environment as ChangeCommandEnvironment,
+    ),
 );
 const changeCancelCommand = withCliHandler(
-  leaf("cancel", "Cancel an open taskless Change.", { changeId: changeIdArgument }),
+  leaf("cancel", "Cancel an open taskless Change.", {
+    changeId: Args.optional(changeIdArgument),
+  }),
   (values, environment) =>
-    runChangeCancel(changeId(values), environment as ChangeCommandEnvironment),
+    runChangeCancel(
+      { changeId: optionalString(values, "changeId") },
+      environment as ChangeCommandEnvironment,
+    ),
 );
 const changeReconcileCommand = withCliHandler(
   leaf("reconcile", "Read owned pull requests and clean up terminal Changes.", {
@@ -366,13 +396,13 @@ const changeReconcileCommand = withCliHandler(
 );
 const changeImplementCommand = withCliHandler(
   leaf("implement", "Launch an Interactive Session in a ready Change worktree.", {
-    changeId: changeIdArgument,
+    changeId: Args.optional(changeIdArgument),
     handoffFile: optionalText("handoff-file"),
   }),
   (values, environment) =>
     runImplement(
       {
-        changeId: requiredString(values, "changeId"),
+        changeId: optionalString(values, "changeId"),
         handoffFile: optionalString(values, "handoffFile"),
       },
       environment as ChangeCommandEnvironment,
@@ -578,10 +608,6 @@ const optionalValue = (value: unknown): unknown => {
 
 const taskId = (values: Record<string, unknown>): { readonly taskId: string } => ({
   taskId: requiredString(values, "taskId"),
-});
-
-const changeId = (values: Record<string, unknown>): { readonly changeId: string } => ({
-  changeId: requiredString(values, "changeId"),
 });
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
