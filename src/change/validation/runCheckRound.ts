@@ -3,6 +3,7 @@ import { Effect } from "effect";
 
 import type { SubmitCheckConfig } from "../submit/submitRepoConfig.js";
 import { ensureCandidateIntegrity } from "./ensureCandidateIntegrity.js";
+import { runWithSubmitProgress, type SubmitProgress } from "./submitProgress.js";
 import { runValidationCommand } from "./runValidationCommand.js";
 import { writeCommandEvidence } from "./writeCommandEvidence.js";
 import { validationPhase } from "../validationRun/validationRun.js";
@@ -24,6 +25,7 @@ export type RunCheckPhaseInput = {
   readonly commandCwd?: string;
   readonly expectedHeadSha?: string;
   readonly allowedUntrackedFiles?: readonly string[];
+  readonly progress?: SubmitProgress;
   readonly now: string;
   readonly continueAfterFinding?: boolean;
   readonly recordCheckRound: (
@@ -70,9 +72,16 @@ export const runCheckPhase = (
     let foundFailure = false;
 
     for (const [index, check] of input.checks.entries()) {
-      const checkRound: CheckRound = yield* runSingleCheck(input, check, index, foundFailure);
-
-      yield* recordCheckRound(input, checkRound);
+      const checkRound: CheckRound = yield* runWithSubmitProgress({
+        progress: input.progress,
+        phase: { kind: "check", id: check.id },
+        run: Effect.gen(function* () {
+          const checkRound = yield* runSingleCheck(input, check, index, foundFailure);
+          yield* recordCheckRound(input, checkRound);
+          return checkRound;
+        }),
+        outcome: (result) => (result.failed ? "failed" : "passed"),
+      });
       foundFailure ||= checkRound.failed;
 
       if (checkRound.failed && input.continueAfterFinding !== true) {
