@@ -21,6 +21,7 @@ import type {
   AppendTaskCommentResult,
   CreateTaskInput,
   ListTasksInput,
+  ListTasksResult,
   ReplaceTaskDependenciesResult,
   TaskApprovalResult,
   TaskStateTransitionResult,
@@ -39,7 +40,7 @@ export type TaskUseCases = {
   ) => Effect.Effect<RepoReplaceTaskDependenciesResult, RepositoryStorageError>;
   readonly listTasks: (
     input: ListTasksInput,
-  ) => Effect.Effect<readonly TaskSummary[], RepositoryStorageError>;
+  ) => Effect.Effect<ListTasksResult, RepositoryStorageError>;
   readonly listActionableTasks: () => Effect.Effect<readonly TaskSummary[], RepositoryStorageError>;
   readonly getTaskById: (
     taskId: PublicTaskId,

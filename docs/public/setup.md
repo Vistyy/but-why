@@ -185,7 +185,7 @@ The installed command templates are:
 ```text
 by task create --title <title> --description-file <file> [--depends-on <task-id>]...
 by task dependencies set <task-id> [--depends-on <task-id>]...
-by task list [--all] [--state <state>]
+by task list [--all] [--state <state>] [--limit <positive integer | all>]
 by task show <task-id>
 by task approve <task-id>
 by task context <task-id>
@@ -212,6 +212,12 @@ by change blocker resolve <change-id> --file <path>
 by change blocker list <change-id>
 by change decision list <change-id>
 ```
+
+`by task list` returns the oldest five matching Tasks by default.
+Use `--limit <positive integer>` to change the bound or `--limit all` to return the complete matching inventory.
+Filtering occurs before oldest-first ordering and limiting.
+The result reports `count` for returned Tasks and `total` for all matching Tasks.
+A truncated result includes help for retrieving all matching Tasks.
 
 Use `by task show` for Task metadata and `by task context` for the complete Task Context.
 Use `by change show` for current Change state and its reported expansion commands.

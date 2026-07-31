@@ -75,6 +75,10 @@ A bounded collection also reports the total matching count before the limit.
 Filtering and deterministic ordering occur before limiting.
 A truncated collection includes the exact command that retrieves the complete matching inventory.
 
+`by task list` returns the oldest five matching Tasks by default.
+`--limit <positive integer>` changes the bound and `--limit all` returns the complete matching inventory.
+Its `count` is the number of returned Tasks and its `total` is the number matching the filters before limiting.
+
 ## Command ownership
 
 - `by task show` owns Task lifecycle, dependency, and linked Change metadata.
