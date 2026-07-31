@@ -78,10 +78,19 @@ export const runBuiltByWithInput = (
 export const runBy = (cwd: string, ...args: readonly string[]) => runByWithEnv(cwd, {}, ...args);
 
 export const runByWithEnv = (cwd: string, env: NodeJS.ProcessEnv, ...args: readonly string[]) =>
-  runTestProcess(byExecutable, args, {
-    cwd,
-    ...testProcessEnvironment(env),
-  });
+  runTestProcess(
+    process.execPath,
+    [
+      "--import",
+      join(repoRoot, "node_modules/tsx/dist/loader.mjs"),
+      join(repoRoot, "src/main.ts"),
+      ...args,
+    ],
+    {
+      cwd,
+      ...testProcessEnvironment({ ...env, BUT_WHY_EXECUTABLE_PATH: byExecutable }),
+    },
+  );
 
 export const runJustBy = (...args: readonly string[]) => {
   const root = createGitRepo();

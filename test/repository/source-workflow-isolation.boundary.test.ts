@@ -86,7 +86,7 @@ test("source workflow delegates a Candidate worktree to the canonical executable
     "recover_published_remote_branch_cleanup",
   ]);
   expect(readTableNames(main)).not.toContain("candidate_migration_probe");
-});
+}, 30_000);
 
 test("source workflow fails without Candidate fallback when the main checkout is unavailable", () => {
   const { candidate } = prepareSourceRepository();
@@ -127,7 +127,7 @@ test("source workflow fails without Candidate fallback when the main checkout is
   message: "The Local Repository's canonical main checkout is unavailable."
 help[1]: "Restore the canonical main checkout, then retry the command."
 `);
-});
+}, 30_000);
 
 const readFile = (path: string): string => readFileSync(path, "utf8");
 
