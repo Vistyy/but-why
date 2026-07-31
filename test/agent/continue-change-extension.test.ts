@@ -352,6 +352,7 @@ describe("packaged Change Implement continuation extension", () => {
     expect(harness.sent).toEqual([]);
     expect(harness.latestWidgetText()).toEqual([`● Watching Change ${changeId.slice(0, 8)}…`]);
 
+    await harness.emit("session_start", { type: "session_start", reason: "resume" });
     await harness.runCommand("continue-change");
 
     expect(harness.sent).toHaveLength(1);

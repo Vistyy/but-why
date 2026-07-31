@@ -499,12 +499,19 @@ export default function continueChange(pi: ExtensionAPI): void {
       return;
     }
     const latest = resolutionId(latestResolution(observed.blockerHistory));
+    const previousResolutionId = persisted?.resolutionId;
+    const resolutionChanged =
+      previousResolutionId !== undefined &&
+      latest !== null &&
+      latest !== previousResolutionId;
     saveState({
       changeId,
       fingerprint: observed.fingerprint,
       unchangedRestarts: 0,
       paused: false,
       resolutionId: latest,
+      pendingResolutionId:
+        persisted?.pendingResolutionId ?? (resolutionChanged ? latest : null),
     });
     showWatcher(ctx, displayFor(observed.snapshot, observed.git));
   };
