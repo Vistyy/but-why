@@ -279,7 +279,8 @@ describe("by CLI", () => {
       expect(result.stdout).toBe(`error:
   code: invalid_usage
   message: "Received unknown argument: '--bad'"
-help[1]: Run \`by --help\` for generated command help.`);
+help[1]: Run \`by --help\` for generated command help.
+`);
     }),
   );
 
@@ -398,7 +399,8 @@ validationSetup:
   guidance[3]{step,detail}:
     inspect,Inspect repo tooling before choosing validation commands.
     configure,Configure top-level prepare and validation.checks to the best of your ability from observed tooling.
-    review,Keep .but-why/config.json explicit and reviewable.`);
+    review,Keep .but-why/config.json explicit and reviewable.
+`);
       expect(JSON.parse(readFileSync(join(root, ".but-why/config.json"), "utf8"))).toEqual({
         taskPrefix: "BY",
       });
@@ -494,7 +496,8 @@ validationSetup:
   guidance[3]{step,detail}:
     inspect,Inspect repo tooling before choosing validation commands.
     configure,Configure top-level prepare and validation.checks to the best of your ability from observed tooling.
-    review,Keep .but-why/config.json explicit and reviewable.`);
+    review,Keep .but-why/config.json explicit and reviewable.
+`);
       const migrations = yield* withRepositorySql(root, (repository) =>
         repository.operation(
           "inspect repository migrations",
@@ -545,7 +548,8 @@ validationSetup:
   guidance[3]{step,detail}:
     inspect,Inspect repo tooling before choosing validation commands.
     configure,Configure top-level prepare and validation.checks to the best of your ability from observed tooling.
-    review,Keep .but-why/config.json explicit and reviewable.`);
+    review,Keep .but-why/config.json explicit and reviewable.
+`);
     }),
   );
 
@@ -572,7 +576,8 @@ validationSetup:
   guidance[3]{step,detail}:
     inspect,Inspect repo tooling before choosing validation commands.
     configure,Configure top-level prepare and validation.checks to the best of your ability from observed tooling.
-    review,Keep .but-why/config.json explicit and reviewable.`);
+    review,Keep .but-why/config.json explicit and reviewable.
+`);
     }),
   );
 
@@ -586,7 +591,8 @@ validationSetup:
       expect(result.stdout).toBe(`error:
   code: not_git_work_tree
   message: by init must be run inside a Git work tree.
-help[1]: "Run git init first, or cd into an existing Git repository."`);
+help[1]: "Run git init first, or cd into an existing Git repository."
+`);
     }),
   );
 
@@ -600,7 +606,8 @@ help[1]: "Run git init first, or cd into an existing Git repository."`);
       expect(result.stdout).toBe(`error:
   code: invalid_usage
   message: "Expected to find option: '--task-prefix'"
-help[1]: Run \`by --help\` for generated command help.`);
+help[1]: Run \`by --help\` for generated command help.
+`);
     }),
   );
 
@@ -615,7 +622,8 @@ help[1]: Run \`by --help\` for generated command help.`);
   code: invalid_task_prefix
   message: "Task prefix must match ^[A-Z][A-Z0-9]{1,9}$."
   taskPrefix: by
-help[1]: "Use 2 to 10 uppercase letters or digits, starting with a letter, such as BY."`);
+help[1]: "Use 2 to 10 uppercase letters or digits, starting with a letter, such as BY."
+`);
     }),
   );
 
@@ -634,7 +642,8 @@ help[1]: "Use 2 to 10 uppercase letters or digits, starting with a letter, such 
   path: .but-why/config.json
   existingTaskPrefix: OLD
   requestedTaskPrefix: BY
-help[1]: "Keep using OLD, or manually migrate .but-why/config.json before running init again."`);
+help[1]: "Keep using OLD, or manually migrate .but-why/config.json before running init again."
+`);
     }),
   );
 

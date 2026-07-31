@@ -65,7 +65,8 @@ describe("by init edge cases", () => {
   code: invalid_repo_state
   message: .but-why/reviewers/ must be a directory.
   path: .but-why/reviewers/
-help[1]: Move the conflicting path aside before running init again.`);
+help[1]: Move the conflicting path aside before running init again.
+`);
       expect(existsSync(join(root, ".but-why/reviewers"))).toBe(true);
     }),
   );
