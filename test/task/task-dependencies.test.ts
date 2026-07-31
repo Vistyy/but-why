@@ -213,6 +213,16 @@ describe("Task dependency CLI", () => {
         error: { code: "invalid_usage" },
       });
 
+      const validTrailingGlobal = yield* runByInProcessEffect(
+        root,
+        ["task", "dependencies", "replace", "BY-4", "--output", "json"],
+        now,
+      );
+      expect(validTrailingGlobal.status).toBe(2);
+      expect(JSON.parse(validTrailingGlobal.stdout)).toMatchObject({
+        error: { code: "replace_requires_dependency" },
+      });
+
       for (const invalidOption of ["--output=xml", "--output", "--log-level"] as const) {
         const malformedGlobal = yield* runByInProcessEffect(
           root,

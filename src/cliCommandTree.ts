@@ -730,11 +730,43 @@ const missingDependencyOperation = (
   }
   const taskIndex = args.indexOf("task");
   const operation = args[taskIndex + 2];
-  if (args.slice(taskIndex + 4).length > 0) return undefined;
+  if (!validTrailingGlobalOptions(args.slice(taskIndex + 4))) return undefined;
   return args[taskIndex + 1] === "dependencies" &&
     (operation === "add" || operation === "remove" || operation === "replace")
     ? operation
     : undefined;
+};
+
+const validTrailingGlobalOptions = (args: readonly string[]): boolean => {
+  const seen = new Set<string>();
+  const valueOptions = new Map([
+    ["--output", new Set(["toon", "json"])],
+    ["-o", new Set(["toon", "json"])],
+    [
+      "--log-level",
+      new Set(["all", "trace", "debug", "info", "warning", "error", "fatal", "none"]),
+    ],
+    ["--completions", new Set(["sh", "bash", "fish", "zsh"])],
+  ]);
+  const flags = new Set(["--wizard", "--version", "--help", "-h"]);
+  for (let index = 0; index < args.length; index += 1) {
+    const argument = args[index];
+    if (argument === undefined) return false;
+    const equalsIndex = argument.indexOf("=");
+    const option = equalsIndex < 0 ? argument : argument.slice(0, equalsIndex);
+    const inlineValue = equalsIndex < 0 ? undefined : argument.slice(equalsIndex + 1);
+    if (flags.has(option)) {
+      if (inlineValue !== undefined || seen.has(option)) return false;
+      seen.add(option);
+      continue;
+    }
+    const values = valueOptions.get(option);
+    if (values === undefined || seen.has(option)) return false;
+    const value = inlineValue ?? args[++index];
+    if (value === undefined || value.startsWith("-") || !values.has(value)) return false;
+    seen.add(option);
+  }
+  return true;
 };
 
 const generatedText = (help: HelpDoc.HelpDoc): string => {
