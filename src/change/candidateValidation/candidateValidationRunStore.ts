@@ -68,6 +68,11 @@ export type StartCandidateValidationRunInput = {
   readonly changeBaseSha?: string;
   readonly policy: CandidateValidationPolicySnapshot;
   readonly implementationDecisions?: readonly ImplementationDecision[];
+  readonly validationRunId?: string;
+  readonly workspaceSetup?: {
+    readonly tempRefName: string;
+    readonly worktreePath: string;
+  };
   readonly now: string;
 };
 

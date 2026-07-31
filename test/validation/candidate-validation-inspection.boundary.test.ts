@@ -102,6 +102,37 @@ describe("Candidate-owned Validation Run inspection", () => {
     }),
   );
 
+  it.effect("records the initial Validation Workspace with the Active relation", () =>
+    Effect.gen(function* () {
+      const fixture = yield* candidateValidationFixture();
+      yield* fixture.runStore.complete({
+        validationRunId: fixture.validationRunId,
+        outcome: "tooling_failed",
+        now,
+      });
+      const workspace = {
+        tempRefName: "refs/but-why/validation-runs/atomic/validation",
+        worktreePath: join(fixture.root, ".sandcastle", "atomic-validation"),
+      };
+      const started = yield* fixture.runStore.startOrReuse({
+        candidateId: fixture.candidateId,
+        headSha: "head-sha",
+        policy,
+        validationRunId: "run-with-atomic-workspace",
+        workspaceSetup: workspace,
+        now: later,
+      });
+
+      expect(started).toEqual({
+        reused: false,
+        validationRunId: "run-with-atomic-workspace",
+      });
+      expect(yield* fixture.runStore.getAbandonmentContext(started.validationRunId)).toMatchObject(
+        workspace,
+      );
+    }),
+  );
+
   it.effect("rejects a second Active Validation Run and clears the relation on completion", () =>
     Effect.gen(function* () {
       const fixture = yield* candidateValidationFixture();

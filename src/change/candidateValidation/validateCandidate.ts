@@ -1,3 +1,5 @@
+import { randomUUID } from "node:crypto";
+
 import type { Sandbox } from "@ai-hero/sandcastle";
 import { Context, Effect, Layer } from "effect";
 
@@ -18,6 +20,10 @@ import {
 } from "../specialistReview/runSpecialistReviewPhase.js";
 import type { SubmitCheckConfig, SubmitPrepareConfig } from "../submit/submitRepoConfig.js";
 import { createValidationWorkspace } from "../validation/createValidationWorkspace.js";
+import {
+  expectedSandcastleWorktreePath,
+  validationTempRefName,
+} from "../validation/validationGitGlue.js";
 import { runCheckPhase } from "../validation/runCheckRound.js";
 import { runPreparePhase } from "../validation/runPreparePhase.js";
 import {
@@ -172,6 +178,8 @@ const makeCandidateValidation = (dependencies: {
             acceptanceContext: input.acceptanceContext,
           }
         : input.policy;
+    const validationRunId = randomUUID();
+    const tempRefName = validationTempRefName(validationRunId);
     const started = yield* dependencies.persistence.startOrReuse({
       candidateId: input.candidateId,
       headSha: input.headSha,
@@ -180,6 +188,14 @@ const makeCandidateValidation = (dependencies: {
       ...(input.implementationDecisions === undefined
         ? {}
         : { implementationDecisions: input.implementationDecisions }),
+      validationRunId,
+      workspaceSetup: {
+        tempRefName,
+        worktreePath: expectedSandcastleWorktreePath(
+          dependencies.localRepositoryMainCheckoutRoot,
+          tempRefName,
+        ),
+      },
       now: input.now,
     });
     if ("active" in started && started.active === true) {

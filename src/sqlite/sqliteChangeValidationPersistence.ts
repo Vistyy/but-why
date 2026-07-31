@@ -227,7 +227,7 @@ const startOrReuse = (sql: SqlClient.SqlClient, input: StartCandidateValidationR
       } satisfies StartCandidateValidationRunResult;
     }
 
-    const validationRunId = randomUUID();
+    const validationRunId = input.validationRunId ?? randomUUID();
     const active = yield* sql<{ readonly validationRunId: string }>`
       SELECT validation_run_id AS validationRunId
       FROM active_validation_runs
@@ -253,6 +253,17 @@ const startOrReuse = (sql: SqlClient.SqlClient, input: StartCandidateValidationR
       INSERT INTO active_validation_runs (change_id, validation_run_id, created_at)
       VALUES (${candidate.changeId}, ${validationRunId}, ${input.now})
     `;
+    if (input.workspaceSetup !== undefined) {
+      yield* sql`
+        INSERT INTO candidate_validation_workspace_setups (
+          validation_run_id, temp_ref_name, submitted_sha, worktree_head, worktree_path,
+          cleanup_worktree, cleanup_temp_ref, created_at
+        ) VALUES (
+          ${validationRunId}, ${input.workspaceSetup.tempRefName}, ${input.headSha}, ${input.headSha},
+          ${input.workspaceSetup.worktreePath}, 'not_created', 'not_created', ${input.now}
+        )
+      `;
+    }
     return { reused: false, validationRunId } satisfies StartCandidateValidationRunResult;
   });
 
