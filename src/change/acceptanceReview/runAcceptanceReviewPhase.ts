@@ -16,6 +16,11 @@ import { writeReviewerArtifacts } from "../validationRun/reviewerArtifacts.js";
 import type { RecordCandidateAcceptanceRoundInput } from "../candidateValidation/candidateValidationRunStore.js";
 import type { RepositoryStorageError } from "../../contracts/repositoryStorageError.js";
 import type { ValidationToolingFailure } from "../validation/validationToolingFailures.js";
+import {
+  runWithSubmitProgress,
+  type SubmitProgress,
+  type SubmitProgressProfile,
+} from "../validation/submitProgress.js";
 import { verifyCandidateIntegrity } from "../validation/verifyCandidateIntegrity.js";
 import {
   continuationPrompt,
@@ -48,6 +53,7 @@ export type RunAcceptanceReviewPhaseInput = {
   readonly sessionStorageRoot?: string;
   readonly sessionStore?: ReviewerSessionStore;
   readonly allowedUntrackedFiles: readonly string[];
+  readonly progress?: SubmitProgress;
   readonly now: string;
   readonly listArtifacts: (
     validationRunId: string,
@@ -85,6 +91,20 @@ export type RunAcceptanceReviewPhaseResult = {
 };
 
 export const runAcceptanceReviewPhase = (
+  input: RunAcceptanceReviewPhaseInput,
+): Effect.Effect<
+  RunAcceptanceReviewPhaseResult,
+  ValidationToolingFailure | RepositoryStorageError
+> =>
+  runWithSubmitProgress({
+    progress: input.progress,
+    phase: { kind: "acceptance", profile: progressProfile(input.policy.profile) },
+    run: runAcceptanceReviewPhaseImpl(input),
+    outcome: (result) =>
+      result.toolingFailure === undefined && result.findings === 0 ? "passed" : "failed",
+  });
+
+const runAcceptanceReviewPhaseImpl = (
   input: RunAcceptanceReviewPhaseInput,
 ): Effect.Effect<
   RunAcceptanceReviewPhaseResult,
@@ -275,6 +295,14 @@ export const runAcceptanceReviewPhase = (
       },
     };
   });
+
+const progressProfile = (
+  profile: RunAcceptanceReviewPhaseInput["policy"]["profile"],
+): SubmitProgressProfile => ({
+  name: profile.agentProfile,
+  model: profile.profile.runtimeConfig?.model ?? "unknown",
+  thinking: profile.profile.runtimeConfig?.thinking ?? "default",
+});
 
 const isUnusableReviewerSessionFailure = (failure: ValidationToolingFailure): boolean =>
   failure._tag === "SandcastleToolingFailed" &&

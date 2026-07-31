@@ -21,6 +21,11 @@ import { verifyCandidateIntegrity } from "../validation/verifyCandidateIntegrity
 import { writeReviewerArtifacts } from "../validationRun/reviewerArtifacts.js";
 import { validationPhase } from "../validationRun/validationRun.js";
 import {
+  runWithSubmitProgress,
+  type SubmitProgress,
+  type SubmitProgressProfile,
+} from "../validation/submitProgress.js";
+import {
   reviewerSessionFingerprint,
   reviewerSessionsPath,
   sessionIdentityMatches,
@@ -48,6 +53,7 @@ export type RunSpecialistReviewPhaseInput = {
   readonly sessionStorageRoot?: string;
   readonly sessionStore?: ReviewerSessionStore;
   readonly allowedUntrackedFiles: readonly string[];
+  readonly progress?: SubmitProgress;
   readonly now: string;
   readonly listArtifacts: (
     validationRunId: string,
@@ -94,7 +100,17 @@ export const runSpecialistReviewPhase = (
     const reviewerEvidence: SpecialistReviewerContinuityEvidence[] = [];
 
     for (const [index, policy] of input.policies.entries()) {
-      const result = yield* runSpecialist(input, policy, index + 1);
+      const result = yield* runWithSubmitProgress({
+        progress: input.progress,
+        phase: {
+          kind: "specialist",
+          id: policy.id,
+          profile: progressProfile(policy.profile),
+        },
+        run: runSpecialist(input, policy, index + 1),
+        outcome: (review) =>
+          review.toolingFailure === undefined && !review.hasFindings ? "passed" : "failed",
+      });
       if (result.hasFindings) hasFindings = true;
       if (result.toolingFailure !== undefined) toolingFailures.push(result.toolingFailure);
       if (result.reviewerEvidence !== undefined) reviewerEvidence.push(result.reviewerEvidence);
@@ -310,6 +326,12 @@ const runSpecialist = (
       },
     };
   });
+
+const progressProfile = (profile: SpecialistReviewPolicy["profile"]): SubmitProgressProfile => ({
+  name: profile.agentProfile,
+  model: profile.profile.runtimeConfig?.model ?? "unknown",
+  thinking: profile.profile.runtimeConfig?.thinking ?? "default",
+});
 
 const isUnusableReviewerSessionFailure = (failure: ValidationToolingFailure): boolean =>
   failure._tag === "SandcastleToolingFailed" &&
