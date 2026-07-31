@@ -728,29 +728,9 @@ const missingDependencyOperation = (
   ) {
     return undefined;
   }
-  const globalOptions = new Set([
-    "--output",
-    "-o",
-    "--log-level",
-    "--completions",
-    "--wizard",
-    "--version",
-    "--help",
-    "-h",
-  ]);
-  if (
-    args.some(
-      (arg) =>
-        arg.startsWith("-") &&
-        !globalOptions.has(arg) &&
-        !arg.startsWith("--output=") &&
-        !arg.startsWith("-o="),
-    )
-  ) {
-    return undefined;
-  }
   const taskIndex = args.indexOf("task");
   const operation = args[taskIndex + 2];
+  if (args.slice(taskIndex + 4).length > 0) return undefined;
   return args[taskIndex + 1] === "dependencies" &&
     (operation === "add" || operation === "remove" || operation === "replace")
     ? operation

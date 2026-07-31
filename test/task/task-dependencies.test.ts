@@ -213,6 +213,18 @@ describe("Task dependency CLI", () => {
         error: { code: "invalid_usage" },
       });
 
+      for (const invalidOption of ["--output=xml", "--output", "--log-level"] as const) {
+        const malformedGlobal = yield* runByInProcessEffect(
+          root,
+          ["--output", "json", "task", "dependencies", "replace", "BY-4", invalidOption],
+          now,
+        );
+        expect(malformedGlobal.status).toBe(2);
+        expect(JSON.parse(malformedGlobal.stdout)).toMatchObject({
+          error: { code: "invalid_usage" },
+        });
+      }
+
       const cleared = yield* runByInProcessEffect(
         root,
         ["--output", "json", "task", "dependencies", "clear", "BY-4"],
