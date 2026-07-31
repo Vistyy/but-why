@@ -11,11 +11,7 @@ import type {
   TaskDependencyFact,
   TaskSummary,
 } from "../task/task.js";
-import {
-  generatedPublicTaskId,
-  storedPublicTaskId,
-  type PublicTaskId,
-} from "../task/taskId.js";
+import { generatedPublicTaskId, storedPublicTaskId, type PublicTaskId } from "../task/taskId.js";
 import type {
   AppendTaskCommentInput,
   ApproveTaskInput,
