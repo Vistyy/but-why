@@ -5,6 +5,7 @@ import * as HelpDoc from "@effect/cli/HelpDoc";
 import * as Options from "@effect/cli/Options";
 import * as ValidationError from "@effect/cli/ValidationError";
 import { NodeFileSystem, NodePath, NodeTerminal } from "@effect/platform-node";
+import { createRequire } from "node:module";
 import { Console, Context, Effect, Layer, Logger, Ref } from "effect";
 
 import type { CliEnvironment } from "./cli.js";
@@ -502,6 +503,9 @@ const commandTree = commandRootWithHandler.pipe(
 ) as unknown as AnyCommand;
 
 const cliConfig = CliConfig.make({});
+const finalCheckBuiltInConfig = CliConfig.make({ finalCheckBuiltIn: true });
+const packageVersion = (createRequire(import.meta.url)("../package.json") as { version: string })
+  .version;
 const stderrLogger = (writeStderr: (message: string) => void) =>
   Logger.make(({ logLevel, message }) => {
     writeStderr(`level=${logLevel.label} message=${String(message)}\n`);
@@ -515,12 +519,10 @@ export const runCommandTree = (
   Effect.gen(function* () {
     const resultRef = yield* Ref.make<CliResult | undefined>(undefined);
     const helpOutput: string[] = [];
-    const run = Command.run(commandTree, { executable: "by", name: "by", version: "0.0.0" })([
-      "by",
-      "by",
-      ...args,
-    ]);
-    const commandResult = yield* Effect.either(
+    const run = Command.run(commandTree, { executable: "by", name: "by", version: packageVersion })(
+      ["by", "by", ...args],
+    );
+    const runWithConfig = (config: CliConfig.CliConfig) =>
       Console.consoleWith((console) =>
         Console.withConsole({
           ...console,
@@ -531,6 +533,7 @@ export const runCommandTree = (
             Effect.provide(
               Layer.mergeAll(
                 runtimeLayer,
+                CliConfig.layer(config),
                 Logger.replace(
                   Logger.defaultLogger,
                   stderrLogger(environment.writeStderr ?? (() => undefined)),
@@ -546,8 +549,25 @@ export const runCommandTree = (
             ),
           ),
         ),
-      ),
-    );
+      );
+    const initialCommandResult = yield* Effect.either(runWithConfig(cliConfig));
+    let commandResult = initialCommandResult;
+    if (
+      initialCommandResult._tag === "Left" &&
+      ValidationError.isValidationError(initialCommandResult.left) &&
+      !generatedText(initialCommandResult.left.error).includes(
+        "Expected one of the following cases: toon, json",
+      )
+    ) {
+      const fallbackCommandResult = yield* Effect.either(runWithConfig(finalCheckBuiltInConfig));
+      if (
+        fallbackCommandResult._tag === "Right" &&
+        helpOutput.length > 0 &&
+        nativeHelpText(helpOutput.at(-1) ?? "") === packageVersion
+      ) {
+        commandResult = fallbackCommandResult;
+      }
+    }
 
     if (commandResult._tag === "Left") {
       if (ValidationError.isValidationError(commandResult.left)) {
@@ -566,8 +586,13 @@ export const runCommandTree = (
     const captured = yield* Ref.get(resultRef);
     if (captured !== undefined) return captured;
     if (helpOutput.length > 0) {
+      const nativeOutput = nativeHelpText(helpOutput.join("\n"));
       return {
-        ...success({ help: rootHelpCorrection(nativeHelpText(helpOutput.join("\n"))) }),
+        ...success(
+          nativeOutput === packageVersion
+            ? { version: packageVersion }
+            : { help: rootHelpCorrection(nativeOutput) },
+        ),
         outputFormat: outputFormatForArgs(args),
       };
     }
