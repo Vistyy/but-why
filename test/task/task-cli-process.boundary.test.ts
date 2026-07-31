@@ -1,4 +1,5 @@
 import { chmodSync, mkdirSync, writeFileSync } from "node:fs";
+import { DatabaseSync } from "node:sqlite";
 import { join } from "node:path";
 import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
@@ -141,7 +142,7 @@ exit 1
           join(root, ".but-why/config.json"),
           `${JSON.stringify({
             taskPrefix: "BY",
-            validation: { checks: [{ id: "quality", command: "false" }] },
+            validation: { checks: [{ id: "quality", command: "sleep 10; false" }] },
           })}\n`,
         );
         commitButWhyConfigAndRecordDefault(root);
@@ -269,6 +270,71 @@ exit 1
           "Add validated change",
         );
 
+        const concurrentSubmissions = yield* Effect.promise(() =>
+          Promise.all([
+            runByAsync(
+              executable,
+              root,
+              processEnvironment,
+              "--output",
+              "json",
+              "change",
+              "submit",
+              change.change.id,
+            ),
+            runByAsync(
+              executable,
+              root,
+              processEnvironment,
+              "--output",
+              "json",
+              "change",
+              "submit",
+              change.change.id,
+            ),
+          ]),
+        );
+        const concurrentSubmissionCodes = concurrentSubmissions.map(
+          (result) =>
+            (JSON.parse(result.stdout) as { readonly error?: { readonly code?: string } }).error
+              ?.code,
+        );
+        expect(concurrentSubmissionCodes).toContain("submission_in_progress");
+        expect(concurrentSubmissionCodes).toContain("validation_findings");
+
+        const runningSubmit = runByAsync(
+          executable,
+          root,
+          processEnvironment,
+          "--output",
+          "json",
+          "change",
+          "submit",
+          change.change.id,
+        );
+        yield* Effect.promise(() => new Promise((resolve) => setTimeout(resolve, 250)));
+        const cancellation = yield* Effect.promise(() =>
+          runByAsync(
+            executable,
+            root,
+            processEnvironment,
+            "--output",
+            "json",
+            "task",
+            "cancel",
+            "BY-1",
+            "--reason",
+            "Cancel during Submit.",
+          ),
+        );
+        const runningSubmitResult = yield* Effect.promise(() => runningSubmit);
+        expect(JSON.parse(cancellation.stdout)).toMatchObject({
+          error: { code: "submission_in_progress", taskId: "BY-1" },
+        });
+        expect(JSON.parse(runningSubmitResult.stdout)).toMatchObject({
+          error: { code: "validation_findings", changeId: change.change.id },
+        });
+
         const toonSubmitted = runBuiltByWithEnv(
           root,
           processEnvironment,
@@ -301,6 +367,73 @@ exit 1
               retryCommand: `by change submit ${change.change.id}`,
             },
           },
+        });
+
+        const interrupted = startTestProcess(
+          process.execPath,
+          [executable, "--output", "json", "change", "submit", change.change.id],
+          {
+            cwd: root,
+            ...testProcessEnvironment({
+              ...processEnvironment,
+              BUT_WHY_EXECUTABLE_PATH: byExecutable,
+            }),
+          },
+        );
+        const interruptedExit = new Promise<number | null>((resolve) =>
+          interrupted.once("close", (status) => resolve(status)),
+        );
+        const database = new DatabaseSync(join(root, ".git", "but-why", "state.sqlite"));
+        database.exec("PRAGMA busy_timeout = 100");
+        let interruptedRunId: string | undefined;
+        for (let attempt = 0; attempt < 100; attempt += 1) {
+          try {
+            const active = database
+              .prepare(
+                "SELECT validation_run_id AS validationRunId FROM active_validation_runs WHERE change_id = ?",
+              )
+              .get(change.change.id) as { readonly validationRunId?: string } | undefined;
+            if (active?.validationRunId !== undefined) {
+              interruptedRunId = active.validationRunId;
+              break;
+            }
+          } catch {
+            // Another process is committing the active-run relation.
+          }
+          yield* Effect.promise(() => new Promise((resolve) => setTimeout(resolve, 100)));
+        }
+        database.close();
+        expect(interruptedRunId).toBeDefined();
+        interrupted.kill("SIGTERM");
+        expect(yield* Effect.promise(() => interruptedExit)).not.toBe(0);
+        const abandoned = runBuiltByWithEnv(
+          root,
+          processEnvironment,
+          "--output",
+          "json",
+          "validation-run",
+          "abandon",
+          interruptedRunId ?? "",
+          "--reason",
+          "Submit process terminated.",
+        );
+        expect(abandoned.status).toBe(0);
+        expect(JSON.parse(abandoned.stdout)).toMatchObject({
+          validationRunId: interruptedRunId,
+          status: "abandoned",
+        });
+        const resubmitted = runBuiltByWithEnv(
+          root,
+          processEnvironment,
+          "--output",
+          "json",
+          "change",
+          "submit",
+          change.change.id,
+        );
+        expect(resubmitted.status).toBe(1);
+        expect(JSON.parse(resubmitted.stdout)).toMatchObject({
+          error: { code: "validation_findings", changeId: change.change.id },
         });
 
         const inspected = runBuiltByWithEnv(
@@ -355,7 +488,7 @@ exit 1
           ],
         });
       }),
-    30_000,
+    120_000,
   );
 });
 

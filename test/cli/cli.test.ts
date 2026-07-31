@@ -515,6 +515,7 @@ validationSetup:
         { migration_id: 7, name: "reviewer_sessions_per_producer" },
         { migration_id: 8, name: "recover_published_remote_branch_cleanup" },
         { migration_id: 9, name: "active_validation_runs" },
+        { migration_id: 10, name: "validation_workspace_paths" },
       ]);
     }),
   );

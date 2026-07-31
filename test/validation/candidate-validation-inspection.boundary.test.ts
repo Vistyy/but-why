@@ -70,6 +70,28 @@ describe("Candidate-owned Validation Run inspection", () => {
     }),
   );
 
+  it.effect("retains the exact Validation Workspace path for abandonment", () =>
+    Effect.gen(function* () {
+      const fixture = yield* candidateValidationFixture();
+      const worktreePath = join(fixture.root, "linked-worktree", ".sandcastle", "validation");
+      yield* fixture.runStore.recordWorkspaceSetup({
+        validationRunId: fixture.validationRunId,
+        tempRefName: "refs/but-why/validation-runs/run/validation",
+        submittedSha: "head-sha",
+        worktreeHead: "head-sha",
+        worktreePath,
+        cleanupWorktree: "not_created",
+        cleanupTempRef: "not_created",
+        now,
+      });
+
+      expect(yield* fixture.runStore.getAbandonmentContext(fixture.validationRunId)).toMatchObject({
+        validationRunId: fixture.validationRunId,
+        worktreePath,
+      });
+    }),
+  );
+
   it.effect("rejects a second Active Validation Run and clears the relation on completion", () =>
     Effect.gen(function* () {
       const fixture = yield* candidateValidationFixture();
@@ -570,6 +592,11 @@ const candidateValidationFixture = () =>
       recordToolingFailure: (
         input: Parameters<ChangeValidationPersistence["recordToolingFailure"]>[0],
       ) => withPersistence((persistence) => persistence.recordToolingFailure(input)),
+      recordWorkspaceSetup: (
+        input: Parameters<ChangeValidationPersistence["recordWorkspaceSetup"]>[0],
+      ) => withPersistence((persistence) => persistence.recordWorkspaceSetup(input)),
+      getAbandonmentContext: (runId: string) =>
+        withPersistence((persistence) => persistence.getAbandonmentContext(runId)),
       complete: (input: Parameters<ChangeValidationPersistence["complete"]>[0]) =>
         withPersistence((persistence) => persistence.complete(input)),
     };

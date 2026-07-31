@@ -81,11 +81,12 @@ export const openSqliteChangeValidationPersistence = (): Effect.Effect<
       repository.operation("record Candidate validation workspace setup", (sql) =>
         Effect.asVoid(sql`
           INSERT INTO candidate_validation_workspace_setups (
-            validation_run_id, temp_ref_name, submitted_sha, worktree_head,
+            validation_run_id, temp_ref_name, submitted_sha, worktree_head, worktree_path,
             cleanup_worktree, cleanup_temp_ref, created_at
           ) VALUES (
             ${input.validationRunId}, ${input.tempRefName}, ${input.submittedSha},
-            ${input.worktreeHead}, ${input.cleanupWorktree}, ${input.cleanupTempRef}, ${input.now}
+            ${input.worktreeHead}, ${input.worktreePath ?? null},
+            ${input.cleanupWorktree}, ${input.cleanupTempRef}, ${input.now}
           )
         `),
       ),
@@ -278,6 +279,7 @@ const getAbandonmentContext = (sql: SqlClient.SqlClient, validationRunId: string
         "tempRefName" | "worktreePath" | "cleanupWorktree" | "cleanupTempRef"
       > & {
         readonly tempRefName: string | null;
+        readonly worktreePath: string | null;
         readonly cleanupWorktree: CandidateValidationRunAbandonmentContext["cleanupWorktree"];
         readonly cleanupTempRef: CandidateValidationRunAbandonmentContext["cleanupTempRef"];
       }
@@ -287,6 +289,7 @@ const getAbandonmentContext = (sql: SqlClient.SqlClient, validationRunId: string
         candidate.id AS candidateId,
         candidate.head_sha AS submittedSha,
         setup.temp_ref_name AS tempRefName,
+        setup.worktree_path AS worktreePath,
         setup.cleanup_worktree AS cleanupWorktree,
         setup.cleanup_temp_ref AS cleanupTempRef
       FROM candidate_validation_runs AS run
@@ -298,10 +301,11 @@ const getAbandonmentContext = (sql: SqlClient.SqlClient, validationRunId: string
     (rows) => {
       const row = rows[0];
       if (row === undefined) return undefined;
-      const { tempRefName, ...rest } = row;
+      const { tempRefName, worktreePath, ...rest } = row;
       return {
         ...rest,
         ...(tempRefName === null ? {} : { tempRefName }),
+        ...(worktreePath === null ? {} : { worktreePath }),
       };
     },
   );
