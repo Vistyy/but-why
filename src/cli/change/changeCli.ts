@@ -36,6 +36,7 @@ import type { RepositoryStorageError } from "../../contracts/repositoryStorageEr
 import type { RepoStateLoadError } from "../../cliResults.js";
 import type { TextInputStdin } from "../../cli/input/textInput.js";
 import { structuredValue } from "../../output/structuredValue.js";
+import { resolveChangeId } from "./changeTarget.js";
 
 export type ChangeCommandEnvironment = {
   readonly cwd: string;
@@ -47,6 +48,18 @@ export type ChangeCommandEnvironment = {
   readonly interactiveSessionPath?: string;
   readonly cancellationUseCases?: CancellationUseCases;
 };
+
+const withResolvedChangeId = <E, R>(
+  changeId: string | undefined,
+  environment: ChangeCommandEnvironment,
+  commandName: string,
+  use: (changeId: string) => Effect.Effect<CliResult, E, R>,
+): Effect.Effect<CliResult, E, R> =>
+  resolveChangeId(changeId, environment.cwd, commandName).pipe(
+    Effect.flatMap((resolved) =>
+      resolved.ok ? use(resolved.changeId) : Effect.succeed(resolved.result),
+    ),
+  );
 
 export type ChangeStartCommand = {
   readonly taskId: string | undefined;
@@ -108,52 +121,53 @@ export const runList = (
 };
 
 export const runShow = (
-  command: { readonly changeId: string },
+  command: { readonly changeId: string | undefined },
   environment: ChangeCommandEnvironment,
-): Effect.Effect<CliResult> => {
-  const loaded = loadChangeInspection({
-    cwd: environment.cwd,
+): Effect.Effect<CliResult> =>
+  withResolvedChangeId(command.changeId, environment, "show", (changeId) => {
+    const loaded = loadChangeInspection({
+      cwd: environment.cwd,
+    });
+    if (!loaded.ok) return Effect.succeed(loadError(loaded.error));
+    return loaded.inspection.inspect(changeId).pipe(
+      Effect.map((detail) =>
+        detail === undefined
+          ? changeNotFound()
+          : success({
+              change: changeInspectionView(detail.change),
+              ...(detail.change.implementationDecisions === undefined ||
+              detail.change.implementationDecisions.length === 0
+                ? {}
+                : { implementationDecisions: detail.change.implementationDecisions }),
+              currentCandidate: detail.currentCandidate,
+              currentValidationRun: compactValidationRunView(detail.currentValidationRun),
+              findingCount: detail.findings.length,
+              toolingFailureCount: detail.toolingFailures.length,
+              ...(detail.findings.length === 0
+                ? {}
+                : { findingsCommand: `by change findings ${detail.change.id}` }),
+              ...(detail.toolingFailures.length === 0
+                ? {}
+                : {
+                    validationRunCommand: `by validation-run show ${detail.currentValidationRun?.id}`,
+                  }),
+              ...(detail.change.publication === null
+                ? {}
+                : {
+                    publication: {
+                      candidateId: detail.change.publication.candidateId,
+                      validationRunId: detail.change.publication.validationRunId,
+                      expectedHeadSha: detail.change.publication.expectedHeadSha,
+                      pullRequest: detail.change.publication.pullRequest,
+                    },
+                  }),
+              pullRequest: detail.change.publication?.pullRequest ?? null,
+              cleanup: detail.change.cleanup,
+            }),
+      ),
+      inspectionFailure,
+    );
   });
-  if (!loaded.ok) return Effect.succeed(loadError(loaded.error));
-  return loaded.inspection.inspect(command.changeId).pipe(
-    Effect.map((detail) =>
-      detail === undefined
-        ? changeNotFound()
-        : success({
-            change: changeInspectionView(detail.change),
-            ...(detail.change.implementationDecisions === undefined ||
-            detail.change.implementationDecisions.length === 0
-              ? {}
-              : { implementationDecisions: detail.change.implementationDecisions }),
-            currentCandidate: detail.currentCandidate,
-            currentValidationRun: compactValidationRunView(detail.currentValidationRun),
-            findingCount: detail.findings.length,
-            toolingFailureCount: detail.toolingFailures.length,
-            ...(detail.findings.length === 0
-              ? {}
-              : { findingsCommand: `by change findings ${detail.change.id}` }),
-            ...(detail.toolingFailures.length === 0
-              ? {}
-              : {
-                  validationRunCommand: `by validation-run show ${detail.currentValidationRun?.id}`,
-                }),
-            ...(detail.change.publication === null
-              ? {}
-              : {
-                  publication: {
-                    candidateId: detail.change.publication.candidateId,
-                    validationRunId: detail.change.publication.validationRunId,
-                    expectedHeadSha: detail.change.publication.expectedHeadSha,
-                    pullRequest: detail.change.publication.pullRequest,
-                  },
-                }),
-            pullRequest: detail.change.publication?.pullRequest ?? null,
-            cleanup: detail.change.cleanup,
-          }),
-    ),
-    inspectionFailure,
-  );
-};
 
 const changeInspectionView = (change: ChangeRecord) => ({
   id: change.id,
@@ -205,49 +219,49 @@ const changeNotFound = (): CliResult =>
   });
 
 export const runFindings = (
-  command: { readonly changeId: string },
+  command: { readonly changeId: string | undefined },
   environment: ChangeCommandEnvironment,
-): Effect.Effect<CliResult> => {
-  const changeId = command.changeId;
-  const loaded = loadChangeInspection({
-    cwd: environment.cwd,
+): Effect.Effect<CliResult> =>
+  withResolvedChangeId(command.changeId, environment, "findings", (changeId) => {
+    const loaded = loadChangeInspection({
+      cwd: environment.cwd,
+    });
+    if (!loaded.ok) return Effect.succeed(loadError(loaded.error));
+    return loaded.inspection.findings(changeId).pipe(
+      Effect.map((result) =>
+        result === undefined
+          ? changeNotFound()
+          : success({
+              change: changeInspectionView(result.change),
+              candidate: result.candidate,
+              validationRun: structuredValue(result.validationRun),
+              findings: result.findings,
+              toolingFailures: result.toolingFailures,
+              count: result.findings.length,
+            }),
+      ),
+      inspectionFailure,
+    );
   });
-  if (!loaded.ok) return Effect.succeed(loadError(loaded.error));
-  return loaded.inspection.findings(changeId).pipe(
-    Effect.map((result) =>
-      result === undefined
-        ? changeNotFound()
-        : success({
-            change: changeInspectionView(result.change),
-            candidate: result.candidate,
-            validationRun: structuredValue(result.validationRun),
-            findings: result.findings,
-            toolingFailures: result.toolingFailures,
-            count: result.findings.length,
-          }),
-    ),
-    inspectionFailure,
-  );
-};
 
 export const runValidationRuns = (
-  command: { readonly changeId: string },
+  command: { readonly changeId: string | undefined },
   environment: ChangeCommandEnvironment,
-): Effect.Effect<CliResult> => {
-  const changeId = command.changeId;
-  const loaded = loadChangeInspection({
-    cwd: environment.cwd,
+): Effect.Effect<CliResult> =>
+  withResolvedChangeId(command.changeId, environment, "validation-runs", (changeId) => {
+    const loaded = loadChangeInspection({
+      cwd: environment.cwd,
+    });
+    if (!loaded.ok) return Effect.succeed(loadError(loaded.error));
+    return loaded.inspection.validationRuns(changeId).pipe(
+      Effect.map((result) =>
+        result === undefined
+          ? changeNotFound()
+          : success(validationRunHistoryView(result.validationRuns)),
+      ),
+      inspectionFailure,
+    );
   });
-  if (!loaded.ok) return Effect.succeed(loadError(loaded.error));
-  return loaded.inspection.validationRuns(changeId).pipe(
-    Effect.map((result) =>
-      result === undefined
-        ? changeNotFound()
-        : success(validationRunHistoryView(result.validationRuns)),
-    ),
-    inspectionFailure,
-  );
-};
 
 const inspectionFailure = <A>(
   effect: Effect.Effect<A, RepositoryStorageError>,
@@ -258,17 +272,17 @@ const inspectionFailure = <A>(
   );
 
 export const runPrepare = (
-  command: { readonly changeId: string },
+  command: { readonly changeId: string | undefined },
   environment: ChangeCommandEnvironment,
-): Effect.Effect<CliResult> => {
-  const changeId = command.changeId;
-  return withChanges(environment, (changes) =>
-    Effect.map(changes.prepare(changeId, environment.now().toISOString()), prepareResult),
+): Effect.Effect<CliResult> =>
+  withResolvedChangeId(command.changeId, environment, "prepare", (changeId) =>
+    withChanges(environment, (changes) =>
+      Effect.map(changes.prepare(changeId, environment.now().toISOString()), prepareResult),
+    ),
   );
-};
 
 export const runImplement = (
-  command: { readonly changeId: string; readonly handoffFile: string | undefined },
+  command: { readonly changeId: string | undefined; readonly handoffFile: string | undefined },
   environment: ChangeCommandEnvironment,
 ): Effect.Effect<CliResult> => {
   const handoff =
@@ -277,19 +291,21 @@ export const runImplement = (
       : readHandoffFile(environment.cwd, command.handoffFile, environment.stdin);
   if (handoff !== undefined && !handoff.ok) return Effect.succeed(handoffFileError(handoff.error));
 
-  return withChanges(
-    environment,
-    (changes) =>
-      Effect.map(
-        changes.implement(command.changeId, handoff === undefined ? undefined : handoff.content),
-        implementResult,
-      ),
-    () =>
-      runtimeError({
-        code: "launch_failed",
-        message: "But Why? could not launch the Interactive Session.",
-        help: ["Confirm Herdr is running, then retry Change Implement."],
-      }),
+  return withResolvedChangeId(command.changeId, environment, "implement", (changeId) =>
+    withChanges(
+      environment,
+      (changes) =>
+        Effect.map(
+          changes.implement(changeId, handoff === undefined ? undefined : handoff.content),
+          implementResult,
+        ),
+      () =>
+        runtimeError({
+          code: "launch_failed",
+          message: "But Why? could not launch the Interactive Session.",
+          help: ["Confirm Herdr is running, then retry Change Implement."],
+        }),
+    ),
   );
 };
 
@@ -464,24 +480,23 @@ const decisionFileError = (error: ImplementationDecisionFileError): CliResult =>
   });
 
 export const runSubmit = (
-  command: { readonly changeId: string },
+  command: { readonly changeId: string | undefined },
   environment: ChangeCommandEnvironment,
-): Effect.Effect<CliResult> => {
-  const loaded = loadChangeSubmit({
-    cwd: environment.cwd,
-    globalConfigPath: environment.globalConfigPath,
-    ...(environment.reviewerAgentRuntime === undefined
-      ? {}
-      : { reviewerAgentRuntime: environment.reviewerAgentRuntime }),
-  });
-  if (!loaded.ok) return Effect.succeed(loadError(loaded.error));
-  return loaded.submit
-    .submit({ changeId: command.changeId, now: environment.now().toISOString() })
-    .pipe(
-      Effect.map((result) => submitResult(result, command.changeId)),
+): Effect.Effect<CliResult> =>
+  withResolvedChangeId(command.changeId, environment, "submit", (changeId) => {
+    const loaded = loadChangeSubmit({
+      cwd: environment.cwd,
+      globalConfigPath: environment.globalConfigPath,
+      ...(environment.reviewerAgentRuntime === undefined
+        ? {}
+        : { reviewerAgentRuntime: environment.reviewerAgentRuntime }),
+    });
+    if (!loaded.ok) return Effect.succeed(loadError(loaded.error));
+    return loaded.submit.submit({ changeId, now: environment.now().toISOString() }).pipe(
+      Effect.map((result) => submitResult(result, changeId)),
       Effect.catchAll((error) => Effect.succeed(repositoryStorageErrorResult(error))),
     );
-};
+  });
 
 type SubmitRecoveryAction =
   | "prepare_change"
@@ -698,26 +713,27 @@ const submitResult = (result: ChangeSubmitResult, changeId: string): CliResult =
 };
 
 export const runCancel = (
-  command: { readonly changeId: string },
+  command: { readonly changeId: string | undefined },
   environment: ChangeCommandEnvironment,
-): Effect.Effect<CliResult> => {
-  return withCancellation(
-    {
-      cwd: environment.cwd,
-      ...(environment.cancellationUseCases === undefined
-        ? {}
-        : { cancellationUseCases: environment.cancellationUseCases }),
-    },
-    (cancellation) =>
-      Effect.map(
-        cancellation.cancelChange({
-          changeId: command.changeId,
-          now: environment.now().toISOString(),
-        }),
-        changeCancelResult,
-      ),
+): Effect.Effect<CliResult> =>
+  withResolvedChangeId(command.changeId, environment, "cancel", (changeId) =>
+    withCancellation(
+      {
+        cwd: environment.cwd,
+        ...(environment.cancellationUseCases === undefined
+          ? {}
+          : { cancellationUseCases: environment.cancellationUseCases }),
+      },
+      (cancellation) =>
+        Effect.map(
+          cancellation.cancelChange({
+            changeId,
+            now: environment.now().toISOString(),
+          }),
+          changeCancelResult,
+        ),
+    ),
   );
-};
 
 const changeCancelResult = (result: ChangeCancellationResult): CliResult => {
   if (result.ok) {

@@ -176,6 +176,10 @@ An unchanged Task-backed Change uses the acceptance-only policy: it runs Accepta
 If Change Submit returns `error.recovery`, follow the exact recovery instruction for that Change without additional user approval.
 If it returns Findings, inspect them, fix the Managed Worktree, commit the fixes, and submit again.
 
+The targeted Change commands infer the Change ID when the canonical current worktree path and Repository Branch match exactly one recorded Managed Worktree.
+If the facts do not match exactly one record, rerun the command with `<change-id>`.
+`by change reconcile` keeps its repository-wide omitted-ID behavior.
+
 The installed command templates are:
 
 ```text
@@ -190,17 +194,17 @@ by task context apply <task-id>
 by task comment <task-id> --file <file>
 by task cancel <task-id> --reason <reason>
 by change start [--task <task-id>] [--base <branch>]
-by change prepare <change-id>
+by change prepare [<change-id>]
 by change list [--all]
-by change show <change-id>
-by change findings <change-id>
-by change validation-runs <change-id>
+by change show [<change-id>]
+by change findings [<change-id>]
+by change validation-runs [<change-id>]
 by validation-run show <validation-run-id>
 by validation-run artifact <validation-run-id> <artifact-ref>
-by change submit <change-id>
-by change cancel <change-id>
+by change submit [<change-id>]
+by change cancel [<change-id>]
 by change reconcile [<change-id>]
-by change implement <change-id> [--handoff-file <path>]
+by change implement [<change-id>] [--handoff-file <path>]
 by change decision add <change-id> --file <path>
 by change blocker raise <change-id> --file <path>
 by change blocker resolve <change-id> --file <path>

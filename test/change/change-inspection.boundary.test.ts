@@ -38,6 +38,60 @@ afterAll(() => {
 const initializedRepoCopy = () => cloneInitializedTestRepository(initializedRepoTemplate);
 
 describe("Change inspection CLI", () => {
+  it.effect("infers the Change from its Managed Worktree and rejects the main checkout", () =>
+    Effect.gen(function* () {
+      const root = yield* initializedRepoCopy();
+      commitButWhyConfigAndRecordDefault(root);
+      const started = yield* runByInProcessEffect(root, ["--output", "json", "change", "start"]);
+      const startedView = JSON.parse(started.stdout) as {
+        readonly change: { readonly id: string };
+        readonly worktreePath: string;
+      };
+
+      const inferred = yield* runByInProcessEffect(startedView.worktreePath, [
+        "--output",
+        "json",
+        "change",
+        "show",
+      ]);
+      yield* withTestRepository(
+        root,
+        Effect.gen(function* () {
+          const repository = yield* RepositorySql;
+          yield* repository.operation(
+            "conflict Change branch fixture",
+            (sql) =>
+              sql`UPDATE changes SET branch_ref = ${"refs/heads/not-the-current-branch"} WHERE id = ${startedView.change.id}`,
+          );
+        }),
+      );
+      const branchConflict = yield* runByInProcessEffect(startedView.worktreePath, [
+        "--output",
+        "json",
+        "change",
+        "show",
+      ]);
+      const explicit = yield* runByInProcessEffect(root, [
+        "--output",
+        "json",
+        "change",
+        "show",
+        startedView.change.id,
+      ]);
+
+      expect(started.status).toBe(0);
+      expect(inferred.status).toBe(0);
+      expect(JSON.parse(inferred.stdout).change.id).toBe(startedView.change.id);
+      expect(branchConflict.status).toBe(1);
+      expect(JSON.parse(branchConflict.stdout)).toMatchObject({
+        error: { code: "change_context_unresolved", repositoryBranch: expect.any(String) },
+        help: [expect.stringContaining("<change-id>")],
+      });
+      expect(explicit.status).toBe(0);
+      expect(JSON.parse(explicit.stdout).change.id).toBe(startedView.change.id);
+    }),
+  );
+
   it.effect("lists open Changes by age, filters closed Changes, and shows taskless facts", () =>
     Effect.gen(function* () {
       const root = yield* initializedRepoCopy();
