@@ -92,7 +92,7 @@ describe("public command documentation", () => {
           const word = words[index];
           const previousWord = words[index - 1] ?? "";
           if (word?.startsWith("<") && !previousWord.includes("--")) {
-            expect(usageLine, documentedCommand).toContain(word.replaceAll(/[\[\]]/gu, ""));
+            expect(usageLine, documentedCommand).toContain(word.replaceAll(/[[\]]/gu, ""));
           }
         }
         if (documentedCommand.includes("...")) {

@@ -693,7 +693,8 @@ const boolean = (values: Record<string, unknown>, key: string): boolean => value
 
 const optionalValue = (value: unknown): unknown => {
   if (!isRecord(value)) return value;
-  return value["_tag"] === "Some" ? value["value"] : undefined;
+  const optional = value as { readonly _tag?: unknown; readonly value?: unknown };
+  return optional._tag === "Some" ? optional.value : undefined;
 };
 
 const taskId = (values: Record<string, unknown>): { readonly taskId: string } => ({

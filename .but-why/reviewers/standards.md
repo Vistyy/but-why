@@ -58,4 +58,4 @@ Complexity scores, assertions, `any`, raw SQL, mocks, and direct source imports 
 Report them only when the concern satisfies every Materiality condition.
 Do not report style preferences, optional refactors, hypothetical future requirements, baseline defects outside the changed scope, or concerns already enforced by deterministic tooling.
 For each Finding, state the governing authority or identified skill rule, concrete harm, and required correction.
-Every Finding must be material even when its severity is low.
+Every Finding must be material.
