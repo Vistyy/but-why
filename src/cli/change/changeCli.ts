@@ -533,7 +533,7 @@ const submitRecovery = (
   retryCommand: `by change submit ${changeId}`,
 });
 
-const submitResult = (result: ChangeSubmitResult, changeId: string): CliResult => {
+export const submitResult = (result: ChangeSubmitResult, changeId: string): CliResult => {
   if (result.ok) {
     if (result.status === "nothing_to_submit") {
       return success({

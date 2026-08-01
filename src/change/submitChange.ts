@@ -345,7 +345,7 @@ const submitChange = (
           return {
             ok: false,
             code: "validation_policy_invalid",
-            ...validationPolicyFailure(policy.error),
+            ...formatValidationPolicyFailure(policy.error),
           } as const;
         }
         if (!policy.resolved.taskBacked) {
@@ -386,7 +386,7 @@ const submitChange = (
       return {
         ok: false,
         code: "validation_policy_invalid",
-        ...validationPolicyFailure(policy.error),
+        ...formatValidationPolicyFailure(policy.error),
       } as const;
     }
     const target = detectPublicationTarget(dependencies, change, candidate);
@@ -422,7 +422,7 @@ type ValidationPolicyFailure =
       readonly details: NonNullable<ReturnType<typeof configFailureDetails>>;
     };
 
-const validationPolicyFailure = (
+export const formatValidationPolicyFailure = (
   error: SubmitRejectionError | GlobalConfigValidationFailed,
 ): ValidationPolicyFailure => {
   switch (error._tag) {
