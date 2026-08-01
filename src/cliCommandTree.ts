@@ -46,7 +46,11 @@ import {
   runArtifactCommand,
   runShowCommand as runValidationRunShowCommand,
 } from "./cli/validationRun/validationRunCli.js";
-import type { OutputFormat } from "./output/structured.js";
+import {
+  hasInvalidJsonSelector,
+  nativeBooleanValue,
+  outputFormatForArgs,
+} from "./output/selection.js";
 import { taskStates, type TaskState } from "./task/lifecycle.js";
 
 class CliEnvironmentContext extends Context.Tag("@but-why/CliEnvironment")<
@@ -548,6 +552,7 @@ export const runCommandTree = (
   Effect.gen(function* () {
     const resultRef = yield* Ref.make<CliResult | undefined>(undefined);
     const helpOutput: string[] = [];
+    const outputFormat = outputFormatForArgs(args);
     const run = Command.run(commandTree, { executable: "by", name: "by", version: packageVersion })(
       ["by", "by", ...args],
     );
@@ -577,7 +582,7 @@ export const runCommandTree = (
                 Layer.succeed(CliResultSink, (result) =>
                   Ref.set(resultRef, {
                     ...result,
-                    outputFormat: outputFormatForArgs(args),
+                    outputFormat,
                   }),
                 ),
               ),
@@ -590,35 +595,7 @@ export const runCommandTree = (
     if (
       initialCommandResult._tag === "Left" &&
       ValidationError.isValidationError(initialCommandResult.left) &&
-      !args.some((argument, index) => {
-        if (argument.startsWith("--json=")) {
-          return !["true", "1", "y", "yes", "on", "false", "0", "n", "no", "off"].includes(
-            argument.slice(7).toLowerCase(),
-          );
-        }
-        if (argument !== "--json") return false;
-        const next = args[index + 1]?.toLowerCase();
-        return (
-          next !== undefined &&
-          !next.startsWith("-") &&
-          ![
-            "init",
-            "task",
-            "change",
-            "validation-run",
-            "true",
-            "1",
-            "y",
-            "yes",
-            "on",
-            "false",
-            "0",
-            "n",
-            "no",
-            "off",
-          ].includes(next)
-        );
-      })
+      !hasInvalidJsonSelector(args)
     ) {
       const fallbackCommandResult = yield* Effect.either(
         runWithConfig(finalCheckBuiltInConfig, true),
@@ -641,7 +618,7 @@ export const runCommandTree = (
         if (missingOperation !== undefined) {
           return {
             ...dependencyOptionRequiredError(missingOperation),
-            outputFormat: outputFormatForArgs(args),
+            outputFormat,
           };
         }
         return {
@@ -650,7 +627,7 @@ export const runCommandTree = (
             message: generatedText(commandResult.left.error),
             help: ["Run `by --help` for generated command help."],
           }),
-          outputFormat: outputFormatForArgs(args),
+          outputFormat,
         };
       }
       return yield* Effect.fail(commandResult.left);
@@ -666,7 +643,7 @@ export const runCommandTree = (
             ? { version: packageVersion }
             : { help: rootHelpCorrection(nativeOutput) },
         ),
-        outputFormat: outputFormatForArgs(args),
+        outputFormat,
       };
     }
     return {
@@ -675,7 +652,7 @@ export const runCommandTree = (
         message: "The command did not produce a result.",
         help: ["Run `by --help` for generated command help."],
       }),
-      outputFormat: outputFormatForArgs(args),
+      outputFormat,
     };
   });
 
@@ -726,48 +703,6 @@ const taskId = (values: Record<string, unknown>): { readonly taskId: string } =>
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null;
 
-export const outputFormatForArgs = (args: readonly string[]): OutputFormat => {
-  for (let index = 0; index < args.length; index += 1) {
-    const argument = args[index];
-    if (argument === "--json") {
-      const value = args[index + 1]?.toLowerCase();
-      if (
-        value === "false" ||
-        value === "0" ||
-        value === "n" ||
-        value === "no" ||
-        value === "off"
-      ) {
-        return "toon";
-      }
-      if (
-        value === undefined ||
-        value.startsWith("-") ||
-        ["init", "task", "change", "validation-run"].includes(value) ||
-        value === "true" ||
-        value === "1" ||
-        value === "y" ||
-        value === "yes" ||
-        value === "on"
-      ) {
-        return "json";
-      }
-      return "json";
-    }
-    if (argument?.startsWith("--json=")) {
-      const value = argument.slice("--json=".length).toLowerCase();
-      return value === "false" ||
-        value === "0" ||
-        value === "n" ||
-        value === "no" ||
-        value === "off"
-        ? "toon"
-        : "json";
-    }
-  }
-  return "toon";
-};
-
 const missingDependencyOperation = (
   args: readonly string[],
   validationMessage: string,
@@ -805,22 +740,12 @@ const validGlobalOptionSyntax = (args: readonly string[]): readonly string[] | u
       continue;
     }
     if (argument.startsWith("--json=")) {
-      if (
-        !["true", "1", "y", "yes", "on", "false", "0", "n", "no", "off"].includes(
-          argument.slice(7).toLowerCase(),
-        )
-      )
-        return undefined;
+      if (nativeBooleanValue(argument.slice("--json=".length)) === undefined) return undefined;
       continue;
     }
     if (argument.includes("=")) return undefined;
     if (argument === "--json") {
-      const next = args[index + 1]?.toLowerCase();
-      if (
-        next !== undefined &&
-        ["true", "1", "y", "yes", "on", "false", "0", "n", "no", "off"].includes(next)
-      )
-        index += 1;
+      if (nativeBooleanValue(args[index + 1]) !== undefined) index += 1;
       continue;
     }
     const option = aliases.get(argument) ?? argument;
