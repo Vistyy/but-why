@@ -33,10 +33,10 @@ export const validateImplementationDecisionInput = (input: {
   if (
     controlCharacter(input.choice) ||
     input.choice.includes("\n") ||
-    /[`*_#[\]]/u.test(input.choice)
+    containsMarkdown(input.choice)
   )
     return { code: "invalid_choice" };
-  if (controlCharacter(input.rationale) || /[`*_#[\]]/u.test(input.rationale))
+  if (controlCharacter(input.rationale) || containsMarkdown(input.rationale))
     return { code: "invalid_rationale" };
   if ([...input.choice].length > 160) return { code: "choice_too_long", maxCharacters: 160 };
   if ([...input.rationale].length > 600) return { code: "rationale_too_long", maxCharacters: 600 };
@@ -58,9 +58,18 @@ export const implementationDecisionMarkdown = (
         )
         .join("\n\n");
 
+const containsMarkdown = (value: string): boolean =>
+  /```|`|\*\*|__|~~|!\[[^\]]*\]\([^)]*\)|\[[^\]]+\]\([^)]*\)|^#{1,6}\s|^>\s/mu.test(value);
+
 const escapeHtml = (value: string): string =>
   value
     .replaceAll("&", "&amp;")
     .replaceAll("<", "&lt;")
     .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;");
+    .replaceAll('"', "&quot;")
+    .replaceAll("\\", "\\\\")
+    .replaceAll("*", "\\*")
+    .replaceAll("_", "\\_")
+    .replaceAll("~", "\\~")
+    .replaceAll("[", "\\[")
+    .replaceAll("]", "\\]");
