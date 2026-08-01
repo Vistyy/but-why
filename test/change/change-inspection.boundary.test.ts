@@ -17,6 +17,8 @@ import { openSqliteTaskPersistence } from "../../src/sqlite/sqliteTaskPersistenc
 import {
   commitButWhyConfigAndRecordDefault,
   createGitRepo,
+  runBy,
+  runBuiltByWithInput,
   runByInProcessEffect,
 } from "../support/by-cli.js";
 import {
@@ -460,6 +462,88 @@ describe("Change inspection CLI", () => {
         ],
       });
       expect(JSON.parse(shown.stdout).implementationDecisions).toHaveLength(1);
+    }),
+  );
+
+  it.effect("records decisions through the public process boundary", () =>
+    Effect.gen(function* () {
+      const root = yield* initializedRepoCopy();
+      const change = yield* createChangeFixture(root, "refs/heads/process-decisions", firstNow);
+      const direct = runBy(
+        root,
+        "--json",
+        "change",
+        "decision",
+        "add",
+        change.id,
+        "--choice",
+        "Use bounded fields",
+        "--rationale",
+        "Use bounded fields.",
+      );
+      const invalid = runBy(
+        root,
+        "--json",
+        "change",
+        "decision",
+        "add",
+        change.id,
+        "--choice",
+        "line\nseparator",
+        "--rationale",
+        "Reason.",
+      );
+      const stdin = runBuiltByWithInput(
+        root,
+        "Read rationale from stdin.\n",
+        {},
+        "--json",
+        "change",
+        "decision",
+        "add",
+        change.id,
+        "--choice",
+        "Use stdin",
+        "--rationale",
+        "-",
+      );
+      expect(direct.status).toBe(0);
+      expect(invalid.status).toBe(2);
+      expect(stdin.status).toBe(0);
+      expect(JSON.parse(direct.stdout).decision).toMatchObject({
+        choice: "Use bounded fields",
+        rationale: "Use bounded fields.",
+      });
+      expect(JSON.parse(stdin.stdout).decision.rationale).toBe("Read rationale from stdin.");
+    }),
+  );
+
+  it.effect("loads a populated historical unstructured decision after migration", () =>
+    Effect.gen(function* () {
+      const root = yield* initializedRepoCopy();
+      const change = yield* createChangeFixture(root, "refs/heads/historical-decisions", firstNow);
+      yield* withTestRepository(
+        root,
+        Effect.gen(function* () {
+          const repository = yield* RepositorySql;
+          yield* repository.operation(
+            "insert historical Implementation Decision",
+            (sql) => sql`
+              INSERT INTO implementation_decisions (id, change_id, recorded_at, content)
+              VALUES ('historical-decision', ${change.id}, ${firstNow}, 'Historical content')
+            `,
+          );
+        }),
+      );
+      const listed = yield* runByInProcessEffect(root, [
+        "--json",
+        "change",
+        "decision",
+        "list",
+        change.id,
+      ]);
+      expect(listed.status).toBe(0);
+      expect(JSON.parse(listed.stdout).decisions).toMatchObject([{ choice: "", rationale: "" }]);
     }),
   );
 
