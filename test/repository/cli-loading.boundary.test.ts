@@ -167,12 +167,34 @@ describe("CLI loading and package boundary", () => {
                 return [key, { samples: values.length, medianMilliseconds }];
               }),
             );
+            const comparisons = Object.fromEntries(
+              Object.entries(currentMeasurements).map(([key, measurement]) => {
+                const [executable, ...commandParts] = key.split(":");
+                const command = commandParts.join(" ");
+                const baseline =
+                  benchmark.medianMilliseconds[command]?.[
+                    executable as "compiledExecutable" | "installedPackageTarball"
+                  ];
+                const current = measurement.medianMilliseconds;
+                return [
+                  key,
+                  {
+                    baseline,
+                    current,
+                    deltaMilliseconds: baseline === undefined ? undefined : current - baseline,
+                    withinTolerance:
+                      baseline === undefined
+                        ? false
+                        : Math.abs(current - baseline) <= benchmark.comparisonToleranceMilliseconds,
+                  },
+                ];
+              }),
+            );
             console.log(
               JSON.stringify({
                 benchmark: "cli-loading",
                 comparisonToleranceMilliseconds: benchmark.comparisonToleranceMilliseconds,
-                baselineMedianMilliseconds: benchmark.medianMilliseconds,
-                currentMeasurements,
+                comparisons,
               }),
             );
           }
