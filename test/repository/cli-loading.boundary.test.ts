@@ -14,7 +14,7 @@ describe("CLI loading and package boundary", () => {
       expect(build.status, build.stderr || build.stdout).toBe(0);
 
       const tree = readFileSync(join(repoRoot, "dist/cliCommandTree.js"), "utf8");
-      expect(tree).not.toMatch(/from \"\.\/cli\/change\//);
+      expect(tree).not.toMatch(/from "\.\/cli\/change\//);
       expect(tree).toContain('import("./cli/change/start.js")');
       expect(tree).toContain('import("./cli/change/submit.js")');
       expect(tree).toContain('import("./cli/task/commands/list.js")');
