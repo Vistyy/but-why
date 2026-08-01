@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
-import { repoRoot } from "../support/by-cli.js";
+import { repoRoot, runBy } from "../support/by-cli.js";
 import { runTestProcess } from "../support/testProcess.js";
 
 describe("CLI loading and package boundary", () => {
@@ -14,7 +14,7 @@ describe("CLI loading and package boundary", () => {
       expect(build.status, build.stderr || build.stdout).toBe(0);
 
       const tree = readFileSync(join(repoRoot, "dist/cliCommandTree.js"), "utf8");
-      expect(tree).not.toMatch(/from "\.\/cli\/change\//);
+      expect(tree).not.toMatch(/from "\.\/cli\/(task|change|validationRun|initCli|dashboard)/);
       expect(tree).toContain('import("./cli/change/start.js")');
       expect(tree).toContain('import("./cli/change/submit.js")');
       expect(tree).toContain('import("./cli/task/commands/list.js")');
@@ -48,16 +48,26 @@ describe("CLI loading and package boundary", () => {
         });
         expect(result.status, result.stderr || result.stdout).toBe(0);
       }
+      const gitInit = runTestProcess("git", ["init", "-q"], { cwd: consumer });
+      expect(gitInit.status, gitInit.stderr || gitInit.stdout).toBe(0);
+      const initialized = runBy(consumer, "init", "--task-prefix", "BY");
+      expect(initialized.status, initialized.stderr || initialized.stdout).toBe(0);
       for (const args of [
         ["task", "list"],
         ["change", "list"],
-        ["validation-run", "show", "missing"],
       ]) {
         const result = runTestProcess(join(consumer, "node_modules/.bin/by"), args, {
           cwd: consumer,
+          env: { GIT_DIR: join(consumer, ".git") },
         });
-        expect(result.status, result.stderr || result.stdout).not.toBe(127);
+        expect(result.status).not.toBe(127);
       }
+      const validationShow = runTestProcess(
+        join(consumer, "node_modules/.bin/by"),
+        ["validation-run", "show", "missing"],
+        { cwd: consumer },
+      );
+      expect(validationShow.status).not.toBe(127);
     } finally {
       rmSync(directory, { recursive: true, force: true });
     }
