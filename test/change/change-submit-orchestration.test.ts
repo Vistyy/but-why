@@ -179,7 +179,7 @@ describe("Change Submit orchestration", () => {
   );
 
   it.effect(
-    "loads Candidate Repo Config after Candidate capture and resolves policy once before validation",
+    "loads the policy baseline before Candidate capture and reviewer config after capture",
     () =>
       Effect.gen(function* () {
         const events: string[] = [];
@@ -216,6 +216,7 @@ describe("Change Submit orchestration", () => {
         expect(result).toMatchObject({ ok: true, status: "published" });
         expect(events).toEqual([
           "reconcile",
+          "load_repo_config",
           "refresh_base",
           "capture",
           "load_repo_config",
@@ -227,7 +228,7 @@ describe("Change Submit orchestration", () => {
       }),
   );
 
-  it.effect("rejects invalid Candidate Repo Config before Validation Run creation", () =>
+  it.effect("rejects invalid Managed Worktree Repo Config before Candidate capture", () =>
     Effect.gen(function* () {
       const events: string[] = [];
       const submit = openChangeSubmit(
@@ -255,7 +256,7 @@ describe("Change Submit orchestration", () => {
         code: "validation_policy_invalid",
         message: "Managed Worktree Repo Config is invalid.",
       });
-      expect(events).toEqual(["reconcile", "capture"]);
+      expect(events).toEqual(["reconcile"]);
     }),
   );
 

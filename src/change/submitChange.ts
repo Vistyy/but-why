@@ -166,6 +166,7 @@ export const openChangeSubmit = (dependencies: {
     taskBacked: boolean,
     repoConfig: RepoConfig,
     worktreePath: string,
+    validationRepoConfig?: RepoConfig,
   ) => CandidateValidationPolicyResolution;
   readonly publicationFor: (cwd: string) => CandidatePublication;
   readonly refreshBase: (
@@ -269,6 +270,14 @@ const submitChange = (
         }
       }
     }
+    const managedRepoConfig = dependencies.loadRepoConfig(change.worktreePath);
+    if (!managedRepoConfig.ok) {
+      return {
+        ok: false,
+        code: "validation_policy_invalid",
+        message: managedRepoConfig.message,
+      } as const;
+    }
     const refreshedBase = dependencies.refreshBase(
       dependencies.repositoryPath,
       change.baseRef,
@@ -299,6 +308,7 @@ const submitChange = (
           true,
           candidateRepoConfig.config,
           change.worktreePath,
+          managedRepoConfig.config,
         );
         if (!policy.ok) {
           return {
@@ -336,6 +346,7 @@ const submitChange = (
       change.acceptanceContext !== null,
       candidateRepoConfig.config,
       change.worktreePath,
+      managedRepoConfig.config,
     );
     if (!policy.ok) {
       return {

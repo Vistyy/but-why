@@ -13,7 +13,7 @@ It contains reusable Agent Profiles and user-level Agent Profile selections.
 
 Both files are validated when But Why reads them.
 
-Change Submit captures a Candidate, then reads the Candidate's tracked Repo Config from the Managed Worktree.
+Change Submit reads the Managed Worktree Repo Config as the non-review policy baseline, captures a Candidate, then reads the Candidate's tracked Repo Config for reviewer policy and Repo Agent Profiles.
 The caller checkout is used only for Local Repository identity, Shared Repository State, and Change selection, so its Repo Config does not supply submission policy.
 Global Config remains resolved from the configured user path.
 

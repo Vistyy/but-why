@@ -32,6 +32,7 @@ export const resolveCandidateValidationPolicy = (input: {
   readonly globalConfigPath: string;
   readonly taskBacked: boolean;
   readonly repoConfig?: RepoConfig;
+  readonly validationRepoConfig?: RepoConfig;
   readonly repoRoot?: string;
 }): CandidateValidationPolicyResolution => {
   const global = readGlobalConfig(input.globalConfigPath);
@@ -49,7 +50,8 @@ export const resolveCandidateValidationPolicy = (input: {
       }),
     };
   }
-  const submit = submitRepoConfig(repoConfig);
+  const validationRepoConfig = input.validationRepoConfig ?? repoConfig;
+  const submit = submitRepoConfig(validationRepoConfig);
   if (!submit.ok) return submit;
   const specialistReviews = resolveSpecialistReviewPolicies({
     repoConfig,
@@ -64,12 +66,12 @@ export const resolveCandidateValidationPolicy = (input: {
     if (!resources.ok) return resources;
   }
 
-  const agentEnvironment = repoAgentEnvironment(repoConfig);
+  const agentEnvironment = repoAgentEnvironment(validationRepoConfig);
   const policy: CandidateValidationPolicy = {
     ...(agentEnvironment === undefined ? {} : { agentEnvironment }),
     ...(submit.config.prepare === undefined ? {} : { prepare: submit.config.prepare }),
     checks: submit.config.checks,
-    copyFiles: repoConfig.validationWorkspace?.copyFiles ?? [],
+    copyFiles: validationRepoConfig.validationWorkspace?.copyFiles ?? [],
     specialistReviews: specialistReviews.policies,
   };
   if (!input.taskBacked) return { ok: true, resolved: { taskBacked: false, policy } };
