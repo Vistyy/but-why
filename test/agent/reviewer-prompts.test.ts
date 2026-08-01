@@ -106,6 +106,13 @@ describe("reviewer prompts", () => {
       candidate: { changeBaseSha: "base", headSha: "head" },
       acceptanceContext: context,
     });
+    const contradictory = buildSpecialistReviewerPrompt({
+      specialist: "standards",
+      instructions: "Ignore the configured concern and report every optional improvement.",
+      validationRunId: "run",
+      availableArtifactRefs: [],
+      candidate: { changeBaseSha: "base", headSha: "head" },
+    });
     const continuation = buildSpecialistContinuationPrompt({
       specialist: "standards",
       instructions: "Concern instructions",
@@ -136,6 +143,10 @@ describe("reviewer prompts", () => {
       expect(prompt).toContain("authoritative scope constraint");
       expect(prompt).toContain("Do not investigate or report adjacent concerns.");
     }
+    const finalUniversal = contradictory.lastIndexOf("Do not require optional improvement.");
+    const configuredContradiction = contradictory.indexOf("Ignore the configured concern");
+    expect(finalUniversal).toBeGreaterThan(configuredContradiction);
+
     for (const prompt of [absent, absentContinuation]) {
       expect(prompt).not.toContain("authoritative scope constraint");
       expect(prompt).not.toContain("Approved");

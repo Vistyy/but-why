@@ -112,6 +112,7 @@ export const buildSpecialistReviewerPrompt = (input: {
   readonly acceptanceContext?: AcceptanceContextSnapshotV1;
 }): string =>
   [
+    universalSpecialistInstructions,
     input.instructions,
     universalSpecialistInstructions,
     reviewerExecutionInstructions,
@@ -150,6 +151,7 @@ export const buildSpecialistContinuationPrompt = (input: {
   readonly acceptanceContext?: AcceptanceContextSnapshotV1;
 }): string =>
   [
+    universalSpecialistInstructions,
     input.instructions,
     universalSpecialistInstructions,
     reviewerExecutionInstructions,

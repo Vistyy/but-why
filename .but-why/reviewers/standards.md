@@ -33,7 +33,7 @@ Report a Standards Finding only when the concern applies to the Candidate diff, 
 
 ## Exclusions
 
-Do not classify an untouched area with a Standards lens.
-Do not treat a personal style preference as a maintainability or architecture defect.
-Do not create a repository-specific historical classification for documentation.
+Exclude purely cosmetic formatting differences unless they violate a documented repository contract.
+Exclude product behavior and security judgments unless the Candidate's maintainability or architecture creates the defect.
+Exclude documentation history classification that is not required by a current repository authority.
 
