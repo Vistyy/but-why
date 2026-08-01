@@ -24,18 +24,12 @@ describe("Change Submit validation-policy errors", () => {
       writeFileSync(join(root, "standards.md"), "Review standards.\n");
       commit(root, "Add reviewer configuration");
 
-      const started = yield* runByInProcessEffect(root, ["--output", "json", "change", "start"]);
+      const started = yield* runByInProcessEffect(root, ["--json", "change", "start"]);
       const startedOutput = JSON.parse(started.stdout);
       const changeId = startedOutput.change.id as string;
       writeFileSync(join(startedOutput.worktreePath, "change.txt"), "changed\n");
       commit(startedOutput.worktreePath, "Make a Change");
-      const submitted = yield* runByInProcessEffect(root, [
-        "--output",
-        "json",
-        "change",
-        "submit",
-        changeId,
-      ]);
+      const submitted = yield* runByInProcessEffect(root, ["--json", "change", "submit", changeId]);
       const output = JSON.parse(submitted.stdout);
 
       expect(submitted.status).toBe(1);
@@ -44,13 +38,7 @@ describe("Change Submit validation-policy errors", () => {
         message: 'Agent Profile "missing-reviewer" in repo scope was not found.',
       });
       expect(output.help).toContain("Fix Repo Config or Global Config, then retry Change Submit.");
-      const shown = yield* runByInProcessEffect(root, [
-        "--output",
-        "json",
-        "change",
-        "show",
-        changeId,
-      ]);
+      const shown = yield* runByInProcessEffect(root, ["--json", "change", "show", changeId]);
       expect(JSON.parse(shown.stdout).currentValidationRun).toBeNull();
     }),
   );
@@ -60,14 +48,14 @@ describe("Change Submit validation-policy errors", () => {
       const root = preparedRepository({});
       const globalConfigPath = join(root, "global-config.json");
       writeFileSync(globalConfigPath, "{ invalid");
-      const started = yield* runByInProcessEffect(root, ["--output", "json", "change", "start"]);
+      const started = yield* runByInProcessEffect(root, ["--json", "change", "start"]);
       const startedOutput = JSON.parse(started.stdout);
       const changeId = startedOutput.change.id as string;
       writeFileSync(join(startedOutput.worktreePath, "change.txt"), "changed\n");
       commit(startedOutput.worktreePath, "Make a Change");
       const submitted = yield* runByInProcessEffect(
         root,
-        ["--output", "json", "change", "submit", changeId],
+        ["--json", "change", "submit", changeId],
         "2026-06-30T12:00:00.000Z",
         { globalConfigPath },
       );

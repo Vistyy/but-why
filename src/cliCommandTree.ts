@@ -752,7 +752,7 @@ export const outputFormatForArgs = (args: readonly string[]): OutputFormat => {
       ) {
         return "json";
       }
-      return "toon";
+      return "json";
     }
     if (argument?.startsWith("--json=")) {
       const value = argument.slice("--json=".length).toLowerCase();
@@ -762,9 +762,7 @@ export const outputFormatForArgs = (args: readonly string[]): OutputFormat => {
         value === "no" ||
         value === "off"
         ? "toon"
-        : value === "true" || value === "1" || value === "y" || value === "yes" || value === "on"
-          ? "json"
-          : "toon";
+        : "json";
     }
   }
   return "toon";

@@ -245,8 +245,9 @@ describe("by CLI", () => {
 
       expect(result.status).toBe(2);
       expect(result.stderr).toBe("");
-      expect(result.stdout).toContain("code: invalid_usage");
-      expect(result.stdout).toContain("Invalid subcommand for by");
+      expect(JSON.parse(result.stdout)).toMatchObject({
+        error: { code: "invalid_usage" },
+      });
     }),
   );
 

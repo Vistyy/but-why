@@ -111,9 +111,7 @@ function outputFormatFor(arguments_) {
       const value = argument.slice("--json=".length).toLowerCase();
       return value === "false" || value === "0" || value === "n" || value === "no" || value === "off"
         ? "toon"
-        : value === "true" || value === "1" || value === "y" || value === "yes" || value === "on"
-          ? "json"
-          : "toon";
+        : "json";
     }
   }
   return "toon";
