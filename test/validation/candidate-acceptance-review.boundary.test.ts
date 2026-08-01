@@ -20,6 +20,7 @@ import type { CandidateValidationPolicySnapshot } from "../../src/change/candida
 import { maxValidationArtifactBytes } from "../../src/change/validationRun/artifactFiles.js";
 import { validationToolingFailureRecord } from "../../src/change/validation/validationToolingFailures.js";
 import { candidateValidationForTest } from "../support/candidateValidation.js";
+import { RepositorySql } from "../../src/sqlite/repositorySql.js";
 import type { RepositoryStorageError } from "../../src/contracts/repositoryStorageError.js";
 import type {
   ReviewerSessionRecord,
@@ -38,6 +39,7 @@ import {
 } from "../support/candidateReadyRepo.js";
 import { cloneInitializedTestRepository } from "../support/initializedRepo.js";
 import { acquireTestWorkspace, releaseTestWorkspace } from "../support/testWorkspace.js";
+import { withTestRepository } from "../support/repository.js";
 
 const now = "2026-07-15T10:00:00.000Z";
 const successorNow = "2026-07-15T10:05:00.000Z";
@@ -238,6 +240,24 @@ layer(acceptanceTemplateLayer)("Task-backed Candidate Acceptance Review", (it) =
       const result = yield* runTaskBackedCandidate(ready);
 
       expect(result).toMatchObject({ ok: true, outcome: "blocked" });
+      const storedSeverity = yield* withTestRepository(
+        ready.repo,
+        Effect.gen(function* () {
+          const repository = yield* RepositorySql;
+          return yield* repository.operation(
+            "inspect reviewer Finding severity storage",
+            (sql) =>
+              sql<{ readonly severity: string | null }>`
+                SELECT severity
+                FROM candidate_validation_findings
+                WHERE validation_run_id = ${result.validationRunId}
+                  AND phase = 'acceptance_review'
+                ORDER BY id
+              `,
+          );
+        }),
+      );
+      expect(storedSeverity).toEqual([{ severity: null }, { severity: null }]);
       expect(yield* validation.listFindings(result.validationRunId)).toHaveLength(2);
       expect(yield* validation.listArtifacts(result.validationRunId)).toEqual(
         expect.arrayContaining([

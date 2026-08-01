@@ -6,6 +6,7 @@ import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
 import { afterAll, beforeAll, describe } from "vitest";
 
+import type { ReviewerAgentRuntime } from "../../src/agent/reviewerAgentRuntime.js";
 import { publicTaskId } from "../../src/task/taskId.js";
 import { openSqliteCandidateCapturePersistence } from "../../src/sqlite/sqliteCandidateCapturePersistence.js";
 import { openSqliteChangePersistence } from "../../src/sqlite/sqliteChangePersistence.js";
@@ -451,6 +452,124 @@ describe("Change inspection CLI", () => {
       });
       expect(JSON.parse(shown.stdout).implementationDecisions).toHaveLength(1);
     }),
+  );
+
+  it.effect(
+    "submits a reviewer Finding through public Change Submit and both inspection views",
+    () =>
+      Effect.gen(function* () {
+        const root = yield* initializedRepoCopy();
+        writeFileSync(
+          join(root, ".but-why", "config.json"),
+          `${JSON.stringify({ taskPrefix: "BY", validation: { checks: [{ id: "quality", command: "true" }] } }, null, 2)}\n`,
+        );
+        commitButWhyConfigAndRecordDefault(root);
+        yield* withTestRepository(
+          root,
+          Effect.gen(function* () {
+            const tasks = yield* openSqliteTaskPersistence("BY");
+            const created = yield* tasks.createTask({
+              title: "Public reviewer Finding",
+              description: "Exercise the public reviewer submission seam.",
+              now: firstNow,
+            });
+            if (!created.ok) throw new Error(created.code);
+            const approved = yield* tasks.approveTask({
+              taskId: publicTaskId("BY-1"),
+              now: secondNow,
+            });
+            if (!approved.ok) throw new Error(approved.code);
+          }),
+        );
+        const started = yield* runByInProcessEffect(root, [
+          "--json",
+          "change",
+          "start",
+          "--task",
+          "BY-1",
+        ]);
+        const startedView = JSON.parse(started.stdout) as {
+          readonly change: { readonly id: string };
+          readonly worktreePath: string;
+        };
+        const changeId = startedView.change.id;
+        writeFileSync(join(startedView.worktreePath, "reviewed.txt"), "reviewed\n");
+        runTestProcessOrThrow("git", ["add", "reviewed.txt"], { cwd: startedView.worktreePath });
+        runTestProcessOrThrow("git", ["commit", "-m", "Add reviewed file"], {
+          cwd: startedView.worktreePath,
+        });
+        writeFileSync(
+          join(root, ".test-global-config.json"),
+          `${JSON.stringify(
+            {
+              defaultAgentProfile: { scope: "global", name: "test" },
+              agentProfiles: {
+                test: { agentRuntime: "pi", runtimeConfig: { model: "test/model" } },
+              },
+            },
+            null,
+            2,
+          )}\n`,
+        );
+        const reviewerAgentRuntime: ReviewerAgentRuntime = {
+          review: () =>
+            Effect.succeed({
+              ok: true as const,
+              report: {
+                findings: [
+                  {
+                    title: "Public reviewer mismatch",
+                    description: "The fake reviewer reports one material mismatch.",
+                    evidence: "The composed public submission returned this Finding.",
+                    files: ["reviewed.txt"],
+                    artifactRefs: [],
+                  },
+                ],
+              },
+              attempts: 1,
+              stdout: "fake reviewer output",
+            }),
+        };
+        const submitted = yield* runByInProcessEffect(
+          root,
+          ["--json", "change", "submit", changeId],
+          commandNow,
+          { reviewerAgentRuntime },
+        );
+        expect(submitted.status, submitted.stdout).toBe(1);
+        const findings = yield* runByInProcessEffect(root, [
+          "--json",
+          "change",
+          "findings",
+          changeId,
+        ]);
+        const findingsView = JSON.parse(findings.stdout) as {
+          readonly validationRun: { readonly id: string } | null;
+        };
+        expect(
+          findingsView.validationRun,
+          `${submitted.stdout}\n${findings.stdout}`,
+        ).not.toBeNull();
+        const validationRun = findingsView.validationRun?.id ?? "";
+        const shown = yield* runByInProcessEffect(root, [
+          "--json",
+          "validation-run",
+          "show",
+          validationRun,
+        ]);
+
+        expect(submitted.status).toBe(1);
+        expect(JSON.parse(findings.stdout).findings).toContainEqual(
+          expect.objectContaining({ title: "Public reviewer mismatch", files: ["reviewed.txt"] }),
+        );
+        expect(findings.stdout).not.toContain('"severity"');
+        expect(JSON.parse(shown.stdout).findings).toContainEqual(
+          expect.objectContaining({
+            evidence: "The composed public submission returned this Finding.",
+          }),
+        );
+        expect(shown.stdout).not.toContain('"severity"');
+      }),
   );
 
   it.effect("projects linked Change progress through Task inspection", () =>
