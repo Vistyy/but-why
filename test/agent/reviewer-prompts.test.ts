@@ -122,13 +122,23 @@ describe("reviewer prompts", () => {
       availableArtifactRefs: [],
       candidate: { changeBaseSha: "base", headSha: "head" },
     });
+    const absentContinuation = buildSpecialistContinuationPrompt({
+      specialist: "standards",
+      instructions: "Concern instructions",
+      validationRunId: "run",
+      availableArtifactRefs: [],
+      candidate: { candidateId: "candidate", changeBaseSha: "base", headSha: "head" },
+      previousFindings: [],
+    });
 
     for (const prompt of [initial, continuation]) {
       expect(prompt).toContain('"title": "Approved"');
       expect(prompt).toContain("authoritative scope constraint");
       expect(prompt).toContain("Do not investigate or report adjacent concerns.");
     }
-    expect(absent).not.toContain("authoritative scope constraint");
-    expect(absent).not.toContain("Approved");
+    for (const prompt of [absent, absentContinuation]) {
+      expect(prompt).not.toContain("authoritative scope constraint");
+      expect(prompt).not.toContain("Approved");
+    }
   });
 });

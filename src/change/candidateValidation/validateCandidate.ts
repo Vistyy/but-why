@@ -62,7 +62,7 @@ export type ValidateCandidateInput = {
   readonly now: string;
 };
 
-type ValidateTaskBackedCandidateInput = {
+type ValidateAcceptanceContextCandidateInput = {
   readonly changeId: string;
   readonly candidateId: string;
   readonly changeBaseSha: string;
@@ -76,7 +76,7 @@ type ValidateTaskBackedCandidateInput = {
   readonly now: string;
 };
 
-type ValidateNoChangeInput = ValidateTaskBackedCandidateInput & {
+type ValidateNoChangeInput = ValidateAcceptanceContextCandidateInput & {
   readonly noChange: true;
 };
 
@@ -129,7 +129,7 @@ export type CandidateValidationService = {
     input: ValidateCandidateInput,
   ) => Effect.Effect<ValidateCandidateResult, RepositoryStorageError>;
   readonly validateAcceptanceContextCandidate: (
-    input: ValidateTaskBackedCandidateInput,
+    input: ValidateAcceptanceContextCandidateInput,
   ) => Effect.Effect<ValidateCandidateResult, RepositoryStorageError>;
   readonly validateNoChange: (
     input: ValidateNoChangeInput,
@@ -169,7 +169,7 @@ const makeCandidateValidation = (dependencies: {
   readonly reviewerSessionsRoot?: string;
 }): CandidateValidationService => {
   const validate = Effect.fn("CandidateValidation.validate")(function* (
-    input: ValidateCandidateInput | ValidateTaskBackedCandidateInput | ValidateNoChangeInput,
+    input: ValidateCandidateInput | ValidateAcceptanceContextCandidateInput | ValidateNoChangeInput,
   ) {
     const policy =
       "acceptanceContext" in input
@@ -344,7 +344,7 @@ const runCandidatePhases = (
     readonly sessionStore?: ReviewerSessionStore;
     readonly reviewerSessionsRoot?: string;
   },
-  input: ValidateCandidateInput | ValidateTaskBackedCandidateInput | ValidateNoChangeInput,
+  input: ValidateCandidateInput | ValidateAcceptanceContextCandidateInput | ValidateNoChangeInput,
   validationRunId: string,
   activeWorkspace: {
     readonly sandbox: Pick<Sandbox, "exec" | "run">;
@@ -516,7 +516,9 @@ const acceptanceOnlyPolicy = (
   acceptanceReview: policy.acceptanceReview,
 });
 
-const candidateIdentity = (input: ValidateCandidateInput | ValidateTaskBackedCandidateInput) => ({
+const candidateIdentity = (
+  input: ValidateCandidateInput | ValidateAcceptanceContextCandidateInput,
+) => ({
   candidateId: input.candidateId,
   changeBaseSha: input.changeBaseSha,
   headSha: input.headSha,

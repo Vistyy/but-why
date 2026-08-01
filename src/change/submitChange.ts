@@ -352,7 +352,8 @@ const submitChange = (
           return {
             ok: false,
             code: "validation_policy_invalid",
-            message: "Task-backed no-change submission requires a Task-backed validation policy.",
+            message:
+              "Task-backed no-change submission requires an Acceptance Context validation policy.",
           } as const;
         }
         return yield* validateAndCompleteNoChange(
@@ -464,7 +465,8 @@ const validateAndCompleteNoChange = (
       return {
         ok: false,
         code: "validation_policy_invalid",
-        message: "Task-backed no-change submission requires a Task-backed validation policy.",
+        message:
+          "Task-backed no-change submission requires an Acceptance Context validation policy.",
       } as const;
     }
     const task = yield* dependencies.taskPersistence.getTaskById(change.taskId);

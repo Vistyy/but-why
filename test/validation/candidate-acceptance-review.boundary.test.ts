@@ -903,7 +903,7 @@ layer(acceptanceTemplateLayer)("Task-backed Candidate Acceptance Review", (it) =
           expect(input.prompt).toContain(`${input.reviewer} review instructions`);
           expect(input.prompt).toContain("/checks/quality/");
           expect(input.prompt).not.toContain(ready.captured.candidateId);
-          expect(input.prompt).not.toContain(acceptanceContext.description);
+          expect(input.prompt).toContain(acceptanceContext.description);
         }
         expect(
           (yield* ready.validation.listFindings(result.validationRunId)).map((item) => item.title),
@@ -1047,7 +1047,7 @@ layer(acceptanceTemplateLayer)("Task-backed Candidate Acceptance Review", (it) =
         "beta-session",
       ]);
       for (const [input] of review.mock.calls.filter(([call]) => call.reviewer !== "acceptance")) {
-        expect(input.prompt).not.toContain(acceptanceContext.description);
+        expect(input.prompt).toContain(acceptanceContext.description);
         if (input.reviewer === "alpha")
           expect(input.prompt).not.toContain("beta review instructions");
         if (input.reviewer === "beta")
@@ -1230,6 +1230,7 @@ const runReviewPhases = (
           headSha: captured.headSha,
         },
         policies: policy.specialistReviews,
+        acceptanceContext,
         ...(policy.agentEnvironment === undefined
           ? {}
           : { agentEnvironment: policy.agentEnvironment }),

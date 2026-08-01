@@ -19,9 +19,9 @@ import {
   type SqliteChangePublicationRow,
 } from "./sqliteChangePublication.js";
 import {
-  decodeSqliteTaskContextSnapshot,
-  encodeSqliteTaskContextSnapshot,
-} from "./sqliteTaskContextSnapshot.js";
+  decodeSqliteAcceptanceContextSnapshot,
+  encodeSqliteAcceptanceContextSnapshot,
+} from "./sqliteAcceptanceContextSnapshot.js";
 
 const columns = [
   "id",
@@ -132,7 +132,7 @@ const create = (sql: SqlClient.SqlClient, input: CreateChangeStartInput) =>
       ) VALUES (
         ${input.id}, ${input.repositoryCommonDirectory}, ${input.branchRef}, ${input.baseRef},
         ${input.baseRemoteUrl}, ${input.taskId ?? null}, ${input.startingCommit}, ${input.worktreePath},
-        ${acceptanceContext === null ? null : encodeSqliteTaskContextSnapshot(acceptanceContext)},
+        ${acceptanceContext === null ? null : encodeSqliteAcceptanceContextSnapshot(acceptanceContext)},
         'pending', ${input.prepare?.command ?? null}, ${input.prepare?.timeoutSeconds ?? null},
         NULL, 'open', NULL, ${input.now}, ${input.now}, NULL
       )
@@ -246,7 +246,7 @@ const mapRow = (row: ChangeStartRow | undefined) => {
       acceptanceContext:
         row.acceptanceContext === null
           ? null
-          : decodeSqliteTaskContextSnapshot(row.acceptanceContext),
+          : decodeSqliteAcceptanceContextSnapshot(row.acceptanceContext),
       readiness,
       prepare:
         row.prepareCommand === null || row.prepareTimeoutSeconds === null

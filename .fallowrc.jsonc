@@ -44,7 +44,7 @@
           "src/change/candidate/candidate.ts",
           "src/change/change.ts",
           "src/change/validationRun/cleanup.ts",
-          "src/change/validationRun/taskContextSnapshot.ts",
+          "src/change/validationRun/acceptanceContextSnapshot.ts",
           "src/change/validationRun/toolingErrorKind.ts",
           "src/change/validationRun/validationRun.ts",
           "src/task/lifecycle.ts",
