@@ -1,4 +1,4 @@
-import { Effect } from "effect";
+import type { Effect } from "effect";
 
 import { runCommandTree } from "./cliCommandTree.js";
 import { runtimeError, type CliResult } from "./cliResults.js";
