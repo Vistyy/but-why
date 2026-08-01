@@ -593,16 +593,32 @@ const decodeRun = (row: CandidateValidationRunRow) =>
   });
 
 const decodeImplementationDecisions = (value: string): readonly ImplementationDecision[] => {
-  const decisions = JSON.parse(value) as readonly Record<string, unknown>[];
-  return decisions.map((decision) => ({
-    id: String(decision["id"]),
-    changeId: String(decision["changeId"]),
-    sequence: Number(decision["sequence"]),
-    recordedAt: String(decision["recordedAt"]),
-    choice: String(decision["choice"] ?? decision["content"] ?? ""),
-    rationale: String(decision["rationale"] ?? ""),
-  }));
+  const parsed: unknown = JSON.parse(value);
+  if (!Array.isArray(parsed)) throw new Error("Implementation Decisions must be an array");
+  return parsed.map((value) => {
+    if (!isRecord(value)) throw new Error("Implementation Decision must be an object");
+    const id = value["id"];
+    const changeId = value["changeId"];
+    const sequence = value["sequence"];
+    const recordedAt = value["recordedAt"];
+    const choice = value["choice"] ?? value["content"];
+    const rationale = value["rationale"] ?? "";
+    if (
+      typeof id !== "string" ||
+      typeof changeId !== "string" ||
+      typeof sequence !== "number" ||
+      !Number.isFinite(sequence) ||
+      typeof recordedAt !== "string" ||
+      typeof choice !== "string" ||
+      typeof rationale !== "string"
+    )
+      throw new Error("Implementation Decision fields are invalid");
+    return { id, changeId, sequence, recordedAt, choice, rationale };
+  });
 };
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
 
 const decodeFinding = (row: CandidateValidationFindingRow) =>
   Effect.try({
