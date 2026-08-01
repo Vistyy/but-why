@@ -1,4 +1,4 @@
-// fallow-ignore-file unused-type duplicate-export -- command descriptor types are consumed by dynamic handlers
+// fallow-ignore-file duplicate-export -- command descriptor types are consumed by dynamic handlers
 
 import type { CancellationUseCases } from "../../change/cancelChange.js";
 import type { InteractiveSessionHost } from "../../change/interactiveSessionHost.js";
@@ -15,9 +15,3 @@ export type ChangeCommandEnvironment = {
   readonly interactiveSessionPath?: string;
   readonly cancellationUseCases?: CancellationUseCases;
 };
-export type ChangeDecisionCommand =
-  | { readonly action: "add"; readonly changeId: string; readonly file: string }
-  | { readonly action: "list"; readonly changeId: string };
-export type ChangeBlockerCommand =
-  | { readonly action: "raise" | "resolve"; readonly changeId: string; readonly file: string }
-  | { readonly action: "list"; readonly changeId: string };

@@ -64,3 +64,20 @@ Fallow and ast-grep own their named structural contracts.
 
 `just health` produces advisory coverage, complexity, duplication, and code-health reports.
 Advisory findings become implementation work only when repository evidence shows a concrete defect or maintenance cost.
+## CLI loading verification
+
+The production CLI keeps the complete Effect CLI descriptor tree in `src/cliCommandTree.ts` and loads command implementations through literal native dynamic imports after command selection.
+
+The release-package boundary test builds the production output, traverses static imports from `dist/main.js`, checks every emitted dynamic target in the packed tarball, installs that tarball in a clean temporary directory, and runs installed Task, Change, and Validation Run commands.
+
+Comparative cold-start evidence uses randomized order and 15 fresh processes per command.
+
+The current compiled executable and installed Candidate tarball medians were:
+
+- `--help`: 606.438 ms current, 610.236 ms Candidate.
+- `--version`: 600.649 ms current, 604.174 ms Candidate.
+- `task list`: 660.635 ms current, 664.461 ms Candidate.
+- `change list`: 713.764 ms current, 725.289 ms Candidate.
+- `validation-run show`: 636.052 ms current, 649.362 ms Candidate.
+
+These measurements are comparative evidence and are not a latency budget.

@@ -11,14 +11,7 @@ import {
 } from "../../cliResults.js";
 import { loadCandidateValidationRunInspection } from "../../change/candidateValidation/loadCandidateValidationRunInspection.js";
 import { candidateValidationArtifactContentView } from "../validationRunViews.js";
-export type ValidationRunCommandEnvironment = { readonly cwd: string; readonly now: () => Date };
-const notFound = (id: string): CliResult =>
-  runtimeError({
-    code: "validation_run_not_found",
-    message: `Validation Run was not found: ${id}`,
-    details: { validationRunId: id },
-    help: ["Run `by change show <change-id>` to inspect known Candidates and Validation Runs."],
-  });
+import { notFound, type ValidationRunCommandEnvironment } from "./validationRunSupport.js";
 const artifactFailure = (code: string, id: string, ref: string): CliResult =>
   code === "validation_run_not_found"
     ? notFound(id)
