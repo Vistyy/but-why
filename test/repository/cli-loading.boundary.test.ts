@@ -14,6 +14,11 @@ vi.setConfig({ testTimeout: 360_000 });
 type LoadingBenchmark = {
   method: { processesPerCommand: number; order: string; comparison: string[] };
   commands: readonly string[][];
+  comparisonToleranceMilliseconds: number;
+  medianMilliseconds: Record<
+    string,
+    { compiledExecutable: number; installedPackageTarball: number }
+  >;
 };
 
 const cliLoadingBenchmarkEnabled =
@@ -151,20 +156,23 @@ describe("CLI loading and package boundary", () => {
               }
               measurements.set(key, values);
             }
+            const currentMeasurements = Object.fromEntries(
+              [...measurements].map(([key, values]) => {
+                const sorted = [...values].sort((left, right) => left - right);
+                const middle = Math.floor(sorted.length / 2);
+                const medianMilliseconds =
+                  sorted.length % 2 === 0
+                    ? ((sorted[middle - 1] ?? 0) + (sorted[middle] ?? 0)) / 2
+                    : (sorted[middle] ?? 0);
+                return [key, { samples: values.length, medianMilliseconds }];
+              }),
+            );
             console.log(
               JSON.stringify({
                 benchmark: "cli-loading",
-                measurements: Object.fromEntries(
-                  [...measurements].map(([key, values]) => {
-                    const sorted = [...values].sort((left, right) => left - right);
-                    const middle = Math.floor(sorted.length / 2);
-                    const medianMilliseconds =
-                      sorted.length % 2 === 0
-                        ? ((sorted[middle - 1] ?? 0) + (sorted[middle] ?? 0)) / 2
-                        : (sorted[middle] ?? 0);
-                    return [key, { samples: values.length, medianMilliseconds }];
-                  }),
-                ),
+                comparisonToleranceMilliseconds: benchmark.comparisonToleranceMilliseconds,
+                baselineMedianMilliseconds: benchmark.medianMilliseconds,
+                currentMeasurements,
               }),
             );
           }
