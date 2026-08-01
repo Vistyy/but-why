@@ -50,9 +50,12 @@ export const runAbandonCommand = (
                   ? "Another Submission, cancellation, or abandonment already owns this Change."
                   : "Validation Run resources could not be cleaned up, so abandonment is incomplete.",
               details: result,
-              help: [
-                "Stop every process, repair the reported resources, then retry Validation Run Abandon.",
-              ],
+              help:
+                result.status === "submission_in_progress"
+                  ? ["Wait for the other operation to finish, then retry Validation Run Abandon."]
+                  : [
+                      `Stop every process, repair the reported resources, then retry \`by validation-run abandon ${command.validationRunId} --reason <reason>\`.`,
+                    ],
             }),
     ),
     Effect.catchAll((error) => Effect.succeed(repositoryStorageErrorResult(error))),
