@@ -1,7 +1,7 @@
 ---
 status: provisional
 artifact_kind: working-plan
-remove_when: accepted simplification work is recorded as approved Tasks and applicable current documentation
+remove_when: every candidate has an authoritative disposition, accepted simplification work is complete, and retained behavior is recorded in approved Tasks and applicable current documentation
 ---
 
 # Codebase simplification audit
@@ -20,6 +20,12 @@ The audit must identify simpler designs that preserve every required observable 
 Start this audit after the verification portfolio migration and closure are complete.
 Use the accepted Material Risks, Verification Claims, and evidence ownership as the behavioral boundary for simplification.
 Complete each approved shared-foundation simplification that Planning would otherwise consume before Task Submission Slice 3.
+
+The Implementation Advisor visible pilot may complete before the verification portfolio migration and this audit.
+When the audit starts, treat the implemented advisor, its separate Agent Profile selection, and its Pi extension integration as current-system inputs.
+The audit may identify shared deterministic utilities between the advisor and `continue-change` only when the implemented duplication has a concrete maintenance cost.
+Any simplification must preserve separate advice and liveness ownership, fail-open advisor behavior, bounded read-only tools, and non-waking delivery.
+The audit has no dependency that blocks Implementation Advisor planning or implementation.
 
 The pre-v1 Shared Repository State reset remains a separate optional decision.
 Evaluate it only after Planning Slices 3 and 4 and other active work are complete, BY-53 provides validated Task Archives, and the operator is ready to decide whether to discard non-Task history.

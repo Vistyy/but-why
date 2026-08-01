@@ -4,7 +4,7 @@ This file is the repository's explicit exception for unresolved product and arch
 It helps maintainers decide whether later evidence warrants formal design work.
 These questions do not approve implementation, establish priority, or define active work.
 Current implementation work and accepted intent belong in SQLite Tasks.
-Settled behavior belongs in `CONTEXT.md`, accepted ADRs, and current system documentation.
+Settled behavior belongs in the contexts linked from `CONTEXT-MAP.md`, accepted ADRs, and current system documentation.
 
 ## How should reviewer quality be measured?
 
