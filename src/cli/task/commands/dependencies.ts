@@ -1,10 +1,11 @@
 import { Effect } from "effect";
 
 import type { CliResult } from "../../../cliResults.js";
-import { runtimeError, success } from "../../../cliResults.js";
+import { runtimeError, success, usageError } from "../../../cliResults.js";
 import { parseCliTaskIdValue } from "../../../cliTaskId.js";
 import type { PublicTaskId } from "../../../task/taskId.js";
-import type { RepoReplaceTaskDependenciesResult } from "../../../task/taskUseCases.js";
+import type { RepoEditTaskDependenciesResult } from "../../../task/taskUseCases.js";
+import type { TaskDependencyOperation } from "../../../task/taskStore.js";
 import {
   resolveTaskId,
   withTasks,
@@ -12,15 +13,40 @@ import {
   type TaskCommandEnvironment,
 } from "../taskCliSupport.js";
 
-export type TaskDependenciesSetCommand = {
+export type TaskDependenciesCommand = {
+  readonly operation: TaskDependencyOperation;
   readonly taskId: string;
   readonly dependsOn: readonly string[];
 };
 
+export const dependencyOptionRequiredError = (operation: "add" | "remove" | "replace"): CliResult =>
+  usageError({
+    code: operation === "replace" ? "replace_requires_dependency" : "depends_on_required",
+    message:
+      operation === "replace"
+        ? "The replace operation requires at least one prerequisite."
+        : `The ${operation} operation requires at least one --depends-on value.`,
+    help: [
+      operation === "replace"
+        ? "Use `by task dependencies clear <task-id>` to remove all prerequisites."
+        : `Use \`by task dependencies ${operation} <task-id> --depends-on <task-id>\`.`,
+    ],
+  });
+
 export const runDependenciesCommand = (
-  command: TaskDependenciesSetCommand,
+  command: TaskDependenciesCommand,
   environment: TaskCommandEnvironment,
 ): Effect.Effect<CliResult> => {
+  if (command.operation === "replace" && command.dependsOn.length === 0) {
+    return Effect.succeed(dependencyOptionRequiredError("replace"));
+  }
+  if (
+    (command.operation === "add" || command.operation === "remove") &&
+    command.dependsOn.length === 0
+  ) {
+    return Effect.succeed(dependencyOptionRequiredError(command.operation));
+  }
+
   const parsedDependent = parseCliTaskIdValue(command.taskId);
   if (!parsedDependent.ok) return Effect.succeed(parsedDependent.result);
 
@@ -36,18 +62,29 @@ export const runDependenciesCommand = (
       prerequisiteTaskIds.push(prerequisite.taskId);
     }
     return Effect.map(
-      tasks.replaceTaskDependencies(dependent.taskId, prerequisiteTaskIds),
+      tasks.editTaskDependencies({
+        taskId: dependent.taskId,
+        operation: command.operation,
+        prerequisiteTaskIds,
+      }),
       (result) =>
         result.ok
-          ? success({ task: { id: result.task.id, prerequisites: result.task.prerequisites } })
-          : replaceError(dependent.taskId, result),
+          ? success({
+              task: { id: result.task.id },
+              operation: result.operation,
+              added: result.added,
+              removed: result.removed,
+              unchanged: result.unchanged,
+              prerequisites: result.task.prerequisites,
+            })
+          : dependencyError(dependent.taskId, result),
     );
   });
 };
 
-const replaceError = (
+const dependencyError = (
   taskId: PublicTaskId,
-  result: Exclude<RepoReplaceTaskDependenciesResult, { readonly ok: true }>,
+  result: Exclude<RepoEditTaskDependenciesResult, { readonly ok: true }>,
 ): CliResult => {
   if (result.code === "task_not_found") return taskNotFound(taskId);
 
@@ -61,19 +98,21 @@ const replaceError = (
 
   return runtimeError({
     code: result.code,
-    message: replaceErrorMessage(taskId, result),
+    message: dependencyErrorMessage(taskId, result),
     details,
     help: [
       result.code === "dependencies_locked"
         ? "Dependency edits are available only before Change Start."
-        : "Use existing Tasks and keep the direct dependency graph acyclic.",
+        : result.code === "replace_requires_dependency"
+          ? "Use `by task dependencies clear <task-id>` to remove all prerequisites."
+          : "Use existing Tasks and keep the direct dependency graph acyclic.",
     ],
   });
 };
 
-const replaceErrorMessage = (
+const dependencyErrorMessage = (
   taskId: PublicTaskId,
-  result: Exclude<RepoReplaceTaskDependenciesResult, { readonly ok: true }>,
+  result: Exclude<RepoEditTaskDependenciesResult, { readonly ok: true }>,
 ): string => {
   switch (result.code) {
     case "task_not_found":
@@ -86,6 +125,8 @@ const replaceErrorMessage = (
       return `Dependency was provided more than once: ${result.taskId ?? ""}`;
     case "dependency_cycle":
       return "Task dependencies must not contain a cycle.";
+    case "replace_requires_dependency":
+      return "The replace operation requires at least one prerequisite.";
     case "dependencies_locked":
       return `Dependencies for task ${taskId} are locked after Start.`;
   }

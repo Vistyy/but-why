@@ -6,6 +6,7 @@ import { Effect } from "effect";
 import { describe } from "vitest";
 
 import type { TaskUseCases } from "../../src/task/taskUseCases.js";
+import { publicTaskId } from "../../src/task/taskId.js";
 import { runByInProcessEffect } from "../support/by-cli.js";
 import { createInitializedRepo } from "../support/initializedRepo.js";
 import { fakeTaskUseCases } from "../support/taskUseCases.js";
@@ -81,6 +82,209 @@ const dependencyErrorTaskUseCases = (overrides: Partial<TaskUseCases>): TaskUseC
 });
 
 describe("Task dependency CLI", () => {
+  it.effect("applies explicit dependency operations and reports retry-safe changes", () =>
+    Effect.gen(function* () {
+      const root = createInitializedRepo();
+      yield* createTask(root, "First");
+      yield* createTask(root, "Second");
+      yield* createTask(root, "Third");
+      yield* createTask(root, "Dependent", ["BY-1"]);
+
+      const added = yield* runByInProcessEffect(
+        root,
+        [
+          "--output",
+          "json",
+          "task",
+          "dependencies",
+          "add",
+          "BY-4",
+          "--depends-on",
+          "BY-1",
+          "--depends-on",
+          "BY-2",
+        ],
+        now,
+      );
+      expect(added.status).toBe(0);
+      expect(JSON.parse(added.stdout)).toMatchObject({
+        operation: "add",
+        added: ["BY-2"],
+        removed: [],
+        unchanged: ["BY-1"],
+        prerequisites: [{ id: "BY-1" }, { id: "BY-2" }],
+      });
+
+      const removed = yield* runByInProcessEffect(
+        root,
+        [
+          "--output",
+          "json",
+          "task",
+          "dependencies",
+          "remove",
+          "BY-4",
+          "--depends-on",
+          "BY-2",
+          "--depends-on",
+          "BY-3",
+        ],
+        now,
+      );
+      expect(removed.status).toBe(0);
+      expect(JSON.parse(removed.stdout)).toMatchObject({
+        operation: "remove",
+        added: [],
+        removed: ["BY-2"],
+        unchanged: ["BY-3"],
+        prerequisites: [{ id: "BY-1" }],
+      });
+
+      const invalidBatch = yield* runByInProcessEffect(
+        root,
+        [
+          "--output",
+          "json",
+          "task",
+          "dependencies",
+          "add",
+          "BY-4",
+          "--depends-on",
+          "BY-3",
+          "--depends-on",
+          "BY-404",
+        ],
+        now,
+      );
+      expect(invalidBatch.status).toBe(1);
+      expect(JSON.parse(invalidBatch.stdout)).toMatchObject({
+        error: { code: "dependency_unknown_task" },
+      });
+      const afterInvalidBatch = yield* runByInProcessEffect(
+        root,
+        ["--output", "json", "task", "show", "BY-4"],
+        now,
+      );
+      expect(JSON.parse(afterInvalidBatch.stdout)).toMatchObject({
+        task: { prerequisites: [{ id: "BY-1" }] },
+      });
+
+      const missingReplace = yield* runByInProcessEffect(
+        root,
+        ["--output", "json", "task", "dependencies", "replace", "BY-4"],
+        now,
+      );
+      expect(missingReplace.status).toBe(2);
+      expect(JSON.parse(missingReplace.stdout)).toMatchObject({
+        error: { code: "replace_requires_dependency" },
+        help: ["Use `by task dependencies clear <task-id>` to remove all prerequisites."],
+      });
+
+      for (const operation of ["add", "remove"] as const) {
+        const missingDependency = yield* runByInProcessEffect(
+          root,
+          ["--output", "json", "task", "dependencies", operation, "BY-4"],
+          now,
+        );
+        expect(missingDependency.status).toBe(2);
+        expect(JSON.parse(missingDependency.stdout)).toMatchObject({
+          error: { code: "depends_on_required" },
+          help: [`Use \`by task dependencies ${operation} <task-id> --depends-on <task-id>\`.`],
+        });
+      }
+
+      const invalidReplace = yield* runByInProcessEffect(
+        root,
+        ["--output", "json", "task", "dependencies", "replace", "BY-4", "--bad"],
+        now,
+      );
+      expect(invalidReplace.status).toBe(2);
+      expect(JSON.parse(invalidReplace.stdout)).toMatchObject({
+        error: { code: "invalid_usage" },
+      });
+
+      const invalidShortReplace = yield* runByInProcessEffect(
+        root,
+        ["--output", "json", "task", "dependencies", "replace", "BY-4", "-x"],
+        now,
+      );
+      expect(invalidShortReplace.status).toBe(2);
+      expect(JSON.parse(invalidShortReplace.stdout)).toMatchObject({
+        error: { code: "invalid_usage" },
+      });
+
+      const validTrailingGlobal = yield* runByInProcessEffect(
+        root,
+        ["task", "dependencies", "replace", "BY-4", "--output", "json"],
+        now,
+      );
+      expect(validTrailingGlobal.status).toBe(2);
+      expect(JSON.parse(validTrailingGlobal.stdout)).toMatchObject({
+        error: { code: "replace_requires_dependency" },
+      });
+
+      const validLeadingGlobal = yield* runByInProcessEffect(
+        root,
+        ["task", "dependencies", "replace", "--output", "json", "BY-4"],
+        now,
+      );
+      expect(validLeadingGlobal.status).toBe(2);
+      expect(JSON.parse(validLeadingGlobal.stdout)).toMatchObject({
+        error: { code: "replace_requires_dependency" },
+      });
+
+      for (const extraArgument of ["extra", "foo", "bar"] as const) {
+        const extraPositional = yield* runByInProcessEffect(
+          root,
+          ["--output", "json", "task", "dependencies", "replace", "BY-4", extraArgument],
+          now,
+        );
+        expect(extraPositional.status).toBe(2);
+        expect(JSON.parse(extraPositional.stdout)).toMatchObject({
+          error: { code: "invalid_usage" },
+        });
+      }
+
+      for (const invalidOption of [
+        "--output=xml",
+        "--output=json",
+        "-o=json",
+        "--output",
+        "--log-level",
+      ] as const) {
+        const malformedGlobal = yield* runByInProcessEffect(
+          root,
+          ["--output", "json", "task", "dependencies", "replace", "BY-4", invalidOption],
+          now,
+        );
+        expect(malformedGlobal.status).toBe(2);
+        expect(JSON.parse(malformedGlobal.stdout)).toMatchObject({
+          error: { code: "invalid_usage" },
+        });
+      }
+
+      const cleared = yield* runByInProcessEffect(
+        root,
+        ["--output", "json", "task", "dependencies", "clear", "BY-4"],
+        now,
+      );
+      expect(cleared.status).toBe(0);
+      expect(JSON.parse(cleared.stdout)).toMatchObject({
+        operation: "clear",
+        added: [],
+        removed: ["BY-1"],
+        unchanged: [],
+        prerequisites: [],
+      });
+      const shown = yield* runByInProcessEffect(
+        root,
+        ["--output", "json", "task", "show", "BY-4"],
+        now,
+      );
+      expect(JSON.parse(shown.stdout)).toMatchObject({ task: { prerequisites: [] } });
+    }),
+  );
+
   it.effect("passes repeated dependency options through the in-process CLI", () =>
     Effect.gen(function* () {
       const root = createTestWorkspace();
@@ -134,7 +338,7 @@ describe("Task dependency CLI", () => {
           "json",
           "task",
           "dependencies",
-          "set",
+          "replace",
           "BY-3",
           "--depends-on",
           "BY-1",
@@ -144,10 +348,14 @@ describe("Task dependency CLI", () => {
         now,
         {
           taskUseCases: fakeTaskUseCases({
-            replaceTaskDependencies: (_taskId, prerequisiteTaskIds) => {
-              replacementDependencies = prerequisiteTaskIds;
+            editTaskDependencies: (input) => {
+              replacementDependencies = input.prerequisiteTaskIds;
               return {
                 ok: true,
+                operation: "replace",
+                added: [],
+                removed: [],
+                unchanged: [publicTaskId("BY-1"), publicTaskId("BY-2")],
                 task: {
                   id: "BY-3",
                   title: "Dependent",
@@ -173,13 +381,15 @@ describe("Task dependency CLI", () => {
       expect(replacement.status).toBe(0);
       expect(replacementDependencies).toEqual(["BY-1", "BY-2"]);
       expect(JSON.parse(replacement.stdout)).toEqual({
-        task: {
-          id: "BY-3",
-          prerequisites: [
-            { id: "BY-1", title: "First", state: "new" },
-            { id: "BY-2", title: "Second", state: "new" },
-          ],
-        },
+        task: { id: "BY-3" },
+        operation: "replace",
+        added: [],
+        removed: [],
+        unchanged: ["BY-1", "BY-2"],
+        prerequisites: [
+          { id: "BY-1", title: "First", state: "new" },
+          { id: "BY-2", title: "Second", state: "new" },
+        ],
       });
     }),
   );
@@ -217,141 +427,148 @@ describe("Task dependency CLI", () => {
     }),
   );
 
-  it.effect("reports reachable dependency rejections without changing the graph", () =>
-    Effect.gen(function* () {
-      const root = createInitializedRepo();
-      yield* createTask(root, "First");
-      yield* createTask(root, "Second", ["BY-1"]);
-      yield* createTask(root, "Third", ["BY-2"]);
-      const taskIds = ["BY-1", "BY-2", "BY-3"];
-      const before = yield* readGraph(root, taskIds);
+  it.effect(
+    "reports reachable dependency rejections without changing the graph",
+    () =>
+      Effect.gen(function* () {
+        const root = createInitializedRepo();
+        yield* createTask(root, "First");
+        yield* createTask(root, "Second", ["BY-1"]);
+        yield* createTask(root, "Third", ["BY-2"]);
+        const taskIds = ["BY-1", "BY-2", "BY-3"];
+        const before = yield* readGraph(root, taskIds);
 
-      for (const testCase of [
-        {
-          title: "Unknown",
-          dependencies: ["BY-404"],
+        for (const testCase of [
+          {
+            title: "Unknown",
+            dependencies: ["BY-404"],
+            error: {
+              code: "dependency_unknown_task",
+              message: "Dependency Task was not found: BY-404",
+              taskId: "BY-404",
+            },
+          },
+          {
+            title: "Self",
+            dependencies: ["BY-4"],
+            error: {
+              code: "dependency_self",
+              message: "A Task cannot depend on itself.",
+              taskId: "BY-4",
+            },
+          },
+          {
+            title: "Duplicate",
+            dependencies: ["BY-1", "BY-1"],
+            error: {
+              code: "dependency_duplicate",
+              message: "Dependency was provided more than once: BY-1",
+              taskId: "BY-1",
+            },
+          },
+        ] as const) {
+          const descriptionFile = `${testCase.title.toLowerCase()}-rejection.md`;
+          writeFileSync(join(root, descriptionFile), `Description for ${testCase.title}`);
+          const result = yield* runByInProcessEffect(
+            root,
+            [
+              "--output",
+              "json",
+              "task",
+              "create",
+              "--title",
+              testCase.title,
+              "--description-file",
+              descriptionFile,
+              ...testCase.dependencies.flatMap((dependency) => ["--depends-on", dependency]),
+            ],
+            now,
+          );
+          expectJsonError(result, {
+            error: testCase.error,
+            help: [
+              "Use existing Tasks from `by task list --all --limit all` as direct prerequisites.",
+            ],
+          });
+        }
+
+        for (const testCase of [
+          {
+            taskId: "BY-3",
+            dependencies: ["BY-404"],
+            error: {
+              code: "dependency_unknown_task",
+              message: "Dependency Task was not found: BY-404",
+              taskId: "BY-3",
+              dependencyTaskId: "BY-404",
+            },
+          },
+          {
+            taskId: "BY-3",
+            dependencies: ["BY-3"],
+            error: {
+              code: "dependency_self",
+              message: "Task BY-3 cannot depend on itself.",
+              taskId: "BY-3",
+              dependencyTaskId: "BY-3",
+            },
+          },
+          {
+            taskId: "BY-3",
+            dependencies: ["BY-2", "BY-2"],
+            error: {
+              code: "dependency_duplicate",
+              message: "Dependency was provided more than once: BY-2",
+              taskId: "BY-3",
+              dependencyTaskId: "BY-2",
+            },
+          },
+          {
+            taskId: "BY-1",
+            dependencies: ["BY-3"],
+            error: {
+              code: "dependency_cycle",
+              message: "Task dependencies must not contain a cycle.",
+              taskId: "BY-1",
+            },
+          },
+        ] as const) {
+          const result = yield* runByInProcessEffect(
+            root,
+            [
+              "--output",
+              "json",
+              "task",
+              "dependencies",
+              "replace",
+              testCase.taskId,
+              ...testCase.dependencies.flatMap((dependency) => ["--depends-on", dependency]),
+            ],
+            now,
+          );
+          expectJsonError(result, {
+            error: testCase.error,
+            help: ["Use existing Tasks and keep the direct dependency graph acyclic."],
+          });
+        }
+
+        const missing = yield* runByInProcessEffect(
+          root,
+          ["--output", "json", "task", "dependencies", "replace", "BY-404", "--depends-on", "BY-1"],
+          now,
+        );
+        expectJsonError(missing, {
           error: {
-            code: "dependency_unknown_task",
-            message: "Dependency Task was not found: BY-404",
+            code: "task_not_found",
+            message: "Task was not found: BY-404",
             taskId: "BY-404",
           },
-        },
-        {
-          title: "Self",
-          dependencies: ["BY-4"],
-          error: {
-            code: "dependency_self",
-            message: "A Task cannot depend on itself.",
-            taskId: "BY-4",
-          },
-        },
-        {
-          title: "Duplicate",
-          dependencies: ["BY-1", "BY-1"],
-          error: {
-            code: "dependency_duplicate",
-            message: "Dependency was provided more than once: BY-1",
-            taskId: "BY-1",
-          },
-        },
-      ] as const) {
-        const descriptionFile = `${testCase.title.toLowerCase()}-rejection.md`;
-        writeFileSync(join(root, descriptionFile), `Description for ${testCase.title}`);
-        const result = yield* runByInProcessEffect(
-          root,
-          [
-            "--output",
-            "json",
-            "task",
-            "create",
-            "--title",
-            testCase.title,
-            "--description-file",
-            descriptionFile,
-            ...testCase.dependencies.flatMap((dependency) => ["--depends-on", dependency]),
-          ],
-          now,
-        );
-        expectJsonError(result, {
-          error: testCase.error,
-          help: [
-            "Use existing Tasks from `by task list --all --limit all` as direct prerequisites.",
-          ],
+          help: ["Run `by task list --all --limit all` to see known Tasks."],
         });
-      }
 
-      for (const testCase of [
-        {
-          taskId: "BY-3",
-          dependencies: ["BY-404"],
-          error: {
-            code: "dependency_unknown_task",
-            message: "Dependency Task was not found: BY-404",
-            taskId: "BY-3",
-            dependencyTaskId: "BY-404",
-          },
-        },
-        {
-          taskId: "BY-3",
-          dependencies: ["BY-3"],
-          error: {
-            code: "dependency_self",
-            message: "Task BY-3 cannot depend on itself.",
-            taskId: "BY-3",
-            dependencyTaskId: "BY-3",
-          },
-        },
-        {
-          taskId: "BY-3",
-          dependencies: ["BY-2", "BY-2"],
-          error: {
-            code: "dependency_duplicate",
-            message: "Dependency was provided more than once: BY-2",
-            taskId: "BY-3",
-            dependencyTaskId: "BY-2",
-          },
-        },
-        {
-          taskId: "BY-1",
-          dependencies: ["BY-3"],
-          error: {
-            code: "dependency_cycle",
-            message: "Task dependencies must not contain a cycle.",
-            taskId: "BY-1",
-          },
-        },
-      ] as const) {
-        const result = yield* runByInProcessEffect(
-          root,
-          [
-            "--output",
-            "json",
-            "task",
-            "dependencies",
-            "set",
-            testCase.taskId,
-            ...testCase.dependencies.flatMap((dependency) => ["--depends-on", dependency]),
-          ],
-          now,
-        );
-        expectJsonError(result, {
-          error: testCase.error,
-          help: ["Use existing Tasks and keep the direct dependency graph acyclic."],
-        });
-      }
-
-      const missing = yield* runByInProcessEffect(
-        root,
-        ["--output", "json", "task", "dependencies", "set", "BY-404"],
-        now,
-      );
-      expectJsonError(missing, {
-        error: { code: "task_not_found", message: "Task was not found: BY-404", taskId: "BY-404" },
-        help: ["Run `by task list --all --limit all` to see known Tasks."],
-      });
-
-      expect(yield* readGraph(root, taskIds)).toEqual(before);
-      expect(yield* readTaskIds(root)).toEqual(taskIds);
-    }),
+        expect(yield* readGraph(root, taskIds)).toEqual(before);
+        expect(yield* readTaskIds(root)).toEqual(taskIds);
+      }),
+    15_000,
   );
 });

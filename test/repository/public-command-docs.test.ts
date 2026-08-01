@@ -25,7 +25,10 @@ const helpText = (stdout: string): string => (JSON.parse(stdout) as HelpView).he
 
 const documentedCommands = [
   "by task create --title <title> --description-file <file> [--depends-on <task-id>]...",
-  "by task dependencies set <task-id> [--depends-on <task-id>]...",
+  "by task dependencies add <task-id> --depends-on <task-id> [--depends-on <task-id>]...",
+  "by task dependencies remove <task-id> --depends-on <task-id> [--depends-on <task-id>]...",
+  "by task dependencies replace <task-id> --depends-on <task-id> [--depends-on <task-id>]...",
+  "by task dependencies clear <task-id>",
   "by task list [--all] [--state <state>] [--limit <positive integer | all>]",
   "by task show <task-id>",
   "by task approve <task-id>",
@@ -104,6 +107,9 @@ describe("public command documentation", () => {
         }
         if (documentedCommand.includes("...")) {
           expect(usageLine, documentedCommand).toContain("...");
+        }
+        if (/task dependencies (add|remove|replace)/u.test(documentedCommand)) {
+          expect(usageLine, documentedCommand).not.toContain("[--depends-on");
         }
       }
 

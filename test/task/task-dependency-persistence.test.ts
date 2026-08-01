@@ -9,7 +9,7 @@ import { withTemporaryRepositoryState } from "../support/repository.js";
 const firstNow = "2026-06-30T12:00:00.000Z";
 const secondNow = "2026-06-30T12:05:00.000Z";
 
-it.scoped("replaces and clears the complete direct Task dependency list", () =>
+it.scoped("edits the complete direct Task dependency list", () =>
   withTasks((tasks) =>
     Effect.gen(function* () {
       yield* createTask(tasks, "First");
@@ -17,8 +17,9 @@ it.scoped("replaces and clears the complete direct Task dependency list", () =>
       yield* createTask(tasks, "Dependent", ["BY-1"]);
 
       expect(
-        yield* tasks.replaceTaskDependencies({
+        yield* tasks.editTaskDependencies({
           taskId: publicTaskId("BY-3"),
+          operation: "replace",
           prerequisiteTaskIds: [publicTaskId("BY-2")],
         }),
       ).toMatchObject({
@@ -27,8 +28,9 @@ it.scoped("replaces and clears the complete direct Task dependency list", () =>
       });
       expect(yield* tasks.getTaskById(publicTaskId("BY-1"))).toMatchObject({ dependents: [] });
       expect(
-        yield* tasks.replaceTaskDependencies({
+        yield* tasks.editTaskDependencies({
           taskId: publicTaskId("BY-3"),
+          operation: "clear",
           prerequisiteTaskIds: [],
         }),
       ).toMatchObject({ ok: true, task: { prerequisites: [] } });
@@ -49,8 +51,9 @@ it.scoped("rejects invalid Task dependencies without changing the graph", () =>
         [["BY-1", "BY-1"], "dependency_duplicate"],
       ] as const) {
         expect(
-          yield* tasks.replaceTaskDependencies({
+          yield* tasks.editTaskDependencies({
             taskId: publicTaskId("BY-3"),
+            operation: "replace",
             prerequisiteTaskIds: dependencies.map(publicTaskId),
           }),
         ).toMatchObject({ ok: false, code });
@@ -70,8 +73,9 @@ it.scoped("rejects Task dependency cycles without changing the graph", () =>
       yield* createTask(tasks, "Third", ["BY-2"]);
 
       expect(
-        yield* tasks.replaceTaskDependencies({
+        yield* tasks.editTaskDependencies({
           taskId: publicTaskId("BY-1"),
+          operation: "replace",
           prerequisiteTaskIds: [publicTaskId("BY-3")],
         }),
       ).toMatchObject({ ok: false, code: "dependency_cycle" });

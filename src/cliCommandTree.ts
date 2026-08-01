@@ -20,7 +20,10 @@ import { runContextApplyCommand } from "./cli/task/commands/contextApply.js";
 import { runContextCommand } from "./cli/task/commands/context.js";
 import { runContextDraftCommand } from "./cli/task/commands/contextDraft.js";
 import { runCreateCommand } from "./cli/task/commands/create.js";
-import { runDependenciesCommand } from "./cli/task/commands/dependencies.js";
+import {
+  dependencyOptionRequiredError,
+  runDependenciesCommand,
+} from "./cli/task/commands/dependencies.js";
 import { defaultTaskListLimit, runListCommand } from "./cli/task/commands/list.js";
 import { runTaskShowCommand } from "./cli/task/commands/show.js";
 import {
@@ -99,19 +102,40 @@ const withCliHandler = (command: AnyCommand, operation: CliOperation): AnyComman
 
 const optionalText = (name: string) => Options.text(name).pipe(Options.optional);
 const repeatedText = (name: string) => Options.repeated(Options.text(name));
+const requiredRepeatedText = (name: string) => Options.atLeast(1)(Options.text(name));
 const taskIdArgument = Args.text({ name: "task-id" });
 const changeIdArgument = Args.text({ name: "change-id" });
 
-const taskDependenciesSetCommand = withCliHandler(
-  leaf("set", "Replace direct Task prerequisites before Start.", {
+const taskDependenciesOperationCommand = (
+  operation: "add" | "remove" | "replace",
+  description: string,
+) =>
+  withCliHandler(
+    leaf(operation, description, {
+      taskId: taskIdArgument,
+      dependsOn: requiredRepeatedText("depends-on"),
+    }),
+    (values, environment) =>
+      runDependenciesCommand(
+        {
+          operation,
+          taskId: requiredString(values, "taskId"),
+          dependsOn: strings(values, "dependsOn"),
+        },
+        environment,
+      ),
+  );
+
+const taskDependenciesClearCommand = withCliHandler(
+  leaf("clear", "Remove all direct Task prerequisites before Start.", {
     taskId: taskIdArgument,
-    dependsOn: repeatedText("depends-on"),
   }),
   (values, environment) =>
     runDependenciesCommand(
       {
+        operation: "clear",
         taskId: requiredString(values, "taskId"),
-        dependsOn: strings(values, "dependsOn"),
+        dependsOn: [],
       },
       environment,
     ),
@@ -121,7 +145,15 @@ let taskDependenciesCommand: AnyCommand;
 taskDependenciesCommand = group(
   "dependencies",
   "Manage direct Task prerequisites.",
-  [taskDependenciesSetCommand],
+  [
+    taskDependenciesOperationCommand("add", "Add direct Task prerequisites before Start."),
+    taskDependenciesOperationCommand("remove", "Remove direct Task prerequisites before Start."),
+    taskDependenciesOperationCommand(
+      "replace",
+      "Replace all direct Task prerequisites before Start.",
+    ),
+    taskDependenciesClearCommand,
+  ],
   {},
   () => generatedCommandUsage(taskDependenciesCommand),
 );
@@ -581,6 +613,16 @@ export const runCommandTree = (
 
     if (commandResult._tag === "Left") {
       if (ValidationError.isValidationError(commandResult.left)) {
+        const missingOperation = missingDependencyOperation(
+          args,
+          generatedText(commandResult.left.error),
+        );
+        if (missingOperation !== undefined) {
+          return {
+            ...dependencyOptionRequiredError(missingOperation),
+            outputFormat: outputFormatForArgs(args),
+          };
+        }
         return {
           ...usageError({
             code: "invalid_usage",
@@ -674,6 +716,59 @@ export const outputFormatForArgs = (args: readonly string[]): OutputFormat => {
     }
   }
   return "toon";
+};
+
+const missingDependencyOperation = (
+  args: readonly string[],
+  validationMessage: string,
+): "add" | "remove" | "replace" | undefined => {
+  if (validationMessage !== "Expected at least 1 value(s) for option: '--depends-on'") {
+    return undefined;
+  }
+  const positional = validGlobalOptionSyntax(args);
+  if (positional === undefined || positional.length !== 4) return undefined;
+  const [command, group, operation] = positional;
+  return command === "task" &&
+    group === "dependencies" &&
+    (operation === "add" || operation === "remove" || operation === "replace")
+    ? operation
+    : undefined;
+};
+
+const validGlobalOptionSyntax = (args: readonly string[]): readonly string[] | undefined => {
+  const seen = new Set<string>();
+  const positional: string[] = [];
+  const valueOptions = new Map([
+    ["--output", new Set(["toon", "json"])],
+    [
+      "--log-level",
+      new Set(["all", "trace", "debug", "info", "warning", "error", "fatal", "none"]),
+    ],
+    ["--completions", new Set(["sh", "bash", "fish", "zsh"])],
+  ]);
+  const aliases = new Map([["-o", "--output"]]);
+  const flags = new Set(["--wizard", "--version", "--help", "-h"]);
+  for (let index = 0; index < args.length; index += 1) {
+    const argument = args[index];
+    if (argument === undefined) return undefined;
+    if (!argument.startsWith("-")) {
+      positional.push(argument);
+      continue;
+    }
+    if (argument.includes("=")) return undefined;
+    const option = aliases.get(argument) ?? argument;
+    if (flags.has(option)) {
+      if (seen.has(option)) return undefined;
+      seen.add(option);
+      continue;
+    }
+    const values = valueOptions.get(option);
+    if (values === undefined || seen.has(option)) return undefined;
+    const value = args[++index];
+    if (value === undefined || value.startsWith("-") || !values.has(value)) return undefined;
+    seen.add(option);
+  }
+  return positional;
 };
 
 const generatedText = (help: HelpDoc.HelpDoc): string => {
