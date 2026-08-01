@@ -68,19 +68,18 @@ describe("CLI loading and package boundary", () => {
           for (const args of [
             ["task", "list"],
             ["change", "list"],
+            ["validation-run", "show", "missing"],
           ]) {
             const result = runTestProcess(join(consumer, "node_modules/.bin/by"), args, {
               cwd: consumer,
-              env: { GIT_DIR: join(consumer, ".git") },
+              env: {
+                GIT_DIR: join(consumer, ".git"),
+                BUT_WHY_EXECUTABLE_PATH: join(repoRoot, "bin/by"),
+              },
             });
             expect(result.status).not.toBe(127);
+            expect(result.stdout + result.stderr).toContain("error:");
           }
-          const validationShow = runTestProcess(
-            join(consumer, "node_modules/.bin/by"),
-            ["validation-run", "show", "missing"],
-            { cwd: consumer },
-          );
-          expect(validationShow.status).not.toBe(127);
         } finally {
           rmSync(directory, { recursive: true, force: true });
         }
