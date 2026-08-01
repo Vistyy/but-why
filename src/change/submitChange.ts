@@ -422,7 +422,7 @@ type ValidationPolicyFailure =
       readonly details: NonNullable<ReturnType<typeof configFailureDetails>>;
     };
 
-export const formatValidationPolicyFailure = (
+const formatValidationPolicyFailure = (
   error: SubmitRejectionError | GlobalConfigValidationFailed,
 ): ValidationPolicyFailure => {
   switch (error._tag) {
