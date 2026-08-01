@@ -18,8 +18,8 @@ describe("CLI loading and package boundary", () => {
       expect(tree).toContain('import("./cli/change/start.js")');
       expect(tree).toContain('import("./cli/change/submit.js")');
       expect(tree).toContain('import("./cli/task/commands/list.js")');
-      const dynamicTargets = [...tree.matchAll(/import\("(\.\/[^\"]+)"\)/g)].flatMap(
-        ([, target]) => (target === undefined ? [] : [target]),
+      const dynamicTargets = [...tree.matchAll(/import\("(\.\/[^"]+)"\)/g)].flatMap(([, target]) =>
+        target === undefined ? [] : [target],
       );
       expect(dynamicTargets.length).toBeGreaterThan(10);
 
