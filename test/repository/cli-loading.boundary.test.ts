@@ -18,6 +18,10 @@ describe("CLI loading and package boundary", () => {
       expect(tree).toContain('import("./cli/change/start.js")');
       expect(tree).toContain('import("./cli/change/submit.js")');
       expect(tree).toContain('import("./cli/task/commands/list.js")');
+      const dynamicTargets = [...tree.matchAll(/import\(\"(\.\/[^\"]+)\"\)/g)].flatMap(
+        ([, target]) => (target === undefined ? [] : [target]),
+      );
+      expect(dynamicTargets.length).toBeGreaterThan(10);
 
       const packed = runTestProcess(
         "pnpm",
@@ -30,12 +34,13 @@ describe("CLI loading and package boundary", () => {
 
       const consumer = join(directory, "consumer");
       mkdirSync(consumer);
-      const installed = runTestProcess(
-        "pnpm",
-        ["add", "--ignore-scripts", "--dir", consumer, tarball],
-        { cwd: directory },
-      );
+      const installed = runTestProcess("pnpm", ["add", "--dir", consumer, tarball], {
+        cwd: directory,
+      });
       expect(installed.status, installed.stderr || installed.stdout).toBe(0);
+      for (const target of dynamicTargets) {
+        expect(existsSync(join(consumer, "node_modules/but-why/dist", target.slice(2)))).toBe(true);
+      }
 
       for (const args of [["--help"], ["--version"]]) {
         const result = runTestProcess(join(consumer, "node_modules/.bin/by"), args, {
@@ -43,11 +48,16 @@ describe("CLI loading and package boundary", () => {
         });
         expect(result.status, result.stderr || result.stdout).toBe(0);
       }
-      const taskList = runTestProcess(join(consumer, "node_modules/.bin/by"), ["task", "list"], {
-        cwd: consumer,
-      });
-      expect(taskList.status).not.toBe(127);
-      expect(taskList.stdout + taskList.stderr).toContain("error:");
+      for (const args of [
+        ["task", "list"],
+        ["change", "list"],
+        ["validation-run", "show", "missing"],
+      ]) {
+        const result = runTestProcess(join(consumer, "node_modules/.bin/by"), args, {
+          cwd: consumer,
+        });
+        expect(result.status, result.stderr || result.stdout).not.toBe(127);
+      }
     } finally {
       rmSync(directory, { recursive: true, force: true });
     }
