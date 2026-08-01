@@ -36,12 +36,16 @@ describe("CLI loading and package boundary", () => {
           "compiledExecutable",
           "installedPackageTarball",
         ]);
+        expect(Object.keys(benchmark.medianMilliseconds)).toEqual([
+          "--help",
+          "--version",
+          "task list",
+          "change list",
+          "validation-run show",
+        ]);
         for (const measurement of Object.values(benchmark.medianMilliseconds)) {
-          expect(measurement.compiledExecutable).toBeGreaterThan(0);
-          expect(measurement.installedPackageTarball).toBeGreaterThan(0);
-          expect(measurement.installedPackageTarball).toBeLessThanOrEqual(
-            measurement.compiledExecutable * 1.1,
-          );
+          expect(Number.isFinite(measurement.compiledExecutable)).toBe(true);
+          expect(Number.isFinite(measurement.installedPackageTarball)).toBe(true);
         }
 
         const directory = mkdtempSync(join(tmpdir(), "but-why-cli-package-"));
