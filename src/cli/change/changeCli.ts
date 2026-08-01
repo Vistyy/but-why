@@ -14,7 +14,9 @@ import { readHandoffFile, type HandoffFileReadError } from "../../change/handoff
 import { validateImplementationDecisionInput } from "../../change/implementationDecision.js";
 import {
   readImplementationDecisionFile,
+  readImplementationRationale,
   type ImplementationDecisionFileError,
+  type ImplementationRationaleInputError,
 } from "../../change/implementationDecisionFile.js";
 import { loadChangeInspection } from "../../change/loadChangeInspection.js";
 import { withChangeUseCases } from "../../change/loadChangeUseCases.js";
@@ -437,9 +439,14 @@ export const runDecision = (
     );
   }
   {
+    const rationale =
+      command.rationale === "-"
+        ? readImplementationRationale(environment.stdin)
+        : { ok: true as const, rationale: command.rationale };
+    if (!rationale.ok) return Effect.succeed(rationaleInputError(rationale.error));
     const validation = validateImplementationDecisionInput({
       choice: command.choice,
-      rationale: command.rationale,
+      rationale: rationale.rationale,
     });
     if (validation !== undefined) return Effect.succeed(decisionInputError(validation));
     const loaded = loadChangeInspection({ cwd: environment.cwd });
@@ -448,7 +455,7 @@ export const runDecision = (
       .addDecision({
         changeId: command.changeId,
         choice: command.choice,
-        rationale: command.rationale,
+        rationale: rationale.rationale,
         now: environment.now().toISOString(),
       })
       .pipe(
@@ -492,6 +499,14 @@ const decisionFileError = (error: ImplementationDecisionFileError): CliResult =>
         ? "Pipe UTF-8 text or use a regular file."
         : "Provide readable UTF-8 text.",
     ],
+  });
+
+const rationaleInputError = (error: ImplementationRationaleInputError): CliResult =>
+  usageError({
+    code: error.code,
+    message: "Implementation Decision Rationale could not be read.",
+    details: "maxBytes" in error ? { maxBytes: error.maxBytes } : {},
+    help: ["Provide direct text or pipe bounded UTF-8 text with --rationale -."],
   });
 
 const decisionInputError = (error: {

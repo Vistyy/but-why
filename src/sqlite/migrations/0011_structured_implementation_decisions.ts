@@ -9,4 +9,7 @@ export const structuredImplementationDecisionsMigration = Effect.gen(function* (
   yield* sql.unsafe(
     "ALTER TABLE implementation_decisions ADD COLUMN rationale TEXT NOT NULL DEFAULT ''",
   );
+  yield* sql.unsafe(
+    "UPDATE implementation_decisions SET choice = content WHERE choice = '' AND content <> ''",
+  );
 });

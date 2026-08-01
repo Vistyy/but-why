@@ -579,9 +579,7 @@ const decodeRun = (row: CandidateValidationRunRow) =>
       id: row.id,
       candidateId: row.candidateId,
       policy: decodeSqliteCandidateValidationPolicy(row.policySnapshot),
-      implementationDecisions: JSON.parse(
-        row.implementationDecisions,
-      ) as readonly ImplementationDecision[],
+      implementationDecisions: decodeImplementationDecisions(row.implementationDecisions),
       state: row.state,
       outcome: row.outcome,
       createdAt: row.createdAt,
@@ -593,6 +591,18 @@ const decodeRun = (row: CandidateValidationRunRow) =>
         cause,
       }),
   });
+
+const decodeImplementationDecisions = (value: string): readonly ImplementationDecision[] => {
+  const decisions = JSON.parse(value) as readonly Record<string, unknown>[];
+  return decisions.map((decision) => ({
+    id: String(decision["id"]),
+    changeId: String(decision["changeId"]),
+    sequence: Number(decision["sequence"]),
+    recordedAt: String(decision["recordedAt"]),
+    choice: String(decision["choice"] ?? decision["content"] ?? ""),
+    rationale: String(decision["rationale"] ?? ""),
+  }));
+};
 
 const decodeFinding = (row: CandidateValidationFindingRow) =>
   Effect.try({

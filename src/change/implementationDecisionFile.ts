@@ -7,7 +7,8 @@ export type ImplementationRationaleInputError =
   | { readonly code: "invalid_rationale_encoding" }
   | { readonly code: "rationale_too_large"; readonly maxBytes: number }
   | { readonly code: "empty_rationale" }
-  | { readonly code: "stdin_is_terminal" };
+  | { readonly code: "stdin_is_terminal" }
+  | { readonly code: "rationale_unreadable" };
 export type ImplementationRationaleInputResult =
   | { readonly ok: true; readonly rationale: string }
   | { readonly ok: false; readonly error: ImplementationRationaleInputError };
@@ -71,8 +72,10 @@ export const readImplementationRationale = (
         return { ok: false, error: { code: "invalid_rationale_encoding" } };
       case "stdin_is_terminal":
         return { ok: false, error: { code: "stdin_is_terminal" } };
+      case "text_input_stdin_unreadable":
+        return { ok: false, error: { code: "rationale_unreadable" } };
       default:
-        return { ok: false, error: { code: "invalid_rationale_encoding" } };
+        return { ok: false, error: { code: "rationale_unreadable" } };
     }
   }
   const rationale = input.content.replace(/\r?\n$/u, "");

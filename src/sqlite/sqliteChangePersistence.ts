@@ -390,7 +390,9 @@ const getById = (sql: SqlClient.SqlClient, changeId: string) =>
 
 const listDecisions = (sql: SqlClient.SqlClient, changeId: string) =>
   sql<ImplementationDecision>`
-    SELECT id, change_id AS changeId, sequence, recorded_at AS recordedAt, choice, rationale
+    SELECT id, change_id AS changeId, sequence, recorded_at AS recordedAt,
+      CASE WHEN choice = '' THEN content ELSE choice END AS choice,
+      rationale
     FROM implementation_decisions WHERE change_id = ${changeId}
     ORDER BY sequence ASC
   `;
@@ -414,7 +416,9 @@ const recordDecision = (sql: SqlClient.SqlClient, input: RecordImplementationDec
       VALUES (${id}, ${input.changeId}, ${input.now}, '', ${input.choice}, ${input.rationale})
     `;
     const rows = yield* sql<ImplementationDecision>`
-      SELECT id, change_id AS changeId, sequence, recorded_at AS recordedAt, choice, rationale
+      SELECT id, change_id AS changeId, sequence, recorded_at AS recordedAt,
+        CASE WHEN choice = '' THEN content ELSE choice END AS choice,
+        rationale
       FROM implementation_decisions WHERE id = ${id}
     `;
     const decision = rows[0];

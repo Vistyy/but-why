@@ -503,7 +503,9 @@ describe("Change inspection CLI", () => {
         change.id,
       ]);
       expect(listed.status).toBe(0);
-      expect(JSON.parse(listed.stdout).decisions).toMatchObject([{ choice: "", rationale: "" }]);
+      expect(JSON.parse(listed.stdout).decisions).toMatchObject([
+        { choice: "Historical content", rationale: "" },
+      ]);
     }),
   );
 
