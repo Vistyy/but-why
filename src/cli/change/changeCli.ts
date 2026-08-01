@@ -11,6 +11,7 @@ import {
   type CliResult,
 } from "../../cliResults.js";
 import { readHandoffFile, type HandoffFileReadError } from "../../change/handoffFile.js";
+import { validateImplementationDecisionInput } from "../../change/implementationDecision.js";
 import {
   readImplementationDecisionFile,
   type ImplementationDecisionFileError,
@@ -411,7 +412,12 @@ export const runBlocker = (
 
 export type ChangeDecisionCommand =
   | { readonly action: "list"; readonly changeId: string }
-  | { readonly action: "add"; readonly changeId: string; readonly file: string };
+  | {
+      readonly action: "add";
+      readonly changeId: string;
+      readonly choice: string;
+      readonly rationale: string;
+    };
 
 export const runDecision = (
   command: ChangeDecisionCommand,
@@ -431,18 +437,18 @@ export const runDecision = (
     );
   }
   {
-    const content = readImplementationDecisionFile(
-      environment.cwd,
-      command.file,
-      environment.stdin,
-    );
-    if (!content.ok) return Effect.succeed(decisionFileError(content.error));
+    const validation = validateImplementationDecisionInput({
+      choice: command.choice,
+      rationale: command.rationale,
+    });
+    if (validation !== undefined) return Effect.succeed(decisionInputError(validation));
     const loaded = loadChangeInspection({ cwd: environment.cwd });
     if (!loaded.ok) return Effect.succeed(loadError(loaded.error));
     return loaded.inspection
       .addDecision({
         changeId: command.changeId,
-        content: content.content,
+        choice: command.choice,
+        rationale: command.rationale,
         now: environment.now().toISOString(),
       })
       .pipe(
@@ -483,8 +489,24 @@ const decisionFileError = (error: ImplementationDecisionFileError): CliResult =>
     details: "path" in error ? { path: error.path } : {},
     help: [
       error.code === "stdin_is_terminal"
-        ? "Pipe UTF-8 Markdown or use a regular file."
-        : "Provide a bounded UTF-8 Markdown file with `--file <path>`.",
+        ? "Pipe UTF-8 text or use a regular file."
+        : "Provide readable UTF-8 text.",
+    ],
+  });
+
+const decisionInputError = (error: {
+  readonly code: string;
+  readonly maxCharacters?: number;
+  readonly min?: number;
+  readonly max?: number;
+}): CliResult =>
+  usageError({
+    code: error.code,
+    message: "Implementation Decision input does not satisfy the current contract.",
+    details: error,
+    help: [
+      "Use --choice for one plain-text line of at most 160 characters.",
+      "Use --rationale for 1 to 3 plain-text sentences of at most 600 characters.",
     ],
   });
 

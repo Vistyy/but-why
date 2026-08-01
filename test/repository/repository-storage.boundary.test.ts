@@ -742,6 +742,7 @@ describe("repository SQL storage", () => {
           { migration_id: 8, name: "recover_published_remote_branch_cleanup" },
           { migration_id: 9, name: "active_validation_runs" },
           { migration_id: 10, name: "validation_workspace_paths" },
+          { migration_id: 11, name: "structured_implementation_decisions" },
         ]);
         expect(identities).toEqual([{ common_directory: repositorySql.commonDirectory }]);
         expect(candidateColumns.map(({ name }) => name)).toEqual([
@@ -975,8 +976,8 @@ describe("repository SQL storage", () => {
         );
 
         return Effect.gen(function* () {
-          expect(yield* readMigrationCount).toBe(10);
-          expect(yield* readMigrationCount).toBe(10);
+          expect(yield* readMigrationCount).toBe(11);
+          expect(yield* readMigrationCount).toBe(11);
         });
       },
       (directory) => Effect.sync(() => rmSync(directory, { recursive: true, force: true })),

@@ -390,7 +390,7 @@ const getById = (sql: SqlClient.SqlClient, changeId: string) =>
 
 const listDecisions = (sql: SqlClient.SqlClient, changeId: string) =>
   sql<ImplementationDecision>`
-    SELECT id, change_id AS changeId, sequence, recorded_at AS recordedAt, content
+    SELECT id, change_id AS changeId, sequence, recorded_at AS recordedAt, choice, rationale
     FROM implementation_decisions WHERE change_id = ${changeId}
     ORDER BY sequence ASC
   `;
@@ -410,11 +410,11 @@ const recordDecision = (sql: SqlClient.SqlClient, input: RecordImplementationDec
       return { ok: false as const, code: "change_published" as const };
     const id = randomUUID();
     yield* sql`
-      INSERT INTO implementation_decisions (id, change_id, recorded_at, content)
-      VALUES (${id}, ${input.changeId}, ${input.now}, ${input.content})
+      INSERT INTO implementation_decisions (id, change_id, recorded_at, content, choice, rationale)
+      VALUES (${id}, ${input.changeId}, ${input.now}, '', ${input.choice}, ${input.rationale})
     `;
     const rows = yield* sql<ImplementationDecision>`
-      SELECT id, change_id AS changeId, sequence, recorded_at AS recordedAt, content
+      SELECT id, change_id AS changeId, sequence, recorded_at AS recordedAt, choice, rationale
       FROM implementation_decisions WHERE id = ${id}
     `;
     const decision = rows[0];

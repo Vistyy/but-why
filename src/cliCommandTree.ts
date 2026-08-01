@@ -52,6 +52,7 @@ import {
   outputFormatForArgs,
 } from "./output/selection.js";
 import { taskStates, type TaskState } from "./task/lifecycle.js";
+import { readImplementationRationale } from "./change/implementationDecisionFile.js";
 
 class CliEnvironmentContext extends Context.Tag("@but-why/CliEnvironment")<
   CliEnvironmentContext,
@@ -265,19 +266,40 @@ taskCommand = group(
 );
 
 const changeDecisionAddCommand = withCliHandler(
-  leaf("add", "Record one Implementer Implementation Decision.", {
-    changeId: changeIdArgument,
-    file: Options.text("file"),
-  }),
-  (values, environment) =>
-    runDecision(
+  leaf(
+    "add",
+    "Record a Choice and Rationale (Choice: 160 characters; Rationale: 1-3 sentences, 600 characters).",
+    {
+      changeId: changeIdArgument,
+      choice: Options.text("choice"),
+      rationale: Options.text("rationale"),
+    },
+  ),
+  (values, environment) => {
+    const rationaleValue = requiredString(values, "rationale");
+    const rationale =
+      rationaleValue === "-"
+        ? readImplementationRationale((environment as ChangeCommandEnvironment).stdin)
+        : { ok: true as const, rationale: rationaleValue };
+    if (!rationale.ok)
+      return Effect.succeed(
+        usageError({
+          code: rationale.error.code,
+          message: "Implementation Decision Rationale could not be read.",
+          details: "maxBytes" in rationale.error ? { maxBytes: rationale.error.maxBytes } : {},
+          help: ["Provide direct text or pipe bounded UTF-8 text with --rationale -."],
+        }),
+      );
+    return runDecision(
       {
         action: "add",
         changeId: requiredString(values, "changeId"),
-        file: requiredString(values, "file"),
+        choice: requiredString(values, "choice"),
+        rationale: rationale.rationale,
       },
       environment as ChangeCommandEnvironment,
-    ),
+    );
+  },
 );
 const changeDecisionListCommand = withCliHandler(
   leaf("list", "List the Change Implementation Decision Log.", {

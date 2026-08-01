@@ -175,7 +175,8 @@ describe("Candidate-owned Validation Run inspection", () => {
         changeId: "change-1",
         sequence: 1,
         recordedAt: now,
-        content: "Keep rationale separate from intent.",
+        choice: "Keep rationale separate",
+        rationale: "Keep rationale separate from intent.",
       };
       const first = yield* fixture.runStore.startOrReuse({
         candidateId: fixture.candidateId,

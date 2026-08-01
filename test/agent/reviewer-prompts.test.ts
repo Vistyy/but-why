@@ -30,7 +30,8 @@ describe("reviewer prompts", () => {
           changeId: "change-1",
           sequence: 1,
           recordedAt: "2026-01-01T00:00:00.000Z",
-          content: "Choose the explicit storage shape.",
+          choice: "Use the explicit storage shape",
+          rationale: "Choose the explicit storage shape.",
         },
       ],
     });

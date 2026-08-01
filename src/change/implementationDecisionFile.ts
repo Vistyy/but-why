@@ -2,6 +2,16 @@ import { resolve } from "node:path";
 import type { TextInputStdin } from "../cli/input/textInput.js";
 import { readTextInput } from "../cli/input/textInput.js";
 
+const maxRationaleBytes = 600 * 4;
+export type ImplementationRationaleInputError =
+  | { readonly code: "invalid_rationale_encoding" }
+  | { readonly code: "rationale_too_large"; readonly maxBytes: number }
+  | { readonly code: "empty_rationale" }
+  | { readonly code: "stdin_is_terminal" };
+export type ImplementationRationaleInputResult =
+  | { readonly ok: true; readonly rationale: string }
+  | { readonly ok: false; readonly error: ImplementationRationaleInputError };
+
 const maxImplementationDecisionBytes = 256 * 1024;
 export type ImplementationDecisionFileError =
   | { readonly code: "decision_file_not_found"; readonly path: string }
@@ -44,4 +54,29 @@ export const readImplementationDecisionFile = (
         error: { code: "empty_decision_file", path: file === "-" ? "-" : resolve(cwd, file) },
       }
     : { ok: true, content: input.content };
+};
+
+export const readImplementationRationale = (
+  stdin: TextInputStdin | undefined,
+): ImplementationRationaleInputResult => {
+  const input = readTextInput("", "-", { maxBytes: maxRationaleBytes, stdin });
+  if (!input.ok) {
+    switch (input.error.code) {
+      case "text_input_too_large":
+        return {
+          ok: false,
+          error: { code: "rationale_too_large", maxBytes: input.error.maxBytes },
+        };
+      case "text_input_invalid_utf8":
+        return { ok: false, error: { code: "invalid_rationale_encoding" } };
+      case "stdin_is_terminal":
+        return { ok: false, error: { code: "stdin_is_terminal" } };
+      default:
+        return { ok: false, error: { code: "invalid_rationale_encoding" } };
+    }
+  }
+  const rationale = input.content.replace(/\r?\n$/u, "");
+  return rationale.length === 0
+    ? { ok: false, error: { code: "empty_rationale" } }
+    : { ok: true, rationale };
 };

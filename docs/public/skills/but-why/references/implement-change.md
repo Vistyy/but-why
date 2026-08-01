@@ -30,9 +30,16 @@ Follow the repository instructions in the Managed Worktree.
 Use task-specific verification requirements in accepted Task Context when present.
 Otherwise, select focused evidence that is proportionate to the Candidate's material risks under the repository's accepted verification policy.
 Do not require a durable automated test unless accepted verification requirements require one.
-Record each material Implementation Decision when it is made with `by change decision add <change-id> --file <path>`.
+Record each material Implementation Decision when it is made with `by change decision add <change-id> --choice "<choice>" --rationale "<rationale>"`.
+Use `--rationale -` to read bounded UTF-8 text from standard input.
 A material decision affects observable behavior, an interface, stored data, failure handling, or a meaningful trade-off.
 Do not record routine coding choices.
+Write a Choice as one standalone plain-text line of at most 160 characters.
+The Choice identifies the selected approach without code or Change context.
+Write a Rationale as one to three standalone plain-text sentences of at most 600 characters.
+The Rationale briefly explains why the approach was selected without code or Change context.
+Use common language and only necessary technical names.
+Do not include Markdown, source code, file contents, command output, or detailed implementation narration.
 Implementation Decisions explain rationale only.
 They cannot amend Acceptance Context or justify a Candidate that does not satisfy approved intent.
 Continue through recoverable problems and local implementation choices.

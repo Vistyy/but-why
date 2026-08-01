@@ -225,7 +225,8 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
         const requests: unknown[] = [];
         const recorded = yield* fixture.changes.recordImplementationDecision({
           changeId: fixture.captured.changeId,
-          content: "Keep the decision log separate from approved intent.",
+          choice: "Keep the decision log separate",
+          rationale: "Keep the decision log separate from approved intent.",
           now,
         });
         expect(recorded.ok).toBe(true);
