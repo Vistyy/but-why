@@ -30,8 +30,7 @@ describe("CLI loading and package boundary", () => {
             const source = readFileSync(entry, "utf8");
             for (const match of source.matchAll(/from "(\.\.?(?:\/)[^\"]+)"/g)) {
               const target = match[1];
-              if (target !== undefined)
-                staticEntryQueue.push(join(dirname(entry), target.slice(2)));
+              if (target !== undefined) staticEntryQueue.push(join(dirname(entry), target));
             }
           }
           expect([...staticEntryFiles].every((entry) => !entry.includes("/cli/task/"))).toBe(true);
