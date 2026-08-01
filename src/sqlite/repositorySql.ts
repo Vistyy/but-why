@@ -1,6 +1,6 @@
 import * as SqlClient from "@effect/sql/SqlClient";
 import type { SqlError } from "@effect/sql/SqlError";
-import * as SqliteClient from "@effect/sql-sqlite-node/SqliteClient";
+import { nodeSqliteLayer } from "./nodeSqliteClient.js";
 import { Context, Effect, Layer } from "effect";
 
 import { migrateRepositoryState } from "./repositoryMigrations.js";
@@ -81,10 +81,7 @@ const ensureRepositoryIdentity = (sql: SqlClient.SqlClient, commonDirectory: str
 export const repositorySqlLayer = (
   config: RepositorySqlConfig,
 ): Layer.Layer<RepositorySql, RepositoryStorageError> => {
-  const sqlite = SqliteClient.layer({
-    filename: config.statePath,
-    disableWAL: true,
-  }).pipe(
+  const sqlite = nodeSqliteLayer(config.statePath).pipe(
     Layer.catchAllCause((cause) =>
       Layer.fail(
         new RepositoryStateUnavailable({
