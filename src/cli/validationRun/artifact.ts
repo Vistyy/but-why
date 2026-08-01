@@ -29,7 +29,11 @@ const artifactFailure = (code: string, id: string, ref: string): CliResult =>
             ? `Artifact was not found: ${ref}`
             : `Artifact metadata exists, but its stored content is unavailable: ${ref}`,
         details: { validationRunId: id, artifactRef: ref },
-        help: [`Run \`by validation-run show ${id}\` to inspect the recorded metadata.`],
+        help: [
+          code === "artifact_not_found"
+            ? `Run \`by validation-run show ${id}\` to list known Artifacts.`
+            : `Run \`by validation-run show ${id}\` to inspect the recorded metadata.`,
+        ],
       });
 export const runArtifactCommand = (
   command: { readonly validationRunId: string; readonly artifactRef: string },
