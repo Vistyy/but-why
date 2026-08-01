@@ -66,10 +66,23 @@ describe("public command documentation", () => {
       const rootHelp = yield* runByInProcessEffect(repoRoot, ["--help", "--json"]);
       const taskHelp = yield* runByInProcessEffect(repoRoot, ["task", "--help", "--json"]);
       const changeHelp = yield* runByInProcessEffect(repoRoot, ["change", "--help", "--json"]);
+      const decisionHelp = yield* runByInProcessEffect(repoRoot, [
+        "change",
+        "decision",
+        "add",
+        "--help",
+        "--json",
+      ]);
 
       expect(rootHelp.status).toBe(0);
       expect(taskHelp.status).toBe(0);
       expect(changeHelp.status).toBe(0);
+      expect(decisionHelp.status).toBe(0);
+      const decisionHelpText = helpText(decisionHelp.stdout);
+      expect(decisionHelpText).toContain("plain-text Choice on one line");
+      expect(decisionHelpText).toContain("--rationale - reads bounded UTF-8 stdin");
+      expect(decisionHelpText).toContain("maximum 160 characters");
+      expect(decisionHelpText).toContain("maximum 600 characters");
       expect(documented).toEqual([...documentedCommands].sort());
 
       const rootHelpText = helpText(rootHelp.stdout);
