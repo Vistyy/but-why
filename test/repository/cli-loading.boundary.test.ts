@@ -28,7 +28,7 @@ describe("CLI loading and package boundary", () => {
             if (entry === undefined || staticEntryFiles.has(entry)) continue;
             staticEntryFiles.add(entry);
             const source = readFileSync(entry, "utf8");
-            for (const match of source.matchAll(/from "(\.\.?(?:\/)[^\"]+)"/g)) {
+            for (const match of source.matchAll(/from "(\.\.?(?:\/)[^"]+)"/g)) {
               const target = match[1];
               if (target !== undefined) staticEntryQueue.push(join(dirname(entry), target));
             }
