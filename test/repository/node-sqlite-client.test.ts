@@ -96,7 +96,7 @@ describe("private Node SQLite SQL Adapter", () => {
         yield* sql`CREATE TABLE records (value INTEGER)`;
         yield* sql`INSERT INTO records VALUES (1), (2)`;
         const rows = yield* Stream.runCollect(sql`SELECT value FROM records ORDER BY value`.stream);
-        expect(Array.from(rows)).toEqual([[{ value: 1 }, { value: 2 }]]);
+        expect(Array.from(rows)).toEqual([{ value: 1 }, { value: 2 }]);
       }),
     ),
   );

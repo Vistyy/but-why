@@ -78,7 +78,7 @@ const nodeSqliteConnection = (database: DatabaseSync): NodeSqliteConnection => {
             transformRows ? transformRows(rows as ReadonlyArray<object>) : rows,
           ),
         ),
-      ),
+      ).pipe(Stream.flatMap((rows) => Stream.fromIterable(rows))),
   };
 };
 
