@@ -52,9 +52,10 @@ The latest Candidate selected from the Managed Worktree for the open Change.
 _Avoid_: Latest historical Candidate, dirty workspace
 
 **Acceptance Context**:
-One immutable version of the approved Task intent.
-For a task-backed Change, Acceptance Review uses it as review authority and each Specialist Review uses it as an authoritative scope constraint.
-The initial version is captured when the Task starts.
+One immutable version of approved intent.
+A task-backed Change captures its initial version from the approved Task when the Task starts.
+Acceptance Review uses supplied Acceptance Context as review authority.
+A Specialist Review that receives Acceptance Context uses it only as an authoritative scope constraint.
 Each approved Implementation Blocker Resolution creates a new version by appending the Resolution to the original approved intent and earlier Resolutions.
 A Validation Run retains the exact Acceptance Context version it reviewed.
 _Avoid_: Current mutable Task text, Specialist instructions, inferred intent, Implementation Blocker report
@@ -169,13 +170,15 @@ The fixed read-only sequence that judges changed code through Repository Prepara
 _Avoid_: Generic pipeline language, publication, implementation
 
 **Acceptance Reviewer**:
-The coding agent that owns the overall judgment of whether a Task-backed Change's Candidate or no-change repository state satisfies immutable Acceptance Context, including its Task Verification Contract.
+The coding agent that owns the overall judgment of whether a Candidate or no-change repository state satisfies supplied Acceptance Context, including its Task Verification Contract.
+It may require missing work necessary for approved intent, but it does not expand approved intent or require optional improvement.
 _Avoid_: Specialist Reviewer, Implementer
 
 **Specialist Reviewer**:
 A configured coding agent that judges one named repository concern for the exact Candidate.
-For a task-backed Change, it uses Acceptance Context only as an authoritative scope constraint and does not duplicate the Acceptance Reviewer's overall conformance judgment.
-It may judge whether existing verification evidence is defective within its concern, but it does not require evidence beyond the Task Verification Contract.
+It owns only its configured concern and does not investigate or report concerns outside that responsibility.
+When supplied Acceptance Context, it uses that context only as an authoritative scope constraint.
+It may judge whether existing verification evidence is defective within its concern, but it does not require evidence beyond a supplied Task Verification Contract or argue against an approved verification decision.
 _Avoid_: Acceptance Reviewer, Final Reviewer
 
 **Validation Workspace**:
