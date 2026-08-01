@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { Effect } from "effect";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { describe, vi } from "vitest";
 import { expect, it } from "@effect/vitest";
 
@@ -21,7 +21,32 @@ describe("CLI loading and package boundary", () => {
           expect(build.status, build.stderr || build.stdout).toBe(0);
 
           const tree = readFileSync(join(repoRoot, "dist/cliCommandTree.js"), "utf8");
-          expect(tree).not.toMatch(/from "\.\/cli\/(task|change|validationRun|initCli|dashboard)/);
+          const staticEntryFiles = new Set<string>();
+          const staticEntryQueue = [join(repoRoot, "dist/main.js")];
+          while (staticEntryQueue.length > 0) {
+            const entry = staticEntryQueue.pop();
+            if (entry === undefined || staticEntryFiles.has(entry)) continue;
+            staticEntryFiles.add(entry);
+            const source = readFileSync(entry, "utf8");
+            for (const match of source.matchAll(/from "(\.\/[^\"]+)"/g)) {
+              const target = match[1];
+              if (target !== undefined)
+                staticEntryQueue.push(join(dirname(entry), target.slice(2)));
+            }
+          }
+          expect([...staticEntryFiles].every((entry) => !entry.includes("/cli/task/"))).toBe(true);
+          expect([...staticEntryFiles].every((entry) => !entry.includes("/cli/change/"))).toBe(
+            true,
+          );
+          expect(
+            [...staticEntryFiles].every((entry) => !entry.includes("/cli/validationRun/")),
+          ).toBe(true);
+          expect([...staticEntryFiles].every((entry) => !entry.endsWith("/cli/initCli.js"))).toBe(
+            true,
+          );
+          expect(
+            [...staticEntryFiles].every((entry) => !entry.endsWith("/cli/task/dashboard.js")),
+          ).toBe(true);
           expect(tree).toContain('import("./cli/change/start.js")');
           expect(tree).toContain('import("./cli/change/submit.js")');
           expect(tree).toContain('import("./cli/task/commands/list.js")');
@@ -76,8 +101,8 @@ describe("CLI loading and package boundary", () => {
             ["validation-run", "show", "missing"],
             { cwd: consumer },
           );
-          expect(validationShow.status).not.toBe(127);
-          expect(validationShow.stdout + validationShow.stderr).toContain("error:");
+          expect(validationShow.status).toBe(1);
+          expect(validationShow.stdout).toContain("code: validation_run_not_found");
         } finally {
           rmSync(directory, { recursive: true, force: true });
         }
