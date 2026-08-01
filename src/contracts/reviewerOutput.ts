@@ -15,19 +15,28 @@ const artifactRefSchema = Schema.String.pipe(
   }),
 );
 
-const reviewerFindingSchema = Schema.Struct({
+export const reviewerFindingCoreSchema = Schema.Struct({
   title: nonBlankStringSchema,
   description: nonBlankStringSchema,
-  severity: Schema.Literal("critical", "high", "medium", "low"),
   evidence: nonBlankStringSchema,
   files: Schema.Array(repoRelativePathSchema),
+});
+
+export const reviewerOutputCoreSchema = Schema.Struct({
+  findings: Schema.Array(reviewerFindingCoreSchema),
+});
+
+const validationReviewerFindingSchema = Schema.Struct({
+  ...reviewerFindingCoreSchema.fields,
   artifactRefs: Schema.Array(artifactRefSchema),
 });
 
 const reviewerOutputSchema = Schema.Struct({
-  findings: Schema.Array(reviewerFindingSchema),
+  findings: Schema.Array(validationReviewerFindingSchema),
 });
 
+export type ReviewerFindingCore = Schema.Schema.Type<typeof reviewerFindingCoreSchema>;
+export type ReviewerOutputCore = Schema.Schema.Type<typeof reviewerOutputCoreSchema>;
 export type ReviewerOutput = Schema.Schema.Type<typeof reviewerOutputSchema>;
 
 export type ValidateReviewerArtifactRefsInput = {
@@ -43,6 +52,25 @@ export type DecodeReviewerOutputContractInput = {
   readonly attempts: number;
   readonly output: unknown;
 };
+
+export const decodeReviewerOutputCoreContract = (
+  input: DecodeReviewerOutputContractInput,
+): Effect.Effect<
+  Schema.Schema.Type<typeof reviewerOutputCoreSchema>,
+  ReviewerOutputContractFailed
+> =>
+  Schema.decodeUnknown(reviewerOutputCoreSchema, { onExcessProperty: "error" })(input.output).pipe(
+    Effect.mapError((error) => {
+      const diagnostics = contractDiagnostics(error, input.output);
+      return new ReviewerOutputContractFailed({
+        operationName: "decode_reviewer_output_core",
+        reviewer: input.reviewer,
+        attempts: input.attempts,
+        diagnostics,
+        message: formatContractDiagnostics(diagnostics),
+      });
+    }),
+  );
 
 export const validateReviewerArtifactRefs = (
   input: ValidateReviewerArtifactRefsInput,

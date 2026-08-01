@@ -66,7 +66,6 @@ export type RunSpecialistReviewPhaseInput = {
     readonly {
       readonly title: string;
       readonly description: string;
-      readonly severity?: "critical" | "high" | "medium" | "low";
       readonly evidence: string;
       readonly files: readonly string[];
       readonly artifactRefs: readonly string[];

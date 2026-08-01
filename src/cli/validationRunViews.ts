@@ -21,7 +21,6 @@ const validationRunFindingView = (finding: ValidationRunFindingRecord): Structur
   source: `${finding.phase}/${finding.producer}`,
   title: finding.title,
   description: finding.description,
-  ...(finding.severity === undefined ? {} : { severity: finding.severity }),
   evidence: finding.evidence,
   files: finding.files,
   artifactRefs: finding.artifactRefs,

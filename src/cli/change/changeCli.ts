@@ -23,7 +23,10 @@ import { withCancellation } from "../../change/loadChangeCancellation.js";
 import type { InteractiveSessionHost } from "../../change/interactiveSessionHost.js";
 import type { ReviewerAgentRuntime } from "../../agent/reviewerAgentRuntime.js";
 import type { ChangeRecord } from "../../change/change.js";
-import type { CandidateValidationRunRecord } from "../../change/candidateValidation/candidateValidationRunStore.js";
+import type {
+  CandidateValidationFinding,
+  CandidateValidationRunRecord,
+} from "../../change/candidateValidation/candidateValidationRunStore.js";
 import type { ChangeReconciliationResult } from "../../change/reconcileChange.js";
 import type { ChangeSubmitResult } from "../../change/submitChange.js";
 import { stderrSubmitProgress } from "../../change/validation/submitProgress.js";
@@ -221,6 +224,9 @@ const changeNotFound = (): CliResult =>
     help: ["Use a Change ID returned by `by change list --all --json`."],
   });
 
+const changeFindingView = ({ severity: _severity, ...finding }: CandidateValidationFinding) =>
+  finding;
+
 export const runFindings = (
   command: { readonly changeId: string | undefined },
   environment: ChangeCommandEnvironment,
@@ -238,7 +244,7 @@ export const runFindings = (
               change: changeInspectionView(result.change),
               candidate: result.candidate,
               validationRun: structuredValue(result.validationRun),
-              findings: result.findings,
+              findings: result.findings.map(changeFindingView),
               toolingFailures: result.toolingFailures,
               count: result.findings.length,
             }),

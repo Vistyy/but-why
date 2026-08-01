@@ -216,7 +216,6 @@ layer(acceptanceTemplateLayer)("Task-backed Candidate Acceptance Review", (it) =
                 {
                   title: "First mismatch",
                   description: "The first requirement is incomplete.",
-                  severity: "high",
                   evidence: "Observed incomplete behavior.",
                   files: ["src/first.ts"],
                   artifactRefs: [],
@@ -224,7 +223,6 @@ layer(acceptanceTemplateLayer)("Task-backed Candidate Acceptance Review", (it) =
                 {
                   title: "Second mismatch",
                   description: "The second requirement is incomplete.",
-                  severity: "low",
                   evidence: "Observed another incomplete behavior.",
                   files: [],
                   artifactRefs: [],
@@ -804,7 +802,6 @@ layer(acceptanceTemplateLayer)("Task-backed Candidate Acceptance Review", (it) =
               {
                 title,
                 description: `${title} description`,
-                severity: "high",
                 evidence: `${title} evidence`,
                 files: [],
                 artifactRefs: [],
@@ -1272,7 +1269,6 @@ const repositoryConfig = (root: string) => ({
 const reviewerFinding = (title: string) => ({
   title,
   description: `${title} description`,
-  severity: "high" as const,
   evidence: `${title} evidence`,
   files: [],
   artifactRefs: [],
