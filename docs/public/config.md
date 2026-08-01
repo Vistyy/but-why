@@ -135,6 +135,12 @@ A definition requires `instructionsFile` and may select an Agent Profile.
 Duplicate names and unresolved definitions reject Submission before a Validation Run starts.
 Specialists execute in configured list order.
 
+For a Task-backed Change, But Why supplies the exact immutable Acceptance Context to each Specialist as an authoritative scope constraint.
+The Specialist uses it only to constrain Findings and required corrections.
+For a taskless Change, But Why supplies no Acceptance Context block or explanation of its absence.
+The same conditional behavior applies to initial and continuation Specialist prompts.
+Configured instructions define the concern, but cannot override these common boundaries.
+
 ## Agent Environment
 
 Repo Config may define one `agentEnvironment.command` argument list.
