@@ -1,5 +1,6 @@
 import { encodeReviewerWireValue, reviewerOutputTag } from "./reviewerOutputWire.js";
 import type { ReviewerOutputContractFailed } from "../change/validation/validationToolingFailures.js";
+import type { ReviewerFindingCore } from "../contracts/reviewerFinding.js";
 import type { ReviewerOutput } from "../contracts/reviewerOutput.js";
 import type { TaskContextSnapshotV1 } from "../change/validationRun/taskContextSnapshot.js";
 import type { ImplementationDecision } from "../change/implementationDecision.js";
@@ -133,11 +134,7 @@ export const buildSpecialistContinuationPrompt = (input: {
     "Each Finding must contain title, description, evidence, files, and artifactRefs.",
   ].join("\n");
 
-export type ReviewerFindingHistory = {
-  readonly title: string;
-  readonly description: string;
-  readonly evidence: string;
-  readonly files: readonly string[];
+export type ReviewerFindingHistory = ReviewerFindingCore & {
   readonly artifactRefs: readonly string[];
 };
 

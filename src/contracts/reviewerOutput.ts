@@ -1,9 +1,8 @@
 import { Effect, Schema } from "effect";
 
 import { ReviewerOutputContractFailed } from "../change/validation/validationToolingFailures.js";
-import { nonBlankStringSchema } from "./agentConfig.js";
 import { contractDiagnostics, formatContractDiagnostics } from "./contractDiagnostics.js";
-import { repoRelativePathSchema } from "./repoConfig.js";
+import { reviewerFindingCoreSchema } from "./reviewerFinding.js";
 
 const artifactRefPattern =
   /^artifact:(?:[a-z0-9][a-z0-9-]*-[0-9a-f]{12}\.v[1-9][0-9]*|[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})\/(prepare|checks|acceptance_review|specialist_review)\/[A-Za-z0-9][A-Za-z0-9._-]*\/[A-Za-z0-9][A-Za-z0-9._-]*$/u;
@@ -15,17 +14,6 @@ const artifactRefSchema = Schema.String.pipe(
   }),
 );
 
-export const reviewerFindingCoreSchema = Schema.Struct({
-  title: nonBlankStringSchema,
-  description: nonBlankStringSchema,
-  evidence: nonBlankStringSchema,
-  files: Schema.Array(repoRelativePathSchema),
-});
-
-export const reviewerOutputCoreSchema = Schema.Struct({
-  findings: Schema.Array(reviewerFindingCoreSchema),
-});
-
 const validationReviewerFindingSchema = Schema.Struct({
   ...reviewerFindingCoreSchema.fields,
   artifactRefs: Schema.Array(artifactRefSchema),
@@ -35,8 +23,6 @@ const reviewerOutputSchema = Schema.Struct({
   findings: Schema.Array(validationReviewerFindingSchema),
 });
 
-export type ReviewerFindingCore = Schema.Schema.Type<typeof reviewerFindingCoreSchema>;
-export type ReviewerOutputCore = Schema.Schema.Type<typeof reviewerOutputCoreSchema>;
 export type ReviewerOutput = Schema.Schema.Type<typeof reviewerOutputSchema>;
 
 export type ValidateReviewerArtifactRefsInput = {
@@ -52,25 +38,6 @@ export type DecodeReviewerOutputContractInput = {
   readonly attempts: number;
   readonly output: unknown;
 };
-
-export const decodeReviewerOutputCoreContract = (
-  input: DecodeReviewerOutputContractInput,
-): Effect.Effect<
-  Schema.Schema.Type<typeof reviewerOutputCoreSchema>,
-  ReviewerOutputContractFailed
-> =>
-  Schema.decodeUnknown(reviewerOutputCoreSchema, { onExcessProperty: "error" })(input.output).pipe(
-    Effect.mapError((error) => {
-      const diagnostics = contractDiagnostics(error, input.output);
-      return new ReviewerOutputContractFailed({
-        operationName: "decode_reviewer_output_core",
-        reviewer: input.reviewer,
-        attempts: input.attempts,
-        diagnostics,
-        message: formatContractDiagnostics(diagnostics),
-      });
-    }),
-  );
 
 export const validateReviewerArtifactRefs = (
   input: ValidateReviewerArtifactRefsInput,
