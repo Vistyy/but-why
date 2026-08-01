@@ -16,7 +16,12 @@ export type ImplementationDecisionInputError =
 const controlCharacter = (value: string): boolean =>
   [...value].some((character) => {
     const codePoint = character.codePointAt(0) ?? 0;
-    return codePoint < 0x20 || (codePoint >= 0x7f && codePoint <= 0x9f);
+    return (
+      codePoint < 0x20 ||
+      (codePoint >= 0x7f && codePoint <= 0x9f) ||
+      codePoint === 0x2028 ||
+      codePoint === 0x2029
+    );
   });
 
 export const validateImplementationDecisionInput = (input: {

@@ -243,9 +243,12 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
         expect((requests[0] as { readonly body: string }).body).toContain(
           "Keep the decision log separate from approved intent.",
         );
-        expect((requests[0] as { readonly body: string }).body).toContain(
-          "Implementation Decision Log",
-        );
+        const body = (requests[0] as { readonly body: string }).body;
+        expect(body).toContain("Implementation Decision Log");
+        expect(body).toContain("<details>");
+        expect(body).toContain("<summary>Keep the decision log separate</summary>");
+        expect(body).not.toContain("decision-");
+        expect(body).not.toContain("recorded");
       }),
     ),
   );

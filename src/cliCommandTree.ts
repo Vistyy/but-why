@@ -268,7 +268,7 @@ taskCommand = group(
 const changeDecisionAddCommand = withCliHandler(
   leaf(
     "add",
-    "Record a Choice and Rationale (Choice: 160 characters; Rationale: 1-3 sentences, 600 characters).",
+    "Record a plain-text Choice on one line (maximum 160 characters) and a Rationale of 1-3 sentences (maximum 600 characters); --rationale - reads bounded UTF-8 stdin.",
     {
       changeId: changeIdArgument,
       choice: Options.text("choice"),

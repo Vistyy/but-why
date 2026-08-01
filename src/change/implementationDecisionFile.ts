@@ -2,7 +2,7 @@ import { resolve } from "node:path";
 import type { TextInputStdin } from "../cli/input/textInput.js";
 import { readTextInput } from "../cli/input/textInput.js";
 
-const maxRationaleBytes = 600 * 4;
+const maxRationaleBytes = 600 * 4 + 2;
 export type ImplementationRationaleInputError =
   | { readonly code: "invalid_rationale_encoding" }
   | { readonly code: "rationale_too_large"; readonly maxBytes: number }
