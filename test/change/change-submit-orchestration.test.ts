@@ -269,14 +269,14 @@ describe("Change Submit orchestration", () => {
       }),
   );
 
-  it.effect("rejects invalid Managed Worktree Repo Config before Candidate capture", () =>
+  it.effect("rejects invalid Change Base Repo Config before Candidate capture", () =>
     Effect.gen(function* () {
       const events: string[] = [];
       const submit = openChangeSubmit(
         dependencies({
           events,
           change: readyChange(),
-          agentEnvironmentError: "Managed Worktree Repo Config is invalid.",
+          baselineRepoConfigError: "Change Base Repo Config is invalid.",
         }),
       );
       const validationLayer = Layer.succeed(CandidateValidation, {
@@ -295,7 +295,7 @@ describe("Change Submit orchestration", () => {
       expect(result).toEqual({
         ok: false,
         code: "validation_policy_invalid",
-        message: "Managed Worktree Repo Config is invalid.",
+        message: "Change Base Repo Config is invalid.",
       });
       expect(events).toEqual(["reconcile"]);
     }),
@@ -1314,6 +1314,8 @@ const dependencies = (input: {
   readonly taskBacked?: boolean;
   readonly agentEnvironment?: readonly string[];
   readonly agentEnvironmentError?: string;
+  readonly baselineRepoConfigError?: string;
+  readonly candidateRepoConfigError?: string;
   readonly trackPolicyResolution?: boolean;
   readonly candidateRepoConfig?: RepoConfig;
   readonly baselineRepoConfig?: RepoConfig;
@@ -1427,15 +1429,17 @@ const dependencies = (input: {
     } satisfies ChangeReconciliation,
     loadRepoConfig: () => {
       if (input.trackPolicyResolution) events.push("load_candidate_repo_config");
-      return input.agentEnvironmentError === undefined
+      const error = input.candidateRepoConfigError ?? input.agentEnvironmentError;
+      return error === undefined
         ? { ok: true as const, config: input.candidateRepoConfig ?? { taskPrefix: "BY" } }
-        : { ok: false as const, message: input.agentEnvironmentError };
+        : { ok: false as const, message: error };
     },
     loadRepoConfigAtCommit: () => {
       if (input.trackPolicyResolution) events.push("load_base_repo_config");
-      return input.agentEnvironmentError === undefined
+      const error = input.baselineRepoConfigError ?? input.agentEnvironmentError;
+      return error === undefined
         ? { ok: true as const, config: input.baselineRepoConfig ?? { taskPrefix: "BY" } }
-        : { ok: false as const, message: input.agentEnvironmentError };
+        : { ok: false as const, message: error };
     },
     resolvePolicy: (
       taskBacked: boolean,
