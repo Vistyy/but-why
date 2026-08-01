@@ -82,6 +82,10 @@ export const loadChangeSubmit = (input: {
           : {
               ok: false,
               message: `Candidate Repo Config is invalid: ${managedConfig.error.message}`,
+              ...(managedConfig.error.path === undefined ? {} : { path: managedConfig.error.path }),
+              ...(managedConfig.error.diagnostics === undefined
+                ? {}
+                : { diagnostics: managedConfig.error.diagnostics }),
             };
       },
       loadRepoConfigAtCommit: (worktreePath, commit): ManagedRepoConfigResolution => {
@@ -98,6 +102,10 @@ export const loadChangeSubmit = (input: {
           : {
               ok: false,
               message: `Change Base Repo Config is invalid: ${decoded.error.message}`,
+              ...(decoded.error.path === undefined ? {} : { path: decoded.error.path }),
+              ...(decoded.error.diagnostics === undefined
+                ? {}
+                : { diagnostics: decoded.error.diagnostics }),
             };
       },
       repositoryCommonDirectory: context.commonDirectory,

@@ -37,6 +37,7 @@ import type { RepositoryStorageError } from "../../contracts/repositoryStorageEr
 import type { RepoStateLoadError } from "../../cliResults.js";
 import type { TextInputStdin } from "../../cli/input/textInput.js";
 import { structuredValue } from "../../output/structuredValue.js";
+import { structuredContractDiagnostics } from "../../output/contractDiagnostics.js";
 import { resolveChangeId } from "./changeTarget.js";
 
 export type ChangeCommandEnvironment = {
@@ -718,6 +719,16 @@ const submitResult = (result: ChangeSubmitResult, changeId: string): CliResult =
     return runtimeError({
       code: result.code,
       message: result.message,
+      ...(result.details === undefined
+        ? {}
+        : {
+            details: {
+              ...(result.details.path === undefined ? {} : { path: result.details.path }),
+              ...(result.details.diagnostics === undefined
+                ? {}
+                : { diagnostics: structuredContractDiagnostics(result.details.diagnostics) }),
+            },
+          }),
       help: ["Fix Repo Config or Global Config, then retry Change Submit."],
     });
   }

@@ -46,19 +46,6 @@ export const resolveAcceptanceReviewPolicy = (input: {
   });
 
   if (!resolution.ok) return resolution;
-  if (
-    resolution.resolved.profile.agentRuntime !== "pi" ||
-    resolution.resolved.profile.runtimeConfig?.model === undefined
-  ) {
-    return {
-      ok: false,
-      error: new InvalidReviewerConfig({
-        profileName: resolution.resolved.agentProfile,
-        message: "Acceptance Review requires a Pi Agent Profile.",
-      }),
-    };
-  }
-
   const instructions = resolveInstructions(input);
   if (!instructions.ok) return instructions;
 

@@ -1,6 +1,9 @@
 import { Effect } from "effect";
 
 import type { RepoConfig } from "../contracts/repoConfig.js";
+import type { ContractDiagnostic } from "../contracts/contractDiagnostics.js";
+import type { GlobalConfigValidationFailed } from "../contracts/configErrors.js";
+import type { SubmitRejectionError } from "./submit/submitRejectionErrors.js";
 import type {
   CandidateValidationPolicyResolution,
   ResolvedCandidateValidationPolicy,
@@ -110,7 +113,17 @@ export type ChangeSubmitResult =
     }
   | { readonly ok: false; readonly code: "owned_pull_request_closed"; readonly changeId: string }
   | { readonly ok: false; readonly code: "task_transition_failed"; readonly changeId: string }
-  | { readonly ok: false; readonly code: "validation_policy_invalid"; readonly message: string }
+  | {
+      readonly ok: false;
+      readonly code: "validation_policy_invalid";
+      readonly message: string;
+      readonly details?:
+        | {
+            readonly path?: string;
+            readonly diagnostics?: readonly ContractDiagnostic[];
+          }
+        | undefined;
+    }
   | { readonly ok: false; readonly code: "github_target_not_found" | "github_tooling_error" }
   | RemoteChangeBaseError
   | { readonly ok: false; readonly code: PublishCandidateFailureCode }
@@ -131,7 +144,12 @@ export type PublicationTargetDetectionResult =
 
 export type ManagedRepoConfigResolution =
   | { readonly ok: true; readonly config: RepoConfig }
-  | { readonly ok: false; readonly message: string };
+  | {
+      readonly ok: false;
+      readonly message: string;
+      readonly path?: string;
+      readonly diagnostics?: readonly ContractDiagnostic[];
+    };
 
 export type ChangeSubmitInput = {
   readonly changeId: string;
@@ -289,6 +307,9 @@ const submitChange = (
         ok: false,
         code: "validation_policy_invalid",
         message: baselineRepoConfig.message,
+        ...(configFailureDetails(baselineRepoConfig) === undefined
+          ? {}
+          : { details: configFailureDetails(baselineRepoConfig) }),
       } as const;
     }
     const candidate = yield* dependencies.captureCandidate({
@@ -309,6 +330,9 @@ const submitChange = (
             ok: false,
             code: "validation_policy_invalid",
             message: candidateRepoConfig.message,
+            ...(configFailureDetails(candidateRepoConfig) === undefined
+              ? {}
+              : { details: configFailureDetails(candidateRepoConfig) }),
           } as const;
         }
         const policy = dependencies.resolvePolicy(
@@ -321,7 +345,7 @@ const submitChange = (
           return {
             ok: false,
             code: "validation_policy_invalid",
-            message: policy.error.message,
+            ...validationPolicyFailure(policy.error),
           } as const;
         }
         if (!policy.resolved.taskBacked) {
@@ -347,6 +371,9 @@ const submitChange = (
         ok: false,
         code: "validation_policy_invalid",
         message: candidateRepoConfig.message,
+        ...(configFailureDetails(candidateRepoConfig) === undefined
+          ? {}
+          : { details: configFailureDetails(candidateRepoConfig) }),
       } as const;
     }
     const policy = dependencies.resolvePolicy(
@@ -359,7 +386,7 @@ const submitChange = (
       return {
         ok: false,
         code: "validation_policy_invalid",
-        message: policy.error.message,
+        ...validationPolicyFailure(policy.error),
       } as const;
     }
     const target = detectPublicationTarget(dependencies, change, candidate);
@@ -374,6 +401,48 @@ const submitChange = (
       input.progress,
     );
   });
+
+const configFailureDetails = (failure: {
+  readonly path?: string;
+  readonly diagnostics?: readonly ContractDiagnostic[];
+}):
+  | { readonly path?: string; readonly diagnostics?: readonly ContractDiagnostic[] }
+  | undefined => {
+  if (failure.path === undefined && failure.diagnostics === undefined) return undefined;
+  return {
+    ...(failure.path === undefined ? {} : { path: failure.path }),
+    ...(failure.diagnostics === undefined ? {} : { diagnostics: failure.diagnostics }),
+  };
+};
+
+type ValidationPolicyFailure =
+  | { readonly message: string }
+  | {
+      readonly message: string;
+      readonly details: NonNullable<ReturnType<typeof configFailureDetails>>;
+    };
+
+const validationPolicyFailure = (
+  error: SubmitRejectionError | GlobalConfigValidationFailed,
+): ValidationPolicyFailure => {
+  switch (error._tag) {
+    case "MissingAgentProfile":
+      return error.profileName === undefined
+        ? { message: "Global Config needs a default Agent Profile for reviewer selection." }
+        : {
+            message: `Agent Profile "${error.profileName}" in ${error.scope ?? "unknown"} scope was not found.`,
+          };
+    case "MissingAgentModel":
+      return {
+        message: `Agent Profile "${error.profileName}" in ${error.scope ?? "unknown"} scope has no Pi model in runtimeConfig.`,
+      };
+    case "RepoConfigValidationFailed":
+    case "GlobalConfigValidationFailed":
+      return { message: error.message, details: configFailureDetails(error) ?? {} };
+    default:
+      return { message: error.message };
+  }
+};
 
 const validateAndCompleteNoChange = (
   dependencies: Parameters<typeof openChangeSubmit>[0],
