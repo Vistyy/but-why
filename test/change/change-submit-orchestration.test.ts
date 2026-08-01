@@ -216,10 +216,10 @@ describe("Change Submit orchestration", () => {
         expect(result).toMatchObject({ ok: true, status: "published" });
         expect(events).toEqual([
           "reconcile",
-          "load_repo_config",
           "refresh_base",
+          "load_base_repo_config",
           "capture",
-          "load_repo_config",
+          "load_candidate_repo_config",
           "resolve_policy",
           "detect_target",
           "validate_taskless",
@@ -1377,7 +1377,13 @@ const dependencies = (input: {
         }),
     } satisfies ChangeReconciliation,
     loadRepoConfig: () => {
-      if (input.trackPolicyResolution) events.push("load_repo_config");
+      if (input.trackPolicyResolution) events.push("load_candidate_repo_config");
+      return input.agentEnvironmentError === undefined
+        ? { ok: true as const, config: { taskPrefix: "BY" } }
+        : { ok: false as const, message: input.agentEnvironmentError };
+    },
+    loadRepoConfigAtCommit: () => {
+      if (input.trackPolicyResolution) events.push("load_base_repo_config");
       return input.agentEnvironmentError === undefined
         ? { ok: true as const, config: { taskPrefix: "BY" } }
         : { ok: false as const, message: input.agentEnvironmentError };

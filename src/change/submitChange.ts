@@ -162,6 +162,10 @@ export const openChangeSubmit = (dependencies: {
   readonly taskPersistence: Pick<TaskPersistence, "getTaskById" | "transitionTaskState">;
   readonly reconciliation: ChangeReconciliation;
   readonly loadRepoConfig: (worktreePath: string) => ManagedRepoConfigResolution;
+  readonly loadRepoConfigAtCommit: (
+    worktreePath: string,
+    commit: string,
+  ) => ManagedRepoConfigResolution;
   readonly resolvePolicy: (
     taskBacked: boolean,
     repoConfig: RepoConfig,
@@ -270,20 +274,23 @@ const submitChange = (
         }
       }
     }
-    const managedRepoConfig = dependencies.loadRepoConfig(change.worktreePath);
-    if (!managedRepoConfig.ok) {
-      return {
-        ok: false,
-        code: "validation_policy_invalid",
-        message: managedRepoConfig.message,
-      } as const;
-    }
     const refreshedBase = dependencies.refreshBase(
       dependencies.repositoryPath,
       change.baseRef,
       change.baseRemoteUrl,
     );
     if (!refreshedBase.ok) return refreshedBase;
+    const baselineRepoConfig = dependencies.loadRepoConfigAtCommit(
+      change.worktreePath,
+      refreshedBase.base.commit,
+    );
+    if (!baselineRepoConfig.ok) {
+      return {
+        ok: false,
+        code: "validation_policy_invalid",
+        message: baselineRepoConfig.message,
+      } as const;
+    }
     const candidate = yield* dependencies.captureCandidate({
       cwd: change.worktreePath,
       changeId: change.id,
@@ -308,7 +315,7 @@ const submitChange = (
           true,
           candidateRepoConfig.config,
           change.worktreePath,
-          managedRepoConfig.config,
+          baselineRepoConfig.config,
         );
         if (!policy.ok) {
           return {
@@ -346,7 +353,7 @@ const submitChange = (
       change.acceptanceContext !== null,
       candidateRepoConfig.config,
       change.worktreePath,
-      managedRepoConfig.config,
+      baselineRepoConfig.config,
     );
     if (!policy.ok) {
       return {

@@ -47,11 +47,11 @@ A Task-backed Change captures immutable Acceptance Context.
 A taskless Change has no Acceptance Context.
 
 `by change submit <change-id>` reconciles an existing owned pull request before starting a new Submission.
-A new Submission selects the Change from Shared Repository State, reads the Managed Worktree Repo Config as the non-review policy baseline, and captures a Candidate.
+A new Submission selects the Change from Shared Repository State, reads the Repo Config from the exact fetched Change Base as the non-review policy baseline, and captures a Candidate.
 The caller checkout supplies only Local Repository identity, Shared Repository State, and Change selection.
 The caller checkout's Repo Config is not a Change Submit policy source.
 Submission reads the Candidate's tracked Repo Config after Candidate capture for reviewer policy and Repo Agent Profiles.
-The Managed Worktree Repo Config supplies Repository Preparation, Checks, Validation Workspace inputs, and the Agent Environment.
+The Change Base Repo Config supplies Repository Preparation, Checks, Validation Workspace inputs, and the Agent Environment.
 The Candidate Repo Config supplies reviewer selections and Repo reviewer profiles.
 It resolves the complete Validation Policy from the baseline and Candidate reviewer configuration before validation starts.
 The fetch updates only the remote-tracking ref.
@@ -87,7 +87,7 @@ The output ownership and expansion rules are defined in [CLI output](cli-output.
 
 Repo Config owns Repository Preparation, Checks, Validation Workspace inputs, review policy, Repo Agent Profiles, and the Agent Environment.
 Global Config owns Global Agent Profiles, reviewer defaults, and Interactive Session preferences.
-Change Submit resolves the non-review Repo Config baseline from the Managed Worktree and reviewer Repo Config from the Candidate, then resolves Global Config from the configured user path.
+Change Submit resolves the non-review Repo Config baseline from the Change Base and reviewer Repo Config from the Candidate, then resolves Global Config from the configured user path.
 It constructs one resolved Validation Policy before validation and reuses that policy for Validation Policy Snapshot evidence and eligible publication.
 The public configuration contract is in [But Why Config](public/config.md).
 
