@@ -30,9 +30,14 @@ export const validateImplementationDecisionInput = (input: {
 }): ImplementationDecisionInputError | undefined => {
   if (input.choice.trim().length === 0) return { code: "empty_choice" };
   if (input.rationale.trim().length === 0) return { code: "empty_rationale" };
-  if (controlCharacter(input.choice) || input.choice.includes("\n"))
+  if (
+    controlCharacter(input.choice) ||
+    input.choice.includes("\n") ||
+    /[`*_#[\]]/u.test(input.choice)
+  )
     return { code: "invalid_choice" };
-  if (controlCharacter(input.rationale)) return { code: "invalid_rationale" };
+  if (controlCharacter(input.rationale) || /[`*_#[\]]/u.test(input.rationale))
+    return { code: "invalid_rationale" };
   if ([...input.choice].length > 160) return { code: "choice_too_long", maxCharacters: 160 };
   if ([...input.rationale].length > 600) return { code: "rationale_too_long", maxCharacters: 600 };
   const sentences = input.rationale.trim().split(/(?<=[.!?])\s+/u);

@@ -31,6 +31,12 @@ describe("Implementation Decisions", () => {
       validateImplementationDecisionInput({ choice: "one\u2028two", rationale: "Reason." }),
     ).toEqual({ code: "invalid_choice" });
     expect(
+      validateImplementationDecisionInput({
+        choice: "Use the approach",
+        rationale: "Use **bold** text.",
+      }),
+    ).toEqual({ code: "invalid_rationale" });
+    expect(
       implementationDecisionMarkdown([
         {
           id: "decision-1",
