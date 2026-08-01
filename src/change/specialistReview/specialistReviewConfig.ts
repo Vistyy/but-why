@@ -80,16 +80,6 @@ const resolveSpecialist = (
     globalConfigDirectory: dirname(input.globalConfigPath),
   });
   if (!profileResolution.ok) return profileResolution;
-  if (
-    profileResolution.resolved.profile.agentRuntime !== "pi" ||
-    profileResolution.resolved.profile.runtimeConfig?.model === undefined
-  ) {
-    return invalid(
-      "Specialist Review requires a Pi Agent Profile.",
-      profileResolution.resolved.agentProfile,
-    );
-  }
-
   const instructionsSource = repoDefinition === undefined ? "global" : "repo";
   const instructionsPath =
     instructionsSource === "repo"
