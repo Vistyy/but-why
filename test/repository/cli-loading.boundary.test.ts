@@ -1,5 +1,6 @@
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
+import { performance } from "node:perf_hooks";
 import { Effect } from "effect";
 import { dirname, join } from "node:path";
 import { describe, vi } from "vitest";
@@ -8,18 +9,11 @@ import { expect, it } from "@effect/vitest";
 import { repoRoot } from "../support/by-cli.js";
 import { runTestProcess } from "../support/testProcess.js";
 
-vi.setConfig({ testTimeout: 30_000 });
+vi.setConfig({ testTimeout: 360_000 });
 
 type LoadingBenchmark = {
-  method: {
-    processesPerCommand: number;
-    order: string;
-    comparison: string[];
-  };
-  medianMilliseconds: Record<
-    string,
-    { compiledExecutable: number; installedPackageTarball: number }
-  >;
+  method: { processesPerCommand: number; order: string; comparison: string[] };
+  commands: readonly string[][];
 };
 
 describe("CLI loading and package boundary", () => {
@@ -27,27 +21,6 @@ describe("CLI loading and package boundary", () => {
     "builds literal lazy targets and runs the real packed package",
     () =>
       Effect.gen(function* () {
-        const benchmark = JSON.parse(
-          readFileSync(join(repoRoot, "test/repository/cli-loading.benchmark.json"), "utf8"),
-        ) as LoadingBenchmark;
-        expect(benchmark.method.processesPerCommand).toBe(15);
-        expect(benchmark.method.order).toBe("randomized");
-        expect(benchmark.method.comparison).toEqual([
-          "compiledExecutable",
-          "installedPackageTarball",
-        ]);
-        expect(Object.keys(benchmark.medianMilliseconds)).toEqual([
-          "--help",
-          "--version",
-          "task list",
-          "change list",
-          "validation-run show",
-        ]);
-        for (const measurement of Object.values(benchmark.medianMilliseconds)) {
-          expect(Number.isFinite(measurement.compiledExecutable)).toBe(true);
-          expect(Number.isFinite(measurement.installedPackageTarball)).toBe(true);
-        }
-
         const directory = mkdtempSync(join(tmpdir(), "but-why-cli-package-"));
         try {
           const build = runTestProcess("pnpm", ["--dir", repoRoot, "build"], { cwd: directory });
@@ -135,10 +108,51 @@ describe("CLI loading and package boundary", () => {
           );
           expect(validationShow.status).toBe(1);
           expect(validationShow.stdout).toContain("code: validation_run_not_found");
+
+          if (process.env["BY_CLI_LOADING_BENCHMARK"] === "1") {
+            const benchmark = JSON.parse(
+              readFileSync(join(repoRoot, "test/repository/cli-loading.benchmark.json"), "utf8"),
+            ) as LoadingBenchmark;
+            expect(benchmark.method.processesPerCommand).toBe(15);
+            expect(benchmark.method.order).toBe("randomized");
+            expect(benchmark.method.comparison).toEqual([
+              "compiledExecutable",
+              "installedPackageTarball",
+            ]);
+            const benchmarkRuns = benchmark.method.comparison.flatMap((executable) =>
+              benchmark.commands.map((args) => ({ executable, args })),
+            );
+            for (let index = benchmarkRuns.length - 1; index > 0; index -= 1) {
+              const swapIndex = Math.floor(Math.random() * (index + 1));
+              const current = benchmarkRuns[index];
+              const swap = benchmarkRuns[swapIndex];
+              if (current === undefined || swap === undefined) continue;
+              benchmarkRuns[index] = swap;
+              benchmarkRuns[swapIndex] = current;
+            }
+            const measurements = new Map<string, number[]>();
+            for (const run of benchmarkRuns) {
+              const values = measurements.get(run.executable) ?? [];
+              for (let repeat = 0; repeat < benchmark.method.processesPerCommand; repeat += 1) {
+                const started = performance.now();
+                const result = runTestProcess(
+                  run.executable === "compiledExecutable" ? "node" : installedBy,
+                  run.executable === "compiledExecutable"
+                    ? [join(repoRoot, "dist/main.js"), ...run.args]
+                    : run.args,
+                  { cwd: consumer },
+                );
+                expect(result.status).toBe(run.args[0] === "validation-run" ? 1 : 0);
+                values.push(performance.now() - started);
+              }
+              measurements.set(run.executable, values);
+            }
+            console.log(JSON.stringify({ benchmark: "cli-loading", measurements }));
+          }
         } finally {
           rmSync(directory, { recursive: true, force: true });
         }
       }),
-    30_000,
+    process.env["BY_CLI_LOADING_BENCHMARK"] === "1" ? 360_000 : 30_000,
   );
 });

@@ -5,6 +5,13 @@
     "order": "randomized",
     "comparison": ["compiledExecutable", "installedPackageTarball"]
   },
+  "commands": [
+    ["--help"],
+    ["--version"],
+    ["task", "list"],
+    ["change", "list"],
+    ["validation-run", "show", "missing"]
+  ],
   "medianMilliseconds": {
     "--help": {
       "compiledExecutable": 606.438,

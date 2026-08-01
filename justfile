@@ -113,6 +113,10 @@ build:
 pack:
     pnpm pack
 
+# Run comparative cold-start measurements for the production and package executables.
+cli-loading-benchmark:
+    @BY_CLI_LOADING_BENCHMARK=1 just test test/repository/cli-loading.boundary.test.ts
+
 # Format the codebase.
 format:
     pnpm run format
