@@ -82,7 +82,7 @@ The migration chain shipped in the first public release remains frozen after rel
 The public CLI is `by`.
 It returns structured results on stdout.
 TOON is the default format.
-Callers that parse output request JSON with `--output json`.
+Callers that parse output request JSON with `--json`.
 The output ownership and expansion rules are defined in [CLI output](cli-output.md).
 
 Repo Config owns Repository Preparation, Checks, Validation Workspace inputs, review policy, Repo Agent Profiles, and the Agent Environment.

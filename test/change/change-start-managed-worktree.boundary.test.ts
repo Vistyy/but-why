@@ -43,11 +43,7 @@ describe("Change Start Managed Worktree boundaries", () => {
       const root = yield* repositoryCopy();
       writeFileSync(join(root, "dirty.txt"), "caller work is not part of Change Start\n");
 
-      const result = yield* runByInProcessEffect(
-        root,
-        ["--output", "json", "change", "start"],
-        now,
-      );
+      const result = yield* runByInProcessEffect(root, ["--json", "change", "start"], now);
 
       expect(result.status).toBe(0);
       const output = JSON.parse(result.stdout) as ChangeOutput;
@@ -80,11 +76,7 @@ describe("Change Start Managed Worktree boundaries", () => {
       git(root, "commit", "-m", "Local-only commit");
       const localCommit = git(root, "rev-parse", "refs/heads/main^{commit}");
 
-      const started = yield* runByInProcessEffect(
-        root,
-        ["--output", "json", "change", "start"],
-        now,
-      );
+      const started = yield* runByInProcessEffect(root, ["--json", "change", "start"], now);
 
       expect(started.status).toBe(0);
       const output = JSON.parse(started.stdout) as ChangeOutput;
@@ -105,7 +97,7 @@ describe("Change Start Managed Worktree boundaries", () => {
 
       const started = yield* runByInProcessEffect(
         root,
-        ["--output", "json", "change", "start", "--base", "release"],
+        ["--json", "change", "start", "--base", "release"],
         now,
       );
 
@@ -123,7 +115,7 @@ describe("Change Start Managed Worktree boundaries", () => {
 
       const started = yield* runByInProcessEffect(
         root,
-        ["--output", "json", "change", "start", "--base", "missing"],
+        ["--json", "change", "start", "--base", "missing"],
         now,
       );
 
@@ -132,7 +124,7 @@ describe("Change Start Managed Worktree boundaries", () => {
         error: { code: "remote_branch_missing", remoteName: "origin", branchName: "missing" },
         help: [expect.stringContaining("retry Change Start")],
       });
-      const listed = yield* runByInProcessEffect(root, ["--output", "json", "change", "list"], now);
+      const listed = yield* runByInProcessEffect(root, ["--json", "change", "list"], now);
       expect(JSON.parse(listed.stdout)).toEqual({ changes: [] });
     }),
   );
@@ -146,7 +138,7 @@ describe("Change Start Managed Worktree boundaries", () => {
 
       const started = yield* runByInProcessEffect(
         root,
-        ["--output", "json", "change", "start", "--task", taskId],
+        ["--json", "change", "start", "--task", taskId],
         now,
       );
 
@@ -155,11 +147,7 @@ describe("Change Start Managed Worktree boundaries", () => {
         error: { code: "publication_remote_missing" },
         help: [expect.stringContaining("retry Change Start")],
       });
-      const task = yield* runByInProcessEffect(
-        root,
-        ["--output", "json", "task", "show", taskId],
-        now,
-      );
+      const task = yield* runByInProcessEffect(root, ["--json", "task", "show", taskId], now);
       expect(JSON.parse(task.stdout)).toMatchObject({ task: { id: taskId, state: "todo" } });
     }),
   );
@@ -169,11 +157,7 @@ describe("Change Start Managed Worktree boundaries", () => {
       const root = yield* repositoryCopy();
       git(root, "remote", "set-url", "origin", root);
 
-      const started = yield* runByInProcessEffect(
-        root,
-        ["--output", "json", "change", "start"],
-        now,
-      );
+      const started = yield* runByInProcessEffect(root, ["--json", "change", "start"], now);
 
       expect(started.status).toBe(1);
       expect(JSON.parse(started.stdout)).toMatchObject({
@@ -189,11 +173,7 @@ describe("Change Start Managed Worktree boundaries", () => {
       configurePublicationRemote(root, initializedRepositoryTemplate, "upstream");
       configurePublicationRemote(root, initializedRepositoryTemplate, "fork");
 
-      const started = yield* runByInProcessEffect(
-        root,
-        ["--output", "json", "change", "start"],
-        now,
-      );
+      const started = yield* runByInProcessEffect(root, ["--json", "change", "start"], now);
 
       expect(started.status).toBe(1);
       expect(JSON.parse(started.stdout)).toMatchObject({
@@ -210,11 +190,7 @@ describe("Change Start Managed Worktree boundaries", () => {
       const root = yield* repositoryCopy();
       configurePublicationRemote(root, join(root, "missing-remote"));
 
-      const started = yield* runByInProcessEffect(
-        root,
-        ["--output", "json", "change", "start"],
-        now,
-      );
+      const started = yield* runByInProcessEffect(root, ["--json", "change", "start"], now);
 
       expect(started.status).toBe(1);
       expect(JSON.parse(started.stdout)).toMatchObject({
@@ -247,14 +223,10 @@ describe("Change Start Managed Worktree boundaries", () => {
       const linkedWorktree = join(dirname(root), `${basename(root)}-linked-caller`);
       git(root, "worktree", "add", "-b", "linked-caller", linkedWorktree, "main");
 
-      const fromMain = yield* runByInProcessEffect(
-        root,
-        ["--output", "json", "change", "start"],
-        now,
-      );
+      const fromMain = yield* runByInProcessEffect(root, ["--json", "change", "start"], now);
       const fromLinked = yield* runByInProcessEffect(
         linkedWorktree,
-        ["--output", "json", "change", "start"],
+        ["--json", "change", "start"],
         now,
       );
 
@@ -287,7 +259,7 @@ describe("Change Start Managed Worktree boundaries", () => {
 
       const failed = yield* runByInProcessEffect(
         root,
-        ["--output", "json", "change", "start", "--task", taskId],
+        ["--json", "change", "start", "--task", taskId],
         now,
       );
 
@@ -314,7 +286,7 @@ describe("Change Start Managed Worktree boundaries", () => {
       rmSync(siblingRoot);
       const retried = yield* runByInProcessEffect(
         root,
-        ["--output", "json", "change", "start", "--task", taskId],
+        ["--json", "change", "start", "--task", taskId],
         now,
       );
       expect(retried.status).toBe(0);
@@ -330,13 +302,12 @@ describe("Change Start Managed Worktree boundaries", () => {
       const root = yield* repositoryCopy();
       const taskId = yield* createTask(root, "Prepared change", "Prepare this Change.\n");
       expect(
-        (yield* runByInProcessEffect(root, ["--output", "json", "task", "approve", taskId], now))
-          .status,
+        (yield* runByInProcessEffect(root, ["--json", "task", "approve", taskId], now)).status,
       ).toBe(0);
 
       const started = yield* runByInProcessEffect(
         root,
-        ["--output", "json", "change", "start", "--task", taskId],
+        ["--json", "change", "start", "--task", taskId],
         now,
       );
       expect(started.status).toBe(0);
@@ -350,7 +321,7 @@ describe("Change Start Managed Worktree boundaries", () => {
       );
       const conflictingBase = yield* runByInProcessEffect(
         root,
-        ["--output", "json", "change", "start", "--task", taskId, "--base", "release"],
+        ["--json", "change", "start", "--task", taskId, "--base", "release"],
         now,
       );
       expect(JSON.parse(conflictingBase.stdout)).toMatchObject({
@@ -378,7 +349,7 @@ describe("Change Start Managed Worktree boundaries", () => {
       });
       const locked = yield* runByInProcessEffect(
         root,
-        ["--output", "json", "task", "dependencies", "add", taskId, "--depends-on", "BY-404"],
+        ["--json", "task", "dependencies", "add", taskId, "--depends-on", "BY-404"],
         now,
       );
       expect(JSON.parse(locked.stdout)).toMatchObject({
@@ -389,7 +360,7 @@ describe("Change Start Managed Worktree boundaries", () => {
       git(root, "worktree", "remove", output.worktreePath);
       const recovered = yield* runByInProcessEffect(
         root,
-        ["--output", "json", "change", "start", "--task", taskId],
+        ["--json", "change", "start", "--task", taskId],
         now,
       );
       expect(JSON.parse(recovered.stdout)).toMatchObject({
@@ -423,11 +394,7 @@ describe("Change Start Managed Worktree boundaries", () => {
       git(root, "commit", "-m", "Configure preparation");
       configurePublicationRemote(root, root);
 
-      const started = yield* runByInProcessEffect(
-        root,
-        ["--output", "json", "change", "start"],
-        now,
-      );
+      const started = yield* runByInProcessEffect(root, ["--json", "change", "start"], now);
       expect(started.status).toBe(1);
       const failure = JSON.parse(started.stdout);
       expect(failure).toMatchObject({
@@ -445,7 +412,7 @@ describe("Change Start Managed Worktree boundaries", () => {
 
       const retried = yield* runByInProcessEffect(
         root,
-        ["--output", "json", "change", "prepare", failure.error.changeId],
+        ["--json", "change", "prepare", failure.error.changeId],
         now,
       );
       expect(JSON.parse(retried.stdout)).toMatchObject({
@@ -463,16 +430,7 @@ describe("Change Start Managed Worktree boundaries", () => {
       expect(
         (yield* runByInProcessEffect(
           root,
-          [
-            "--output",
-            "json",
-            "task",
-            "dependencies",
-            "add",
-            dependent,
-            "--depends-on",
-            prerequisite,
-          ],
+          ["--json", "task", "dependencies", "add", dependent, "--depends-on", prerequisite],
           now,
         )).status,
       ).toBe(0);
@@ -482,7 +440,7 @@ describe("Change Start Managed Worktree boundaries", () => {
 
       const blocked = yield* runByInProcessEffect(
         root,
-        ["--output", "json", "change", "start", "--task", dependent],
+        ["--json", "change", "start", "--task", dependent],
         now,
       );
       expect(JSON.parse(blocked.stdout)).toMatchObject({
@@ -497,8 +455,7 @@ describe("Change Start Managed Worktree boundaries", () => {
   it.effect("keeps Change Start on the Change command", () =>
     Effect.gen(function* () {
       const retired = yield* runByInProcessEffect(createTestWorkspace(), [
-        "--output",
-        "json",
+        "--json",
         "task",
         "start",
         "BY-1",
@@ -668,16 +625,7 @@ const createTask = (root: string, title: string, description: string) =>
     writeFileSync(descriptionPath, description);
     const created = yield* runByInProcessEffect(
       root,
-      [
-        "--output",
-        "json",
-        "task",
-        "create",
-        "--title",
-        title,
-        "--description-file",
-        descriptionPath,
-      ],
+      ["--json", "task", "create", "--title", title, "--description-file", descriptionPath],
       now,
     );
     expect(created.status).toBe(0);

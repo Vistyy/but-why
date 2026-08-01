@@ -116,11 +116,7 @@ describe("by change implement", () => {
   it.effect("launches a ready Change and passes a 256 KiB handoff unchanged", () =>
     Effect.gen(function* () {
       const root = yield* readyRepository();
-      const started = yield* runByInProcessEffect(
-        root,
-        ["--output", "json", "change", "start"],
-        now,
-      );
+      const started = yield* runByInProcessEffect(root, ["--json", "change", "start"], now);
       const change = JSON.parse(started.stdout) as {
         readonly change: { readonly id: string };
         readonly worktreePath: string;
@@ -142,7 +138,7 @@ describe("by change implement", () => {
 
       const result = yield* runByInProcessEffect(
         root,
-        ["--output", "json", "change", "implement", change.change.id],
+        ["--json", "change", "implement", change.change.id],
         now,
         { interactiveSessionHost: host },
       );
@@ -202,15 +198,7 @@ describe("by change implement", () => {
       const received: string[] = [];
       const handoffResult = yield* runByInProcessEffect(
         root,
-        [
-          "--output",
-          "json",
-          "change",
-          "implement",
-          change.change.id,
-          "--handoff-file",
-          handoffPath,
-        ],
+        ["--json", "change", "implement", change.change.id, "--handoff-file", handoffPath],
         now,
         {
           interactiveSessionHost: {
@@ -244,7 +232,7 @@ describe("by change implement", () => {
       expect((yield* runByInProcessEffect(root, ["task", "approve", taskId], now)).status).toBe(0);
       const started = yield* runByInProcessEffect(
         root,
-        ["--output", "json", "change", "start", "--task", taskId],
+        ["--json", "change", "start", "--task", taskId],
         now,
       );
       const change = JSON.parse(started.stdout) as {
@@ -254,7 +242,7 @@ describe("by change implement", () => {
       let launchInput: unknown;
       const result = yield* runByInProcessEffect(
         root,
-        ["--output", "json", "change", "implement", change.change.id],
+        ["--json", "change", "implement", change.change.id],
         now,
         {
           interactiveSessionHost: {
@@ -293,11 +281,7 @@ describe("by change implement", () => {
           },
         }),
       );
-      const started = yield* runByInProcessEffect(
-        root,
-        ["--output", "json", "change", "start"],
-        now,
-      );
+      const started = yield* runByInProcessEffect(root, ["--json", "change", "start"], now);
       const change = JSON.parse(started.stdout) as {
         readonly change: { readonly id: string };
         readonly worktreePath: string;
@@ -305,7 +289,7 @@ describe("by change implement", () => {
       let launches = 0;
       const result = yield* runByInProcessEffect(
         root,
-        ["--output", "json", "change", "implement", change.change.id],
+        ["--json", "change", "implement", change.change.id],
         now,
         {
           interactiveSessionHost: {
@@ -351,11 +335,7 @@ describe("by change implement", () => {
       );
 
       try {
-        const started = yield* runByInProcessEffect(
-          root,
-          ["--output", "json", "change", "start"],
-          now,
-        );
+        const started = yield* runByInProcessEffect(root, ["--json", "change", "start"], now);
         const change = JSON.parse(started.stdout) as {
           readonly change: { readonly id: string };
           readonly worktreePath: string;
@@ -370,13 +350,13 @@ describe("by change implement", () => {
 
         const fromMain = yield* runByInProcessEffect(
           root,
-          ["--output", "json", "change", "implement", change.change.id],
+          ["--json", "change", "implement", change.change.id],
           now,
           { interactiveSessionHost: host },
         );
         const fromLinked = yield* runByInProcessEffect(
           linkedCheckout,
-          ["--output", "json", "change", "implement", change.change.id],
+          ["--json", "change", "implement", change.change.id],
           now,
           { interactiveSessionHost: host },
         );
@@ -406,11 +386,7 @@ describe("by change implement", () => {
   it.effect("passes the selected Global Pi Agent Profile to the Interactive Session Host", () =>
     Effect.gen(function* () {
       const root = yield* readyRepository();
-      const started = yield* runByInProcessEffect(
-        root,
-        ["--output", "json", "change", "start"],
-        now,
-      );
+      const started = yield* runByInProcessEffect(root, ["--json", "change", "start"], now);
       const change = JSON.parse(started.stdout) as { readonly change: { readonly id: string } };
       const globalConfigPath = join(root, "global-config.json");
       writeFileSync(
@@ -429,7 +405,7 @@ describe("by change implement", () => {
 
       const result = yield* runByInProcessEffect(
         root,
-        ["--output", "json", "change", "implement", change.change.id],
+        ["--json", "change", "implement", change.change.id],
         now,
         {
           globalConfigPath,
@@ -478,24 +454,20 @@ describe("by change implement", () => {
     ([_name, globalConfig, message]) =>
       Effect.gen(function* () {
         const root = yield* readyRepository();
-        const started = yield* runByInProcessEffect(
-          root,
-          ["--output", "json", "change", "start"],
-          now,
-        );
+        const started = yield* runByInProcessEffect(root, ["--json", "change", "start"], now);
         const change = JSON.parse(started.stdout) as { readonly change: { readonly id: string } };
         const globalConfigPath = join(root, "global-config.json");
         writeFileSync(globalConfigPath, JSON.stringify(globalConfig));
         const before = yield* runByInProcessEffect(
           root,
-          ["--output", "json", "change", "show", change.change.id],
+          ["--json", "change", "show", change.change.id],
           now,
         );
         let launches = 0;
 
         const result = yield* runByInProcessEffect(
           root,
-          ["--output", "json", "change", "implement", change.change.id],
+          ["--json", "change", "implement", change.change.id],
           now,
           {
             globalConfigPath,
@@ -509,7 +481,7 @@ describe("by change implement", () => {
         );
         const after = yield* runByInProcessEffect(
           root,
-          ["--output", "json", "change", "show", change.change.id],
+          ["--json", "change", "show", change.change.id],
           now,
         );
 
@@ -528,11 +500,7 @@ describe("by change implement", () => {
   it.effect("rejects invalid Managed Worktree Repo Config before launching", () =>
     Effect.gen(function* () {
       const root = yield* readyRepository();
-      const started = yield* runByInProcessEffect(
-        root,
-        ["--output", "json", "change", "start"],
-        now,
-      );
+      const started = yield* runByInProcessEffect(root, ["--json", "change", "start"], now);
       const change = JSON.parse(started.stdout) as {
         readonly change: { readonly id: string };
         readonly worktreePath: string;
@@ -545,7 +513,7 @@ describe("by change implement", () => {
 
       const result = yield* runByInProcessEffect(
         root,
-        ["--output", "json", "change", "implement", change.change.id],
+        ["--json", "change", "implement", change.change.id],
         now,
         {
           interactiveSessionHost: {
@@ -568,17 +536,13 @@ describe("by change implement", () => {
   it.effect("rejects a Change whose Repository Preparation has not succeeded", () =>
     Effect.gen(function* () {
       const root = yield* unreadyRepository();
-      const started = yield* runByInProcessEffect(
-        root,
-        ["--output", "json", "change", "start"],
-        now,
-      );
+      const started = yield* runByInProcessEffect(root, ["--json", "change", "start"], now);
       const failure = JSON.parse(started.stdout) as {
         readonly error: { readonly changeId: string };
       };
       const submit = yield* runByInProcessEffect(
         root,
-        ["--output", "json", "change", "submit", failure.error.changeId],
+        ["--json", "change", "submit", failure.error.changeId],
         now,
       );
       expect(submit.status).toBe(1);
@@ -602,7 +566,7 @@ describe("by change implement", () => {
 
       const result = yield* runByInProcessEffect(
         root,
-        ["--output", "json", "change", "implement", failure.error.changeId],
+        ["--json", "change", "implement", failure.error.changeId],
         now,
         { interactiveSessionHost: host },
       );
@@ -615,11 +579,7 @@ describe("by change implement", () => {
   it.effect("maps host outcomes and remains launchable after retryable failures", () =>
     Effect.gen(function* () {
       const root = yield* readyRepository();
-      const started = yield* runByInProcessEffect(
-        root,
-        ["--output", "json", "change", "start"],
-        now,
-      );
+      const started = yield* runByInProcessEffect(root, ["--json", "change", "start"], now);
       const change = JSON.parse(started.stdout) as {
         readonly change: { readonly id: string };
         readonly worktreePath: string;
@@ -627,7 +587,7 @@ describe("by change implement", () => {
       writeFileSync(join(change.worktreePath, "dirty.txt"), "uncommitted\n");
       const submit = yield* runByInProcessEffect(
         root,
-        ["--output", "json", "change", "submit", change.change.id],
+        ["--json", "change", "submit", change.change.id],
         now,
       );
       expect(submit.status).toBe(1);
@@ -694,7 +654,7 @@ describe("by change implement", () => {
       for (const testCase of cases) {
         const result = yield* runByInProcessEffect(
           root,
-          ["--output", "json", "change", "implement", change.change.id],
+          ["--json", "change", "implement", change.change.id],
           now,
           { interactiveSessionHost: testCase.host },
         );
@@ -707,11 +667,7 @@ describe("by change implement", () => {
   it.effect("passes piped UTF-8 standard input to the Interactive Session Host", () =>
     Effect.gen(function* () {
       const root = yield* readyRepository();
-      const started = yield* runByInProcessEffect(
-        root,
-        ["--output", "json", "change", "start"],
-        now,
-      );
+      const started = yield* runByInProcessEffect(root, ["--json", "change", "start"], now);
       const change = JSON.parse(started.stdout) as { readonly change: { readonly id: string } };
       const stdinPath = join(root, "stdin-handoff.md");
       writeFileSync(stdinPath, "Handoff from stdin: Héllo\n");
@@ -727,7 +683,7 @@ describe("by change implement", () => {
       try {
         const result = yield* runByInProcessEffect(
           root,
-          ["--output", "json", "change", "implement", change.change.id, "--handoff-file", "-"],
+          ["--json", "change", "implement", change.change.id, "--handoff-file", "-"],
           now,
           { interactiveSessionHost: host, stdin: { fd: stdin, isTerminal: false } },
         );
@@ -745,7 +701,7 @@ describe("by change implement", () => {
 
       const result = yield* runByInProcessEffect(
         root,
-        ["--output", "json", "change", "implement", "change-1", "--handoff-file", "-"],
+        ["--json", "change", "implement", "change-1", "--handoff-file", "-"],
         now,
       );
 
@@ -773,7 +729,7 @@ describe("by change implement", () => {
 
         const result = yield* runByInProcessEffect(
           root,
-          ["--output", "json", "change", "implement", "change-1", "--handoff-file", handoffPath],
+          ["--json", "change", "implement", "change-1", "--handoff-file", handoffPath],
           now,
           { interactiveSessionHost: host },
         );
@@ -799,16 +755,7 @@ const createTask = (root: string, title: string, description: string) =>
     writeFileSync(descriptionPath, description);
     const created = yield* runByInProcessEffect(
       root,
-      [
-        "--output",
-        "json",
-        "task",
-        "create",
-        "--title",
-        title,
-        "--description-file",
-        descriptionPath,
-      ],
+      ["--json", "task", "create", "--title", title, "--description-file", descriptionPath],
       now,
     );
     expect(created.status).toBe(0);

@@ -233,25 +233,25 @@ tasks[2]:
 
       const defaultResult = yield* runByInProcessEffect(
         createTestWorkspace(),
-        ["--output", "json", "task", "list"],
+        ["--json", "task", "list"],
         firstNow,
         { taskUseCases },
       );
       const numericResult = yield* runByInProcessEffect(
         createTestWorkspace(),
-        ["--output", "json", "task", "list", "--limit", "2"],
+        ["--json", "task", "list", "--limit", "2"],
         firstNow,
         { taskUseCases },
       );
       const unlimitedResult = yield* runByInProcessEffect(
         createTestWorkspace(),
-        ["--output", "json", "task", "list", "--limit", "all"],
+        ["--json", "task", "list", "--limit", "all"],
         firstNow,
         { taskUseCases },
       );
       const filteredResult = yield* runByInProcessEffect(
         createTestWorkspace(),
-        ["--output", "json", "task", "list", "--state", "done", "--limit", "2"],
+        ["--json", "task", "list", "--state", "done", "--limit", "2"],
         firstNow,
         { taskUseCases },
       );
@@ -273,7 +273,7 @@ tasks[2]:
     Effect.gen(function* () {
       const result = yield* runByInProcessEffect(
         createTestWorkspace(),
-        ["--output", "json", "task", "list", "--limit", "0"],
+        ["--json", "task", "list", "--limit", "0"],
         firstNow,
         { taskUseCases: fakeTaskUseCases({ listTasks: () => expect.fail("must not list") }) },
       );
@@ -292,7 +292,7 @@ tasks[2]:
     Effect.gen(function* () {
       const result = yield* runByInProcessEffect(
         createTestWorkspace(),
-        ["--output", "json", "task", "list"],
+        ["--json", "task", "list"],
         firstNow,
         {
           taskUseCases: fakeTaskUseCases({
@@ -354,20 +354,15 @@ help[1]: "Run \`by task create --title \\"...\\" --description-file <file>\` to 
         },
       });
 
-      yield* runByInProcessEffect(root, ["--output", "json", "task", "list"], firstNow, {
+      yield* runByInProcessEffect(root, ["--json", "task", "list"], firstNow, {
         taskUseCases,
       });
-      yield* runByInProcessEffect(root, ["--output", "json", "task", "list", "--all"], firstNow, {
+      yield* runByInProcessEffect(root, ["--json", "task", "list", "--all"], firstNow, {
         taskUseCases,
       });
-      yield* runByInProcessEffect(
-        root,
-        ["--output", "json", "task", "list", "--state", "done"],
-        firstNow,
-        {
-          taskUseCases,
-        },
-      );
+      yield* runByInProcessEffect(root, ["--json", "task", "list", "--state", "done"], firstNow, {
+        taskUseCases,
+      });
 
       expect(inputs).toEqual([
         { includeDone: false, limit: 5 },
@@ -444,8 +439,7 @@ contextCommand: by task context BY-1
       yield* createTask(root, firstNow, "Draft title");
 
       const result = yield* runByInProcessEffect(root, [
-        "--output",
-        "json",
+        "--json",
         "task",
         "context",
         "draft",
@@ -474,8 +468,7 @@ contextCommand: by task context BY-1
       writeFileSync(join(root, ".git", "but-why", "task-context-drafts"), "not a directory");
 
       const result = yield* runByInProcessEffect(root, [
-        "--output",
-        "json",
+        "--json",
         "task",
         "context",
         "draft",
@@ -495,14 +488,7 @@ contextCommand: by task context BY-1
 
       yield* createTask(root, firstNow, "Original title");
       const firstDraft = JSON.parse(
-        (yield* runByInProcessEffect(root, [
-          "--output",
-          "json",
-          "task",
-          "context",
-          "draft",
-          "BY-1",
-        ])).stdout,
+        (yield* runByInProcessEffect(root, ["--json", "task", "context", "draft", "BY-1"])).stdout,
       ) as { draft: { path: string } };
       writeFileSync(firstDraft.draft.path, "# Current title\n\nCurrent description");
       expect(
@@ -510,8 +496,7 @@ contextCommand: by task context BY-1
       ).toBe(0);
 
       const draftResult = yield* runByInProcessEffect(root, [
-        "--output",
-        "json",
+        "--json",
         "task",
         "context",
         "draft",
@@ -535,8 +520,7 @@ contextCommand: by task context BY-1
       yield* createTask(root, firstNow, "Original title");
 
       const draftResult = yield* runByInProcessEffect(root, [
-        "--output",
-        "json",
+        "--json",
         "task",
         "context",
         "draft",
@@ -547,7 +531,7 @@ contextCommand: by task context BY-1
 
       const result = yield* runByInProcessEffect(
         root,
-        ["--output", "json", "task", "context", "apply", "BY-1"],
+        ["--json", "task", "context", "apply", "BY-1"],
         secondNow,
       );
 
@@ -576,8 +560,7 @@ contextCommand: by task context BY-1
       yield* createTask(root, firstNow, "Original title");
 
       const draftResult = yield* runByInProcessEffect(root, [
-        "--output",
-        "json",
+        "--json",
         "task",
         "context",
         "draft",
@@ -608,8 +591,7 @@ contextCommand: by task context BY-1
 
       yield* createTask(root, firstNow, "Original title");
       const draftResult = yield* runByInProcessEffect(root, [
-        "--output",
-        "json",
+        "--json",
         "task",
         "context",
         "draft",
@@ -641,8 +623,7 @@ contextCommand: by task context BY-1
 
         yield* createTask(root, firstNow, "Original title");
         const draftResult = yield* runByInProcessEffect(root, [
-          "--output",
-          "json",
+          "--json",
           "task",
           "context",
           "draft",

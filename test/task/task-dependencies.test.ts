@@ -26,8 +26,7 @@ const createTask = (root: string, title: string, dependencies: readonly string[]
     const result = yield* runByInProcessEffect(
       root,
       [
-        "--output",
-        "json",
+        "--json",
         "task",
         "create",
         "--title",
@@ -45,11 +44,7 @@ const readGraph = (root: string, taskIds: readonly string[]) =>
   Effect.gen(function* () {
     const graph: Record<string, TaskGraph> = {};
     for (const taskId of taskIds) {
-      const result = yield* runByInProcessEffect(
-        root,
-        ["--output", "json", "task", "show", taskId],
-        now,
-      );
+      const result = yield* runByInProcessEffect(root, ["--json", "task", "show", taskId], now);
       graph[taskId] = (JSON.parse(result.stdout) as { readonly task: TaskGraph }).task;
     }
     return graph;
@@ -57,11 +52,7 @@ const readGraph = (root: string, taskIds: readonly string[]) =>
 
 const readTaskIds = (root: string) =>
   Effect.gen(function* () {
-    const result = yield* runByInProcessEffect(
-      root,
-      ["--output", "json", "task", "list", "--all"],
-      now,
-    );
+    const result = yield* runByInProcessEffect(root, ["--json", "task", "list", "--all"], now);
     return (
       JSON.parse(result.stdout) as { readonly tasks: readonly { readonly id: string }[] }
     ).tasks.map((task) => task.id);
@@ -93,8 +84,7 @@ describe("Task dependency CLI", () => {
       const added = yield* runByInProcessEffect(
         root,
         [
-          "--output",
-          "json",
+          "--json",
           "task",
           "dependencies",
           "add",
@@ -118,8 +108,7 @@ describe("Task dependency CLI", () => {
       const removed = yield* runByInProcessEffect(
         root,
         [
-          "--output",
-          "json",
+          "--json",
           "task",
           "dependencies",
           "remove",
@@ -143,8 +132,7 @@ describe("Task dependency CLI", () => {
       const invalidBatch = yield* runByInProcessEffect(
         root,
         [
-          "--output",
-          "json",
+          "--json",
           "task",
           "dependencies",
           "add",
@@ -162,7 +150,7 @@ describe("Task dependency CLI", () => {
       });
       const afterInvalidBatch = yield* runByInProcessEffect(
         root,
-        ["--output", "json", "task", "show", "BY-4"],
+        ["--json", "task", "show", "BY-4"],
         now,
       );
       expect(JSON.parse(afterInvalidBatch.stdout)).toMatchObject({
@@ -171,7 +159,7 @@ describe("Task dependency CLI", () => {
 
       const missingReplace = yield* runByInProcessEffect(
         root,
-        ["--output", "json", "task", "dependencies", "replace", "BY-4"],
+        ["--json", "task", "dependencies", "replace", "BY-4"],
         now,
       );
       expect(missingReplace.status).toBe(2);
@@ -183,7 +171,7 @@ describe("Task dependency CLI", () => {
       for (const operation of ["add", "remove"] as const) {
         const missingDependency = yield* runByInProcessEffect(
           root,
-          ["--output", "json", "task", "dependencies", operation, "BY-4"],
+          ["--json", "task", "dependencies", operation, "BY-4"],
           now,
         );
         expect(missingDependency.status).toBe(2);
@@ -195,7 +183,7 @@ describe("Task dependency CLI", () => {
 
       const invalidReplace = yield* runByInProcessEffect(
         root,
-        ["--output", "json", "task", "dependencies", "replace", "BY-4", "--bad"],
+        ["--json", "task", "dependencies", "replace", "BY-4", "--bad"],
         now,
       );
       expect(invalidReplace.status).toBe(2);
@@ -205,7 +193,7 @@ describe("Task dependency CLI", () => {
 
       const invalidShortReplace = yield* runByInProcessEffect(
         root,
-        ["--output", "json", "task", "dependencies", "replace", "BY-4", "-x"],
+        ["--json", "task", "dependencies", "replace", "BY-4", "-x"],
         now,
       );
       expect(invalidShortReplace.status).toBe(2);
@@ -215,7 +203,7 @@ describe("Task dependency CLI", () => {
 
       const validTrailingGlobal = yield* runByInProcessEffect(
         root,
-        ["task", "dependencies", "replace", "BY-4", "--output", "json"],
+        ["task", "dependencies", "replace", "BY-4", "--json"],
         now,
       );
       expect(validTrailingGlobal.status).toBe(2);
@@ -225,7 +213,7 @@ describe("Task dependency CLI", () => {
 
       const validLeadingGlobal = yield* runByInProcessEffect(
         root,
-        ["task", "dependencies", "replace", "--output", "json", "BY-4"],
+        ["task", "dependencies", "replace", "--json", "BY-4"],
         now,
       );
       expect(validLeadingGlobal.status).toBe(2);
@@ -236,7 +224,7 @@ describe("Task dependency CLI", () => {
       for (const extraArgument of ["extra", "foo", "bar"] as const) {
         const extraPositional = yield* runByInProcessEffect(
           root,
-          ["--output", "json", "task", "dependencies", "replace", "BY-4", extraArgument],
+          ["--json", "task", "dependencies", "replace", "BY-4", extraArgument],
           now,
         );
         expect(extraPositional.status).toBe(2);
@@ -254,7 +242,7 @@ describe("Task dependency CLI", () => {
       ] as const) {
         const malformedGlobal = yield* runByInProcessEffect(
           root,
-          ["--output", "json", "task", "dependencies", "replace", "BY-4", invalidOption],
+          ["--json", "task", "dependencies", "replace", "BY-4", invalidOption],
           now,
         );
         expect(malformedGlobal.status).toBe(2);
@@ -265,7 +253,7 @@ describe("Task dependency CLI", () => {
 
       const cleared = yield* runByInProcessEffect(
         root,
-        ["--output", "json", "task", "dependencies", "clear", "BY-4"],
+        ["--json", "task", "dependencies", "clear", "BY-4"],
         now,
       );
       expect(cleared.status).toBe(0);
@@ -276,11 +264,7 @@ describe("Task dependency CLI", () => {
         unchanged: [],
         prerequisites: [],
       });
-      const shown = yield* runByInProcessEffect(
-        root,
-        ["--output", "json", "task", "show", "BY-4"],
-        now,
-      );
+      const shown = yield* runByInProcessEffect(root, ["--json", "task", "show", "BY-4"], now);
       expect(JSON.parse(shown.stdout)).toMatchObject({ task: { prerequisites: [] } });
     }),
   );
@@ -295,8 +279,7 @@ describe("Task dependency CLI", () => {
       const result = yield* runByInProcessEffect(
         root,
         [
-          "--output",
-          "json",
+          "--json",
           "task",
           "create",
           "--title",
@@ -334,8 +317,7 @@ describe("Task dependency CLI", () => {
       const replacement = yield* runByInProcessEffect(
         root,
         [
-          "--output",
-          "json",
+          "--json",
           "task",
           "dependencies",
           "replace",
@@ -401,8 +383,7 @@ describe("Task dependency CLI", () => {
       const result = yield* runByInProcessEffect(
         root,
         [
-          "--output",
-          "json",
+          "--json",
           "task",
           "create",
           "--title",
@@ -472,8 +453,7 @@ describe("Task dependency CLI", () => {
           const result = yield* runByInProcessEffect(
             root,
             [
-              "--output",
-              "json",
+              "--json",
               "task",
               "create",
               "--title",
@@ -536,8 +516,7 @@ describe("Task dependency CLI", () => {
           const result = yield* runByInProcessEffect(
             root,
             [
-              "--output",
-              "json",
+              "--json",
               "task",
               "dependencies",
               "replace",
@@ -554,7 +533,7 @@ describe("Task dependency CLI", () => {
 
         const missing = yield* runByInProcessEffect(
           root,
-          ["--output", "json", "task", "dependencies", "replace", "BY-404", "--depends-on", "BY-1"],
+          ["--json", "task", "dependencies", "replace", "BY-404", "--depends-on", "BY-1"],
           now,
         );
         expectJsonError(missing, {

@@ -101,10 +101,18 @@ function fail(failure) {
 function outputFormatFor(arguments_) {
   for (let index = 0; index < arguments_.length; index += 1) {
     const argument = arguments_[index];
-    if ((argument === "--output" || argument === "-o") && arguments_[index + 1] === "json") {
-      return "json";
+    if (argument === "--json") {
+      const value = arguments_[index + 1]?.toLowerCase();
+      return value === "false" || value === "0" || value === "n" || value === "no" || value === "off"
+        ? "toon"
+        : "json";
     }
-    if (argument === "--output=json" || argument === "-o=json") return "json";
+    if (argument?.startsWith("--json=")) {
+      const value = argument.slice("--json=".length).toLowerCase();
+      return value === "false" || value === "0" || value === "n" || value === "no" || value === "off"
+        ? "toon"
+        : "json";
+    }
   }
   return "toon";
 }

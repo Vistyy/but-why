@@ -40,8 +40,7 @@ describe("Change cancellation", () => {
       ).toBe(0);
       expect((yield* runByInProcessEffect(root, ["task", "approve", "BY-1"])).status).toBe(0);
       const started = yield* runByInProcessEffect(root, [
-        "--output",
-        "json",
+        "--json",
         "change",
         "start",
         "--task",
@@ -97,7 +96,7 @@ describe("Change cancellation", () => {
       expect(initialized.status).toBe(0);
       commitButWhyConfigAndRecordDefault(root);
 
-      const started = yield* runByInProcessEffect(root, ["--output", "json", "change", "start"]);
+      const started = yield* runByInProcessEffect(root, ["--json", "change", "start"]);
       expect(started.status).toBe(0);
       const changeId = (JSON.parse(started.stdout) as { readonly change: { readonly id: string } })
         .change.id;

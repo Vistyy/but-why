@@ -47,8 +47,7 @@ describe("Change inspection CLI", () => {
     Effect.gen(function* () {
       const root = createGitRepo();
       const result = yield* runByInProcessEffect(root, [
-        "--output",
-        "json",
+        "--json",
         "change",
         "submit",
         randomUUID(),
@@ -65,15 +64,14 @@ describe("Change inspection CLI", () => {
     Effect.gen(function* () {
       const root = yield* initializedRepoCopy();
       commitButWhyConfigAndRecordDefault(root);
-      const started = yield* runByInProcessEffect(root, ["--output", "json", "change", "start"]);
+      const started = yield* runByInProcessEffect(root, ["--json", "change", "start"]);
       const startedView = JSON.parse(started.stdout) as {
         readonly change: { readonly id: string };
         readonly worktreePath: string;
       };
 
       const inferred = yield* runByInProcessEffect(startedView.worktreePath, [
-        "--output",
-        "json",
+        "--json",
         "change",
         "show",
       ]);
@@ -89,14 +87,12 @@ describe("Change inspection CLI", () => {
         }),
       );
       const branchConflict = yield* runByInProcessEffect(startedView.worktreePath, [
-        "--output",
-        "json",
+        "--json",
         "change",
         "show",
       ]);
       const explicit = yield* runByInProcessEffect(root, [
-        "--output",
-        "json",
+        "--json",
         "change",
         "show",
         startedView.change.id,
@@ -124,28 +120,16 @@ describe("Change inspection CLI", () => {
 
       const defaultResult = yield* runByInProcessEffect(
         root,
-        ["--output", "json", "change", "list"],
+        ["--json", "change", "list"],
         commandNow,
       );
       const allResult = yield* runByInProcessEffect(
         root,
-        ["--output", "json", "change", "list", "--all"],
+        ["--json", "change", "list", "--all"],
         commandNow,
       );
-      const openShown = yield* runByInProcessEffect(root, [
-        "--output",
-        "json",
-        "change",
-        "show",
-        older.id,
-      ]);
-      const closedShown = yield* runByInProcessEffect(root, [
-        "--output",
-        "json",
-        "change",
-        "show",
-        newer.id,
-      ]);
+      const openShown = yield* runByInProcessEffect(root, ["--json", "change", "show", older.id]);
+      const closedShown = yield* runByInProcessEffect(root, ["--json", "change", "show", newer.id]);
 
       expect(JSON.parse(defaultResult.stdout)).toEqual({
         changes: [
@@ -264,26 +248,18 @@ describe("Change inspection CLI", () => {
         }),
       );
       const findings = yield* runByInProcessEffect(root, [
-        "--output",
-        "json",
+        "--json",
         "change",
         "findings",
         change.id,
       ]);
       const history = yield* runByInProcessEffect(root, [
-        "--output",
-        "json",
+        "--json",
         "change",
         "validation-runs",
         change.id,
       ]);
-      const shown = yield* runByInProcessEffect(root, [
-        "--output",
-        "json",
-        "change",
-        "show",
-        change.id,
-      ]);
+      const shown = yield* runByInProcessEffect(root, ["--json", "change", "show", change.id]);
 
       expect(JSON.parse(findings.stdout)).toMatchObject({
         change: { id: change.id },
@@ -358,16 +334,12 @@ describe("Change inspection CLI", () => {
     Effect.gen(function* () {
       const root = yield* initializedRepoCopy();
       commitButWhyConfigAndRecordDefault(root);
-      const started = yield* runByInProcessEffect(
-        root,
-        ["--output", "json", "change", "start"],
-        firstNow,
-      );
+      const started = yield* runByInProcessEffect(root, ["--json", "change", "start"], firstNow);
       const change = JSON.parse(started.stdout) as { readonly change: { readonly id: string } };
 
       const result = yield* runByInProcessEffect(
         root,
-        ["--output", "json", "change", "submit", change.change.id],
+        ["--json", "change", "submit", change.change.id],
         firstNow,
       );
 
@@ -392,11 +364,7 @@ describe("Change inspection CLI", () => {
         )}\n`,
       );
       commitButWhyConfigAndRecordDefault(root);
-      const started = yield* runByInProcessEffect(
-        root,
-        ["--output", "json", "change", "start"],
-        firstNow,
-      );
+      const started = yield* runByInProcessEffect(root, ["--json", "change", "start"], firstNow);
       const change = JSON.parse(started.stdout) as {
         readonly change: { readonly id: string };
         readonly worktreePath: string;
@@ -433,7 +401,7 @@ describe("Change inspection CLI", () => {
 
       const result = yield* runByInProcessEffect(
         root,
-        ["--output", "json", "change", "submit", change.change.id],
+        ["--json", "change", "submit", change.change.id],
         firstNow,
       );
       const output = JSON.parse(result.stdout) as {
@@ -457,24 +425,17 @@ describe("Change inspection CLI", () => {
 
       const added = yield* runByInProcessEffect(
         root,
-        ["--output", "json", "change", "decision", "add", change.id, "--file", "decision.md"],
+        ["--json", "change", "decision", "add", change.id, "--file", "decision.md"],
         commandNow,
       );
       const listed = yield* runByInProcessEffect(root, [
-        "--output",
-        "json",
+        "--json",
         "change",
         "decision",
         "list",
         change.id,
       ]);
-      const shown = yield* runByInProcessEffect(root, [
-        "--output",
-        "json",
-        "change",
-        "show",
-        change.id,
-      ]);
+      const shown = yield* runByInProcessEffect(root, ["--json", "change", "show", change.id]);
 
       expect(added.status).toBe(0);
       expect(JSON.parse(listed.stdout)).toMatchObject({
@@ -515,15 +476,14 @@ describe("Change inspection CLI", () => {
       );
 
       const started = yield* runByInProcessEffect(root, [
-        "--output",
-        "json",
+        "--json",
         "change",
         "start",
         "--task",
         "BY-1",
       ]);
       const changeId = JSON.parse(started.stdout).change.id;
-      const shown = yield* runByInProcessEffect(root, ["--output", "json", "task", "show", "BY-1"]);
+      const shown = yield* runByInProcessEffect(root, ["--json", "task", "show", "BY-1"]);
 
       expect(started.status).toBe(0);
       expect(shown.status).toBe(0);
@@ -536,9 +496,8 @@ describe("Change inspection CLI", () => {
         },
       });
       expect(
-        JSON.parse(
-          (yield* runByInProcessEffect(root, ["--output", "json", "task", "list", "--all"])).stdout,
-        ).tasks,
+        JSON.parse((yield* runByInProcessEffect(root, ["--json", "task", "list", "--all"])).stdout)
+          .tasks,
       ).toContainEqual(
         expect.objectContaining({
           id: "BY-1",
@@ -548,34 +507,25 @@ describe("Change inspection CLI", () => {
 
       yield* transitionTaskFixture(root, "validating");
       expect(
-        JSON.parse(
-          (yield* runByInProcessEffect(root, ["--output", "json", "task", "show", "BY-1"])).stdout,
-        ).task.state,
+        JSON.parse((yield* runByInProcessEffect(root, ["--json", "task", "show", "BY-1"])).stdout)
+          .task.state,
       ).toBe("validating");
 
       yield* transitionTaskFixture(root, "ready");
       expect(
-        JSON.parse(
-          (yield* runByInProcessEffect(root, ["--output", "json", "task", "show", "BY-1"])).stdout,
-        ).task.state,
+        JSON.parse((yield* runByInProcessEffect(root, ["--json", "task", "show", "BY-1"])).stdout)
+          .task.state,
       ).toBe("ready");
 
       yield* completeChangeFixture(root, changeId);
-      const completed = yield* runByInProcessEffect(root, [
-        "--output",
-        "json",
-        "change",
-        "show",
-        changeId,
-      ]);
+      const completed = yield* runByInProcessEffect(root, ["--json", "change", "show", changeId]);
       expect(JSON.parse(completed.stdout)).toMatchObject({
         change: { state: "closed", closeReason: "completed" },
         cleanup: { state: "pending", blockingReason: null },
       });
       expect(
-        JSON.parse(
-          (yield* runByInProcessEffect(root, ["--output", "json", "task", "show", "BY-1"])).stdout,
-        ).task.state,
+        JSON.parse((yield* runByInProcessEffect(root, ["--json", "task", "show", "BY-1"])).stdout)
+          .task.state,
       ).toBe("done");
     }),
   );

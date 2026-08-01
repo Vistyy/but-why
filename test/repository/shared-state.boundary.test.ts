@@ -68,8 +68,7 @@ describe("shared repository state", () => {
         const linkedStatusBeforeDraft = git(linked, "status", "--short");
 
         const draftResult = yield* runByInProcessEffect(root, [
-          "--output",
-          "json",
+          "--json",
           "task",
           "context",
           "draft",

@@ -217,7 +217,7 @@ const changeNotFound = (): CliResult =>
   runtimeError({
     code: "change_not_found",
     message: "Change was not found.",
-    help: ["Use a Change ID returned by `by change list --all --output json`."],
+    help: ["Use a Change ID returned by `by change list --all --json`."],
   });
 
 export const runFindings = (
@@ -616,7 +616,7 @@ const submitResult = (result: ChangeSubmitResult, changeId: string): CliResult =
           ? [
               `Inspect the existing Implementation Blocker with \`by change blocker list ${changeId}\`, then report it and wait.`,
             ]
-          : ["Use a Change ID returned by `by change start --output json`."],
+          : ["Use a Change ID returned by `by change start --json`."],
     });
   }
   if (result.code === "change_not_ready") {
@@ -782,7 +782,7 @@ const changeCancelResult = (result: ChangeCancellationResult): CliResult => {
       code: result.code,
       message: "Change was not found.",
       details: { changeId: result.changeId },
-      help: ["Use a Change ID returned by `by change start --output json`."],
+      help: ["Use a Change ID returned by `by change start --json`."],
     });
   }
   if (result.code === "task_backed_change") {
@@ -871,7 +871,7 @@ const reconcileResult = (
     return runtimeError({
       code: "change_not_found",
       message: "Change was not found.",
-      help: ["Use a Change ID returned by `by change start --output json`."],
+      help: ["Use a Change ID returned by `by change start --json`."],
     });
   }
   return result.rejected
@@ -902,7 +902,7 @@ const implementResult = (result: ChangeImplementResult): CliResult => {
     return runtimeError({
       code: result.code,
       message: result.code === "change_not_found" ? "Change was not found." : "Change is closed.",
-      help: ["Use an open ready Change ID returned by `by change start --output json`."],
+      help: ["Use an open ready Change ID returned by `by change start --json`."],
     });
   }
   if (result.code === "change_not_ready") {
@@ -1014,7 +1014,7 @@ const prepareResult = (result: ChangePrepareResult): CliResult => {
     return runtimeError({
       code: result.code,
       message: result.code === "change_not_found" ? "Change was not found." : "Change is closed.",
-      help: ["Use an open Change ID returned by `by change start --output json`."],
+      help: ["Use an open Change ID returned by `by change start --json`."],
     });
   }
   return operationalError(result.code, result.change);

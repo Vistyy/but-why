@@ -67,8 +67,7 @@ test("source workflow delegates a Candidate worktree to the canonical executable
     "just",
     [
       "by",
-      "--output",
-      "json",
+      "--json",
       "task",
       "create",
       "--title",
@@ -111,7 +110,7 @@ test("source workflow fails without Candidate fallback when the main checkout is
 
   // biome-ignore lint/complexity/useLiteralKeys: ProcessEnv requires an index-signature lookup.
   const inheritedPath = process.env["PATH"] ?? "";
-  const result = runTestProcess("just", ["by", "--output", "json", "task", "list"], {
+  const result = runTestProcess("just", ["by", "--json", "task", "list"], {
     cwd: candidate,
     env: { PATH: `${fakeGitDirectory}:${inheritedPath}` },
   });
@@ -144,7 +143,7 @@ test("source workflow preserves a newline in the canonical checkout path", () =>
   const trustedExecutable = join(main, "bin/by");
   rmSync(trustedExecutable);
 
-  const result = runTestProcess("just", ["by", "--output", "json", "task", "list"], {
+  const result = runTestProcess("just", ["by", "--json", "task", "list"], {
     cwd: candidate,
   });
 

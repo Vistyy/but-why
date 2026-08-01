@@ -82,7 +82,7 @@ describe("by CLI", () => {
         "Validate completed code changes against approved human intent.",
       );
       expect(result.stdout).toContain("COMMANDS");
-      expect(result.stdout).toContain("(-o, --output toon | json)");
+      expect(result.stdout).toContain("--json");
       for (const commandPath of expectedCommandPaths) {
         expect(result.stdout, commandPath).toContain(`- ${commandPath}`);
       }
@@ -98,13 +98,7 @@ describe("by CLI", () => {
 
   it.effect("uses native help behavior for trailing arguments", () =>
     Effect.gen(function* () {
-      const result = yield* runByInProcessEffect(repoRoot, [
-        "--output",
-        "json",
-        "task",
-        "--help",
-        "extra",
-      ]);
+      const result = yield* runByInProcessEffect(repoRoot, ["--json", "task", "--help", "extra"]);
 
       expect(result.status).toBe(0);
       expect(result.stderr).toBe("");
@@ -115,8 +109,7 @@ describe("by CLI", () => {
   it.effect("uses native leaf help behavior for trailing arguments", () =>
     Effect.gen(function* () {
       const result = yield* runByInProcessEffect(repoRoot, [
-        "--output",
-        "json",
+        "--json",
         "task",
         "list",
         "--help",
@@ -132,8 +125,7 @@ describe("by CLI", () => {
   it.effect("uses native help behavior for trailing options", () =>
     Effect.gen(function* () {
       const result = yield* runByInProcessEffect(repoRoot, [
-        "--output",
-        "json",
+        "--json",
         "task",
         "list",
         "--help",
@@ -149,7 +141,7 @@ describe("by CLI", () => {
 
   it.effect("prints JSON help when selected after help", () =>
     Effect.gen(function* () {
-      const result = yield* runByInProcessEffect(repoRoot, ["--help", "--output", "json"]);
+      const result = yield* runByInProcessEffect(repoRoot, ["--help", "--json"]);
 
       expect(result.status).toBe(0);
       expect(result.stderr).toBe("");
@@ -161,7 +153,7 @@ describe("by CLI", () => {
         "Validate completed code changes against approved human intent.",
       );
       expect(parsed.help).toContain("COMMANDS");
-      expect(parsed.help).toContain("(-o, --output toon | json)");
+      expect(parsed.help).toContain("--json");
       for (const commandPath of expectedCommandPaths) {
         expect(parsed.help, commandPath).toContain(`- ${commandPath}`);
       }
@@ -172,7 +164,7 @@ describe("by CLI", () => {
 
   it.effect("prints JSON init help", () =>
     Effect.gen(function* () {
-      const result = yield* runByInProcessEffect(repoRoot, ["--output", "json", "init", "--help"]);
+      const result = yield* runByInProcessEffect(repoRoot, ["--json", "init", "--help"]);
 
       expect(result.status).toBe(0);
       expect(result.stderr).toBe("");
@@ -185,13 +177,7 @@ describe("by CLI", () => {
   it.effect("prints JSON init guidance", () =>
     Effect.gen(function* () {
       const root = createGitRepo();
-      const result = yield* runByInProcessEffect(root, [
-        "--output",
-        "json",
-        "init",
-        "--task-prefix",
-        "BY",
-      ]);
+      const result = yield* runByInProcessEffect(root, ["--json", "init", "--task-prefix", "BY"]);
 
       expect(result.status).toBe(0);
       expect(result.stderr).toBe("");
@@ -220,7 +206,7 @@ describe("by CLI", () => {
 
   it.effect("prints JSON help when selected after help", () =>
     Effect.gen(function* () {
-      const result = yield* runByInProcessEffect(repoRoot, ["--help", "--output", "json"]);
+      const result = yield* runByInProcessEffect(repoRoot, ["--help", "--json"]);
 
       expect(result.status).toBe(0);
       expect(result.stderr).toBe("");
@@ -230,9 +216,9 @@ describe("by CLI", () => {
     }),
   );
 
-  it.effect("keeps TOON output when selected explicitly", () =>
+  it.effect("uses TOON output when JSON is false", () =>
     Effect.gen(function* () {
-      const result = yield* runByInProcessEffect(repoRoot, ["--help", "-o", "toon"]);
+      const result = yield* runByInProcessEffect(repoRoot, ["--help", "--json=false"]);
 
       expect(result.status).toBe(0);
       expect(result.stderr).toBe("");
@@ -243,7 +229,7 @@ describe("by CLI", () => {
 
   it.effect("prints JSON usage errors after a valid JSON selector", () =>
     Effect.gen(function* () {
-      const result = yield* runByInProcessEffect(repoRoot, ["--output", "json", "--bad"]);
+      const result = yield* runByInProcessEffect(repoRoot, ["--json", "--bad"]);
 
       expect(result.status).toBe(2);
       expect(result.stderr).toBe("");
@@ -259,7 +245,7 @@ describe("by CLI", () => {
   it.effect("prints JSON command errors after a valid JSON selector", () =>
     Effect.gen(function* () {
       const root = createGitRepo();
-      const result = yield* runByInProcessEffect(root, ["--output", "json", "task", "list"]);
+      const result = yield* runByInProcessEffect(root, ["--json", "task", "list"]);
 
       expect(result.status).toBe(1);
       expect(result.stderr).toBe("");
@@ -287,64 +273,25 @@ help[1]: Run \`by --help\` for generated command help.
     }),
   );
 
-  it.effect("prints invalid output selectors as TOON usage errors", () =>
+  it.effect("rejects the removed output selector", () =>
     Effect.gen(function* () {
-      const result = yield* runByInProcessEffect(repoRoot, ["--output", "xml", "--help"]);
+      const result = yield* runByInProcessEffect(repoRoot, ["--output", "json", "--help"]);
 
       expect(result.status).toBe(2);
       expect(result.stderr).toBe("");
       expect(result.stdout).toContain("code: invalid_usage");
-      expect(result.stdout).toContain("Expected one of the following cases: toon, json");
+      expect(result.stdout).toContain("Invalid subcommand for by");
     }),
   );
 
-  it.effect("prints missing output selector values as TOON usage errors", () =>
+  it.effect("rejects the removed short output selector", () =>
     Effect.gen(function* () {
-      const result = yield* runByInProcessEffect(repoRoot, ["task", "list", "--output"]);
+      const result = yield* runByInProcessEffect(repoRoot, ["task", "list", "-o", "json"]);
 
       expect(result.status).toBe(2);
       expect(result.stderr).toBe("");
       expect(result.stdout).toContain("code: invalid_usage");
-      expect(result.stdout).toContain("Received unknown argument: '--output'");
-    }),
-  );
-
-  it.effect("prints duplicate output selectors as TOON usage errors", () =>
-    Effect.gen(function* () {
-      const result = yield* runByInProcessEffect(repoRoot, [
-        "--output",
-        "json",
-        "init",
-        "--output",
-        "toon",
-      ]);
-
-      expect(result.status).toBe(2);
-      expect(result.stderr).toBe("");
-      expect(JSON.parse(result.stdout)).toMatchObject({
-        error: { code: "invalid_usage" },
-      });
-    }),
-  );
-
-  it.effect("rejects duplicate output selectors through native parsing", () =>
-    Effect.gen(function* () {
-      const result = yield* runByInProcessEffect(repoRoot, [
-        "--output",
-        "json",
-        "task",
-        "list",
-        "--output=json",
-      ]);
-
-      expect(result.status).toBe(2);
-      expect(result.stderr).toBe("");
-      expect(JSON.parse(result.stdout)).toMatchObject({
-        error: {
-          code: "invalid_usage",
-          message: "Received unknown argument: '--output=json'",
-        },
-      });
+      expect(result.stdout).toContain("Received unknown argument: '-o'");
     }),
   );
 

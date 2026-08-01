@@ -111,8 +111,8 @@ See [Global Config and Agent Profiles](config.md#global-config-and-agent-profile
 
 Task commands manage intent and Task lifecycle.
 Change commands manage implementation, validation, delivery, and reconciliation.
-Human-facing commands omit `--output` and use default TOON output.
-Programmatic callers put `--output json` before the command.
+Human-facing commands omit `--json` and use default TOON output.
+Programmatic callers put `--json` before the command.
 
 Create and approve a Task when the work needs durable intent:
 
@@ -143,13 +143,13 @@ by task context BY-3
 Start a Task-backed Change:
 
 ```bash
-by --output json change start --task BY-3
+by --json change start --task BY-3
 ```
 
 Start a taskless Change when no approved Task intent is required:
 
 ```bash
-by --output json change start
+by --json change start
 ```
 
 Change Start fetches the detected publication remote.

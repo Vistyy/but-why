@@ -46,7 +46,7 @@ import {
   runArtifactCommand,
   runShowCommand as runValidationRunShowCommand,
 } from "./cli/validationRun/validationRunCli.js";
-import { outputFormats, type OutputFormat } from "./output/structured.js";
+import type { OutputFormat } from "./output/structured.js";
 import { taskStates, type TaskState } from "./task/lifecycle.js";
 
 class CliEnvironmentContext extends Context.Tag("@but-why/CliEnvironment")<
@@ -521,12 +521,7 @@ const initCommand = withCliHandler(
     runInitCommand({ taskPrefix: requiredString(values, "taskPrefix") }, environment),
 );
 
-const globalOutput = Options.withAlias(
-  Options.withDefault(Options.choice("output", outputFormats), "toon"),
-  "o",
-);
-
-const commandRootBase = Command.make("by", { output: globalOutput }).pipe(
+const commandRootBase = Command.make("by", { json: Options.boolean("json") }).pipe(
   Command.withDescription("Validate completed code changes against approved human intent."),
 ) as unknown as AnyCommand;
 const commandRootWithHandler = withCliHandler(commandRootBase, (_values, environment) =>
@@ -594,10 +589,7 @@ export const runCommandTree = (
     let commandResult = initialCommandResult;
     if (
       initialCommandResult._tag === "Left" &&
-      ValidationError.isValidationError(initialCommandResult.left) &&
-      !generatedText(initialCommandResult.left.error).includes(
-        "Expected one of the following cases: toon, json",
-      )
+      ValidationError.isValidationError(initialCommandResult.left)
     ) {
       const fallbackCommandResult = yield* Effect.either(
         runWithConfig(finalCheckBuiltInConfig, true),
@@ -707,12 +699,26 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 
 export const outputFormatForArgs = (args: readonly string[]): OutputFormat => {
   for (let index = 0; index < args.length; index += 1) {
-    const selector = args[index];
-    if (selector === "--output" || selector === "-o") {
-      return args[index + 1] === "json" ? "json" : "toon";
+    const argument = args[index];
+    if (argument === "--json") {
+      const value = args[index + 1]?.toLowerCase();
+      return value === "false" ||
+        value === "0" ||
+        value === "n" ||
+        value === "no" ||
+        value === "off"
+        ? "toon"
+        : "json";
     }
-    if (selector?.startsWith("--output=") || selector?.startsWith("-o=")) {
-      return selector.split("=", 2)[1] === "json" ? "json" : "toon";
+    if (argument?.startsWith("--json=")) {
+      const value = argument.slice("--json=".length).toLowerCase();
+      return value === "false" ||
+        value === "0" ||
+        value === "n" ||
+        value === "no" ||
+        value === "off"
+        ? "toon"
+        : "json";
     }
   }
   return "toon";
@@ -739,14 +745,13 @@ const validGlobalOptionSyntax = (args: readonly string[]): readonly string[] | u
   const seen = new Set<string>();
   const positional: string[] = [];
   const valueOptions = new Map([
-    ["--output", new Set(["toon", "json"])],
     [
       "--log-level",
       new Set(["all", "trace", "debug", "info", "warning", "error", "fatal", "none"]),
     ],
     ["--completions", new Set(["sh", "bash", "fish", "zsh"])],
   ]);
-  const aliases = new Map([["-o", "--output"]]);
+  const aliases = new Map<string, string>();
   const flags = new Set(["--wizard", "--version", "--help", "-h"]);
   for (let index = 0; index < args.length; index += 1) {
     const argument = args[index];
@@ -755,7 +760,25 @@ const validGlobalOptionSyntax = (args: readonly string[]): readonly string[] | u
       positional.push(argument);
       continue;
     }
+    if (argument.startsWith("--json=")) {
+      if (
+        !["true", "1", "y", "yes", "on", "false", "0", "n", "no", "off"].includes(
+          argument.slice(7).toLowerCase(),
+        )
+      )
+        return undefined;
+      continue;
+    }
     if (argument.includes("=")) return undefined;
+    if (argument === "--json") {
+      const next = args[index + 1]?.toLowerCase();
+      if (
+        next !== undefined &&
+        ["true", "1", "y", "yes", "on", "false", "0", "n", "no", "off"].includes(next)
+      )
+        index += 1;
+      continue;
+    }
     const option = aliases.get(argument) ?? argument;
     if (flags.has(option)) {
       if (seen.has(option)) return undefined;
