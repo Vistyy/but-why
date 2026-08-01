@@ -36,6 +36,7 @@ The first version must not add Plan, Epic, Initiative, or generic Run concepts.
 - A material validation problem is a Finding.
 - A non-blocking suggestion is neither a Planning Finding nor a Finding.
 - The design must compare each Planning behavior with the corresponding Validation behavior before it introduces a difference.
+- Planning Review must treat deletion or no code change as a valid complete result when that is the smallest result that satisfies current intent.
 - The first implementation must prefer a small complete path over speculative flexibility.
 
 ## Task Submission and approval
@@ -87,6 +88,12 @@ A Planning Finding must identify a material problem that can do at least one of 
 - Conflict with repository evidence or authoritative external evidence.
 - Duplicate or contradict existing work.
 - Leave a consequential assumption unsupported.
+- Preserve or create a durable representation of a retired concept without an accepted current boundary.
+- Require durable evidence whose only purpose is to prove that a retired concept is absent.
+
+When a Task proposal retires a concept, the Planning Reviewer must apply the repository current-system invariant.
+The proposal and its Task Verification Contract must identify the retired concept, its replacement, affected repository surfaces, targeted search scope, and each accepted exception.
+The contract must classify evidence as durable current-behavior evidence or one-time removal evidence.
 
 A Planning Reviewer must not report a Finding only because the Task lacks file-by-file implementation steps.
 A Planning Reviewer must not report a Finding for a local reversible choice.
@@ -414,9 +421,8 @@ Errors must include an actionable command when recovery is possible.
 
 ## Boundaries and dependencies
 
-BY-54, `Enforce one Active Validation Run per Change`, must land before Task Submission execution ownership is implemented.
-BY-54 must establish the reusable SQLite execution-lock primitive and durable active-run relation pattern.
-Before implementation, BY-54 must be amended to own the accepted Validation cancellation interaction with an Active Validation Run.
+BY-54, `Enforce one Active Validation Run per Change`, is Done.
+It establishes the reusable SQLite execution-lock primitive, durable active-run relation pattern, and accepted Validation cancellation interaction that Task Submission execution ownership requires.
 
 `src/task/` must own Task Submission, Planning Runs, Planning Findings, Task Approval, and their persistence ports.
 CLI modules must route commands and translate results without coordinating persistence.
@@ -458,10 +464,7 @@ One Change has at most one Active Validation Run, and an operator can recover an
 Primary seam:
 Run concurrent real `by change submit` processes, interrupt the owner, inspect the durable Active Validation Run, and recover through `by validation-run abandon`.
 
-Required addition from this plan:
-BY-54 must be amended before implementation so Validation cancellation rejects a live Submission or requires abandonment of an interrupted Active Validation Run.
-
-This slice establishes the execution-lock and active-run primitives that Planning needs.
+BY-54 is Done and establishes the execution-lock and active-run primitives that Planning needs.
 
 ### Slice 2: One shared reviewer Finding contract
 
@@ -503,6 +506,7 @@ Observable variations must also prove:
 
 The Task Verification Contract must address the Material Risk that Task Context or dependency facts change after submission or approval.
 It must require evidence that Task Approval binds the exact Planning Proposal Snapshot and that concurrent mutation cannot create approval.
+Planning Review must also enforce the repository current-system invariant and its evidence-lifecycle requirements when the proposal retires a concept.
 Until Slice 4 provides confirmed approved-Task revision, the slice must reject mutation of approved Task intent.
 
 This slice owns:
@@ -534,6 +538,7 @@ Approve a Task through Task Submission, propose a changed Task Context, confirm 
 Observable variations must also prove:
 
 - Identical Task Context apply as a no-op.
+- Confirmed revision that removes or supersedes an over-specified accepted requirement.
 - Task Comment confirmation and invalidation.
 - Task Dependency confirmation and invalidation.
 - Rejection of every intent edit after Change Start.
@@ -541,7 +546,7 @@ Observable variations must also prove:
 - Explicit Todo resubmission and each pass, Finding, and tooling-failure result after invalid ancestry.
 
 The Task Verification Contract must require evidence that confirmed revision invalidates the exact prior Task Approval.
-It must also require evidence that Change Start captures only the newly approved intent.
+It must also require evidence that a revision can explicitly supersede prior accepted intent and that Change Start captures only the newly approved intent.
 
 This slice owns:
 
@@ -560,13 +565,15 @@ Do not create one Task per module, command, migration, or test group.
 The four slices above are the maximum initial decomposition.
 BY-54 already owns Slice 1.
 
-After the plan is approved:
+The approved high-level sequence is:
 
-1. BY-54 owns the accepted Validation cancellation behavior and shared execution lock.
-2. BY-83 owns Slice 2.
-3. Create Slice 3 only after BY-54 and BY-83 are Done.
-4. Create Slice 4 only after Slice 3 is Done and has been dogfooded.
-5. Split a slice only when new evidence establishes an independently useful capability or a real blocker.
+1. BY-54 remains the completed owner of Validation cancellation behavior and the shared execution lock.
+2. Complete BY-83 as Slice 2 before the verification portfolio migration.
+3. Complete the verification portfolio migration and closure.
+4. Complete the codebase simplification audit and each approved shared-foundation simplification that Planning would otherwise consume.
+5. Create Slice 3 only after BY-54 and BY-83 are Done and the preceding program work is complete.
+6. Create Slice 4 only after Slice 3 is Done and has been dogfooded.
+7. Split a slice only when new evidence establishes an independently useful capability or a real blocker.
 
 Sequence does not create a Task Dependency by itself.
 Record a dependency only when the later Task cannot be implemented or verified before the prerequisite is Done.
