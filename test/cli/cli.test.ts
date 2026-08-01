@@ -227,6 +227,18 @@ describe("by CLI", () => {
     }),
   );
 
+  it.effect("accepts spaced native JSON boolean values", () =>
+    Effect.gen(function* () {
+      const json = yield* runByInProcessEffect(repoRoot, ["--json", "true", "--version"]);
+      const toon = yield* runByInProcessEffect(repoRoot, ["--json", "false", "--version"]);
+
+      expect(json.status).toBe(0);
+      expect(JSON.parse(json.stdout)).toEqual({ version: "0.0.1" });
+      expect(toon.status).toBe(0);
+      expect(toon.stdout).toBe("version: 0.0.1\n");
+    }),
+  );
+
   it.effect("rejects invalid native JSON values without version fallback", () =>
     Effect.gen(function* () {
       const result = yield* runByInProcessEffect(repoRoot, ["--json", "bad", "--version"]);

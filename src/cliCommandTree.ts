@@ -601,7 +601,22 @@ export const runCommandTree = (
         return (
           next !== undefined &&
           !next.startsWith("-") &&
-          !["init", "task", "change", "validation-run"].includes(next)
+          ![
+            "init",
+            "task",
+            "change",
+            "validation-run",
+            "true",
+            "1",
+            "y",
+            "yes",
+            "on",
+            "false",
+            "0",
+            "n",
+            "no",
+            "off",
+          ].includes(next)
         );
       })
     ) {
