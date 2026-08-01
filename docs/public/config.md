@@ -13,7 +13,7 @@ It contains reusable Agent Profiles and user-level Agent Profile selections.
 
 Both files are validated when But Why reads them.
 
-Change Submit reads Repo Config exactly once from the selected Change's recorded Managed Worktree.
+Change Submit reads the Repo Config from the exact fetched Change Base as the non-review policy baseline, captures a Candidate, then reads the Candidate's tracked Repo Config for reviewer policy and Repo Agent Profiles.
 The caller checkout is used only for Local Repository identity, Shared Repository State, and Change selection, so its Repo Config does not supply submission policy.
 Global Config remains resolved from the configured user path.
 
@@ -139,7 +139,8 @@ Every entry must be a non-empty string.
 But Why prepends the list to the complete Pi invocation after it resolves the Agent Profile.
 
 Change Implement reads the setting from the Change Managed Worktree.
-Change Submit resolves the setting from the selected Change's Managed Worktree and records it in the Validation Policy Snapshot.
+Change Submit resolves the setting from the exact fetched Change Base Repo Config and records it in the Validation Policy Snapshot.
+Candidate reviewer configuration does not change this setting.
 Missing configuration preserves direct Pi launch.
 An invalid configuration rejects the applicable command before agent launch.
 A configured wrapper failure stops the operation without an unwrapped retry.
@@ -230,13 +231,13 @@ Reviewer operations require `runtimeConfig.model`.
 
 Selections use `{ "scope": "repo" | "global", "name": "..." }`.
 An explicit selection resolves only the declared scope.
-Reviewer and Specialist profile selections resolve from the selected Change's Managed Worktree Repo Config, then Global Config, then Global `defaultAgentProfile`.
+Reviewer and Specialist profile selections resolve from the Candidate Repo Config, then Global Config, then Global `defaultAgentProfile`.
 Interactive Session selection uses the Change Managed Worktree Repo Config, then Global Config, then Global `defaultAgentProfile`.
 
 Configured resource arrays are exact allowlists.
 An empty array disables that resource type.
 An omitted field preserves normal Pi behavior.
-Repo paths resolve from the Managed Worktree and remain inside the repository.
+Repo paths resolve from the Candidate Validation Workspace and remain inside the repository.
 Global relative paths resolve from the Global Config directory.
 Supported absolute paths and Pi package sources may be used by Global Profiles.
 

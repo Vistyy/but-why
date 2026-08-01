@@ -361,7 +361,7 @@ const runCandidatePhases = (
 > =>
   Effect.fn("CandidateValidation.runPhases")(function* () {
     const agentEnvironment = input.policy.agentEnvironment;
-    const resourceRoot = input.resourceRoot ?? activeWorkspace.worktreePath;
+    const resourceRoot = activeWorkspace.worktreePath;
     let reviewerEvidence: ReviewerContinuityEvidence | undefined;
     const sessionOptions = {
       ...(dependencies.sessionStore === undefined

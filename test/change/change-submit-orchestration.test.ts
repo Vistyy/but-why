@@ -3,6 +3,7 @@ import { Effect, Layer } from "effect";
 import { describe } from "vitest";
 
 import { CandidateValidation } from "../../src/change/candidateValidation/validateCandidate.js";
+import type { CandidateValidationPolicyResolution } from "../../src/change/candidateValidation/resolveCandidateValidationPolicy.js";
 import type { ChangeRecord } from "../../src/change/change.js";
 import type { RepoConfig } from "../../src/contracts/repoConfig.js";
 import type { ChangePersistence } from "../../src/change/changePersistence.js";
@@ -179,7 +180,7 @@ describe("Change Submit orchestration", () => {
   );
 
   it.effect(
-    "loads Repo Config before Candidate capture and resolves policy once before validation",
+    "loads the policy baseline before Candidate capture and reviewer config after capture",
     () =>
       Effect.gen(function* () {
         const events: string[] = [];
@@ -188,13 +189,53 @@ describe("Change Submit orchestration", () => {
             events,
             change: readyChange(),
             trackPolicyResolution: true,
+            candidateRepoConfig: { taskPrefix: "BY", review: { specialists: ["candidate"] } },
+            baselineRepoConfig: { taskPrefix: "BY", review: { specialists: ["baseline"] } },
             refreshResult: { ok: true, base: refreshedBase },
+            resolvePolicy: (_taskBacked, repoConfig, _worktreePath, validationRepoConfig) => {
+              expect(repoConfig.review?.specialists).toEqual(["candidate"]);
+              expect(validationRepoConfig?.review?.specialists).toEqual(["baseline"]);
+              return {
+                ok: true,
+                resolved: {
+                  taskBacked: false,
+                  policy: {
+                    ...tasklessPolicy,
+                    specialistReviews: [
+                      {
+                        id: "candidate",
+                        instructions: "Candidate reviewer",
+                        instructionsSource: "repo",
+                        agentProfile: "candidate-reviewer",
+                        profileScope: "repo",
+                        profile: {
+                          agentProfile: "candidate-reviewer",
+                          scope: "repo",
+                          profile: {
+                            agentRuntime: "pi",
+                            runtimeConfig: { model: "candidate/model" },
+                          },
+                        },
+                      },
+                    ],
+                  },
+                },
+              } satisfies CandidateValidationPolicyResolution;
+            },
           }),
         );
         const validationLayer = Layer.succeed(CandidateValidation, {
-          validateCandidate: () =>
+          validateCandidate: (input) =>
             Effect.sync(() => {
               events.push("validate_taskless");
+              expect(input.policy.specialistReviews).toMatchObject([
+                {
+                  id: "candidate",
+                  agentProfile: "candidate-reviewer",
+                  profileScope: "repo",
+                  profile: { profile: { runtimeConfig: { model: "candidate/model" } } },
+                },
+              ]);
               return {
                 ok: true,
                 reused: false,
@@ -216,9 +257,10 @@ describe("Change Submit orchestration", () => {
         expect(result).toMatchObject({ ok: true, status: "published" });
         expect(events).toEqual([
           "reconcile",
-          "load_repo_config",
           "refresh_base",
+          "load_base_repo_config",
           "capture",
+          "load_candidate_repo_config",
           "resolve_policy",
           "detect_target",
           "validate_taskless",
@@ -227,14 +269,14 @@ describe("Change Submit orchestration", () => {
       }),
   );
 
-  it.effect("rejects invalid Managed Worktree Agent Environment before Candidate capture", () =>
+  it.effect("rejects invalid Change Base Repo Config before Candidate capture", () =>
     Effect.gen(function* () {
       const events: string[] = [];
       const submit = openChangeSubmit(
         dependencies({
           events,
           change: readyChange(),
-          agentEnvironmentError: "Managed Worktree Repo Config is invalid.",
+          baselineRepoConfigError: "Change Base Repo Config is invalid.",
         }),
       );
       const validationLayer = Layer.succeed(CandidateValidation, {
@@ -253,7 +295,7 @@ describe("Change Submit orchestration", () => {
       expect(result).toEqual({
         ok: false,
         code: "validation_policy_invalid",
-        message: "Managed Worktree Repo Config is invalid.",
+        message: "Change Base Repo Config is invalid.",
       });
       expect(events).toEqual(["reconcile"]);
     }),
@@ -1272,7 +1314,17 @@ const dependencies = (input: {
   readonly taskBacked?: boolean;
   readonly agentEnvironment?: readonly string[];
   readonly agentEnvironmentError?: string;
+  readonly baselineRepoConfigError?: string;
+  readonly candidateRepoConfigError?: string;
   readonly trackPolicyResolution?: boolean;
+  readonly candidateRepoConfig?: RepoConfig;
+  readonly baselineRepoConfig?: RepoConfig;
+  readonly resolvePolicy?: (
+    taskBacked: boolean,
+    repoConfig: RepoConfig,
+    worktreePath: string,
+    validationRepoConfig?: RepoConfig,
+  ) => CandidateValidationPolicyResolution;
   readonly findings?: readonly (typeof finding)[];
   readonly toolingFailures?: readonly (typeof toolingFailure)[];
   readonly publication?: PublicationFixture;
@@ -1376,13 +1428,29 @@ const dependencies = (input: {
         }),
     } satisfies ChangeReconciliation,
     loadRepoConfig: () => {
-      if (input.trackPolicyResolution) events.push("load_repo_config");
-      return input.agentEnvironmentError === undefined
-        ? { ok: true as const, config: { taskPrefix: "BY" } }
-        : { ok: false as const, message: input.agentEnvironmentError };
+      if (input.trackPolicyResolution) events.push("load_candidate_repo_config");
+      const error = input.candidateRepoConfigError ?? input.agentEnvironmentError;
+      return error === undefined
+        ? { ok: true as const, config: input.candidateRepoConfig ?? { taskPrefix: "BY" } }
+        : { ok: false as const, message: error };
     },
-    resolvePolicy: (_taskBacked: boolean, _repoConfig: RepoConfig, _worktreePath: string) => {
+    loadRepoConfigAtCommit: () => {
+      if (input.trackPolicyResolution) events.push("load_base_repo_config");
+      const error = input.baselineRepoConfigError ?? input.agentEnvironmentError;
+      return error === undefined
+        ? { ok: true as const, config: input.baselineRepoConfig ?? { taskPrefix: "BY" } }
+        : { ok: false as const, message: error };
+    },
+    resolvePolicy: (
+      taskBacked: boolean,
+      repoConfig: RepoConfig,
+      worktreePath: string,
+      validationRepoConfig?: RepoConfig,
+    ) => {
       if (input.trackPolicyResolution) events.push("resolve_policy");
+      if (input.resolvePolicy !== undefined) {
+        return input.resolvePolicy(taskBacked, repoConfig, worktreePath, validationRepoConfig);
+      }
       if (input.agentEnvironmentError !== undefined) {
         return {
           ok: false as const,

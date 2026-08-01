@@ -24,7 +24,7 @@ import {
   loadRepoLocalSubmissionContext,
   type LoadRepoLocalContextError,
 } from "../init/repoContext.js";
-import { readRepoConfig } from "../init/repoConfig.js";
+import { decodeRepoConfigSource, readRepoConfig } from "../init/repoConfig.js";
 import { candidateValidationLayer } from "./candidateValidation/candidateValidationLayer.js";
 import { localCandidatePublicationGit } from "./publication/localCandidatePublicationGit.js";
 import type { RepositoryStorageError } from "../contracts/repositoryStorageError.js";
@@ -38,6 +38,7 @@ import { detectGitHubPrTarget } from "../submissionEnvironment/githubTarget.js";
 import { refreshRemoteChangeBase } from "../submissionEnvironment/remoteChangeBase.js";
 import { localGitHubPullRequestGateway } from "../submissionEnvironment/localGitHubPullRequestGateway.js";
 import { openSqliteExecutionLock } from "../sqlite/sqliteExecutionLock.js";
+import { readRepositoryFileAtCommit } from "../submissionEnvironment/repositoryFile.js";
 
 export type LoadChangeSubmitResult =
   | { readonly ok: true; readonly submit: ChangeSubmit }
@@ -80,7 +81,23 @@ export const loadChangeSubmit = (input: {
           ? managedConfig
           : {
               ok: false,
-              message: `Managed Worktree Repo Config is invalid: ${managedConfig.error.message}`,
+              message: `Candidate Repo Config is invalid: ${managedConfig.error.message}`,
+            };
+      },
+      loadRepoConfigAtCommit: (worktreePath, commit): ManagedRepoConfigResolution => {
+        const source = readRepositoryFileAtCommit(worktreePath, commit, ".but-why/config.json");
+        if (!source.ok) {
+          return {
+            ok: false,
+            message: `Change Base Repo Config could not be read at commit ${commit}.`,
+          };
+        }
+        const decoded = decodeRepoConfigSource(source.content, ".but-why/config.json");
+        return decoded.ok
+          ? decoded
+          : {
+              ok: false,
+              message: `Change Base Repo Config is invalid: ${decoded.error.message}`,
             };
       },
       repositoryCommonDirectory: context.commonDirectory,
@@ -88,12 +105,13 @@ export const loadChangeSubmit = (input: {
       persistence: changePersistence,
       taskPersistence,
       reconciliation,
-      resolvePolicy: (taskBacked, repoConfig, worktreePath) =>
+      resolvePolicy: (taskBacked, repoConfig, worktreePath, validationRepoConfig) =>
         resolveCandidateValidationPolicy({
           context,
           globalConfigPath: input.globalConfigPath,
           taskBacked,
           repoConfig,
+          ...(validationRepoConfig === undefined ? {} : { validationRepoConfig }),
           repoRoot: worktreePath,
         }),
       publicationFor: (cwd) =>

@@ -380,9 +380,17 @@ describe("Change inspection CLI", () => {
     }),
   );
 
-  it.effect("submits with Managed Worktree Repo Config from a different caller checkout", () =>
+  it.effect("keeps non-review policy from Change Base while using Candidate reviewer config", () =>
     Effect.gen(function* () {
       const root = yield* initializedRepoCopy();
+      writeFileSync(
+        join(root, ".but-why", "config.json"),
+        `${JSON.stringify(
+          { taskPrefix: "BY", validation: { checks: [{ id: "base", command: "false" }] } },
+          null,
+          2,
+        )}\n`,
+      );
       commitButWhyConfigAndRecordDefault(root);
       const started = yield* runByInProcessEffect(
         root,
@@ -405,7 +413,7 @@ describe("Change inspection CLI", () => {
       writeFileSync(
         join(change.worktreePath, ".but-why", "config.json"),
         `${JSON.stringify(
-          { taskPrefix: "BY", validation: { checks: [{ id: "managed", command: "false" }] } },
+          { taskPrefix: "BY", validation: { checks: [{ id: "managed", command: "true" }] } },
           null,
           2,
         )}\n`,

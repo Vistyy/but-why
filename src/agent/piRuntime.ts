@@ -77,7 +77,7 @@ export const piResourceFlags = (
   }
 
   if (runtimeConfig?.tools !== undefined) {
-    flags.push("--tools", runtimeConfig.tools.length === 0 ? "''" : runtimeConfig.tools.join(","));
+    flags.push("--tools", shellQuote(runtimeConfig.tools.join(",")));
   }
 
   if (runtimeConfig?.contextFileDiscovery === false) flags.push("--no-context-files");
