@@ -5,7 +5,6 @@
     "order": "randomized",
     "comparison": ["compiledExecutable", "installedPackageTarball"]
   },
-  "comparisonToleranceMilliseconds": 250,
   "commands": [
     ["--help"],
     ["--version"],

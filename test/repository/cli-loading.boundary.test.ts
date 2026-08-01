@@ -14,7 +14,6 @@ vi.setConfig({ testTimeout: 360_000 });
 type LoadingBenchmark = {
   method: { processesPerCommand: number; order: string; comparison: string[] };
   commands: readonly string[][];
-  comparisonToleranceMilliseconds: number;
   medianMilliseconds: Record<
     string,
     { compiledExecutable: number; installedPackageTarball: number }
@@ -182,10 +181,6 @@ describe("CLI loading and package boundary", () => {
                     baseline,
                     current,
                     deltaMilliseconds: baseline === undefined ? undefined : current - baseline,
-                    withinTolerance:
-                      baseline === undefined
-                        ? false
-                        : Math.abs(current - baseline) <= benchmark.comparisonToleranceMilliseconds,
                   },
                 ];
               }),
@@ -193,7 +188,6 @@ describe("CLI loading and package boundary", () => {
             console.log(
               JSON.stringify({
                 benchmark: "cli-loading",
-                comparisonToleranceMilliseconds: benchmark.comparisonToleranceMilliseconds,
                 comparisons,
               }),
             );
