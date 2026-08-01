@@ -590,13 +590,20 @@ export const runCommandTree = (
     if (
       initialCommandResult._tag === "Left" &&
       ValidationError.isValidationError(initialCommandResult.left) &&
-      !args.some(
-        (argument) =>
-          argument.startsWith("--json=") &&
-          !["true", "1", "y", "yes", "on", "false", "0", "n", "no", "off"].includes(
+      !args.some((argument, index) => {
+        if (argument.startsWith("--json=")) {
+          return !["true", "1", "y", "yes", "on", "false", "0", "n", "no", "off"].includes(
             argument.slice(7).toLowerCase(),
-          ),
-      )
+          );
+        }
+        if (argument !== "--json") return false;
+        const next = args[index + 1];
+        return (
+          next !== undefined &&
+          !next.startsWith("-") &&
+          !["init", "task", "change", "validation-run"].includes(next)
+        );
+      })
     ) {
       const fallbackCommandResult = yield* Effect.either(
         runWithConfig(finalCheckBuiltInConfig, true),

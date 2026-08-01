@@ -229,12 +229,13 @@ describe("by CLI", () => {
 
   it.effect("rejects invalid native JSON values without version fallback", () =>
     Effect.gen(function* () {
-      const result = yield* runByInProcessEffect(repoRoot, ["--json=bad", "--version"]);
+      const result = yield* runByInProcessEffect(repoRoot, ["--json", "bad", "--version"]);
 
       expect(result.status).toBe(2);
       expect(result.stderr).toBe("");
-      expect(result.stdout).toContain("code: invalid_usage");
-      expect(result.stdout).toContain("Invalid subcommand for by");
+      expect(JSON.parse(result.stdout)).toMatchObject({
+        error: { code: "invalid_usage" },
+      });
     }),
   );
 
