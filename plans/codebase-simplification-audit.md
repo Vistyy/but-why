@@ -15,11 +15,15 @@ remove_when: accepted simplification work is recorded as approved Tasks and appl
 But Why should contain only the product behavior, safeguards, abstractions, and compatibility paths justified by accepted requirements or concrete project evidence.
 The audit must identify simpler designs that preserve every required observable behavior.
 
-## Entry condition
+## Entry condition and sequence
 
-Do not start this audit until the verification portfolio defines approved Material Risks, Verification Claims, and evidence ownership.
-Use those accepted claims as the behavioral boundary for simplification.
-The exact sequence relative to the Task Submission planning gate remains unresolved.
+Start this audit after the verification portfolio migration and closure are complete.
+Use the accepted Material Risks, Verification Claims, and evidence ownership as the behavioral boundary for simplification.
+Complete each approved shared-foundation simplification that Planning would otherwise consume before Task Submission Slice 3.
+
+The pre-v1 Shared Repository State reset remains a separate optional decision.
+Evaluate it only after Planning Slices 3 and 4 and other active work are complete, BY-53 provides validated Task Archives, and the operator is ready to decide whether to discard non-Task history.
+The reset does not block verification portfolio work, shared-foundation simplification, or the Task Submission planning gate.
 
 ## Method
 
@@ -54,6 +58,14 @@ Reviewer Session continuation appears to require only the current identity finge
 Investigate removing the stored identity JSON if no inspection, recovery, or compatibility requirement uses it.
 Preserve explicit restart when the stored fingerprint or session reference is unusable.
 
+### Pre-v1 Shared Repository State reset
+
+After active work is complete and BY-53 provides validated append-only Task Archives, evaluate whether the first public release should start from a new clean database and consolidated baseline instead of carrying the pre-release migration chain.
+This is a low-to-medium priority simplification candidate, not current verification-portfolio work.
+A reset is eligible only when the operator accepts discarding Change, Candidate, Validation Run, Finding, Artifact, reviewer-session, and publication history because Task Archives preserve Tasks only.
+The decision must define one release boundary that retires old source executables and pre-reset databases, validates Task restoration into the new schema, and supersedes ADR 0009 before any Migration Artifact is rewritten.
+If those conditions are not met, retain the immutable chain and append the next migration.
+
 ## Boundaries
 
 Do not remove a safeguard because its implementation is difficult or visually complex.
@@ -68,5 +80,6 @@ The audit is complete when every approved simplification preserves accepted beha
 
 ## Approval
 
-The operator approved this follow-up approach.
-The target simplifications, Task sequence, and placement relative to the Task Submission planning gate remain provisional.
+The operator approved this follow-up approach and its placement after verification portfolio closure and before Task Submission Slice 3.
+The target simplifications remain provisional until their audit evidence and designs receive operator approval.
+The pre-v1 Shared Repository State reset remains a separate optional decision after the planning gate and active work.

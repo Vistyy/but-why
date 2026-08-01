@@ -403,17 +403,30 @@ const recordRound = (sql: SqlClient.SqlClient, input: RecordCandidateValidationC
     const findings = input.findings ?? (input.finding === undefined ? [] : [input.finding]);
     yield* Effect.forEach(
       findings,
-      (finding) => sql`
-        INSERT INTO candidate_validation_findings (
-          id, validation_run_id, phase, producer, title, description, severity,
-          evidence, files, artifact_refs, created_at, updated_at
-        ) VALUES (
-          ${finding.id}, ${finding.validationRunId}, ${finding.phase}, ${finding.producer},
-          ${finding.title}, ${finding.description}, ${finding.severity ?? null},
-          ${finding.evidence}, ${encodeSqliteJsonStringArray(finding.files)},
-          ${encodeSqliteJsonStringArray(finding.artifactRefs)}, ${input.now}, ${input.now}
-        )
-      `,
+      (finding) =>
+        finding.phase === "acceptance_review" || finding.phase === "specialist_review"
+          ? sql`
+              INSERT INTO candidate_validation_findings (
+                id, validation_run_id, phase, producer, title, description,
+                evidence, files, artifact_refs, created_at, updated_at
+              ) VALUES (
+                ${finding.id}, ${finding.validationRunId}, ${finding.phase}, ${finding.producer},
+                ${finding.title}, ${finding.description}, ${finding.evidence},
+                ${encodeSqliteJsonStringArray(finding.files)},
+                ${encodeSqliteJsonStringArray(finding.artifactRefs)}, ${input.now}, ${input.now}
+              )
+            `
+          : sql`
+              INSERT INTO candidate_validation_findings (
+                id, validation_run_id, phase, producer, title, description, severity,
+                evidence, files, artifact_refs, created_at, updated_at
+              ) VALUES (
+                ${finding.id}, ${finding.validationRunId}, ${finding.phase}, ${finding.producer},
+                ${finding.title}, ${finding.description}, ${finding.severity ?? null},
+                ${finding.evidence}, ${encodeSqliteJsonStringArray(finding.files)},
+                ${encodeSqliteJsonStringArray(finding.artifactRefs)}, ${input.now}, ${input.now}
+              )
+            `,
       { discard: true },
     );
   });

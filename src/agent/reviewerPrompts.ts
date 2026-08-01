@@ -1,5 +1,6 @@
 import { encodeReviewerWireValue, reviewerOutputTag } from "./reviewerOutputWire.js";
 import type { ReviewerOutputContractFailed } from "../change/validation/validationToolingFailures.js";
+import type { ReviewerFindingCore } from "../contracts/reviewerFinding.js";
 import type { ReviewerOutput } from "../contracts/reviewerOutput.js";
 import type { TaskContextSnapshotV1 } from "../change/validationRun/taskContextSnapshot.js";
 import type { ImplementationDecision } from "../change/implementationDecision.js";
@@ -65,7 +66,7 @@ export const buildAcceptanceReviewerPrompt = (input: {
     "",
     "Return exactly one JSON object inside this XML tag:",
     `<${reviewerOutputTag}>{"findings":[]}</${reviewerOutputTag}>`,
-    "Each Finding must include title, description, severity, evidence, files, and artifactRefs.",
+    "Each Finding must include title, description, evidence, files, and artifactRefs.",
   ].join("\n");
 
 export const buildSpecialistReviewerPrompt = (input: {
@@ -97,7 +98,7 @@ export const buildSpecialistReviewerPrompt = (input: {
     "",
     "Return exactly one JSON object inside this XML tag:",
     `<${reviewerOutputTag}>{"findings":[]}</${reviewerOutputTag}>`,
-    "Each Finding must contain title, description, severity, evidence, files, and artifactRefs.",
+    "Each Finding must contain title, description, evidence, files, and artifactRefs.",
   ].join("\n");
 
 export const buildSpecialistContinuationPrompt = (input: {
@@ -130,25 +131,19 @@ export const buildSpecialistContinuationPrompt = (input: {
     encodeReviewerWireValue({ findings: input.previousFindings }),
     "Return exactly one JSON object inside this XML tag:",
     `<${reviewerOutputTag}>{"findings":[]}</${reviewerOutputTag}>`,
-    "Each Finding must contain title, description, severity, evidence, files, and artifactRefs.",
+    "Each Finding must contain title, description, evidence, files, and artifactRefs.",
   ].join("\n");
 
-export type ReviewerFindingHistory = {
-  readonly title: string;
-  readonly description: string;
-  readonly severity?: "critical" | "high" | "medium" | "low";
-  readonly evidence: string;
-  readonly files: readonly string[];
+export type ReviewerFindingHistory = ReviewerFindingCore & {
   readonly artifactRefs: readonly string[];
 };
 
 export const reviewerFindingHistory = (
   findings: readonly ReviewerFindingHistory[],
 ): readonly ReviewerFindingHistory[] =>
-  findings.map(({ title, description, severity, evidence, files, artifactRefs }) => ({
+  findings.map(({ title, description, evidence, files, artifactRefs }) => ({
     title,
     description,
-    ...(severity === undefined ? {} : { severity }),
     evidence,
     files,
     artifactRefs,

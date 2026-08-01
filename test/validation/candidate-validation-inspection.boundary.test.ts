@@ -328,7 +328,6 @@ describe("Candidate-owned Validation Run inspection", () => {
             source: "checks/types",
             title: "Check failed: types",
             description: "Configured check types exited with code 1.",
-            severity: "high",
             evidence: "command: pnpm typecheck\nexitCode: 1",
             files: ["src/main.ts"],
             artifactRefs: [`artifact:${fixture.validationRunId}/checks/types/stdout.txt`],

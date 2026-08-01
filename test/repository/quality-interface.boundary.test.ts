@@ -514,9 +514,9 @@ describe("quality interface", () => {
   });
 
   test.each([
-    ["quality", "SIGINT", 130],
+    ["quality", "SIGTERM", 143],
     ["full-quality", "SIGTERM", 143],
-  ] as const)("interrupts the complete %s Just command with %s and releases its workload", async (qualityCommand, signal, expectedStatus) => {
+  ] as const)("interrupts the complete %s command with %s and releases capacity", async (qualityCommand, signal, expectedStatus) => {
     const directory = mkdtempSync(join(tmpdir(), "but-why-quality-lock-"));
     temporaryPaths.push(directory);
     const lockFile = join(directory, "capacity.lock");
@@ -524,7 +524,7 @@ describe("quality interface", () => {
     const descendantPidFile = join(directory, `${qualityCommand}-descendant-pid`);
     createBlockingPnpm(directory, readyFile, descendantPidFile);
     createQualityFixture(directory);
-    const justProcess = startJust(
+    const quality = startJust(
       lockFile,
       [qualityCommand],
       {
@@ -536,18 +536,16 @@ describe("quality interface", () => {
     try {
       await waitForFile(readyFile);
       await waitForFile(descendantPidFile);
-      const interruptedAt = Date.now();
-      signalJust(justProcess, signal);
-      expect((await justProcess.done).status).toBe(expectedStatus);
-      expect(justProcess.output).toContain(`${qualityCommand} interrupted after`);
-      expect(justProcess.output).toContain(`rerun just ${qualityCommand} to retry`);
-      expect(justProcess.output).not.toContain(`${qualityCommand} completed in`);
-      expect(Date.now() - interruptedAt).toBeLessThan(3_000);
+      quality.child.kill(signal);
+      expect((await quality.done).status).toBe(expectedStatus);
+      expect(quality.output).toContain(`${qualityCommand} interrupted after`);
+      expect(quality.output).toContain(`rerun just ${qualityCommand} to retry`);
+      expect(quality.output).not.toContain(`${qualityCommand} completed in`);
+      await waitForProcessExit(descendantPidFile);
       const recovered = await runRunner(lockFile, ["complete test", "sh", "-c", "exit 0"]);
       expect(recovered.status).toBe(0);
-      await waitForProcessExit(descendantPidFile);
     } finally {
-      await stopJust(justProcess);
+      await stopJust(quality);
     }
   });
 

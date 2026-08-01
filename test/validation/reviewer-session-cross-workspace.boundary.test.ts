@@ -58,7 +58,7 @@ export PI_CODING_AGENT_SESSION_DIR
 if [ -n "$session_id" ]; then
   previous=$(find "$PI_CODING_AGENT_SESSION_DIR" -type f -name "*_$session_id.jsonl" -print -quit)
   [ -n "$previous" ] || exit 44
-  grep -F '\"cwd\":\"'"$(pwd)"'\"' "$previous" >/dev/null || exit 45
+  grep -F '"cwd":"'"$(pwd)"'"' "$previous" >/dev/null || exit 45
   session_file="$previous"
   mode=resumed
 else

@@ -502,7 +502,7 @@ describe("Pi reviewer agent runtime", () => {
       const corrected = runResult('<reviewer-output>{"findings":[]}</reviewer-output>');
       const resume = vi.fn(() => Promise.resolve(corrected));
       const dangling = runResult(
-        '<reviewer-output>{"findings":[{"title":"Mismatch","description":"Incomplete behavior.","severity":"high","evidence":"Missing output.","files":[],"artifactRefs":["artifact:123e4567-e89b-42d3-a456-426614174000/checks/missing/stdout.txt"]}]}</reviewer-output>',
+        '<reviewer-output>{"findings":[{"title":"Mismatch","description":"Incomplete behavior.","evidence":"Missing output.","files":[],"artifactRefs":["artifact:123e4567-e89b-42d3-a456-426614174000/checks/missing/stdout.txt"]}]}</reviewer-output>',
         resume,
       );
 

@@ -20,6 +20,7 @@ import type { CandidateValidationPolicySnapshot } from "../../src/change/candida
 import { maxValidationArtifactBytes } from "../../src/change/validationRun/artifactFiles.js";
 import { validationToolingFailureRecord } from "../../src/change/validation/validationToolingFailures.js";
 import { candidateValidationForTest } from "../support/candidateValidation.js";
+import { RepositorySql } from "../../src/sqlite/repositorySql.js";
 import type { RepositoryStorageError } from "../../src/contracts/repositoryStorageError.js";
 import type {
   ReviewerSessionRecord,
@@ -38,6 +39,7 @@ import {
 } from "../support/candidateReadyRepo.js";
 import { cloneInitializedTestRepository } from "../support/initializedRepo.js";
 import { acquireTestWorkspace, releaseTestWorkspace } from "../support/testWorkspace.js";
+import { withTestRepository } from "../support/repository.js";
 
 const now = "2026-07-15T10:00:00.000Z";
 const successorNow = "2026-07-15T10:05:00.000Z";
@@ -216,7 +218,6 @@ layer(acceptanceTemplateLayer)("Task-backed Candidate Acceptance Review", (it) =
                 {
                   title: "First mismatch",
                   description: "The first requirement is incomplete.",
-                  severity: "high",
                   evidence: "Observed incomplete behavior.",
                   files: ["src/first.ts"],
                   artifactRefs: [],
@@ -224,7 +225,6 @@ layer(acceptanceTemplateLayer)("Task-backed Candidate Acceptance Review", (it) =
                 {
                   title: "Second mismatch",
                   description: "The second requirement is incomplete.",
-                  severity: "low",
                   evidence: "Observed another incomplete behavior.",
                   files: [],
                   artifactRefs: [],
@@ -240,7 +240,51 @@ layer(acceptanceTemplateLayer)("Task-backed Candidate Acceptance Review", (it) =
       const result = yield* runTaskBackedCandidate(ready);
 
       expect(result).toMatchObject({ ok: true, outcome: "blocked" });
-      expect(yield* validation.listFindings(result.validationRunId)).toHaveLength(2);
+      const storedSeverity = yield* withTestRepository(
+        ready.repo,
+        Effect.gen(function* () {
+          const repository = yield* RepositorySql;
+          return yield* repository.operation(
+            "inspect reviewer Finding severity storage",
+            (sql) =>
+              sql<{ readonly severity: string | null }>`
+                SELECT severity
+                FROM candidate_validation_findings
+                WHERE validation_run_id = ${result.validationRunId}
+                  AND phase = 'acceptance_review'
+                ORDER BY id
+              `,
+          );
+        }),
+      );
+      expect(storedSeverity).toEqual([{ severity: null }, { severity: null }]);
+      yield* withTestRepository(
+        ready.repo,
+        Effect.gen(function* () {
+          const repository = yield* RepositorySql;
+          yield* repository.operation(
+            "seed historical reviewer Finding",
+            (sql) =>
+              sql`
+                INSERT INTO candidate_validation_findings (
+                  id, validation_run_id, phase, producer, title, description, severity,
+                  evidence, files, artifact_refs, created_at, updated_at
+                ) VALUES (
+                  ${`${result.validationRunId}-historical`}, ${result.validationRunId},
+                  'acceptance_review', 'acceptance', 'Historical Finding',
+                  'A historical reviewer Finding remains readable.', 'high',
+                  'Historical evidence.', '[]', '[]', ${now}, ${now}
+                )
+              `,
+          );
+        }),
+      );
+      const findings = yield* validation.listFindings(result.validationRunId);
+      expect(findings).toHaveLength(3);
+      expect(findings.find((finding) => finding.title === "Historical Finding")).toMatchObject({
+        severity: "high",
+        evidence: "Historical evidence.",
+      });
       expect(yield* validation.listArtifacts(result.validationRunId)).toEqual(
         expect.arrayContaining([
           expect.objectContaining({ path: expect.stringContaining("stdout.txt") }),
@@ -804,7 +848,6 @@ layer(acceptanceTemplateLayer)("Task-backed Candidate Acceptance Review", (it) =
               {
                 title,
                 description: `${title} description`,
-                severity: "high",
                 evidence: `${title} evidence`,
                 files: [],
                 artifactRefs: [],
@@ -1272,7 +1315,6 @@ const repositoryConfig = (root: string) => ({
 const reviewerFinding = (title: string) => ({
   title,
   description: `${title} description`,
-  severity: "high" as const,
   evidence: `${title} evidence`,
   files: [],
   artifactRefs: [],

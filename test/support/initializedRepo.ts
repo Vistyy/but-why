@@ -1,9 +1,9 @@
 import { SqlClient } from "@effect/sql";
-import { SqliteClient } from "@effect/sql-sqlite-node";
 import { copyFileSync, cpSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { Effect } from "effect";
 
+import { nodeSqliteLayer } from "../../src/sqlite/nodeSqliteClient.js";
 import { createGitRepo, runBy } from "./by-cli.js";
 import { createTestWorkspace } from "./testWorkspace.js";
 
@@ -44,9 +44,7 @@ export const cloneInitializedRepositoryState = (template: string) =>
         WHERE repository_common_directory = ${templateCommonDirectory}
       `;
     }).pipe(
-      Effect.provide(
-        SqliteClient.layer({ filename: join(commonDirectory, "but-why", "state.sqlite") }),
-      ),
+      Effect.provide(nodeSqliteLayer(join(commonDirectory, "but-why", "state.sqlite"))),
       Effect.scoped,
     );
     return root;
@@ -74,9 +72,7 @@ export const cloneInitializedTestRepository = (template: string) =>
         WHERE repository_common_directory = ${templateCommonDirectory}
       `;
     }).pipe(
-      Effect.provide(
-        SqliteClient.layer({ filename: join(commonDirectory, "but-why", "state.sqlite") }),
-      ),
+      Effect.provide(nodeSqliteLayer(join(commonDirectory, "but-why", "state.sqlite"))),
       Effect.scoped,
     );
     return root;
