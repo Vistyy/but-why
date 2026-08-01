@@ -168,7 +168,7 @@ const runAbandonCommand = (
   environment: { readonly cwd: string; readonly now: () => Date },
 ) =>
   deferred(
-    () => import("./cli/validationRun/validationRunCli.js"),
+    () => import("./cli/validationRun/abandon.js"),
     ({ runAbandonCommand }) => runAbandonCommand(command, environment),
   );
 const runValidationRunShowCommand = (
@@ -176,7 +176,7 @@ const runValidationRunShowCommand = (
   environment: { readonly cwd: string; readonly now: () => Date },
 ) =>
   deferred(
-    () => import("./cli/validationRun/validationRunCli.js"),
+    () => import("./cli/validationRun/show.js"),
     ({ runShowCommand }) => runShowCommand(command, environment),
   );
 const runArtifactCommand = (
@@ -184,7 +184,7 @@ const runArtifactCommand = (
   environment: { readonly cwd: string; readonly now: () => Date },
 ) =>
   deferred(
-    () => import("./cli/validationRun/validationRunCli.js"),
+    () => import("./cli/validationRun/artifact.js"),
     ({ runArtifactCommand }) => runArtifactCommand(command, environment),
   );
 
