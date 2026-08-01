@@ -56,6 +56,33 @@ const startRunner = (lockFile: string, args: string[]) => {
 const runRunner = (lockFile: string, args: string[]): Promise<CommandResult> =>
   startRunner(lockFile, args).done;
 
+const startQualityRunner = (directory: string, mode: "quality" | "full-quality") => {
+  const child = startTestProcess("bash", [qualityRunner, mode], {
+    cwd: directory,
+    env: {
+      BY_CAPACITY_LOCK_HELD: "1",
+      PATH: `${directory}:${Reflect.get(process.env, "PATH") ?? ""}`,
+    },
+  });
+  let output = "";
+  child.stdout.on("data", (chunk: Buffer) => {
+    output += chunk.toString();
+  });
+  child.stderr.on("data", (chunk: Buffer) => {
+    output += chunk.toString();
+  });
+  const done = new Promise<CommandResult>((resolveResult) => {
+    child.on("close", (status) => resolveResult({ status, output }));
+  });
+  return {
+    child,
+    done,
+    get output() {
+      return output;
+    },
+  };
+};
+
 const startJust = (
   lockFile: string,
   args: string[],
@@ -97,6 +124,13 @@ const runJust = (lockFile: string, args: string[]): Promise<CommandResult> =>
   }).done;
 
 const stopRunner = async (runnerProcess: ReturnType<typeof startRunner>): Promise<void> => {
+  if (runnerProcess.child.exitCode === null) runnerProcess.child.kill("SIGTERM");
+  await runnerProcess.done;
+};
+
+const stopQualityRunner = async (
+  runnerProcess: ReturnType<typeof startQualityRunner>,
+): Promise<void> => {
   if (runnerProcess.child.exitCode === null) runnerProcess.child.kill("SIGTERM");
   await runnerProcess.done;
 };
@@ -198,6 +232,26 @@ fi
 `,
   );
   chmodSync(pnpm, 0o755);
+};
+
+const createInterruptibleQualityFixture = (
+  directory: string,
+  readyFile: string,
+  descendantPidFile: string,
+): void => {
+  createBlockingPnpm(directory, readyFile, descendantPidFile);
+  writeFileSync(
+    join(directory, "justfile"),
+    `_quality-static-routine:
+    @true
+
+build:
+    @true
+
+test:
+    @pnpm exec vitest
+`,
+  );
 };
 
 const createBuildRaceQualityFixture = (
@@ -489,6 +543,31 @@ describe("quality interface", () => {
       await waitForProcessExit(descendantPidFile);
     } finally {
       await stopJust(justProcess);
+    }
+  });
+
+  test.each([
+    ["quality", "SIGINT", 130],
+    ["full-quality", "SIGTERM", 143],
+  ] as const)("interrupts the %s runner with %s and cleans up its workload", async (mode, signal, expectedStatus) => {
+    const directory = mkdtempSync(join(tmpdir(), "but-why-quality-runner-"));
+    temporaryPaths.push(directory);
+    const readyFile = join(directory, "ready");
+    const descendantPidFile = join(directory, "descendant-pid");
+    createInterruptibleQualityFixture(directory, readyFile, descendantPidFile);
+    const quality = startQualityRunner(directory, mode);
+
+    try {
+      await waitForFile(readyFile);
+      await waitForFile(descendantPidFile);
+      quality.child.kill(signal);
+      expect((await quality.done).status).toBe(expectedStatus);
+      expect(quality.output).toContain(`${mode} interrupted after`);
+      expect(quality.output).toContain(`rerun just ${mode} to retry`);
+      expect(quality.output).not.toContain(`${mode} completed in`);
+      await waitForProcessExit(descendantPidFile);
+    } finally {
+      await stopQualityRunner(quality);
     }
   });
 
