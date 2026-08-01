@@ -1,5 +1,6 @@
 // fallow-ignore-file unused-export -- dynamically imported by the CLI
 
+// fallow-ignore-file duplicate-export -- shared Change command support
 // @ts-nocheck
 
 import { Effect } from "effect";

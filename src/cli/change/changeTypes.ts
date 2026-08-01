@@ -1,3 +1,5 @@
+// fallow-ignore-file unused-type duplicate-export -- command descriptor types are consumed by dynamic handlers
+
 import type { CancellationUseCases } from "../../change/cancelChange.js";
 import type { InteractiveSessionHost } from "../../change/interactiveSessionHost.js";
 import type { ReviewerAgentRuntime } from "../../agent/reviewerAgentRuntime.js";
