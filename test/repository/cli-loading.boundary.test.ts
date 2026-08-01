@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { describe, vi } from "vitest";
 import { expect, it } from "@effect/vitest";
 
-import { repoRoot, runByInProcessEffect } from "../support/by-cli.js";
+import { repoRoot } from "../support/by-cli.js";
 import { runTestProcess } from "../support/testProcess.js";
 
 vi.setConfig({ testTimeout: 30_000 });
@@ -59,27 +59,25 @@ describe("CLI loading and package boundary", () => {
           }
           const gitInit = runTestProcess("git", ["init", "-q"], { cwd: consumer });
           expect(gitInit.status, gitInit.stderr || gitInit.stdout).toBe(0);
-          const initialized = yield* runByInProcessEffect(consumer, [
-            "init",
-            "--task-prefix",
-            "BY",
-          ]);
+          const installedBy = join(consumer, "node_modules/.bin/by");
+          const initialized = runTestProcess(installedBy, ["init", "--task-prefix", "BY"], {
+            cwd: consumer,
+          });
           expect(initialized.status, initialized.stderr || initialized.stdout).toBe(0);
           for (const args of [
             ["task", "list"],
             ["change", "list"],
-            ["validation-run", "show", "missing"],
           ]) {
-            const result = runTestProcess(join(consumer, "node_modules/.bin/by"), args, {
-              cwd: consumer,
-              env: {
-                GIT_DIR: join(consumer, ".git"),
-                BUT_WHY_EXECUTABLE_PATH: join(repoRoot, "bin/by"),
-              },
-            });
-            expect(result.status).not.toBe(127);
-            expect(result.stdout + result.stderr).toContain("error:");
+            const result = runTestProcess(installedBy, args, { cwd: consumer });
+            expect(result.status, result.stderr || result.stdout).toBe(0);
           }
+          const validationShow = runTestProcess(
+            installedBy,
+            ["validation-run", "show", "missing"],
+            { cwd: consumer },
+          );
+          expect(validationShow.status).not.toBe(127);
+          expect(validationShow.stdout + validationShow.stderr).toContain("error:");
         } finally {
           rmSync(directory, { recursive: true, force: true });
         }
