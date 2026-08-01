@@ -59,7 +59,9 @@ export const implementationDecisionMarkdown = (
         .join("\n\n");
 
 const containsMarkdown = (value: string): boolean =>
-  /```|`|\*\*|__|~~|!\[[^\]]*\]\([^)]*\)|\[[^\]]+\]\([^)]*\)|^#{1,6}\s|^>\s/mu.test(value);
+  /```|`|\*\*|__|~~|!\[[^\]]*\]\([^)]*\)|\[[^\]]+\]\([^)]*\)|^#{1,6}\s|^>\s|^\s*(?:[-+*]|\d+[.)])\s/mu.test(
+    value,
+  );
 
 const escapeHtml = (value: string): string =>
   value
@@ -71,5 +73,7 @@ const escapeHtml = (value: string): string =>
     .replaceAll("*", "\\*")
     .replaceAll("_", "\\_")
     .replaceAll("~", "\\~")
+    .replaceAll("- ", "\\- ")
+    .replaceAll("+ ", "\\+ ")
     .replaceAll("[", "\\[")
     .replaceAll("]", "\\]");

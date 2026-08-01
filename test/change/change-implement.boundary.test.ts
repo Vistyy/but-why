@@ -186,6 +186,10 @@ describe("by change implement", () => {
       expect(launch.systemPrompt).toContain(
         "The Implementer must not return a final progress report.",
       );
+      expect(launch.systemPrompt).toContain(
+        'by change decision add <change-id> --choice "<choice>" --rationale "<rationale>"',
+      );
+      expect(launch.systemPrompt).toContain("Write a Choice as one standalone plain-text line");
       expect(launch.initialPrompt).toBe(
         [`Change identity: ${change.change.id}.`, `Managed Worktree: ${change.worktreePath}.`].join(
           "\n\n",
