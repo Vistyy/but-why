@@ -27,14 +27,14 @@ export const defaultAcceptanceInstructions = [
   "Do not expand approved intent or require optional improvement.",
 ].join("\n");
 
-export const universalAcceptanceInstructions = [
+const universalAcceptanceInstructions = [
   "Review the exact Candidate against the supplied immutable Acceptance Context.",
   "Own the overall judgment of whether the Candidate satisfies the complete supplied Acceptance Context, including its Task Verification Contract.",
   "Report a Finding when the Candidate omits work necessary for approved intent or otherwise fails to satisfy the Acceptance Context.",
   "Do not expand approved intent or require optional improvement.",
 ].join("\n");
 
-export const universalSpecialistInstructions = [
+const universalSpecialistInstructions = [
   "Review the exact Candidate only for the configured concern.",
   "Limit investigation to evidence necessary to judge that concern.",
   "Report only material Findings that belong to that concern.",
