@@ -3,7 +3,7 @@
 Status: Approved as provisional handoff context on 2026-08-01.
 The operator has not approved any proposed Task disposition in this plan except the completed cancellation of BY-67.
 
-Remove this plan after every retained requirement and approved disposition is recorded in SQLite Tasks, current documentation, or an accepted ADR, and every superseded Task is cancelled or completed.
+Remove this plan after every retained requirement and approved disposition is recorded in SQLite Tasks, current documentation, or an accepted ADR, every unresolved or proposed disposition is transferred to an authoritative open question or explicitly rejected by the operator, and every superseded Task is cancelled or completed.
 
 ## Purpose and authority
 
@@ -16,7 +16,7 @@ Active Task reconciliation is a separate future outcome because it requires Task
 
 ## Audit scope
 
-The audit compared every active Task with current code, `CONTEXT.md`, `docs/architecture.md`, `docs/cli-output.md`, `docs/tooling.md`, accepted ADRs, current working plans, Task Dependencies, and active Change state.
+The audit compared every active Task with current code, the contexts identified by `CONTEXT-MAP.md`, `docs/architecture.md`, `docs/cli-output.md`, `docs/tooling.md`, accepted ADRs, current working plans, Task Dependencies, and active Change state.
 Three independent domain-group audits covered release and cancellation, lifecycle and runtime, and Validation and CLI Tasks.
 Focused tests passed during the read-only audits, but no full repository gate was required for this planning investigation.
 

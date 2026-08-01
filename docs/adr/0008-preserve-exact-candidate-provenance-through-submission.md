@@ -24,7 +24,8 @@ But Why does not modify the Managed Worktree or Repository Branch to satisfy anc
 
 Tracked-tree equality between the exact Change Base and Repository Branch head defines No-Change after ancestry passes.
 A changed Candidate completes only through its exact owned pull request.
-A passing No-Change Submission completes without a pull request.
+A passing Task-backed No-Change Submission can complete without a pull request after Acceptance Review passes.
+A taskless No-Change Submission returns `nothing_to_submit` and remains open.
 
 Completed Submissions retain their Candidate, Validation Policy Snapshot, validation, and publication evidence.
 Later configuration or Change Base changes do not invalidate completed evidence.

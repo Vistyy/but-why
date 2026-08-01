@@ -1,18 +1,21 @@
 ---
 status: approved
 artifact_kind: working-plan
-remove_when: implementation slices are recorded as approved Tasks and applicable architecture
+remove_when: implementation slices are complete, accepted behavior is recorded in current architecture and SQLite Tasks, and every deferred question is transferred to an authoritative open question or explicitly rejected
 ---
 
 # Task Submission planning gate
 
 > Non-authoritative working plan.
-> This file records the approved implementation sequence but is not current product documentation or implementation authority.
+> This file records the operator-approved lifecycle design and implementation sequence but is not current product documentation or implementation authority.
 > Agents must use it only when the operator or an active Task explicitly identifies it as planning context.
 
 This plan defines the approved pre-implementation planning gate for But Why.
-It is not current product behavior or implementation authority.
-`CONTEXT.md` owns the resolved domain language.
+The lifecycle design, ownership boundaries, and four-slice sequence are approved planning decisions.
+Exact configuration-key spelling and local implementation details remain provisional until their applicable SQLite Task is approved.
+Deferred questions are outside the approved implementation sequence and are not approved requirements.
+This plan is not current product behavior or implementation authority.
+`CONTEXT-MAP.md` identifies the contexts that own the resolved domain language.
 `docs/architecture.md`, accepted ADRs, executable sources, and SQLite Tasks remain authoritative for implemented behavior.
 
 ## Outcome
@@ -616,7 +619,9 @@ Workspace creation and Repository Preparation duration belong to this question.
 
 ## Approval
 
-The user approved this working plan.
+The user approved the lifecycle design, ownership boundaries, and four-slice implementation sequence in this working plan.
+Exact configuration-key spelling remains provisional until Slice 3 Task approval.
+Deferred questions remain unapproved and outside the implementation sequence.
 ADR 0005 records the qualifying lifecycle decision.
 The applicable SQLite Tasks must own implementation requirements.
-Remove this working plan after those Tasks and current architecture contain every accepted requirement.
+Remove this working plan after those Tasks and current architecture contain every accepted requirement and each deferred question has an authoritative disposition.

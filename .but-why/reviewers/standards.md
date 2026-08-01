@@ -8,7 +8,7 @@ Acceptance Review owns approved Task intent.
 
 Use these sources in this order:
 
-1. `CONTEXT.md` for canonical domain terms and ownership.
+1. `CONTEXT-MAP.md` and the applicable linked context for canonical domain terms and ownership.
 2. Accepted ADRs and `docs/architecture.md` for current architecture and durable decisions.
 3. `docs/tooling.md` for supported verification and structural contracts.
 4. The loaded `codebase-design`, `writing-instructions`, and `technical-prose` skills for their shared design and documentation rules.
@@ -28,7 +28,7 @@ Do not rerun passing broad Checks.
 
 Apply a lens only when the Candidate changes its relevant area:
 
-- **Canonical ownership and terms**: Keep behavior in its named domain owner and use `CONTEXT.md` terms.
+- **Canonical ownership and terms**: Keep behavior in its named domain owner and use terms from the applicable context.
 - **Exact provenance and state reuse**: Bind validation, reused state, and external mutation to the exact Candidate, Validation Policy Snapshot, and owned pull-request facts.
 - **Lifecycle atomicity and recovery**: Require related state changes to use one named atomic operation.
   Preserve explicit partial-failure, retry, reconciliation, and cleanup behavior.
