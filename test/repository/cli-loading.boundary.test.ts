@@ -135,7 +135,8 @@ describe("CLI loading and package boundary", () => {
             }
             const measurements = new Map<string, number[]>();
             for (const run of benchmarkRuns) {
-              const values = measurements.get(run.executable) ?? [];
+              const key = `${run.executable}:${run.args.join(" ")}`;
+              const values = measurements.get(key) ?? [];
               for (let repeat = 0; repeat < benchmark.method.processesPerCommand; repeat += 1) {
                 const started = performance.now();
                 const result = runTestProcess(
@@ -148,9 +149,24 @@ describe("CLI loading and package boundary", () => {
                 expect(result.status).toBe(run.args[0] === "validation-run" ? 1 : 0);
                 values.push(performance.now() - started);
               }
-              measurements.set(run.executable, values);
+              measurements.set(key, values);
             }
-            console.log(JSON.stringify({ benchmark: "cli-loading", measurements }));
+            console.log(
+              JSON.stringify({
+                benchmark: "cli-loading",
+                measurements: Object.fromEntries(
+                  [...measurements].map(([key, values]) => {
+                    const sorted = [...values].sort((left, right) => left - right);
+                    const middle = Math.floor(sorted.length / 2);
+                    const medianMilliseconds =
+                      sorted.length % 2 === 0
+                        ? ((sorted[middle - 1] ?? 0) + (sorted[middle] ?? 0)) / 2
+                        : (sorted[middle] ?? 0);
+                    return [key, { samples: values.length, medianMilliseconds }];
+                  }),
+                ),
+              }),
+            );
           }
         } finally {
           rmSync(directory, { recursive: true, force: true });
