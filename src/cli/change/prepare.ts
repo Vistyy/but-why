@@ -6,6 +6,7 @@ import type { CliResult } from "../../cliResults.js";
 import type { ChangeCommandEnvironment } from "./changeTypes.js";
 
 import * as support from "./changeSupport.js";
+import { prepareResult } from "./lifecycleResults.js";
 
 export const runPrepare = (
   command: { readonly changeId: string | undefined },
@@ -13,6 +14,6 @@ export const runPrepare = (
 ): Effect.Effect<CliResult> =>
   support.withResolvedChangeId(command.changeId, environment, "prepare", (changeId) =>
     support.withChanges(environment, (changes) =>
-      Effect.map(changes.prepare(changeId, environment.now().toISOString()), support.prepareResult),
+      Effect.map(changes.prepare(changeId, environment.now().toISOString()), prepareResult),
     ),
   );

@@ -6,6 +6,7 @@ import type { CliResult } from "../../cliResults.js";
 import type { ChangeCommandEnvironment } from "./changeTypes.js";
 
 import * as support from "./changeSupport.js";
+import { reconcileResult } from "./reconcileResult.js";
 
 export const runReconcile = (
   command: { readonly changeId: string | undefined },
@@ -14,7 +15,7 @@ export const runReconcile = (
   const changeId = command.changeId;
   return support.withChanges(environment, (changes) =>
     Effect.map(changes.reconcile(changeId, environment.now().toISOString()), (result) =>
-      support.reconcileResult(changeId, result),
+      reconcileResult(changeId, result),
     ),
   );
 };

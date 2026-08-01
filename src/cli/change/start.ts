@@ -6,6 +6,7 @@ import type { CliResult } from "../../cliResults.js";
 import type { ChangeCommandEnvironment } from "./changeTypes.js";
 import { parseCliTaskIdValue } from "../../cliTaskId.js";
 import * as support from "./changeSupport.js";
+import { startResult } from "./lifecycleResults.js";
 
 type ChangeStartCommand = {
   readonly taskId: string | undefined;
@@ -27,7 +28,7 @@ export const runStart = (
         ...(command.baseBranch === undefined ? {} : { baseBranch: command.baseBranch }),
         now: environment.now().toISOString(),
       }),
-      support.startResult,
+      startResult,
     ),
   );
 };

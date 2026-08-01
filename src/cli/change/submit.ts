@@ -8,6 +8,7 @@ import { loadChangeSubmit } from "../../change/loadChangeSubmit.js";
 import { repositoryStorageErrorResult } from "../../cliResults.js";
 import { stderrSubmitProgress } from "../../change/validation/submitProgress.js";
 import * as support from "./changeSupport.js";
+import { submitResult } from "./submitResult.js";
 
 export const runSubmit = (
   command: { readonly changeId: string | undefined },
@@ -31,7 +32,7 @@ export const runSubmit = (
           : { progress: stderrSubmitProgress(environment.writeStderr) }),
       })
       .pipe(
-        Effect.map((result) => support.submitResult(result, changeId)),
+        Effect.map((result) => submitResult(result, changeId)),
         Effect.catchAll((error) => Effect.succeed(repositoryStorageErrorResult(error))),
       );
   });

@@ -7,6 +7,7 @@ import type { ChangeCommandEnvironment } from "./changeTypes.js";
 import { readHandoffFile } from "../../change/handoffFile.js";
 import { runtimeError } from "../../cliResults.js";
 import * as support from "./changeSupport.js";
+import { handoffFileError, implementResult } from "./implementResult.js";
 
 export const runImplement = (
   command: { readonly changeId: string | undefined; readonly handoffFile: string | undefined },
@@ -16,8 +17,7 @@ export const runImplement = (
     command.handoffFile === undefined
       ? undefined
       : readHandoffFile(environment.cwd, command.handoffFile, environment.stdin);
-  if (handoff !== undefined && !handoff.ok)
-    return Effect.succeed(support.handoffFileError(handoff.error));
+  if (handoff !== undefined && !handoff.ok) return Effect.succeed(handoffFileError(handoff.error));
 
   return support.withResolvedChangeId(command.changeId, environment, "implement", (changeId) =>
     support.withChanges(
@@ -25,7 +25,7 @@ export const runImplement = (
       (changes) =>
         Effect.map(
           changes.implement(changeId, handoff === undefined ? undefined : handoff.content),
-          support.implementResult,
+          implementResult,
         ),
       () =>
         runtimeError({

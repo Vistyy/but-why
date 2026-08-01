@@ -8,6 +8,7 @@ import { loadChangeInspection } from "../../change/loadChangeInspection.js";
 import { readImplementationDecisionFile } from "../../change/implementationDecisionFile.js";
 import { runtimeError, success } from "../../cliResults.js";
 import * as support from "./changeSupport.js";
+import { decisionFileError } from "./decisionResults.js";
 
 type ChangeBlockerCommand =
   | { readonly action: "list"; readonly changeId: string }
@@ -30,7 +31,7 @@ export const runBlocker = (
     );
   }
   const content = readImplementationDecisionFile(environment.cwd, command.file, environment.stdin);
-  if (!content.ok) return Effect.succeed(support.decisionFileError(content.error));
+  if (!content.ok) return Effect.succeed(decisionFileError(content.error));
   const loaded = loadChangeInspection({ cwd: environment.cwd });
   if (!loaded.ok) return Effect.succeed(support.loadError(loaded.error));
   const operation =

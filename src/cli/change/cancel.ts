@@ -6,6 +6,7 @@ import type { CliResult } from "../../cliResults.js";
 import type { ChangeCommandEnvironment } from "./changeTypes.js";
 import { withCancellation } from "../../change/loadChangeCancellation.js";
 import * as support from "./changeSupport.js";
+import { changeCancelResult } from "./cancelResult.js";
 
 export const runCancel = (
   command: { readonly changeId: string | undefined },
@@ -25,7 +26,7 @@ export const runCancel = (
             changeId,
             now: environment.now().toISOString(),
           }),
-          support.changeCancelResult,
+          changeCancelResult,
         ),
     ),
   );

@@ -8,6 +8,7 @@ import { loadChangeInspection } from "../../change/loadChangeInspection.js";
 import { readImplementationDecisionFile } from "../../change/implementationDecisionFile.js";
 import { success } from "../../cliResults.js";
 import * as support from "./changeSupport.js";
+import { decisionFileError, decisionMutationError } from "./decisionResults.js";
 
 type ChangeDecisionCommand =
   | { readonly action: "list"; readonly changeId: string }
@@ -36,7 +37,7 @@ export const runDecision = (
       command.file,
       environment.stdin,
     );
-    if (!content.ok) return Effect.succeed(support.decisionFileError(content.error));
+    if (!content.ok) return Effect.succeed(decisionFileError(content.error));
     const loaded = loadChangeInspection({ cwd: environment.cwd });
     if (!loaded.ok) return Effect.succeed(support.loadError(loaded.error));
     return loaded.inspection
@@ -49,7 +50,7 @@ export const runDecision = (
         Effect.map((result) =>
           result.ok
             ? success({ changeId: command.changeId, decision: result.decision })
-            : support.decisionMutationError(result.code, command.changeId),
+            : decisionMutationError(result.code, command.changeId),
         ),
         support.inspectionFailure,
       );
