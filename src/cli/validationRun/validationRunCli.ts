@@ -1,3 +1,5 @@
+// fallow-ignore-file unused-export -- dynamically imported by the CLI
+
 import { Effect } from "effect";
 
 import { loadAbandonValidationRun } from "../../change/loadAbandonValidationRun.js";
