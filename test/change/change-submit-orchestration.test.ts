@@ -3,6 +3,7 @@ import { Effect, Layer } from "effect";
 import { describe } from "vitest";
 
 import { CandidateValidation } from "../../src/change/candidateValidation/validateCandidate.js";
+import type { CandidateValidationPolicyResolution } from "../../src/change/candidateValidation/resolveCandidateValidationPolicy.js";
 import type { ChangeRecord } from "../../src/change/change.js";
 import type { RepoConfig } from "../../src/contracts/repoConfig.js";
 import type { ChangePersistence } from "../../src/change/changePersistence.js";
@@ -188,13 +189,53 @@ describe("Change Submit orchestration", () => {
             events,
             change: readyChange(),
             trackPolicyResolution: true,
+            candidateRepoConfig: { taskPrefix: "BY", review: { specialists: ["candidate"] } },
+            baselineRepoConfig: { taskPrefix: "BY", review: { specialists: ["baseline"] } },
             refreshResult: { ok: true, base: refreshedBase },
+            resolvePolicy: (_taskBacked, repoConfig, _worktreePath, validationRepoConfig) => {
+              expect(repoConfig.review?.specialists).toEqual(["candidate"]);
+              expect(validationRepoConfig?.review?.specialists).toEqual(["baseline"]);
+              return {
+                ok: true,
+                resolved: {
+                  taskBacked: false,
+                  policy: {
+                    ...tasklessPolicy,
+                    specialistReviews: [
+                      {
+                        id: "candidate",
+                        instructions: "Candidate reviewer",
+                        instructionsSource: "repo",
+                        agentProfile: "candidate-reviewer",
+                        profileScope: "repo",
+                        profile: {
+                          agentProfile: "candidate-reviewer",
+                          scope: "repo",
+                          profile: {
+                            agentRuntime: "pi",
+                            runtimeConfig: { model: "candidate/model" },
+                          },
+                        },
+                      },
+                    ],
+                  },
+                },
+              } satisfies CandidateValidationPolicyResolution;
+            },
           }),
         );
         const validationLayer = Layer.succeed(CandidateValidation, {
-          validateCandidate: () =>
+          validateCandidate: (input) =>
             Effect.sync(() => {
               events.push("validate_taskless");
+              expect(input.policy.specialistReviews).toMatchObject([
+                {
+                  id: "candidate",
+                  agentProfile: "candidate-reviewer",
+                  profileScope: "repo",
+                  profile: { profile: { runtimeConfig: { model: "candidate/model" } } },
+                },
+              ]);
               return {
                 ok: true,
                 reused: false,
@@ -1274,6 +1315,14 @@ const dependencies = (input: {
   readonly agentEnvironment?: readonly string[];
   readonly agentEnvironmentError?: string;
   readonly trackPolicyResolution?: boolean;
+  readonly candidateRepoConfig?: RepoConfig;
+  readonly baselineRepoConfig?: RepoConfig;
+  readonly resolvePolicy?: (
+    taskBacked: boolean,
+    repoConfig: RepoConfig,
+    worktreePath: string,
+    validationRepoConfig?: RepoConfig,
+  ) => CandidateValidationPolicyResolution;
   readonly findings?: readonly (typeof finding)[];
   readonly toolingFailures?: readonly (typeof toolingFailure)[];
   readonly publication?: PublicationFixture;
@@ -1379,17 +1428,25 @@ const dependencies = (input: {
     loadRepoConfig: () => {
       if (input.trackPolicyResolution) events.push("load_candidate_repo_config");
       return input.agentEnvironmentError === undefined
-        ? { ok: true as const, config: { taskPrefix: "BY" } }
+        ? { ok: true as const, config: input.candidateRepoConfig ?? { taskPrefix: "BY" } }
         : { ok: false as const, message: input.agentEnvironmentError };
     },
     loadRepoConfigAtCommit: () => {
       if (input.trackPolicyResolution) events.push("load_base_repo_config");
       return input.agentEnvironmentError === undefined
-        ? { ok: true as const, config: { taskPrefix: "BY" } }
+        ? { ok: true as const, config: input.baselineRepoConfig ?? { taskPrefix: "BY" } }
         : { ok: false as const, message: input.agentEnvironmentError };
     },
-    resolvePolicy: (_taskBacked: boolean, _repoConfig: RepoConfig, _worktreePath: string) => {
+    resolvePolicy: (
+      taskBacked: boolean,
+      repoConfig: RepoConfig,
+      worktreePath: string,
+      validationRepoConfig?: RepoConfig,
+    ) => {
       if (input.trackPolicyResolution) events.push("resolve_policy");
+      if (input.resolvePolicy !== undefined) {
+        return input.resolvePolicy(taskBacked, repoConfig, worktreePath, validationRepoConfig);
+      }
       if (input.agentEnvironmentError !== undefined) {
         return {
           ok: false as const,

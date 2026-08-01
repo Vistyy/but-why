@@ -139,7 +139,8 @@ Every entry must be a non-empty string.
 But Why prepends the list to the complete Pi invocation after it resolves the Agent Profile.
 
 Change Implement reads the setting from the Change Managed Worktree.
-Change Submit resolves the setting from the selected Change's Managed Worktree and records it in the Validation Policy Snapshot.
+Change Submit resolves the setting from the exact fetched Change Base Repo Config and records it in the Validation Policy Snapshot.
+Candidate reviewer configuration does not change this setting.
 Missing configuration preserves direct Pi launch.
 An invalid configuration rejects the applicable command before agent launch.
 A configured wrapper failure stops the operation without an unwrapped retry.
