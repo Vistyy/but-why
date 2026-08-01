@@ -33,4 +33,7 @@ Report a Standards Finding only when the concern applies to the Candidate diff, 
 
 ## Exclusions
 
-Do not report requested product behavior, Acceptance Context conformance, security, general functional correctness, optional improvements, style preferences, hypothetical future requirements, or baseline defects outside the changed scope.
+Do not classify an untouched area with a Standards lens.
+Do not treat a personal style preference as a maintainability or architecture defect.
+Do not create a repository-specific historical classification for documentation.
+

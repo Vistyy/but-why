@@ -112,6 +112,39 @@ const passingValidationPolicy = {
 
 layer(acceptanceTemplateLayer)("Task-backed Candidate Acceptance Review", (it) => {
   it.scoped(
+    "routes taskless Specialists without Acceptance Context through Candidate Validation",
+    () =>
+      Effect.gen(function* () {
+        const review = vi.fn<ReviewerAgentRuntime["review"]>(() =>
+          Effect.succeed({
+            ok: true as const,
+            report: { findings: [] },
+            attempts: 1,
+            stdout: '<reviewer-output>{"findings":[]}</reviewer-output>',
+          }),
+        );
+        const ready = yield* acceptanceReadyRepo({ review });
+        const { acceptanceReview: _acceptanceReview, ...tasklessPolicy } = passingValidationPolicy;
+        const result = yield* Effect.gen(function* () {
+          const validation = yield* CandidateValidation;
+          return yield* validation.validateCandidate({
+            changeId: ready.captured.changeId,
+            candidateId: ready.captured.candidateId,
+            changeBaseSha: ready.captured.changeBaseSha,
+            headSha: ready.captured.headSha,
+            policy: { ...tasklessPolicy, specialistReviews: [specialistPolicy("standards")] },
+            now,
+          });
+        }).pipe(Effect.provide(ready.validation.layer));
+
+        expect(result).toMatchObject({ ok: true, outcome: "passed" });
+        expect(review.mock.calls.map(([input]) => input.reviewer)).toEqual(["standards"]);
+        expect(review.mock.calls[0]?.[0].prompt).not.toContain("authoritative scope constraint");
+        expect(review.mock.calls[0]?.[0].prompt).not.toContain(acceptanceContext.description);
+      }),
+  );
+
+  it.scoped(
     "reviews the exact Candidate and immutable Acceptance Context after passing Checks",
     () =>
       Effect.gen(function* () {
