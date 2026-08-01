@@ -111,11 +111,12 @@ function outputFormatFor(arguments_) {
       const value = argument.slice("--json=".length).toLowerCase();
       return value === "false" || value === "0" || value === "n" || value === "no" || value === "off"
         ? "toon"
-        : "json";
+        : value === "true" || value === "1" || value === "y" || value === "yes" || value === "on"
+          ? "json"
+          : "toon";
     }
   }
   return "toon";
-}
 
 function toonFailure(result) {
   const lines = [

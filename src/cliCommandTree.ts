@@ -589,7 +589,14 @@ export const runCommandTree = (
     let commandResult = initialCommandResult;
     if (
       initialCommandResult._tag === "Left" &&
-      ValidationError.isValidationError(initialCommandResult.left)
+      ValidationError.isValidationError(initialCommandResult.left) &&
+      !args.some(
+        (argument) =>
+          argument.startsWith("--json=") &&
+          !["true", "1", "y", "yes", "on", "false", "0", "n", "no", "off"].includes(
+            argument.slice(7).toLowerCase(),
+          ),
+      )
     ) {
       const fallbackCommandResult = yield* Effect.either(
         runWithConfig(finalCheckBuiltInConfig, true),
@@ -718,7 +725,9 @@ export const outputFormatForArgs = (args: readonly string[]): OutputFormat => {
         value === "no" ||
         value === "off"
         ? "toon"
-        : "json";
+        : value === "true" || value === "1" || value === "y" || value === "yes" || value === "on"
+          ? "json"
+          : "toon";
     }
   }
   return "toon";
