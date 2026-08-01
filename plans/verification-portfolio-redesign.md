@@ -1,13 +1,13 @@
 ---
-status: provisional
+status: approved
 artifact_kind: working-plan
-remove_when: approved portfolio decisions are recorded in VERIFICATION.md and implementation slices are recorded as approved Tasks
+remove_when: approved portfolio decisions and deferred dispositions are transferred to authoritative artifacts, every migration slice is recorded as an approved Task, and portfolio closure is complete
 ---
 
 # Verification portfolio redesign
 
 > Non-authoritative working plan.
-> This file records provisional design choices and unresolved questions while the verification portfolio is evaluated.
+> This file records the operator-approved verification portfolio plan.
 > Agents must use it only when the operator or an active Task explicitly identifies it as planning context.
 
 ## Outcome
@@ -26,7 +26,8 @@ SQLite Task Context will define each implementation slice and its Task Verificat
 Executable code and configuration determine whether a proposed verification mechanism exists.
 
 This working plan does not define current project verification policy.
-Proposed risks, claims, evidence owners, mechanisms, sentinels, and budgets must remain here until the operator approves them.
+The operator has approved the complete risks, claims, evidence owners, mechanisms, sentinels, budgets, reconciliation, and migration structure recorded here.
+They remain planning context until VP-0 records the strategy in `VERIFICATION.md` and each applicable implementation requirement in a SQLite Task.
 
 ## Scope and sequence
 
@@ -45,6 +46,12 @@ The work must use this sequence:
 
 The planning-gate work must use Task Verification Contracts from its first new implementation Task.
 The planning-gate working plan remains a separate artifact because it owns a separate product capability and implementation sequence.
+
+The Implementation Advisor visible pilot is an approved exception to the high-level program order.
+Its planning and implementation may proceed before the verification portfolio migration because no portfolio migration Task exists yet.
+Complete the Implementation Advisor Change before creating VP-0 so the portfolio baseline can include the resulting supported capability.
+This working plan owns the cross-program portfolio update.
+The Implementation Advisor Tasks own only the approved implementation slices and their Task Verification Contracts.
 
 ## Boundaries
 
@@ -243,12 +250,12 @@ Candidate Publication consumes this identity and owns its separate remote-target
 
 ### Validation execution, evidence, judgment, and recovery
 
-**VE-1: Run-rooted evidence**
+**VE-1: Validation Run-rooted evidence**
 
 A Validation Run must identify one exact Candidate and immutable Validation Policy Snapshot.
 Findings, Artifacts, Tooling Failures, workspace facts, and review rounds must bind through that Validation Run.
 Passed Validation Run reuse must require the same Candidate and policy binding.
-VE-1 owns persisted Run binding and reuse, while CFG-1 owns policy resolution.
+VE-1 owns persisted Validation Run binding and reuse, while CFG-1 owns policy resolution.
 
 **VE-2: Fixed Validation Gate**
 
@@ -257,7 +264,9 @@ An omitted phase, wrong eligibility decision, Finding, or tooling failure must p
 
 **VE-3: Reviewer boundary**
 
-Validation orchestration must supply each reviewer with the exact Candidate scope, applicable Acceptance Context or Specialist concern, and matching Reviewer Session identity.
+Validation orchestration must supply each reviewer with the exact Candidate scope and matching Reviewer Session identity.
+For a task-backed Change, it must supply Acceptance Context to Acceptance Review as review authority and to each Specialist Review as an authoritative scope constraint.
+Each Specialist Review must also receive its configured concern.
 Only structurally valid producer output with resolvable current-Run Artifact references may become review evidence.
 VE-3 owns review-evidence and session binding, while AG-1 owns launch configuration.
 This claim does not assert that But Why can prove reviewer reasoning or semantic concern adherence.
@@ -378,7 +387,7 @@ This claim ends when the installed package becomes the supported executable.
 Repo Config and Global Config must resolve through documented precedence and path rules.
 Invalid configuration, unresolved role selection, or missing required local resources must reject before the applicable operation runs.
 The resolved Validation policy must contain every policy field that execution consumes and must be persisted without changing its meaning.
-CFG-1 owns deterministic resolution and snapshot fidelity, while VE-1 owns Run binding and reuse.
+CFG-1 owns deterministic resolution and snapshot fidelity, while VE-1 owns Validation Run binding and reuse.
 This claim does not prove operator intent or use a raw configuration hash as policy evidence.
 
 **RP-1: Repository Preparation in required workspaces**
@@ -474,7 +483,8 @@ Use the minimal real Git Validation Workspace that the current public service re
 **VE-3 owner: capability-local review-boundary evidence**
 
 Exercise the Acceptance and Specialist review phases with real SQLite and temporary Artifact storage.
-Observe exact Candidate scope, applicable Acceptance Context or Specialist concern, Reviewer Session identity, structurally valid output, and current-Run Artifact references.
+Observe exact Candidate scope, Acceptance Context role, configured Specialist concern, Reviewer Session identity, structurally valid output, and current-Run Artifact references.
+Observe that every task-backed Specialist receives the exact Acceptance Context while taskless Specialist Review receives none.
 Use a fake reviewer runtime and one real persisted session-store composition where continuity is part of the scenario.
 AG-1 separately owns launch configuration.
 Do not assert model reasoning or semantic concern adherence.
@@ -748,6 +758,9 @@ Record approved claims that lack sufficient evidence.
 Record duplicated evidence ownership and expensive seams that lack a distinct justification.
 
 For each mapped item, decide whether to retain, consolidate, move to a cheaper seam, replace, or remove it.
+An existing test does not earn retention merely because it exercises supported functionality.
+When automated evidence is flaky, brittle, or disproportionately costly and its Material Risk does not justify durable automation, remove it even when no automated replacement is added.
+Use lower-cost evidence when the claim still needs support, and record that mandatory gates are sufficient when no additional evidence is justified.
 Add evidence only when an approved Verification Claim remains unsupported.
 Use targeted diff, search, inspection, type checking, or a one-time script instead of durable evidence when the claim concerns retired text, symbols, files, or implementation structure.
 Use test-double evidence only when the Verification Claim does not require integration with the real dependency.
@@ -798,7 +811,7 @@ This reconciliation requires no Change capability system sentinel.
 ### Approved Validation capability reconciliation
 
 Consolidate VE-1 into one focused real-SQLite owner set.
-Cover exact Candidate and policy identity, Run-owned Findings, Artifacts, Tooling Failures, workspace facts, and rounds, isolation between Runs, and passed reuse only for the same Candidate and policy.
+Cover exact Candidate and policy identity, Validation Run-owned Findings, Artifacts, Tooling Failures, workspace facts, and rounds, isolation between Validation Runs, and passed reuse only for the same Candidate and policy.
 Move policy resolution to CFG-1 and inspection presentation to CLI-3.
 
 Replace manually assembled Gate evidence with a VE-2 Candidate Validation service matrix.
@@ -923,6 +936,35 @@ The approved migration has 14 vertical Tasks:
 3. Seven evidence-migration Tasks own Task lifecycle, Change and Candidate, Validation, publication, Shared Repository State, CLI, and runtime-foundation evidence.
 4. One closure Task confirms distinct claim ownership, measures the maintained workflows, removes or explicitly retains temporary suite controls, and removes the generic `boundary` category.
 
+### Migration ledger
+
+This ledger prevents an approved migration slice from becoming implicit before its SQLite Task is created.
+The slot name is planning vocabulary only, is never a CLI command identifier or Task ID, and is not a domain record or implementation authority.
+Create one portfolio Task at a time from current repository evidence, record its Task ID here, implement and dogfood it, and then refine the next slot.
+The `State` column is a manually maintained planning summary with allowed values `Planned`, `Active`, `Done`, and `Superseded`.
+SQLite Task and Change state remains authoritative.
+Update this ledger when a Task is created or its planning summary changes.
+Remove the ledger with this plan after authoritative artifacts contain the accepted strategy and every migration Task is complete.
+
+| Order | Slot | Observable outcome | Required program input | SQLite Task | State |
+| --- | --- | --- | --- | --- | --- |
+| 1 | VP-0 Portfolio controls | `VERIFICATION.md`, packaged Implementer guidance, and maintained quality controls state the accepted strategy without obsolete timing rules. | BY-83 Done. | Not created | Planned |
+| 2 | VP-CS1 Change binding correction | Implement and Candidate capture reject a recorded repository, branch, or worktree mismatch before external work. | VP-0 complete. | Not created | Planned |
+| 3 | VP-VE4 Validation terminal-write correction | Completed and abandoned Validation Runs reject late rounds, Findings, Artifacts, workspace facts, Tooling Failures, and outcome writes. | VP-0 and BY-54 complete. | Not created | Planned |
+| 4 | VP-PUB-CORR Exact publication identity correction | Publication, merged completion, and No-Change comparison reject mismatched or moving Candidate and target facts. | VP-0 complete. | Not created | Planned |
+| 5 | VP-SRS2 Confirmed decoder correction | The two approved malformed persisted values return `RepositoryPersistedDataInvalid` at their public SQLite trust seams. | VP-0 complete. | Not created | Planned |
+| 6 | VP-CLI2 Abandonment-result correction | An empty Validation Run abandonment reason returns the supported structured usage error and exit status without mutation. | VP-0 complete. | Not created | Planned |
+| 7 | VP-TS Task evidence migration | TS-1 and TS-2 have distinct capability-local evidence owners without generic lifecycle duplication. | VP-0 and VP-PUB-CORR complete; sequence after BY-66. | Not created | Planned |
+| 8 | VP-CS Change evidence migration | CS-1 through CS-3 have sufficient evidence at their approved Change and Candidate seams. | VP-CS1 complete. | Not created | Planned |
+| 9 | VP-VE Validation evidence migration | VE-1 through VE-4 have sufficient Validation Run, gate, reviewer-boundary, and recovery evidence. | VP-VE4 and BY-83 complete; sequence after BY-71. | Not created | Planned |
+| 10 | VP-PUB-EVID Publication evidence migration | PUB-1 through PUB-5 have sufficient target, recovery, cleanup, and completion evidence. | VP-PUB-CORR complete. | Not created | Planned |
+| 11 | VP-SRS Shared-state evidence migration | SRS-1, MIG-1, and the approved SRS-2 cases have sufficient current-system evidence. | VP-SRS2 complete. | Not created | Planned |
+| 12 | VP-CLI CLI evidence migration | CLI-1 through CLI-4 use one justified process sentinel plus capability-local inspection and routing evidence. | VP-CLI2, BY-86, and BY-87 complete. | Not created | Planned |
+| 13 | VP-RUN Runtime-foundation evidence migration | RI-1, CFG-1, RP-1, and AG-1 have sufficient evidence at their approved seams. | VP-0 complete; sequence after BY-68. | Not created | Planned |
+| 14 | VP-CLOSE Portfolio closure | Every retained check has distinct ownership, maintained workflows are measured, and temporary controls and categories have final dispositions. | VP-TS, VP-CS, VP-VE, VP-PUB-EVID, VP-SRS, VP-CLI, and VP-RUN complete. | Not created | Planned |
+
+A required program input controls creation order but becomes a SQLite Task Dependency only when the later Task cannot be implemented or verified without the earlier Task's completed result.
+
 Each product correction must be complete before the evidence migration that claims its corrected behavior.
 BY-83 must be complete before Validation evidence migration.
 BY-86 and BY-87 must be complete before final CLI evidence migration.
@@ -953,6 +995,18 @@ Create the next Task only when current implementation evidence supports its boun
 
 This phase is complete when every approved portfolio claim has sufficient maintained evidence, every retained check has distinct ownership, and the accepted budgets pass their measurement procedures.
 
+## Implementation Advisor handoff
+
+The Implementation Advisor is part of the agent-execution foundation after its implementation Change closes.
+Before creating VP-0, update the approved capability map, Material Risks, Verification Claims, and evidence owners for the resulting supported behavior.
+The update must include separate Agent Profile resolution, qualifying-delta scheduling, accumulated-delta preservation, structured rule and citation validation, duplicate suppression, fail-open behavior, bounded read-only tools, and non-waking advice delivery.
+The update must preserve `continue-change` as the sole Interactive Session liveness owner.
+It must not claim semantic model correctness from deterministic evidence.
+Use the approved spike report in [implementation-advisor-spike.md](implementation-advisor-spike.md) as one-time feasibility evidence, not as durable current-behavior evidence.
+
+The Implementation Advisor Task Verification Contract must establish the implementation-specific evidence needed before the Change closes.
+Do not delegate the portfolio capability, risk, claim, or evidence-owner design to that Task.
+
 ## Planning-gate handoff
 
 Do not start Slice 3 of the Task Submission planning gate before this plan is complete.
@@ -980,13 +1034,17 @@ VE-3 reconciliation must treat severity assertions as superseded target evidence
 
 The operator approved the capability map, Material Risks, Verification Claims, evidence owners, system sentinels, cost policy, current-portfolio reconciliation, and 14-Task migration structure.
 BY-83 runs before the verification portfolio migration.
-The high-level program order is BY-83, verification portfolio migration, shared-foundation simplification, Planning Slices 3 and 4, and then normal product and release work.
+The Implementation Advisor visible pilot may proceed before BY-83 and the verification portfolio migration.
+Complete the Implementation Advisor Change and its cross-program portfolio update before creating VP-0.
+The remaining high-level program order is BY-83, verification portfolio migration, shared-foundation simplification, Planning Slices 3 and 4, and then normal product and release work.
 The pre-v1 Shared Repository State reset remains a separate optional decision.
 
 ## Approval
 
-This plan remains provisional until the operator explicitly approves it.
-After approval, evaluate each architectural decision against the repository ADR qualification rules.
+The operator approved this complete plan on 2026-08-01.
+The plan remains non-authoritative planning context while implementation proceeds.
+Evaluate each architectural decision against the repository ADR qualification rules before recording its authoritative form.
 Record accepted project verification strategy in `VERIFICATION.md`.
 Record implementation requirements and Task Verification Contracts in SQLite Tasks.
-Remove this working plan after those authoritative artifacts contain every accepted decision and the approved migration is complete.
+Transfer each deferred disposition to its applicable current documentation, open question, Task, or explicit operator rejection.
+Remove this working plan after those authoritative artifacts contain every accepted decision and disposition and the approved migration is complete.

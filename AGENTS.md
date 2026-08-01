@@ -10,13 +10,21 @@
 
 ## Documentation
 
-- Read `CONTEXT.md` before naming domain-facing behavior.
+- Read `CONTEXT-MAP.md` and the applicable context before naming domain-facing behavior.
 - Read `docs/architecture.md` for current ownership and workflow boundaries.
 - Read `docs/cli-output.md` for structured CLI output contracts.
 - Read `docs/tooling.md` for contributor verification and architecture checks.
 - Read accepted decisions in `docs/adr/` when a change affects their constraints.
 - Read the shared Documentation policy in `writing-instructions` before changing documentation.
   It governs documentation admission, authoritative media, current-system description, and authority maintenance.
+
+## Portable product boundary
+
+- Treat packaged CLI help, `docs/public/`, packaged `extensions/`, and injected agent prompts as portable product interfaces.
+- Portable product interfaces must work in target repositories without this source repository's agent instructions, context files, internal documentation, or local development files.
+- This repository's agent instructions, context files, and internal contributor documentation govern development of But Why only.
+- Portable guidance may direct an agent to discover and follow target-repository instructions, but it must not assume a specific instruction file, tool, directory, or domain context.
+- Package every extension and reference required by a portable workflow, or declare it as an explicit configurable external dependency with actionable failure behavior.
 
 ## Code map
 
