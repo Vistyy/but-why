@@ -1,3 +1,5 @@
+// fallow-ignore-file unused-export duplicate-export -- dynamically loaded command owner
+
 import { Effect } from "effect";
 import { loadAbandonValidationRun } from "../../change/loadAbandonValidationRun.js";
 import type { CliResult } from "../../cliResults.js";
