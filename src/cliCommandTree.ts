@@ -11,7 +11,7 @@ import { Console, Context, Effect, Layer, Logger, Ref } from "effect";
 import type { CliEnvironment } from "./cli.js";
 import { collapseHome } from "./cli/cliPath.js";
 import { success, usageError, type CliResult } from "./cliResults.js";
-import type { ChangeCommandEnvironment } from "./cli/change/changeCli.js";
+import type { ChangeCommandEnvironment } from "./cli/change/changeTypes.js";
 import {
   hasInvalidJsonSelector,
   nativeBooleanValue,
@@ -43,10 +43,10 @@ type SubcommandBuilder = <Name extends string, R, E, A>(
 
 type DeferredModule = Record<string, unknown>;
 
-const deferred = <Module extends DeferredModule, Result>(
+const deferred = <Module extends DeferredModule>(
   load: () => Promise<Module>,
-  run: (module: Module) => Effect.Effect<Result>,
-): Effect.Effect<Result> => Effect.promise(load).pipe(Effect.flatMap(run));
+  run: (module: Module) => Effect.Effect<CliResult>,
+): Effect.Effect<CliResult> => Effect.promise(load).pipe(Effect.flatMap(run));
 
 const runInitCommand = (command: { readonly taskPrefix: string }, environment: CliEnvironment) =>
   deferred(
@@ -70,7 +70,7 @@ const runStart = (
   environment: ChangeCommandEnvironment,
 ) =>
   deferred(
-    () => import("./cli/change/changeCli.js"),
+    () => import("./cli/change/start.js"),
     ({ runStart }) => runStart(command, environment),
   );
 const runPrepare = (
@@ -78,12 +78,12 @@ const runPrepare = (
   environment: ChangeCommandEnvironment,
 ) =>
   deferred(
-    () => import("./cli/change/changeCli.js"),
+    () => import("./cli/change/prepare.js"),
     ({ runPrepare }) => runPrepare(command, environment),
   );
 const runChangeList = (command: { readonly all: boolean }, environment: ChangeCommandEnvironment) =>
   deferred(
-    () => import("./cli/change/changeCli.js"),
+    () => import("./cli/change/list.js"),
     ({ runList }) => runList(command, environment),
   );
 const runChangeShow = (
@@ -91,7 +91,7 @@ const runChangeShow = (
   environment: ChangeCommandEnvironment,
 ) =>
   deferred(
-    () => import("./cli/change/changeCli.js"),
+    () => import("./cli/change/show.js"),
     ({ runShow }) => runShow(command, environment),
   );
 const runFindings = (
@@ -99,7 +99,7 @@ const runFindings = (
   environment: ChangeCommandEnvironment,
 ) =>
   deferred(
-    () => import("./cli/change/changeCli.js"),
+    () => import("./cli/change/findings.js"),
     ({ runFindings }) => runFindings(command, environment),
   );
 const runValidationRuns = (
@@ -107,7 +107,7 @@ const runValidationRuns = (
   environment: ChangeCommandEnvironment,
 ) =>
   deferred(
-    () => import("./cli/change/changeCli.js"),
+    () => import("./cli/change/validationRuns.js"),
     ({ runValidationRuns }) => runValidationRuns(command, environment),
   );
 const runSubmit = (
@@ -115,7 +115,7 @@ const runSubmit = (
   environment: ChangeCommandEnvironment,
 ) =>
   deferred(
-    () => import("./cli/change/changeCli.js"),
+    () => import("./cli/change/submit.js"),
     ({ runSubmit }) => runSubmit(command, environment),
   );
 const runChangeCancel = (
@@ -123,7 +123,7 @@ const runChangeCancel = (
   environment: ChangeCommandEnvironment,
 ) =>
   deferred(
-    () => import("./cli/change/changeCli.js"),
+    () => import("./cli/change/cancel.js"),
     ({ runCancel }) => runCancel(command, environment),
   );
 const runReconcile = (
@@ -131,7 +131,7 @@ const runReconcile = (
   environment: ChangeCommandEnvironment,
 ) =>
   deferred(
-    () => import("./cli/change/changeCli.js"),
+    () => import("./cli/change/reconcile.js"),
     ({ runReconcile }) => runReconcile(command, environment),
   );
 const runImplement = (
@@ -139,23 +139,23 @@ const runImplement = (
   environment: ChangeCommandEnvironment,
 ) =>
   deferred(
-    () => import("./cli/change/changeCli.js"),
+    () => import("./cli/change/implement.js"),
     ({ runImplement }) => runImplement(command, environment),
   );
 const runDecision = (
-  command: import("./cli/change/changeCli.js").ChangeDecisionCommand,
+  command: import("./cli/change/changeTypes.js").ChangeDecisionCommand,
   environment: ChangeCommandEnvironment,
 ) =>
   deferred(
-    () => import("./cli/change/changeCli.js"),
+    () => import("./cli/change/decision.js"),
     ({ runDecision }) => runDecision(command, environment),
   );
 const runBlocker = (
-  command: import("./cli/change/changeCli.js").ChangeBlockerCommand,
+  command: import("./cli/change/changeTypes.js").ChangeBlockerCommand,
   environment: ChangeCommandEnvironment,
 ) =>
   deferred(
-    () => import("./cli/change/changeCli.js"),
+    () => import("./cli/change/blocker.js"),
     ({ runBlocker }) => runBlocker(command, environment),
   );
 const dashboard = (executablePath: string, description: string, environment: CliEnvironment) =>
