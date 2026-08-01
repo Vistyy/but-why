@@ -95,4 +95,40 @@ describe("reviewer prompts", () => {
       expect(prompt).not.toContain("complete fresh sweep");
     }
   });
+
+  it("injects Acceptance Context into Specialist prompts only when supplied", () => {
+    const context = { version: 1 as const, title: "Approved", description: "Scope", comments: [] };
+    const initial = buildSpecialistReviewerPrompt({
+      specialist: "standards",
+      instructions: "Concern instructions",
+      validationRunId: "run",
+      availableArtifactRefs: [],
+      candidate: { changeBaseSha: "base", headSha: "head" },
+      acceptanceContext: context,
+    });
+    const continuation = buildSpecialistContinuationPrompt({
+      specialist: "standards",
+      instructions: "Concern instructions",
+      validationRunId: "run",
+      availableArtifactRefs: [],
+      candidate: { candidateId: "candidate", changeBaseSha: "base", headSha: "head" },
+      previousFindings: [],
+      acceptanceContext: context,
+    });
+    const absent = buildSpecialistReviewerPrompt({
+      specialist: "standards",
+      instructions: "Concern instructions",
+      validationRunId: "run",
+      availableArtifactRefs: [],
+      candidate: { changeBaseSha: "base", headSha: "head" },
+    });
+
+    for (const prompt of [initial, continuation]) {
+      expect(prompt).toContain('"title": "Approved"');
+      expect(prompt).toContain("authoritative scope constraint");
+      expect(prompt).toContain("Do not investigate or report adjacent concerns.");
+    }
+    expect(absent).not.toContain("authoritative scope constraint");
+    expect(absent).not.toContain("Approved");
+  });
 });

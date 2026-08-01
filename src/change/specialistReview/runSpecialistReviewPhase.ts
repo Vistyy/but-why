@@ -33,6 +33,7 @@ import {
   type ReviewerSessionStore,
 } from "../reviewerSession/reviewerSession.js";
 import type { ReviewerContinuityEvidence } from "../acceptanceReview/runAcceptanceReviewPhase.js";
+import type { AcceptanceContextSnapshotV1 } from "../validationRun/acceptanceContextSnapshot.js";
 
 export type RunSpecialistReviewPhaseInput = {
   readonly validationRunId: string;
@@ -43,6 +44,7 @@ export type RunSpecialistReviewPhaseInput = {
     readonly headSha: string;
   };
   readonly policies: readonly SpecialistReviewPolicy[];
+  readonly acceptanceContext?: AcceptanceContextSnapshotV1;
   readonly agentEnvironment?: AgentEnvironmentCommand;
   readonly runtime: ReviewerAgentRuntime;
   readonly sandbox: Pick<Sandbox, "exec" | "run">;
@@ -149,6 +151,9 @@ const runSpecialist = (
         changeBaseSha: input.candidate.changeBaseSha,
         headSha: input.candidate.headSha,
       },
+      ...(input.acceptanceContext === undefined
+        ? {}
+        : { acceptanceContext: input.acceptanceContext }),
     });
     const earlierFindings = reviewerFindingHistory(
       yield* input.listPreviousCandidateReviewerFindings({
@@ -219,6 +224,9 @@ const runSpecialist = (
                 availableArtifactRefs,
                 candidate: input.candidate,
                 previousFindings: earlierFindings,
+                ...(input.acceptanceContext === undefined
+                  ? {}
+                  : { acceptanceContext: input.acceptanceContext }),
               })
             : reviewPrompt,
         profile: policy.profile,

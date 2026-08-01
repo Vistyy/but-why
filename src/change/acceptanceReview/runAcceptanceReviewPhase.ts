@@ -8,7 +8,7 @@ import {
   buildAcceptanceReviewerPrompt,
   reviewerFindingHistory,
 } from "../../agent/reviewerPrompts.js";
-import type { TaskContextSnapshotV1 } from "../validationRun/taskContextSnapshot.js";
+import type { AcceptanceContextSnapshotV1 } from "../validationRun/acceptanceContextSnapshot.js";
 import type { ImplementationBlockerHistory } from "../implementationBlocker.js";
 import type { ImplementationDecision } from "../implementationDecision.js";
 import { validationPhase } from "../validationRun/validationRun.js";
@@ -39,7 +39,7 @@ export type RunAcceptanceReviewPhaseInput = {
     readonly changeBaseSha: string;
     readonly headSha: string;
   };
-  readonly acceptanceContext: TaskContextSnapshotV1;
+  readonly acceptanceContext: AcceptanceContextSnapshotV1;
   readonly implementationDecisions: readonly ImplementationDecision[] | undefined;
   readonly blockerHistory?: ImplementationBlockerHistory;
   readonly policy: AcceptanceReviewPolicy;

@@ -69,6 +69,9 @@ A complete example is:
 `validationWorkspace.copyFiles` is an optional list of local regular files copied into each Validation Workspace.
 `review` selects Acceptance Review and Specialists.
 `reviewers` supplies Specialist instruction files.
+Each configured Specialist instruction file must positively define exactly one concern.
+It must state the concern's applicable authority, review lenses, materiality, and concern-specific exclusions.
+It must not duplicate or override But Why's universal Specialist role boundaries, Acceptance Context handling, Candidate integrity rules, or output contract.
 `agentProfiles` supplies Repo Agent Profiles.
 
 But Why detects Git facts at runtime.

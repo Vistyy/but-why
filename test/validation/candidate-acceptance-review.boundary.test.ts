@@ -14,7 +14,7 @@ import { runAcceptanceReviewPhase } from "../../src/change/acceptanceReview/runA
 import { runSpecialistReviewPhase } from "../../src/change/specialistReview/runSpecialistReviewPhase.js";
 import {
   CandidateValidation,
-  type TaskBackedCandidateValidationPolicy,
+  type AcceptanceContextCandidateValidationPolicy,
 } from "../../src/change/candidateValidation/validateCandidate.js";
 import type { CandidateValidationPolicySnapshot } from "../../src/change/candidateValidation/candidateValidationRunStore.js";
 import { maxValidationArtifactBytes } from "../../src/change/validationRun/artifactFiles.js";
@@ -30,7 +30,7 @@ import {
   ReviewerOutputContractFailed,
   SandcastleToolingFailed,
 } from "../../src/change/validation/validationToolingFailures.js";
-import type { TaskContextSnapshotV1 } from "../../src/change/validationRun/taskContextSnapshot.js";
+import type { AcceptanceContextSnapshotV1 } from "../../src/change/validationRun/acceptanceContextSnapshot.js";
 import {
   candidateReadyRepo,
   candidateRepositoryConfig,
@@ -76,7 +76,7 @@ const acceptanceContext = Object.freeze({
   title: "Keep the exact intent",
   description: "Review the Candidate against this immutable context.",
   comments: Object.freeze(["Do not infer intent from mutable Task state."]),
-}) satisfies TaskContextSnapshotV1;
+}) satisfies AcceptanceContextSnapshotV1;
 
 const acceptancePolicy = {
   instructions: "Repository Acceptance instructions",
@@ -1069,12 +1069,12 @@ type AcceptanceReadyRepo = {
 
 const runFullTaskBackedCandidate = (
   ready: AcceptanceReadyRepo,
-  policy: TaskBackedCandidateValidationPolicy = passingValidationPolicy,
+  policy: AcceptanceContextCandidateValidationPolicy = passingValidationPolicy,
   captured = ready.captured,
 ) =>
   Effect.gen(function* () {
     const validation = yield* CandidateValidation;
-    return yield* validation.validateTaskBackedCandidate({
+    return yield* validation.validateAcceptanceContextCandidate({
       changeId: captured.changeId,
       candidateId: captured.candidateId,
       changeBaseSha: captured.changeBaseSha,
@@ -1087,7 +1087,7 @@ const runFullTaskBackedCandidate = (
 
 const runTaskBackedCandidate = (
   ready: AcceptanceReadyRepo,
-  policy: TaskBackedCandidateValidationPolicy = passingValidationPolicy,
+  policy: AcceptanceContextCandidateValidationPolicy = passingValidationPolicy,
   captured = ready.captured,
 ) => runReviewPhases(ready, policy, captured, false);
 
@@ -1096,7 +1096,7 @@ const runNoChangeCandidate = (ready: AcceptanceReadyRepo, captured = ready.captu
 
 const runReviewPhases = (
   ready: AcceptanceReadyRepo,
-  policy: TaskBackedCandidateValidationPolicy,
+  policy: AcceptanceContextCandidateValidationPolicy,
   captured: Captured,
   noChange: boolean,
 ) =>

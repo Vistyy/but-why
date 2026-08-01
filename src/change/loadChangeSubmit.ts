@@ -113,11 +113,11 @@ export const loadChangeSubmit = (input: {
       persistence: changePersistence,
       taskPersistence,
       reconciliation,
-      resolvePolicy: (taskBacked, repoConfig, worktreePath, validationRepoConfig) =>
+      resolvePolicy: (acceptanceContextSupplied, repoConfig, worktreePath, validationRepoConfig) =>
         resolveCandidateValidationPolicy({
           context,
           globalConfigPath: input.globalConfigPath,
-          taskBacked,
+          acceptanceContextSupplied,
           repoConfig,
           ...(validationRepoConfig === undefined ? {} : { validationRepoConfig }),
           repoRoot: worktreePath,

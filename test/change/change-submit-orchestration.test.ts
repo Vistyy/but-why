@@ -56,7 +56,7 @@ describe("Change Submit orchestration", () => {
       );
       const validationLayer = Layer.succeed(CandidateValidation, {
         validateCandidate: () => Effect.die("Validation must not start"),
-        validateTaskBackedCandidate: () => Effect.die("Validation must not start"),
+        validateAcceptanceContextCandidate: () => Effect.die("Validation must not start"),
         validateNoChange: () => Effect.die("Validation must not start"),
         listFindings: () => Effect.succeed([]),
         listToolingFailures: () => Effect.succeed([]),
@@ -97,7 +97,7 @@ describe("Change Submit orchestration", () => {
         Effect.provide(
           Layer.succeed(CandidateValidation, {
             validateCandidate: () => Effect.die("Validation must not start"),
-            validateTaskBackedCandidate: () => Effect.die("Validation must not start"),
+            validateAcceptanceContextCandidate: () => Effect.die("Validation must not start"),
             validateNoChange: () => Effect.die("Validation must not start"),
             listFindings: () => Effect.succeed([]),
             listToolingFailures: () => Effect.succeed([]),
@@ -149,7 +149,8 @@ describe("Change Submit orchestration", () => {
                 outcome: "passed",
               } as const;
             }),
-          validateTaskBackedCandidate: () => Effect.die("Acceptance Review was not expected"),
+          validateAcceptanceContextCandidate: () =>
+            Effect.die("Acceptance Review was not expected"),
           validateNoChange: () => Effect.die("Acceptance-only validation was not expected"),
           listFindings: () => Effect.succeed([]),
           listToolingFailures: () => Effect.succeed([]),
@@ -192,13 +193,18 @@ describe("Change Submit orchestration", () => {
             candidateRepoConfig: { taskPrefix: "BY", review: { specialists: ["candidate"] } },
             baselineRepoConfig: { taskPrefix: "BY", review: { specialists: ["baseline"] } },
             refreshResult: { ok: true, base: refreshedBase },
-            resolvePolicy: (_taskBacked, repoConfig, _worktreePath, validationRepoConfig) => {
+            resolvePolicy: (
+              _acceptanceContextSupplied,
+              repoConfig,
+              _worktreePath,
+              validationRepoConfig,
+            ) => {
               expect(repoConfig.review?.specialists).toEqual(["candidate"]);
               expect(validationRepoConfig?.review?.specialists).toEqual(["baseline"]);
               return {
                 ok: true,
                 resolved: {
-                  taskBacked: false,
+                  acceptanceContextSupplied: false,
                   policy: {
                     ...tasklessPolicy,
                     specialistReviews: [
@@ -243,7 +249,8 @@ describe("Change Submit orchestration", () => {
                 outcome: "passed",
               } as const;
             }),
-          validateTaskBackedCandidate: () => Effect.die("Acceptance Review was not expected"),
+          validateAcceptanceContextCandidate: () =>
+            Effect.die("Acceptance Review was not expected"),
           validateNoChange: () => Effect.die("Acceptance-only validation was not expected"),
           listFindings: () => Effect.succeed([]),
           listToolingFailures: () => Effect.succeed([]),
@@ -281,7 +288,7 @@ describe("Change Submit orchestration", () => {
       );
       const validationLayer = Layer.succeed(CandidateValidation, {
         validateCandidate: () => Effect.die("Validation must not start"),
-        validateTaskBackedCandidate: () => Effect.die("Validation must not start"),
+        validateAcceptanceContextCandidate: () => Effect.die("Validation must not start"),
         validateNoChange: () => Effect.die("Validation must not start"),
         listFindings: () => Effect.succeed([]),
         listToolingFailures: () => Effect.succeed([]),
@@ -345,7 +352,7 @@ describe("Change Submit orchestration", () => {
               outcome: "passed",
             } as const;
           }),
-        validateTaskBackedCandidate: () => Effect.die("Acceptance Review was not expected"),
+        validateAcceptanceContextCandidate: () => Effect.die("Acceptance Review was not expected"),
         validateNoChange: () => Effect.die("Acceptance-only validation was not expected"),
         listFindings: () => Effect.succeed([]),
         listToolingFailures: () => Effect.succeed([]),
@@ -407,7 +414,7 @@ describe("Change Submit orchestration", () => {
           events,
           transitions,
           change,
-          taskBacked: true,
+          acceptanceContextSupplied: true,
           captureResult: {
             ...candidate,
             changeBaseSha: "base",
@@ -418,7 +425,7 @@ describe("Change Submit orchestration", () => {
       );
       const validationLayer = Layer.succeed(CandidateValidation, {
         validateCandidate: () => Effect.die("Full validation was not expected"),
-        validateTaskBackedCandidate: () => Effect.die("Full validation was not expected"),
+        validateAcceptanceContextCandidate: () => Effect.die("Full validation was not expected"),
         validateNoChange: (input) =>
           Effect.sync(() => {
             events.push("validate_no_change");
@@ -473,7 +480,7 @@ describe("Change Submit orchestration", () => {
             events,
             transitions,
             change,
-            taskBacked: true,
+            acceptanceContextSupplied: true,
             captureResult: {
               ...candidate,
               changeBaseSha: "base",
@@ -485,7 +492,7 @@ describe("Change Submit orchestration", () => {
         );
         const validationLayer = Layer.succeed(CandidateValidation, {
           validateCandidate: () => Effect.die("Full validation was not expected"),
-          validateTaskBackedCandidate: () => Effect.die("Full validation was not expected"),
+          validateAcceptanceContextCandidate: () => Effect.die("Full validation was not expected"),
           validateNoChange: () =>
             Effect.succeed({
               ok: true,
@@ -541,7 +548,7 @@ describe("Change Submit orchestration", () => {
           dependencies({
             events,
             change,
-            taskBacked: true,
+            acceptanceContextSupplied: true,
             reconciliationStatus: "open",
             branchHeadSha: "base",
             captureResult: {
@@ -555,7 +562,7 @@ describe("Change Submit orchestration", () => {
         const validationLayer = Layer.succeed(CandidateValidation, {
           validateCandidate: () => Effect.die("Taskless validation was not expected"),
           validateNoChange: () => Effect.die("No-Change validation was not expected"),
-          validateTaskBackedCandidate: () =>
+          validateAcceptanceContextCandidate: () =>
             Effect.sync(() => {
               events.push("validate_task_backed");
               return {
@@ -603,7 +610,7 @@ describe("Change Submit orchestration", () => {
           events,
           transitions,
           change,
-          taskBacked: true,
+          acceptanceContextSupplied: true,
           captureResults: [
             { ...candidate, headSha: "changed-head" },
             { ...candidate, headSha: "base", trackedTreeMatchesChangeBase: true },
@@ -612,7 +619,7 @@ describe("Change Submit orchestration", () => {
       );
       const validationLayer = Layer.succeed(CandidateValidation, {
         validateCandidate: () => Effect.die("Taskless validation was not expected"),
-        validateTaskBackedCandidate: () =>
+        validateAcceptanceContextCandidate: () =>
           Effect.sync(() => {
             events.push("validate_task_backed");
             return {
@@ -683,7 +690,7 @@ describe("Change Submit orchestration", () => {
       );
       const validationLayer = Layer.succeed(CandidateValidation, {
         validateCandidate: () => Effect.die("Validation was not expected"),
-        validateTaskBackedCandidate: () => Effect.die("Validation was not expected"),
+        validateAcceptanceContextCandidate: () => Effect.die("Validation was not expected"),
         validateNoChange: () => Effect.die("Validation was not expected"),
         listFindings: () => Effect.succeed([]),
         listToolingFailures: () => Effect.succeed([]),
@@ -732,7 +739,7 @@ describe("Change Submit orchestration", () => {
       );
       const validationLayer = Layer.succeed(CandidateValidation, {
         validateCandidate: () => Effect.die("Validation was not expected"),
-        validateTaskBackedCandidate: () => Effect.die("Validation was not expected"),
+        validateAcceptanceContextCandidate: () => Effect.die("Validation was not expected"),
         validateNoChange: () => Effect.die("Validation was not expected"),
         listFindings: () => Effect.succeed([]),
         listToolingFailures: () => Effect.succeed([]),
@@ -767,11 +774,11 @@ describe("Change Submit orchestration", () => {
         },
       });
       const submit = openChangeSubmit(
-        dependencies({ events, transitions, change, taskBacked: true }),
+        dependencies({ events, transitions, change, acceptanceContextSupplied: true }),
       );
       const validationLayer = Layer.succeed(CandidateValidation, {
         validateCandidate: () => Effect.die("Taskless validation was not expected"),
-        validateTaskBackedCandidate: (input) =>
+        validateAcceptanceContextCandidate: (input) =>
           Effect.sync(() => {
             events.push("validate_task_backed");
             expect(input.acceptanceContext.title).toBe("Approved intent");
@@ -836,7 +843,7 @@ describe("Change Submit orchestration", () => {
               outcome: "passed",
             } as const;
           }),
-        validateTaskBackedCandidate: () => Effect.die("Acceptance Review was not expected"),
+        validateAcceptanceContextCandidate: () => Effect.die("Acceptance Review was not expected"),
         validateNoChange: () => Effect.die("Acceptance-only validation was not expected"),
         listFindings: () => Effect.succeed([]),
         listToolingFailures: () => Effect.succeed([]),
@@ -875,7 +882,7 @@ describe("Change Submit orchestration", () => {
         );
         const validationLayer = Layer.succeed(CandidateValidation, {
           validateCandidate: () => Effect.die("Validation must not start"),
-          validateTaskBackedCandidate: () => Effect.die("Validation must not start"),
+          validateAcceptanceContextCandidate: () => Effect.die("Validation must not start"),
           validateNoChange: () => Effect.die("Validation must not start"),
           listFindings: () => Effect.succeed([]),
           listToolingFailures: () => Effect.succeed([]),
@@ -903,7 +910,7 @@ describe("Change Submit orchestration", () => {
       );
       const validationLayer = Layer.succeed(CandidateValidation, {
         validateCandidate: () => Effect.die("Validation must not start"),
-        validateTaskBackedCandidate: () => Effect.die("Validation must not start"),
+        validateAcceptanceContextCandidate: () => Effect.die("Validation must not start"),
         validateNoChange: () => Effect.die("Validation must not start"),
         listFindings: () => Effect.succeed([]),
         listToolingFailures: () => Effect.succeed([]),
@@ -951,7 +958,7 @@ describe("Change Submit orchestration", () => {
         );
         const validationLayer = Layer.succeed(CandidateValidation, {
           validateCandidate: () => Effect.die("Duplicate validation"),
-          validateTaskBackedCandidate: () => Effect.die("Duplicate validation"),
+          validateAcceptanceContextCandidate: () => Effect.die("Duplicate validation"),
           validateNoChange: () => Effect.die("Duplicate validation"),
           listFindings: () => Effect.succeed([]),
           listToolingFailures: () => Effect.succeed([]),
@@ -999,7 +1006,7 @@ describe("Change Submit orchestration", () => {
               outcome: "passed",
             } as const;
           }),
-        validateTaskBackedCandidate: () => Effect.die("Acceptance Review was not expected"),
+        validateAcceptanceContextCandidate: () => Effect.die("Acceptance Review was not expected"),
         validateNoChange: () => Effect.die("No-Change validation was not expected"),
         listFindings: () => Effect.succeed([]),
         listToolingFailures: () => Effect.succeed([]),
@@ -1052,7 +1059,7 @@ describe("Change Submit orchestration", () => {
         );
         const validationLayer = Layer.succeed(CandidateValidation, {
           validateCandidate: () => Effect.die("Validation must not start"),
-          validateTaskBackedCandidate: () => Effect.die("Validation must not start"),
+          validateAcceptanceContextCandidate: () => Effect.die("Validation must not start"),
           validateNoChange: () => Effect.die("Validation must not start"),
           listFindings: () => Effect.succeed([]),
           listToolingFailures: () => Effect.succeed([]),
@@ -1083,7 +1090,7 @@ describe("Change Submit orchestration", () => {
                 comments: [],
               },
             }),
-            taskBacked: true,
+            acceptanceContextSupplied: true,
             refreshResult: { ok: true, base: refreshedBase },
             captureResult: {
               ok: false,
@@ -1097,7 +1104,7 @@ describe("Change Submit orchestration", () => {
         );
         const validationLayer = Layer.succeed(CandidateValidation, {
           validateCandidate: () => Effect.die("Validation must not start"),
-          validateTaskBackedCandidate: () => Effect.die("Validation must not start"),
+          validateAcceptanceContextCandidate: () => Effect.die("Validation must not start"),
           validateNoChange: () => Effect.die("Validation must not start"),
           listFindings: () => Effect.succeed([]),
           listToolingFailures: () => Effect.succeed([]),
@@ -1134,7 +1141,7 @@ describe("Change Submit orchestration", () => {
       );
       const validationLayer = Layer.succeed(CandidateValidation, {
         validateCandidate: () => Effect.die("Validation must not start"),
-        validateTaskBackedCandidate: () => Effect.die("Validation must not start"),
+        validateAcceptanceContextCandidate: () => Effect.die("Validation must not start"),
         validateNoChange: () => Effect.die("Validation must not start"),
         listFindings: () => Effect.succeed([]),
         listToolingFailures: () => Effect.succeed([]),
@@ -1170,7 +1177,7 @@ describe("Change Submit orchestration", () => {
       );
       const validationLayer = Layer.succeed(CandidateValidation, {
         validateCandidate: () => Effect.die("Validation must not start"),
-        validateTaskBackedCandidate: () => Effect.die("Validation must not start"),
+        validateAcceptanceContextCandidate: () => Effect.die("Validation must not start"),
         validateNoChange: () => Effect.die("Validation must not start"),
         listFindings: () => Effect.succeed([]),
         listToolingFailures: () => Effect.succeed([]),
@@ -1196,7 +1203,7 @@ describe("Change Submit orchestration", () => {
       );
       const validationLayer = Layer.succeed(CandidateValidation, {
         validateCandidate: () => Effect.die("Validation must not start without a GitHub target"),
-        validateTaskBackedCandidate: () =>
+        validateAcceptanceContextCandidate: () =>
           Effect.die("Validation must not start without a GitHub target"),
         validateNoChange: () => Effect.die("Validation must not start without a GitHub target"),
         listFindings: () => Effect.succeed([]),
@@ -1226,11 +1233,11 @@ describe("Change Submit orchestration", () => {
         },
       });
       const submit = openChangeSubmit(
-        dependencies({ change, transitions, taskBacked: true, findings: [finding] }),
+        dependencies({ change, transitions, acceptanceContextSupplied: true, findings: [finding] }),
       );
       const validationLayer = Layer.succeed(CandidateValidation, {
         validateCandidate: () => Effect.die("Taskless validation was not expected"),
-        validateTaskBackedCandidate: () =>
+        validateAcceptanceContextCandidate: () =>
           Effect.succeed({
             ok: true,
             reused: false,
@@ -1272,11 +1279,16 @@ describe("Change Submit orchestration", () => {
         },
       });
       const submit = openChangeSubmit(
-        dependencies({ change, transitions, taskBacked: true, toolingFailures: [toolingFailure] }),
+        dependencies({
+          change,
+          transitions,
+          acceptanceContextSupplied: true,
+          toolingFailures: [toolingFailure],
+        }),
       );
       const validationLayer = Layer.succeed(CandidateValidation, {
         validateCandidate: () => Effect.die("Taskless validation was not expected"),
-        validateTaskBackedCandidate: () =>
+        validateAcceptanceContextCandidate: () =>
           Effect.succeed({
             ok: false,
             validationRunId: "run-1",
@@ -1311,7 +1323,7 @@ const dependencies = (input: {
   readonly change: ChangeRecord;
   readonly events?: string[];
   readonly transitions?: string[];
-  readonly taskBacked?: boolean;
+  readonly acceptanceContextSupplied?: boolean;
   readonly agentEnvironment?: readonly string[];
   readonly agentEnvironmentError?: string;
   readonly baselineRepoConfigError?: string;
@@ -1320,7 +1332,7 @@ const dependencies = (input: {
   readonly candidateRepoConfig?: RepoConfig;
   readonly baselineRepoConfig?: RepoConfig;
   readonly resolvePolicy?: (
-    taskBacked: boolean,
+    acceptanceContextSupplied: boolean,
     repoConfig: RepoConfig,
     worktreePath: string,
     validationRepoConfig?: RepoConfig,
@@ -1442,14 +1454,19 @@ const dependencies = (input: {
         : { ok: false as const, message: error };
     },
     resolvePolicy: (
-      taskBacked: boolean,
+      acceptanceContextSupplied: boolean,
       repoConfig: RepoConfig,
       worktreePath: string,
       validationRepoConfig?: RepoConfig,
     ) => {
       if (input.trackPolicyResolution) events.push("resolve_policy");
       if (input.resolvePolicy !== undefined) {
-        return input.resolvePolicy(taskBacked, repoConfig, worktreePath, validationRepoConfig);
+        return input.resolvePolicy(
+          acceptanceContextSupplied,
+          repoConfig,
+          worktreePath,
+          validationRepoConfig,
+        );
       }
       if (input.agentEnvironmentError !== undefined) {
         return {
@@ -1460,11 +1477,11 @@ const dependencies = (input: {
           }),
         };
       }
-      return input.taskBacked
+      return input.acceptanceContextSupplied
         ? ({
             ok: true,
             resolved: {
-              taskBacked: true,
+              acceptanceContextSupplied: true,
               policy: {
                 ...tasklessPolicy,
                 acceptanceReview: {
@@ -1484,7 +1501,7 @@ const dependencies = (input: {
         : ({
             ok: true,
             resolved: {
-              taskBacked: false,
+              acceptanceContextSupplied: false,
               policy: {
                 ...tasklessPolicy,
                 ...(input.agentEnvironment === undefined

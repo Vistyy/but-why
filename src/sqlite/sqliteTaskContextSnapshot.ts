@@ -1,6 +1,6 @@
-import type { TaskContextSnapshotV1 } from "../change/validationRun/taskContextSnapshot.js";
+import type { AcceptanceContextSnapshotV1 } from "../change/validationRun/acceptanceContextSnapshot.js";
 
-export const encodeSqliteTaskContextSnapshot = (snapshot: TaskContextSnapshotV1): string =>
+export const encodeSqliteTaskContextSnapshot = (snapshot: AcceptanceContextSnapshotV1): string =>
   JSON.stringify({
     version: 1,
     title: snapshot.title,
@@ -9,7 +9,7 @@ export const encodeSqliteTaskContextSnapshot = (snapshot: TaskContextSnapshotV1)
     ...(snapshot.resolutions === undefined ? {} : { resolutions: [...snapshot.resolutions] }),
   });
 
-export const decodeSqliteTaskContextSnapshot = (encoded: string): TaskContextSnapshotV1 => {
+export const decodeSqliteTaskContextSnapshot = (encoded: string): AcceptanceContextSnapshotV1 => {
   const value: unknown = JSON.parse(encoded);
 
   if (

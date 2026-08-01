@@ -7,7 +7,7 @@ import type { ChangeStartRecord, CreateChangeStartInput } from "../change/change
 import type { TaskState } from "../task/lifecycle.js";
 import type { TaskDependencyFact } from "../task/task.js";
 import { storedPublicTaskId, type PublicTaskId } from "../task/taskId.js";
-import type { TaskContextSnapshotV1 } from "../change/validationRun/taskContextSnapshot.js";
+import type { AcceptanceContextSnapshotV1 } from "../change/validationRun/acceptanceContextSnapshot.js";
 import { RepositoryPersistedDataInvalid } from "../contracts/repositoryStorageError.js";
 import { RepositorySql } from "./repositorySql.js";
 import {
@@ -103,7 +103,7 @@ const create = (sql: SqlClient.SqlClient, input: CreateChangeStartInput) =>
       return { ok: false as const, code: "change_start_conflict" as const };
     }
 
-    let acceptanceContext: TaskContextSnapshotV1 | null = null;
+    let acceptanceContext: AcceptanceContextSnapshotV1 | null = null;
     if (input.taskId !== undefined) {
       const eligibility = yield* readEligibility(sql, input.taskId);
       if (!eligibility.ok) return eligibility;
