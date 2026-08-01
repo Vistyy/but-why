@@ -6,6 +6,8 @@ import { runTestProcess } from "../support/testProcess.js";
 import {
   builtByExecutable,
   commitButWhyConfigAndRecordDefault,
+  createGitRepo,
+  runBy,
   runBuiltByWithEnv,
   runBuiltByWithInput,
 } from "../support/by-cli.js";
@@ -135,5 +137,74 @@ exit 1
     expect(JSON.parse(terminal.stdout.trim())).toMatchObject({
       error: { code: "stdin_is_terminal" },
     });
+  }, 30_000);
+});
+describe("Implementation Decision process CLI", () => {
+  it("supports direct input, bounded stdin, structured output, and usage errors", () => {
+    const root = createGitRepo();
+    writeFileSync(join(root, "README.md"), "test\n");
+    expect(runTestProcess("git", ["add", "README.md"], { cwd: root }).status).toBe(0);
+    expect(
+      runTestProcess(
+        "git",
+        ["-c", "user.email=test@example.com", "-c", "user.name=Test", "commit", "-m", "test"],
+        { cwd: root },
+      ).status,
+    ).toBe(0);
+    expect(runBy(root, "init", "--task-prefix", "BY").status).toBe(0);
+    commitButWhyConfigAndRecordDefault(root);
+    const started = runBy(root, "--json", "change", "start");
+    expect(started.status).toBe(0);
+    const changeId = (JSON.parse(started.stdout) as { readonly change: { readonly id: string } })
+      .change.id;
+
+    const direct = runBy(
+      root,
+      "--json",
+      "change",
+      "decision",
+      "add",
+      changeId,
+      "--choice",
+      "Use bounded fields",
+      "--rationale",
+      "Use bounded fields.",
+    );
+    const invalid = runBy(
+      root,
+      "--json",
+      "change",
+      "decision",
+      "add",
+      changeId,
+      "--choice",
+      "line\nseparator",
+      "--rationale",
+      "Reason.",
+    );
+    const stdin = runBuiltByWithInput(
+      root,
+      "Read rationale from stdin.\n",
+      {},
+      "--json",
+      "change",
+      "decision",
+      "add",
+      changeId,
+      "--choice",
+      "Use stdin",
+      "--rationale",
+      "-",
+    );
+
+    expect(direct.status).toBe(0);
+    expect(JSON.parse(direct.stdout).decision).toMatchObject({
+      choice: "Use bounded fields",
+      rationale: "Use bounded fields.",
+    });
+    expect(invalid.status).toBe(2);
+    expect(JSON.parse(invalid.stdout).error.code).toBe("invalid_choice");
+    expect(stdin.status).toBe(0);
+    expect(JSON.parse(stdin.stdout).decision.rationale).toBe("Read rationale from stdin.");
   }, 30_000);
 });
