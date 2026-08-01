@@ -16,6 +16,9 @@ type LoadingBenchmark = {
   commands: readonly string[][];
 };
 
+const cliLoadingBenchmarkEnabled =
+  (process.env as { readonly BY_CLI_LOADING_BENCHMARK?: string }).BY_CLI_LOADING_BENCHMARK === "1";
+
 describe("CLI loading and package boundary", () => {
   it.effect(
     "builds literal lazy targets and runs the real packed package",
@@ -109,7 +112,7 @@ describe("CLI loading and package boundary", () => {
           expect(validationShow.status).toBe(1);
           expect(validationShow.stdout).toContain("code: validation_run_not_found");
 
-          if (process.env["BY_CLI_LOADING_BENCHMARK"] === "1") {
+          if (cliLoadingBenchmarkEnabled) {
             const benchmark = JSON.parse(
               readFileSync(join(repoRoot, "test/repository/cli-loading.benchmark.json"), "utf8"),
             ) as LoadingBenchmark;
@@ -153,6 +156,6 @@ describe("CLI loading and package boundary", () => {
           rmSync(directory, { recursive: true, force: true });
         }
       }),
-    process.env["BY_CLI_LOADING_BENCHMARK"] === "1" ? 360_000 : 30_000,
+    cliLoadingBenchmarkEnabled ? 360_000 : 30_000,
   );
 });
