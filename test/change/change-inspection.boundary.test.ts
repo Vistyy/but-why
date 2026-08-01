@@ -471,6 +471,21 @@ describe("Change inspection CLI", () => {
         root,
         Effect.gen(function* () {
           const repository = yield* RepositorySql;
+          yield* repository.operation("remove historical rationale column", (sql) =>
+            sql.unsafe("ALTER TABLE implementation_decisions DROP COLUMN rationale"),
+          );
+          yield* repository.operation("remove historical choice column", (sql) =>
+            sql.unsafe("ALTER TABLE implementation_decisions DROP COLUMN choice"),
+          );
+          yield* repository.operation("remove structured decision migration record", (sql) =>
+            sql.unsafe("DELETE FROM effect_sql_migrations WHERE migration_id = 11"),
+          );
+        }),
+      );
+      yield* withTestRepository(
+        root,
+        Effect.gen(function* () {
+          const repository = yield* RepositorySql;
           yield* repository.operation(
             "insert historical Implementation Decision",
             (sql) => sql`
