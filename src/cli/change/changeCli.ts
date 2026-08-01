@@ -665,7 +665,7 @@ const submitResult = (result: ChangeSubmitResult, changeId: string): CliResult =
         changeId: result.changeId,
         candidateId: result.candidateId,
         validationRunId: result.validationRunId,
-        findings: result.findings,
+        findings: result.findings.map(changeFindingView),
         ...(result.reviewerEvidence === undefined
           ? {}
           : { reviewerEvidence: result.reviewerEvidence }),

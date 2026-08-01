@@ -407,13 +407,13 @@ describe("Change inspection CLI", () => {
       const output = JSON.parse(result.stdout) as {
         readonly error: {
           readonly code: string;
-          readonly details?: { readonly findings?: readonly { readonly evidence: string }[] };
         };
       };
 
       expect(result.status).toBe(1);
       expect(output.error.code).toBe("validation_findings");
       expect(result.stdout).toContain("command: false");
+      expect(result.stdout).not.toContain('"severity"');
     }),
   );
 
