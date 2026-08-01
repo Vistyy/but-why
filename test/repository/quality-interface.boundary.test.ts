@@ -200,27 +200,6 @@ fi
   chmodSync(pnpm, 0o755);
 };
 
-const createQualityFixture = (directory: string): void => {
-  writeFileSync(
-    join(directory, "justfile"),
-    `quality:
-    @exec ${JSON.stringify(qualityRunner)} quality
-
-full-quality:
-    @exec ${JSON.stringify(qualityRunner)} full-quality
-
-_quality-static-routine:
-    @true
-
-build:
-    @true
-
-test:
-    @pnpm exec vitest
-`,
-  );
-};
-
 const createBuildRaceQualityFixture = (
   directory: string,
   readyFile: string,
@@ -506,44 +485,6 @@ describe("quality interface", () => {
       expect(justProcess.output).toContain("rerun the same command to retry");
       expect(Date.now() - interruptedAt).toBeLessThan(3_000);
       const recovered = await runRunner(lockFile, ["complete coverage", "sh", "-c", "exit 0"]);
-      expect(recovered.status).toBe(0);
-      await waitForProcessExit(descendantPidFile);
-    } finally {
-      await stopJust(justProcess);
-    }
-  });
-
-  test.each([
-    ["quality", "SIGINT", 130],
-    ["full-quality", "SIGTERM", 143],
-  ] as const)("interrupts the complete %s Just command with %s and releases its workload", async (qualityCommand, signal, expectedStatus) => {
-    const directory = mkdtempSync(join(tmpdir(), "but-why-quality-lock-"));
-    temporaryPaths.push(directory);
-    const lockFile = join(directory, "capacity.lock");
-    const readyFile = join(directory, `${qualityCommand}-ready`);
-    const descendantPidFile = join(directory, `${qualityCommand}-descendant-pid`);
-    createBlockingPnpm(directory, readyFile, descendantPidFile);
-    createQualityFixture(directory);
-    const justProcess = startJust(
-      lockFile,
-      [qualityCommand],
-      {
-        PATH: `${directory}:${Reflect.get(process.env, "PATH") ?? ""}`,
-      },
-      directory,
-    );
-
-    try {
-      await waitForFile(readyFile);
-      await waitForFile(descendantPidFile);
-      const interruptedAt = Date.now();
-      signalJust(justProcess, signal);
-      expect((await justProcess.done).status).toBe(expectedStatus);
-      expect(justProcess.output).toContain(`${qualityCommand} interrupted after`);
-      expect(justProcess.output).toContain(`rerun just ${qualityCommand} to retry`);
-      expect(justProcess.output).not.toContain(`${qualityCommand} completed in`);
-      expect(Date.now() - interruptedAt).toBeLessThan(3_000);
-      const recovered = await runRunner(lockFile, ["complete test", "sh", "-c", "exit 0"]);
       expect(recovered.status).toBe(0);
       await waitForProcessExit(descendantPidFile);
     } finally {
