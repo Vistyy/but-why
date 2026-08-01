@@ -269,14 +269,6 @@ const submitChange = (
         }
       }
     }
-    const managedRepoConfig = dependencies.loadRepoConfig(change.worktreePath);
-    if (!managedRepoConfig.ok) {
-      return {
-        ok: false,
-        code: "validation_policy_invalid",
-        message: managedRepoConfig.message,
-      } as const;
-    }
     const refreshedBase = dependencies.refreshBase(
       dependencies.repositoryPath,
       change.baseRef,
@@ -295,9 +287,17 @@ const submitChange = (
         return { ok: true, status: "nothing_to_submit", changeId: change.id } as const;
       }
       if (change.publication === null) {
+        const candidateRepoConfig = dependencies.loadRepoConfig(change.worktreePath);
+        if (!candidateRepoConfig.ok) {
+          return {
+            ok: false,
+            code: "validation_policy_invalid",
+            message: candidateRepoConfig.message,
+          } as const;
+        }
         const policy = dependencies.resolvePolicy(
           true,
-          managedRepoConfig.config,
+          candidateRepoConfig.config,
           change.worktreePath,
         );
         if (!policy.ok) {
@@ -324,9 +324,17 @@ const submitChange = (
         );
       }
     }
+    const candidateRepoConfig = dependencies.loadRepoConfig(change.worktreePath);
+    if (!candidateRepoConfig.ok) {
+      return {
+        ok: false,
+        code: "validation_policy_invalid",
+        message: candidateRepoConfig.message,
+      } as const;
+    }
     const policy = dependencies.resolvePolicy(
       change.acceptanceContext !== null,
-      managedRepoConfig.config,
+      candidateRepoConfig.config,
       change.worktreePath,
     );
     if (!policy.ok) {

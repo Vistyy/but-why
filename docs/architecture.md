@@ -47,14 +47,15 @@ A Task-backed Change captures immutable Acceptance Context.
 A taskless Change has no Acceptance Context.
 
 `by change submit <change-id>` reconciles an existing owned pull request before starting a new Submission.
-A new Submission selects the Change from Shared Repository State, then reads Repo Config exactly once from the selected Change's Managed Worktree.
+A new Submission selects the Change from Shared Repository State, then captures a Candidate from the selected Change's Managed Worktree.
 The caller checkout supplies only Local Repository identity, Shared Repository State, and Change selection.
 The caller checkout's Repo Config is not a Change Submit policy source.
-The selected Managed Worktree Repo Config supplies Repository Preparation, Checks, Validation Workspace inputs, reviewer policy, Repo Agent Profiles, and the Agent Environment.
-Submission loads that Repo Config before fetching the Change Base and creating a Candidate.
-It resolves the complete Validation Policy from the loaded config before validation starts.
+Submission reads Repo Config from the Candidate's Managed Worktree after Candidate capture.
+That Candidate Repo Config supplies Repository Preparation, Checks, Validation Workspace inputs, reviewer policy, Repo Agent Profiles, and the Agent Environment.
+It resolves the complete Validation Policy from the Candidate Repo Config before validation starts.
 The fetch updates only the remote-tracking ref.
 It does not modify the Managed Worktree or Repository Branch.
+Repo reviewer profiles and resources are resolved from the exact Candidate Validation Workspace during reviewer execution.
 
 A Candidate is identified by its Change, `changeBaseSha`, and `headSha`.
 Tracked-tree equality with the fetched Change Base defines No-Change after the ancestry check passes.

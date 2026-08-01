@@ -80,7 +80,7 @@ describe("Pi reviewer agent runtime", () => {
 
       expect(result).toMatchObject({ ok: true, attempts: 1 });
       expect(command).toBe(
-        "'nix' 'develop' '-c' pi -p --mode json --model 'openai-codex/gpt-5.5' --thinking high --no-prompt-templates --no-themes --no-extensions --extension '~/.pi/agent/extensions/package-manager-policy' --extension '~/.pi/agent/extensions/web-search' --extension '~/.pi/agent/extensions/openai-remote-compaction' --no-skills --skill '~/.pi/agent/skills/codebase-design' --tools read,bash,grep,find,ls,web_search,web_fetch,web_content_get",
+        "'nix' 'develop' '-c' pi -p --mode json --model 'openai-codex/gpt-5.5' --thinking high --no-prompt-templates --no-themes --no-extensions --extension '~/.pi/agent/extensions/package-manager-policy' --extension '~/.pi/agent/extensions/web-search' --extension '~/.pi/agent/extensions/openai-remote-compaction' --no-skills --skill '~/.pi/agent/skills/codebase-design' --tools 'read,bash,grep,find,ls,web_search,web_fetch,web_content_get'",
       );
       expect(command).not.toContain("--subagent");
       expect(command).not.toContain("--edit");
