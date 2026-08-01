@@ -1,5 +1,4 @@
 // fallow-ignore-file duplicate-export -- shared Change command support
-// @ts-nocheck
 
 import { Effect } from "effect";
 
@@ -11,27 +10,13 @@ import {
   type CliResult,
 } from "../../cliResults.js";
 import { withChangeUseCases } from "../../change/loadChangeUseCases.js";
-import type { InteractiveSessionHost } from "../../change/interactiveSessionHost.js";
-import type { ReviewerAgentRuntime } from "../../agent/reviewerAgentRuntime.js";
 import type { ChangeRecord } from "../../change/change.js";
 import type { CandidateValidationRunRecord } from "../../change/candidateValidation/candidateValidationRunStore.js";
 import type { ChangeUseCases } from "../../change/changeUseCases.js";
 import type { RepositoryStorageError } from "../../contracts/repositoryStorageError.js";
 import type { RepoStateLoadError } from "../../cliResults.js";
-import type { TextInputStdin } from "../../cli/input/textInput.js";
+import type { ChangeCommandEnvironment } from "./changeTypes.js";
 import { resolveChangeId } from "./changeTarget.js";
-
-export type ChangeCommandEnvironment = {
-  readonly cwd: string;
-  readonly globalConfigPath: string;
-  readonly now: () => Date;
-  readonly stdin: TextInputStdin;
-  readonly writeStderr?: (message: string) => void;
-  readonly reviewerAgentRuntime?: ReviewerAgentRuntime;
-  readonly interactiveSessionHost?: InteractiveSessionHost;
-  readonly interactiveSessionPath?: string;
-  readonly cancellationUseCases?: CancellationUseCases;
-};
 
 export const withResolvedChangeId = <E, R>(
   changeId: string | undefined,
