@@ -10,11 +10,40 @@ import { runTestProcess } from "../support/testProcess.js";
 
 vi.setConfig({ testTimeout: 30_000 });
 
+type LoadingBenchmark = {
+  method: {
+    processesPerCommand: number;
+    order: string;
+    comparison: string[];
+  };
+  medianMilliseconds: Record<
+    string,
+    { compiledExecutable: number; installedPackageTarball: number }
+  >;
+};
+
 describe("CLI loading and package boundary", () => {
   it.effect(
     "builds literal lazy targets and runs the real packed package",
     () =>
       Effect.gen(function* () {
+        const benchmark = JSON.parse(
+          readFileSync(join(repoRoot, "test/repository/cli-loading.benchmark.json"), "utf8"),
+        ) as LoadingBenchmark;
+        expect(benchmark.method.processesPerCommand).toBe(15);
+        expect(benchmark.method.order).toBe("randomized");
+        expect(benchmark.method.comparison).toEqual([
+          "compiledExecutable",
+          "installedPackageTarball",
+        ]);
+        for (const measurement of Object.values(benchmark.medianMilliseconds)) {
+          expect(measurement.compiledExecutable).toBeGreaterThan(0);
+          expect(measurement.installedPackageTarball).toBeGreaterThan(0);
+          expect(measurement.installedPackageTarball).toBeLessThanOrEqual(
+            measurement.compiledExecutable * 1.1,
+          );
+        }
+
         const directory = mkdtempSync(join(tmpdir(), "but-why-cli-package-"));
         try {
           const build = runTestProcess("pnpm", ["--dir", repoRoot, "build"], { cwd: directory });
