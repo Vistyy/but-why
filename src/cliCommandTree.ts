@@ -731,13 +731,28 @@ export const outputFormatForArgs = (args: readonly string[]): OutputFormat => {
     const argument = args[index];
     if (argument === "--json") {
       const value = args[index + 1]?.toLowerCase();
-      return value === "false" ||
+      if (
+        value === "false" ||
         value === "0" ||
         value === "n" ||
         value === "no" ||
         value === "off"
-        ? "toon"
-        : "json";
+      ) {
+        return "toon";
+      }
+      if (
+        value === undefined ||
+        value.startsWith("-") ||
+        ["init", "task", "change", "validation-run"].includes(value) ||
+        value === "true" ||
+        value === "1" ||
+        value === "y" ||
+        value === "yes" ||
+        value === "on"
+      ) {
+        return "json";
+      }
+      return "toon";
     }
     if (argument?.startsWith("--json=")) {
       const value = argument.slice("--json=".length).toLowerCase();
