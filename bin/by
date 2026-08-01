@@ -117,6 +117,7 @@ function outputFormatFor(arguments_) {
     }
   }
   return "toon";
+}
 
 function toonFailure(result) {
   const lines = [
