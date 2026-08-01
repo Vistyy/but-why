@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { Effect } from "effect";
 
 import { mapRuntimeError, runCli } from "./cli.js";
-import { outputFormatForArgs } from "./cliCommandTree.js";
+import { outputFormatForArgs } from "./output/selection.js";
 import { serializeOutput } from "./output/serialize.js";
 
 const executablePath =

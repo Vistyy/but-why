@@ -380,8 +380,8 @@ export default function continueChange(pi: ExtensionAPI): void {
   };
 
   const inspect = async (ctx: ExtensionContext, id: string): Promise<InspectionResult> => {
-    const args = ["--output", "json", "change", "show", id];
-    const blockerArgs = ["--output", "json", "change", "blocker", "list", id];
+    const args = ["--json", "change", "show", id];
+    const blockerArgs = ["--json", "change", "blocker", "list", id];
     const [changeResult, blockerResult, headResult, statusResult, unstagedResult, stagedResult, untrackedResult] =
       await Promise.all([
         inspectCommand(args, ctx.cwd),

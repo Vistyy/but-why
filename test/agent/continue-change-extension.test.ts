@@ -193,11 +193,11 @@ describe("packaged Change Implement continuation extension", () => {
     expect(harness.sent).toHaveLength(1);
     expect(harness.execCalls).toContainEqual({
       command: "just",
-      args: ["by", "--output", "json", "change", "show", changeId],
+      args: ["by", "--json", "change", "show", changeId],
     });
     expect(harness.execCalls).toContainEqual({
       command: "just",
-      args: ["by", "--output", "json", "change", "blocker", "list", changeId],
+      args: ["by", "--json", "change", "blocker", "list", changeId],
     });
   });
 
@@ -209,7 +209,7 @@ describe("packaged Change Implement continuation extension", () => {
 
     expect(harness.execCalls).toContainEqual({
       command: "npx",
-      args: ["-y", "but-why", "--output", "json", "change", "show", changeId],
+      args: ["-y", "but-why", "--json", "change", "show", changeId],
     });
     expect(harness.sent[0]).toContain(`npx -y but-why change show ${changeId}`);
   });

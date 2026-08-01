@@ -8,12 +8,12 @@ The audience is an agent or program that must choose the next repository action 
 Each command constructs one structured result before serialization.
 TOON and JSON serialize the same result fields and semantics.
 TOON is the default stdout format.
-Programmatic callers request JSON with `--output json` before the command.
+Programmatic callers request JSON with `--json` before the command.
 Domain modules do not depend on either serialization format.
 
 `by --version` returns the authoritative package version in a structured `version` field.
 The default TOON result is `version: 0.0.1` for the current package version.
-`by --output json --version` returns the equivalent JSON object `{"version":"0.0.1"}`.
+`by --json --version` returns the equivalent JSON object `{"version":"0.0.1"}`.
 The value comes from the packaged `package.json` metadata.
 
 ## Change Submit progress

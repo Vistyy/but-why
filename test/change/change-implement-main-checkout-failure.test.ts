@@ -46,15 +46,11 @@ describe("Change Implement canonical main checkout failures", () => {
         ["worktree", "add", "-b", "linked-caller", linkedCheckout, "main"],
         { cwd: root },
       );
-      const started = yield* runByInProcessEffect(
-        root,
-        ["--output", "json", "change", "start"],
-        now,
-      );
+      const started = yield* runByInProcessEffect(root, ["--json", "change", "start"], now);
       const change = JSON.parse(started.stdout) as { readonly change: { readonly id: string } };
       const before = yield* runByInProcessEffect(
         root,
-        ["--output", "json", "change", "show", change.change.id],
+        ["--json", "change", "show", change.change.id],
         now,
       );
       const fakeGitDirectory = createTestWorkspace();
@@ -77,8 +73,7 @@ exec ${realGitPath} "$@"
         const result = runByWithEnv(
           linkedCheckout,
           { PATH: `${fakeGitDirectory}:${inheritedPath}` },
-          "--output",
-          "json",
+          "--json",
           "change",
           "implement",
           change.change.id,
@@ -100,7 +95,7 @@ exec ${realGitPath} "$@"
 
       const after = yield* runByInProcessEffect(
         root,
-        ["--output", "json", "change", "show", change.change.id],
+        ["--json", "change", "show", change.change.id],
         now,
       );
       expect(after.stdout).toBe(before.stdout);

@@ -73,7 +73,7 @@ exit 1
       PATH: `${tools}:${process.env["PATH"] ?? ""}`,
     };
 
-    const started = runBuiltByWithEnv(root, baseEnv, "--output", "json", "change", "start");
+    const started = runBuiltByWithEnv(root, baseEnv, "--json", "change", "start");
     expect(started.status).toBe(0);
     const change = JSON.parse(started.stdout) as {
       readonly change: { readonly id: string };
@@ -91,8 +91,7 @@ exit 1
       root,
       "Handoff from piped stdin\n",
       env,
-      "--output",
-      "json",
+      "--json",
       "change",
       "implement",
       change.change.id,
@@ -110,8 +109,7 @@ exit 1
       root,
       Buffer.from([0xff]),
       {},
-      "--output",
-      "json",
+      "--json",
       "change",
       "implement",
       "change-1",
@@ -128,7 +126,7 @@ exit 1
 
       [
         "-qec",
-        `${process.execPath} ${builtByExecutable()} --output json change implement change-1 --handoff-file -`,
+        `${process.execPath} ${builtByExecutable()} --json change implement change-1 --handoff-file -`,
         "/dev/null",
       ],
       { cwd: root },

@@ -30,9 +30,9 @@ const expectExactlyOneTrailingLineFeed = (stdout: string): void => {
 
 describe("by task CLI processes", () => {
   it.each([
-    ["root", ["--help", "--output", "json"], "Validate completed code changes"],
-    ["group", ["task", "--help", "--output", "json"], "Manage repo-local Tasks"],
-    ["leaf", ["task", "list", "--help", "--output", "json"], "List repo-local Tasks"],
+    ["root", ["--help", "--json"], "Validate completed code changes"],
+    ["group", ["task", "--help", "--json"], "Manage repo-local Tasks"],
+    ["leaf", ["task", "list", "--help", "--json"], "List repo-local Tasks"],
   ] as const)("returns generated %s help in JSON", (_name, args, description) => {
     const result = runBuiltByWithEnv(createTestWorkspace(), {}, ...args);
 
@@ -50,7 +50,7 @@ describe("by task CLI processes", () => {
   });
 
   it("returns the package version in JSON when output is selected first", () => {
-    const result = runBuiltByWithEnv(createTestWorkspace(), {}, "--output", "json", "--version");
+    const result = runBuiltByWithEnv(createTestWorkspace(), {}, "--json", "--version");
 
     expect(result.status).toBe(0);
     expect(result.stderr).toBe("");
@@ -62,7 +62,7 @@ describe("by task CLI processes", () => {
     const init = runBuiltByWithEnv(root, {}, "init", "--task-prefix", "BY");
     expect(init.status).toBe(0);
 
-    const result = runBuiltByWithEnv(root, {}, "--log-level", "debug", "--output", "json");
+    const result = runBuiltByWithEnv(root, {}, "--log-level", "debug", "--json");
 
     expect(result.status).toBe(0);
     expect(result.stdout).not.toContain("level=");
@@ -73,10 +73,10 @@ describe("by task CLI processes", () => {
   it("terminates TOON and JSON success and error results with one line feed", () => {
     const root = createTestWorkspace();
     const cases = [
-      { format: "toon", args: ["--output", "toon", "task", "--help"] as const, status: 0 },
-      { format: "json", args: ["--output", "json", "task", "--help"] as const, status: 0 },
-      { format: "toon", args: ["--output", "toon", "task", "--bad"] as const, status: 2 },
-      { format: "json", args: ["--output", "json", "task", "--bad"] as const, status: 2 },
+      { format: "toon", args: ["task", "--help"] as const, status: 0 },
+      { format: "json", args: ["--json", "task", "--help"] as const, status: 0 },
+      { format: "toon", args: ["task", "--bad"] as const, status: 2 },
+      { format: "json", args: ["--json", "task", "--bad"] as const, status: 2 },
     ] as const;
     const results = cases.map(({ args }) => runBuiltByWithEnv(root, {}, ...args));
 
@@ -105,8 +105,7 @@ describe("by task CLI processes", () => {
       root,
       "Descripción exacta\n",
       {},
-      "--output",
-      "json",
+      "--json",
       "task",
       "create",
       "--title",
@@ -120,8 +119,7 @@ describe("by task CLI processes", () => {
       root,
       "Comentario exacto\n",
       {},
-      "--output",
-      "json",
+      "--json",
       "task",
       "comment",
       "BY-1",
@@ -143,8 +141,7 @@ describe("by task CLI processes", () => {
       root,
       Buffer.from([0xff]),
       {},
-      "--output",
-      "json",
+      "--json",
       "task",
       "create",
       "--title",
@@ -220,8 +217,7 @@ exit 1
                 executable,
                 root,
                 processEnvironment,
-                "--output",
-                "json",
+                "--json",
                 "task",
                 "create",
                 "--title",
@@ -299,11 +295,7 @@ exit 1
         expect(createdTaskIds).toEqual(["BY-1", "BY-2"]);
 
         const context = yield* runByInProcessEffect(root, ["task", "context", "BY-1"], now);
-        const shown = yield* runByInProcessEffect(
-          root,
-          ["--output", "json", "task", "show", "BY-2"],
-          now,
-        );
+        const shown = yield* runByInProcessEffect(root, ["--json", "task", "show", "BY-2"], now);
         expect(context.stdout).toContain("First concurrent comment");
         expect(context.stdout).toContain("Second concurrent comment");
 
@@ -320,7 +312,7 @@ exit 1
         expect(approved.status).toBe(0);
         const started = yield* runByInProcessEffect(
           root,
-          ["--output", "json", "change", "start", "--task", "BY-1"],
+          ["--json", "change", "start", "--task", "BY-1"],
           now,
         );
         expect(started.status).toBe(0);
@@ -347,8 +339,7 @@ exit 1
               executable,
               root,
               processEnvironment,
-              "--output",
-              "json",
+              "--json",
               "change",
               "submit",
               change.change.id,
@@ -357,8 +348,7 @@ exit 1
               executable,
               root,
               processEnvironment,
-              "--output",
-              "json",
+              "--json",
               "change",
               "submit",
               change.change.id,
@@ -377,8 +367,7 @@ exit 1
           executable,
           root,
           processEnvironment,
-          "--output",
-          "json",
+          "--json",
           "change",
           "submit",
           change.change.id,
@@ -389,8 +378,7 @@ exit 1
             executable,
             root,
             processEnvironment,
-            "--output",
-            "json",
+            "--json",
             "task",
             "cancel",
             "BY-1",
@@ -420,8 +408,7 @@ exit 1
         const submitted = runBuiltByWithEnv(
           root,
           processEnvironment,
-          "--output",
-          "json",
+          "--json",
           "change",
           "submit",
           change.change.id,
@@ -442,7 +429,7 @@ exit 1
 
         const interrupted = startTestProcess(
           process.execPath,
-          [executable, "--output", "json", "change", "submit", change.change.id],
+          [executable, "--json", "change", "submit", change.change.id],
           {
             cwd: root,
             ...testProcessEnvironment({
@@ -480,8 +467,7 @@ exit 1
         const abandoned = runBuiltByWithEnv(
           root,
           processEnvironment,
-          "--output",
-          "json",
+          "--json",
           "validation-run",
           "abandon",
           interruptedRunId ?? "",
@@ -496,8 +482,7 @@ exit 1
         const resubmitted = runBuiltByWithEnv(
           root,
           processEnvironment,
-          "--output",
-          "json",
+          "--json",
           "change",
           "submit",
           change.change.id,
@@ -510,8 +495,7 @@ exit 1
         const inspected = runBuiltByWithEnv(
           root,
           processEnvironment,
-          "--output",
-          "json",
+          "--json",
           "change",
           "show",
           change.change.id,
@@ -526,8 +510,7 @@ exit 1
         const blocked = runBuiltByWithEnv(
           root,
           processEnvironment,
-          "--output",
-          "json",
+          "--json",
           "change",
           "blocker",
           "raise",
@@ -540,8 +523,7 @@ exit 1
         const submitBlocked = runBuiltByWithEnv(
           root,
           processEnvironment,
-          "--output",
-          "json",
+          "--json",
           "change",
           "submit",
           change.change.id,

@@ -250,8 +250,7 @@ describe("Candidate-owned Validation Run inspection", () => {
       });
 
       const result = yield* runByInProcessEffect(fixture.root, [
-        "--output",
-        "json",
+        "--json",
         "validation-run",
         "show",
         fixture.validationRunId,
@@ -389,8 +388,7 @@ describe("Candidate-owned Validation Run inspection", () => {
 
       const artifactRef = `artifact:${fixture.validationRunId}/checks/types/stdout.txt`;
       const detail = yield* runByInProcessEffect(fixture.root, [
-        "--output",
-        "json",
+        "--json",
         "validation-run",
         "artifact",
         fixture.validationRunId,
@@ -422,8 +420,7 @@ describe("Candidate-owned Validation Run inspection", () => {
       });
 
       const emptyResult = yield* runByInProcessEffect(empty.root, [
-        "--output",
-        "json",
+        "--json",
         "validation-run",
         "show",
         empty.validationRunId,
@@ -480,8 +477,7 @@ describe("Candidate-owned Validation Run inspection", () => {
       rmSync(join(unavailable.artifactsRoot, missing.path));
 
       const unavailableResult = yield* runByInProcessEffect(unavailable.root, [
-        "--output",
-        "json",
+        "--json",
         "validation-run",
         "show",
         unavailable.validationRunId,
@@ -501,23 +497,20 @@ describe("Candidate-owned Validation Run inspection", () => {
       });
 
       const unknownRun = yield* runByInProcessEffect(unavailable.root, [
-        "--output",
-        "json",
+        "--json",
         "validation-run",
         "show",
         "missing-run",
       ]);
       const unknownArtifact = yield* runByInProcessEffect(unavailable.root, [
-        "--output",
-        "json",
+        "--json",
         "validation-run",
         "artifact",
         unavailable.validationRunId,
         "missing-artifact",
       ]);
       const unavailableContent = yield* runByInProcessEffect(unavailable.root, [
-        "--output",
-        "json",
+        "--json",
         "validation-run",
         "artifact",
         unavailable.validationRunId,

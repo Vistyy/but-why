@@ -7,8 +7,8 @@ Do not use the published-package prefixes for an unreleased Candidate.
 Use the resolved prefix for every But Why command in the session.
 
 Use the default TOON output when you read a command result directly.
-Use `--output json` only when a program parses the command result.
-Put `--output` before the command.
+Use `--json` only when a program parses the command result.
+Put `--json` before the command.
 
 Use CLI `--help` output for exact command syntax.
 
