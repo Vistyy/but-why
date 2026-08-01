@@ -597,7 +597,7 @@ export const runCommandTree = (
           );
         }
         if (argument !== "--json") return false;
-        const next = args[index + 1];
+        const next = args[index + 1]?.toLowerCase();
         return (
           next !== undefined &&
           !next.startsWith("-") &&
