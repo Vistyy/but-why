@@ -7,6 +7,9 @@ status: accepted
 But Why judges and publishes an exact Candidate identified by its Change, freshly fetched remote Change Base commit, and locally owned Repository Branch head commit.
 Submission requires the Repository Branch to contain that Change Base before Candidate creation.
 But Why publishes only that validated local head through an owned pull request and never adopts an unexpected remote head.
+Each successful publication appends an immutable Candidate Publication.
+An Open Change can publish a revised Candidate to the same open owned pull request after the revised Candidate passes Submission.
+Reconciliation completes the Change only when the merged head matches the latest Candidate Publication.
 
 ## Considered Options
 
@@ -30,3 +33,7 @@ A taskless No-Change Submission returns `nothing_to_submit` and remains open.
 Completed Submissions retain their Candidate, Validation Policy Snapshot, validation, and publication evidence.
 Later configuration or Change Base changes do not invalidate completed evidence.
 A repeated Submit returns stored success only when durable evidence identifies the same exact Candidate and confirmed publication or No-Change completion.
+A revised Candidate must pass Submission before But Why updates the same open owned pull request.
+Each update appends Candidate Publication evidence without changing earlier publication evidence.
+A closed owned pull request blocks publication while it remains closed.
+If the owned pull request reopens before the Change closes, a later Submission can continue through that pull request.
