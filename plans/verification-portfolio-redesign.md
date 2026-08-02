@@ -1002,7 +1002,8 @@ Before creating VP-0, update the approved capability map, Material Risks, Verifi
 The update must include separate Agent Profile resolution, qualifying-delta scheduling, accumulated-delta preservation, structured rule and citation validation, duplicate suppression, fail-open behavior, bounded read-only tools, and non-waking advice delivery.
 The update must preserve `continue-change` as the sole Interactive Session liveness owner.
 It must not claim semantic model correctness from deterministic evidence.
-Use the approved spike report in [implementation-advisor-spike.md](implementation-advisor-spike.md) as one-time feasibility evidence, not as durable current-behavior evidence.
+Treat the completed advisor planning spikes only as feasibility evidence.
+BY-92 must establish production behavior before the advisor enters the portfolio baseline.
 
 The Implementation Advisor Task Verification Contract must establish the implementation-specific evidence needed before the Change closes.
 Do not delegate the portfolio capability, risk, claim, or evidence-owner design to that Task.

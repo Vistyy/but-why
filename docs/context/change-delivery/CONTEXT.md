@@ -51,6 +51,11 @@ _Avoid_: Change, working tree, resolved target, comparison base, merge-base pair
 The latest Candidate selected from the Managed Worktree for the open Change.
 _Avoid_: Latest historical Candidate, dirty workspace
 
+**Candidate Publication**:
+An immutable record that one exact Candidate and its passed Validation Run were confirmed as the head of a Change's owned open pull request at publication time.
+A later Candidate Publication for the same Change and owned pull request does not alter an earlier Candidate Publication.
+_Avoid_: Current Candidate, mutable pull request state, Submission
+
 **Acceptance Context**:
 One immutable version of approved intent.
 A task-backed Change captures its initial version from the approved Task when the Task starts.
