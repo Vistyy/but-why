@@ -113,13 +113,7 @@ const publish = (dependencies: Dependencies, input: PublishCandidateInput): Publ
       return { ok: false, code: "validation_evidence_invalid" };
     const headBranch = branchName(change.branchRef);
     if (headBranch === undefined) return { ok: false, code: "branch_binding_invalid" };
-    const metadata = metadataFor(
-      change,
-      candidate.id,
-      input.validationRunId,
-      candidate.headSha,
-      dependencies.git,
-    );
+    const metadata = metadataFor(change, candidate.headSha, dependencies.git);
     if ("ok" in metadata) return metadata;
     if (change.publication === null)
       return yield* create(
@@ -316,13 +310,7 @@ const recover = (
       ...marker,
       pullRequest: { number: selected.pullRequest.number, url: selected.pullRequest.url },
     } as Published;
-    const metadata = metadataFor(
-      change,
-      input.candidateId,
-      input.validationRunId,
-      expectedHeadSha,
-      dependencies.git,
-    );
+    const metadata = metadataFor(change, expectedHeadSha, dependencies.git);
     if ("ok" in metadata) return metadata;
     return yield* executePullRequestUpdate(
       dependencies,
@@ -343,13 +331,7 @@ const createRecoveryAttempt = (
   change: ChangeRecord,
 ): PublicationEffect =>
   Effect.gen(function* () {
-    const metadata = metadataFor(
-      change,
-      input.candidateId,
-      input.validationRunId,
-      expectedHeadSha,
-      dependencies.git,
-    );
+    const metadata = metadataFor(change, expectedHeadSha, dependencies.git);
     if ("ok" in metadata) return metadata;
     const pending = { ...facts(input, headBranch, expectedHeadSha), now: input.now };
     const created = dependencies.github.createPullRequest({
@@ -777,8 +759,6 @@ const implementationDecisionSection = (
 
 const metadataFor = (
   change: ChangeRecord,
-  candidateId: string,
-  validationRunId: string,
   headSha: string,
   git: CandidatePublicationGit,
 ): Metadata | Extract<PublishCandidateResult, { readonly ok: false }> => {
@@ -787,15 +767,15 @@ const metadataFor = (
       ? { ok: false, code: "task_metadata_missing" }
       : {
           title: change.acceptanceContext.title,
-          body: `Task: ${change.taskId}\nCandidate: ${candidateId}\nValidation Run: ${validationRunId}${implementationDecisionSection(change.implementationDecisions)}`,
+          body: `Task: ${change.taskId}${implementationDecisionSection(change.implementationDecisions)}`,
         };
   if (change.startingCommit === null) return { ok: false, code: "commit_history_unavailable" };
   const subject = git.readFirstNonMergeCommitSubject(change.startingCommit, headSha);
   return !subject.ok
     ? { ok: false, code: "commit_history_unavailable" }
     : {
-        title: subject.subject ?? `Change ${change.id.slice(0, 8)}`,
-        body: `Change: ${change.id}\nCandidate: ${candidateId}\nValidation Run: ${validationRunId}${implementationDecisionSection(change.implementationDecisions)}`,
+        title: subject.subject ?? "Change publication",
+        body: implementationDecisionSection(change.implementationDecisions).trim(),
       };
 };
 

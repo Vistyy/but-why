@@ -55,11 +55,9 @@ export type ChangeInspection = {
     import("./changePersistence.js").ImplementationBlockerMutationResult,
     RepositoryStorageError
   >;
-  readonly addDecision: (input: {
-    readonly changeId: string;
-    readonly content: string;
-    readonly now: string;
-  }) => Effect.Effect<RecordImplementationDecisionResult, RepositoryStorageError>;
+  readonly addDecision: (
+    input: import("./changePersistence.js").RecordImplementationDecisionInput,
+  ) => Effect.Effect<RecordImplementationDecisionResult, RepositoryStorageError>;
 };
 
 export type ChangeTaskProjection = {

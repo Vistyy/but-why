@@ -614,7 +614,8 @@ describe("Change Submit orchestration", () => {
             changeId: "change-1",
             sequence: 1,
             recordedAt: now,
-            content: "Keep the same owned pull request.",
+            choice: "Keep the same owned pull request",
+            rationale: "Preserve the existing owned pull request.",
           },
         ],
         publication: {

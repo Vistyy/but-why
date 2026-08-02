@@ -1,4 +1,4 @@
-import { runtimeError, type CliResult } from "../../cliResults.js";
+import { runtimeError, usageError, type CliResult } from "../../cliResults.js";
 import type { ImplementationDecisionFileError } from "../../change/implementationDecisionFile.js";
 
 export const decisionMutationError = (code: string, changeId: string): CliResult =>
@@ -22,4 +22,18 @@ export const decisionFileError = (error: ImplementationDecisionFileError): CliRe
         ? "Pipe UTF-8 Markdown or use a regular file."
         : "Provide a bounded UTF-8 Markdown file with `--file <path>`.",
     ],
+  });
+
+export const decisionInputError = (
+  code: "empty_choice" | "empty_rationale" | "multiline_choice",
+): CliResult =>
+  usageError({
+    code,
+    message:
+      code === "empty_choice"
+        ? "Implementation Decision Choice is required and must not be empty."
+        : code === "empty_rationale"
+          ? "Implementation Decision Rationale is required and must not be empty."
+          : "Implementation Decision Choice must be one line.",
+    help: ["Provide --choice <one-line approach> and --rationale <reason>."],
   });

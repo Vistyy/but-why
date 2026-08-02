@@ -398,11 +398,33 @@ const getById = (sql: SqlClient.SqlClient, changeId: string) =>
   );
 
 const listDecisions = (sql: SqlClient.SqlClient, changeId: string) =>
-  sql<ImplementationDecision>`
-    SELECT id, change_id AS changeId, sequence, recorded_at AS recordedAt, content
-    FROM implementation_decisions WHERE change_id = ${changeId}
-    ORDER BY sequence ASC
-  `;
+  Effect.map(
+    sql<{
+      readonly id: string;
+      readonly changeId: string;
+      readonly sequence: number | bigint;
+      readonly recordedAt: string;
+      readonly content: string | null;
+      readonly choice: string | null;
+      readonly rationale: string | null;
+    }>`
+      SELECT id, change_id AS changeId, sequence, recorded_at AS recordedAt, content, choice, rationale
+      FROM implementation_decisions WHERE change_id = ${changeId}
+      ORDER BY sequence ASC
+    `,
+    (rows) =>
+      rows.map(
+        (row): ImplementationDecision => ({
+          id: row.id,
+          changeId: row.changeId,
+          sequence: Number(row.sequence),
+          recordedAt: row.recordedAt,
+          choice: row.choice ?? row.content ?? "",
+          rationale: row.rationale ?? "",
+          ...(row.choice === null && row.rationale === null ? { content: row.content ?? "" } : {}),
+        }),
+      ),
+  );
 
 const recordDecision = (sql: SqlClient.SqlClient, input: RecordImplementationDecisionInput) =>
   Effect.gen(function* () {
@@ -416,14 +438,11 @@ const recordDecision = (sql: SqlClient.SqlClient, input: RecordImplementationDec
     if (change.state !== "open") return { ok: false as const, code: "change_not_open" as const };
     const id = randomUUID();
     yield* sql`
-      INSERT INTO implementation_decisions (id, change_id, recorded_at, content)
-      VALUES (${id}, ${input.changeId}, ${input.now}, ${input.content})
+      INSERT INTO implementation_decisions (id, change_id, recorded_at, content, choice, rationale)
+      VALUES (${id}, ${input.changeId}, ${input.now}, '', ${input.choice}, ${input.rationale})
     `;
-    const rows = yield* sql<ImplementationDecision>`
-      SELECT id, change_id AS changeId, sequence, recorded_at AS recordedAt, content
-      FROM implementation_decisions WHERE id = ${id}
-    `;
-    const decision = rows[0];
+    const decisions = yield* listDecisions(sql, input.changeId);
+    const decision = decisions.find((item) => item.id === id);
     if (decision === undefined)
       return yield* invalidData("record Implementation Decision", "Decision disappeared");
     return { ok: true as const, decision };

@@ -487,11 +487,19 @@ describe("Change inspection CLI", () => {
     Effect.gen(function* () {
       const root = yield* initializedRepoCopy();
       const change = yield* createChangeFixture(root, "refs/heads/decisions", firstNow);
-      writeFileSync(join(root, "decision.md"), "Use an append-only record for material choices.\n");
-
       const added = yield* runByInProcessEffect(
         root,
-        ["--json", "change", "decision", "add", change.id, "--file", "decision.md"],
+        [
+          "--json",
+          "change",
+          "decision",
+          "add",
+          change.id,
+          "--choice",
+          "Use an append-only record",
+          "--rationale",
+          "Keep material choices separate from rationale.",
+        ],
         commandNow,
       );
       const listed = yield* runByInProcessEffect(root, [
@@ -511,11 +519,86 @@ describe("Change inspection CLI", () => {
           {
             changeId: change.id,
             sequence: 1,
-            content: "Use an append-only record for material choices.\n",
+            choice: "Use an append-only record",
+            rationale: "Keep material choices separate from rationale.",
           },
         ],
       });
       expect(JSON.parse(shown.stdout).implementationDecisions).toHaveLength(1);
+
+      const missing = yield* runByInProcessEffect(root, [
+        "--json",
+        "change",
+        "decision",
+        "add",
+        change.id,
+      ]);
+      const empty = yield* runByInProcessEffect(root, [
+        "--json",
+        "change",
+        "decision",
+        "add",
+        change.id,
+        "--choice",
+        "",
+        "--rationale",
+        "A reason",
+      ]);
+      const emptyRationale = yield* runByInProcessEffect(root, [
+        "--json",
+        "change",
+        "decision",
+        "add",
+        change.id,
+        "--choice",
+        "A choice",
+        "--rationale",
+        "",
+      ]);
+      const help = yield* runByInProcessEffect(root, ["change", "decision", "add", "--help"]);
+      const multiline = yield* runByInProcessEffect(root, [
+        "--json",
+        "change",
+        "decision",
+        "add",
+        change.id,
+        "--choice",
+        "Two lines\nnot allowed",
+        "--rationale",
+        "A reason",
+      ]);
+      expect(missing.status).toBe(2);
+      expect(JSON.parse(missing.stdout)).toMatchObject({
+        error: { code: "invalid_usage" },
+        help: expect.any(Array),
+      });
+      expect(empty.status).toBe(2);
+      expect(JSON.parse(empty.stdout)).toMatchObject({
+        error: {
+          code: "empty_choice",
+          message: "Implementation Decision Choice is required and must not be empty.",
+        },
+        help: ["Provide --choice <one-line approach> and --rationale <reason>."],
+      });
+      expect(emptyRationale.status).toBe(2);
+      expect(JSON.parse(emptyRationale.stdout)).toMatchObject({
+        error: {
+          code: "empty_rationale",
+          message: "Implementation Decision Rationale is required and must not be empty.",
+        },
+        help: ["Provide --choice <one-line approach> and --rationale <reason>."],
+      });
+      expect(multiline.status).toBe(2);
+      expect(JSON.parse(multiline.stdout)).toMatchObject({
+        error: {
+          code: "multiline_choice",
+          message: "Implementation Decision Choice must be one line.",
+        },
+        help: ["Provide --choice <one-line approach> and --rationale <reason>."],
+      });
+      expect(help.status).toBe(0);
+      expect(help.stdout).toContain("--choice");
+      expect(help.stdout).toContain("--rationale");
     }),
   );
 

@@ -35,7 +35,8 @@ export type ChangePublicationEvidence = {
 
 export type RecordImplementationDecisionInput = {
   readonly changeId: string;
-  readonly content: string;
+  readonly choice: string;
+  readonly rationale: string;
   readonly now: string;
 };
 

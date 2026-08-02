@@ -102,7 +102,7 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
             branchRef: "refs/heads/feature",
             expectedHeadSha: fixture.captured.headSha,
             title: "Add taskless publication",
-            body: `Change: ${fixture.captured.changeId}\nCandidate: ${fixture.captured.candidateId}\nValidation Run: ${fixture.validationRunId}`,
+            body: "",
           },
         ]);
       }),
@@ -214,9 +214,7 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
         expect(requests).toEqual([]);
         historyAvailable = true;
         expect(yield* publication.publish(input(fixture))).toMatchObject({ ok: true });
-        expect(requests).toContainEqual(
-          expect.objectContaining({ title: `Change ${fixture.captured.changeId.slice(0, 8)}` }),
-        );
+        expect(requests).toContainEqual(expect.objectContaining({ title: "Change publication" }));
       }),
     ),
   );
@@ -227,10 +225,19 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
         const requests: unknown[] = [];
         const recorded = yield* fixture.changes.recordImplementationDecision({
           changeId: fixture.captured.changeId,
-          content: "Keep the decision log separate from approved intent.",
+          choice: "Keep & preserve <details>",
+          rationale: "Keep the decision log separate from <approved> intent.",
           now,
         });
         expect(recorded.ok).toBe(true);
+        const recordedDecisionId = recorded.ok ? recorded.decision.id : "";
+        const second = yield* fixture.changes.recordImplementationDecision({
+          changeId: fixture.captured.changeId,
+          choice: "Preserve chronological order",
+          rationale: "Keep decisions in their recorded order.",
+          now: "2026-07-22T10:01:00.000Z",
+        });
+        expect(second.ok).toBe(true);
         const publication = openCandidatePublication({
           changePersistence: fixture.changes,
           validationPersistence: fixture.validation,
@@ -242,8 +249,19 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
         });
         expect(yield* publication.publish(input(fixture))).toMatchObject({ ok: true });
         expect((requests[0] as { readonly body: string }).body).toContain(
-          "Keep the decision log separate from approved intent.",
+          "<details>\n<summary>Keep &amp; preserve &lt;details&gt;</summary>",
         );
+        expect((requests[0] as { readonly body: string }).body).toContain(
+          "Keep the decision log separate from &lt;approved&gt; intent.",
+        );
+        expect(
+          (requests[0] as { readonly body: string }).body.indexOf("Keep &amp; preserve"),
+        ).toBeLessThan(
+          (requests[0] as { readonly body: string }).body.indexOf("Preserve chronological order"),
+        );
+        expect((requests[0] as { readonly body: string }).body).not.toContain("Decision 1");
+        expect((requests[0] as { readonly body: string }).body).not.toContain(recordedDecisionId);
+        expect((requests[0] as { readonly body: string }).body).not.toContain(now);
         expect((requests[0] as { readonly body: string }).body).toContain(
           "Implementation Decision Log",
         );
@@ -286,7 +304,7 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
         expect(requests).toContainEqual(
           expect.objectContaining({
             title: "Publish exact Candidate",
-            body: `Task: BY-1\nCandidate: ${fixture.captured.candidateId}\nValidation Run: ${fixture.validationRunId}`,
+            body: "Task: BY-1",
           }),
         );
       }),
@@ -327,7 +345,8 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
 
         yield* fixture.changes.recordImplementationDecision({
           changeId: fixture.captured.changeId,
-          content: "Update the owned pull request with the current decision log.",
+          choice: "Update the owned pull request",
+          rationale: "Keep the current decision log in the revised publication.",
           now: "2026-07-22T10:04:00.000Z",
         });
         const next = yield* nextCandidate(fixture, "New Candidate", "2026-07-22T10:05:00.000Z");
@@ -346,7 +365,7 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
             expectedCurrentHeadSha: fixture.captured.headSha,
             expectedHeadSha: next.captured.headSha,
             body: expect.stringContaining(
-              "Update the owned pull request with the current decision log.",
+              "Keep the current decision log in the revised publication.",
             ),
           }),
         );
