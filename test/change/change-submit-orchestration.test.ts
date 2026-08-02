@@ -924,6 +924,107 @@ describe("Change Submit orchestration", () => {
       }),
   );
 
+  it.effect("reopens a closed owned pull request before revising the same publication", () =>
+    Effect.gen(function* () {
+      const events: string[] = [];
+      const publicationResults: PublishCandidateResult[] = [
+        { ok: false, code: "publication_remote_mismatch" },
+        {
+          ok: true,
+          created: false,
+          pullRequest: { number: 42, url: "https://github.test/acme/repo/pull/42" },
+        },
+      ];
+      const change = readyChange({
+        taskId: publicTaskId("BY-1"),
+        acceptanceContext: {
+          version: 1,
+          title: "Approved intent",
+          description: "Deliver it",
+          comments: [],
+        },
+        publication: {
+          candidateId: "published-candidate",
+          validationRunId: "published-run",
+          target: { owner: "acme", repo: "repo", baseBranch: "main", remoteName: "origin" },
+          headBranch: "change-1",
+          expectedHeadSha: "published-head",
+          pullRequest: { number: 42, url: "https://github.test/acme/repo/pull/42" },
+        },
+      });
+      const submit = openChangeSubmit(
+        dependencies({
+          events,
+          change,
+          reconciliationStatuses: ["closed_unmerged", "open", "open"],
+          publication: {
+            publish: () => {
+              events.push("publish");
+              return (
+                publicationResults.shift() ?? { ok: false, code: "publication_tooling_failed" }
+              );
+            },
+          },
+          acceptanceContextSupplied: true,
+          branchHeadSha: "base",
+          captureResults: [
+            { ...candidate, trackedTreeMatchesChangeBase: true },
+            { ...candidate, candidateId: "candidate-2", headSha: "revised-head" },
+          ],
+        }),
+      );
+      const validationLayer = Layer.succeed(CandidateValidation, {
+        validateCandidate: () => Effect.die("Taskless validation was not expected"),
+        validateNoChange: () => Effect.die("No-Change validation was not expected"),
+        validateAcceptanceContextCandidate: () =>
+          Effect.sync(() => {
+            events.push("validate_task_backed");
+            return {
+              ok: true,
+              reused: false,
+              validationRunId: "run-revised",
+              outcome: "passed",
+            } as const;
+          }),
+        listFindings: () => Effect.succeed([]),
+        listToolingFailures: () => Effect.succeed([]),
+        listRounds: () => Effect.succeed([]),
+      });
+
+      const closed = yield* submit
+        .submit({ changeId: change.id, now })
+        .pipe(Effect.provide(validationLayer));
+      const rejected = yield* submit
+        .submit({ changeId: change.id, now })
+        .pipe(Effect.provide(validationLayer));
+      const published = yield* submit
+        .submit({ changeId: change.id, now })
+        .pipe(Effect.provide(validationLayer));
+
+      expect(closed).toEqual({ ok: false, code: "owned_pull_request_closed", changeId: change.id });
+      expect(rejected).toEqual({ ok: false, code: "publication_remote_mismatch" });
+      expect(published).toMatchObject({
+        ok: true,
+        status: "published",
+        created: false,
+        pullRequest: { number: 42 },
+      });
+      expect(events).toEqual([
+        "reconcile",
+        "reconcile",
+        "capture",
+        "detect_target",
+        "validate_task_backed",
+        "publish",
+        "reconcile",
+        "capture",
+        "detect_target",
+        "validate_task_backed",
+        "publish",
+      ]);
+    }),
+  );
+
   it.effect("keeps rejecting reconciliation mismatches other than the Candidate commit", () =>
     Effect.gen(function* () {
       const events: string[] = [];
@@ -1374,6 +1475,10 @@ const dependencies = (input: {
     | "rejected"
     | "completed"
     | "closed_unmerged";
+  readonly reconciliationStatuses?: readonly [
+    "not_owned" | "open" | "rejected" | "completed" | "closed_unmerged",
+    ...("not_owned" | "open" | "rejected" | "completed" | "closed_unmerged")[],
+  ];
   readonly reconciliationRejection?: string;
   readonly captureResult?: CaptureLocalCandidateResult;
   readonly captureResults?: readonly CaptureLocalCandidateResult[];
@@ -1404,6 +1509,7 @@ const dependencies = (input: {
   const events = input.events ?? [];
   const captureResults = [...(input.captureResults ?? [])];
   const refreshResults = [...(input.refreshResults ?? [])];
+  const reconciliationStatuses = [...(input.reconciliationStatuses ?? [])];
   let currentTargetSha: string = refreshedBase.commit;
   let taskState = "implementing";
   return {
@@ -1449,7 +1555,8 @@ const dependencies = (input: {
       reconcile: () =>
         Effect.sync(() => {
           events.push("reconcile");
-          const status = input.reconciliationStatus ?? "not_owned";
+          const status =
+            reconciliationStatuses.shift() ?? input.reconciliationStatus ?? "not_owned";
           return {
             rejected: status === "rejected",
             changes: [
