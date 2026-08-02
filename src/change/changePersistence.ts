@@ -19,6 +19,8 @@ import type {
   RecordChangeCleanupResult,
   RecordPublishedPullRequestInput,
   RecordPublishedPullRequestResult,
+  ReplacePendingChangePublicationInput,
+  ReplacePendingChangePublicationResult,
   ReleasePendingPublicationResult,
 } from "./changeStore.js";
 
@@ -125,6 +127,9 @@ export type ChangePersistence = {
   readonly beginPublication: (
     input: BeginChangePublicationInput,
   ) => StorageEffect<BeginChangePublicationResult>;
+  readonly replacePendingPublication: (
+    input: ReplacePendingChangePublicationInput,
+  ) => StorageEffect<ReplacePendingChangePublicationResult>;
   readonly releasePendingPublication: (
     input: BeginChangePublicationInput,
   ) => StorageEffect<ReleasePendingPublicationResult>;

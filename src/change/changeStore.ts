@@ -45,6 +45,14 @@ export type BeginChangePublicationInput = {
   readonly now: string;
 };
 
+export type ReplacePendingChangePublicationInput = BeginChangePublicationInput & {
+  readonly expectedCurrentCandidateId: string;
+  readonly expectedCurrentValidationRunId: string;
+  readonly expectedCurrentHeadSha: string;
+  readonly expectedCurrentHeadBranch: string;
+  readonly expectedCurrentTarget: ChangePublicationTarget;
+};
+
 export type RecordPublishedPullRequestInput = BeginChangePublicationInput & {
   readonly pullRequest: ChangeOwnedPullRequest;
   readonly previousExpectedHeadSha?: string;
@@ -86,6 +94,13 @@ export type BeginChangePublicationResult =
   | {
       readonly ok: false;
       readonly code: "change_not_found" | "change_closed" | "publication_already_owned";
+    };
+
+export type ReplacePendingChangePublicationResult =
+  | { readonly ok: true; readonly change: ChangeRecord }
+  | {
+      readonly ok: false;
+      readonly code: "change_not_found" | "change_closed" | "publication_state_conflict";
     };
 
 export type ReleasePendingPublicationResult =

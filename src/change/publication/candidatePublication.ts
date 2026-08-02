@@ -28,6 +28,7 @@ export type CandidatePublicationGit = {
     startingCommit: string,
     headSha: string,
   ) => CommitSubjectResult;
+  readonly containsCommit?: (headSha: string, ancestorSha: string) => boolean;
 };
 
 export type CandidatePublication = {
@@ -166,7 +167,7 @@ const create = (
         headBranch,
         expectedHeadSha,
         pending,
-        created.code,
+        created,
       );
     if (!matches(created.pullRequest, input.target, headBranch, expectedHeadSha))
       return { ok: false, code: "publication_remote_mismatch" };
@@ -176,22 +177,45 @@ const create = (
 const createFailure = (
   dependencies: Dependencies,
   input: PublishCandidateInput,
-  change: ChangeRecord,
+  _change: ChangeRecord,
   headBranch: string,
   expectedHeadSha: string,
   pending: Parameters<ChangePersistence["beginPublication"]>[0],
-  failure: Exclude<GitHubPullRequestMutationResult, { readonly ok: true }>["code"],
+  failure: Exclude<GitHubPullRequestMutationResult, { readonly ok: true }>,
 ): PublicationEffect => {
-  if (failure === "remote_response_lost")
-    return recover(dependencies, input, change, headBranch, expectedHeadSha);
+  if (failure.code === "remote_response_lost" || failure.code === "remote_response_unusable")
+    return confirmCreation(dependencies, input, headBranch, expectedHeadSha);
+  if (failure.code === "remote_rejected") return retainFailure(dependencies, pending, failure);
   const code =
-    failure === "local_head_mismatch"
+    failure.code === "local_head_mismatch"
       ? "current_head_mismatch"
-      : failure === "remote_head_mismatch"
+      : failure.code === "remote_head_mismatch"
         ? "publication_remote_mismatch"
         : "publication_tooling_failed";
-  return release(dependencies, pending, code);
+  return releaseWithDetails(dependencies, pending, code, failure);
 };
+
+const releaseWithDetails = (
+  dependencies: Dependencies,
+  pending: Parameters<ChangePersistence["beginPublication"]>[0],
+  code: Extract<PublishCandidateResult, { readonly ok: false }>["code"],
+  failure: Exclude<GitHubPullRequestMutationResult, { readonly ok: true }>,
+): PublicationEffect =>
+  Effect.map(dependencies.changePersistence.releasePendingPublication(pending), (released) =>
+    released.ok
+      ? {
+          ok: false,
+          code,
+          ...(failure.evidence === undefined ? {} : { evidence: failure.evidence }),
+          ...(failure.observedRemoteHeadSha === undefined
+            ? {}
+            : {
+                expectedRemoteHeadSha: pending.expectedHeadSha,
+                observedRemoteHeadSha: failure.observedRemoteHeadSha,
+              }),
+        }
+      : mapPersistenceError(released.code),
+  );
 
 const release = (
   dependencies: Dependencies,
@@ -208,11 +232,115 @@ const recover = (
   change: ChangeRecord,
   headBranch: string,
   expectedHeadSha: string,
+): PublicationEffect =>
+  Effect.gen(function* () {
+    const marker = change.publication;
+    if (marker === null || marker.pullRequest !== null)
+      return { ok: false, code: "publication_state_conflict" };
+    const found = dependencies.github.findPullRequests(marker.target, marker.headBranch);
+    const selected = selectRecoveredPullRequest(
+      found,
+      marker.target,
+      marker.headBranch,
+      marker.expectedHeadSha,
+    );
+    if (!selected.ok) {
+      if (selected.code !== "publication_creation_unconfirmed") return selected;
+      const replacement = yield* dependencies.changePersistence.replacePendingPublication({
+        ...facts(input, headBranch, expectedHeadSha),
+        now: input.now,
+        expectedCurrentCandidateId: marker.candidateId,
+        expectedCurrentValidationRunId: marker.validationRunId,
+        expectedCurrentHeadSha: marker.expectedHeadSha,
+        expectedCurrentHeadBranch: marker.headBranch,
+        expectedCurrentTarget: marker.target,
+      });
+      if (!replacement.ok) return mapPersistenceError(replacement.code);
+      return yield* createRecoveryAttempt(
+        dependencies,
+        input,
+        headBranch,
+        expectedHeadSha,
+        replacement.change,
+      );
+    }
+    if (
+      marker.candidateId === input.candidateId &&
+      marker.validationRunId === input.validationRunId
+    )
+      return yield* record(dependencies, input, headBranch, expectedHeadSha, selected.pullRequest);
+    if (
+      dependencies.git.containsCommit !== undefined &&
+      !dependencies.git.containsCommit(expectedHeadSha, selected.pullRequest.headSha)
+    )
+      return {
+        ok: false,
+        code: "publication_remote_mismatch",
+        expectedRemoteHeadSha: selected.pullRequest.headSha,
+        observedRemoteHeadSha: expectedHeadSha,
+      };
+    const owned = {
+      ...marker,
+      pullRequest: { number: selected.pullRequest.number, url: selected.pullRequest.url },
+    } as Published;
+    const metadata = metadataFor(
+      change,
+      input.candidateId,
+      input.validationRunId,
+      expectedHeadSha,
+      dependencies.git,
+    );
+    if ("ok" in metadata) return metadata;
+    return yield* executePullRequestUpdate(
+      dependencies,
+      input,
+      change,
+      owned,
+      headBranch,
+      expectedHeadSha,
+      metadata,
+    );
+  });
+
+const createRecoveryAttempt = (
+  dependencies: Dependencies,
+  input: PublishCandidateInput,
+  headBranch: string,
+  expectedHeadSha: string,
+  change: ChangeRecord,
+): PublicationEffect =>
+  Effect.gen(function* () {
+    const metadata = metadataFor(
+      change,
+      input.candidateId,
+      input.validationRunId,
+      expectedHeadSha,
+      dependencies.git,
+    );
+    if ("ok" in metadata) return metadata;
+    const pending = { ...facts(input, headBranch, expectedHeadSha), now: input.now };
+    const created = dependencies.github.createPullRequest({
+      ...request(input.target, change.branchRef, headBranch, expectedHeadSha),
+      allowExistingRemoteHead: true,
+      ...metadata,
+    });
+    if (created.ok && matches(created.pullRequest, input.target, headBranch, expectedHeadSha))
+      return yield* record(dependencies, input, headBranch, expectedHeadSha, created.pullRequest);
+    if (
+      !created.ok &&
+      (created.code === "remote_response_lost" || created.code === "remote_response_unusable")
+    )
+      return yield* confirmCreation(dependencies, input, headBranch, expectedHeadSha);
+    if (!created.ok) return yield* retainFailure(dependencies, pending, created);
+    return { ok: false, code: "publication_remote_mismatch" };
+  });
+
+const confirmCreation = (
+  dependencies: Dependencies,
+  input: PublishCandidateInput,
+  headBranch: string,
+  expectedHeadSha: string,
 ): PublicationEffect => {
-  const marker = change.publication;
-  if (!isMatchingPendingPublication(marker, input, headBranch, expectedHeadSha)) {
-    return Effect.succeed({ ok: false, code: "publication_state_conflict" });
-  }
   const selected = selectRecoveredPullRequest(
     dependencies.github.findPullRequests(input.target, headBranch),
     input.target,
@@ -224,33 +352,25 @@ const recover = (
     : Effect.succeed(selected);
 };
 
-const isMatchingPendingPublication = (
-  publication: ChangePublication | null,
-  input: PublishCandidateInput,
-  headBranch: string,
-  expectedHeadSha: string,
-): publication is ChangePublication & { readonly pullRequest: null } =>
-  publication !== null &&
-  publication.pullRequest === null &&
-  hasPublicationEvidence(publication, input) &&
-  hasPublicationBinding(publication, input.target, headBranch, expectedHeadSha);
-
-const hasPublicationEvidence = (
-  publication: ChangePublication,
-  input: PublishCandidateInput,
-): boolean =>
-  publication.candidateId === input.candidateId &&
-  publication.validationRunId === input.validationRunId;
-
-const hasPublicationBinding = (
-  publication: ChangePublication,
-  target: ChangePublicationTarget,
-  headBranch: string,
-  expectedHeadSha: string,
-): boolean =>
-  sameTarget(publication.target, target) &&
-  publication.headBranch === headBranch &&
-  publication.expectedHeadSha === expectedHeadSha;
+const retainFailure = (
+  dependencies: Dependencies,
+  pending: Parameters<ChangePersistence["beginPublication"]>[0],
+  failure: Exclude<GitHubPullRequestMutationResult, { readonly ok: true }>,
+): PublicationEffect =>
+  Effect.map(dependencies.changePersistence.getChangeById(pending.changeId), () => ({
+    ok: false,
+    code:
+      failure.code === "remote_head_mismatch"
+        ? "publication_remote_mismatch"
+        : "publication_tooling_failed",
+    ...(failure.evidence === undefined ? {} : { evidence: failure.evidence }),
+    ...(failure.observedRemoteHeadSha === undefined
+      ? {}
+      : {
+          expectedRemoteHeadSha: pending.expectedHeadSha,
+          observedRemoteHeadSha: failure.observedRemoteHeadSha,
+        }),
+  }));
 
 const selectRecoveredPullRequest = (
   found: readonly GitHubPullRequest[] | undefined,

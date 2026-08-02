@@ -9,6 +9,19 @@ export type GitHubPullRequest = ChangeOwnedPullRequest & {
   readonly repository?: { readonly owner: string; readonly repo: string };
 };
 
+export type PublicationFailureEvidence = {
+  readonly operation:
+    | "remote_lookup"
+    | "branch_push"
+    | "pull_request_creation"
+    | "pull_request_update";
+  readonly classification: "rejected" | "lost_response" | "response_parse_failure" | "unavailable";
+  readonly exitStatus?: number;
+  readonly stdout?: string;
+  readonly stderr?: string;
+  readonly parseFailure?: string;
+};
+
 export type GitHubPullRequestRequest = {
   readonly owner: string;
   readonly repo: string;
@@ -17,6 +30,7 @@ export type GitHubPullRequestRequest = {
   readonly headBranch: string;
   readonly branchRef: string;
   readonly expectedHeadSha: string;
+  readonly allowExistingRemoteHead?: boolean;
   readonly title: string;
   readonly body: string;
 };
@@ -30,7 +44,11 @@ export type GitHubPullRequestMutationResult =
         | "remote_head_mismatch"
         | "push_failed"
         | "remote_response_lost"
+        | "remote_response_unusable"
+        | "remote_rejected"
         | "close_failed";
+      readonly evidence?: PublicationFailureEvidence;
+      readonly observedRemoteHeadSha?: string;
     };
 
 export type GitHubPullRequestCloseInput = {

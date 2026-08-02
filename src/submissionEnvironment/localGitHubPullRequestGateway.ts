@@ -11,8 +11,36 @@ import type {
 } from "../change/ownedPullRequestGateway.js";
 
 export type PublicationCommandResult =
-  | { readonly ok: true; readonly stdout: string }
-  | { readonly ok: false };
+  | {
+      readonly ok: true;
+      readonly stdout: string;
+      readonly stderr?: string;
+      readonly status?: number;
+    }
+  | {
+      readonly ok: false;
+      readonly stdout?: string;
+      readonly stderr?: string;
+      readonly status?: number;
+    };
+
+const bounded = (value: string): string =>
+  value
+    .replace(/(token|password|secret|authorization)\s*[:=]\s*\S+/gi, "$1=[redacted]")
+    .slice(0, 1000);
+const evidence = (
+  operation: "remote_lookup" | "branch_push" | "pull_request_creation" | "pull_request_update",
+  result: PublicationCommandResult,
+  classification: "rejected" | "lost_response" | "response_parse_failure" | "unavailable",
+  parseFailure?: string,
+) => ({
+  operation,
+  classification,
+  ...(result.status === undefined ? {} : { exitStatus: result.status }),
+  ...(result.stdout === undefined ? {} : { stdout: bounded(result.stdout) }),
+  ...(result.stderr === undefined ? {} : { stderr: bounded(result.stderr) }),
+  ...(parseFailure === undefined ? {} : { parseFailure: bounded(parseFailure) }),
+});
 
 export type PublicationCommandRunner = (args: readonly string[]) => PublicationCommandResult;
 
@@ -87,9 +115,23 @@ const createPullRequest = (
     return { ok: false, code: "local_head_mismatch" };
   }
   const remoteHead = initialRemoteHeadState(runGit, request);
-  if (remoteHead === "present") return { ok: false, code: "remote_head_mismatch" };
-  if (remoteHead === "unknown") return { ok: false, code: "push_failed" };
-  if (!pushExactHead(runGit, request)) return { ok: false, code: "push_failed" };
+  if (remoteHead.kind === "unknown") return { ok: false, code: "push_failed" };
+  if (
+    remoteHead.kind === "present" &&
+    remoteHead.sha !== undefined &&
+    remoteHead.sha !== request.expectedHeadSha
+  )
+    return request.allowExistingRemoteHead
+      ? { ok: false, code: "remote_head_mismatch", observedRemoteHeadSha: remoteHead.sha }
+      : { ok: false, code: "remote_head_mismatch" };
+  if (
+    remoteHead.kind === "present" &&
+    !request.allowExistingRemoteHead &&
+    remoteHead.sha !== undefined
+  )
+    return { ok: false, code: "remote_head_mismatch" };
+  if (remoteHead.kind === "missing" && !pushExactHead(runGit, request))
+    return { ok: false, code: "push_failed" };
   const result = runGh([
     "api",
     "--method",
@@ -104,10 +146,27 @@ const createPullRequest = (
     "-f",
     `body=${request.body}`,
   ]);
-  if (!result.ok) return { ok: false, code: "remote_response_lost" };
+  if (!result.ok) {
+    const lost =
+      result.status === undefined && result.stdout === undefined && result.stderr === undefined;
+    return {
+      ok: false,
+      code: lost ? "remote_response_lost" : "remote_rejected",
+      evidence: evidence("pull_request_creation", result, lost ? "lost_response" : "rejected"),
+    };
+  }
   const pullRequest = parsePullRequest(result.stdout);
   return pullRequest === undefined
-    ? { ok: false, code: "remote_response_lost" }
+    ? {
+        ok: false,
+        code: "remote_response_unusable",
+        evidence: evidence(
+          "pull_request_creation",
+          result,
+          "response_parse_failure",
+          "pull request response did not contain usable facts",
+        ),
+      }
     : { ok: true, pullRequest };
 };
 
@@ -130,10 +189,24 @@ const updatePullRequest = (
     "-f",
     `body=${request.body}`,
   ]);
-  if (!result.ok) return { ok: false, code: "remote_response_lost" };
+  if (!result.ok)
+    return {
+      ok: false,
+      code: "remote_response_lost",
+      evidence: evidence("pull_request_update", result, "lost_response"),
+    };
   const pullRequest = parsePullRequest(result.stdout);
   return pullRequest === undefined
-    ? { ok: false, code: "remote_response_lost" }
+    ? {
+        ok: false,
+        code: "remote_response_unusable",
+        evidence: evidence(
+          "pull_request_update",
+          result,
+          "response_parse_failure",
+          "pull request response did not contain usable facts",
+        ),
+      }
     : { ok: true, pullRequest };
 };
 
@@ -148,15 +221,16 @@ const hasExpectedLocalHead = (
 const initialRemoteHeadState = (
   runGit: PublicationCommandRunner,
   request: GitHubPullRequestRequest,
-): "missing" | "present" | "unknown" => {
+): { readonly kind: "missing" | "present" | "unknown"; readonly sha?: string } => {
   const remoteHead = runGit([
     "ls-remote",
     "--heads",
     requestRemote(request),
     `refs/heads/${request.headBranch}`,
   ]);
-  if (!remoteHead.ok) return "unknown";
-  return remoteHead.stdout.trim().length === 0 ? "missing" : "present";
+  if (!remoteHead.ok) return { kind: "unknown" };
+  const sha = remoteHead.stdout.trim().split(/\s+/)[0] ?? "";
+  return sha.length === 0 ? { kind: "missing" } : { kind: "present", sha };
 };
 
 const pushExactHead = (
@@ -191,11 +265,23 @@ const runCommand = (
 ): PublicationCommandResult => {
   const options: SpawnSyncOptionsWithStringEncoding = {
     encoding: "utf8",
-    stdio: ["ignore", "pipe", "ignore"],
+    stdio: ["ignore", "pipe", "pipe"],
     ...(cwd === undefined ? {} : { cwd }),
   };
   const result = spawnSync(command, args, options);
-  return result.status === 0 ? { ok: true, stdout: result.stdout } : { ok: false };
+  return result.status === 0
+    ? {
+        ok: true,
+        stdout: result.stdout,
+        ...(result.stderr.length === 0 ? {} : { stderr: result.stderr }),
+        ...(result.status === null ? {} : { status: result.status }),
+      }
+    : {
+        ok: false,
+        stdout: result.stdout,
+        ...(result.stderr.length === 0 ? {} : { stderr: result.stderr }),
+        ...(result.status === null ? {} : { status: result.status }),
+      };
 };
 
 type GitHubPullRequestJson = {

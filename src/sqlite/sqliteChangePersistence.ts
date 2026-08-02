@@ -18,6 +18,7 @@ import type {
   ListChangesInput,
   RecordChangeCleanupInput,
   RecordPublishedPullRequestInput,
+  ReplacePendingChangePublicationInput,
 } from "../change/changeStore.js";
 import { RepositoryPersistedDataInvalid } from "../contracts/repositoryStorageError.js";
 import { storedPublicTaskId } from "../task/taskId.js";
@@ -176,6 +177,10 @@ export const openSqliteChangePersistence = (): Effect.Effect<
     beginPublication: (input) =>
       repository.transactionImmediate("begin Change publication", (sql) =>
         beginPublication(sql, input),
+      ),
+    replacePendingPublication: (input) =>
+      repository.transactionImmediate("replace pending Change publication", (sql) =>
+        replacePendingPublication(sql, input),
       ),
     releasePendingPublication: (input) =>
       repository.transactionImmediate("release Change publication", (sql) =>
@@ -531,6 +536,32 @@ const beginPublication = (sql: SqlClient.SqlClient, input: BeginChangePublicatio
       ok: true as const,
       created: true,
       change: yield* requireChange(sql, input.changeId, "begin Change publication"),
+    };
+  });
+
+const replacePendingPublication = (
+  sql: SqlClient.SqlClient,
+  input: ReplacePendingChangePublicationInput,
+) =>
+  Effect.gen(function* () {
+    const selected = selectOpenChange(yield* getById(sql, input.changeId));
+    if (!selected.ok) return selected;
+    const publication = selected.change.publication;
+    if (
+      publication === null ||
+      publication.pullRequest !== null ||
+      publication.candidateId !== input.expectedCurrentCandidateId ||
+      publication.validationRunId !== input.expectedCurrentValidationRunId ||
+      publication.expectedHeadSha !== input.expectedCurrentHeadSha ||
+      publication.headBranch !== input.expectedCurrentHeadBranch ||
+      !sameTarget(publication.target, input.expectedCurrentTarget)
+    ) {
+      return { ok: false as const, code: "publication_state_conflict" as const };
+    }
+    yield* sql`UPDATE changes SET publication_candidate_id = ${input.candidateId}, publication_validation_run_id = ${input.validationRunId}, publication_owner = ${input.target.owner}, publication_repo = ${input.target.repo}, publication_base_branch = ${input.target.baseBranch}, publication_remote_name = ${input.target.remoteName}, publication_head_branch = ${input.headBranch}, publication_expected_head_sha = ${input.expectedHeadSha}, publication_pr_number = NULL, publication_pr_url = NULL, updated_at = ${input.now} WHERE id = ${input.changeId} AND publication_pr_number IS NULL AND publication_candidate_id = ${input.expectedCurrentCandidateId} AND publication_validation_run_id = ${input.expectedCurrentValidationRunId} AND publication_expected_head_sha = ${input.expectedCurrentHeadSha}`;
+    return {
+      ok: true as const,
+      change: yield* requireChange(sql, input.changeId, "replace pending Change publication"),
     };
   });
 
