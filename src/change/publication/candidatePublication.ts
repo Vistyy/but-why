@@ -746,6 +746,7 @@ const record = (
             previousExpectedHeadSha: previous.expectedHeadSha,
             previousCandidateId: previous.candidateId,
             previousValidationRunId: previous.validationRunId,
+            previousPullRequestNumber: pullRequest.number,
           }),
       now: input.now,
     }),

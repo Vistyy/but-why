@@ -725,6 +725,15 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
           }),
         ).toMatchObject({ ok: false, code: "publication_creation_unconfirmed" });
         expect(createCalls).toBe(2);
+        expect(
+          yield* publication.publish({
+            ...input(fixture),
+            candidateId: next.captured.candidateId,
+            validationRunId: next.validationRunId,
+            now: "2026-07-25T16:01:00.000Z",
+          }),
+        ).toMatchObject({ ok: false, code: "publication_creation_unconfirmed" });
+        expect(createCalls).toBe(3);
         expect(yield* fixture.changes.getChangeById(fixture.captured.changeId)).toMatchObject({
           publication: {
             candidateId: next.captured.candidateId,

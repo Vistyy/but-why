@@ -812,11 +812,12 @@ const canRecord = (
       publication.validationRunId === input.validationRunId
     : input.previousCandidateId !== undefined &&
       input.previousValidationRunId !== undefined &&
+      input.previousPullRequestNumber === input.pullRequest.number &&
       publication.expectedHeadSha === input.previousExpectedHeadSha &&
       publication.candidateId === input.previousCandidateId &&
       publication.validationRunId === input.previousValidationRunId &&
       (publication.pullRequest === null ||
-        publication.pullRequest.number === input.pullRequest.number);
+        publication.pullRequest.number === input.previousPullRequestNumber);
 
 const sameTarget = (
   left: ChangePublication["target"],

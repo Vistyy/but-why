@@ -58,6 +58,7 @@ export type RecordPublishedPullRequestInput = BeginChangePublicationInput & {
   readonly previousExpectedHeadSha?: string;
   readonly previousCandidateId?: string;
   readonly previousValidationRunId?: string;
+  readonly previousPullRequestNumber?: number;
   readonly changeBaseSha?: string;
 };
 
