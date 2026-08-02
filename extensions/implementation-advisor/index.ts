@@ -1,5 +1,4 @@
 import { createHash } from "node:crypto";
-import { homedir } from "node:os";
 import { join } from "node:path";
 import { createAgentSession, DefaultResourceLoader, ModelRuntime, SessionManager } from "@earendil-works/pi-coding-agent";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
@@ -59,8 +58,12 @@ export default function implementationAdvisor(pi: ExtensionAPI): void {
     pending.push({ activity: event.toolName, reference, input: event.input, result: event.content, failed: event.isError });
   });
 
-  pi.on("agent_settled", async (_event, context) => {
-    if (disabled || running || pending.length === 0) return;
+  const handleSettled = async (context: ExtensionContext): Promise<void> => {
+    if (disabled || pending.length === 0) return;
+    if (running) {
+      setTimeout(() => void handleSettled(context), 0);
+      return;
+    }
     const evidence = pending;
     pending = [];
     const activityBatch = ++batch;
@@ -86,7 +89,12 @@ export default function implementationAdvisor(pi: ExtensionAPI): void {
       void error;
     } finally {
       running = false;
+      if (pending.length > 0 && !disabled) queueMicrotask(() => void handleSettled(context));
     }
+  };
+
+  pi.on("agent_settled", (_event, context) => {
+    void handleSettled(context);
   });
 
   async function evaluate(evidence: readonly Evidence[], activityBatch: number, context: ExtensionContext): Promise<Note | undefined> {
@@ -95,9 +103,11 @@ export default function implementationAdvisor(pi: ExtensionAPI): void {
       const [provider, ...modelParts] = modelSetting.split("/");
       const model = runtime.getModel(provider ?? "", modelParts.join("/"));
       if (model === undefined) throw new Error("Configured Implementation Advisor model is unavailable.");
-      const loader = new DefaultResourceLoader({ cwd: context.cwd, agentDir: process.env["PI_AGENT_DIR"] ?? `${process.env["HOME"] ?? "~"}/.pi/agent`, noExtensions: true, noSkills: true, noPromptTemplates: true, noThemes: true });
+      const advisorAgentDir = process.env["PI_CODING_AGENT_DIR"] ?? `${process.env["HOME"] ?? "~"}/.pi/agent`;
+      const advisorSessionDir = process.env["PI_CODING_AGENT_SESSION_DIR"] ?? join(advisorAgentDir, "implementation-advisor-sessions");
+      const loader = new DefaultResourceLoader({ cwd: context.cwd, agentDir: advisorAgentDir, noExtensions: true, noSkills: true, noPromptTemplates: true, noThemes: true });
       await loader.reload();
-      nested = (await createAgentSession({ cwd: context.cwd, model, ...(thinking === undefined ? {} : { thinkingLevel: thinking as "off" | "minimal" | "low" | "medium" | "high" | "xhigh" }), tools: ["read", "grep", "find", "ls", NOTE_TOOL], resourceLoader: loader, sessionManager: SessionManager.continueRecent(context.cwd, join(process.env["PI_AGENT_DIR"] ?? join(homedir(), ".pi", "agent"), "implementation-advisor-sessions")), customTools: [{ name: NOTE_TOOL, label: "Implementation advice", description: "Return zero or one grounded note.", parameters: Type.Object({ ruleId: Type.String(), message: Type.String(), evidence: Type.Array(Type.String()), activityBatch: Type.Integer() }), execute: async (_id, value, _signal, _update, toolContext) => {
+      nested = (await createAgentSession({ cwd: context.cwd, model, ...(thinking === undefined ? {} : { thinkingLevel: thinking as "off" | "minimal" | "low" | "medium" | "high" | "xhigh" }), tools: ["read", "grep", "find", "ls", NOTE_TOOL], resourceLoader: loader, sessionManager: SessionManager.continueRecent(context.cwd, advisorSessionDir), customTools: [{ name: NOTE_TOOL, label: "Implementation advice", description: "Return zero or one grounded note.", parameters: Type.Object({ ruleId: Type.String(), message: Type.String(), evidence: Type.Array(Type.String()), activityBatch: Type.Integer() }), execute: async (_id, value, _signal, _update, toolContext) => {
         const candidate = value as { readonly ruleId: string; readonly message: string; readonly evidence: readonly string[]; readonly activityBatch: number };
         if (!terminated && candidate.message.trim() !== "" && ruleIds.has(candidate.ruleId as ImplementationAdvisorRuleId) && candidate.activityBatch === currentBatch && candidate.evidence.every((item) => currentEvidence.some((entry) => entry.reference === item))) currentResult = { ruleId: candidate.ruleId as ImplementationAdvisorRuleId, message: candidate.message, evidence: candidate.evidence, activityBatch: candidate.activityBatch };
         terminated = true;
