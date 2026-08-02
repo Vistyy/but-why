@@ -523,7 +523,7 @@ describe("Change Submit orchestration", () => {
   );
 
   it.effect(
-    "updates an owned pull request when its Repository Branch returns to the Change Base tree",
+    "validates a revised Candidate before updating the same owned pull request",
     () =>
       Effect.gen(function* () {
         const events: string[] = [];
@@ -535,6 +535,15 @@ describe("Change Submit orchestration", () => {
             description: "Deliver it",
             comments: [],
           },
+          implementationDecisions: [
+            {
+              id: "decision-1",
+              changeId: "change-1",
+              sequence: 1,
+              recordedAt: now,
+              content: "Keep the same owned pull request.",
+            },
+          ],
           publication: {
             candidateId: "published-candidate",
             validationRunId: "published-run",
