@@ -22,7 +22,7 @@
     "node": ">=24.0.0 <25"
   },
   "scripts": {
-    "build": "tsc -p tsconfig.build.json",
+    "build": "node scripts/build.mjs",
     "prepack": "just build",
     "docs-check": "remark --frail --quiet",
     "format": "biome format --write .",
@@ -33,18 +33,18 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@earendil-works/pi-coding-agent": "0.82.1",
+    "typebox": "1.1.38"
+  },
+  "devDependencies": {
     "@ai-hero/sandcastle": "0.12.0",
     "@effect/cli": "0.74.0",
     "@effect/experimental": "0.59.0",
     "@effect/platform": "0.95.0",
     "@effect/platform-node": "0.105.0",
     "@effect/sql": "0.50.0",
-    "@toon-format/toon": "^2.3.0",
-    "@earendil-works/pi-coding-agent": "0.82.1",
+    "@toon-format/toon": "2.3.0",
     "effect": "3.20.0",
-    "typebox": "1.1.38"
-  },
-  "devDependencies": {
     "@ast-grep/cli": "^0.44.1",
     "@biomejs/biome": "^2.2.0",
     "@effect/vitest": "0.28.0",
@@ -53,6 +53,7 @@
     "fallow": "^3.2.0",
     "remark-cli": "^12.0.1",
     "remark-validate-links": "^13.1.0",
+    "rolldown": "1.2.1",
     "tsx": "^4.20.3",
     "typescript": "^7.0.2",
     "vitest": "^3.2.4"

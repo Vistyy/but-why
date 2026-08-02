@@ -1,13 +1,28 @@
 {
   "$schema": "https://raw.githubusercontent.com/fallow-rs/fallow/main/config-schema.json",
-  "entry": ["src/main.ts", "extensions/**/*.ts", "test/**/*.ts"],
-  "ignoreDependencies": ["@earendil-works/pi-coding-agent"],
+  "entry": [
+    "src/main.ts",
+    "extensions/**/*.ts",
+    "scripts/cli-loading-benchmark.mjs",
+    "test/**/*.ts"
+  ],
+  "ignoreDependencies": [
+    "@ai-hero/sandcastle",
+    "@effect/cli",
+    "@effect/experimental",
+    "@effect/platform",
+    "@effect/platform-node",
+    "@effect/sql",
+    "@earendil-works/pi-coding-agent",
+    "@toon-format/toon",
+    "effect"
+  ],
   "ignorePatterns": ["spikes/**", "dist/**", "build/**", "coverage/**"],
   "rulePacks": ["./fallow-rules/architecture.json"],
   "rules": {
     "boundary-violation": "error",
     "circular-dependencies": "error",
-    "dev-dependencies-in-production": "error",
+    "dev-dependencies-in-production": "off",
     "duplicate-exports": "error",
     "policy-violation": "error",
     "re-export-cycle": "error",

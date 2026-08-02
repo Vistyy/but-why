@@ -1,9 +1,17 @@
-import { cpSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  cpSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { join } from "node:path";
-import { pathToFileURL } from "node:url";
 import { describe, expect, it } from "vitest";
 
-import { repoRoot } from "../support/by-cli.js";
+import { createGitRepo, repoRoot } from "../support/by-cli.js";
 import { createTestWorkspace } from "../support/testWorkspace.js";
 import { runTestProcess } from "../support/testProcess.js";
 
@@ -27,6 +35,8 @@ const createPackageFixture = (packageRoot: string): void => {
   cpSync(join(repoRoot, "package.json"), join(packageRoot, "package.json"));
   cpSync(join(repoRoot, "README.md"), join(packageRoot, "README.md"));
   cpSync(join(repoRoot, "CHANGELOG.md"), join(packageRoot, "CHANGELOG.md"));
+  mkdirSync(join(packageRoot, "scripts"));
+  cpSync(join(repoRoot, "scripts", "build.mjs"), join(packageRoot, "scripts", "build.mjs"));
   cpSync(join(repoRoot, "extensions"), join(packageRoot, "extensions"), { recursive: true });
   mkdirSync(join(packageRoot, "docs"));
   cpSync(join(repoRoot, "docs", "public"), join(packageRoot, "docs", "public"), {
@@ -35,7 +45,7 @@ const createPackageFixture = (packageRoot: string): void => {
 };
 
 describe("CLI package contents", () => {
-  it("loads continuation from the installed package", async () => {
+  it("packs bundled continuation support from the installed package", async () => {
     const packageRoot = createTestWorkspace();
     createPackageFixture(packageRoot);
     cpSync(join(repoRoot, "src"), join(packageRoot, "src"), { recursive: true });
@@ -51,9 +61,8 @@ describe("CLI package contents", () => {
     expect(packed.error).toBeUndefined();
     expect(packed.status).toBe(0);
     const [{ filename }] = JSON.parse(packed.stdout) as readonly [{ filename: string }];
-    rmSync(join(packageRoot, "node_modules"), { recursive: true, force: true });
-    const installRoot = join(packageRoot, "installed");
-    const installed = runTestProcess(
+    const installed = join(packageRoot, "installed");
+    const installResult = runTestProcess(
       "npm",
       [
         "install",
@@ -61,80 +70,133 @@ describe("CLI package contents", () => {
         "--no-audit",
         "--no-fund",
         "--prefix",
-        installRoot,
+        installed,
         join(packageRoot, filename),
       ],
       { cwd: packageRoot },
     );
-    expect(installed.error).toBeUndefined();
-    expect(installed.status).toBe(0);
-
-    const installedPackage = join(installRoot, "node_modules", "but-why");
-    const extension = join(installedPackage, "extensions/continue-change.ts");
-    const advisorExtension = join(installedPackage, "extensions/implementation-advisor/index.ts");
-    expect(readFileSync(advisorExtension, "utf8")).toContain("implementation_advice");
-    const installedAdvisor = (await import(pathToFileURL(advisorExtension).href)) as {
-      readonly default: unknown;
-    };
-    expect(typeof installedAdvisor.default).toBe("function");
-    const module = (await import(
-      pathToFileURL(join(installedPackage, "dist/change/herdrInteractiveSessionHost.js")).href
-    )) as typeof import("../../src/change/herdrInteractiveSessionHost.js");
-    const commands: string[][] = [];
-    const execute = async (args: readonly string[]) => {
-      commands.push([...args]);
-      if (args[0] === "agent" && args[1] === "list") {
-        return commands.some(([command]) => command === "pane")
-          ? {
-              ok: true as const,
-              stdout:
-                '{"result":{"type":"agent_list","agents":[{"name":"but-why-change-123","cwd":"/workspace/change-123","pane_id":"workspace-1:pane-1","agent_status":"working"}]}}',
-            }
-          : { ok: true as const, stdout: '{"result":{"type":"agent_list","agents":[]}}' };
-      }
-      if (args[0] === "worktree") {
-        return {
-          ok: true as const,
-          stdout:
-            '{"result":{"type":"worktree_opened","workspace":{"workspace_id":"workspace-1"},"root_pane":{"pane_id":"workspace-1:pane-1"},"already_open":false}}',
-        };
-      }
-      if (args[0] === "agent" && args[1] === "rename") {
-        return {
-          ok: true as const,
-          stdout:
-            '{"result":{"agent":{"name":"but-why-change-123","cwd":"/workspace/change-123","pane_id":"workspace-1:pane-1"}}}',
-        };
-      }
-      return { ok: true as const, stdout: "{}" };
-    };
-    const input = {
-      changeId: "change-123",
-      repositoryPath: "/repository",
-      worktreePath: "/workspace/change-123",
-      initialPrompt: "Implement",
-    };
-
-    await expect(
-      module.openHerdrInteractiveSessionHost(execute).launch(input),
-    ).resolves.toMatchObject({
-      ok: true,
-      status: "started",
-    });
-    expect(commands.find(([command]) => command === "pane")?.[3]).toContain(
-      `--extension '${extension}'`,
+    expect(installResult.status).toBe(0);
+    const installedPackage = join(installed, "node_modules", "but-why");
+    expect(readFileSync(join(installedPackage, "extensions/continue-change.ts"), "utf8")).toContain(
+      "continue-change",
     );
 
-    commands.length = 0;
-    rmSync(extension);
-    await expect(
-      module.openHerdrInteractiveSessionHost(execute).launch(input),
-    ).resolves.toMatchObject({
-      ok: false,
-      code: "launch_failed",
-      message: expect.stringContaining("Required trusted continuation extension is missing"),
+    const repository = createGitRepo();
+    const tools = createTestWorkspace();
+    writeFileSync(
+      join(tools, "gh"),
+      '#!/usr/bin/env sh\nif [ "$1" = "repo" ] && [ "$2" = "view" ]; then printf \'{\\"defaultBranchRef\\":{\\"name\\":\\"main\\"}}\\n\'; exit 0; fi\nexit 1\n',
+    );
+    writeFileSync(
+      join(tools, "herdr"),
+      `#!/usr/bin/env sh
+if [ "$1" = "agent" ] && [ "$2" = "list" ]; then
+  if [ -f "$BY_FAKE_CAPTURE.started" ]; then
+    printf '{"result":{"type":"agent_list","agents":[{"name":"%s","cwd":"%s","pane_id":"pane","agent_status":"working"}]}}\\n' "$BY_FAKE_SESSION" "$BY_FAKE_WORKTREE"
+  else
+    printf '{"result":{"type":"agent_list","agents":[]}}\\n'
+  fi
+  exit 0
+fi
+if [ "$1" = "worktree" ] && [ "$2" = "open" ]; then
+  printf '{"result":{"type":"worktree_opened","workspace":{"workspace_id":"workspace"},"root_pane":{"pane_id":"pane"},"already_open":false}}\\n'
+  exit 0
+fi
+if [ "$1" = "pane" ] && [ "$2" = "run" ]; then
+  printf '%s\\n' "$4" > "$BY_FAKE_CAPTURE"
+  : > "$BY_FAKE_CAPTURE.started"
+  printf '{"result":{}}\\n'
+  exit 0
+fi
+if [ "$1" = "agent" ] && [ "$2" = "rename" ]; then
+  printf '{"result":{"agent":{"name":"change-agent","cwd":"%s","pane_id":"pane"}}}\\n' "$BY_FAKE_WORKTREE"
+  exit 0
+fi
+exit 1
+`,
+    );
+    chmodSync(join(tools, "gh"), 0o755);
+    chmodSync(join(tools, "herdr"), 0o755);
+    const bin = join(installed, "node_modules", ".bin", "by");
+    const env = {
+      PATH: `${tools}:${process.env["PATH"] ?? ""}`,
+      BY_FAKE_CAPTURE: join(repository, "herdr-capture.txt"),
+    };
+    const isolatedHome = createTestWorkspace();
+    const init = runTestProcess(bin, ["init", "--task-prefix", "BY"], {
+      cwd: repository,
+      env,
+      isolatedHome,
     });
-    expect(commands).toEqual([]);
+    expect(init.status, `${init.stdout}${init.stderr}`).toBe(0);
+    for (const args of [
+      ["config", "user.name", "But Why Test"],
+      ["config", "user.email", "but-why@example.test"],
+      ["add", ".but-why/config.json", ".gitignore"],
+      ["commit", "-m", "Initialize But Why"],
+      ["branch", "-M", "main"],
+      ["config", `url.${repository}.insteadOf`, "https://github.com/acme/repo.git"],
+      ["remote", "add", "origin", "https://github.com/acme/repo.git"],
+      ["update-ref", "refs/remotes/origin/main", "refs/heads/main"],
+      ["symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/main"],
+    ]) {
+      const git = runTestProcess("git", args, { cwd: repository, isolatedHome });
+      expect(git.status, `${git.stdout}${git.stderr}`).toBe(0);
+    }
+    mkdirSync(join(isolatedHome, ".config", "but-why"), { recursive: true });
+    writeFileSync(
+      join(isolatedHome, ".config", "but-why", "config.json"),
+      `${JSON.stringify({
+        defaultAgentProfile: { scope: "global", name: "test" },
+        agentProfiles: { test: { agentRuntime: "pi", runtimeConfig: { model: "test/model" } } },
+      })}\n`,
+    );
+    const started = runTestProcess(bin, ["--json", "change", "start"], {
+      cwd: repository,
+      env,
+      isolatedHome,
+    });
+    expect(started.status, `${started.stdout}${started.stderr}`).toBe(0);
+    const change = JSON.parse(started.stdout) as {
+      readonly change: { readonly id: string };
+      readonly worktreePath: string;
+    };
+    const implement = runTestProcess(bin, ["--json", "change", "implement", change.change.id], {
+      cwd: repository,
+      env: {
+        ...env,
+        BY_FAKE_WORKTREE: change.worktreePath,
+        BY_FAKE_SESSION: `change-${change.change.id.slice(0, 8)}`,
+      },
+      isolatedHome,
+    });
+    expect(implement.status, `${implement.stdout}${implement.stderr}`).toBe(0);
+    const extension = join(installedPackage, "extensions/continue-change.ts");
+    expect(readFileSync(env.BY_FAKE_CAPTURE, "utf8")).toContain(`--extension '${extension}'`);
+
+    rmSync(extension);
+    rmSync(env.BY_FAKE_CAPTURE);
+    const missingExtension = runTestProcess(
+      bin,
+      ["--json", "change", "implement", change.change.id],
+      {
+        cwd: repository,
+        env: {
+          ...env,
+          BY_FAKE_WORKTREE: change.worktreePath,
+          BY_FAKE_SESSION: `change-${change.change.id.slice(0, 8)}`,
+        },
+        isolatedHome,
+      },
+    );
+    expect(missingExtension.status).toBe(1);
+    expect(JSON.parse(missingExtension.stdout)).toMatchObject({
+      error: {
+        code: "launch_failed",
+        message: expect.stringContaining("Required trusted continuation extension is missing"),
+      },
+    });
+    expect(existsSync(env.BY_FAKE_CAPTURE)).toBe(false);
   }, 120_000);
 
   it("packs built CLI output and public package metadata only", () => {
@@ -207,8 +269,6 @@ describe("CLI package contents", () => {
     expect(files).toContain("docs/public/config.md");
     expect(files).toContain("docs/public/setup.md");
     expect(files).toContain("extensions/continue-change.ts");
-    expect(files).toContain("extensions/implementation-advisor/index.ts");
-    expect(files).toContain("extensions/implementation-advisor/rules.ts");
     expect(files).toContain("docs/public/skills/but-why/SKILL.md");
     expect(files).toContain("docs/public/skills/but-why/references/implement-change.md");
     expect(files.some((path) => path.startsWith("skills/"))).toBe(false);

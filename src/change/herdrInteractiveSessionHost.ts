@@ -1,11 +1,10 @@
 import { statSync } from "node:fs";
-import { dirname, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
 
 import { executeHostCommand } from "../command/hostCommand.js";
 
 import { prependAgentEnvironment, shellQuote } from "../agent/agentEnvironment.js";
 import { piResourceFlags } from "../agent/piRuntime.js";
+import { resolvePackageAsset } from "./packageAssetPath.js";
 import type {
   InteractiveSessionHost,
   InteractiveSessionLaunchInput,
@@ -52,7 +51,7 @@ export const openHerdrInteractiveSessionHost = (
 export const herdrSessionName = (changeId: string): string => `but-why-${changeId}`;
 
 export const trustedContinuationExtensionPath = (): string =>
-  resolve(dirname(fileURLToPath(import.meta.url)), "../../extensions/continue-change.ts");
+  resolvePackageAsset("extensions/continue-change.ts");
 
 const trustedImplementationAdvisorExtensionPath = (): string =>
   resolve(
