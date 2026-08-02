@@ -26,6 +26,7 @@ export type PublicationCommandResult =
 
 const bounded = (value: string): string =>
   value
+    .replace(/(token|password|secret|authorization)\s*=\s*["']?[^\s,"'}]+["']?/gi, "$1=[redacted]")
     .replace(
       /["']?(token|password|secret|authorization)["']?\s*:\s*["']?(?:bearer\s+)?[^\s,"'}]+|["']?(token|password|secret|authorization)["']?\s*=\s*(?:bearer\s+)?[^\s,"'}]+/gi,
       "$1=[redacted]",
@@ -75,14 +76,14 @@ export const localGitHubPullRequestGateway = (
       return found;
     },
     getPullRequest: (target, number) => {
-      const result = getPullRequest(runGh, target, number);
-      if (result === undefined)
-        lastFailureEvidence = evidence(
-          "remote_lookup",
-          { ok: false },
-          "response_parse_failure",
-          "pull request response was unavailable or unusable",
-        );
+      const result = getPullRequest(
+        runGh,
+        target,
+        number,
+        (command, classification, parseFailure) => {
+          lastFailureEvidence = evidence("remote_lookup", command, classification, parseFailure);
+        },
+      );
       return result;
     },
     closePullRequest: (input) => closePullRequest(runGh, input),
@@ -110,7 +111,9 @@ const findPullRequests = (
   if (!result.ok) {
     onFailure(
       result,
-      result.status === undefined && result.stderr === undefined ? "unavailable" : "rejected",
+      result.status === undefined && result.stdout === undefined && result.stderr === undefined
+        ? "unavailable"
+        : "rejected",
     );
     return undefined;
   }
@@ -124,9 +127,26 @@ const getPullRequest = (
   runGh: PublicationCommandRunner,
   target: ChangePublicationTarget,
   number: number,
+  onFailure: (
+    result: PublicationCommandResult,
+    classification: "rejected" | "response_parse_failure" | "unavailable",
+    parseFailure?: string,
+  ) => void,
 ): GitHubPullRequest | undefined => {
   const result = runGh(["api", `repos/${target.owner}/${target.repo}/pulls/${number}`]);
-  return result.ok ? parsePullRequest(result.stdout) : undefined;
+  if (!result.ok) {
+    onFailure(
+      result,
+      result.status === undefined && result.stdout === undefined && result.stderr === undefined
+        ? "unavailable"
+        : "rejected",
+    );
+    return undefined;
+  }
+  const parsed = parsePullRequest(result.stdout);
+  if (parsed === undefined)
+    onFailure(result, "response_parse_failure", "pull request response was not usable");
+  return parsed;
 };
 
 const closePullRequest = (
@@ -184,7 +204,9 @@ const createPullRequest = (
         evidence: evidence(
           "branch_push",
           pushed,
-          pushed.status === undefined && pushed.stderr === undefined ? "unavailable" : "rejected",
+          pushed.status === undefined && pushed.stdout === undefined && pushed.stderr === undefined
+            ? "unavailable"
+            : "rejected",
         ),
       };
   }
@@ -307,7 +329,9 @@ const initialRemoteHeadState = (
       evidence: evidence(
         "remote_lookup",
         remoteHead,
-        remoteHead.status === undefined && remoteHead.stderr === undefined
+        remoteHead.status === undefined &&
+          remoteHead.stdout === undefined &&
+          remoteHead.stderr === undefined
           ? "unavailable"
           : "rejected",
       ),
