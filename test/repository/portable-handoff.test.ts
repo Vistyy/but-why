@@ -17,7 +17,7 @@ type HandoffRoute = "task-backed" | "taskless-existing" | "taskless-new";
 
 type HandoffOptions = {
   readonly route: HandoffRoute;
-  readonly implementation?: unknown;
+  readonly implementation?: string;
   readonly activeAgentName?: string;
   readonly implementationDelay?: string;
 };
