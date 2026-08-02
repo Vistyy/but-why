@@ -54,7 +54,7 @@ export const herdrSessionName = (changeId: string): string => `but-why-${changeI
 export const trustedContinuationExtensionPath = (): string =>
   resolvePackageAsset("extensions/continue-change.ts");
 
-export const trustedImplementationAdvisorExtensionPath = (): string =>
+const trustedImplementationAdvisorExtensionPath = (): string =>
   resolvePackageAsset("extensions/implementation-advisor/index.ts");
 
 type TrustedExtensionPreflight =
