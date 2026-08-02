@@ -1,6 +1,9 @@
+import { randomUUID } from "node:crypto";
 import { chmodSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { Effect } from "effect";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { expect, it } from "@effect/vitest";
+import { describe } from "vitest";
 
 import { runTestProcess } from "../support/testProcess.js";
 import {
@@ -11,6 +14,8 @@ import {
 } from "../support/by-cli.js";
 import { createInitializedRepo } from "../support/initializedRepo.js";
 import { createTestWorkspace } from "../support/testWorkspace.js";
+import { RepositorySql } from "../../src/sqlite/repositorySql.js";
+import { withTestRepository } from "../support/repository.js";
 
 describe("by change implement stdin process boundary", () => {
   it("forwards piped stdin through a real process", () => {
@@ -136,4 +141,56 @@ exit 1
       error: { code: "stdin_is_terminal" },
     });
   }, 30_000);
+
+  it.effect("records decisions and reads publication history through the executable", () =>
+    Effect.gen(function* () {
+      const root = createInitializedRepo();
+      const changeId = randomUUID();
+      yield* withTestRepository(
+        root,
+        Effect.gen(function* () {
+          const repository = yield* RepositorySql;
+          yield* repository.operation(
+            "create process Change fixture",
+            (sql) => sql`
+              INSERT INTO changes (
+                id, repository_common_directory, branch_ref, task_id, state,
+                close_reason, created_at, updated_at, closed_at
+              ) VALUES (
+                ${changeId}, ${join(root, ".git")}, 'refs/heads/process', NULL, 'open',
+                NULL, '2026-07-30T10:00:00.000Z', '2026-07-30T10:00:00.000Z', NULL
+              )
+            `,
+          );
+        }),
+      );
+      writeFileSync(join(root, "decision.md"), "Use the process boundary.\\n");
+      const added = runBuiltByWithEnv(
+        root,
+        {},
+        "--json",
+        "change",
+        "decision",
+        "add",
+        changeId,
+        "--file",
+        "decision.md",
+      );
+      expect(added.status).toBe(0);
+      const publications = runBuiltByWithEnv(
+        root,
+        {},
+        "--json",
+        "change",
+        "publications",
+        changeId,
+      );
+      expect(publications.status).toBe(0);
+      expect(JSON.parse(publications.stdout)).toMatchObject({
+        changeId,
+        count: 0,
+        publications: [],
+      });
+    }),
+  );
 });
