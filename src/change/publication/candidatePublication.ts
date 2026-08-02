@@ -520,7 +520,16 @@ const prepareOwnedPullRequestUpdate = (
 ): UpdatePreparation => {
   const remote = dependencies.github.getPullRequest(input.target, owned.pullRequest.number);
   if (remote === undefined) {
-    return { proceed: false, result: { ok: false, code: "publication_tooling_failed" } };
+    return {
+      proceed: false,
+      result: {
+        ok: false,
+        code: "publication_tooling_failed",
+        ...(dependencies.github.getLastFailureEvidence?.() === undefined
+          ? {}
+          : { evidence: dependencies.github.getLastFailureEvidence?.() }),
+      },
+    };
   }
   if (
     isExpectedPullRequest(
@@ -610,7 +619,13 @@ const confirmUpdatedPullRequest = (
       yield* delay(100);
       const confirmed = dependencies.github.getPullRequest(input.target, owned.pullRequest.number);
       if (confirmed === undefined) {
-        return { ok: false, code: "publication_tooling_failed" };
+        return {
+          ok: false,
+          code: "publication_tooling_failed",
+          ...(dependencies.github.getLastFailureEvidence?.() === undefined
+            ? {}
+            : { evidence: dependencies.github.getLastFailureEvidence?.() }),
+        };
       }
       if (isExpectedUpdatedPullRequest(confirmed, owned, input, headBranch, expectedHeadSha)) {
         return yield* record(dependencies, input, headBranch, expectedHeadSha, confirmed, owned);

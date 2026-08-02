@@ -30,7 +30,7 @@ const bounded = (value: string): string =>
       /["']?(token|password|secret|authorization)["']?\s*:\s*["']?(?:bearer\s+)?[^\s,"'}]+|["']?(token|password|secret|authorization)["']?\s*=\s*(?:bearer\s+)?[^\s,"'}]+/gi,
       "$1=[redacted]",
     )
-    .replace(/(https?:\/\/[^\s/:]+:[^\s@]+@)/gi, "$1[redacted]@")
+    .replace(/https?:\/\/[^\s/@]+:[^\s@]+@/gi, "https://[redacted]@")
     .slice(0, 1000);
 const evidence = (
   operation: "remote_lookup" | "branch_push" | "pull_request_creation" | "pull_request_update",
@@ -74,7 +74,17 @@ export const localGitHubPullRequestGateway = (
       if (found !== undefined) lastFailureEvidence = undefined;
       return found;
     },
-    getPullRequest: (target, number) => getPullRequest(runGh, target, number),
+    getPullRequest: (target, number) => {
+      const result = getPullRequest(runGh, target, number);
+      if (result === undefined)
+        lastFailureEvidence = evidence(
+          "remote_lookup",
+          { ok: false },
+          "response_parse_failure",
+          "pull request response was unavailable or unusable",
+        );
+      return result;
+    },
     closePullRequest: (input) => closePullRequest(runGh, input),
     createPullRequest: (request) => createPullRequest(runGit, runGh, request),
     updatePullRequest: (request) => updatePullRequest(runGit, runGh, request),
@@ -292,7 +302,16 @@ const initialRemoteHeadState = (
     `refs/heads/${request.headBranch}`,
   ]);
   if (!remoteHead.ok)
-    return { kind: "unknown", evidence: evidence("remote_lookup", remoteHead, "unavailable") };
+    return {
+      kind: "unknown",
+      evidence: evidence(
+        "remote_lookup",
+        remoteHead,
+        remoteHead.status === undefined && remoteHead.stderr === undefined
+          ? "unavailable"
+          : "rejected",
+      ),
+    };
   const sha = remoteHead.stdout.trim().split(/\s+/)[0] ?? "";
   return sha.length === 0 ? { kind: "missing" } : { kind: "present", sha };
 };
