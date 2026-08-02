@@ -26,7 +26,10 @@ export type PublicationCommandResult =
 
 const bounded = (value: string): string =>
   value
-    .replace(/(token|password|secret|authorization)\s*[:=]\s*\S+/gi, "$1=[redacted]")
+    .replace(
+      /(token|password|secret|authorization)\s*[:=]\s*(?:bearer\s+)?["']?[^\s,"'}]+/gi,
+      "$1=[redacted]",
+    )
     .slice(0, 1000);
 const evidence = (
   operation: "remote_lookup" | "branch_push" | "pull_request_creation" | "pull_request_update",
@@ -121,9 +124,7 @@ const createPullRequest = (
     remoteHead.sha !== undefined &&
     remoteHead.sha !== request.expectedHeadSha
   )
-    return request.allowExistingRemoteHead
-      ? { ok: false, code: "remote_head_mismatch", observedRemoteHeadSha: remoteHead.sha }
-      : { ok: false, code: "remote_head_mismatch" };
+    return { ok: false, code: "remote_head_mismatch", observedRemoteHeadSha: remoteHead.sha };
   if (
     remoteHead.kind === "present" &&
     !request.allowExistingRemoteHead &&

@@ -184,14 +184,11 @@ const createFailure = (
   failure: Exclude<GitHubPullRequestMutationResult, { readonly ok: true }>,
 ): PublicationEffect => {
   if (failure.code === "remote_response_lost" || failure.code === "remote_response_unusable")
-    return confirmCreation(dependencies, input, headBranch, expectedHeadSha);
-  if (failure.code === "remote_rejected") return retainFailure(dependencies, pending, failure);
+    return confirmCreation(dependencies, input, headBranch, expectedHeadSha, failure.evidence);
+  if (failure.code === "remote_rejected" || failure.code === "remote_head_mismatch")
+    return retainFailure(dependencies, pending, failure);
   const code =
-    failure.code === "local_head_mismatch"
-      ? "current_head_mismatch"
-      : failure.code === "remote_head_mismatch"
-        ? "publication_remote_mismatch"
-        : "publication_tooling_failed";
+    failure.code === "local_head_mismatch" ? "current_head_mismatch" : "publication_tooling_failed";
   return releaseWithDetails(dependencies, pending, code, failure);
 };
 
@@ -270,7 +267,7 @@ const recover = (
     )
       return yield* record(dependencies, input, headBranch, expectedHeadSha, selected.pullRequest);
     if (
-      dependencies.git.containsCommit !== undefined &&
+      dependencies.git.containsCommit === undefined ||
       !dependencies.git.containsCommit(expectedHeadSha, selected.pullRequest.headSha)
     )
       return {
@@ -331,7 +328,15 @@ const createRecoveryAttempt = (
       (created.code === "remote_response_lost" || created.code === "remote_response_unusable")
     )
       return yield* confirmCreation(dependencies, input, headBranch, expectedHeadSha);
-    if (!created.ok) return yield* retainFailure(dependencies, pending, created);
+    if (!created.ok) {
+      if (created.code === "push_failed" || created.code === "local_head_mismatch")
+        return yield* release(
+          dependencies,
+          pending,
+          created.code === "push_failed" ? "publication_tooling_failed" : "current_head_mismatch",
+        );
+      return yield* retainFailure(dependencies, pending, created);
+    }
     return { ok: false, code: "publication_remote_mismatch" };
   });
 
@@ -340,6 +345,7 @@ const confirmCreation = (
   input: PublishCandidateInput,
   headBranch: string,
   expectedHeadSha: string,
+  failureEvidence?: import("../ownedPullRequestGateway.js").PublicationFailureEvidence,
 ): PublicationEffect => {
   const selected = selectRecoveredPullRequest(
     dependencies.github.findPullRequests(input.target, headBranch),
@@ -349,7 +355,9 @@ const confirmCreation = (
   );
   return selected.ok
     ? record(dependencies, input, headBranch, expectedHeadSha, selected.pullRequest)
-    : Effect.succeed(selected);
+    : Effect.succeed(
+        failureEvidence === undefined ? selected : { ...selected, evidence: failureEvidence },
+      );
 };
 
 const retainFailure = (
@@ -393,7 +401,12 @@ const selectSingleRecoveredPullRequest = (
 ):
   | { readonly ok: true; readonly pullRequest: GitHubPullRequest }
   | Extract<PublishCandidateResult, { readonly ok: false }> => {
-  if (exact.length === 0) return { ok: false, code: "publication_creation_unconfirmed" };
+  if (exact.length === 0)
+    return {
+      ok: false,
+      code:
+        found.length === 0 ? "publication_creation_unconfirmed" : "publication_lookup_ambiguous",
+    };
   if (exact.length !== 1) return { ok: false, code: "publication_lookup_ambiguous" };
   if (found.length !== 1) return { ok: false, code: "publication_lookup_ambiguous" };
   return { ok: true, pullRequest: exact[0] as GitHubPullRequest };

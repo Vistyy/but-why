@@ -259,7 +259,7 @@ describe("GitHub pull request gateway", () => {
         title: "Publish Candidate",
         body: "Validation facts",
       }),
-    ).toEqual({ ok: false, code: "remote_head_mismatch" });
+    ).toEqual({ ok: false, code: "remote_head_mismatch", observedRemoteHeadSha: "other-head" });
     expect(gitCalls).toEqual([
       ["rev-parse", "--verify", "refs/heads/feature^{commit}"],
       ["ls-remote", "--heads", "origin", "refs/heads/feature"],
@@ -310,5 +310,71 @@ describe("GitHub pull request gateway", () => {
       ["rev-parse", "--verify", "refs/heads/feature^{commit}"],
       ["rev-parse", "--verify", "refs/heads/feature^{commit}"],
     ]);
+  });
+
+  it("accepts an exact existing remote branch during recovery without pushing again", () => {
+    const gitCalls: (readonly string[])[] = [];
+    const gateway = localGitHubPullRequestGateway({
+      runGit: (args) => {
+        gitCalls.push(args);
+        return {
+          ok: true,
+          stdout:
+            args[0] === "rev-parse" ? "candidate-sha\n" : "candidate-sha\trefs/heads/feature\n",
+        };
+      },
+      runGh: () => ({
+        ok: true,
+        stdout:
+          '{"number":42,"url":"https://github.com/acme/widgets/pull/42","base":{"ref":"main"},"head":{"ref":"feature","sha":"candidate-sha"}}',
+      }),
+    });
+    expect(
+      gateway.createPullRequest({
+        owner: "acme",
+        repo: "widgets",
+        remoteName: "origin",
+        baseBranch: "main",
+        headBranch: "feature",
+        branchRef: "refs/heads/feature",
+        expectedHeadSha: "candidate-sha",
+        allowExistingRemoteHead: true,
+        title: "Publish",
+        body: "Body",
+      }),
+    ).toMatchObject({ ok: true });
+    expect(gitCalls.map((call) => call[0])).toEqual(["rev-parse", "ls-remote"]);
+  });
+
+  it("returns bounded redacted evidence for a rejected creation", () => {
+    const gateway = localGitHubPullRequestGateway({
+      runGit: (args) => ({ ok: true, stdout: args[0] === "rev-parse" ? "candidate-sha\n" : "" }),
+      runGh: (args) =>
+        args[1] === "--method"
+          ? {
+              ok: false,
+              status: 422,
+              stdout: "token=SECRET",
+              stderr: "Authorization: Bearer SECRET",
+            }
+          : { ok: true, stdout: "" },
+    });
+    const result = gateway.createPullRequest({
+      owner: "acme",
+      repo: "widgets",
+      remoteName: "origin",
+      baseBranch: "main",
+      headBranch: "feature",
+      branchRef: "refs/heads/feature",
+      expectedHeadSha: "candidate-sha",
+      title: "Publish",
+      body: "Body",
+    });
+    expect(result).toMatchObject({
+      ok: false,
+      code: "remote_rejected",
+      evidence: { operation: "pull_request_creation", classification: "rejected", exitStatus: 422 },
+    });
+    expect(JSON.stringify(result)).not.toContain("SECRET");
   });
 });
