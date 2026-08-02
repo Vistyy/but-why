@@ -77,6 +77,11 @@ describe("CLI loading and package boundary", () => {
             cwd: directory,
           });
           expect(installed.status, installed.stderr || installed.stdout).toBe(0);
+          const pnpxVersion = runTestProcess("pnpx", ["--package", tarball, "by", "--version"], {
+            cwd: consumer,
+          });
+          expect(pnpxVersion.status, pnpxVersion.stderr || pnpxVersion.stdout).toBe(0);
+          expect(pnpxVersion.stdout).toContain("version: 0.0.1");
           for (const target of dynamicTargets) {
             expect(existsSync(join(consumer, "node_modules/but-why/dist", target.slice(2)))).toBe(
               true,
@@ -132,6 +137,22 @@ describe("CLI loading and package boundary", () => {
               benchmarkRuns[index] = swap;
               benchmarkRuns[swapIndex] = current;
             }
+            rmSync(join(repoRoot, ".cli-loading-baseline"), { recursive: true, force: true });
+            const baselineBuild = runTestProcess(
+              "pnpm",
+              [
+                "--dir",
+                repoRoot,
+                "exec",
+                "tsc",
+                "-p",
+                "tsconfig.build.json",
+                "--outDir",
+                join(repoRoot, ".cli-loading-baseline"),
+              ],
+              { cwd: directory },
+            );
+            expect(baselineBuild.status, baselineBuild.stderr || baselineBuild.stdout).toBe(0);
             const measurements = new Map<string, number[]>();
             for (const run of benchmarkRuns) {
               const key = `${run.executable}:${run.args.join(" ")}`;
@@ -141,7 +162,7 @@ describe("CLI loading and package boundary", () => {
                 const result = runTestProcess(
                   run.executable === "compiledExecutable" ? "node" : installedBy,
                   run.executable === "compiledExecutable"
-                    ? [join(repoRoot, "dist/main.js"), ...run.args]
+                    ? [join(repoRoot, ".cli-loading-baseline/main.js"), ...run.args]
                     : run.args,
                   { cwd: consumer },
                 );
@@ -161,6 +182,15 @@ describe("CLI loading and package boundary", () => {
                 return [key, { samples: values.length, medianMilliseconds }];
               }),
             );
+            for (const command of ["--help", "--version"]) {
+              const baseline =
+                currentMeasurements[`compiledExecutable:${command}`]?.medianMilliseconds;
+              const bundled =
+                currentMeasurements[`installedPackageTarball:${command}`]?.medianMilliseconds;
+              expect(baseline).toBeDefined();
+              expect(bundled).toBeDefined();
+              expect((bundled ?? Number.POSITIVE_INFINITY) * 2).toBeLessThan(baseline ?? 0);
+            }
             const comparisons = Object.fromEntries(
               Object.entries(currentMeasurements).map(([key, measurement]) => {
                 const [executable, ...commandParts] = key.split(":");
@@ -188,6 +218,7 @@ describe("CLI loading and package boundary", () => {
             );
           }
         } finally {
+          rmSync(join(repoRoot, ".cli-loading-baseline"), { recursive: true, force: true });
           rmSync(directory, { recursive: true, force: true });
         }
       }),
