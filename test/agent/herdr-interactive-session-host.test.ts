@@ -197,7 +197,7 @@ describe("Herdr Interactive Session Host", () => {
           profile: {
             agentRuntime: "pi",
             runtimeConfig: {
-              extensions: ["extensions/one.ts"],
+              extensions: ["extensions/one.ts", trustedContinuationExtensionPath()],
               skills: ["skills/one"],
               tools: [],
               contextFileDiscovery: false,
@@ -211,6 +211,9 @@ describe("Herdr Interactive Session Host", () => {
     expect(commands[3]?.[3]).toContain(
       "--no-extensions --extension '/workspace/change-123/extensions/one.ts'",
     );
+    expect(
+      (commands[3]?.[3] ?? "").match(new RegExp(trustedContinuationExtensionPath(), "g")) ?? [],
+    ).toHaveLength(1);
     expect(commands[3]?.[3]).toContain("--no-skills --skill '/workspace/change-123/skills/one'");
     expect(commands[3]?.[3]).toContain("--tools '' --no-context-files");
   });
