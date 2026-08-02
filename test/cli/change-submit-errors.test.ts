@@ -39,6 +39,40 @@ describe("Change Submit validation-policy errors", () => {
     });
   });
 
+  it("serializes bounded recovery failures with retry guidance", () => {
+    for (const code of [
+      "publication_creation_unconfirmed",
+      "publication_lookup_ambiguous",
+      "publication_tooling_failed",
+    ] as const) {
+      const result = submitResult(
+        {
+          ok: false,
+          code,
+          evidence: {
+            operation: "pull_request_creation",
+            classification: "response_parse_failure",
+            parseFailure: "missing pull request facts",
+          },
+        },
+        "change-1",
+      );
+      expect(result).toMatchObject({
+        exitCode: 1,
+        stdout: {
+          error: {
+            code,
+            evidence: {
+              operation: "pull_request_creation",
+              classification: "response_parse_failure",
+            },
+          },
+          help: ["Inspect the pending publication and retry Submit."],
+        },
+      });
+    }
+  });
+
   it.effect("reports a missing scoped profile through the serialized CLI result", () =>
     Effect.gen(function* () {
       const root = preparedRepository({
