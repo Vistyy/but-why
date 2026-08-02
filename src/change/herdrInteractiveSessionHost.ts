@@ -54,7 +54,7 @@ export const herdrSessionName = (changeId: string): string => `but-why-${changeI
 export const trustedContinuationExtensionPath = (): string =>
   resolve(dirname(fileURLToPath(import.meta.url)), "../../extensions/continue-change.ts");
 
-export const trustedImplementationAdvisorExtensionPath = (): string =>
+const trustedImplementationAdvisorExtensionPath = (): string =>
   resolve(
     dirname(fileURLToPath(import.meta.url)),
     "../../extensions/implementation-advisor/index.ts",
