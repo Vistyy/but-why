@@ -293,8 +293,8 @@ const recover = (
       return {
         ok: false,
         code: "publication_remote_mismatch",
-        expectedRemoteHeadSha: selected.pullRequest.headSha,
-        observedRemoteHeadSha: expectedHeadSha,
+        expectedRemoteHeadSha: expectedHeadSha,
+        observedRemoteHeadSha: selected.pullRequest.headSha,
       };
     const owned = {
       ...marker,
@@ -585,7 +585,7 @@ const executePullRequestUpdate = (
     expectedCurrentHeadSha: owned.expectedHeadSha,
   });
   if (!updated.ok) {
-    return updateFailure(dependencies, input, owned, headBranch, expectedHeadSha, updated.code);
+    return updateFailure(dependencies, input, owned, headBranch, expectedHeadSha, updated);
   }
   if (
     !isExpectedUpdatedPullRequest(updated.pullRequest, owned, input, headBranch, expectedHeadSha)
@@ -651,14 +651,25 @@ const updateFailure = (
   },
   headBranch: string,
   expectedHeadSha: string,
-  failure: Exclude<GitHubPullRequestMutationResult, { readonly ok: true }>["code"],
+  failure: Exclude<GitHubPullRequestMutationResult, { readonly ok: true }>,
 ): PublicationEffect => {
-  if (failure === "local_head_mismatch") {
+  if (failure.code === "local_head_mismatch") {
     return Effect.succeed({ ok: false, code: "current_head_mismatch" });
   }
-  return canRecoverUpdateFailure(failure)
-    ? recoverUpdatedPullRequest(dependencies, input, owned, headBranch, expectedHeadSha)
-    : Effect.succeed({ ok: false, code: "publication_tooling_failed" });
+  return canRecoverUpdateFailure(failure.code)
+    ? recoverUpdatedPullRequest(
+        dependencies,
+        input,
+        owned,
+        headBranch,
+        expectedHeadSha,
+        failure.evidence,
+      )
+    : Effect.succeed({
+        ok: false,
+        code: "publication_tooling_failed",
+        ...(failure.evidence === undefined ? {} : { evidence: failure.evidence }),
+      });
 };
 
 const canRecoverUpdateFailure = (
@@ -671,10 +682,15 @@ const recoverUpdatedPullRequest = (
   owned: Published,
   headBranch: string,
   expectedHeadSha: string,
+  failureEvidence?: import("../ownedPullRequestGateway.js").PublicationFailureEvidence,
 ): PublicationEffect => {
   const recovered = dependencies.github.getPullRequest(input.target, owned.pullRequest.number);
   if (recovered === undefined) {
-    return Effect.succeed({ ok: false, code: "publication_tooling_failed" });
+    return Effect.succeed({
+      ok: false,
+      code: "publication_tooling_failed",
+      ...(failureEvidence === undefined ? {} : { evidence: failureEvidence }),
+    });
   }
   return isExpectedUpdatedPullRequest(recovered, owned, input, headBranch, expectedHeadSha)
     ? record(dependencies, input, headBranch, expectedHeadSha, recovered, owned)

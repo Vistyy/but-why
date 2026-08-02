@@ -30,6 +30,7 @@ const bounded = (value: string): string =>
       /["']?(token|password|secret|authorization)["']?\s*:\s*["']?(?:bearer\s+)?[^\s,"'}]+|["']?(token|password|secret|authorization)["']?\s*=\s*(?:bearer\s+)?[^\s,"'}]+/gi,
       "$1=[redacted]",
     )
+    .replace(/(https?:\/\/[^\s/:]+:[^\s@]+@)/gi, "$1[redacted]@")
     .slice(0, 1000);
 const evidence = (
   operation: "remote_lookup" | "branch_push" | "pull_request_creation" | "pull_request_update",
@@ -146,7 +147,12 @@ const createPullRequest = (
     return { ok: false, code: "local_head_mismatch" };
   }
   const remoteHead = initialRemoteHeadState(runGit, request);
-  if (remoteHead.kind === "unknown") return { ok: false, code: "push_failed" };
+  if (remoteHead.kind === "unknown")
+    return {
+      ok: false,
+      code: "push_failed",
+      ...(remoteHead.evidence === undefined ? {} : { evidence: remoteHead.evidence }),
+    };
   if (
     remoteHead.kind === "present" &&
     remoteHead.sha !== undefined &&
@@ -274,14 +280,19 @@ const hasExpectedLocalHead = (
 const initialRemoteHeadState = (
   runGit: PublicationCommandRunner,
   request: GitHubPullRequestRequest,
-): { readonly kind: "missing" | "present" | "unknown"; readonly sha?: string } => {
+): {
+  readonly kind: "missing" | "present" | "unknown";
+  readonly sha?: string;
+  readonly evidence?: ReturnType<typeof evidence>;
+} => {
   const remoteHead = runGit([
     "ls-remote",
     "--heads",
     requestRemote(request),
     `refs/heads/${request.headBranch}`,
   ]);
-  if (!remoteHead.ok) return { kind: "unknown" };
+  if (!remoteHead.ok)
+    return { kind: "unknown", evidence: evidence("remote_lookup", remoteHead, "unavailable") };
   const sha = remoteHead.stdout.trim().split(/\s+/)[0] ?? "";
   return sha.length === 0 ? { kind: "missing" } : { kind: "present", sha };
 };
