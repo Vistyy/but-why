@@ -69,6 +69,9 @@ A complete example is:
 `validationWorkspace.copyFiles` is an optional list of local regular files copied into each Validation Workspace.
 `review` selects Acceptance Review and Specialists.
 `reviewers` supplies Specialist instruction files.
+Each configured Specialist instruction file must positively define exactly one concern.
+It must state the concern's applicable authority, review lenses, materiality, and concern-specific exclusions.
+It must not duplicate or override But Why's universal Specialist role boundaries, Acceptance Context handling, Candidate integrity rules, or output contract.
 `agentProfiles` supplies Repo Agent Profiles.
 
 But Why detects Git facts at runtime.
@@ -131,6 +134,12 @@ Each Specialist name resolves a definition from Repo Config before Global Config
 A definition requires `instructionsFile` and may select an Agent Profile.
 Duplicate names and unresolved definitions reject Submission before a Validation Run starts.
 Specialists execute in configured list order.
+
+For a Task-backed Change, But Why supplies the exact immutable Acceptance Context to each Specialist as an authoritative scope constraint.
+The Specialist uses it only to constrain Findings and required corrections.
+For a taskless Change, But Why supplies no Acceptance Context block or explanation of its absence.
+The same conditional behavior applies to initial and continuation Specialist prompts.
+Configured instructions define the concern, but cannot override these common boundaries.
 
 ## Agent Environment
 

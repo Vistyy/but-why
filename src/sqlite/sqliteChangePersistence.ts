@@ -27,7 +27,7 @@ import {
   decodeSqliteChangePublication,
   type SqliteChangePublicationRow,
 } from "./sqliteChangePublication.js";
-import { decodeSqliteTaskContextSnapshot } from "./sqliteTaskContextSnapshot.js";
+import { decodeSqliteAcceptanceContextSnapshot } from "./sqliteAcceptanceContextSnapshot.js";
 import type { ReviewerSessionRecord } from "../change/reviewerSession/reviewerSession.js";
 import type { ImplementationDecision } from "../change/implementationDecision.js";
 import type {
@@ -766,7 +766,7 @@ const mapRow = (row: ChangeRow | undefined, operationName: string, sql: SqlClien
             acceptanceContext:
               row.acceptanceContext === null
                 ? null
-                : decodeSqliteTaskContextSnapshot(row.acceptanceContext),
+                : decodeSqliteAcceptanceContextSnapshot(row.acceptanceContext),
             implementationDecisions: decisions,
             readiness: row.readiness,
             prepare:

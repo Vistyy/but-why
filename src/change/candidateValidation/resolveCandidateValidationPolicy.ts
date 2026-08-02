@@ -13,12 +13,15 @@ import { submitRepoConfig } from "../submit/submitRepoConfig.js";
 import type { SubmitRejectionError } from "../submit/submitRejectionErrors.js";
 import type {
   CandidateValidationPolicy,
-  TaskBackedCandidateValidationPolicy,
+  AcceptanceContextCandidateValidationPolicy,
 } from "./validateCandidate.js";
 
 export type ResolvedCandidateValidationPolicy =
-  | { readonly taskBacked: false; readonly policy: CandidateValidationPolicy }
-  | { readonly taskBacked: true; readonly policy: TaskBackedCandidateValidationPolicy };
+  | { readonly acceptanceContextSupplied: false; readonly policy: CandidateValidationPolicy }
+  | {
+      readonly acceptanceContextSupplied: true;
+      readonly policy: AcceptanceContextCandidateValidationPolicy;
+    };
 
 export type CandidateValidationPolicyResolution =
   | { readonly ok: true; readonly resolved: ResolvedCandidateValidationPolicy }
@@ -30,7 +33,7 @@ export type CandidateValidationPolicyResolution =
 export const resolveCandidateValidationPolicy = (input: {
   readonly context: RepoLocalContext | { readonly root: string; readonly config?: RepoConfig };
   readonly globalConfigPath: string;
-  readonly taskBacked: boolean;
+  readonly acceptanceContextSupplied: boolean;
   readonly repoConfig?: RepoConfig;
   readonly validationRepoConfig?: RepoConfig;
   readonly repoRoot?: string;
@@ -74,7 +77,8 @@ export const resolveCandidateValidationPolicy = (input: {
     copyFiles: validationRepoConfig.validationWorkspace?.copyFiles ?? [],
     specialistReviews: specialistReviews.policies,
   };
-  if (!input.taskBacked) return { ok: true, resolved: { taskBacked: false, policy } };
+  if (!input.acceptanceContextSupplied)
+    return { ok: true, resolved: { acceptanceContextSupplied: false, policy } };
 
   const acceptanceReview = resolveAcceptanceReviewPolicy({
     repoConfig,
@@ -91,7 +95,7 @@ export const resolveCandidateValidationPolicy = (input: {
   return {
     ok: true,
     resolved: {
-      taskBacked: true,
+      acceptanceContextSupplied: true,
       policy: { ...policy, acceptanceReview: acceptanceReview.policy },
     },
   };

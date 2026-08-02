@@ -14,7 +14,7 @@ import { runAcceptanceReviewPhase } from "../../src/change/acceptanceReview/runA
 import { runSpecialistReviewPhase } from "../../src/change/specialistReview/runSpecialistReviewPhase.js";
 import {
   CandidateValidation,
-  type TaskBackedCandidateValidationPolicy,
+  type AcceptanceContextCandidateValidationPolicy,
 } from "../../src/change/candidateValidation/validateCandidate.js";
 import type { CandidateValidationPolicySnapshot } from "../../src/change/candidateValidation/candidateValidationRunStore.js";
 import { maxValidationArtifactBytes } from "../../src/change/validationRun/artifactFiles.js";
@@ -30,7 +30,7 @@ import {
   ReviewerOutputContractFailed,
   SandcastleToolingFailed,
 } from "../../src/change/validation/validationToolingFailures.js";
-import type { TaskContextSnapshotV1 } from "../../src/change/validationRun/taskContextSnapshot.js";
+import type { AcceptanceContextSnapshotV1 } from "../../src/change/validationRun/acceptanceContextSnapshot.js";
 import {
   candidateReadyRepo,
   candidateRepositoryConfig,
@@ -76,7 +76,7 @@ const acceptanceContext = Object.freeze({
   title: "Keep the exact intent",
   description: "Review the Candidate against this immutable context.",
   comments: Object.freeze(["Do not infer intent from mutable Task state."]),
-}) satisfies TaskContextSnapshotV1;
+}) satisfies AcceptanceContextSnapshotV1;
 
 const acceptancePolicy = {
   instructions: "Repository Acceptance instructions",
@@ -111,6 +111,39 @@ const passingValidationPolicy = {
 };
 
 layer(acceptanceTemplateLayer)("Task-backed Candidate Acceptance Review", (it) => {
+  it.scoped(
+    "routes taskless Specialists without Acceptance Context through Candidate Validation",
+    () =>
+      Effect.gen(function* () {
+        const review = vi.fn<ReviewerAgentRuntime["review"]>(() =>
+          Effect.succeed({
+            ok: true as const,
+            report: { findings: [] },
+            attempts: 1,
+            stdout: '<reviewer-output>{"findings":[]}</reviewer-output>',
+          }),
+        );
+        const ready = yield* acceptanceReadyRepo({ review });
+        const { acceptanceReview: _acceptanceReview, ...tasklessPolicy } = passingValidationPolicy;
+        const result = yield* Effect.gen(function* () {
+          const validation = yield* CandidateValidation;
+          return yield* validation.validateCandidate({
+            changeId: ready.captured.changeId,
+            candidateId: ready.captured.candidateId,
+            changeBaseSha: ready.captured.changeBaseSha,
+            headSha: ready.captured.headSha,
+            policy: { ...tasklessPolicy, specialistReviews: [specialistPolicy("standards")] },
+            now,
+          });
+        }).pipe(Effect.provide(ready.validation.layer));
+
+        expect(result).toMatchObject({ ok: true, outcome: "passed" });
+        expect(review.mock.calls.map(([input]) => input.reviewer)).toEqual(["standards"]);
+        expect(review.mock.calls[0]?.[0].prompt).not.toContain("authoritative scope constraint");
+        expect(review.mock.calls[0]?.[0].prompt).not.toContain(acceptanceContext.description);
+      }),
+  );
+
   it.scoped(
     "reviews the exact Candidate and immutable Acceptance Context after passing Checks",
     () =>
@@ -903,7 +936,7 @@ layer(acceptanceTemplateLayer)("Task-backed Candidate Acceptance Review", (it) =
           expect(input.prompt).toContain(`${input.reviewer} review instructions`);
           expect(input.prompt).toContain("/checks/quality/");
           expect(input.prompt).not.toContain(ready.captured.candidateId);
-          expect(input.prompt).not.toContain(acceptanceContext.description);
+          expect(input.prompt).toContain(acceptanceContext.description);
         }
         expect(
           (yield* ready.validation.listFindings(result.validationRunId)).map((item) => item.title),
@@ -1047,7 +1080,7 @@ layer(acceptanceTemplateLayer)("Task-backed Candidate Acceptance Review", (it) =
         "beta-session",
       ]);
       for (const [input] of review.mock.calls.filter(([call]) => call.reviewer !== "acceptance")) {
-        expect(input.prompt).not.toContain(acceptanceContext.description);
+        expect(input.prompt).toContain(acceptanceContext.description);
         if (input.reviewer === "alpha")
           expect(input.prompt).not.toContain("beta review instructions");
         if (input.reviewer === "beta")
@@ -1069,12 +1102,12 @@ type AcceptanceReadyRepo = {
 
 const runFullTaskBackedCandidate = (
   ready: AcceptanceReadyRepo,
-  policy: TaskBackedCandidateValidationPolicy = passingValidationPolicy,
+  policy: AcceptanceContextCandidateValidationPolicy = passingValidationPolicy,
   captured = ready.captured,
 ) =>
   Effect.gen(function* () {
     const validation = yield* CandidateValidation;
-    return yield* validation.validateTaskBackedCandidate({
+    return yield* validation.validateAcceptanceContextCandidate({
       changeId: captured.changeId,
       candidateId: captured.candidateId,
       changeBaseSha: captured.changeBaseSha,
@@ -1087,7 +1120,7 @@ const runFullTaskBackedCandidate = (
 
 const runTaskBackedCandidate = (
   ready: AcceptanceReadyRepo,
-  policy: TaskBackedCandidateValidationPolicy = passingValidationPolicy,
+  policy: AcceptanceContextCandidateValidationPolicy = passingValidationPolicy,
   captured = ready.captured,
 ) => runReviewPhases(ready, policy, captured, false);
 
@@ -1096,7 +1129,7 @@ const runNoChangeCandidate = (ready: AcceptanceReadyRepo, captured = ready.captu
 
 const runReviewPhases = (
   ready: AcceptanceReadyRepo,
-  policy: TaskBackedCandidateValidationPolicy,
+  policy: AcceptanceContextCandidateValidationPolicy,
   captured: Captured,
   noChange: boolean,
 ) =>
@@ -1230,6 +1263,7 @@ const runReviewPhases = (
           headSha: captured.headSha,
         },
         policies: policy.specialistReviews,
+        acceptanceContext,
         ...(policy.agentEnvironment === undefined
           ? {}
           : { agentEnvironment: policy.agentEnvironment }),

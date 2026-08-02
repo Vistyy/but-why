@@ -49,7 +49,7 @@ describe("Candidate validation policy configuration", () => {
         },
       },
       globalConfigPath,
-      taskBacked: true,
+      acceptanceContextSupplied: true,
     });
 
     expect(result).toMatchObject({
@@ -117,13 +117,13 @@ describe("Candidate validation policy configuration", () => {
         },
       },
       globalConfigPath,
-      taskBacked: true,
+      acceptanceContextSupplied: true,
     });
 
     expect(result).toMatchObject({
       ok: true,
       resolved: {
-        taskBacked: true,
+        acceptanceContextSupplied: true,
         policy: {
           agentEnvironment: ["nix", "develop", "-c"],
           acceptanceReview: {

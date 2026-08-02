@@ -1,6 +1,8 @@
-import type { TaskContextSnapshotV1 } from "../change/validationRun/taskContextSnapshot.js";
+import type { AcceptanceContextSnapshotV1 } from "../change/validationRun/acceptanceContextSnapshot.js";
 
-export const encodeSqliteTaskContextSnapshot = (snapshot: TaskContextSnapshotV1): string =>
+export const encodeSqliteAcceptanceContextSnapshot = (
+  snapshot: AcceptanceContextSnapshotV1,
+): string =>
   JSON.stringify({
     version: 1,
     title: snapshot.title,
@@ -9,7 +11,9 @@ export const encodeSqliteTaskContextSnapshot = (snapshot: TaskContextSnapshotV1)
     ...(snapshot.resolutions === undefined ? {} : { resolutions: [...snapshot.resolutions] }),
   });
 
-export const decodeSqliteTaskContextSnapshot = (encoded: string): TaskContextSnapshotV1 => {
+export const decodeSqliteAcceptanceContextSnapshot = (
+  encoded: string,
+): AcceptanceContextSnapshotV1 => {
   const value: unknown = JSON.parse(encoded);
 
   if (
@@ -25,7 +29,7 @@ export const decodeSqliteTaskContextSnapshot = (encoded: string): TaskContextSna
     !Array.isArray(value.comments) ||
     !value.comments.every((comment) => typeof comment === "string")
   ) {
-    throw new Error("Stored Task Context Snapshot is invalid");
+    throw new Error("Stored Acceptance Context Snapshot is invalid");
   }
 
   return {

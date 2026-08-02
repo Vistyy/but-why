@@ -6,7 +6,7 @@ import type { Effect } from "effect";
 import type { AgentEnvironmentCommand } from "../../agent/agentEnvironment.js";
 import type { ResolvedPiAgentProfile } from "../../agent/agentProfiles.js";
 import { currentCandidateReReviewInstructions } from "../../agent/reviewerPrompts.js";
-import type { TaskContextSnapshotV1 } from "../validationRun/taskContextSnapshot.js";
+import type { AcceptanceContextSnapshotV1 } from "../validationRun/acceptanceContextSnapshot.js";
 import type { ImplementationDecision } from "../implementationDecision.js";
 import type { ImplementationBlockerHistory } from "../implementationBlocker.js";
 import type { RepositoryStorageError } from "../../contracts/repositoryStorageError.js";
@@ -80,7 +80,7 @@ export const continuationPrompt = (input: {
     readonly changeBaseSha: string;
     readonly headSha: string;
   };
-  readonly acceptanceContext: TaskContextSnapshotV1;
+  readonly acceptanceContext: AcceptanceContextSnapshotV1;
   readonly implementationDecisions: readonly ImplementationDecision[];
   readonly blockerHistory?: ImplementationBlockerHistory;
   readonly availableArtifactRefs: readonly string[];

@@ -7,7 +7,7 @@ import type { ChangeStartRecord, CreateChangeStartInput } from "../change/change
 import type { TaskState } from "../task/lifecycle.js";
 import type { TaskDependencyFact } from "../task/task.js";
 import { storedPublicTaskId, type PublicTaskId } from "../task/taskId.js";
-import type { TaskContextSnapshotV1 } from "../change/validationRun/taskContextSnapshot.js";
+import type { AcceptanceContextSnapshotV1 } from "../change/validationRun/acceptanceContextSnapshot.js";
 import { RepositoryPersistedDataInvalid } from "../contracts/repositoryStorageError.js";
 import { RepositorySql } from "./repositorySql.js";
 import {
@@ -19,9 +19,9 @@ import {
   type SqliteChangePublicationRow,
 } from "./sqliteChangePublication.js";
 import {
-  decodeSqliteTaskContextSnapshot,
-  encodeSqliteTaskContextSnapshot,
-} from "./sqliteTaskContextSnapshot.js";
+  decodeSqliteAcceptanceContextSnapshot,
+  encodeSqliteAcceptanceContextSnapshot,
+} from "./sqliteAcceptanceContextSnapshot.js";
 
 const columns = [
   "id",
@@ -103,7 +103,7 @@ const create = (sql: SqlClient.SqlClient, input: CreateChangeStartInput) =>
       return { ok: false as const, code: "change_start_conflict" as const };
     }
 
-    let acceptanceContext: TaskContextSnapshotV1 | null = null;
+    let acceptanceContext: AcceptanceContextSnapshotV1 | null = null;
     if (input.taskId !== undefined) {
       const eligibility = yield* readEligibility(sql, input.taskId);
       if (!eligibility.ok) return eligibility;
@@ -132,7 +132,7 @@ const create = (sql: SqlClient.SqlClient, input: CreateChangeStartInput) =>
       ) VALUES (
         ${input.id}, ${input.repositoryCommonDirectory}, ${input.branchRef}, ${input.baseRef},
         ${input.baseRemoteUrl}, ${input.taskId ?? null}, ${input.startingCommit}, ${input.worktreePath},
-        ${acceptanceContext === null ? null : encodeSqliteTaskContextSnapshot(acceptanceContext)},
+        ${acceptanceContext === null ? null : encodeSqliteAcceptanceContextSnapshot(acceptanceContext)},
         'pending', ${input.prepare?.command ?? null}, ${input.prepare?.timeoutSeconds ?? null},
         NULL, 'open', NULL, ${input.now}, ${input.now}, NULL
       )
@@ -246,7 +246,7 @@ const mapRow = (row: ChangeStartRow | undefined) => {
       acceptanceContext:
         row.acceptanceContext === null
           ? null
-          : decodeSqliteTaskContextSnapshot(row.acceptanceContext),
+          : decodeSqliteAcceptanceContextSnapshot(row.acceptanceContext),
       readiness,
       prepare:
         row.prepareCommand === null || row.prepareTimeoutSeconds === null

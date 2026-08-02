@@ -1,5 +1,5 @@
 import type { PublicTaskId } from "../task/taskId.js";
-import type { TaskContextSnapshotV1 } from "./validationRun/taskContextSnapshot.js";
+import type { AcceptanceContextSnapshotV1 } from "./validationRun/acceptanceContextSnapshot.js";
 import type { ImplementationDecision } from "./implementationDecision.js";
 
 export const changeState = {
@@ -86,7 +86,7 @@ export type ChangeRecord = {
   readonly taskId: PublicTaskId | null;
   readonly startingCommit: string | null;
   readonly worktreePath: string | null;
-  readonly acceptanceContext: TaskContextSnapshotV1 | null;
+  readonly acceptanceContext: AcceptanceContextSnapshotV1 | null;
   readonly implementationDecisions?: readonly ImplementationDecision[];
   readonly readiness: ChangeReadiness | null;
   readonly prepare: ChangePrepareDefinition | null;

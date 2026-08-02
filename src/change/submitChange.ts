@@ -185,7 +185,7 @@ export const openChangeSubmit = (dependencies: {
     commit: string,
   ) => ManagedRepoConfigResolution;
   readonly resolvePolicy: (
-    taskBacked: boolean,
+    acceptanceContextSupplied: boolean,
     repoConfig: RepoConfig,
     worktreePath: string,
     validationRepoConfig?: RepoConfig,
@@ -348,11 +348,12 @@ const submitChange = (
             ...formatValidationPolicyFailure(policy.error),
           } as const;
         }
-        if (!policy.resolved.taskBacked) {
+        if (!policy.resolved.acceptanceContextSupplied) {
           return {
             ok: false,
             code: "validation_policy_invalid",
-            message: "Task-backed no-change submission requires a Task-backed validation policy.",
+            message:
+              "Task-backed no-change submission requires an Acceptance Context validation policy.",
           } as const;
         }
         return yield* validateAndCompleteNoChange(
@@ -448,7 +449,7 @@ const validateAndCompleteNoChange = (
   dependencies: Parameters<typeof openChangeSubmit>[0],
   change: ReadyChange,
   candidate: CapturedCandidate,
-  policy: Extract<ResolvedCandidateValidationPolicy, { readonly taskBacked: true }>,
+  policy: Extract<ResolvedCandidateValidationPolicy, { readonly acceptanceContextSupplied: true }>,
   now: string,
   progress: SubmitProgress | undefined,
 ): Effect.Effect<ChangeSubmitResult, RepositoryStorageError, CandidateValidation> =>
@@ -460,11 +461,12 @@ const validateAndCompleteNoChange = (
         message: "Task-backed no-change submission requires Acceptance Context.",
       } as const;
     }
-    if (!policy.taskBacked) {
+    if (!policy.acceptanceContextSupplied) {
       return {
         ok: false,
         code: "validation_policy_invalid",
-        message: "Task-backed no-change submission requires a Task-backed validation policy.",
+        message:
+          "Task-backed no-change submission requires an Acceptance Context validation policy.",
       } as const;
     }
     const task = yield* dependencies.taskPersistence.getTaskById(change.taskId);
@@ -605,8 +607,8 @@ const validateAndPublish = (
 
     const validation = yield* CandidateValidation;
     const validationResult =
-      policy.taskBacked && change.acceptanceContext !== null
-        ? yield* validation.validateTaskBackedCandidate({
+      policy.acceptanceContextSupplied && change.acceptanceContext !== null
+        ? yield* validation.validateAcceptanceContextCandidate({
             changeId: change.id,
             ...candidateIdentity(candidate),
             resourceRoot: change.worktreePath,

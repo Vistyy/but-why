@@ -32,7 +32,7 @@ import {
   type ValidationToolingFailure,
 } from "../validation/validationToolingFailures.js";
 import { maxValidationArtifactBytes } from "../validationRun/artifactFiles.js";
-import type { TaskContextSnapshotV1 } from "../validationRun/taskContextSnapshot.js";
+import type { AcceptanceContextSnapshotV1 } from "../validationRun/acceptanceContextSnapshot.js";
 import type { ImplementationDecision } from "../implementationDecision.js";
 import type { ImplementationBlockerHistory } from "../implementationBlocker.js";
 import type { ReviewerSessionStore } from "../reviewerSession/reviewerSession.js";
@@ -46,7 +46,7 @@ export type CandidateValidationPolicy = {
   readonly specialistReviews: readonly SpecialistReviewPolicy[];
 };
 
-export type TaskBackedCandidateValidationPolicy = CandidateValidationPolicy & {
+export type AcceptanceContextCandidateValidationPolicy = CandidateValidationPolicy & {
   readonly acceptanceReview: AcceptanceReviewPolicy;
 };
 
@@ -62,21 +62,21 @@ export type ValidateCandidateInput = {
   readonly now: string;
 };
 
-type ValidateTaskBackedCandidateInput = {
+type ValidateAcceptanceContextCandidateInput = {
   readonly changeId: string;
   readonly candidateId: string;
   readonly changeBaseSha: string;
   readonly headSha: string;
   readonly resourceRoot?: string;
-  readonly acceptanceContext: TaskContextSnapshotV1;
+  readonly acceptanceContext: AcceptanceContextSnapshotV1;
   readonly progress?: SubmitProgress;
   readonly blockerHistory?: ImplementationBlockerHistory;
-  readonly policy: TaskBackedCandidateValidationPolicy;
+  readonly policy: AcceptanceContextCandidateValidationPolicy;
   readonly implementationDecisions?: readonly ImplementationDecision[];
   readonly now: string;
 };
 
-type ValidateNoChangeInput = ValidateTaskBackedCandidateInput & {
+type ValidateNoChangeInput = ValidateAcceptanceContextCandidateInput & {
   readonly noChange: true;
 };
 
@@ -128,8 +128,8 @@ export type CandidateValidationService = {
   readonly validateCandidate: (
     input: ValidateCandidateInput,
   ) => Effect.Effect<ValidateCandidateResult, RepositoryStorageError>;
-  readonly validateTaskBackedCandidate: (
-    input: ValidateTaskBackedCandidateInput,
+  readonly validateAcceptanceContextCandidate: (
+    input: ValidateAcceptanceContextCandidateInput,
   ) => Effect.Effect<ValidateCandidateResult, RepositoryStorageError>;
   readonly validateNoChange: (
     input: ValidateNoChangeInput,
@@ -169,7 +169,7 @@ const makeCandidateValidation = (dependencies: {
   readonly reviewerSessionsRoot?: string;
 }): CandidateValidationService => {
   const validate = Effect.fn("CandidateValidation.validate")(function* (
-    input: ValidateCandidateInput | ValidateTaskBackedCandidateInput | ValidateNoChangeInput,
+    input: ValidateCandidateInput | ValidateAcceptanceContextCandidateInput | ValidateNoChangeInput,
   ) {
     const policy =
       "acceptanceContext" in input
@@ -325,7 +325,7 @@ const makeCandidateValidation = (dependencies: {
 
   return {
     validateCandidate: (input) => validate(input),
-    validateTaskBackedCandidate: (input) => validate(input),
+    validateAcceptanceContextCandidate: (input) => validate(input),
     validateNoChange: (input) => validate(input),
     listFindings: dependencies.persistence.listFindings,
     listToolingFailures: dependencies.persistence.listToolingFailures,
@@ -344,7 +344,7 @@ const runCandidatePhases = (
     readonly sessionStore?: ReviewerSessionStore;
     readonly reviewerSessionsRoot?: string;
   },
-  input: ValidateCandidateInput | ValidateTaskBackedCandidateInput | ValidateNoChangeInput,
+  input: ValidateCandidateInput | ValidateAcceptanceContextCandidateInput | ValidateNoChangeInput,
   validationRunId: string,
   activeWorkspace: {
     readonly sandbox: Pick<Sandbox, "exec" | "run">;
@@ -479,6 +479,7 @@ const runCandidatePhases = (
       changeId: input.changeId,
       candidate: candidateIdentity(input),
       policies: input.policy.specialistReviews,
+      ...("acceptanceContext" in input ? { acceptanceContext: input.acceptanceContext } : {}),
       ...(input.progress === undefined ? {} : { progress: input.progress }),
       ...(agentEnvironment === undefined ? {} : { agentEnvironment }),
       runtime: dependencies.reviewerAgentRuntime,
@@ -506,8 +507,8 @@ const runCandidatePhases = (
   })();
 
 const acceptanceOnlyPolicy = (
-  policy: TaskBackedCandidateValidationPolicy,
-): TaskBackedCandidateValidationPolicy => ({
+  policy: AcceptanceContextCandidateValidationPolicy,
+): AcceptanceContextCandidateValidationPolicy => ({
   ...(policy.agentEnvironment === undefined ? {} : { agentEnvironment: policy.agentEnvironment }),
   checks: [],
   copyFiles: policy.copyFiles,
@@ -515,7 +516,9 @@ const acceptanceOnlyPolicy = (
   acceptanceReview: policy.acceptanceReview,
 });
 
-const candidateIdentity = (input: ValidateCandidateInput | ValidateTaskBackedCandidateInput) => ({
+const candidateIdentity = (
+  input: ValidateCandidateInput | ValidateAcceptanceContextCandidateInput,
+) => ({
   candidateId: input.candidateId,
   changeBaseSha: input.changeBaseSha,
   headSha: input.headSha,

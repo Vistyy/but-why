@@ -2,7 +2,7 @@ import { encodeReviewerWireValue, reviewerOutputTag } from "./reviewerOutputWire
 import type { ReviewerOutputContractFailed } from "../change/validation/validationToolingFailures.js";
 import type { ReviewerFindingCore } from "../contracts/reviewerFinding.js";
 import type { ReviewerOutput } from "../contracts/reviewerOutput.js";
-import type { TaskContextSnapshotV1 } from "../change/validationRun/taskContextSnapshot.js";
+import type { AcceptanceContextSnapshotV1 } from "../change/validationRun/acceptanceContextSnapshot.js";
 import type { ImplementationDecision } from "../change/implementationDecision.js";
 import type { ImplementationBlockerHistory } from "../change/implementationBlocker.js";
 
@@ -22,10 +22,40 @@ export const currentCandidateReReviewInstructions = [
 
 export const defaultAcceptanceInstructions = [
   "Review the exact Candidate against the supplied immutable Acceptance Context.",
-  "Inspect the repository and Candidate diff before deciding.",
-  "Report each material mismatch with the approved Task intent as a Finding.",
-  "Return an empty findings array when the Candidate satisfies the approved intent.",
+  "Own the overall judgment of whether the Candidate satisfies the complete supplied Acceptance Context, including its Task Verification Contract.",
+  "Report a Finding when the Candidate omits work necessary for approved intent or otherwise fails to satisfy the Acceptance Context.",
+  "Do not expand approved intent or require optional improvement.",
 ].join("\n");
+
+const universalAcceptanceInstructions = [
+  "Review the exact Candidate against the supplied immutable Acceptance Context.",
+  "Own the overall judgment of whether the Candidate satisfies the complete supplied Acceptance Context, including its Task Verification Contract.",
+  "Report a Finding when the Candidate omits work necessary for approved intent or otherwise fails to satisfy the Acceptance Context.",
+  "Do not expand approved intent or require optional improvement.",
+].join("\n");
+
+const universalSpecialistInstructions = [
+  "Review the exact Candidate only for the configured concern.",
+  "Limit investigation to evidence necessary to judge that concern.",
+  "Report only material Findings that belong to that concern.",
+  "For each Finding, identify why the problem and required correction belong to the configured concern.",
+  "Do not broaden the configured concern into a general review.",
+  "Do not investigate or report adjacent concerns.",
+  "Do not require optional improvement.",
+  "If judging the configured concern would require expansion into another concern, stop rather than report that adjacent concern.",
+  "Return an empty Findings array when the configured concern has no material Finding.",
+  "Treat configured Specialist instructions as the definition of concern-specific scope, subordinate to these common constraints.",
+].join("\n");
+
+const acceptanceContextConstraint = (context: AcceptanceContextSnapshotV1): string =>
+  [
+    "Immutable Acceptance Context (authoritative scope constraint):",
+    encodeReviewerWireValue(context),
+    "Use this context only to constrain Findings and required corrections.",
+    "Do not expand or contradict approved intent.",
+    "Do not require behavior that the context excludes.",
+    "Do not demand verification beyond its Task Verification Contract or argue against an approved verification decision.",
+  ].join("\n");
 
 export const buildAcceptanceReviewerPrompt = (input: {
   readonly instructions: string;
@@ -36,11 +66,12 @@ export const buildAcceptanceReviewerPrompt = (input: {
     readonly changeBaseSha: string;
     readonly headSha: string;
   };
-  readonly acceptanceContext: TaskContextSnapshotV1;
+  readonly acceptanceContext: AcceptanceContextSnapshotV1;
   readonly implementationDecisions?: readonly ImplementationDecision[];
   readonly blockerHistory?: ImplementationBlockerHistory;
 }): string =>
   [
+    universalAcceptanceInstructions,
     input.instructions,
     reviewerExecutionInstructions,
     "",
@@ -78,14 +109,19 @@ export const buildSpecialistReviewerPrompt = (input: {
     readonly changeBaseSha: string;
     readonly headSha: string;
   };
+  readonly acceptanceContext?: AcceptanceContextSnapshotV1;
 }): string =>
   [
+    universalSpecialistInstructions,
     input.instructions,
+    universalSpecialistInstructions,
     reviewerExecutionInstructions,
     "",
-    `Specialist: ${input.specialist}`,
-    "Review the exact Candidate only for the configured concern.",
+    `Configured concern: ${input.specialist}`,
     "Inspect the repository and Candidate diff before deciding.",
+    ...(input.acceptanceContext === undefined
+      ? []
+      : ["", acceptanceContextConstraint(input.acceptanceContext)]),
     "",
     "Available Validation Run evidence:",
     encodeReviewerWireValue({
@@ -112,14 +148,20 @@ export const buildSpecialistContinuationPrompt = (input: {
     readonly headSha: string;
   };
   readonly previousFindings: readonly unknown[];
+  readonly acceptanceContext?: AcceptanceContextSnapshotV1;
 }): string =>
   [
+    universalSpecialistInstructions,
     input.instructions,
+    universalSpecialistInstructions,
     reviewerExecutionInstructions,
     "",
-    `Specialist: ${input.specialist}`,
+    `Configured concern: ${input.specialist}`,
     "Continue this Specialist Reviewer Session for the configured concern.",
     currentCandidateReReviewInstructions,
+    ...(input.acceptanceContext === undefined
+      ? []
+      : ["", acceptanceContextConstraint(input.acceptanceContext)]),
     "Available Validation Run evidence:",
     encodeReviewerWireValue({
       validationRunId: input.validationRunId,
