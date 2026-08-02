@@ -3,6 +3,7 @@ import { dirname, join } from "node:path";
 import { Effect } from "effect";
 
 import { repoAgentEnvironment } from "../agent/agentEnvironment.js";
+import { resolveImplementationAdvisor } from "./implementationAdvisorConfig.js";
 import { resolveInteractiveSessionAgentProfile } from "../agent/agentProfiles.js";
 import { validatePiAgentProfileResources } from "../agent/piRuntime.js";
 import type { RepoLocalContext } from "../init/repoContext.js";
@@ -292,6 +293,15 @@ const implementChange = (
             agentProfile: resolvedAgentProfile,
             globalConfigDirectory: dirname(globalConfigPath),
             ...(agentEnvironment === undefined ? {} : { agentEnvironment }),
+            ...(() => {
+              const advisor = resolveImplementationAdvisor({
+                repoConfig: managedRepoConfig.config,
+                globalConfig: globalConfig.config,
+              });
+              return advisor !== undefined && advisor !== false
+                ? { implementationAdvisor: advisor }
+                : {};
+            })(),
           },
           signal,
         ),

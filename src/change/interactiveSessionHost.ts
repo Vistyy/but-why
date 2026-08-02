@@ -1,5 +1,6 @@
 import type { InteractiveSessionAgentProfile } from "../agent/agentProfiles.js";
 import type { AgentEnvironmentCommand } from "../agent/agentEnvironment.js";
+import type { ImplementationAdvisorConfig } from "./implementationAdvisorConfig.js";
 
 export type InteractiveSessionHost = {
   readonly launch: (
@@ -19,6 +20,7 @@ export type InteractiveSessionLaunchInput = {
   readonly agentProfile?: InteractiveSessionAgentProfile;
   readonly globalConfigDirectory?: string;
   readonly agentEnvironment?: AgentEnvironmentCommand;
+  readonly implementationAdvisor?: ImplementationAdvisorConfig;
 };
 
 export type InteractiveSessionLaunchResult =

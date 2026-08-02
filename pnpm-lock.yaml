@@ -32,6 +32,9 @@ importers:
       effect:
         specifier: 3.20.0
         version: 3.20.0
+      typebox:
+        specifier: 1.1.38
+        version: 1.1.38
     devDependencies:
       '@ast-grep/cli':
         specifier: ^0.44.1

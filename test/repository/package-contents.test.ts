@@ -70,6 +70,8 @@ describe("CLI package contents", () => {
 
     const installedPackage = join(installRoot, "node_modules", "but-why");
     const extension = join(installedPackage, "extensions/continue-change.ts");
+    const advisorExtension = join(installedPackage, "extensions/implementation-advisor/index.ts");
+    expect(readFileSync(advisorExtension, "utf8")).toContain("implementation_advice");
     const module = (await import(
       pathToFileURL(join(installedPackage, "dist/change/herdrInteractiveSessionHost.js")).href
     )) as typeof import("../../src/change/herdrInteractiveSessionHost.js");
@@ -200,6 +202,8 @@ describe("CLI package contents", () => {
     expect(files).toContain("docs/public/config.md");
     expect(files).toContain("docs/public/setup.md");
     expect(files).toContain("extensions/continue-change.ts");
+    expect(files).toContain("extensions/implementation-advisor/index.ts");
+    expect(files).toContain("extensions/implementation-advisor/rules.ts");
     expect(files).toContain("docs/public/skills/but-why/SKILL.md");
     expect(files).toContain("docs/public/skills/but-why/references/implement-change.md");
     expect(files.some((path) => path.startsWith("skills/"))).toBe(false);
