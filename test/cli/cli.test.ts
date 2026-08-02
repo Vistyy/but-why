@@ -428,6 +428,7 @@ validationSetup:
             expect(rows).toEqual([
               { name: "acceptance_context_versions" },
               { name: "active_validation_runs" },
+              { name: "candidate_publications" },
               { name: "candidate_validation_artifacts" },
               { name: "candidate_validation_findings" },
               { name: "candidate_validation_rounds" },
@@ -493,6 +494,7 @@ validationSetup:
         { migration_id: 8, name: "recover_published_remote_branch_cleanup" },
         { migration_id: 9, name: "active_validation_runs" },
         { migration_id: 10, name: "validation_workspace_paths" },
+        { migration_id: 11, name: "candidate_publications" },
       ]);
     }),
   );

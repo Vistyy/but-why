@@ -253,6 +253,8 @@ const unexpectedPullRequestFact = (
   }
   if (pullRequest.baseBranch !== publication.target.baseBranch) return "base_branch_mismatch";
   if (pullRequest.headBranch !== publication.headBranch) return "head_branch_mismatch";
+  if (pullRequest.merged === true && pullRequest.headSha !== publication.expectedHeadSha)
+    return "merged_head_mismatch";
   if (pullRequest.state === undefined || pullRequest.merged === undefined) {
     return "pull_request_facts_unavailable";
   }

@@ -4,18 +4,9 @@ import type { ImplementationDecisionFileError } from "../../change/implementatio
 export const decisionMutationError = (code: string, changeId: string): CliResult =>
   runtimeError({
     code,
-    message:
-      code === "change_not_found"
-        ? "Change was not found."
-        : code === "change_published"
-          ? "The owned pull request is already published."
-          : "Change is closed.",
+    message: code === "change_not_found" ? "Change was not found." : "Change is closed.",
     details: { changeId },
-    help: [
-      code === "change_published"
-        ? "Record decisions before Change Submit publishes the owned pull request."
-        : "Use an open unpublished Change ID.",
-    ],
+    help: ["Use an open Change ID."],
   });
 
 export const decisionFileError = (error: ImplementationDecisionFileError): CliResult =>

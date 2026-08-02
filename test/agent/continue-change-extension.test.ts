@@ -449,10 +449,15 @@ describe("packaged Change Implement continuation extension", () => {
       }),
     );
 
-    await harness.runCommand("continue-change");
-
+    await harness.emit("agent_settled");
     expect(harness.sent).toEqual([]);
     expect(harness.latestWidgetText()).toEqual(["◌ Waiting for human merge"]);
+
+    await harness.runCommand("continue-change");
+
+    expect(harness.sent).toHaveLength(1);
+    expect(harness.sent[0]).toContain("Candidate ready for human review");
+    expect(harness.latestWidgetText()).toEqual(["● Watching Change de32d32a…"]);
   });
 
   it("reports cancelled and cleanup-needed terminal states", async () => {

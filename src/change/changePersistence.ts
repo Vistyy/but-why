@@ -1,7 +1,7 @@
 import type { Effect } from "effect";
 
 import type { RepositoryStorageError } from "../contracts/repositoryStorageError.js";
-import type { ChangeRecord } from "./change.js";
+import type { CandidatePublicationRecord, ChangeRecord } from "./change.js";
 import type { ImplementationDecision } from "./implementationDecision.js";
 import type { ImplementationBlockerHistory } from "./implementationBlocker.js";
 import type { ReviewerSessionRecord } from "./reviewerSession/reviewerSession.js";
@@ -41,7 +41,7 @@ export type RecordImplementationDecisionResult =
   | { readonly ok: true; readonly decision: ImplementationDecision }
   | {
       readonly ok: false;
-      readonly code: "change_not_found" | "change_not_open" | "change_published";
+      readonly code: "change_not_found" | "change_not_open";
     };
 
 export type RaiseImplementationBlockerInput = {
@@ -98,6 +98,9 @@ export type ChangePersistence = {
   readonly getPassingPublicationEvidence: (
     changeId: string,
   ) => StorageEffect<ChangePublicationEvidence | undefined>;
+  readonly listCandidatePublications: (
+    changeId: string,
+  ) => StorageEffect<readonly CandidatePublicationRecord[] | undefined>;
   readonly listChanges: (input: ListChangesInput) => StorageEffect<readonly ChangeRecord[]>;
   readonly listChangesForReconciliation: (
     repositoryCommonDirectory: string,

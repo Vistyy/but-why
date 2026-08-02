@@ -64,8 +64,10 @@ A task-backed No-Change Submission runs Acceptance Review and can complete witho
 A changed Candidate passes through Repository Preparation, Checks, Acceptance Review when task-backed, configured Specialists, and publication policy.
 
 `by change reconcile [<change-id>]` observes owned pull requests.
-A merged owned pull request closes the Change and completes its linked Task.
+A merged owned pull request closes the Change and completes its linked Task only when its merged head matches the latest Candidate Publication.
+A merged-head mismatch rejects reconciliation and preserves the Open Change.
 Cleanup deletes a Remote Change Branch only when it still identifies the exact published Candidate head.
+Candidate Publication history is append-only and is exposed by `by change publications <change-id>`.
 
 ## Storage
 

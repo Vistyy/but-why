@@ -78,6 +78,13 @@ The extension explains the Resolution before it directs the Implementer to Findi
 If inspection fails, `/continue-change` retries the local inspection and reports the recovery action.
 A Validation Tooling Failure receives recovery guidance only after the operator runs `/continue-change`.
 
+Candidate Publication is an Implementer handoff, not durable Change completion.
+Automatic continuation waits while the exact current Candidate remains published.
+Explicit `/continue-change` can resume revision work under the operator's direct instruction.
+After a review correction, record new Implementation Decisions, commit the revised Candidate, and run Change Submit again.
+Change Submit must pass before the same owned open pull request is updated.
+Use `by change publications <change-id>` to inspect the complete immutable publication history.
+
 ## 3. Submit the Candidate
 
 Run `<but-why> change submit <change-id>`.
