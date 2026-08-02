@@ -239,7 +239,7 @@ const launchInOpenedWorktree = async (
   );
   if (!launched.ok) {
     const observed = isUncertainMutationFailure(launched.message)
-      ? await waitForSession(execute, input, sessionName, opened.rootPaneId, signal, options)
+      ? await waitForAgent(execute, input, sessionName, opened.rootPaneId, signal, options, "named")
       : ({ kind: "absent" } as const);
     if (observed.kind === "ready") {
       return { ok: true, host: "herdr", status: "started" };
@@ -265,10 +265,28 @@ const launchInOpenedWorktree = async (
           : launchFailure(launched.message, evidence);
   }
 
+  const detected = await waitForAgent(
+    execute,
+    input,
+    sessionName,
+    opened.rootPaneId,
+    signal,
+    options,
+    "detected",
+  );
+  if (detected.kind !== "ready") {
+    const evidence = await launchEvidence(execute, opened.rootPaneId, signal);
+    return detected.kind === "exited"
+      ? launchFailure(`Pi exited during startup: ${detected.message}`, evidence)
+      : detected.kind === "malformed"
+        ? launchIndeterminate(detected.message, evidence)
+        : launchIndeterminate("Herdr did not detect Pi before naming the session.", evidence);
+  }
+
   const failedRename = async (message: string): Promise<InteractiveSessionLaunchResult> => {
+    const evidence = await launchEvidence(execute, opened.rootPaneId, signal);
     await execute(["pane", "send-keys", opened.rootPaneId, "ctrl-c"], signal);
     if (!opened.alreadyOpen) await closeWorkspace(execute, opened.workspaceId, signal);
-    const evidence = await launchEvidence(execute, opened.rootPaneId, signal);
     return hasExitEvidence(evidence)
       ? launchFailure("Pi exited during startup.", evidence)
       : launchFailure(message, evidence);
@@ -335,13 +353,14 @@ type SessionObservation =
   | { readonly kind: "unknown" }
   | { readonly kind: "malformed"; readonly message: string };
 
-const waitForSession = async (
+const waitForAgent = async (
   execute: HerdrCommandExecutor,
   input: InteractiveSessionLaunchInput,
   sessionName: string,
   paneId: string,
   signal: AbortSignal | undefined,
   options: ResolvedOptions,
+  match: "named" | "detected",
 ): Promise<SessionObservation> => {
   const deadline = performance.now() + options.readinessTimeoutMs;
   let last: SessionObservation = { kind: "absent" };
@@ -360,7 +379,10 @@ const waitForSession = async (
     } else if (!isValidAgentList(listed.stdout)) {
       return { kind: "malformed", message: "Herdr returned malformed agent-list output." };
     } else {
-      const agent = findSession(listed.stdout, input, sessionName, paneId);
+      const agent =
+        match === "named"
+          ? findSession(listed.stdout, input, sessionName, paneId)
+          : findDetectedAgent(listed.stdout, input, paneId);
       if (agent === undefined) {
         last = { kind: "absent" };
       } else if (isActiveAgentStatus(recordValue(agent, "agent_status"))) {
@@ -378,6 +400,23 @@ const waitForSession = async (
     );
   } while (performance.now() < deadline);
   return last;
+};
+
+const findDetectedAgent = (
+  source: string,
+  input: InteractiveSessionLaunchInput,
+  paneId: string,
+): Record<string, unknown> | undefined => {
+  const result = herdrResult(source);
+  const agents = result === undefined ? undefined : recordValue(result, "agents");
+  return Array.isArray(agents)
+    ? (agents.find(
+        (agent) =>
+          isRecord(agent) &&
+          recordValue(agent, "cwd") === input.worktreePath &&
+          recordValue(agent, "pane_id") === paneId,
+      ) as Record<string, unknown> | undefined)
+    : undefined;
 };
 
 const findSession = (
