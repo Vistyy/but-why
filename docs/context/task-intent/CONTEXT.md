@@ -4,6 +4,17 @@ This context owns requested intent, planning judgment, approval, dependencies, a
 
 ## Language
 
+**Work Route Selection**:
+The Operator's explicit choice to handle requested repository work through a Task-backed Change, a taskless Change, or a direct edit outside But Why.
+An agent may recommend a route but must not substitute another route after the Operator decides.
+When the selected route conflicts with a higher-priority instruction, supported interface, safety constraint, or approved Task intent, the agent reports the conflict and requests direction through the applicable authority mechanism.
+_Avoid_: Agent-selected workflow, Task Approval, Change Start
+
+**Task Recording Authorization**:
+The Operator's explicit permission to persist one proposed set of Task Contexts and Task Dependencies.
+It does not authorize Task Approval, Change Start, or an implementation handoff.
+_Avoid_: Task Approval, approval to implement, automatic Change Start
+
 **Task**:
 The durable record of one requested outcome, its approved intent, dependencies, and user-facing progress.
 _Avoid_: Change, issue draft, implementation session

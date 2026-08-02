@@ -124,6 +124,13 @@ The operation that creates a Change, its Managed Worktree, and its starting comm
 It may link an approved Task and capture its Acceptance Context.
 _Avoid_: Agent launch alone, validation, arbitrary state assignment
 
+**Implementation Authorization**:
+The Operator's explicit permission to begin implementing one selected work item through its selected Work Route.
+Task Recording Authorization and Task Approval do not grant it.
+It applies to Task-backed Changes, taskless Changes, and direct edits.
+A handoff launches a fresh Interactive Session only when the authorization includes handoff.
+_Avoid_: Task Approval, Task Recording Authorization, inferred permission to implement, authorization for unrelated work
+
 **Managed Worktree**:
 The persistent But Why-owned Git branch and linked worktree belonging to one open Change.
 _Avoid_: Validation Workspace, caller checkout, temporary agent worktree, Task Worktree
