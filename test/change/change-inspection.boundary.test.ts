@@ -164,6 +164,7 @@ describe("Change inspection CLI", () => {
         currentValidationRun: null,
         findingCount: 0,
         toolingFailureCount: 0,
+        publicationsCommand: `by change publications ${older.id}`,
         pullRequest: null,
         cleanup: { state: "complete", blockingReason: null },
       });
