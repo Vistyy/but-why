@@ -235,6 +235,14 @@ const recover = (
     if (marker === null || marker.pullRequest !== null)
       return { ok: false, code: "publication_state_conflict" };
     const found = dependencies.github.findPullRequests(marker.target, marker.headBranch);
+    if (found === undefined)
+      return {
+        ok: false,
+        code: "publication_tooling_failed",
+        ...(dependencies.github.getLastFailureEvidence?.() === undefined
+          ? {}
+          : { evidence: dependencies.github.getLastFailureEvidence?.() }),
+      };
     const selected = selectRecoveredPullRequest(
       found,
       marker.target,
@@ -327,7 +335,13 @@ const createRecoveryAttempt = (
       !created.ok &&
       (created.code === "remote_response_lost" || created.code === "remote_response_unusable")
     )
-      return yield* confirmCreation(dependencies, input, headBranch, expectedHeadSha);
+      return yield* confirmCreation(
+        dependencies,
+        input,
+        headBranch,
+        expectedHeadSha,
+        created.evidence,
+      );
     if (!created.ok) {
       if (created.code === "push_failed" || created.code === "local_head_mismatch")
         return yield* release(
@@ -347,17 +361,19 @@ const confirmCreation = (
   expectedHeadSha: string,
   failureEvidence?: import("../ownedPullRequestGateway.js").PublicationFailureEvidence,
 ): PublicationEffect => {
-  const selected = selectRecoveredPullRequest(
-    dependencies.github.findPullRequests(input.target, headBranch),
-    input.target,
-    headBranch,
-    expectedHeadSha,
-  );
+  const found = dependencies.github.findPullRequests(input.target, headBranch);
+  const selected = selectRecoveredPullRequest(found, input.target, headBranch, expectedHeadSha);
+  const lookupEvidence = dependencies.github.getLastFailureEvidence?.();
   return selected.ok
     ? record(dependencies, input, headBranch, expectedHeadSha, selected.pullRequest)
-    : Effect.succeed(
-        failureEvidence === undefined ? selected : { ...selected, evidence: failureEvidence },
-      );
+    : Effect.succeed({
+        ...selected,
+        ...(failureEvidence === undefined
+          ? lookupEvidence === undefined
+            ? {}
+            : { evidence: lookupEvidence }
+          : { evidence: failureEvidence }),
+      });
 };
 
 const retainFailure = (

@@ -57,6 +57,7 @@ export type GitHubPullRequestCloseInput = {
 };
 
 export type GitHubPullRequestGateway = {
+  readonly getLastFailureEvidence?: () => PublicationFailureEvidence | undefined;
   readonly findPullRequests: (
     target: ChangePublicationTarget,
     headBranch: string,

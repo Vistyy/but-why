@@ -56,9 +56,18 @@ export const localGitHubPullRequestGateway = (
 ): GitHubPullRequestGateway => {
   const runGit = input.runGit ?? ((args) => runCommand("git", args, input.cwd));
   const runGh = input.runGh ?? ((args) => runCommand("gh", args, input.cwd));
+  let lastFailureEvidence: ReturnType<typeof evidence> | undefined;
 
   return {
-    findPullRequests: (target, headBranch) => findPullRequests(runGh, target, headBranch),
+    getLastFailureEvidence: () => lastFailureEvidence,
+
+    findPullRequests: (target, headBranch) => {
+      const result = findPullRequests(runGh, target, headBranch);
+      if (result === undefined)
+        lastFailureEvidence = evidence("remote_lookup", { ok: false }, "unavailable");
+      else lastFailureEvidence = undefined;
+      return result;
+    },
     getPullRequest: (target, number) => getPullRequest(runGh, target, number),
     closePullRequest: (input) => closePullRequest(runGh, input),
     createPullRequest: (request) => createPullRequest(runGit, runGh, request),
@@ -137,7 +146,11 @@ const createPullRequest = (
       return {
         ok: false,
         code: "push_failed",
-        evidence: evidence("branch_push", pushed, "unavailable"),
+        evidence: evidence(
+          "branch_push",
+          pushed,
+          pushed.status === undefined && pushed.stderr === undefined ? "unavailable" : "rejected",
+        ),
       };
   }
   const result = runGh([
@@ -191,7 +204,11 @@ const updatePullRequest = (
     return {
       ok: false,
       code: "push_failed",
-      evidence: evidence("branch_push", pushed, "unavailable"),
+      evidence: evidence(
+        "branch_push",
+        pushed,
+        pushed.status === undefined && pushed.stderr === undefined ? "unavailable" : "rejected",
+      ),
     };
   const result = runGh([
     "api",
