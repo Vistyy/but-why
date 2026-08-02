@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 const advisorMock = vi.hoisted(() => ({
   mode: "valid" as "valid" | "invalid",
   sessionRestored: false,
+  restoredConversation: false,
 }));
 vi.mock("@earendil-works/pi-coding-agent", async () => {
   const actual = await vi.importActual<typeof import("@earendil-works/pi-coding-agent")>(
@@ -24,38 +25,43 @@ vi.mock("@earendil-works/pi-coding-agent", async () => {
     SessionManager: {
       continueRecent: () => {
         advisorMock.sessionRestored = true;
-        return {};
+        return { restoredConversation: true };
       },
     },
     createAgentSession: async (options: {
       customTools: Array<{ execute: (...args: never[]) => Promise<unknown> }>;
-    }) => ({
-      session: {
-        async prompt(prompt: string): Promise<void> {
-          const batch = Number(prompt.match(/Review activity batch (\d+)/u)?.[1] ?? 0);
-          const evidence = JSON.parse(
-            prompt.match(/Evidence, including inputs and results: (\[.*?\])\. Rules/u)?.[1] ?? "[]",
-          ) as Array<{ reference: string }>;
-          const tool = options.customTools[0];
-          if (tool === undefined) return;
-          await (tool.execute as (...args: unknown[]) => Promise<unknown>)(
-            "id",
-            advisorMock.mode === "valid"
-              ? {
-                  ruleId: "verification.proportional-evidence",
-                  message: "Review.",
-                  evidence: evidence.slice(0, 1).map((item) => item.reference),
-                  activityBatch: batch,
-                }
-              : { ruleId: "unknown", message: "", evidence: [], activityBatch: batch },
-            undefined,
-            undefined,
-            undefined,
-            { abort() {} } as never,
-          );
+      sessionManager?: { restoredConversation?: boolean };
+    }) => {
+      advisorMock.restoredConversation = options.sessionManager?.restoredConversation === true;
+      return {
+        session: {
+          async prompt(prompt: string): Promise<void> {
+            const batch = Number(prompt.match(/Review activity batch (\d+)/u)?.[1] ?? 0);
+            const evidence = JSON.parse(
+              prompt.match(/Evidence, including inputs and results: (\[.*?\])\. Rules/u)?.[1] ??
+                "[]",
+            ) as Array<{ reference: string }>;
+            const tool = options.customTools[0];
+            if (tool === undefined) return;
+            await (tool.execute as (...args: unknown[]) => Promise<unknown>)(
+              "id",
+              advisorMock.mode === "valid"
+                ? {
+                    ruleId: "verification.proportional-evidence",
+                    message: "Review.",
+                    evidence: evidence.slice(0, 1).map((item) => item.reference),
+                    activityBatch: batch,
+                  }
+                : { ruleId: "unknown", message: "", evidence: [], activityBatch: batch },
+              undefined,
+              undefined,
+              undefined,
+              { abort() {} } as never,
+            );
+          },
         },
-      },
-    }),
+      };
+    },
   };
 });
 import { decodeGlobalConfig, type GlobalConfig } from "../../src/contracts/globalConfig.js";
@@ -282,6 +288,7 @@ describe("Implementation Advisor", () => {
     await new Promise((resolve) => setTimeout(resolve, 20));
     expect(sent).toHaveLength(1);
     expect(advisorMock.sessionRestored).toBe(true);
+    expect(advisorMock.restoredConversation).toBe(true);
     expect(sent[0]).toMatchObject({ options: { triggerTurn: false, deliverAs: "followUp" } });
     idle = true;
     await handlers.get("tool_result")?.(
@@ -435,7 +442,10 @@ describe("Implementation Advisor", () => {
             data: {
               rule: "verification.proportional-evidence",
               batch,
-              evidenceFingerprint: `fingerprint-${batch}`,
+              evidenceFingerprint:
+                batch === 1
+                  ? "59415dd52617d4de704c7e1a19f277f7ae8a9fc8706bb6667644fbab06d45568"
+                  : `fingerprint-${batch}`,
               outcome: "note",
               failures: 0,
               timestamp: "now",
