@@ -1,5 +1,5 @@
-import { chmodSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { chmodSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import { publicTaskId, taskSlugForId } from "../../src/task/taskId.js";
@@ -12,6 +12,7 @@ type HandoffResult = {
   readonly worktreePath: string;
   readonly status: string;
   readonly changeVerified: boolean;
+  readonly tracePath?: string;
   readonly error?: { readonly code: string; readonly message: string };
   readonly preLaunch?: {
     readonly exitCode: number;
@@ -164,6 +165,7 @@ exit 1
       options.finalWorktreeMismatch ? mismatchedWorktreePath : worktreePath,
     ),
     HANDOFF_SHOW_COUNT: join(root, "show-count"),
+    HANDOFF_DIAGNOSTIC_DIRECTORY: root,
     HANDOFF_AGENT_SNAPSHOT: activeAgentSnapshot,
     HANDOFF_IMPLEMENT_DELAY: options.implementationDelay ?? "0",
     HANDOFF_OBSERVER_POLL_MS: "5",
@@ -266,6 +268,9 @@ describe("portable handoff observer", () => {
       error: commandResult.error,
       preLaunch: { exitCode: 1, timedOut: false, result: commandResult },
     });
+    if (handoff.result.tracePath === undefined) throw new Error("Expected a pre-launch trace path");
+    expect(existsSync(handoff.result.tracePath)).toBe(true);
+    rmSync(dirname(handoff.result.tracePath), { recursive: true, force: true });
   });
 
   it.each([

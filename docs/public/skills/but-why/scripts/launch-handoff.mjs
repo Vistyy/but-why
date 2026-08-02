@@ -43,8 +43,9 @@ const commandPrefix = runnerCommands[args.runner];
 const startedAt = performance.now();
 const wallStartedAt = new Date().toISOString();
 const safeId = args.changeId.replaceAll(/[^a-zA-Z0-9._-]/g, "_");
+const diagnosticBaseDirectory = process.env.HANDOFF_DIAGNOSTIC_DIRECTORY ?? tmpdir();
 let expectedSessionName;
-const diagnosticDirectory = await mkdtemp(join(tmpdir(), `but-why-launch-${safeId}.`));
+const diagnosticDirectory = await mkdtemp(join(diagnosticBaseDirectory, `but-why-launch-${safeId}.`));
 const tracePath = join(diagnosticDirectory, "trace.jsonl");
 const diagnosticPath = join(diagnosticDirectory, "pane.txt");
 const handoffDirectory = await mkdtemp(join(tmpdir(), "but-why-handoff."));
@@ -225,6 +226,11 @@ try {
   observerRunning = false;
   for (const activeChild of activeChildren) killProcessTree(activeChild);
   if (preLaunchFailure !== undefined) {
+    await appendTrace("prelaunch_verification_failed", {
+      exitCode: preLaunchFailure.preLaunch.exitCode,
+      timedOut: preLaunchFailure.preLaunch.timedOut,
+      errorCode: preLaunchFailure.error.code,
+    }).catch(() => {});
     exitWith(preLaunchFailure, 1);
   } else {
     if (latestObservation.paneId) {
