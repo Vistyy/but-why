@@ -9,6 +9,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 import { describe, expect, it } from "vitest";
 
 import { createGitRepo, repoRoot } from "../support/by-cli.js";
@@ -81,6 +82,10 @@ describe("CLI package contents", () => {
     expect(readFileSync(join(installedPackage, "extensions/continue-change.ts"), "utf8")).toContain(
       "continue-change",
     );
+    const advisor = (await import(
+      pathToFileURL(join(installedPackage, "extensions/implementation-advisor/index.ts")).href
+    )) as { readonly default: unknown };
+    expect(typeof advisor.default).toBe("function");
 
     const repository = createGitRepo();
     const tools = createTestWorkspace();
