@@ -13,6 +13,8 @@ import {
   shouldEvaluateActivity,
   validateAdvisorNote,
   advisorDisabledAfterFailures,
+  nextAdvisorFailures,
+  shouldEmit,
   createAdvisorActivityScheduler,
   type Evidence,
 } from "../../extensions/implementation-advisor/index.js";
@@ -146,10 +148,122 @@ describe("Implementation Advisor", () => {
     expect(delivered).toEqual([1, 2]);
   });
 
-  it("disables after three failures and restores the disabled state", () => {
+  it("disables after three failures and resets after success", () => {
     expect(advisorDisabledAfterFailures(2)).toBe(false);
     expect(advisorDisabledAfterFailures(3)).toBe(true);
-    expect(advisorDisabledAfterFailures(4)).toBe(true);
+    expect(nextAdvisorFailures(nextAdvisorFailures(2, "failure"), "success")).toBe(0);
+    expect(nextAdvisorFailures(0, "failure")).toBe(1);
+    const note = {
+      ruleId: "verification.proportional-evidence" as const,
+      message: "Review.",
+      evidence: ["write:1"],
+      activityBatch: 2,
+    };
+    expect(shouldEmit(note, new Map())).toBe(true);
+    expect(
+      shouldEmit(
+        note,
+        new Map([
+          ["verification.proportional-evidence:a", 3],
+          ["verification.proportional-evidence:b", 1],
+        ]),
+      ),
+    ).toBe(false);
+  });
+
+  it("records three injected failures, disables, and restores disabled state from the ledger", async () => {
+    const previous = process.env["BUT_WHY_IMPLEMENTATION_ADVISOR_MODEL"];
+    process.env["BUT_WHY_IMPLEMENTATION_ADVISOR_MODEL"] = "missing/model";
+    const handlers = new Map<string, (event: unknown, context: unknown) => unknown>();
+    const entries: unknown[] = [];
+    implementationAdvisor({
+      on(event: string, handler: (event: unknown, context: unknown) => unknown) {
+        handlers.set(event, handler);
+      },
+      appendEntry(_type: string, data: unknown) {
+        entries.push(data);
+      },
+    } as never);
+    const context = {
+      sessionManager: { getBranch: () => [] },
+      isIdle: () => true,
+      ui: { notify() {} },
+    };
+    for (let index = 1; index <= 3; index += 1) {
+      await handlers.get("tool_result")?.(
+        {
+          toolName: "write",
+          toolCallId: `write:${index}`,
+          input: { path: "src/a.ts" },
+          content: [],
+          isError: false,
+        },
+        context,
+      );
+      await handlers.get("agent_settled")?.({ type: "agent_settled" }, context);
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+    expect(entries).toHaveLength(3);
+    await handlers.get("tool_result")?.(
+      {
+        toolName: "write",
+        toolCallId: "write:4",
+        input: { path: "src/a.ts" },
+        content: [],
+        isError: false,
+      },
+      context,
+    );
+    await handlers.get("agent_settled")?.({ type: "agent_settled" }, context);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(entries).toHaveLength(3);
+
+    const restoredEntries: unknown[] = [];
+    const restoredHandlers = new Map<string, (event: unknown, context: unknown) => unknown>();
+    implementationAdvisor({
+      on(event: string, handler: (event: unknown, context: unknown) => unknown) {
+        restoredHandlers.set(event, handler);
+      },
+      appendEntry(_type: string, data: unknown) {
+        restoredEntries.push(data);
+      },
+    } as never);
+    const restoredContext = {
+      sessionManager: {
+        getBranch: () => [
+          {
+            type: "custom",
+            customType: "but-why.implementation-advisor.ledger",
+            data: {
+              rule: "none",
+              batch: 1,
+              evidenceFingerprint: "a",
+              outcome: "failure",
+              failures: 3,
+              timestamp: "now",
+            },
+          },
+        ],
+      },
+      isIdle: () => true,
+      ui: { notify() {} },
+    };
+    await restoredHandlers.get("session_start")?.({}, restoredContext);
+    await restoredHandlers.get("tool_result")?.(
+      {
+        toolName: "write",
+        toolCallId: "write:restored",
+        input: { path: "src/a.ts" },
+        content: [],
+        isError: false,
+      },
+      restoredContext,
+    );
+    await restoredHandlers.get("agent_settled")?.({}, restoredContext);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(restoredEntries).toHaveLength(0);
+    if (previous === undefined) delete process.env["BUT_WHY_IMPLEMENTATION_ADVISOR_MODEL"];
+    else process.env["BUT_WHY_IMPLEMENTATION_ADVISOR_MODEL"] = previous;
   });
 
   it("runs scheduler failure injection through Pi event handlers without waking the host", async () => {

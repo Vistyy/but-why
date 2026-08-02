@@ -73,7 +73,7 @@ export default function implementationAdvisor(pi: ExtensionAPI): void {
     currentEvidence = evidence;
     try {
       const note = await evaluate(evidence, activityBatch, context);
-      failures = 0;
+      failures = nextAdvisorFailures(failures, "success");
       if (note !== undefined && shouldEmit(note, emitted)) {
         emitted.set(`${note.ruleId}:${fingerprint(note.evidence)}`, (emitted.get(`${note.ruleId}:${fingerprint(note.evidence)}`) ?? 0) + 1);
         appendLedger({ rule: note.ruleId, batch: note.activityBatch, evidenceFingerprint: fingerprint(note.evidence), outcome: "note", failures: 0, timestamp: new Date().toISOString() }, context);
@@ -82,7 +82,7 @@ export default function implementationAdvisor(pi: ExtensionAPI): void {
         appendLedger({ rule: note?.ruleId ?? "none", batch: activityBatch, evidenceFingerprint: fingerprint(evidence.map((item) => item.reference)), outcome: "none", failures: 0, timestamp: new Date().toISOString() }, context);
       }
     } catch (error) {
-      failures += 1;
+      failures = nextAdvisorFailures(failures, "failure");
       appendLedger({ rule: "none", batch: activityBatch, evidenceFingerprint: fingerprint(evidence.map((item) => item.reference)), outcome: "failure", failures, timestamp: new Date().toISOString() }, context);
       if (failures === 1) context.ui.notify("Implementation Advisor failed open and will retry on the next qualifying activity.", "warning");
       if (advisorDisabledAfterFailures(failures)) { disabled = true; context.ui.notify("Implementation Advisor disabled after three consecutive failures.", "warning"); }
@@ -171,7 +171,9 @@ export const createAdvisorActivityScheduler = <T>(evaluate: (batch: number, acti
 
 const isAuthorityRead = (input: Record<string, unknown>): boolean => /AGENTS\.md|CONTEXT\.md|CONTEXT-MAP\.md|VERIFICATION\.md|docs\/adr|docs\/architecture|docs\/tooling/u.test(JSON.stringify(input));
 const fingerprint = (values: readonly string[]): string => createHash("sha256").update(values.join("\n")).digest("hex");
-const shouldEmit = (note: Note, emitted: ReadonlyMap<string, number>): boolean => {
+export const nextAdvisorFailures = (failures: number, outcome: "success" | "failure"): number => outcome === "success" ? 0 : failures + 1;
+
+export const shouldEmit = (note: Note, emitted: ReadonlyMap<string, number>): boolean => {
   const key = `${note.ruleId}:${fingerprint(note.evidence)}`;
   const count = emitted.get(key) ?? 0;
   const ruleCount = [...emitted.entries()].filter(([entry]) => entry.startsWith(`${note.ruleId}:`)).reduce((sum, [, value]) => sum + value, 0);
