@@ -632,6 +632,40 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
       }),
     ),
   );
+  it.scoped("does not create after a conflicting non-empty recovery lookup", () =>
+    withFixture((fixture) =>
+      Effect.gen(function* () {
+        let creates = 0;
+        const publication = openCandidatePublication({
+          changePersistence: fixture.changes,
+          validationPersistence: fixture.validation,
+          git: {
+            readBranchHead: () => fixture.captured.headSha,
+            readFirstNonMergeCommitSubject: () => ({ ok: true, subject: "Publication" }),
+          },
+          github: {
+            findPullRequests: () => [pullRequest("foreign-head")],
+            getPullRequest: () => undefined,
+            createPullRequest: () => {
+              creates += 1;
+              return { ok: false as const, code: "remote_response_lost" as const };
+            },
+            updatePullRequest: () => {
+              throw new Error("Unexpected update");
+            },
+          },
+        });
+        expect(yield* publication.publish(input(fixture))).toMatchObject({
+          ok: false,
+          code: "publication_lookup_ambiguous",
+        });
+        expect(creates).toBe(1);
+        expect(yield* fixture.changes.getChangeById(fixture.captured.changeId)).toMatchObject({
+          publication: { pullRequest: null },
+        });
+      }),
+    ),
+  );
 });
 
 type Fixture = {
