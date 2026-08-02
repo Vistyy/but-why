@@ -1,6 +1,62 @@
 import { Value } from "typebox/value";
 import { Either } from "effect";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+
+const advisorMock = vi.hoisted(() => ({
+  mode: "valid" as "valid" | "invalid",
+  sessionRestored: false,
+}));
+vi.mock("@earendil-works/pi-coding-agent", async () => {
+  const actual = await vi.importActual<typeof import("@earendil-works/pi-coding-agent")>(
+    "@earendil-works/pi-coding-agent",
+  );
+  return {
+    ...actual,
+    ModelRuntime: {
+      create: async () => ({
+        getModel: (name: string) => (name === "missing/model" ? undefined : {}),
+      }),
+    },
+    DefaultResourceLoader: class {
+      async reload(): Promise<void> {}
+    },
+    SessionManager: {
+      continueRecent: () => {
+        advisorMock.sessionRestored = true;
+        return {};
+      },
+    },
+    createAgentSession: async (options: {
+      customTools: Array<{ execute: (...args: never[]) => Promise<unknown> }>;
+    }) => ({
+      session: {
+        async prompt(prompt: string): Promise<void> {
+          const batch = Number(prompt.match(/Review activity batch (\d+)/u)?.[1] ?? 0);
+          const evidence = JSON.parse(
+            prompt.match(/Evidence, including inputs and results: (\[.*?\])\. Rules/u)?.[1] ?? "[]",
+          ) as Array<{ reference: string }>;
+          const tool = options.customTools[0];
+          if (tool === undefined) return;
+          await (tool.execute as (...args: unknown[]) => Promise<unknown>)(
+            "id",
+            advisorMock.mode === "valid"
+              ? {
+                  ruleId: "verification.proportional-evidence",
+                  message: "Review.",
+                  evidence: evidence.slice(0, 1).map((item) => item.reference),
+                  activityBatch: batch,
+                }
+              : { ruleId: "unknown", message: "", evidence: [], activityBatch: batch },
+            undefined,
+            undefined,
+            undefined,
+            { abort() {} } as never,
+          );
+        },
+      },
+    }),
+  };
+});
 import { decodeGlobalConfig, type GlobalConfig } from "../../src/contracts/globalConfig.js";
 import { decodeRepoConfig, type RepoConfig } from "../../src/contracts/repoConfig.js";
 import { resolveImplementationAdvisor } from "../../src/change/implementationAdvisorConfig.js";
@@ -169,6 +225,64 @@ describe("Implementation Advisor", () => {
         ]),
       ),
     ).toBe(false);
+  });
+
+  it("evaluates through nested Pi, delivers to the host, and terminates invalid advice", async () => {
+    const previousModel = process.env["BUT_WHY_IMPLEMENTATION_ADVISOR_MODEL"];
+    process.env["BUT_WHY_IMPLEMENTATION_ADVISOR_MODEL"] = "provider/model";
+    const handlers = new Map<string, (event: unknown, context: unknown) => unknown>();
+    const entries: unknown[] = [];
+    const sent: unknown[] = [];
+    implementationAdvisor({
+      on(event: string, handler: (event: unknown, context: unknown) => unknown) {
+        handlers.set(event, handler);
+      },
+      appendEntry(_type: string, data: unknown) {
+        entries.push(data);
+      },
+      sendMessage(message: unknown, options: unknown) {
+        sent.push({ message, options });
+      },
+    } as never);
+    const context = {
+      cwd: ".",
+      sessionManager: { getBranch: () => [] },
+      isIdle: () => false,
+      ui: { notify() {} },
+    };
+    advisorMock.mode = "valid";
+    await handlers.get("tool_result")?.(
+      {
+        toolName: "write",
+        toolCallId: "write:success",
+        input: { path: "src/a.ts" },
+        content: [],
+        isError: false,
+      },
+      context,
+    );
+    await handlers.get("agent_settled")?.({}, context);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(sent).toHaveLength(1);
+    expect(advisorMock.sessionRestored).toBe(true);
+    expect(sent[0]).toMatchObject({ options: { triggerTurn: false, deliverAs: "followUp" } });
+    advisorMock.mode = "invalid";
+    await handlers.get("tool_result")?.(
+      {
+        toolName: "write",
+        toolCallId: "write:invalid",
+        input: { path: "src/b.ts" },
+        content: [],
+        isError: false,
+      },
+      context,
+    );
+    await handlers.get("agent_settled")?.({}, context);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(sent).toHaveLength(1);
+    expect(entries.at(-1)).toMatchObject({ outcome: "failure", failures: 1 });
+    if (previousModel === undefined) delete process.env["BUT_WHY_IMPLEMENTATION_ADVISOR_MODEL"];
+    else process.env["BUT_WHY_IMPLEMENTATION_ADVISOR_MODEL"] = previousModel;
   });
 
   it("records three injected failures, disables, and restores disabled state from the ledger", async () => {
