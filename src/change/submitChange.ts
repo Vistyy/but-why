@@ -669,6 +669,7 @@ const validateAndPublish = (
       changeId: change.id,
       candidateId: candidate.candidateId,
       validationRunId: validationResult.validationRunId,
+      changeBaseSha: candidate.changeBaseSha,
       policy: {
         ...policy.policy,
         ...(change.acceptanceContext === null

@@ -40,6 +40,7 @@ export type PublishCandidateInput = {
   readonly changeId: string;
   readonly candidateId: string;
   readonly validationRunId: string;
+  readonly changeBaseSha?: string;
   readonly policy: CandidateValidationPolicySnapshot;
   readonly target: ChangePublicationTarget;
   readonly now: string;
@@ -573,6 +574,7 @@ const facts = (input: PublishCandidateInput, headBranch: string, expectedHeadSha
   changeId: input.changeId,
   candidateId: input.candidateId,
   validationRunId: input.validationRunId,
+  changeBaseSha: input.changeBaseSha ?? "",
   target: input.target,
   headBranch,
   expectedHeadSha,

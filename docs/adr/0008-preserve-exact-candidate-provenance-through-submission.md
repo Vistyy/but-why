@@ -37,3 +37,4 @@ A revised Candidate must pass Submission before But Why updates the same open ow
 Each update appends Candidate Publication evidence without changing earlier publication evidence.
 A closed owned pull request blocks publication while it remains closed.
 If the owned pull request reopens before the Change closes, a later Submission can continue through that pull request.
+Each successful publication stores the complete current Implementation Decision Log on the same pull request and appends immutable Candidate Publication history.

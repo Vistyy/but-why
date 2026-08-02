@@ -207,6 +207,7 @@ by change prepare [<change-id>]
 by change list [--all]
 by change show [<change-id>]
 by change findings [<change-id>]
+by change publications [<change-id>]
 by change validation-runs [<change-id>]
 by validation-run show <validation-run-id>
 by validation-run artifact <validation-run-id> <artifact-ref>
@@ -232,6 +233,13 @@ Use `by task show` for Task metadata and `by task context` for the complete Task
 Use `by change show` for current Change state and its reported expansion commands.
 Use `by change findings` for current Findings.
 Use `by change validation-runs` for compact Validation Run History.
+Use `by change publications` for the complete ordered Candidate Publication history.
+
+Candidate Publication makes the current Candidate ready for human review.
+Keep the Change open while review is in progress.
+After review corrections, record new Implementation Decisions, change the Managed Worktree, and run `by change submit` again.
+Each successful revised Submission updates the same owned open pull request and appends immutable publication evidence.
+Reconciliation completes the Change only when the merged pull request head matches the latest Candidate Publication.
 Use `by validation-run show` for one Validation Run's policy and recorded evidence.
 Use `by validation-run artifact` for complete stored Artifact content.
 

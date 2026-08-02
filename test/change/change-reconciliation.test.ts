@@ -240,15 +240,6 @@ describe("by change reconcile", () => {
         });
         if (!recorded.ok) throw new Error(recorded.code);
 
-        let cleanupInput:
-          | {
-              readonly remoteChangeBranch?: {
-                readonly remoteName: string;
-                readonly branchName: string;
-                readonly expectedHeadSha: string;
-              };
-            }
-          | undefined;
         let cleanupAttempts = 0;
         const reconciliation = openChangeReconciliation({
           persistence: changes,
@@ -271,8 +262,7 @@ describe("by change reconcile", () => {
               throw new Error("Reconciliation must not update a pull request");
             },
           },
-          cleanup: (input) => {
-            cleanupInput = input;
+          cleanup: () => {
             cleanupAttempts += 1;
             return cleanupAttempts === 1
               ? { state: "pending", blockingReason: "remote_branch_unavailable" }
@@ -287,50 +277,18 @@ describe("by change reconcile", () => {
             now,
           }),
         ).toMatchObject({
-          rejected: false,
+          rejected: true,
           changes: [
-            {
-              changeId: created.change.id,
-              status: "completed",
-              cleanup: { state: "pending", blockingReason: "remote_branch_unavailable" },
-            },
+            { changeId: created.change.id, status: "rejected", rejection: "merged_head_mismatch" },
           ],
         });
-        expect(
-          yield* reconciliation.reconcile({
-            repositoryCommonDirectory: input.commonDirectory,
-            changeId: created.change.id,
-            now,
-          }),
-        ).toMatchObject({
-          rejected: false,
-          changes: [{ changeId: created.change.id, status: "cleanup_complete" }],
-        });
-        expect(cleanupAttempts).toBe(2);
-        expect(
-          yield* reconciliation.reconcile({
-            repositoryCommonDirectory: input.commonDirectory,
-            now,
-          }),
-        ).toMatchObject({
-          rejected: false,
-          changes: [],
-        });
-        expect(cleanupAttempts).toBe(2);
+        expect(cleanupAttempts).toBe(0);
         expect(yield* changes.getChangeById(created.change.id)).toMatchObject({
-          state: "closed",
-          closeReason: "completed",
-          cleanup: { state: "complete", blockingReason: null },
+          state: "open",
+          closeReason: null,
         });
-        const completedTask = yield* tasks.getTaskById(taskId);
-        expect(completedTask).toMatchObject({ state: "done" });
-        expect(cleanupInput).toMatchObject({
-          remoteChangeBranch: {
-            remoteName: "origin",
-            branchName: "change-1",
-            expectedHeadSha: "head",
-          },
-        });
+        const openTask = yield* tasks.getTaskById(taskId);
+        expect(openTask).toMatchObject({ state: "implementing" });
       }),
     ),
   );

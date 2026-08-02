@@ -50,6 +50,7 @@ export type RecordPublishedPullRequestInput = BeginChangePublicationInput & {
   readonly previousExpectedHeadSha?: string;
   readonly previousCandidateId?: string;
   readonly previousValidationRunId?: string;
+  readonly changeBaseSha?: string;
 };
 
 export type CompleteMergedChangeResult =

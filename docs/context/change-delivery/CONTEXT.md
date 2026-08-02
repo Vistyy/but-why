@@ -54,6 +54,7 @@ _Avoid_: Latest historical Candidate, dirty workspace
 **Candidate Publication**:
 An immutable record that one exact Candidate and its passed Validation Run were confirmed as the head of a Change's owned open pull request at publication time.
 A later Candidate Publication for the same Change and owned pull request does not alter an earlier Candidate Publication.
+Candidate Publication history is ordered, immutable evidence exposed by `by change publications <change-id>`.
 _Avoid_: Current Candidate, mutable pull request state, Submission
 
 **Acceptance Context**:
