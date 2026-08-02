@@ -72,6 +72,10 @@ describe("CLI package contents", () => {
     const extension = join(installedPackage, "extensions/continue-change.ts");
     const advisorExtension = join(installedPackage, "extensions/implementation-advisor/index.ts");
     expect(readFileSync(advisorExtension, "utf8")).toContain("implementation_advice");
+    const installedAdvisor = (await import(pathToFileURL(advisorExtension).href)) as {
+      readonly default: unknown;
+    };
+    expect(typeof installedAdvisor.default).toBe("function");
     const module = (await import(
       pathToFileURL(join(installedPackage, "dist/change/herdrInteractiveSessionHost.js")).href
     )) as typeof import("../../src/change/herdrInteractiveSessionHost.js");
