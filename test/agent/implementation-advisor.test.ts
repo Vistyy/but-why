@@ -1,3 +1,4 @@
+import { resolve } from "node:path";
 import { Value } from "typebox/value";
 import { describe, expect, it } from "vitest";
 import { Either } from "effect";
@@ -75,7 +76,7 @@ describe("Implementation Advisor", () => {
         {
           toolName: "read",
           toolCallId: "authority",
-          input: { authority: true },
+          input: { path: "AGENTS.md" },
           content: [],
           isError: false,
         },
@@ -89,7 +90,11 @@ describe("Implementation Advisor", () => {
         { toolName: "ls", toolCallId: "failed", input: {}, content: [], isError: true },
       ],
     } as never;
-    expect(turnEvidence(event).map((item) => item.reference)).toEqual([
+    expect(
+      turnEvidence(event, new Set([resolve(process.cwd(), "AGENTS.md")]), process.cwd()).map(
+        (item) => item.reference,
+      ),
+    ).toEqual([
       "turn:4:evidence:1:authority",
       "turn:4:evidence:2:command",
       "turn:4:evidence:3:failed",

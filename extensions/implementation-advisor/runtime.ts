@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { resolve } from "node:path";
+import { dirname, resolve } from "node:path";
 import {
   createAgentSession,
   DefaultResourceLoader,
@@ -156,7 +156,7 @@ export const createImplementationAdvisorRuntime = (input: AdvisorRuntimeInput) =
     contextFiles = new Set(
       loadProjectContextFiles({ cwd: context.cwd, agentDir })
         .map((file) => resolve(file.path))
-        .filter((path) => isWithinWorktree(path, context.cwd)),
+        .filter((path) => dirname(path) === resolve(context.cwd)),
     );
     return contextFiles;
   };
@@ -359,7 +359,7 @@ export const turnEvidence = (
     const toolInput = input.input ?? (input.toolCallId === undefined ? {} : toolInputs.get(input.toolCallId) ?? {});
     const failed = input.isError === true;
     const qualifies = writeTools.has(toolName) || failed ||
-      (readTools.has(toolName) && isTargetRepositoryContextRead(toolInput as { readonly [key: string]: unknown }, discoveredContextFiles, cwd));
+      (readTools.has(toolName) && isTargetRepositoryRootContextRead(toolInput as { readonly [key: string]: unknown }, discoveredContextFiles, cwd));
     if (!qualifies) return [];
     return [{
       reference: `${activityBatch}:evidence:${index}:${input.toolCallId ?? toolName}`,
@@ -409,20 +409,15 @@ const buildEvaluationPrompt = (evaluation: {
 }): string =>
   `Review exactly Advisor Activity Batch ${evaluation.activityBatch}.\nAcceptance Context (authoritative approved intent and scope): ${JSON.stringify(evaluation.acceptanceContext)}\nImplementation Decisions (non-authoritative rationale only; not asserted complete or current): ${JSON.stringify(evaluation.implementationDecisions)}\nEvidence for this exact batch: ${JSON.stringify(evaluation.evidence)}\nEvaluate every supplied rule and call ${NOTE_TOOL} exactly once with kind no_note or note. Bind every result to this exact batch and supplied evidence. Do not claim semantic correctness.`;
 
-const isTargetRepositoryContextRead = (
+const isTargetRepositoryRootContextRead = (
   input: { readonly [key: string]: unknown },
   discoveredContextFiles: ReadonlySet<string>,
   cwd: string,
 ): boolean => {
-  if (input["authority"] === true || input["applicableAuthority"] === true) return true;
   const path = input["path"];
-  return typeof path === "string" && discoveredContextFiles.has(resolve(cwd, path));
-};
-
-const isWithinWorktree = (path: string, cwd: string): boolean => {
-  const root = resolve(cwd);
-  const relative = resolve(path).slice(root.length);
-  return relative === "" || relative.startsWith("/");
+  return typeof path === "string" &&
+    discoveredContextFiles.has(resolve(cwd, path)) &&
+    dirname(resolve(cwd, path)) === resolve(cwd);
 };
 
 const noteFingerprint = (note: AdvisorNote): string =>

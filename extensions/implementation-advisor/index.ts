@@ -1,4 +1,6 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import { Type, type Static } from "typebox";
+import { Value } from "typebox/value";
 import {
   createImplementationAdvisorRuntime,
   implementationAdvisorOutputSchema,
@@ -42,24 +44,40 @@ export default function implementationAdvisor(pi: ExtensionAPI): void {
   });
 }
 
-type LaunchContext = {
-  readonly changeId: string;
-  readonly acceptanceContext: unknown;
-  readonly implementationDecisions: readonly unknown[];
-};
+const acceptanceContextSchema = Type.Union([
+  Type.Null(),
+  Type.Object({
+    version: Type.Literal(1),
+    title: Type.String(),
+    description: Type.String(),
+    comments: Type.Array(Type.String()),
+    resolutions: Type.Optional(Type.Array(Type.String())),
+  }),
+]);
+
+const implementationDecisionSchema = Type.Object({
+  id: Type.String(),
+  changeId: Type.String(),
+  sequence: Type.Number(),
+  recordedAt: Type.String(),
+  choice: Type.String(),
+  rationale: Type.String(),
+  content: Type.Optional(Type.String()),
+});
+
+const launchContextSchema = Type.Object({
+  changeId: Type.String({ minLength: 1 }),
+  acceptanceContext: acceptanceContextSchema,
+  implementationDecisions: Type.Array(implementationDecisionSchema),
+});
+
+type LaunchContext = Static<typeof launchContextSchema>;
 
 const parseLaunchContext = (source: string | undefined): LaunchContext | undefined => {
   if (source === undefined) return undefined;
   try {
-    const value = JSON.parse(source) as Record<string, unknown>;
-    return typeof value["changeId"] === "string" &&
-      Array.isArray(value["implementationDecisions"])
-      ? {
-          changeId: value["changeId"],
-          acceptanceContext: value["acceptanceContext"] ?? null,
-          implementationDecisions: value["implementationDecisions"],
-        }
-      : undefined;
+    const value: unknown = JSON.parse(source);
+    return Value.Check(launchContextSchema, value) ? (value as LaunchContext) : undefined;
   } catch {
     return undefined;
   }
