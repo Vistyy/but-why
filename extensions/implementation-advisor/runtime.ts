@@ -6,6 +6,7 @@ import {
   loadProjectContextFiles,
   ModelRuntime,
   SessionManager,
+  type AgentSessionEvent,
   type ExtensionContext,
   type ExtensionAPI,
   type ToolDefinition,
@@ -98,6 +99,8 @@ export const createImplementationAdvisorRuntime = (input: AdvisorRuntimeInput) =
   } | undefined;
   let activeResult: AdvisorOutput | undefined;
   let activeTerminated = false;
+  let activeInvestigationEvidence: AdvisorEvidence[] = [];
+  const investigationInputs = new Map<string, unknown>();
   let contextFiles: ReadonlySet<string> | undefined;
   let worktreeCwd = process.cwd();
   let parentSessionId = input.context.changeId;
@@ -203,11 +206,26 @@ export const createImplementationAdvisorRuntime = (input: AdvisorRuntimeInput) =
           customTools: [createAdviceTool()],
         })
       ).session;
+      nested.subscribe((event: AgentSessionEvent) => {
+        if (event.type === "tool_execution_start" && readTools.has(event.toolName)) {
+          investigationInputs.set(event.toolCallId, event.args);
+          return;
+        }
+        if (activeBatch === undefined) return;
+        const evidence = investigationEvidence(
+          event,
+          activeBatch.activityBatch,
+          investigationInputs.get(event.type === "tool_execution_end" ? event.toolCallId : ""),
+        );
+        if (event.type === "tool_execution_end") investigationInputs.delete(event.toolCallId);
+        if (evidence !== undefined) activeInvestigationEvidence.push(evidence);
+      });
     }
 
     activeBatch = evaluation;
     activeResult = undefined;
     activeTerminated = false;
+    activeInvestigationEvidence = [];
     try {
       await nested.prompt(buildEvaluationPrompt(evaluation));
     } catch (error) {
@@ -218,7 +236,10 @@ export const createImplementationAdvisorRuntime = (input: AdvisorRuntimeInput) =
       throw new Error("Implementation Advisor did not return terminating structured output.");
     }
     if (result.kind === "no_note") return undefined;
-    return validateAdvisorOutput(result, evaluation);
+    return validateAdvisorOutput(result, {
+      ...evaluation,
+      evidence: [...evaluation.evidence, ...activeInvestigationEvidence],
+    });
   };
 
   const evaluateDelta = async (delta: AdvisorActivityDelta): Promise<void> => {
@@ -339,6 +360,22 @@ export const validateAdvisorOutput = (
   };
 };
 
+export const investigationEvidence = (
+  event: AgentSessionEvent,
+  activityBatch: string,
+  input?: unknown,
+): AdvisorEvidence | undefined => {
+  if (event.type !== "tool_execution_end" || !readTools.has(event.toolName)) return undefined;
+  const eventWithArgs = event as AgentSessionEvent & { readonly args?: unknown };
+  return {
+    reference: `${activityBatch}:investigation:${event.toolCallId}`,
+    activity: event.toolName,
+    input: input ?? eventWithArgs.args ?? {},
+    result: event.result,
+    failed: event.isError,
+  };
+};
+
 export const turnEvidence = (
   event: TurnEndEvent,
   discoveredContextFiles: ReadonlySet<string> = new Set(),
@@ -407,7 +444,7 @@ const buildEvaluationPrompt = (evaluation: {
   readonly acceptanceContext: unknown;
   readonly implementationDecisions: readonly unknown[];
 }): string =>
-  `Review exactly Advisor Activity Batch ${evaluation.activityBatch}.\nAcceptance Context (authoritative approved intent and scope): ${JSON.stringify(evaluation.acceptanceContext)}\nImplementation Decisions (non-authoritative rationale only; not asserted complete or current): ${JSON.stringify(evaluation.implementationDecisions)}\nEvidence for this exact batch: ${JSON.stringify(evaluation.evidence)}\nEvaluate every supplied rule and call ${NOTE_TOOL} exactly once with kind no_note or note. Bind every result to this exact batch and supplied evidence. Do not claim semantic correctness.`;
+  `Review exactly Advisor Activity Batch ${evaluation.activityBatch}.\nAcceptance Context (authoritative approved intent and scope): ${JSON.stringify(evaluation.acceptanceContext)}\nImplementation Decisions (non-authoritative rationale only; not asserted complete or current): ${JSON.stringify(evaluation.implementationDecisions)}\nEvidence for this exact batch: ${JSON.stringify(evaluation.evidence)}\nIf you investigate with read, grep, find, or ls, the host records each successful or failed result as evidence reference ${evaluation.activityBatch}:investigation:<toolCallId>. Use that exact reference when you cite an investigation result.\nEvaluate every supplied rule and call ${NOTE_TOOL} exactly once with kind no_note or note. Bind every result to this exact batch and supplied evidence. Do not claim semantic correctness.`;
 
 const isTargetRepositoryRootContextRead = (
   input: { readonly [key: string]: unknown },

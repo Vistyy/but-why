@@ -10,6 +10,7 @@ const advisorMock = vi.hoisted(() => ({
   messages: [] as unknown[],
   createCalls: 0,
   toolValues: [] as unknown[],
+  nestedEventListener: undefined as ((event: unknown) => void) | undefined,
 }));
 
 vi.mock("@earendil-works/pi-coding-agent", async () => {
@@ -37,6 +38,14 @@ vi.mock("@earendil-works/pi-coding-agent", async () => {
       advisorMock.createCalls += 1;
       return {
         session: {
+          subscribe(listener: (event: unknown) => void): () => void {
+            advisorMock.nestedEventListener = listener;
+            return () => {
+              if (advisorMock.nestedEventListener === listener) {
+                advisorMock.nestedEventListener = undefined;
+              }
+            };
+          },
           async prompt(prompt: string): Promise<void> {
             advisorMock.promptCalls.push(prompt);
             if (advisorMock.promptCalls.length === 1) {
@@ -49,7 +58,9 @@ vi.mock("@earendil-works/pi-coding-agent", async () => {
             const activityBatch = prompt.match(
               /Review exactly Advisor Activity Batch ([^\n.]+)/u,
             )?.[1];
-            const evidenceReference = prompt.match(/"reference":"([^"]+)"/u)?.[1];
+            const evidenceReference = advisorMock.nestedEventListener
+              ? `${activityBatch}:investigation:investigation-read`
+              : prompt.match(/"reference":"([^"]+)"/u)?.[1];
             const tool = options.customTools[0];
             if (
               tool === undefined ||
@@ -57,6 +68,14 @@ vi.mock("@earendil-works/pi-coding-agent", async () => {
               evidenceReference === undefined
             )
               return;
+            advisorMock.nestedEventListener?.({
+              type: "tool_execution_end",
+              toolCallId: "investigation-read",
+              toolName: "read",
+              args: { path: "src/example.ts" },
+              result: { content: [{ type: "text", text: "example" }] },
+              isError: false,
+            });
             const toolValue =
               advisorMock.mode === "no_note" || advisorMock.promptCalls.length > 1
                 ? { kind: "no_note", activityBatch }
@@ -120,6 +139,7 @@ describe("Implementation Advisor extension event seam", () => {
     advisorMock.messages.length = 0;
     advisorMock.createCalls = 0;
     advisorMock.toolValues.length = 0;
+    advisorMock.nestedEventListener = undefined;
   });
 
   afterEach(() => {

@@ -11,6 +11,7 @@ import {
 } from "../../extensions/implementation-advisor/rules.js";
 import {
   implementationAdvisorOutputSchema,
+  investigationEvidence,
   turnEvidence,
   validateAdvisorOutput,
 } from "../../extensions/implementation-advisor/runtime.js";
@@ -55,11 +56,56 @@ describe("Implementation Advisor", () => {
     const prompt = buildImplementationAdvisorSystemPrompt(
       implementationAdvisorRules.map((rule) => rule.contract),
     );
-    expect(prompt).toContain("The `continue-change` extension is the sole continuation owner.");
-    expect(prompt).toContain(
+    for (const requiredLine of [
+      "Observe completed implementation activity and provide corrective advice only when one approved rule has a concrete violation supported by evidence.",
+      "You advise only.",
+      "The `continue-change` extension is the sole continuation owner.",
+      "Treat the supplied Acceptance Context as authoritative approved intent and scope.",
+      "Review only the supplied Advisor Activity Batch.",
+      "Use `read`, `grep`, `find`, and `ls` only when the supplied evidence is insufficient.",
+      "Evaluate every enabled rule.",
+      "Return zero or one note from the highest applicable response class.",
+      "Do not provide praise, summaries, optional improvements, speculative warnings, or general review commentary.",
       "Complete the evaluation only through the terminating structured-output tool.",
-    );
+    ]) {
+      expect(prompt).toContain(requiredLine);
+    }
     for (const rule of implementationAdvisorRules) expect(prompt).toContain(rule.contract);
+  });
+
+  it("records nested read-only investigation results as batch-bound evidence", () => {
+    expect(
+      investigationEvidence(
+        {
+          type: "tool_execution_end",
+          toolCallId: "read-1",
+          toolName: "read",
+          args: { path: "src/example.ts" },
+          result: { content: [{ type: "text", text: "const value = 1;" }] },
+          isError: false,
+        } as never,
+        "turn:4",
+      ),
+    ).toEqual({
+      reference: "turn:4:investigation:read-1",
+      activity: "read",
+      input: { path: "src/example.ts" },
+      result: { content: [{ type: "text", text: "const value = 1;" }] },
+      failed: false,
+    });
+    expect(
+      investigationEvidence(
+        {
+          type: "tool_execution_end",
+          toolCallId: "bash-1",
+          toolName: "bash",
+          args: { command: "git status" },
+          result: {},
+          isError: false,
+        } as never,
+        "turn:4",
+      ),
+    ).toBeUndefined();
   });
 
   it("qualifies edits, commands, failures, and explicitly identified authority reads only", () => {

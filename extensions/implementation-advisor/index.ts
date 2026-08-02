@@ -10,6 +10,7 @@ import {
 
 export {
   createAdvisorActivityScheduler,
+  investigationEvidence,
   turnEvidence,
   validateAdvisorOutput,
 } from "./runtime.js";
