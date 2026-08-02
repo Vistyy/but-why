@@ -102,7 +102,7 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
             branchRef: "refs/heads/feature",
             expectedHeadSha: fixture.captured.headSha,
             title: "Add taskless publication",
-            body: `Change: ${fixture.captured.changeId}\nCandidate: ${fixture.captured.candidateId}\nValidation Run: ${fixture.validationRunId}`,
+            body: "",
           },
         ]);
       }),
@@ -306,7 +306,7 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
         expect(requests).toContainEqual(
           expect.objectContaining({
             title: "Publish exact Candidate",
-            body: `Task: BY-1\nCandidate: ${fixture.captured.candidateId}\nValidation Run: ${fixture.validationRunId}`,
+            body: "Task: BY-1",
           }),
         );
       }),
