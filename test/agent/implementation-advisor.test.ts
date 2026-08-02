@@ -1,3 +1,4 @@
+import { Value } from "typebox/value";
 import { Either } from "effect";
 import { describe, expect, it } from "vitest";
 import { decodeGlobalConfig, type GlobalConfig } from "../../src/contracts/globalConfig.js";
@@ -7,6 +8,8 @@ import { implementationAdvisorRules } from "../../extensions/implementation-advi
 import implementationAdvisor from "../../extensions/implementation-advisor/index.js";
 import {
   implementationAdvisorToolNames,
+  implementationAdvisorNoteSchema,
+  deliverAdvisorAdvice,
   shouldEvaluateActivity,
   validateAdvisorNote,
   advisorDisabledAfterFailures,
@@ -65,6 +68,22 @@ describe("Implementation Advisor", () => {
     ];
     expect(implementationAdvisorToolNames).toEqual(["read", "grep", "find", "ls"]);
     expect(
+      Value.Check(implementationAdvisorNoteSchema, {
+        ruleId: "authority.explicit-conflict",
+        message: "Review.",
+        evidence: ["write:1"],
+        activityBatch: 2,
+      }),
+    ).toBe(true);
+    expect(
+      Value.Check(implementationAdvisorNoteSchema, {
+        ruleId: "authority.explicit-conflict",
+        message: "Review.",
+        evidence: [],
+        activityBatch: "2",
+      }),
+    ).toBe(false);
+    expect(
       validateAdvisorNote(
         {
           ruleId: "authority.explicit-conflict",
@@ -90,11 +109,16 @@ describe("Implementation Advisor", () => {
     ).toMatchObject({ activityBatch: 2 });
   });
 
-  it("keeps delivery non-waking and continuation-owned", () => {
-    expect({ triggerTurn: false, owner: "continue-change" }).toEqual({
-      triggerTurn: false,
-      owner: "continue-change",
+  it("delivers advice without waking the host", () => {
+    const sent: unknown[] = [];
+    deliverAdvisorAdvice((message, options) => sent.push({ message, options }), false, {
+      ruleId: "verification.proportional-evidence",
+      message: "Review.",
+      evidence: ["write:1"],
+      activityBatch: 2,
     });
+    expect(sent[0]).toMatchObject({ options: { triggerTurn: false, deliverAs: "followUp" } });
+    expect(sent[0]).toMatchObject({ message: { details: { activityBatch: 2 } } });
   });
 
   it("coalesces later qualifying deltas and evaluates them after the active batch", async () => {
@@ -162,7 +186,7 @@ describe("Implementation Advisor", () => {
       context,
     );
     await handlers.get("agent_settled")?.({ type: "agent_settled" }, context);
-    await new Promise((resolve) => setTimeout(resolve, 20));
+    await new Promise((resolve) => setTimeout(resolve, 100));
     expect(entries).toHaveLength(1);
     expect(sent).toHaveLength(0);
     if (previous === undefined) delete process.env["BUT_WHY_IMPLEMENTATION_ADVISOR_MODEL"];
