@@ -78,7 +78,13 @@ const parseLaunchContext = (source: string | undefined): LaunchContext | undefin
   if (source === undefined) return undefined;
   try {
     const value: unknown = JSON.parse(source);
-    return Value.Check(launchContextSchema, value) ? (value as LaunchContext) : undefined;
+    if (!Value.Check(launchContextSchema, value)) return undefined;
+    const context = value as LaunchContext;
+    return context.implementationDecisions.every(
+      (decision) => decision.changeId === context.changeId,
+    )
+      ? context
+      : undefined;
   } catch {
     return undefined;
   }

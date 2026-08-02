@@ -147,6 +147,31 @@ describe("Implementation Advisor extension event seam", () => {
     delete process.env["BUT_WHY_IMPLEMENTATION_ADVISOR_CONTEXT"];
   });
 
+  it("does not register when a decision belongs to another Change", () => {
+    process.env["BUT_WHY_IMPLEMENTATION_ADVISOR_MODEL"] = "provider/model";
+    process.env["BUT_WHY_IMPLEMENTATION_ADVISOR_CONTEXT"] = JSON.stringify({
+      changeId: "change-current",
+      acceptanceContext: null,
+      implementationDecisions: [
+        {
+          id: "decision-foreign",
+          changeId: "change-other",
+          sequence: 1,
+          recordedAt: "2026-08-02T00:00:00.000Z",
+          choice: "foreign choice",
+          rationale: "foreign rationale",
+        },
+      ],
+    });
+    const handlers = new Map<string, Handler>();
+    implementationAdvisor({
+      on(event: string, handler: Handler) {
+        handlers.set(event, handler);
+      },
+    } as never);
+    expect(handlers).toHaveLength(0);
+  });
+
   it("does not block later turn_end events and evaluates the complete pending batch", async () => {
     process.env["BUT_WHY_IMPLEMENTATION_ADVISOR_MODEL"] = "provider/model";
     process.env["BUT_WHY_IMPLEMENTATION_ADVISOR_CONTEXT"] = JSON.stringify({
