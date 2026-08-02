@@ -57,7 +57,7 @@ export default function implementationAdvisor(pi: ExtensionAPI): void {
 
   pi.on("tool_result", (event, context) => {
     latestContext = context;
-    if (disabled || !shouldEvaluateActivity(event.toolName, event.input)) return;
+    if (disabled || (!event.isError && !shouldEvaluateActivity(event.toolName, event.input))) return;
     const reference = `${event.toolName}:${String(event.toolCallId)}`;
     scheduler.add({ activity: event.toolName, reference, input: event.input, result: event.content, failed: event.isError });
   });

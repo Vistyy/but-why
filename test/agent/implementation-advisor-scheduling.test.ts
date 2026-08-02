@@ -1,69 +1,69 @@
 import { describe, expect, it } from "vitest";
 import {
-  implementationAdvisorToolNames,
-  shouldEvaluateActivity,
-  validateAdvisorNote,
-  advisorDisabledAfterFailures,
+  createAdvisorActivityScheduler,
+  deliverAdvisorAdvice,
   type Evidence,
 } from "../../extensions/implementation-advisor/index.js";
 
-describe("Implementation Advisor scheduler", () => {
-  const evidence: Evidence[] = [
-    {
+describe("Implementation Advisor scheduling and delivery", () => {
+  it("coalesces activity while one evaluation is active", async () => {
+    const batches: Evidence[][] = [];
+    let release: (() => void) | undefined;
+    const scheduler = createAdvisorActivityScheduler<Evidence>(
+      async (_batch, activity) => {
+        batches.push([...activity]);
+        if (batches.length === 1)
+          await new Promise<void>((resolve) => {
+            release = resolve;
+          });
+      },
+      () => undefined,
+    );
+    const first: Evidence = {
       activity: "write",
       reference: "write:1",
-      input: { path: "src/a.ts" },
+      input: {},
       result: [],
       failed: false,
-    },
-  ];
-
-  it("schedules qualifying activity and ignores discussion and ordinary reads", () => {
-    expect(shouldEvaluateActivity("write", {})).toBe(true);
-    expect(shouldEvaluateActivity("read", { path: "README.md" })).toBe(false);
-    expect(shouldEvaluateActivity("read", { path: "docs/architecture.md" })).toBe(true);
+    };
+    const second: Evidence = {
+      activity: "write",
+      reference: "write:2",
+      input: {},
+      result: [],
+      failed: false,
+    };
+    scheduler.add(first);
+    const active = scheduler.settle();
+    scheduler.add(second);
+    release?.();
+    await active;
+    await new Promise<void>((resolve) => queueMicrotask(resolve));
+    expect(batches.map((batch) => batch.map((item) => item.reference))).toEqual([
+      ["write:1"],
+      ["write:2"],
+    ]);
   });
 
-  it("enforces the fixed tool allowlist and structured output binding", () => {
-    const firstEvidence = evidence[0];
-    if (firstEvidence === undefined) throw new Error("Test evidence is missing");
-    expect(implementationAdvisorToolNames).toEqual(["read", "grep", "find", "ls"]);
+  it("uses non-waking delivery modes for active and idle sessions", () => {
+    const deliveries: unknown[] = [];
+    const note = {
+      ruleId: "verification.proportional-evidence" as const,
+      message: "Review.",
+      evidence: ["write:1"],
+      activityBatch: 1,
+    };
+    deliverAdvisorAdvice((message, options) => deliveries.push({ message, options }), false, note);
+    deliverAdvisorAdvice((message, options) => deliveries.push({ message, options }), true, note);
+    expect(deliveries).toHaveLength(2);
     expect(
-      validateAdvisorNote(
-        {
-          ruleId: "authority.explicit-conflict",
-          message: "Review the conflict.",
-          evidence: ["read:1"],
-          activityBatch: 2,
-        },
-        2,
-        evidence,
+      deliveries.map(
+        (delivery) =>
+          (delivery as { options: { triggerTurn: boolean; deliverAs: string } }).options,
       ),
-    ).toBeUndefined();
-    expect(
-      validateAdvisorNote(
-        {
-          ruleId: "authority.explicit-conflict",
-          message: "Review the conflict.",
-          evidence: ["write:1"],
-          activityBatch: 2,
-        },
-        2,
-        [{ ...firstEvidence, reference: "write:1" }],
-      ),
-    ).toMatchObject({ activityBatch: 2 });
-  });
-
-  it("keeps delivery non-waking and continuation-owned", () => {
-    expect({ triggerTurn: false, owner: "continue-change" }).toEqual({
-      triggerTurn: false,
-      owner: "continue-change",
-    });
-  });
-
-  it("disables after three failures and permits restoration checks", () => {
-    expect(advisorDisabledAfterFailures(2)).toBe(false);
-    expect(advisorDisabledAfterFailures(3)).toBe(true);
-    expect(advisorDisabledAfterFailures(4)).toBe(true);
+    ).toEqual([
+      { triggerTurn: false, deliverAs: "followUp" },
+      { triggerTurn: false, deliverAs: "nextTurn" },
+    ]);
   });
 });

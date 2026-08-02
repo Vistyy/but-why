@@ -14,7 +14,8 @@ vi.mock("@earendil-works/pi-coding-agent", async () => {
     ...actual,
     ModelRuntime: {
       create: async () => ({
-        getModel: (name: string) => (name === "missing/model" ? undefined : {}),
+        getModel: (provider: string, model: string) =>
+          provider + "/" + model === "missing/model" ? undefined : {},
       }),
     },
     DefaultResourceLoader: class {
@@ -228,6 +229,7 @@ describe("Implementation Advisor", () => {
   });
 
   it("evaluates through nested Pi, delivers to the host, and terminates invalid advice", async () => {
+    advisorMock.mode = "valid";
     const previousModel = process.env["BUT_WHY_IMPLEMENTATION_ADVISOR_MODEL"];
     process.env["BUT_WHY_IMPLEMENTATION_ADVISOR_MODEL"] = "provider/model";
     const handlers = new Map<string, (event: unknown, context: unknown) => unknown>();
@@ -244,10 +246,11 @@ describe("Implementation Advisor", () => {
         sent.push({ message, options });
       },
     } as never);
+    let idle = false;
     const context = {
       cwd: ".",
       sessionManager: { getBranch: () => [] },
-      isIdle: () => false,
+      isIdle: () => idle,
       ui: { notify() {} },
     };
     advisorMock.mode = "valid";
@@ -266,6 +269,21 @@ describe("Implementation Advisor", () => {
     expect(sent).toHaveLength(1);
     expect(advisorMock.sessionRestored).toBe(true);
     expect(sent[0]).toMatchObject({ options: { triggerTurn: false, deliverAs: "followUp" } });
+    idle = true;
+    await handlers.get("tool_result")?.(
+      {
+        toolName: "write",
+        toolCallId: "write:idle",
+        input: { path: "src/c.ts" },
+        content: [],
+        isError: false,
+      },
+      context,
+    );
+    await handlers.get("agent_settled")?.({}, context);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(sent).toHaveLength(2);
+    expect(sent[1]).toMatchObject({ options: { triggerTurn: false, deliverAs: "nextTurn" } });
     advisorMock.mode = "invalid";
     await handlers.get("tool_result")?.(
       {
@@ -279,13 +297,14 @@ describe("Implementation Advisor", () => {
     );
     await handlers.get("agent_settled")?.({}, context);
     await new Promise((resolve) => setTimeout(resolve, 20));
-    expect(sent).toHaveLength(1);
+    expect(sent).toHaveLength(2);
     expect(entries.at(-1)).toMatchObject({ outcome: "failure", failures: 1 });
     if (previousModel === undefined) delete process.env["BUT_WHY_IMPLEMENTATION_ADVISOR_MODEL"];
     else process.env["BUT_WHY_IMPLEMENTATION_ADVISOR_MODEL"] = previousModel;
   });
 
   it("records three injected failures, disables, and restores disabled state from the ledger", async () => {
+    advisorMock.mode = "valid";
     const previous = process.env["BUT_WHY_IMPLEMENTATION_ADVISOR_MODEL"];
     process.env["BUT_WHY_IMPLEMENTATION_ADVISOR_MODEL"] = "missing/model";
     const handlers = new Map<string, (event: unknown, context: unknown) => unknown>();
@@ -306,11 +325,11 @@ describe("Implementation Advisor", () => {
     for (let index = 1; index <= 3; index += 1) {
       await handlers.get("tool_result")?.(
         {
-          toolName: "write",
-          toolCallId: `write:${index}`,
-          input: { path: "src/a.ts" },
+          toolName: index === 1 ? "read" : "write",
+          toolCallId: `${index === 1 ? "read" : "write"}:${index}`,
+          input: { path: index === 1 ? "README.md" : "src/a.ts" },
           content: [],
-          isError: false,
+          isError: index === 1,
         },
         context,
       );
