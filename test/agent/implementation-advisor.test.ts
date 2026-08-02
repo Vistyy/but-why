@@ -6,6 +6,8 @@ const advisorMock = vi.hoisted(() => ({
   mode: "valid" as "valid" | "invalid",
   sessionRestored: false,
   restoredConversation: false,
+  tools: [] as string[],
+  resourceBoundary: false,
 }));
 vi.mock("@earendil-works/pi-coding-agent", async () => {
   const actual = await vi.importActual<typeof import("@earendil-works/pi-coding-agent")>(
@@ -20,6 +22,18 @@ vi.mock("@earendil-works/pi-coding-agent", async () => {
       }),
     },
     DefaultResourceLoader: class {
+      constructor(options: {
+        noExtensions?: boolean;
+        noSkills?: boolean;
+        noPromptTemplates?: boolean;
+        noThemes?: boolean;
+      }) {
+        advisorMock.resourceBoundary =
+          options.noExtensions === true &&
+          options.noSkills === true &&
+          options.noPromptTemplates === true &&
+          options.noThemes === true;
+      }
       async reload(): Promise<void> {}
     },
     SessionManager: {
@@ -30,9 +44,11 @@ vi.mock("@earendil-works/pi-coding-agent", async () => {
     },
     createAgentSession: async (options: {
       customTools: Array<{ execute: (...args: never[]) => Promise<unknown> }>;
+      tools: string[];
       sessionManager?: { restoredConversation?: boolean };
     }) => {
       advisorMock.restoredConversation = options.sessionManager?.restoredConversation === true;
+      advisorMock.tools = options.tools;
       return {
         session: {
           async prompt(prompt: string): Promise<void> {
@@ -289,6 +305,8 @@ describe("Implementation Advisor", () => {
     expect(sent).toHaveLength(1);
     expect(advisorMock.sessionRestored).toBe(true);
     expect(advisorMock.restoredConversation).toBe(true);
+    expect(advisorMock.tools).toEqual(["read", "grep", "find", "ls", "implementation_advice"]);
+    expect(advisorMock.resourceBoundary).toBe(true);
     expect(sent[0]).toMatchObject({ options: { triggerTurn: false, deliverAs: "followUp" } });
     idle = true;
     await handlers.get("tool_result")?.(

@@ -40,11 +40,11 @@
     "@effect/platform-node": "0.105.0",
     "@effect/sql": "0.50.0",
     "@toon-format/toon": "^2.3.0",
+    "@earendil-works/pi-coding-agent": "0.82.1",
     "effect": "3.20.0",
     "typebox": "1.1.38"
   },
   "devDependencies": {
-    "@earendil-works/pi-coding-agent": "0.82.1",
     "@ast-grep/cli": "^0.44.1",
     "@biomejs/biome": "^2.2.0",
     "@effect/vitest": "0.28.0",
