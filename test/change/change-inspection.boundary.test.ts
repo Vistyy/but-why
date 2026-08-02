@@ -487,11 +487,19 @@ describe("Change inspection CLI", () => {
     Effect.gen(function* () {
       const root = yield* initializedRepoCopy();
       const change = yield* createChangeFixture(root, "refs/heads/decisions", firstNow);
-      writeFileSync(join(root, "decision.md"), "Use an append-only record for material choices.\n");
-
       const added = yield* runByInProcessEffect(
         root,
-        ["--json", "change", "decision", "add", change.id, "--file", "decision.md"],
+        [
+          "--json",
+          "change",
+          "decision",
+          "add",
+          "--choice",
+          "Use an append-only record",
+          "--rationale",
+          "Keep material choices separate from rationale.",
+          change.id,
+        ],
         commandNow,
       );
       const listed = yield* runByInProcessEffect(root, [
@@ -511,7 +519,8 @@ describe("Change inspection CLI", () => {
           {
             changeId: change.id,
             sequence: 1,
-            content: "Use an append-only record for material choices.\n",
+            choice: "Use an append-only record",
+            rationale: "Keep material choices separate from rationale.",
           },
         ],
       });

@@ -733,6 +733,8 @@ describe("repository SQL storage", () => {
         yield* repository.operation("install legacy publication facts", (sql) =>
           Effect.gen(function* () {
             yield* sql`UPDATE changes SET publication_candidate_id = ${captured.candidateId}, publication_validation_run_id = 'legacy-run', publication_owner = 'acme', publication_repo = 'repo', publication_base_branch = 'main', publication_remote_name = 'origin', publication_head_branch = 'legacy', publication_expected_head_sha = 'head-legacy', publication_pr_number = 7, publication_pr_url = 'https://github.test/pull/7' WHERE id = ${captured.changeId}`;
+            yield* sql`DROP TABLE candidate_publications`;
+            yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id IN (11, 12)`;
           }),
         );
         yield* Effect.scoped(
