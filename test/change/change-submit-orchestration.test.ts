@@ -189,7 +189,16 @@ describe("Change Submit orchestration", () => {
       const publishedCandidates: string[] = [];
       const submit = openChangeSubmit(
         dependencies({
-          change: readyChange(),
+          change: readyChange({
+            publication: {
+              candidateId: "candidate-0",
+              validationRunId: "run-0",
+              target: { owner: "acme", repo: "repo", baseBranch: "main", remoteName: "origin" },
+              headBranch: "change-1",
+              expectedHeadSha: "old-head",
+              pullRequest: null,
+            },
+          }),
           captureResults: [
             candidate,
             { ...candidate, candidateId: "candidate-2", headSha: "head-2" },
