@@ -734,7 +734,7 @@ describe("repository SQL storage", () => {
           Effect.gen(function* () {
             yield* sql`UPDATE changes SET publication_candidate_id = ${captured.candidateId}, publication_validation_run_id = 'legacy-run', publication_owner = 'acme', publication_repo = 'repo', publication_base_branch = 'main', publication_remote_name = 'origin', publication_head_branch = 'legacy', publication_expected_head_sha = 'head-legacy', publication_pr_number = 7, publication_pr_url = 'https://github.test/pull/7' WHERE id = ${captured.changeId}`;
             yield* sql`DROP TABLE candidate_publications`;
-            yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id = 11`;
+            yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id IN (11, 12)`;
           }),
         );
         yield* Effect.scoped(
@@ -964,6 +964,7 @@ describe("repository SQL storage", () => {
           { migration_id: 9, name: "active_validation_runs" },
           { migration_id: 10, name: "validation_workspace_paths" },
           { migration_id: 11, name: "candidate_publications" },
+          { migration_id: 12, name: "structured_implementation_decisions" },
         ]);
         expect(identities).toEqual([{ common_directory: repositorySql.commonDirectory }]);
         expect(candidateColumns.map(({ name }) => name)).toEqual([
@@ -1197,8 +1198,8 @@ describe("repository SQL storage", () => {
         );
 
         return Effect.gen(function* () {
-          expect(yield* readMigrationCount).toBe(11);
-          expect(yield* readMigrationCount).toBe(11);
+          expect(yield* readMigrationCount).toBe(12);
+          expect(yield* readMigrationCount).toBe(12);
         });
       },
       (directory) => Effect.sync(() => rmSync(directory, { recursive: true, force: true })),

@@ -3,8 +3,18 @@ export type ImplementationDecision = {
   readonly changeId: string;
   readonly sequence: number;
   readonly recordedAt: string;
-  readonly content: string;
+  readonly choice?: string;
+  readonly rationale?: string;
+  /** Present only when loading a pre-structured decision. */
+  readonly content?: string;
 };
+
+const escapeHtml = (value: string): string =>
+  value.replace(
+    /[&<>"']/gu,
+    (character) =>
+      ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '\"': "&quot;", "'": "&#39;" })[character]!,
+  );
 
 export const implementationDecisionMarkdown = (
   decisions: readonly ImplementationDecision[],
@@ -12,8 +22,9 @@ export const implementationDecisionMarkdown = (
   decisions.length === 0
     ? "_No Implementation Decisions recorded._"
     : decisions
-        .map(
-          (decision) =>
-            `### Decision ${decision.sequence}\n\n${decision.content}\n\n<!-- ${decision.id} recorded ${decision.recordedAt} -->`,
+        .map((decision) =>
+          decision.content !== undefined
+            ? `### Decision ${decision.sequence}\n\n${decision.content}`
+            : `<details>\n<summary>${escapeHtml(decision.choice ?? "")}</summary>\n\n${escapeHtml(decision.rationale ?? "")}\n\n</details>`,
         )
         .join("\n\n");
