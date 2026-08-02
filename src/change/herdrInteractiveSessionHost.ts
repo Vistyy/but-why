@@ -1,4 +1,6 @@
 import { statSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
 import { executeHostCommand } from "../command/hostCommand.js";
 
