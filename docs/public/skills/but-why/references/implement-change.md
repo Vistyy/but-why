@@ -33,7 +33,7 @@ Do not require a durable automated test unless accepted verification requirement
 Record each material Implementation Decision when it is made with `by change decision add <change-id> --choice "<selected approach>" --rationale "<reason>"`.
 A material decision affects observable behavior, an interface, stored data, failure handling, or a meaningful trade-off.
 Do not record routine coding choices.
-Implementation Decisions explain rationale only.
+Implementation Decisions record the selected Choice and explain its Rationale.
 They cannot amend Acceptance Context or justify a Candidate that does not satisfy approved intent.
 Continue through recoverable problems and local implementation choices.
 Raise an Implementation Blocker only when accepted implementation cannot safely continue without external authority or action.

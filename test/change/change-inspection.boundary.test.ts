@@ -568,9 +568,31 @@ describe("Change inspection CLI", () => {
         "A reason",
       ]);
       expect(missing.status).toBeGreaterThan(0);
-      expect(empty.stdout).toContain("empty_choice");
-      expect(emptyRationale.stdout).toContain("empty_rationale");
-      expect(multiline.stdout).toContain("multiline_choice");
+      expect(JSON.parse(missing.stdout)).toMatchObject({
+        error: { code: "invalid_usage" },
+        help: expect.any(Array),
+      });
+      expect(JSON.parse(empty.stdout)).toMatchObject({
+        error: {
+          code: "empty_choice",
+          message: "Implementation Decision Choice is required and must not be empty.",
+        },
+        help: ["Provide --choice <one-line approach> and --rationale <reason>."],
+      });
+      expect(JSON.parse(emptyRationale.stdout)).toMatchObject({
+        error: {
+          code: "empty_rationale",
+          message: "Implementation Decision Rationale is required and must not be empty.",
+        },
+        help: ["Provide --choice <one-line approach> and --rationale <reason>."],
+      });
+      expect(JSON.parse(multiline.stdout)).toMatchObject({
+        error: {
+          code: "multiline_choice",
+          message: "Implementation Decision Choice must be one line.",
+        },
+        help: ["Provide --choice <one-line approach> and --rationale <reason>."],
+      });
       expect(help.status).toBe(0);
       expect(help.stdout).toContain("--choice");
       expect(help.stdout).toContain("--rationale");
