@@ -3,11 +3,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const advisorMock = vi.hoisted(() => ({
   promptCalls: [] as string[],
   firstPromptStarted: false,
+  holdFirstPrompt: false,
+  secondPromptNoNote: false,
   releaseFirstPrompt: undefined as (() => void) | undefined,
-  mode: "note" as "note" | "no_note" | "failure",
+  mode: "note" as "note" | "no_note" | "failure" | "malformed",
   appendEntries: [] as unknown[],
   notifications: [] as string[],
   messages: [] as unknown[],
+  deliveryOptions: [] as unknown[],
+  sendMessageFailure: false,
   createCalls: 0,
   toolValues: [] as unknown[],
   nestedEventListener: undefined as ((event: unknown) => void) | undefined,
@@ -48,7 +52,7 @@ vi.mock("@earendil-works/pi-coding-agent", async () => {
           },
           async prompt(prompt: string): Promise<void> {
             advisorMock.promptCalls.push(prompt);
-            if (advisorMock.promptCalls.length === 1) {
+            if (advisorMock.holdFirstPrompt && advisorMock.promptCalls.length === 1) {
               advisorMock.firstPromptStarted = true;
               await new Promise<void>((resolve) => {
                 advisorMock.releaseFirstPrompt = resolve;
@@ -77,18 +81,21 @@ vi.mock("@earendil-works/pi-coding-agent", async () => {
               isError: false,
             });
             const toolValue =
-              advisorMock.mode === "no_note" || advisorMock.promptCalls.length > 1
-                ? { kind: "no_note", activityBatch }
-                : {
-                    kind: "note",
-                    ruleId: "external-mutation.reconcile-uncertain-outcome",
-                    responseClass: "follow",
-                    activityBatch,
-                    evidence: [evidenceReference],
-                    problem: "The external result is uncertain.",
-                    consequence: "A retry can duplicate the mutation.",
-                    correction: "Reconcile the authoritative state before retrying.",
-                  };
+              advisorMock.mode === "malformed"
+                ? { kind: "note", activityBatch }
+                : advisorMock.mode === "no_note" ||
+                    (advisorMock.secondPromptNoNote && advisorMock.promptCalls.length > 1)
+                  ? { kind: "no_note", activityBatch }
+                  : {
+                      kind: "note",
+                      ruleId: "external-mutation.reconcile-uncertain-outcome",
+                      responseClass: "follow",
+                      activityBatch,
+                      evidence: [evidenceReference],
+                      problem: "The external result is uncertain.",
+                      consequence: "A retry can duplicate the mutation.",
+                      correction: "Reconcile the authoritative state before retrying.",
+                    };
             advisorMock.toolValues.push(toolValue);
             await tool.execute("advice", toolValue, undefined, undefined, { abort() {} } as never);
           },
@@ -132,11 +139,15 @@ describe("Implementation Advisor extension event seam", () => {
   beforeEach(() => {
     advisorMock.promptCalls.length = 0;
     advisorMock.firstPromptStarted = false;
+    advisorMock.holdFirstPrompt = false;
+    advisorMock.secondPromptNoNote = false;
     advisorMock.releaseFirstPrompt = undefined;
     advisorMock.mode = "note";
     advisorMock.appendEntries.length = 0;
     advisorMock.notifications.length = 0;
     advisorMock.messages.length = 0;
+    advisorMock.deliveryOptions.length = 0;
+    advisorMock.sendMessageFailure = false;
     advisorMock.createCalls = 0;
     advisorMock.toolValues.length = 0;
     advisorMock.nestedEventListener = undefined;
@@ -179,6 +190,8 @@ describe("Implementation Advisor extension event seam", () => {
       acceptanceContext: null,
       implementationDecisions: [],
     });
+    advisorMock.holdFirstPrompt = true;
+    advisorMock.secondPromptNoNote = true;
     const handlers = new Map<string, Handler>();
     implementationAdvisor({
       on(event: string, handler: Handler) {
@@ -187,8 +200,10 @@ describe("Implementation Advisor extension event seam", () => {
       appendEntry(_type: string, data: unknown) {
         advisorMock.appendEntries.push(data);
       },
-      sendMessage(message: unknown) {
+      sendMessage(message: unknown, options: unknown) {
+        if (advisorMock.sendMessageFailure) throw new Error("delivery unavailable");
         advisorMock.messages.push(message);
+        advisorMock.deliveryOptions.push(options);
       },
     } as never);
     const context = {
@@ -218,6 +233,224 @@ describe("Implementation Advisor extension event seam", () => {
     expect(advisorMock.messages[0]).toMatchObject({
       details: { activityBatch: "turn:1" },
     });
+    expect(advisorMock.deliveryOptions[0]).toEqual({
+      triggerTurn: false,
+      deliverAs: "followUp",
+    });
+  });
+
+  it("delivers idle advice on the next turn without triggering a model turn", async () => {
+    process.env["BUT_WHY_IMPLEMENTATION_ADVISOR_MODEL"] = "provider/model";
+    process.env["BUT_WHY_IMPLEMENTATION_ADVISOR_CONTEXT"] = JSON.stringify({
+      changeId: "change-idle",
+      acceptanceContext: null,
+      implementationDecisions: [],
+    });
+    const handlers = new Map<string, Handler>();
+    implementationAdvisor({
+      on(event: string, handler: Handler) {
+        handlers.set(event, handler);
+      },
+      appendEntry(_type: string, data: unknown) {
+        advisorMock.appendEntries.push(data);
+      },
+      sendMessage(message: unknown, options: unknown) {
+        advisorMock.messages.push(message);
+        advisorMock.deliveryOptions.push(options);
+      },
+    } as never);
+    const context = {
+      cwd: process.cwd(),
+      sessionManager: { getSessionId: () => "idle-session", getBranch: () => [] },
+      isIdle: () => true,
+      ui: {
+        notify(message: string) {
+          advisorMock.notifications.push(message);
+        },
+      },
+    } as never;
+    handlers.get("session_start")?.({} as never, context);
+    handlers.get("turn_end")?.(turn(1), context);
+    await waitFor(() => advisorMock.messages.length === 1);
+    expect(advisorMock.deliveryOptions[0]).toEqual({
+      triggerTurn: false,
+      deliverAs: "nextTurn",
+    });
+  });
+
+  it("fails open for malformed output, persistence failures, and delivery failures", async () => {
+    process.env["BUT_WHY_IMPLEMENTATION_ADVISOR_MODEL"] = "provider/model";
+    process.env["BUT_WHY_IMPLEMENTATION_ADVISOR_CONTEXT"] = JSON.stringify({
+      changeId: "change-failures",
+      acceptanceContext: null,
+      implementationDecisions: [],
+    });
+    advisorMock.mode = "malformed";
+    const malformedHandlers = new Map<string, Handler>();
+    implementationAdvisor({
+      on(event: string, handler: Handler) {
+        malformedHandlers.set(event, handler);
+      },
+      appendEntry(_type: string, data: unknown) {
+        advisorMock.appendEntries.push(data);
+      },
+      sendMessage(message: unknown, options: unknown) {
+        advisorMock.messages.push(message);
+        advisorMock.deliveryOptions.push(options);
+      },
+    } as never);
+    const context = {
+      cwd: process.cwd(),
+      sessionManager: { getSessionId: () => "failure-session", getBranch: () => [] },
+      isIdle: () => true,
+      ui: {
+        notify(message: string) {
+          advisorMock.notifications.push(message);
+        },
+      },
+    } as never;
+    malformedHandlers.get("turn_end")?.(turn(1), context);
+    await waitFor(() => advisorMock.notifications.length === 1);
+    expect(advisorMock.messages).toHaveLength(0);
+
+    advisorMock.mode = "note";
+    const persistenceHandlers = new Map<string, Handler>();
+    implementationAdvisor({
+      on(event: string, handler: Handler) {
+        persistenceHandlers.set(event, handler);
+      },
+      appendEntry() {
+        throw new Error("persistence unavailable");
+      },
+      sendMessage(message: unknown, options: unknown) {
+        advisorMock.messages.push(message);
+        advisorMock.deliveryOptions.push(options);
+      },
+    } as never);
+    persistenceHandlers.get("turn_end")?.(turn(2), context);
+    await waitFor(() => advisorMock.messages.length === 1);
+    expect(advisorMock.messages[0]).toMatchObject({ details: { activityBatch: "turn:2" } });
+
+    advisorMock.sendMessageFailure = true;
+    const deliveryHandlers = new Map<string, Handler>();
+    implementationAdvisor({
+      on(event: string, handler: Handler) {
+        deliveryHandlers.set(event, handler);
+      },
+      appendEntry(_type: string, data: unknown) {
+        advisorMock.appendEntries.push(data);
+      },
+      sendMessage(message: unknown, options: unknown) {
+        if (advisorMock.sendMessageFailure) throw new Error("delivery unavailable");
+        advisorMock.messages.push(message);
+        advisorMock.deliveryOptions.push(options);
+      },
+    } as never);
+    deliveryHandlers.get("turn_end")?.(turn(3), context);
+    await waitFor(() => advisorMock.notifications.length === 2);
+    expect(advisorMock.messages).toHaveLength(1);
+  });
+
+  it("disables after three failures and restores the disabled state", async () => {
+    process.env["BUT_WHY_IMPLEMENTATION_ADVISOR_MODEL"] = "provider/model";
+    process.env["BUT_WHY_IMPLEMENTATION_ADVISOR_CONTEXT"] = JSON.stringify({
+      changeId: "change-disabled",
+      acceptanceContext: null,
+      implementationDecisions: [],
+    });
+    advisorMock.mode = "failure";
+    const entries: unknown[] = [];
+    const handlers = new Map<string, Handler>();
+    implementationAdvisor({
+      on(event: string, handler: Handler) {
+        handlers.set(event, handler);
+      },
+      appendEntry(_type: string, data: unknown) {
+        entries.push(data);
+      },
+    } as never);
+    const context = {
+      cwd: process.cwd(),
+      sessionManager: { getSessionId: () => "disabled-session", getBranch: () => [] },
+      isIdle: () => true,
+      ui: {
+        notify(message: string) {
+          advisorMock.notifications.push(message);
+        },
+      },
+    } as never;
+    for (let turnIndex = 1; turnIndex <= 3; turnIndex += 1) {
+      handlers.get("turn_end")?.(turn(turnIndex), context);
+      await waitFor(() => entries.length === turnIndex);
+    }
+    expect(advisorMock.notifications).toHaveLength(1);
+
+    const restoredEntries: unknown[] = [];
+    const restoredHandlers = new Map<string, Handler>();
+    implementationAdvisor({
+      on(event: string, handler: Handler) {
+        restoredHandlers.set(event, handler);
+      },
+      appendEntry(_type: string, data: unknown) {
+        restoredEntries.push(data);
+      },
+    } as never);
+    const restoredContext = {
+      cwd: process.cwd(),
+      sessionManager: {
+        getSessionId: () => "disabled-session",
+        getBranch: () => [
+          {
+            type: "custom",
+            customType: "but-why.implementation-advisor.state",
+            data: { fingerprints: [], failures: 3, disabled: true },
+          },
+        ],
+      },
+      isIdle: () => true,
+      ui: { notify() {} },
+    } as never;
+    restoredHandlers.get("session_start")?.({} as never, restoredContext);
+    restoredHandlers.get("turn_end")?.(turn(4), restoredContext);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(advisorMock.createCalls).toBe(0);
+    expect(restoredEntries).toHaveLength(0);
+  });
+
+  it("resets consecutive failures after a successful no-note evaluation", async () => {
+    process.env["BUT_WHY_IMPLEMENTATION_ADVISOR_MODEL"] = "provider/model";
+    process.env["BUT_WHY_IMPLEMENTATION_ADVISOR_CONTEXT"] = JSON.stringify({
+      changeId: "change-reset",
+      acceptanceContext: null,
+      implementationDecisions: [],
+    });
+    advisorMock.mode = "failure";
+    const entries: unknown[] = [];
+    const handlers = new Map<string, Handler>();
+    implementationAdvisor({
+      on(event: string, handler: Handler) {
+        handlers.set(event, handler);
+      },
+      appendEntry(_type: string, data: unknown) {
+        entries.push(data);
+      },
+    } as never);
+    const context = {
+      cwd: process.cwd(),
+      sessionManager: { getSessionId: () => "reset-session", getBranch: () => [] },
+      isIdle: () => true,
+      ui: {
+        notify(message: string) {
+          advisorMock.notifications.push(message);
+        },
+      },
+    } as never;
+    handlers.get("turn_end")?.(turn(1), context);
+    await waitFor(() => advisorMock.notifications.length === 1);
+    advisorMock.mode = "no_note";
+    handlers.get("turn_end")?.(turn(2), context);
+    await waitFor(() => entries.some((entry) => (entry as { failures?: number }).failures === 0));
+    expect(advisorMock.notifications).toHaveLength(1);
   });
 
   it("fails open across model failures, persistence failures, and restoration failures", async () => {
