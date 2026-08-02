@@ -710,7 +710,12 @@ export default function continueChange(pi: ExtensionAPI): void {
       const decision = decideContinuation(observed.snapshot, observed.git);
       if (decision.kind === "idle") {
         pendingThresholdCompaction = false;
-        if (explicit && observed.snapshot.change.state === "open" && observed.snapshot.publication?.pullRequest !== null) {
+        if (
+          explicit &&
+          observed.snapshot.change.state === "open" &&
+          observed.snapshot.publication?.pullRequest !== null &&
+          observed.snapshot.publication?.pullRequest !== undefined
+        ) {
           showWatcher(ctx, { kind: "watching" });
           pi.sendUserMessage(
             `The Change ${id} has a Candidate ready for human review. Resume revision work in the Managed Worktree under the operator's direct instruction. Record new Implementation Decisions when needed, commit the revised Candidate, and run ${butWhyCommand(commandPrefix, "change", "submit", id)} before publication.`,
