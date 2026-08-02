@@ -686,11 +686,26 @@ describe("repository SQL storage", () => {
               repositoryCommonDirectory: input.commonDirectory,
               branchRef: "refs/heads/legacy",
               baseRef: "refs/remotes/origin/main",
+              expectedChangeId: captured.changeId,
               changeBaseSha: "base-next",
               headSha: "head-next",
               now: "2026-07-25T15:31:00.000Z",
             });
-            if (!next.ok) return;
+            expect(next.ok).toBe(true);
+            if (!next.ok) throw new Error(next.code);
+            yield* repository.operation(
+              "prepare revised publication after upgrade",
+              (sql) => sql`
+                UPDATE changes
+                SET publication_candidate_id = ${next.candidateId},
+                    publication_validation_run_id = 'next-run',
+                    publication_owner = 'acme', publication_repo = 'repo',
+                    publication_base_branch = 'main', publication_remote_name = 'origin',
+                    publication_head_branch = 'legacy', publication_expected_head_sha = 'head-next',
+                    publication_pr_number = NULL, publication_pr_url = NULL
+                WHERE id = ${captured.changeId}
+              `,
+            );
             const nextPublication = {
               changeId: captured.changeId,
               candidateId: next.candidateId,

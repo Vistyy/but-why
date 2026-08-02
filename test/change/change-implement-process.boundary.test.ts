@@ -142,55 +142,105 @@ exit 1
     });
   }, 30_000);
 
-  it.effect("records decisions and reads publication history through the executable", () =>
-    Effect.gen(function* () {
-      const root = createInitializedRepo();
-      const changeId = randomUUID();
-      yield* withTestRepository(
-        root,
-        Effect.gen(function* () {
-          const repository = yield* RepositorySql;
-          yield* repository.operation(
-            "create process Change fixture",
-            (sql) => sql`
+  it.effect(
+    "records decisions and reads publication history through the executable",
+    () =>
+      Effect.gen(function* () {
+        const root = createInitializedRepo();
+        const changeId = randomUUID();
+        const emptyChangeId = randomUUID();
+        yield* withTestRepository(
+          root,
+          Effect.gen(function* () {
+            const repository = yield* RepositorySql;
+            yield* repository.operation(
+              "create process Change fixture",
+              (sql) => sql`
               INSERT INTO changes (
                 id, repository_common_directory, branch_ref, task_id, state,
                 close_reason, created_at, updated_at, closed_at
+              ) VALUES
+                (${changeId}, ${join(root, ".git")}, 'refs/heads/process', NULL, 'open', NULL, '2026-07-30T10:00:00.000Z', '2026-07-30T10:00:00.000Z', NULL),
+                (${emptyChangeId}, ${join(root, ".git")}, 'refs/heads/empty', NULL, 'open', NULL, '2026-07-30T10:00:00.000Z', '2026-07-30T10:00:00.000Z', NULL)
+            `,
+            );
+            yield* repository.operation(
+              "create process publication fixture",
+              (sql) => sql`
+              INSERT INTO candidate_publications (
+                change_id, candidate_id, validation_run_id, change_base_sha, head_sha,
+                publication_owner, publication_repo, publication_base_branch,
+                publication_remote_name, publication_head_branch, pull_request_number,
+                pull_request_url, published_at
               ) VALUES (
-                ${changeId}, ${join(root, ".git")}, 'refs/heads/process', NULL, 'open',
-                NULL, '2026-07-30T10:00:00.000Z', '2026-07-30T10:00:00.000Z', NULL
+                ${changeId}, 'candidate-process', 'run-process', 'base-process', 'head-process',
+                'acme', 'repo', 'main', 'origin', 'process', 42,
+                'https://github.test/pull/42', '2026-07-30T10:01:00.000Z'
               )
             `,
-          );
-        }),
-      );
-      writeFileSync(join(root, "decision.md"), "Use the process boundary.\\n");
-      const added = runBuiltByWithEnv(
-        root,
-        {},
-        "--json",
-        "change",
-        "decision",
-        "add",
-        changeId,
-        "--file",
-        "decision.md",
-      );
-      expect(added.status).toBe(0);
-      const publications = runBuiltByWithEnv(
-        root,
-        {},
-        "--json",
-        "change",
-        "publications",
-        changeId,
-      );
-      expect(publications.status).toBe(0);
-      expect(JSON.parse(publications.stdout)).toMatchObject({
-        changeId,
-        count: 0,
-        publications: [],
-      });
-    }),
+            );
+          }),
+        );
+        writeFileSync(join(root, "decision.md"), "Use the process boundary.\\n");
+        const added = runBuiltByWithEnv(
+          root,
+          {},
+          "--json",
+          "change",
+          "decision",
+          "add",
+          changeId,
+          "--file",
+          "decision.md",
+        );
+        expect(added.status).toBe(0);
+        const publications = runBuiltByWithEnv(
+          root,
+          {},
+          "--json",
+          "change",
+          "publications",
+          changeId,
+        );
+        expect(publications.status).toBe(0);
+        expect(JSON.parse(publications.stdout)).toMatchObject({
+          changeId,
+          count: 1,
+          publications: [{ headSha: "head-process" }],
+        });
+        const toon = runBuiltByWithEnv(root, {}, "change", "publications", changeId);
+        expect(toon.status).toBe(0);
+        expect(toon.stdout).toContain("head-process");
+        const emptyJson = runBuiltByWithEnv(
+          root,
+          {},
+          "--json",
+          "change",
+          "publications",
+          emptyChangeId,
+        );
+        expect(emptyJson.status).toBe(0);
+        expect(JSON.parse(emptyJson.stdout)).toMatchObject({ count: 0, publications: [] });
+        const emptyToon = runBuiltByWithEnv(root, {}, "change", "publications", emptyChangeId);
+        expect(emptyToon.status).toBe(0);
+        expect(emptyToon.stdout).toContain("count: 0");
+        const missingId = randomUUID();
+        const missingJson = runBuiltByWithEnv(
+          root,
+          {},
+          "--json",
+          "change",
+          "publications",
+          missingId,
+        );
+        expect(missingJson.status).toBe(1);
+        expect(JSON.parse(missingJson.stdout)).toMatchObject({
+          error: { code: "change_not_found" },
+        });
+        const missingToon = runBuiltByWithEnv(root, {}, "change", "publications", missingId);
+        expect(missingToon.status).toBe(1);
+        expect(missingToon.stdout).toContain("change_not_found");
+      }),
+    30_000,
   );
 });
