@@ -59,6 +59,7 @@ let previousObservationKey;
 let previousProgressKey;
 let lastPressureAt = 0;
 let traceBytes = 0;
+let preLaunchFailure;
 
 for (const [signal, exitCode] of [
   ["SIGINT", 130],
@@ -81,7 +82,31 @@ try {
     verifyChange(preLaunchChange, args.changeId, args.worktreePath);
   expectedSessionName = sessionNameForChange(preLaunchChange, args.changeId);
   if (!preLaunchVerified || expectedSessionName === undefined) {
-    throw new Error("Cannot verify the Change and its owned Interactive Session before handoff.");
+    const commandResult = preLaunchChange ?? {
+      error: {
+        code: "invalid_command_output",
+        message: "Change Show did not return valid JSON.",
+      },
+    };
+    preLaunchFailure = {
+      changeId: args.changeId,
+      worktreePath: args.worktreePath,
+      status: "prelaunch_verification_failed",
+      elapsedMs: elapsed(),
+      changeVerified: false,
+      tracePath,
+      preLaunch: {
+        exitCode: preLaunchInspection.code,
+        timedOut: preLaunchInspection.timedOut,
+        result: commandResult,
+      },
+      error:
+        commandResult.error ?? {
+          code: "change_verification_failed",
+          message: "Change Show did not verify the selected Change and Managed Worktree.",
+        },
+    };
+    throw new Error("Pre-launch Change inspection did not verify handoff ownership.");
   }
 
   const handoff = await readStdin();
@@ -199,21 +224,25 @@ try {
   preserveTrace = true;
   observerRunning = false;
   for (const activeChild of activeChildren) killProcessTree(activeChild);
-  if (latestObservation.paneId) {
-    await captureFinalDiagnostics(latestObservation.paneId).catch(() => {});
+  if (preLaunchFailure !== undefined) {
+    exitWith(preLaunchFailure, 1);
+  } else {
+    if (latestObservation.paneId) {
+      await captureFinalDiagnostics(latestObservation.paneId).catch(() => {});
+    }
+    await appendTrace("observer_failed", { message: errorMessage(error) }).catch(() => {});
+    exitWith(
+      {
+        changeId: args.changeId,
+        worktreePath: args.worktreePath,
+        status: "observer_failed",
+        changeVerified: false,
+        tracePath,
+        error: { code: "observer_failed", message: errorMessage(error) },
+      },
+      1,
+    );
   }
-  await appendTrace("observer_failed", { message: errorMessage(error) }).catch(() => {});
-  exitWith(
-    {
-      changeId: args.changeId,
-      worktreePath: args.worktreePath,
-      status: "observer_failed",
-      changeVerified: false,
-      tracePath,
-      error: { code: "observer_failed", message: errorMessage(error) },
-    },
-    1,
-  );
 } finally {
   observerRunning = false;
   await rm(handoffDirectory, { recursive: true, force: true });

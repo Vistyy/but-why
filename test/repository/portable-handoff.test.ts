@@ -12,6 +12,12 @@ type HandoffResult = {
   readonly worktreePath: string;
   readonly status: string;
   readonly changeVerified: boolean;
+  readonly error?: { readonly code: string; readonly message: string };
+  readonly preLaunch?: {
+    readonly exitCode: number;
+    readonly timedOut: boolean;
+    readonly result: unknown;
+  };
 };
 
 type HandoffRoute = "task-backed" | "taskless-existing" | "taskless-new";
@@ -25,6 +31,8 @@ type HandoffOptions = {
   readonly initialWorktreeMismatch?: boolean;
   readonly finalChangeId?: string;
   readonly finalWorktreeMismatch?: boolean;
+  readonly initialCommandResult?: string;
+  readonly initialCommandExitCode?: string;
 };
 
 type HandoffExecution = {
@@ -66,6 +74,7 @@ if [ "$1" = "by" ] && [ "$2" = "--json" ] && [ "$3" = "change" ] && [ "$4" = "sh
   elif [ ! -e "$HANDOFF_SHOW_COUNT" ]; then
     : > "$HANDOFF_SHOW_COUNT"
     printf '%s\\n' "$HANDOFF_INITIAL_SHOW"
+    exit "$HANDOFF_INITIAL_SHOW_EXIT"
   else
     printf '%s\\n' "$HANDOFF_FINAL_SHOW"
   fi
@@ -143,10 +152,13 @@ exit 1
       options.implementation ??
       JSON.stringify({ changeId, worktreePath, host: "herdr", status: "started" }),
     HANDOFF_PRELAUNCH_SHOW: showResult(changeId, worktreePath),
-    HANDOFF_INITIAL_SHOW: showResult(
-      options.initialChangeId ?? changeId,
-      options.initialWorktreeMismatch ? mismatchedWorktreePath : worktreePath,
-    ),
+    HANDOFF_INITIAL_SHOW:
+      options.initialCommandResult ??
+      showResult(
+        options.initialChangeId ?? changeId,
+        options.initialWorktreeMismatch ? mismatchedWorktreePath : worktreePath,
+      ),
+    HANDOFF_INITIAL_SHOW_EXIT: options.initialCommandExitCode ?? "0",
     HANDOFF_FINAL_SHOW: showResult(
       options.finalChangeId ?? changeId,
       options.finalWorktreeMismatch ? mismatchedWorktreePath : worktreePath,
@@ -235,6 +247,25 @@ describe("portable handoff observer", () => {
 
     expect(handoff.status).toBe(0);
     expect(handoff.result).toMatchObject({ status: "late_active", changeVerified: true });
+  });
+
+  it("preserves a pre-launch Change Show failure", () => {
+    const commandResult = {
+      error: { code: "change_not_found", message: "Change was not found." },
+    };
+    const handoff = runHandoff("missing-change", {
+      route: "taskless-existing",
+      initialCommandResult: JSON.stringify(commandResult),
+      initialCommandExitCode: "1",
+    });
+
+    expect(handoff.status).toBe(1);
+    expect(handoff.result).toMatchObject({
+      status: "prelaunch_verification_failed",
+      changeVerified: false,
+      error: commandResult.error,
+      preLaunch: { exitCode: 1, timedOut: false, result: commandResult },
+    });
   });
 
   it.each([
