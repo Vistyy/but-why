@@ -1,4 +1,4 @@
-import { cpSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { describe, expect, it } from "vitest";
@@ -23,16 +23,55 @@ type PackageManifest = {
   readonly repository: { readonly type: string; readonly url: string };
 };
 
+const createPackageFixture = (packageRoot: string): void => {
+  cpSync(join(repoRoot, "package.json"), join(packageRoot, "package.json"));
+  cpSync(join(repoRoot, "README.md"), join(packageRoot, "README.md"));
+  cpSync(join(repoRoot, "CHANGELOG.md"), join(packageRoot, "CHANGELOG.md"));
+  cpSync(join(repoRoot, "extensions"), join(packageRoot, "extensions"), { recursive: true });
+  mkdirSync(join(packageRoot, "docs"));
+  cpSync(join(repoRoot, "docs", "public"), join(packageRoot, "docs", "public"), {
+    recursive: true,
+  });
+};
+
 describe("CLI package contents", () => {
-  it("loads continuation from the emitted package layout", async () => {
+  it("loads continuation from the installed package", async () => {
     const packageRoot = createTestWorkspace();
-    cpSync(join(repoRoot, "dist"), join(packageRoot, "dist"), { recursive: true });
-    cpSync(join(repoRoot, "extensions"), join(packageRoot, "extensions"), {
-      recursive: true,
+    createPackageFixture(packageRoot);
+    cpSync(join(repoRoot, "src"), join(packageRoot, "src"), { recursive: true });
+    cpSync(join(repoRoot, "tsconfig.json"), join(packageRoot, "tsconfig.json"));
+    cpSync(join(repoRoot, "tsconfig.build.json"), join(packageRoot, "tsconfig.build.json"));
+    symlinkSync(join(repoRoot, "node_modules"), join(packageRoot, "node_modules"));
+    const buildResult = runTestProcess("pnpm", ["run", "build"], { cwd: packageRoot });
+    expect(buildResult.error).toBeUndefined();
+    expect(buildResult.status).toBe(0);
+    const packed = runTestProcess("npm", ["pack", "--ignore-scripts", "--json"], {
+      cwd: packageRoot,
     });
-    const extension = join(packageRoot, "extensions/continue-change.ts");
+    expect(packed.error).toBeUndefined();
+    expect(packed.status).toBe(0);
+    const [{ filename }] = JSON.parse(packed.stdout) as readonly [{ filename: string }];
+    const installRoot = join(packageRoot, "installed");
+    const installed = runTestProcess(
+      "npm",
+      [
+        "install",
+        "--ignore-scripts",
+        "--no-audit",
+        "--no-fund",
+        "--prefix",
+        installRoot,
+        join(packageRoot, filename),
+      ],
+      { cwd: packageRoot },
+    );
+    expect(installed.error).toBeUndefined();
+    expect(installed.status).toBe(0);
+
+    const installedPackage = join(installRoot, "node_modules", "but-why");
+    const extension = join(installedPackage, "extensions/continue-change.ts");
     const module = (await import(
-      pathToFileURL(join(packageRoot, "dist/change/herdrInteractiveSessionHost.js")).href
+      pathToFileURL(join(installedPackage, "dist/change/herdrInteractiveSessionHost.js")).href
     )) as typeof import("../../src/change/herdrInteractiveSessionHost.js");
     const commands: string[][] = [];
     const execute = async (args: readonly string[]) => {
@@ -89,25 +128,18 @@ describe("CLI package contents", () => {
       message: expect.stringContaining("Required trusted continuation extension is missing"),
     });
     expect(commands).toEqual([]);
-  });
+  }, 120_000);
 
   it("packs built CLI output and public package metadata only", () => {
     const fixture = createTestWorkspace();
-    cpSync(join(repoRoot, "package.json"), join(fixture, "package.json"));
-    cpSync(join(repoRoot, "README.md"), join(fixture, "README.md"));
-    cpSync(join(repoRoot, "CHANGELOG.md"), join(fixture, "CHANGELOG.md"));
-    cpSync(join(repoRoot, "extensions"), join(fixture, "extensions"), { recursive: true });
-    mkdirSync(join(fixture, "docs"));
-    cpSync(join(repoRoot, "docs", "public"), join(fixture, "docs", "public"), {
-      recursive: true,
-    });
+    createPackageFixture(fixture);
     for (const directory of ["dist", "src", "test", "spikes"]) {
       mkdirSync(join(fixture, directory), { recursive: true });
     }
     writeFileSync(join(fixture, "dist", "main.js"), "#!/usr/bin/env node\n");
-    mkdirSync(join(fixture, "dist", "sqlite"));
-    mkdirSync(join(fixture, "dist", "agent"));
-    mkdirSync(join(fixture, "dist", "acceptanceReview"));
+    mkdirSync(join(fixture, "dist", "sqlite"), { recursive: true });
+    mkdirSync(join(fixture, "dist", "agent"), { recursive: true });
+    mkdirSync(join(fixture, "dist", "acceptanceReview"), { recursive: true });
     writeFileSync(join(fixture, "dist", "sqlite", "repositoryMigrations.js"), "export {};\n");
     writeFileSync(join(fixture, "dist", "agent", "reviewerPrompts.js"), "export {};\n");
     writeFileSync(
