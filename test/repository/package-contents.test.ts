@@ -51,6 +51,7 @@ describe("CLI package contents", () => {
     expect(packed.error).toBeUndefined();
     expect(packed.status).toBe(0);
     const [{ filename }] = JSON.parse(packed.stdout) as readonly [{ filename: string }];
+    rmSync(join(packageRoot, "node_modules"), { recursive: true, force: true });
     const installRoot = join(packageRoot, "installed");
     const installed = runTestProcess(
       "npm",
