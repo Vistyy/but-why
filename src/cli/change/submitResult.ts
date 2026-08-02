@@ -215,6 +215,17 @@ export const submitResult = (result: ChangeSubmitResult, changeId: string): CliR
       ],
     });
   }
+  if (result.code === "current_head_mismatch") {
+    return runtimeError({
+      code: result.code,
+      message: "The Managed Worktree branch no longer matches the expected Candidate.",
+      details: {
+        changeId,
+        ...(result.evidence === undefined ? {} : { evidence: result.evidence }),
+      },
+      help: ["Restore the expected Candidate head, then retry Submit."],
+    });
+  }
   if (result.code === "publication_remote_mismatch") {
     return runtimeError({
       code: result.code,

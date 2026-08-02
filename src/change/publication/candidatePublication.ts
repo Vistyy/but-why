@@ -66,6 +66,11 @@ export type PublishCandidateResult =
         | "publication_remote_mismatch"
         | "publication_state_conflict"
         | "publication_tooling_failed";
+    }
+  | {
+      readonly ok: false;
+      readonly code: "current_head_mismatch";
+      readonly evidence?: import("../ownedPullRequestGateway.js").PublicationFailureEvidence;
     };
 
 type Dependencies = {
@@ -685,7 +690,11 @@ const updateFailure = (
   failure: Exclude<GitHubPullRequestMutationResult, { readonly ok: true }>,
 ): PublicationEffect => {
   if (failure.code === "local_head_mismatch") {
-    return Effect.succeed({ ok: false, code: "current_head_mismatch" });
+    return Effect.succeed({
+      ok: false,
+      code: "current_head_mismatch",
+      ...(failure.evidence === undefined ? {} : { evidence: failure.evidence }),
+    });
   }
   return canRecoverUpdateFailure(failure.code)
     ? recoverUpdatedPullRequest(

@@ -39,6 +39,31 @@ describe("Change Submit validation-policy errors", () => {
     });
   });
 
+  it("serializes local head preflight evidence", () => {
+    const result = submitResult(
+      {
+        ok: false,
+        code: "current_head_mismatch",
+        evidence: {
+          operation: "branch_push",
+          classification: "rejected",
+          exitStatus: 128,
+          stderr: "worktree unavailable",
+        },
+      },
+      "change-1",
+    );
+    expect(result).toMatchObject({
+      exitCode: 1,
+      stdout: {
+        error: {
+          code: "current_head_mismatch",
+          evidence: { operation: "branch_push", exitStatus: 128 },
+        },
+      },
+    });
+  });
+
   it("serializes bounded recovery failures with retry guidance", () => {
     for (const code of [
       "publication_creation_unconfirmed",
