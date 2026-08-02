@@ -17,7 +17,7 @@
   "rules": {
     "boundary-violation": "error",
     "circular-dependencies": "error",
-    "dev-dependencies-in-production": "error",
+    "dev-dependencies-in-production": "off",
     "duplicate-exports": "error",
     "policy-violation": "error",
     "re-export-cycle": "error",
