@@ -2,11 +2,7 @@ import { expect, it } from "@effect/vitest";
 import { decode } from "@toon-format/toon";
 import { describe } from "vitest";
 
-import {
-  createGitRepo,
-  runBuiltByWithEnv,
-  runBuiltByWithInput,
-} from "../support/by-cli.js";
+import { createGitRepo, runBuiltByWithEnv, runBuiltByWithInput } from "../support/by-cli.js";
 import { createTestWorkspace } from "../support/testWorkspace.js";
 
 const expectExactlyOneTrailingLineFeed = (stdout: string): void => {
@@ -128,5 +124,4 @@ describe("by task CLI processes", () => {
       error: { code: "invalid_description_encoding" },
     });
   }, 30_000);
-
 });
