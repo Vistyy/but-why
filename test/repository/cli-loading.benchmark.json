@@ -1,0 +1,37 @@
+{
+  "description": "Comparative cold-start measurements for the production executable and installed package tarball.",
+  "method": {
+    "processesPerCommand": 15,
+    "order": "randomized",
+    "comparison": ["compiledExecutable", "installedPackageTarball"]
+  },
+  "commands": [
+    ["--help"],
+    ["--version"],
+    ["task", "list"],
+    ["change", "list"],
+    ["validation-run", "show", "missing"]
+  ],
+  "medianMilliseconds": {
+    "--help": {
+      "compiledExecutable": 606.438,
+      "installedPackageTarball": 610.236
+    },
+    "--version": {
+      "compiledExecutable": 600.649,
+      "installedPackageTarball": 604.174
+    },
+    "task list": {
+      "compiledExecutable": 660.635,
+      "installedPackageTarball": 664.461
+    },
+    "change list": {
+      "compiledExecutable": 713.764,
+      "installedPackageTarball": 725.289
+    },
+    "validation-run show": {
+      "compiledExecutable": 636.052,
+      "installedPackageTarball": 649.362
+    }
+  }
+}

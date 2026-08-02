@@ -1,5 +1,7 @@
 import { realpathSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
+// fallow-ignore-file unused-export -- dynamically imported by the CLI
+
 import { Effect } from "effect";
 
 import type { CliEnvironment } from "../cli.js";
