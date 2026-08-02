@@ -927,14 +927,7 @@ describe("Change Submit orchestration", () => {
   it.effect("reopens a closed owned pull request before revising the same publication", () =>
     Effect.gen(function* () {
       const events: string[] = [];
-      const publicationResults: PublishCandidateResult[] = [
-        { ok: false, code: "publication_remote_mismatch" },
-        {
-          ok: true,
-          created: false,
-          pullRequest: { number: 42, url: "https://github.test/acme/repo/pull/42" },
-        },
-      ];
+      let remoteHead = "unexpected-head";
       const change = readyChange({
         taskId: publicTaskId("BY-1"),
         acceptanceContext: {
@@ -958,11 +951,16 @@ describe("Change Submit orchestration", () => {
           change,
           reconciliationStatuses: ["closed_unmerged", "open", "open"],
           publication: {
-            publish: () => {
-              events.push("publish");
-              return (
-                publicationResults.shift() ?? { ok: false, code: "publication_tooling_failed" }
-              );
+            publish: (input) => {
+              events.push(`publish:${input.candidateId}`);
+              if (remoteHead !== "revised-head") {
+                return { ok: false, code: "publication_remote_mismatch" };
+              }
+              return {
+                ok: true,
+                created: false,
+                pullRequest: { number: 42, url: "https://github.test/acme/repo/pull/42" },
+              };
             },
           },
           acceptanceContextSupplied: true,
@@ -997,6 +995,7 @@ describe("Change Submit orchestration", () => {
       const rejected = yield* submit
         .submit({ changeId: change.id, now })
         .pipe(Effect.provide(validationLayer));
+      remoteHead = "revised-head";
       const published = yield* submit
         .submit({ changeId: change.id, now })
         .pipe(Effect.provide(validationLayer));
@@ -1009,18 +1008,22 @@ describe("Change Submit orchestration", () => {
         created: false,
         pullRequest: { number: 42 },
       });
+      expect(change.publication).toMatchObject({
+        candidateId: "published-candidate",
+        expectedHeadSha: "published-head",
+      });
       expect(events).toEqual([
         "reconcile",
         "reconcile",
         "capture",
         "detect_target",
         "validate_task_backed",
-        "publish",
+        "publish:candidate-1",
         "reconcile",
         "capture",
         "detect_target",
         "validate_task_backed",
-        "publish",
+        "publish:candidate-2",
       ]);
     }),
   );
