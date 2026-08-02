@@ -569,7 +569,7 @@ const recordPublishedPullRequest = (
         (change_id, candidate_id, validation_run_id, change_base_sha, head_sha,
          publication_owner, publication_repo, publication_base_branch, publication_remote_name,
          publication_head_branch, pull_request_number, pull_request_url, published_at)
-      VALUES (${input.changeId}, ${input.candidateId}, ${input.validationRunId}, ${input.changeBaseSha ?? ""},
+      VALUES (${input.changeId}, ${input.candidateId}, ${input.validationRunId}, ${input.changeBaseSha},
         ${input.expectedHeadSha}, ${input.target.owner}, ${input.target.repo}, ${input.target.baseBranch},
         ${input.target.remoteName}, ${input.headBranch}, ${input.pullRequest.number},
         ${input.pullRequest.url}, ${input.now})

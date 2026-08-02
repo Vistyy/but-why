@@ -279,7 +279,7 @@ Then the main operator session runs Reconcile:
 by change reconcile <change-id>
 ```
 
-Reconciliation closes the Change and completes its linked Task when the owned pull request is merged.
+Reconciliation closes the Change and completes its linked Task only when the owned pull request is merged at the latest Candidate Publication head.
 
 ## Install the optional agent skill
 

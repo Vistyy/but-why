@@ -715,6 +715,7 @@ const input = (fixture: Fixture) => ({
   changeId: fixture.captured.changeId,
   candidateId: fixture.captured.candidateId,
   validationRunId: fixture.validationRunId,
+  changeBaseSha: fixture.captured.changeBaseSha,
   policy,
   target,
   now,

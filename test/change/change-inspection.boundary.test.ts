@@ -17,6 +17,7 @@ import { openSqliteTaskPersistence } from "../../src/sqlite/sqliteTaskPersistenc
 import {
   commitButWhyConfigAndRecordDefault,
   createGitRepo,
+  runBuiltByWithEnv,
   runByInProcessEffect,
 } from "../support/by-cli.js";
 import {
@@ -190,19 +191,21 @@ describe("Change inspection CLI", () => {
           );
         }),
       );
-      const nonEmptyJson = yield* runByInProcessEffect(root, [
+      const nonEmptyJson = runBuiltByWithEnv(
+        root,
+        {},
         "--json",
         "change",
         "publications",
         older.id,
-      ]);
+      );
       expect(nonEmptyJson.status).toBe(0);
       expect(JSON.parse(nonEmptyJson.stdout)).toMatchObject({
         changeId: older.id,
         count: 1,
         publications: [{ headSha: "head-cli" }],
       });
-      const nonEmptyToon = yield* runByInProcessEffect(root, ["change", "publications", older.id]);
+      const nonEmptyToon = runBuiltByWithEnv(root, {}, "change", "publications", older.id);
       expect(nonEmptyToon.status).toBe(0);
       expect(nonEmptyToon.stdout).toContain("head-cli");
       const emptyJson = yield* runByInProcessEffect(root, [
@@ -489,10 +492,16 @@ describe("Change inspection CLI", () => {
       const change = yield* createChangeFixture(root, "refs/heads/decisions", firstNow);
       writeFileSync(join(root, "decision.md"), "Use an append-only record for material choices.\n");
 
-      const added = yield* runByInProcessEffect(
+      const added = runBuiltByWithEnv(
         root,
-        ["--json", "change", "decision", "add", change.id, "--file", "decision.md"],
-        commandNow,
+        {},
+        "--json",
+        "change",
+        "decision",
+        "add",
+        change.id,
+        "--file",
+        "decision.md",
       );
       const listed = yield* runByInProcessEffect(root, [
         "--json",

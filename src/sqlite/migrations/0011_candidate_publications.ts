@@ -30,7 +30,7 @@ export const candidatePublicationsMigration = Effect.gen(function* () {
        publication_owner, publication_repo, publication_base_branch, publication_remote_name,
        publication_head_branch, pull_request_number, pull_request_url, published_at)
     SELECT id, publication_candidate_id, publication_validation_run_id,
-      COALESCE((SELECT change_base_sha FROM candidates WHERE id = publication_candidate_id), ''),
+      (SELECT change_base_sha FROM candidates WHERE id = publication_candidate_id),
       publication_expected_head_sha, publication_owner, publication_repo, publication_base_branch,
       publication_remote_name, publication_head_branch, publication_pr_number, publication_pr_url,
       updated_at

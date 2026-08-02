@@ -40,7 +40,7 @@ export type PublishCandidateInput = {
   readonly changeId: string;
   readonly candidateId: string;
   readonly validationRunId: string;
-  readonly changeBaseSha?: string;
+  readonly changeBaseSha: string;
   readonly policy: CandidateValidationPolicySnapshot;
   readonly target: ChangePublicationTarget;
   readonly now: string;
@@ -93,14 +93,15 @@ const publish = (dependencies: Dependencies, input: PublishCandidateInput): Publ
     if (candidate === undefined) return { ok: false, code: "candidate_not_found" };
     if (candidate.changeId !== change.id)
       return { ok: false, code: "candidate_does_not_belong_to_change" };
+    const publicationInput = { ...input, changeBaseSha: candidate.changeBaseSha };
     const validationRun = yield* dependencies.validationPersistence.getRunById(
-      input.validationRunId,
+      publicationInput.validationRunId,
     );
     if (
       validationRun === undefined ||
       validationRun.candidateId !== input.candidateId ||
       validationRun.outcome !== "passed" ||
-      !isDeepStrictEqual(validationRun.policy, input.policy) ||
+      !isDeepStrictEqual(validationRun.policy, publicationInput.policy) ||
       candidate.headSha.length === 0
     )
       return { ok: false, code: "validation_evidence_invalid" };
@@ -115,12 +116,19 @@ const publish = (dependencies: Dependencies, input: PublishCandidateInput): Publ
     );
     if ("ok" in metadata) return metadata;
     if (change.publication === null)
-      return yield* create(dependencies, input, change, headBranch, candidate.headSha, metadata);
+      return yield* create(
+        dependencies,
+        publicationInput,
+        change,
+        headBranch,
+        candidate.headSha,
+        metadata,
+      );
     if (change.publication.pullRequest === null)
-      return yield* recover(dependencies, input, change, headBranch, candidate.headSha);
+      return yield* recover(dependencies, publicationInput, change, headBranch, candidate.headSha);
     return yield* updateOrReuse(
       dependencies,
-      input,
+      publicationInput,
       change,
       headBranch,
       candidate.headSha,
@@ -574,7 +582,7 @@ const facts = (input: PublishCandidateInput, headBranch: string, expectedHeadSha
   changeId: input.changeId,
   candidateId: input.candidateId,
   validationRunId: input.validationRunId,
-  changeBaseSha: input.changeBaseSha ?? "",
+  changeBaseSha: input.changeBaseSha,
   target: input.target,
   headBranch,
   expectedHeadSha,

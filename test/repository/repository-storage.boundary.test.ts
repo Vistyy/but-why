@@ -681,6 +681,37 @@ describe("repository SQL storage", () => {
                 pullRequest: { number: 7 },
               },
             ]);
+            const nextCapture = yield* openSqliteCandidateCapturePersistence();
+            const next = yield* nextCapture.commitCapture({
+              repositoryCommonDirectory: input.commonDirectory,
+              branchRef: "refs/heads/legacy",
+              baseRef: "refs/remotes/origin/main",
+              changeBaseSha: "base-next",
+              headSha: "head-next",
+              now: "2026-07-25T15:31:00.000Z",
+            });
+            if (!next.ok) return;
+            const nextPublication = {
+              changeId: captured.changeId,
+              candidateId: next.candidateId,
+              validationRunId: "next-run",
+              target: { owner: "acme", repo: "repo", baseBranch: "main", remoteName: "origin" },
+              headBranch: "legacy",
+              expectedHeadSha: "head-next",
+              changeBaseSha: "base-next",
+              now: "2026-07-25T15:32:00.000Z",
+            };
+            expect(yield* upgraded.beginPublication(nextPublication)).toMatchObject({ ok: true });
+            expect(
+              yield* upgraded.recordPublishedPullRequest({
+                ...nextPublication,
+                pullRequest: { number: 7, url: "https://github.test/pull/7" },
+              }),
+            ).toMatchObject({ ok: true });
+            expect(yield* upgraded.listCandidatePublications(captured.changeId)).toMatchObject([
+              { headSha: "head-legacy" },
+              { headSha: "head-next", changeBaseSha: "base-next" },
+            ]);
           }).pipe(
             Effect.provide(
               repositorySqlLayer({
