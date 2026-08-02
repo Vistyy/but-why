@@ -36,6 +36,11 @@ export const candidatePublicationsMigration = Effect.gen(function* () {
       updated_at
     FROM changes
     WHERE publication_pr_number IS NOT NULL
+      AND EXISTS (
+        SELECT 1 FROM candidates
+        WHERE candidates.id = changes.publication_candidate_id
+          AND candidates.change_base_sha IS NOT NULL
+      )
       AND NOT EXISTS (
         SELECT 1 FROM candidate_publications history
         WHERE history.change_id = changes.id

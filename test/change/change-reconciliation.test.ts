@@ -39,6 +39,7 @@ describe("by change reconcile", () => {
             target: publicationTarget,
             headBranch: "change-1",
             expectedHeadSha: "head",
+            changeBaseSha: "base",
             now,
           };
           const begun = yield* changes.beginPublication(publication);
@@ -125,6 +126,7 @@ describe("by change reconcile", () => {
             target: publicationTarget,
             headBranch: "change-1",
             expectedHeadSha: "head",
+            changeBaseSha: "base",
             now,
           };
           const begun = yield* changes.beginPublication(publication);
@@ -230,6 +232,7 @@ describe("by change reconcile", () => {
           target: publicationTarget,
           headBranch: "change-1",
           expectedHeadSha: "head",
+          changeBaseSha: "base",
           now,
         };
         const begun = yield* changes.beginPublication(publication);
