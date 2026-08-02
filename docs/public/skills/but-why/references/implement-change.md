@@ -64,7 +64,7 @@ Do not detect, stop, message, or automatically wake an Interactive Session.
 ## Change continuation
 
 Change continuation is optional.
-To use these commands, add the packaged `extensions/continue-change.ts` extension to the Global `implementer` profile as described in the configuration reference.
+Change Implement sessions load the packaged `continue-change` extension automatically. Do not add it to an Agent Profile.
 
 Use `/pause-change` to pause automatic continuation before discussing a Change or taking an external action.
 

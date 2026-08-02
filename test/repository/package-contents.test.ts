@@ -1,5 +1,6 @@
-import { cpSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { cpSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 import { describe, expect, it } from "vitest";
 
 import { repoRoot } from "../support/by-cli.js";
@@ -22,24 +23,123 @@ type PackageManifest = {
   readonly repository: { readonly type: string; readonly url: string };
 };
 
+const createPackageFixture = (packageRoot: string): void => {
+  cpSync(join(repoRoot, "package.json"), join(packageRoot, "package.json"));
+  cpSync(join(repoRoot, "README.md"), join(packageRoot, "README.md"));
+  cpSync(join(repoRoot, "CHANGELOG.md"), join(packageRoot, "CHANGELOG.md"));
+  cpSync(join(repoRoot, "extensions"), join(packageRoot, "extensions"), { recursive: true });
+  mkdirSync(join(packageRoot, "docs"));
+  cpSync(join(repoRoot, "docs", "public"), join(packageRoot, "docs", "public"), {
+    recursive: true,
+  });
+};
+
 describe("CLI package contents", () => {
+  it("loads continuation from the installed package", async () => {
+    const packageRoot = createTestWorkspace();
+    createPackageFixture(packageRoot);
+    cpSync(join(repoRoot, "src"), join(packageRoot, "src"), { recursive: true });
+    cpSync(join(repoRoot, "tsconfig.json"), join(packageRoot, "tsconfig.json"));
+    cpSync(join(repoRoot, "tsconfig.build.json"), join(packageRoot, "tsconfig.build.json"));
+    symlinkSync(join(repoRoot, "node_modules"), join(packageRoot, "node_modules"));
+    const buildResult = runTestProcess("pnpm", ["run", "build"], { cwd: packageRoot });
+    expect(buildResult.error).toBeUndefined();
+    expect(buildResult.status).toBe(0);
+    const packed = runTestProcess("npm", ["pack", "--ignore-scripts", "--json"], {
+      cwd: packageRoot,
+    });
+    expect(packed.error).toBeUndefined();
+    expect(packed.status).toBe(0);
+    const [{ filename }] = JSON.parse(packed.stdout) as readonly [{ filename: string }];
+    const installRoot = join(packageRoot, "installed");
+    const installed = runTestProcess(
+      "npm",
+      [
+        "install",
+        "--ignore-scripts",
+        "--no-audit",
+        "--no-fund",
+        "--prefix",
+        installRoot,
+        join(packageRoot, filename),
+      ],
+      { cwd: packageRoot },
+    );
+    expect(installed.error).toBeUndefined();
+    expect(installed.status).toBe(0);
+
+    const installedPackage = join(installRoot, "node_modules", "but-why");
+    const extension = join(installedPackage, "extensions/continue-change.ts");
+    const module = (await import(
+      pathToFileURL(join(installedPackage, "dist/change/herdrInteractiveSessionHost.js")).href
+    )) as typeof import("../../src/change/herdrInteractiveSessionHost.js");
+    const commands: string[][] = [];
+    const execute = async (args: readonly string[]) => {
+      commands.push([...args]);
+      if (args[0] === "agent" && args[1] === "list") {
+        return commands.some(([command]) => command === "pane")
+          ? {
+              ok: true as const,
+              stdout:
+                '{"result":{"type":"agent_list","agents":[{"name":"but-why-change-123","cwd":"/workspace/change-123","pane_id":"workspace-1:pane-1","agent_status":"working"}]}}',
+            }
+          : { ok: true as const, stdout: '{"result":{"type":"agent_list","agents":[]}}' };
+      }
+      if (args[0] === "worktree") {
+        return {
+          ok: true as const,
+          stdout:
+            '{"result":{"type":"worktree_opened","workspace":{"workspace_id":"workspace-1"},"root_pane":{"pane_id":"workspace-1:pane-1"},"already_open":false}}',
+        };
+      }
+      if (args[0] === "agent" && args[1] === "rename") {
+        return {
+          ok: true as const,
+          stdout:
+            '{"result":{"agent":{"name":"but-why-change-123","cwd":"/workspace/change-123","pane_id":"workspace-1:pane-1"}}}',
+        };
+      }
+      return { ok: true as const, stdout: "{}" };
+    };
+    const input = {
+      changeId: "change-123",
+      repositoryPath: "/repository",
+      worktreePath: "/workspace/change-123",
+      initialPrompt: "Implement",
+    };
+
+    await expect(
+      module.openHerdrInteractiveSessionHost(execute).launch(input),
+    ).resolves.toMatchObject({
+      ok: true,
+      status: "started",
+    });
+    expect(commands.find(([command]) => command === "pane")?.[3]).toContain(
+      `--extension '${extension}'`,
+    );
+
+    commands.length = 0;
+    rmSync(extension);
+    await expect(
+      module.openHerdrInteractiveSessionHost(execute).launch(input),
+    ).resolves.toMatchObject({
+      ok: false,
+      code: "launch_failed",
+      message: expect.stringContaining("Required trusted continuation extension is missing"),
+    });
+    expect(commands).toEqual([]);
+  }, 120_000);
+
   it("packs built CLI output and public package metadata only", () => {
     const fixture = createTestWorkspace();
-    cpSync(join(repoRoot, "package.json"), join(fixture, "package.json"));
-    cpSync(join(repoRoot, "README.md"), join(fixture, "README.md"));
-    cpSync(join(repoRoot, "CHANGELOG.md"), join(fixture, "CHANGELOG.md"));
-    cpSync(join(repoRoot, "extensions"), join(fixture, "extensions"), { recursive: true });
-    mkdirSync(join(fixture, "docs"));
-    cpSync(join(repoRoot, "docs", "public"), join(fixture, "docs", "public"), {
-      recursive: true,
-    });
+    createPackageFixture(fixture);
     for (const directory of ["dist", "src", "test", "spikes"]) {
       mkdirSync(join(fixture, directory), { recursive: true });
     }
     writeFileSync(join(fixture, "dist", "main.js"), "#!/usr/bin/env node\n");
-    mkdirSync(join(fixture, "dist", "sqlite"));
-    mkdirSync(join(fixture, "dist", "agent"));
-    mkdirSync(join(fixture, "dist", "acceptanceReview"));
+    mkdirSync(join(fixture, "dist", "sqlite"), { recursive: true });
+    mkdirSync(join(fixture, "dist", "agent"), { recursive: true });
+    mkdirSync(join(fixture, "dist", "acceptanceReview"), { recursive: true });
     writeFileSync(join(fixture, "dist", "sqlite", "repositoryMigrations.js"), "export {};\n");
     writeFileSync(join(fixture, "dist", "agent", "reviewerPrompts.js"), "export {};\n");
     writeFileSync(
