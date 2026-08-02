@@ -248,6 +248,7 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
         expect((requests[0] as { readonly body: string }).body).toContain(
           "Keep the decision log separate from &lt;approved&gt; intent.",
         );
+        expect((requests[0] as { readonly body: string }).body).not.toContain("Decision 1");
         expect((requests[0] as { readonly body: string }).body).toContain(
           "Implementation Decision Log",
         );
@@ -331,7 +332,8 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
 
         yield* fixture.changes.recordImplementationDecision({
           changeId: fixture.captured.changeId,
-          content: "Update the owned pull request with the current decision log.",
+          choice: "Update the owned pull request",
+          rationale: "Keep the current decision log in the revised publication.",
           now: "2026-07-22T10:04:00.000Z",
         });
         const next = yield* nextCandidate(fixture, "New Candidate", "2026-07-22T10:05:00.000Z");
@@ -350,7 +352,7 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
             expectedCurrentHeadSha: fixture.captured.headSha,
             expectedHeadSha: next.captured.headSha,
             body: expect.stringContaining(
-              "Update the owned pull request with the current decision log.",
+              "Keep the current decision log in the revised publication.",
             ),
           }),
         );

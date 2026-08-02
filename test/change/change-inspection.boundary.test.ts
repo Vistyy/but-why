@@ -525,6 +525,39 @@ describe("Change inspection CLI", () => {
         ],
       });
       expect(JSON.parse(shown.stdout).implementationDecisions).toHaveLength(1);
+
+      const missing = yield* runByInProcessEffect(root, [
+        "--json",
+        "change",
+        "decision",
+        "add",
+        change.id,
+      ]);
+      const empty = yield* runByInProcessEffect(root, [
+        "--json",
+        "change",
+        "decision",
+        "add",
+        change.id,
+        "--choice",
+        "",
+        "--rationale",
+        "A reason",
+      ]);
+      const multiline = yield* runByInProcessEffect(root, [
+        "--json",
+        "change",
+        "decision",
+        "add",
+        change.id,
+        "--choice",
+        "Two lines\nnot allowed",
+        "--rationale",
+        "A reason",
+      ]);
+      expect(missing.status).toBeGreaterThan(0);
+      expect(empty.stdout).toContain("empty_choice");
+      expect(multiline.stdout).toContain("multiline_choice");
     }),
   );
 
