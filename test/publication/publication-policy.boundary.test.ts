@@ -232,6 +232,13 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
           now,
         });
         expect(recorded.ok).toBe(true);
+        const second = yield* fixture.changes.recordImplementationDecision({
+          changeId: fixture.captured.changeId,
+          choice: "Preserve chronological order",
+          rationale: "Keep decisions in their recorded order.",
+          now: "2026-07-22T10:01:00.000Z",
+        });
+        expect(second.ok).toBe(true);
         const publication = openCandidatePublication({
           changePersistence: fixture.changes,
           validationPersistence: fixture.validation,
@@ -247,6 +254,11 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
         );
         expect((requests[0] as { readonly body: string }).body).toContain(
           "Keep the decision log separate from &lt;approved&gt; intent.",
+        );
+        expect(
+          (requests[0] as { readonly body: string }).body.indexOf("Keep &amp; preserve"),
+        ).toBeLessThan(
+          (requests[0] as { readonly body: string }).body.indexOf("Preserve chronological order"),
         );
         expect((requests[0] as { readonly body: string }).body).not.toContain("Decision 1");
         expect((requests[0] as { readonly body: string }).body).toContain(

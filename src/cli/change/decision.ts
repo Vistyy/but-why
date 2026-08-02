@@ -6,8 +6,6 @@ import type { CliResult } from "../../cliResults.js";
 import type { ChangeCommandEnvironment } from "./changeTypes.js";
 import { loadChangeInspection } from "../../change/loadChangeInspection.js";
 import { success } from "../../cliResults.js";
-import { readImplementationDecisionFile } from "../../change/implementationDecisionFile.js";
-import { decisionFileError } from "./decisionResults.js";
 import * as support from "./changeSupport.js";
 import { decisionInputError, decisionMutationError } from "./decisionResults.js";
 
@@ -16,16 +14,11 @@ type ChangeDecisionCommand =
   | {
       readonly action: "add";
       readonly changeId: string;
-      readonly choice: string | undefined;
-      readonly rationale: string | undefined;
-      readonly file: string | undefined;
+      readonly choice: string;
+      readonly rationale: string;
     };
 
-type DecisionInputError =
-  | "empty_choice"
-  | "empty_rationale"
-  | "multiline_choice"
-  | "missing_fields";
+type DecisionInputError = "empty_choice" | "empty_rationale" | "multiline_choice";
 
 const validateDecisionInput = (
   choice: string,
@@ -42,8 +35,7 @@ export const runDecision = (
   command: ChangeDecisionCommand,
   environment: ChangeCommandEnvironment,
 ): Effect.Effect<CliResult> => {
-  const action = command.action;
-  if (action === "list") {
+  if (command.action === "list") {
     const loaded = loadChangeInspection({ cwd: environment.cwd });
     if (!loaded.ok) return Effect.succeed(support.loadError(loaded.error));
     return loaded.inspection.decisions(command.changeId).pipe(
@@ -55,50 +47,23 @@ export const runDecision = (
       support.inspectionFailure,
     );
   }
-  {
-    if (command.choice === undefined || command.rationale === undefined) {
-      if (command.file === undefined) return Effect.succeed(decisionInputError("missing_fields"));
-      const content = readImplementationDecisionFile(
-        environment.cwd,
-        command.file,
-        environment.stdin,
-      );
-      if (!content.ok) return Effect.succeed(decisionFileError(content.error));
-      const loaded = loadChangeInspection({ cwd: environment.cwd });
-      if (!loaded.ok) return Effect.succeed(support.loadError(loaded.error));
-      return loaded.inspection
-        .addDecision({
-          changeId: command.changeId,
-          content: content.content,
-          now: environment.now().toISOString(),
-        })
-        .pipe(
-          Effect.map((result) =>
-            result.ok
-              ? success({ changeId: command.changeId, decision: result.decision })
-              : decisionMutationError(result.code, command.changeId),
-          ),
-          support.inspectionFailure,
-        );
-    }
-    const validation = validateDecisionInput(command.choice, command.rationale);
-    if (!validation.ok) return Effect.succeed(decisionInputError(validation.code));
-    const loaded = loadChangeInspection({ cwd: environment.cwd });
-    if (!loaded.ok) return Effect.succeed(support.loadError(loaded.error));
-    return loaded.inspection
-      .addDecision({
-        changeId: command.changeId,
-        choice: command.choice,
-        rationale: command.rationale,
-        now: environment.now().toISOString(),
-      })
-      .pipe(
-        Effect.map((result) =>
-          result.ok
-            ? success({ changeId: command.changeId, decision: result.decision })
-            : decisionMutationError(result.code, command.changeId),
-        ),
-        support.inspectionFailure,
-      );
-  }
+  const validation = validateDecisionInput(command.choice, command.rationale);
+  if (!validation.ok) return Effect.succeed(decisionInputError(validation.code));
+  const loaded = loadChangeInspection({ cwd: environment.cwd });
+  if (!loaded.ok) return Effect.succeed(support.loadError(loaded.error));
+  return loaded.inspection
+    .addDecision({
+      changeId: command.changeId,
+      choice: command.choice,
+      rationale: command.rationale,
+      now: environment.now().toISOString(),
+    })
+    .pipe(
+      Effect.map((result) =>
+        result.ok
+          ? success({ changeId: command.changeId, decision: result.decision })
+          : decisionMutationError(result.code, command.changeId),
+      ),
+      support.inspectionFailure,
+    );
 };

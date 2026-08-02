@@ -274,9 +274,8 @@ taskCommand = group(
 const changeDecisionAddCommand = withCliHandler(
   leaf("add", "Record one Implementer Implementation Decision.", {
     changeId: changeIdArgument,
-    file: Options.text("file").pipe(Options.optional),
-    choice: Options.text("choice").pipe(Options.optional),
-    rationale: Options.text("rationale").pipe(Options.optional),
+    choice: Options.text("choice"),
+    rationale: Options.text("rationale"),
   }),
   (values, environment) =>
     Effect.promise(() => import("./cli/change/decision.js")).pipe(
@@ -285,9 +284,8 @@ const changeDecisionAddCommand = withCliHandler(
           {
             action: "add",
             changeId: requiredString(values, "changeId"),
-            file: optionalString(values, "file"),
-            choice: optionalString(values, "choice"),
-            rationale: optionalString(values, "rationale"),
+            choice: requiredString(values, "choice"),
+            rationale: requiredString(values, "rationale"),
           },
           environment as ChangeCommandEnvironment,
         ),
