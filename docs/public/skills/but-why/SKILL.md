@@ -10,7 +10,7 @@ It owns setup guidance, But Why CLI operation, Work Route Selection, Task author
 It does not require target-repository private instructions or other local skills.
 
 Before running a But Why command, read [Command guidance](references/command-guidance.md) completely.
-Before setup guidance, read `docs/public/setup.md` from the installed package.
+Before setup guidance, read [Setup guidance](../../setup.md) completely.
 Before Task authoring, Work Route Selection, implementation authorization, or handoff, read [Operator workflow](references/operator-workflow.md) completely.
 
 When a handoff identifies a Change, Task-backed Change, or Managed Worktree, treat the session as Change implementation.

@@ -131,6 +131,11 @@ describe("CLI package contents", () => {
     expect(readFileSync(join(installedPackage, "extensions/continue-change.ts"), "utf8")).toContain(
       "continue-change",
     );
+    const installedSkill = join(installedPackage, "docs/public/skills/but-why/SKILL.md");
+    expect(readFileSync(installedSkill, "utf8")).toContain("[Setup guidance](../../setup.md)");
+    expect(existsSync(join(installedPackage, "docs/public/skills/but-why/../../setup.md"))).toBe(
+      true,
+    );
     verifyPiSkillDiscovery(installedPackage);
     const advisor = (await import(
       pathToFileURL(join(installedPackage, "extensions/implementation-advisor/index.ts")).href
