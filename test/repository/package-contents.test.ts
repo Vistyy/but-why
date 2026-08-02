@@ -1,17 +1,15 @@
 import {
+  chmodSync,
   cpSync,
   mkdirSync,
   readFileSync,
-  readdirSync,
-  rmSync,
   symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { join } from "node:path";
-import { pathToFileURL } from "node:url";
 import { describe, expect, it } from "vitest";
 
-import { repoRoot } from "../support/by-cli.js";
+import { createGitRepo, repoRoot } from "../support/by-cli.js";
 import { createTestWorkspace } from "../support/testWorkspace.js";
 import { runTestProcess } from "../support/testProcess.js";
 
@@ -80,68 +78,108 @@ describe("CLI package contents", () => {
     expect(readFileSync(join(installedPackage, "extensions/continue-change.ts"), "utf8")).toContain(
       "continue-change",
     );
-    const bundledHost = readdirSync(join(installedPackage, "dist")).find(
-      (file) =>
-        file.endsWith(".js") &&
-        readFileSync(join(installedPackage, "dist", file), "utf8").includes(
-          "Required trusted continuation extension is missing",
-        ),
+
+    const repository = createGitRepo();
+    const tools = createTestWorkspace();
+    writeFileSync(
+      join(tools, "gh"),
+      "#!/usr/bin/env sh\nif [ \"$1\" = \"repo\" ] && [ \"$2\" = \"view\" ]; then printf '{\\\"defaultBranchRef\\\":{\\\"name\\\":\\\"main\\\"}}\\n'; exit 0; fi\nexit 1\n",
     );
-    expect(bundledHost).toBeDefined();
-    const bundledModule = await import(
-      pathToFileURL(join(installedPackage, "dist", bundledHost as string)).href
+    writeFileSync(
+      join(tools, "herdr"),
+      `#!/usr/bin/env sh
+if [ "$1" = "agent" ] && [ "$2" = "list" ]; then
+  if [ -f "$BY_FAKE_CAPTURE.started" ]; then
+    printf '{"result":{"type":"agent_list","agents":[{"name":"%s","cwd":"%s","pane_id":"pane","agent_status":"working"}]}}\\n' "$BY_FAKE_SESSION" "$BY_FAKE_WORKTREE"
+  else
+    printf '{"result":{"type":"agent_list","agents":[]}}\\n'
+  fi
+  exit 0
+fi
+if [ "$1" = "worktree" ] && [ "$2" = "open" ]; then
+  printf '{"result":{"type":"worktree_opened","workspace":{"workspace_id":"workspace"},"root_pane":{"pane_id":"pane"},"already_open":false}}\\n'
+  exit 0
+fi
+if [ "$1" = "pane" ] && [ "$2" = "run" ]; then
+  printf '%s\\n' "$4" > "$BY_FAKE_CAPTURE"
+  : > "$BY_FAKE_CAPTURE.started"
+  printf '{"result":{}}\\n'
+  exit 0
+fi
+if [ "$1" = "agent" ] && [ "$2" = "rename" ]; then
+  printf '{"result":{"agent":{"name":"change-agent","cwd":"%s","pane_id":"pane"}}}\\n' "$BY_FAKE_WORKTREE"
+  exit 0
+fi
+exit 1
+`,
     );
-    const hostFactory = Object.values(bundledModule).find(
-      (value): value is (execute: Execute) => { launch: (input: unknown) => Promise<unknown> } =>
-        typeof value === "function" && String(value).includes("launch"),
-    );
-    expect(hostFactory).toBeDefined();
-    const commands: string[][] = [];
-    type Execute = (args: readonly string[]) => Promise<{ ok: true; stdout: string }>;
-    const execute: Execute = async (args) => {
-      commands.push([...args]);
-      if (args[0] === "agent" && args[1] === "list") {
-        return {
-          ok: true as const,
-          stdout: '{"result":{"type":"agent_list","agents":[]}}',
-        };
-      }
-      if (args[0] === "worktree") {
-        return {
-          ok: true as const,
-          stdout:
-            '{"result":{"type":"worktree_opened","workspace":{"workspace_id":"workspace-1"},"root_pane":{"pane_id":"workspace-1:pane-1"},"already_open":false}}',
-        };
-      }
-      if (args[0] === "agent" && args[1] === "rename") {
-        return {
-          ok: true as const,
-          stdout:
-            '{"result":{"agent":{"name":"but-why-change-123","cwd":"/workspace/change-123","pane_id":"workspace-1:pane-1"}}}',
-        };
-      }
-      return { ok: true as const, stdout: "{}" };
+    chmodSync(join(tools, "gh"), 0o755);
+    chmodSync(join(tools, "herdr"), 0o755);
+    const bin = join(installed, "node_modules", ".bin", "by");
+    const env = {
+      PATH: `${tools}:${process.env.PATH ?? ""}`,
+      BY_FAKE_CAPTURE: join(repository, "herdr-capture.txt"),
     };
-    const extension = join(installedPackage, "extensions/continue-change.ts");
-    const input = {
-      changeId: "change-123",
-      repositoryPath: "/repository",
-      worktreePath: "/workspace/change-123",
-      initialPrompt: "Implement",
+    const isolatedHome = createTestWorkspace();
+    const init = runTestProcess(bin, ["init", "--task-prefix", "BY"], {
+      cwd: repository,
+      env,
+      isolatedHome,
+    });
+    expect(init.status, `${init.stdout}${init.stderr}`).toBe(0);
+    for (const args of [
+      ["config", "user.name", "But Why Test"],
+      ["config", "user.email", "but-why@example.test"],
+      ["add", ".but-why/config.json", ".gitignore"],
+      ["commit", "-m", "Initialize But Why"],
+      ["branch", "-M", "main"],
+      [
+        "config",
+        `url.${repository}.insteadOf`,
+        "https://github.com/acme/repo.git",
+      ],
+      ["remote", "add", "origin", "https://github.com/acme/repo.git"],
+      ["update-ref", "refs/remotes/origin/main", "refs/heads/main"],
+      ["symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/main"],
+    ]) {
+      const git = runTestProcess("git", args, { cwd: repository, isolatedHome });
+      expect(git.status, `${git.stdout}${git.stderr}`).toBe(0);
+    }
+    mkdirSync(join(isolatedHome, ".config", "but-why"), { recursive: true });
+    writeFileSync(
+      join(isolatedHome, ".config", "but-why", "config.json"),
+      `${JSON.stringify({
+        defaultAgentProfile: { scope: "global", name: "test" },
+        agentProfiles: { test: { agentRuntime: "pi", runtimeConfig: { model: "test/model" } } },
+      })}\n`,
+    );
+    const started = runTestProcess(bin, ["--json", "change", "start"], {
+      cwd: repository,
+      env,
+      isolatedHome,
+    });
+    expect(started.status, `${started.stdout}${started.stderr}`).toBe(0);
+    const change = JSON.parse(started.stdout) as {
+      readonly change: { readonly id: string };
+      readonly worktreePath: string;
     };
-    await expect(hostFactory?.(execute).launch(input)).resolves.toMatchObject({
-      ok: true,
-      status: "started",
-    });
-    expect(commands.some(([command]) => command === "pane")).toBe(true);
-    commands.length = 0;
-    rmSync(extension);
-    await expect(hostFactory?.(execute).launch(input)).resolves.toMatchObject({
-      ok: false,
-      code: "launch_failed",
-      message: expect.stringContaining("Required trusted continuation extension is missing"),
-    });
-    expect(commands).toEqual([]);
+    const implement = runTestProcess(
+      bin,
+      ["--json", "change", "implement", change.change.id],
+      {
+        cwd: repository,
+        env: {
+          ...env,
+          BY_FAKE_WORKTREE: change.worktreePath,
+          BY_FAKE_SESSION: `change-${change.change.id.slice(0, 8)}`,
+        },
+        isolatedHome,
+      },
+    );
+    expect(implement.status, `${implement.stdout}${implement.stderr}`).toBe(0);
+    expect(readFileSync(env.BY_FAKE_CAPTURE, "utf8")).toContain(
+      `--extension '${join(installedPackage, "extensions/continue-change.ts")}'`,
+    );
   }, 120_000);
 
   it("packs built CLI output and public package metadata only", () => {
