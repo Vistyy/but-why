@@ -1,3 +1,6 @@
+import { mkdtempSync, rmSync } from "node:fs";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const advisorMock = vi.hoisted(() => ({
@@ -15,12 +18,14 @@ const advisorMock = vi.hoisted(() => ({
   createCalls: 0,
   toolValues: [] as unknown[],
   nestedEventListener: undefined as ((event: unknown) => void) | undefined,
+  sessionManager: undefined as unknown,
 }));
 
 vi.mock("@earendil-works/pi-coding-agent", async () => {
   const actual = await vi.importActual<typeof import("@earendil-works/pi-coding-agent")>(
     "@earendil-works/pi-coding-agent",
   );
+  const actualContinueRecent = actual.SessionManager.continueRecent.bind(actual.SessionManager);
   return {
     ...actual,
     ModelRuntime: {
@@ -31,9 +36,10 @@ vi.mock("@earendil-works/pi-coding-agent", async () => {
     DefaultResourceLoader: class {
       async reload(): Promise<void> {}
     },
-    SessionManager: {
-      continueRecent: () => ({ restoredConversation: true }),
-    },
+    SessionManager: Object.assign(actual.SessionManager, {
+      continueRecent: (...args: Parameters<typeof actual.SessionManager.continueRecent>) =>
+        advisorMock.sessionManager ?? actualContinueRecent(...args),
+    }),
     createAgentSession: async (options: {
       customTools: Array<{
         execute: (...args: unknown[]) => Promise<unknown>;
@@ -151,6 +157,7 @@ describe("Implementation Advisor extension event seam", () => {
     advisorMock.createCalls = 0;
     advisorMock.toolValues.length = 0;
     advisorMock.nestedEventListener = undefined;
+    advisorMock.sessionManager = undefined;
   });
 
   afterEach(() => {
@@ -451,6 +458,115 @@ describe("Implementation Advisor extension event seam", () => {
     handlers.get("turn_end")?.(turn(2), context);
     await waitFor(() => entries.some((entry) => (entry as { failures?: number }).failures === 0));
     expect(advisorMock.notifications).toHaveLength(1);
+  });
+
+  it("restores duplicate fingerprints and failure counts from persisted Pi session state", async () => {
+    process.env["BUT_WHY_IMPLEMENTATION_ADVISOR_MODEL"] = "provider/model";
+    process.env["BUT_WHY_IMPLEMENTATION_ADVISOR_CONTEXT"] = JSON.stringify({
+      changeId: "change-persisted",
+      acceptanceContext: null,
+      implementationDecisions: [],
+    });
+    const sessionDirectory = mkdtempSync(join(tmpdir(), "by99-advisor-session-"));
+    try {
+      const { SessionManager } = await import("@earendil-works/pi-coding-agent");
+      const session = SessionManager.create(process.cwd(), sessionDirectory);
+      const firstMessage = session.appendMessage({
+        role: "user",
+        content: [{ type: "text", text: "before compaction" }],
+        timestamp: Date.now(),
+      });
+      session.appendMessage({
+        role: "assistant",
+        content: [{ type: "text", text: "implementation history" }],
+        timestamp: Date.now(),
+      } as never);
+      session.appendCompaction("Compacted implementation history.", firstMessage, 10);
+      advisorMock.sessionManager = session;
+      const firstEntries: unknown[] = [];
+      const firstHandlers = new Map<string, Handler>();
+      implementationAdvisor({
+        on(event: string, handler: Handler) {
+          firstHandlers.set(event, handler);
+        },
+        appendEntry(type: string, data: unknown) {
+          session.appendCustomEntry(type, data);
+          firstEntries.push(data);
+        },
+        sendMessage(message: unknown) {
+          advisorMock.messages.push(message);
+        },
+      } as never);
+      const context = {
+        cwd: process.cwd(),
+        sessionManager: session,
+        isIdle: () => true,
+        ui: { notify() {} },
+      } as never;
+      firstHandlers.get("session_start")?.({} as never, context);
+      firstHandlers.get("turn_end")?.(turn(1), context);
+      await waitFor(() => advisorMock.messages.length === 1);
+      expect(firstEntries).toHaveLength(1);
+      expect(session.getBranch()).toContainEqual(
+        expect.objectContaining({ customType: "but-why.implementation-advisor.state" }),
+      );
+      expect(session.getBranch()).toContainEqual(expect.objectContaining({ type: "compaction" }));
+
+      advisorMock.sessionManager = undefined;
+      const reopened = SessionManager.continueRecent(process.cwd(), sessionDirectory);
+      advisorMock.sessionManager = reopened;
+      const duplicateEntries: unknown[] = [];
+      const duplicateHandlers = new Map<string, Handler>();
+      implementationAdvisor({
+        on(event: string, handler: Handler) {
+          duplicateHandlers.set(event, handler);
+        },
+        appendEntry(type: string, data: unknown) {
+          reopened.appendCustomEntry(type, data);
+          duplicateEntries.push(data);
+        },
+        sendMessage(message: unknown) {
+          advisorMock.messages.push(message);
+        },
+      } as never);
+      const restoredContext = {
+        cwd: process.cwd(),
+        sessionManager: reopened,
+        isIdle: () => true,
+        ui: { notify() {} },
+      } as never;
+      duplicateHandlers.get("session_start")?.({} as never, restoredContext);
+      duplicateHandlers.get("turn_end")?.(turn(1), restoredContext);
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      expect(advisorMock.messages).toHaveLength(1);
+      expect(duplicateEntries).toHaveLength(0);
+
+      reopened.appendCustomEntry("but-why.implementation-advisor.state", {
+        fingerprints: [],
+        failures: 2,
+        disabled: false,
+      });
+      advisorMock.mode = "failure";
+      const failureEntries: unknown[] = [];
+      const failureHandlers = new Map<string, Handler>();
+      implementationAdvisor({
+        on(event: string, handler: Handler) {
+          failureHandlers.set(event, handler);
+        },
+        appendEntry(type: string, data: unknown) {
+          reopened.appendCustomEntry(type, data);
+          failureEntries.push(data);
+        },
+      } as never);
+      failureHandlers.get("session_start")?.({} as never, restoredContext);
+      failureHandlers.get("turn_end")?.(turn(2), restoredContext);
+      await waitFor(() => failureEntries.length === 1);
+      expect(failureEntries[0]).toMatchObject({ failures: 3, disabled: true });
+    } finally {
+      advisorMock.mode = "note";
+      advisorMock.sessionManager = undefined;
+      rmSync(sessionDirectory, { recursive: true, force: true });
+    }
   });
 
   it("fails open across model failures, persistence failures, and restoration failures", async () => {

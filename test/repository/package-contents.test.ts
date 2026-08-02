@@ -241,6 +241,29 @@ exit 1
       `--extension '${advisorExtension}'`,
     );
 
+    writeFileSync(advisorExtension, "export default 42;\n");
+    const advisorInvalid = runTestProcess(
+      bin,
+      ["--json", "change", "implement", change.change.id],
+      {
+        cwd: repository,
+        env: {
+          ...env,
+          BY_FAKE_WORKTREE: change.worktreePath,
+          BY_FAKE_SESSION: `change-${change.change.id.slice(0, 8)}`,
+        },
+        isolatedHome,
+      },
+    );
+    expect(advisorInvalid.status, `${advisorInvalid.stdout}${advisorInvalid.stderr}`).toBe(0);
+    expect(JSON.parse(advisorInvalid.stdout)).toMatchObject({
+      warning: {
+        code: "implementation_advisor_preflight_failed",
+        message: expect.stringContaining("launched without the advisor"),
+        details: { path: advisorExtension },
+      },
+    });
+
     rmSync(advisorExtension);
     const advisorMissing = runTestProcess(
       bin,
@@ -264,8 +287,33 @@ exit 1
       },
     });
 
-    rmSync(extension);
+    writeFileSync(extension, "export default 42;\n");
     rmSync(env.BY_FAKE_CAPTURE);
+    const invalidExtension = runTestProcess(
+      bin,
+      ["--json", "change", "implement", change.change.id],
+      {
+        cwd: repository,
+        env: {
+          ...env,
+          BY_FAKE_WORKTREE: change.worktreePath,
+          BY_FAKE_SESSION: `change-${change.change.id.slice(0, 8)}`,
+        },
+        isolatedHome,
+      },
+    );
+    expect(invalidExtension.status).toBe(1);
+    expect(JSON.parse(invalidExtension.stdout)).toMatchObject({
+      error: {
+        code: "launch_failed",
+        message: expect.stringContaining(
+          "Required trusted continuation extension failed preflight",
+        ),
+      },
+    });
+    expect(existsSync(env.BY_FAKE_CAPTURE)).toBe(false);
+
+    rmSync(extension);
     const missingExtension = runTestProcess(
       bin,
       ["--json", "change", "implement", change.change.id],
