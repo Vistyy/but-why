@@ -79,16 +79,19 @@ describe("Change Submit orchestration", () => {
 
   it.effect("rejects a concurrent Submit before it reads Change state", () =>
     Effect.gen(function* () {
+      let lockCalls = 0;
       const lock: ExecutionLock = {
-        withLock: () =>
-          Effect.fail(
+        withLock: () => {
+          lockCalls += 1;
+          return Effect.fail(
             new ExecutionLockUnavailable({
               owner: "change_submission",
               key: "change-1",
               lockPath: "/tmp/change-1.sqlite",
               cause: new Error("busy"),
             }),
-          ),
+          );
+        },
       };
       const submit = openChangeSubmit(
         dependencies({ events: [], change: readyChange(), executionLock: lock }),
@@ -112,6 +115,7 @@ describe("Change Submit orchestration", () => {
         changeId: "change-1",
         validationRunId: null,
       });
+      expect(lockCalls).toBe(1);
     }),
   );
 

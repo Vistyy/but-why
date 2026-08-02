@@ -312,6 +312,33 @@ describe("GitHub pull request gateway", () => {
     ]);
   });
 
+  it("keeps a failed remote branch lookup distinct from a failed push", () => {
+    const gateway = localGitHubPullRequestGateway({
+      runGit: (args) =>
+        args[0] === "rev-parse"
+          ? { ok: true, stdout: "candidate-sha\n" }
+          : { ok: false, status: 128, stderr: "remote unavailable" },
+      runGh: () => ({ ok: true, stdout: "" }),
+    });
+    expect(
+      gateway.createPullRequest({
+        owner: "acme",
+        repo: "widgets",
+        remoteName: "origin",
+        baseBranch: "main",
+        headBranch: "feature",
+        branchRef: "refs/heads/feature",
+        expectedHeadSha: "candidate-sha",
+        title: "Publish",
+        body: "Body",
+      }),
+    ).toMatchObject({
+      ok: false,
+      code: "remote_lookup_failed",
+      evidence: { operation: "remote_lookup", classification: "rejected" },
+    });
+  });
+
   it("accepts an exact existing remote branch during recovery without pushing again", () => {
     const gitCalls: (readonly string[])[] = [];
     const gateway = localGitHubPullRequestGateway({

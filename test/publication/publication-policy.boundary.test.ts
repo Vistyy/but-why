@@ -632,6 +632,44 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
       }),
     ),
   );
+  it.scoped("retains the marker when remote branch state is unavailable", () =>
+    withFixture((fixture) =>
+      Effect.gen(function* () {
+        const publication = openCandidatePublication({
+          changePersistence: fixture.changes,
+          validationPersistence: fixture.validation,
+          git: {
+            readBranchHead: () => fixture.captured.headSha,
+            readFirstNonMergeCommitSubject: () => ({ ok: true, subject: "Publication" }),
+          },
+          github: {
+            findPullRequests: () => [],
+            getPullRequest: () => undefined,
+            createPullRequest: () => ({
+              ok: false as const,
+              code: "remote_lookup_failed" as const,
+              evidence: {
+                operation: "remote_lookup" as const,
+                classification: "unavailable" as const,
+              },
+            }),
+            updatePullRequest: () => {
+              throw new Error("Unexpected update");
+            },
+          },
+        });
+        expect(yield* publication.publish(input(fixture))).toMatchObject({
+          ok: false,
+          code: "publication_tooling_failed",
+          evidence: { operation: "remote_lookup", classification: "unavailable" },
+        });
+        expect(yield* fixture.changes.getChangeById(fixture.captured.changeId)).toMatchObject({
+          publication: { candidateId: fixture.captured.candidateId, pullRequest: null },
+        });
+      }),
+    ),
+  );
+
   it.scoped("does not create after a conflicting non-empty recovery lookup", () =>
     withFixture((fixture) =>
       Effect.gen(function* () {

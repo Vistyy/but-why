@@ -185,7 +185,11 @@ const createFailure = (
 ): PublicationEffect => {
   if (failure.code === "remote_response_lost" || failure.code === "remote_response_unusable")
     return confirmCreation(dependencies, input, headBranch, expectedHeadSha, failure.evidence);
-  if (failure.code === "remote_rejected" || failure.code === "remote_head_mismatch")
+  if (
+    failure.code === "remote_rejected" ||
+    failure.code === "remote_head_mismatch" ||
+    failure.code === "remote_lookup_failed"
+  )
     return retainFailure(dependencies, pending, failure);
   const code =
     failure.code === "local_head_mismatch" ? "current_head_mismatch" : "publication_tooling_failed";

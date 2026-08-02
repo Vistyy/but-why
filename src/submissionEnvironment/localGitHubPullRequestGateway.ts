@@ -181,7 +181,7 @@ const createPullRequest = (
   if (remoteHead.kind === "unknown")
     return {
       ok: false,
-      code: "push_failed",
+      code: "remote_lookup_failed",
       ...(remoteHead.evidence === undefined ? {} : { evidence: remoteHead.evidence }),
     };
   if (

@@ -43,6 +43,7 @@ export type GitHubPullRequestMutationResult =
         | "local_head_mismatch"
         | "remote_head_mismatch"
         | "push_failed"
+        | "remote_lookup_failed"
         | "remote_response_lost"
         | "remote_response_unusable"
         | "remote_rejected"

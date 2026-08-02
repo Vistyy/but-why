@@ -6,8 +6,39 @@ import { describe, expect, it } from "@effect/vitest";
 import { runByInProcessEffect } from "../support/by-cli.js";
 import { createInitializedRepo } from "../support/initializedRepo.js";
 import { runTestProcess } from "../support/testProcess.js";
+import { submitResult } from "../../src/cli/change/submitResult.js";
 
 describe("Change Submit validation-policy errors", () => {
+  it("serializes remote mismatch commits and bounded failure evidence", () => {
+    const result = submitResult(
+      {
+        ok: false,
+        code: "publication_remote_mismatch",
+        evidence: {
+          operation: "branch_push",
+          classification: "rejected",
+          exitStatus: 1,
+          stderr: "remote rejected",
+        },
+        expectedRemoteHeadSha: "expected-head",
+        observedRemoteHeadSha: "observed-head",
+      },
+      "change-1",
+    );
+
+    expect(result).toMatchObject({
+      exitCode: 1,
+      stdout: {
+        error: {
+          code: "publication_remote_mismatch",
+          expectedCommit: "expected-head",
+          observedCommit: "observed-head",
+          evidence: { operation: "branch_push", classification: "rejected" },
+        },
+      },
+    });
+  });
+
   it.effect("reports a missing scoped profile through the serialized CLI result", () =>
     Effect.gen(function* () {
       const root = preparedRepository({

@@ -650,6 +650,72 @@ describe("repository SQL storage", () => {
     ),
   );
 
+  it.scoped("replaces only the exact pending publication marker atomically", () =>
+    withTemporaryState((input) =>
+      Effect.gen(function* () {
+        const capture = yield* openSqliteCandidateCapturePersistence();
+        const changes = yield* openSqliteChangePersistence();
+        const first = yield* capture.commitCapture({
+          repositoryCommonDirectory: input.commonDirectory,
+          branchRef: "refs/heads/feature",
+          baseRef: "refs/remotes/origin/main",
+          changeBaseSha: "base-sha",
+          headSha: "first-head",
+          now: "2026-07-25T15:10:00.000Z",
+        });
+        if (!first.ok) return;
+        const target = {
+          owner: "acme",
+          repo: "repo",
+          baseBranch: "main",
+          remoteName: "origin",
+        };
+        const pending = {
+          changeId: first.changeId,
+          candidateId: first.candidateId,
+          validationRunId: "run-first",
+          target,
+          headBranch: "feature",
+          expectedHeadSha: "first-head",
+          now: "2026-07-25T15:11:00.000Z",
+        };
+        expect(yield* changes.beginPublication(pending)).toMatchObject({ ok: true, created: true });
+        const second = yield* capture.commitCapture({
+          repositoryCommonDirectory: input.commonDirectory,
+          branchRef: "refs/heads/feature",
+          expectedChangeId: first.changeId,
+          baseRef: "refs/remotes/origin/main",
+          changeBaseSha: "base-sha",
+          headSha: "second-head",
+          now: "2026-07-25T15:12:00.000Z",
+        });
+        if (!second.ok) return;
+        const replacement = {
+          ...pending,
+          candidateId: second.candidateId,
+          validationRunId: "run-second",
+          expectedHeadSha: "second-head",
+          now: "2026-07-25T15:13:00.000Z",
+          expectedCurrentCandidateId: first.candidateId,
+          expectedCurrentValidationRunId: "run-first",
+          expectedCurrentHeadSha: "first-head",
+          expectedCurrentHeadBranch: "feature",
+          expectedCurrentTarget: target,
+        };
+        expect(yield* changes.replacePendingPublication(replacement)).toMatchObject({ ok: true });
+        expect(
+          yield* changes.replacePendingPublication({
+            ...replacement,
+            expectedCurrentCandidateId: first.candidateId,
+          }),
+        ).toEqual({ ok: false, code: "publication_state_conflict" });
+        expect(yield* changes.getChangeById(first.changeId)).toMatchObject({
+          publication: { candidateId: second.candidateId, expectedHeadSha: "second-head" },
+        });
+      }),
+    ),
+  );
+
   it.scoped("upgrades existing publication facts before appending history", () =>
     withTemporaryState((input) =>
       Effect.gen(function* () {
