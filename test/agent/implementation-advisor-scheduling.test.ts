@@ -25,6 +25,8 @@ describe("Implementation Advisor scheduler", () => {
   });
 
   it("enforces the fixed tool allowlist and structured output binding", () => {
+    const firstEvidence = evidence[0];
+    if (firstEvidence === undefined) throw new Error("Test evidence is missing");
     expect(implementationAdvisorToolNames).toEqual(["read", "grep", "find", "ls"]);
     expect(
       validateAdvisorNote(
@@ -47,7 +49,7 @@ describe("Implementation Advisor scheduler", () => {
           activityBatch: 2,
         },
         2,
-        [{ ...evidence[0]!, reference: "write:1" }],
+        [{ ...firstEvidence, reference: "write:1" }],
       ),
     ).toMatchObject({ activityBatch: 2 });
   });
