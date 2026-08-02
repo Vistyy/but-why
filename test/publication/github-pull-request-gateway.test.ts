@@ -373,6 +373,47 @@ describe("GitHub pull request gateway", () => {
     expect(gitCalls.map((call) => call[0])).toEqual(["rev-parse", "ls-remote"]);
   });
 
+  it("reports failed pushes and bounds command evidence", () => {
+    const gateway = localGitHubPullRequestGateway({
+      runGit: (args) => {
+        if (args[0] === "rev-parse") return { ok: true, stdout: "candidate-sha\n" };
+        if (args[0] === "ls-remote") return { ok: true, stdout: "" };
+        return { ok: false, status: 1, stderr: "x".repeat(2000) };
+      },
+      runGh: () => ({ ok: true, stdout: "" }),
+    });
+    expect(
+      gateway.createPullRequest({
+        owner: "acme",
+        repo: "widgets",
+        remoteName: "origin",
+        baseBranch: "main",
+        headBranch: "feature",
+        branchRef: "refs/heads/feature",
+        expectedHeadSha: "candidate-sha",
+        title: "Publish",
+        body: "Body",
+      }),
+    ).toMatchObject({
+      ok: false,
+      code: "push_failed",
+      evidence: { operation: "branch_push", exitStatus: 1, stderr: expect.any(String) },
+    });
+    const result = gateway.createPullRequest({
+      owner: "acme",
+      repo: "widgets",
+      remoteName: "origin",
+      baseBranch: "main",
+      headBranch: "feature",
+      branchRef: "refs/heads/feature",
+      expectedHeadSha: "candidate-sha",
+      title: "Publish",
+      body: "Body",
+    });
+    if (result.ok) throw new Error("Expected push failure evidence");
+    expect(result.evidence?.stderr?.length).toBeLessThanOrEqual(1000);
+  });
+
   it("classifies lost and unusable creation responses", () => {
     const request = {
       owner: "acme",
