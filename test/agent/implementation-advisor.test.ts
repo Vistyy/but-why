@@ -361,9 +361,19 @@ describe("Implementation Advisor", () => {
     };
     expect(Value.Check(implementationAdvisorOutputSchema, note)).toBe(true);
     expect(validateAdvisorOutput(note, evaluation)).toMatchObject({ activityBatch: "turn:4" });
+    expect(() =>
+      validateAdvisorOutput({ kind: "note", activityBatch: "turn:4" } as never, evaluation),
+    ).toThrow();
+    expect(() =>
+      validateAdvisorOutput({ ...note, ruleId: "unsupported.rule" } as never, evaluation),
+    ).toThrow();
     expect(() => validateAdvisorOutput({ ...note, activityBatch: "turn:5" }, evaluation)).toThrow();
     expect(() => validateAdvisorOutput({ ...note, evidence: ["unknown"] }, evaluation)).toThrow();
     expect(() => validateAdvisorOutput({ ...note, responseClass: "block" }, evaluation)).toThrow();
+    expect(() => validateAdvisorOutput({ ...note, problem: "" }, evaluation)).toThrow();
+    expect(() =>
+      validateAdvisorOutput({ kind: "no_note", activityBatch: "turn:5" }, evaluation),
+    ).toThrow();
     expect(
       validateAdvisorOutput({ kind: "no_note", activityBatch: "turn:4" }, evaluation),
     ).toBeUndefined();
