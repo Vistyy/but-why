@@ -74,10 +74,12 @@ It must state the concern's applicable authority, review lenses, materiality, an
 It must not duplicate or override But Why's universal Specialist role boundaries, Acceptance Context handling, Candidate integrity rules, or output contract.
 `agentProfiles` supplies Repo Agent Profiles.
 
+Change Implement sessions always load the packaged `continue-change` extension once.
 `interactiveSession.implementationAdvisor` optionally enables the bounded Implementation Advisor for Change Implement sessions.
 Set it to `false` to disable the advisor, or to an object with a required `model` string and an optional `thinking` level.
 Repo Config takes precedence over Global Config, including an explicit `false` value.
 The setting does not use Agent Profile fallback, and the advisor uses only its fixed nested-session tools and trusted rules.
+A trusted advisor preflight failure disables only the advisor and returns one transient launch warning.
 
 But Why detects Git facts at runtime.
 Repo Config does not define the default branch, publication remote, GitHub repository, or current head.
