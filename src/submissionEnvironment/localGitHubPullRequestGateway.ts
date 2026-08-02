@@ -26,6 +26,10 @@ export type PublicationCommandResult =
 
 const bounded = (value: string): string =>
   value
+    .replace(
+      /((?:token|password|secret|authorization)\s*[:=]\s*)(?:bearer|basic)?\s*["']?[^\s,"'}]+["']?/gi,
+      "$1[redacted]",
+    )
     .replace(/(token|password|secret|authorization)\s*=\s*["']?[^\s,"'}]+["']?/gi, "$1=[redacted]")
     .replace(
       /["']?(token|password|secret|authorization)["']?\s*:\s*["']?(?:bearer\s+)?[^\s,"'}]+|["']?(token|password|secret|authorization)["']?\s*=\s*(?:bearer\s+)?[^\s,"'}]+/gi,
@@ -264,7 +268,9 @@ const updatePullRequest = (
       evidence: evidence(
         "branch_push",
         pushed,
-        pushed.status === undefined && pushed.stderr === undefined ? "unavailable" : "rejected",
+        pushed.status === undefined && pushed.stdout === undefined && pushed.stderr === undefined
+          ? "unavailable"
+          : "rejected",
       ),
     };
   const result = runGh([
