@@ -382,7 +382,7 @@ describe("GitHub pull request gateway", () => {
               ok: false,
               status: 422,
               stdout: "token=SECRET",
-              stderr: "Authorization: Bearer SECRET",
+              stderr: "Authorization:\nBearer SECRET",
             }
           : { ok: true, stdout: "" },
     });

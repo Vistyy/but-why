@@ -26,7 +26,10 @@ export type PublicationCommandResult =
 
 const bounded = (value: string): string =>
   value
-    .replace(/((?:token|password|secret|authorization)["']?\s*[:=]\s*).*/gi, "$1[redacted]")
+    .replace(
+      /((?:token|password|secret|authorization)["']?\s*[:=]\s*)(?:\r?\n\s*)?[^\r\n]*/gi,
+      "$1[redacted]",
+    )
     .replace(/https?:\/\/[^\s/@]+:[^\s@]+@/gi, "https://[redacted]@")
     .slice(0, 1000);
 const classifyCommandFailure = (result: PublicationCommandResult): "rejected" | "unavailable" =>

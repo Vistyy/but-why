@@ -632,6 +632,62 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
       }),
     ),
   );
+  it.scoped("bounds empty recovery creation and final confirmation", () =>
+    withFixture((fixture) =>
+      Effect.gen(function* () {
+        let branchHead = fixture.captured.headSha;
+        let createCalls = 0;
+        const publication = openCandidatePublication({
+          changePersistence: fixture.changes,
+          validationPersistence: fixture.validation,
+          git: {
+            readBranchHead: () => branchHead,
+            readFirstNonMergeCommitSubject: () => ({ ok: true, subject: "Publication" }),
+          },
+          github: {
+            findPullRequests: () => [],
+            getPullRequest: () => undefined,
+            createPullRequest: () => {
+              createCalls += 1;
+              return createCalls === 1
+                ? { ok: false as const, code: "remote_rejected" as const }
+                : { ok: false as const, code: "remote_response_lost" as const };
+            },
+            updatePullRequest: () => {
+              throw new Error("Recovery must not update the pull request");
+            },
+          },
+        });
+        expect(yield* publication.publish(input(fixture))).toMatchObject({
+          ok: false,
+          code: "publication_tooling_failed",
+        });
+        const next = yield* nextCandidate(
+          fixture,
+          "Recovery Candidate",
+          "2026-07-25T16:00:00.000Z",
+        );
+        branchHead = next.captured.headSha;
+        expect(
+          yield* publication.publish({
+            ...input(fixture),
+            candidateId: next.captured.candidateId,
+            validationRunId: next.validationRunId,
+            now: "2026-07-25T16:00:00.000Z",
+          }),
+        ).toMatchObject({ ok: false, code: "publication_creation_unconfirmed" });
+        expect(createCalls).toBe(2);
+        expect(yield* fixture.changes.getChangeById(fixture.captured.changeId)).toMatchObject({
+          publication: {
+            candidateId: next.captured.candidateId,
+            expectedHeadSha: next.captured.headSha,
+            pullRequest: null,
+          },
+        });
+      }),
+    ),
+  );
+
   it.scoped("retains the marker when remote branch state is unavailable", () =>
     withFixture((fixture) =>
       Effect.gen(function* () {
