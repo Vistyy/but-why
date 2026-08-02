@@ -240,7 +240,8 @@ const updatePullRequest = (
     `body=${request.body}`,
   ]);
   if (!result.ok) {
-    const lost = result.status === undefined && result.stderr === undefined;
+    const lost =
+      result.status === undefined && result.stdout === undefined && result.stderr === undefined;
     return {
       ok: false,
       code: lost ? "remote_response_lost" : "remote_rejected",

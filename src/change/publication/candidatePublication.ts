@@ -385,7 +385,9 @@ const confirmCreation = (
           ? lookupEvidence === undefined
             ? {}
             : { evidence: lookupEvidence }
-          : { evidence: failureEvidence }),
+          : lookupEvidence === undefined
+            ? { evidence: failureEvidence }
+            : { evidence: lookupEvidence }),
       });
 };
 
