@@ -18,14 +18,14 @@ Use the Candidate and directly affected code as evidence.
 
 Apply a lens only when the Candidate changes its relevant area:
 
-- Canonical ownership and terms.
-- Exact provenance and state reuse.
-- Lifecycle atomicity and recovery.
-- External boundaries and error honesty.
-- Test value and public contracts.
-- Small coherent design.
-- Reviewer infrastructure and evidence.
-- Documentation responsibility.
+- **Domain ownership and terms**: Keep behavior in its owning domain, preserve valid domain relationships, and use canonical terms from the applicable context.
+- **Design locality and necessity**: Keep caller knowledge and coordination small, put behavior in its clear owner, and require concrete justification for abstractions, seams, and indirection.
+- **Interface and agent experience**: Preserve supported interface contracts and, for agent-facing commands, review output, errors, exit codes, help, empty states, and non-interactive operation.
+- **State integrity, provenance, and recovery**: Bind stored state, reused evidence, and external effects to the correct identity; keep related transitions atomic; and preserve explicit retry, reconciliation, and cleanup behavior.
+- **External boundaries and error honesty**: Validate untrusted persisted or wire data at the applicable Adapter seam and represent dependency failures explicitly without reporting misleading success.
+- **Verification and test value**: Assess changed and directly affected tests for proportionate coverage of material risks through supported interfaces, distinct observable behavior, unsupported requirements, and redundant coverage.
+- **Change completeness and current-system consistency**: Update directly affected callers, tests, configuration, generated artifacts, and authorities, and remove replaced paths unless a current accepted boundary requires them.
+- **Documentation and instruction responsibility**: Keep each supported claim in one current authority, close concrete reader knowledge gaps, and make changed instructions precise, correctly placed, and behaviorally complete.
 
 ## Materiality
 
