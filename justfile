@@ -115,7 +115,7 @@ pack:
 
 # Run comparative cold-start measurements for the production and package executables.
 cli-loading-benchmark:
-    @BY_CLI_LOADING_BENCHMARK=1 just test test/repository/cli-loading.boundary.test.ts
+    @node scripts/cli-loading-benchmark.mjs
 
 # Format the codebase.
 format:
