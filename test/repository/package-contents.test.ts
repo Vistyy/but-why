@@ -1,4 +1,13 @@
-import { chmodSync, cpSync, mkdirSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  cpSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
@@ -162,9 +171,32 @@ exit 1
       isolatedHome,
     });
     expect(implement.status, `${implement.stdout}${implement.stderr}`).toBe(0);
-    expect(readFileSync(env.BY_FAKE_CAPTURE, "utf8")).toContain(
-      `--extension '${join(installedPackage, "extensions/continue-change.ts")}'`,
+    const extension = join(installedPackage, "extensions/continue-change.ts");
+    expect(readFileSync(env.BY_FAKE_CAPTURE, "utf8")).toContain(`--extension '${extension}'`);
+
+    rmSync(extension);
+    rmSync(env.BY_FAKE_CAPTURE);
+    const missingExtension = runTestProcess(
+      bin,
+      ["--json", "change", "implement", change.change.id],
+      {
+        cwd: repository,
+        env: {
+          ...env,
+          BY_FAKE_WORKTREE: change.worktreePath,
+          BY_FAKE_SESSION: `change-${change.change.id.slice(0, 8)}`,
+        },
+        isolatedHome,
+      },
     );
+    expect(missingExtension.status).toBe(1);
+    expect(JSON.parse(missingExtension.stdout)).toMatchObject({
+      error: {
+        code: "launch_failed",
+        message: expect.stringContaining("Required trusted continuation extension is missing"),
+      },
+    });
+    expect(existsSync(env.BY_FAKE_CAPTURE)).toBe(false);
   }, 120_000);
 
   it("packs built CLI output and public package metadata only", () => {
