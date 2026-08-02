@@ -1,4 +1,5 @@
 import { statSync } from "node:fs";
+import { createJiti } from "jiti/static";
 import { executeHostCommand } from "../command/hostCommand.js";
 
 import { prependAgentEnvironment, shellQuote } from "../agent/agentEnvironment.js";
@@ -9,6 +10,7 @@ import type {
   InteractiveSessionLaunchInput,
   InteractiveSessionLaunchResult,
   InteractiveSessionLaunchEvidence,
+  InteractiveSessionLaunchWarning,
 } from "./interactiveSessionHost.js";
 
 export type HerdrCommandExecutor = (
@@ -55,6 +57,32 @@ export const trustedContinuationExtensionPath = (): string =>
 const trustedImplementationAdvisorExtensionPath = (): string =>
   resolvePackageAsset("extensions/implementation-advisor/index.ts");
 
+type TrustedExtensionPreflight =
+  | { readonly ok: true }
+  | { readonly ok: false; readonly message: string };
+
+const preflightTrustedExtension = async (path: string): Promise<TrustedExtensionPreflight> => {
+  try {
+    if (!statSync(path).isFile()) {
+      return { ok: false, message: `Entry point is not a regular file: ${path}` };
+    }
+  } catch {
+    return { ok: false, message: `Entry point is missing: ${path}` };
+  }
+  try {
+    const jiti = createJiti(import.meta.url, { moduleCache: false });
+    const factory = await jiti.import(path, { default: true });
+    return typeof factory === "function"
+      ? { ok: true }
+      : { ok: false, message: `Entry point does not export a Pi extension factory: ${path}` };
+  } catch (error) {
+    return {
+      ok: false,
+      message: error instanceof Error ? error.message : String(error),
+    };
+  }
+};
+
 const launchHerdrSession = async (
   execute: HerdrCommandExecutor,
   input: InteractiveSessionLaunchInput,
@@ -65,25 +93,27 @@ const launchHerdrSession = async (
   const continuationExtension = trustedContinuationExtensionPath();
   const advisorExtension = trustedImplementationAdvisorExtensionPath();
   let implementationAdvisor = input.implementationAdvisor;
-  try {
-    if (!statSync(continuationExtension).isFile()) {
-      return launchFailure(
-        `Required trusted continuation extension is not a file: ${continuationExtension}`,
-      );
-    }
-  } catch {
+  const continuationPreflight = await preflightTrustedExtension(continuationExtension);
+  if (!continuationPreflight.ok) {
     return launchFailure(
-      `Required trusted continuation extension is missing: ${continuationExtension}`,
+      continuationPreflight.message.startsWith("Entry point is missing:")
+        ? `Required trusted continuation extension is missing: ${continuationExtension}`
+        : `Required trusted continuation extension failed preflight: ${continuationPreflight.message}`,
     );
   }
-  const command = boundedExecutor(execute, options.commandTimeoutMs);
+  let launchWarning: InteractiveSessionLaunchWarning | undefined;
   if (implementationAdvisor !== undefined) {
-    try {
-      if (!statSync(advisorExtension).isFile()) implementationAdvisor = undefined;
-    } catch {
+    const advisorPreflight = await preflightTrustedExtension(advisorExtension);
+    if (!advisorPreflight.ok) {
+      launchWarning = {
+        code: "implementation_advisor_preflight_failed",
+        message: `Implementation Advisor preflight failed, so the Implementer session launched without the advisor: ${advisorPreflight.message}`,
+        details: { path: advisorExtension, failure: advisorPreflight.message },
+      };
       implementationAdvisor = undefined;
     }
   }
+  const command = boundedExecutor(execute, options.commandTimeoutMs);
   const sessionName = input.herdrName ?? herdrSessionName(input.changeId);
   let agents = await observe(command, ["agent", "list"], signal, options.observationRetries);
   if (!agents.ok) {
@@ -97,7 +127,12 @@ const launchHerdrSession = async (
     return launchFailure("Herdr returned malformed agent-list output.");
   }
   if (hasActiveSession(agents.stdout, input, sessionName)) {
-    return { ok: true, host: "herdr", status: "already_active" };
+    return {
+      ok: true,
+      host: "herdr",
+      status: "already_active",
+      ...(launchWarning === undefined ? {} : { warning: launchWarning }),
+    };
   }
   if (hasUnknownSession(agents.stdout, input, sessionName)) {
     return launchIndeterminate("Herdr could not determine the existing session state.");
@@ -129,7 +164,12 @@ const launchHerdrSession = async (
         return launchIndeterminate("Herdr did not provide session facts for worktree recovery.");
       }
       if (hasActiveSession(agents.stdout, input, sessionName)) {
-        return { ok: true, host: "herdr", status: "already_active" };
+        return {
+          ok: true,
+          host: "herdr",
+          status: "already_active",
+          ...(launchWarning === undefined ? {} : { warning: launchWarning }),
+        };
       }
       if (hasUnknownSession(agents.stdout, input, sessionName)) {
         return launchIndeterminate("Herdr could not determine the existing session state.");
@@ -146,7 +186,12 @@ const launchHerdrSession = async (
       );
     }
     if (hasActiveSession(agents.stdout, input, sessionName)) {
-      return { ok: true, host: "herdr", status: "already_active" };
+      return {
+        ok: true,
+        host: "herdr",
+        status: "already_active",
+        ...(launchWarning === undefined ? {} : { warning: launchWarning }),
+      };
     }
     if (hasUnknownSession(agents.stdout, input, sessionName)) {
       return launchIndeterminate("Herdr could not determine the existing session state.");
@@ -185,7 +230,12 @@ const launchHerdrSession = async (
     );
   }
   if (hasActiveSession(currentAgents.stdout, input, sessionName)) {
-    return { ok: true, host: "herdr", status: "already_active" };
+    return {
+      ok: true,
+      host: "herdr",
+      status: "already_active",
+      ...(launchWarning === undefined ? {} : { warning: launchWarning }),
+    };
   }
   if (hasUnknownSession(currentAgents.stdout, input, sessionName)) {
     return launchIndeterminate("Herdr could not determine the existing session state.");
@@ -202,6 +252,7 @@ const launchHerdrSession = async (
     continuationExtension,
     implementationAdvisor,
     advisorExtension,
+    launchWarning,
   );
 };
 
@@ -217,6 +268,7 @@ const launchInOpenedWorktree = async (
   continuationExtension: string,
   implementationAdvisor: InteractiveSessionLaunchInput["implementationAdvisor"],
   advisorExtension: string,
+  launchWarning: InteractiveSessionLaunchWarning | undefined,
 ): Promise<InteractiveSessionLaunchResult> => {
   if (
     hasUnknownSession(listedAgents, input, sessionName) ||
@@ -242,7 +294,12 @@ const launchInOpenedWorktree = async (
       ? await waitForAgent(execute, input, sessionName, opened.rootPaneId, signal, options, "named")
       : ({ kind: "absent" } as const);
     if (observed.kind === "ready") {
-      return { ok: true, host: "herdr", status: "started" };
+      return {
+        ok: true,
+        host: "herdr",
+        status: "started",
+        ...(launchWarning === undefined ? {} : { warning: launchWarning }),
+      };
     }
     const evidence = await launchEvidence(execute, opened.rootPaneId, signal);
     if (!opened.alreadyOpen && observed.kind === "absent") {
@@ -323,7 +380,12 @@ const launchInOpenedWorktree = async (
       );
     }
   }
-  return { ok: true, host: "herdr", status: "started" };
+  return {
+    ok: true,
+    host: "herdr",
+    status: "started",
+    ...(launchWarning === undefined ? {} : { warning: launchWarning }),
+  };
 };
 
 const launchFailure = (
@@ -617,7 +679,7 @@ const piCommand = (
           ...(input.implementationAdvisorContext === undefined
             ? []
             : [
-                `BUT_WHY_IMPLEMENTATION_ADVISOR_CONTEXT=${shellQuote(input.implementationAdvisorContext)}`,
+                `BUT_WHY_IMPLEMENTATION_ADVISOR_CONTEXT=${shellQuote(JSON.stringify(input.implementationAdvisorContext))}`,
               ]),
         ];
   return [

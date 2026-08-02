@@ -1,4 +1,4 @@
-import { existsSync } from "node:fs";
+import { existsSync, realpathSync } from "node:fs";
 import { homedir } from "node:os";
 import { isAbsolute, join, resolve } from "node:path";
 
@@ -67,12 +67,20 @@ export const piResourceFlags = (
 
   const trustedExtensions = options.trustedExtensions ?? [];
   const configuredExtensions =
-    runtimeConfig?.extensions?.map((extension) => resolvePiResource(extension, context)) ?? [];
+    runtimeConfig?.extensions?.map((extension) =>
+      canonicalizeExistingPath(resolvePiResource(extension, context)),
+    ) ?? [];
   if (runtimeConfig?.extensions !== undefined) flags.push("--no-extensions");
-  const extensions = [
+  const extensions: string[] = [];
+  const seenExtensionPaths = new Set<string>();
+  for (const extension of [
     ...configuredExtensions,
-    ...trustedExtensions.filter((extension) => !configuredExtensions.includes(extension)),
-  ];
+    ...trustedExtensions.map(canonicalizeExistingPath),
+  ]) {
+    if (seenExtensionPaths.has(extension)) continue;
+    seenExtensionPaths.add(extension);
+    extensions.push(extension);
+  }
   for (const extension of extensions) flags.push("--extension", shellQuote(extension));
 
   if (runtimeConfig?.skills !== undefined) {
@@ -113,3 +121,11 @@ const resolvePiResource = (source: string, context: PiRuntimeResourceContext): s
 
 const isPiPackageSource = (source: string): boolean =>
   /^(?:npm|git|github|https?|ssh):/u.test(source);
+
+const canonicalizeExistingPath = (path: string): string => {
+  try {
+    return realpathSync(path);
+  } catch {
+    return path;
+  }
+};

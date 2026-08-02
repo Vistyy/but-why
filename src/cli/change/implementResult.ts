@@ -56,6 +56,7 @@ export const implementResult = (result: ChangeImplementResult): CliResult => {
       worktreePath: result.change.worktreePath,
       host: result.host,
       status: result.status,
+      ...(result.warning === undefined ? {} : { warning: result.warning }),
       ...(result.agentProfile === undefined
         ? {}
         : { agentProfile: result.agentProfile, profileScope: result.profileScope }),

@@ -20,6 +20,7 @@ import { changeReadiness, changeState, type ChangePrepareFailure } from "./chang
 import type {
   InteractiveSessionHost,
   InteractiveSessionLaunchEvidence,
+  InteractiveSessionLaunchWarning,
 } from "./interactiveSessionHost.js";
 import {
   buildImplementerInitialPrompt,
@@ -71,6 +72,7 @@ export type ChangeImplementResult =
       readonly change: ChangeStartRecord;
       readonly host: "herdr";
       readonly status: "started" | "already_active";
+      readonly warning?: InteractiveSessionLaunchWarning;
       readonly agentProfile?: string;
       readonly profileScope?: "repo" | "global";
     }
@@ -301,9 +303,11 @@ const implementChange = (
               return advisor !== undefined && advisor !== false
                 ? {
                     implementationAdvisor: advisor,
-                    ...(change.acceptanceContext === null
-                      ? {}
-                      : { implementationAdvisorContext: JSON.stringify(change.acceptanceContext) }),
+                    implementationAdvisorContext: {
+                      changeId: change.id,
+                      acceptanceContext: change.acceptanceContext,
+                      implementationDecisions: change.implementationDecisions ?? [],
+                    },
                   }
                 : {};
             })(),

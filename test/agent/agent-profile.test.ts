@@ -1,4 +1,4 @@
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
@@ -6,7 +6,7 @@ import {
   resolveAgentProfile,
   resolveInteractiveSessionAgentProfile,
 } from "../../src/agent/agentProfiles.js";
-import { validatePiAgentProfileResources } from "../../src/agent/piRuntime.js";
+import { piResourceFlags, validatePiAgentProfileResources } from "../../src/agent/piRuntime.js";
 import { createTestWorkspace } from "../support/testWorkspace.js";
 
 const piProfile = (model?: string) => ({
@@ -156,6 +156,23 @@ describe("Agent Profiles", () => {
     if (!resolved.ok) return;
 
     expect(validatePiAgentProfileResources(resolved.resolved, root)).toEqual({ ok: true });
+  });
+
+  it("deduplicates configured and trusted extensions by canonical physical identity", () => {
+    const root = createTestWorkspace();
+    const extension = join(root, "extensions", "review.ts");
+    const alias = join(root, "extensions", "review-alias.ts");
+    mkdirSync(join(root, "extensions"), { recursive: true });
+    writeFileSync(extension, "export default {};");
+    symlinkSync(extension, alias);
+
+    expect(
+      piResourceFlags(
+        { extensions: ["extensions/review.ts"] },
+        { scope: "repo", repoRoot: root, globalConfigDirectory: undefined },
+        { trustedExtensions: [alias] },
+      ),
+    ).toBe(`--no-extensions --extension '${extension}'`);
   });
 
   it("resolves Repo resources from the supplied resource root", () => {
