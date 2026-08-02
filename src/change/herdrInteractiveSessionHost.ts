@@ -1,7 +1,4 @@
 import { statSync } from "node:fs";
-import { dirname, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
-
 import { executeHostCommand } from "../command/hostCommand.js";
 
 import { prependAgentEnvironment, shellQuote } from "../agent/agentEnvironment.js";
@@ -56,10 +53,7 @@ export const trustedContinuationExtensionPath = (): string =>
   resolvePackageAsset("extensions/continue-change.ts");
 
 const trustedImplementationAdvisorExtensionPath = (): string =>
-  resolve(
-    dirname(fileURLToPath(import.meta.url)),
-    "../../extensions/implementation-advisor/index.ts",
-  );
+  resolvePackageAsset("extensions/implementation-advisor/index.ts");
 
 const launchHerdrSession = async (
   execute: HerdrCommandExecutor,
