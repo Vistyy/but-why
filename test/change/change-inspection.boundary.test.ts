@@ -188,6 +188,14 @@ describe("Change inspection CLI", () => {
       expect(emptyToon.status).toBe(0);
       expect(emptyToon.stdout).toContain("count: 0");
       expect(emptyToon.stdout).toContain("No Candidate Publications recorded.");
+      const missing = yield* runByInProcessEffect(root, [
+        "--json",
+        "change",
+        "publications",
+        randomUUID(),
+      ]);
+      expect(missing.status).toBe(1);
+      expect(JSON.parse(missing.stdout)).toMatchObject({ error: { code: "change_not_found" } });
     }),
   );
 
