@@ -214,9 +214,7 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
         expect(requests).toEqual([]);
         historyAvailable = true;
         expect(yield* publication.publish(input(fixture))).toMatchObject({ ok: true });
-        expect(requests).toContainEqual(
-          expect.objectContaining({ title: `Change ${fixture.captured.changeId.slice(0, 8)}` }),
-        );
+        expect(requests).toContainEqual(expect.objectContaining({ title: "Change publication" }));
       }),
     ),
   );

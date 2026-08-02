@@ -774,7 +774,7 @@ const metadataFor = (
   return !subject.ok
     ? { ok: false, code: "commit_history_unavailable" }
     : {
-        title: subject.subject ?? `Change ${change.id.slice(0, 8)}`,
+        title: subject.subject ?? "Change publication",
         body: implementationDecisionSection(change.implementationDecisions).trim(),
       };
 };
