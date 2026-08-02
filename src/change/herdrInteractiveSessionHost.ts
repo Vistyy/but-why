@@ -1,3 +1,7 @@
+import { statSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+
 import { executeHostCommand } from "../command/hostCommand.js";
 
 import { prependAgentEnvironment, shellQuote } from "../agent/agentEnvironment.js";
@@ -47,6 +51,9 @@ export const openHerdrInteractiveSessionHost = (
 
 export const herdrSessionName = (changeId: string): string => `but-why-${changeId}`;
 
+export const trustedContinuationExtensionPath = (): string =>
+  resolve(dirname(fileURLToPath(import.meta.url)), "../../extensions/continue-change.ts");
+
 const launchHerdrSession = async (
   execute: HerdrCommandExecutor,
   input: InteractiveSessionLaunchInput,
@@ -54,6 +61,18 @@ const launchHerdrSession = async (
   signal: AbortSignal | undefined,
 ): Promise<InteractiveSessionLaunchResult> => {
   const options = { ...defaultOptions, ...environment };
+  const continuationExtension = trustedContinuationExtensionPath();
+  try {
+    if (!statSync(continuationExtension).isFile()) {
+      return launchFailure(
+        `Required trusted continuation extension is not a file: ${continuationExtension}`,
+      );
+    }
+  } catch {
+    return launchFailure(
+      `Required trusted continuation extension is missing: ${continuationExtension}`,
+    );
+  }
   const command = boundedExecutor(execute, options.commandTimeoutMs);
   const sessionName = input.herdrName ?? herdrSessionName(input.changeId);
   let agents = await observe(command, ["agent", "list"], signal, options.observationRetries);
@@ -170,6 +189,7 @@ const launchHerdrSession = async (
     opened,
     signal,
     options,
+    continuationExtension,
   );
 };
 
@@ -182,6 +202,7 @@ const launchInOpenedWorktree = async (
   opened: OpenedWorktree,
   signal: AbortSignal | undefined,
   options: ResolvedOptions,
+  continuationExtension: string,
 ): Promise<InteractiveSessionLaunchResult> => {
   if (
     hasUnknownSession(listedAgents, input, sessionName) ||
@@ -194,7 +215,7 @@ const launchInOpenedWorktree = async (
   }
 
   const launched = await execute(
-    ["pane", "run", opened.rootPaneId, piCommand(input, path)],
+    ["pane", "run", opened.rootPaneId, piCommand(input, path, continuationExtension)],
     signal,
   );
   if (!launched.ok) {
@@ -502,15 +523,20 @@ const launchEvidence = async (
       };
 };
 
-const piCommand = (input: InteractiveSessionLaunchInput, path: string | undefined): string => {
-  const profileFlags =
-    input.agentProfile === undefined
-      ? ""
-      : piResourceFlags(input.agentProfile.profile.runtimeConfig, {
-          scope: input.agentProfile.scope,
-          repoRoot: input.worktreePath,
-          globalConfigDirectory: input.globalConfigDirectory,
-        });
+const piCommand = (
+  input: InteractiveSessionLaunchInput,
+  path: string | undefined,
+  continuationExtension: string,
+): string => {
+  const profileFlags = piResourceFlags(
+    input.agentProfile?.profile.runtimeConfig,
+    {
+      scope: input.agentProfile?.scope ?? "repo",
+      repoRoot: input.worktreePath,
+      globalConfigDirectory: input.globalConfigDirectory,
+    },
+    { trustedExtensions: [continuationExtension] },
+  );
   const model = input.agentProfile?.profile.runtimeConfig?.model;
   const thinking = input.agentProfile?.profile.runtimeConfig?.thinking;
   return [

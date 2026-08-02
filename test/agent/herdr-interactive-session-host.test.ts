@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   herdrSessionName,
   openHerdrInteractiveSessionHost,
+  trustedContinuationExtensionPath,
   type HerdrCommandExecutor,
 } from "../../src/change/herdrInteractiveSessionHost.js";
 
@@ -73,7 +74,7 @@ describe("Herdr Interactive Session Host", () => {
       "pane",
       "run",
       "workspace-1:pane-1",
-      "exec pi --name 'BY-41 Name Interactive Sessions' 'Implement'",
+      `exec pi --name 'BY-41 Name Interactive Sessions' --extension '${trustedContinuationExtensionPath()}' 'Implement'`,
     ]);
     expect(commands).toContainEqual(["agent", "rename", "workspace-1:pane-1", "BY-41"]);
   });
@@ -148,7 +149,7 @@ describe("Herdr Interactive Session Host", () => {
         "pane",
         "run",
         "workspace-1:pane-1",
-        "PATH='/usr/local/bin:/opt/pi/bin' exec 'nix' 'develop' '-c' pi --system-prompt 'Canonical Implementer contract' --name 'but-why-change-123' --model 'openai-codex/gpt-5.6-luna' --thinking 'high' '\n---\ndescription: Continue from the recorded decision.\n---'",
+        `PATH='/usr/local/bin:/opt/pi/bin' exec 'nix' 'develop' '-c' pi --system-prompt 'Canonical Implementer contract' --name 'but-why-change-123' --model 'openai-codex/gpt-5.6-luna' --thinking 'high' --extension '${trustedContinuationExtensionPath()}' '\n---\ndescription: Continue from the recorded decision.\n---'`,
       ],
       ["agent", "rename", "workspace-1:pane-1", sessionName],
     ]);

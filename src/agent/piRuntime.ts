@@ -57,17 +57,23 @@ export const validatePiAgentProfileResources = (
 export const piResourceFlags = (
   runtimeConfig: PiRuntimeConfig | undefined,
   context: PiRuntimeResourceContext,
-  options: { readonly reviewerHygiene?: boolean } = {},
+  options: {
+    readonly reviewerHygiene?: boolean;
+    readonly trustedExtensions?: readonly string[];
+  } = {},
 ): string => {
   const flags: string[] = [];
   if (options.reviewerHygiene === true) flags.push("--no-prompt-templates", "--no-themes");
 
-  if (runtimeConfig?.extensions !== undefined) {
-    flags.push("--no-extensions");
-    for (const extension of runtimeConfig.extensions) {
-      flags.push("--extension", shellQuote(resolvePiResource(extension, context)));
-    }
-  }
+  const trustedExtensions = options.trustedExtensions ?? [];
+  const configuredExtensions =
+    runtimeConfig?.extensions?.map((extension) => resolvePiResource(extension, context)) ?? [];
+  if (runtimeConfig?.extensions !== undefined) flags.push("--no-extensions");
+  const extensions = [
+    ...configuredExtensions,
+    ...trustedExtensions.filter((extension) => !configuredExtensions.includes(extension)),
+  ];
+  for (const extension of extensions) flags.push("--extension", shellQuote(extension));
 
   if (runtimeConfig?.skills !== undefined) {
     flags.push("--no-skills");

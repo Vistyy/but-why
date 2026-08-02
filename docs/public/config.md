@@ -254,4 +254,4 @@ The old flat `agentModel` and `thinking` fields are invalid.
 Non-Pi runtimes and unknown configuration keys are invalid.
 No compatibility parser or automatic migration is provided.
 
-For opt-in Change Implement continuation, add the packaged `extensions/continue-change.ts` extension to the Global `implementer` profile.
+Change Implement sessions automatically load the packaged `continue-change` extension. Agent Profile extension settings continue to control only user-configured extensions.
