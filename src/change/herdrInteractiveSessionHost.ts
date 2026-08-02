@@ -580,6 +580,11 @@ const piCommand = (
             : [
                 `BUT_WHY_IMPLEMENTATION_ADVISOR_THINKING=${shellQuote(implementationAdvisor.thinking)}`,
               ]),
+          ...(input.implementationAdvisorContext === undefined
+            ? []
+            : [
+                `BUT_WHY_IMPLEMENTATION_ADVISOR_CONTEXT=${shellQuote(input.implementationAdvisorContext)}`,
+              ]),
         ];
   return [
     ...(path === undefined ? [] : [`PATH=${shellQuote(path)}`]),

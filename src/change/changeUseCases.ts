@@ -299,7 +299,12 @@ const implementChange = (
                 globalConfig: globalConfig.config,
               });
               return advisor !== undefined && advisor !== false
-                ? { implementationAdvisor: advisor }
+                ? {
+                    implementationAdvisor: advisor,
+                    ...(change.acceptanceContext === null
+                      ? {}
+                      : { implementationAdvisorContext: JSON.stringify(change.acceptanceContext) }),
+                  }
                 : {};
             })(),
           },

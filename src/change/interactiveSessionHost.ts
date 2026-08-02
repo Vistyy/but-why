@@ -21,6 +21,7 @@ export type InteractiveSessionLaunchInput = {
   readonly globalConfigDirectory?: string;
   readonly agentEnvironment?: AgentEnvironmentCommand;
   readonly implementationAdvisor?: ImplementationAdvisorConfig;
+  readonly implementationAdvisorContext?: string;
 };
 
 export type InteractiveSessionLaunchResult =

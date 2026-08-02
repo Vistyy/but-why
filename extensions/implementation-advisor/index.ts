@@ -1,4 +1,6 @@
 import { createHash } from "node:crypto";
+import { homedir } from "node:os";
+import { join } from "node:path";
 import { createAgentSession, DefaultResourceLoader, ModelRuntime, SessionManager } from "@earendil-works/pi-coding-agent";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
@@ -10,7 +12,7 @@ const qualifyingTools = new Set(["bash", "edit", "write"]);
 const readTools = new Set(["read", "grep", "find", "ls"]);
 const ruleIds = new Set(implementationAdvisorRules.map((rule) => rule.id));
 
-type Evidence = { readonly activity: string; readonly reference: string };
+type Evidence = { readonly activity: string; readonly reference: string; readonly input: unknown; readonly result: unknown; readonly failed: boolean };
 type LedgerItem = { readonly rule: string; readonly batch: number; readonly evidenceFingerprint: string; readonly outcome: "note" | "none" | "failure"; readonly failures: number; readonly timestamp: string };
 type Note = { readonly ruleId: ImplementationAdvisorRuleId; readonly message: string; readonly evidence: readonly string[]; readonly activityBatch: number };
 
@@ -27,6 +29,8 @@ export default function implementationAdvisor(pi: ExtensionAPI): void {
   const ledger: LedgerItem[] = [];
   let nested: Awaited<ReturnType<typeof createAgentSession>>["session"] | undefined;
   let currentResult: Note | undefined;
+  let currentBatch = 0;
+  let terminated = false;
 
   const appendLedger = (item: LedgerItem, context: ExtensionContext): void => {
     ledger.push(item);
@@ -40,6 +44,7 @@ export default function implementationAdvisor(pi: ExtensionAPI): void {
       ledger.push(entry.data);
       if (entry.data.outcome === "note") emitted.set(`${entry.data.rule}:${entry.data.evidenceFingerprint}`, (emitted.get(`${entry.data.rule}:${entry.data.evidenceFingerprint}`) ?? 0) + 1);
       failures = entry.data.outcome === "failure" ? entry.data.failures : 0;
+      if (failures >= 3) disabled = true;
     }
   });
 
@@ -48,7 +53,7 @@ export default function implementationAdvisor(pi: ExtensionAPI): void {
     const qualifies = qualifyingTools.has(event.toolName) || (readTools.has(event.toolName) && isAuthorityRead(event.input));
     if (!qualifies) return;
     const reference = `${event.toolName}:${String(event.toolCallId)}`;
-    pending.push({ activity: event.toolName, reference });
+    pending.push({ activity: event.toolName, reference, input: event.input, result: event.content, failed: event.isError });
   });
 
   pi.on("agent_settled", async (_event, context) => {
@@ -56,6 +61,7 @@ export default function implementationAdvisor(pi: ExtensionAPI): void {
     const evidence = pending;
     pending = [];
     const activityBatch = ++batch;
+    currentBatch = activityBatch;
     running = true;
     try {
       const note = await evaluate(evidence, activityBatch, context);
@@ -85,12 +91,13 @@ export default function implementationAdvisor(pi: ExtensionAPI): void {
       const [provider, ...modelParts] = configuredModel.split("/");
       const model = runtime.getModel(provider ?? "", modelParts.join("/"));
       if (model === undefined) throw new Error("Configured Implementation Advisor model is unavailable.");
-      const loader = new DefaultResourceLoader({ cwd: context.cwd, agentDir: process.env.PI_AGENT_DIR ?? `${process.env.HOME ?? "~"}/.pi/agent`, noExtensions: true, noSkills: true, noPromptTemplates: true, noThemes: true, noContextFiles: true });
+      const loader = new DefaultResourceLoader({ cwd: context.cwd, agentDir: process.env.PI_AGENT_DIR ?? `${process.env.HOME ?? "~"}/.pi/agent`, noExtensions: true, noSkills: true, noPromptTemplates: true, noThemes: true });
       await loader.reload();
-      nested = (await createAgentSession({ cwd: context.cwd, model, thinkingLevel: thinking as "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | undefined, tools: ["read", "grep", "find", "ls", NOTE_TOOL], resourceLoader: loader, sessionManager: SessionManager.create(context.cwd, undefined, { id: "implementation-advisor" }), customTools: [{ name: NOTE_TOOL, label: "Implementation advice", description: "Return zero or one grounded note.", parameters: Type.Object({ ruleId: Type.String(), message: Type.String(), evidence: Type.Array(Type.String()), activityBatch: Type.Integer() }), execute: async (_id, value) => { if (value.message.trim() !== "" && ruleIds.has(value.ruleId as ImplementationAdvisorRuleId) && value.activityBatch === activityBatch && value.evidence.every((item) => evidence.some((candidate) => candidate.reference === item))) currentResult = { ruleId: value.ruleId as ImplementationAdvisorRuleId, message: value.message, evidence: value.evidence, activityBatch }; return { content: [{ type: "text", text: "Result recorded." }], details: {} }; } }] })).session;
+      nested = (await createAgentSession({ cwd: context.cwd, model, thinkingLevel: thinking as "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | undefined, tools: ["read", "grep", "find", "ls", NOTE_TOOL], resourceLoader: loader, sessionManager: SessionManager.continueRecent(context.cwd, join(process.env.PI_AGENT_DIR ?? join(homedir(), ".pi", "agent"), "implementation-advisor-sessions")), customTools: [{ name: NOTE_TOOL, label: "Implementation advice", description: "Return zero or one grounded note.", parameters: Type.Object({ ruleId: Type.String(), message: Type.String(), evidence: Type.Array(Type.String()), activityBatch: Type.Integer() }), execute: async (_id, value) => { if (!terminated && value.message.trim() !== "" && ruleIds.has(value.ruleId as ImplementationAdvisorRuleId) && value.activityBatch === currentBatch && value.evidence.every((item) => evidence.some((candidate) => candidate.reference === item))) currentResult = { ruleId: value.ruleId as ImplementationAdvisorRuleId, message: value.message, evidence: value.evidence, activityBatch }; terminated = true; return { content: [{ type: "text", text: "Result recorded." }], details: {} }; } }] })).session;
     }
     currentResult = undefined;
-    await nested.prompt(`Review activity batch ${activityBatch}. Evidence references: ${JSON.stringify(evidence)}. Rules (priority order): ${JSON.stringify(implementationAdvisorRules)}. Apply thresholds exactly. If and only if one grounded rule applies, call ${NOTE_TOOL} with a note bound to this batch and exact evidence references. Otherwise do not call the tool. Do not claim semantic correctness.`);
+    terminated = false;
+    await nested.prompt(`Review activity batch ${activityBatch}. Accepted implementation context: ${process.env.BUT_WHY_IMPLEMENTATION_ADVISOR_CONTEXT ?? "not supplied"}. Evidence, including inputs and results: ${JSON.stringify(evidence)}. Rules (priority order): ${JSON.stringify(implementationAdvisorRules)}. Apply thresholds exactly. If and only if one grounded rule applies, call ${NOTE_TOOL} with a note bound to this batch and exact evidence references. Otherwise do not call the tool. Do not claim semantic correctness.`);
     return currentResult;
   }
 
