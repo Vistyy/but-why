@@ -525,6 +525,8 @@ describe("Change Submit orchestration", () => {
   it.effect("validates a revised Candidate before updating the same owned pull request", () =>
     Effect.gen(function* () {
       const events: string[] = [];
+      let seenPublishInput: PublishCandidateInput | undefined;
+      let seenValidationInput: Readonly<Record<string, unknown>> | undefined;
       const change = readyChange({
         taskId: publicTaskId("BY-1"),
         acceptanceContext: {
@@ -555,6 +557,17 @@ describe("Change Submit orchestration", () => {
         dependencies({
           events,
           change,
+          publication: {
+            publish: (input) => {
+              seenPublishInput = input;
+              events.push("publish");
+              return {
+                ok: true,
+                created: false,
+                pullRequest: { number: 42, url: "https://github.test/acme/repo/pull/42" },
+              };
+            },
+          },
           acceptanceContextSupplied: true,
           reconciliationStatus: "open",
           branchHeadSha: "base",
@@ -569,8 +582,9 @@ describe("Change Submit orchestration", () => {
       const validationLayer = Layer.succeed(CandidateValidation, {
         validateCandidate: () => Effect.die("Taskless validation was not expected"),
         validateNoChange: () => Effect.die("No-Change validation was not expected"),
-        validateAcceptanceContextCandidate: () =>
+        validateAcceptanceContextCandidate: (input) =>
           Effect.sync(() => {
+            seenValidationInput = input;
             events.push("validate_task_backed");
             return {
               ok: true,
@@ -588,7 +602,14 @@ describe("Change Submit orchestration", () => {
         .submit({ changeId: change.id, now })
         .pipe(Effect.provide(validationLayer));
 
-      expect(result).toMatchObject({ ok: true, status: "published" });
+      expect(result).toMatchObject({ ok: true, status: "published", pullRequest: { number: 42 } });
+      expect(seenPublishInput).toMatchObject({
+        candidateId: "candidate-1",
+        validationRunId: "run-1",
+      });
+      expect(seenValidationInput).toMatchObject({
+        implementationDecisions: change.implementationDecisions,
+      });
       expect(events).toEqual([
         "reconcile",
         "capture",
