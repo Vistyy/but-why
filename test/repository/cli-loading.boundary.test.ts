@@ -33,15 +33,16 @@ describe("CLI loading and package boundary", () => {
           const build = runTestProcess("pnpm", ["--dir", repoRoot, "build"], { cwd: directory });
           expect(build.status, build.stderr || build.stdout).toBe(0);
 
-          const tree = readFileSync(join(repoRoot, "dist/cliCommandTree.js"), "utf8");
+          const entry = join(repoRoot, "dist/main.js");
+          const entrySource = readFileSync(entry, "utf8");
           const staticEntryFiles = new Set<string>();
-          const staticEntryQueue = [join(repoRoot, "dist/main.js")];
+          const staticEntryQueue = [entry];
           while (staticEntryQueue.length > 0) {
             const entry = staticEntryQueue.pop();
             if (entry === undefined || staticEntryFiles.has(entry)) continue;
             staticEntryFiles.add(entry);
             const source = readFileSync(entry, "utf8");
-            for (const match of source.matchAll(/from "(\.\.?(?:\/)[^"]+)"/g)) {
+            for (const match of source.matchAll(/from["'](\.\.?(?:\/)[^"']+)["']/g)) {
               const target = match[1];
               if (target !== undefined) staticEntryQueue.push(join(dirname(entry), target));
             }
@@ -53,19 +54,13 @@ describe("CLI loading and package boundary", () => {
           expect(
             [...staticEntryFiles].every((entry) => !entry.includes("/cli/validationRun/")),
           ).toBe(true);
-          expect([...staticEntryFiles].every((entry) => !entry.endsWith("/cli/initCli.js"))).toBe(
-            true,
-          );
-          expect(
-            [...staticEntryFiles].every((entry) => !entry.endsWith("/cli/task/dashboard.js")),
-          ).toBe(true);
-          expect(tree).toContain('import("./cli/change/start.js")');
-          expect(tree).toContain('import("./cli/change/submit.js")');
-          expect(tree).toContain('import("./cli/task/commands/list.js")');
-          const dynamicTargets = [...tree.matchAll(/import\("(\.\/[^"]+)"\)/g)].flatMap(
-            ([, target]) => (target === undefined ? [] : [target]),
-          );
+          const dynamicTargets = [
+            ...entrySource.matchAll(/import\([`"](\.\/[^`"]+)[`"]\)/g),
+          ].flatMap(([, target]) => (target === undefined ? [] : [target]));
           expect(dynamicTargets.length).toBeGreaterThan(10);
+          expect(
+            dynamicTargets.every((target) => existsSync(join(repoRoot, "dist", target.slice(2)))),
+          ).toBe(true);
 
           const packed = runTestProcess(
             "pnpm",

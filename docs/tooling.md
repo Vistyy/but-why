@@ -68,6 +68,6 @@ Advisory findings become implementation work only when repository evidence shows
 
 The production CLI keeps the complete Effect CLI descriptor tree in `src/cliCommandTree.ts` and loads command implementations through literal native dynamic imports after command selection.
 
-The release-package boundary test verifies the static import graph, emitted dynamic targets, and installed package tarball behavior.
+The release-package boundary test verifies the bundled entry graph, generated dynamic targets, and installed package tarball behavior.
 See [`test/repository/cli-loading.boundary.test.ts`](../test/repository/cli-loading.boundary.test.ts).
 Run it with `just test test/repository/cli-loading.boundary.test.ts`.
