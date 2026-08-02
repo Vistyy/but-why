@@ -79,16 +79,19 @@ describe("Change Submit orchestration", () => {
 
   it.effect("rejects a concurrent Submit before it reads Change state", () =>
     Effect.gen(function* () {
+      let lockCalls = 0;
       const lock: ExecutionLock = {
-        withLock: () =>
-          Effect.fail(
+        withLock: () => {
+          lockCalls += 1;
+          return Effect.fail(
             new ExecutionLockUnavailable({
               owner: "change_submission",
               key: "change-1",
               lockPath: "/tmp/change-1.sqlite",
               cause: new Error("busy"),
             }),
-          ),
+          );
+        },
       };
       const submit = openChangeSubmit(
         dependencies({ events: [], change: readyChange(), executionLock: lock }),
@@ -112,6 +115,7 @@ describe("Change Submit orchestration", () => {
         changeId: "change-1",
         validationRunId: null,
       });
+      expect(lockCalls).toBe(1);
     }),
   );
 
@@ -178,6 +182,75 @@ describe("Change Submit orchestration", () => {
           "publish",
         ]);
       }),
+  );
+
+  it.effect("retries a pending publication for a newer Candidate through Submit", () =>
+    Effect.gen(function* () {
+      const publishedCandidates: string[] = [];
+      const submit = openChangeSubmit(
+        dependencies({
+          change: readyChange({
+            publication: {
+              candidateId: "candidate-0",
+              validationRunId: "run-0",
+              target: { owner: "acme", repo: "repo", baseBranch: "main", remoteName: "origin" },
+              headBranch: "change-1",
+              expectedHeadSha: "old-head",
+              pullRequest: null,
+            },
+          }),
+          captureResults: [
+            candidate,
+            { ...candidate, candidateId: "candidate-2", headSha: "head-2" },
+          ],
+          publication: {
+            publish: (input) => {
+              publishedCandidates.push(input.candidateId);
+              return publishedCandidates.length === 1
+                ? { ok: false as const, code: "publication_tooling_failed" as const }
+                : {
+                    ok: true as const,
+                    created: false,
+                    pullRequest: { number: 42, url: "https://github.test/acme/repo/pull/42" },
+                  };
+            },
+          },
+        }),
+      );
+      let validationRuns = 0;
+      const validationLayer = Layer.succeed(CandidateValidation, {
+        validateCandidate: () =>
+          Effect.sync(() => {
+            validationRuns += 1;
+            return {
+              ok: true,
+              reused: false,
+              validationRunId: `run-${validationRuns}`,
+              outcome: "passed",
+            } as const;
+          }),
+        validateAcceptanceContextCandidate: () => Effect.die("Acceptance Review was not expected"),
+        validateNoChange: () => Effect.die("No-Change validation was not expected"),
+        listFindings: () => Effect.succeed([]),
+        listToolingFailures: () => Effect.succeed([]),
+        listRounds: () => Effect.succeed([]),
+      });
+
+      expect(
+        yield* submit.submit({ changeId: "change-1", now }).pipe(Effect.provide(validationLayer)),
+      ).toMatchObject({
+        ok: false,
+        code: "publication_tooling_failed",
+      });
+      expect(
+        yield* submit.submit({ changeId: "change-1", now }).pipe(Effect.provide(validationLayer)),
+      ).toMatchObject({
+        ok: true,
+        status: "published",
+        created: false,
+      });
+      expect(publishedCandidates).toEqual(["candidate-1", "candidate-2"]);
+    }),
   );
 
   it.effect(
@@ -954,7 +1027,12 @@ describe("Change Submit orchestration", () => {
             publish: (input) => {
               events.push(`publish:${input.candidateId}`);
               if (remoteHead !== "revised-head") {
-                return { ok: false, code: "publication_remote_mismatch" };
+                return {
+                  ok: false,
+                  code: "publication_remote_mismatch",
+                  expectedRemoteHeadSha: "expected-revised-head",
+                  observedRemoteHeadSha: remoteHead,
+                };
               }
               return {
                 ok: true,
@@ -1001,7 +1079,12 @@ describe("Change Submit orchestration", () => {
         .pipe(Effect.provide(validationLayer));
 
       expect(closed).toEqual({ ok: false, code: "owned_pull_request_closed", changeId: change.id });
-      expect(rejected).toEqual({ ok: false, code: "publication_remote_mismatch" });
+      expect(rejected).toEqual({
+        ok: false,
+        code: "publication_remote_mismatch",
+        expectedRemoteHeadSha: "expected-revised-head",
+        observedRemoteHeadSha: "unexpected-head",
+      });
       expect(published).toMatchObject({
         ok: true,
         status: "published",

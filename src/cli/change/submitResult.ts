@@ -215,6 +215,49 @@ export const submitResult = (result: ChangeSubmitResult, changeId: string): CliR
       ],
     });
   }
+  if (result.code === "current_head_mismatch") {
+    return runtimeError({
+      code: result.code,
+      message: "The Managed Worktree branch no longer matches the expected Candidate.",
+      details: {
+        changeId,
+        ...(result.evidence === undefined ? {} : { evidence: result.evidence }),
+      },
+      help: ["Restore the expected Candidate head, then retry Submit."],
+    });
+  }
+  if (result.code === "publication_remote_mismatch") {
+    return runtimeError({
+      code: result.code,
+      message: "The Remote Change Branch or pull request does not match the expected Candidate.",
+      details: {
+        changeId,
+        ...(result.expectedRemoteHeadSha === undefined
+          ? {}
+          : { expectedCommit: result.expectedRemoteHeadSha }),
+        ...(result.observedRemoteHeadSha === undefined
+          ? {}
+          : { observedCommit: result.observedRemoteHeadSha }),
+        ...(result.evidence === undefined ? {} : { evidence: result.evidence }),
+      },
+      help: ["Inspect and resolve the remote commit or pull request, then retry Submit."],
+    });
+  }
+  if (
+    result.code === "publication_creation_unconfirmed" ||
+    result.code === "publication_lookup_ambiguous" ||
+    result.code === "publication_tooling_failed"
+  ) {
+    return runtimeError({
+      code: result.code,
+      message: "Candidate Publication could not be confirmed safely.",
+      details: {
+        changeId,
+        ...(result.evidence === undefined ? {} : { evidence: result.evidence }),
+      },
+      help: ["Inspect the pending publication and retry Submit."],
+    });
+  }
   if (result.code === "validation_policy_invalid") {
     return runtimeError({
       code: result.code,

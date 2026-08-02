@@ -18,6 +18,8 @@ export const localCandidatePublicationGit = (input: {
   const runGit = input.runGit ?? runGitCommand;
   return {
     readBranchHead: (branchRef) => readBranchHead(runGit, input.cwd, branchRef),
+    containsCommit: (headSha, ancestorSha) =>
+      containsCommit(runGit, input.cwd, headSha, ancestorSha),
     readFirstNonMergeCommitSubject: (startingCommit, headSha) =>
       readFirstNonMergeCommitSubject(runGit, input.cwd, startingCommit, headSha),
   };
@@ -32,6 +34,13 @@ const readBranchHead = (
   const head = result.ok ? result.stdout.trim() : "";
   return head.length > 0 ? head : undefined;
 };
+
+const containsCommit = (
+  runGit: PublicationGitCommandRunner,
+  cwd: string,
+  headSha: string,
+  ancestorSha: string,
+): boolean => runGit(["merge-base", "--is-ancestor", ancestorSha, headSha], cwd).ok;
 
 const readFirstNonMergeCommitSubject = (
   runGit: PublicationGitCommandRunner,

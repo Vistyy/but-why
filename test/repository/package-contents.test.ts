@@ -125,6 +125,7 @@ exit 1
     chmodSync(join(tools, "herdr"), 0o755);
     const bin = join(installed, "node_modules", ".bin", "by");
     const env = {
+      // biome-ignore lint/complexity/useLiteralKeys: Node's environment type requires indexed access.
       PATH: `${tools}:${process.env["PATH"] ?? ""}`,
       BY_FAKE_CAPTURE: join(repository, "herdr-capture.txt"),
     };
