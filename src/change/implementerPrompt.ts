@@ -1,11 +1,8 @@
 import { readFileSync } from "node:fs";
-import { dirname, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { resolve } from "node:path";
+import { resolvePackageAsset } from "./packageAssetPath.js";
 
-const skillDirectory = resolve(
-  dirname(fileURLToPath(import.meta.url)),
-  "../../docs/public/skills/but-why",
-);
+const skillDirectory = resolvePackageAsset("docs/public/skills/but-why");
 
 const implementerContract = (): string =>
   [
