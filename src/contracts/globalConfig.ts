@@ -35,6 +35,17 @@ const globalConfigSchema = Schema.Struct({
   interactiveSession: Schema.optional(
     Schema.Struct({
       agentProfile: Schema.optional(agentProfileReferenceSchema),
+      implementationAdvisor: Schema.optional(
+        Schema.Union(
+          Schema.Literal(false),
+          Schema.Struct({
+            model: Schema.String.pipe(Schema.minLength(1)),
+            thinking: Schema.optional(
+              Schema.Literal("off", "minimal", "low", "medium", "high", "xhigh"),
+            ),
+          }),
+        ),
+      ),
     }),
   ),
   review: Schema.optional(
