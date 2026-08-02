@@ -33,6 +33,7 @@ export default function implementationAdvisor(pi: ExtensionAPI): void {
   let currentBatch = 0;
   let terminated = false;
   let currentEvidence: readonly Evidence[] = [];
+  let rerunScheduled = false;
 
   const appendLedger = (item: LedgerItem, context: ExtensionContext): void => {
     ledger.push(item);
@@ -61,7 +62,7 @@ export default function implementationAdvisor(pi: ExtensionAPI): void {
   const handleSettled = async (context: ExtensionContext): Promise<void> => {
     if (disabled || pending.length === 0) return;
     if (running) {
-      setTimeout(() => void handleSettled(context), 0);
+      rerunScheduled = true;
       return;
     }
     const evidence = pending;
@@ -89,7 +90,10 @@ export default function implementationAdvisor(pi: ExtensionAPI): void {
       void error;
     } finally {
       running = false;
-      if (pending.length > 0 && !disabled) queueMicrotask(() => void handleSettled(context));
+      if ((pending.length > 0 || rerunScheduled) && !disabled) {
+        rerunScheduled = false;
+        queueMicrotask(() => void handleSettled(context));
+      }
     }
   };
 
@@ -104,7 +108,7 @@ export default function implementationAdvisor(pi: ExtensionAPI): void {
       const model = runtime.getModel(provider ?? "", modelParts.join("/"));
       if (model === undefined) throw new Error("Configured Implementation Advisor model is unavailable.");
       const advisorAgentDir = process.env["PI_CODING_AGENT_DIR"] ?? `${process.env["HOME"] ?? "~"}/.pi/agent`;
-      const advisorSessionDir = process.env["PI_CODING_AGENT_SESSION_DIR"] ?? join(advisorAgentDir, "implementation-advisor-sessions");
+      const advisorSessionDir = join(process.env["PI_CODING_AGENT_SESSION_DIR"] ?? join(advisorAgentDir, "sessions"), "implementation-advisor");
       const loader = new DefaultResourceLoader({ cwd: context.cwd, agentDir: advisorAgentDir, noExtensions: true, noSkills: true, noPromptTemplates: true, noThemes: true });
       await loader.reload();
       nested = (await createAgentSession({ cwd: context.cwd, model, ...(thinking === undefined ? {} : { thinkingLevel: thinking as "off" | "minimal" | "low" | "medium" | "high" | "xhigh" }), tools: ["read", "grep", "find", "ls", NOTE_TOOL], resourceLoader: loader, sessionManager: SessionManager.continueRecent(context.cwd, advisorSessionDir), customTools: [{ name: NOTE_TOOL, label: "Implementation advice", description: "Return zero or one grounded note.", parameters: Type.Object({ ruleId: Type.String(), message: Type.String(), evidence: Type.Array(Type.String()), activityBatch: Type.Integer() }), execute: async (_id, value, _signal, _update, toolContext) => {
