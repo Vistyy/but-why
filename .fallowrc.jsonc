@@ -3,6 +3,7 @@
   "entry": [
     "src/main.ts",
     "extensions/**/*.ts",
+    "docs/public/skills/but-why/scripts/launch-handoff.mjs",
     "scripts/cli-loading-benchmark.mjs",
     "test/**/*.ts"
   ],

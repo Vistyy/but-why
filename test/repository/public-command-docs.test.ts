@@ -63,7 +63,11 @@ describe("public command documentation", () => {
     Effect.gen(function* () {
       const setup = readFileSync(join(repoRoot, "docs/public/setup.md"), "utf8");
       const config = readFileSync(join(repoRoot, "docs/public/config.md"), "utf8");
-      const documented = extractDocumentedCommands(`${setup}\n${config}`);
+      const operatorWorkflow = readFileSync(
+        join(repoRoot, "docs/public/skills/but-why/references/operator-workflow.md"),
+        "utf8",
+      );
+      const documented = extractDocumentedCommands(`${setup}\n${config}\n${operatorWorkflow}`);
       const rootHelp = yield* runByInProcessEffect(repoRoot, ["--help", "--json"]);
       const taskHelp = yield* runByInProcessEffect(repoRoot, ["task", "--help", "--json"]);
       const changeHelp = yield* runByInProcessEffect(repoRoot, ["change", "--help", "--json"]);
