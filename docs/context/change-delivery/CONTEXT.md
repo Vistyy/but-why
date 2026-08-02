@@ -147,6 +147,11 @@ _Avoid_: Acceptance Reviewer, Specialist Reviewer, reviewer process
 An optional background agent within an Implementer's Interactive Session that observes completed implementation activity and emits non-blocking advice without changing repository state, controlling the Implementer, or owning session continuation.
 _Avoid_: Implementer, reviewer, continuation worker
 
+**Advisor Activity Batch**:
+The ordered qualifying completed Implementer turns that one Implementation Advisor evaluation reviews together.
+An Advisor Activity Batch retains its exact activity and evidence identity after later implementation activity occurs.
+_Avoid_: Pi turn, current Managed Worktree state, advisor conversation
+
 **Submission**:
 The point-in-time act of asking But Why to fetch the Change Base, inspect a Change's Managed Worktree, select its Candidate or no-change state, validate it, and publish when eligible.
 Later Change Base advancement does not alter a completed Submission or invalidate its Candidate automatically.
