@@ -323,6 +323,11 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
         });
         expect(yield* publication.publish(input(fixture))).toMatchObject({ ok: true });
 
+        yield* fixture.changes.recordImplementationDecision({
+          changeId: fixture.captured.changeId,
+          content: "Update the owned pull request with the current decision log.",
+          now: "2026-07-22T10:04:00.000Z",
+        });
         const next = yield* nextCandidate(fixture, "New Candidate", "2026-07-22T10:05:00.000Z");
         branchHead = next.captured.headSha;
         expect(
@@ -338,6 +343,9 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
             number: 42,
             expectedCurrentHeadSha: fixture.captured.headSha,
             expectedHeadSha: next.captured.headSha,
+            body: expect.stringContaining(
+              "Update the owned pull request with the current decision log.",
+            ),
           }),
         );
         expect(confirmationDelays).toEqual([100]);
@@ -707,6 +715,7 @@ const input = (fixture: Fixture) => ({
   changeId: fixture.captured.changeId,
   candidateId: fixture.captured.candidateId,
   validationRunId: fixture.validationRunId,
+  changeBaseSha: fixture.captured.changeBaseSha,
   policy,
   target,
   now,

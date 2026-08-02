@@ -39,6 +39,7 @@ describe("by change reconcile", () => {
             target: publicationTarget,
             headBranch: "change-1",
             expectedHeadSha: "head",
+            changeBaseSha: "base",
             now,
           };
           const begun = yield* changes.beginPublication(publication);
@@ -125,6 +126,7 @@ describe("by change reconcile", () => {
             target: publicationTarget,
             headBranch: "change-1",
             expectedHeadSha: "head",
+            changeBaseSha: "base",
             now,
           };
           const begun = yield* changes.beginPublication(publication);
@@ -230,6 +232,7 @@ describe("by change reconcile", () => {
           target: publicationTarget,
           headBranch: "change-1",
           expectedHeadSha: "head",
+          changeBaseSha: "base",
           now,
         };
         const begun = yield* changes.beginPublication(publication);
@@ -240,16 +243,8 @@ describe("by change reconcile", () => {
         });
         if (!recorded.ok) throw new Error(recorded.code);
 
-        let cleanupInput:
-          | {
-              readonly remoteChangeBranch?: {
-                readonly remoteName: string;
-                readonly branchName: string;
-                readonly expectedHeadSha: string;
-              };
-            }
-          | undefined;
         let cleanupAttempts = 0;
+        let mergedHead = "merged-head";
         const reconciliation = openChangeReconciliation({
           persistence: changes,
           github: {
@@ -262,7 +257,7 @@ describe("by change reconcile", () => {
               merged: true,
               baseBranch: publicationTarget.baseBranch,
               headBranch: "change-1",
-              headSha: "merged-head",
+              headSha: mergedHead,
             }),
             createPullRequest: () => {
               throw new Error("Reconciliation must not create a pull request");
@@ -271,8 +266,7 @@ describe("by change reconcile", () => {
               throw new Error("Reconciliation must not update a pull request");
             },
           },
-          cleanup: (input) => {
-            cleanupInput = input;
+          cleanup: () => {
             cleanupAttempts += 1;
             return cleanupAttempts === 1
               ? { state: "pending", blockingReason: "remote_branch_unavailable" }
@@ -287,15 +281,13 @@ describe("by change reconcile", () => {
             now,
           }),
         ).toMatchObject({
-          rejected: false,
+          rejected: true,
           changes: [
-            {
-              changeId: created.change.id,
-              status: "completed",
-              cleanup: { state: "pending", blockingReason: "remote_branch_unavailable" },
-            },
+            { changeId: created.change.id, status: "rejected", rejection: "merged_head_mismatch" },
           ],
         });
+        expect(cleanupAttempts).toBe(0);
+        mergedHead = "head";
         expect(
           yield* reconciliation.reconcile({
             repositoryCommonDirectory: input.commonDirectory,
@@ -304,33 +296,14 @@ describe("by change reconcile", () => {
           }),
         ).toMatchObject({
           rejected: false,
-          changes: [{ changeId: created.change.id, status: "cleanup_complete" }],
+          changes: [{ changeId: created.change.id, status: "completed" }],
         });
-        expect(cleanupAttempts).toBe(2);
-        expect(
-          yield* reconciliation.reconcile({
-            repositoryCommonDirectory: input.commonDirectory,
-            now,
-          }),
-        ).toMatchObject({
-          rejected: false,
-          changes: [],
-        });
-        expect(cleanupAttempts).toBe(2);
         expect(yield* changes.getChangeById(created.change.id)).toMatchObject({
           state: "closed",
           closeReason: "completed",
-          cleanup: { state: "complete", blockingReason: null },
         });
         const completedTask = yield* tasks.getTaskById(taskId);
         expect(completedTask).toMatchObject({ state: "done" });
-        expect(cleanupInput).toMatchObject({
-          remoteChangeBranch: {
-            remoteName: "origin",
-            branchName: "change-1",
-            expectedHeadSha: "head",
-          },
-        });
       }),
     ),
   );

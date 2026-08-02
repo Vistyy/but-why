@@ -10,6 +10,7 @@ import { specialistReviewerSessionsMigration as specialistReviewerSessions } fro
 import { recoverPublishedRemoteBranchCleanupMigration as recoverPublishedRemoteBranchCleanup } from "./migrations/0008_recover_published_remote_branch_cleanup.js";
 import { activeValidationRunsMigration as activeValidationRuns } from "./migrations/0009_active_validation_runs.js";
 import { validationWorkspacePathsMigration as validationWorkspacePaths } from "./migrations/0010_validation_workspace_paths.js";
+import { candidatePublicationsMigration as candidatePublications } from "./migrations/0011_candidate_publications.js";
 
 export const migrateRepositoryState = Migrator.make({})({
   loader: Migrator.fromRecord({
@@ -23,5 +24,6 @@ export const migrateRepositoryState = Migrator.make({})({
     "0008_recover_published_remote_branch_cleanup": recoverPublishedRemoteBranchCleanup,
     "0009_active_validation_runs": activeValidationRuns,
     "0010_validation_workspace_paths": validationWorkspacePaths,
+    "0011_candidate_publications": candidatePublications,
   }),
 });

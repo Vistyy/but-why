@@ -650,6 +650,161 @@ describe("repository SQL storage", () => {
     ),
   );
 
+  it.scoped("upgrades existing publication facts before appending history", () =>
+    withTemporaryState((input) =>
+      Effect.gen(function* () {
+        const repository = yield* RepositorySql;
+        const capture = yield* openSqliteCandidateCapturePersistence();
+        const captured = yield* capture.commitCapture({
+          repositoryCommonDirectory: input.commonDirectory,
+          branchRef: "refs/heads/legacy",
+          baseRef: "refs/remotes/origin/main",
+          changeBaseSha: "base-legacy",
+          headSha: "head-legacy",
+          now: "2026-07-25T15:30:00.000Z",
+        });
+        if (!captured.ok) return;
+        yield* repository.operation("install legacy publication facts", (sql) =>
+          Effect.gen(function* () {
+            yield* sql`UPDATE changes SET publication_candidate_id = ${captured.candidateId}, publication_validation_run_id = 'legacy-run', publication_owner = 'acme', publication_repo = 'repo', publication_base_branch = 'main', publication_remote_name = 'origin', publication_head_branch = 'legacy', publication_expected_head_sha = 'head-legacy', publication_pr_number = 7, publication_pr_url = 'https://github.test/pull/7' WHERE id = ${captured.changeId}`;
+            yield* sql`DROP TABLE candidate_publications`;
+            yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id = 11`;
+          }),
+        );
+        yield* Effect.scoped(
+          Effect.gen(function* () {
+            const upgraded = yield* openSqliteChangePersistence();
+            expect(yield* upgraded.listCandidatePublications(captured.changeId)).toMatchObject([
+              {
+                candidateId: captured.candidateId,
+                headSha: "head-legacy",
+                pullRequest: { number: 7 },
+              },
+            ]);
+            const nextCapture = yield* openSqliteCandidateCapturePersistence();
+            const next = yield* nextCapture.commitCapture({
+              repositoryCommonDirectory: input.commonDirectory,
+              branchRef: "refs/heads/legacy",
+              baseRef: "refs/remotes/origin/main",
+              expectedChangeId: captured.changeId,
+              changeBaseSha: "base-next",
+              headSha: "head-next",
+              now: "2026-07-25T15:31:00.000Z",
+            });
+            expect(next.ok).toBe(true);
+            if (!next.ok) throw new Error(next.code);
+            yield* repository.operation(
+              "prepare revised publication after upgrade",
+              (sql) => sql`
+                UPDATE changes
+                SET publication_candidate_id = ${next.candidateId},
+                    publication_validation_run_id = 'next-run',
+                    publication_owner = 'acme', publication_repo = 'repo',
+                    publication_base_branch = 'main', publication_remote_name = 'origin',
+                    publication_head_branch = 'legacy', publication_expected_head_sha = 'head-next',
+                    publication_pr_number = NULL, publication_pr_url = NULL
+                WHERE id = ${captured.changeId}
+              `,
+            );
+            const nextPublication = {
+              changeId: captured.changeId,
+              candidateId: next.candidateId,
+              validationRunId: "next-run",
+              target: { owner: "acme", repo: "repo", baseBranch: "main", remoteName: "origin" },
+              headBranch: "legacy",
+              expectedHeadSha: "head-next",
+              changeBaseSha: "base-next",
+              now: "2026-07-25T15:32:00.000Z",
+            };
+            expect(yield* upgraded.beginPublication(nextPublication)).toMatchObject({ ok: true });
+            expect(
+              yield* upgraded.recordPublishedPullRequest({
+                ...nextPublication,
+                pullRequest: { number: 7, url: "https://github.test/pull/7" },
+              }),
+            ).toMatchObject({ ok: true });
+            expect(yield* upgraded.listCandidatePublications(captured.changeId)).toMatchObject([
+              { headSha: "head-legacy" },
+              { headSha: "head-next", changeBaseSha: "base-next" },
+            ]);
+          }).pipe(
+            Effect.provide(
+              repositorySqlLayer({
+                commonDirectory: input.commonDirectory,
+                statePath: input.statePath,
+              }),
+            ),
+          ),
+        );
+      }),
+    ),
+  );
+
+  it.scoped("appends immutable Candidate Publication history for repeated heads", () =>
+    withTemporaryState((input) =>
+      Effect.gen(function* () {
+        const capture = yield* openSqliteCandidateCapturePersistence();
+        const changes = yield* openSqliteChangePersistence();
+        const first = yield* capture.commitCapture({
+          repositoryCommonDirectory: input.commonDirectory,
+          branchRef: "refs/heads/revision",
+          baseRef: "refs/remotes/origin/main",
+          changeBaseSha: "base-1",
+          headSha: "head-1",
+          now: "2026-07-25T16:00:00.000Z",
+        });
+        if (!first.ok) return;
+        const target = { owner: "acme", repo: "repo", baseBranch: "main", remoteName: "origin" };
+        const publication = {
+          changeId: first.changeId,
+          candidateId: first.candidateId,
+          validationRunId: "run-1",
+          target,
+          headBranch: "revision",
+          expectedHeadSha: "head-1",
+          changeBaseSha: "base-1",
+          now: "2026-07-25T16:01:00.000Z",
+        };
+        expect(yield* changes.beginPublication(publication)).toMatchObject({ ok: true });
+        expect(
+          yield* changes.recordPublishedPullRequest({
+            ...publication,
+            pullRequest: { number: 42, url: "https://github.test/pull/42" },
+          }),
+        ).toMatchObject({ ok: true });
+        const second = yield* capture.commitCapture({
+          repositoryCommonDirectory: input.commonDirectory,
+          branchRef: "refs/heads/revision",
+          baseRef: "refs/remotes/origin/main",
+          changeBaseSha: "base-2",
+          headSha: "head-2",
+          now: "2026-07-25T16:02:00.000Z",
+        });
+        if (!second.ok) return;
+        expect(
+          yield* changes.recordPublishedPullRequest({
+            changeId: first.changeId,
+            candidateId: second.candidateId,
+            validationRunId: "run-2",
+            target,
+            headBranch: "revision",
+            expectedHeadSha: "head-2",
+            changeBaseSha: "base-2",
+            previousExpectedHeadSha: "head-1",
+            previousCandidateId: first.candidateId,
+            previousValidationRunId: "run-1",
+            pullRequest: { number: 42, url: "https://github.test/pull/42" },
+            now: "2026-07-25T16:03:00.000Z",
+          }),
+        ).toMatchObject({ ok: true });
+        expect(yield* changes.listCandidatePublications(first.changeId)).toMatchObject([
+          { candidateId: first.candidateId, headSha: "head-1", pullRequest: { number: 42 } },
+          { candidateId: second.candidateId, headSha: "head-2", pullRequest: { number: 42 } },
+        ]);
+      }),
+    ),
+  );
+
   it.scoped("rolls back the complete Candidate capture when its write fails", () =>
     withTemporaryState((input) =>
       Effect.gen(function* () {
@@ -742,6 +897,7 @@ describe("repository SQL storage", () => {
           { migration_id: 8, name: "recover_published_remote_branch_cleanup" },
           { migration_id: 9, name: "active_validation_runs" },
           { migration_id: 10, name: "validation_workspace_paths" },
+          { migration_id: 11, name: "candidate_publications" },
         ]);
         expect(identities).toEqual([{ common_directory: repositorySql.commonDirectory }]);
         expect(candidateColumns.map(({ name }) => name)).toEqual([
@@ -975,8 +1131,8 @@ describe("repository SQL storage", () => {
         );
 
         return Effect.gen(function* () {
-          expect(yield* readMigrationCount).toBe(10);
-          expect(yield* readMigrationCount).toBe(10);
+          expect(yield* readMigrationCount).toBe(11);
+          expect(yield* readMigrationCount).toBe(11);
         });
       },
       (directory) => Effect.sync(() => rmSync(directory, { recursive: true, force: true })),
