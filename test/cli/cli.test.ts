@@ -495,6 +495,7 @@ validationSetup:
         { migration_id: 9, name: "active_validation_runs" },
         { migration_id: 10, name: "validation_workspace_paths" },
         { migration_id: 11, name: "candidate_publications" },
+        { migration_id: 12, name: "structured_implementation_decisions" },
       ]);
     }),
   );
