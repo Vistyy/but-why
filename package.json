@@ -2,6 +2,14 @@
   "name": "but-why",
   "version": "0.0.1",
   "private": false,
+  "keywords": [
+    "pi-package"
+  ],
+  "pi": {
+    "skills": [
+      "./docs/public/skills"
+    ]
+  },
   "type": "module",
   "packageManager": "pnpm@10.28.0",
   "bin": {
