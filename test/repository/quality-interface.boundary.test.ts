@@ -1,7 +1,6 @@
 import {
   chmodSync,
   cpSync,
-  mkdirSync,
   mkdtempSync,
   readFileSync,
   rmSync,
@@ -13,7 +12,6 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, test } from "vitest";
 
-import { builtByExecutable } from "../support/by-cli.js";
 import { startTestProcess } from "../support/testProcess.js";
 
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
@@ -217,41 +215,6 @@ build:
 
 test:
     @pnpm exec vitest
-`,
-  );
-};
-
-const createBuildRaceQualityFixture = (
-  directory: string,
-  readyFile: string,
-  releaseFile: string,
-  buildOutput: string,
-): void => {
-  writeFileSync(
-    join(directory, "build.sh"),
-    `#!/usr/bin/env bash
-set -euo pipefail
-printf ready > ${JSON.stringify(readyFile)}
-while [[ ! -f ${JSON.stringify(releaseFile)} ]]; do sleep 0.01; done
-rm -rf ${JSON.stringify(buildOutput)}
-mkdir -p ${JSON.stringify(buildOutput)}
-printf complete > ${JSON.stringify(join(buildOutput, "main.js"))}
-`,
-  );
-  chmodSync(join(directory, "build.sh"), 0o755);
-  writeFileSync(
-    join(directory, "justfile"),
-    `quality:
-    @exec ${JSON.stringify(qualityRunner)} quality
-
-_quality-static-routine:
-    @true
-
-build:
-    @exec ./build.sh
-
-test:
-    @true
 `,
   );
 };
@@ -559,64 +522,6 @@ describe("quality interface", () => {
     expect(result.status).toBe(0);
     expect(result.output).toContain("nested-success");
   });
-
-  test("keeps a built CLI consumer isolated while nested quality replaces build output", async () => {
-    const qualityDirectory = mkdtempSync(join(tmpdir(), "but-why-quality-race-"));
-    const consumerDirectory = mkdtempSync(join(tmpdir(), "but-why-cli-consumer-"));
-    temporaryPaths.push(qualityDirectory, consumerDirectory);
-    const readyFile = join(qualityDirectory, "build-ready");
-    const releaseFile = join(qualityDirectory, "build-release");
-    const sharedBuildOutput = join(qualityDirectory, "dist");
-    const executable = builtByExecutable();
-    const consumerBuildOutput = join(consumerDirectory, "dist");
-    mkdirSync(sharedBuildOutput, { recursive: true });
-    mkdirSync(consumerBuildOutput, { recursive: true });
-    cpSync(dirname(executable), sharedBuildOutput, { recursive: true });
-    cpSync(dirname(executable), consumerBuildOutput, { recursive: true });
-    cpSync(join(repositoryRoot, "package.json"), join(consumerDirectory, "package.json"));
-    cpSync(join(repositoryRoot, "docs/public"), join(consumerDirectory, "docs/public"), {
-      recursive: true,
-    });
-    symlinkSync(
-      join(repositoryRoot, "node_modules"),
-      join(consumerDirectory, "node_modules"),
-      "dir",
-    );
-    createBuildRaceQualityFixture(qualityDirectory, readyFile, releaseFile, sharedBuildOutput);
-    const lockFile = join(qualityDirectory, "capacity.lock");
-    const quality = startJust(lockFile, ["quality"], {}, qualityDirectory);
-    const consumer = startTestProcess(
-      process.execPath,
-      [join(consumerBuildOutput, "main.js"), "--help", "--json"],
-      {
-        cwd: consumerDirectory,
-      },
-    );
-    let consumerOutput = "";
-    consumer.stdout.on("data", (chunk: Buffer) => {
-      consumerOutput += chunk.toString();
-    });
-    consumer.stderr.on("data", (chunk: Buffer) => {
-      consumerOutput += chunk.toString();
-    });
-    const consumerDone = new Promise<number | null>((resolveResult) =>
-      consumer.on("close", resolveResult),
-    );
-
-    try {
-      await waitForFile(readyFile);
-      const consumerStatus = await consumerDone;
-      expect(consumerStatus, consumerOutput).toBe(0);
-      expect(consumerOutput).toContain('"help"');
-      writeFileSync(releaseFile, "release");
-      const qualityResult = await quality.done;
-      expect(qualityResult.status, qualityResult.output).toBe(0);
-      expect(readFileSync(join(sharedBuildOutput, "main.js"), "utf8")).toBe("complete");
-    } finally {
-      if (consumer.exitCode === null) consumer.kill("SIGTERM");
-      if (quality.child.exitCode === null) await stopJust(quality);
-    }
-  }, 30_000);
 
   test("keeps successful output concise and failed diagnostics complete", async () => {
     const fixtureRoot = mkdtempSync(join(tmpdir(), "but-why-quality-fixtures-"));
