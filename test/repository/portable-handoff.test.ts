@@ -21,6 +21,10 @@ type HandoffOptions = {
   readonly implementation?: string;
   readonly activeAgentName?: string;
   readonly implementationDelay?: string;
+  readonly initialChangeId?: string;
+  readonly initialWorktreeMismatch?: boolean;
+  readonly finalChangeId?: string;
+  readonly finalWorktreeMismatch?: boolean;
 };
 
 type HandoffExecution = {
@@ -57,7 +61,14 @@ if [ "$1" = "by" ] && [ "$2" = "--json" ] && [ "$3" = "change" ] && [ "$4" = "im
   exit 0
 fi
 if [ "$1" = "by" ] && [ "$2" = "--json" ] && [ "$3" = "change" ] && [ "$4" = "show" ]; then
-  printf '%s\\n' "$HANDOFF_SHOW"
+  if [ "\${HANDOFF_PRELAUNCH:-}" = "1" ]; then
+    printf '%s\\n' "$HANDOFF_PRELAUNCH_SHOW"
+  elif [ ! -e "$HANDOFF_SHOW_COUNT" ]; then
+    : > "$HANDOFF_SHOW_COUNT"
+    printf '%s\\n' "$HANDOFF_INITIAL_SHOW"
+  else
+    printf '%s\\n' "$HANDOFF_FINAL_SHOW"
+  fi
   exit 0
 fi
 exit 2
@@ -81,6 +92,18 @@ exit 1
   chmodSync(herdr, 0o755);
 
   const taskId = options.route === "task-backed" ? "BY-1" : null;
+  const mismatchedWorktreePath = join(root, "mismatched-worktree");
+  const showResult = (shownChangeId: string, shownWorktreePath: string) =>
+    JSON.stringify({
+      change: {
+        id: shownChangeId,
+        taskId,
+        state: "open",
+        readiness: "ready",
+        worktreePath: shownWorktreePath,
+      },
+      worktreePath: shownWorktreePath,
+    });
   const prelaunch =
     options.route === "task-backed"
       ? [
@@ -119,10 +142,16 @@ exit 1
     HANDOFF_IMPLEMENT:
       options.implementation ??
       JSON.stringify({ changeId, worktreePath, host: "herdr", status: "started" }),
-    HANDOFF_SHOW: JSON.stringify({
-      change: { id: changeId, taskId, state: "open", readiness: "ready", worktreePath },
-      worktreePath,
-    }),
+    HANDOFF_PRELAUNCH_SHOW: showResult(changeId, worktreePath),
+    HANDOFF_INITIAL_SHOW: showResult(
+      options.initialChangeId ?? changeId,
+      options.initialWorktreeMismatch ? mismatchedWorktreePath : worktreePath,
+    ),
+    HANDOFF_FINAL_SHOW: showResult(
+      options.finalChangeId ?? changeId,
+      options.finalWorktreeMismatch ? mismatchedWorktreePath : worktreePath,
+    ),
+    HANDOFF_SHOW_COUNT: join(root, "show-count"),
     HANDOFF_AGENT_SNAPSHOT: activeAgentSnapshot,
     HANDOFF_IMPLEMENT_DELAY: options.implementationDelay ?? "0",
     HANDOFF_OBSERVER_POLL_MS: "5",
@@ -133,7 +162,7 @@ exit 1
   for (const args of prelaunch) {
     const command = runTestProcess(just, args, {
       cwd: root,
-      env: environment,
+      env: { ...environment, HANDOFF_PRELAUNCH: "1" },
       isolatedHome: createTestWorkspace(),
     });
     expect(command.status, `${command.stdout}${command.stderr}`).toBe(0);
@@ -206,6 +235,23 @@ describe("portable handoff observer", () => {
 
     expect(handoff.status).toBe(0);
     expect(handoff.result).toMatchObject({ status: "late_active", changeVerified: true });
+  });
+
+  it.each([
+    ["Task-backed", "initial", "Change ID", { initialChangeId: "other-change" }],
+    ["Task-backed", "initial", "Managed Worktree", { initialWorktreeMismatch: true }],
+    ["Task-backed", "final", "Change ID", { finalChangeId: "other-change" }],
+    ["Task-backed", "final", "Managed Worktree", { finalWorktreeMismatch: true }],
+    ["taskless", "initial", "Change ID", { initialChangeId: "other-change" }],
+    ["taskless", "initial", "Managed Worktree", { initialWorktreeMismatch: true }],
+    ["taskless", "final", "Change ID", { finalChangeId: "other-change" }],
+    ["taskless", "final", "Managed Worktree", { finalWorktreeMismatch: true }],
+  ] as const)("rejects a mismatched %s %s %s", (_routeName, _phase, _identity, mismatch) => {
+    const route = _routeName === "Task-backed" ? "task-backed" : "taskless-existing";
+    const handoff = runHandoff("change-identity", { route, ...mismatch });
+
+    expect(handoff.status).toBe(1);
+    expect(handoff.result.changeVerified).toBe(false);
   });
 
   it("rejects an unrelated active session after Change Implement times out", () => {
