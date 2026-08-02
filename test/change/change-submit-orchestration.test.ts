@@ -958,7 +958,12 @@ describe("Change Submit orchestration", () => {
             publish: (input) => {
               events.push(`publish:${input.candidateId}`);
               if (remoteHead !== "revised-head") {
-                return { ok: false, code: "publication_remote_mismatch" };
+                return {
+                  ok: false,
+                  code: "publication_remote_mismatch",
+                  expectedRemoteHeadSha: "expected-revised-head",
+                  observedRemoteHeadSha: remoteHead,
+                };
               }
               return {
                 ok: true,
@@ -1005,7 +1010,12 @@ describe("Change Submit orchestration", () => {
         .pipe(Effect.provide(validationLayer));
 
       expect(closed).toEqual({ ok: false, code: "owned_pull_request_closed", changeId: change.id });
-      expect(rejected).toEqual({ ok: false, code: "publication_remote_mismatch" });
+      expect(rejected).toEqual({
+        ok: false,
+        code: "publication_remote_mismatch",
+        expectedRemoteHeadSha: "expected-revised-head",
+        observedRemoteHeadSha: "unexpected-head",
+      });
       expect(published).toMatchObject({
         ok: true,
         status: "published",
