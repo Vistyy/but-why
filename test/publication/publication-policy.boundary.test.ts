@@ -227,7 +227,8 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
         const requests: unknown[] = [];
         const recorded = yield* fixture.changes.recordImplementationDecision({
           changeId: fixture.captured.changeId,
-          content: "Keep the decision log separate from approved intent.",
+          choice: "Keep & preserve <details>",
+          rationale: "Keep the decision log separate from <approved> intent.",
           now,
         });
         expect(recorded.ok).toBe(true);
@@ -242,7 +243,10 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
         });
         expect(yield* publication.publish(input(fixture))).toMatchObject({ ok: true });
         expect((requests[0] as { readonly body: string }).body).toContain(
-          "Keep the decision log separate from approved intent.",
+          "<details>\n<summary>Keep &amp; preserve &lt;details&gt;</summary>",
+        );
+        expect((requests[0] as { readonly body: string }).body).toContain(
+          "Keep the decision log separate from &lt;approved&gt; intent.",
         );
         expect((requests[0] as { readonly body: string }).body).toContain(
           "Implementation Decision Log",

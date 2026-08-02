@@ -28,7 +28,7 @@ export const implementationDecisionMarkdown = (
     : decisions
         .map((decision) =>
           decision.content !== undefined
-            ? `### Decision ${decision.sequence}\n\n${decision.content}`
+            ? decision.content
             : `<details>\n<summary>${escapeHtml(decision.choice ?? "")}</summary>\n\n${escapeHtml(decision.rationale ?? "")}\n\n</details>`,
         )
         .join("\n\n");

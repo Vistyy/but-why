@@ -421,7 +421,7 @@ const listDecisions = (sql: SqlClient.SqlClient, changeId: string) =>
           recordedAt: row.recordedAt,
           choice: row.choice ?? row.content ?? "",
           rationale: row.rationale ?? "",
-          ...(row.content === null ? {} : { content: row.content }),
+          ...(row.choice === null && row.rationale === null ? { content: row.content ?? "" } : {}),
         }),
       ),
   );
@@ -440,7 +440,7 @@ const recordDecision = (sql: SqlClient.SqlClient, input: RecordImplementationDec
     const legacy = input.content !== undefined && input.choice === undefined;
     yield* sql`
       INSERT INTO implementation_decisions (id, change_id, recorded_at, content, choice, rationale)
-      VALUES (${id}, ${input.changeId}, ${input.now}, ${legacy ? input.content : null}, ${input.choice ?? input.content ?? ""}, ${input.rationale ?? ""})
+      VALUES (${id}, ${input.changeId}, ${input.now}, ${legacy ? input.content : ""}, ${legacy ? null : input.choice}, ${legacy ? null : input.rationale})
     `;
     const decisions = yield* listDecisions(sql, input.changeId);
     const decision = decisions.find((item) => item.id === id);

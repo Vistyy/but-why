@@ -181,7 +181,6 @@ exit 1
             );
           }),
         );
-        writeFileSync(join(root, "decision.md"), "Use the process boundary.\\n");
         const added = runBuiltByWithEnv(
           root,
           {},
@@ -190,8 +189,10 @@ exit 1
           "decision",
           "add",
           changeId,
-          "--file",
-          "decision.md",
+          "--choice",
+          "Use the process boundary.",
+          "--rationale",
+          "Keep the process boundary explicit.",
         );
         expect(added.status).toBe(0);
         const publications = runBuiltByWithEnv(
