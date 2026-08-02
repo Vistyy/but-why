@@ -1,4 +1,4 @@
-import { runtimeError, type CliResult } from "../../cliResults.js";
+import { runtimeError, usageError, type CliResult } from "../../cliResults.js";
 import type { ImplementationDecisionFileError } from "../../change/implementationDecisionFile.js";
 
 export const decisionMutationError = (code: string, changeId: string): CliResult =>
@@ -27,7 +27,7 @@ export const decisionFileError = (error: ImplementationDecisionFileError): CliRe
 export const decisionInputError = (
   code: "empty_choice" | "empty_rationale" | "multiline_choice",
 ): CliResult =>
-  runtimeError({
+  usageError({
     code,
     message:
       code === "empty_choice"

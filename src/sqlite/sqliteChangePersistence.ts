@@ -437,10 +437,9 @@ const recordDecision = (sql: SqlClient.SqlClient, input: RecordImplementationDec
     if (change === undefined) return { ok: false as const, code: "change_not_found" as const };
     if (change.state !== "open") return { ok: false as const, code: "change_not_open" as const };
     const id = randomUUID();
-    const legacy = input.content !== undefined && input.choice === undefined;
     yield* sql`
       INSERT INTO implementation_decisions (id, change_id, recorded_at, content, choice, rationale)
-      VALUES (${id}, ${input.changeId}, ${input.now}, ${legacy ? input.content : ""}, ${legacy ? null : input.choice}, ${legacy ? null : input.rationale})
+      VALUES (${id}, ${input.changeId}, ${input.now}, '', ${input.choice}, ${input.rationale})
     `;
     const decisions = yield* listDecisions(sql, input.changeId);
     const decision = decisions.find((item) => item.id === id);

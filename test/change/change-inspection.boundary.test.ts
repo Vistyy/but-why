@@ -567,11 +567,12 @@ describe("Change inspection CLI", () => {
         "--rationale",
         "A reason",
       ]);
-      expect(missing.status).toBeGreaterThan(0);
+      expect(missing.status).toBe(2);
       expect(JSON.parse(missing.stdout)).toMatchObject({
         error: { code: "invalid_usage" },
         help: expect.any(Array),
       });
+      expect(empty.status).toBe(2);
       expect(JSON.parse(empty.stdout)).toMatchObject({
         error: {
           code: "empty_choice",
@@ -579,6 +580,7 @@ describe("Change inspection CLI", () => {
         },
         help: ["Provide --choice <one-line approach> and --rationale <reason>."],
       });
+      expect(emptyRationale.status).toBe(2);
       expect(JSON.parse(emptyRationale.stdout)).toMatchObject({
         error: {
           code: "empty_rationale",
@@ -586,6 +588,7 @@ describe("Change inspection CLI", () => {
         },
         help: ["Provide --choice <one-line approach> and --rationale <reason>."],
       });
+      expect(multiline.status).toBe(2);
       expect(JSON.parse(multiline.stdout)).toMatchObject({
         error: {
           code: "multiline_choice",

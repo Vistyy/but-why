@@ -35,10 +35,8 @@ export type ChangePublicationEvidence = {
 
 export type RecordImplementationDecisionInput = {
   readonly changeId: string;
-  readonly choice?: string;
-  readonly rationale?: string;
-  /** Legacy storage callers may provide unstructured content. */
-  readonly content?: string;
+  readonly choice: string;
+  readonly rationale: string;
   readonly now: string;
 };
 

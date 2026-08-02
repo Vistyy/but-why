@@ -3,8 +3,8 @@ export type ImplementationDecision = {
   readonly changeId: string;
   readonly sequence: number;
   readonly recordedAt: string;
-  readonly choice?: string;
-  readonly rationale?: string;
+  readonly choice: string;
+  readonly rationale: string;
   /** Present only when loading a pre-structured decision. */
   readonly content?: string;
 };
@@ -29,6 +29,6 @@ export const implementationDecisionMarkdown = (
         .map((decision) =>
           decision.content !== undefined
             ? decision.content
-            : `<details>\n<summary>${escapeHtml(decision.choice ?? "")}</summary>\n\n${escapeHtml(decision.rationale ?? "")}\n\n</details>`,
+            : `<details>\n<summary>${escapeHtml(decision.choice)}</summary>\n\n${escapeHtml(decision.rationale)}\n\n</details>`,
         )
         .join("\n\n");
