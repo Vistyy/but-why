@@ -9,12 +9,16 @@ export type ImplementationDecision = {
   readonly content?: string;
 };
 
-const escapeHtml = (value: string): string =>
-  value.replace(
-    /[&<>"']/gu,
-    (character) =>
-      ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[character]!,
-  );
+const escapeHtml = (value: string): string => {
+  const entities: Readonly<Record<string, string>> = {
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    '"': "&quot;",
+    "'": "&#39;",
+  };
+  return value.replace(/[&<>"']/gu, (character) => entities[character] ?? character);
+};
 
 export const implementationDecisionMarkdown = (
   decisions: readonly ImplementationDecision[],
