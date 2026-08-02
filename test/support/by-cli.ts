@@ -34,6 +34,7 @@ export const builtByExecutable = (): string => {
   cpSync(join(repoRoot, "src"), join(fixture, "src"), { recursive: true });
   cpSync(join(repoRoot, "package.json"), join(fixture, "package.json"));
   cpSync(join(repoRoot, "docs/public"), join(fixture, "docs/public"), { recursive: true });
+  cpSync(join(repoRoot, "extensions"), join(fixture, "extensions"), { recursive: true });
   cpSync(join(repoRoot, "tsconfig.json"), join(fixture, "tsconfig.json"));
   cpSync(join(repoRoot, "tsconfig.build.json"), join(fixture, "tsconfig.build.json"));
   symlinkSync(join(repoRoot, "node_modules"), join(fixture, "node_modules"), "dir");
