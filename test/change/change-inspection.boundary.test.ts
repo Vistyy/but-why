@@ -544,6 +544,18 @@ describe("Change inspection CLI", () => {
         "--rationale",
         "A reason",
       ]);
+      const emptyRationale = yield* runByInProcessEffect(root, [
+        "--json",
+        "change",
+        "decision",
+        "add",
+        change.id,
+        "--choice",
+        "A choice",
+        "--rationale",
+        "",
+      ]);
+      const help = yield* runByInProcessEffect(root, ["change", "decision", "add", "--help"]);
       const multiline = yield* runByInProcessEffect(root, [
         "--json",
         "change",
@@ -557,7 +569,11 @@ describe("Change inspection CLI", () => {
       ]);
       expect(missing.status).toBeGreaterThan(0);
       expect(empty.stdout).toContain("empty_choice");
+      expect(emptyRationale.stdout).toContain("empty_rationale");
       expect(multiline.stdout).toContain("multiline_choice");
+      expect(help.status).toBe(0);
+      expect(help.stdout).toContain("--choice");
+      expect(help.stdout).toContain("--rationale");
     }),
   );
 

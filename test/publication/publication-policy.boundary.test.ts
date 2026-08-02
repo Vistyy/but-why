@@ -232,6 +232,7 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
           now,
         });
         expect(recorded.ok).toBe(true);
+        const recordedDecisionId = recorded.ok ? recorded.decision.id : "";
         const second = yield* fixture.changes.recordImplementationDecision({
           changeId: fixture.captured.changeId,
           choice: "Preserve chronological order",
@@ -261,6 +262,8 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
           (requests[0] as { readonly body: string }).body.indexOf("Preserve chronological order"),
         );
         expect((requests[0] as { readonly body: string }).body).not.toContain("Decision 1");
+        expect((requests[0] as { readonly body: string }).body).not.toContain(recordedDecisionId);
+        expect((requests[0] as { readonly body: string }).body).not.toContain(now);
         expect((requests[0] as { readonly body: string }).body).toContain(
           "Implementation Decision Log",
         );
