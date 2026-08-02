@@ -264,6 +264,8 @@ const recover = (
           ? {}
           : { evidence: dependencies.github.getLastFailureEvidence?.() }),
       };
+    if (!sameTarget(marker.target, input.target))
+      return { ok: false, code: "publication_state_conflict" };
     const selected = selectRecoveredPullRequest(
       found,
       marker.target,
@@ -290,8 +292,6 @@ const recover = (
         replacement.change,
       );
     }
-    if (!sameTarget(marker.target, input.target))
-      return { ok: false, code: "publication_state_conflict" };
     if (
       marker.candidateId === input.candidateId &&
       marker.validationRunId === input.validationRunId
