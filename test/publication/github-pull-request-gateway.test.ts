@@ -373,6 +373,36 @@ describe("GitHub pull request gateway", () => {
     expect(gitCalls.map((call) => call[0])).toEqual(["rev-parse", "ls-remote"]);
   });
 
+  it("preserves failed local head preflight evidence for create and update", () => {
+    const gateway = localGitHubPullRequestGateway({
+      runGit: () => ({ ok: false, status: 128, stderr: "worktree unavailable" }),
+      runGh: () => ({ ok: true, stdout: "" }),
+    });
+    const request = {
+      owner: "acme",
+      repo: "widgets",
+      remoteName: "origin",
+      baseBranch: "main",
+      headBranch: "feature",
+      branchRef: "refs/heads/feature",
+      expectedHeadSha: "candidate-sha",
+      title: "Publish",
+      body: "Body",
+    };
+    expect(gateway.createPullRequest(request)).toMatchObject({
+      ok: false,
+      code: "local_head_mismatch",
+      evidence: { operation: "branch_push", exitStatus: 128 },
+    });
+    expect(
+      gateway.updatePullRequest({ ...request, number: 42, expectedCurrentHeadSha: "old-head" }),
+    ).toMatchObject({
+      ok: false,
+      code: "local_head_mismatch",
+      evidence: { operation: "branch_push", exitStatus: 128 },
+    });
+  });
+
   it("reports failed pushes and bounds command evidence", () => {
     const gateway = localGitHubPullRequestGateway({
       runGit: (args) => {

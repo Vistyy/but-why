@@ -177,8 +177,13 @@ const createPullRequest = (
   runGh: PublicationCommandRunner,
   request: GitHubPullRequestRequest,
 ): ReturnType<GitHubPullRequestGateway["createPullRequest"]> => {
-  if (!hasExpectedLocalHead(runGit, request)) {
-    return { ok: false, code: "local_head_mismatch" };
+  const localHead = hasExpectedLocalHead(runGit, request);
+  if (!localHead.ok) {
+    return {
+      ok: false,
+      code: "local_head_mismatch",
+      ...(localHead.evidence === undefined ? {} : { evidence: localHead.evidence }),
+    };
   }
   const remoteHead = initialRemoteHeadState(runGit, request);
   if (remoteHead.kind === "unknown")
@@ -251,8 +256,13 @@ const updatePullRequest = (
   runGh: PublicationCommandRunner,
   request: Parameters<GitHubPullRequestGateway["updatePullRequest"]>[0],
 ): ReturnType<GitHubPullRequestGateway["updatePullRequest"]> => {
-  if (!hasExpectedLocalHead(runGit, request)) {
-    return { ok: false, code: "local_head_mismatch" };
+  const localHead = hasExpectedLocalHead(runGit, request);
+  if (!localHead.ok) {
+    return {
+      ok: false,
+      code: "local_head_mismatch",
+      ...(localHead.evidence === undefined ? {} : { evidence: localHead.evidence }),
+    };
   }
   const pushed = pushExpectedHead(runGit, request);
   if (!pushed.ok)
@@ -298,9 +308,14 @@ const updatePullRequest = (
 const hasExpectedLocalHead = (
   runGit: PublicationCommandRunner,
   request: GitHubPullRequestRequest,
-): boolean => {
+): { readonly ok: boolean; readonly evidence?: ReturnType<typeof evidence> } => {
   const currentHead = runGit(["rev-parse", "--verify", `${request.branchRef}^{commit}`]);
-  return currentHead.ok && currentHead.stdout.trim() === request.expectedHeadSha;
+  if (!currentHead.ok)
+    return {
+      ok: false,
+      evidence: evidence("branch_push", currentHead, classifyCommandFailure(currentHead)),
+    };
+  return { ok: currentHead.stdout.trim() === request.expectedHeadSha };
 };
 
 const initialRemoteHeadState = (
