@@ -1,5 +1,4 @@
 import { statSync } from "node:fs";
-
 import { executeHostCommand } from "../command/hostCommand.js";
 
 import { prependAgentEnvironment, shellQuote } from "../agent/agentEnvironment.js";
@@ -53,6 +52,9 @@ export const herdrSessionName = (changeId: string): string => `but-why-${changeI
 export const trustedContinuationExtensionPath = (): string =>
   resolvePackageAsset("extensions/continue-change.ts");
 
+const trustedImplementationAdvisorExtensionPath = (): string =>
+  resolvePackageAsset("extensions/implementation-advisor/index.ts");
+
 const launchHerdrSession = async (
   execute: HerdrCommandExecutor,
   input: InteractiveSessionLaunchInput,
@@ -61,6 +63,8 @@ const launchHerdrSession = async (
 ): Promise<InteractiveSessionLaunchResult> => {
   const options = { ...defaultOptions, ...environment };
   const continuationExtension = trustedContinuationExtensionPath();
+  const advisorExtension = trustedImplementationAdvisorExtensionPath();
+  let implementationAdvisor = input.implementationAdvisor;
   try {
     if (!statSync(continuationExtension).isFile()) {
       return launchFailure(
@@ -73,6 +77,13 @@ const launchHerdrSession = async (
     );
   }
   const command = boundedExecutor(execute, options.commandTimeoutMs);
+  if (implementationAdvisor !== undefined) {
+    try {
+      if (!statSync(advisorExtension).isFile()) implementationAdvisor = undefined;
+    } catch {
+      implementationAdvisor = undefined;
+    }
+  }
   const sessionName = input.herdrName ?? herdrSessionName(input.changeId);
   let agents = await observe(command, ["agent", "list"], signal, options.observationRetries);
   if (!agents.ok) {
@@ -189,6 +200,8 @@ const launchHerdrSession = async (
     signal,
     options,
     continuationExtension,
+    implementationAdvisor,
+    advisorExtension,
   );
 };
 
@@ -202,6 +215,8 @@ const launchInOpenedWorktree = async (
   signal: AbortSignal | undefined,
   options: ResolvedOptions,
   continuationExtension: string,
+  implementationAdvisor: InteractiveSessionLaunchInput["implementationAdvisor"],
+  advisorExtension: string,
 ): Promise<InteractiveSessionLaunchResult> => {
   if (
     hasUnknownSession(listedAgents, input, sessionName) ||
@@ -214,7 +229,12 @@ const launchInOpenedWorktree = async (
   }
 
   const launched = await execute(
-    ["pane", "run", opened.rootPaneId, piCommand(input, path, continuationExtension)],
+    [
+      "pane",
+      "run",
+      opened.rootPaneId,
+      piCommand(input, path, continuationExtension, implementationAdvisor, advisorExtension),
+    ],
     signal,
   );
   if (!launched.ok) {
@@ -526,6 +546,8 @@ const piCommand = (
   input: InteractiveSessionLaunchInput,
   path: string | undefined,
   continuationExtension: string,
+  implementationAdvisor: InteractiveSessionLaunchInput["implementationAdvisor"],
+  advisorExtension: string,
 ): string => {
   const profileFlags = piResourceFlags(
     input.agentProfile?.profile.runtimeConfig,
@@ -534,12 +556,34 @@ const piCommand = (
       repoRoot: input.worktreePath,
       globalConfigDirectory: input.globalConfigDirectory,
     },
-    { trustedExtensions: [continuationExtension] },
+    {
+      trustedExtensions: [
+        continuationExtension,
+        ...(implementationAdvisor === undefined ? [] : [advisorExtension]),
+      ],
+    },
   );
   const model = input.agentProfile?.profile.runtimeConfig?.model;
   const thinking = input.agentProfile?.profile.runtimeConfig?.thinking;
+  const advisorEnvironment =
+    implementationAdvisor === undefined
+      ? []
+      : [
+          `BUT_WHY_IMPLEMENTATION_ADVISOR_MODEL=${shellQuote(implementationAdvisor.model)}`,
+          ...(implementationAdvisor.thinking === undefined
+            ? []
+            : [
+                `BUT_WHY_IMPLEMENTATION_ADVISOR_THINKING=${shellQuote(implementationAdvisor.thinking)}`,
+              ]),
+          ...(input.implementationAdvisorContext === undefined
+            ? []
+            : [
+                `BUT_WHY_IMPLEMENTATION_ADVISOR_CONTEXT=${shellQuote(input.implementationAdvisorContext)}`,
+              ]),
+        ];
   return [
     ...(path === undefined ? [] : [`PATH=${shellQuote(path)}`]),
+    ...advisorEnvironment,
     `exec ${prependAgentEnvironment("pi", input.agentEnvironment)}`,
     ...(input.systemPrompt === undefined
       ? []
