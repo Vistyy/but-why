@@ -211,6 +211,7 @@ exit 1
       `${JSON.stringify({
         defaultAgentProfile: { scope: "global", name: "test" },
         agentProfiles: { test: { agentRuntime: "pi", runtimeConfig: { model: "test/model" } } },
+        interactiveSession: { implementationAdvisor: { model: "test/model" } },
       })}\n`,
     );
     const started = runTestProcess(bin, ["--json", "change", "start"], {
@@ -234,7 +235,34 @@ exit 1
     });
     expect(implement.status, `${implement.stdout}${implement.stderr}`).toBe(0);
     const extension = join(installedPackage, "extensions/continue-change.ts");
+    const advisorExtension = join(installedPackage, "extensions/implementation-advisor/index.ts");
     expect(readFileSync(env.BY_FAKE_CAPTURE, "utf8")).toContain(`--extension '${extension}'`);
+    expect(readFileSync(env.BY_FAKE_CAPTURE, "utf8")).toContain(
+      `--extension '${advisorExtension}'`,
+    );
+
+    rmSync(advisorExtension);
+    const advisorMissing = runTestProcess(
+      bin,
+      ["--json", "change", "implement", change.change.id],
+      {
+        cwd: repository,
+        env: {
+          ...env,
+          BY_FAKE_WORKTREE: change.worktreePath,
+          BY_FAKE_SESSION: `change-${change.change.id.slice(0, 8)}`,
+        },
+        isolatedHome,
+      },
+    );
+    expect(advisorMissing.status, `${advisorMissing.stdout}${advisorMissing.stderr}`).toBe(0);
+    expect(JSON.parse(advisorMissing.stdout)).toMatchObject({
+      warning: {
+        code: "implementation_advisor_preflight_failed",
+        message: expect.stringContaining("launched without the advisor"),
+        details: { path: advisorExtension },
+      },
+    });
 
     rmSync(extension);
     rmSync(env.BY_FAKE_CAPTURE);
