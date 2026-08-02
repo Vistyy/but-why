@@ -1,11 +1,4 @@
-import {
-  chmodSync,
-  cpSync,
-  mkdirSync,
-  readFileSync,
-  symlinkSync,
-  writeFileSync,
-} from "node:fs";
+import { chmodSync, cpSync, mkdirSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
@@ -83,7 +76,7 @@ describe("CLI package contents", () => {
     const tools = createTestWorkspace();
     writeFileSync(
       join(tools, "gh"),
-      "#!/usr/bin/env sh\nif [ \"$1\" = \"repo\" ] && [ \"$2\" = \"view\" ]; then printf '{\\\"defaultBranchRef\\\":{\\\"name\\\":\\\"main\\\"}}\\n'; exit 0; fi\nexit 1\n",
+      '#!/usr/bin/env sh\nif [ "$1" = "repo" ] && [ "$2" = "view" ]; then printf \'{\\"defaultBranchRef\\":{\\"name\\":\\"main\\"}}\\n\'; exit 0; fi\nexit 1\n',
     );
     writeFileSync(
       join(tools, "herdr"),
@@ -117,7 +110,7 @@ exit 1
     chmodSync(join(tools, "herdr"), 0o755);
     const bin = join(installed, "node_modules", ".bin", "by");
     const env = {
-      PATH: `${tools}:${process.env.PATH ?? ""}`,
+      PATH: `${tools}:${process.env["PATH"] ?? ""}`,
       BY_FAKE_CAPTURE: join(repository, "herdr-capture.txt"),
     };
     const isolatedHome = createTestWorkspace();
@@ -133,11 +126,7 @@ exit 1
       ["add", ".but-why/config.json", ".gitignore"],
       ["commit", "-m", "Initialize But Why"],
       ["branch", "-M", "main"],
-      [
-        "config",
-        `url.${repository}.insteadOf`,
-        "https://github.com/acme/repo.git",
-      ],
+      ["config", `url.${repository}.insteadOf`, "https://github.com/acme/repo.git"],
       ["remote", "add", "origin", "https://github.com/acme/repo.git"],
       ["update-ref", "refs/remotes/origin/main", "refs/heads/main"],
       ["symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/main"],
@@ -163,19 +152,15 @@ exit 1
       readonly change: { readonly id: string };
       readonly worktreePath: string;
     };
-    const implement = runTestProcess(
-      bin,
-      ["--json", "change", "implement", change.change.id],
-      {
-        cwd: repository,
-        env: {
-          ...env,
-          BY_FAKE_WORKTREE: change.worktreePath,
-          BY_FAKE_SESSION: `change-${change.change.id.slice(0, 8)}`,
-        },
-        isolatedHome,
+    const implement = runTestProcess(bin, ["--json", "change", "implement", change.change.id], {
+      cwd: repository,
+      env: {
+        ...env,
+        BY_FAKE_WORKTREE: change.worktreePath,
+        BY_FAKE_SESSION: `change-${change.change.id.slice(0, 8)}`,
       },
-    );
+      isolatedHome,
+    });
     expect(implement.status, `${implement.stdout}${implement.stderr}`).toBe(0);
     expect(readFileSync(env.BY_FAKE_CAPTURE, "utf8")).toContain(
       `--extension '${join(installedPackage, "extensions/continue-change.ts")}'`,
