@@ -18,7 +18,7 @@ vi.mock("@earendil-works/pi-coding-agent", async () => {
     ModelRuntime: {
       create: async () => ({
         getModel: (provider: string, model: string) =>
-          provider + "/" + model === "missing/model" ? undefined : {},
+          `${provider}/${model}` === "missing/model" ? undefined : {},
       }),
     },
     DefaultResourceLoader: class {
@@ -252,8 +252,8 @@ describe("Implementation Advisor", () => {
 
   it("evaluates through nested Pi, delivers to the host, and terminates invalid advice", async () => {
     advisorMock.mode = "valid";
-    const previousModel = process.env["BUT_WHY_IMPLEMENTATION_ADVISOR_MODEL"];
-    process.env["BUT_WHY_IMPLEMENTATION_ADVISOR_MODEL"] = "provider/model";
+    const previousModel = process.env.BUT_WHY_IMPLEMENTATION_ADVISOR_MODEL;
+    process.env.BUT_WHY_IMPLEMENTATION_ADVISOR_MODEL = "provider/model";
     const handlers = new Map<string, (event: unknown, context: unknown) => unknown>();
     const entries: unknown[] = [];
     const sent: unknown[] = [];
@@ -338,14 +338,14 @@ describe("Implementation Advisor", () => {
     await new Promise((resolve) => setTimeout(resolve, 20));
     expect(sent).toHaveLength(2);
     expect(entries.at(-1)).toMatchObject({ outcome: "failure", failures: 1 });
-    if (previousModel === undefined) delete process.env["BUT_WHY_IMPLEMENTATION_ADVISOR_MODEL"];
-    else process.env["BUT_WHY_IMPLEMENTATION_ADVISOR_MODEL"] = previousModel;
+    if (previousModel === undefined) delete process.env.BUT_WHY_IMPLEMENTATION_ADVISOR_MODEL;
+    else process.env.BUT_WHY_IMPLEMENTATION_ADVISOR_MODEL = previousModel;
   });
 
   it("records three injected failures, disables, and restores disabled state from the ledger", async () => {
     advisorMock.mode = "valid";
-    const previous = process.env["BUT_WHY_IMPLEMENTATION_ADVISOR_MODEL"];
-    process.env["BUT_WHY_IMPLEMENTATION_ADVISOR_MODEL"] = "missing/model";
+    const previous = process.env.BUT_WHY_IMPLEMENTATION_ADVISOR_MODEL;
+    process.env.BUT_WHY_IMPLEMENTATION_ADVISOR_MODEL = "missing/model";
     const handlers = new Map<string, (event: unknown, context: unknown) => unknown>();
     const entries: unknown[] = [];
     implementationAdvisor({
@@ -435,7 +435,7 @@ describe("Implementation Advisor", () => {
     await new Promise((resolve) => setTimeout(resolve, 20));
     expect(restoredEntries).toHaveLength(0);
 
-    process.env["BUT_WHY_IMPLEMENTATION_ADVISOR_MODEL"] = "provider/model";
+    process.env.BUT_WHY_IMPLEMENTATION_ADVISOR_MODEL = "provider/model";
     const capEntries: unknown[] = [];
     const capSent: unknown[] = [];
     const capHandlers = new Map<string, (event: unknown, context: unknown) => unknown>();
@@ -489,13 +489,13 @@ describe("Implementation Advisor", () => {
     await new Promise((resolve) => setTimeout(resolve, 20));
     expect(capSent).toHaveLength(0);
     expect(capEntries.at(-1)).toMatchObject({ outcome: "none" });
-    if (previous === undefined) delete process.env["BUT_WHY_IMPLEMENTATION_ADVISOR_MODEL"];
-    else process.env["BUT_WHY_IMPLEMENTATION_ADVISOR_MODEL"] = previous;
+    if (previous === undefined) delete process.env.BUT_WHY_IMPLEMENTATION_ADVISOR_MODEL;
+    else process.env.BUT_WHY_IMPLEMENTATION_ADVISOR_MODEL = previous;
   });
 
   it("runs scheduler failure injection through Pi event handlers without waking the host", async () => {
-    const previous = process.env["BUT_WHY_IMPLEMENTATION_ADVISOR_MODEL"];
-    process.env["BUT_WHY_IMPLEMENTATION_ADVISOR_MODEL"] = "missing/model";
+    const previous = process.env.BUT_WHY_IMPLEMENTATION_ADVISOR_MODEL;
+    process.env.BUT_WHY_IMPLEMENTATION_ADVISOR_MODEL = "missing/model";
     const handlers = new Map<string, (event: unknown, context: unknown) => unknown>();
     const entries: unknown[] = [];
     const sent: unknown[] = [];
@@ -530,7 +530,7 @@ describe("Implementation Advisor", () => {
     await new Promise((resolve) => setTimeout(resolve, 100));
     expect(entries).toHaveLength(1);
     expect(sent).toHaveLength(0);
-    if (previous === undefined) delete process.env["BUT_WHY_IMPLEMENTATION_ADVISOR_MODEL"];
-    else process.env["BUT_WHY_IMPLEMENTATION_ADVISOR_MODEL"] = previous;
+    if (previous === undefined) delete process.env.BUT_WHY_IMPLEMENTATION_ADVISOR_MODEL;
+    else process.env.BUT_WHY_IMPLEMENTATION_ADVISOR_MODEL = previous;
   });
 });
