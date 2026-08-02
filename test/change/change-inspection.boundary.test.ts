@@ -172,19 +172,52 @@ describe("Change inspection CLI", () => {
         change: { state: "closed", closeReason: "cancelled" },
         cleanup: { state: "pending", blockingReason: null },
       });
-      const emptyJson = yield* runByInProcessEffect(root, [
+      yield* withTestRepository(
+        root,
+        Effect.gen(function* () {
+          const repository = yield* RepositorySql;
+          yield* repository.operation(
+            "install CLI publication fixture",
+            (sql) => sql`
+            INSERT INTO candidate_publications
+              (change_id, candidate_id, validation_run_id, change_base_sha, head_sha,
+               publication_owner, publication_repo, publication_base_branch, publication_remote_name,
+               publication_head_branch, pull_request_number, pull_request_url, published_at)
+            VALUES (${older.id}, 'candidate-cli', 'run-cli', 'base-cli', 'head-cli',
+              'acme', 'repo', 'main', 'origin', 'older', 42,
+              'https://github.test/pull/42', ${commandNow})
+          `,
+          );
+        }),
+      );
+      const nonEmptyJson = yield* runByInProcessEffect(root, [
         "--json",
         "change",
         "publications",
         older.id,
       ]);
+      expect(nonEmptyJson.status).toBe(0);
+      expect(JSON.parse(nonEmptyJson.stdout)).toMatchObject({
+        changeId: older.id,
+        count: 1,
+        publications: [{ headSha: "head-cli" }],
+      });
+      const nonEmptyToon = yield* runByInProcessEffect(root, ["change", "publications", older.id]);
+      expect(nonEmptyToon.status).toBe(0);
+      expect(nonEmptyToon.stdout).toContain("head-cli");
+      const emptyJson = yield* runByInProcessEffect(root, [
+        "--json",
+        "change",
+        "publications",
+        newer.id,
+      ]);
       expect(emptyJson.status).toBe(0);
       expect(JSON.parse(emptyJson.stdout)).toMatchObject({
-        changeId: older.id,
+        changeId: newer.id,
         count: 0,
         publications: [],
       });
-      const emptyToon = yield* runByInProcessEffect(root, ["change", "publications", older.id]);
+      const emptyToon = yield* runByInProcessEffect(root, ["change", "publications", newer.id]);
       expect(emptyToon.status).toBe(0);
       expect(emptyToon.stdout).toContain("count: 0");
       expect(emptyToon.stdout).toContain("No Candidate Publications recorded.");
@@ -196,6 +229,13 @@ describe("Change inspection CLI", () => {
       ]);
       expect(missing.status).toBe(1);
       expect(JSON.parse(missing.stdout)).toMatchObject({ error: { code: "change_not_found" } });
+      const missingToon = yield* runByInProcessEffect(root, [
+        "change",
+        "publications",
+        randomUUID(),
+      ]);
+      expect(missingToon.status).toBe(1);
+      expect(missingToon.stdout).toContain("change_not_found");
     }),
   );
 

@@ -650,6 +650,37 @@ describe("repository SQL storage", () => {
     ),
   );
 
+  it.scoped("upgrades existing publication facts before appending history", () =>
+    withTemporaryState((input) =>
+      Effect.gen(function* () {
+        const repository = yield* RepositorySql;
+        const capture = yield* openSqliteCandidateCapturePersistence();
+        const changes = yield* openSqliteChangePersistence();
+        const captured = yield* capture.commitCapture({
+          repositoryCommonDirectory: input.commonDirectory,
+          branchRef: "refs/heads/legacy",
+          baseRef: "refs/remotes/origin/main",
+          changeBaseSha: "base-legacy",
+          headSha: "head-legacy",
+          now: "2026-07-25T15:30:00.000Z",
+        });
+        if (!captured.ok) return;
+        yield* repository.operation("install legacy publication facts", (sql) =>
+          Effect.gen(function* () {
+            yield* sql`UPDATE changes SET publication_candidate_id = ${captured.candidateId}, publication_validation_run_id = 'legacy-run', publication_owner = 'acme', publication_repo = 'repo', publication_base_branch = 'main', publication_remote_name = 'origin', publication_head_branch = 'legacy', publication_expected_head_sha = 'head-legacy', publication_pr_number = 7, publication_pr_url = 'https://github.test/pull/7' WHERE id = ${captured.changeId}`;
+            yield* sql`DROP TABLE candidate_publications`;
+            yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id = 11`;
+            yield* sql`CREATE TABLE candidate_publications (sequence INTEGER PRIMARY KEY AUTOINCREMENT, change_id TEXT NOT NULL, candidate_id TEXT NOT NULL, validation_run_id TEXT NOT NULL, change_base_sha TEXT NOT NULL, head_sha TEXT NOT NULL, publication_owner TEXT NOT NULL, publication_repo TEXT NOT NULL, publication_base_branch TEXT NOT NULL, publication_remote_name TEXT NOT NULL, publication_head_branch TEXT NOT NULL, pull_request_number INTEGER NOT NULL, pull_request_url TEXT NOT NULL, published_at TEXT NOT NULL)`;
+            yield* sql`INSERT INTO candidate_publications (change_id, candidate_id, validation_run_id, change_base_sha, head_sha, publication_owner, publication_repo, publication_base_branch, publication_remote_name, publication_head_branch, pull_request_number, pull_request_url, published_at) SELECT id, publication_candidate_id, publication_validation_run_id, ${"base-legacy"}, publication_expected_head_sha, publication_owner, publication_repo, publication_base_branch, publication_remote_name, publication_head_branch, publication_pr_number, publication_pr_url, updated_at FROM changes WHERE id = ${captured.changeId}`;
+          }),
+        );
+        expect(yield* changes.listCandidatePublications(captured.changeId)).toMatchObject([
+          { candidateId: captured.candidateId, headSha: "head-legacy", pullRequest: { number: 7 } },
+        ]);
+      }),
+    ),
+  );
+
   it.scoped("appends immutable Candidate Publication history for repeated heads", () =>
     withTemporaryState((input) =>
       Effect.gen(function* () {
