@@ -172,6 +172,22 @@ describe("Change inspection CLI", () => {
         change: { state: "closed", closeReason: "cancelled" },
         cleanup: { state: "pending", blockingReason: null },
       });
+      const emptyJson = yield* runByInProcessEffect(root, [
+        "--json",
+        "change",
+        "publications",
+        older.id,
+      ]);
+      expect(emptyJson.status).toBe(0);
+      expect(JSON.parse(emptyJson.stdout)).toMatchObject({
+        changeId: older.id,
+        count: 0,
+        publications: [],
+      });
+      const emptyToon = yield* runByInProcessEffect(root, ["change", "publications", older.id]);
+      expect(emptyToon.status).toBe(0);
+      expect(emptyToon.stdout).toContain("count: 0");
+      expect(emptyToon.stdout).toContain("No Candidate Publications recorded.");
     }),
   );
 

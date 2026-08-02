@@ -241,6 +241,7 @@ describe("by change reconcile", () => {
         if (!recorded.ok) throw new Error(recorded.code);
 
         let cleanupAttempts = 0;
+        let mergedHead = "merged-head";
         const reconciliation = openChangeReconciliation({
           persistence: changes,
           github: {
@@ -253,7 +254,7 @@ describe("by change reconcile", () => {
               merged: true,
               baseBranch: publicationTarget.baseBranch,
               headBranch: "change-1",
-              headSha: "merged-head",
+              headSha: mergedHead,
             }),
             createPullRequest: () => {
               throw new Error("Reconciliation must not create a pull request");
@@ -283,12 +284,23 @@ describe("by change reconcile", () => {
           ],
         });
         expect(cleanupAttempts).toBe(0);
-        expect(yield* changes.getChangeById(created.change.id)).toMatchObject({
-          state: "open",
-          closeReason: null,
+        mergedHead = "head";
+        expect(
+          yield* reconciliation.reconcile({
+            repositoryCommonDirectory: input.commonDirectory,
+            changeId: created.change.id,
+            now,
+          }),
+        ).toMatchObject({
+          rejected: false,
+          changes: [{ changeId: created.change.id, status: "completed" }],
         });
-        const openTask = yield* tasks.getTaskById(taskId);
-        expect(openTask).toMatchObject({ state: "implementing" });
+        expect(yield* changes.getChangeById(created.change.id)).toMatchObject({
+          state: "closed",
+          closeReason: "completed",
+        });
+        const completedTask = yield* tasks.getTaskById(taskId);
+        expect(completedTask).toMatchObject({ state: "done" });
       }),
     ),
   );

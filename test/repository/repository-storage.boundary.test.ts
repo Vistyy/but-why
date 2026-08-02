@@ -650,6 +650,71 @@ describe("repository SQL storage", () => {
     ),
   );
 
+  it.scoped("appends immutable Candidate Publication history for repeated heads", () =>
+    withTemporaryState((input) =>
+      Effect.gen(function* () {
+        const capture = yield* openSqliteCandidateCapturePersistence();
+        const changes = yield* openSqliteChangePersistence();
+        const first = yield* capture.commitCapture({
+          repositoryCommonDirectory: input.commonDirectory,
+          branchRef: "refs/heads/revision",
+          baseRef: "refs/remotes/origin/main",
+          changeBaseSha: "base-1",
+          headSha: "head-1",
+          now: "2026-07-25T16:00:00.000Z",
+        });
+        if (!first.ok) return;
+        const target = { owner: "acme", repo: "repo", baseBranch: "main", remoteName: "origin" };
+        const publication = {
+          changeId: first.changeId,
+          candidateId: first.candidateId,
+          validationRunId: "run-1",
+          target,
+          headBranch: "revision",
+          expectedHeadSha: "head-1",
+          changeBaseSha: "base-1",
+          now: "2026-07-25T16:01:00.000Z",
+        };
+        expect(yield* changes.beginPublication(publication)).toMatchObject({ ok: true });
+        expect(
+          yield* changes.recordPublishedPullRequest({
+            ...publication,
+            pullRequest: { number: 42, url: "https://github.test/pull/42" },
+          }),
+        ).toMatchObject({ ok: true });
+        const second = yield* capture.commitCapture({
+          repositoryCommonDirectory: input.commonDirectory,
+          branchRef: "refs/heads/revision",
+          baseRef: "refs/remotes/origin/main",
+          changeBaseSha: "base-2",
+          headSha: "head-2",
+          now: "2026-07-25T16:02:00.000Z",
+        });
+        if (!second.ok) return;
+        expect(
+          yield* changes.recordPublishedPullRequest({
+            changeId: first.changeId,
+            candidateId: second.candidateId,
+            validationRunId: "run-2",
+            target,
+            headBranch: "revision",
+            expectedHeadSha: "head-2",
+            changeBaseSha: "base-2",
+            previousExpectedHeadSha: "head-1",
+            previousCandidateId: first.candidateId,
+            previousValidationRunId: "run-1",
+            pullRequest: { number: 42, url: "https://github.test/pull/42" },
+            now: "2026-07-25T16:03:00.000Z",
+          }),
+        ).toMatchObject({ ok: true });
+        expect(yield* changes.listCandidatePublications(first.changeId)).toMatchObject([
+          { candidateId: first.candidateId, headSha: "head-1", pullRequest: { number: 42 } },
+          { candidateId: second.candidateId, headSha: "head-2", pullRequest: { number: 42 } },
+        ]);
+      }),
+    ),
+  );
+
   it.scoped("rolls back the complete Candidate capture when its write fails", () =>
     withTemporaryState((input) =>
       Effect.gen(function* () {
