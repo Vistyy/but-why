@@ -141,6 +141,39 @@ export const validateAdvisorNote = (value: { readonly ruleId: string; readonly m
 
 export const advisorDisabledAfterFailures = (failures: number): boolean => failures >= 3;
 
+export const createAdvisorActivityScheduler = <T>(evaluate: (batch: number, activity: readonly T[]) => Promise<void>, deliver: (batch: number) => void) => {
+  let active = false;
+  let nextBatch = 0;
+  let pending: T[] = [];
+  let scheduled = false;
+  const settle = async (): Promise<void> => {
+    if (active || pending.length === 0) return;
+    active = true;
+    const activity = pending;
+    pending = [];
+    const batch = ++nextBatch;
+    try {
+      await evaluate(batch, activity);
+      deliver(batch);
+    } finally {
+      active = false;
+      if (pending.length > 0 && !scheduled) {
+        scheduled = true;
+        queueMicrotask(() => {
+          scheduled = false;
+          void settle();
+        });
+      }
+    }
+  };
+  return {
+    add(activity: T): void { pending.push(activity); },
+    settle,
+    get pendingCount(): number { return pending.length; },
+    get active(): boolean { return active; },
+  };
+};
+
 const isAuthorityRead = (input: Record<string, unknown>): boolean => /AGENTS\.md|CONTEXT\.md|CONTEXT-MAP\.md|VERIFICATION\.md|docs\/adr|docs\/architecture|docs\/tooling/u.test(JSON.stringify(input));
 const fingerprint = (values: readonly string[]): string => createHash("sha256").update(values.join("\n")).digest("hex");
 const shouldEmit = (note: Note, emitted: ReadonlyMap<string, number>): boolean => {

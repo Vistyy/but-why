@@ -10,6 +10,7 @@ import {
   shouldEvaluateActivity,
   validateAdvisorNote,
   advisorDisabledAfterFailures,
+  createAdvisorActivityScheduler,
   type Evidence,
 } from "../../extensions/implementation-advisor/index.js";
 
@@ -94,6 +95,31 @@ describe("Implementation Advisor", () => {
       triggerTurn: false,
       owner: "continue-change",
     });
+  });
+
+  it("coalesces later qualifying deltas and evaluates them after the active batch", async () => {
+    const batches: Array<readonly string[]> = [];
+    const delivered: number[] = [];
+    let release: (() => void) | undefined;
+    const scheduler = createAdvisorActivityScheduler<string>(
+      async (_batch, activity) => {
+        batches.push(activity);
+        if (batches.length === 1)
+          await new Promise<void>((resolve) => {
+            release = resolve;
+          });
+      },
+      (batch) => delivered.push(batch),
+    );
+    scheduler.add("first");
+    const first = scheduler.settle();
+    scheduler.add("second");
+    scheduler.add("third");
+    release?.();
+    await first;
+    await new Promise<void>((resolve) => queueMicrotask(resolve));
+    expect(batches).toEqual([["first"], ["second", "third"]]);
+    expect(delivered).toEqual([1, 2]);
   });
 
   it("disables after three failures and restores the disabled state", () => {
