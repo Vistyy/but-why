@@ -8,11 +8,12 @@ import type {
   GitHubPullRequestGateway,
   GitHubPullRequestMutationResult,
   GitHubPullRequestRequest,
+  PullRequestGatewayDiagnostic,
 } from "../change/ownedPullRequestGateway.js";
 
 export type PublicationCommandResult =
   | { readonly ok: true; readonly stdout: string }
-  | { readonly ok: false };
+  | { readonly ok: false; readonly diagnostic?: PullRequestGatewayDiagnostic };
 
 export type PublicationCommandRunner = (args: readonly string[]) => PublicationCommandResult;
 
@@ -71,10 +72,23 @@ const closePullRequest = (
     "-f",
     "state=closed",
   ]);
-  if (!result.ok) return { ok: false, code: "close_failed" };
+  if (!result.ok)
+    return {
+      ok: false,
+      code: "close_failed",
+      ...(result.diagnostic === undefined ? {} : { diagnostic: result.diagnostic }),
+    };
   const pullRequest = parsePullRequest(result.stdout);
   return pullRequest === undefined
-    ? { ok: false, code: "close_failed" }
+    ? {
+        ok: false,
+        code: "close_failed",
+        diagnostic: {
+          command: "gh",
+          operation: "close pull request response",
+          message: "GitHub returned a response that did not contain a valid pull request.",
+        },
+      }
     : { ok: true, pullRequest };
 };
 
@@ -89,7 +103,13 @@ const createPullRequest = (
   const remoteHead = initialRemoteHeadState(runGit, request);
   if (remoteHead === "present") return { ok: false, code: "remote_head_mismatch" };
   if (remoteHead === "unknown") return { ok: false, code: "push_failed" };
-  if (!pushExactHead(runGit, request)) return { ok: false, code: "push_failed" };
+  const pushed = pushExactHead(runGit, request);
+  if (!pushed.ok)
+    return {
+      ok: false,
+      code: "push_failed",
+      ...(pushed.diagnostic === undefined ? {} : { diagnostic: pushed.diagnostic }),
+    };
   const result = runGh([
     "api",
     "--method",
@@ -104,10 +124,23 @@ const createPullRequest = (
     "-f",
     `body=${request.body}`,
   ]);
-  if (!result.ok) return { ok: false, code: "remote_response_lost" };
+  if (!result.ok)
+    return {
+      ok: false,
+      code: "remote_response_lost",
+      ...(result.diagnostic === undefined ? {} : { diagnostic: result.diagnostic }),
+    };
   const pullRequest = parsePullRequest(result.stdout);
   return pullRequest === undefined
-    ? { ok: false, code: "remote_response_lost" }
+    ? {
+        ok: false,
+        code: "remote_response_lost",
+        diagnostic: {
+          command: "gh",
+          operation: "create pull request response",
+          message: "GitHub returned a response that did not contain a valid pull request.",
+        },
+      }
     : { ok: true, pullRequest };
 };
 
@@ -119,7 +152,13 @@ const updatePullRequest = (
   if (!hasExpectedLocalHead(runGit, request)) {
     return { ok: false, code: "local_head_mismatch" };
   }
-  if (!pushExpectedHead(runGit, request)) return { ok: false, code: "push_failed" };
+  const pushed = pushExpectedHead(runGit, request);
+  if (!pushed.ok)
+    return {
+      ok: false,
+      code: "push_failed",
+      ...(pushed.diagnostic === undefined ? {} : { diagnostic: pushed.diagnostic }),
+    };
   const result = runGh([
     "api",
     "--method",
@@ -130,10 +169,23 @@ const updatePullRequest = (
     "-f",
     `body=${request.body}`,
   ]);
-  if (!result.ok) return { ok: false, code: "remote_response_lost" };
+  if (!result.ok)
+    return {
+      ok: false,
+      code: "remote_response_lost",
+      ...(result.diagnostic === undefined ? {} : { diagnostic: result.diagnostic }),
+    };
   const pullRequest = parsePullRequest(result.stdout);
   return pullRequest === undefined
-    ? { ok: false, code: "remote_response_lost" }
+    ? {
+        ok: false,
+        code: "remote_response_lost",
+        diagnostic: {
+          command: "gh",
+          operation: "update pull request response",
+          message: "GitHub returned a response that did not contain a valid pull request.",
+        },
+      }
     : { ok: true, pullRequest };
 };
 
@@ -162,40 +214,61 @@ const initialRemoteHeadState = (
 const pushExactHead = (
   runGit: PublicationCommandRunner,
   request: GitHubPullRequestRequest,
-): boolean =>
+): PublicationCommandResult =>
   runGit([
     "push",
     `--force-with-lease=refs/heads/${request.headBranch}:`,
     requestRemote(request),
     `${request.expectedHeadSha}:refs/heads/${request.headBranch}`,
-  ]).ok;
+  ]);
 
 const pushExpectedHead = (
   runGit: PublicationCommandRunner,
   request: Parameters<GitHubPullRequestGateway["updatePullRequest"]>[0],
-): boolean =>
+): PublicationCommandResult =>
   runGit([
     "push",
     `--force-with-lease=refs/heads/${request.headBranch}:${request.expectedCurrentHeadSha}`,
     requestRemote(request),
     `${request.expectedHeadSha}:refs/heads/${request.headBranch}`,
-  ]).ok;
+  ]);
 
 const requestRemote = (request: Pick<GitHubPullRequestRequest, "remoteName">): string =>
   request.remoteName;
 
+const boundedDiagnostic = (value: string): string =>
+  value.length <= 2000 ? value : `${value.slice(0, 2000)}\n... (truncated)`;
+
+const diagnosticOperation = (args: readonly string[]): string => {
+  const methodIndex = args.indexOf("--method");
+  const method = methodIndex === -1 ? undefined : args[methodIndex + 1];
+  const endpoint = args.find((argument) => argument.startsWith("repos/"));
+  return [args[0] ?? "command", method, endpoint].filter((part) => part !== undefined).join(" ");
+};
+
 const runCommand = (
-  command: string,
+  command: "git" | "gh",
   args: readonly string[],
   cwd: string | undefined,
 ): PublicationCommandResult => {
   const options: SpawnSyncOptionsWithStringEncoding = {
     encoding: "utf8",
-    stdio: ["ignore", "pipe", "ignore"],
+    stdio: ["ignore", "pipe", "pipe"],
     ...(cwd === undefined ? {} : { cwd }),
   };
   const result = spawnSync(command, args, options);
-  return result.status === 0 ? { ok: true, stdout: result.stdout } : { ok: false };
+  if (result.status === 0) return { ok: true, stdout: result.stdout };
+  return {
+    ok: false,
+    diagnostic: {
+      command,
+      operation: diagnosticOperation(args),
+      ...(result.status === null ? {} : { exitCode: result.status }),
+      ...(result.signal === null ? {} : { signal: result.signal }),
+      ...(result.stderr.trim().length === 0 ? {} : { stderr: boundedDiagnostic(result.stderr) }),
+      ...(result.error === undefined ? {} : { message: result.error.message }),
+    },
+  };
 };
 
 type GitHubPullRequestJson = {

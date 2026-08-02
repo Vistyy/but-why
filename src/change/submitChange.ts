@@ -30,6 +30,7 @@ import type {
   CandidatePublication,
   PublishCandidateResult,
 } from "./publication/candidatePublication.js";
+import type { PullRequestGatewayDiagnostic } from "./ownedPullRequestGateway.js";
 import type { TaskState } from "../task/lifecycle.js";
 import type { TaskPersistence } from "../task/taskPersistence.js";
 import {
@@ -126,7 +127,11 @@ export type ChangeSubmitResult =
     }
   | { readonly ok: false; readonly code: "github_target_not_found" | "github_tooling_error" }
   | RemoteChangeBaseError
-  | { readonly ok: false; readonly code: PublishCandidateFailureCode }
+  | {
+      readonly ok: false;
+      readonly code: PublishCandidateFailureCode;
+      readonly details?: { readonly gateway?: PullRequestGatewayDiagnostic };
+    }
   | Exclude<CaptureLocalCandidateResult, { readonly ok: true }>;
 
 type PublishCandidateFailureCode = Exclude<PublishCandidateResult, { readonly ok: true }>["code"];

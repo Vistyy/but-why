@@ -21,6 +21,15 @@ export type GitHubPullRequestRequest = {
   readonly body: string;
 };
 
+export type PullRequestGatewayDiagnostic = {
+  readonly command: "git" | "gh";
+  readonly operation: string;
+  readonly exitCode?: number;
+  readonly signal?: string;
+  readonly stderr?: string;
+  readonly message?: string;
+};
+
 export type GitHubPullRequestMutationResult =
   | { readonly ok: true; readonly pullRequest: GitHubPullRequest }
   | {
@@ -31,6 +40,7 @@ export type GitHubPullRequestMutationResult =
         | "push_failed"
         | "remote_response_lost"
         | "close_failed";
+      readonly diagnostic?: PullRequestGatewayDiagnostic;
     };
 
 export type GitHubPullRequestCloseInput = {
