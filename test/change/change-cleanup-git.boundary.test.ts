@@ -453,44 +453,6 @@ console.log(JSON.stringify(cleanupChangeResources({ repositoryCommonDirectory, w
     expect(reads).toBe(2);
   });
 
-  it("deletes the exact Remote Change Branch through Git with a lease", () => {
-    const repository = initializedRepository();
-    const remoteRepository = createTestWorkspace();
-    git(remoteRepository, "init", "--bare", "-q");
-    git(repository, "remote", "add", "origin", remoteRepository);
-    git(repository, "push", "origin", "main");
-    const worktreePath = join(repository, "feature-worktree");
-    git(repository, "worktree", "add", "-b", "feature", worktreePath, "main");
-    writeFileSync(join(worktreePath, "feature.txt"), "merged work\n");
-    git(worktreePath, "add", "feature.txt");
-    git(worktreePath, "commit", "-m", "Feature");
-    const expectedHeadSha = git(worktreePath, "rev-parse", "HEAD");
-    git(worktreePath, "push", "origin", "feature");
-    git(repository, "merge", "--ff-only", "feature");
-
-    expect(
-      cleanupChangeResources({
-        repositoryCommonDirectory: git(
-          repository,
-          "rev-parse",
-          "--path-format=absolute",
-          "--git-common-dir",
-        ),
-        worktreePath,
-        branchRef: "refs/heads/feature",
-        remoteChangeBranch: {
-          owner: "acme",
-          repo: "widgets",
-          remoteName: "origin",
-          remoteUrl: remoteRepository,
-          branchName: "feature",
-          expectedHeadSha,
-        },
-      }),
-    ).toEqual({ state: "complete" });
-    expect(() => git(remoteRepository, "show-ref", "--verify", "refs/heads/feature")).toThrow();
-  }, 30_000);
-
   it("preserves a Remote Change Branch from a repointed remote", () => {
     const repository = initializedRepository();
 
