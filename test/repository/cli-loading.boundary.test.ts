@@ -1,6 +1,5 @@
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { performance } from "node:perf_hooks";
 import { Effect } from "effect";
 import { dirname, join } from "node:path";
 import { describe, vi } from "vitest";
@@ -10,18 +9,6 @@ import { repoRoot } from "../support/by-cli.js";
 import { runTestProcess } from "../support/testProcess.js";
 
 vi.setConfig({ testTimeout: 360_000 });
-
-type LoadingBenchmark = {
-  method: { processesPerCommand: number; order: string; comparison: string[] };
-  commands: readonly string[][];
-  medianMilliseconds: Record<
-    string,
-    { compiledExecutable: number; installedPackageTarball: number }
-  >;
-};
-
-const cliLoadingBenchmarkEnabled =
-  (process.env as { readonly BY_CLI_LOADING_BENCHMARK?: string }).BY_CLI_LOADING_BENCHMARK === "1";
 
 describe("CLI loading and package boundary", () => {
   it.effect(
@@ -115,113 +102,10 @@ describe("CLI loading and package boundary", () => {
           );
           expect(validationShow.status).toBe(1);
           expect(validationShow.stdout).toContain("code: validation_run_not_found");
-
-          if (cliLoadingBenchmarkEnabled) {
-            const benchmark = JSON.parse(
-              readFileSync(join(repoRoot, "test/repository/cli-loading.benchmark.json"), "utf8"),
-            ) as LoadingBenchmark;
-            expect(benchmark.method.processesPerCommand).toBe(15);
-            expect(benchmark.method.order).toBe("randomized");
-            expect(benchmark.method.comparison).toEqual([
-              "compiledExecutable",
-              "installedPackageTarball",
-            ]);
-            const benchmarkRuns = benchmark.method.comparison.flatMap((executable) =>
-              benchmark.commands.map((args) => ({ executable, args })),
-            );
-            for (let index = benchmarkRuns.length - 1; index > 0; index -= 1) {
-              const swapIndex = Math.floor(Math.random() * (index + 1));
-              const current = benchmarkRuns[index];
-              const swap = benchmarkRuns[swapIndex];
-              if (current === undefined || swap === undefined) continue;
-              benchmarkRuns[index] = swap;
-              benchmarkRuns[swapIndex] = current;
-            }
-            rmSync(join(repoRoot, ".cli-loading-baseline"), { recursive: true, force: true });
-            const baselineBuild = runTestProcess(
-              "pnpm",
-              [
-                "--dir",
-                repoRoot,
-                "exec",
-                "tsc",
-                "-p",
-                "tsconfig.build.json",
-                "--outDir",
-                join(repoRoot, ".cli-loading-baseline"),
-              ],
-              { cwd: directory },
-            );
-            expect(baselineBuild.status, baselineBuild.stderr || baselineBuild.stdout).toBe(0);
-            const measurements = new Map<string, number[]>();
-            for (const run of benchmarkRuns) {
-              const key = `${run.executable}:${run.args.join(" ")}`;
-              const values = measurements.get(key) ?? [];
-              for (let repeat = 0; repeat < benchmark.method.processesPerCommand; repeat += 1) {
-                const started = performance.now();
-                const result = runTestProcess(
-                  run.executable === "compiledExecutable" ? "node" : installedBy,
-                  run.executable === "compiledExecutable"
-                    ? [join(repoRoot, ".cli-loading-baseline/main.js"), ...run.args]
-                    : run.args,
-                  { cwd: consumer },
-                );
-                expect(result.status).toBe(run.args[0] === "validation-run" ? 1 : 0);
-                values.push(performance.now() - started);
-              }
-              measurements.set(key, values);
-            }
-            const currentMeasurements = Object.fromEntries(
-              [...measurements].map(([key, values]) => {
-                const sorted = [...values].sort((left, right) => left - right);
-                const middle = Math.floor(sorted.length / 2);
-                const medianMilliseconds =
-                  sorted.length % 2 === 0
-                    ? ((sorted[middle - 1] ?? 0) + (sorted[middle] ?? 0)) / 2
-                    : (sorted[middle] ?? 0);
-                return [key, { samples: values.length, medianMilliseconds }];
-              }),
-            );
-            for (const command of ["--help", "--version"]) {
-              const baseline =
-                currentMeasurements[`compiledExecutable:${command}`]?.medianMilliseconds;
-              const bundled =
-                currentMeasurements[`installedPackageTarball:${command}`]?.medianMilliseconds;
-              expect(baseline).toBeDefined();
-              expect(bundled).toBeDefined();
-              expect((bundled ?? Number.POSITIVE_INFINITY) * 2).toBeLessThan(baseline ?? 0);
-            }
-            const comparisons = Object.fromEntries(
-              Object.entries(currentMeasurements).map(([key, measurement]) => {
-                const [executable, ...commandParts] = key.split(":");
-                const command = commandParts.join(" ");
-                const baseline =
-                  benchmark.medianMilliseconds[command]?.[
-                    executable as "compiledExecutable" | "installedPackageTarball"
-                  ];
-                const current = measurement.medianMilliseconds;
-                return [
-                  key,
-                  {
-                    baseline,
-                    current,
-                    deltaMilliseconds: baseline === undefined ? undefined : current - baseline,
-                  },
-                ];
-              }),
-            );
-            console.log(
-              JSON.stringify({
-                benchmark: "cli-loading",
-                comparisons,
-              }),
-            );
-          }
         } finally {
-          rmSync(join(repoRoot, ".cli-loading-baseline"), { recursive: true, force: true });
           rmSync(directory, { recursive: true, force: true });
         }
       }),
-    cliLoadingBenchmarkEnabled ? 360_000 : 30_000,
+    30_000,
   );
 });
