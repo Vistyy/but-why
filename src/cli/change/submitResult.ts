@@ -243,19 +243,6 @@ export const submitResult = (result: ChangeSubmitResult, changeId: string): CliR
   ) {
     return remoteChangeBaseError(result, "Submit");
   }
-  if (
-    "details" in result &&
-    result.details !== undefined &&
-    result.details !== null &&
-    "gateway" in result.details
-  ) {
-    return runtimeError({
-      code: result.code,
-      message: "Change Submit could not validate or publish the current Candidate.",
-      details: { gateway: result.details.gateway },
-      help: ["Inspect the Change, validation evidence, and owned pull request, then retry."],
-    });
-  }
   return runtimeError({
     code: result.code,
     message: "Change Submit could not validate or publish the current Candidate.",

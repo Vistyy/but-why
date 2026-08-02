@@ -232,36 +232,6 @@ describe("GitHub pull request gateway", () => {
     ).toEqual({ ok: false, code: "close_failed" });
   });
 
-  it("preserves GitHub command diagnostics when pull request creation fails", () => {
-    const diagnostic = {
-      command: "gh" as const,
-      operation: "api",
-      exitCode: 1,
-      stderr: "HTTP 422: Validation Failed",
-    };
-    const gateway = localGitHubPullRequestGateway({
-      runGit: (args) => ({
-        ok: true,
-        stdout: args[0] === "rev-parse" ? "candidate-sha\n" : "",
-      }),
-      runGh: () => ({ ok: false, diagnostic }),
-    });
-
-    expect(
-      gateway.createPullRequest({
-        owner: "acme",
-        repo: "widgets",
-        remoteName: "origin",
-        baseBranch: "main",
-        headBranch: "feature",
-        branchRef: "refs/heads/feature",
-        expectedHeadSha: "candidate-sha",
-        title: "Publish Candidate",
-        body: "Validation facts",
-      }),
-    ).toEqual({ ok: false, code: "remote_response_lost", diagnostic });
-  });
-
   it("rejects an existing remote head before initial publication", () => {
     const gitCalls: (readonly string[])[] = [];
     const gateway = localGitHubPullRequestGateway({

@@ -15,7 +15,6 @@ import type {
   GitHubPullRequestGateway,
   GitHubPullRequestMutationResult,
   GitHubPullRequestRequest,
-  PullRequestGatewayDiagnostic,
 } from "../ownedPullRequestGateway.js";
 import type { RepositoryStorageError } from "../../contracts/repositoryStorageError.js";
 import { implementationDecisionMarkdown } from "../implementationDecision.js";
@@ -66,7 +65,6 @@ export type PublishCandidateResult =
         | "publication_remote_mismatch"
         | "publication_state_conflict"
         | "publication_tooling_failed";
-      readonly details?: { readonly gateway?: PullRequestGatewayDiagnostic };
     };
 
 type Dependencies = {
@@ -169,7 +167,6 @@ const create = (
         expectedHeadSha,
         pending,
         created.code,
-        created.diagnostic,
       );
     if (!matches(created.pullRequest, input.target, headBranch, expectedHeadSha))
       return { ok: false, code: "publication_remote_mismatch" };
@@ -184,33 +181,25 @@ const createFailure = (
   expectedHeadSha: string,
   pending: Parameters<ChangePersistence["beginPublication"]>[0],
   failure: Exclude<GitHubPullRequestMutationResult, { readonly ok: true }>["code"],
-  diagnostic: PullRequestGatewayDiagnostic | undefined,
 ): PublicationEffect => {
   if (failure === "remote_response_lost")
-    return recover(dependencies, input, change, headBranch, expectedHeadSha, diagnostic);
+    return recover(dependencies, input, change, headBranch, expectedHeadSha);
   const code =
     failure === "local_head_mismatch"
       ? "current_head_mismatch"
       : failure === "remote_head_mismatch"
         ? "publication_remote_mismatch"
         : "publication_tooling_failed";
-  return release(dependencies, pending, code, diagnostic);
+  return release(dependencies, pending, code);
 };
 
 const release = (
   dependencies: Dependencies,
   pending: Parameters<ChangePersistence["beginPublication"]>[0],
   code: Extract<PublishCandidateResult, { readonly ok: false }>["code"],
-  diagnostic?: PullRequestGatewayDiagnostic,
 ): PublicationEffect =>
   Effect.map(dependencies.changePersistence.releasePendingPublication(pending), (released) =>
-    released.ok
-      ? {
-          ok: false,
-          code,
-          ...(diagnostic === undefined ? {} : { details: { gateway: diagnostic } }),
-        }
-      : mapPersistenceError(released.code),
+    released.ok ? { ok: false, code } : mapPersistenceError(released.code),
   );
 
 const recover = (
@@ -219,7 +208,6 @@ const recover = (
   change: ChangeRecord,
   headBranch: string,
   expectedHeadSha: string,
-  diagnostic?: PullRequestGatewayDiagnostic,
 ): PublicationEffect => {
   const marker = change.publication;
   if (!isMatchingPendingPublication(marker, input, headBranch, expectedHeadSha)) {
@@ -230,7 +218,6 @@ const recover = (
     input.target,
     headBranch,
     expectedHeadSha,
-    diagnostic,
   );
   return selected.ok
     ? record(dependencies, input, headBranch, expectedHeadSha, selected.pullRequest)
@@ -270,47 +257,25 @@ const selectRecoveredPullRequest = (
   target: ChangePublicationTarget,
   headBranch: string,
   expectedHeadSha: string,
-  diagnostic?: PullRequestGatewayDiagnostic,
 ):
   | { readonly ok: true; readonly pullRequest: GitHubPullRequest }
   | Extract<PublishCandidateResult, { readonly ok: false }> => {
-  if (found === undefined)
-    return {
-      ok: false,
-      code: "publication_tooling_failed",
-      ...(diagnostic === undefined ? {} : { details: { gateway: diagnostic } }),
-    };
+  if (found === undefined) return { ok: false, code: "publication_tooling_failed" };
   const exact = found.filter((pullRequest) =>
     matches(pullRequest, target, headBranch, expectedHeadSha),
   );
-  return selectSingleRecoveredPullRequest(found, exact, diagnostic);
+  return selectSingleRecoveredPullRequest(found, exact);
 };
 
 const selectSingleRecoveredPullRequest = (
   found: readonly GitHubPullRequest[],
   exact: readonly GitHubPullRequest[],
-  diagnostic?: PullRequestGatewayDiagnostic,
 ):
   | { readonly ok: true; readonly pullRequest: GitHubPullRequest }
   | Extract<PublishCandidateResult, { readonly ok: false }> => {
-  if (exact.length === 0)
-    return {
-      ok: false,
-      code: "publication_creation_unconfirmed",
-      ...(diagnostic === undefined ? {} : { details: { gateway: diagnostic } }),
-    };
-  if (exact.length !== 1)
-    return {
-      ok: false,
-      code: "publication_lookup_ambiguous",
-      ...(diagnostic === undefined ? {} : { details: { gateway: diagnostic } }),
-    };
-  if (found.length !== 1)
-    return {
-      ok: false,
-      code: "publication_lookup_ambiguous",
-      ...(diagnostic === undefined ? {} : { details: { gateway: diagnostic } }),
-    };
+  if (exact.length === 0) return { ok: false, code: "publication_creation_unconfirmed" };
+  if (exact.length !== 1) return { ok: false, code: "publication_lookup_ambiguous" };
+  if (found.length !== 1) return { ok: false, code: "publication_lookup_ambiguous" };
   return { ok: true, pullRequest: exact[0] as GitHubPullRequest };
 };
 
