@@ -184,6 +184,66 @@ describe("Change Submit orchestration", () => {
       }),
   );
 
+  it.effect("retries a pending publication for a newer Candidate through Submit", () =>
+    Effect.gen(function* () {
+      const publishedCandidates: string[] = [];
+      const submit = openChangeSubmit(
+        dependencies({
+          change: readyChange(),
+          captureResults: [
+            candidate,
+            { ...candidate, candidateId: "candidate-2", headSha: "head-2" },
+          ],
+          publication: {
+            publish: (input) => {
+              publishedCandidates.push(input.candidateId);
+              return publishedCandidates.length === 1
+                ? { ok: false as const, code: "publication_tooling_failed" as const }
+                : {
+                    ok: true as const,
+                    created: false,
+                    pullRequest: { number: 42, url: "https://github.test/acme/repo/pull/42" },
+                  };
+            },
+          },
+        }),
+      );
+      let validationRuns = 0;
+      const validationLayer = Layer.succeed(CandidateValidation, {
+        validateCandidate: () =>
+          Effect.sync(() => {
+            validationRuns += 1;
+            return {
+              ok: true,
+              reused: false,
+              validationRunId: `run-${validationRuns}`,
+              outcome: "passed",
+            } as const;
+          }),
+        validateAcceptanceContextCandidate: () => Effect.die("Acceptance Review was not expected"),
+        validateNoChange: () => Effect.die("No-Change validation was not expected"),
+        listFindings: () => Effect.succeed([]),
+        listToolingFailures: () => Effect.succeed([]),
+        listRounds: () => Effect.succeed([]),
+      });
+
+      expect(
+        yield* submit.submit({ changeId: "change-1", now }).pipe(Effect.provide(validationLayer)),
+      ).toMatchObject({
+        ok: false,
+        code: "publication_tooling_failed",
+      });
+      expect(
+        yield* submit.submit({ changeId: "change-1", now }).pipe(Effect.provide(validationLayer)),
+      ).toMatchObject({
+        ok: true,
+        status: "published",
+        created: false,
+      });
+      expect(publishedCandidates).toEqual(["candidate-1", "candidate-2"]);
+    }),
+  );
+
   it.effect(
     "loads the policy baseline before Candidate capture and reviewer config after capture",
     () =>
