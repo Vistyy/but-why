@@ -214,6 +214,18 @@ const releaseWithDetails = (
       : mapPersistenceError(released.code),
   );
 
+const releaseWithEvidence = (
+  dependencies: Dependencies,
+  pending: Parameters<ChangePersistence["beginPublication"]>[0],
+  code: Extract<PublishCandidateResult, { readonly ok: false }>["code"],
+  failureEvidence?: import("../ownedPullRequestGateway.js").PublicationFailureEvidence,
+): PublicationEffect =>
+  Effect.map(dependencies.changePersistence.releasePendingPublication(pending), (released) =>
+    released.ok
+      ? { ok: false, code, ...(failureEvidence === undefined ? {} : { evidence: failureEvidence }) }
+      : mapPersistenceError(released.code),
+  );
+
 const release = (
   dependencies: Dependencies,
   pending: Parameters<ChangePersistence["beginPublication"]>[0],
@@ -344,10 +356,11 @@ const createRecoveryAttempt = (
       );
     if (!created.ok) {
       if (created.code === "push_failed" || created.code === "local_head_mismatch")
-        return yield* release(
+        return yield* releaseWithEvidence(
           dependencies,
           pending,
           created.code === "push_failed" ? "publication_tooling_failed" : "current_head_mismatch",
+          created.evidence,
         );
       return yield* retainFailure(dependencies, pending, created);
     }
