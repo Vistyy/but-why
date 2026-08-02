@@ -378,8 +378,8 @@ const runCommand = (
       }
     : {
         ok: false,
-        stdout,
-        ...(stderr.length === 0 ? {} : { stderr }),
+        ...(result.stdout === undefined ? {} : { stdout: result.stdout }),
+        ...(result.stderr === undefined ? {} : { stderr: result.stderr }),
         ...(result.status === null ? {} : { status: result.status }),
       };
 };
