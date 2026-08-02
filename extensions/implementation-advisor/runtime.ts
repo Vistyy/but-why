@@ -103,25 +103,33 @@ export const createImplementationAdvisorRuntime = (input: AdvisorRuntimeInput) =
   let parentSessionId = input.context.changeId;
 
   const restore = (context: ExtensionContext): void => {
-    worktreeCwd = context.cwd;
-    parentSessionId = context.sessionManager.getSessionId();
-    const entries = context.sessionManager.getBranch();
-    for (let index = entries.length - 1; index >= 0; index -= 1) {
-      const entry = entries[index];
-      if (entry?.type !== "custom" || entry.customType !== STATE_ENTRY) continue;
-      if (isAdvisorState(entry.data)) {
-        state = {
-          fingerprints: [...entry.data.fingerprints],
-          failures: entry.data.failures,
-          disabled: entry.data.disabled,
-        };
+    try {
+      worktreeCwd = context.cwd;
+      parentSessionId = context.sessionManager.getSessionId();
+      const entries = context.sessionManager.getBranch();
+      for (let index = entries.length - 1; index >= 0; index -= 1) {
+        const entry = entries[index];
+        if (entry?.type !== "custom" || entry.customType !== STATE_ENTRY) continue;
+        if (isAdvisorState(entry.data)) {
+          state = {
+            fingerprints: [...entry.data.fingerprints],
+            failures: entry.data.failures,
+            disabled: entry.data.disabled,
+          };
+        }
+        break;
       }
-      break;
+    } catch {
+      // Restoration is advisory state. A corrupt or unavailable parent state must not block the Implementer.
     }
   };
 
   const appendState = (): void => {
-    input.pi.appendEntry(STATE_ENTRY, state);
+    try {
+      input.pi.appendEntry(STATE_ENTRY, state);
+    } catch {
+      // Advisor persistence is fail-open and must not escape the parent event handler.
+    }
   };
 
   const setFailure = (context: ExtensionContext): void => {
@@ -146,7 +154,9 @@ export const createImplementationAdvisorRuntime = (input: AdvisorRuntimeInput) =
     if (contextFiles !== undefined) return contextFiles;
     const agentDir = process.env["PI_CODING_AGENT_DIR"] ?? `${process.env["HOME"] ?? "~"}/.pi/agent`;
     contextFiles = new Set(
-      loadProjectContextFiles({ cwd: context.cwd, agentDir }).map((file) => resolve(file.path)),
+      loadProjectContextFiles({ cwd: context.cwd, agentDir })
+        .map((file) => resolve(file.path))
+        .filter((path) => isWithinWorktree(path, context.cwd)),
     );
     return contextFiles;
   };
@@ -251,14 +261,20 @@ export const createImplementationAdvisorRuntime = (input: AdvisorRuntimeInput) =
   return {
     restore,
     async handleTurnEnd(event: TurnEndEvent, context: ExtensionContext): Promise<void> {
-      worktreeCwd = context.cwd;
-      const evidence = turnEvidence(event, ensureContextFiles(context), context.cwd);
-      if (evidence.length === 0 || state.disabled) return;
-      await scheduler.add({
-        activityBatch: `turn:${event.turnIndex}`,
-        evidence,
-        context,
-      });
+      try {
+        worktreeCwd = context.cwd;
+        const evidence = turnEvidence(event, ensureContextFiles(context), context.cwd);
+        if (evidence.length === 0 || state.disabled) return;
+        void scheduler
+          .add({
+            activityBatch: `turn:${event.turnIndex}`,
+            evidence,
+            context,
+          })
+          .catch(() => setFailure(context));
+      } catch {
+        setFailure(context);
+      }
     },
     getState: () => state,
     getNestedSession: () => nested,
@@ -343,7 +359,7 @@ export const turnEvidence = (
     const toolInput = input.input ?? (input.toolCallId === undefined ? {} : toolInputs.get(input.toolCallId) ?? {});
     const failed = input.isError === true;
     const qualifies = writeTools.has(toolName) || failed ||
-      (readTools.has(toolName) && isApplicableAuthorityRead(toolInput as { readonly [key: string]: unknown }, discoveredContextFiles, cwd));
+      (readTools.has(toolName) && isTargetRepositoryContextRead(toolInput as { readonly [key: string]: unknown }, discoveredContextFiles, cwd));
     if (!qualifies) return [];
     return [{
       reference: `${activityBatch}:evidence:${index}:${input.toolCallId ?? toolName}`,
@@ -393,7 +409,7 @@ const buildEvaluationPrompt = (evaluation: {
 }): string =>
   `Review exactly Advisor Activity Batch ${evaluation.activityBatch}.\nAcceptance Context (authoritative approved intent and scope): ${JSON.stringify(evaluation.acceptanceContext)}\nImplementation Decisions (non-authoritative rationale only; not asserted complete or current): ${JSON.stringify(evaluation.implementationDecisions)}\nEvidence for this exact batch: ${JSON.stringify(evaluation.evidence)}\nEvaluate every supplied rule and call ${NOTE_TOOL} exactly once with kind no_note or note. Bind every result to this exact batch and supplied evidence. Do not claim semantic correctness.`;
 
-const isApplicableAuthorityRead = (
+const isTargetRepositoryContextRead = (
   input: { readonly [key: string]: unknown },
   discoveredContextFiles: ReadonlySet<string>,
   cwd: string,
@@ -401,6 +417,12 @@ const isApplicableAuthorityRead = (
   if (input["authority"] === true || input["applicableAuthority"] === true) return true;
   const path = input["path"];
   return typeof path === "string" && discoveredContextFiles.has(resolve(cwd, path));
+};
+
+const isWithinWorktree = (path: string, cwd: string): boolean => {
+  const root = resolve(cwd);
+  const relative = resolve(path).slice(root.length);
+  return relative === "" || relative.startsWith("/");
 };
 
 const noteFingerprint = (note: AdvisorNote): string =>

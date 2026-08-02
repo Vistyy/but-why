@@ -31,9 +31,15 @@ export default function implementationAdvisor(pi: ExtensionAPI): void {
   });
 
   pi.on("session_start", (_event, extensionContext) => {
-    runtime.restore(extensionContext);
+    try {
+      runtime.restore(extensionContext);
+    } catch {
+      // Advisor restoration is fail-open and must not block the Implementer.
+    }
   });
-  pi.on("turn_end", (event, extensionContext) => runtime.handleTurnEnd(event, extensionContext));
+  pi.on("turn_end", (event, extensionContext) => {
+    void runtime.handleTurnEnd(event, extensionContext);
+  });
 }
 
 type LaunchContext = {
