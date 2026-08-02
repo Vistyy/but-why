@@ -4,6 +4,7 @@ import { decodeGlobalConfig, type GlobalConfig } from "../../src/contracts/globa
 import { decodeRepoConfig, type RepoConfig } from "../../src/contracts/repoConfig.js";
 import { resolveImplementationAdvisor } from "../../src/change/implementationAdvisorConfig.js";
 import { implementationAdvisorRules } from "../../extensions/implementation-advisor/rules.js";
+import implementationAdvisor from "../../extensions/implementation-advisor/index.js";
 import {
   implementationAdvisorToolNames,
   shouldEvaluateActivity,
@@ -99,5 +100,46 @@ describe("Implementation Advisor", () => {
     expect(advisorDisabledAfterFailures(2)).toBe(false);
     expect(advisorDisabledAfterFailures(3)).toBe(true);
     expect(advisorDisabledAfterFailures(4)).toBe(true);
+  });
+
+  it("runs scheduler failure injection through Pi event handlers without waking the host", async () => {
+    const previous = process.env["BUT_WHY_IMPLEMENTATION_ADVISOR_MODEL"];
+    process.env["BUT_WHY_IMPLEMENTATION_ADVISOR_MODEL"] = "missing/model";
+    const handlers = new Map<string, (event: unknown, context: unknown) => unknown>();
+    const entries: unknown[] = [];
+    const sent: unknown[] = [];
+    implementationAdvisor({
+      on(event: string, handler: (event: unknown, context: unknown) => unknown) {
+        handlers.set(event, handler);
+      },
+      appendEntry(_type: string, data: unknown) {
+        entries.push(data);
+      },
+      sendMessage(message: unknown) {
+        sent.push(message);
+      },
+    } as never);
+    const context = {
+      sessionManager: { getBranch: () => [] },
+      isIdle: () => true,
+      ui: { notify() {} },
+    };
+    await handlers.get("tool_result")?.(
+      {
+        type: "tool_result",
+        toolName: "write",
+        toolCallId: "write:1",
+        input: { path: "src/a.ts" },
+        content: [],
+        isError: false,
+      },
+      context,
+    );
+    await handlers.get("agent_settled")?.({ type: "agent_settled" }, context);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(entries).toHaveLength(1);
+    expect(sent).toHaveLength(0);
+    if (previous === undefined) delete process.env["BUT_WHY_IMPLEMENTATION_ADVISOR_MODEL"];
+    else process.env["BUT_WHY_IMPLEMENTATION_ADVISOR_MODEL"] = previous;
   });
 });
