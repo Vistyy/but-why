@@ -2,6 +2,7 @@ import { chmodSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
+import { publicTaskId, taskSlugForId } from "../../src/task/taskId.js";
 import { repoRoot } from "../support/by-cli.js";
 import { createTestWorkspace } from "../support/testWorkspace.js";
 import { runTestProcess } from "../support/testProcess.js";
@@ -79,6 +80,7 @@ exit 1
   chmodSync(just, 0o755);
   chmodSync(herdr, 0o755);
 
+  const taskId = options.route === "task-backed" ? "BY-1" : null;
   const prelaunch =
     options.route === "task-backed"
       ? [
@@ -118,7 +120,7 @@ exit 1
       options.implementation ??
       JSON.stringify({ changeId, worktreePath, host: "herdr", status: "started" }),
     HANDOFF_SHOW: JSON.stringify({
-      change: { id: changeId, state: "open", readiness: "ready", worktreePath },
+      change: { id: changeId, taskId, state: "open", readiness: "ready", worktreePath },
       worktreePath,
     }),
     HANDOFF_AGENT_SNAPSHOT: activeAgentSnapshot,
@@ -185,6 +187,25 @@ describe("portable handoff observer", () => {
     }
     expect(handoff.calls).toContain(`by --json change implement ${changeId}`);
     expect(handoff.calls).toContain(`by --json change show ${changeId}`);
+  });
+
+  it.each([
+    ["a taskless Change session", "change-timeout", "taskless-existing", "change-change-t"],
+    [
+      "a Task-backed Change session",
+      "change-task-timeout",
+      "task-backed",
+      taskSlugForId(publicTaskId("BY-1")),
+    ],
+  ] as const)("accepts late recovery from %s", (_kind, changeId, route, activeAgentName) => {
+    const handoff = runHandoff(changeId, {
+      route,
+      activeAgentName,
+      implementationDelay: "1",
+    });
+
+    expect(handoff.status).toBe(0);
+    expect(handoff.result).toMatchObject({ status: "late_active", changeVerified: true });
   });
 
   it("rejects an unrelated active session after Change Implement times out", () => {

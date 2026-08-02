@@ -43,7 +43,7 @@ const commandPrefix = runnerCommands[args.runner];
 const startedAt = performance.now();
 const wallStartedAt = new Date().toISOString();
 const safeId = args.changeId.replaceAll(/[^a-zA-Z0-9._-]/g, "_");
-const expectedSessionName = `but-why-${args.changeId}`;
+let expectedSessionName;
 const diagnosticDirectory = await mkdtemp(join(tmpdir(), `but-why-launch-${safeId}.`));
 const tracePath = join(diagnosticDirectory, "trace.jsonl");
 const diagnosticPath = join(diagnosticDirectory, "pane.txt");
@@ -68,6 +68,22 @@ for (const [signal, exitCode] of [
 }
 
 try {
+  const preLaunchInspection = await run(
+    commandPrefix,
+    ["--json", "change", "show", args.changeId],
+    showTimeoutMs,
+  );
+  if (preLaunchInspection.stderr.trim()) process.stderr.write(preLaunchInspection.stderr);
+  const preLaunchChange = parseJson(preLaunchInspection.stdout);
+  const preLaunchVerified =
+    preLaunchInspection.code === 0 &&
+    preLaunchChange !== undefined &&
+    verifyChange(preLaunchChange, args.changeId, args.worktreePath);
+  expectedSessionName = sessionNameForChange(preLaunchChange, args.changeId);
+  if (!preLaunchVerified || expectedSessionName === undefined) {
+    throw new Error("Cannot verify the Change and its owned Interactive Session before handoff.");
+  }
+
   const handoff = await readStdin();
   await writeFile(handoffPath, handoff, { mode: 0o600 });
   await appendTrace("observer_started", {
@@ -355,6 +371,21 @@ function verifyChange(result, changeId, worktreePath) {
     paths.length > 0 &&
     paths.every((candidate) => candidate === worktreePath)
   );
+}
+
+function sessionNameForChange(result, changeId) {
+  const change = result?.change ?? result;
+  if (change?.taskId === null) return `change-${changeId.slice(0, 8)}`;
+  if (typeof change?.taskId !== "string") return undefined;
+  const readablePart = change.taskId
+    .normalize("NFKD")
+    .toLowerCase()
+    .replaceAll(/[^a-z0-9]+/g, "-")
+    .replaceAll(/^-+|-+$/g, "")
+    .slice(0, 48)
+    .replaceAll(/-+$/g, "");
+  const hash = createHash("sha256").update(change.taskId, "utf8").digest("hex").slice(0, 12);
+  return `${readablePart || "task"}-${hash}`;
 }
 
 function agentName(agent) {

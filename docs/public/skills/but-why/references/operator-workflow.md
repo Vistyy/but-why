@@ -111,7 +111,7 @@ node <skill-directory>/scripts/launch-handoff.mjs \
 BUT_WHY_HANDOFF
 ```
 
-The script runs Change Implement and verifies the exact Change and Managed Worktree after launch.
+The script verifies the exact Change and Managed Worktree before it runs Change Implement and after launch.
 Accept `started`, `already_active`, or `late_active` only when `changeVerified` is `true`.
 `started` confirms But Why dispatch and the named Interactive Session, but it does not confirm that Pi is active or ready.
 For any other result, report the structured result and diagnostic paths, then stop.
