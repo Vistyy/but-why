@@ -253,6 +253,20 @@ describe("Implementation Advisor", () => {
       isIdle: () => idle,
       ui: { notify() {} },
     };
+    advisorMock.mode = "invalid";
+    await handlers.get("tool_result")?.(
+      {
+        toolName: "write",
+        toolCallId: "write:initial-failure",
+        input: { path: "src/f.ts" },
+        content: [],
+        isError: false,
+      },
+      context,
+    );
+    await handlers.get("agent_settled")?.({}, context);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(entries.at(-1)).toMatchObject({ outcome: "failure", failures: 1 });
     advisorMock.mode = "valid";
     await handlers.get("tool_result")?.(
       {
@@ -395,6 +409,58 @@ describe("Implementation Advisor", () => {
     await restoredHandlers.get("agent_settled")?.({}, restoredContext);
     await new Promise((resolve) => setTimeout(resolve, 20));
     expect(restoredEntries).toHaveLength(0);
+
+    process.env["BUT_WHY_IMPLEMENTATION_ADVISOR_MODEL"] = "provider/model";
+    const capEntries: unknown[] = [];
+    const capSent: unknown[] = [];
+    const capHandlers = new Map<string, (event: unknown, context: unknown) => unknown>();
+    implementationAdvisor({
+      on(event: string, handler: (event: unknown, context: unknown) => unknown) {
+        capHandlers.set(event, handler);
+      },
+      appendEntry(_type: string, data: unknown) {
+        capEntries.push(data);
+      },
+      sendMessage(message: unknown) {
+        capSent.push(message);
+      },
+    } as never);
+    const capContext = {
+      cwd: ".",
+      sessionManager: {
+        getBranch: () =>
+          [1, 2, 3].map((batch) => ({
+            type: "custom",
+            customType: "but-why.implementation-advisor.ledger",
+            data: {
+              rule: "verification.proportional-evidence",
+              batch,
+              evidenceFingerprint: `fingerprint-${batch}`,
+              outcome: "note",
+              failures: 0,
+              timestamp: "now",
+            },
+          })),
+      },
+      isIdle: () => true,
+      ui: { notify() {} },
+    };
+    advisorMock.mode = "valid";
+    await capHandlers.get("session_start")?.({}, capContext);
+    await capHandlers.get("tool_result")?.(
+      {
+        toolName: "write",
+        toolCallId: "write:cap",
+        input: { path: "src/cap.ts" },
+        content: [],
+        isError: false,
+      },
+      capContext,
+    );
+    await capHandlers.get("agent_settled")?.({}, capContext);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(capSent).toHaveLength(0);
+    expect(capEntries.at(-1)).toMatchObject({ outcome: "none" });
     if (previous === undefined) delete process.env["BUT_WHY_IMPLEMENTATION_ADVISOR_MODEL"];
     else process.env["BUT_WHY_IMPLEMENTATION_ADVISOR_MODEL"] = previous;
   });
