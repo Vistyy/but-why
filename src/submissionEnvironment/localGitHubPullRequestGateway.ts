@@ -26,17 +26,14 @@ export type PublicationCommandResult =
 
 const bounded = (value: string): string =>
   value
-    .replace(
-      /((?:token|password|secret|authorization)\s*[:=]\s*)(?:bearer|basic)?\s*["']?[^\s,"'}]+["']?/gi,
-      "$1[redacted]",
-    )
-    .replace(/(token|password|secret|authorization)\s*=\s*["']?[^\s,"'}]+["']?/gi, "$1=[redacted]")
-    .replace(
-      /["']?(token|password|secret|authorization)["']?\s*:\s*["']?(?:bearer\s+)?[^\s,"'}]+|["']?(token|password|secret|authorization)["']?\s*=\s*(?:bearer\s+)?[^\s,"'}]+/gi,
-      "$1=[redacted]",
-    )
+    .replace(/((?:token|password|secret|authorization)["']?\s*[:=]\s*).*/gi, "$1[redacted]")
     .replace(/https?:\/\/[^\s/@]+:[^\s@]+@/gi, "https://[redacted]@")
     .slice(0, 1000);
+const classifyCommandFailure = (result: PublicationCommandResult): "rejected" | "unavailable" =>
+  result.status === undefined && result.stdout === undefined && result.stderr === undefined
+    ? "unavailable"
+    : "rejected";
+
 const evidence = (
   operation: "remote_lookup" | "branch_push" | "pull_request_creation" | "pull_request_update",
   result: PublicationCommandResult,
@@ -205,13 +202,7 @@ const createPullRequest = (
       return {
         ok: false,
         code: "push_failed",
-        evidence: evidence(
-          "branch_push",
-          pushed,
-          pushed.status === undefined && pushed.stdout === undefined && pushed.stderr === undefined
-            ? "unavailable"
-            : "rejected",
-        ),
+        evidence: evidence("branch_push", pushed, classifyCommandFailure(pushed)),
       };
   }
   const result = runGh([
@@ -265,13 +256,7 @@ const updatePullRequest = (
     return {
       ok: false,
       code: "push_failed",
-      evidence: evidence(
-        "branch_push",
-        pushed,
-        pushed.status === undefined && pushed.stdout === undefined && pushed.stderr === undefined
-          ? "unavailable"
-          : "rejected",
-      ),
+      evidence: evidence("branch_push", pushed, classifyCommandFailure(pushed)),
     };
   const result = runGh([
     "api",
