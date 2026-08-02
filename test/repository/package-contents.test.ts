@@ -1,5 +1,14 @@
-import { cpSync, mkdirSync, readFileSync, readdirSync, symlinkSync, writeFileSync } from "node:fs";
+import {
+  cpSync,
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 import { describe, expect, it } from "vitest";
 
 import { repoRoot } from "../support/by-cli.js";
@@ -36,7 +45,7 @@ const createPackageFixture = (packageRoot: string): void => {
 };
 
 describe("CLI package contents", () => {
-  it("packs bundled continuation support from the installed package", () => {
+  it("packs bundled continuation support from the installed package", async () => {
     const packageRoot = createTestWorkspace();
     createPackageFixture(packageRoot);
     cpSync(join(repoRoot, "src"), join(packageRoot, "src"), { recursive: true });
@@ -71,15 +80,68 @@ describe("CLI package contents", () => {
     expect(readFileSync(join(installedPackage, "extensions/continue-change.ts"), "utf8")).toContain(
       "continue-change",
     );
-    expect(
-      readdirSync(join(installedPackage, "dist")).some(
-        (file) =>
-          file.endsWith(".js") &&
-          readFileSync(join(installedPackage, "dist", file), "utf8").includes(
-            "Required trusted continuation extension is missing",
-          ),
-      ),
-    ).toBe(true);
+    const bundledHost = readdirSync(join(installedPackage, "dist")).find(
+      (file) =>
+        file.endsWith(".js") &&
+        readFileSync(join(installedPackage, "dist", file), "utf8").includes(
+          "Required trusted continuation extension is missing",
+        ),
+    );
+    expect(bundledHost).toBeDefined();
+    const bundledModule = await import(
+      pathToFileURL(join(installedPackage, "dist", bundledHost as string)).href
+    );
+    const hostFactory = Object.values(bundledModule).find(
+      (value): value is (execute: Execute) => { launch: (input: unknown) => Promise<unknown> } =>
+        typeof value === "function" && String(value).includes("launch"),
+    );
+    expect(hostFactory).toBeDefined();
+    const commands: string[][] = [];
+    type Execute = (args: readonly string[]) => Promise<{ ok: true; stdout: string }>;
+    const execute: Execute = async (args) => {
+      commands.push([...args]);
+      if (args[0] === "agent" && args[1] === "list") {
+        return {
+          ok: true as const,
+          stdout: '{"result":{"type":"agent_list","agents":[]}}',
+        };
+      }
+      if (args[0] === "worktree") {
+        return {
+          ok: true as const,
+          stdout:
+            '{"result":{"type":"worktree_opened","workspace":{"workspace_id":"workspace-1"},"root_pane":{"pane_id":"workspace-1:pane-1"},"already_open":false}}',
+        };
+      }
+      if (args[0] === "agent" && args[1] === "rename") {
+        return {
+          ok: true as const,
+          stdout:
+            '{"result":{"agent":{"name":"but-why-change-123","cwd":"/workspace/change-123","pane_id":"workspace-1:pane-1"}}}',
+        };
+      }
+      return { ok: true as const, stdout: "{}" };
+    };
+    const extension = join(installedPackage, "extensions/continue-change.ts");
+    const input = {
+      changeId: "change-123",
+      repositoryPath: "/repository",
+      worktreePath: "/workspace/change-123",
+      initialPrompt: "Implement",
+    };
+    await expect(hostFactory?.(execute).launch(input)).resolves.toMatchObject({
+      ok: true,
+      status: "started",
+    });
+    expect(commands.some(([command]) => command === "pane")).toBe(true);
+    commands.length = 0;
+    rmSync(extension);
+    await expect(hostFactory?.(execute).launch(input)).resolves.toMatchObject({
+      ok: false,
+      code: "launch_failed",
+      message: expect.stringContaining("Required trusted continuation extension is missing"),
+    });
+    expect(commands).toEqual([]);
   }, 120_000);
 
   it("packs built CLI output and public package metadata only", () => {

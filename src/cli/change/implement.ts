@@ -8,6 +8,9 @@ import { readHandoffFile } from "../../change/handoffFile.js";
 import { runtimeError } from "../../cliResults.js";
 import * as support from "./changeSupport.js";
 import { handoffFileError, implementResult } from "./implementResult.js";
+import { openHerdrInteractiveSessionHost } from "../../change/herdrInteractiveSessionHost.js";
+
+export const bundledInteractiveSessionHost = openHerdrInteractiveSessionHost;
 
 export const runImplement = (
   command: { readonly changeId: string | undefined; readonly handoffFile: string | undefined },
