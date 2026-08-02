@@ -43,6 +43,7 @@ const commandPrefix = runnerCommands[args.runner];
 const startedAt = performance.now();
 const wallStartedAt = new Date().toISOString();
 const safeId = args.changeId.replaceAll(/[^a-zA-Z0-9._-]/g, "_");
+const expectedSessionName = `but-why-${args.changeId}`;
 const diagnosticDirectory = await mkdtemp(join(tmpdir(), `but-why-launch-${safeId}.`));
 const tracePath = join(diagnosticDirectory, "trace.jsonl");
 const diagnosticPath = join(diagnosticDirectory, "pane.txt");
@@ -73,7 +74,8 @@ try {
     wallStartedAt,
     changeId: args.changeId,
     worktreePath: args.worktreePath,
-    sessionMatch: "active agent in the Managed Worktree",
+    sessionMatch: "active Change Interactive Session in the Managed Worktree",
+    expectedSessionName,
     runner: args.runner,
   });
 
@@ -236,6 +238,7 @@ async function observeOnce() {
   }));
   const agent = (snapshot.agents ?? []).find(
     (candidate) =>
+      agentName(candidate) === expectedSessionName &&
       candidate?.cwd === args.worktreePath &&
       ["idle", "working", "blocked"].includes(candidate?.agent_status),
   );
@@ -334,6 +337,7 @@ async function hostPressure() {
 
 function isActiveInWorktree(agent) {
   return (
+    agentName(agent) === expectedSessionName &&
     agent?.cwd === args.worktreePath &&
     ["idle", "working", "blocked"].includes(agent?.agent_status)
   );
