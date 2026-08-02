@@ -170,7 +170,12 @@ const create = (
         created,
       );
     if (!matches(created.pullRequest, input.target, headBranch, expectedHeadSha))
-      return { ok: false, code: "publication_remote_mismatch" };
+      return {
+        ok: false,
+        code: "publication_remote_mismatch",
+        expectedRemoteHeadSha: expectedHeadSha,
+        observedRemoteHeadSha: created.pullRequest.headSha,
+      };
     return yield* record(dependencies, input, headBranch, expectedHeadSha, created.pullRequest);
   });
 
@@ -370,7 +375,12 @@ const createRecoveryAttempt = (
         );
       return yield* retainFailure(dependencies, pending, created);
     }
-    return { ok: false, code: "publication_remote_mismatch" };
+    return {
+      ok: false,
+      code: "publication_remote_mismatch",
+      expectedRemoteHeadSha: expectedHeadSha,
+      observedRemoteHeadSha: created.pullRequest.headSha,
+    };
   });
 
 const confirmCreation = (

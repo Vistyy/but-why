@@ -373,6 +373,33 @@ describe("GitHub pull request gateway", () => {
     expect(gitCalls.map((call) => call[0])).toEqual(["rev-parse", "ls-remote"]);
   });
 
+  it("classifies lost and unusable creation responses", () => {
+    const request = {
+      owner: "acme",
+      repo: "widgets",
+      remoteName: "origin",
+      baseBranch: "main",
+      headBranch: "feature",
+      branchRef: "refs/heads/feature",
+      expectedHeadSha: "candidate-sha",
+      title: "Publish",
+      body: "Body",
+    };
+    for (const [response, classification] of [
+      [{ ok: false as const }, "lost_response" as const],
+      [{ ok: true as const, stdout: "not-json" }, "response_parse_failure" as const],
+    ] as const) {
+      const gateway = localGitHubPullRequestGateway({
+        runGit: (args) => ({ ok: true, stdout: args[0] === "rev-parse" ? "candidate-sha\n" : "" }),
+        runGh: () => response,
+      });
+      expect(gateway.createPullRequest(request)).toMatchObject({
+        ok: false,
+        evidence: { operation: "pull_request_creation", classification },
+      });
+    }
+  });
+
   it("returns bounded redacted evidence for a rejected creation", () => {
     const gateway = localGitHubPullRequestGateway({
       runGit: (args) => ({ ok: true, stdout: args[0] === "rev-parse" ? "candidate-sha\n" : "" }),

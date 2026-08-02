@@ -130,9 +130,11 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
           },
         });
 
-        expect(yield* publication.publish(input(fixture))).toEqual({
+        expect(yield* publication.publish(input(fixture))).toMatchObject({
           ok: false,
           code: "publication_remote_mismatch",
+          expectedRemoteHeadSha: fixture.captured.headSha,
+          observedRemoteHeadSha: fixture.captured.headSha,
         });
         expect(yield* fixture.changes.getChangeById(fixture.captured.changeId)).toMatchObject({
           publication: { pullRequest: null },
@@ -632,6 +634,52 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
       }),
     ),
   );
+  it.scoped("reuses the exact old pull request for a newer Candidate", () =>
+    withFixture((fixture) =>
+      Effect.gen(function* () {
+        let branchHead = fixture.captured.headSha;
+        const oldPullRequest = pullRequest(fixture.captured.headSha);
+        let updates = 0;
+        const publication = openCandidatePublication({
+          changePersistence: fixture.changes,
+          validationPersistence: fixture.validation,
+          git: {
+            readBranchHead: () => branchHead,
+            containsCommit: () => true,
+            readFirstNonMergeCommitSubject: () => ({ ok: true, subject: "Publication" }),
+          },
+          github: {
+            findPullRequests: () => [oldPullRequest],
+            getPullRequest: () => oldPullRequest,
+            createPullRequest: () => ({ ok: false as const, code: "remote_rejected" as const }),
+            updatePullRequest: (request) => {
+              updates += 1;
+              return { ok: true as const, pullRequest: pullRequest(request.expectedHeadSha) };
+            },
+          },
+        });
+        expect(yield* publication.publish(input(fixture))).toMatchObject({
+          ok: false,
+          code: "publication_tooling_failed",
+        });
+        const next = yield* nextCandidate(
+          fixture,
+          "Recovered Candidate",
+          "2026-07-25T15:40:00.000Z",
+        );
+        branchHead = next.captured.headSha;
+        const recovered = yield* publication.publish({
+          ...input(fixture),
+          candidateId: next.captured.candidateId,
+          validationRunId: next.validationRunId,
+          now: "2026-07-25T15:40:00.000Z",
+        });
+        expect(recovered).toMatchObject({ ok: true, created: false, pullRequest: { number: 42 } });
+        expect(updates).toBe(1);
+      }),
+    ),
+  );
+
   it.scoped("bounds empty recovery creation and final confirmation", () =>
     withFixture((fixture) =>
       Effect.gen(function* () {
