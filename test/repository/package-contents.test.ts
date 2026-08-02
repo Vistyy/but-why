@@ -1,5 +1,6 @@
-import { cpSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { cpSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 import { describe, expect, it } from "vitest";
 
 import { repoRoot } from "../support/by-cli.js";
@@ -23,6 +24,73 @@ type PackageManifest = {
 };
 
 describe("CLI package contents", () => {
+  it("loads continuation from the emitted package layout", async () => {
+    const packageRoot = createTestWorkspace();
+    cpSync(join(repoRoot, "dist"), join(packageRoot, "dist"), { recursive: true });
+    cpSync(join(repoRoot, "extensions"), join(packageRoot, "extensions"), {
+      recursive: true,
+    });
+    const extension = join(packageRoot, "extensions/continue-change.ts");
+    const module = (await import(
+      pathToFileURL(join(packageRoot, "dist/change/herdrInteractiveSessionHost.js")).href
+    )) as typeof import("../../src/change/herdrInteractiveSessionHost.js");
+    const commands: string[][] = [];
+    const execute = async (args: readonly string[]) => {
+      commands.push([...args]);
+      if (args[0] === "agent" && args[1] === "list") {
+        return commands.some(([command]) => command === "pane")
+          ? {
+              ok: true as const,
+              stdout:
+                '{"result":{"type":"agent_list","agents":[{"name":"but-why-change-123","cwd":"/workspace/change-123","pane_id":"workspace-1:pane-1","agent_status":"working"}]}}',
+            }
+          : { ok: true as const, stdout: '{"result":{"type":"agent_list","agents":[]}}' };
+      }
+      if (args[0] === "worktree") {
+        return {
+          ok: true as const,
+          stdout:
+            '{"result":{"type":"worktree_opened","workspace":{"workspace_id":"workspace-1"},"root_pane":{"pane_id":"workspace-1:pane-1"},"already_open":false}}',
+        };
+      }
+      if (args[0] === "agent" && args[1] === "rename") {
+        return {
+          ok: true as const,
+          stdout:
+            '{"result":{"agent":{"name":"but-why-change-123","cwd":"/workspace/change-123","pane_id":"workspace-1:pane-1"}}}',
+        };
+      }
+      return { ok: true as const, stdout: "{}" };
+    };
+    const input = {
+      changeId: "change-123",
+      repositoryPath: "/repository",
+      worktreePath: "/workspace/change-123",
+      initialPrompt: "Implement",
+    };
+
+    await expect(
+      module.openHerdrInteractiveSessionHost(execute).launch(input),
+    ).resolves.toMatchObject({
+      ok: true,
+      status: "started",
+    });
+    expect(commands.find(([command]) => command === "pane")?.[3]).toContain(
+      `--extension '${extension}'`,
+    );
+
+    commands.length = 0;
+    rmSync(extension);
+    await expect(
+      module.openHerdrInteractiveSessionHost(execute).launch(input),
+    ).resolves.toMatchObject({
+      ok: false,
+      code: "launch_failed",
+      message: expect.stringContaining("Required trusted continuation extension is missing"),
+    });
+    expect(commands).toEqual([]);
+  });
+
   it("packs built CLI output and public package metadata only", () => {
     const fixture = createTestWorkspace();
     cpSync(join(repoRoot, "package.json"), join(fixture, "package.json"));
