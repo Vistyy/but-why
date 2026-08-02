@@ -6,20 +6,22 @@ import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-a
 import { Type } from "typebox";
 import { implementationAdvisorRules, type ImplementationAdvisorRuleId } from "./rules.js";
 
-const NOTE_TOOL = "implementation_advice";
+export const NOTE_TOOL = "implementation_advice";
+export const implementationAdvisorToolNames = ["read", "grep", "find", "ls"] as const;
 const LEDGER_ENTRY = "but-why.implementation-advisor.ledger";
 const qualifyingTools = new Set(["bash", "edit", "write"]);
 const readTools = new Set(["read", "grep", "find", "ls"]);
 const ruleIds = new Set(implementationAdvisorRules.map((rule) => rule.id));
 
-type Evidence = { readonly activity: string; readonly reference: string; readonly input: unknown; readonly result: unknown; readonly failed: boolean };
+export type Evidence = { readonly activity: string; readonly reference: string; readonly input: unknown; readonly result: unknown; readonly failed: boolean };
 type LedgerItem = { readonly rule: string; readonly batch: number; readonly evidenceFingerprint: string; readonly outcome: "note" | "none" | "failure"; readonly failures: number; readonly timestamp: string };
 type Note = { readonly ruleId: ImplementationAdvisorRuleId; readonly message: string; readonly evidence: readonly string[]; readonly activityBatch: number };
 
 export default function implementationAdvisor(pi: ExtensionAPI): void {
-  const configuredModel = process.env.BUT_WHY_IMPLEMENTATION_ADVISOR_MODEL;
+  const configuredModel = process.env["BUT_WHY_IMPLEMENTATION_ADVISOR_MODEL"];
   if (configuredModel === undefined || configuredModel.trim() === "") return;
-  const thinking = process.env.BUT_WHY_IMPLEMENTATION_ADVISOR_THINKING;
+  const modelSetting = configuredModel;
+  const thinking = process.env["BUT_WHY_IMPLEMENTATION_ADVISOR_THINKING"];
   let batch = 0;
   let pending: Evidence[] = [];
   let running = false;
@@ -45,13 +47,13 @@ export default function implementationAdvisor(pi: ExtensionAPI): void {
       ledger.push(entry.data);
       if (entry.data.outcome === "note") emitted.set(`${entry.data.rule}:${entry.data.evidenceFingerprint}`, (emitted.get(`${entry.data.rule}:${entry.data.evidenceFingerprint}`) ?? 0) + 1);
       failures = entry.data.outcome === "failure" ? entry.data.failures : 0;
-      if (failures >= 3) disabled = true;
+      if (advisorDisabledAfterFailures(failures)) disabled = true;
     }
   });
 
   pi.on("tool_result", (event) => {
     if (disabled) return;
-    const qualifies = qualifyingTools.has(event.toolName) || (readTools.has(event.toolName) && isAuthorityRead(event.input));
+    const qualifies = shouldEvaluateActivity(event.toolName, event.input);
     if (!qualifies) return;
     const reference = `${event.toolName}:${String(event.toolCallId)}`;
     pending.push({ activity: event.toolName, reference, input: event.input, result: event.content, failed: event.isError });
@@ -68,7 +70,7 @@ export default function implementationAdvisor(pi: ExtensionAPI): void {
     try {
       const note = await evaluate(evidence, activityBatch, context);
       failures = 0;
-      if (note !== undefined && shouldEmit(note)) {
+      if (note !== undefined && shouldEmit(note, emitted)) {
         emitted.set(`${note.ruleId}:${fingerprint(note.evidence)}`, (emitted.get(`${note.ruleId}:${fingerprint(note.evidence)}`) ?? 0) + 1);
         appendLedger({ rule: note.ruleId, batch: note.activityBatch, evidenceFingerprint: fingerprint(note.evidence), outcome: "note", failures: 0, timestamp: new Date().toISOString() }, context);
         const message = `Implementation Advisor note (activity batch ${note.activityBatch}, rule ${note.ruleId}): ${note.message}\nEvidence: ${note.evidence.join(", ")}`;
@@ -80,7 +82,7 @@ export default function implementationAdvisor(pi: ExtensionAPI): void {
       failures += 1;
       appendLedger({ rule: "none", batch: activityBatch, evidenceFingerprint: fingerprint(evidence.map((item) => item.reference)), outcome: "failure", failures, timestamp: new Date().toISOString() }, context);
       if (failures === 1) context.ui.notify("Implementation Advisor failed open and will retry on the next qualifying activity.", "warning");
-      if (failures >= 3) { disabled = true; context.ui.notify("Implementation Advisor disabled after three consecutive failures.", "warning"); }
+      if (advisorDisabledAfterFailures(failures)) { disabled = true; context.ui.notify("Implementation Advisor disabled after three consecutive failures.", "warning"); }
       void error;
     } finally {
       running = false;
@@ -90,17 +92,23 @@ export default function implementationAdvisor(pi: ExtensionAPI): void {
   async function evaluate(evidence: readonly Evidence[], activityBatch: number, context: ExtensionContext): Promise<Note | undefined> {
     if (nested === undefined) {
       const runtime = await ModelRuntime.create();
-      const [provider, ...modelParts] = configuredModel.split("/");
+      const [provider, ...modelParts] = modelSetting.split("/");
       const model = runtime.getModel(provider ?? "", modelParts.join("/"));
       if (model === undefined) throw new Error("Configured Implementation Advisor model is unavailable.");
-      const loader = new DefaultResourceLoader({ cwd: context.cwd, agentDir: process.env.PI_AGENT_DIR ?? `${process.env.HOME ?? "~"}/.pi/agent`, noExtensions: true, noSkills: true, noPromptTemplates: true, noThemes: true });
+      const loader = new DefaultResourceLoader({ cwd: context.cwd, agentDir: process.env["PI_AGENT_DIR"] ?? `${process.env["HOME"] ?? "~"}/.pi/agent`, noExtensions: true, noSkills: true, noPromptTemplates: true, noThemes: true });
       await loader.reload();
-      nested = (await createAgentSession({ cwd: context.cwd, model, thinkingLevel: thinking as "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | undefined, tools: ["read", "grep", "find", "ls", NOTE_TOOL], resourceLoader: loader, sessionManager: SessionManager.continueRecent(context.cwd, join(process.env.PI_AGENT_DIR ?? join(homedir(), ".pi", "agent"), "implementation-advisor-sessions")), customTools: [{ name: NOTE_TOOL, label: "Implementation advice", description: "Return zero or one grounded note.", parameters: Type.Object({ ruleId: Type.String(), message: Type.String(), evidence: Type.Array(Type.String()), activityBatch: Type.Integer() }), execute: async (_id, value, _signal, _update, toolContext) => { if (!terminated && value.message.trim() !== "" && ruleIds.has(value.ruleId as ImplementationAdvisorRuleId) && value.activityBatch === currentBatch && value.evidence.every((item) => currentEvidence.some((candidate) => candidate.reference === item))) currentResult = { ruleId: value.ruleId as ImplementationAdvisorRuleId, message: value.message, evidence: value.evidence, activityBatch }; terminated = true; toolContext.abort(); return { content: [{ type: "text", text: "Result recorded." }], details: {} }; } }] })).session;
+      nested = (await createAgentSession({ cwd: context.cwd, model, ...(thinking === undefined ? {} : { thinkingLevel: thinking as "off" | "minimal" | "low" | "medium" | "high" | "xhigh" }), tools: ["read", "grep", "find", "ls", NOTE_TOOL], resourceLoader: loader, sessionManager: SessionManager.continueRecent(context.cwd, join(process.env["PI_AGENT_DIR"] ?? join(homedir(), ".pi", "agent"), "implementation-advisor-sessions")), customTools: [{ name: NOTE_TOOL, label: "Implementation advice", description: "Return zero or one grounded note.", parameters: Type.Object({ ruleId: Type.String(), message: Type.String(), evidence: Type.Array(Type.String()), activityBatch: Type.Integer() }), execute: async (_id, value, _signal, _update, toolContext) => {
+        const candidate = value as { readonly ruleId: string; readonly message: string; readonly evidence: readonly string[]; readonly activityBatch: number };
+        if (!terminated && candidate.message.trim() !== "" && ruleIds.has(candidate.ruleId as ImplementationAdvisorRuleId) && candidate.activityBatch === currentBatch && candidate.evidence.every((item) => currentEvidence.some((entry) => entry.reference === item))) currentResult = { ruleId: candidate.ruleId as ImplementationAdvisorRuleId, message: candidate.message, evidence: candidate.evidence, activityBatch: candidate.activityBatch };
+        terminated = true;
+        toolContext.abort();
+        return { content: [{ type: "text", text: "Result recorded." }], details: {} };
+      } }] })).session;
     }
     currentResult = undefined;
     terminated = false;
     try {
-      await nested.prompt(`Review activity batch ${activityBatch}. Accepted implementation context: ${process.env.BUT_WHY_IMPLEMENTATION_ADVISOR_CONTEXT ?? "not supplied"}. Evidence, including inputs and results: ${JSON.stringify(evidence)}. Rules (priority order): ${JSON.stringify(implementationAdvisorRules)}. Apply thresholds exactly. If and only if one grounded rule applies, call ${NOTE_TOOL} with a note bound to this batch and exact evidence references. Otherwise do not call the tool. Do not claim semantic correctness.`);
+      await nested.prompt(`Review activity batch ${activityBatch}. Accepted implementation context: ${process.env["BUT_WHY_IMPLEMENTATION_ADVISOR_CONTEXT"] ?? "not supplied"}. Evidence, including inputs and results: ${JSON.stringify(evidence)}. Rules (priority order): ${JSON.stringify(implementationAdvisorRules)}. Apply thresholds exactly. If and only if one grounded rule applies, call ${NOTE_TOOL} with a note bound to this batch and exact evidence references. Otherwise do not call the tool. Do not claim semantic correctness.`);
     } catch (error) {
       if (currentResult === undefined) throw error;
     }
@@ -109,9 +117,19 @@ export default function implementationAdvisor(pi: ExtensionAPI): void {
 
 }
 
+export const shouldEvaluateActivity = (toolName: string, input: Record<string, unknown>): boolean =>
+  qualifyingTools.has(toolName) || (readTools.has(toolName) && isAuthorityRead(input));
+
+export const validateAdvisorNote = (value: { readonly ruleId: string; readonly message: string; readonly evidence: readonly string[]; readonly activityBatch: number }, batch: number, evidence: readonly Evidence[]): Note | undefined =>
+  value.message.trim() !== "" && ruleIds.has(value.ruleId as ImplementationAdvisorRuleId) && value.activityBatch === batch && value.evidence.length > 0 && value.evidence.every((item) => evidence.some((candidate) => candidate.reference === item))
+    ? { ruleId: value.ruleId as ImplementationAdvisorRuleId, message: value.message, evidence: value.evidence, activityBatch: value.activityBatch }
+    : undefined;
+
+export const advisorDisabledAfterFailures = (failures: number): boolean => failures >= 3;
+
 const isAuthorityRead = (input: Record<string, unknown>): boolean => /AGENTS\.md|CONTEXT\.md|CONTEXT-MAP\.md|VERIFICATION\.md|docs\/adr|docs\/architecture|docs\/tooling/u.test(JSON.stringify(input));
 const fingerprint = (values: readonly string[]): string => createHash("sha256").update(values.join("\n")).digest("hex");
-const shouldEmit = (note: Note): boolean => {
+const shouldEmit = (note: Note, emitted: ReadonlyMap<string, number>): boolean => {
   const key = `${note.ruleId}:${fingerprint(note.evidence)}`;
   const count = emitted.get(key) ?? 0;
   const ruleCount = [...emitted.entries()].filter(([entry]) => entry.startsWith(`${note.ruleId}:`)).reduce((sum, [, value]) => sum + value, 0);
