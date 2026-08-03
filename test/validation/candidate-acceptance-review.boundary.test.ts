@@ -1,4 +1,5 @@
 import type { Sandbox } from "@ai-hero/sandcastle";
+import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, layer } from "@effect/vitest";
 import { Context, Effect, Layer } from "effect";
@@ -368,6 +369,10 @@ layer(acceptanceTemplateLayer)("Task-backed Candidate Acceptance Review", (it) =
 
       expect(final).toMatchObject({ ok: true, outcome: "blocked" });
       expect(review).toHaveBeenCalledTimes(2);
+      expect(review.mock.calls[1]?.[0].prompt).toContain(earlierFinding.title);
+      expect(review.mock.calls[1]?.[0].prompt).toContain(
+        "Historical Artifact references are not current Validation Run evidence",
+      );
       expect(
         (yield* ready.validation.listFindings(final.validationRunId)).map(
           (finding) => finding.title,
@@ -718,6 +723,22 @@ layer(acceptanceTemplateLayer)("Task-backed Candidate Acceptance Review", (it) =
       expect(finalPrompt).toContain("Provisional specialist Finding");
       expect(finalPrompt).toContain(earlierFinding.title);
       expect(finalPrompt).not.toContain(earlier.validationRunId);
+      expect(
+        JSON.parse(
+          readFileSync(
+            join(
+              commonDirectory(ready.repo),
+              "but-why",
+              "artifacts",
+              final.validationRunId,
+              "specialist_review",
+              "standards",
+              "execution.json",
+            ),
+            "utf8",
+          ),
+        ),
+      ).toMatchObject({ reviewCalls: 2 });
       expect(
         (yield* ready.validation.listFindings(final.validationRunId)).map(
           (finding) => finding.title,

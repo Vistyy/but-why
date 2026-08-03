@@ -1,5 +1,7 @@
 import { expect, it } from "@effect/vitest";
 import { Cause, Effect, Exit } from "effect";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe } from "vitest";
 
 import { runCheckPhase } from "../../src/change/validation/runCheckRound.js";
@@ -88,10 +90,11 @@ describe("check round Findings", () => {
   it.effect("records timed-out check Findings without severity", () =>
     Effect.gen(function* () {
       const recordedRounds: RecordCandidateValidationCheckRoundInput[] = [];
+      const artifactsRoot = createTestWorkspace();
       const result = yield* runCheckPhase({
         validationRunId: "by-1.v1",
         checks: [{ id: "quality", command: "sleep 10", timeoutSeconds: 1 }],
-        artifactsRoot: createTestWorkspace(),
+        artifactsRoot,
         now,
         sandbox: {
           exec: async (command) => {
@@ -121,9 +124,17 @@ describe("check round Findings", () => {
           "artifact:by-1.v1/checks/quality/stderr.txt",
           "artifact:by-1.v1/checks/quality/exit-code.json",
           "artifact:by-1.v1/checks/quality/logs.txt",
+          "artifact:by-1.v1/checks/quality/execution.json",
         ],
       });
       expect(recordedRounds[0]?.finding).not.toHaveProperty("severity");
+      const execution = recordedRounds[0]?.artifactRecords.find(
+        (artifact) => artifact.path === "by-1.v1/checks/quality/execution.json",
+      );
+      expect(execution).toBeDefined();
+      expect(JSON.parse(readFileSync(join(artifactsRoot, execution?.path ?? ""), "utf8"))).toEqual({
+        durationMs: expect.any(Number),
+      });
     }),
   );
 

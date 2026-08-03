@@ -1,5 +1,5 @@
 import type { Sandbox } from "@ai-hero/sandcastle";
-import { Effect } from "effect";
+import { Clock, Effect } from "effect";
 
 import { runRepositoryPreparation } from "../../repositoryPreparation/runRepositoryPreparation.js";
 import type { SubmitPrepareConfig } from "../submit/submitRepoConfig.js";
@@ -62,6 +62,7 @@ export const runPreparePhase = (
     progress: input.progress,
     phase: { kind: "prepare" },
     run: Effect.gen(function* () {
+      const startedAt = yield* Clock.currentTimeMillis;
       const { commandResult, timedOut } = yield* runPrepareCommand(
         input.sandbox,
         input.prepare,
@@ -69,11 +70,13 @@ export const runPreparePhase = (
         input.expectedHeadSha,
         input.allowedUntrackedFiles,
       );
+      const durationMs = (yield* Clock.currentTimeMillis) - startedAt;
       const { artifactRefs, artifactRecords } = yield* writePrepareArtifacts({
         validationRunId: input.validationRunId,
         prepare: input.prepare,
         commandResult,
         timedOut,
+        durationMs,
         artifactsRoot: input.artifactsRoot,
         ...(input.artifactMaxBytes === undefined
           ? {}
@@ -109,6 +112,7 @@ export const runPreparePhase = (
       return { ok: true, findings: 0 };
     }),
     outcome: (result) => (result.findings === 0 ? "passed" : "failed"),
+    details: (result) => (result.findings === 1 ? { reason: "findings" } : undefined),
   });
 
 const runPrepareCommand = (
@@ -193,6 +197,7 @@ const writePrepareArtifacts = (input: {
   readonly prepare: SubmitPrepareConfig;
   readonly commandResult: CommandResult;
   readonly timedOut: boolean;
+  readonly durationMs: number;
   readonly artifactsRoot: string;
   readonly artifactMaxBytes?: number;
   readonly now: string;
@@ -204,6 +209,7 @@ const writePrepareArtifacts = (input: {
         phase: validationPhase.prepare,
         producer: prepareProducer,
         commandResult: { ...input.commandResult, timedOut: input.timedOut },
+        durationMs: input.durationMs,
         logFields: [
           { name: "producer", value: prepareProducer },
           { name: "command", value: input.prepare.command },

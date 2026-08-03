@@ -5,7 +5,10 @@ import { join } from "node:path";
 import type { Effect } from "effect";
 import type { AgentEnvironmentCommand } from "../../agent/agentEnvironment.js";
 import type { ResolvedPiAgentProfile } from "../../agent/agentProfiles.js";
-import { currentCandidateReReviewInstructions } from "../../agent/reviewerPrompts.js";
+import {
+  currentCandidateReReviewInstructions,
+  previousFindingsPrompt,
+} from "../../agent/reviewerPrompts.js";
 import type { AcceptanceContextSnapshotV1 } from "../validationRun/acceptanceContextSnapshot.js";
 import type { ImplementationDecision } from "../implementationDecision.js";
 import type { ImplementationBlockerHistory } from "../implementationBlocker.js";
@@ -99,7 +102,6 @@ export const continuationPrompt = (input: {
     JSON.stringify(input.blockerHistory ?? { blockers: [], resolutions: [], active: null }),
     "Available Check and Validation evidence:",
     JSON.stringify(input.availableArtifactRefs),
-    "Previous final Acceptance Findings:",
-    JSON.stringify({ findings: input.previousFindings }),
+    previousFindingsPrompt(input.previousFindings),
     "Return only the required reviewer output.",
   ].join("\n");

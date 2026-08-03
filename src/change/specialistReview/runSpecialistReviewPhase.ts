@@ -111,6 +111,19 @@ export const runSpecialistReviewPhase = (
         run: runSpecialist(input, policy, index + 1),
         outcome: (review) =>
           review.toolingFailure === undefined && !review.hasFindings ? "passed" : "failed",
+        details: (review) => ({
+          ...(review.toolingFailure !== undefined
+            ? { reason: "tooling" as const }
+            : review.hasFindings
+              ? { reason: "findings" as const }
+              : {}),
+          ...(review.reviewerEvidence === undefined
+            ? {}
+            : {
+                continuity: review.reviewerEvidence.continuity,
+                reviewCalls: review.reviewerEvidence.reviewCalls,
+              }),
+        }),
       });
       if (result.hasFindings) hasFindings = true;
       if (result.toolingFailure !== undefined) toolingFailures.push(result.toolingFailure);
@@ -209,8 +222,10 @@ const runSpecialist = (
       yield* input.sessionStore.remove(input.changeId, policy.id);
     }
 
-    const review = (resumeSession?: string, reviewPrompt = prompt) =>
-      input.runtime.review({
+    let reviewCalls = 0;
+    const review = (resumeSession?: string, reviewPrompt = prompt) => {
+      reviewCalls += 1;
+      return input.runtime.review({
         sandbox: input.sandbox,
         reviewer: policy.id,
         validationRunId: input.validationRunId,
@@ -244,6 +259,7 @@ const runSpecialist = (
             }),
         ...(resumeSession === undefined ? {} : { resumeSession }),
       });
+    };
 
     let provisional = yield* review(compatible ? stored?.sessionReference : undefined);
     if (!provisional.ok && compatible && isUnusableReviewerSessionFailure(provisional.failure)) {
@@ -288,6 +304,7 @@ const runSpecialist = (
         identityFingerprint: fingerprint,
         ...(restartReason === undefined ? {} : { restartReason }),
         durationMs,
+        reviewCalls,
       },
     });
     const findings = result.ok
@@ -330,6 +347,7 @@ const runSpecialist = (
         identityFingerprint: fingerprint,
         ...(restartReason === undefined ? {} : { restartReason }),
         durationMs,
+        reviewCalls,
       },
     };
   });

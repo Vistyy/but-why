@@ -9,13 +9,20 @@ export type ValidationCommandEvidence = {
   readonly timedOut: boolean;
 };
 
-const artifactFileNames = ["stdout.txt", "stderr.txt", "exit-code.json", "logs.txt"] as const;
+const artifactFileNames = [
+  "stdout.txt",
+  "stderr.txt",
+  "exit-code.json",
+  "logs.txt",
+  "execution.json",
+] as const;
 
 export const writeCommandEvidence = (input: {
   readonly validationRunId: string;
   readonly phase: ValidationPhase;
   readonly producer: string;
   readonly commandResult: ValidationCommandEvidence;
+  readonly durationMs: number;
   readonly logFields: readonly { readonly name: string; readonly value: string | number }[];
   readonly artifactsRoot: string;
   readonly artifactMaxBytes?: number;
@@ -44,6 +51,10 @@ export const writeCommandEvidence = (input: {
         `timedOut: ${input.commandResult.timedOut}`,
         "",
       ].join("\n"),
+    },
+    {
+      fileName: "execution.json",
+      content: `${JSON.stringify({ durationMs: input.durationMs }, null, 2)}\n`,
     },
   ] as const;
 

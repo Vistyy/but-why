@@ -61,6 +61,7 @@ export const buildAcceptanceReviewerPrompt = (input: {
   readonly instructions: string;
   readonly validationRunId: string;
   readonly availableArtifactRefs: readonly string[];
+  readonly previousFindings?: readonly ReviewerFindingHistory[];
   readonly candidate: {
     readonly candidateId: string;
     readonly changeBaseSha: string;
@@ -94,6 +95,9 @@ export const buildAcceptanceReviewerPrompt = (input: {
     encodeReviewerWireValue(
       input.blockerHistory ?? { blockers: [], resolutions: [], active: null },
     ),
+    ...(input.previousFindings === undefined || input.previousFindings.length === 0
+      ? []
+      : ["", previousFindingsPrompt(input.previousFindings)]),
     "",
     "Return exactly one JSON object inside this XML tag:",
     `<${reviewerOutputTag}>{"findings":[]}</${reviewerOutputTag}>`,
@@ -169,27 +173,37 @@ export const buildSpecialistContinuationPrompt = (input: {
     }),
     "Candidate:",
     encodeReviewerWireValue(input.candidate),
-    "Previous final Specialist Findings:",
-    encodeReviewerWireValue({ findings: input.previousFindings }),
+    previousFindingsPrompt(input.previousFindings),
     "Return exactly one JSON object inside this XML tag:",
     `<${reviewerOutputTag}>{"findings":[]}</${reviewerOutputTag}>`,
     "Each Finding must contain title, description, evidence, files, and artifactRefs.",
   ].join("\n");
 
-export type ReviewerFindingHistory = ReviewerFindingCore & {
+export type ReviewerFindingHistory = ReviewerFindingCore;
+
+type PersistedReviewerFinding = ReviewerFindingCore & {
   readonly artifactRefs: readonly string[];
 };
 
 export const reviewerFindingHistory = (
-  findings: readonly ReviewerFindingHistory[],
+  findings: readonly PersistedReviewerFinding[],
 ): readonly ReviewerFindingHistory[] =>
-  findings.map(({ title, description, evidence, files, artifactRefs }) => ({
+  findings.map(({ title, description, evidence, files }) => ({
     title,
     description,
     evidence,
     files,
-    artifactRefs,
   }));
+
+export const previousFindingsPrompt = (findings: readonly unknown[]): string =>
+  [
+    "Previous Findings:",
+    encodeReviewerWireValue({ findings }),
+    "These Findings apply to the previous Candidate and are context for reviewing the exact current Candidate.",
+    "Recheck them, but do not limit the current review to them.",
+    "Historical Artifact references are not current Validation Run evidence and have been omitted.",
+    "Final Finding artifactRefs may use only the available current Validation Run evidence.",
+  ].join("\n");
 
 export const buildReviewerRevisionPrompt = (input: {
   readonly reviewPrompt: string;
@@ -202,8 +216,7 @@ export const buildReviewerRevisionPrompt = (input: {
     "Blind provisional report:",
     encodeReviewerWireValue(input.provisionalReport),
     "",
-    "Findings from the latest earlier valid report:",
-    encodeReviewerWireValue({ findings: input.earlierFindings }),
+    previousFindingsPrompt(input.earlierFindings),
     "",
     "Recheck the Candidate against the applicable instructions.",
     "Confirm whether each earlier Finding remains open.",

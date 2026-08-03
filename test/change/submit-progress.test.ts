@@ -31,11 +31,12 @@ describe("Change Submit progress", () => {
       },
       "passed",
       6 * 60_000 + 49_000,
+      { continuity: "resumed", reviewCalls: 1 },
     );
 
     expect(output).toEqual([
       "Acceptance Review started: profile=reviewer model=openai-codex/gpt-5.6-luna thinking=high\n",
-      "Acceptance Review passed in 6m49s\n",
+      "Acceptance Review passed in 6m49s continuity=resumed reviewCalls=1\n",
     ]);
   });
 

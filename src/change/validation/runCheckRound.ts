@@ -1,5 +1,5 @@
 import type { Sandbox } from "@ai-hero/sandcastle";
-import { Effect } from "effect";
+import { Clock, Effect } from "effect";
 
 import type { SubmitCheckConfig } from "../submit/submitRepoConfig.js";
 import { ensureCandidateIntegrity } from "./ensureCandidateIntegrity.js";
@@ -81,6 +81,7 @@ export const runCheckPhase = (
           return checkRound;
         }),
         outcome: (result) => (result.failed ? "failed" : "passed"),
+        details: (result) => (result.failed ? { reason: "findings" } : undefined),
       });
       foundFailure ||= checkRound.failed;
 
@@ -101,6 +102,7 @@ const runSingleCheck = (
   priorFailure: boolean,
 ): Effect.Effect<CheckRound, ValidationToolingFailure> =>
   Effect.gen(function* () {
+    const startedAt = yield* Clock.currentTimeMillis;
     const { commandResult, timedOut } = yield* runCheckCommand(
       input.sandbox,
       check,
@@ -108,11 +110,13 @@ const runSingleCheck = (
       input.expectedHeadSha,
       input.allowedUntrackedFiles,
     );
+    const durationMs = (yield* Clock.currentTimeMillis) - startedAt;
     const { artifactRefs, artifactRecords } = yield* writeCheckArtifacts({
       validationRunId: input.validationRunId,
       check,
       commandResult,
       timedOut,
+      durationMs,
       artifactsRoot: input.artifactsRoot,
       ...(input.artifactMaxBytes === undefined ? {} : { artifactMaxBytes: input.artifactMaxBytes }),
       now: input.now,
@@ -242,6 +246,7 @@ const writeCheckArtifacts = (input: {
   readonly check: SubmitCheckConfig;
   readonly commandResult: CommandResult;
   readonly timedOut: boolean;
+  readonly durationMs: number;
   readonly artifactsRoot: string;
   readonly artifactMaxBytes?: number;
   readonly now: string;
@@ -253,6 +258,7 @@ const writeCheckArtifacts = (input: {
         phase: validationPhase.checks,
         producer: input.check.id,
         commandResult: { ...input.commandResult, timedOut: input.timedOut },
+        durationMs: input.durationMs,
         logFields: [
           { name: "checkId", value: input.check.id },
           { name: "command", value: input.check.command },

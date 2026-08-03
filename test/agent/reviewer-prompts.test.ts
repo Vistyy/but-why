@@ -54,6 +54,40 @@ describe("reviewer prompts", () => {
     }
   });
 
+  it("supplies prior Acceptance Findings without presenting historical Artifacts as current evidence", () => {
+    const prompt = buildAcceptanceReviewerPrompt({
+      instructions: "Acceptance instructions",
+      validationRunId: "current-run",
+      availableArtifactRefs: [],
+      previousFindings: [
+        {
+          title: "Earlier Finding",
+          description: "Earlier description.",
+          evidence: "Earlier evidence.",
+          files: ["src/example.ts"],
+        },
+      ],
+      candidate: {
+        candidateId: "candidate-2",
+        changeBaseSha: "base",
+        headSha: "head-2",
+      },
+      acceptanceContext: {
+        version: 1,
+        title: "Intent",
+        description: "Description",
+        comments: [],
+      },
+    });
+
+    expect(prompt).toContain("Earlier Finding");
+    expect(prompt).toContain("previous Candidate");
+    expect(prompt).toContain("do not limit the current review to them");
+    expect(prompt).toContain(
+      "Historical Artifact references are not current Validation Run evidence",
+    );
+  });
+
   it("re-reviews the current Candidate without repeating repository orientation by default", () => {
     const acceptance = continuationPrompt({
       candidate: {

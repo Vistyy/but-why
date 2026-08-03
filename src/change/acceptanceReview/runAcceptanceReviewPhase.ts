@@ -80,6 +80,7 @@ export type ReviewerContinuityEvidence = {
   readonly continuity: ReviewerContinuity;
   readonly identityFingerprint: string;
   readonly durationMs: number;
+  readonly reviewCalls: number;
   readonly restartReason?: string;
 };
 
@@ -101,6 +102,19 @@ export const runAcceptanceReviewPhase = (
     run: runAcceptanceReviewPhaseImpl(input),
     outcome: (result) =>
       result.toolingFailure === undefined && result.findings === 0 ? "passed" : "failed",
+    details: (result) => ({
+      ...(result.toolingFailure !== undefined
+        ? { reason: "tooling" as const }
+        : result.findings === 1
+          ? { reason: "findings" as const }
+          : {}),
+      ...(result.reviewerEvidence === undefined
+        ? {}
+        : {
+            continuity: result.reviewerEvidence.continuity,
+            reviewCalls: result.reviewerEvidence.reviewCalls,
+          }),
+    }),
   });
 
 const runAcceptanceReviewPhaseImpl = (
@@ -115,15 +129,6 @@ const runAcceptanceReviewPhaseImpl = (
     const availableArtifactRefs = (yield* input.listArtifacts(input.validationRunId)).map(
       (artifact) => artifact.ref,
     );
-    const prompt = buildAcceptanceReviewerPrompt({
-      instructions: input.policy.instructions,
-      validationRunId: input.validationRunId,
-      availableArtifactRefs,
-      candidate: input.candidate,
-      acceptanceContext: input.acceptanceContext,
-      implementationDecisions: input.implementationDecisions ?? [],
-      ...(input.blockerHistory === undefined ? {} : { blockerHistory: input.blockerHistory }),
-    });
     const earlierFindings = reviewerFindingHistory(
       yield* input.listPreviousCandidateReviewerFindings({
         candidateId: input.candidate.candidateId,
@@ -131,6 +136,16 @@ const runAcceptanceReviewPhaseImpl = (
         producer: "acceptance",
       }),
     );
+    const prompt = buildAcceptanceReviewerPrompt({
+      instructions: input.policy.instructions,
+      validationRunId: input.validationRunId,
+      availableArtifactRefs,
+      previousFindings: earlierFindings,
+      candidate: input.candidate,
+      acceptanceContext: input.acceptanceContext,
+      implementationDecisions: input.implementationDecisions ?? [],
+      ...(input.blockerHistory === undefined ? {} : { blockerHistory: input.blockerHistory }),
+    });
     const identity = {
       changeId: input.changeId,
       producer: "acceptance" as const,
@@ -177,8 +192,10 @@ const runAcceptanceReviewPhaseImpl = (
     if (stored !== undefined && !identityCompatible && input.sessionStore !== undefined) {
       yield* input.sessionStore.remove(identity.changeId, identity.producer);
     }
-    const review = (resumeSession?: string) =>
-      input.runtime.review({
+    let reviewCalls = 0;
+    const review = (resumeSession?: string) => {
+      reviewCalls += 1;
+      return input.runtime.review({
         sandbox: input.sandbox,
         reviewer: "acceptance",
         validationRunId: input.validationRunId,
@@ -211,6 +228,7 @@ const runAcceptanceReviewPhaseImpl = (
             }),
         ...(resumeSession === undefined ? {} : { resumeSession }),
       });
+    };
     let provisional = yield* review(compatible ? stored?.sessionReference : undefined);
     if (!provisional.ok && compatible) {
       const sessionFailure = isUnusableReviewerSessionFailure(provisional.failure);
@@ -244,6 +262,7 @@ const runAcceptanceReviewPhaseImpl = (
         identityFingerprint: fingerprint,
         ...(restartReason === undefined ? {} : { restartReason }),
         durationMs: (yield* Clock.currentTimeMillis) - startedAt,
+        reviewCalls,
       },
     });
     const findings = result.ok
@@ -272,6 +291,7 @@ const runAcceptanceReviewPhaseImpl = (
           identityFingerprint: fingerprint,
           ...(restartReason === undefined ? {} : { restartReason }),
           durationMs: (yield* Clock.currentTimeMillis) - startedAt,
+          reviewCalls,
         },
         toolingFailure: result.failure,
       };
@@ -291,6 +311,7 @@ const runAcceptanceReviewPhaseImpl = (
         identityFingerprint: fingerprint,
         ...(restartReason === undefined ? {} : { restartReason }),
         durationMs: (yield* Clock.currentTimeMillis) - startedAt,
+        reviewCalls,
       },
     };
   });
