@@ -56,13 +56,15 @@ This section is complete when the Operator's selected Work Route and its selecte
    Do not use generic verification gates, test counts, coverage targets, or unsupported test categories as acceptance criteria.
    Give each Task a Task Verification Contract with Material Risks, Verification Claims, proportionate evidence, escalation conditions, and explicit exclusions.
    Do not require tests by default.
-4. Present the complete Task graph, Task Context, Task Dependency rationale, and recording order.
+4. Before requesting Task Recording Authorization for a consequential multi-Task graph, independently audit the exact final Task Contexts and dependencies against current authority, ownership, verification feasibility, and cross-Task overlap.
+   Task lifecycle state does not establish implementation readiness.
+5. Present the complete Task graph, Task Context, Task Dependency rationale, and recording order.
    Obtain Task Recording Authorization before any Task or Task Dependency mutation.
-5. Record only the authorized Task Context and Task Dependencies.
+6. Record only the authorized Task Context and Task Dependencies.
    Use CLI help for the exact syntax before each command.
    Create Tasks in the authorized recording order and set each complete dependency set.
    Use a Task Context draft and apply operation for an existing unstarted Task.
-6. Verify each mutation through Task Show, Task Context, and the applicable dependency inspection.
+7. Verify each mutation through Task Show, Task Context, and the applicable dependency inspection.
    Verify every recorded Task remains unapproved and has no Change.
 
 This section is complete when every authorized Task and Task Dependency is recorded, unapproved, and unlinked to a Change.
