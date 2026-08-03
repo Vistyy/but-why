@@ -22,6 +22,10 @@ The accepted lifecycle and evidence decisions are recorded in [Lifecycle and evi
 The current simplification candidates and sequencing are recorded in [Codebase simplification audit](codebase-simplification-audit.md).
 The completed stale Task dispositions are authoritative in SQLite, and retained replacement requirements remain in the lifecycle review.
 
+The current root `VERIFICATION.md` intentionally contains only recurring But Why Material Risks and project-specific evidence constraints that affect work across Tasks.
+Commands, configuration, product behavior, temporary migration details, and generic verification guidance remain in their existing authorities.
+The complete portfolio must not enter that file until its refreshed strategy is approved.
+
 The portfolio design must be refreshed early so simplification Tasks can use proportionate focused evidence.
 Broad portfolio migration must occur after important lifecycle and codebase ownership seams stabilize.
 This split replaces the previous requirement to migrate the broad portfolio before product simplification.
