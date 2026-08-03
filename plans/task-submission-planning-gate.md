@@ -1,21 +1,30 @@
 ---
-status: approved
+status: requires-refresh-before-task-creation
 artifact_kind: working-plan
-remove_when: implementation slices are complete, accepted behavior is recorded in current architecture and SQLite Tasks, and every deferred question is transferred to an authoritative open question or explicitly rejected
+remove_when: the refreshed implementation slices are complete, accepted behavior is recorded in current architecture and SQLite Tasks, and every deferred question is transferred to an authoritative open question or explicitly rejected
 ---
 
 # Task Submission planning gate
 
 > Non-authoritative working plan.
-> This file records the operator-approved lifecycle design and implementation sequence but is not current product documentation or implementation authority.
-> Agents must use it only when the operator or an active Task explicitly identifies it as planning context.
+> The previously approved detailed design requires refresh after the lifecycle and evidence simplification review.
+> The detailed sections below preserve prior planning context but must not create implementation Tasks until the operator approves a refreshed complete design.
+> Agents must use this file only when the operator or an active Task explicitly identifies it as planning context.
 
-This plan defines the approved pre-implementation planning gate for But Why.
-The lifecycle design, ownership boundaries, and four-slice sequence are approved planning decisions.
-Exact configuration-key spelling and local implementation details remain provisional until their applicable SQLite Task is approved.
-Deferred questions are outside the approved implementation sequence and are not approved requirements.
+## Refresh notice
+
+The planning capability remains a future accepted direction, but its current detailed lifecycle is not the approved implementation target.
+The refresh must use [Lifecycle and evidence simplification review](lifecycle-evidence-simplification-review.md), the refreshed [Verification portfolio redesign](verification-portfolio-redesign.md), and implemented simplification outcomes.
+
+The refresh must preserve Task-based planning, separate Planning Run and Validation Run ownership, mandatory Reviewer Session continuity, one material reviewer Finding contract, proportionate evidence, and explicit operator approval.
+It must reconsider exact immutable snapshot duplication, permanent Planning history, active-run and abandonment machinery, approval invalidation, drift rules, inspection breadth, and every constraint inherited from current Validation behavior.
+It must not reintroduce removed transient Task states, generic Run records, Finding severity, Validation phase status, Candidate Publication history, Acceptance Context version history, or a durable Follow-up lifecycle.
+
+Planning Submission remains after lifecycle simplification, broader codebase simplification, and broad verification portfolio closure.
+No Slice 3 or Slice 4 Task may be created from the preserved detail below until the refreshed design is approved.
+
 This plan is not current product behavior or implementation authority.
-`CONTEXT-MAP.md` identifies the contexts that own the resolved domain language.
+`CONTEXT-MAP.md` identifies the contexts that own resolved domain language.
 `docs/architecture.md`, accepted ADRs, executable sources, and SQLite Tasks remain authoritative for implemented behavior.
 
 ## Outcome
@@ -619,9 +628,10 @@ Workspace creation and Repository Preparation duration belong to this question.
 
 ## Approval
 
-The user approved the lifecycle design, ownership boundaries, and four-slice implementation sequence in this working plan.
-Exact configuration-key spelling remains provisional until Slice 3 Task approval.
-Deferred questions remain unapproved and outside the implementation sequence.
-ADR 0005 records the qualifying lifecycle decision.
-The applicable SQLite Tasks must own implementation requirements.
-Remove this working plan after those Tasks and current architecture contain every accepted requirement and each deferred question has an authoritative disposition.
+The operator previously approved the detailed lifecycle design, ownership boundaries, and four-slice sequence preserved in this file.
+The later lifecycle and evidence review superseded approval to create Tasks from that detail without refresh.
+The planning capability remains accepted, but its complete current target and implementation slices are unapproved.
+Exact configuration, lifecycle, evidence, and persistence choices require renewed operator review.
+Deferred questions remain unapproved and outside implementation.
+The applicable SQLite Tasks must eventually own implementation requirements.
+Remove this working plan after refreshed Tasks and current architecture contain every accepted requirement and each deferred question has an authoritative disposition.
