@@ -115,6 +115,10 @@ Migration evidence must show that supported current facts survive, retired histo
 
 ## Focused evidence during simplification
 
+During simplification, Change Submit uses `just quality` rather than the complete legacy boundary suite as its blocking Check.
+`just full-quality` remains available as a diagnostic migration tool but must not block a Change while it contains known brittle or obsolete evidence.
+This direct policy change does not require a separate implementation Task.
+
 Each simplification Task must have a Task Verification Contract before implementation.
 The contract must protect only the Material Risks affected by that slice.
 The slice must remove obsolete tests with obsolete behavior and add or retain focused evidence through the new supported seam.

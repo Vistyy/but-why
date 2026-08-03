@@ -30,17 +30,19 @@ A durable automated test is not required unless accepted requirements or this st
 ## Mandatory gates
 
 - For repository changes outside Change Submit, run the blocking routine contributor workflow defined in [Tooling](docs/tooling.md#supported-commands).
-- For a changed Candidate, Change Submit must run the Check and review phases resolved from [Repo Config](.but-why/config.json).
+- During lifecycle simplification, Changed Candidate Submission must run `just quality` as its configured Check, followed by the configured review phases.
+- Each simplification Task must obtain the focused evidence required by its Task Verification Contract at the cheapest reliable seam.
 - For a task-backed No-Change Submission, Change Submit must run Acceptance Review without configured Checks or Specialists.
 - A taskless No-Change Submission must return `nothing_to_submit` before Validation and remain open.
 
-Change Submit owns its broad Check and review phases.
-Implementers must not duplicate them manually.
+Change Submit owns its configured Check and review phases.
+Implementers must not rerun that broad Check manually.
+`just full-quality` remains a diagnostic migration tool and is not a blocking Change Submit gate.
+A complete-suite result does not replace focused evidence for an affected Material Risk.
 
 ## Budgets
 
+- Retained blocking evidence must have zero known intermittent failures.
 - Complete quality, test, and coverage workloads use the repository capacity lock, while targeted test selections remain unlocked.
-- The routine quality workload has a 10-second warning target.
-- The complete quality workload has a 30-second warning target.
-- These runtime targets warn but do not fail the workload.
-- The project has no accepted hard stability budget.
+- The project has no accepted numerical runtime threshold.
+- Existing 10-second and 30-second warnings are historical diagnostics, not accepted verification budgets.
