@@ -169,7 +169,9 @@ describe("packaged Change Implement continuation extension", () => {
     await harness.emit("agent_settled");
 
     expect(harness.sent).toHaveLength(1);
-    expect(harness.sent[0]).toContain("take the next concrete implementation action");
+    expect(harness.sent[0]).toContain("Resume implementation of Change");
+    expect(harness.sent[0]).toContain("linked Task Context when present");
+    expect(harness.sent[0]).toContain("until Change Submit passes");
   });
 
   it("does not queue a continuation while another agent run is active", async () => {
@@ -288,7 +290,6 @@ describe("packaged Change Implement continuation extension", () => {
         },
       ],
     });
-    await harness.emit("session_compact", { reason: "threshold" });
     await harness.emit("agent_end", {
       messages: [{ role: "assistant", content: [], stopReason: "aborted" }],
     });
@@ -300,9 +301,7 @@ describe("packaged Change Implement continuation extension", () => {
     expect(harness.sent).toEqual([]);
 
     await harness.runCommand("continue-change");
-    expect(harness.sent).toEqual([
-      expect.stringContaining("Automatic threshold compaction completed"),
-    ]);
+    expect(harness.sent).toEqual([expect.stringContaining("Resume implementation of Change")]);
   });
 
   it("does not inspect the Change before a normal prompt starts", async () => {
@@ -339,7 +338,7 @@ describe("packaged Change Implement continuation extension", () => {
       data: { changeId, paused: false },
     });
     expect(harness.sent).toEqual([
-      expect.stringContaining(`The Change ${changeId} is still unfinished.`),
+      expect.stringContaining(`Resume implementation of Change ${changeId}.`),
     ]);
     expect(harness.latestWidgetText()).toEqual([`● Watching Change ${changeId.slice(0, 8)}…`]);
   });

@@ -152,7 +152,6 @@ export const decideContinuation = (
 export const buildContinuationMessage = (
   decision: ContinuationDecision,
   changeId: string,
-  compactionReason: "threshold" | undefined = undefined,
   commandPrefix: ButWhyCommandPrefix = defaultCommandPrefix,
 ): string => {
   if (decision.kind === "idle") return "";
@@ -162,16 +161,10 @@ export const buildContinuationMessage = (
       `Inspect the Findings with \`${butWhyCommand(commandPrefix, "change", "findings", changeId)}\`, fix every applicable problem in the Managed Worktree, commit the fixes, and submit again with \`${butWhyCommand(commandPrefix, "change", "submit", changeId)}\`.`,
     ].join(" ");
   }
-  if (compactionReason === "threshold") {
-    return [
-      "Automatic threshold compaction completed.",
-      `Restore the current Change state from the compacted context for ${changeId}, inspect the Managed Worktree, and take the next concrete implementation action.`,
-      "The Change is still unfinished. Continue until it has a passing Candidate and an owned pull request, or a durable stopping condition permits idle state.",
-    ].join(" ");
-  }
   return [
-    `The Change ${changeId} is still unfinished.`,
-    `Inspect \`${butWhyCommand(commandPrefix, "change", "show", changeId)}\` and the Managed Worktree, then take the next concrete implementation action.`,
+    `Resume implementation of Change ${changeId}.`,
+    `Inspect \`${butWhyCommand(commandPrefix, "change", "show", changeId)}\`, the Managed Worktree, and the linked Task Context when present.`,
+    "Implement the complete accepted intent and continue until Change Submit passes.",
   ].join(" ");
 };
 
@@ -205,7 +198,6 @@ const durableChangeFingerprint = (
 export default function continueChange(pi: ExtensionAPI): void {
   let changeId: string | undefined;
   let persisted: PersistedContinuationState | undefined;
-  let pendingThresholdCompaction = false;
   let settling = false;
   let pauseGeneration = 0;
   let watcherDisplay: WatcherDisplay = { kind: "watching" };
@@ -491,7 +483,7 @@ export default function continueChange(pi: ExtensionAPI): void {
     const explanation = typeof content === "string" ? content : "The approved Resolution has no recorded text.";
     const next = hasFindings
       ? `Now inspect the earlier Findings with \`${butWhyCommand(commandPrefix, "change", "findings", id)}\`, fix every applicable problem in the Managed Worktree, commit the fixes, and submit again with \`${butWhyCommand(commandPrefix, "change", "submit", id)}\`.`
-      : `Now inspect \`${butWhyCommand(commandPrefix, "change", "show", id)}\` and the Managed Worktree, then take the next concrete implementation action.`;
+      : `Now inspect \`${butWhyCommand(commandPrefix, "change", "show", id)}\`, the Managed Worktree, and the linked Task Context when present. Continue implementing the complete accepted intent until Change Submit passes.`;
     return `An Implementation Blocker Resolution was recorded for Change ${id}: ${explanation} ${next}`;
   };
 
@@ -601,7 +593,6 @@ export default function continueChange(pi: ExtensionAPI): void {
           resolutionId: null,
         };
         if (!observed.transient) {
-          pendingThresholdCompaction = false;
           saveState({ ...previous, paused: true });
           showWatcher(ctx, { kind: "inspection-failed" });
           ctx.ui.notify(
@@ -614,7 +605,6 @@ export default function continueChange(pi: ExtensionAPI): void {
           fingerprint: previous.fingerprint,
           unchangedRestarts: previous.unchangedRestarts + 1,
         };
-        pendingThresholdCompaction = false;
         if (retry.unchangedRestarts > maxUnchangedRestarts) {
           saveState({ ...previous, ...retry, paused: false });
           showWatcher(ctx, { kind: "stopped" });
@@ -668,17 +658,14 @@ export default function continueChange(pi: ExtensionAPI): void {
       });
 
       if (observed.blockerHistory.active !== null) {
-        pendingThresholdCompaction = false;
         showWatcher(ctx, { kind: "blocked" });
         return;
       }
       if (!explicit && (resolutionChanged || pendingResolution)) {
-        pendingThresholdCompaction = false;
         showWatcher(ctx, displayFor(observed.snapshot, observed.git, observed.blockerHistory));
         return;
       }
       if (explicit && (resolutionChanged || pendingResolution) && currentResolution !== null) {
-        pendingThresholdCompaction = false;
         showWatcher(ctx, { kind: "watching" });
         if (observed.snapshot.change.state === "open") {
           saveState({
@@ -701,7 +688,6 @@ export default function continueChange(pi: ExtensionAPI): void {
         return;
       }
       if (explicit && observed.snapshot.toolingFailureCount > 0) {
-        pendingThresholdCompaction = false;
         showWatcher(ctx, { kind: "stopped" });
         pi.sendUserMessage(validationFailureMessage(id, observed.snapshot, commandPrefix));
         return;
@@ -709,7 +695,6 @@ export default function continueChange(pi: ExtensionAPI): void {
 
       const decision = decideContinuation(observed.snapshot, observed.git);
       if (decision.kind === "idle") {
-        pendingThresholdCompaction = false;
         if (
           explicit &&
           observed.snapshot.change.state === "open" &&
@@ -726,7 +711,6 @@ export default function continueChange(pi: ExtensionAPI): void {
         return;
       }
       if (!explicit && retry.unchangedRestarts > maxUnchangedRestarts) {
-        pendingThresholdCompaction = false;
         showWatcher(ctx, { kind: "stopped" });
         ctx.ui.notify(
           "But Why automatic continuation stopped after three restarts without Git or Change progress. Take the next action manually.",
@@ -734,13 +718,7 @@ export default function continueChange(pi: ExtensionAPI): void {
         );
         return;
       }
-      const message = buildContinuationMessage(
-        decision,
-        id,
-        pendingThresholdCompaction ? "threshold" : undefined,
-        commandPrefix,
-      );
-      pendingThresholdCompaction = false;
+      const message = buildContinuationMessage(decision, id, commandPrefix);
       showWatcher(ctx, { kind: "watching" });
       if (ctx.isIdle()) pi.sendUserMessage(message);
     } finally {
@@ -785,10 +763,6 @@ export default function continueChange(pi: ExtensionAPI): void {
     if (inputChangeId === undefined || changeId !== undefined) return;
     changeId = inputChangeId;
     showWatcher(ctx, persisted?.paused ? { kind: "paused" } : { kind: "watching" });
-  });
-
-  pi.on("session_compact", (event) => {
-    pendingThresholdCompaction = event.reason === "threshold";
   });
 
   pi.on("agent_end", (event, ctx) => {

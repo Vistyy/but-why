@@ -556,6 +556,12 @@ describe("Change inspection CLI", () => {
         "",
       ]);
       const help = yield* runByInProcessEffect(root, ["change", "decision", "add", "--help"]);
+      const blockerHelp = yield* runByInProcessEffect(root, [
+        "change",
+        "blocker",
+        "raise",
+        "--help",
+      ]);
       const multiline = yield* runByInProcessEffect(root, [
         "--json",
         "change",
@@ -597,8 +603,12 @@ describe("Change inspection CLI", () => {
         help: ["Provide --choice <one-line approach> and --rationale <reason>."],
       });
       expect(help.status).toBe(0);
-      expect(help.stdout).toContain("--choice");
-      expect(help.stdout).toContain("--rationale");
+      expect(help.stdout).toContain("The selected one-line material approach.");
+      expect(help.stdout).toContain("Why the approach was selected and its material trade-off.");
+      expect(blockerHelp.status).toBe(0);
+      expect(blockerHelp.stdout).toContain("unresolved issue");
+      expect(blockerHelp.stdout).toContain("continuing is unsafe");
+      expect(blockerHelp.stdout).toContain("external decision or action");
     }),
   );
 

@@ -40,11 +40,17 @@ This section is complete when the Operator's selected Work Route and its selecte
 ## Author Tasks
 
 1. Gather the Operator-approved requirements and applicable current authority.
+   Do not infer approval from brainstorming or provisional planning.
+   Ask the Operator when requirement approval is unclear.
    Inspect current Tasks, their complete Task Context, and their dependencies.
    Identify one current Task owner or one ownership gap for every requirement.
 2. Propose the complete Task graph before mutation.
+   Compare every approved requirement with the proposed graph and give each requirement exactly one Task owner.
+   Do not omit, replace, defer, or reduce approved behavior to make a Task smaller.
+   Treat any such proposal as a requirements change that requires an explicit Operator decision.
    Each proposed Task must deliver one independently verifiable observable capability.
    Keep all work for one capability in one Task unless a split creates independently verifiable capabilities with necessary dependencies.
+   Keep the capability in one Task when no such split exists, even when the Task is large.
    Add a Task Dependency only when the dependent Task cannot be implemented or verified until the prerequisite Task is Done.
 3. Give each proposed Task behavior-based acceptance criteria.
    Do not use generic verification gates, test counts, coverage targets, or unsupported test categories as acceptance criteria.

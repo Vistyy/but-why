@@ -101,7 +101,7 @@ describe("Change Implement continuation policy", () => {
     ).toEqual({ kind: "general" });
   });
 
-  it("continues after automatic threshold compaction with a recovery message", () => {
+  it("continues a Change against its complete accepted intent", () => {
     const decision = decideContinuation({
       change: { state: "open", closeReason: null },
       currentCandidate: null,
@@ -111,9 +111,11 @@ describe("Change Implement continuation policy", () => {
       pullRequest: null,
     });
 
-    expect(buildContinuationMessage(decision, "change-123", "threshold")).toContain(
-      "Restore the current Change state from the compacted context",
-    );
+    const message = buildContinuationMessage(decision, "change-123");
+    expect(message).toContain("Resume implementation of Change change-123");
+    expect(message).toContain("linked Task Context when present");
+    expect(message).toContain("complete accepted intent");
+    expect(message).toContain("until Change Submit passes");
   });
 
   it("extracts the Change identity from the user handoff", () => {

@@ -274,8 +274,12 @@ taskCommand = group(
 const changeDecisionAddCommand = withCliHandler(
   leaf("add", "Record one Implementer Implementation Decision.", {
     changeId: changeIdArgument,
-    choice: Options.text("choice"),
-    rationale: Options.text("rationale"),
+    choice: Options.text("choice").pipe(
+      Options.withDescription("The selected one-line material approach."),
+    ),
+    rationale: Options.text("rationale").pipe(
+      Options.withDescription("Why the approach was selected and its material trade-off."),
+    ),
   }),
   (values, environment) =>
     Effect.promise(() => import("./cli/change/decision.js")).pipe(
@@ -318,7 +322,11 @@ changeDecisionCommand = group(
 const changeBlockerRaiseCommand = withCliHandler(
   leaf("raise", "Report an Implementation Blocker.", {
     changeId: changeIdArgument,
-    file: Options.text("file"),
+    file: Options.text("file").pipe(
+      Options.withDescription(
+        "A UTF-8 Markdown report stating the unresolved issue, why continuing is unsafe, and the required external decision or action.",
+      ),
+    ),
   }),
   (values, environment) =>
     Effect.promise(() => import("./cli/change/blocker.js")).pipe(

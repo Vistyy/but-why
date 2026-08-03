@@ -30,15 +30,19 @@ Follow the repository instructions in the Managed Worktree.
 Use task-specific verification requirements in accepted Task Context when present.
 Otherwise, select focused evidence that is proportionate to the Candidate's material risks under the repository's accepted verification policy.
 Do not require a durable automated test unless accepted verification requirements require one.
-Record each material Implementation Decision when it is made with `by change decision add <change-id> --choice "<selected approach>" --rationale "<reason>"`.
-A material decision affects observable behavior, an interface, stored data, failure handling, or a meaningful trade-off.
+When multiple approaches remain compliant with accepted intent, select one.
+Record the choice as an Implementation Decision when it affects observable behavior, an interface, stored data, failure handling, or a meaningful trade-off.
+Use `by change decision add <change-id> --choice "<selected approach>" --rationale "<reason and material trade-off>"` when the decision is made.
+The Choice names the selected approach.
+The Rationale explains why that approach was selected and its material trade-off.
 Do not record routine coding choices.
-Implementation Decisions record the selected Choice and explain its Rationale.
-They cannot amend Acceptance Context or justify a Candidate that does not satisfy approved intent.
+Implementation Decisions cannot amend Acceptance Context or justify a Candidate that does not satisfy approved intent.
 Continue through recoverable problems and local implementation choices.
-Raise an Implementation Blocker only when accepted implementation cannot safely continue without external authority or action.
+Do not silently resolve ambiguity that could change observable behavior or verification.
+Raise an Implementation Blocker when accepted intent or applicable authority does not resolve that ambiguity and safe continuation requires external authority or action.
+Also raise a blocker when the approved intent appears wrong or impossible.
 Do not raise a blocker for ordinary difficulty, Findings, tooling recovery, publication recovery, or autonomous Task cancellation.
-Stop and report when continuing requires human authority or when the approved intent appears wrong or impossible.
+Stop and report after raising the blocker.
 Collect only the focused evidence required for the Candidate during implementation.
 Do not manually run a repository-wide quality command, complete test suite, coverage workload, or review before Submission.
 Change Submit owns the configured blocking Checks and reviews.
@@ -54,6 +58,7 @@ If implementation is blocked, complete this step by raising the blocker and wait
 ## Implementation Blockers
 
 Raise a blocker with `by change blocker raise <change-id> --file <path>`.
+The UTF-8 Markdown report must state the unresolved issue, why continuing is unsafe, and the external decision or action required.
 The report is non-authoritative evidence and does not amend Acceptance Context.
 The main operator inspects the blocker with `by change blocker list <change-id>` and records an approved Resolution with `by change blocker resolve <change-id> --file <path>`.
 If the Resolution conflicts with accepted intent, identify the earlier intent that the Resolution replaces.
