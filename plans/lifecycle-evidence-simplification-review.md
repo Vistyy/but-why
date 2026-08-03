@@ -118,7 +118,9 @@ The operator may recover the branch externally or cancel the Change.
 
 Implementation Blocker and Resolution history remains useful operational and review evidence.
 Only one unresolved Implementation Blocker may be active for a Change.
-Every operator-approved Resolution remains part of Acceptance Context.
+For a Task-backed Change, every operator-approved Resolution remains part of Acceptance Context.
+For a taskless Change, a Blocker signals that operator intervention is required because the Change cannot progress normally.
+Its Resolution remains immutable Change history, invalidates prior Validation, and requires fresh Validation without creating Acceptance Context or triggering Acceptance Review.
 But Why must not classify Resolutions by whether they change intent because that classification would add more complexity than retaining the complete Resolution.
 The current Acceptance Context remains available for the next review, and each Validation Run retains the exact Acceptance Context it used.
 The write-only Acceptance Context versions table should be removed.
