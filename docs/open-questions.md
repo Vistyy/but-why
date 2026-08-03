@@ -76,6 +76,12 @@ Revisit this when real replacement work requires more than creating a new Task a
 AFK Implementers, automatic Fixers, and orchestration-owned stops are deferred.
 Before adding them, define process ownership, cancellation, workspace fencing, cost protection, recovery, and security from observed interactive-session behavior.
 
+Before unattended implementation, define an Implementation Budget.
+The budget might bound elapsed time, model usage or cost, agent iterations, tool calls, or another measure.
+Later design must decide whether the budget belongs to a Task, Change, or individual implementation attempt.
+It must also define exhaustion behavior, additional authorization, resume behavior, evidence, and whether enforcement can be hard or only advisory.
+An agent completion signal can report claimed completion, but it does not enforce the budget.
+
 ## How should But Why separate operator and Implementer authority?
 
 Implementers currently use the same local CLI and Shared Repository State as the main operator.
@@ -127,6 +133,15 @@ Add another host only after a second implementation proves a shared interface.
 V1 uses the fixed changed-code Validation Gate and the Acceptance-only no-change path.
 Future configuration may select Checks or Specialists from trusted facts such as changed paths or Task metadata.
 Use named conditions instead of a generic workflow language.
+
+## Where should lifecycle customization use hooks?
+
+Sandcastle demonstrates that generic lifecycle hooks can make an orchestration engine more reusable and customizable than But Why's fixed named phases.
+Explore hooks only after a concrete repository workflow requires lifecycle behavior that the current Preparation, Checks, Specialists, integrity, and cleanup boundaries cannot represent coherently.
+
+Before adding hooks, define trusted configuration, execution location, ordering, timeout, cancellation, failure behavior, evidence capture, and permitted side effects.
+Hooks must not bypass Validation Gate policy, Candidate integrity, authority boundaries, or cleanup evidence.
+Prefer named extension points when the behavior has stable domain meaning, and do not introduce a generic workflow language without evidence that named extension points are insufficient.
 
 ## How should reviewer execution use containers?
 
