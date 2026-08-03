@@ -1,5 +1,5 @@
 ---
-status: approved-target-task-design-pending
+status: task-graph-recorded-implementation-pending
 artifact_kind: working-plan
 remove_when: the operator approves the complete target, every accepted requirement and Task disposition is transferred to SQLite Tasks or an accepted ADR, applicable current documentation describes the implemented system, and deferred questions have authoritative dispositions
 ---
@@ -8,7 +8,8 @@ remove_when: the operator approves the complete target, every accepted requireme
 
 > Non-authoritative working plan.
 > This file preserves accepted planning decisions and open questions from the lifecycle and evidence review.
-> It does not describe current implemented behavior and does not authorize implementation or Task mutation.
+> The approved replacement graph is recorded in BY-100 through BY-120, with existing BY-60 and BY-70 retained.
+> It does not describe current implemented behavior and does not authorize Task approval, Change Start, or implementation.
 
 ## Outcome
 
@@ -352,5 +353,6 @@ These deferred triggers are not current requirements and do not block the lifecy
 ## Approval state
 
 The operator approved every individual decision identified as accepted in this plan.
-The operator approved the complete lifecycle and evidence simplification target for Task reconciliation and replacement Task design.
-The operator has not approved a replacement Task graph, Shared Repository State mutation, or implementation Change.
+The operator approved the complete lifecycle and evidence simplification target and replacement Task graph.
+The approved graph is recorded as unapproved Tasks BY-100 through BY-120, with existing BY-60 and BY-70 retained unchanged.
+The operator has not approved any new Task, Change Start, or implementation Change.

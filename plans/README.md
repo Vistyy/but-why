@@ -8,7 +8,7 @@ An approved status records operator acceptance but does not make the plan implem
 Agents must use a plan only when the operator or an active Task explicitly identifies it as planning context.
 
 The current planning entry point is [Lifecycle and evidence simplification review](lifecycle-evidence-simplification-review.md).
-That plan contains the approved target while replacement Tasks are designed.
+That plan contains the approved target now recorded in BY-100 through BY-120, with existing BY-60 and BY-70 retained.
 
 [Codebase simplification audit](codebase-simplification-audit.md) is the umbrella product-simplification program.
 [Verification portfolio redesign](verification-portfolio-redesign.md) is a separate evidence workstream that must target the simplified product seams.
