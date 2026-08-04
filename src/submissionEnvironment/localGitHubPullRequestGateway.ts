@@ -269,9 +269,19 @@ const readRemoteBranchHead = (
     `qualifiedName=refs/heads/${input.branchName}`,
   ]);
   if (!result.ok) return { state: "unavailable" };
-  const parsed = parseJson(result.stdout) as RemoteBranchQueryJson | undefined;
-  const repository = parsed?.data?.repository;
-  if (repository === null || repository === undefined) return { state: "mismatch" };
+  const parsed = parseJson(result.stdout);
+  if (
+    typeof parsed !== "object" ||
+    parsed === null ||
+    Array.isArray(parsed) ||
+    !("data" in parsed) ||
+    hasGraphqlErrors(parsed)
+  ) {
+    return { state: "unavailable" };
+  }
+  const repository = (parsed as RemoteBranchQueryJson).data?.repository;
+  if (repository === undefined) return { state: "unavailable" };
+  if (repository === null) return { state: "mismatch" };
   const defaultBranch = repository.defaultBranchRef?.name;
   if (typeof defaultBranch !== "string") return { state: "unavailable" };
   if (defaultBranch === input.branchName) return { state: "excluded" };

@@ -593,6 +593,18 @@ describe("GitHub pull request gateway", () => {
         { ok: false as const },
         { state: "unavailable" as const },
       ],
+      [
+        "read-error",
+        { ok: false as const },
+        { ok: true as const, stdout: '{"errors":[{"message":"read failed"}]}' },
+        { state: "unavailable" as const },
+      ],
+      [
+        "malformed-read",
+        { ok: false as const },
+        { ok: true as const, stdout: "not-json" },
+        { state: "unavailable" as const },
+      ],
     ] as const;
 
     for (const [name, deletionResponse, readResponse, expected] of cases) {

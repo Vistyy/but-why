@@ -228,7 +228,7 @@ describe("Change cancellation", () => {
     }),
   );
 
-  it.effect("closes an owned open pull request before recording cancellation", () => {
+  it.effect("closes an owned open pull request and preserves its Remote Change Branch", () => {
     const events: string[] = [];
     const cleanupRemoteBranches: (object | undefined)[] = [];
     const task = taskRecord("implementing");
