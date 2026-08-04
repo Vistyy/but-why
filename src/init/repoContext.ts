@@ -18,7 +18,7 @@ export type RepoLocalPaths = {
   readonly statePath: string;
   readonly reviewersPath: string;
   readonly artifactsPath: string;
-  readonly snapshotsPath?: string;
+  readonly snapshotsPath: string;
   readonly taskContextDraftsPath: string;
   readonly gitignorePath: string;
 };

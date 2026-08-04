@@ -1,5 +1,4 @@
 import { existsSync } from "node:fs";
-import { join } from "node:path";
 import { Effect } from "effect";
 
 import { loadRepoLocalContext, type LoadRepoLocalContextError } from "../init/repoContext.js";
@@ -31,9 +30,7 @@ export const loadSnapshotUseCases = (cwd: string): Effect.Effect<LoadedSnapshotU
 
   const input = {
     sourcePath: context.context.paths.statePath,
-    snapshotsPath:
-      context.context.paths.snapshotsPath ??
-      join(context.context.paths.operationalDir, "snapshots"),
+    snapshotsPath: context.context.paths.snapshotsPath,
   };
   const useCases: SnapshotUseCases = {
     create: (): Effect.Effect<SharedRepositoryStateSnapshot, SnapshotCreationFailed> =>
