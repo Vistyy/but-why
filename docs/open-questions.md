@@ -130,7 +130,7 @@ Add another host only after a second implementation proves a shared interface.
 
 ## Should validation be conditional?
 
-V1 uses the fixed changed-code Validation Gate and the Acceptance-only no-change path.
+V1 uses the fixed changed-code Validation Gate and does not validate an unchanged tracked tree.
 Future configuration may select Checks or Specialists from trusted facts such as changed paths or Task metadata.
 Use named conditions instead of a generic workflow language.
 

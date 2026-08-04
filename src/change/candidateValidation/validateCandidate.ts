@@ -76,10 +76,6 @@ type ValidateAcceptanceContextCandidateInput = {
   readonly now: string;
 };
 
-type ValidateNoChangeInput = ValidateAcceptanceContextCandidateInput & {
-  readonly noChange: true;
-};
-
 type ValidateCandidateResult =
   | {
       readonly ok: true;
@@ -131,9 +127,6 @@ export type CandidateValidationService = {
   readonly validateAcceptanceContextCandidate: (
     input: ValidateAcceptanceContextCandidateInput,
   ) => Effect.Effect<ValidateCandidateResult, RepositoryStorageError>;
-  readonly validateNoChange: (
-    input: ValidateNoChangeInput,
-  ) => Effect.Effect<ValidateCandidateResult, RepositoryStorageError>;
   readonly listFindings: ChangeValidationPersistence["listFindings"];
   readonly listToolingFailures: ChangeValidationPersistence["listToolingFailures"];
   readonly listRounds: (validationRunId: string) => Effect.Effect<
@@ -169,14 +162,11 @@ const makeCandidateValidation = (dependencies: {
   readonly reviewerSessionsRoot?: string;
 }): CandidateValidationService => {
   const validate = Effect.fn("CandidateValidation.validate")(function* (
-    input: ValidateCandidateInput | ValidateAcceptanceContextCandidateInput | ValidateNoChangeInput,
+    input: ValidateCandidateInput | ValidateAcceptanceContextCandidateInput,
   ) {
     const policy =
       "acceptanceContext" in input
-        ? {
-            ...("noChange" in input ? acceptanceOnlyPolicy(input.policy) : input.policy),
-            acceptanceContext: input.acceptanceContext,
-          }
+        ? { ...input.policy, acceptanceContext: input.acceptanceContext }
         : input.policy;
     const validationRunId = randomUUID();
     const tempRefName = validationTempRefName(validationRunId);
@@ -326,7 +316,6 @@ const makeCandidateValidation = (dependencies: {
   return {
     validateCandidate: (input) => validate(input),
     validateAcceptanceContextCandidate: (input) => validate(input),
-    validateNoChange: (input) => validate(input),
     listFindings: dependencies.persistence.listFindings,
     listToolingFailures: dependencies.persistence.listToolingFailures,
     listRounds: (validationRunId) =>
@@ -344,7 +333,7 @@ const runCandidatePhases = (
     readonly sessionStore?: ReviewerSessionStore;
     readonly reviewerSessionsRoot?: string;
   },
-  input: ValidateCandidateInput | ValidateAcceptanceContextCandidateInput | ValidateNoChangeInput,
+  input: ValidateCandidateInput | ValidateAcceptanceContextCandidateInput,
   validationRunId: string,
   activeWorkspace: {
     readonly sandbox: Pick<Sandbox, "exec" | "run">;
@@ -371,39 +360,6 @@ const runCandidatePhases = (
         ? {}
         : { sessionStorageRoot: dependencies.reviewerSessionsRoot }),
     };
-    if ("noChange" in input) {
-      const acceptance = yield* runAcceptanceReviewPhase({
-        validationRunId,
-        changeId: input.changeId,
-        candidate: candidateIdentity(input),
-        acceptanceContext: input.acceptanceContext,
-        implementationDecisions: input.implementationDecisions,
-        ...(input.blockerHistory === undefined ? {} : { blockerHistory: input.blockerHistory }),
-        policy: input.policy.acceptanceReview,
-        ...(input.progress === undefined ? {} : { progress: input.progress }),
-        ...(agentEnvironment === undefined ? {} : { agentEnvironment }),
-        runtime: dependencies.reviewerAgentRuntime,
-        sandbox: activeWorkspace.sandbox,
-        artifactsRoot: dependencies.artifactsRoot,
-        artifactMaxBytes: maxValidationArtifactBytes,
-        commandCwd: activeWorkspace.worktreePath,
-        resourceRoot,
-        allowedUntrackedFiles: input.policy.copyFiles,
-        now: input.now,
-        listArtifacts: dependencies.persistence.listArtifacts,
-        listPreviousCandidateReviewerFindings:
-          dependencies.persistence.listPreviousCandidateReviewerFindings,
-        recordAcceptanceRound: dependencies.persistence.recordAcceptanceRound,
-        ...sessionOptions,
-      });
-      return {
-        validationFindings: acceptance.findings,
-        ...(acceptance.reviewerEvidence === undefined
-          ? {}
-          : { reviewerEvidence: acceptance.reviewerEvidence }),
-        toolingFailures: acceptance.toolingFailure === undefined ? [] : [acceptance.toolingFailure],
-      };
-    }
     if (input.policy.prepare !== undefined) {
       const prepare = yield* runPreparePhase({
         validationRunId,
@@ -505,16 +461,6 @@ const runCandidatePhases = (
       toolingFailures: specialists.toolingFailures,
     };
   })();
-
-const acceptanceOnlyPolicy = (
-  policy: AcceptanceContextCandidateValidationPolicy,
-): AcceptanceContextCandidateValidationPolicy => ({
-  ...(policy.agentEnvironment === undefined ? {} : { agentEnvironment: policy.agentEnvironment }),
-  checks: [],
-  copyFiles: policy.copyFiles,
-  specialistReviews: [],
-  acceptanceReview: policy.acceptanceReview,
-});
 
 const candidateIdentity = (
   input: ValidateCandidateInput | ValidateAcceptanceContextCandidateInput,

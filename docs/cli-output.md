@@ -24,7 +24,7 @@ The command continues to write one structured TOON or JSON result to stdout.
 
 Progress reports only phases that run for the Submission.
 A changed Candidate can report Prepare, each configured Check, Acceptance Review for a Task-backed Change, and each configured Specialist Review.
-A Taskless or no-change Submission does not report phases that it does not run.
+A `nothing_to_submit` Submission does not report phases because it does not run validation.
 
 Each phase reports one start line and one completion line.
 Each completion line contains `passed` or `failed` and the elapsed duration.

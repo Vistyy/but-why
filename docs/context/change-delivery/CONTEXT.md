@@ -156,18 +156,17 @@ The coding agent that changes a Change's Managed Worktree and may author Impleme
 _Avoid_: Acceptance Reviewer, Specialist Reviewer, reviewer process
 
 **Submission**:
-The point-in-time act of asking But Why to fetch the Change Base, inspect a Change's Managed Worktree, select its Candidate or no-change state, validate it, and publish when eligible.
+The point-in-time act of asking But Why to fetch the Change Base, inspect a Change's Managed Worktree, select its Candidate or unchanged state, validate a changed Candidate, and publish when eligible.
 Later Change Base advancement does not alter a completed Submission or invalidate its Candidate automatically.
 _Avoid_: Push, Candidate, Validation Run, continuous merge gate
 
 **No-Change Submission**:
 A Submission whose Repository Branch has the same tracked file tree as the exact fetched Change Base after the ancestry check passes.
-A Task-backed No-Change Submission runs Acceptance Review and can complete without a pull request.
-A taskless no-change result remains open.
+A No-Change Submission returns `nothing_to_submit`, keeps its Task and Change open, and does not run validation.
 _Avoid_: Empty commit, comparison with the Change's starting tree, caller assertion
 
 **Finding**:
-An immutable report that states one material problem and its evidence from Prepare, a Check, Acceptance Review, or a Specialist for one Candidate or no-change review.
+An immutable report that states one material problem and its evidence from Prepare, a Check, Acceptance Review, or a Specialist for one Candidate review.
 Every Finding is blocking, so it has no severity classification.
 _Avoid_: Tooling Failure, Task Comment, mutable issue
 
@@ -191,7 +190,7 @@ The fixed read-only sequence that judges changed code through Repository Prepara
 _Avoid_: Generic pipeline language, publication, implementation
 
 **Acceptance Reviewer**:
-The coding agent that owns the overall judgment of whether a Candidate or no-change repository state satisfies supplied Acceptance Context, including its Task Verification Contract.
+The coding agent that owns the overall judgment of whether a Candidate satisfies supplied Acceptance Context, including its Task Verification Contract.
 It may require missing work necessary for approved intent, but it does not expand approved intent or require optional improvement.
 _Avoid_: Specialist Reviewer, Implementer
 

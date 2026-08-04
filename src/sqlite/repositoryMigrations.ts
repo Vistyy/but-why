@@ -12,6 +12,7 @@ import { activeValidationRunsMigration as activeValidationRuns } from "./migrati
 import { validationWorkspacePathsMigration as validationWorkspacePaths } from "./migrations/0010_validation_workspace_paths.js";
 import { candidatePublicationsMigration as candidatePublications } from "./migrations/0011_candidate_publications.js";
 import { structuredImplementationDecisionsMigration as structuredImplementationDecisions } from "./migrations/0012_structured_implementation_decisions.js";
+import { removeNoChangeCompletionMigration as removeNoChangeCompletion } from "./migrations/0013_remove_no_change_completion.js";
 
 export const migrateRepositoryState = Migrator.make({})({
   loader: Migrator.fromRecord({
@@ -27,5 +28,6 @@ export const migrateRepositoryState = Migrator.make({})({
     "0010_validation_workspace_paths": validationWorkspacePaths,
     "0011_candidate_publications": candidatePublications,
     "0012_structured_implementation_decisions": structuredImplementationDecisions,
+    "0013_remove_no_change_completion": removeNoChangeCompletion,
   }),
 });

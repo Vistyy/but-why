@@ -59,8 +59,7 @@ It does not modify the Managed Worktree or Repository Branch.
 Repo reviewer profiles and resources are resolved from the exact Candidate Validation Workspace during reviewer execution.
 
 A Candidate is identified by its Change, `changeBaseSha`, and `headSha`.
-Tracked-tree equality with the fetched Change Base defines No-Change after the ancestry check passes.
-A task-backed No-Change Submission runs Acceptance Review and can complete without a pull request.
+Tracked-tree equality with the fetched Change Base returns `nothing_to_submit` after the ancestry check passes.
 A changed Candidate passes through Repository Preparation, Checks, Acceptance Review when task-backed, configured Specialists, and publication policy.
 
 `by change reconcile [<change-id>]` observes owned pull requests.

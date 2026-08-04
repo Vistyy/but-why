@@ -193,27 +193,6 @@ layer(acceptanceTemplateLayer)("Task-backed Candidate Acceptance Review", (it) =
         );
       }),
   );
-  it.scoped("runs no-change validation through Acceptance only", () =>
-    Effect.gen(function* () {
-      const review = vi.fn<ReviewerAgentRuntime["review"]>(() =>
-        Effect.succeed({
-          ok: true as const,
-          report: { findings: [] },
-          attempts: 1,
-          stdout: "acceptance-only",
-        }),
-      );
-      const ready = yield* acceptanceReadyRepo({ review });
-      const result = yield* runNoChangeCandidate(ready);
-
-      expect(result).toMatchObject({ ok: true, outcome: "passed" });
-      expect(review).toHaveBeenCalledOnce();
-      if (!result.ok) return;
-      expect(yield* ready.validation.listRounds(result.validationRunId)).toEqual([
-        { producer: "acceptance", status: "passed" },
-      ]);
-    }),
-  );
   it.scoped("does not start Acceptance after a Prepare or Check Finding", () =>
     Effect.gen(function* () {
       const review = vi.fn<ReviewerAgentRuntime["review"]>(() =>
@@ -1538,28 +1517,16 @@ const runTaskBackedCandidate = (
   ready: AcceptanceReadyRepo,
   policy: AcceptanceContextCandidateValidationPolicy = passingValidationPolicy,
   captured = ready.captured,
-) => runReviewPhases(ready, policy, captured, false);
-
-const runNoChangeCandidate = (ready: AcceptanceReadyRepo, captured = ready.captured) =>
-  runReviewPhases(ready, passingValidationPolicy, captured, true);
+) => runReviewPhases(ready, policy, captured);
 
 const runReviewPhases = (
   ready: AcceptanceReadyRepo,
   policy: AcceptanceContextCandidateValidationPolicy,
   captured: Captured,
-  noChange: boolean,
 ) =>
   ready.validation.runWithPersistence((persistence) =>
     Effect.gen(function* () {
-      const policySnapshot: CandidateValidationPolicySnapshot = noChange
-        ? {
-            checks: [],
-            copyFiles: policy.copyFiles,
-            specialistReviews: [],
-            acceptanceReview: policy.acceptanceReview,
-            acceptanceContext,
-          }
-        : { ...policy, acceptanceContext };
+      const policySnapshot: CandidateValidationPolicySnapshot = { ...policy, acceptanceContext };
       const started = yield* persistence.startOrReuse({
         candidateId: captured.candidateId,
         headSha: captured.headSha,
@@ -1569,28 +1536,26 @@ const runReviewPhases = (
       });
       if (started.reused) return { ok: true as const, ...started, outcome: "passed" as const };
 
-      if (!noChange) {
-        yield* persistence.recordCheckRound({
-          validationRunId: started.validationRunId,
-          producer: "quality",
-          roundNumber: 1,
-          roundStatus: "passed",
-          phaseStatus: "passed",
-          artifactRecords: [
-            {
-              ref: `artifact:${started.validationRunId}/checks/quality/stdout.txt`,
-              validationRunId: started.validationRunId,
-              phase: "checks",
-              producer: "quality",
-              path: "stdout.txt",
-              originalBytes: 0,
-              storedBytes: 0,
-              truncated: false,
-            },
-          ],
-          now,
-        });
-      }
+      yield* persistence.recordCheckRound({
+        validationRunId: started.validationRunId,
+        producer: "quality",
+        roundNumber: 1,
+        roundStatus: "passed",
+        phaseStatus: "passed",
+        artifactRecords: [
+          {
+            ref: `artifact:${started.validationRunId}/checks/quality/stdout.txt`,
+            validationRunId: started.validationRunId,
+            phase: "checks",
+            producer: "quality",
+            path: "stdout.txt",
+            originalBytes: 0,
+            storedBytes: 0,
+            truncated: false,
+          },
+        ],
+        now,
+      });
       const sandbox: Pick<Sandbox, "exec" | "run"> = {
         exec: async () => ({ exitCode: 0, stdout: `${captured.headSha}\n`, stderr: "" }),
         run: async () => {
@@ -1654,7 +1619,7 @@ const runReviewPhases = (
           outcome: "blocked" as const,
         };
       }
-      if (noChange || policy.specialistReviews.length === 0) {
+      if (policy.specialistReviews.length === 0) {
         yield* persistence.complete({
           validationRunId: started.validationRunId,
           outcome: "passed",

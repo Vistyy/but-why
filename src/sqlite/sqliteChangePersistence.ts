@@ -14,7 +14,6 @@ import type {
   BeginChangePublicationInput,
   CancelChangeInput,
   CompleteMergedChangeInput,
-  CompleteNoChangeInput,
   ListChangesInput,
   RecordChangeCleanupInput,
   RecordPublishedPullRequestInput,
@@ -61,9 +60,6 @@ const columns = [
   "publication_expected_head_sha AS publicationExpectedHeadSha",
   "publication_pr_number AS publicationPrNumber",
   "publication_pr_url AS publicationPrUrl",
-  "no_change_candidate_id AS noChangeCandidateId",
-  "no_change_validation_run_id AS noChangeValidationRunId",
-  "(SELECT change_base_sha FROM candidates WHERE id = no_change_candidate_id) AS noChangeChangeBaseSha",
   "cleanup_state AS cleanupState",
   "cleanup_blocking_reason AS cleanupBlockingReason",
   "state",
@@ -120,10 +116,6 @@ export const openSqliteChangePersistence = (): Effect.Effect<
     completeMergedChange: (input) =>
       repository.transactionImmediate("complete merged Change", (sql) =>
         completeMergedChange(sql, input),
-      ),
-    completeNoChange: (input) =>
-      repository.transactionImmediate("complete no-change Task", (sql) =>
-        completeNoChange(sql, input),
       ),
     cancelChange: (input) =>
       repository.transactionImmediate("cancel Change", (sql) => cancelChange(sql, input)),
@@ -641,87 +633,12 @@ const completeMergedChange = (sql: SqlClient.SqlClient, input: CompleteMergedCha
         : { ok: false as const, code: "change_already_closed" as const };
     yield* sql`UPDATE changes SET state = 'closed', close_reason = 'completed', cleanup_state = 'pending', cleanup_blocking_reason = NULL, updated_at = ${input.now}, closed_at = ${input.now} WHERE id = ${input.changeId} AND state = 'open'`;
     if (change.taskId !== null)
-      yield* sql`UPDATE tasks SET state = 'done', completion_kind = 'merged_pr', updated_at = ${input.now} WHERE id = ${change.taskId}`;
+      yield* sql`UPDATE tasks SET state = 'done', updated_at = ${input.now} WHERE id = ${change.taskId}`;
     return {
       ok: true as const,
       changed: true,
       change: yield* requireChange(sql, input.changeId, "complete merged Change"),
     };
-  });
-
-const completeNoChange = (sql: SqlClient.SqlClient, input: CompleteNoChangeInput) =>
-  Effect.gen(function* () {
-    const change = yield* getById(sql, input.changeId);
-    if (change === undefined) return { ok: false as const, code: "change_not_found" as const };
-    if (change.state === changeState.closed) {
-      const completion = change.noChangeCompletion;
-      return completion?.candidateId === input.candidateId &&
-        completion.validationRunId === input.validationRunId
-        ? { ok: true as const, changed: false, change }
-        : { ok: false as const, code: "change_not_open" as const };
-    }
-    if (change.taskId !== storedPublicTaskId(input.taskId)) {
-      return { ok: false as const, code: "task_not_found" as const };
-    }
-    if (change.publication !== null) {
-      return { ok: false as const, code: "no_change_evidence_invalid" as const };
-    }
-    if (!(yield* hasValidNoChangeEvidence(sql, change, input))) {
-      return { ok: false as const, code: "no_change_evidence_invalid" as const };
-    }
-    const tasks = yield* sql<{ readonly state: string }>`
-      SELECT state FROM tasks WHERE id = ${input.taskId}
-    `;
-    const task = tasks[0];
-    if (task === undefined) return { ok: false as const, code: "task_not_found" as const };
-    if (task.state === "done") {
-      return { ok: false as const, code: "task_already_completed" as const };
-    }
-    if (!["validating", "ready"].includes(task.state)) {
-      return { ok: false as const, code: "task_state_invalid" as const };
-    }
-    yield* sql`
-      UPDATE changes
-      SET state = 'closed', close_reason = 'completed', cleanup_state = 'pending',
-        cleanup_blocking_reason = NULL, no_change_candidate_id = ${input.candidateId},
-        no_change_validation_run_id = ${input.validationRunId}, updated_at = ${input.now},
-        closed_at = ${input.now}
-      WHERE id = ${input.changeId} AND state = 'open'
-    `;
-    yield* sql`
-      UPDATE tasks SET state = 'done', completion_kind = 'no_change', updated_at = ${input.now}
-      WHERE id = ${input.taskId}
-    `;
-    const completed = yield* getById(sql, input.changeId);
-    if (completed === undefined)
-      return yield* invalidData("complete no-change Task", "Change disappeared");
-    return { ok: true as const, changed: true, change: completed };
-  });
-
-const hasValidNoChangeEvidence = (
-  sql: SqlClient.SqlClient,
-  change: ChangeRecord,
-  input: CompleteNoChangeInput,
-) =>
-  Effect.gen(function* () {
-    const candidates = yield* sql<{ readonly changeId: string }>`
-      SELECT change_id AS changeId FROM candidates WHERE id = ${input.candidateId}
-    `;
-    if (candidates[0]?.changeId !== change.id) return false;
-    const validationRuns = yield* sql<{
-      readonly candidateId: string;
-      readonly state: string;
-      readonly outcome: string | null;
-    }>`
-      SELECT candidate_id AS candidateId, state, outcome
-      FROM candidate_validation_runs WHERE id = ${input.validationRunId}
-    `;
-    const validationRun = validationRuns[0];
-    return (
-      validationRun?.candidateId === input.candidateId &&
-      validationRun.state === "complete" &&
-      validationRun.outcome === "passed"
-    );
   });
 
 const cancelChange = (sql: SqlClient.SqlClient, input: CancelChangeInput) =>
@@ -885,16 +802,6 @@ const mapRow = (row: ChangeRow | undefined, operationName: string, sql: SqlClien
                 ? null
                 : decodeSqliteChangePrepareFailure(row.prepareFailure),
             publication: decodeSqliteChangePublication(row),
-            noChangeCompletion:
-              row.noChangeCandidateId === null ||
-              row.noChangeValidationRunId === null ||
-              row.noChangeChangeBaseSha === null
-                ? null
-                : {
-                    candidateId: row.noChangeCandidateId,
-                    validationRunId: row.noChangeValidationRunId,
-                    changeBaseSha: row.noChangeChangeBaseSha,
-                  },
             cleanup: { state: row.cleanupState, blockingReason: row.cleanupBlockingReason },
             state: row.state,
             activeBlocker: activeRows[0] === undefined ? null : mapBlocker(activeRows[0]),
@@ -925,9 +832,6 @@ type ChangeRow = Omit<
   readonly prepareCommand: string | null;
   readonly prepareTimeoutSeconds: number | null;
   readonly prepareFailure: string | null;
-  readonly noChangeCandidateId: string | null;
-  readonly noChangeValidationRunId: string | null;
-  readonly noChangeChangeBaseSha: string | null;
   readonly cleanupState: ChangeCleanup["state"];
   readonly cleanupBlockingReason: string | null;
 } & SqliteChangePublicationRow;
