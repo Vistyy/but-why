@@ -69,7 +69,7 @@ export type TaskUseCases = {
   ) => Effect.Effect<RepoTaskStateTransitionResult, RepositoryStorageError>;
 };
 
-export type TaskContextDraft = { readonly path: string };
+export type TaskContextDraft = { readonly path: string; readonly content: string };
 
 export type ApplyTaskContextDraftInput = {
   readonly taskId: PublicTaskId;
@@ -77,7 +77,7 @@ export type ApplyTaskContextDraftInput = {
 };
 
 export type ApplyTaskContextDraftResult =
-  | { readonly ok: true; readonly task: TaskRecord }
+  | { readonly ok: true; readonly task: TaskRecord; readonly context: TaskContext }
   | { readonly ok: false; readonly code: "task_not_found" }
   | { readonly ok: false; readonly code: "invalid_task_state"; readonly state: TaskState }
   | { readonly ok: false; readonly error: TaskContextDraftReadError }
@@ -122,7 +122,7 @@ const createTaskContextDraft = (
       ? Effect.succeed(undefined)
       : Effect.try({
           try: () => ({
-            path: writeTaskContextDraft(context.paths.taskContextDraftsPath, taskId, taskContext),
+            ...writeTaskContextDraft(context.paths.taskContextDraftsPath, taskId, taskContext),
           }),
           catch: (cause) =>
             new RepositoryStateUnavailable({

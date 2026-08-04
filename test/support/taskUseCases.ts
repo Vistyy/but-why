@@ -46,7 +46,26 @@ export const fakeTaskUseCases = (overrides: Partial<SyncTaskUseCases> = {}): Tas
   return {
     taskPrefix: sync.taskPrefix,
     resolveTaskId: sync.resolveTaskId,
-    createTask: (...args) => Effect.succeed({ ok: true, task: sync.createTask(...args) }),
+    createTask: (...args) => {
+      const task = sync.createTask(...args);
+      return Effect.succeed({
+        ok: true as const,
+        task: {
+          ...task,
+          description: args[0].description,
+          commentCount: 0,
+          cancelReason: null,
+          prerequisites: [],
+          dependents: [],
+        },
+        context: {
+          id: task.id,
+          title: task.title,
+          description: args[0].description,
+          comments: [],
+        },
+      });
+    },
     editTaskDependencies: (...args) => Effect.succeed(sync.editTaskDependencies(...args)),
     listTasks: (...args) => Effect.succeed(sync.listTasks(...args)),
     listActionableTasks: (...args) => Effect.succeed(sync.listActionableTasks(...args)),

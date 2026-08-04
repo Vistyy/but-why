@@ -29,13 +29,14 @@ export const writeTaskContextDraft = (
   draftsPath: string,
   taskId: PublicTaskId,
   context: TaskContext,
-): string => {
+): { readonly path: string; readonly content: string } => {
   mkdirSync(draftsPath, { recursive: true });
 
   const path = taskContextDraftPath(draftsPath, taskId);
-  writeFileSync(path, `# ${context.title}\n\n${context.description}`, "utf8");
+  const content = `# ${context.title}\n\n${context.description}`;
+  writeFileSync(path, content, "utf8");
 
-  return path;
+  return { path, content };
 };
 
 export const readTaskContextDraft = (

@@ -65,15 +65,16 @@ Before designing or revising a Task Verification Contract, read [Task verificati
    Use CLI help for the exact syntax before each command.
    Create Tasks in the authorized recording order and set each complete dependency set.
    Use a Task Context draft and apply operation for an existing unstarted Task.
-7. Verify each mutation through Task Show, Task Context, and the applicable dependency inspection.
-   Verify every recorded Task remains unapproved and has no Change.
+7. Treat each successful mutation result as authoritative for its returned committed fields.
+   Run Task Show, Task Context, or dependency inspection only when required recording state is omitted from that result.
+   Verify every recorded Task remains unapproved and has no Change through the returned state or the applicable inspection command.
 
 This section is complete when every authorized Task and Task Dependency is recorded, unapproved, and unlinked to a Change.
 
 ## Approve a Task
 
 When the Operator explicitly requests Task Approval, inspect the selected recorded Task and run `by task approve <task-id>`.
-Verify the resulting Task state with `by task show <task-id>`.
+Treat the returned Task state as authoritative, and run `by task show <task-id>` only when required approval or Change-link state is omitted.
 Do not start a Change or hand off work as part of Task Approval.
 
 This section is complete when the selected Task is approved and no Change has started from this action.

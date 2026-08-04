@@ -11,7 +11,12 @@ import {
 import { parseCliTaskIdValue } from "../../../cliTaskId.js";
 import type { DependencyValidationCode } from "../../../task/task.js";
 import type { PublicTaskId } from "../../../task/taskId.js";
-import { resolveTaskId, withTasks, type TaskCommandEnvironment } from "../taskCliSupport.js";
+import {
+  resolveTaskId,
+  taskMutationView,
+  withTasks,
+  type TaskCommandEnvironment,
+} from "../taskCliSupport.js";
 
 export type TaskCreateCommand = {
   readonly title: string;
@@ -61,13 +66,8 @@ export const runCreateCommand = (
         if (!result.ok) return dependencyError(result);
         const task = result.task;
         return success({
-          task: {
-            id: task.id,
-            title: task.title,
-            state: task.state,
-            createdAt: task.createdAt,
-            updatedAt: task.updatedAt,
-          },
+          task: taskMutationView(task),
+          context: result.context,
           help: ["Run `by task list` to see open tasks."],
         });
       },
