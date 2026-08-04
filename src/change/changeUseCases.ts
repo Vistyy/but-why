@@ -27,7 +27,7 @@ import {
 import type { ChangeReconciliation, ChangeReconciliationResult } from "./reconcileChange.js";
 import type {
   ChangeStartGitOperations,
-  ProvisionChangeWorktreeResult,
+  ProvisionChangeWorktreeFailure,
   ResolveChangeStartGitResult,
 } from "./changeStartGitOperations.js";
 import type { ChangeStartPersistence } from "./changeStartPersistence.js";
@@ -57,11 +57,7 @@ export type ChangeStartResult =
   | { readonly ok: true; readonly change: ChangeStartRecord }
   | ChangeStartEligibilityError
   | Exclude<ResolveChangeStartGitResult, { readonly ok: true }>
-  | {
-      readonly ok: false;
-      readonly code: Exclude<ProvisionChangeWorktreeResult, { readonly ok: true }>["code"];
-      readonly change: ChangeStartRecord;
-    };
+  | (ProvisionChangeWorktreeFailure & { readonly change: ChangeStartRecord });
 
 export type ChangeImplementResult =
   | {
@@ -90,11 +86,7 @@ export type ChangePrepareResult =
   | { readonly ok: true; readonly change: ChangeStartRecord }
   | { readonly ok: false; readonly code: "change_not_found" }
   | { readonly ok: false; readonly code: "change_not_open" }
-  | {
-      readonly ok: false;
-      readonly code: Exclude<ProvisionChangeWorktreeResult, { readonly ok: true }>["code"];
-      readonly change: ChangeStartRecord;
-    };
+  | (ProvisionChangeWorktreeFailure & { readonly change: ChangeStartRecord });
 
 export const openChangeUseCases = (
   context: RepoLocalContext,

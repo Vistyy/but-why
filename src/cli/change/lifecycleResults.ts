@@ -56,7 +56,7 @@ export const startResult = (result: ChangeStartResult): CliResult => {
   ) {
     return remoteChangeBaseError(result, "Start");
   }
-  return operationalError(result.code, "change" in result ? result.change : undefined);
+  return operationalError(result);
 };
 
 export const prepareResult = (result: ChangePrepareResult): CliResult => {
@@ -68,7 +68,7 @@ export const prepareResult = (result: ChangePrepareResult): CliResult => {
       help: ["Use an open Change ID returned by `by change start --json`."],
     });
   }
-  return operationalError(result.code, result.change);
+  return operationalError(result);
 };
 
 export const changeView = (change: ChangeRecord) => ({
@@ -82,20 +82,70 @@ export const changeView = (change: ChangeRecord) => ({
     : { prepareFailure: prepareFailureView(change.prepareFailure) }),
 });
 
-export const operationalError = (code: string, change?: ChangeRecord): CliResult =>
-  runtimeError({
-    code,
-    message: "Change Start could not create or recover the Managed Worktree.",
-    ...(change === undefined
+type OperationalErrorInput = {
+  readonly code: string;
+  readonly change?: ChangeRecord;
+  readonly attachedPath?: string;
+};
+
+const cancelChangeHelp = (change: ChangeRecord | undefined): string =>
+  change === undefined
+    ? "Or cancel the work with the applicable cancellation command."
+    : change.taskId === null
+      ? `Or cancel the Change with \`by change cancel ${change.id}\`.`
+      : `Or cancel the Task with \`by task cancel ${change.taskId} --reason "<reason>"\`.`;
+
+export const operationalError = (result: OperationalErrorInput): CliResult => {
+  const { code, change } = result;
+  const identityDetails =
+    change === undefined
       ? {}
       : {
-          details: {
-            changeId: change.id,
-            branch: change.branchRef,
-            startingCommit: change.startingCommit,
-            worktreePath: change.worktreePath,
-          },
-        }),
+          changeId: change.id,
+          branch: change.branchRef,
+          startingCommit: change.startingCommit,
+          worktreePath: change.worktreePath,
+        };
+  if (code === "managed_branch_missing") {
+    return runtimeError({
+      code,
+      message: "The recorded Repository Branch is missing.",
+      details: identityDetails,
+      help: [
+        `Recover the branch externally, then run \`by change prepare ${change?.id ?? "<change-id>"}\`.`,
+        cancelChangeHelp(change),
+      ],
+    });
+  }
+  if (code === "managed_branch_attached") {
+    return runtimeError({
+      code,
+      message: "The recorded Repository Branch is attached to another worktree.",
+      details: {
+        ...identityDetails,
+        ...(result.attachedPath === undefined ? {} : { attachedPath: result.attachedPath }),
+      },
+      help: [
+        `Remove or relocate the worktree that holds the branch, then run \`by change prepare ${change?.id ?? "<change-id>"}\`.`,
+        cancelChangeHelp(change),
+      ],
+    });
+  }
+  if (code === "managed_worktree_path_conflict") {
+    return runtimeError({
+      code,
+      message: "The recorded Managed Worktree path contains conflicting files.",
+      details: identityDetails,
+      help: [
+        `Move the conflicting files aside or remove them, then run \`by change prepare ${change?.id ?? "<change-id>"}\`.`,
+        cancelChangeHelp(change),
+      ],
+    });
+  }
+  return runtimeError({
+    code,
+    message: "Change Start could not create or recover the Managed Worktree.",
+    ...(change === undefined ? {} : { details: identityDetails }),
     help:
       code === "managed_worktree_path_unavailable"
         ? [
@@ -107,3 +157,4 @@ export const operationalError = (code: string, change?: ChangeRecord): CliResult
             "Inspect the default branch, committed Repo Config, branch, and worktree path, then retry.",
           ],
   });
+};

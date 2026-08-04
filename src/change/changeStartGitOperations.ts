@@ -32,7 +32,32 @@ export type ProvisionChangeWorktreeResult =
       readonly ok: false;
       readonly code: "managed_worktree_path_unavailable";
       readonly path: string;
+    }
+  | {
+      readonly ok: false;
+      readonly code: "managed_worktree_path_conflict";
+      readonly branch: string;
+      readonly path: string;
+    }
+  | {
+      readonly ok: false;
+      readonly code: "managed_branch_missing";
+      readonly branch: string;
+      readonly path: string;
+      readonly startingCommit: string;
+    }
+  | {
+      readonly ok: false;
+      readonly code: "managed_branch_attached";
+      readonly branch: string;
+      readonly path: string;
+      readonly attachedPath: string;
     };
+
+export type ProvisionChangeWorktreeFailure = Exclude<
+  ProvisionChangeWorktreeResult,
+  { readonly ok: true }
+>;
 
 export type ChangeStartGitOperations = {
   readonly resolveIntent: (
