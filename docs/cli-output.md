@@ -73,6 +73,26 @@ Concrete repository safety constraints still apply.
 `change_blocked` reports the existing Implementation Blocker command and does not contain `error.recovery`.
 Uncertain and operator-owned Submit failures retain ordinary help and do not authorize Implementer recovery.
 
+## Managed Worktree recovery
+
+A resumed Task Change Start or `by change prepare <change-id>` recovers a missing or stale Managed Worktree for an open Change.
+Recovery reattaches the exact recorded Repository Branch at its current commit when the branch exists and is not attached elsewhere.
+It never resets, rebases, replaces, or guesses a commit, and it never overwrites or removes conflicting files.
+
+The result of a successful recovery is the normal Change result with the recorded branch, starting commit, and worktree path.
+A recovery that must stop returns a nonzero result with the Change identity and actionable facts under `error`.
+
+- `managed_branch_missing` reports that the recorded Repository Branch does not exist, with the recorded branch, starting commit, and worktree path.
+  The operator may recover the branch externally or cancel the Change or its linked Task.
+- `managed_branch_attached` reports that the recorded Repository Branch is attached to another worktree, including the `attachedPath`.
+  The operator may remove or relocate that worktree or cancel the Change or its linked Task.
+- `managed_worktree_path_conflict` reports that the recorded Managed Worktree path contains conflicting files, with the worktree path.
+  The operator may move the conflicting files aside or cancel the Change or its linked Task.
+- `managed_worktree_path_unavailable` reports that the recorded Managed Worktree path cannot be created because its parent containers are unavailable or unwritable.
+- `change_start_conflict` reports that the recorded path or branch is already owned by another worktree or Change.
+
+Each stopped recovery preserves the conflicting files, the recorded branch, and any worktree registration it did not create.
+
 ## Collections
 
 A collection result reports the returned count.

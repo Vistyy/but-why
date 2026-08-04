@@ -97,16 +97,37 @@ const inspectRecordedWorktree = (
   const listedForBranch = worktrees.find((entry) => entry.branchRef === start.branchRef);
   if (!pathEntryExists(start.worktreePath)) {
     if (listedAtPath === undefined && listedForBranch === undefined) return "missing";
-    return listedAtPath?.branchRef === start.branchRef &&
+    if (
+      listedAtPath !== undefined &&
+      listedAtPath.branchRef === start.branchRef &&
       listedAtPath.prunable &&
       listedForBranch === listedAtPath
-      ? "stale"
-      : { ok: false, code: "change_start_conflict" };
+    ) {
+      return "stale";
+    }
+    if (listedForBranch !== undefined) {
+      return {
+        ok: false,
+        code: "managed_branch_attached",
+        branch: start.branchRef,
+        path: start.worktreePath,
+        attachedPath: listedForBranch.path,
+      };
+    }
+    return { ok: false, code: "change_start_conflict" };
   }
-  if (lstatSync(start.worktreePath).isSymbolicLink() || listedAtPath === undefined) {
+  if (lstatSync(start.worktreePath).isSymbolicLink()) {
     return {
       ok: false,
       code: "managed_worktree_path_unavailable",
+      path: start.worktreePath,
+    };
+  }
+  if (listedAtPath === undefined || listedAtPath.prunable) {
+    return {
+      ok: false,
+      code: "managed_worktree_path_conflict",
+      branch: start.branchRef,
       path: start.worktreePath,
     };
   }
@@ -123,6 +144,15 @@ const ensureRecordedBranch = (
   const branchCommit = resolveLocalBranch(cwd, start.branchRef);
   if (branchCommit !== undefined) {
     return recovering ? { ok: true } : { ok: false, code: "change_start_conflict" };
+  }
+  if (recovering) {
+    return {
+      ok: false,
+      code: "managed_branch_missing",
+      branch: start.branchRef,
+      path: start.worktreePath,
+      startingCommit: start.startingCommit,
+    };
   }
   const branchName = start.branchRef.slice("refs/heads/".length);
   const create = git(cwd, "branch", branchName, start.startingCommit);

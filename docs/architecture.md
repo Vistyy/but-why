@@ -47,6 +47,11 @@ A failed preparation attempt preserves the open Change and is recorded as the cu
 A Task-backed Change captures immutable Acceptance Context.
 A taskless Change has no Acceptance Context.
 
+When the Managed Worktree is missing or has a stale registration, a resumed Task Change Start or `by change prepare <change-id>` recovers the exact recorded Repository Branch at its current commit when the branch exists and is not attached elsewhere.
+Recovery preserves every commit on the recorded branch and never resets, rebases, replaces, or guesses a commit.
+A branch attached elsewhere, a missing recorded branch, or a managed path containing conflicting files stops with actionable identity and location facts, and conflicting files are never overwritten or removed.
+The operator may recover the branch externally or cancel the Change or its linked Task.
+
 `by change submit <change-id>` reconciles an existing owned pull request before starting a new Submission.
 A new Submission selects the Change from Shared Repository State, reads the Repo Config from the exact fetched Change Base as the non-review policy baseline, and captures a Candidate.
 The caller checkout supplies only Local Repository identity, Shared Repository State, and Change selection.
