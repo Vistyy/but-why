@@ -223,7 +223,7 @@ export const openChangeSubmit = (dependencies: {
   },
 });
 
-type ReadyChange = ChangeRecord & { readonly worktreePath: string };
+type OpenChangeWithWorktree = ChangeRecord & { readonly worktreePath: string };
 type ReconciliationDecision =
   | { readonly proceed: true; readonly reconciled: ReconciledChange }
   | { readonly proceed: false; readonly result: ChangeSubmitResult };
@@ -382,7 +382,7 @@ const formatValidationPolicyFailure = (
 
 const reconcileBeforeSubmission = (
   dependencies: Parameters<typeof openChangeSubmit>[0],
-  change: ReadyChange,
+  change: OpenChangeWithWorktree,
   now: string,
 ): Effect.Effect<ReconciliationDecision, RepositoryStorageError> =>
   Effect.gen(function* () {
@@ -419,7 +419,7 @@ const reconcileBeforeSubmission = (
 
 const validateAndPublish = (
   dependencies: Parameters<typeof openChangeSubmit>[0],
-  change: ReadyChange,
+  change: OpenChangeWithWorktree,
   candidate: CapturedCandidate,
   policy: ResolvedCandidateValidationPolicy,
   target: ChangePublicationTarget,
@@ -537,7 +537,7 @@ const validateAndPublish = (
 const blockedValidationResult = (
   candidateValidation: CandidateValidationService,
   dependencies: Parameters<typeof openChangeSubmit>[0],
-  change: ReadyChange,
+  change: OpenChangeWithWorktree,
   candidate: CapturedCandidate,
   validation: {
     readonly outcome: "blocked" | "tooling_failed";
