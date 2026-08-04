@@ -3,7 +3,6 @@ import { dirname, join } from "node:path";
 import { Effect } from "effect";
 
 import { repoAgentEnvironment } from "../agent/agentEnvironment.js";
-import { resolveImplementationAdvisor } from "./implementationAdvisorConfig.js";
 import { resolveInteractiveSessionAgentProfile } from "../agent/agentProfiles.js";
 import { validatePiAgentProfileResources } from "../agent/piRuntime.js";
 import type { RepoLocalContext } from "../init/repoContext.js";
@@ -20,7 +19,6 @@ import { changeReadiness, changeState, type ChangePrepareFailure } from "./chang
 import type {
   InteractiveSessionHost,
   InteractiveSessionLaunchEvidence,
-  InteractiveSessionLaunchWarning,
 } from "./interactiveSessionHost.js";
 import {
   buildImplementerInitialPrompt,
@@ -72,7 +70,6 @@ export type ChangeImplementResult =
       readonly change: ChangeStartRecord;
       readonly host: "herdr";
       readonly status: "started" | "already_active";
-      readonly warning?: InteractiveSessionLaunchWarning;
       readonly agentProfile?: string;
       readonly profileScope?: "repo" | "global";
     }
@@ -295,22 +292,6 @@ const implementChange = (
             agentProfile: resolvedAgentProfile,
             globalConfigDirectory: dirname(globalConfigPath),
             ...(agentEnvironment === undefined ? {} : { agentEnvironment }),
-            ...(() => {
-              const advisor = resolveImplementationAdvisor({
-                repoConfig: managedRepoConfig.config,
-                globalConfig: globalConfig.config,
-              });
-              return advisor !== undefined && advisor !== false
-                ? {
-                    implementationAdvisor: advisor,
-                    implementationAdvisorContext: {
-                      changeId: change.id,
-                      acceptanceContext: change.acceptanceContext,
-                      implementationDecisions: change.implementationDecisions ?? [],
-                    },
-                  }
-                : {};
-            })(),
           },
           signal,
         ),
