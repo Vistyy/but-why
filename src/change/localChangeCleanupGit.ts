@@ -1,46 +1,11 @@
 import { spawnSync } from "node:child_process";
-import { existsSync, lstatSync, mkdtempSync, rmdirSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { basename, dirname, join } from "node:path";
+import { existsSync, lstatSync, rmdirSync, rmSync } from "node:fs";
+import { basename, dirname } from "node:path";
 
 import type { RemoteChangeBranch } from "./change.js";
-
-type RemoteUrlRewrite = {
-  readonly base: string;
-  readonly pattern: string;
-  readonly kind: "insteadOf" | "pushInsteadOf";
-};
-
-export type RemoteBranchHeadResult =
-  | { readonly state: "missing" }
-  | {
-      readonly state: "present";
-      readonly headSha: string;
-      readonly remoteUrl: string;
-    }
-  | { readonly state: "unavailable" }
-  | { readonly state: "mismatch" };
-
-export type ChangeCleanupRemote = {
-  readonly readRemoteBranchHead: (input: {
-    readonly repositoryCommonDirectory: string;
-    readonly owner: string;
-    readonly repo: string;
-    readonly remoteName: string;
-    readonly remoteUrl: string;
-    readonly branchName: string;
-  }) => RemoteBranchHeadResult;
-  readonly deleteRemoteBranch: (input: {
-    readonly repositoryCommonDirectory: string;
-    readonly owner: string;
-    readonly repo: string;
-    readonly remoteName: string;
-    readonly remoteUrl: string;
-    readonly branchName: string;
-    readonly expectedHeadSha: string;
-    readonly resolvedRemoteUrl: string;
-  }) => boolean;
-};
+import { changeBranchNameForRef, branchNameForRef } from "./changeBranch.js";
+import type { ChangeCleanupRemote } from "./changeCleanupRemote.js";
+export type { ChangeCleanupRemote } from "./changeCleanupRemote.js";
 
 export type ChangeCleanupResult =
   | { readonly state: "complete" }
@@ -58,10 +23,18 @@ export type ChangeCleanupResult =
         | "branch_deletion_failed"
         | "remote_branch_unavailable"
         | "remote_branch_repository_mismatch"
+        | "remote_branch_ownership_mismatch"
+        | "remote_branch_exclusion_unavailable"
+        | "remote_branch_excluded"
         | "remote_branch_head_mismatch"
         | "remote_branch_deletion_failed"
         | "reviewer_session_removal_failed";
     };
+
+export const cleanupChangeResourcesWithRemote =
+  (remote: ChangeCleanupRemote) =>
+  (input: Parameters<typeof cleanupChangeResources>[0]): ChangeCleanupResult =>
+    cleanupChangeResources(input, remote);
 
 export const cleanupChangeResources = (
   input: {
@@ -170,6 +143,16 @@ const cleanupRemoteChangeBranch = (
 ): ChangeCleanupResult => {
   const branch = input.remoteChangeBranch;
   if (branch === undefined) return { state: "complete" };
+  const canonicalBranchName = changeBranchNameForRef(input.branchRef);
+  if (canonicalBranchName === undefined || canonicalBranchName !== branch.branchName) {
+    return { state: "pending", blockingReason: "remote_branch_ownership_mismatch" };
+  }
+  if (branch.targetBranch.trim().length === 0) {
+    return { state: "pending", blockingReason: "remote_branch_exclusion_unavailable" };
+  }
+  if (canonicalBranchName === branch.targetBranch) {
+    return { state: "pending", blockingReason: "remote_branch_excluded" };
+  }
   const observed = remote.readRemoteBranchHead({
     repositoryCommonDirectory: input.repositoryCommonDirectory,
     owner: branch.owner,
@@ -177,6 +160,8 @@ const cleanupRemoteChangeBranch = (
     remoteName: branch.remoteName,
     remoteUrl: branch.remoteUrl,
     branchName: branch.branchName,
+    canonicalBranchRef: input.branchRef,
+    targetBranch: branch.targetBranch,
   });
   if (observed.state === "missing") return { state: "complete" };
   if (observed.state === "unavailable") {
@@ -184,6 +169,9 @@ const cleanupRemoteChangeBranch = (
   }
   if (observed.state === "mismatch") {
     return { state: "pending", blockingReason: "remote_branch_repository_mismatch" };
+  }
+  if (observed.state === "excluded") {
+    return { state: "pending", blockingReason: "remote_branch_excluded" };
   }
   if (observed.headSha !== branch.expectedHeadSha) {
     return { state: "pending", blockingReason: "remote_branch_head_mismatch" };
@@ -198,205 +186,18 @@ const cleanupRemoteChangeBranch = (
       branchName: branch.branchName,
       expectedHeadSha: branch.expectedHeadSha,
       resolvedRemoteUrl: observed.remoteUrl,
+      ...(observed.repositoryId === undefined ? {} : { repositoryId: observed.repositoryId }),
+      ...(observed.refId === undefined ? {} : { refId: observed.refId }),
     })
   ) {
     return { state: "complete" };
   }
-  const afterFailure = remote.readRemoteBranchHead({
-    repositoryCommonDirectory: input.repositoryCommonDirectory,
-    owner: branch.owner,
-    repo: branch.repo,
-    remoteName: branch.remoteName,
-    remoteUrl: branch.remoteUrl,
-    branchName: branch.branchName,
-  });
-  if (afterFailure.state === "missing") return { state: "complete" };
-  if (afterFailure.state === "mismatch") {
-    return { state: "pending", blockingReason: "remote_branch_repository_mismatch" };
-  }
-  if (afterFailure.state === "unavailable") {
-    return { state: "pending", blockingReason: "remote_branch_unavailable" };
-  }
-  return afterFailure.headSha === branch.expectedHeadSha
-    ? { state: "pending", blockingReason: "remote_branch_deletion_failed" }
-    : { state: "pending", blockingReason: "remote_branch_head_mismatch" };
+  return { state: "pending", blockingReason: "remote_branch_deletion_failed" };
 };
 
 const localChangeCleanupRemote: ChangeCleanupRemote = {
-  readRemoteBranchHead: (input) => {
-    const repository = resolveRemoteRepository(input);
-    if (repository.state !== "matches") return { state: repository.state };
-    const result = gitAtResolvedRemote(input.repositoryCommonDirectory, [
-      "ls-remote",
-      "--heads",
-      repository.fetchUrl,
-      `refs/heads/${input.branchName}`,
-    ]);
-    if (!result.ok) return { state: "unavailable" };
-    const output = result.stdout.trim();
-    if (output.length === 0) return { state: "missing" };
-    const headSha = output.split(/\s+/, 1)[0];
-    return headSha === undefined || headSha.length === 0
-      ? { state: "unavailable" }
-      : {
-          state: "present",
-          headSha,
-          remoteUrl: repository.pushUrl,
-        };
-  },
-  deleteRemoteBranch: (input) =>
-    gitAtResolvedRemote(input.repositoryCommonDirectory, [
-      "push",
-      `--force-with-lease=refs/heads/${input.branchName}:${input.expectedHeadSha}`,
-      input.resolvedRemoteUrl,
-      `:refs/heads/${input.branchName}`,
-    ]).ok,
-};
-
-type RemoteRepositoryInput = Parameters<ChangeCleanupRemote["readRemoteBranchHead"]>[0];
-type RemoteRepositoryResolution =
-  | {
-      readonly state: "matches";
-      readonly fetchUrl: string;
-      readonly pushUrl: string;
-    }
-  | { readonly state: "mismatch" | "unavailable" };
-
-const resolveRemoteRepository = (input: RemoteRepositoryInput): RemoteRepositoryResolution => {
-  const rewrites = readRemoteUrlRewrites(input.repositoryCommonDirectory);
-  if (rewrites === undefined) return { state: "unavailable" };
-  const configured = readRemoteUrls(input.repositoryCommonDirectory, input.remoteName, "url");
-  if (configured === undefined || configured.length !== 1) return { state: "mismatch" };
-  if (!configured.every((url) => sameRemoteRepository(url, input))) {
-    return { state: "mismatch" };
-  }
-  const fetchUrl = rewriteRemoteUrl(configured[0] as string, rewrites, "fetch");
-  if (
-    fetchUrl === undefined ||
-    !transportRepositoryMatches(fetchUrl, configured[0] as string, input)
-  ) {
-    return { state: "mismatch" };
-  }
-  const configuredPushUrls = readRemoteUrls(
-    input.repositoryCommonDirectory,
-    input.remoteName,
-    "pushurl",
-  );
-  if (configuredPushUrls === undefined) return { state: "unavailable" };
-  const pushUrl =
-    configuredPushUrls.length > 0
-      ? (configuredPushUrls[0] as string)
-      : rewriteRemoteUrl(configured[0] as string, rewrites, "push");
-  return configuredPushUrls.length > 1 ||
-    pushUrl === undefined ||
-    !transportRepositoryMatches(pushUrl, (configuredPushUrls[0] ?? configured[0]) as string, input)
-    ? { state: "mismatch" }
-    : { state: "matches", fetchUrl, pushUrl };
-};
-
-const readRemoteUrlRewrites = (
-  repositoryCommonDirectory: string,
-): readonly RemoteUrlRewrite[] | undefined => {
-  const result = git(repositoryCommonDirectory, [
-    "config",
-    "--get-regexp",
-    "^url\\..*\\.(insteadof|pushinsteadof)$",
-  ]);
-  if (!result.ok || result.stdout.trim().length === 0) return [];
-  const rewrites = result.stdout
-    .trim()
-    .split("\n")
-    .map((line) => {
-      const match = /^url\.(.+)\.(insteadof|pushinsteadof)\s+(.+)$/u.exec(line);
-      return match === null
-        ? undefined
-        : {
-            base: match[1] ?? "",
-            kind: match[2] === "insteadof" ? ("insteadOf" as const) : ("pushInsteadOf" as const),
-            pattern: match[3] ?? "",
-          };
-    });
-  return rewrites.every((rewrite): rewrite is RemoteUrlRewrite => rewrite !== undefined)
-    ? rewrites
-    : undefined;
-};
-
-const readRemoteUrls = (
-  repositoryCommonDirectory: string,
-  remoteName: string,
-  kind: "url" | "pushurl",
-): readonly string[] | undefined => {
-  const result = git(repositoryCommonDirectory, [
-    "config",
-    "--get-all",
-    `remote.${remoteName}.${kind}`,
-  ]);
-  if (!result.ok) return kind === "pushurl" ? [] : undefined;
-  return result.stdout
-    .split("\n")
-    .map((url) => url.trim())
-    .filter((url) => url.length > 0);
-};
-
-const rewriteRemoteUrl = (
-  url: string,
-  rewrites: readonly RemoteUrlRewrite[],
-  direction: "fetch" | "push",
-): string => {
-  const pushRewrite =
-    direction === "push" ? longestRewrite(url, rewrites, "pushInsteadOf") : undefined;
-  const rewrite = pushRewrite ?? longestRewrite(url, rewrites, "insteadOf");
-  return rewrite === undefined ? url : rewrite.base + url.slice(rewrite.pattern.length);
-};
-
-const longestRewrite = (
-  url: string,
-  rewrites: readonly RemoteUrlRewrite[],
-  kind: RemoteUrlRewrite["kind"],
-): RemoteUrlRewrite | undefined =>
-  rewrites
-    .filter((rewrite) => rewrite.kind === kind && url.startsWith(rewrite.pattern))
-    .sort((left, right) => right.pattern.length - left.pattern.length)[0];
-
-const sameRemoteRepository = (configuredUrl: string, input: RemoteRepositoryInput): boolean => {
-  const configured = githubRepository(configuredUrl);
-  const expected = githubRepository(input.remoteUrl);
-  if (configured !== undefined && expected !== undefined) {
-    return (
-      configured.owner === input.owner &&
-      configured.repo === input.repo &&
-      expected.owner === input.owner &&
-      expected.repo === input.repo
-    );
-  }
-  return normalizeRemoteUrl(configuredUrl) === normalizeRemoteUrl(input.remoteUrl);
-};
-
-const transportRepositoryMatches = (
-  url: string,
-  configuredUrl: string,
-  input: RemoteRepositoryInput,
-): boolean => {
-  const repository = githubRepository(url);
-  return repository === undefined
-    ? normalizeRemoteUrl(url) === normalizeRemoteUrl(configuredUrl)
-    : repository.owner === input.owner && repository.repo === input.repo;
-};
-
-const githubRepository = (
-  url: string,
-): { readonly owner: string; readonly repo: string } | undefined => {
-  const normalized = normalizeRemoteUrl(url);
-  const match =
-    /^https:\/\/github\.com\/([^/]+)\/([^/]+)$/.exec(normalized) ??
-    /^git@github\.com:([^/]+)\/([^/]+)$/.exec(normalized) ??
-    /^ssh:\/\/git@github\.com\/([^/]+)\/([^/]+)$/.exec(normalized);
-  return match === null ? undefined : { owner: match[1] ?? "", repo: match[2] ?? "" };
-};
-
-const normalizeRemoteUrl = (url: string): string => {
-  const trimmed = url.trim().replace(/\/$/u, "");
-  return trimmed.endsWith(".git") ? trimmed.slice(0, -4) : trimmed;
+  readRemoteBranchHead: () => ({ state: "unavailable" }),
+  deleteRemoteBranch: () => false,
 };
 
 const isWorktreePathSafe = (worktreePath: string): boolean => {
@@ -455,48 +256,6 @@ const git = (commonDirectory: string, args: readonly string[]): GitResult =>
 const gitAtWorktree = (worktreePath: string, args: readonly string[]): GitResult =>
   runGit(["-C", worktreePath, ...args], worktreePath);
 
-const gitAtResolvedRemote = (commonDirectory: string, args: readonly string[]): GitResult => {
-  const temporaryGitDirectory = mkdtempSync(join(tmpdir(), "but-why-remote-cleanup-"));
-  try {
-    const initialized = runGitCommand(
-      ["init", "--bare", "-q", temporaryGitDirectory],
-      commonDirectory,
-    );
-    if (!initialized.ok) return initialized;
-    const configured = runGitCommand(
-      [`--git-dir=${commonDirectory}`, "config", "--null", "--list"],
-      commonDirectory,
-    );
-    if (!configured.ok) return configured;
-    const copied = copyGitConfiguration(
-      configured.stdout,
-      join(temporaryGitDirectory, "config"),
-      commonDirectory,
-    );
-    return copied
-      ? runGitWithoutUrlRewrites([`--git-dir=${temporaryGitDirectory}`, ...args], commonDirectory)
-      : { ok: false, status: null };
-  } finally {
-    rmSync(temporaryGitDirectory, { recursive: true, force: true });
-  }
-};
-
-const copyGitConfiguration = (value: string, destination: string, cwd: string): boolean => {
-  for (const entry of value.split("\0").filter((item) => item.length > 0)) {
-    const separator = entry.indexOf("\n");
-    if (separator < 0) return false;
-    const key = entry.slice(0, separator);
-    const setting = entry.slice(separator + 1);
-    if (key.startsWith("include") || /^url\..*\.(insteadof|pushinsteadof)$/u.test(key)) {
-      continue;
-    }
-    if (!runGitCommand(["config", "--file", destination, "--add", key, setting], cwd).ok) {
-      return false;
-    }
-  }
-  return true;
-};
-
 const runGit = (args: readonly string[], cwd: string): GitResult => runGitCommand(args, cwd);
 
 const runGitCommand = (args: readonly string[], cwd: string): GitResult => {
@@ -508,25 +267,4 @@ const runGitCommand = (args: readonly string[], cwd: string): GitResult => {
   return result.status === 0
     ? { ok: true, stdout: result.stdout }
     : { ok: false, status: result.status };
-};
-
-const runGitWithoutUrlRewrites = (args: readonly string[], cwd: string): GitResult => {
-  const result = spawnSync(
-    "env",
-    ["GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_NOSYSTEM=1", "git", ...args],
-    {
-      cwd,
-      encoding: "utf8",
-      stdio: ["ignore", "pipe", "ignore"],
-    },
-  );
-  return result.status === 0
-    ? { ok: true, stdout: result.stdout }
-    : { ok: false, status: result.status };
-};
-
-const branchNameForRef = (branchRef: string): string | undefined => {
-  const prefix = "refs/heads/";
-  const branchName = branchRef.startsWith(prefix) ? branchRef.slice(prefix.length) : "";
-  return branchName.length > 0 ? branchName : undefined;
 };

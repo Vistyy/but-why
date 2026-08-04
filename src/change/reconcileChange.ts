@@ -232,6 +232,7 @@ const remoteChangeBranchFor = (change: ChangeRecord) => {
         remoteName: publication.target.remoteName,
         remoteUrl: change.baseRemoteUrl ?? "",
         branchName: publication.headBranch,
+        targetBranch: publication.target.baseBranch,
         expectedHeadSha: publication.expectedHeadSha,
       }
     : undefined;

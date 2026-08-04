@@ -12,7 +12,7 @@ import {
   localCandidateCaptureGit,
   readRepositoryBranchHead,
 } from "./candidateCapture/localGitCandidate.js";
-import { cleanupChangeResources } from "./localChangeCleanupGit.js";
+import { cleanupChangeResourcesWithRemote } from "./localChangeCleanupGit.js";
 import { openChangeReconciliation } from "./reconcileChange.js";
 import {
   openChangeSubmit,
@@ -36,7 +36,10 @@ import { openSqliteTaskPersistence } from "../sqlite/sqliteTaskPersistence.js";
 import { openCandidatePublication } from "./publication/candidatePublication.js";
 import { detectGitHubPrTarget } from "../submissionEnvironment/githubTarget.js";
 import { refreshRemoteChangeBase } from "../submissionEnvironment/remoteChangeBase.js";
-import { localGitHubPullRequestGateway } from "../submissionEnvironment/localGitHubPullRequestGateway.js";
+import {
+  githubChangeCleanupRemote,
+  localGitHubPullRequestGateway,
+} from "../submissionEnvironment/localGitHubPullRequestGateway.js";
 import { openSqliteExecutionLock } from "../sqlite/sqliteExecutionLock.js";
 import { readRepositoryFileAtCommit } from "../submissionEnvironment/repositoryFile.js";
 
@@ -68,10 +71,11 @@ export const loadChangeSubmit = (input: {
     changePersistence: import("./changePersistence.js").ChangePersistence,
     taskPersistence: import("../task/taskPersistence.js").TaskPersistence,
   ) => {
+    const github = localGitHubPullRequestGateway({ cwd: context.root });
     const reconciliation = openChangeReconciliation({
       persistence: changePersistence,
-      github: localGitHubPullRequestGateway({ cwd: context.root }),
-      cleanup: cleanupChangeResources,
+      github,
+      cleanup: cleanupChangeResourcesWithRemote(githubChangeCleanupRemote(github)),
       reviewerSessionPathFor: (changeId) => join(context.paths.operationalDir, changeId),
     });
     return openChangeSubmit({

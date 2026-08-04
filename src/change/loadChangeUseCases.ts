@@ -4,7 +4,7 @@ import { Effect } from "effect";
 
 import { openHerdrInteractiveSessionHost } from "./herdrInteractiveSessionHost.js";
 import type { InteractiveSessionHost } from "./interactiveSessionHost.js";
-import { cleanupChangeResources } from "./localChangeCleanupGit.js";
+import { cleanupChangeResourcesWithRemote } from "./localChangeCleanupGit.js";
 import { openChangeReconciliation } from "./reconcileChange.js";
 import { openChangeUseCases, type ChangeUseCases } from "./changeUseCases.js";
 import { provisionChangeWorktree, resolveChangeStartGitIntent } from "./changeStartGit.js";
@@ -14,7 +14,10 @@ import type { RepositoryStorageError } from "../contracts/repositoryStorageError
 import { repositorySqlLayer } from "../sqlite/repositorySql.js";
 import { openSqliteChangePersistence } from "../sqlite/sqliteChangePersistence.js";
 import { openSqliteChangeStartPersistence } from "../sqlite/sqliteChangeStartPersistence.js";
-import { localGitHubPullRequestGateway } from "../submissionEnvironment/localGitHubPullRequestGateway.js";
+import {
+  githubChangeCleanupRemote,
+  localGitHubPullRequestGateway,
+} from "../submissionEnvironment/localGitHubPullRequestGateway.js";
 
 export type LoadChangeUseCasesError =
   | LoadRepoLocalContextError
@@ -45,6 +48,7 @@ export const withChangeUseCases = <A, E, R>(
     });
   }
 
+  const github = localGitHubPullRequestGateway();
   return Effect.all({
     startPersistence: openSqliteChangeStartPersistence(),
     changePersistence: openSqliteChangePersistence(),
@@ -63,8 +67,8 @@ export const withChangeUseCases = <A, E, R>(
           executeLocalRepositoryPreparation,
           openChangeReconciliation({
             persistence: changePersistence,
-            github: localGitHubPullRequestGateway(),
-            cleanup: cleanupChangeResources,
+            github,
+            cleanup: cleanupChangeResourcesWithRemote(githubChangeCleanupRemote(github)),
             reviewerSessionPathFor: (changeId) =>
               join(repoContext.context.paths.operationalDir, changeId),
           }),

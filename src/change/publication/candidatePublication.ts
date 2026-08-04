@@ -18,6 +18,7 @@ import type {
 } from "../ownedPullRequestGateway.js";
 import type { RepositoryStorageError } from "../../contracts/repositoryStorageError.js";
 import { implementationDecisionMarkdown } from "../implementationDecision.js";
+import { branchNameForRef } from "../changeBranch.js";
 export type CommitSubjectResult =
   | { readonly ok: true; readonly subject: string | undefined }
   | { readonly ok: false };
@@ -111,7 +112,7 @@ const publish = (dependencies: Dependencies, input: PublishCandidateInput): Publ
       candidate.headSha.length === 0
     )
       return { ok: false, code: "validation_evidence_invalid" };
-    const headBranch = branchName(change.branchRef);
+    const headBranch = branchNameForRef(change.branchRef);
     if (headBranch === undefined) return { ok: false, code: "branch_binding_invalid" };
     const metadata = metadataFor(change, candidate.headSha, dependencies.git);
     if ("ok" in metadata) return metadata;
@@ -802,8 +803,6 @@ const request = (
   branchRef,
   expectedHeadSha,
 });
-const branchName = (branchRef: string) =>
-  branchRef.startsWith("refs/heads/") && branchRef.length > 11 ? branchRef.slice(11) : undefined;
 const hasExpectedHead = (
   git: CandidatePublicationGit,
   branchRef: string,

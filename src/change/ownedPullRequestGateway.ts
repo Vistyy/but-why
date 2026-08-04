@@ -1,4 +1,5 @@
 import type { ChangeOwnedPullRequest, ChangePublicationTarget } from "./change.js";
+import type { ChangeCleanupRemote } from "./changeCleanupRemote.js";
 
 export type GitHubPullRequest = ChangeOwnedPullRequest & {
   readonly baseBranch: string;
@@ -73,6 +74,8 @@ export type GitHubPullRequestGateway = {
   readonly createPullRequest: (
     request: GitHubPullRequestRequest,
   ) => GitHubPullRequestMutationResult;
+  readonly readRemoteBranchHead?: ChangeCleanupRemote["readRemoteBranchHead"];
+  readonly deleteRemoteBranch?: ChangeCleanupRemote["deleteRemoteBranch"];
   readonly updatePullRequest: (
     input: GitHubPullRequestRequest & {
       readonly number: number;

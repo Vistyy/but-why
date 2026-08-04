@@ -471,6 +471,131 @@ describe("GitHub pull request gateway", () => {
     }
   });
 
+  it("conditionally deletes an owned exact-head Remote Change Branch through GraphQL", () => {
+    const ghCalls: (readonly string[])[] = [];
+    const gateway = localGitHubPullRequestGateway({
+      runGh: (args) => {
+        ghCalls.push(args);
+        return args.some((arg) => arg.includes("updateRefs"))
+          ? { ok: true, stdout: '{"data":{"updateRefs":{"clientMutationId":null}}}' }
+          : {
+              ok: true,
+              stdout:
+                '{"data":{"repository":{"id":"repo-id","defaultBranchRef":{"name":"main"},"ref":{"id":"ref-id","name":"refs/heads/but-why/feature","target":{"oid":"candidate-sha"}}}}}',
+            };
+      },
+    });
+    const branch = {
+      repositoryCommonDirectory: "/repo/.git",
+      owner: "acme",
+      repo: "widgets",
+      remoteName: "origin",
+      remoteUrl: "https://github.com/acme/widgets.git",
+      branchName: "but-why/feature",
+      canonicalBranchRef: "refs/heads/but-why/feature",
+      targetBranch: "main",
+    };
+
+    expect(gateway.readRemoteBranchHead?.(branch)).toEqual({
+      state: "present",
+      headSha: "candidate-sha",
+      remoteUrl: branch.remoteUrl,
+      repositoryId: "repo-id",
+      refId: "ref-id",
+    });
+    expect(
+      gateway.deleteRemoteBranch?.({
+        ...branch,
+        expectedHeadSha: "candidate-sha",
+        resolvedRemoteUrl: branch.remoteUrl,
+        repositoryId: "repo-id",
+        refId: "ref-id",
+      }),
+    ).toBe(true);
+    expect(ghCalls).toHaveLength(2);
+    expect(ghCalls[0]).toContain("qualifiedName=refs/heads/but-why/feature");
+    const deletionArgs = ghCalls[1]?.join(" ") ?? "";
+    expect(deletionArgs).toContain("name=refs/heads/but-why/feature");
+    expect(deletionArgs).toContain("beforeOid=candidate-sha");
+    expect(deletionArgs).toContain(`afterOid=${"0".repeat(40)}`);
+    expect(
+      gateway.readRemoteBranchHead?.({
+        ...branch,
+        remoteUrl: "https://github.com/acme/other.git",
+      }),
+    ).toEqual({ state: "mismatch" });
+    expect(ghCalls).toHaveLength(2);
+  });
+
+  it("protects the pull request target and default branch from remote deletion", () => {
+    const ghCalls: (readonly string[])[] = [];
+    const gateway = localGitHubPullRequestGateway({
+      runGh: (args) => {
+        ghCalls.push(args);
+        return {
+          ok: true,
+          stdout:
+            '{"data":{"repository":{"id":"repo-id","defaultBranchRef":{"name":"but-why/default"},"ref":{"id":"ref-id","target":{"oid":"candidate-sha"}}}}}',
+        };
+      },
+    });
+    const input = {
+      repositoryCommonDirectory: "/repo/.git",
+      owner: "acme",
+      repo: "widgets",
+      remoteName: "origin",
+      remoteUrl: "https://github.com/acme/widgets.git",
+      branchName: "but-why/default",
+      canonicalBranchRef: "refs/heads/but-why/default",
+      targetBranch: "main",
+    };
+    expect(gateway.readRemoteBranchHead?.(input)).toEqual({ state: "excluded" });
+    expect(ghCalls).toHaveLength(1);
+    expect(
+      gateway.readRemoteBranchHead?.({
+        ...input,
+        branchName: "but-why/main",
+        canonicalBranchRef: "refs/heads/but-why/main",
+        targetBranch: "but-why/main",
+      }),
+    ).toEqual({ state: "excluded" });
+    expect(ghCalls).toHaveLength(1);
+  });
+
+  it("keeps missing, moved, and unavailable Remote Change Branches safe", () => {
+    const input = {
+      repositoryCommonDirectory: "/repo/.git",
+      owner: "acme",
+      repo: "widgets",
+      remoteName: "origin",
+      remoteUrl: "https://github.com/acme/widgets.git",
+      branchName: "but-why/feature",
+      canonicalBranchRef: "refs/heads/but-why/feature",
+      targetBranch: "main",
+    };
+    for (const [stdout, expected] of [
+      [
+        '{"data":{"repository":{"defaultBranchRef":{"name":"main"},"ref":null}}}',
+        { state: "missing" },
+      ],
+      [
+        '{"data":{"repository":{"id":"repo-id","defaultBranchRef":{"name":"main"},"ref":{"id":"ref-id","target":{"oid":"moved-sha"}}}}}',
+        {
+          state: "present",
+          headSha: "moved-sha",
+          remoteUrl: "https://github.com/acme/widgets.git",
+          repositoryId: "repo-id",
+          refId: "ref-id",
+        },
+      ],
+    ] as const) {
+      const gateway = localGitHubPullRequestGateway({ runGh: () => ({ ok: true, stdout }) });
+      expect(gateway.readRemoteBranchHead?.(input)).toMatchObject(expected);
+    }
+    const unavailable = localGitHubPullRequestGateway({ runGh: () => ({ ok: false }) });
+    expect(unavailable.readRemoteBranchHead?.(input)).toEqual({ state: "unavailable" });
+  });
+
   it("returns bounded redacted evidence for a rejected creation", () => {
     const gateway = localGitHubPullRequestGateway({
       runGit: (args) => ({ ok: true, stdout: args[0] === "rev-parse" ? "candidate-sha\n" : "" }),
