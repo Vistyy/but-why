@@ -340,7 +340,7 @@ console.log(JSON.stringify(cleanupChangeResources({ repositoryCommonDirectory, w
           },
           deleteRemoteBranch: () => {
             calls.push("delete");
-            return true;
+            return { state: "deleted" };
           },
         },
       ),
@@ -486,7 +486,7 @@ console.log(JSON.stringify(cleanupChangeResources({ repositoryCommonDirectory, w
               remoteUrl: "origin-url",
             };
           },
-          deleteRemoteBranch: () => false,
+          deleteRemoteBranch: () => ({ state: "failed" }),
         },
       ),
     ).toEqual({ state: "pending", blockingReason: "remote_branch_deletion_failed" });
@@ -570,7 +570,7 @@ console.log(JSON.stringify(cleanupChangeResources({ repositoryCommonDirectory, w
           }),
           deleteRemoteBranch: () => {
             deleted = true;
-            return true;
+            return { state: "deleted" };
           },
         },
       ),

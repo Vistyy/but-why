@@ -511,7 +511,7 @@ describe("GitHub pull request gateway", () => {
         repositoryId: "repo-id",
         refId: "ref-id",
       }),
-    ).toBe(true);
+    ).toEqual({ state: "deleted" });
     expect(ghCalls).toHaveLength(2);
     expect(ghCalls[0]).toContain("qualifiedName=refs/heads/but-why/feature");
     const deletionArgs = ghCalls[1]?.join(" ") ?? "";
@@ -525,6 +525,96 @@ describe("GitHub pull request gateway", () => {
       }),
     ).toEqual({ state: "mismatch" });
     expect(ghCalls).toHaveLength(2);
+  });
+
+  it("reads the exact branch once after an uncertain GraphQL deletion response", () => {
+    const input = {
+      repositoryCommonDirectory: "/repo/.git",
+      owner: "acme",
+      repo: "widgets",
+      remoteName: "origin",
+      remoteUrl: "https://github.com/acme/widgets.git",
+      branchName: "but-why/feature",
+      canonicalBranchRef: "refs/heads/but-why/feature",
+      targetBranch: "main",
+      expectedHeadSha: "candidate-sha",
+      resolvedRemoteUrl: "https://github.com/acme/widgets.git",
+      repositoryId: "repo-id",
+      refId: "ref-id",
+    };
+    const cases = [
+      [
+        "absent",
+        {
+          ok: true as const,
+          stdout: '{"errors":[{"message":"response lost"}],"data":{"updateRefs":null}}',
+        },
+        {
+          ok: true as const,
+          stdout: '{"data":{"repository":{"defaultBranchRef":{"name":"main"},"ref":null}}}',
+        },
+        { state: "missing" as const },
+      ],
+      [
+        "unchanged",
+        { ok: true as const, stdout: "not-json" },
+        {
+          ok: true as const,
+          stdout:
+            '{"data":{"repository":{"id":"repo-id","defaultBranchRef":{"name":"main"},"ref":{"id":"ref-id","target":{"oid":"candidate-sha"}}}}}',
+        },
+        {
+          state: "present" as const,
+          headSha: "candidate-sha",
+          remoteUrl: input.remoteUrl,
+          repositoryId: "repo-id",
+          refId: "ref-id",
+        },
+      ],
+      [
+        "moved",
+        { ok: false as const },
+        {
+          ok: true as const,
+          stdout:
+            '{"data":{"repository":{"id":"repo-id","defaultBranchRef":{"name":"main"},"ref":{"id":"ref-id","target":{"oid":"moved-sha"}}}}}',
+        },
+        {
+          state: "present" as const,
+          headSha: "moved-sha",
+          remoteUrl: input.remoteUrl,
+          repositoryId: "repo-id",
+          refId: "ref-id",
+        },
+      ],
+      [
+        "unreadable",
+        { ok: false as const },
+        { ok: false as const },
+        { state: "unavailable" as const },
+      ],
+    ] as const;
+
+    for (const [name, deletionResponse, readResponse, expected] of cases) {
+      const ghCalls: (readonly string[])[] = [];
+      const gateway = localGitHubPullRequestGateway({
+        runGh: (args) => {
+          ghCalls.push(args);
+          return ghCalls.length === 1 ? deletionResponse : readResponse;
+        },
+      });
+
+      expect(gateway.deleteRemoteBranch?.(input), name).toEqual(expected);
+      expect(ghCalls).toHaveLength(2);
+      expect(ghCalls.filter((args) => args.some((arg) => arg.includes("updateRefs")))).toHaveLength(
+        1,
+      );
+      expect(
+        ghCalls.filter((args) =>
+          args.some((arg) => arg.includes("qualifiedName=refs/heads/but-why/feature")),
+        ),
+      ).toHaveLength(1);
+    }
   });
 
   it("protects the pull request target and default branch from remote deletion", () => {

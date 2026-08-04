@@ -11,6 +11,11 @@ export type RemoteBranchHeadResult =
   | { readonly state: "mismatch" }
   | { readonly state: "excluded" };
 
+export type RemoteBranchDeletionResult =
+  | { readonly state: "deleted" }
+  | { readonly state: "failed" }
+  | RemoteBranchHeadResult;
+
 export type ChangeCleanupRemote = {
   readonly readRemoteBranchHead: (input: {
     readonly repositoryCommonDirectory: string;
@@ -29,9 +34,11 @@ export type ChangeCleanupRemote = {
     readonly remoteName: string;
     readonly remoteUrl: string;
     readonly branchName: string;
+    readonly targetBranch: string;
+    readonly canonicalBranchRef: string;
     readonly expectedHeadSha: string;
     readonly resolvedRemoteUrl: string;
     readonly repositoryId?: string;
     readonly refId?: string;
-  }) => boolean;
+  }) => RemoteBranchDeletionResult;
 };

@@ -4,7 +4,7 @@ import { basename, dirname } from "node:path";
 
 import type { RemoteChangeBranch } from "./change.js";
 import { changeBranchNameForRef, branchNameForRef } from "./changeBranch.js";
-import type { ChangeCleanupRemote } from "./changeCleanupRemote.js";
+import type { ChangeCleanupRemote, RemoteBranchDeletionResult } from "./changeCleanupRemote.js";
 export type { ChangeCleanupRemote } from "./changeCleanupRemote.js";
 
 export type ChangeCleanupResult =
@@ -176,28 +176,46 @@ const cleanupRemoteChangeBranch = (
   if (observed.headSha !== branch.expectedHeadSha) {
     return { state: "pending", blockingReason: "remote_branch_head_mismatch" };
   }
-  if (
-    remote.deleteRemoteBranch({
-      repositoryCommonDirectory: input.repositoryCommonDirectory,
-      owner: branch.owner,
-      repo: branch.repo,
-      remoteName: branch.remoteName,
-      remoteUrl: branch.remoteUrl,
-      branchName: branch.branchName,
-      expectedHeadSha: branch.expectedHeadSha,
-      resolvedRemoteUrl: observed.remoteUrl,
-      ...(observed.repositoryId === undefined ? {} : { repositoryId: observed.repositoryId }),
-      ...(observed.refId === undefined ? {} : { refId: observed.refId }),
-    })
-  ) {
-    return { state: "complete" };
+  const deletion = remote.deleteRemoteBranch({
+    repositoryCommonDirectory: input.repositoryCommonDirectory,
+    owner: branch.owner,
+    repo: branch.repo,
+    remoteName: branch.remoteName,
+    remoteUrl: branch.remoteUrl,
+    branchName: branch.branchName,
+    targetBranch: branch.targetBranch,
+    canonicalBranchRef: input.branchRef,
+    expectedHeadSha: branch.expectedHeadSha,
+    resolvedRemoteUrl: observed.remoteUrl,
+    ...(observed.repositoryId === undefined ? {} : { repositoryId: observed.repositoryId }),
+    ...(observed.refId === undefined ? {} : { refId: observed.refId }),
+  });
+  return remoteDeletionResult(deletion, branch.expectedHeadSha);
+};
+
+const remoteDeletionResult = (
+  result: RemoteBranchDeletionResult,
+  expectedHeadSha: string,
+): ChangeCleanupResult => {
+  if (result.state === "deleted" || result.state === "missing") return { state: "complete" };
+  if (result.state === "unavailable") {
+    return { state: "pending", blockingReason: "remote_branch_unavailable" };
+  }
+  if (result.state === "mismatch") {
+    return { state: "pending", blockingReason: "remote_branch_repository_mismatch" };
+  }
+  if (result.state === "excluded") {
+    return { state: "pending", blockingReason: "remote_branch_excluded" };
+  }
+  if (result.state === "present" && result.headSha !== expectedHeadSha) {
+    return { state: "pending", blockingReason: "remote_branch_head_mismatch" };
   }
   return { state: "pending", blockingReason: "remote_branch_deletion_failed" };
 };
 
 const localChangeCleanupRemote: ChangeCleanupRemote = {
   readRemoteBranchHead: () => ({ state: "unavailable" }),
-  deleteRemoteBranch: () => false,
+  deleteRemoteBranch: () => ({ state: "failed" }),
 };
 
 const isWorktreePathSafe = (worktreePath: string): boolean => {
