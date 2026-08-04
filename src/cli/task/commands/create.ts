@@ -121,7 +121,7 @@ const descriptionInputError = (error: RecordingTextReadError): CliResult => {
   switch (error.code) {
     case "recording_text_file_not_found":
       return usageError({
-        code: "description_input_not_found",
+        code: "description_file_not_found",
         message: "Task description file was not found.",
         details: { path: error.path },
         help: ['Create the file, then rerun `by task create --title "..." --file <path|->`.'],
@@ -129,7 +129,7 @@ const descriptionInputError = (error: RecordingTextReadError): CliResult => {
     case "recording_text_file_unreadable":
     case "recording_text_stdin_unreadable":
       return usageError({
-        code: "description_input_unreadable",
+        code: "description_file_unreadable",
         message: "Task description input is not readable.",
         details: "path" in error ? { path: error.path } : { path: "-" },
         help: ["Use a readable UTF-8 file or pipe UTF-8 text with `--file -`."],

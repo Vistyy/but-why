@@ -847,25 +847,25 @@ contextCommand: by task context BY-1
           name: "missing file",
           args: ["task", "comment", "BY-1", "--file", "missing.md"],
           status: 1,
-          code: "comment_input_not_found",
+          code: "comment_file_not_found",
         },
         {
           name: "unreadable file",
           args: ["task", "comment", "BY-1", "--file", "comment-dir"],
           status: 1,
-          code: "comment_input_unreadable",
+          code: "comment_file_unreadable",
         },
         {
           name: "invalid UTF-8",
           args: ["task", "comment", "BY-1", "--file", "invalid.bin"],
           status: 1,
-          code: "invalid_comment_encoding",
+          code: "comment_file_unreadable",
         },
         {
           name: "oversized comment",
           args: ["task", "comment", "BY-1", "--file", "large.md"],
           status: 1,
-          code: "comment_input_too_large",
+          code: "comment_file_unreadable",
         },
         {
           name: "empty comment",
@@ -1107,8 +1107,8 @@ help[1]: Run \`by --help\` for generated command help.
       writeFileSync(join(root, "empty.md"), " \n\t");
 
       for (const [path, code] of [
-        ["missing.md", "description_input_not_found"],
-        ["directory", "description_input_unreadable"],
+        ["missing.md", "description_file_not_found"],
+        ["directory", "description_file_unreadable"],
         ["invalid.bin", "invalid_description_encoding"],
         ["large.md", "description_too_large"],
         ["empty.md", "empty_description"],

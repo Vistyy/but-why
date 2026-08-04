@@ -75,7 +75,7 @@ const commentInputError = (error: RecordingTextReadError): CliResult => {
   switch (error.code) {
     case "recording_text_file_not_found":
       return runtimeError({
-        code: "comment_input_not_found",
+        code: "comment_file_not_found",
         message: "Task comment file was not found.",
         details: { path: error.path },
         help: ["Create the file, then rerun `by task comment <task-id> --file <path|->`."],
@@ -83,24 +83,18 @@ const commentInputError = (error: RecordingTextReadError): CliResult => {
     case "recording_text_file_unreadable":
     case "recording_text_stdin_unreadable":
       return runtimeError({
-        code: "comment_input_unreadable",
+        code: "comment_file_unreadable",
         message: "Task comment input is not readable.",
         details: "path" in error ? { path: error.path } : { path: "-" },
         help: ["Use a readable UTF-8 file or pipe UTF-8 text with `--file -`."],
       });
     case "recording_text_invalid_utf8":
-      return runtimeError({
-        code: "invalid_comment_encoding",
-        message: "Task comment input must be valid UTF-8.",
-        details: { path: error.path },
-        help: ["Rewrite the input as UTF-8 and rerun the command."],
-      });
     case "recording_text_too_large":
       return runtimeError({
-        code: "comment_input_too_large",
-        message: "Task comment input is larger than 256 KiB.",
-        details: { path: error.path, maxBytes: error.maxBytes },
-        help: ["Shorten the input to 256 KiB or less."],
+        code: "comment_file_unreadable",
+        message: "Task comment input is not readable UTF-8 text.",
+        details: { path: error.path },
+        help: ["Use a readable UTF-8 file or pipe UTF-8 text with `--file -`."],
       });
     case "recording_text_blank":
       return runtimeError({

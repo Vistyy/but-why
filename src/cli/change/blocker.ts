@@ -5,7 +5,7 @@ import { Effect } from "effect";
 import type { CliResult } from "../../cliResults.js";
 import { loadChangeInspection } from "../../change/loadChangeInspection.js";
 import { readRecordingText, type RecordingTextReadError } from "../../cli/input/recordingText.js";
-import { runtimeError, success, usageError } from "../../cliResults.js";
+import { runtimeError, success } from "../../cliResults.js";
 import type { ChangeCommandEnvironment } from "./changeTypes.js";
 import * as support from "./changeSupport.js";
 
@@ -57,43 +57,36 @@ export const runBlocker = (
 const blockerInputError = (error: RecordingTextReadError): CliResult => {
   switch (error.code) {
     case "recording_text_file_not_found":
-      return usageError({
-        code: "blocker_input_not_found",
-        message: "Implementation Blocker input file was not found.",
+      return runtimeError({
+        code: "decision_file_not_found",
+        message: "Implementation Blocker content could not be read.",
         details: { path: error.path },
         help: ["Create the file, then rerun the blocker command with `--file <path|->`."],
       });
     case "recording_text_file_unreadable":
     case "recording_text_stdin_unreadable":
-      return usageError({
-        code: "blocker_input_unreadable",
-        message: "Implementation Blocker input is not readable.",
+    case "recording_text_too_large":
+    case "recording_text_invalid_utf8":
+      return runtimeError({
+        code:
+          error.code === "recording_text_too_large"
+            ? "decision_file_too_large"
+            : error.code === "recording_text_invalid_utf8"
+              ? "invalid_decision_encoding"
+              : "decision_file_unreadable",
+        message: "Implementation Blocker content could not be read.",
         details: "path" in error ? { path: error.path } : { path: "-" },
         help: ["Use a readable UTF-8 file or pipe UTF-8 text with `--file -`."],
       });
-    case "recording_text_too_large":
-      return usageError({
-        code: "blocker_input_too_large",
-        message: "Implementation Blocker input is larger than 256 KiB.",
-        details: { path: error.path, maxBytes: error.maxBytes },
-        help: ["Shorten the input to 256 KiB or less."],
-      });
-    case "recording_text_invalid_utf8":
-      return usageError({
-        code: "invalid_blocker_encoding",
-        message: "Implementation Blocker input must be valid UTF-8.",
-        details: { path: error.path },
-        help: ["Rewrite the input as UTF-8 and rerun the command."],
-      });
     case "recording_text_blank":
-      return usageError({
-        code: "empty_blocker",
-        message: "Implementation Blocker input must not be blank.",
+      return runtimeError({
+        code: "empty_decision_file",
+        message: "Implementation Blocker content could not be read.",
         details: { path: error.path },
-        help: ["Provide non-blank text with `--file <path|->`."],
+        help: ["Provide non-blank UTF-8 text with `--file <path|->`."],
       });
     case "stdin_is_terminal":
-      return usageError({
+      return runtimeError({
         code: error.code,
         message: "Standard input is an interactive terminal.",
         help: ["Pipe UTF-8 text or use a shell heredoc with `--file -`."],

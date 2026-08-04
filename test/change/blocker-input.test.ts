@@ -17,10 +17,10 @@ describe("Implementation Blocker recording input", () => {
       writeFileSync(join(root, "large.txt"), "x".repeat(256 * 1024 + 1));
 
       const cases = [
-        ["directory", "blocker_input_unreadable"],
-        ["invalid.bin", "invalid_blocker_encoding"],
-        ["blank.txt", "empty_blocker"],
-        ["large.txt", "blocker_input_too_large"],
+        ["directory", "decision_file_unreadable"],
+        ["invalid.bin", "invalid_decision_encoding"],
+        ["blank.txt", "empty_decision_file"],
+        ["large.txt", "decision_file_too_large"],
         ["-", "stdin_is_terminal"],
       ] as const;
 
@@ -34,7 +34,7 @@ describe("Implementation Blocker recording input", () => {
           file,
         ]);
 
-        expect(result.status, `${action} ${file}`).toBe(2);
+        expect(result.status, `${action} ${file}`).toBe(1);
         expect(result.stderr, `${action} ${file}`).toBe("");
         expect(result.stdout, `${action} ${file}`).toContain(`code: ${code}`);
       }
