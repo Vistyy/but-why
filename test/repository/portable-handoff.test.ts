@@ -34,6 +34,7 @@ type HandoffOptions = {
   readonly finalWorktreeMismatch?: boolean;
   readonly initialCommandResult?: string;
   readonly initialCommandExitCode?: string;
+  readonly handoff?: string;
 };
 
 type HandoffExecution = {
@@ -196,7 +197,7 @@ exit 1
       cwd: root,
       env: environment,
       isolatedHome: createTestWorkspace(),
-      input: "Implement the authorized work.\n",
+      input: options.handoff ?? "Implement the authorized work.\n",
       timeout: 10_000,
     },
   );
@@ -228,7 +229,21 @@ describe("portable handoff observer", () => {
       expect(handoff.calls).toContain("by --json change start");
     }
     expect(handoff.calls).toContain(`by --json change implement ${changeId}`);
+    expect(handoff.calls).toContain("--handoff-file");
     expect(handoff.calls).toContain(`by --json change show ${changeId}`);
+  });
+
+  it.each(["", " \n\t"])("launches with no operator context for %j", (input) => {
+    const changeId = "change-no-context";
+    const handoff = runHandoff(changeId, {
+      route: "taskless-existing",
+      handoff: input,
+    });
+
+    expect(handoff.status).toBe(0);
+    expect(handoff.result).toMatchObject({ changeId, status: "started", changeVerified: true });
+    expect(handoff.calls).toContain(`by --json change implement ${changeId}`);
+    expect(handoff.calls).not.toContain("--handoff-file");
   });
 
   it.each([

@@ -96,8 +96,12 @@ This section is complete when the authorization identifies one work item, one Wo
 
 ## Hand Off an Authorized Change
 
-Write compact handoff Markdown for the fresh Interactive Session.
-Include the authorized implementation goal, relevant decisions, artifact references, and selected Task ID when applicable.
+Operator context is optional.
+The Change ID and Managed Worktree are already bound to Change Implement.
+The captured Task Context and packaged Implementer instructions already provide accepted intent and the implementation procedure.
+Provide handoff Markdown only when the Implementer needs current operator context that Change inspection, Task Context, and packaged instructions do not provide.
+Do not repeat the Change ID, Task ID, Change state, Managed Worktree path, Task Context, or packaged instructions.
+If a fact requires durable authority, record it through the applicable Task or Change operation instead.
 Do not include sensitive information.
 
 For a Task-backed Change, run `by task show <task-id>`.
@@ -110,15 +114,14 @@ When no selected taskless Change exists, run `by change start`.
 After Change Start or reuse, run `by change show <change-id>`.
 Verify the exact Change ID, `open` state, and exact Managed Worktree path.
 Resolve `scripts/launch-handoff.mjs` relative to this skill directory.
-Pipe the handoff Markdown to the script with the runner that matches the resolved But Why command prefix.
+When no operator context is required, run the script with empty standard input.
+When operator context is required, pipe only that Markdown to the script with the runner that matches the resolved But Why command prefix.
 
 ```sh
 node <skill-directory>/scripts/launch-handoff.mjs \
   --runner <just|pnpx|npx> \
   --change-id <change-id> \
-  --worktree-path <managed-worktree-path> <<'BUT_WHY_HANDOFF'
-<handoff Markdown>
-BUT_WHY_HANDOFF
+  --worktree-path <managed-worktree-path> </dev/null
 ```
 
 The script verifies the exact Change and Managed Worktree before it runs Change Implement and after launch.

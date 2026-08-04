@@ -48,8 +48,8 @@ let expectedSessionName;
 const diagnosticDirectory = await mkdtemp(join(diagnosticBaseDirectory, `but-why-launch-${safeId}.`));
 const tracePath = join(diagnosticDirectory, "trace.jsonl");
 const diagnosticPath = join(diagnosticDirectory, "pane.txt");
-const handoffDirectory = await mkdtemp(join(tmpdir(), "but-why-handoff."));
-const handoffPath = join(handoffDirectory, "handoff.md");
+let handoffDirectory;
+let handoffPath;
 const activeChildren = new Set();
 let observerRunning = true;
 let preserveTrace = false;
@@ -111,7 +111,11 @@ try {
   }
 
   const handoff = await readStdin();
-  await writeFile(handoffPath, handoff, { mode: 0o600 });
+  if (handoff.toString("utf8").trim().length > 0) {
+    handoffDirectory = await mkdtemp(join(tmpdir(), "but-why-handoff."));
+    handoffPath = join(handoffDirectory, "handoff.md");
+    await writeFile(handoffPath, handoff, { mode: 0o600 });
+  }
   await appendTrace("observer_started", {
     wallStartedAt,
     changeId: args.changeId,
@@ -129,8 +133,7 @@ try {
       "change",
       "implement",
       args.changeId,
-      "--handoff-file",
-      handoffPath,
+      ...(handoffPath === undefined ? [] : ["--handoff-file", handoffPath]),
     ],
     implementTimeoutMs,
   );
@@ -251,7 +254,9 @@ try {
   }
 } finally {
   observerRunning = false;
-  await rm(handoffDirectory, { recursive: true, force: true });
+  if (handoffDirectory !== undefined) {
+    await rm(handoffDirectory, { recursive: true, force: true });
+  }
 }
 
 async function observeLoop() {
