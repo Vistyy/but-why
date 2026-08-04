@@ -206,6 +206,20 @@ const remoteBranchDeletionMutation = `mutation($repositoryId: ID!, $name: GitRef
 
 const zeroSha = "0".repeat(40);
 
+const githubRepository = (
+  url: string,
+): { readonly owner: string; readonly repo: string } | undefined => {
+  const normalized = url
+    .trim()
+    .replace(/\/$/u, "")
+    .replace(/\.git$/u, "");
+  const match =
+    /^https:\/\/github\.com\/([^/]+)\/([^/]+)$/u.exec(normalized) ??
+    /^git@github\.com:([^/]+)\/([^/]+)$/u.exec(normalized) ??
+    /^ssh:\/\/git@github\.com\/([^/]+)\/([^/]+)$/u.exec(normalized);
+  return match === null ? undefined : { owner: match[1] ?? "", repo: match[2] ?? "" };
+};
+
 type RemoteBranchCleanupInput = Parameters<ChangeCleanupRemote["readRemoteBranchHead"]>[0];
 
 type RemoteBranchQueryJson = {
@@ -227,6 +241,14 @@ const readRemoteBranchHead = (
   input: RemoteBranchCleanupInput,
 ): RemoteBranchHeadResult => {
   if (changeBranchNameForRef(input.canonicalBranchRef) !== input.branchName) {
+    return { state: "mismatch" };
+  }
+  const remoteRepository = githubRepository(input.remoteUrl);
+  if (
+    remoteRepository === undefined ||
+    remoteRepository.owner !== input.owner ||
+    remoteRepository.repo !== input.repo
+  ) {
     return { state: "mismatch" };
   }
   if (input.branchName === input.targetBranch) return { state: "excluded" };

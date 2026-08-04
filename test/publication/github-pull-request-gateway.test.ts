@@ -518,6 +518,13 @@ describe("GitHub pull request gateway", () => {
     expect(deletionArgs).toContain("name=refs/heads/but-why/feature");
     expect(deletionArgs).toContain("beforeOid=candidate-sha");
     expect(deletionArgs).toContain(`afterOid=${"0".repeat(40)}`);
+    expect(
+      gateway.readRemoteBranchHead?.({
+        ...branch,
+        remoteUrl: "https://github.com/acme/other.git",
+      }),
+    ).toEqual({ state: "mismatch" });
+    expect(ghCalls).toHaveLength(2);
   });
 
   it("protects the pull request target and default branch from remote deletion", () => {
@@ -537,7 +544,7 @@ describe("GitHub pull request gateway", () => {
       owner: "acme",
       repo: "widgets",
       remoteName: "origin",
-      remoteUrl: "origin",
+      remoteUrl: "https://github.com/acme/widgets.git",
       branchName: "but-why/default",
       canonicalBranchRef: "refs/heads/but-why/default",
       targetBranch: "main",
@@ -561,7 +568,7 @@ describe("GitHub pull request gateway", () => {
       owner: "acme",
       repo: "widgets",
       remoteName: "origin",
-      remoteUrl: "origin",
+      remoteUrl: "https://github.com/acme/widgets.git",
       branchName: "but-why/feature",
       canonicalBranchRef: "refs/heads/but-why/feature",
       targetBranch: "main",
@@ -576,7 +583,7 @@ describe("GitHub pull request gateway", () => {
         {
           state: "present",
           headSha: "moved-sha",
-          remoteUrl: "origin",
+          remoteUrl: "https://github.com/acme/widgets.git",
           repositoryId: "repo-id",
           refId: "ref-id",
         },
