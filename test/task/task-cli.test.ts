@@ -209,7 +209,6 @@ tasks[2]:
     state: new
     createdAt: "${firstNow}"
     updatedAt: "${firstNow}"
-    startable: false
     blockedBy: []
     change: null
   - id: BY-2
@@ -217,7 +216,6 @@ tasks[2]:
     state: ready
     createdAt: "${secondNow}"
     updatedAt: "${thirdNow}"
-    startable: false
     blockedBy: []
     change: null
 `);
@@ -317,7 +315,10 @@ tasks[2]:
       expect(JSON.parse(result.stdout)).toEqual({
         count: 2,
         total: 2,
-        tasks: listedTasks.map((task) => ({ ...task, change: null })),
+        tasks: listedTasks.map(({ startable: _startable, ...task }) => ({
+          ...task,
+          change: null,
+        })),
       });
     }),
   );

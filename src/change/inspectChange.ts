@@ -60,11 +60,11 @@ export type ChangeInspection = {
   ) => Effect.Effect<RecordImplementationDecisionResult, RepositoryStorageError>;
 };
 
+export type ChangeActivity = "blocked" | "validating" | "ready" | "implementing";
+
 export type ChangeTaskProjection = {
   readonly id: string;
-  readonly state: ChangeRecord["state"];
-  readonly readiness: ChangeRecord["readiness"];
-  readonly activeBlocker: import("./implementationBlocker.js").ImplementationBlocker | null;
+  readonly activity?: ChangeActivity;
 };
 
 export type ChangeDetail = {
@@ -94,17 +94,7 @@ export const openChangeInspection = (input: {
 }): ChangeInspection => ({
   list: input.changePersistence.listChanges,
   inspect: (changeId) => inspectChange(input, changeId),
-  inspectTaskProjection: (taskId) =>
-    Effect.map(input.changePersistence.getChangeByTaskId(taskId), (change) =>
-      change === undefined
-        ? null
-        : {
-            id: change.id,
-            state: change.state,
-            readiness: change.readiness,
-            activeBlocker: change.activeBlocker ?? null,
-          },
-    ),
+  inspectTaskProjection: (taskId) => inspectTaskProjection(input, taskId),
   findings: (changeId) => inspectFindings(input, changeId),
   validationRuns: (changeId) => inspectValidationRuns(input, changeId),
   publications: (changeId) =>
@@ -132,6 +122,42 @@ export const openChangeInspection = (input: {
   resolveBlocker: input.changePersistence.resolveImplementationBlocker,
   addDecision: (decision) => input.changePersistence.recordImplementationDecision(decision),
 });
+
+const inspectTaskProjection = (
+  dependencies: {
+    readonly changePersistence: ChangePersistence;
+    readonly persistence: ChangeValidationPersistence;
+  },
+  taskId: string,
+): Effect.Effect<ChangeTaskProjection | null, RepositoryStorageError> =>
+  Effect.gen(function* () {
+    const change = yield* dependencies.changePersistence.getChangeByTaskId(taskId);
+    if (change === undefined) return null;
+    if (change.state === "closed") return { id: change.id };
+    if (change.activeBlocker !== null && change.activeBlocker !== undefined) {
+      return { id: change.id, activity: "blocked" };
+    }
+    if ((yield* dependencies.persistence.getActiveForChange(change.id)) !== undefined) {
+      return { id: change.id, activity: "validating" };
+    }
+
+    const candidates = yield* dependencies.persistence.listCandidatesForChange(change.id);
+    const currentCandidate = candidates.at(-1);
+    if (currentCandidate === undefined) {
+      return { id: change.id, activity: "implementing" };
+    }
+    const validationRuns = yield* dependencies.persistence.listRunsForCandidate(
+      currentCandidate.id,
+    );
+    const currentValidationRun = validationRuns.at(-1);
+    return {
+      id: change.id,
+      activity:
+        currentValidationRun?.state === "complete" && currentValidationRun.outcome === "passed"
+          ? "ready"
+          : "implementing",
+    };
+  });
 
 const inspectChange = (
   dependencies: {
