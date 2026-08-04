@@ -1,4 +1,7 @@
 import { statSync } from "node:fs";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { createJiti } from "jiti/static";
 import { executeHostCommand } from "../command/hostCommand.js";
 
@@ -37,7 +40,7 @@ type ResolvedOptions = {
 
 const defaultOptions = {
   commandTimeoutMs: 5_000,
-  readinessTimeoutMs: 10_000,
+  readinessTimeoutMs: 30_000,
   readinessPollMs: 100,
   observationRetries: 2,
 } as const;
@@ -280,19 +283,33 @@ const launchInOpenedWorktree = async (
     return launchFailure("Another Interactive Session is already active in this worktree.");
   }
 
-  const launched = await execute(
-    [
-      "pane",
-      "run",
-      opened.rootPaneId,
+  let launchScript: PiLaunchScript;
+  try {
+    launchScript = await createPiLaunchScript(
       piCommand(input, path, continuationExtension, implementationAdvisor, advisorExtension),
-    ],
+    );
+  } catch (error) {
+    if (!opened.alreadyOpen) await closeWorkspace(execute, opened.workspaceId, signal);
+    return launchFailure(
+      `Could not prepare the private Pi launch script: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+
+  const launched = await execute(
+    ["pane", "run", opened.rootPaneId, `exec ${shellQuote(launchScript.path)}`],
     signal,
   );
   if (!launched.ok) {
     const observed = isUncertainMutationFailure(launched.message)
       ? await waitForAgent(execute, input, sessionName, opened.rootPaneId, signal, options, "named")
       : ({ kind: "absent" } as const);
+    if (
+      !isUncertainMutationFailure(launched.message) ||
+      observed.kind === "ready" ||
+      observed.kind === "exited"
+    ) {
+      await launchScript.cleanup();
+    }
     if (observed.kind === "ready") {
       return {
         ok: true,
@@ -331,6 +348,9 @@ const launchInOpenedWorktree = async (
     options,
     "detected",
   );
+  if (detected.kind === "ready" || detected.kind === "exited") {
+    await launchScript.cleanup();
+  }
   if (detected.kind !== "ready") {
     const evidence = await launchEvidence(execute, opened.rootPaneId, signal);
     return detected.kind === "exited"
@@ -641,6 +661,32 @@ const launchEvidence = async (
         ...(startupOutput === undefined ? {} : { startupOutput }),
         ...(exitEvidence === undefined ? {} : { exitEvidence }),
       };
+};
+
+type PiLaunchScript = {
+  readonly path: string;
+  readonly cleanup: () => Promise<void>;
+};
+
+const createPiLaunchScript = async (command: string): Promise<PiLaunchScript> => {
+  const directory = await mkdtemp(join(tmpdir(), "but-why-pi-launch-"));
+  const path = join(directory, "launch.sh");
+  try {
+    await writeFile(
+      path,
+      `#!/bin/sh\nlaunch_directory=\${0%/*}\nrm -f -- "$0"\nrmdir -- "$launch_directory" 2>/dev/null || :\n${command}\n`,
+      { mode: 0o700 },
+    );
+  } catch (error) {
+    await rm(directory, { recursive: true, force: true });
+    throw error;
+  }
+  return {
+    path,
+    cleanup: async () => {
+      await rm(directory, { recursive: true, force: true }).catch(() => undefined);
+    },
+  };
 };
 
 const piCommand = (

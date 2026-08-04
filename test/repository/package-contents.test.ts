@@ -164,7 +164,9 @@ if [ "$1" = "worktree" ] && [ "$2" = "open" ]; then
   exit 0
 fi
 if [ "$1" = "pane" ] && [ "$2" = "run" ]; then
-  printf '%s\\n' "$4" > "$BY_FAKE_CAPTURE"
+  launch_path=\${4#exec \\'}
+  launch_path=\${launch_path%\\'}
+  cp "$launch_path" "$BY_FAKE_CAPTURE"
   : > "$BY_FAKE_CAPTURE.started"
   printf '{"result":{}}\\n'
   exit 0

@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -17,11 +18,21 @@ const workspaceFailure: HerdrCommandExecutor = async (args) =>
     ? { ok: true, stdout: '{"result":{"type":"agent_list","agents":[]}}' }
     : { ok: false, message: "workspace unavailable" };
 
+const readPiLaunchScript = (command: string | undefined): string => {
+  const match = /^exec '([^']+)'$/.exec(command ?? "");
+  expect(match).not.toBeNull();
+  return readFileSync(match?.[1] ?? "", "utf8");
+};
+
 describe("Herdr Interactive Session Host", () => {
   it("supplies compact Herdr names independently from descriptive Pi names", async () => {
     const commands: readonly string[][] = [];
+    let launchScript = "";
     const execute: HerdrCommandExecutor = async (args) => {
       (commands as string[][]).push([...args]);
+      if (args[0] === "pane" && args[1] === "run") {
+        launchScript = readPiLaunchScript(args[3]);
+      }
       if (args[0] === "agent" && args[1] === "list") {
         return commands.some(([command, operation]) => command === "pane" && operation === "run")
           ? {
@@ -74,15 +85,22 @@ describe("Herdr Interactive Session Host", () => {
       "pane",
       "run",
       "workspace-1:pane-1",
-      `exec pi --name 'BY-41 Name Interactive Sessions' --extension '${trustedContinuationExtensionPath()}' 'Implement'`,
+      expect.stringMatching(/^exec '\/.*\/but-why-pi-launch-.*\/launch\.sh'$/),
     ]);
+    expect(launchScript).toContain(
+      `exec pi --name 'BY-41 Name Interactive Sessions' --extension '${trustedContinuationExtensionPath()}' 'Implement'`,
+    );
     expect(commands).toContainEqual(["agent", "rename", "workspace-1:pane-1", "BY-41"]);
   });
 
   it("opens an existing Managed Worktree and starts a named Pi session", async () => {
     const commands: readonly string[][] = [];
+    let launchScript = "";
     const execute: HerdrCommandExecutor = async (args) => {
       (commands as string[][]).push([...args]);
+      if (args[0] === "pane" && args[1] === "run") {
+        launchScript = readPiLaunchScript(args[3]);
+      }
       if (args[0] === "agent" && args[1] === "list") {
         return commands.some(([command, operation]) => command === "pane" && operation === "run")
           ? {
@@ -108,7 +126,6 @@ describe("Herdr Interactive Session Host", () => {
       }
       return { ok: true, stdout: "{}" };
     };
-    const sessionName = herdrSessionName("change-123");
 
     const result = await openHerdrInteractiveSessionHost(execute, {
       path: "/usr/local/bin:/opt/pi/bin",
@@ -131,35 +148,44 @@ describe("Herdr Interactive Session Host", () => {
     });
 
     expect(result).toEqual({ ok: true, host: "herdr", status: "started" });
-    expect(commands).toEqual([
+    expect(commands.map((command) => command.slice(0, 3))).toEqual([
       ["agent", "list"],
-      [
-        "worktree",
-        "open",
-        "--cwd",
-        "/repository",
-        "--path",
-        "/workspace/change-123",
-        "--label",
-        sessionName,
-        "--no-focus",
-      ],
+      ["worktree", "open", "--cwd"],
       ["agent", "list"],
-      [
-        "pane",
-        "run",
-        "workspace-1:pane-1",
-        `PATH='/usr/local/bin:/opt/pi/bin' exec 'nix' 'develop' '-c' pi --system-prompt 'Canonical Implementer contract' --name 'but-why-change-123' --model 'openai-codex/gpt-5.6-luna' --thinking 'high' --extension '${trustedContinuationExtensionPath()}' '\n---\ndescription: Continue from the recorded decision.\n---'`,
-      ],
+      ["pane", "run", "workspace-1:pane-1"],
       ["agent", "list"],
-      ["agent", "rename", "workspace-1:pane-1", sessionName],
+      ["agent", "rename", "workspace-1:pane-1"],
     ]);
+    expect(commands[1]).toEqual([
+      "worktree",
+      "open",
+      "--cwd",
+      "/repository",
+      "--path",
+      "/workspace/change-123",
+      "--label",
+      herdrSessionName("change-123"),
+      "--no-focus",
+    ]);
+    expect(commands[5]).toEqual([
+      "agent",
+      "rename",
+      "workspace-1:pane-1",
+      herdrSessionName("change-123"),
+    ]);
+    expect(launchScript).toContain(
+      `PATH='/usr/local/bin:/opt/pi/bin' exec 'nix' 'develop' '-c' pi --system-prompt 'Canonical Implementer contract' --name 'but-why-change-123' --model 'openai-codex/gpt-5.6-luna' --thinking 'high' --extension '${trustedContinuationExtensionPath()}' '\n---\ndescription: Continue from the recorded decision.\n---'`,
+    );
   });
 
   it("materializes scoped Pi resource allowlists for the Implementer", async () => {
     const commands: readonly string[][] = [];
+    let launchScript = "";
     const execute: HerdrCommandExecutor = async (args) => {
       (commands as string[][]).push([...args]);
+      if (args[0] === "pane" && args[1] === "run") {
+        launchScript = readPiLaunchScript(args[3]);
+      }
       if (args[0] === "agent" && args[1] === "list") {
         return commands.some(([command, operation]) => command === "pane" && operation === "run")
           ? {
@@ -209,14 +235,65 @@ describe("Herdr Interactive Session Host", () => {
       }),
     ).resolves.toEqual({ ok: true, host: "herdr", status: "started" });
 
-    expect(commands[3]?.[3]).toContain(
+    expect(launchScript).toContain(
       "--no-extensions --extension '/workspace/change-123/extensions/one.ts'",
     );
     expect(
-      (commands[3]?.[3] ?? "").match(new RegExp(trustedContinuationExtensionPath(), "g")) ?? [],
+      launchScript.match(new RegExp(trustedContinuationExtensionPath(), "g")) ?? [],
     ).toHaveLength(1);
-    expect(commands[3]?.[3]).toContain("--no-skills --skill '/workspace/change-123/skills/one'");
-    expect(commands[3]?.[3]).toContain("--tools '' --no-context-files");
+    expect(launchScript).toContain("--no-skills --skill '/workspace/change-123/skills/one'");
+    expect(launchScript).toContain("--tools '' --no-context-files");
+  });
+
+  it("keeps large Pi launch payloads out of terminal input", async () => {
+    const initialPrompt = "x".repeat(100_000);
+    let paneCommand = "";
+    let launchScript = "";
+    let launched = false;
+    const execute: HerdrCommandExecutor = async (args) => {
+      if (args[0] === "agent" && args[1] === "list") {
+        return launched
+          ? {
+              ok: true,
+              stdout:
+                '{"result":{"type":"agent_list","agents":[{"name":"but-why-change-123","cwd":"/workspace/change-123","pane_id":"workspace-1:pane-1","agent_status":"working"}]}}',
+            }
+          : { ok: true, stdout: '{"result":{"type":"agent_list","agents":[]}}' };
+      }
+      if (args[0] === "worktree") {
+        return {
+          ok: true,
+          stdout:
+            '{"result":{"type":"worktree_opened","workspace":{"workspace_id":"workspace-1"},"root_pane":{"pane_id":"workspace-1:pane-1"},"already_open":false}}',
+        };
+      }
+      if (args[0] === "pane" && args[1] === "run") {
+        paneCommand = args[3] ?? "";
+        launchScript = readPiLaunchScript(paneCommand);
+        launched = true;
+        return { ok: true, stdout: "{}" };
+      }
+      if (args[0] === "agent" && args[1] === "rename") {
+        return {
+          ok: true,
+          stdout:
+            '{"result":{"agent":{"name":"but-why-change-123","pane_id":"workspace-1:pane-1","cwd":"/workspace/change-123"}}}',
+        };
+      }
+      return { ok: true, stdout: "{}" };
+    };
+
+    await expect(
+      openHerdrInteractiveSessionHost(execute).launch({
+        changeId: "change-123",
+        repositoryPath: "/repository",
+        worktreePath: "/workspace/change-123",
+        initialPrompt,
+      }),
+    ).resolves.toEqual({ ok: true, host: "herdr", status: "started" });
+
+    expect(paneCommand.length).toBeLessThan(200);
+    expect(launchScript).toContain(initialPrompt);
   });
 
   it("returns a retryable failure when a concurrent launch claims the session name", async () => {
