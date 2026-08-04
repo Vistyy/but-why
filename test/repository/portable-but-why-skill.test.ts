@@ -44,7 +44,10 @@ describe("portable But Why skill", () => {
       authorTasks.indexOf("Create Tasks in the authorized recording order"),
     );
     expect(authorTasks).toContain(
-      "Verify every recorded Task remains unapproved and has no Change.",
+      "Treat each successful mutation result as authoritative for its returned committed fields.",
+    );
+    expect(authorTasks).toContain(
+      "Verify every recorded Task remains unapproved and has no Change through the returned state or the applicable inspection command.",
     );
     expect(authorTasks).not.toContain("by task approve");
     expect(approveTask).toContain("by task approve <task-id>");

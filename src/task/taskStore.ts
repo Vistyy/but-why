@@ -1,4 +1,5 @@
 import type { TaskState } from "./lifecycle.js";
+import type { TaskContext } from "./task.js";
 import type {
   DependencyValidationCode,
   TaskDependencyFact,
@@ -86,6 +87,9 @@ export type AppendTaskCommentResult =
       readonly ok: true;
       readonly taskId: PublicTaskId;
       readonly commentCount: number;
+      readonly state: TaskState;
+      readonly updatedAt: string;
+      readonly content: string;
     }
   | {
       readonly ok: false;
@@ -108,6 +112,7 @@ export type UpdateTaskContextResult =
   | {
       readonly ok: true;
       readonly task: StoredTaskRecord;
+      readonly context: TaskContext;
     }
   | {
       readonly ok: false;

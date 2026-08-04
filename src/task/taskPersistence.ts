@@ -19,11 +19,11 @@ import type {
   UpdateTaskContextInput,
   UpdateTaskContextResult,
 } from "./taskStore.js";
-import type { DependencyValidationCode, TaskContext, TaskSummary } from "./task.js";
+import type { DependencyValidationCode, TaskContext, TaskRecord, TaskSummary } from "./task.js";
 import type { PublicTaskId } from "./taskId.js";
 
 export type CreateTaskPersistenceResult =
-  | { readonly ok: true; readonly task: TaskSummary }
+  | { readonly ok: true; readonly task: TaskRecord; readonly context: TaskContext }
   | {
       readonly ok: false;
       readonly code: DependencyValidationCode;

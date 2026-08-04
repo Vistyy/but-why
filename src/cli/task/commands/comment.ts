@@ -45,7 +45,15 @@ export const runCommentCommand = (
               ? taskNotFound(taskId.taskId)
               : invalidTaskCommentState(taskId.taskId, result.state);
           }
-          return success({ task: { id: result.taskId, commentCount: result.commentCount } });
+          return success({
+            task: {
+              id: result.taskId,
+              state: result.state,
+              commentCount: result.commentCount,
+              updatedAt: result.updatedAt,
+            },
+            content: result.content,
+          });
         },
       );
     });
