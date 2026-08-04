@@ -3,7 +3,11 @@ import { spawnSync } from "node:child_process";
 import type { SpawnSyncOptionsWithStringEncoding } from "node:child_process";
 
 import type { ChangePublicationTarget } from "../change/change.js";
-import type { ChangeCleanupRemote, RemoteBranchHeadResult } from "../change/changeCleanupRemote.js";
+import type {
+  ChangeCleanupRemote,
+  RemoteBranchDeletionResult,
+  RemoteBranchHeadResult,
+} from "../change/changeCleanupRemote.js";
 import { changeBranchNameForRef } from "../change/changeBranch.js";
 import type {
   GitHubPullRequest,
@@ -59,7 +63,7 @@ export const githubChangeCleanupRemote = (
   gateway: GitHubPullRequestGateway,
 ): ChangeCleanupRemote => ({
   readRemoteBranchHead: gateway.readRemoteBranchHead ?? (() => ({ state: "unavailable" as const })),
-  deleteRemoteBranch: gateway.deleteRemoteBranch ?? (() => false),
+  deleteRemoteBranch: gateway.deleteRemoteBranch ?? (() => ({ state: "failed" as const })),
 });
 
 export const localGitHubPullRequestGateway = (
@@ -265,9 +269,19 @@ const readRemoteBranchHead = (
     `qualifiedName=refs/heads/${input.branchName}`,
   ]);
   if (!result.ok) return { state: "unavailable" };
-  const parsed = parseJson(result.stdout) as RemoteBranchQueryJson | undefined;
-  const repository = parsed?.data?.repository;
-  if (repository === null || repository === undefined) return { state: "mismatch" };
+  const parsed = parseJson(result.stdout);
+  if (
+    typeof parsed !== "object" ||
+    parsed === null ||
+    Array.isArray(parsed) ||
+    !("data" in parsed) ||
+    hasGraphqlErrors(parsed)
+  ) {
+    return { state: "unavailable" };
+  }
+  const repository = (parsed as RemoteBranchQueryJson).data?.repository;
+  if (repository === undefined) return { state: "unavailable" };
+  if (repository === null) return { state: "mismatch" };
   const defaultBranch = repository.defaultBranchRef?.name;
   if (typeof defaultBranch !== "string") return { state: "unavailable" };
   if (defaultBranch === input.branchName) return { state: "excluded" };
@@ -292,8 +306,10 @@ const readRemoteBranchHead = (
 const deleteRemoteBranch = (
   runGh: PublicationCommandRunner,
   input: Parameters<ChangeCleanupRemote["deleteRemoteBranch"]>[0],
-): boolean => {
-  if (input.repositoryId === undefined || input.refId === undefined) return false;
+): RemoteBranchDeletionResult => {
+  if (input.repositoryId === undefined || input.refId === undefined) {
+    return { state: "failed" };
+  }
   const result = runGh([
     "api",
     "graphql",
@@ -308,11 +324,45 @@ const deleteRemoteBranch = (
     "-F",
     `afterOid=${zeroSha}`,
   ]);
-  if (!result.ok) return false;
+  if (!result.ok) return readAfterUncertainDeletion(runGh, input);
   const parsed = parseJson(result.stdout) as
-    | { readonly data?: { readonly updateRefs?: { readonly clientMutationId?: unknown } | null } }
+    | {
+        readonly data?: { readonly updateRefs?: { readonly clientMutationId?: unknown } | null };
+        readonly errors?: readonly unknown[];
+      }
     | undefined;
-  return parsed?.data?.updateRefs !== null && parsed?.data?.updateRefs !== undefined;
+  return parsed?.data?.updateRefs !== null &&
+    parsed?.data?.updateRefs !== undefined &&
+    !hasGraphqlErrors(parsed)
+    ? { state: "deleted" }
+    : readAfterUncertainDeletion(runGh, input);
+};
+
+const hasGraphqlErrors = (value: unknown): boolean =>
+  typeof value === "object" &&
+  value !== null &&
+  "errors" in value &&
+  Array.isArray(value.errors) &&
+  value.errors.length > 0;
+
+const readAfterUncertainDeletion = (
+  runGh: PublicationCommandRunner,
+  input: Parameters<ChangeCleanupRemote["deleteRemoteBranch"]>[0],
+): RemoteBranchDeletionResult => {
+  try {
+    return readRemoteBranchHead(runGh, {
+      repositoryCommonDirectory: input.repositoryCommonDirectory,
+      owner: input.owner,
+      repo: input.repo,
+      remoteName: input.remoteName,
+      remoteUrl: input.remoteUrl,
+      branchName: input.branchName,
+      canonicalBranchRef: input.canonicalBranchRef,
+      targetBranch: input.targetBranch,
+    });
+  } catch {
+    return { state: "unavailable" };
+  }
 };
 
 const createPullRequest = (
