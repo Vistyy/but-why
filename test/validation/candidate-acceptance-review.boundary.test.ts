@@ -1537,24 +1537,24 @@ const runReviewPhases = (
       if (started.reused) return { ok: true as const, ...started, outcome: "passed" as const };
 
       yield* persistence.recordCheckRound({
-          validationRunId: started.validationRunId,
-          producer: "quality",
-          roundNumber: 1,
-          roundStatus: "passed",
-          phaseStatus: "passed",
-          artifactRecords: [
-            {
-              ref: `artifact:${started.validationRunId}/checks/quality/stdout.txt`,
-              validationRunId: started.validationRunId,
-              phase: "checks",
-              producer: "quality",
-              path: "stdout.txt",
-              originalBytes: 0,
-              storedBytes: 0,
-              truncated: false,
-            },
-          ],
-          now,
+        validationRunId: started.validationRunId,
+        producer: "quality",
+        roundNumber: 1,
+        roundStatus: "passed",
+        phaseStatus: "passed",
+        artifactRecords: [
+          {
+            ref: `artifact:${started.validationRunId}/checks/quality/stdout.txt`,
+            validationRunId: started.validationRunId,
+            phase: "checks",
+            producer: "quality",
+            path: "stdout.txt",
+            originalBytes: 0,
+            storedBytes: 0,
+            truncated: false,
+          },
+        ],
+        now,
       });
       const sandbox: Pick<Sandbox, "exec" | "run"> = {
         exec: async () => ({ exitCode: 0, stdout: `${captured.headSha}\n`, stderr: "" }),

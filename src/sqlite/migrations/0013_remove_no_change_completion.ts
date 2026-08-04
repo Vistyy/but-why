@@ -143,6 +143,8 @@ export const removeNoChangeCompletionMigration = Effect.gen(function* () {
 
   const foreignKeyFailures = yield* sql`PRAGMA foreign_key_check`;
   if (foreignKeyFailures.length > 0) {
-    return yield* Effect.fail(new Error("No-Change removal migration did not preserve foreign keys"));
+    return yield* Effect.fail(
+      new Error("No-Change removal migration did not preserve foreign keys"),
+    );
   }
 });

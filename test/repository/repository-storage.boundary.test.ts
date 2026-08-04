@@ -920,7 +920,9 @@ describe("repository SQL storage", () => {
           );
 
           const error = yield* Effect.scoped(
-            RepositorySql.pipe(Effect.provide(repositorySqlLayer({ commonDirectory: directory, statePath }))),
+            RepositorySql.pipe(
+              Effect.provide(repositorySqlLayer({ commonDirectory: directory, statePath })),
+            ),
           ).pipe(Effect.flip);
 
           expect(error).toBeInstanceOf(RepositoryMigrationFailed);
