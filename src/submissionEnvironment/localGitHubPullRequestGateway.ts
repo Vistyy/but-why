@@ -3,6 +3,8 @@ import { spawnSync } from "node:child_process";
 import type { SpawnSyncOptionsWithStringEncoding } from "node:child_process";
 
 import type { ChangePublicationTarget } from "../change/change.js";
+import type { ChangeCleanupRemote, RemoteBranchHeadResult } from "../change/changeCleanupRemote.js";
+import { changeBranchNameForRef } from "../change/changeBranch.js";
 import type {
   GitHubPullRequest,
   GitHubPullRequestGateway,
@@ -53,6 +55,13 @@ const evidence = (
 
 export type PublicationCommandRunner = (args: readonly string[]) => PublicationCommandResult;
 
+export const githubChangeCleanupRemote = (
+  gateway: GitHubPullRequestGateway,
+): ChangeCleanupRemote => ({
+  readRemoteBranchHead: gateway.readRemoteBranchHead ?? (() => ({ state: "unavailable" as const })),
+  deleteRemoteBranch: gateway.deleteRemoteBranch ?? (() => false),
+});
+
 export const localGitHubPullRequestGateway = (
   input: {
     readonly cwd?: string;
@@ -91,6 +100,8 @@ export const localGitHubPullRequestGateway = (
       return result;
     },
     closePullRequest: (input) => closePullRequest(runGh, input),
+    readRemoteBranchHead: (input) => readRemoteBranchHead(runGh, input),
+    deleteRemoteBranch: (input) => deleteRemoteBranch(runGh, input),
     createPullRequest: (request) => createPullRequest(runGit, runGh, request),
     updatePullRequest: (request) => updatePullRequest(runGit, runGh, request),
   };
@@ -170,6 +181,116 @@ const closePullRequest = (
   return pullRequest === undefined
     ? { ok: false, code: "close_failed" }
     : { ok: true, pullRequest };
+};
+
+const remoteBranchQuery = `query($owner: String!, $repo: String!, $qualifiedName: String!) {
+  repository(owner: $owner, name: $repo) {
+    id
+    defaultBranchRef { name }
+    ref(qualifiedName: $qualifiedName) {
+      id
+      name
+      target { oid }
+    }
+  }
+}`;
+
+const remoteBranchDeletionMutation = `mutation($repositoryId: ID!, $refUpdates: [RefUpdate!]!) {
+  updateRefs(input: { repositoryId: $repositoryId, refUpdates: $refUpdates }) {
+    clientMutationId
+  }
+}`;
+
+const zeroSha = "0".repeat(40);
+
+type RemoteBranchCleanupInput = Parameters<ChangeCleanupRemote["readRemoteBranchHead"]>[0];
+
+type RemoteBranchQueryJson = {
+  readonly data?: {
+    readonly repository?: {
+      readonly id?: unknown;
+      readonly defaultBranchRef?: { readonly name?: unknown } | null;
+      readonly ref?: {
+        readonly id?: unknown;
+        readonly name?: unknown;
+        readonly target?: { readonly oid?: unknown } | null;
+      } | null;
+    } | null;
+  };
+};
+
+const readRemoteBranchHead = (
+  runGh: PublicationCommandRunner,
+  input: RemoteBranchCleanupInput,
+): RemoteBranchHeadResult => {
+  if (changeBranchNameForRef(input.canonicalBranchRef) !== input.branchName) {
+    return { state: "mismatch" };
+  }
+  if (input.branchName === input.targetBranch) return { state: "excluded" };
+  const result = runGh([
+    "api",
+    "graphql",
+    "-f",
+    `query=${remoteBranchQuery}`,
+    "-f",
+    `owner=${input.owner}`,
+    "-f",
+    `repo=${input.repo}`,
+    "-f",
+    `qualifiedName=refs/heads/${input.branchName}`,
+  ]);
+  if (!result.ok) return { state: "unavailable" };
+  const parsed = parseJson(result.stdout) as RemoteBranchQueryJson | undefined;
+  const repository = parsed?.data?.repository;
+  if (repository === null || repository === undefined) return { state: "mismatch" };
+  const defaultBranch = repository.defaultBranchRef?.name;
+  if (typeof defaultBranch !== "string") return { state: "unavailable" };
+  if (defaultBranch === input.branchName) return { state: "excluded" };
+  const ref = repository.ref;
+  if (ref === null) return { state: "missing" };
+  if (
+    typeof repository.id !== "string" ||
+    typeof ref?.id !== "string" ||
+    typeof ref.target?.oid !== "string"
+  ) {
+    return { state: "unavailable" };
+  }
+  return {
+    state: "present",
+    headSha: ref.target.oid,
+    remoteUrl: input.remoteUrl,
+    repositoryId: repository.id,
+    refId: ref.id,
+  };
+};
+
+const deleteRemoteBranch = (
+  runGh: PublicationCommandRunner,
+  input: Parameters<ChangeCleanupRemote["deleteRemoteBranch"]>[0],
+): boolean => {
+  if (input.repositoryId === undefined || input.refId === undefined) return false;
+  const result = runGh([
+    "api",
+    "graphql",
+    "-f",
+    `query=${remoteBranchDeletionMutation}`,
+    "-F",
+    `repositoryId=${input.repositoryId}`,
+    "-F",
+    `refUpdates=${JSON.stringify([
+      {
+        name: `refs/heads/${input.branchName}`,
+        beforeOid: input.expectedHeadSha,
+        afterOid: zeroSha,
+        force: false,
+      },
+    ])}`,
+  ]);
+  if (!result.ok) return false;
+  const parsed = parseJson(result.stdout) as
+    | { readonly data?: { readonly updateRefs?: { readonly clientMutationId?: unknown } | null } }
+    | undefined;
+  return parsed?.data?.updateRefs !== null && parsed?.data?.updateRefs !== undefined;
 };
 
 const createPullRequest = (

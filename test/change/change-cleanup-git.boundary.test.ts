@@ -300,12 +300,12 @@ console.log(JSON.stringify(cleanupChangeResources({ repositoryCommonDirectory, w
   it("deletes an exact Remote Change Branch after local cleanup", () => {
     const repository = initializedRepository();
     const worktreePath = join(repository, "feature-worktree");
-    git(repository, "worktree", "add", "-b", "feature", worktreePath, "main");
+    git(repository, "worktree", "add", "-b", "but-why/feature", worktreePath, "main");
     writeFileSync(join(worktreePath, "feature.txt"), "merged work\n");
     git(worktreePath, "add", "feature.txt");
     git(worktreePath, "commit", "-m", "Feature");
     const expectedHeadSha = git(worktreePath, "rev-parse", "HEAD");
-    git(repository, "merge", "--ff-only", "feature");
+    git(repository, "merge", "--ff-only", "but-why/feature");
     const calls: string[] = [];
 
     expect(
@@ -318,13 +318,14 @@ console.log(JSON.stringify(cleanupChangeResources({ repositoryCommonDirectory, w
             "--git-common-dir",
           ),
           worktreePath,
-          branchRef: "refs/heads/feature",
+          branchRef: "refs/heads/but-why/feature",
           remoteChangeBranch: {
             owner: "acme",
             repo: "widgets",
             remoteName: "origin",
             remoteUrl: "origin-url",
-            branchName: "feature",
+            branchName: "but-why/feature",
+            targetBranch: "main",
             expectedHeadSha,
           },
         },
@@ -360,13 +361,14 @@ console.log(JSON.stringify(cleanupChangeResources({ repositoryCommonDirectory, w
             "--git-common-dir",
           ),
           worktreePath: null,
-          branchRef: "refs/heads/missing",
+          branchRef: "refs/heads/but-why/feature",
           remoteChangeBranch: {
             owner: "acme",
             repo: "widgets",
             remoteName: "origin",
             remoteUrl: "origin-url",
-            branchName: "feature",
+            branchName: "but-why/feature",
+            targetBranch: "main",
             expectedHeadSha: "candidate-head",
           },
         },
@@ -393,13 +395,14 @@ console.log(JSON.stringify(cleanupChangeResources({ repositoryCommonDirectory, w
             "--git-common-dir",
           ),
           worktreePath: null,
-          branchRef: "refs/heads/missing",
+          branchRef: "refs/heads/but-why/feature",
           remoteChangeBranch: {
             owner: "acme",
             repo: "widgets",
             remoteName: "origin",
             remoteUrl: "origin-url",
-            branchName: "feature",
+            branchName: "but-why/feature",
+            targetBranch: "main",
             expectedHeadSha: "candidate-head",
           },
         },
@@ -427,13 +430,14 @@ console.log(JSON.stringify(cleanupChangeResources({ repositoryCommonDirectory, w
             "--git-common-dir",
           ),
           worktreePath: null,
-          branchRef: "refs/heads/missing",
+          branchRef: "refs/heads/but-why/feature",
           remoteChangeBranch: {
             owner: "acme",
             repo: "widgets",
             remoteName: "origin",
             remoteUrl: "origin-url",
-            branchName: "feature",
+            branchName: "but-why/feature",
+            targetBranch: "main",
             expectedHeadSha: "candidate-head",
           },
         },
@@ -450,7 +454,7 @@ console.log(JSON.stringify(cleanupChangeResources({ repositoryCommonDirectory, w
         },
       ),
     ).toEqual({ state: "pending", blockingReason: "remote_branch_deletion_failed" });
-    expect(reads).toBe(2);
+    expect(reads).toBe(1);
   });
 
   it("preserves a Remote Change Branch from a repointed remote", () => {
@@ -466,13 +470,14 @@ console.log(JSON.stringify(cleanupChangeResources({ repositoryCommonDirectory, w
             "--git-common-dir",
           ),
           worktreePath: null,
-          branchRef: "refs/heads/missing",
+          branchRef: "refs/heads/but-why/feature",
           remoteChangeBranch: {
             owner: "acme",
             repo: "widgets",
             remoteName: "origin",
             remoteUrl: "origin-url",
-            branchName: "feature",
+            branchName: "but-why/feature",
+            targetBranch: "main",
             expectedHeadSha: "candidate-head",
           },
         },
@@ -492,12 +497,12 @@ console.log(JSON.stringify(cleanupChangeResources({ repositoryCommonDirectory, w
   it("preserves a Remote Change Branch that moved to another commit", () => {
     const repository = initializedRepository();
     const worktreePath = join(repository, "feature-worktree");
-    git(repository, "worktree", "add", "-b", "feature", worktreePath, "main");
+    git(repository, "worktree", "add", "-b", "but-why/feature", worktreePath, "main");
     writeFileSync(join(worktreePath, "feature.txt"), "merged work\n");
     git(worktreePath, "add", "feature.txt");
     git(worktreePath, "commit", "-m", "Feature");
     const expectedHeadSha = git(worktreePath, "rev-parse", "HEAD");
-    git(repository, "merge", "--ff-only", "feature");
+    git(repository, "merge", "--ff-only", "but-why/feature");
     let deleted = false;
 
     expect(
@@ -510,13 +515,14 @@ console.log(JSON.stringify(cleanupChangeResources({ repositoryCommonDirectory, w
             "--git-common-dir",
           ),
           worktreePath,
-          branchRef: "refs/heads/feature",
+          branchRef: "refs/heads/but-why/feature",
           remoteChangeBranch: {
             owner: "acme",
             repo: "widgets",
             remoteName: "origin",
             remoteUrl: "origin-url",
-            branchName: "feature",
+            branchName: "but-why/feature",
+            targetBranch: "main",
             expectedHeadSha,
           },
         },

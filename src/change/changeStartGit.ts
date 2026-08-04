@@ -7,6 +7,7 @@ import { resolveLocalBranch } from "./candidateCapture/localGitCandidate.js";
 import { fetchRemoteChangeBase } from "../submissionEnvironment/remoteChangeBase.js";
 import type { RepoLocalContext } from "../init/repoContext.js";
 import { changeReadiness } from "./change.js";
+import { changeBranchRefForSlug } from "./changeBranch.js";
 import type {
   ProvisionChangeWorktreeResult,
   ResolveChangeStartGitResult,
@@ -31,7 +32,7 @@ export const resolveChangeStartGitIntent = (
     return { ok: false, code: "committed_repo_config_invalid" };
   }
 
-  const branchRef = `refs/heads/but-why/${slug}`;
+  const branchRef = changeBranchRefForSlug(slug);
   if (resolveLocalBranch(context.root, branchRef) !== undefined) {
     return { ok: false, code: "change_start_conflict" };
   }

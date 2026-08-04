@@ -49,6 +49,7 @@ export type RemoteChangeBranch = {
   readonly remoteName: string;
   readonly remoteUrl: string;
   readonly branchName: string;
+  readonly targetBranch: string;
   readonly expectedHeadSha: string;
 };
 

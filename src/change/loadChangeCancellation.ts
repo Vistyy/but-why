@@ -5,9 +5,12 @@ import { Effect } from "effect";
 import { repositoryStorageErrorResult, repoStateLoadError, type CliResult } from "../cliResults.js";
 import { loadRepoLocalContext } from "../init/repoContext.js";
 import { resolveRepoTaskId } from "../task/repoTaskIds.js";
-import { cleanupChangeResources } from "./localChangeCleanupGit.js";
+import { cleanupChangeResourcesWithRemote } from "./localChangeCleanupGit.js";
 import { openCancellationUseCases, type CancellationUseCases } from "./cancelChange.js";
-import { localGitHubPullRequestGateway } from "../submissionEnvironment/localGitHubPullRequestGateway.js";
+import {
+  githubChangeCleanupRemote,
+  localGitHubPullRequestGateway,
+} from "../submissionEnvironment/localGitHubPullRequestGateway.js";
 import { repositorySqlLayer } from "../sqlite/repositorySql.js";
 import { openSqliteChangePersistence } from "../sqlite/sqliteChangePersistence.js";
 import { openSqliteTaskPersistence } from "../sqlite/sqliteTaskPersistence.js";
@@ -41,6 +44,7 @@ export const withCancellation = <A, R>(
     });
   }
 
+  const github = localGitHubPullRequestGateway({ cwd: context.context.root });
   const program = Effect.all({
     changes: openSqliteChangePersistence(),
     tasks: openSqliteTaskPersistence(context.context.taskPrefix),
@@ -56,8 +60,8 @@ export const withCancellation = <A, R>(
           executionLock: openSqliteExecutionLock({
             commonDirectory: context.context.commonDirectory,
           }),
-          github: localGitHubPullRequestGateway({ cwd: context.context.root }),
-          cleanup: cleanupChangeResources,
+          github,
+          cleanup: cleanupChangeResourcesWithRemote(githubChangeCleanupRemote(github)),
           reviewerSessionPathFor: (changeId) =>
             join(context.context.paths.operationalDir, changeId),
         }),
