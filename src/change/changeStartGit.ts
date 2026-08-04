@@ -123,7 +123,7 @@ const inspectRecordedWorktree = (
       path: start.worktreePath,
     };
   }
-  if (listedAtPath === undefined) {
+  if (listedAtPath === undefined || listedAtPath.prunable) {
     return {
       ok: false,
       code: "managed_worktree_path_conflict",

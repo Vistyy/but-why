@@ -548,6 +548,39 @@ describe("Change Start Managed Worktree boundaries", () => {
     }),
   );
 
+  it.effect("stops recovery when the recorded path conflicts under a stale registration", () =>
+    Effect.gen(function* () {
+      const root = yield* repositoryCopy();
+      const started = yield* runByInProcessEffect(root, ["--json", "change", "start"], now);
+      expect(started.status).toBe(0);
+      const output = JSON.parse(started.stdout) as ChangeOutput;
+      rmSync(output.worktreePath, { recursive: true });
+      mkdirSync(output.worktreePath, { recursive: true });
+      writeFileSync(join(output.worktreePath, "keep.txt"), "do not overwrite\n");
+      expect(git(root, "worktree", "list", "--porcelain")).toContain("prunable");
+
+      const recovered = yield* runByInProcessEffect(
+        root,
+        ["--json", "change", "prepare", output.change.id],
+        now,
+      );
+      expect(recovered.status).toBe(1);
+      expect(JSON.parse(recovered.stdout)).toMatchObject({
+        error: {
+          code: "managed_worktree_path_conflict",
+          changeId: output.change.id,
+          branch: output.branch,
+          worktreePath: output.worktreePath,
+        },
+        help: [
+          expect.stringContaining("Move the conflicting files aside or remove them"),
+          expect.stringContaining(`by change cancel ${output.change.id}`),
+        ],
+      });
+      expect(existsSync(join(output.worktreePath, "keep.txt"))).toBe(true);
+    }),
+  );
+
   it.effect("preserves failed preparation and retries it in the same worktree", () =>
     Effect.gen(function* () {
       const root = yield* repositoryCopy();
