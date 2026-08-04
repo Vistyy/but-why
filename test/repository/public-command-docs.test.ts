@@ -24,6 +24,7 @@ const extractDocumentedCommands = (docs: string): readonly string[] =>
 const helpText = (stdout: string): string => (JSON.parse(stdout) as HelpView).help;
 
 const documentedCommands = [
+  "by snapshot",
   "by task create --title <title> --file <path|-> [--depends-on <task-id>]...",
   "by task dependencies add <task-id> --depends-on <task-id> [--depends-on <task-id>]...",
   "by task dependencies remove <task-id> --depends-on <task-id> [--depends-on <task-id>]...",
