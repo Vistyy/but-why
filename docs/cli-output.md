@@ -38,7 +38,9 @@ Each command returns the smallest default schema that supports its normal next d
 Navigation commands return identities, lifecycle state, readiness, aggregate counts, durable references, and valid next commands.
 They omit bodies, repeated evidence, and historical detail owned by another command.
 
-Mutation results report the resulting state and durable identifiers needed to verify the mutation.
+Mutation results report the smallest resulting persisted state needed to verify the mutation and choose the normal next action.
+A successful result is authoritative for every committed field it returns.
+Content mutations return complete persisted text once when that text is required for verification.
 An empty successful result states its applied scope and reports a zero count.
 
 When a result omits detail, it includes the exact public command that retrieves the detail.

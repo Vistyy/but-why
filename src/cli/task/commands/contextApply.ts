@@ -9,6 +9,7 @@ import type { TaskContextDraftReadError } from "../../../task/files/contextDraft
 import type { PublicTaskId } from "../../../task/taskId.js";
 import {
   resolveTaskId,
+  taskMutationView,
   taskNotFound,
   withTasks,
   type TaskCommandEnvironment,
@@ -29,7 +30,9 @@ export const runContextApplyCommand = (
         now: environment.now().toISOString(),
       }),
       (result) => {
-        if (result.ok) return success({ task: result.task });
+        if (result.ok) {
+          return success({ task: taskMutationView(result.task), context: result.context });
+        }
         if ("error" in result) return taskContextDraftReadError(result.error);
         if (result.code === "task_not_found") return taskNotFound(taskId.taskId);
         if (result.code === "task_context_draft_cleanup_failed") {

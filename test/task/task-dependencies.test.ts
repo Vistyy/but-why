@@ -38,6 +38,15 @@ const createTask = (root: string, title: string, dependencies: readonly string[]
       now,
     );
     expect(result.status).toBe(0);
+    return JSON.parse(result.stdout) as {
+      readonly task: {
+        readonly prerequisites: readonly {
+          readonly id: string;
+          readonly title: string;
+          readonly state: string;
+        }[];
+      };
+    };
   });
 
 const readGraph = (root: string, taskIds: readonly string[]) =>
@@ -218,8 +227,10 @@ describe("Task dependency CLI", () => {
       Effect.gen(function* () {
         const root = createInitializedRepo();
         yield* createTask(root, "First");
-        yield* createTask(root, "Second", ["BY-1"]);
-        yield* createTask(root, "Third", ["BY-2"]);
+        const second = yield* createTask(root, "Second", ["BY-1"]);
+        const third = yield* createTask(root, "Third", ["BY-2"]);
+        expect(second.task.prerequisites).toEqual([{ id: "BY-1", title: "First", state: "new" }]);
+        expect(third.task.prerequisites).toEqual([{ id: "BY-2", title: "Second", state: "new" }]);
         const taskIds = ["BY-1", "BY-2", "BY-3"];
         const before = yield* readGraph(root, taskIds);
 

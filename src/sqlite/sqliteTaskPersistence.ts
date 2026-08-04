@@ -76,7 +76,9 @@ const createTask = (sql: SqlClient.SqlClient, taskPrefix: string, input: CreateT
     yield* insertDependencies(sql, taskId, prerequisiteTaskIds);
     const created = yield* getTaskById(sql, taskId);
     if (created === undefined) return yield* invalidData("create Task", "Task disappeared");
-    return { ok: true as const, task: created };
+    const context = yield* getTaskContextById(sql, taskId);
+    if (context === undefined) return yield* invalidData("create Task", "Task Context disappeared");
+    return { ok: true as const, task: created, context };
   });
 
 const editTaskDependencies = (sql: SqlClient.SqlClient, input: EditTaskDependenciesInput) =>
@@ -292,8 +294,16 @@ const appendTaskComment = (sql: SqlClient.SqlClient, input: AppendTaskCommentInp
       VALUES (${randomUUID()}, ${input.taskId}, ${now}, ${input.content})
     `;
     yield* sql`UPDATE tasks SET updated_at = ${now} WHERE id = ${input.taskId}`;
-    const count = yield* commentCountForTask(sql, input.taskId);
-    return { ok: true as const, taskId: input.taskId, commentCount: count };
+    const updated = yield* getTaskById(sql, input.taskId);
+    if (updated === undefined) return yield* invalidData("append Task comment", "Task disappeared");
+    return {
+      ok: true as const,
+      taskId: input.taskId,
+      commentCount: updated.commentCount,
+      state: updated.state,
+      updatedAt: updated.updatedAt,
+      content: input.content,
+    };
   });
 
 const updateTaskContext = (sql: SqlClient.SqlClient, input: UpdateTaskContextInput) =>
@@ -311,7 +321,11 @@ const updateTaskContext = (sql: SqlClient.SqlClient, input: UpdateTaskContextInp
     if (updated === undefined) {
       return yield* invalidData("update Task Context", "Task disappeared");
     }
-    return { ok: true as const, task: updated };
+    const context = yield* getTaskContextById(sql, input.taskId);
+    if (context === undefined) {
+      return yield* invalidData("update Task Context", "Task Context disappeared");
+    }
+    return { ok: true as const, task: updated, context };
   });
 
 const cancelTask = (
@@ -552,16 +566,6 @@ const rowToStoredTaskRecord = (sql: SqlClient.SqlClient, row: StoredTaskRecordRo
     } satisfies StoredTaskRecord;
   });
 
-const commentCountForTask = (sql: SqlClient.SqlClient, taskId: PublicTaskId) =>
-  Effect.gen(function* () {
-    const rows = yield* sql<CommentCountRow>`
-      SELECT COUNT(*) AS commentCount FROM task_comments WHERE task_id = ${taskId}
-    `;
-    const row = rows[0];
-    if (row === undefined) return yield* invalidData("append Task comment", "Missing count");
-    return Number(row.commentCount);
-  });
-
 const invalidData = (operationName: string, message: string) =>
   Effect.fail(
     new RepositoryPersistedDataInvalid({
@@ -591,4 +595,3 @@ type TaskContextHeaderRow = {
   readonly description: string;
 };
 type CommentContentRow = { readonly content: string };
-type CommentCountRow = { readonly commentCount: number | bigint };

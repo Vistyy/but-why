@@ -46,6 +46,15 @@ describe("by task CLI", () => {
   state: new
   createdAt: "${firstNow}"
   updatedAt: "${firstNow}"
+  commentCount: 0
+  prerequisites: []
+  dependents: []
+  change: null
+context:
+  id: BY-1
+  title: Add   login
+  description: "  Preserve me exactly.\\n\\n"
+  comments: []
 help[1]: Run \`by task list\` to see open tasks.
 `);
       }),
@@ -449,15 +458,16 @@ contextCommand: by task context BY-1
       expect(result.status).toBe(0);
       expect(result.stderr).toBe("");
 
-      const output = JSON.parse(result.stdout) as { draft: { path: string } };
+      const output = JSON.parse(result.stdout) as {
+        draft: { path: string; content: string };
+      };
 
       expect(output.draft.path).toMatch(
         /\.git\/but-why\/task-context-drafts\/by-1-[a-f0-9]{12}\.md$/,
       );
+      expect(output.draft.content).toBe("# Draft title\n\nDescription for Draft title");
       expect(existsSync(output.draft.path)).toBe(true);
-      expect(readFileSync(output.draft.path, "utf8")).toBe(
-        "# Draft title\n\nDescription for Draft title",
-      );
+      expect(readFileSync(output.draft.path, "utf8")).toBe(output.draft.content);
     }),
   );
 
@@ -541,9 +551,15 @@ contextCommand: by task context BY-1
         task: {
           id: "BY-1",
           title: "Updated title",
-          description: "Updated description\n\n",
           state: "new",
           updatedAt: secondNow,
+          change: null,
+        },
+        context: {
+          id: "BY-1",
+          title: "Updated title",
+          description: "Updated description\n\n",
+          comments: [],
         },
       });
       expect(existsSync(draft.draft.path)).toBe(false);
@@ -677,12 +693,18 @@ contextCommand: by task context BY-1
         expect(firstResult.stderr).toBe("");
         expect(firstResult.stdout).toBe(`task:
   id: BY-1
+  state: new
   commentCount: 1
+  updatedAt: "${thirdNow}"
+content: "First comment\\n\\nWith Markdown.\\n"
 `);
         expect(duplicateResult.status).toBe(0);
         expect(duplicateResult.stdout).toBe(`task:
   id: BY-1
+  state: todo
   commentCount: 2
+  updatedAt: "2026-06-30T12:15:00.000Z"
+content: "First comment\\n\\nWith Markdown.\\n"
 `);
 
         expect((yield* runByInProcessEffect(root, ["task", "show", "BY-1"])).stdout).toBe(`task:
@@ -779,7 +801,14 @@ contextCommand: by task context BY-1
         getTaskById: (taskId) => (taskId === "BY-1" ? taskRecord() : undefined),
         appendTaskComment: () => {
           appendCalls += 1;
-          return { ok: true, taskId: publicTaskId("BY-1"), commentCount: 1 };
+          return {
+            ok: true,
+            taskId: publicTaskId("BY-1"),
+            commentCount: 1,
+            state: "new",
+            updatedAt: secondNow,
+            content: "Valid comment",
+          };
         },
       });
       const cases = [

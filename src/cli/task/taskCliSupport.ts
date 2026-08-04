@@ -10,6 +10,7 @@ import { taskIdResolutionError } from "../../cliTaskId.js";
 import { loadRepoLocalContext } from "../../init/repoContext.js";
 import { withTaskUseCases } from "../../task/loadTaskUseCases.js";
 import type { RepositoryStorageError } from "../../contracts/repositoryStorageError.js";
+import type { TaskRecord } from "../../task/task.js";
 import type { PublicTaskId } from "../../task/taskId.js";
 import type { TaskUseCases } from "../../task/taskUseCases.js";
 import type { CancellationUseCases } from "../../change/cancelChange.js";
@@ -62,6 +63,20 @@ export const resolveTaskId = (tasks: TaskUseCases, taskId: PublicTaskId): Resolv
   }
   return { ok: true, tasks, taskId: resolvedTaskId.taskId };
 };
+
+export const taskMutationView = (task: TaskRecord) => ({
+  id: task.id,
+  title: task.title,
+  state: task.state,
+  ...(task.completionKind == null ? {} : { completionKind: task.completionKind }),
+  createdAt: task.createdAt,
+  updatedAt: task.updatedAt,
+  commentCount: task.commentCount,
+  ...(task.cancelReason === null ? {} : { cancelReason: task.cancelReason }),
+  prerequisites: task.prerequisites,
+  dependents: task.dependents,
+  change: null,
+});
 
 export const taskNotFound = (taskId: string): CliResult =>
   runtimeError({
