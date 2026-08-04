@@ -46,7 +46,6 @@ const columns = [
   "starting_commit AS startingCommit",
   "worktree_path AS worktreePath",
   "acceptance_context AS acceptanceContext",
-  "readiness",
   "prepare_command AS prepareCommand",
   "prepare_timeout_seconds AS prepareTimeoutSeconds",
   "prepare_failure AS prepareFailure",
@@ -792,7 +791,6 @@ const mapRow = (row: ChangeRow | undefined, operationName: string, sql: SqlClien
                 ? null
                 : decodeSqliteAcceptanceContextSnapshot(row.acceptanceContext),
             implementationDecisions: decisions,
-            readiness: row.readiness,
             prepare:
               row.prepareCommand === null || row.prepareTimeoutSeconds === null
                 ? null

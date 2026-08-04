@@ -547,7 +547,7 @@ describe("repository SQL storage", () => {
           Effect.gen(function* () {
             yield* sql`UPDATE changes SET publication_candidate_id = ${captured.candidateId}, publication_validation_run_id = 'legacy-run', publication_owner = 'acme', publication_repo = 'repo', publication_base_branch = 'main', publication_remote_name = 'origin', publication_head_branch = 'legacy', publication_expected_head_sha = 'head-legacy', publication_pr_number = 7, publication_pr_url = 'https://github.test/pull/7' WHERE id = ${captured.changeId}`;
             yield* sql`DROP TABLE candidate_publications`;
-            yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id IN (11, 12, 13)`;
+            yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id IN (11, 12, 13, 14)`;
             yield* sql`INSERT INTO implementation_decisions (id, change_id, recorded_at, content) VALUES ('legacy-decision', ${captured.changeId}, '2026-07-25T15:30:00.000Z', 'Legacy unstructured decision')`;
           }),
         );
@@ -791,6 +791,7 @@ describe("repository SQL storage", () => {
           { migration_id: 11, name: "candidate_publications" },
           { migration_id: 12, name: "structured_implementation_decisions" },
           { migration_id: 13, name: "remove_no_change_completion" },
+          { migration_id: 14, name: "remove_change_readiness" },
         ]);
         expect(identities).toEqual([{ common_directory: repositorySql.commonDirectory }]);
         expect(candidateColumns.map(({ name }) => name)).toEqual([
@@ -803,6 +804,7 @@ describe("repository SQL storage", () => {
         expect(taskColumns.map(({ name }) => name)).not.toContain("completion_kind");
         expect(changeColumns.map(({ name }) => name)).not.toContain("no_change_candidate_id");
         expect(changeColumns.map(({ name }) => name)).not.toContain("no_change_validation_run_id");
+        expect(changeColumns.map(({ name }) => name)).not.toContain("readiness");
       }),
     ),
   );
@@ -821,6 +823,7 @@ describe("repository SQL storage", () => {
                   yield* sql`ALTER TABLE tasks ADD COLUMN completion_kind TEXT`;
                   yield* sql`ALTER TABLE changes ADD COLUMN no_change_candidate_id TEXT`;
                   yield* sql`ALTER TABLE changes ADD COLUMN no_change_validation_run_id TEXT`;
+                  yield* sql`ALTER TABLE changes ADD COLUMN readiness TEXT`;
                   yield* sql`
                     INSERT INTO tasks (
                       id, numeric_id, title, description, state, completion_kind, created_at, updated_at
@@ -839,7 +842,7 @@ describe("repository SQL storage", () => {
                       '2026-07-25T16:30:00.000Z', '2026-07-25T16:30:00.000Z'
                     )
                   `;
-                  yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id = 13`;
+                  yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id IN (13, 14)`;
                 }),
               );
             }).pipe(Effect.provide(repositorySqlLayer({ commonDirectory: directory, statePath }))),
@@ -913,7 +916,7 @@ describe("repository SQL storage", () => {
                       'candidate-unsupported', 'run-unsupported'
                     )
                   `;
-                  yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id = 13`;
+                  yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id IN (13, 14)`;
                 }),
               );
             }).pipe(Effect.provide(repositorySqlLayer({ commonDirectory: directory, statePath }))),
@@ -935,6 +938,82 @@ describe("repository SQL storage", () => {
           expect(String(migrationError.cause)).toContain("changeId=change-unsupported-no-change");
           expect(String(migrationError.cause)).toContain("candidateId=candidate-unsupported");
           expect(String(migrationError.cause)).toContain("validationRunId=run-unsupported");
+        }),
+      (directory) => Effect.sync(() => rmSync(directory, { recursive: true, force: true })),
+    ),
+  );
+
+  it.effect("preserves supported Change data while removing persisted readiness", () =>
+    Effect.acquireUseRelease(
+      Effect.sync(() => mkdtempSync(join(tmpdir(), "but-why-repository-sql-"))),
+      (directory) =>
+        Effect.gen(function* () {
+          const statePath = join(directory, "state.sqlite");
+          yield* Effect.scoped(
+            Effect.gen(function* () {
+              const repository = yield* RepositorySql;
+              yield* repository.operation("restore persisted readiness facts", (sql) =>
+                Effect.gen(function* () {
+                  yield* sql`ALTER TABLE changes ADD COLUMN readiness TEXT`;
+                  yield* sql`
+                    INSERT INTO changes (
+                      id, repository_common_directory, branch_ref, state, created_at, updated_at,
+                      base_ref, base_remote_url, starting_commit, worktree_path,
+                      readiness, prepare_command, prepare_timeout_seconds, prepare_failure,
+                      publication_candidate_id, publication_validation_run_id, publication_owner,
+                      publication_repo, publication_base_branch, publication_remote_name,
+                      publication_head_branch, publication_expected_head_sha,
+                      publication_pr_number, publication_pr_url
+                    ) VALUES (
+                      'change-with-failure', ${directory}, 'refs/heads/with-failure', 'open',
+                      '2026-07-25T17:30:00.000Z', '2026-07-25T17:30:00.000Z',
+                      'refs/remotes/origin/main', 'https://github.com/acme/repo.git', 'base-sha',
+                      ${join(directory, "worktree")}, 'prepare_failed', 'just prepare', 1200,
+                      '{"command":"just prepare","exitCode":7,"timedOut":false,"stdout":"","stderr":"failed"}',
+                      'candidate-1', 'run-1', 'acme', 'repo', 'main', 'origin',
+                      'with-failure', 'head-sha', 42, 'https://github.com/acme/repo/pull/42'
+                    )
+                  `;
+                  yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id = 14`;
+                }),
+              );
+            }).pipe(Effect.provide(repositorySqlLayer({ commonDirectory: directory, statePath }))),
+          );
+
+          yield* Effect.scoped(
+            Effect.gen(function* () {
+              const repository = yield* RepositorySql;
+              const changeColumns = yield* repository.operation(
+                "read migrated Change columns",
+                (sql) => sql<{ readonly name: string }>`PRAGMA table_info(changes)`,
+              );
+              expect(changeColumns.map(({ name }) => name)).not.toContain("readiness");
+              const changes = yield* openSqliteChangePersistence();
+              const stored = yield* changes.getChangeById("change-with-failure");
+              expect(stored).toMatchObject({
+                id: "change-with-failure",
+                state: "open",
+                baseRef: "refs/remotes/origin/main",
+                worktreePath: join(directory, "worktree"),
+                prepare: { command: "just prepare", timeoutSeconds: 1200 },
+                prepareFailure: {
+                  command: "just prepare",
+                  exitCode: 7,
+                  timedOut: false,
+                  stdout: "",
+                  stderr: "failed",
+                },
+                publication: {
+                  candidateId: "candidate-1",
+                  validationRunId: "run-1",
+                  headBranch: "with-failure",
+                  expectedHeadSha: "head-sha",
+                  pullRequest: { number: 42, url: "https://github.com/acme/repo/pull/42" },
+                },
+              });
+              expect(stored).not.toHaveProperty("readiness");
+            }).pipe(Effect.provide(repositorySqlLayer({ commonDirectory: directory, statePath }))),
+          );
         }),
       (directory) => Effect.sync(() => rmSync(directory, { recursive: true, force: true })),
     ),
@@ -1160,8 +1239,8 @@ describe("repository SQL storage", () => {
         );
 
         return Effect.gen(function* () {
-          expect(yield* readMigrationCount).toBe(13);
-          expect(yield* readMigrationCount).toBe(13);
+          expect(yield* readMigrationCount).toBe(14);
+          expect(yield* readMigrationCount).toBe(14);
         });
       },
       (directory) => Effect.sync(() => rmSync(directory, { recursive: true, force: true })),

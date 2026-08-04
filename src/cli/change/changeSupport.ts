@@ -17,6 +17,7 @@ import type { RepositoryStorageError } from "../../contracts/repositoryStorageEr
 import type { RepoStateLoadError } from "../../cliResults.js";
 import type { ChangeCommandEnvironment } from "./changeTypes.js";
 import { resolveChangeId } from "./changeTarget.js";
+import { prepareFailureView } from "./sharedResults.js";
 
 export const withResolvedChangeId = <E, R>(
   changeId: string | undefined,
@@ -35,13 +36,15 @@ export const changeInspectionView = (change: ChangeRecord) => ({
   taskId: change.taskId,
   state: change.state,
   closeReason: change.closeReason,
-  readiness: change.readiness,
   branchRef: change.branchRef,
   baseRef: change.baseRef,
   worktreePath: change.worktreePath,
   startingCommit: change.startingCommit,
   createdAt: change.createdAt,
   closedAt: change.closedAt,
+  ...(change.prepareFailure === null
+    ? {}
+    : { prepareFailure: prepareFailureView(change.prepareFailure) }),
 });
 
 export const compactValidationRunView = (run: CandidateValidationRunRecord | null) =>

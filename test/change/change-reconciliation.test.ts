@@ -33,7 +33,7 @@ describe("by change reconcile", () => {
             now,
           });
           if (!created.ok) throw new Error(created.code);
-          yield* starts.markReady(created.change.id, now);
+          yield* starts.recordPrepareOutcome(created.change.id, null, now);
           const changes = yield* openSqliteChangePersistence();
           const publication = {
             changeId: created.change.id,
@@ -120,7 +120,7 @@ describe("by change reconcile", () => {
             now,
           });
           if (!created.ok) throw new Error(created.code);
-          yield* starts.markReady(created.change.id, now);
+          yield* starts.recordPrepareOutcome(created.change.id, null, now);
           const changes = yield* openSqliteChangePersistence();
           const publication = {
             changeId: created.change.id,
@@ -225,7 +225,7 @@ describe("by change reconcile", () => {
           now,
         });
         if (!created.ok) throw new Error(created.code);
-        yield* starts.markReady(created.change.id, now);
+        yield* starts.recordPrepareOutcome(created.change.id, null, now);
 
         const gitRoot = join(input.commonDirectory, "git-repository");
         mkdirSync(gitRoot);

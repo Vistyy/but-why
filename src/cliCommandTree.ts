@@ -328,14 +328,18 @@ changeDecisionCommand = group(
 );
 
 const changeBlockerRaiseCommand = withCliHandler(
-  leaf("raise", "Report an Implementation Blocker.", {
-    changeId: changeIdArgument,
-    file: Options.text("file").pipe(
-      Options.withDescription(
-        "Use --file <path|-> with a regular UTF-8 text file path or - to read standard input.",
+  leaf(
+    "raise",
+    "Report an unresolved issue, why continuing is unsafe, and the required external decision or action.",
+    {
+      changeId: changeIdArgument,
+      file: Options.text("file").pipe(
+        Options.withDescription(
+          "Use --file <path|-> with a regular UTF-8 text file path or - to read standard input.",
+        ),
       ),
-    ),
-  }),
+    },
+  ),
   (values, environment) =>
     Effect.promise(() => import("./cli/change/blocker.js")).pipe(
       Effect.flatMap(({ runBlocker }) =>

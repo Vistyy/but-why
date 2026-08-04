@@ -32,12 +32,7 @@ import type {
 } from "./publication/candidatePublication.js";
 import type { TaskState } from "../task/lifecycle.js";
 import type { TaskPersistence } from "../task/taskPersistence.js";
-import {
-  changeReadiness,
-  changeState,
-  type ChangePublicationTarget,
-  type ChangeRecord,
-} from "./change.js";
+import { changeState, type ChangePublicationTarget, type ChangeRecord } from "./change.js";
 import type { ChangeReconciliation, ReconciledChange } from "./reconcileChange.js";
 import type { ChangePersistence } from "./changePersistence.js";
 import type {
@@ -95,7 +90,6 @@ export type ChangeSubmitResult =
       readonly validationRunId: string | null;
     }
   | { readonly ok: false; readonly code: "change_not_found" | "change_not_open" | "change_blocked" }
-  | { readonly ok: false; readonly code: "change_not_ready"; readonly change: ChangeRecord }
   | {
       readonly ok: false;
       readonly code: "reconciliation_rejected";
@@ -239,7 +233,7 @@ const submitChange = (
   input: ChangeSubmitInput,
 ): Effect.Effect<ChangeSubmitResult, RepositoryStorageError, CandidateValidation> =>
   Effect.gen(function* () {
-    const selected = yield* selectReadyChange(dependencies.persistence, input.changeId);
+    const selected = yield* selectOpenChange(dependencies.persistence, input.changeId);
     if (!selected.ok) return selected;
     const change = selected.change;
     if (change.baseRef === null || change.baseRemoteUrl === null) {
@@ -618,7 +612,7 @@ const taskTransitionFailure = (change: ChangeRecord): ChangeSubmitResult => ({
   changeId: change.id,
 });
 
-const selectReadyChange = (
+const selectOpenChange = (
   persistence: ChangePersistence,
   changeId: string,
 ): Effect.Effect<
@@ -626,11 +620,7 @@ const selectReadyChange = (
   | Extract<
       ChangeSubmitResult,
       {
-        readonly code:
-          | "change_not_found"
-          | "change_not_open"
-          | "change_blocked"
-          | "change_not_ready";
+        readonly code: "change_not_found" | "change_not_open" | "change_blocked";
       }
     >,
   RepositoryStorageError
@@ -640,8 +630,8 @@ const selectReadyChange = (
     if (change === undefined) return { ok: false, code: "change_not_found" };
     if (change.state === changeState.blocked) return { ok: false, code: "change_blocked" };
     if (change.state !== changeState.open) return { ok: false, code: "change_not_open" };
-    if (change.readiness !== changeReadiness.ready || change.worktreePath === null) {
-      return { ok: false, code: "change_not_ready", change };
+    if (change.worktreePath === null) {
+      return { ok: false, code: "change_not_open" };
     }
     return { ok: true, change: change as ChangeRecord & { readonly worktreePath: string } };
   });

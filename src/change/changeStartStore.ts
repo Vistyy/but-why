@@ -1,4 +1,4 @@
-import type { ChangeReadiness, ChangeRecord } from "./change.js";
+import type { ChangeRecord } from "./change.js";
 import type { TaskDependencyFact } from "../task/task.js";
 import type { PublicTaskId } from "../task/taskId.js";
 import type { TaskState } from "../task/lifecycle.js";
@@ -8,7 +8,6 @@ export type ChangeStartRecord = ChangeRecord & {
   readonly baseRemoteUrl: string;
   readonly startingCommit: string;
   readonly worktreePath: string;
-  readonly readiness: ChangeReadiness;
 };
 
 export type CreateChangeStartInput = {

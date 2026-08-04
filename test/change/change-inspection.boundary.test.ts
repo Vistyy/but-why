@@ -152,7 +152,6 @@ describe("Change inspection CLI", () => {
           taskId: null,
           state: "open",
           closeReason: null,
-          readiness: null,
           branchRef: "refs/heads/older",
           baseRef: null,
           worktreePath: null,

@@ -33,7 +33,6 @@ const columns = [
   "starting_commit AS startingCommit",
   "worktree_path AS worktreePath",
   "acceptance_context AS acceptanceContext",
-  "readiness",
   "prepare_command AS prepareCommand",
   "prepare_timeout_seconds AS prepareTimeoutSeconds",
   "prepare_failure AS prepareFailure",
@@ -68,11 +67,9 @@ export const openSqliteChangeStartPersistence = (): Effect.Effect<
       repository.transactionImmediate("create Change Start", (sql) => create(sql, input)),
     getById: (changeId) =>
       repository.transaction("read Change Start", (sql) => getById(sql, changeId)),
-    markReady: (changeId, now) =>
-      repository.transactionImmediate("mark Change ready", (sql) => markReady(sql, changeId, now)),
-    markPrepareFailed: (changeId, failure, now) =>
-      repository.transactionImmediate("record Change preparation failure", (sql) =>
-        markPrepareFailed(sql, changeId, failure, now),
+    recordPrepareOutcome: (changeId, failure, now) =>
+      repository.transactionImmediate("record Change preparation outcome", (sql) =>
+        recordPrepareOutcome(sql, changeId, failure, now),
       ),
   }));
 
@@ -126,14 +123,14 @@ const create = (sql: SqlClient.SqlClient, input: CreateChangeStartInput) =>
     yield* sql`
       INSERT INTO changes (
         id, repository_common_directory, branch_ref, base_ref, base_remote_url, task_id,
-        starting_commit, worktree_path, acceptance_context, readiness,
+        starting_commit, worktree_path, acceptance_context,
         prepare_command, prepare_timeout_seconds, prepare_failure,
         state, close_reason, created_at, updated_at, closed_at
       ) VALUES (
         ${input.id}, ${input.repositoryCommonDirectory}, ${input.branchRef}, ${input.baseRef},
         ${input.baseRemoteUrl}, ${input.taskId ?? null}, ${input.startingCommit}, ${input.worktreePath},
         ${acceptanceContext === null ? null : encodeSqliteAcceptanceContextSnapshot(acceptanceContext)},
-        'pending', ${input.prepare?.command ?? null}, ${input.prepare?.timeoutSeconds ?? null},
+        ${input.prepare?.command ?? null}, ${input.prepare?.timeoutSeconds ?? null},
         NULL, 'open', NULL, ${input.now}, ${input.now}, NULL
       )
     `;
@@ -175,33 +172,20 @@ const readTask = (sql: SqlClient.SqlClient, taskId: PublicTaskId) =>
     (rows) => rows[0],
   );
 
-const markReady = (sql: SqlClient.SqlClient, changeId: string, now: string) =>
-  Effect.gen(function* () {
-    yield* sql`
-      UPDATE changes SET readiness = 'ready', prepare_failure = NULL, updated_at = ${now}
-      WHERE id = ${changeId}
-    `;
-    const change = yield* getById(sql, changeId);
-    return change === undefined
-      ? yield* invalidData("mark Change ready", "Change was not found")
-      : change;
-  });
-
-const markPrepareFailed = (
+const recordPrepareOutcome = (
   sql: SqlClient.SqlClient,
   changeId: string,
-  failure: ChangePrepareFailure,
+  failure: ChangePrepareFailure | null,
   now: string,
 ) =>
   Effect.gen(function* () {
     yield* sql`
-      UPDATE changes SET readiness = 'prepare_failed',
-        prepare_failure = ${encodeSqliteChangePrepareFailure(failure)}, updated_at = ${now}
+      UPDATE changes SET prepare_failure = ${failure === null ? null : encodeSqliteChangePrepareFailure(failure)}, updated_at = ${now}
       WHERE id = ${changeId}
     `;
     const change = yield* getById(sql, changeId);
     return change === undefined
-      ? yield* invalidData("record Change preparation", "Change was not found")
+      ? yield* invalidData("record Change preparation outcome", "Change was not found")
       : change;
   });
 
@@ -223,8 +207,7 @@ const mapRow = (row: ChangeStartRow | undefined) => {
     row.baseRef === null ||
     row.baseRemoteUrl === null ||
     row.startingCommit === null ||
-    row.worktreePath === null ||
-    row.readiness === null
+    row.worktreePath === null
   ) {
     return Effect.succeed(undefined);
   }
@@ -232,7 +215,6 @@ const mapRow = (row: ChangeStartRow | undefined) => {
   const baseRemoteUrl = row.baseRemoteUrl;
   const startingCommit = row.startingCommit;
   const worktreePath = row.worktreePath;
-  const readiness = row.readiness;
   return Effect.try({
     try: (): ChangeStartRecord => ({
       id: row.id,
@@ -247,7 +229,6 @@ const mapRow = (row: ChangeStartRow | undefined) => {
         row.acceptanceContext === null
           ? null
           : decodeSqliteAcceptanceContextSnapshot(row.acceptanceContext),
-      readiness,
       prepare:
         row.prepareCommand === null || row.prepareTimeoutSeconds === null
           ? null
@@ -287,7 +268,6 @@ type ChangeStartRow = {
   readonly startingCommit: string | null;
   readonly worktreePath: string | null;
   readonly acceptanceContext: string | null;
-  readonly readiness: ChangeStartRecord["readiness"] | null;
   readonly prepareCommand: string | null;
   readonly prepareTimeoutSeconds: number | null;
   readonly prepareFailure: string | null;

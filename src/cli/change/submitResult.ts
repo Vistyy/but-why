@@ -8,7 +8,6 @@ const changeFindingView = ({ severity: _severity, ...finding }: CandidateValidat
   finding;
 
 type SubmitRecoveryAction =
-  | "prepare_change"
   | "resolve_dirty_work"
   | "fix_validation_findings"
   | "integrate_change_base";
@@ -107,22 +106,6 @@ export const submitResult = (result: ChangeSubmitResult, changeId: string): CliR
               `Inspect the existing Implementation Blocker with \`by change blocker list ${changeId}\`, then report it and wait.`,
             ]
           : ["Use a Change ID returned by `by change start --json`."],
-    });
-  }
-  if (result.code === "change_not_ready") {
-    return runtimeError({
-      code: result.code,
-      message: "Change is not ready for Submission.",
-      details: {
-        changeId: result.change.id,
-        readiness: result.change.readiness,
-        recovery: submitRecovery(
-          result.change.id,
-          "prepare_change",
-          `Run \`by change prepare ${result.change.id}\`, then retry Change Submit.`,
-        ),
-      },
-      help: [`Run \`by change prepare ${result.change.id}\`, then retry Change Submit.`],
     });
   }
   if (result.code === "dirty_work") {

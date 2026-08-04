@@ -181,6 +181,67 @@ describe("Change Submit orchestration", () => {
       }),
   );
 
+  it.effect("publishes a Candidate when a current preparation failure is recorded", () =>
+    Effect.gen(function* () {
+      const events: string[] = [];
+      const change = readyChange({
+        prepareFailure: {
+          command: "just prepare",
+          exitCode: 7,
+          timedOut: false,
+          stdout: "stdout excerpt",
+          stderr: "stderr excerpt",
+        },
+      });
+      const submit = openChangeSubmit(
+        dependencies({
+          events,
+          change,
+          publication: {
+            publish: () => {
+              events.push("publish");
+              return {
+                ok: true,
+                created: true,
+                pullRequest: { number: 42, url: "https://github.test/acme/repo/pull/42" },
+              };
+            },
+          },
+        }),
+      );
+      const validationLayer = Layer.succeed(CandidateValidation, {
+        validateCandidate: () =>
+          Effect.sync(() => {
+            events.push("validate_taskless");
+            return {
+              ok: true,
+              reused: false,
+              validationRunId: "run-1",
+              outcome: "passed",
+            } as const;
+          }),
+        validateAcceptanceContextCandidate: () => Effect.die("Acceptance Review was not expected"),
+        listFindings: () => Effect.succeed([]),
+        listToolingFailures: () => Effect.succeed([]),
+        listRounds: () => Effect.succeed([]),
+      });
+
+      const result = yield* submit
+        .submit({ changeId: "change-1", now })
+        .pipe(Effect.provide(validationLayer));
+
+      expect(result).toMatchObject({ ok: true, status: "published" });
+      expect(events).toEqual([
+        "reconcile",
+        "capture",
+        "detect_target",
+        "validate_taskless",
+        "publish",
+      ]);
+      expect(change.prepareFailure).toMatchObject({ exitCode: 7 });
+    }),
+  );
+
   it.effect("retries a pending publication for a newer Candidate through Submit", () =>
     Effect.gen(function* () {
       const publishedCandidates: string[] = [];
@@ -1555,7 +1616,6 @@ const readyChange = (overrides: Partial<ChangeRecord> = {}): ChangeRecord => ({
   startingCommit: "base",
   worktreePath: "/repo/worktree",
   acceptanceContext: null,
-  readiness: "ready",
   prepare: null,
   prepareFailure: null,
   publication: null,

@@ -28,13 +28,9 @@ export type ChangeStartPersistence = {
   readonly getById: (
     changeId: string,
   ) => Effect.Effect<ChangeStartRecord | undefined, RepositoryStorageError>;
-  readonly markReady: (
+  readonly recordPrepareOutcome: (
     changeId: string,
-    now: string,
-  ) => Effect.Effect<ChangeStartRecord, RepositoryStorageError>;
-  readonly markPrepareFailed: (
-    changeId: string,
-    failure: ChangePrepareFailure,
+    failure: ChangePrepareFailure | null,
     now: string,
   ) => Effect.Effect<ChangeStartRecord, RepositoryStorageError>;
 };

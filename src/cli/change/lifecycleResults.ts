@@ -3,11 +3,10 @@
 import { runtimeError, success, type CliResult } from "../../cliResults.js";
 import type { ChangeRecord } from "../../change/change.js";
 import type { ChangeStartResult, ChangePrepareResult } from "../../change/changeUseCases.js";
-import { boundedEvidence, remoteChangeBaseError } from "./sharedResults.js";
+import { prepareFailureView, remoteChangeBaseError } from "./sharedResults.js";
 
 export const startResult = (result: ChangeStartResult): CliResult => {
   if (result.ok) return success(changeView(result.change));
-  if (result.code === "prepare_failed") return prepareFailure(result.change);
   if (result.code === "task_dependencies_unsatisfied") {
     return runtimeError({
       code: result.code,
@@ -62,7 +61,6 @@ export const startResult = (result: ChangeStartResult): CliResult => {
 
 export const prepareResult = (result: ChangePrepareResult): CliResult => {
   if (result.ok) return success(changeView(result.change));
-  if (result.code === "prepare_failed") return prepareFailure(result.change);
   if (result.code === "change_not_found" || result.code === "change_not_open") {
     return runtimeError({
       code: result.code,
@@ -74,32 +72,15 @@ export const prepareResult = (result: ChangePrepareResult): CliResult => {
 };
 
 export const changeView = (change: ChangeRecord) => ({
-  change: { id: change.id, taskId: change.taskId, readiness: change.readiness },
+  change: { id: change.id, taskId: change.taskId },
   branch: change.branchRef,
   baseRef: change.baseRef,
   startingCommit: change.startingCommit,
   worktreePath: change.worktreePath,
+  ...(change.prepareFailure === null
+    ? {}
+    : { prepareFailure: prepareFailureView(change.prepareFailure) }),
 });
-
-export const prepareFailure = (change: ChangeRecord): CliResult => {
-  const failure = change.prepareFailure;
-  if (failure === null) throw new Error("Prepare-failed Change has no failure evidence");
-  return runtimeError({
-    code: "prepare_failed",
-    message: "Repository Preparation failed; the Change and worktree were preserved.",
-    details: {
-      changeId: change.id,
-      readiness: change.readiness,
-      worktreePath: change.worktreePath,
-      command: failure.command,
-      exitCode: failure.exitCode,
-      timedOut: failure.timedOut,
-      stdout: boundedEvidence(failure.stdout),
-      stderr: boundedEvidence(failure.stderr),
-    },
-    help: [`Fix the preparation failure, then run \`by change prepare ${change.id}\`.`],
-  });
-};
 
 export const operationalError = (code: string, change?: ChangeRecord): CliResult =>
   runtimeError({

@@ -86,6 +86,8 @@ test("source workflow delegates a Candidate worktree to the canonical executable
     "validation_workspace_paths",
     "candidate_publications",
     "structured_implementation_decisions",
+    "remove_no_change_completion",
+    "remove_change_readiness",
   ]);
   expect(readTableNames(main)).not.toContain("candidate_migration_probe");
 }, 30_000);
