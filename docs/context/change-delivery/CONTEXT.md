@@ -20,6 +20,13 @@ _Avoid_: Ad hoc worktree, implicit Task
 A Change whose implementation, validation, publication, or merge observation may still advance.
 _Avoid_: Active process, current Validation Run
 
+**Change Activity**:
+A derived inspection classification of a linked Open Change as `implementing`, `validating`, `blocked`, or `ready`.
+It is absent for an unlinked Task or a linked Closed Change.
+When facts overlap, an unresolved Implementation Blocker takes precedence, then an Active Validation Run, then current passing Validation evidence.
+It is distinct from Task Lifecycle and is not persisted as Task state.
+_Avoid_: Task State, Task progress
+
 **Blocked Change**:
 A temporary Change state caused by one active Implementation Blocker.
 A Blocked Change cannot be submitted and returns to Open when its blocker is resolved.

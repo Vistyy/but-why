@@ -46,7 +46,8 @@ V1 represents approval through Todo and does not maintain a separate approval sn
 _Avoid_: Change Start, Implementation Authorization
 
 **Task Lifecycle**:
-The user-facing progress of a Task through New, Todo, Implementing, Blocked, Validating, Ready, Done, or Cancelled.
+The user-facing progress of a Task through New, Todo, Done, or Cancelled.
+Todo means approved and unfinished, even while a linked Change reports Change Activity.
 _Avoid_: Validation Run state, generic pipeline
 
 **Task Dependency**:

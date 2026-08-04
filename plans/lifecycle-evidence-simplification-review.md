@@ -309,6 +309,18 @@ Each simplification slice must retain the focused evidence needed to change beha
 Broad portfolio migration later maps the complete retained test inventory to approved risks and claims, removes obsolete and duplicate evidence, and consolidates expensive integration sentinels.
 Planning order does not create a Task Dependency unless a later Task cannot be implemented or verified without an earlier completed result.
 
+### Accepted Task lifecycle graph correction
+
+BY-100 owns a Task inspection projection that reports Task-owned lifecycle and dependency facts with non-persisted linked Change Activity.
+Todo retains its current name and means approved and unfinished, even while a linked Change reports Change Activity.
+It does not own transient Task-state writer removal, migration, terminal orchestration, Blocker behavior, or Validation behavior.
+BY-101 owns final transient-state removal and its forward migration after BY-100, BY-102, BY-106, BY-108, BY-114, and BY-115 remove their respective callers.
+Task list and show should expose a linked Change only through its ID and optional Change Activity.
+They should remove `startable` and linked Change `state`, `readiness`, and `activeBlocker` fields.
+When Change facts overlap, Change Activity is `blocked` for an unresolved Implementation Blocker, then `validating` for an Active Validation Run, then `ready` for current passing Validation evidence, and otherwise `implementing`.
+Complete Change facts remain owned by Change inspection.
+This correction requires later Task Context and Task Dependency mutations, but does not authorize them.
+
 ## Accepted final gate-audit consequences
 
 Closed Change state remains the general terminal mutation guard.
@@ -338,6 +350,7 @@ The exact-head safeguard, missing-branch idempotence, uncertain-response recover
 The operator approved the GraphQL replacement and reported deleting the private spike repository `Vistyy/by70-graphql-delete-ref-20260803140717-2`.
 BY-70 should remain approved and own the replacement.
 The implementation should use one focused GraphQL Adapter with pre-read, exact `beforeOid`, all-zero `afterOid`, and post-error readback.
+The completed BY-70 Task explicitly excludes immediate post-failure readback, so unapproved Task BY-125 owns this follow-up.
 It must not add storage, configuration, a generic GraphQL framework, or duplicated recovery state.
 
 ## Deferred review triggers
