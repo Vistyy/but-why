@@ -16,6 +16,12 @@ _Avoid_: Worktree root, Repo Config location, per-worktree Git directory
 SQLite and other local operational state resolved through Git's common directory so every linked worktree sees the same facts.
 _Avoid_: Copied state file, tracked Repo Config, per-worktree database
 
+**Shared Repository State Snapshot**:
+One operator-created, independently readable full SQLite copy of Shared Repository State at a coherent point.
+But Why assigns each Snapshot a unique path under the Git Common Directory and never overwrites or changes it after successful creation.
+It does not promise filesystem tamper prevention.
+_Avoid_: Task Archive, restore point, retention policy
+
 **Trusted But Why Executable**:
 The command executable authorized to operate a Local Repository's Shared Repository State.
 Before publication, it is the executable in the canonical main checkout.
