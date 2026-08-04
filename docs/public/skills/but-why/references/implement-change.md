@@ -28,6 +28,7 @@ This step is complete when the Change, accepted intent, readiness, and Managed W
 
 Follow the repository instructions in the Managed Worktree.
 Use task-specific verification requirements in accepted Task Context when present.
+Before you add a Shared Repository State Migration Artifact, run `<but-why> snapshot`.
 Otherwise, select focused evidence that is proportionate to the Candidate's material risks under the repository's accepted verification policy.
 Do not require a durable automated test unless accepted verification requirements require one.
 When multiple approaches remain compliant with accepted intent, select one.
