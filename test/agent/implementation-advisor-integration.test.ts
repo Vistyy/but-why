@@ -48,6 +48,7 @@ vi.mock("@earendil-works/pi-coding-agent", async () => {
       advisorMock.createCalls += 1;
       return {
         session: {
+          sessionManager: advisorMock.sessionManager,
           subscribe(listener: (event: unknown) => void): () => void {
             advisorMock.nestedEventListener = listener;
             return () => {
@@ -188,6 +189,120 @@ describe("Implementation Advisor extension event seam", () => {
       },
     } as never);
     expect(handlers).toHaveLength(0);
+  });
+
+  it("opens the interactive TUI viewer for the current advisor session", async () => {
+    process.env["BUT_WHY_IMPLEMENTATION_ADVISOR_MODEL"] = "provider/model";
+    process.env["BUT_WHY_IMPLEMENTATION_ADVISOR_CONTEXT"] = JSON.stringify({
+      changeId: "change-viewer",
+      acceptanceContext: null,
+      implementationDecisions: [],
+    });
+    const { SessionManager } = await import("@earendil-works/pi-coding-agent");
+    const parent = SessionManager.inMemory(process.cwd());
+    parent.appendCustomEntry("but-why.implementation-advisor.state", {
+      fingerprints: [],
+      failures: 1,
+      disabled: false,
+      latestRejectionReason: "Advisor result rejected: host evidence was incomplete.",
+    });
+    const nested = SessionManager.inMemory(process.cwd());
+    nested.appendMessage({
+      role: "assistant",
+      content: [{ type: "text", text: "Persisted advisor response" }],
+      timestamp: Date.now(),
+    } as never);
+    advisorMock.sessionManager = nested;
+
+    const commands = new Map<string, (args: never, context: never) => Promise<void>>();
+    let requestRenderCount = 0;
+    let colors: string[] = [];
+    let closed = false;
+    let rendered: string[] = [];
+    implementationAdvisor({
+      on() {},
+      registerCommand(
+        name: string,
+        command: { handler: (args: never, context: never) => Promise<void> },
+      ) {
+        commands.set(name, command.handler);
+      },
+      appendEntry() {},
+    } as never);
+    const context = {
+      mode: "tui",
+      cwd: process.cwd(),
+      sessionManager: parent,
+      isIdle: () => true,
+      ui: {
+        notify() {},
+        async custom(
+          factory: (
+            tui: unknown,
+            theme: unknown,
+            keybindings: unknown,
+            done: (result: undefined) => void,
+          ) => {
+            render(width: number): string[];
+            handleInput(data: string): void;
+            dispose(): void;
+          },
+          options: unknown,
+        ): Promise<undefined> {
+          expect(options).toMatchObject({ overlay: true });
+          const beforeClose = nested.getBranch().length;
+          const component = factory(
+            {
+              terminal: { rows: 30 },
+              requestRender: () => {
+                requestRenderCount += 1;
+              },
+            },
+            {
+              fg: (color: string, text: string) => {
+                colors.push(color);
+                return text;
+              },
+              bold: (text: string) => text,
+            },
+            {},
+            () => {
+              closed = true;
+            },
+          );
+          rendered = component.render(60);
+          advisorMock.nestedEventListener?.({
+            type: "message_start",
+            message: {
+              role: "assistant",
+              content: [{ type: "text", text: "Live advisor response" }],
+            },
+          });
+          advisorMock.nestedEventListener?.({
+            type: "tool_execution_start",
+            toolCallId: "read-live",
+            toolName: "read",
+            args: { path: "src/example.ts" },
+          });
+          rendered = component.render(60);
+          component.handleInput("escape");
+          component.dispose();
+          expect(nested.getBranch()).toHaveLength(beforeClose);
+          return undefined;
+        },
+      },
+    } as never;
+
+    await commands.get("advisor")?.({} as never, context as never);
+    expect(rendered.join("\\n")).toContain("Persisted advisor response");
+    expect(rendered.join("\\n")).toContain("host evidence was incomplete");
+    expect(rendered.join("\\n")).toContain("Live advisor response");
+    expect(rendered.join("\\n")).toContain("tool [running]: read");
+    expect(colors).toEqual(expect.arrayContaining(["accent", "warning", "error", "borderAccent"]));
+    expect(rendered.every((line) => line.length <= 60)).toBe(true);
+    expect(requestRenderCount).toBeGreaterThan(1);
+    expect(closed).toBe(true);
+    expect(advisorMock.sessionManager).toBe(nested);
   });
 
   it("does not block later turn_end events and evaluates the complete pending batch", async () => {
