@@ -29,6 +29,11 @@ describe("Shared Repository State Snapshots", () => {
       const initialized = yield* runByInProcessEffect(root, ["init", "--task-prefix", "BY"]);
       expect(initialized.status).toBe(0);
 
+      const seededSource = new DatabaseSync(statePath(root));
+      seededSource.exec(
+        "CREATE TABLE snapshot_facts (id INTEGER PRIMARY KEY, value TEXT); INSERT INTO snapshot_facts VALUES (1, 'before'), (2, 'work')",
+      );
+      seededSource.close();
       const sourceBefore = readFileSync(statePath(root));
       const toon = yield* runByInProcessEffect(root, ["snapshot"]);
       const json = yield* runByInProcessEffect(root, ["--json", "snapshot"]);
@@ -53,8 +58,17 @@ describe("Shared Repository State Snapshots", () => {
       const snapshotTableCount = snapshot
         .prepare("SELECT count(*) AS count FROM sqlite_schema")
         .get();
+      const sourceConnection = new DatabaseSync(statePath(root), { readOnly: true });
+      const sourceFacts = sourceConnection
+        .prepare("SELECT id, value FROM snapshot_facts ORDER BY id")
+        .all();
+      sourceConnection.close();
+      const snapshotFacts = snapshot
+        .prepare("SELECT id, value FROM snapshot_facts ORDER BY id")
+        .all();
       snapshot.close();
       expect(snapshotTableCount).toEqual(sourceTableCount);
+      expect(snapshotFacts).toEqual(sourceFacts);
 
       const writableSource = new DatabaseSync(statePath(root));
       writableSource.exec("CREATE TABLE later(value TEXT)");
