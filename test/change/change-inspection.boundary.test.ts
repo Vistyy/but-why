@@ -759,7 +759,11 @@ describe("Change inspection CLI", () => {
         "--task",
         "BY-1",
       ]);
-      const changeId = JSON.parse(started.stdout).change.id;
+      const startedView = JSON.parse(started.stdout) as {
+        readonly change: { readonly id: string };
+        readonly branch: string;
+      };
+      const changeId = startedView.change.id;
       const shown = yield* runByInProcessEffect(root, ["--json", "task", "show", "BY-1"]);
 
       expect(started.status).toBe(0);
@@ -769,18 +773,94 @@ describe("Change inspection CLI", () => {
           id: "BY-1",
           title: "Task-backed Change",
           state: "implementing",
-          change: { id: changeId, state: "open", readiness: "ready" },
+          change: { id: changeId, activity: "implementing" },
         },
       });
+      expect(JSON.parse(shown.stdout).task).not.toHaveProperty("startable");
+      expect(JSON.parse(shown.stdout).task.change).not.toHaveProperty("state");
+      expect(JSON.parse(shown.stdout).task.change).not.toHaveProperty("readiness");
+      expect(JSON.parse(shown.stdout).task.change).not.toHaveProperty("activeBlocker");
+      const toonShown = yield* runByInProcessEffect(root, ["task", "show", "BY-1"]);
+      expect(toonShown.stdout).toContain(`id: ${changeId}`);
+      expect(toonShown.stdout).toContain("activity: implementing");
+      expect(toonShown.stdout).not.toContain("startable");
+      expect(toonShown.stdout).not.toContain("readiness");
+      expect(toonShown.stdout).not.toContain("activeBlocker");
+
+      yield* withTestRepository(
+        root,
+        Effect.gen(function* () {
+          const changes = yield* openSqliteChangePersistence();
+          const raised = yield* changes.raiseImplementationBlocker({
+            changeId,
+            content: "Wait for an external decision.",
+            now: commandNow,
+          });
+          if (!raised.ok) throw new Error(raised.code);
+        }),
+      );
+      const blocked = yield* runByInProcessEffect(root, ["--json", "task", "show", "BY-1"]);
+      expect(JSON.parse(blocked.stdout).task.change).toEqual({
+        id: changeId,
+        activity: "blocked",
+      });
+      yield* withTestRepository(
+        root,
+        Effect.gen(function* () {
+          const changes = yield* openSqliteChangePersistence();
+          const resolved = yield* changes.resolveImplementationBlocker({
+            changeId,
+            content: "Proceed with the accepted implementation.",
+            now: commandNow,
+          });
+          if (!resolved.ok) throw new Error(resolved.code);
+        }),
+      );
+
       expect(
         JSON.parse((yield* runByInProcessEffect(root, ["--json", "task", "list", "--all"])).stdout)
           .tasks,
       ).toContainEqual(
         expect.objectContaining({
           id: "BY-1",
-          change: { id: changeId, state: "open", readiness: "ready", activeBlocker: null },
+          change: { id: changeId, activity: "implementing" },
         }),
       );
+
+      const candidate = yield* captureCandidateFixture(
+        root,
+        changeId,
+        startedView.branch,
+        "projection-head",
+        firstNow,
+      );
+      const activeValidation = yield* withValidationPersistence(root, (persistence) =>
+        persistence.startOrReuse({
+          candidateId: candidate.id,
+          headSha: candidate.headSha,
+          policy: { checks: [], copyFiles: [] },
+          now: commandNow,
+        }),
+      );
+      if (activeValidation.reused) throw new Error("Expected an active Validation Run");
+      const validating = yield* runByInProcessEffect(root, ["--json", "task", "show", "BY-1"]);
+      expect(JSON.parse(validating.stdout).task.change).toEqual({
+        id: changeId,
+        activity: "validating",
+      });
+
+      yield* withValidationPersistence(root, (persistence) =>
+        persistence.complete({
+          validationRunId: activeValidation.validationRunId,
+          outcome: "passed",
+          now: commandNow,
+        }),
+      );
+      const ready = yield* runByInProcessEffect(root, ["--json", "task", "show", "BY-1"]);
+      expect(JSON.parse(ready.stdout).task.change).toEqual({
+        id: changeId,
+        activity: "ready",
+      });
 
       yield* transitionTaskFixture(root, "validating");
       expect(

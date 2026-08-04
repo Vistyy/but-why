@@ -110,7 +110,6 @@ const taskSummaryRows = (
       state: task.state,
       createdAt: task.createdAt,
       updatedAt: task.updatedAt,
-      startable: task.startable,
       blockedBy: task.blockedBy,
       change,
     })),
