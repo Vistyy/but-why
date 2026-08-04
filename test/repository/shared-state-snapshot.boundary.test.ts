@@ -96,6 +96,27 @@ describe("Shared Repository State Snapshots", () => {
     }),
   );
 
+  it.effect("identifies snapshot storage in failure guidance", () =>
+    Effect.gen(function* () {
+      const root = createGitRepo();
+      const initialized = yield* runByInProcessEffect(root, ["init", "--task-prefix", "BY"]);
+      expect(initialized.status).toBe(0);
+      writeFileSync(snapshotsPath(root), "not a directory\n");
+
+      const result = yield* runByInProcessEffect(root, ["--json", "snapshot"]);
+      const output = JSON.parse(result.stdout) as {
+        readonly error?: { readonly code?: string };
+        readonly help?: readonly string[];
+        readonly snapshotPath?: string;
+      };
+
+      expect(result.status).toBe(1);
+      expect(output.error?.code).toBe("snapshot_creation_failed");
+      expect(output.snapshotPath).toBeUndefined();
+      expect(output.help?.[0]).toContain("snapshots directory is writable");
+    }),
+  );
+
   it.effect("returns no snapshot path and leaves no output after a source failure", () =>
     Effect.gen(function* () {
       const root = createGitRepo();

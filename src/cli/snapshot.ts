@@ -18,7 +18,9 @@ export const runSnapshotCommand = (environment: CliEnvironment): Effect.Effect<C
             runtimeError({
               code: "snapshot_creation_failed",
               message: "Shared Repository State Snapshot creation failed.",
-              help: ["Check that Shared Repository State is readable, then retry `by snapshot`."],
+              help: [
+                "Check that Shared Repository State is readable and the shared snapshots directory is writable, then retry `by snapshot`.",
+              ],
             }),
           ),
         ),
