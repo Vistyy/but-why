@@ -755,7 +755,7 @@ const createTask = (root: string, title: string, description: string) =>
     writeFileSync(descriptionPath, description);
     const created = yield* runByInProcessEffect(
       root,
-      ["--json", "task", "create", "--title", title, "--description-file", descriptionPath],
+      ["--json", "task", "create", "--title", title, "--file", descriptionPath],
       now,
     );
     expect(created.status).toBe(0);

@@ -136,7 +136,7 @@ Use CLI `--help` output for exact syntax before executing a command.
 The installed command templates are:
 
 ```text
-by task create --title <title> --description-file <file> [--depends-on <task-id>]...
+by task create --title <title> --file <path|-> [--depends-on <task-id>]...
 by task dependencies add <task-id> --depends-on <task-id> [--depends-on <task-id>]...
 by task dependencies remove <task-id> --depends-on <task-id> [--depends-on <task-id>]...
 by task dependencies replace <task-id> --depends-on <task-id> [--depends-on <task-id>]...
@@ -147,7 +147,7 @@ by task approve <task-id>
 by task context <task-id>
 by task context draft <task-id>
 by task context apply <task-id>
-by task comment <task-id> --file <file>
+by task comment <task-id> --file <path|->
 by task cancel <task-id> --reason <reason>
 by change start [--task <task-id>] [--base <branch>]
 by change prepare [<change-id>]
@@ -164,8 +164,8 @@ by change cancel [<change-id>]
 by change reconcile [<change-id>]
 by change implement [<change-id>] [--handoff-file <path>]
 by change decision add <change-id> --choice "<selected approach>" --rationale "<reason>"
-by change blocker raise <change-id> --file <path>
-by change blocker resolve <change-id> --file <path>
+by change blocker raise <change-id> --file <path|->
+by change blocker resolve <change-id> --file <path|->
 by change blocker list <change-id>
 by change decision list <change-id>
 ```

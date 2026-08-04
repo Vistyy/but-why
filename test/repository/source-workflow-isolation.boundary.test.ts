@@ -65,16 +65,7 @@ test("source workflow delegates a Candidate worktree to the canonical executable
 
   const result = runTestProcess(
     "just",
-    [
-      "by",
-      "--json",
-      "task",
-      "create",
-      "--title",
-      "Trusted workflow",
-      "--description-file",
-      "description.md",
-    ],
+    ["by", "--json", "task", "create", "--title", "Trusted workflow", "--file", "description.md"],
     { cwd: candidate, env: { BUT_WHY_NOW: sourceNow } },
   );
 

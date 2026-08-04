@@ -34,7 +34,7 @@ describe("Change cancellation", () => {
           "create",
           "--title",
           "Linked change",
-          "--description-file",
+          "--file",
           "task.md",
         ])).status,
       ).toBe(0);
