@@ -880,10 +880,12 @@ describe("Change inspection CLI", () => {
         change: { state: "closed", closeReason: "completed" },
         cleanup: { state: "pending", blockingReason: null },
       });
-      expect(
-        JSON.parse((yield* runByInProcessEffect(root, ["--json", "task", "show", "BY-1"])).stdout)
-          .task.state,
-      ).toBe("done");
+      const closedTask = yield* runByInProcessEffect(root, ["--json", "task", "show", "BY-1"]);
+      expect(JSON.parse(closedTask.stdout).task).toMatchObject({
+        state: "done",
+        change: { id: changeId },
+      });
+      expect(JSON.parse(closedTask.stdout).task.change).not.toHaveProperty("activity");
     }),
   );
 });
