@@ -1,5 +1,5 @@
 import type { Sandbox } from "@ai-hero/sandcastle";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, layer } from "@effect/vitest";
 import { Context, Effect, Layer } from "effect";
@@ -217,6 +217,53 @@ layer(acceptanceTemplateLayer)("Task-backed Candidate Acceptance Review", (it) =
       }
 
       expect(review).not.toHaveBeenCalled();
+    }),
+  );
+
+  it.scoped("runs Repository Preparation and Checks before task-backed Acceptance Review", () =>
+    Effect.gen(function* () {
+      const review = vi.fn<ReviewerAgentRuntime["review"]>(({ commandCwd }) =>
+        Effect.sync(() => {
+          if (commandCwd === undefined) throw new Error("Acceptance Review has no workspace path.");
+          const gitDir = git(commandCwd, "rev-parse", "--path-format=absolute", "--git-dir");
+          if (!existsSync(join(gitDir, ".but-why-check-marker")))
+            throw new Error("Acceptance Review started before Checks.");
+          return {
+            ok: true as const,
+            report: { findings: [] },
+            attempts: 1,
+            stdout: "",
+          };
+        }),
+      );
+      const ready = yield* acceptanceReadyRepo({ review });
+      const policy = {
+        ...passingValidationPolicy,
+        prepare: {
+          command:
+            'gitdir="$(git rev-parse --git-dir)"; printf prepared > "$gitdir/.but-why-prepare-marker"',
+          timeoutSeconds: 1,
+        },
+        checks: [
+          {
+            id: "prepared",
+            command:
+              'test -f "$(git rev-parse --git-dir)/.but-why-prepare-marker" && gitdir="$(git rev-parse --git-dir)" && printf checked > "$gitdir/.but-why-check-marker"',
+            timeoutSeconds: 1,
+          },
+        ],
+      };
+
+      const result = yield* runFullTaskBackedCandidate(ready, policy);
+
+      expect(result).toMatchObject({ ok: true, outcome: "passed" });
+      expect(review).toHaveBeenCalledOnce();
+      if (!result.ok) return;
+      expect(yield* ready.validation.listRounds(result.validationRunId)).toEqual([
+        { producer: "prepare", status: "passed" },
+        { producer: "prepared", status: "passed" },
+        { producer: "acceptance", status: "passed" },
+      ]);
     }),
   );
 
