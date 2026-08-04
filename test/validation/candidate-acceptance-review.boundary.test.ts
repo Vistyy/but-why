@@ -1,5 +1,5 @@
 import type { Sandbox } from "@ai-hero/sandcastle";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, layer } from "@effect/vitest";
 import { Context, Effect, Layer } from "effect";
@@ -264,6 +264,36 @@ layer(acceptanceTemplateLayer)("Task-backed Candidate Acceptance Review", (it) =
         { producer: "prepared", status: "passed" },
         { producer: "acceptance", status: "passed" },
       ]);
+    }),
+  );
+
+  it.scoped("records a Candidate-integrity Tooling Failure after Acceptance Review", () =>
+    Effect.gen(function* () {
+      const review = vi.fn<ReviewerAgentRuntime["review"]>(({ commandCwd }) =>
+        Effect.sync(() => {
+          if (commandCwd === undefined) throw new Error("Acceptance Review has no workspace path.");
+          writeFileSync(join(commandCwd, ".but-why", "config.json"), "{}");
+          return {
+            ok: true as const,
+            report: { findings: [] },
+            attempts: 1,
+            stdout: "",
+          };
+        }),
+      );
+      const ready = yield* acceptanceReadyRepo({ review });
+      const result = yield* runFullTaskBackedCandidate(ready);
+
+      expect(result).toMatchObject({ ok: false, outcome: "tooling_failed" });
+      expect(review).toHaveBeenCalledOnce();
+      if (result.ok) return;
+      expect(yield* ready.validation.listToolingFailures(result.validationRunId)).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ operationName: "verify_candidate_head" }),
+        ]),
+      );
+      expect(git(ready.repo, "rev-parse", "HEAD")).toBe(ready.captured.headSha);
+      expect(git(ready.repo, "status", "--porcelain")).toBe("");
     }),
   );
 

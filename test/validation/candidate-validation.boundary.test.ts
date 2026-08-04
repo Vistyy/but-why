@@ -1,9 +1,9 @@
-import { writeFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
-import { describe } from "vitest";
+import { describe, vi } from "vitest";
 import { captureLocalCandidate } from "../support/candidateCapture.js";
 import {
   CandidateValidation,
@@ -18,6 +18,8 @@ import {
 } from "../support/candidateReadyRepo.js";
 import { RepositorySql } from "../../src/sqlite/repositorySql.js";
 import { withTestRepository } from "../support/repository.js";
+import { createTestWorkspace } from "../support/testWorkspace.js";
+import type { ReviewerAgentRuntime } from "../../src/agent/reviewerAgentRuntime.js";
 
 const now = "2026-07-15T10:00:00.000Z";
 
@@ -136,6 +138,30 @@ describe("Candidate validation", () => {
       Effect.gen(function* () {
         const mainCheckout = candidateReadyRepo();
         const candidateCheckout = join(commonDirectory(mainCheckout), "candidate-worktree");
+        const callLog = join(createTestWorkspace(), "validation-calls");
+        const review = vi.fn<ReviewerAgentRuntime["review"]>(() =>
+          Effect.succeed({
+            ok: true as const,
+            report: { findings: [] },
+            attempts: 1,
+            stdout: "",
+          }),
+        );
+        const specialist = {
+          id: "standards",
+          instructions: "Review standards.",
+          instructionsSource: "repo" as const,
+          agentProfile: "standards",
+          profileScope: "repo" as const,
+          profile: {
+            agentProfile: "standards",
+            scope: "repo" as const,
+            profile: {
+              agentRuntime: "pi" as const,
+              runtimeConfig: { model: "standards-model" },
+            },
+          },
+        };
         git(
           mainCheckout,
           "worktree",
@@ -153,29 +179,37 @@ describe("Candidate validation", () => {
         expect(first.ok).toBe(true);
         if (!first.ok) return;
 
-        const prepare =
-          'gitdir="$(git rev-parse --git-dir)"; printf prepared > "$gitdir/.but-why-prepared"';
-        const check = 'test -f "$(git rev-parse --git-dir)/.but-why-prepared"';
+        const prepare = `gitdir="$(git rev-parse --git-dir)"; printf P >> "${callLog}"; printf prepared > "$gitdir/.but-why-prepared"`;
+        const validationPolicy = (headSha: string, content: string) => ({
+          prepare: { command: prepare, timeoutSeconds: 1 },
+          checks: [
+            {
+              id: "prepared",
+              command: `test "$(git rev-parse HEAD)" = "${headSha}" && test "$(cat candidate.txt)" = "${content}" && test -f "$(git rev-parse --git-dir)/.but-why-prepared" && printf C >> "${callLog}"`,
+              timeoutSeconds: 1,
+            },
+          ],
+          copyFiles: [],
+          specialistReviews: [specialist],
+        });
         const validation = candidateValidationForTest({
           localRepositoryMainCheckoutRoot: mainCheckout,
           artifactsRoot: join(commonDirectory(mainCheckout), "but-why", "artifacts"),
           repository: repositoryConfig(mainCheckout),
+          reviewerAgentRuntime: { review },
         });
-        const policy = {
-          prepare: { command: prepare, timeoutSeconds: 1 },
-          checks: [{ id: "prepared", command: check, timeoutSeconds: 1 }],
-          copyFiles: [],
-          specialistReviews: [],
-        } as const;
+        const firstPolicy = validationPolicy(first.headSha, "first");
         const firstResult = yield* validateCandidate(validation, {
           changeId: first.changeId,
           candidateId: first.candidateId,
           changeBaseSha: first.changeBaseSha,
           headSha: first.headSha,
-          policy,
+          policy: firstPolicy,
           now,
         });
         expect(firstResult).toMatchObject({ ok: true, outcome: "passed", reused: false });
+        expect(readFileSync(callLog, "utf8")).toBe("PC");
+        expect(review).toHaveBeenCalledOnce();
 
         writeFileSync(join(candidateCheckout, "candidate.txt"), "second\n");
         git(candidateCheckout, "add", "candidate.txt");
@@ -183,26 +217,31 @@ describe("Candidate validation", () => {
         const second = yield* captureLocalCandidate({ cwd: candidateCheckout, now });
         expect(second.ok).toBe(true);
         if (!second.ok) return;
+        const secondPolicy = validationPolicy(second.headSha, "second");
         const secondResult = yield* validateCandidate(validation, {
           changeId: second.changeId,
           candidateId: second.candidateId,
           changeBaseSha: second.changeBaseSha,
           headSha: second.headSha,
-          policy,
+          policy: secondPolicy,
           now,
         });
         expect(secondResult).toMatchObject({ ok: true, outcome: "passed", reused: false });
         expect(secondResult).not.toMatchObject({ validationRunId: firstResult.validationRunId });
+        expect(readFileSync(callLog, "utf8")).toBe("PCPC");
+        expect(review).toHaveBeenCalledTimes(2);
 
         const reused = yield* validateCandidate(validation, {
           changeId: first.changeId,
           candidateId: first.candidateId,
           changeBaseSha: first.changeBaseSha,
           headSha: first.headSha,
-          policy,
+          policy: firstPolicy,
           now,
         });
         expect(reused).toMatchObject({ ok: true, outcome: "passed", reused: true });
+        expect(readFileSync(callLog, "utf8")).toBe("PCPC");
+        expect(review).toHaveBeenCalledTimes(2);
 
         const workspaces = yield* withTestRepository(
           mainCheckout,
