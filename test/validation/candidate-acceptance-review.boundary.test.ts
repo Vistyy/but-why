@@ -1150,6 +1150,292 @@ layer(acceptanceTemplateLayer)("Task-backed Candidate Acceptance Review", (it) =
     }),
   );
 
+  it.scoped("restarts one unusable Specialist Reviewer Session for one fresh success", () =>
+    Effect.gen(function* () {
+      const sessions = new Map<string, ReviewerSessionRecord>();
+      const sessionStore = specialistSessionStore(sessions);
+      const unusable = new ReviewerOutputContractFailed({
+        operationName: "decode_reviewer_output",
+        reviewer: "standards",
+        attempts: 1,
+        diagnostics: [],
+        message: "Session resume failed: provider detail hidden behind the runtime",
+      });
+      let specialistCalls = 0;
+      const review = vi.fn<ReviewerAgentRuntime["review"]>((input) => {
+        if (input.reviewer === "acceptance")
+          return Effect.succeed({
+            ok: true as const,
+            report: { findings: [] },
+            attempts: 1,
+            stdout: "acceptance report",
+          });
+        specialistCalls += 1;
+        if (specialistCalls === 1)
+          return Effect.succeed({
+            ok: true as const,
+            report: { findings: [] },
+            attempts: 1,
+            stdout: "initial specialist report",
+            sessionReference: "old-session",
+          });
+        if (input.resumeSession !== undefined)
+          return Effect.succeed({
+            ok: false as const,
+            failure: unusable,
+            sessionUsability: "unusable" as const,
+            attempts: 1,
+            stdout: "resumed specialist failure",
+          });
+        return Effect.succeed({
+          ok: true as const,
+          report: { findings: [] },
+          attempts: 1,
+          stdout: "fresh specialist report",
+          sessionReference: "fresh-session",
+        });
+      });
+      const ready = yield* acceptanceReadyRepo({ review }, { sessionStore });
+      const policy = {
+        ...passingValidationPolicy,
+        specialistReviews: [specialistPolicy("standards")],
+      };
+
+      const initial = yield* runTaskBackedCandidate(ready, policy);
+      expect(initial).toMatchObject({ ok: true, outcome: "passed" });
+      git(ready.repo, "commit", "--allow-empty", "-m", "unusable specialist session");
+      const successor = yield* captureLocalCandidate({ cwd: ready.repo, now: successorNow });
+      if (!successor.ok) throw new Error(`Candidate capture failed: ${successor.code}`);
+
+      const result = yield* runTaskBackedCandidate(ready, policy, successor);
+
+      expect(result).toMatchObject({
+        ok: true,
+        outcome: "passed",
+        specialistReviewerEvidence: [
+          { producer: "standards", continuity: "restarted", reviewCalls: 2 },
+        ],
+      });
+      expect(specialistCalls).toBe(3);
+      expect(
+        review.mock.calls
+          .filter(([input]) => input.reviewer === "standards")
+          .map(([input]) => input.resumeSession),
+      ).toEqual([undefined, "old-session", undefined]);
+      expect(sessions.get(`${successor.changeId}/standards`)?.sessionReference).toBe(
+        "fresh-session",
+      );
+    }),
+  );
+
+  it.scoped("does not restart after an unusable Specialist fresh call fails", () =>
+    Effect.gen(function* () {
+      const sessions = new Map<string, ReviewerSessionRecord>();
+      const sessionStore = specialistSessionStore(sessions);
+      const unusable = new ReviewerOutputContractFailed({
+        operationName: "decode_reviewer_output",
+        reviewer: "standards",
+        attempts: 1,
+        diagnostics: [],
+        message: "resumed session is unusable",
+      });
+      const freshFailure = new ReviewerOutputContractFailed({
+        operationName: "decode_reviewer_output",
+        reviewer: "standards",
+        attempts: 1,
+        diagnostics: [],
+        message: "fresh Specialist review failed",
+      });
+      let specialistCalls = 0;
+      const review = vi.fn<ReviewerAgentRuntime["review"]>((input) => {
+        if (input.reviewer === "acceptance")
+          return Effect.succeed({
+            ok: true as const,
+            report: { findings: [] },
+            attempts: 1,
+            stdout: "acceptance report",
+          });
+        specialistCalls += 1;
+        if (specialistCalls === 1)
+          return Effect.succeed({
+            ok: true as const,
+            report: { findings: [] },
+            attempts: 1,
+            stdout: "initial specialist report",
+            sessionReference: "old-session",
+          });
+        return Effect.succeed({
+          ok: false as const,
+          failure: specialistCalls === 2 ? unusable : freshFailure,
+          sessionUsability:
+            specialistCalls === 2 ? ("unusable" as const) : ("unknown" as const),
+          attempts: 1,
+          stdout: "failed specialist report",
+        });
+      });
+      const ready = yield* acceptanceReadyRepo({ review }, { sessionStore });
+      const policy = {
+        ...passingValidationPolicy,
+        specialistReviews: [specialistPolicy("standards")],
+      };
+      const initial = yield* runTaskBackedCandidate(ready, policy);
+      expect(initial).toMatchObject({ ok: true, outcome: "passed" });
+      git(ready.repo, "commit", "--allow-empty", "-m", "failed fresh specialist review");
+      const successor = yield* captureLocalCandidate({ cwd: ready.repo, now: successorNow });
+      if (!successor.ok) throw new Error(`Candidate capture failed: ${successor.code}`);
+
+      const result = yield* runTaskBackedCandidate(ready, policy, successor);
+
+      expect(result).toMatchObject({ ok: false, outcome: "tooling_failed" });
+      expect(specialistCalls).toBe(3);
+      expect(yield* ready.validation.listFindings(result.validationRunId)).toEqual([]);
+      expect(sessions.get(`${successor.changeId}/standards`)).toBeUndefined();
+    }),
+  );
+
+  it.scoped("preserves a Specialist Reviewer Session after an unknown resumed failure", () =>
+    Effect.gen(function* () {
+      const sessions = new Map<string, ReviewerSessionRecord>();
+      const sessionStore = specialistSessionStore(sessions);
+      const temporaryFailure = new ReviewerOutputContractFailed({
+        operationName: "decode_reviewer_output",
+        reviewer: "standards",
+        attempts: 1,
+        diagnostics: [],
+        message: "Temporary failure classified as unknown",
+      });
+      let specialistCalls = 0;
+      const review = vi.fn<ReviewerAgentRuntime["review"]>((input) => {
+        if (input.reviewer === "acceptance")
+          return Effect.succeed({
+            ok: true as const,
+            report: { findings: [] },
+            attempts: 1,
+            stdout: "acceptance report",
+          });
+        specialistCalls += 1;
+        if (specialistCalls === 1)
+          return Effect.succeed({
+            ok: true as const,
+            report: { findings: [] },
+            attempts: 1,
+            stdout: "initial specialist report",
+            sessionReference: "known-session",
+          });
+        return Effect.succeed({
+          ok: false as const,
+          failure: temporaryFailure,
+          sessionUsability: "unknown" as const,
+          attempts: 1,
+          stdout: "temporary specialist failure",
+        });
+      });
+      const ready = yield* acceptanceReadyRepo({ review }, { sessionStore });
+      const policy = {
+        ...passingValidationPolicy,
+        specialistReviews: [specialistPolicy("standards")],
+      };
+      const initial = yield* runTaskBackedCandidate(ready, policy);
+      expect(initial).toMatchObject({ ok: true, outcome: "passed" });
+      git(ready.repo, "commit", "--allow-empty", "-m", "unknown specialist failure");
+      const successor = yield* captureLocalCandidate({ cwd: ready.repo, now: successorNow });
+      if (!successor.ok) throw new Error(`Candidate capture failed: ${successor.code}`);
+
+      const result = yield* runTaskBackedCandidate(ready, policy, successor);
+
+      expect(result).toMatchObject({ ok: false, outcome: "tooling_failed" });
+      expect(specialistCalls).toBe(2);
+      expect(review.mock.calls.filter(([input]) => input.reviewer === "standards")).toHaveLength(2);
+      expect(sessions.get(`${successor.changeId}/standards`)?.sessionReference).toBe(
+        "known-session",
+      );
+      expect(yield* ready.validation.listFindings(result.validationRunId)).toEqual([]);
+    }),
+  );
+
+  it.scoped("keeps Specialist restarts and sessions independent", () =>
+    Effect.gen(function* () {
+      const sessions = new Map<string, ReviewerSessionRecord>();
+      const sessionStore = specialistSessionStore(sessions);
+      const alphaFailure = new ReviewerOutputContractFailed({
+        operationName: "decode_reviewer_output",
+        reviewer: "alpha",
+        attempts: 1,
+        diagnostics: [],
+        message: "alpha resumed session failure",
+      });
+      let alphaCalls = 0;
+      const review = vi.fn<ReviewerAgentRuntime["review"]>((input) => {
+        if (input.reviewer === "acceptance")
+          return Effect.succeed({
+            ok: true as const,
+            report: { findings: [] },
+            attempts: 1,
+            stdout: "acceptance report",
+          });
+        if (input.reviewer === "alpha") {
+          alphaCalls += 1;
+          if (input.resumeSession !== undefined)
+            return Effect.succeed({
+              ok: false as const,
+              failure: alphaFailure,
+              sessionUsability: "unusable" as const,
+              attempts: 1,
+              stdout: "alpha resumed failure",
+            });
+          return Effect.succeed({
+            ok: true as const,
+            report: { findings: [] },
+            attempts: 1,
+            stdout: "alpha report",
+            sessionReference: alphaCalls === 1 ? "alpha-session" : "alpha-fresh-session",
+          });
+        }
+        return Effect.succeed({
+          ok: true as const,
+          report: { findings: [] },
+          attempts: 1,
+          stdout: "beta report",
+          sessionReference: "beta-session",
+        });
+      });
+      const ready = yield* acceptanceReadyRepo({ review }, { sessionStore });
+      const policy = {
+        ...passingValidationPolicy,
+        specialistReviews: [specialistPolicy("alpha"), specialistPolicy("beta")],
+      };
+      const initial = yield* runTaskBackedCandidate(ready, policy);
+      expect(initial).toMatchObject({ ok: true, outcome: "passed" });
+      git(ready.repo, "commit", "--allow-empty", "-m", "independent specialist sessions");
+      const successor = yield* captureLocalCandidate({ cwd: ready.repo, now: successorNow });
+      if (!successor.ok) throw new Error(`Candidate capture failed: ${successor.code}`);
+
+      const result = yield* runTaskBackedCandidate(ready, policy, successor);
+
+      expect(result).toMatchObject({
+        ok: true,
+        outcome: "passed",
+        specialistReviewerEvidence: [
+          { producer: "alpha", continuity: "restarted", reviewCalls: 2 },
+          { producer: "beta", continuity: "resumed", reviewCalls: 1 },
+        ],
+      });
+      expect(review.mock.calls.map(([input]) => input.reviewer)).toEqual([
+        "acceptance",
+        "alpha",
+        "beta",
+        "acceptance",
+        "alpha",
+        "alpha",
+        "beta",
+      ]);
+      expect(sessions.get(`${successor.changeId}/alpha`)?.sessionReference).toBe(
+        "alpha-fresh-session",
+      );
+      expect(sessions.get(`${successor.changeId}/beta`)?.sessionReference).toBe("beta-session");
+    }),
+  );
+
   it.scoped("continues independent Specialist Reviewer Sessions in configured order", () =>
     Effect.gen(function* () {
       const sessions = new Map<string, ReviewerSessionRecord>();
@@ -1447,6 +1733,17 @@ const runReviewPhases = (
           };
     }),
   );
+
+const specialistSessionStore = (
+  sessions: Map<string, ReviewerSessionRecord>,
+): ReviewerSessionStore => ({
+  get: (changeId, producer) => Effect.succeed(sessions.get(`${changeId}/${producer}`)),
+  save: (record) =>
+    Effect.sync(() =>
+      sessions.set(`${record.identity.changeId}/${record.identity.producer}`, record),
+    ),
+  remove: (changeId, producer) => Effect.sync(() => sessions.delete(`${changeId}/${producer}`)),
+});
 
 const acceptanceReadyRepo = (
   reviewerAgentRuntime: ReviewerAgentRuntime,
