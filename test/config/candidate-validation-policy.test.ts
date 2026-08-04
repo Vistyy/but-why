@@ -66,6 +66,43 @@ describe("Candidate validation policy configuration", () => {
     });
   });
 
+  it("resolves Repository Preparation from the Change Base Repo Config", () => {
+    const root = createTestWorkspace();
+    const globalConfigPath = join(root, "global-config.json");
+    writeFileSync(globalConfigPath, "{}");
+    const candidate = decodeRepoConfig({
+      taskPrefix: "BY",
+      prepare: { command: "candidate-prepare" },
+      validation: { checks: [{ id: "candidate", command: "true" }] },
+    });
+    const changeBase = decodeRepoConfig({
+      taskPrefix: "BY",
+      prepare: { command: "base-prepare" },
+      validation: { checks: [{ id: "base", command: "true" }] },
+    });
+    if (Either.isLeft(candidate) || Either.isLeft(changeBase))
+      throw new Error("Repo Config fixture is invalid.");
+
+    const result = resolveCandidateValidationPolicy({
+      context: { root, config: candidate.right },
+      globalConfigPath,
+      acceptanceContextSupplied: false,
+      repoConfig: candidate.right,
+      validationRepoConfig: changeBase.right,
+    });
+
+    expect(result).toMatchObject({
+      ok: true,
+      resolved: {
+        acceptanceContextSupplied: false,
+        policy: {
+          prepare: { command: "base-prepare" },
+          checks: [{ id: "base", command: "true" }],
+        },
+      },
+    });
+  });
+
   it("uses configured Acceptance and Specialist Review selections", () => {
     const root = createTestWorkspace();
     const globalConfigPath = join(root, "global-config.json");
