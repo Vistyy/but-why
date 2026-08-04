@@ -804,15 +804,11 @@ describe("Change inspection CLI", () => {
         id: changeId,
         activity: "blocked",
       });
-      const blockedList = yield* runByInProcessEffect(root, [
-        "--json",
-        "task",
-        "list",
-        "--all",
-      ]);
+      const blockedList = yield* runByInProcessEffect(root, ["--json", "task", "list", "--all"]);
       expect(
-        JSON.parse(blockedList.stdout).tasks.find((task: { readonly id: string }) => task.id === "BY-1")
-          .change,
+        JSON.parse(blockedList.stdout).tasks.find(
+          (task: { readonly id: string }) => task.id === "BY-1",
+        ).change,
       ).toEqual({ id: changeId, activity: "blocked" });
       yield* withTestRepository(
         root,
@@ -858,12 +854,7 @@ describe("Change inspection CLI", () => {
         id: changeId,
         activity: "validating",
       });
-      const validatingList = yield* runByInProcessEffect(root, [
-        "--json",
-        "task",
-        "list",
-        "--all",
-      ]);
+      const validatingList = yield* runByInProcessEffect(root, ["--json", "task", "list", "--all"]);
       expect(
         JSON.parse(validatingList.stdout).tasks.find(
           (task: { readonly id: string }) => task.id === "BY-1",
@@ -882,15 +873,11 @@ describe("Change inspection CLI", () => {
         id: changeId,
         activity: "ready",
       });
-      const readyList = yield* runByInProcessEffect(root, [
-        "--json",
-        "task",
-        "list",
-        "--all",
-      ]);
+      const readyList = yield* runByInProcessEffect(root, ["--json", "task", "list", "--all"]);
       expect(
-        JSON.parse(readyList.stdout).tasks.find((task: { readonly id: string }) => task.id === "BY-1")
-          .change,
+        JSON.parse(readyList.stdout).tasks.find(
+          (task: { readonly id: string }) => task.id === "BY-1",
+        ).change,
       ).toEqual({ id: changeId, activity: "ready" });
 
       yield* transitionTaskFixture(root, "validating");
@@ -917,15 +904,11 @@ describe("Change inspection CLI", () => {
         change: { id: changeId },
       });
       expect(JSON.parse(closedTask.stdout).task.change).not.toHaveProperty("activity");
-      const closedList = yield* runByInProcessEffect(root, [
-        "--json",
-        "task",
-        "list",
-        "--all",
-      ]);
+      const closedList = yield* runByInProcessEffect(root, ["--json", "task", "list", "--all"]);
       expect(
-        JSON.parse(closedList.stdout).tasks.find((task: { readonly id: string }) => task.id === "BY-1")
-          .change,
+        JSON.parse(closedList.stdout).tasks.find(
+          (task: { readonly id: string }) => task.id === "BY-1",
+        ).change,
       ).toEqual({ id: changeId });
     }),
   );
