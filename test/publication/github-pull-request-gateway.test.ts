@@ -515,8 +515,9 @@ describe("GitHub pull request gateway", () => {
     expect(ghCalls).toHaveLength(2);
     expect(ghCalls[0]).toContain("qualifiedName=refs/heads/but-why/feature");
     const deletionArgs = ghCalls[1]?.join(" ") ?? "";
-    expect(deletionArgs).toContain('beforeOid":"candidate-sha"');
-    expect(deletionArgs).toContain(`afterOid":"${"0".repeat(40)}"`);
+    expect(deletionArgs).toContain("name=refs/heads/but-why/feature");
+    expect(deletionArgs).toContain("beforeOid=candidate-sha");
+    expect(deletionArgs).toContain(`afterOid=${"0".repeat(40)}`);
   });
 
   it("protects the pull request target and default branch from remote deletion", () => {

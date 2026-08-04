@@ -195,8 +195,11 @@ const remoteBranchQuery = `query($owner: String!, $repo: String!, $qualifiedName
   }
 }`;
 
-const remoteBranchDeletionMutation = `mutation($repositoryId: ID!, $refUpdates: [RefUpdate!]!) {
-  updateRefs(input: { repositoryId: $repositoryId, refUpdates: $refUpdates }) {
+const remoteBranchDeletionMutation = `mutation($repositoryId: ID!, $name: GitRefname!, $beforeOid: GitObjectID!, $afterOid: GitObjectID!) {
+  updateRefs(input: {
+    repositoryId: $repositoryId
+    refUpdates: [{ name: $name, beforeOid: $beforeOid, afterOid: $afterOid }]
+  }) {
     clientMutationId
   }
 }`;
@@ -277,14 +280,11 @@ const deleteRemoteBranch = (
     "-F",
     `repositoryId=${input.repositoryId}`,
     "-F",
-    `refUpdates=${JSON.stringify([
-      {
-        name: `refs/heads/${input.branchName}`,
-        beforeOid: input.expectedHeadSha,
-        afterOid: zeroSha,
-        force: false,
-      },
-    ])}`,
+    `name=refs/heads/${input.branchName}`,
+    "-F",
+    `beforeOid=${input.expectedHeadSha}`,
+    "-F",
+    `afterOid=${zeroSha}`,
   ]);
   if (!result.ok) return false;
   const parsed = parseJson(result.stdout) as
