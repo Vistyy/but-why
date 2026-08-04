@@ -102,9 +102,15 @@ The Implementer handoff should include the latest failure so a separately launch
 `by change prepare <change-id>` should remain as an explicit retry that runs the trusted command in the Managed Worktree and clears the latest failure on success.
 Persisted Change readiness values `pending`, `ready`, and `prepare_failed`, the readiness gate, and `change_not_ready` should be removed.
 Every new Validation Run should create a fresh Validation Workspace and run trusted Repository Preparation there before Checks and review.
+Recovery may reuse only the same Validation Run's matching clean Validation Workspace and must not make it available to a later Validation Run.
+When the Change Base Repo Config omits the optional Repository Preparation command, validation should begin with Checks and should not record an empty Prepare phase.
 A reused completed passing Validation Run should not rerun preparation.
-Validation preparation failure remains a Finding that prevents publication.
-No coordination machinery for simultaneous preparation-repair Changes or trusted-policy override for changing a broken baseline preparation command is justified without a concrete case.
+A configured Repository Preparation command that exits nonzero or times out remains a Finding that prevents publication.
+A Repository Preparation execution or Candidate-integrity failure remains a Validation Tooling Failure that prevents publication.
+BY-104 verification should use one real-Git preparation flow and a focused task-backed ordering case that proves preparation and Checks precede Acceptance Review.
+Reviewer Session reuse verification remains Reviewer Agent Runtime work and should not duplicate the real-Git preparation flow.
+BY-104 verification should prove that reused complete passing evidence creates no Validation Workspace and runs no Repository Preparation, Check, or review.
+No cross-Validation-Run reusable workspace state, coordination machinery for simultaneous preparation-repair Changes, or trusted-policy override for changing a broken baseline preparation command is justified without a concrete case.
 
 ## Accepted Managed Worktree recovery behavior
 

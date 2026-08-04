@@ -81,9 +81,11 @@ Repo Config does not define the default branch, publication remote, GitHub repos
 
 ## Repository Preparation
 
-Top-level `prepare` runs in each new Managed Worktree and once before Validation Checks.
+When configured, top-level `prepare` runs in each new Managed Worktree and once before Validation Checks.
 It contains a non-empty command and an optional positive `timeoutSeconds`.
 The default timeout is 1200 seconds.
+When `prepare` is absent, But Why runs no Repository Preparation.
+Change Submit starts Checks without an empty Prepare phase.
 
 Change Start runs Repository Preparation in the new Managed Worktree.
 A failure preserves the Change and Managed Worktree, is recorded as the current preparation failure, and does not block implementation or Submission.
@@ -94,8 +96,11 @@ Retry it with:
 by change prepare <change-id>
 ```
 
-A Repository Preparation failure reports the command, exit or timeout facts, bounded stdout and stderr, and the retry command.
+A Change Start or `by change prepare` failure reports the command, exit or timeout facts, bounded stdout and stderr, and the retry command.
 A successful retry clears the current preparation failure.
+During Change Submit, a nonzero exit or timeout creates a Finding.
+An execution or Candidate-integrity failure during Change Submit is a Validation Tooling Failure.
+Both Change Submit outcomes prevent publication.
 
 ## Checks
 

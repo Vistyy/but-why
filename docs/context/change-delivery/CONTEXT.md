@@ -203,6 +203,8 @@ _Avoid_: Acceptance Reviewer, Final Reviewer
 
 **Validation Workspace**:
 An isolated disposable workspace in which one Validation Run judges the exact Candidate without changing it.
+A later Validation Run uses a different Validation Workspace.
+Recovery may reuse only the same Validation Run's matching clean Validation Workspace.
 _Avoid_: Task Worktree, Interactive Session
 
 **Validation Tooling Failure**:

@@ -47,6 +47,7 @@ _Avoid_: Interactive Session Environment, Reviewer Environment, Caller-checkout 
 
 **Repository Preparation**:
 The configured setup that establishes dependencies or tools in a new Managed Worktree or Validation Workspace.
+When Repo Config omits Repository Preparation, But Why runs no Repository Preparation.
 _Avoid_: Validation-only setup, package-manager-specific install stage
 
 **Repo Config**:
