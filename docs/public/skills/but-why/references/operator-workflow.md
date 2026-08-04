@@ -39,6 +39,8 @@ This section is complete when the Operator's selected Work Route and its selecte
 
 ## Author Tasks
 
+Before designing or revising a Task Verification Contract, read [Task verification](task-verification.md) completely.
+
 1. Gather the Operator-approved requirements and applicable current authority.
    Do not infer approval from brainstorming or provisional planning.
    Ask the Operator when requirement approval is unclear.
@@ -52,10 +54,9 @@ This section is complete when the Operator's selected Work Route and its selecte
    Keep all work for one capability in one Task unless a split creates independently verifiable capabilities with necessary dependencies.
    Keep the capability in one Task when no such split exists, even when the Task is large.
    Add a Task Dependency only when the dependent Task cannot be implemented or verified until the prerequisite Task is Done.
-3. Give each proposed Task behavior-based acceptance criteria.
+3. Give each proposed Task behavior-based acceptance criteria and a complete Task Verification Contract.
    Do not use generic verification gates, test counts, coverage targets, or unsupported test categories as acceptance criteria.
-   Give each Task a Task Verification Contract with Material Risks, Verification Claims, proportionate evidence, escalation conditions, and explicit exclusions.
-   Do not require tests by default.
+   Follow the Task verification reference to define proportionate implementation confidence.
 4. Before requesting Task Recording Authorization for a consequential multi-Task graph, independently audit the exact final Task Contexts and dependencies against current authority, ownership, verification feasibility, and cross-Task overlap.
    Task lifecycle state does not establish implementation readiness.
 5. Present the complete Task graph, Task Context, Task Dependency rationale, and recording order.

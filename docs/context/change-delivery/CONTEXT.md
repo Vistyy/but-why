@@ -102,6 +102,11 @@ A continuing reviewer conversation owned by one Change and one Reviewer Session 
 It can resume across that Change's Candidates and disposable Validation Workspaces so a reviewer can reuse repository orientation.
 _Avoid_: Fresh reviewer session per Candidate, cross-Change reviewer conversation
 
+**Reviewer Session Usability**:
+The Reviewer Agent Runtime classification after a failed resumed review.
+`unusable` means the stored Reviewer Session is proven unable to continue, while `unknown` means the failure does not establish that the stored session is unusable and the session remains preserved.
+_Avoid_: Provider error message, automatic retry status
+
 **Producer**:
 The named source of validation evidence, such as Prepare, a Check, Acceptance Review, or a Specialist Review.
 A Producer identifies the source that creates an Artifact or Finding.

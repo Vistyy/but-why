@@ -29,6 +29,7 @@ describe("portable But Why skill", () => {
 
   it("orders authority guards before each permitted operation", () => {
     const workflow = readSkillArtifact("references/operator-workflow.md");
+    const taskVerification = readSkillArtifact("references/task-verification.md");
     const authority = section(workflow, "Authority");
     const selectRoute = section(workflow, "Select a Work Route");
     const authorTasks = section(workflow, "Author Tasks");
@@ -60,7 +61,8 @@ describe("portable But Why skill", () => {
     );
     expect(handoff).toContain("scripts/launch-handoff.mjs");
     expect(handoff).toContain("changeVerified: true");
-    expect(workflow).toContain("Task Verification Contract");
-    expect(workflow).toContain("Do not require tests by default.");
+    expect(authorTasks).toContain("[Task verification](task-verification.md)");
+    expect(taskVerification).toContain("Task Verification Contract");
+    expect(taskVerification).toContain("Do not require tests by default.");
   });
 });
