@@ -1,11 +1,16 @@
 import { runtimeError, type CliResult } from "../../cliResults.js";
 import type { ChangeStartResult } from "../../change/changeUseCases.js";
 import type { ChangeSubmitResult } from "../../change/submitChange.js";
+import type { ChangeRecord } from "../../change/change.js";
+import { boundedEvidence } from "../../change/preparationEvidence.js";
 
-export const boundedEvidence = (value: string): string =>
-  value.length <= 1000
-    ? value
-    : `${value.slice(0, 1000)}\n... (truncated, ${value.length} chars total)`;
+export const prepareFailureView = (failure: NonNullable<ChangeRecord["prepareFailure"]>) => ({
+  command: failure.command,
+  exitCode: failure.exitCode,
+  timedOut: failure.timedOut,
+  stdout: boundedEvidence(failure.stdout),
+  stderr: boundedEvidence(failure.stderr),
+});
 
 export const remoteChangeBaseError = (
   result: Extract<

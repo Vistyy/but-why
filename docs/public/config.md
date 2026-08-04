@@ -85,9 +85,9 @@ Top-level `prepare` runs in each new Managed Worktree and once before Validation
 It contains a non-empty command and an optional positive `timeoutSeconds`.
 The default timeout is 1200 seconds.
 
-Change Start runs Repository Preparation before it reports a Change as ready.
+Change Start runs Repository Preparation in the new Managed Worktree.
+A failure preserves the Change and Managed Worktree, is recorded as the current preparation failure, and does not block implementation or Submission.
 Change Submit runs it before Checks in the Validation Workspace.
-A failure preserves the Change and Managed Worktree.
 Retry it with:
 
 ```bash
@@ -95,6 +95,7 @@ by change prepare <change-id>
 ```
 
 A Repository Preparation failure reports the command, exit or timeout facts, bounded stdout and stderr, and the retry command.
+A successful retry clears the current preparation failure.
 
 ## Checks
 

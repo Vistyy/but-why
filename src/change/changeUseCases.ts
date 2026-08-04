@@ -15,7 +15,7 @@ import {
   type RepositoryPreparationEffectExecutor,
 } from "../repositoryPreparation/runRepositoryPreparation.js";
 import { taskSlugForId, type PublicTaskId } from "../task/taskId.js";
-import { changeReadiness, changeState, type ChangePrepareFailure } from "./change.js";
+import { changeState, type ChangePrepareFailure } from "./change.js";
 import type {
   InteractiveSessionHost,
   InteractiveSessionLaunchEvidence,
@@ -61,8 +61,7 @@ export type ChangeStartResult =
       readonly ok: false;
       readonly code: Exclude<ProvisionChangeWorktreeResult, { readonly ok: true }>["code"];
       readonly change: ChangeStartRecord;
-    }
-  | { readonly ok: false; readonly code: "prepare_failed"; readonly change: ChangeStartRecord };
+    };
 
 export type ChangeImplementResult =
   | {
@@ -85,8 +84,7 @@ export type ChangeImplementResult =
       readonly message: string;
       readonly evidence?: InteractiveSessionLaunchEvidence;
     }
-  | { readonly ok: false; readonly code: "change_not_found" | "change_not_open" }
-  | { readonly ok: false; readonly code: "change_not_ready"; readonly change: ChangeStartRecord };
+  | { readonly ok: false; readonly code: "change_not_found" | "change_not_open" };
 
 export type ChangePrepareResult =
   | { readonly ok: true; readonly change: ChangeStartRecord }
@@ -96,8 +94,7 @@ export type ChangePrepareResult =
       readonly ok: false;
       readonly code: Exclude<ProvisionChangeWorktreeResult, { readonly ok: true }>["code"];
       readonly change: ChangeStartRecord;
-    }
-  | { readonly ok: false; readonly code: "prepare_failed"; readonly change: ChangeStartRecord };
+    };
 
 export const openChangeUseCases = (
   context: RepoLocalContext,
@@ -187,9 +184,7 @@ const resumeTaskChange = (
 
     const provisioned = git.provisionWorktree(eligibility.existing, true);
     if (!provisioned.ok) return { ...provisioned, change: eligibility.existing };
-    return eligibility.existing.readiness === changeReadiness.pending
-      ? yield* prepareExisting(store, executor, eligibility.existing, now)
-      : readinessResult(eligibility.existing);
+    return yield* prepareExisting(store, executor, eligibility.existing, now);
   });
 
 const prepareChange = (
@@ -205,7 +200,6 @@ const prepareChange = (
     if (change.state !== changeState.open) return { ok: false, code: "change_not_open" };
     const provisioned = git.provisionWorktree(change, true);
     if (!provisioned.ok) return { ...provisioned, change };
-    if (change.readiness === changeReadiness.ready) return { ok: true, change };
     return yield* prepareExisting(store, executor, change, now);
   });
 
@@ -221,9 +215,6 @@ const implementChange = (
     const change = yield* store.getById(changeId);
     if (change === undefined) return { ok: false, code: "change_not_found" };
     if (change.state !== changeState.open) return { ok: false, code: "change_not_open" };
-    if (change.readiness !== changeReadiness.ready) {
-      return { ok: false, code: "change_not_ready", change };
-    }
     const managedRepoConfig = readRepoConfig(join(change.worktreePath, ".but-why", "config.json"));
     if (!managedRepoConfig.ok) {
       return {
@@ -287,6 +278,7 @@ const implementChange = (
             initialPrompt: buildImplementerInitialPrompt({
               changeId: change.id,
               worktreePath: change.worktreePath,
+              ...(change.prepareFailure === null ? {} : { prepareFailure: change.prepareFailure }),
               ...(handoff === undefined ? {} : { handoff }),
             }),
             agentProfile: resolvedAgentProfile,
@@ -341,9 +333,7 @@ const agentProfileErrorMessage = (error: {
   return `${profile}${scope} must use the Pi agent runtime; it uses "${error.agentRuntime ?? "unknown"}".`;
 };
 
-type PreparationResult =
-  | { readonly ok: true; readonly change: ChangeStartRecord }
-  | { readonly ok: false; readonly code: "prepare_failed"; readonly change: ChangeStartRecord };
+type PreparationResult = { readonly ok: true; readonly change: ChangeStartRecord };
 
 const prepareExisting = (
   store: ChangeStartPersistence,
@@ -354,8 +344,8 @@ const prepareExisting = (
   Effect.gen(function* () {
     const prepare = change.prepare;
     if (prepare === null) {
-      const ready = yield* store.markReady(change.id, now);
-      return { ok: true as const, change: ready };
+      const recorded = yield* store.recordPrepareOutcome(change.id, null, now);
+      return { ok: true as const, change: recorded };
     }
 
     const outcome = yield* runRepositoryPreparationEffect({
@@ -381,16 +371,12 @@ const prepareExisting = (
         }),
       );
 
-    if (outcome.ok && outcome.result.exitCode === 0) {
-      const ready = yield* store.markReady(change.id, now);
-      return { ok: true as const, change: ready };
-    }
-    const failure = outcome.ok ? outcome.result : outcome.failure;
-    const failed = yield* store.markPrepareFailed(change.id, failure, now);
-    return { ok: false as const, code: "prepare_failed" as const, change: failed };
+    const failure =
+      outcome.ok && outcome.result.exitCode === 0
+        ? null
+        : outcome.ok
+          ? outcome.result
+          : outcome.failure;
+    const recorded = yield* store.recordPrepareOutcome(change.id, failure, now);
+    return { ok: true as const, change: recorded };
   });
-
-const readinessResult = (change: ChangeStartRecord): ChangeStartResult =>
-  change.readiness === changeReadiness.prepareFailed
-    ? { ok: false, code: "prepare_failed", change }
-    : { ok: true, change };

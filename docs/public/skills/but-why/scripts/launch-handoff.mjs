@@ -402,7 +402,6 @@ function verifyChange(result, changeId, worktreePath) {
   return (
     change.id === changeId &&
     change.state === "open" &&
-    change.readiness === "ready" &&
     paths.length > 0 &&
     paths.every((candidate) => candidate === worktreePath)
   );

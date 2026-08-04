@@ -108,7 +108,7 @@ For a taskless Change, run `by change show <change-id>` when the Operator select
 When no selected taskless Change exists, run `by change start`.
 
 After Change Start or reuse, run `by change show <change-id>`.
-Verify the exact Change ID, `open` state, `ready` readiness, and exact Managed Worktree path.
+Verify the exact Change ID, `open` state, and exact Managed Worktree path.
 Resolve `scripts/launch-handoff.mjs` relative to this skill directory.
 Pipe the handoff Markdown to the script with the runner that matches the resolved But Why command prefix.
 

@@ -109,7 +109,6 @@ exit 1
         id: shownChangeId,
         taskId,
         state: "open",
-        readiness: "ready",
         worktreePath: shownWorktreePath,
       },
       worktreePath: shownWorktreePath,

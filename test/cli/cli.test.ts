@@ -498,6 +498,7 @@ validationSetup:
         { migration_id: 11, name: "candidate_publications" },
         { migration_id: 12, name: "structured_implementation_decisions" },
         { migration_id: 13, name: "remove_no_change_completion" },
+        { migration_id: 14, name: "remove_change_readiness" },
       ]);
     }),
   );

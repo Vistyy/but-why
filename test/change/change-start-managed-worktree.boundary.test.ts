@@ -1,4 +1,12 @@
-import { chmodSync, existsSync, mkdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { basename, dirname, join } from "node:path";
 
 import { expect, it } from "@effect/vitest";
@@ -49,7 +57,7 @@ describe("Change Start Managed Worktree boundaries", () => {
       const output = JSON.parse(result.stdout) as ChangeOutput;
       const startingCommit = git(root, "rev-parse", "refs/remotes/origin/main^{commit}");
       expect(output).toMatchObject({
-        change: { id: expect.any(String), taskId: null, readiness: "ready" },
+        change: { id: expect.any(String), taskId: null },
         branch: expect.stringMatching(/^refs\/heads\/but-why\/change-/u),
         baseRef: "refs/remotes/origin/main",
         startingCommit,
@@ -291,7 +299,7 @@ describe("Change Start Managed Worktree boundaries", () => {
       );
       expect(retried.status).toBe(0);
       expect(JSON.parse(retried.stdout)).toMatchObject({
-        change: { id: failure.error.changeId, taskId, readiness: "ready" },
+        change: { id: failure.error.changeId, taskId },
         worktreePath: failure.error.worktreePath,
       });
     }),
@@ -312,7 +320,7 @@ describe("Change Start Managed Worktree boundaries", () => {
       );
       expect(started.status).toBe(0);
       const output = JSON.parse(started.stdout) as ChangeOutput;
-      expect(output.change).toMatchObject({ taskId, readiness: "ready" });
+      expect(output.change).toMatchObject({ taskId });
       expect(dirname(output.worktreePath)).toBe(
         join(dirname(root), `${basename(root)}-worktrees`, "but-why"),
       );
@@ -383,7 +391,7 @@ describe("Change Start Managed Worktree boundaries", () => {
             taskPrefix: "BY",
             prepare: {
               command:
-                "if [ -f .prepare-attempted ]; then exit 0; else touch .prepare-attempted; printf failed >&2; exit 7; fi",
+                "count=$(cat .prepare-count 2>/dev/null || echo 0); count=$((count + 1)); printf '%s' $count > .prepare-count; if [ $count -le 2 ]; then printf 'failed attempt %s' $count >&2; exit $((6 + count)); else printf 'prepared'; exit 0; fi",
             },
           },
           null,
@@ -395,30 +403,69 @@ describe("Change Start Managed Worktree boundaries", () => {
       configurePublicationRemote(root, root);
 
       const started = yield* runByInProcessEffect(root, ["--json", "change", "start"], now);
-      expect(started.status).toBe(1);
-      const failure = JSON.parse(started.stdout);
-      expect(failure).toMatchObject({
-        error: {
-          code: "prepare_failed",
-          changeId: expect.any(String),
-          readiness: "prepare_failed",
+      expect(started.status).toBe(0);
+      const output = JSON.parse(started.stdout) as ChangeOutput;
+      expect(output).toMatchObject({
+        change: { id: expect.any(String), taskId: null },
+        worktreePath: expect.any(String),
+        prepareFailure: {
           exitCode: 7,
           timedOut: false,
-          stderr: "failed",
-          worktreePath: expect.any(String),
+          stderr: "failed attempt 1",
         },
       });
-      expect(existsSync(failure.error.worktreePath)).toBe(true);
+      expect(existsSync(output.worktreePath)).toBe(true);
+      expect(readFileSync(join(output.worktreePath, ".prepare-count"), "utf8")).toBe("1");
+
+      const shown = yield* runByInProcessEffect(
+        root,
+        ["--json", "change", "show", output.change.id],
+        now,
+      );
+      expect(shown.status).toBe(0);
+      expect(JSON.parse(shown.stdout)).toMatchObject({
+        change: {
+          id: output.change.id,
+          state: "open",
+          worktreePath: output.worktreePath,
+          prepareFailure: {
+            exitCode: 7,
+            timedOut: false,
+            stderr: "failed attempt 1",
+          },
+        },
+      });
 
       const retried = yield* runByInProcessEffect(
         root,
-        ["--json", "change", "prepare", failure.error.changeId],
+        ["--json", "change", "prepare", output.change.id],
         now,
       );
+      expect(retried.status).toBe(0);
       expect(JSON.parse(retried.stdout)).toMatchObject({
-        change: { id: failure.error.changeId, readiness: "ready" },
-        worktreePath: failure.error.worktreePath,
+        change: { id: output.change.id, taskId: null },
+        worktreePath: output.worktreePath,
+        prepareFailure: {
+          exitCode: 8,
+          timedOut: false,
+          stderr: "failed attempt 2",
+        },
       });
+      expect(readFileSync(join(output.worktreePath, ".prepare-count"), "utf8")).toBe("2");
+
+      const succeeded = yield* runByInProcessEffect(
+        root,
+        ["--json", "change", "prepare", output.change.id],
+        now,
+      );
+      expect(succeeded.status).toBe(0);
+      const succeededOutput = JSON.parse(succeeded.stdout) as ChangeOutput;
+      expect(succeededOutput).toMatchObject({
+        change: { id: output.change.id, taskId: null },
+        worktreePath: output.worktreePath,
+      });
+      expect(succeededOutput).not.toHaveProperty("prepareFailure");
+      expect(readFileSync(join(output.worktreePath, ".prepare-count"), "utf8")).toBe("3");
     }),
   );
 
@@ -559,12 +606,18 @@ type ChangeOutput = {
   readonly change: {
     readonly id: string;
     readonly taskId: string | null;
-    readonly readiness: string;
   };
   readonly branch: string;
   readonly baseRef: string;
   readonly startingCommit: string;
   readonly worktreePath: string;
+  readonly prepareFailure?: {
+    readonly command: string;
+    readonly exitCode: number;
+    readonly timedOut: boolean;
+    readonly stdout: string;
+    readonly stderr: string;
+  };
 };
 
 const initializedRepository = (workspace?: string): string => {
@@ -606,7 +659,6 @@ const changeStartRecord = (root: string): ChangeStartRecord => {
     startingCommit: git(root, "rev-parse", "refs/heads/main"),
     worktreePath: join(commonDirectory, "but-why", "worktrees", "change-1"),
     acceptanceContext: null,
-    readiness: "pending",
     prepare: null,
     prepareFailure: null,
     publication: null,

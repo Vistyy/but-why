@@ -65,15 +65,7 @@ export const implementResult = (result: ChangeImplementResult): CliResult => {
     return runtimeError({
       code: result.code,
       message: result.code === "change_not_found" ? "Change was not found." : "Change is closed.",
-      help: ["Use an open ready Change ID returned by `by change start --json`."],
-    });
-  }
-  if (result.code === "change_not_ready") {
-    return runtimeError({
-      code: result.code,
-      message: "Change is not ready for an Interactive Session.",
-      details: { changeId: result.change.id, readiness: result.change.readiness },
-      help: [`Run \`by change prepare ${result.change.id}\`, then retry Change Implement.`],
+      help: ["Use an open Change ID returned by `by change start --json`."],
     });
   }
   if (result.code === "agent_environment_invalid") {

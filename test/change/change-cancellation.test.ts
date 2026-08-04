@@ -381,7 +381,6 @@ const changeRecord = (taskId: PublicTaskId | null): ChangeRecord => ({
   startingCommit: "base",
   worktreePath: null,
   acceptanceContext: null,
-  readiness: "ready",
   prepare: null,
   prepareFailure: null,
   publication: {

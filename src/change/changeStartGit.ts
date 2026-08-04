@@ -6,7 +6,6 @@ import { decodeRepoConfigSource } from "../init/repoConfig.js";
 import { resolveLocalBranch } from "./candidateCapture/localGitCandidate.js";
 import { fetchRemoteChangeBase } from "../submissionEnvironment/remoteChangeBase.js";
 import type { RepoLocalContext } from "../init/repoContext.js";
-import { changeReadiness } from "./change.js";
 import { changeBranchRefForSlug } from "./changeBranch.js";
 import type {
   ProvisionChangeWorktreeResult,
@@ -123,13 +122,7 @@ const ensureRecordedBranch = (
 ): ProvisionChangeWorktreeResult => {
   const branchCommit = resolveLocalBranch(cwd, start.branchRef);
   if (branchCommit !== undefined) {
-    return recovering &&
-      (start.readiness === changeReadiness.ready || branchCommit === start.startingCommit)
-      ? { ok: true }
-      : { ok: false, code: "change_start_conflict" };
-  }
-  if (recovering && start.readiness === changeReadiness.ready) {
-    return { ok: false, code: "change_start_conflict" };
+    return recovering ? { ok: true } : { ok: false, code: "change_start_conflict" };
   }
   const branchName = start.branchRef.slice("refs/heads/".length);
   const create = git(cwd, "branch", branchName, start.startingCommit);

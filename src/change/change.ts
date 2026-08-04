@@ -13,15 +13,8 @@ const changeCloseReason = {
   cancelled: "cancelled",
 } as const;
 
-export const changeReadiness = {
-  pending: "pending",
-  ready: "ready",
-  prepareFailed: "prepare_failed",
-} as const;
-
 export type ChangeState = (typeof changeState)[keyof typeof changeState];
 export type ChangeCloseReason = (typeof changeCloseReason)[keyof typeof changeCloseReason];
-export type ChangeReadiness = (typeof changeReadiness)[keyof typeof changeReadiness];
 
 export type ChangePrepareDefinition = {
   readonly command: string;
@@ -95,7 +88,6 @@ export type ChangeRecord = {
   readonly worktreePath: string | null;
   readonly acceptanceContext: AcceptanceContextSnapshotV1 | null;
   readonly implementationDecisions?: readonly ImplementationDecision[];
-  readonly readiness: ChangeReadiness | null;
   readonly prepare: ChangePrepareDefinition | null;
   readonly prepareFailure: ChangePrepareFailure | null;
   readonly publication: ChangePublication | null;

@@ -28,7 +28,7 @@ beforeAll(() => {
   readyRepositoryTemplate = acquireTestWorkspace();
   initializedRepository(undefined, readyRepositoryTemplate);
   unreadyRepositoryTemplate = acquireTestWorkspace();
-  initializedRepository("exit 7", unreadyRepositoryTemplate);
+  initializedRepository("printf 'failed' >&2; exit 7", unreadyRepositoryTemplate);
 });
 
 afterAll(() => {
@@ -533,47 +533,100 @@ describe("by change implement", () => {
     }),
   );
 
-  it.effect("rejects a Change whose Repository Preparation has not succeeded", () =>
+  it.effect("keeps implementation and the handoff available after failed preparation", () =>
     Effect.gen(function* () {
       const root = yield* unreadyRepository();
-      const started = yield* runByInProcessEffect(root, ["--json", "change", "start"], now);
-      const failure = JSON.parse(started.stdout) as {
-        readonly error: { readonly changeId: string };
-      };
-      const submit = yield* runByInProcessEffect(
-        root,
-        ["--json", "change", "submit", failure.error.changeId],
-        now,
-      );
-      expect(submit.status).toBe(1);
-      expect(JSON.parse(submit.stdout)).toMatchObject({
-        error: {
-          code: "change_not_ready",
-          changeId: failure.error.changeId,
-          recovery: {
-            authority: "change_submit",
-            action: "prepare_change",
-            retryCommand: `by change submit ${failure.error.changeId}`,
+      writeFileSync(
+        join(root, ".test-global-config.json"),
+        JSON.stringify({
+          defaultAgentProfile: { scope: "global", name: "implementation" },
+          agentProfiles: {
+            implementation: {
+              agentRuntime: "pi",
+              runtimeConfig: { model: "openai-codex/gpt-5.6-luna", thinking: "high" },
+            },
           },
-        },
-      });
+        }),
+      );
+      const started = yield* runByInProcessEffect(root, ["--json", "change", "start"], now);
+      expect(started.status).toBe(0);
+      const output = JSON.parse(started.stdout) as {
+        readonly change: { readonly id: string };
+        readonly worktreePath: string;
+        readonly prepareFailure: {
+          readonly command: string;
+          readonly exitCode: number;
+          readonly stderr: string;
+        };
+      };
+      expect(output.prepareFailure).toMatchObject({ exitCode: 7 });
 
+      let launchedPrompt: string | undefined;
       const host: InteractiveSessionHost = {
-        launch: async () => {
-          throw new Error("Change Implement must not launch an unready Change");
+        launch: async (input) => {
+          launchedPrompt = input.initialPrompt;
+          return { ok: true, host: "herdr", status: "started" };
         },
       };
 
       const result = yield* runByInProcessEffect(
         root,
-        ["--json", "change", "implement", failure.error.changeId],
+        ["--json", "change", "implement", output.change.id],
         now,
         { interactiveSessionHost: host },
       );
 
-      expect(result.status).toBe(1);
-      expect(JSON.parse(result.stdout)).toMatchObject({ error: { code: "change_not_ready" } });
+      expect(result.status).toBe(0);
+      expect(JSON.parse(result.stdout)).toMatchObject({
+        changeId: output.change.id,
+        worktreePath: output.worktreePath,
+        host: "herdr",
+        status: "started",
+      });
+      expect(launchedPrompt).toContain(`Change identity: ${output.change.id}.`);
+      expect(launchedPrompt).toContain("Current Repository Preparation failure");
+      expect(launchedPrompt).toContain("exit code: 7");
+      expect(launchedPrompt).toContain("stderr (bounded): failed");
     }),
+  );
+
+  it.effect(
+    "keeps Submission available after failed preparation without altering the failure",
+    () =>
+      Effect.gen(function* () {
+        const root = yield* unreadyRepository();
+        const started = yield* runByInProcessEffect(root, ["--json", "change", "start"], now);
+        expect(started.status).toBe(0);
+        const output = JSON.parse(started.stdout) as {
+          readonly change: { readonly id: string };
+          readonly worktreePath: string;
+        };
+
+        const submit = yield* runByInProcessEffect(
+          root,
+          ["--json", "change", "submit", output.change.id],
+          now,
+        );
+
+        expect(submit.status).toBe(0);
+        expect(JSON.parse(submit.stdout)).toMatchObject({
+          changeId: output.change.id,
+          status: "nothing_to_submit",
+        });
+        const shown = yield* runByInProcessEffect(
+          root,
+          ["--json", "change", "show", output.change.id],
+          now,
+        );
+        expect(JSON.parse(shown.stdout)).toMatchObject({
+          change: {
+            id: output.change.id,
+            state: "open",
+            worktreePath: output.worktreePath,
+            prepareFailure: { exitCode: 7 },
+          },
+        });
+      }),
   );
 
   it.effect("maps host outcomes and remains launchable after retryable failures", () =>

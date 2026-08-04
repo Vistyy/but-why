@@ -328,14 +328,18 @@ changeDecisionCommand = group(
 );
 
 const changeBlockerRaiseCommand = withCliHandler(
-  leaf("raise", "Report an Implementation Blocker.", {
-    changeId: changeIdArgument,
-    file: Options.text("file").pipe(
-      Options.withDescription(
-        "Use --file <path|-> with a regular UTF-8 text file path or - to read standard input.",
+  leaf(
+    "raise",
+    "Report an unresolved issue, why continuing is unsafe, and the required external decision or action.",
+    {
+      changeId: changeIdArgument,
+      file: Options.text("file").pipe(
+        Options.withDescription(
+          "Use --file <path|-> with a regular UTF-8 text file path or - to read standard input.",
+        ),
       ),
-    ),
-  }),
+    },
+  ),
   (values, environment) =>
     Effect.promise(() => import("./cli/change/blocker.js")).pipe(
       Effect.flatMap(({ runBlocker }) =>
@@ -395,7 +399,7 @@ changeBlockerCommand = group(
 );
 
 const changeStartCommand = withCliHandler(
-  leaf("start", "Create a prepared Change worktree.", {
+  leaf("start", "Create a Change worktree and attempt preparation.", {
     task: optionalText("task"),
     base: optionalText("base"),
   }),
@@ -492,7 +496,7 @@ const changeValidationRunsCommand = withCliHandler(
     ),
 );
 const changeSubmitCommand = withCliHandler(
-  leaf("submit", "Validate and publish a ready Change.", {
+  leaf("submit", "Validate and publish a Change.", {
     changeId: Args.optional(changeIdArgument),
   }),
   (values, environment) =>
@@ -534,7 +538,7 @@ const changeReconcileCommand = withCliHandler(
     ),
 );
 const changeImplementCommand = withCliHandler(
-  leaf("implement", "Launch an Interactive Session in a ready Change worktree.", {
+  leaf("implement", "Launch an Interactive Session in a Change worktree.", {
     changeId: Args.optional(changeIdArgument),
     handoffFile: optionalText("handoff-file"),
   }),

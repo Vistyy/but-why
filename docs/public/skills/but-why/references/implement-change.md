@@ -1,6 +1,6 @@
 # Implement a Change
 
-The handoff identifies one ready Change and its Managed Worktree.
+The handoff identifies one open Change and its Managed Worktree.
 Let `<but-why>` represent the command prefix resolved by the But Why command guidance.
 
 ## Completion control
@@ -22,7 +22,7 @@ For a Task-backed Change, run `<but-why> task context <task-id>`.
 Treat the Task Context captured at Change Start as the accepted implementation intent.
 Use the Managed Worktree reported by Change Show for every edit, verification command, and commit.
 
-This step is complete when the Change, accepted intent, readiness, and Managed Worktree are known.
+This step is complete when the Change, accepted intent, and Managed Worktree are known.
 
 ## 2. Implement and commit
 
@@ -125,7 +125,6 @@ Concrete repository execution and safety constraints remain applicable.
 
 Submit Recovery Guidance is provided only for these errors:
 
-- `change_not_ready`: run the reported Change Prepare command, then retry Change Submit.
 - `dirty_work`: commit or remove the Git-visible changes in the Managed Worktree, then retry Change Submit.
 - `validation_findings`: inspect every Finding, fix the applicable problems in the Managed Worktree, commit the fixes, then retry Change Submit.
 - `change_base_not_ancestor`: merge or rebase the Change Base into the Repository Branch, then retry Change Submit.

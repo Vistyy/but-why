@@ -35,7 +35,7 @@ Progress does not include Candidate, Change, Validation Run, or other durable UU
 ## Result design
 
 Each command returns the smallest default schema that supports its normal next decision.
-Navigation commands return identities, lifecycle state, readiness, aggregate counts, durable references, and valid next commands.
+Navigation commands return identities, lifecycle state, aggregate counts, durable references, and valid next commands.
 They omit bodies, repeated evidence, and historical detail owned by another command.
 
 Mutation results report the smallest resulting persisted state needed to verify the mutation and choose the normal next action.
@@ -65,7 +65,7 @@ It returns an explicit zero-count result when no Candidate Publication exists.
 
 ## Submit Recovery Guidance
 
-Change Submit places Submit Recovery Guidance under `error.recovery` for `change_not_ready`, `dirty_work`, `validation_findings`, and `change_base_not_ancestor`.
+Change Submit places Submit Recovery Guidance under `error.recovery` for `dirty_work`, `validation_findings`, and `change_base_not_ancestor`.
 The recovery object contains `authority: "change_submit"`, the exact `changeId`, a machine-readable action, an instruction, and a retry command.
 The guidance authorizes the Implementer to perform that exact recovery without additional user approval.
 Concrete repository safety constraints still apply.

@@ -42,7 +42,8 @@ Local branches cannot supply a Change Base.
 New Managed Worktrees use `<main-checkout-parent>/<main-checkout-name>-worktrees/but-why/<change-slug>`.
 But Why resolves the root from the canonical main checkout, including when Change Start runs from a linked worktree.
 Existing Changes retain their recorded absolute paths.
-Change Start runs Repository Preparation before it reports the Change as ready.
+Change Start runs Repository Preparation in the new Managed Worktree.
+A failed preparation attempt preserves the open Change and is recorded as the current preparation failure.
 A Task-backed Change captures immutable Acceptance Context.
 A taskless Change has no Acceptance Context.
 
