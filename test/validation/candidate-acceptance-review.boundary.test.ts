@@ -1267,8 +1267,7 @@ layer(acceptanceTemplateLayer)("Task-backed Candidate Acceptance Review", (it) =
         return Effect.succeed({
           ok: false as const,
           failure: specialistCalls === 2 ? unusable : freshFailure,
-          sessionUsability:
-            specialistCalls === 2 ? ("unusable" as const) : ("unknown" as const),
+          sessionUsability: specialistCalls === 2 ? ("unusable" as const) : ("unknown" as const),
           attempts: 1,
           stdout: "failed specialist report",
         });
