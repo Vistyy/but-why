@@ -399,7 +399,7 @@ changeBlockerCommand = group(
 );
 
 const changeStartCommand = withCliHandler(
-  leaf("start", "Create a prepared Change worktree.", {
+  leaf("start", "Create a Change worktree and attempt preparation.", {
     task: optionalText("task"),
     base: optionalText("base"),
   }),
@@ -496,7 +496,7 @@ const changeValidationRunsCommand = withCliHandler(
     ),
 );
 const changeSubmitCommand = withCliHandler(
-  leaf("submit", "Validate and publish a ready Change.", {
+  leaf("submit", "Validate and publish a Change.", {
     changeId: Args.optional(changeIdArgument),
   }),
   (values, environment) =>
@@ -538,7 +538,7 @@ const changeReconcileCommand = withCliHandler(
     ),
 );
 const changeImplementCommand = withCliHandler(
-  leaf("implement", "Launch an Interactive Session in a ready Change worktree.", {
+  leaf("implement", "Launch an Interactive Session in a Change worktree.", {
     changeId: Args.optional(changeIdArgument),
     handoffFile: optionalText("handoff-file"),
   }),
