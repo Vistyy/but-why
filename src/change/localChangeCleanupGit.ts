@@ -24,6 +24,7 @@ export type ChangeCleanupResult =
         | "remote_branch_unavailable"
         | "remote_branch_repository_mismatch"
         | "remote_branch_ownership_mismatch"
+        | "remote_branch_exclusion_unavailable"
         | "remote_branch_excluded"
         | "remote_branch_head_mismatch"
         | "remote_branch_deletion_failed"
@@ -145,6 +146,9 @@ const cleanupRemoteChangeBranch = (
   const canonicalBranchName = changeBranchNameForRef(input.branchRef);
   if (canonicalBranchName === undefined || canonicalBranchName !== branch.branchName) {
     return { state: "pending", blockingReason: "remote_branch_ownership_mismatch" };
+  }
+  if (branch.targetBranch.trim().length === 0) {
+    return { state: "pending", blockingReason: "remote_branch_exclusion_unavailable" };
   }
   if (canonicalBranchName === branch.targetBranch) {
     return { state: "pending", blockingReason: "remote_branch_excluded" };

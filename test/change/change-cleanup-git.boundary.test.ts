@@ -382,6 +382,42 @@ console.log(JSON.stringify(cleanupChangeResources({ repositoryCommonDirectory, w
     ).toEqual({ state: "complete" });
   });
 
+  it("keeps cleanup pending when the Remote Change Branch target is unavailable", () => {
+    const repository = initializedRepository();
+
+    expect(
+      cleanupChangeResources(
+        {
+          repositoryCommonDirectory: git(
+            repository,
+            "rev-parse",
+            "--path-format=absolute",
+            "--git-common-dir",
+          ),
+          worktreePath: null,
+          branchRef: "refs/heads/but-why/feature",
+          remoteChangeBranch: {
+            owner: "acme",
+            repo: "widgets",
+            remoteName: "origin",
+            remoteUrl: "origin-url",
+            branchName: "but-why/feature",
+            targetBranch: "",
+            expectedHeadSha: "candidate-head",
+          },
+        },
+        {
+          readRemoteBranchHead: () => {
+            throw new Error("An unavailable target must not be read");
+          },
+          deleteRemoteBranch: () => {
+            throw new Error("An unavailable target must not be deleted");
+          },
+        },
+      ),
+    ).toEqual({ state: "pending", blockingReason: "remote_branch_exclusion_unavailable" });
+  });
+
   it("keeps cleanup pending when the Remote Change Branch cannot be read", () => {
     const repository = initializedRepository();
 
