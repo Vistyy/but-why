@@ -36,6 +36,8 @@ export type ReviewerAgentRuntime = {
   readonly review: (input: ReviewerAgentInput) => Effect.Effect<ReviewerAgentResult>;
 };
 
+export type ReviewerSessionUsability = "unusable" | "unknown";
+
 export type ReviewerAgentInput = {
   readonly sandbox: Pick<Sandbox, "run">;
   readonly reviewer: string;
@@ -62,6 +64,7 @@ export type ReviewerAgentResult =
   | {
       readonly ok: false;
       readonly failure: ValidationToolingFailure;
+      readonly sessionUsability: ReviewerSessionUsability;
       readonly attempts: number;
       readonly stdout: string;
       readonly sessionReference?: string;
@@ -142,7 +145,13 @@ const reviewWithPi = (input: ReviewerAgentInput): Effect.Effect<ReviewerAgentRes
           };
         }
         restoreSession();
-        return { ok: false, failure: decoded.left, attempts: 1, stdout: recovered.right.stdout };
+        return {
+          ok: false,
+          failure: decoded.left,
+          sessionUsability: "unknown",
+          attempts: 1,
+          stdout: recovered.right.stdout,
+        };
       }
     }
     if (initial._tag === "Left") {
@@ -167,6 +176,7 @@ const reviewWithPi = (input: ReviewerAgentInput): Effect.Effect<ReviewerAgentRes
       return {
         ok: false,
         failure: first.left,
+        sessionUsability: "unknown",
         attempts: 1,
         stdout: initial.right.stdout,
         ...(yield* sessionMetadata(agent, initial.right)),
@@ -196,6 +206,7 @@ const reviewWithPi = (input: ReviewerAgentInput): Effect.Effect<ReviewerAgentRes
     return {
       ok: false,
       failure: second.left,
+      sessionUsability: "unknown",
       attempts: 2,
       stdout: corrected.right.stdout,
       ...(yield* sessionMetadata(agent, corrected.right)),
@@ -281,7 +292,26 @@ const sandcastleFailure = (
   failure: SandcastleToolingFailed,
   attempts: number,
   stdout: string,
-): ReviewerAgentResult => ({ ok: false, failure, attempts, stdout });
+): ReviewerAgentResult => ({
+  ok: false,
+  failure,
+  sessionUsability: classifyReviewerSessionUsability(failure),
+  attempts,
+  stdout,
+});
+
+const classifyReviewerSessionUsability = (
+  failure: ValidationToolingFailure,
+): ReviewerSessionUsability =>
+  failure._tag === "SandcastleToolingFailed" &&
+  (/^resumeSession ".+" not found(?: under|: expected)/m.test(failure.message) ||
+    /^Session resume failed:/m.test(failure.message) ||
+    /^Reviewer Session (?:JSONL is corrupt|header is (?:incompatible|missing))\.$/m.test(
+      failure.message,
+    ) ||
+    /No session found matching/m.test(failure.message))
+    ? "unusable"
+    : "unknown";
 
 const prepareHostPiSession = async (
   agent: AgentProvider,

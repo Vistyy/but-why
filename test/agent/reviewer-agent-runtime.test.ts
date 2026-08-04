@@ -208,6 +208,7 @@ describe("Pi reviewer agent runtime", () => {
             _tag: "SandcastleToolingFailed",
             message: "Reviewer Session JSONL is corrupt.",
           },
+          sessionUsability: "unusable",
         });
         expect(run).not.toHaveBeenCalled();
       } finally {
@@ -322,6 +323,7 @@ describe("Pi reviewer agent runtime", () => {
         ok: false,
         attempts: 1,
         failure: { _tag: "SandcastleToolingFailed", message: "wrapper failed" },
+        sessionUsability: "unknown",
       });
       expect(command.startsWith("'nix' 'develop' '-c' pi ")).toBe(true);
       expect(attempts).toBe(1);

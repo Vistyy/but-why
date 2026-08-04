@@ -230,15 +230,12 @@ const runAcceptanceReviewPhaseImpl = (
       });
     };
     let provisional = yield* review(compatible ? stored?.sessionReference : undefined);
-    if (!provisional.ok && compatible) {
-      const sessionFailure = isUnusableReviewerSessionFailure(provisional.failure);
-      if (sessionFailure) {
-        continuity = "restarted";
-        restartReason = "session_unusable";
-        if (input.sessionStore !== undefined)
-          yield* input.sessionStore.remove(identity.changeId, identity.producer);
-        provisional = yield* review();
-      }
+    if (!provisional.ok && compatible && provisional.sessionUsability === "unusable") {
+      continuity = "restarted";
+      restartReason = "session_unusable";
+      if (input.sessionStore !== undefined)
+        yield* input.sessionStore.remove(identity.changeId, identity.producer);
+      provisional = yield* review();
     }
     yield* verifyIntegrity(input);
     const result = provisional;
@@ -323,15 +320,6 @@ const progressProfile = (
   model: profile.profile.runtimeConfig?.model ?? "unknown",
   thinking: profile.profile.runtimeConfig?.thinking ?? "default",
 });
-
-const isUnusableReviewerSessionFailure = (failure: ValidationToolingFailure): boolean =>
-  failure._tag === "SandcastleToolingFailed" &&
-  (/^resumeSession ".+" not found(?: under|: expected)/m.test(failure.message) ||
-    /^Session resume failed:/m.test(failure.message) ||
-    /^Reviewer Session (?:JSONL is corrupt|header is (?:incompatible|missing))\.$/m.test(
-      failure.message,
-    ) ||
-    /No session found matching/m.test(failure.message));
 
 const chmodSessionFile = (path: string): boolean => {
   try {

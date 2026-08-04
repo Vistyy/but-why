@@ -479,7 +479,13 @@ layer(acceptanceTemplateLayer)("Task-backed Candidate Acceptance Review", (it) =
       });
       if (!intermediate.ok) throw new Error(`Candidate capture failed: ${intermediate.code}`);
       review.mockImplementationOnce(() =>
-        Effect.succeed({ ok: false, failure, attempts: 2, stdout: "" }),
+        Effect.succeed({
+          ok: false,
+          failure,
+          sessionUsability: "unknown" as const,
+          attempts: 2,
+          stdout: "",
+        }),
       );
       const failed = yield* runTaskBackedCandidate(ready, passingValidationPolicy, intermediate);
       expect(failed).toMatchObject({ ok: false, outcome: "tooling_failed" });
@@ -536,6 +542,7 @@ layer(acceptanceTemplateLayer)("Task-backed Candidate Acceptance Review", (it) =
           : Effect.succeed({
               ok: false as const,
               failure: temporaryFailure,
+              sessionUsability: "unknown" as const,
               attempts: 1,
               stdout: "",
             }),
@@ -553,6 +560,78 @@ layer(acceptanceTemplateLayer)("Task-backed Candidate Acceptance Review", (it) =
       expect(review).toHaveBeenCalledTimes(2);
       expect(review.mock.calls[1]?.[0].resumeSession).toBe("known-good-session");
       expect(sessions.get(successor.changeId)?.sessionReference).toBe("known-good-session");
+    }),
+  );
+
+  it.scoped(
+    "restarts exactly once when the Reviewer Agent Runtime reports an unusable session",
+    () =>
+      Effect.gen(function* () {
+        const sessions = new Map<string, ReviewerSessionRecord>();
+        const sessionStore: ReviewerSessionStore = {
+          get: (changeId) => Effect.succeed(sessions.get(changeId)),
+          save: (record) => Effect.sync(() => sessions.set(record.identity.changeId, record)),
+          remove: (changeId) => Effect.sync(() => sessions.delete(changeId)),
+        };
+        const unusable = new SandcastleToolingFailed({
+          operationName: "run_reviewer_agent",
+          message: "provider detail hidden behind the runtime",
+        });
+        const review = vi.fn<ReviewerAgentRuntime["review"]>((input) =>
+          input.resumeSession === undefined
+            ? Effect.succeed({
+                ok: true as const,
+                report: { findings: [] },
+                attempts: 1,
+                stdout: "fresh acceptance report",
+                sessionReference: "fresh-session",
+              })
+            : Effect.succeed({
+                ok: false as const,
+                failure: unusable,
+                sessionUsability: "unusable" as const,
+                attempts: 1,
+                stdout: "",
+              }),
+        );
+        const ready = yield* acceptanceReadyRepo({ review }, { sessionStore });
+        const initial = yield* runTaskBackedCandidate(ready);
+        expect(initial).toMatchObject({ ok: true, outcome: "passed" });
+
+        git(ready.repo, "commit", "--allow-empty", "-m", "unusable resumed session");
+        const successor = yield* captureLocalCandidate({ cwd: ready.repo, now: successorNow });
+        if (!successor.ok) throw new Error(`Candidate capture failed: ${successor.code}`);
+        const result = yield* runTaskBackedCandidate(ready, passingValidationPolicy, successor);
+
+        expect(result).toMatchObject({ ok: true, outcome: "passed" });
+        expect(review).toHaveBeenCalledTimes(3);
+        expect(review.mock.calls[1]?.[0].resumeSession).toBe("fresh-session");
+        expect(review.mock.calls[2]?.[0].resumeSession).toBeUndefined();
+        expect(sessions.get(successor.changeId)?.sessionReference).toBe("fresh-session");
+      }),
+  );
+
+  it.scoped("does not restart or succeed after a failed fresh review", () =>
+    Effect.gen(function* () {
+      const failure = new SandcastleToolingFailed({
+        operationName: "run_reviewer_agent",
+        message: "fresh review failed",
+      });
+      const review = vi.fn<ReviewerAgentRuntime["review"]>(() =>
+        Effect.succeed({
+          ok: false as const,
+          failure,
+          sessionUsability: "unknown" as const,
+          attempts: 1,
+          stdout: "",
+        }),
+      );
+      const ready = yield* acceptanceReadyRepo({ review });
+
+      const result = yield* runTaskBackedCandidate(ready);
+
+      expect(result).toMatchObject({ ok: false, outcome: "tooling_failed" });
+      expect(review).toHaveBeenCalledOnce();
     }),
   );
 
@@ -652,7 +731,13 @@ layer(acceptanceTemplateLayer)("Task-backed Candidate Acceptance Review", (it) =
         }),
       );
       review.mockImplementationOnce(() =>
-        Effect.succeed({ ok: false, failure, attempts: 2, stdout: "invalid final output" }),
+        Effect.succeed({
+          ok: false,
+          failure,
+          sessionUsability: "unknown" as const,
+          attempts: 2,
+          stdout: "invalid final output",
+        }),
       );
 
       const final = yield* runTaskBackedCandidate(ready, passingValidationPolicy, successor);
@@ -837,7 +922,13 @@ layer(acceptanceTemplateLayer)("Task-backed Candidate Acceptance Review", (it) =
           stdout: "specialist 1",
         },
         { ok: true, report: { findings: [] }, attempts: 1, stdout: "accepted 2" },
-        { ok: false, failure, attempts: 2, stdout: "invalid specialist output" },
+        {
+          ok: false,
+          failure,
+          sessionUsability: "unknown",
+          attempts: 2,
+          stdout: "invalid specialist output",
+        },
         { ok: true, report: { findings: [] }, attempts: 1, stdout: "accepted 3" },
         { ok: true, report: { findings: [] }, attempts: 1, stdout: "provisional specialist 3" },
         { ok: true, report: { findings: [] }, attempts: 1, stdout: "final specialist 3" },
@@ -922,7 +1013,13 @@ layer(acceptanceTemplateLayer)("Task-backed Candidate Acceptance Review", (it) =
           const results: Record<string, ReviewerAgentResult> = {
             acceptance: { ok: true, report: { findings: [] }, attempts: 1, stdout: "accepted" },
             zeta: finding("Zeta Finding"),
-            broken: { ok: false, failure, attempts: 2, stdout: "invalid" },
+            broken: {
+              ok: false,
+              failure,
+              sessionUsability: "unknown",
+              attempts: 2,
+              stdout: "invalid",
+            },
             alpha: finding("Alpha Finding"),
           };
           const result = results[input.reviewer];
@@ -992,7 +1089,13 @@ layer(acceptanceTemplateLayer)("Task-backed Candidate Acceptance Review", (it) =
         review: (input) => {
           calls += 1;
           expect(input.agentEnvironment).toEqual(["nix", "develop", "-c"]);
-          return Effect.succeed({ ok: false, failure, attempts: 1, stdout: "" });
+          return Effect.succeed({
+            ok: false,
+            failure,
+            sessionUsability: "unknown" as const,
+            attempts: 1,
+            stdout: "",
+          });
         },
       });
 
@@ -1023,7 +1126,14 @@ layer(acceptanceTemplateLayer)("Task-backed Candidate Acceptance Review", (it) =
         message: "Structured output correction failed.",
       });
       const ready = yield* acceptanceReadyRepo({
-        review: () => Effect.succeed({ ok: false, failure, attempts: 2, stdout: "invalid output" }),
+        review: () =>
+          Effect.succeed({
+            ok: false,
+            failure,
+            sessionUsability: "unknown" as const,
+            attempts: 2,
+            stdout: "invalid output",
+          }),
       });
       const { validation } = ready;
 
