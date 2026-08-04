@@ -34,7 +34,7 @@ describe("by task CLI", () => {
 
         const result = yield* runByInProcessEffect(
           root,
-          ["task", "create", "--title", "  Add   login  ", "--description-file", "task.md"],
+          ["task", "create", "--title", "  Add   login  ", "--file", "task.md"],
           firstNow,
         );
 
@@ -150,14 +150,14 @@ help[1]: Run \`by task list\` to see open tasks.
           "create",
           "--title",
           "   ",
-          "--description-file",
+          "--file",
           "task.md",
         ])).status,
       ).toBe(2);
 
       const result = yield* runByInProcessEffect(
         root,
-        ["task", "create", "--title", "First valid", "--description-file", "task.md"],
+        ["task", "create", "--title", "First valid", "--file", "task.md"],
         firstNow,
       );
 
@@ -347,7 +347,7 @@ tasks[2]:
 description: Validate completed code changes against approved human intent.
 count: 0
 tasks: []
-help[1]: "Run \`by task create --title \\"...\\" --description-file <file>\` to create a task."
+help[1]: "Run \`by task create --title \\"...\\" --file <path|->\` to create a task."
 `);
     }),
   );
@@ -758,7 +758,7 @@ contextCommand: by task context BY-1
     }),
   );
 
-  it.effect("preserves a leading UTF-8 BOM in Task comment content", () =>
+  it.effect("ignores a leading UTF-8 BOM in Task comment content", () =>
     Effect.gen(function* () {
       const root = yield* initializedRepo();
 
@@ -774,7 +774,7 @@ contextCommand: by task context BY-1
       expect(result.status).toBe(0);
 
       expect((yield* runByInProcessEffect(root, ["task", "context", "BY-1"])).stdout).toContain(
-        'comments[1]: "\uFEFFBOM"',
+        "comments[1]: BOM",
       );
     }),
   );
@@ -787,6 +787,7 @@ contextCommand: by task context BY-1
       mkdirSync(join(root, "comment-dir"));
       writeFileSync(join(root, "empty.md"), " \n\t");
       writeFileSync(join(root, "invalid.bin"), Buffer.from([0xff]));
+      writeFileSync(join(root, "large.md"), Buffer.alloc(256 * 1024 + 1, "x"));
 
       const taskUseCases = fakeTaskUseCases({
         resolveTaskId: (taskId) =>
@@ -857,6 +858,12 @@ contextCommand: by task context BY-1
         {
           name: "invalid UTF-8",
           args: ["task", "comment", "BY-1", "--file", "invalid.bin"],
+          status: 1,
+          code: "comment_file_unreadable",
+        },
+        {
+          name: "oversized comment",
+          args: ["task", "comment", "BY-1", "--file", "large.md"],
           status: 1,
           code: "comment_file_unreadable",
         },
@@ -973,7 +980,7 @@ help[1]: Run \`by task list --all --limit all\` to see known Tasks.
       expect(result.stdout).toBe(`count: 0
 total: 0
 tasks: []
-help[1]: "Run \`by task create --title \\"...\\" --description-file <file>\` to create a task."
+help[1]: "Run \`by task create --title \\"...\\" --file <path|->\` to create a task."
 `);
     }),
   );
@@ -1031,7 +1038,7 @@ tasks[3]{id,title,state,createdAt,updatedAt}:
 description: Validate completed code changes against approved human intent.
 count: 0
 tasks: []
-help[1]: "Run \`by task create --title \\"...\\" --description-file <file>\` to create a task."
+help[1]: "Run \`by task create --title \\"...\\" --file <path|->\` to create a task."
 `);
     }),
   );
@@ -1065,7 +1072,7 @@ help[1]: Run \`by --help\` for generated command help.
         "create",
         "--title",
         "Title\nwith line break",
-        "--description-file",
+        "--file",
         "task.md",
       ]);
 
@@ -1075,13 +1082,9 @@ help[1]: Run \`by --help\` for generated command help.
   );
 
   it.effect.each([
-    ["missing title", ["task", "create", "--description-file", "task.md"], "invalid_usage"],
-    [
-      "empty title",
-      ["task", "create", "--title", "   ", "--description-file", "task.md"],
-      "empty_title",
-    ],
-    ["missing description file", ["task", "create", "--title", "Title"], "invalid_usage"],
+    ["missing title", ["task", "create", "--file", "task.md"], "invalid_usage"],
+    ["empty title", ["task", "create", "--title", "   ", "--file", "task.md"], "empty_title"],
+    ["missing description input", ["task", "create", "--title", "Title"], "invalid_usage"],
   ] as const)("prints %s as a usage error", ([_name, args, code]) =>
     Effect.gen(function* () {
       const root = createTestWorkspace();
@@ -1095,7 +1098,7 @@ help[1]: Run \`by --help\` for generated command help.
     }),
   );
 
-  it.effect("maps description file failures to actionable command output", () =>
+  it.effect("maps description input failures to actionable command output", () =>
     Effect.gen(function* () {
       const root = createTestWorkspace();
       mkdirSync(join(root, "directory"));
@@ -1112,7 +1115,7 @@ help[1]: Run \`by --help\` for generated command help.
       ] as const) {
         const result = yield* runByInProcessEffect(
           root,
-          ["task", "create", "--title", "Title", "--description-file", path],
+          ["task", "create", "--title", "Title", "--file", path],
           firstNow,
           { taskUseCases: fakeTaskUseCases() },
         );
@@ -1242,7 +1245,7 @@ const createTask = (root: string, now: string, title: string) => {
   return Effect.flatMap(
     runByInProcessEffect(
       root,
-      ["task", "create", "--title", title, "--description-file", descriptionPath],
+      ["task", "create", "--title", title, "--file", descriptionPath],
       now,
     ),
     (result) =>

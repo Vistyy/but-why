@@ -57,10 +57,10 @@ If implementation is blocked, complete this step by raising the blocker and wait
 
 ## Implementation Blockers
 
-Raise a blocker with `by change blocker raise <change-id> --file <path>`.
-The UTF-8 Markdown report must state the unresolved issue, why continuing is unsafe, and the external decision or action required.
+Raise a blocker with `by change blocker raise <change-id> --file <path|->`.
+The UTF-8 text report must state the unresolved issue, why continuing is unsafe, and the external decision or action required.
 The report is non-authoritative evidence and does not amend Acceptance Context.
-The main operator inspects the blocker with `by change blocker list <change-id>` and records an approved Resolution with `by change blocker resolve <change-id> --file <path>`.
+The main operator inspects the blocker with `by change blocker list <change-id>` and records an approved Resolution with `by change blocker resolve <change-id> --file <path|->`.
 If the Resolution conflicts with accepted intent, identify the earlier intent that the Resolution replaces.
 For a Task-backed Change, the Resolution creates a new Acceptance Context version.
 After resolution, the main operator manually tells the Implementer to continue in the same Managed Worktree.

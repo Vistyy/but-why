@@ -172,7 +172,11 @@ taskContextCommand = group(
 const taskCreateCommand = withCliHandler(
   leaf("create", "Create a repo-local Task.", {
     title: Options.text("title"),
-    descriptionFile: Options.text("description-file"),
+    file: Options.text("file").pipe(
+      Options.withDescription(
+        "Use --file <path|-> with a regular UTF-8 text file path or - to read standard input.",
+      ),
+    ),
     dependsOn: repeatedText("depends-on"),
   }),
   (values, environment) =>
@@ -181,7 +185,7 @@ const taskCreateCommand = withCliHandler(
         runCreateCommand(
           {
             title: requiredString(values, "title"),
-            descriptionFile: requiredString(values, "descriptionFile"),
+            file: requiredString(values, "file"),
             dependsOn: strings(values, "dependsOn"),
           },
           environment,
@@ -224,9 +228,13 @@ const taskApproveCommand = withCliHandler(
     ),
 );
 const taskCommentCommand = withCliHandler(
-  leaf("comment", "Append a Markdown Task comment.", {
+  leaf("comment", "Append a Task comment.", {
     taskId: taskIdArgument,
-    file: Options.text("file"),
+    file: Options.text("file").pipe(
+      Options.withDescription(
+        "Use --file <path|-> with a regular UTF-8 text file path or - to read standard input.",
+      ),
+    ),
   }),
   (values, environment) =>
     Effect.promise(() => import("./cli/task/commands/comment.js")).pipe(
@@ -324,7 +332,7 @@ const changeBlockerRaiseCommand = withCliHandler(
     changeId: changeIdArgument,
     file: Options.text("file").pipe(
       Options.withDescription(
-        "A UTF-8 Markdown report stating the unresolved issue, why continuing is unsafe, and the required external decision or action.",
+        "Use --file <path|-> with a regular UTF-8 text file path or - to read standard input.",
       ),
     ),
   }),
@@ -345,7 +353,11 @@ const changeBlockerRaiseCommand = withCliHandler(
 const changeBlockerResolveCommand = withCliHandler(
   leaf("resolve", "Record an approved Implementation Blocker Resolution.", {
     changeId: changeIdArgument,
-    file: Options.text("file"),
+    file: Options.text("file").pipe(
+      Options.withDescription(
+        "Use --file <path|-> with a regular UTF-8 text file path or - to read standard input.",
+      ),
+    ),
   }),
   (values, environment) =>
     Effect.promise(() => import("./cli/change/blocker.js")).pipe(

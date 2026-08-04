@@ -116,5 +116,4 @@ const taskSummaryRows = (
     })),
   );
 
-const createTaskHelp =
-  'Run `by task create --title "..." --description-file <file>` to create a task.';
+const createTaskHelp = 'Run `by task create --title "..." --file <path|->` to create a task.';

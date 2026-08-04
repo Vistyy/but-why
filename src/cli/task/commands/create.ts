@@ -5,9 +5,9 @@ import { Effect } from "effect";
 import type { CliResult } from "../../../cliResults.js";
 import { runtimeError, success, usageError } from "../../../cliResults.js";
 import {
-  readDescriptionFile,
-  type DescriptionFileReadError,
-} from "../../../task/files/descriptionFile.js";
+  readRecordingText,
+  type RecordingTextReadError,
+} from "../../../cli/input/recordingText.js";
 import { parseCliTaskIdValue } from "../../../cliTaskId.js";
 import type { DependencyValidationCode } from "../../../task/task.js";
 import type { PublicTaskId } from "../../../task/taskId.js";
@@ -20,7 +20,7 @@ import {
 
 export type TaskCreateCommand = {
   readonly title: string;
-  readonly descriptionFile: string;
+  readonly file: string;
   readonly dependsOn: readonly string[];
 };
 
@@ -45,12 +45,8 @@ export const runCreateCommand = (
         help: ['Provide a one-line title with `--title "..."`.'],
       }),
     );
-  const description = readDescriptionFile(
-    environment.cwd,
-    command.descriptionFile,
-    environment.stdin,
-  );
-  if (!description.ok) return Effect.succeed(descriptionFileError(description.error));
+  const description = readRecordingText(environment.cwd, command.file, environment.stdin);
+  if (!description.ok) return Effect.succeed(descriptionInputError(description.error));
 
   return withTasks(environment, true, (tasks) => {
     const dependencies = resolveDependencies(command.dependsOn, tasks);
@@ -121,50 +117,49 @@ const dependencyErrorMessage = (error: {
   }
 };
 
-const descriptionFileError = (error: DescriptionFileReadError): CliResult => {
+const descriptionInputError = (error: RecordingTextReadError): CliResult => {
   switch (error.code) {
-    case "description_file_not_found":
+    case "recording_text_file_not_found":
       return usageError({
-        code: error.code,
+        code: "description_file_not_found",
         message: "Task description file was not found.",
         details: { path: error.path },
-        help: [
-          'Create the file, then rerun `by task create --title "..." --description-file <file>`.',
-        ],
+        help: ['Create the file, then rerun `by task create --title "..." --file <path|->`.'],
       });
-    case "description_file_unreadable":
+    case "recording_text_file_unreadable":
+    case "recording_text_stdin_unreadable":
       return usageError({
-        code: error.code,
-        message: "Task description file is not readable.",
+        code: "description_file_unreadable",
+        message: "Task description input is not readable.",
+        details: "path" in error ? { path: error.path } : { path: "-" },
+        help: ["Use a readable UTF-8 file or pipe UTF-8 text with `--file -`."],
+      });
+    case "recording_text_invalid_utf8":
+      return usageError({
+        code: "invalid_description_encoding",
+        message: "Task description input must be valid UTF-8.",
         details: { path: error.path },
-        help: ["Use a readable UTF-8 file for `--description-file`."],
+        help: ["Rewrite the input as UTF-8 and rerun the command."],
       });
-    case "invalid_description_encoding":
+    case "recording_text_too_large":
       return usageError({
-        code: error.code,
-        message: "Task description file must be valid UTF-8.",
-        details: { path: error.path },
-        help: ["Rewrite the description file as UTF-8 and rerun the command."],
-      });
-    case "description_too_large":
-      return usageError({
-        code: error.code,
-        message: "Task description file is larger than 256 KiB.",
+        code: "description_too_large",
+        message: "Task description input is larger than 256 KiB.",
         details: { path: error.path, maxBytes: error.maxBytes },
-        help: ["Shorten the description file to 256 KiB or less."],
+        help: ["Shorten the input to 256 KiB or less."],
       });
-    case "empty_description":
+    case "recording_text_blank":
       return usageError({
-        code: error.code,
-        message: "Task description must not be empty.",
+        code: "empty_description",
+        message: "Task description must not be blank.",
         details: { path: error.path },
-        help: ["Write a non-empty description file and rerun the command."],
+        help: ["Provide non-blank text with `--file <path|->`."],
       });
     case "stdin_is_terminal":
       return usageError({
         code: error.code,
         message: "Standard input is an interactive terminal.",
-        help: ["Pipe UTF-8 text or use a shell heredoc with --description-file -."],
+        help: ["Pipe UTF-8 text or use a shell heredoc with `--file -`."],
       });
   }
 };

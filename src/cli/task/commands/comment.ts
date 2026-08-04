@@ -5,7 +5,10 @@ import { Effect } from "effect";
 import type { CliResult } from "../../../cliResults.js";
 import { runtimeError, success } from "../../../cliResults.js";
 import { parseCliTaskIdValue } from "../../../cliTaskId.js";
-import { readCommentFile, type CommentFileReadError } from "../../../task/files/commentFile.js";
+import {
+  readRecordingText,
+  type RecordingTextReadError,
+} from "../../../cli/input/recordingText.js";
 import type { PublicTaskId } from "../../../task/taskId.js";
 import {
   resolveTaskId,
@@ -31,8 +34,8 @@ export const runCommentCommand = (
     if (!taskId.ok) return Effect.succeed(taskId.result);
     return Effect.flatMap(tasks.getTaskById(taskId.taskId), (task) => {
       if (task === undefined) return Effect.succeed(taskNotFound(taskId.taskId));
-      const comment = readCommentFile(environment.cwd, command.file, environment.stdin);
-      if (!comment.ok) return Effect.succeed(commentFileError(comment.error));
+      const comment = readRecordingText(environment.cwd, command.file, environment.stdin);
+      if (!comment.ok) return Effect.succeed(commentInputError(comment.error));
       return Effect.map(
         tasks.appendTaskComment({
           taskId: taskId.taskId,
@@ -68,34 +71,43 @@ const invalidTaskCommentState = (taskId: PublicTaskId, state: string): CliResult
     help: ["Task comments may be appended before starting the Task."],
   });
 
-const commentFileError = (error: CommentFileReadError): CliResult => {
+const commentInputError = (error: RecordingTextReadError): CliResult => {
   switch (error.code) {
-    case "comment_file_not_found":
+    case "recording_text_file_not_found":
       return runtimeError({
-        code: error.code,
+        code: "comment_file_not_found",
         message: "Task comment file was not found.",
         details: { path: error.path },
-        help: ["Create the file, then rerun `by task comment <task-id> --file <file>`."],
+        help: ["Create the file, then rerun `by task comment <task-id> --file <path|->`."],
       });
-    case "comment_file_unreadable":
+    case "recording_text_file_unreadable":
+    case "recording_text_stdin_unreadable":
       return runtimeError({
-        code: error.code,
-        message: "Task comment file is not readable UTF-8 text.",
-        details: { path: error.path },
-        help: ["Use a readable UTF-8 file for `--file`."],
+        code: "comment_file_unreadable",
+        message: "Task comment input is not readable.",
+        details: "path" in error ? { path: error.path } : { path: "-" },
+        help: ["Use a readable UTF-8 file or pipe UTF-8 text with `--file -`."],
       });
-    case "empty_comment":
+    case "recording_text_invalid_utf8":
+    case "recording_text_too_large":
       return runtimeError({
-        code: error.code,
-        message: "Task comment must not be empty.",
+        code: "comment_file_unreadable",
+        message: "Task comment input is not readable UTF-8 text.",
         details: { path: error.path },
-        help: ["Write a non-empty comment file and rerun the command."],
+        help: ["Use a readable UTF-8 file or pipe UTF-8 text with `--file -`."],
+      });
+    case "recording_text_blank":
+      return runtimeError({
+        code: "empty_comment",
+        message: "Task comment must not be blank.",
+        details: { path: error.path },
+        help: ["Provide non-blank text with `--file <path|->`."],
       });
     case "stdin_is_terminal":
       return runtimeError({
         code: error.code,
         message: "Standard input is an interactive terminal.",
-        help: ["Pipe UTF-8 text or use a shell heredoc with --file -."],
+        help: ["Pipe UTF-8 text or use a shell heredoc with `--file -`."],
       });
   }
 };

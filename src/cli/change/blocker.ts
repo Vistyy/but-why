@@ -3,12 +3,11 @@
 
 import { Effect } from "effect";
 import type { CliResult } from "../../cliResults.js";
-import type { ChangeCommandEnvironment } from "./changeTypes.js";
 import { loadChangeInspection } from "../../change/loadChangeInspection.js";
-import { readImplementationDecisionFile } from "../../change/implementationDecisionFile.js";
+import { readRecordingText, type RecordingTextReadError } from "../../cli/input/recordingText.js";
 import { runtimeError, success } from "../../cliResults.js";
+import type { ChangeCommandEnvironment } from "./changeTypes.js";
 import * as support from "./changeSupport.js";
-import { decisionFileError } from "./decisionResults.js";
 
 type ChangeBlockerCommand =
   | { readonly action: "list"; readonly changeId: string }
@@ -30,8 +29,8 @@ export const runBlocker = (
       support.inspectionFailure,
     );
   }
-  const content = readImplementationDecisionFile(environment.cwd, command.file, environment.stdin);
-  if (!content.ok) return Effect.succeed(decisionFileError(content.error));
+  const content = readRecordingText(environment.cwd, command.file, environment.stdin);
+  if (!content.ok) return Effect.succeed(blockerInputError(content.error));
   const loaded = loadChangeInspection({ cwd: environment.cwd });
   if (!loaded.ok) return Effect.succeed(support.loadError(loaded.error));
   const operation =
@@ -53,4 +52,44 @@ export const runBlocker = (
     ),
     support.inspectionFailure,
   );
+};
+
+const blockerInputError = (error: RecordingTextReadError): CliResult => {
+  switch (error.code) {
+    case "recording_text_file_not_found":
+      return runtimeError({
+        code: "decision_file_not_found",
+        message: "Implementation Blocker content could not be read.",
+        details: { path: error.path },
+        help: ["Create the file, then rerun the blocker command with `--file <path|->`."],
+      });
+    case "recording_text_file_unreadable":
+    case "recording_text_stdin_unreadable":
+    case "recording_text_too_large":
+    case "recording_text_invalid_utf8":
+      return runtimeError({
+        code:
+          error.code === "recording_text_too_large"
+            ? "decision_file_too_large"
+            : error.code === "recording_text_invalid_utf8"
+              ? "invalid_decision_encoding"
+              : "decision_file_unreadable",
+        message: "Implementation Blocker content could not be read.",
+        details: "path" in error ? { path: error.path } : { path: "-" },
+        help: ["Use a readable UTF-8 file or pipe UTF-8 text with `--file -`."],
+      });
+    case "recording_text_blank":
+      return runtimeError({
+        code: "empty_decision_file",
+        message: "Implementation Blocker content could not be read.",
+        details: { path: error.path },
+        help: ["Provide non-blank UTF-8 text with `--file <path|->`."],
+      });
+    case "stdin_is_terminal":
+      return runtimeError({
+        code: error.code,
+        message: "Standard input is an interactive terminal.",
+        help: ["Pipe UTF-8 text or use a shell heredoc with `--file -`."],
+      });
+  }
 };

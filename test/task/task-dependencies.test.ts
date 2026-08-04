@@ -21,8 +21,8 @@ type TaskGraph = {
 
 const createTask = (root: string, title: string, dependencies: readonly string[] = []) =>
   Effect.gen(function* () {
-    const descriptionFile = `${title.toLowerCase()}.md`;
-    writeFileSync(join(root, descriptionFile), `Description for ${title}`);
+    const file = `${title.toLowerCase()}.md`;
+    writeFileSync(join(root, file), `Description for ${title}`);
     const result = yield* runByInProcessEffect(
       root,
       [
@@ -31,8 +31,8 @@ const createTask = (root: string, title: string, dependencies: readonly string[]
         "create",
         "--title",
         title,
-        "--description-file",
-        descriptionFile,
+        "--file",
+        file,
         ...dependencies.flatMap((dependency) => ["--depends-on", dependency]),
       ],
       now,
@@ -97,7 +97,7 @@ describe("Task dependency CLI", () => {
           "create",
           "--title",
           "Dependent",
-          "--description-file",
+          "--file",
           descriptionPath,
           "--depends-on",
           "BY-1",
@@ -201,7 +201,7 @@ describe("Task dependency CLI", () => {
           "create",
           "--title",
           "Cycle",
-          "--description-file",
+          "--file",
           "cycle.md",
           "--depends-on",
           "BY-1",
@@ -263,8 +263,8 @@ describe("Task dependency CLI", () => {
             },
           },
         ] as const) {
-          const descriptionFile = `${testCase.title.toLowerCase()}-rejection.md`;
-          writeFileSync(join(root, descriptionFile), `Description for ${testCase.title}`);
+          const file = `${testCase.title.toLowerCase()}-rejection.md`;
+          writeFileSync(join(root, file), `Description for ${testCase.title}`);
           const result = yield* runByInProcessEffect(
             root,
             [
@@ -273,8 +273,8 @@ describe("Task dependency CLI", () => {
               "create",
               "--title",
               testCase.title,
-              "--description-file",
-              descriptionFile,
+              "--file",
+              file,
               ...testCase.dependencies.flatMap((dependency) => ["--depends-on", dependency]),
             ],
             now,

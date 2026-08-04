@@ -27,7 +27,7 @@ describe("shared repository state", () => {
       expect(
         (yield* runByInProcessEffect(
           root,
-          ["task", "create", "--title", "Shared", "--description-file", "task.md"],
+          ["task", "create", "--title", "Shared", "--file", "task.md"],
           now,
         )).status,
       ).toBe(0);
@@ -59,7 +59,7 @@ describe("shared repository state", () => {
         expect(
           (yield* runByInProcessEffect(
             root,
-            ["task", "create", "--title", "Shared", "--description-file", "task.md"],
+            ["task", "create", "--title", "Shared", "--file", "task.md"],
             now,
           )).status,
         ).toBe(0);
