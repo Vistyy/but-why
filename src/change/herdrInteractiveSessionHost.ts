@@ -13,7 +13,6 @@ import type {
   InteractiveSessionLaunchInput,
   InteractiveSessionLaunchResult,
   InteractiveSessionLaunchEvidence,
-  InteractiveSessionLaunchWarning,
 } from "./interactiveSessionHost.js";
 
 export type HerdrCommandExecutor = (
@@ -57,9 +56,6 @@ export const herdrSessionName = (changeId: string): string => `but-why-${changeI
 export const trustedContinuationExtensionPath = (): string =>
   resolvePackageAsset("extensions/continue-change.ts");
 
-const trustedImplementationAdvisorExtensionPath = (): string =>
-  resolvePackageAsset("extensions/implementation-advisor/index.ts");
-
 type TrustedExtensionPreflight =
   | { readonly ok: true }
   | { readonly ok: false; readonly message: string };
@@ -94,8 +90,6 @@ const launchHerdrSession = async (
 ): Promise<InteractiveSessionLaunchResult> => {
   const options = { ...defaultOptions, ...environment };
   const continuationExtension = trustedContinuationExtensionPath();
-  const advisorExtension = trustedImplementationAdvisorExtensionPath();
-  let implementationAdvisor = input.implementationAdvisor;
   const continuationPreflight = await preflightTrustedExtension(continuationExtension);
   if (!continuationPreflight.ok) {
     return launchFailure(
@@ -103,18 +97,6 @@ const launchHerdrSession = async (
         ? `Required trusted continuation extension is missing: ${continuationExtension}`
         : `Required trusted continuation extension failed preflight: ${continuationPreflight.message}`,
     );
-  }
-  let launchWarning: InteractiveSessionLaunchWarning | undefined;
-  if (implementationAdvisor !== undefined) {
-    const advisorPreflight = await preflightTrustedExtension(advisorExtension);
-    if (!advisorPreflight.ok) {
-      launchWarning = {
-        code: "implementation_advisor_preflight_failed",
-        message: `Implementation Advisor preflight failed, so the Implementer session launched without the advisor: ${advisorPreflight.message}`,
-        details: { path: advisorExtension, failure: advisorPreflight.message },
-      };
-      implementationAdvisor = undefined;
-    }
   }
   const command = boundedExecutor(execute, options.commandTimeoutMs);
   const sessionName = input.herdrName ?? herdrSessionName(input.changeId);
@@ -134,7 +116,6 @@ const launchHerdrSession = async (
       ok: true,
       host: "herdr",
       status: "already_active",
-      ...(launchWarning === undefined ? {} : { warning: launchWarning }),
     };
   }
   if (hasUnknownSession(agents.stdout, input, sessionName)) {
@@ -171,7 +152,6 @@ const launchHerdrSession = async (
           ok: true,
           host: "herdr",
           status: "already_active",
-          ...(launchWarning === undefined ? {} : { warning: launchWarning }),
         };
       }
       if (hasUnknownSession(agents.stdout, input, sessionName)) {
@@ -193,7 +173,6 @@ const launchHerdrSession = async (
         ok: true,
         host: "herdr",
         status: "already_active",
-        ...(launchWarning === undefined ? {} : { warning: launchWarning }),
       };
     }
     if (hasUnknownSession(agents.stdout, input, sessionName)) {
@@ -237,7 +216,6 @@ const launchHerdrSession = async (
       ok: true,
       host: "herdr",
       status: "already_active",
-      ...(launchWarning === undefined ? {} : { warning: launchWarning }),
     };
   }
   if (hasUnknownSession(currentAgents.stdout, input, sessionName)) {
@@ -253,9 +231,6 @@ const launchHerdrSession = async (
     signal,
     options,
     continuationExtension,
-    implementationAdvisor,
-    advisorExtension,
-    launchWarning,
   );
 };
 
@@ -269,9 +244,6 @@ const launchInOpenedWorktree = async (
   signal: AbortSignal | undefined,
   options: ResolvedOptions,
   continuationExtension: string,
-  implementationAdvisor: InteractiveSessionLaunchInput["implementationAdvisor"],
-  advisorExtension: string,
-  launchWarning: InteractiveSessionLaunchWarning | undefined,
 ): Promise<InteractiveSessionLaunchResult> => {
   if (
     hasUnknownSession(listedAgents, input, sessionName) ||
@@ -285,9 +257,7 @@ const launchInOpenedWorktree = async (
 
   let launchScript: PiLaunchScript;
   try {
-    launchScript = await createPiLaunchScript(
-      piCommand(input, path, continuationExtension, implementationAdvisor, advisorExtension),
-    );
+    launchScript = await createPiLaunchScript(piCommand(input, path, continuationExtension));
   } catch (error) {
     if (!opened.alreadyOpen) await closeWorkspace(execute, opened.workspaceId, signal);
     return launchFailure(
@@ -315,7 +285,6 @@ const launchInOpenedWorktree = async (
         ok: true,
         host: "herdr",
         status: "started",
-        ...(launchWarning === undefined ? {} : { warning: launchWarning }),
       };
     }
     const evidence = await launchEvidence(execute, opened.rootPaneId, signal);
@@ -404,7 +373,6 @@ const launchInOpenedWorktree = async (
     ok: true,
     host: "herdr",
     status: "started",
-    ...(launchWarning === undefined ? {} : { warning: launchWarning }),
   };
 };
 
@@ -693,8 +661,6 @@ const piCommand = (
   input: InteractiveSessionLaunchInput,
   path: string | undefined,
   continuationExtension: string,
-  implementationAdvisor: InteractiveSessionLaunchInput["implementationAdvisor"],
-  advisorExtension: string,
 ): string => {
   const profileFlags = piResourceFlags(
     input.agentProfile?.profile.runtimeConfig,
@@ -704,33 +670,13 @@ const piCommand = (
       globalConfigDirectory: input.globalConfigDirectory,
     },
     {
-      trustedExtensions: [
-        continuationExtension,
-        ...(implementationAdvisor === undefined ? [] : [advisorExtension]),
-      ],
+      trustedExtensions: [continuationExtension],
     },
   );
   const model = input.agentProfile?.profile.runtimeConfig?.model;
   const thinking = input.agentProfile?.profile.runtimeConfig?.thinking;
-  const advisorEnvironment =
-    implementationAdvisor === undefined
-      ? []
-      : [
-          `BUT_WHY_IMPLEMENTATION_ADVISOR_MODEL=${shellQuote(implementationAdvisor.model)}`,
-          ...(implementationAdvisor.thinking === undefined
-            ? []
-            : [
-                `BUT_WHY_IMPLEMENTATION_ADVISOR_THINKING=${shellQuote(implementationAdvisor.thinking)}`,
-              ]),
-          ...(input.implementationAdvisorContext === undefined
-            ? []
-            : [
-                `BUT_WHY_IMPLEMENTATION_ADVISOR_CONTEXT=${shellQuote(JSON.stringify(input.implementationAdvisorContext))}`,
-              ]),
-        ];
   return [
     ...(path === undefined ? [] : [`PATH=${shellQuote(path)}`]),
-    ...advisorEnvironment,
     `exec ${prependAgentEnvironment("pi", input.agentEnvironment)}`,
     ...(input.systemPrompt === undefined
       ? []

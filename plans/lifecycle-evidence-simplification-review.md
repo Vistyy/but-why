@@ -220,8 +220,6 @@ Append-only Task Archives, per-mutation archive hooks, Task normalization during
 But Why should instead provide one explicit immutable full-SQLite snapshot command using SQLite's supported backup operation.
 Snapshots should use unique paths under shared Git operational state and must not overwrite earlier snapshots.
 Automatic snapshot retention, restoration, publication-triggered snapshots, and automatic pre-migration snapshots are not justified now.
-A repository-specific Implementation Advisor rule should identify Shared Repository State migrations or destructive persistence changes and advise the operator to create a snapshot shortly before merge.
-This advice is not enforcement.
 Automatic pre-migration backup may be reconsidered with published compatibility work if advisory snapshots prove insufficient.
 
 ## Accepted migration-chain direction
@@ -260,7 +258,6 @@ A durable Follow-up concept, automatic Task creation, issue detection, deduplica
 An active Implementation Blocker remains scoped to completing its current Change.
 When the operator accepts out-of-scope work, the operator may create a normal unapproved Task.
 Future follow-up capture should wait for concrete examples showing that manual operator-created Tasks are insufficient.
-If evidence appears, first evaluate non-authoritative Implementation Advisor suggestions that require explicit operator promotion.
 
 ## Accepted stale Task dispositions
 
@@ -271,7 +268,7 @@ The operator accepted these proposed dispositions for the later reconciliation m
 - BY-15 should be cancelled as premature and recreated only when a real post-publication upgrade is ready to implement and verify.
 - BY-41 should be cancelled as superseded, while local taskless cancellation-reason storage moves into terminal lifecycle work.
 - BY-42 should be cancelled as superseded, while targeted `change reconcile <change-id> --discard-work` moves into terminal cleanup work.
-- BY-53 should be cancelled as superseded, while an explicit immutable SQLite snapshot command and migration-related Advisor rule remain replacement requirements.
+- BY-53 should be cancelled as superseded, while an explicit immutable SQLite snapshot command remains a replacement requirement.
 - BY-60 should remain approved and should deepen the existing Reviewer Agent Runtime without adding a generic coordinator.
 - BY-66 should be cancelled as superseded, while its durable linked-Task identity invariant moves into Task and Change lifecycle work.
 - BY-68 should be cancelled as effectively satisfied, with optional command-runner cleanup left to the codebase simplification audit.

@@ -17,8 +17,8 @@ But Why currently uses Sandcastle for two jobs:
 But Why does not currently use Sandcastle for actual sandbox isolation.
 Production passes `noSandbox()`, so preparation, Checks, and reviewers run as ordinary host processes in a disposable Git worktree.
 
-Sandcastle does not run the Implementer, Herdr, or the Implementation Advisor.
-Herdr launches the Implementer directly, and the Implementation Advisor is a Pi extension that creates a nested Pi SDK session.
+Sandcastle does not run the Implementer or Herdr.
+Herdr launches the Implementer directly.
 Replacing Sandcastle therefore does not by itself change those paths or solve their usage accounting.
 
 The smallest credible replacement is project-owned Git worktree lifecycle plus direct Pi SDK execution.
@@ -193,13 +193,12 @@ The prepared evidence must also remain bound to the exact Candidate and must not
 
 Usage accounting should be a But Why domain capability, not a Sandcastle feature.
 Pi's SDK exposes session statistics for input, output, cache tokens, reported cost, and context usage.
-The direct SDK reviewer and the existing nested Implementation Advisor can therefore produce Pi-native usage evidence.
+The direct SDK reviewer can therefore produce Pi-native usage evidence.
 An Implementer extension can observe the same Pi events or session records for the interactive session.
 
 Record each agent invocation with these associations:
 
 - Implementer usage belongs to its Change and Interactive Session.
-- Implementation Advisor usage belongs to its Change, Interactive Session, and Advisor Activity Batch.
 - Reviewer usage belongs to its Change, Validation Run, and Reviewer Producer.
 - A Task total is derived through its linked Change.
 - Planning remains outside this total until its ownership is defined.

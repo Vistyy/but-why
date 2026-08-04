@@ -9,7 +9,6 @@ import {
   writeFileSync,
 } from "node:fs";
 import { join } from "node:path";
-import { pathToFileURL } from "node:url";
 import { describe, expect, it } from "vitest";
 
 import { createGitRepo, repoRoot } from "../support/by-cli.js";
@@ -137,11 +136,6 @@ describe("CLI package contents", () => {
       true,
     );
     verifyPiSkillDiscovery(installedPackage);
-    const advisor = (await import(
-      pathToFileURL(join(installedPackage, "extensions/implementation-advisor/index.ts")).href
-    )) as { readonly default: unknown };
-    expect(typeof advisor.default).toBe("function");
-
     const repository = createGitRepo();
     const tools = createTestWorkspace();
     writeFileSync(
@@ -213,7 +207,6 @@ exit 1
       `${JSON.stringify({
         defaultAgentProfile: { scope: "global", name: "test" },
         agentProfiles: { test: { agentRuntime: "pi", runtimeConfig: { model: "test/model" } } },
-        interactiveSession: { implementationAdvisor: { model: "test/model" } },
       })}\n`,
     );
     const started = runTestProcess(bin, ["--json", "change", "start"], {
@@ -237,57 +230,7 @@ exit 1
     });
     expect(implement.status, `${implement.stdout}${implement.stderr}`).toBe(0);
     const extension = join(installedPackage, "extensions/continue-change.ts");
-    const advisorExtension = join(installedPackage, "extensions/implementation-advisor/index.ts");
     expect(readFileSync(env.BY_FAKE_CAPTURE, "utf8")).toContain(`--extension '${extension}'`);
-    expect(readFileSync(env.BY_FAKE_CAPTURE, "utf8")).toContain(
-      `--extension '${advisorExtension}'`,
-    );
-
-    writeFileSync(advisorExtension, "export default 42;\n");
-    const advisorInvalid = runTestProcess(
-      bin,
-      ["--json", "change", "implement", change.change.id],
-      {
-        cwd: repository,
-        env: {
-          ...env,
-          BY_FAKE_WORKTREE: change.worktreePath,
-          BY_FAKE_SESSION: `change-${change.change.id.slice(0, 8)}`,
-        },
-        isolatedHome,
-      },
-    );
-    expect(advisorInvalid.status, `${advisorInvalid.stdout}${advisorInvalid.stderr}`).toBe(0);
-    expect(JSON.parse(advisorInvalid.stdout)).toMatchObject({
-      warning: {
-        code: "implementation_advisor_preflight_failed",
-        message: expect.stringContaining("launched without the advisor"),
-        details: { path: advisorExtension },
-      },
-    });
-
-    rmSync(advisorExtension);
-    const advisorMissing = runTestProcess(
-      bin,
-      ["--json", "change", "implement", change.change.id],
-      {
-        cwd: repository,
-        env: {
-          ...env,
-          BY_FAKE_WORKTREE: change.worktreePath,
-          BY_FAKE_SESSION: `change-${change.change.id.slice(0, 8)}`,
-        },
-        isolatedHome,
-      },
-    );
-    expect(advisorMissing.status, `${advisorMissing.stdout}${advisorMissing.stderr}`).toBe(0);
-    expect(JSON.parse(advisorMissing.stdout)).toMatchObject({
-      warning: {
-        code: "implementation_advisor_preflight_failed",
-        message: expect.stringContaining("launched without the advisor"),
-        details: { path: advisorExtension },
-      },
-    });
 
     writeFileSync(extension, "export default 42;\n");
     rmSync(env.BY_FAKE_CAPTURE);

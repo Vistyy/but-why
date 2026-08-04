@@ -72,7 +72,7 @@ The refreshed portfolio must cover the supported system after accepted simplific
 4. Current publication evidence, iterative pull-request updates, reconciliation, cleanup, and terminal completion.
 5. Shared Repository State, migrations, explicit snapshots, and persisted-data trust seams.
 6. Agent-facing CLI routing, structured output, inspection, and actionable recovery.
-7. Repository initialization, configuration, Repository Preparation, handoffs, Reviewer Agent Runtime, and Implementation Advisor behavior.
+7. Repository initialization, configuration, Repository Preparation, handoffs, and Reviewer Agent Runtime behavior.
 
 The map must not treat removed transient Task states, Candidate Publication chronology, Acceptance Context version history, Finding severity, Validation phase status, legacy Implementation Decision content, or permanent Artifact content as supported target behavior.
 The unimplemented Task Submission Planning Gate must remain outside the current-system portfolio.
@@ -163,14 +163,6 @@ Current tests were built around duplicated lifecycle states, broad orchestration
 Applying verification terminology to those seams does not make them good evidence owners.
 Do not perform a mechanical rename or one-for-one migration.
 Simplify product ownership first, retain focused safety evidence, and then redesign the complete maintained suite.
-
-## Implementation Advisor refresh
-
-The completed Implementation Advisor is current product behavior.
-The refreshed capability map must include its separate Agent Profile resolution, bounded activity batches, qualifying-delta scheduling, accumulated evidence, structured rule and citation validation, duplicate suppression, fail-open behavior, bounded read-only tools, and non-waking delivery.
-The portfolio must preserve `continue-change` as the sole Interactive Session liveness owner.
-It must not claim semantic model correctness from deterministic evidence.
-The repository-specific future snapshot-advice rule requires evidence only after an approved Task implements it.
 
 ## Planning-gate handoff
 
