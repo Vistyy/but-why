@@ -22,6 +22,7 @@ const managedGitignoreBlock = `${butWhyGitignoreBlock}\n`;
 const sharedStatePath = (root: string): string => join(root, ".git", "but-why", "state.sqlite");
 const expectedCommandPaths = [
   "init",
+  "snapshot",
   "task create",
   "task dependencies add",
   "task dependencies remove",

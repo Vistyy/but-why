@@ -641,6 +641,13 @@ const initCommand = withCliHandler(
       ),
     ),
 );
+const snapshotCommand = withCliHandler(
+  leaf("snapshot", "Create an immutable Shared Repository State Snapshot."),
+  (_values, environment) =>
+    Effect.promise(() => import("./cli/snapshot.js")).pipe(
+      Effect.flatMap(({ runSnapshotCommand }) => runSnapshotCommand(environment)),
+    ),
+);
 
 const commandRootBase = Command.make("by", { json: Options.boolean("json") }).pipe(
   Command.withDescription("Validate completed code changes against approved human intent."),
@@ -649,7 +656,7 @@ const commandRootWithHandler = withCliHandler(commandRootBase, (_values, environ
   dashboardResult(environment),
 );
 const commandTree = commandRootWithHandler.pipe(
-  withSubcommands([initCommand, taskCommand, changeCommand, validationRunCommand]),
+  withSubcommands([initCommand, snapshotCommand, taskCommand, changeCommand, validationRunCommand]),
 ) as unknown as AnyCommand;
 
 const cliConfig = CliConfig.make({});
