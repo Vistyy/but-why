@@ -399,7 +399,7 @@ export const turnEvidence = (
       (readTools.has(toolName) && isTargetRepositoryRootContextRead(toolInput as { readonly [key: string]: unknown }, discoveredContextFiles, cwd));
     if (!qualifies) return [];
     return [{
-      reference: `${activityBatch}:evidence:${index}:${input.toolCallId ?? toolName}`,
+      reference: `${activityBatch}:evidence:${index}`,
       activity: toolName,
       input: toolInput,
       result: input.content,

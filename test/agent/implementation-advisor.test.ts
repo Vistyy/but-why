@@ -327,11 +327,7 @@ describe("Implementation Advisor", () => {
       turnEvidence(event, new Set([resolve(process.cwd(), "AGENTS.md")]), process.cwd()).map(
         (item) => item.reference,
       ),
-    ).toEqual([
-      "turn:4:evidence:1:authority",
-      "turn:4:evidence:2:command",
-      "turn:4:evidence:3:failed",
-    ]);
+    ).toEqual(["turn:4:evidence:1", "turn:4:evidence:2", "turn:4:evidence:3"]);
   });
 
   it("validates exact batches, rule response classes, and evidence identity", () => {
@@ -339,7 +335,7 @@ describe("Implementation Advisor", () => {
       activityBatch: "turn:4",
       evidence: [
         {
-          reference: "turn:4:evidence:0:write",
+          reference: "turn:4:evidence:0",
           activity: "write",
           input: {},
           result: [],
@@ -354,7 +350,7 @@ describe("Implementation Advisor", () => {
       ruleId: "external-mutation.reconcile-uncertain-outcome",
       responseClass: "follow",
       activityBatch: "turn:4",
-      evidence: ["turn:4:evidence:0:write"],
+      evidence: ["turn:4:evidence:0"],
       problem: "The outcome is uncertain.",
       consequence: "A retry can duplicate the mutation.",
       correction: "Reconcile the authoritative state before retrying.",
