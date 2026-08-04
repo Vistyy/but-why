@@ -1,4 +1,5 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import { ImplementationAdvisorViewer } from "./viewer.js";
 import { Type, type Static } from "typebox";
 import { Value } from "typebox/value";
 import {
@@ -19,7 +20,14 @@ export {
   implementationAdvisorToolNames,
   NOTE_TOOL,
 };
-export type { AdvisorEvidence, AdvisorNote } from "./runtime.js";
+export type {
+  AdvisorEvidence,
+  AdvisorNote,
+  AdvisorViewerActivity,
+  AdvisorViewerState,
+  AdvisorViewerTranscriptEntry,
+} from "./runtime.js";
+export { AdvisorResultRejectedError, createAdvisorViewerState } from "./runtime.js";
 
 export default function implementationAdvisor(pi: ExtensionAPI): void {
   const model = process.env["BUT_WHY_IMPLEMENTATION_ADVISOR_MODEL"]?.trim();
@@ -43,6 +51,40 @@ export default function implementationAdvisor(pi: ExtensionAPI): void {
   pi.on("turn_end", (event, extensionContext) => {
     void runtime.handleTurnEnd(event, extensionContext);
   });
+  if (typeof pi.registerCommand === "function") {
+    pi.registerCommand("advisor", {
+      description: "Open the current Interactive Session's Implementation Advisor viewer.",
+      handler: async (_args, commandContext) => {
+        if (commandContext.mode !== "tui") return;
+        try {
+          runtime.restore(commandContext);
+          await runtime.openViewer();
+          await commandContext.ui.custom(
+            (tui, theme, _keybindings, done) =>
+              new ImplementationAdvisorViewer({
+                getState: runtime.getViewerState,
+                subscribe: runtime.subscribeViewer,
+                close: () => done(undefined),
+                requestRender: () => tui.requestRender(),
+                theme,
+                getRows: () => tui.terminal.rows,
+              }),
+            {
+              overlay: true,
+              overlayOptions: {
+                width: "90%",
+                maxHeight: "85%",
+                anchor: "center",
+                margin: 1,
+              },
+            },
+          );
+        } catch {
+          commandContext.ui.notify("Implementation Advisor viewer is unavailable.", "warning");
+        }
+      },
+    });
+  }
 }
 
 const acceptanceContextSchema = Type.Union([

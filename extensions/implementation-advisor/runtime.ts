@@ -9,6 +9,7 @@ import {
   type AgentSessionEvent,
   type ExtensionContext,
   type ExtensionAPI,
+  type SessionEntry,
   type ToolDefinition,
   type TurnEndEvent,
 } from "@earendil-works/pi-coding-agent";
@@ -65,7 +66,45 @@ type AdvisorState = {
   readonly fingerprints: readonly string[];
   readonly failures: number;
   readonly disabled: boolean;
+  readonly latestRejectionReason?: string;
 };
+
+export type AdvisorViewerTranscriptEntry = {
+  readonly id: string;
+  readonly kind: "user" | "assistant" | "tool" | "custom" | "system";
+  readonly timestamp: string;
+  readonly text: string;
+};
+
+export type AdvisorViewerActivity = {
+  readonly id: string;
+  readonly kind: "assistant" | "tool";
+  readonly status: "running" | "complete";
+  readonly text: string;
+};
+
+export type AdvisorViewerState = {
+  readonly sessionId: string | undefined;
+  readonly transcript: readonly AdvisorViewerTranscriptEntry[];
+  readonly activity: readonly AdvisorViewerActivity[];
+  readonly latestRejectionReason: string | undefined;
+};
+
+export const createAdvisorViewerState = (input: {
+  readonly sessionId: string | undefined;
+  readonly entries: readonly SessionEntry[];
+  readonly activity: readonly AdvisorViewerActivity[];
+  readonly latestRejectionReason: string | undefined;
+}): AdvisorViewerState => ({
+  sessionId: input.sessionId,
+  transcript: input.entries.flatMap(sessionEntryToViewerTranscript),
+  activity: input.activity,
+  latestRejectionReason: input.latestRejectionReason === undefined
+    ? undefined
+    : boundViewerText(input.latestRejectionReason, MAX_REJECTION_REASON_LENGTH),
+});
+
+type AdvisorViewerListener = (state: AdvisorViewerState) => void;
 
 type AdvisorRuntimeInput = {
   readonly model: string;
@@ -85,6 +124,8 @@ type AdvisorActivityDelta = {
 };
 
 const STATE_ENTRY = "but-why.implementation-advisor.state";
+const MAX_REJECTION_REASON_LENGTH = 500;
+const MAX_VIEWER_ACTIVITY = 24;
 const writeTools = new Set(["edit", "write", "bash"]);
 const readTools = new Set(["read", "grep", "find", "ls"]);
 
@@ -98,9 +139,15 @@ export const createImplementationAdvisorRuntime = (input: AdvisorRuntimeInput) =
     readonly implementationDecisions: readonly unknown[];
   } | undefined;
   let activeResult: AdvisorOutput | undefined;
+  let activeRejectionReason: string | undefined;
   let activeTerminated = false;
   let activeInvestigationEvidence: AdvisorEvidence[] = [];
   const investigationInputs = new Map<string, unknown>();
+  const viewerListeners = new Set<AdvisorViewerListener>();
+  const viewerActivity = new Map<string, AdvisorViewerActivity>();
+  let viewerSequence = 0;
+  let activeAssistantActivityId: string | undefined;
+  let nestedCreation: Promise<Awaited<ReturnType<typeof createAgentSession>>["session"]> | undefined;
   let contextFiles: ReadonlySet<string> | undefined;
   let worktreeCwd = process.cwd();
   let parentSessionId = input.context.changeId;
@@ -118,6 +165,9 @@ export const createImplementationAdvisorRuntime = (input: AdvisorRuntimeInput) =
             fingerprints: [...entry.data.fingerprints],
             failures: entry.data.failures,
             disabled: entry.data.disabled,
+            ...(entry.data.latestRejectionReason === undefined
+              ? {}
+              : { latestRejectionReason: entry.data.latestRejectionReason }),
           };
         }
         break;
@@ -135,10 +185,18 @@ export const createImplementationAdvisorRuntime = (input: AdvisorRuntimeInput) =
     }
   };
 
-  const setFailure = (context: ExtensionContext): void => {
+  const setFailure = (context: ExtensionContext, rejectionReason?: string): void => {
     const failures = state.failures + 1;
-    state = { ...state, failures, disabled: failures >= 3 };
+    state = {
+      ...state,
+      failures,
+      disabled: failures >= 3,
+      ...(rejectionReason === undefined
+        ? {}
+        : { latestRejectionReason: boundViewerText(rejectionReason, MAX_REJECTION_REASON_LENGTH) }),
+    };
     appendState();
+    notifyViewerListeners();
     if (failures === 1) {
       context.ui.notify(
         "Implementation Advisor failed open and will retry on the next qualifying activity.",
@@ -164,13 +222,10 @@ export const createImplementationAdvisorRuntime = (input: AdvisorRuntimeInput) =
     return contextFiles;
   };
 
-  const evaluate = async (evaluation: {
-    readonly activityBatch: string;
-    readonly evidence: readonly AdvisorEvidence[];
-    readonly acceptanceContext: unknown;
-    readonly implementationDecisions: readonly unknown[];
-  }): Promise<AdvisorNote | undefined> => {
-    if (nested === undefined) {
+  const ensureNestedSession = async (): Promise<Awaited<ReturnType<typeof createAgentSession>>["session"]> => {
+    if (nested !== undefined) return nested;
+    if (nestedCreation !== undefined) return nestedCreation;
+    nestedCreation = (async () => {
       const modelRuntime = await ModelRuntime.create();
       const [provider, ...modelParts] = input.model.split("/");
       const model = modelRuntime.getModel(provider ?? "", modelParts.join("/"));
@@ -195,7 +250,7 @@ export const createImplementationAdvisorRuntime = (input: AdvisorRuntimeInput) =
         appendSystemPromptOverride: () => [],
       });
       await resourceLoader.reload();
-      nested = (
+      const session = (
         await createAgentSession({
           cwd: worktreeCwd,
           model,
@@ -206,34 +261,55 @@ export const createImplementationAdvisorRuntime = (input: AdvisorRuntimeInput) =
           customTools: [createAdviceTool()],
         })
       ).session;
-      nested.subscribe((event: AgentSessionEvent) => {
+      nested = session;
+      session.subscribe((event: AgentSessionEvent) => {
         if (event.type === "tool_execution_start" && readTools.has(event.toolName)) {
           investigationInputs.set(event.toolCallId, event.args);
-          return;
         }
-        if (activeBatch === undefined) return;
-        const evidence = investigationEvidence(
-          event,
-          activeBatch.activityBatch,
-          investigationInputs.get(event.type === "tool_execution_end" ? event.toolCallId : ""),
-        );
-        if (event.type === "tool_execution_end") investigationInputs.delete(event.toolCallId);
-        if (evidence !== undefined) activeInvestigationEvidence.push(evidence);
+        if (activeBatch !== undefined) {
+          const evidence = investigationEvidence(
+            event,
+            activeBatch.activityBatch,
+            investigationInputs.get(event.type === "tool_execution_end" ? event.toolCallId : ""),
+          );
+          if (event.type === "tool_execution_end") investigationInputs.delete(event.toolCallId);
+          if (evidence !== undefined) activeInvestigationEvidence.push(evidence);
+        }
+        updateViewerActivity(event);
+        notifyViewerListeners();
       });
+      notifyViewerListeners();
+      return session;
+    })();
+    try {
+      return await nestedCreation;
+    } finally {
+      nestedCreation = undefined;
     }
+  };
 
+  const evaluate = async (evaluation: {
+    readonly activityBatch: string;
+    readonly evidence: readonly AdvisorEvidence[];
+    readonly acceptanceContext: unknown;
+    readonly implementationDecisions: readonly unknown[];
+  }): Promise<AdvisorNote | undefined> => {
+    const session = await ensureNestedSession();
     activeBatch = evaluation;
     activeResult = undefined;
+    activeRejectionReason = undefined;
     activeTerminated = false;
     activeInvestigationEvidence = [];
     try {
-      await nested.prompt(buildEvaluationPrompt(evaluation));
+      await session.prompt(buildEvaluationPrompt(evaluation));
     } catch (error) {
       if (activeResult === undefined) throw error;
     }
     const result = activeResult as AdvisorOutput | undefined;
     if (!activeTerminated || result === undefined) {
-      throw new Error("Implementation Advisor did not return terminating structured output.");
+      throw new AdvisorResultRejectedError(
+        activeRejectionReason ?? "Advisor result rejected: no terminating structured output was returned.",
+      );
     }
     if (result.kind === "no_note") return undefined;
     return validateAdvisorOutput(result, {
@@ -266,9 +342,87 @@ export const createImplementationAdvisorRuntime = (input: AdvisorRuntimeInput) =
         },
         { triggerTurn: false, deliverAs: delta.context.isIdle() ? "nextTurn" : "followUp" },
       );
-    } catch {
-      setFailure(delta.context);
+    } catch (error) {
+      setFailure(
+        delta.context,
+        error instanceof AdvisorResultRejectedError ? error.message : undefined,
+      );
     }
+  };
+
+  const updateViewerActivity = (event: AgentSessionEvent): void => {
+    if (event.type === "message_start" && event.message.role === "assistant") {
+      activeAssistantActivityId = `assistant:${viewerSequence++}`;
+      viewerActivity.set(activeAssistantActivityId, {
+        id: activeAssistantActivityId,
+        kind: "assistant",
+        status: "running",
+        text: agentMessageText(event.message),
+      });
+    } else if (event.type === "message_update" && event.message.role === "assistant") {
+      const id = activeAssistantActivityId ?? `assistant:${viewerSequence++}`;
+      activeAssistantActivityId = id;
+      viewerActivity.set(id, {
+        id,
+        kind: "assistant",
+        status: "running",
+        text: agentMessageText(event.message),
+      });
+    } else if (event.type === "message_end" && event.message.role === "assistant") {
+      const id = activeAssistantActivityId;
+      if (id !== undefined) {
+        viewerActivity.set(id, {
+          id,
+          kind: "assistant",
+          status: "complete",
+          text: agentMessageText(event.message),
+        });
+      }
+      activeAssistantActivityId = undefined;
+    } else if (event.type === "tool_execution_start") {
+      viewerActivity.set(`tool:${event.toolCallId}`, {
+        id: `tool:${event.toolCallId}`,
+        kind: "tool",
+        status: "running",
+        text: `${event.toolName} ${boundViewerText(safeJson(event.args), 300)}`,
+      });
+    } else if (event.type === "tool_execution_update") {
+      const id = `tool:${event.toolCallId}`;
+      viewerActivity.set(id, {
+        id,
+        kind: "tool",
+        status: "running",
+        text: `${event.toolName}: ${boundViewerText(safeJson(event.partialResult), 300)}`,
+      });
+    } else if (event.type === "tool_execution_end") {
+      const id = `tool:${event.toolCallId}`;
+      viewerActivity.set(id, {
+        id,
+        kind: "tool",
+        status: "complete",
+        text: `${event.toolName}: ${boundViewerText(safeJson(event.result), 300)}`,
+      });
+    }
+    while (viewerActivity.size > MAX_VIEWER_ACTIVITY) {
+      const oldest = viewerActivity.keys().next().value;
+      if (typeof oldest !== "string") break;
+      viewerActivity.delete(oldest);
+    }
+  };
+
+  const getViewerState = (): AdvisorViewerState => {
+    const sessionManager = nested?.sessionManager;
+    return createAdvisorViewerState({
+      sessionId: sessionManager?.getSessionId(),
+      entries: sessionManager?.getBranch() ?? [],
+      activity: [...viewerActivity.values()],
+      latestRejectionReason: state.latestRejectionReason,
+    });
+  };
+
+  const notifyViewerListeners = (): void => {
+    const viewerState = getViewerState();
+    for (const listener of viewerListeners) listener(viewerState);
   };
 
   const scheduler = createAdvisorActivityScheduler<AdvisorActivityDelta>(async (deltas) => {
@@ -299,6 +453,13 @@ export const createImplementationAdvisorRuntime = (input: AdvisorRuntimeInput) =
     },
     getState: () => state,
     getNestedSession: () => nested,
+    openViewer: ensureNestedSession,
+    getViewerState,
+    subscribeViewer(listener: AdvisorViewerListener): () => void {
+      viewerListeners.add(listener);
+      listener(getViewerState());
+      return () => viewerListeners.delete(listener);
+    },
   };
 
   function createAdviceTool(): ToolDefinition<typeof implementationAdvisorOutputSchema> {
@@ -311,6 +472,8 @@ export const createImplementationAdvisorRuntime = (input: AdvisorRuntimeInput) =
         if (!activeTerminated && activeBatch !== undefined && Value.Check(implementationAdvisorOutputSchema, value)) {
           activeResult = value;
           activeTerminated = true;
+        } else if (!activeTerminated) {
+          activeRejectionReason = "Advisor result rejected: output does not match the required schema.";
         }
         toolContext.abort();
         return { content: [{ type: "text", text: "Structured result recorded." }], details: {} };
@@ -318,6 +481,13 @@ export const createImplementationAdvisorRuntime = (input: AdvisorRuntimeInput) =
     };
   }
 };
+
+export class AdvisorResultRejectedError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "AdvisorResultRejectedError";
+  }
+}
 
 export const validateAdvisorOutput = (
   value: AdvisorOutput,
@@ -329,25 +499,25 @@ export const validateAdvisorOutput = (
   },
 ): AdvisorNote | undefined => {
   if (!Value.Check(implementationAdvisorOutputSchema, value)) {
-    throw new Error("Implementation Advisor output does not match its schema.");
+    throw new AdvisorResultRejectedError("Advisor result rejected: output does not match the required schema.");
   }
   if (value.activityBatch !== evaluation.activityBatch) {
-    throw new Error("Implementation Advisor output is detached from its activity batch.");
+    throw new AdvisorResultRejectedError("Advisor result rejected: output is detached from its activity batch.");
   }
   if (value.kind === "no_note") return undefined;
   if (!implementationAdvisorRuleIds.has(value.ruleId)) {
-    throw new Error("Implementation Advisor selected an unsupported rule.");
+    throw new AdvisorResultRejectedError("Advisor result rejected: unsupported rule.");
   }
   const rule = implementationAdvisorRules.find((candidate) => candidate.id === value.ruleId);
   if (rule === undefined || !rule.responseClasses.includes(value.responseClass as never)) {
-    throw new Error("Implementation Advisor selected an unsupported response class.");
+    throw new AdvisorResultRejectedError("Advisor result rejected: unsupported response class.");
   }
   const references = new Set(evaluation.evidence.map((item) => item.reference));
   if (value.evidence.some((reference) => !references.has(reference))) {
-    throw new Error("Implementation Advisor selected unknown evidence.");
+    throw new AdvisorResultRejectedError("Advisor result rejected: output cites evidence that the host did not capture.");
   }
   if ([value.problem, value.consequence, value.correction].some((field) => field.trim() === "")) {
-    throw new Error("Implementation Advisor note fields must not be empty.");
+    throw new AdvisorResultRejectedError("Advisor result rejected: note fields must not be empty.");
   }
   return {
     ruleId: value.ruleId as ImplementationAdvisorRuleId,
@@ -438,6 +608,74 @@ export const createAdvisorActivityScheduler = <T>(
   };
 };
 
+const sessionEntryToViewerTranscript = (
+  entry: SessionEntry,
+): AdvisorViewerTranscriptEntry[] => {
+  if (entry.type === "message") {
+    const message = entry.message as { readonly role?: string; readonly content?: unknown };
+    const kind = message.role === "user"
+      ? "user"
+      : message.role === "assistant"
+        ? "assistant"
+        : message.role === "toolResult"
+          ? "tool"
+          : "system";
+    const text = agentMessageText(message);
+    return text === ""
+      ? []
+      : [{ id: entry.id, kind, timestamp: entry.timestamp, text }];
+  }
+  if (entry.type === "custom_message") {
+    const text = contentText(entry.content);
+    return text === ""
+      ? []
+      : [{ id: entry.id, kind: "custom", timestamp: entry.timestamp, text }];
+  }
+  if (entry.type === "compaction" || entry.type === "branch_summary") {
+    const text = entry.summary.trim();
+    return text === ""
+      ? []
+      : [{ id: entry.id, kind: "system", timestamp: entry.timestamp, text }];
+  }
+  return [];
+};
+
+const agentMessageText = (message: { readonly role?: string; readonly content?: unknown }): string =>
+  contentText(message.content);
+
+const contentText = (content: unknown): string => {
+  if (typeof content === "string") return content.trim();
+  if (!Array.isArray(content)) return "";
+  return content
+    .map((item) => {
+      if (typeof item === "string") return item;
+      if (typeof item !== "object" || item === null) return "";
+      const record = item as Record<string, unknown>;
+      if (typeof record["text"] === "string") return record["text"];
+      if (record["type"] === "toolCall") {
+        const name = typeof record["name"] === "string" ? record["name"] : "tool";
+        return `${name} ${safeJson(record["arguments"] ?? {})}`;
+      }
+      return "";
+    })
+    .filter((item) => item.trim() !== "")
+    .join("\n")
+    .trim();
+};
+
+const safeJson = (value: unknown): string => {
+  try {
+    return JSON.stringify(value) ?? String(value);
+  } catch {
+    return "[unavailable]";
+  }
+};
+
+const boundViewerText = (value: string, maximum: number): string => {
+  const text = value.trim();
+  return text.length <= maximum ? text : `${text.slice(0, Math.max(0, maximum - 3))}...`;
+};
+
 const buildEvaluationPrompt = (evaluation: {
   readonly activityBatch: string;
   readonly evidence: readonly AdvisorEvidence[];
@@ -468,6 +706,8 @@ const isAdvisorState = (value: unknown): value is AdvisorState => {
   return Array.isArray(record["fingerprints"]) &&
     record["fingerprints"].every((item) => typeof item === "string") &&
     typeof record["failures"] === "number" &&
-    typeof record["disabled"] === "boolean";
+    typeof record["disabled"] === "boolean" &&
+    (record["latestRejectionReason"] === undefined ||
+      typeof record["latestRejectionReason"] === "string");
 };
 
