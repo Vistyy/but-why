@@ -2,7 +2,7 @@
 
 ## Contexts
 
-- [Task Intent](./docs/context/task-intent/CONTEXT.md) - owns requested intent, planning judgment, approval, dependencies, and user-facing Task progress.
+- [Task Intent](./docs/context/task-intent/CONTEXT.md) - owns requested intent, approval, dependencies, and user-facing Task progress.
 - [Change Delivery](./docs/context/change-delivery/CONTEXT.md) - owns code lineage, implementation, Candidate selection, validation, publication, reconciliation, and Change completion.
 - [Repository Runtime](./docs/context/repository-runtime/CONTEXT.md) - owns repository identity, shared operational state, configuration, executable selection, preparation, and agent runtime configuration.
 
@@ -10,5 +10,5 @@
 
 - **Task Intent -> Change Delivery**: Change Start can link one approved Task, capture its Acceptance Context, and create a Task-backed Change.
 - **Change Delivery -> Task Intent**: Change state advances the linked Task lifecycle, and an approved Implementation Blocker Resolution creates a new Acceptance Context version.
-- **Repository Runtime -> Task Intent**: Shared Repository State persists Tasks and Planning Runs, while resolved configuration supplies planning policy and the Planning Reviewer Agent Profile.
+- **Repository Runtime -> Task Intent**: Shared Repository State persists Tasks.
 - **Repository Runtime -> Change Delivery**: Shared Repository State persists Changes and validation evidence, while resolved configuration supplies preparation, validation, reviewer, and Interactive Session behavior.

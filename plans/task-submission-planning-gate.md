@@ -27,6 +27,120 @@ This plan is not current product behavior or implementation authority.
 `CONTEXT-MAP.md` identifies the contexts that own resolved domain language.
 `docs/architecture.md`, accepted ADRs, executable sources, and SQLite Tasks remain authoritative for implemented behavior.
 
+## Preemptive authority wording retained for refresh
+
+The following wording was removed verbatim from current authority because it describes unimplemented Planning Submission behavior.
+It remains here only as future planning input and must be reconsidered during refresh before any part returns to current authority.
+
+### ADR 0005
+
+```markdown
+V1 uses Planning Review through Task Submission to create Task Approval, dependency-checked Change Start, validation and publication through Change Submission, synchronous Task cancellation, and authoritative merge or accepted No-Change completion.
+Task Approval belongs to the exact reviewed Task proposal, planning policy, and Planning Base instead of remaining permanent after those facts change.
+An operator must explicitly confirm an approved Task revision before the Task returns to New for another Task Submission.
+A repeated Task Submission or Change Submission may recover interrupted progress only through valid lifecycle transitions and exact durable evidence.
+```
+
+### Task Intent context ownership
+
+```markdown
+This context owns requested intent, planning judgment, approval, dependencies, and user-facing Task progress.
+```
+
+### Task Intent planning language
+
+```markdown
+**Task Submission**:
+The point-in-time operation that asks But Why to judge one Planning Proposal Snapshot against one Planning Base and resolved planning policy.
+Explicit resubmission of a Todo Task under a different policy or invalid Planning Base replaces its prior approval only after preflight succeeds.
+_Avoid_: Task Approval, Change Submission, Task edit
+
+**Planning Proposal Snapshot**:
+The immutable Task Context, dependency edges, and exact direct-related-Task evidence supplied to one Planning Run.
+A concurrent change to that evidence makes an active Task Submission stale before approval.
+_Avoid_: Acceptance Context, mutable Task view, repository evidence
+
+**Planning Base**:
+The exact local default-branch commit and tree against which one Planning Run judges a Task proposal.
+_Avoid_: Change Base, remote default branch, arbitrary caller HEAD
+
+**Planning Run**:
+One durable execution and judgment of one Task proposal under one resolved planning policy that begins only after Task Submission eligibility and preflight succeed.
+A passed or Finding-blocked Planning Run is reusable while its proposal and policy match and its Planning Base remains valid.
+_Avoid_: Validation Run, Task Submission attempt, generic job
+
+**Active Planning Run**:
+The sole running Planning Run durably related to one Task until it completes or an operator explicitly abandons it.
+Its Task cannot be cancelled while it remains active.
+_Avoid_: Process lock, reviewer process, current Task Submission
+
+**Planning Run Abandonment**:
+The explicit operator recovery that completes an interrupted Active Planning Run as tooling-failed after its processes stop and its exact resources are handled.
+_Avoid_: Automatic cleanup, process termination, cancellation
+
+**Planning Run State**:
+The state of a Planning Run: running or complete.
+_Avoid_: Task state, review result
+
+**Planning Run Outcome**:
+The completed result of a Planning Run: passed, blocked by Planning Findings, or failed because of tooling.
+_Avoid_: Task state, reviewer status, abandonment
+
+**Planning Run History**:
+The ordered immutable Planning Runs retained for one Task.
+_Avoid_: Mutable planning report, Task comments
+
+**Planning Policy Snapshot**:
+The immutable resolved Repository Preparation, Planning Reviewer instructions, Agent Profile, Agent Environment, and output contract used by one Planning Run.
+Later configuration changes do not alter the snapshot or its historical Planning Run, and Planning Run reuse requires an exact snapshot match.
+_Avoid_: Mutable current config, raw config hash, Validation Policy Snapshot
+
+**Planning Reviewer**:
+The coding agent that judges whether one Task proposal is ready for implementation against repository and authoritative external evidence.
+_Avoid_: Acceptance Reviewer, Implementer, Task approver
+
+**Planning Reviewer Session**:
+A continuing reviewer conversation owned by one Task and resumed across its Planning Runs and disposable Planning Workspaces.
+_Avoid_: Fresh reviewer session per Task Submission, cross-Task reviewer conversation
+
+**Planning Reviewer Session Identity**:
+The Task, Planning Reviewer producer, resolved Agent Profile, reviewer instructions, Agent Environment, and configured resources that determine whether a Planning Reviewer Session can safely continue.
+The Planning Base, Planning Proposal Snapshot, and Planning Run do not belong to this identity.
+_Avoid_: Planning Run identity, session file path, mutable Task proposal
+
+**Planning Finding**:
+An immutable report that states one material problem and the evidence that prevents approval of the reviewed Task proposal.
+Every Planning Finding is blocking, so it has no severity classification.
+_Avoid_: Task Comment, implementation detail, optional refinement
+
+**Planning Workspace**:
+An isolated disposable workspace in which one Planning Run judges its exact Planning Base without changing it.
+_Avoid_: Validation Workspace, Managed Worktree, caller checkout
+
+**Planning Tooling Failure**:
+A failure after Planning Run creation in But Why or its planning tooling that prevents a trustworthy judgment of the Task proposal.
+Preflight rejection is not a Planning Tooling Failure.
+_Avoid_: Planning Finding, reviewer rejection
+
+**Task Approval**:
+The current confirmation that one exact Planning Proposal Snapshot passed Planning Review under its recorded Planning Policy Snapshot and Planning Base.
+Configuration changes do not invalidate it automatically, but explicit Task resubmission can replace it after preflight succeeds.
+_Avoid_: Change Start, permanent approval, operator-only assertion
+```
+
+### Task Dependency planning sentence
+
+```markdown
+An unfinished prerequisite does not prevent Task Submission, but Planning Review can report a Planning Finding when that prerequisite prevents trustworthy planning.
+```
+
+### Context Map wording
+
+```markdown
+- [Task Intent](./docs/context/task-intent/CONTEXT.md) - owns requested intent, planning judgment, approval, dependencies, and user-facing Task progress.
+- **Repository Runtime -> Task Intent**: Shared Repository State persists Tasks and Planning Runs, while resolved configuration supplies planning policy and the Planning Reviewer Agent Profile.
+```
+
 ## Outcome
 
 But Why must validate a Task proposal against repository evidence and approved planning policy before implementation starts.
