@@ -25,14 +25,13 @@ Submission reconciles an existing owned pull request before fetching a newer Cha
 A new Submission fetches the recorded Change Base and rejects divergence before Candidate or Validation Run creation.
 But Why does not modify the Managed Worktree or Repository Branch to satisfy ancestry.
 
-Tracked-tree equality between the exact Change Base and Repository Branch head defines No-Change after ancestry passes.
+Tracked-tree equality between the exact Change Base and Repository Branch head returns `nothing_to_submit` after ancestry passes.
 A changed Candidate completes only through its exact owned pull request.
-A passing Task-backed No-Change Submission can complete without a pull request after Acceptance Review passes.
-A taskless No-Change Submission returns `nothing_to_submit` and remains open.
+A `nothing_to_submit` Submission keeps its Task and Change open and does not run validation.
 
 Completed Submissions retain their Candidate, Validation Policy Snapshot, validation, and publication evidence.
 Later configuration or Change Base changes do not invalidate completed evidence.
-A repeated Submit returns stored success only when durable evidence identifies the same exact Candidate and confirmed publication or No-Change completion.
+A repeated Submit returns stored success only when durable evidence identifies the same exact Candidate and confirmed publication.
 A revised Candidate must pass Submission before But Why updates the same open owned pull request.
 Each update appends Candidate Publication evidence without changing earlier publication evidence.
 A closed owned pull request blocks publication while it remains closed.

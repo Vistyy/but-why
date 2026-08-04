@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { expect, it } from "@effect/vitest";
-import { Effect } from "effect";
+import { Cause, Effect } from "effect";
 import { describe } from "vitest";
 
 import { storedPublicTaskId } from "../../src/task/taskId.js";
@@ -327,193 +327,6 @@ describe("repository SQL storage", () => {
           change: { state: "closed", closeReason: "completed", cleanup: { state: "pending" } },
         });
         expect(yield* tasks.getTaskById(taskId)).toMatchObject({ state: "done" });
-        expect(
-          yield* changes.completeNoChange({
-            changeId: started.change.id,
-            taskId,
-            candidateId: "candidate-no-change",
-            validationRunId: "run-no-change",
-            now: "2026-07-17T22:59:00.000Z",
-          }),
-        ).toEqual({ ok: false, code: "change_not_open" });
-      }),
-    ),
-  );
-
-  it.scoped("completes and reuses a Task-backed no-change Change", () =>
-    withTemporaryState((input) =>
-      Effect.gen(function* () {
-        const tasks = yield* openSqliteTaskPersistence("BY");
-        const starts = yield* openSqliteChangeStartPersistence();
-        const changes = yield* openSqliteChangePersistence();
-        const created = yield* tasks.createTask({
-          title: "Complete no-change Change",
-          description: "Complete the linked Task without a PR.",
-          now: "2026-07-17T23:05:00.000Z",
-        });
-        if (!created.ok) return;
-        const taskId = storedPublicTaskId(created.task.id);
-        yield* tasks.approveTask({ taskId, now: "2026-07-17T23:06:00.000Z" });
-        const started = yield* starts.create({
-          id: "change-no-change",
-          repositoryCommonDirectory: input.commonDirectory,
-          branchRef: "refs/heads/but-why/by-1-no-change",
-          baseRef: "main",
-          baseRemoteUrl: "https://github.com/acme/repo.git",
-          startingCommit: "1111111111111111111111111111111111111111",
-          worktreePath: join(input.commonDirectory, "worktrees", "by-1-no-change"),
-          taskId,
-          now: "2026-07-17T23:07:00.000Z",
-        });
-        expect(started.ok).toBe(true);
-        if (!started.ok) return;
-        yield* tasks.transitionTaskState({
-          taskId,
-          to: "validating",
-          now: "2026-07-17T23:07:05.000Z",
-        });
-        const repository = yield* RepositorySql;
-        yield* repository.operation(
-          "install no-change publication conflict",
-          (sql) => sql`
-            UPDATE changes SET
-              publication_candidate_id = 'published-candidate',
-              publication_validation_run_id = 'published-run',
-              publication_owner = 'acme', publication_repo = 'repo',
-              publication_base_branch = 'main', publication_remote_name = 'origin',
-              publication_head_branch = 'change-no-change',
-              publication_expected_head_sha = 'published-head',
-              publication_pr_number = 42, publication_pr_url = 'https://github.test/pull/42'
-            WHERE id = ${started.change.id}
-          `,
-        );
-        expect(
-          yield* changes.completeNoChange({
-            changeId: started.change.id,
-            taskId,
-            candidateId: "candidate-no-change",
-            validationRunId: "run-no-change",
-            now: "2026-07-17T23:07:15.000Z",
-          }),
-        ).toEqual({ ok: false, code: "no_change_evidence_invalid" });
-        yield* repository.operation(
-          "clear no-change publication conflict",
-          (sql) => sql`
-            UPDATE changes SET
-              publication_candidate_id = NULL, publication_validation_run_id = NULL,
-              publication_owner = NULL, publication_repo = NULL,
-              publication_base_branch = NULL, publication_remote_name = NULL,
-              publication_head_branch = NULL, publication_expected_head_sha = NULL,
-              publication_pr_number = NULL, publication_pr_url = NULL
-            WHERE id = ${started.change.id}
-          `,
-        );
-        expect(
-          yield* changes.completeNoChange({
-            changeId: started.change.id,
-            taskId,
-            candidateId: "missing-candidate",
-            validationRunId: "missing-run",
-            now: "2026-07-17T23:07:20.000Z",
-          }),
-        ).toEqual({ ok: false, code: "no_change_evidence_invalid" });
-        yield* repository.operation("insert no-change evidence", (sql) =>
-          Effect.gen(function* () {
-            yield* sql`
-                INSERT INTO candidates (
-                  id, change_id, change_base_sha, head_sha, created_at
-                ) VALUES (
-                  'candidate-no-change', ${started.change.id},
-                  ${started.change.startingCommit}, ${started.change.startingCommit},
-                  '2026-07-17T23:07:30.000Z'
-                )
-              `;
-            yield* sql`
-                INSERT INTO candidate_validation_runs (
-                  id, candidate_id, policy_snapshot, state, outcome, created_at, updated_at
-                ) VALUES (
-                  'run-no-change', 'candidate-no-change', '{}', 'complete', 'passed',
-                  '2026-07-17T23:07:45.000Z', '2026-07-17T23:07:45.000Z'
-                )
-              `;
-          }),
-        );
-
-        expect(
-          yield* changes.completeNoChange({
-            changeId: started.change.id,
-            taskId,
-            candidateId: "candidate-no-change",
-            validationRunId: "run-no-change",
-            now: "2026-07-17T23:08:00.000Z",
-          }),
-        ).toMatchObject({ ok: true, changed: true, change: { state: "closed" } });
-        expect(
-          yield* changes.completeNoChange({
-            changeId: started.change.id,
-            taskId,
-            candidateId: "candidate-no-change",
-            validationRunId: "run-no-change",
-            now: "2026-07-17T23:09:00.000Z",
-          }),
-        ).toMatchObject({ ok: true, changed: false, change: { state: "closed" } });
-        expect(yield* changes.getChangeById(started.change.id)).toMatchObject({
-          state: "closed",
-          closeReason: "completed",
-          noChangeCompletion: {
-            candidateId: "candidate-no-change",
-            validationRunId: "run-no-change",
-          },
-        });
-        expect(yield* tasks.getTaskById(taskId)).toMatchObject({
-          state: "done",
-          completionKind: "no_change",
-        });
-      }),
-    ),
-  );
-
-  it.scoped("rejects no-change completion for a cancelled Change", () =>
-    withTemporaryState((input) =>
-      Effect.gen(function* () {
-        const tasks = yield* openSqliteTaskPersistence("BY");
-        const starts = yield* openSqliteChangeStartPersistence();
-        const changes = yield* openSqliteChangePersistence();
-        const created = yield* tasks.createTask({
-          title: "Cancelled no-change Change",
-          description: "Do not complete a cancelled Change.",
-          now: "2026-07-17T23:10:00.000Z",
-        });
-        if (!created.ok) return;
-        const taskId = storedPublicTaskId(created.task.id);
-        yield* tasks.approveTask({ taskId, now: "2026-07-17T23:11:00.000Z" });
-        const started = yield* starts.create({
-          id: "change-cancelled-no-change",
-          repositoryCommonDirectory: input.commonDirectory,
-          branchRef: "refs/heads/but-why/by-1-cancelled",
-          baseRef: "main",
-          baseRemoteUrl: "https://github.com/acme/repo.git",
-          startingCommit: "1111111111111111111111111111111111111111",
-          worktreePath: join(input.commonDirectory, "worktrees", "by-1-cancelled"),
-          taskId,
-          now: "2026-07-17T23:12:00.000Z",
-        });
-        if (!started.ok) return;
-        yield* changes.cancelChange({
-          changeId: started.change.id,
-          reason: "cancelled for test",
-          now: "2026-07-17T23:13:00.000Z",
-        });
-
-        expect(
-          yield* changes.completeNoChange({
-            changeId: started.change.id,
-            taskId,
-            candidateId: "candidate-no-change",
-            validationRunId: "run-no-change",
-            now: "2026-07-17T23:14:00.000Z",
-          }),
-        ).toEqual({ ok: false, code: "change_not_open" });
       }),
     ),
   );
@@ -734,7 +547,7 @@ describe("repository SQL storage", () => {
           Effect.gen(function* () {
             yield* sql`UPDATE changes SET publication_candidate_id = ${captured.candidateId}, publication_validation_run_id = 'legacy-run', publication_owner = 'acme', publication_repo = 'repo', publication_base_branch = 'main', publication_remote_name = 'origin', publication_head_branch = 'legacy', publication_expected_head_sha = 'head-legacy', publication_pr_number = 7, publication_pr_url = 'https://github.test/pull/7' WHERE id = ${captured.changeId}`;
             yield* sql`DROP TABLE candidate_publications`;
-            yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id IN (11, 12)`;
+            yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id IN (11, 12, 13)`;
             yield* sql`INSERT INTO implementation_decisions (id, change_id, recorded_at, content) VALUES ('legacy-decision', ${captured.changeId}, '2026-07-25T15:30:00.000Z', 'Legacy unstructured decision')`;
           }),
         );
@@ -955,6 +768,14 @@ describe("repository SQL storage", () => {
           "read Candidate baseline shape",
           (sql) => sql<{ readonly name: string }>`PRAGMA table_info(candidates)`,
         );
+        const taskColumns = yield* repositorySql.operation(
+          "read Task completion shape",
+          (sql) => sql<{ readonly name: string }>`PRAGMA table_info(tasks)`,
+        );
+        const changeColumns = yield* repositorySql.operation(
+          "read Change no-change shape",
+          (sql) => sql<{ readonly name: string }>`PRAGMA table_info(changes)`,
+        );
 
         expect(migrations).toEqual([
           { migration_id: 1, name: "baseline" },
@@ -969,6 +790,7 @@ describe("repository SQL storage", () => {
           { migration_id: 10, name: "validation_workspace_paths" },
           { migration_id: 11, name: "candidate_publications" },
           { migration_id: 12, name: "structured_implementation_decisions" },
+          { migration_id: 13, name: "remove_no_change_completion" },
         ]);
         expect(identities).toEqual([{ common_directory: repositorySql.commonDirectory }]);
         expect(candidateColumns.map(({ name }) => name)).toEqual([
@@ -978,7 +800,141 @@ describe("repository SQL storage", () => {
           "head_sha",
           "created_at",
         ]);
+        expect(taskColumns.map(({ name }) => name)).not.toContain("completion_kind");
+        expect(changeColumns.map(({ name }) => name)).not.toContain("no_change_candidate_id");
+        expect(changeColumns.map(({ name }) => name)).not.toContain("no_change_validation_run_id");
       }),
+    ),
+  );
+
+  it.effect("preserves supported merged Done records while removing legacy columns", () =>
+    Effect.acquireUseRelease(
+      Effect.sync(() => mkdtempSync(join(tmpdir(), "but-why-repository-sql-"))),
+      (directory) =>
+        Effect.gen(function* () {
+          const statePath = join(directory, "state.sqlite");
+          yield* Effect.scoped(
+            Effect.gen(function* () {
+              const repository = yield* RepositorySql;
+              yield* repository.operation("restore supported merged Done records", (sql) =>
+                Effect.gen(function* () {
+                  yield* sql`ALTER TABLE tasks ADD COLUMN completion_kind TEXT`;
+                  yield* sql`ALTER TABLE changes ADD COLUMN no_change_candidate_id TEXT`;
+                  yield* sql`ALTER TABLE changes ADD COLUMN no_change_validation_run_id TEXT`;
+                  yield* sql`
+                    INSERT INTO tasks (
+                      id, numeric_id, title, description, state, completion_kind, created_at, updated_at
+                    ) VALUES (
+                      'BY-1', 1, 'Merged Done Task', 'Must survive migration.',
+                      'done', 'merged_pr', '2026-07-25T16:30:00.000Z', '2026-07-25T16:30:00.000Z'
+                    )
+                  `;
+                  yield* sql`
+                    INSERT INTO changes (
+                      id, repository_common_directory, branch_ref, task_id, state, close_reason,
+                      created_at, updated_at, closed_at
+                    ) VALUES (
+                      'change-supported-merged', ${directory}, 'refs/heads/supported-merged',
+                      'BY-1', 'closed', 'completed', '2026-07-25T16:30:00.000Z',
+                      '2026-07-25T16:30:00.000Z', '2026-07-25T16:30:00.000Z'
+                    )
+                  `;
+                  yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id = 13`;
+                }),
+              );
+            }).pipe(Effect.provide(repositorySqlLayer({ commonDirectory: directory, statePath }))),
+          );
+
+          yield* Effect.scoped(
+            Effect.gen(function* () {
+              const repository = yield* RepositorySql;
+              const tasks = yield* repository.operation(
+                "read migrated supported Task",
+                (sql) => sql<{ readonly state: string }>`SELECT state FROM tasks WHERE id = 'BY-1'`,
+              );
+              const changes = yield* repository.operation(
+                "read migrated supported Change",
+                (sql) =>
+                  sql<{ readonly state: string; readonly close_reason: string }>`
+                    SELECT state, close_reason FROM changes WHERE id = 'change-supported-merged'
+                  `,
+              );
+              const taskColumns = yield* repository.operation(
+                "read migrated Task columns",
+                (sql) => sql<{ readonly name: string }>`PRAGMA table_info(tasks)`,
+              );
+              const changeColumns = yield* repository.operation(
+                "read migrated Change columns",
+                (sql) => sql<{ readonly name: string }>`PRAGMA table_info(changes)`,
+              );
+              expect(tasks).toEqual([{ state: "done" }]);
+              expect(changes).toEqual([{ state: "closed", close_reason: "completed" }]);
+              expect(taskColumns.map(({ name }) => name)).not.toContain("completion_kind");
+              expect(changeColumns.map(({ name }) => name)).not.toContain("no_change_candidate_id");
+              expect(changeColumns.map(({ name }) => name)).not.toContain(
+                "no_change_validation_run_id",
+              );
+            }).pipe(Effect.provide(repositorySqlLayer({ commonDirectory: directory, statePath }))),
+          );
+        }),
+      (directory) => Effect.sync(() => rmSync(directory, { recursive: true, force: true })),
+    ),
+  );
+
+  it.effect("stops migration with Task and Change facts for unsupported No-Change records", () =>
+    Effect.acquireUseRelease(
+      Effect.sync(() => mkdtempSync(join(tmpdir(), "but-why-repository-sql-"))),
+      (directory) =>
+        Effect.gen(function* () {
+          const statePath = join(directory, "state.sqlite");
+          yield* Effect.scoped(
+            Effect.gen(function* () {
+              const repository = yield* RepositorySql;
+              yield* repository.operation("restore unsupported No-Change records", (sql) =>
+                Effect.gen(function* () {
+                  yield* sql`ALTER TABLE tasks ADD COLUMN completion_kind TEXT`;
+                  yield* sql`ALTER TABLE changes ADD COLUMN no_change_candidate_id TEXT`;
+                  yield* sql`ALTER TABLE changes ADD COLUMN no_change_validation_run_id TEXT`;
+                  yield* sql`
+                    INSERT INTO tasks (
+                      id, numeric_id, title, description, state, completion_kind, created_at, updated_at
+                    ) VALUES (
+                      'BY-1', 1, 'Unsupported No-Change Task', 'Must stop migration.',
+                      'done', 'no_change', '2026-07-25T17:00:00.000Z', '2026-07-25T17:00:00.000Z'
+                    )
+                  `;
+                  yield* sql`
+                    INSERT INTO changes (
+                      id, repository_common_directory, branch_ref, task_id, state, created_at, updated_at,
+                      no_change_candidate_id, no_change_validation_run_id
+                    ) VALUES (
+                      'change-unsupported-no-change', ${directory}, 'refs/heads/unsupported-no-change',
+                      'BY-1', 'open', '2026-07-25T17:00:00.000Z', '2026-07-25T17:00:00.000Z',
+                      'candidate-unsupported', 'run-unsupported'
+                    )
+                  `;
+                  yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id = 13`;
+                }),
+              );
+            }).pipe(Effect.provide(repositorySqlLayer({ commonDirectory: directory, statePath }))),
+          );
+
+          const error = yield* Effect.scoped(
+            RepositorySql.pipe(Effect.provide(repositorySqlLayer({ commonDirectory: directory, statePath }))),
+          ).pipe(Effect.flip);
+
+          expect(error).toBeInstanceOf(RepositoryMigrationFailed);
+          const migrationError = Array.from(
+            Cause.defects(error.cause as Cause.Cause<unknown>),
+          )[0] as {
+            readonly cause?: unknown;
+          };
+          expect(String(migrationError.cause)).toContain("taskId=BY-1 taskState=done");
+          expect(String(migrationError.cause)).toContain("changeId=change-unsupported-no-change");
+          expect(String(migrationError.cause)).toContain("candidateId=candidate-unsupported");
+          expect(String(migrationError.cause)).toContain("validationRunId=run-unsupported");
+        }),
+      (directory) => Effect.sync(() => rmSync(directory, { recursive: true, force: true })),
     ),
   );
 
@@ -1202,8 +1158,8 @@ describe("repository SQL storage", () => {
         );
 
         return Effect.gen(function* () {
-          expect(yield* readMigrationCount).toBe(12);
-          expect(yield* readMigrationCount).toBe(12);
+          expect(yield* readMigrationCount).toBe(13);
+          expect(yield* readMigrationCount).toBe(13);
         });
       },
       (directory) => Effect.sync(() => rmSync(directory, { recursive: true, force: true })),

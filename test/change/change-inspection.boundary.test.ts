@@ -413,7 +413,10 @@ describe("Change inspection CLI", () => {
       expect(JSON.parse(result.stdout)).toEqual({
         changeId: change.change.id,
         status: "nothing_to_submit",
-        help: [`Run \`by change cancel ${change.change.id}\` to cancel this unchanged Change.`],
+        help: [
+          "Continue implementation in the Managed Worktree and retry Change Submit, or cancel explicitly.",
+          `Run \`by change cancel ${change.change.id}\` to cancel this unchanged Change.`,
+        ],
       });
     }),
   );

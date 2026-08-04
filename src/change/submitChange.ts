@@ -54,16 +54,6 @@ export type ChangeSubmitResult =
     }
   | {
       readonly ok: true;
-      readonly status: "no_change";
-      readonly changeId: string;
-      readonly candidateId: string;
-      readonly validationRunId: string;
-      readonly completionKind: "no_change";
-      readonly reviewerEvidence?: ReviewerContinuityEvidence;
-      readonly specialistReviewerEvidence?: readonly SpecialistReviewerContinuityEvidence[];
-    }
-  | {
-      readonly ok: true;
       readonly status: "published";
       readonly changeId: string;
       readonly candidateId: string;
@@ -183,7 +173,7 @@ export const openChangeSubmit = (dependencies: {
   readonly repositoryCommonDirectory: string;
   readonly repositoryPath: string;
   readonly persistence: ChangePersistence;
-  readonly taskPersistence: Pick<TaskPersistence, "getTaskById" | "transitionTaskState">;
+  readonly taskPersistence: Pick<TaskPersistence, "transitionTaskState">;
   readonly reconciliation: ChangeReconciliation;
   readonly loadRepoConfig: (worktreePath: string) => ManagedRepoConfigResolution;
   readonly loadRepoConfigAtCommit: (
@@ -249,17 +239,6 @@ const submitChange = (
   input: ChangeSubmitInput,
 ): Effect.Effect<ChangeSubmitResult, RepositoryStorageError, CandidateValidation> =>
   Effect.gen(function* () {
-    const existing = yield* dependencies.persistence.getChangeById(input.changeId);
-    if (existing?.noChangeCompletion !== undefined && existing.noChangeCompletion !== null) {
-      return {
-        ok: true,
-        status: "no_change",
-        changeId: existing.id,
-        candidateId: existing.noChangeCompletion.candidateId,
-        validationRunId: existing.noChangeCompletion.validationRunId,
-        completionKind: "no_change",
-      } as const;
-    }
     const selected = yield* selectReadyChange(dependencies.persistence, input.changeId);
     if (!selected.ok) return selected;
     const change = selected.change;
@@ -277,6 +256,22 @@ const submitChange = (
         changeId: change.id,
         validationRunId: active.validationRunId,
       } as const;
+    }
+    const refreshedBase = dependencies.refreshBase(
+      dependencies.repositoryPath,
+      change.baseRef,
+      change.baseRemoteUrl,
+    );
+    if (!refreshedBase.ok) return refreshedBase;
+    const candidate = yield* dependencies.captureCandidate({
+      cwd: change.worktreePath,
+      changeId: change.id,
+      now: input.now,
+      changeBaseSha: refreshedBase.base.commit,
+    });
+    if (!candidate.ok) return candidate;
+    if (candidate.trackedTreeMatchesChangeBase) {
+      return { ok: true, status: "nothing_to_submit", changeId: change.id } as const;
     }
     if (change.publication !== null && reconciliation.reconciled.status === "open") {
       const branchHead = yield* dependencies.readBranchHead(change.worktreePath, change.branchRef);
@@ -298,12 +293,6 @@ const submitChange = (
         }
       }
     }
-    const refreshedBase = dependencies.refreshBase(
-      dependencies.repositoryPath,
-      change.baseRef,
-      change.baseRemoteUrl,
-    );
-    if (!refreshedBase.ok) return refreshedBase;
     const baselineRepoConfig = dependencies.loadRepoConfigAtCommit(
       change.worktreePath,
       refreshedBase.base.commit,
@@ -317,60 +306,6 @@ const submitChange = (
           ? {}
           : { details: configFailureDetails(baselineRepoConfig) }),
       } as const;
-    }
-    const candidate = yield* dependencies.captureCandidate({
-      cwd: change.worktreePath,
-      changeId: change.id,
-      now: input.now,
-      changeBaseSha: refreshedBase.base.commit,
-    });
-    if (!candidate.ok) return candidate;
-    if (candidate.trackedTreeMatchesChangeBase) {
-      if (change.taskId === null) {
-        return { ok: true, status: "nothing_to_submit", changeId: change.id } as const;
-      }
-      if (change.publication === null) {
-        const candidateRepoConfig = dependencies.loadRepoConfig(change.worktreePath);
-        if (!candidateRepoConfig.ok) {
-          return {
-            ok: false,
-            code: "validation_policy_invalid",
-            message: candidateRepoConfig.message,
-            ...(configFailureDetails(candidateRepoConfig) === undefined
-              ? {}
-              : { details: configFailureDetails(candidateRepoConfig) }),
-          } as const;
-        }
-        const policy = dependencies.resolvePolicy(
-          true,
-          candidateRepoConfig.config,
-          change.worktreePath,
-          baselineRepoConfig.config,
-        );
-        if (!policy.ok) {
-          return {
-            ok: false,
-            code: "validation_policy_invalid",
-            ...formatValidationPolicyFailure(policy.error),
-          } as const;
-        }
-        if (!policy.resolved.acceptanceContextSupplied) {
-          return {
-            ok: false,
-            code: "validation_policy_invalid",
-            message:
-              "Task-backed no-change submission requires an Acceptance Context validation policy.",
-          } as const;
-        }
-        return yield* validateAndCompleteNoChange(
-          dependencies,
-          change,
-          candidate,
-          policy.resolved,
-          input.now,
-          input.progress,
-        );
-      }
     }
     const candidateRepoConfig = dependencies.loadRepoConfig(change.worktreePath);
     if (!candidateRepoConfig.ok) {
@@ -450,112 +385,6 @@ const formatValidationPolicyFailure = (
       return { message: error.message };
   }
 };
-
-const validateAndCompleteNoChange = (
-  dependencies: Parameters<typeof openChangeSubmit>[0],
-  change: ReadyChange,
-  candidate: CapturedCandidate,
-  policy: Extract<ResolvedCandidateValidationPolicy, { readonly acceptanceContextSupplied: true }>,
-  now: string,
-  progress: SubmitProgress | undefined,
-): Effect.Effect<ChangeSubmitResult, RepositoryStorageError, CandidateValidation> =>
-  Effect.gen(function* () {
-    if (change.taskId === null || change.acceptanceContext === null) {
-      return {
-        ok: false,
-        code: "validation_policy_invalid",
-        message: "Task-backed no-change submission requires Acceptance Context.",
-      } as const;
-    }
-    if (!policy.acceptanceContextSupplied) {
-      return {
-        ok: false,
-        code: "validation_policy_invalid",
-        message:
-          "Task-backed no-change submission requires an Acceptance Context validation policy.",
-      } as const;
-    }
-    const task = yield* dependencies.taskPersistence.getTaskById(change.taskId);
-    const alreadyCompletedNoChange = task?.state === "done" && task.completionKind === "no_change";
-    if (
-      !alreadyCompletedNoChange &&
-      !(yield* transitionTask(dependencies.persistence, change, "validating", now))
-    ) {
-      return taskTransitionFailure(change);
-    }
-    const validation = yield* CandidateValidation;
-    const validationResult = yield* validation.validateNoChange({
-      changeId: change.id,
-      ...candidateIdentity(candidate),
-      resourceRoot: change.worktreePath,
-      noChange: true,
-      acceptanceContext: change.acceptanceContext,
-      ...(progress === undefined ? {} : { progress }),
-      blockerHistory: (yield* dependencies.persistence.listImplementationBlockers?.(change.id) ??
-        Effect.succeed(undefined)) ?? {
-        blockers: [],
-        resolutions: [],
-        active: null,
-      },
-      ...(change.implementationDecisions === undefined
-        ? {}
-        : { implementationDecisions: change.implementationDecisions }),
-      policy: policy.policy,
-      now,
-    });
-    if ("code" in validationResult) {
-      return {
-        ok: false,
-        code: "active_validation_run",
-        changeId: change.id,
-        validationRunId: validationResult.validationRunId,
-      } as const;
-    }
-    if (validationResult.outcome !== "passed") {
-      return yield* blockedValidationResult(
-        validation,
-        dependencies,
-        change,
-        candidate,
-        {
-          validationRunId: validationResult.validationRunId,
-          outcome: validationResult.outcome === "blocked" ? "blocked" : "tooling_failed",
-          ...(validationResult.reviewerEvidence === undefined
-            ? {}
-            : { reviewerEvidence: validationResult.reviewerEvidence }),
-          ...(validationResult.specialistReviewerEvidence === undefined
-            ? {}
-            : { specialistReviewerEvidence: validationResult.specialistReviewerEvidence }),
-        },
-        now,
-      );
-    }
-    if (!validationResult.ok) {
-      return yield* Effect.die(new Error("Unexpected active Validation Run result."));
-    }
-    const completed = yield* dependencies.persistence.completeNoChange({
-      changeId: change.id,
-      taskId: change.taskId,
-      candidateId: candidate.candidateId,
-      validationRunId: validationResult.validationRunId,
-      now,
-    });
-    if (!completed.ok) return taskTransitionFailure(change);
-    return {
-      ok: true,
-      status: "no_change",
-      changeId: change.id,
-      candidateId: candidate.candidateId,
-      validationRunId: validationResult.validationRunId,
-      completionKind: "no_change",
-      ...(validationResult.reviewerEvidence === undefined
-        ? {}
-        : { reviewerEvidence: validationResult.reviewerEvidence }),
-      ...(validationResult.specialistReviewerEvidence === undefined
-        ? {}
-        : { specialistReviewerEvidence: validationResult.specialistReviewerEvidence }),
-    } as const;
-  });
 
 const reconcileBeforeSubmission = (
   dependencies: Parameters<typeof openChangeSubmit>[0],

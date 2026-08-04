@@ -39,25 +39,14 @@ export const submitResult = (result: ChangeSubmitResult, changeId: string): CliR
       return success({
         changeId: result.changeId,
         status: result.status,
-        help: [`Run \`by change cancel ${result.changeId}\` to cancel this unchanged Change.`],
+        help: [
+          "Continue implementation in the Managed Worktree and retry Change Submit, or cancel explicitly.",
+          `Run \`by change cancel ${result.changeId}\` to cancel this unchanged Change.`,
+        ],
       });
     }
     if (result.status === "reconciled")
       return success({ status: result.status, change: result.change });
-    if (result.status === "no_change")
-      return success({
-        changeId: result.changeId,
-        candidateId: result.candidateId,
-        validationRunId: result.validationRunId,
-        status: result.status,
-        completionKind: result.completionKind,
-        ...(result.reviewerEvidence === undefined
-          ? {}
-          : { reviewerEvidence: result.reviewerEvidence }),
-        ...(result.specialistReviewerEvidence === undefined
-          ? {}
-          : { specialistReviewerEvidence: result.specialistReviewerEvidence }),
-      });
     return success({
       changeId: result.changeId,
       candidateId: result.candidateId,

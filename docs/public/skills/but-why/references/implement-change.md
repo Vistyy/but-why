@@ -9,7 +9,7 @@ The Implementer must continue until a return condition applies.
 The Implementer must not return a final progress report.
 The Implementer may return control only when one of these conditions applies:
 
-- Change Submit reports a ready owned pull request or a passing No-Change Submission.
+- Change Submit reports a ready owned pull request.
 - An Implementation Blocker requires operator authority.
 - A Tooling Failure prevents trustworthy validation.
 - An uncertain or operator-owned Submit failure provides no Submit Recovery Guidance.
@@ -113,7 +113,7 @@ Retry Change Submit only after abandonment reports success.
 When Change Submit returns Findings, run `<but-why> change findings <change-id>`.
 Fix every applicable Finding in the Managed Worktree.
 Commit the fixes and run Change Submit again.
-Repeat this loop until the exact Candidate publishes, a No-Change Submission passes, or a return condition applies.
+Repeat this loop until the exact Candidate publishes or a return condition applies.
 Report a tooling failure with its structured recovery guidance.
 
 ## Submit Recovery Guidance
@@ -142,7 +142,7 @@ Uncertain and operator-owned Submit failures retain ordinary help and do not aut
 Do not perform recovery work for a result that does not contain `error.recovery`.
 Report the structured error and its help, then wait for the main operator.
 
-This step is complete when Change Submit reports the owned pull request for the exact passing Candidate or a passing No-Change Submission.
+This step is complete when Change Submit reports the owned pull request for the exact passing Candidate.
 If another return condition applies, this step is complete when the applicable blocker or failure is reported to the main operator.
 
 ## 4. Hand control back for completion
@@ -154,8 +154,5 @@ The user closes the Herdr Interactive Session manually before reconciliation.
 The main operator runs `<but-why> change reconcile <change-id>` after the human confirms the merge.
 The main operator inspects the Task and Change when reconciliation reports pending or unsafe cleanup.
 
-When Change Submit reports a passing No-Change Submission, report that result and wait.
-Do not create a commit or pull request only to replace a passing No-Change Submission.
-
-The implementation workflow is complete when the ready owned pull request or passing No-Change Submission is reported.
+The implementation workflow is complete when the ready owned pull request is reported.
 The Change workflow is complete when But Why records durable completion through the applicable successful Submission or reconciliation path.
