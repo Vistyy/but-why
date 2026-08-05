@@ -33,6 +33,11 @@ Blocked Change activity is derived from the unresolved Blocker row and is not pe
 Blocker operations neither write nor depend on blocked lifecycle state.
 _Avoid_: Closed Change, Validation Run blocked by Findings
 
+**Transient Change State**:
+The retired persisted Change-state value `blocked`.
+It has no current lifecycle meaning and a migration stops rather than mapping it to Open or Closed.
+_Avoid_: Blocked Change, Change Activity
+
 **Closed Change**:
 A Change permanently completed or cancelled while preserving its history.
 _Avoid_: Deleted Change, merged branch

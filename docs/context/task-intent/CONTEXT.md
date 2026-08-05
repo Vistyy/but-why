@@ -50,6 +50,11 @@ The user-facing progress of a Task through New, Todo, Done, or Cancelled.
 Todo means approved and unfinished, even while a linked Change reports Change Activity.
 _Avoid_: Validation Run state, generic pipeline
 
+**Transient Task State**:
+A retired persisted Task-state value other than New, Todo, Done, or Cancelled.
+It has no current lifecycle meaning and a migration stops rather than mapping it to a supported state.
+_Avoid_: Change Activity, active Task state
+
 **Task Dependency**:
 A directed prerequisite relationship required because the dependent Task cannot be implemented or verified until the prerequisite Task is Done.
 Related work, shared files, likely conflicts, preferred sequence, and relative importance do not establish a Task Dependency.
