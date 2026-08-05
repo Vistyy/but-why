@@ -107,10 +107,26 @@ export const stateStoreUnavailable = (taskPrefix: string | undefined): CliResult
 export const repositoryStorageErrorResult = (
   error: RepositoryStorageError,
   taskPrefix?: string,
-): CliResult =>
-  error._tag === "RepositoryIdentityConflict"
-    ? sharedStateIdentityConflict()
-    : stateStoreUnavailable(taskPrefix);
+): CliResult => {
+  switch (error._tag) {
+    case "RepositoryIdentityConflict":
+      return sharedStateIdentityConflict();
+    case "RepositoryPersistedDataInvalid":
+      return persistedDataInvalid(error.operationName);
+    default:
+      return stateStoreUnavailable(taskPrefix);
+  }
+};
+
+const persistedDataInvalid = (operation: string): CliResult =>
+  runtimeError({
+    code: "persisted_data_invalid",
+    message: "Shared But Why? state contains malformed persisted data.",
+    details: { operation },
+    help: [
+      "Replace <git-common-dir>/but-why/state.sqlite with a known-good copy, then retry the command.",
+    ],
+  });
 
 const sharedStateIdentityConflict = (): CliResult =>
   runtimeError({
