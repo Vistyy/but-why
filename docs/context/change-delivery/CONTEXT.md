@@ -151,6 +151,13 @@ _Avoid_: Session file path, Candidate identity, Validation Run identity
 A durable reference to bounded validation evidence with explicit Run, phase, producer, storage, and truncation metadata.
 _Avoid_: Untracked file, copied secret content, console-only output
 
+**Artifact Content**:
+The bounded filesystem content addressed by an Artifact's metadata.
+It remains available while its Change is Open.
+Terminal Cleanup removes it for the exact Closed Change, and its absence after closure has no diagnostic meaning.
+Artifact metadata remains inspectable.
+_Avoid_: Artifact metadata, archived content, expired content
+
 **Change Start**:
 The operation that creates a Change, its Managed Worktree, and its starting commit.
 It may link an approved Task and capture its Acceptance Context.
