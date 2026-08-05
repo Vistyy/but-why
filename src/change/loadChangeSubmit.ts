@@ -12,8 +12,6 @@ import {
   localCandidateCaptureGit,
   readRepositoryBranchHead,
 } from "./candidateCapture/localGitCandidate.js";
-import { cleanupChangeResourcesWithRemote } from "./localChangeCleanupGit.js";
-import { openChangeReconciliation } from "./reconcileChange.js";
 import {
   openChangeSubmit,
   type ChangeSubmit,
@@ -35,10 +33,7 @@ import { openSqliteChangeValidationPersistence } from "../sqlite/sqliteChangeVal
 import { openCandidatePublication } from "./publication/candidatePublication.js";
 import { detectGitHubPrTarget } from "../submissionEnvironment/githubTarget.js";
 import { refreshRemoteChangeBase } from "../submissionEnvironment/remoteChangeBase.js";
-import {
-  githubChangeCleanupRemote,
-  localGitHubPullRequestGateway,
-} from "../submissionEnvironment/localGitHubPullRequestGateway.js";
+import { localGitHubPullRequestGateway } from "../submissionEnvironment/localGitHubPullRequestGateway.js";
 import { openSqliteExecutionLock } from "../sqlite/sqliteExecutionLock.js";
 import { readRepositoryFileAtCommit } from "../submissionEnvironment/repositoryFile.js";
 
@@ -70,13 +65,8 @@ export const loadChangeSubmit = (input: {
     changePersistence: import("./changePersistence.js").ChangePersistence,
   ) => {
     const github = localGitHubPullRequestGateway({ cwd: context.root });
-    const reconciliation = openChangeReconciliation({
-      persistence: changePersistence,
-      github,
-      cleanup: cleanupChangeResourcesWithRemote(githubChangeCleanupRemote(github)),
-      reviewerSessionPathFor: (changeId) => join(context.paths.operationalDir, changeId),
-    });
     return openChangeSubmit({
+      github,
       loadRepoConfig: (worktreePath): ManagedRepoConfigResolution => {
         const managedConfig = readRepoConfig(join(worktreePath, ".but-why", "config.json"));
         return managedConfig.ok
@@ -113,7 +103,6 @@ export const loadChangeSubmit = (input: {
       repositoryCommonDirectory: context.commonDirectory,
       repositoryPath: context.root,
       persistence: changePersistence,
-      reconciliation,
       resolvePolicy: (acceptanceContextSupplied, repoConfig, worktreePath, validationRepoConfig) =>
         resolveCandidateValidationPolicy({
           context,

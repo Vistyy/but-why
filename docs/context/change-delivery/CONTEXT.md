@@ -60,11 +60,11 @@ The latest Candidate selected from the Managed Worktree for the open Change.
 _Avoid_: Latest historical Candidate, dirty workspace
 
 **Candidate Publication**:
-An immutable record that one exact Candidate and its passed Validation Run were confirmed as the head of a Change's owned open pull request at publication time.
+The act of placing one exact Candidate and its passed Validation Run as the head of a Change's owned pull request.
 Publication requires complete, passed evidence that exactly matches the current Candidate, Change Base, Acceptance Context when present, Validation Policy Snapshot, Implementation Decisions, and latest resolved Implementation Blocker identity.
 Fresh passing evidence for the same Candidate already on the owned pull request records the new Validation Run without artificial republication.
-A later Candidate Publication for the same Change and owned pull request does not alter an earlier Candidate Publication.
-Candidate Publication history is ordered, immutable evidence exposed by `by change publications <change-id>`.
+Current publication facts record the exact Candidate, Validation Run, target, head branch, expected head commit, and owned pull request.
+A changed Candidate invalidates current publication until that Candidate is on the owned pull request.
 _Avoid_: Current Candidate, mutable pull request state, Submission
 
 **Acceptance Context**:

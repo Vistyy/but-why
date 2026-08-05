@@ -152,7 +152,6 @@ by change prepare [<change-id>]
 by change list [--all]
 by change show [<change-id>]
 by change findings [<change-id>]
-by change publications [<change-id>]
 by change validation-runs [<change-id>]
 by validation-run show <validation-run-id>
 by validation-run artifact <validation-run-id> <artifact-ref>

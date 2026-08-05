@@ -7,7 +7,6 @@ import type { CandidateValidationPolicyResolution } from "../../src/change/candi
 import type { ChangeRecord } from "../../src/change/change.js";
 import type { RepoConfig } from "../../src/contracts/repoConfig.js";
 import type { ChangePersistence } from "../../src/change/changePersistence.js";
-import type { ChangeReconciliation } from "../../src/change/reconcileChange.js";
 import { openChangeSubmit } from "../../src/change/submitChange.js";
 import type {
   CaptureLocalCandidateInput,
@@ -20,6 +19,10 @@ import type {
 import { publicTaskId } from "../../src/task/taskId.js";
 import type { RemoteChangeBaseResult } from "../../src/submissionEnvironment/remoteChangeBase.js";
 import type { ChangeValidationPersistence } from "../../src/change/validation/changeValidationPersistence.js";
+import type {
+  GitHubPullRequest,
+  GitHubPullRequestGateway,
+} from "../../src/change/ownedPullRequestGateway.js";
 import { ExecutionLockUnavailable, type ExecutionLock } from "../../src/contracts/executionLock.js";
 import { RepoConfigValidationFailed } from "../../src/contracts/configErrors.js";
 
@@ -67,7 +70,7 @@ describe("Change Submit orchestration", () => {
         changeId: "change-1",
         validationRunId: "run-active",
       });
-      expect(events).toEqual(["reconcile", "capture", "detect_target"]);
+      expect(events).toEqual(["capture", "detect_target"]);
     }),
   );
 
@@ -112,68 +115,59 @@ describe("Change Submit orchestration", () => {
     }),
   );
 
-  it.effect(
-    "reconciles before Candidate selection and publishes one passing taskless Candidate",
-    () =>
-      Effect.gen(function* () {
-        const events: string[] = [];
-        const submit = openChangeSubmit(
-          dependencies({
-            events,
-            change: readyChange(),
-            agentEnvironment: ["nix", "develop", "-c"],
-            publication: {
-              publish: () => {
-                events.push("publish");
-                return {
-                  ok: true,
-                  created: true,
-                  pullRequest: { number: 42, url: "https://github.test/acme/repo/pull/42" },
-                };
-              },
-            },
-          }),
-        );
-        const validationLayer = Layer.succeed(CandidateValidation, {
-          validateCandidate: (input) =>
-            Effect.sync(() => {
-              events.push("validate_taskless");
-              expect(input.policy.agentEnvironment).toEqual(["nix", "develop", "-c"]);
+  it.effect("observes the owned pull request and publishes one passing taskless Candidate", () =>
+    Effect.gen(function* () {
+      const events: string[] = [];
+      const submit = openChangeSubmit(
+        dependencies({
+          events,
+          change: readyChange(),
+          agentEnvironment: ["nix", "develop", "-c"],
+          publication: {
+            publish: () => {
+              events.push("publish");
               return {
                 ok: true,
-                reused: false,
-                validationRunId: "run-1",
-                outcome: "passed",
-              } as const;
-            }),
-          validateAcceptanceContextCandidate: () =>
-            Effect.die("Acceptance Review was not expected"),
-          listFindings: () => Effect.succeed([]),
-          listToolingFailures: () => Effect.succeed([]),
-          listRounds: () => Effect.succeed([]),
-        });
+                created: true,
+                pullRequest: { number: 42, url: "https://github.test/acme/repo/pull/42" },
+              };
+            },
+          },
+        }),
+      );
+      const validationLayer = Layer.succeed(CandidateValidation, {
+        validateCandidate: (input) =>
+          Effect.sync(() => {
+            events.push("validate_taskless");
+            expect(input.policy.agentEnvironment).toEqual(["nix", "develop", "-c"]);
+            return {
+              ok: true,
+              reused: false,
+              validationRunId: "run-1",
+              outcome: "passed",
+            } as const;
+          }),
+        validateAcceptanceContextCandidate: () => Effect.die("Acceptance Review was not expected"),
+        listFindings: () => Effect.succeed([]),
+        listToolingFailures: () => Effect.succeed([]),
+        listRounds: () => Effect.succeed([]),
+      });
 
-        const result = yield* submit
-          .submit({ changeId: "change-1", now })
-          .pipe(Effect.provide(validationLayer));
+      const result = yield* submit
+        .submit({ changeId: "change-1", now })
+        .pipe(Effect.provide(validationLayer));
 
-        expect(result).toEqual({
-          ok: true,
-          status: "published",
-          changeId: "change-1",
-          candidateId: "candidate-1",
-          validationRunId: "run-1",
-          created: true,
-          pullRequest: { number: 42, url: "https://github.test/acme/repo/pull/42" },
-        });
-        expect(events).toEqual([
-          "reconcile",
-          "capture",
-          "detect_target",
-          "validate_taskless",
-          "publish",
-        ]);
-      }),
+      expect(result).toEqual({
+        ok: true,
+        status: "published",
+        changeId: "change-1",
+        candidateId: "candidate-1",
+        validationRunId: "run-1",
+        created: true,
+        pullRequest: { number: 42, url: "https://github.test/acme/repo/pull/42" },
+      });
+      expect(events).toEqual(["capture", "detect_target", "validate_taskless", "publish"]);
+    }),
   );
 
   it.effect("publishes a Candidate when a current preparation failure is recorded", () =>
@@ -226,13 +220,7 @@ describe("Change Submit orchestration", () => {
         .pipe(Effect.provide(validationLayer));
 
       expect(result).toMatchObject({ ok: true, status: "published" });
-      expect(events).toEqual([
-        "reconcile",
-        "capture",
-        "detect_target",
-        "validate_taskless",
-        "publish",
-      ]);
+      expect(events).toEqual(["capture", "detect_target", "validate_taskless", "publish"]);
       expect(change.prepareFailure).toMatchObject({ exitCode: 7 });
     }),
   );
@@ -387,7 +375,6 @@ describe("Change Submit orchestration", () => {
 
         expect(result).toMatchObject({ ok: true, status: "published" });
         expect(events).toEqual([
-          "reconcile",
           "refresh_base",
           "capture",
           "load_base_repo_config",
@@ -427,7 +414,7 @@ describe("Change Submit orchestration", () => {
         code: "validation_policy_invalid",
         message: "Change Base Repo Config is invalid.",
       });
-      expect(events).toEqual(["reconcile", "capture"]);
+      expect(events).toEqual(["capture"]);
     }),
   );
 
@@ -500,13 +487,11 @@ describe("Change Submit orchestration", () => {
       });
       expect(validatedCandidates).toEqual(["candidate-old-target", "candidate-new-target"]);
       expect(events).toEqual([
-        "reconcile",
         "refresh_base",
         "capture",
         "detect_target",
         "validate_taskless",
         "publish",
-        "reconcile",
         "refresh_base",
         "capture",
         "detect_target",
@@ -564,7 +549,6 @@ describe("Change Submit orchestration", () => {
             },
           },
           acceptanceContextSupplied: true,
-          reconciliationStatus: "open",
           branchHeadSha: "base",
           captureResult: {
             ...candidate,
@@ -605,7 +589,7 @@ describe("Change Submit orchestration", () => {
         implementationDecisions: change.implementationDecisions,
       });
       expect(events).toEqual([
-        "reconcile",
+        "observe_pull_request",
         "capture",
         "detect_target",
         "validate_task_backed",
@@ -652,17 +636,11 @@ describe("Change Submit orchestration", () => {
         .pipe(Effect.provide(validationLayer));
 
       expect(result.ok).toBe(true);
-      expect(events).toEqual([
-        "reconcile",
-        "capture",
-        "detect_target",
-        "validate_task_backed",
-        "publish",
-      ]);
+      expect(events).toEqual(["capture", "detect_target", "validate_task_backed", "publish"]);
     }),
   );
 
-  it.effect("continues to validated publication after a stale stored Candidate is observed", () =>
+  it.effect("stops when the observed owned pull request head is mismatched", () =>
     Effect.gen(function* () {
       const events: string[] = [];
       const change = readyChange({
@@ -679,8 +657,104 @@ describe("Change Submit orchestration", () => {
         dependencies({
           events,
           change,
-          reconciliationStatus: "rejected",
-          reconciliationRejection: "head_sha_mismatch",
+          observedPullRequest: {
+            number: 42,
+            url: "https://github.test/acme/repo/pull/42",
+            repository: { owner: "acme", repo: "repo" },
+            state: "open",
+            merged: false,
+            baseBranch: "main",
+            headBranch: "change-1",
+            headSha: "unexpected-remote-head",
+          },
+        }),
+      );
+      const validationLayer = Layer.succeed(CandidateValidation, {
+        validateCandidate: () => Effect.die("Validation must not start"),
+        validateAcceptanceContextCandidate: () => Effect.die("Validation must not start"),
+        listFindings: () => Effect.succeed([]),
+        listToolingFailures: () => Effect.succeed([]),
+        listRounds: () => Effect.succeed([]),
+      });
+
+      expect(
+        yield* submit.submit({ changeId: change.id, now }).pipe(Effect.provide(validationLayer)),
+      ).toMatchObject({
+        ok: false,
+        code: "reconciliation_rejected",
+        change: { changeId: change.id, rejection: "head_sha_mismatch" },
+      });
+      expect(events).toEqual(["observe_pull_request"]);
+    }),
+  );
+
+  it.effect("completes an exact merged owned pull request through terminal completion", () =>
+    Effect.gen(function* () {
+      const events: string[] = [];
+      const change = readyChange({
+        publication: {
+          candidateId: "published-candidate",
+          validationRunId: "published-run",
+          target: { owner: "acme", repo: "repo", baseBranch: "main", remoteName: "origin" },
+          headBranch: "change-1",
+          expectedHeadSha: "published-head",
+          pullRequest: { number: 42, url: "https://github.test/acme/repo/pull/42" },
+        },
+      });
+      const submit = openChangeSubmit(
+        dependencies({
+          events,
+          change,
+          pullRequestObservation: "exact_merged",
+        }),
+      );
+      const validationLayer = Layer.succeed(CandidateValidation, {
+        validateCandidate: () => Effect.die("Validation must not start"),
+        validateAcceptanceContextCandidate: () => Effect.die("Validation must not start"),
+        listFindings: () => Effect.succeed([]),
+        listToolingFailures: () => Effect.succeed([]),
+        listRounds: () => Effect.succeed([]),
+      });
+
+      expect(
+        yield* submit.submit({ changeId: change.id, now }).pipe(Effect.provide(validationLayer)),
+      ).toMatchObject({
+        ok: true,
+        status: "completed",
+        change: { id: change.id },
+      });
+      expect(events).toEqual(["observe_pull_request", "complete_merged_change"]);
+    }),
+  );
+
+  it.effect("continues Candidate work through an exact closed-unmerged owned pull request", () =>
+    Effect.gen(function* () {
+      const events: string[] = [];
+      const change = readyChange({
+        publication: {
+          candidateId: "published-candidate",
+          validationRunId: "published-run",
+          target: { owner: "acme", repo: "repo", baseBranch: "main", remoteName: "origin" },
+          headBranch: "change-1",
+          expectedHeadSha: "published-head",
+          pullRequest: { number: 42, url: "https://github.test/acme/repo/pull/42" },
+        },
+      });
+      const submit = openChangeSubmit(
+        dependencies({
+          events,
+          change,
+          pullRequestObservation: "exact_closed_unmerged",
+          publication: {
+            publish: () => {
+              events.push("publish");
+              return {
+                ok: true,
+                created: false,
+                pullRequest: { number: 42, url: "https://github.test/acme/repo/pull/42" },
+              };
+            },
+          },
         }),
       );
       const validationLayer = Layer.succeed(CandidateValidation, {
@@ -702,9 +776,9 @@ describe("Change Submit orchestration", () => {
 
       expect(
         yield* submit.submit({ changeId: change.id, now }).pipe(Effect.provide(validationLayer)),
-      ).toMatchObject({ ok: true, status: "published", candidateId: "candidate-1" });
+      ).toMatchObject({ ok: true, status: "published", created: false });
       expect(events).toEqual([
-        "reconcile",
+        "observe_pull_request",
         "capture",
         "detect_target",
         "validate_taskless",
@@ -713,42 +787,9 @@ describe("Change Submit orchestration", () => {
     }),
   );
 
-  it.effect.each([
-    {
-      status: "completed" as const,
-      expected: { ok: true, status: "reconciled" },
-    },
-    {
-      status: "closed_unmerged" as const,
-      expected: { ok: false, code: "owned_pull_request_closed" },
-    },
-  ])(
-    "returns authoritative $status pull request facts before fetching the Change Base",
-    ({ status, expected }) =>
-      Effect.gen(function* () {
-        const events: string[] = [];
-        const submit = openChangeSubmit(
-          dependencies({ events, change: readyChange(), reconciliationStatus: status }),
-        );
-        const validationLayer = Layer.succeed(CandidateValidation, {
-          validateCandidate: () => Effect.die("Validation must not start"),
-          validateAcceptanceContextCandidate: () => Effect.die("Validation must not start"),
-          listFindings: () => Effect.succeed([]),
-          listToolingFailures: () => Effect.succeed([]),
-          listRounds: () => Effect.succeed([]),
-        });
-
-        expect(
-          yield* submit.submit({ changeId: "change-1", now }).pipe(Effect.provide(validationLayer)),
-        ).toMatchObject(expected);
-        expect(events).toEqual(["reconcile"]);
-      }),
-  );
-
   it.effect("reopens a closed owned pull request before revising the same publication", () =>
     Effect.gen(function* () {
       const events: string[] = [];
-      let remoteHead = "unexpected-head";
       const change = readyChange({
         taskId: publicTaskId("BY-1"),
         acceptanceContext: {
@@ -770,18 +811,10 @@ describe("Change Submit orchestration", () => {
         dependencies({
           events,
           change,
-          reconciliationStatuses: ["closed_unmerged", "open", "open"],
+          pullRequestObservations: ["exact_closed_unmerged", "exact_open", "exact_open"],
           publication: {
             publish: (input) => {
               events.push(`publish:${input.candidateId}`);
-              if (remoteHead !== "revised-head") {
-                return {
-                  ok: false,
-                  code: "publication_remote_mismatch",
-                  expectedRemoteHeadSha: "expected-revised-head",
-                  observedRemoteHeadSha: remoteHead,
-                };
-              }
               return {
                 ok: true,
                 created: false,
@@ -819,25 +852,20 @@ describe("Change Submit orchestration", () => {
         listRounds: () => Effect.succeed([]),
       });
 
-      const closed = yield* submit
+      const first = yield* submit
         .submit({ changeId: change.id, now })
         .pipe(Effect.provide(validationLayer));
-      const rejected = yield* submit
-        .submit({ changeId: change.id, now })
-        .pipe(Effect.provide(validationLayer));
-      remoteHead = "revised-head";
-      const published = yield* submit
+      const second = yield* submit
         .submit({ changeId: change.id, now })
         .pipe(Effect.provide(validationLayer));
 
-      expect(closed).toEqual({ ok: false, code: "owned_pull_request_closed", changeId: change.id });
-      expect(rejected).toEqual({
-        ok: false,
-        code: "publication_remote_mismatch",
-        expectedRemoteHeadSha: "expected-revised-head",
-        observedRemoteHeadSha: "unexpected-head",
+      expect(first).toMatchObject({
+        ok: true,
+        status: "published",
+        created: false,
+        pullRequest: { number: 42 },
       });
-      expect(published).toMatchObject({
+      expect(second).toMatchObject({
         ok: true,
         status: "published",
         created: false,
@@ -848,13 +876,12 @@ describe("Change Submit orchestration", () => {
         expectedHeadSha: "published-head",
       });
       expect(events).toEqual([
-        "reconcile",
-        "reconcile",
+        "observe_pull_request",
         "capture",
         "detect_target",
         "validate_task_backed",
         "publish:candidate-1",
-        "reconcile",
+        "observe_pull_request",
         "capture",
         "detect_target",
         "validate_task_backed",
@@ -863,16 +890,33 @@ describe("Change Submit orchestration", () => {
     }),
   );
 
-  it.effect("keeps rejecting reconciliation mismatches other than the Candidate commit", () =>
+  it.effect("rejects mismatched owned pull request identity facts before Candidate work", () =>
     Effect.gen(function* () {
       const events: string[] = [];
-      const change = readyChange();
+      const change = readyChange({
+        publication: {
+          candidateId: "published-candidate",
+          validationRunId: "published-run",
+          target: { owner: "acme", repo: "repo", baseBranch: "main", remoteName: "origin" },
+          headBranch: "change-1",
+          expectedHeadSha: "published-head",
+          pullRequest: { number: 42, url: "https://github.test/acme/repo/pull/42" },
+        },
+      });
       const submit = openChangeSubmit(
         dependencies({
           events,
           change,
-          reconciliationStatus: "rejected",
-          reconciliationRejection: "base_branch_mismatch",
+          observedPullRequest: {
+            number: 42,
+            url: "https://github.test/acme/repo/pull/42",
+            repository: { owner: "acme", repo: "repo" },
+            state: "open",
+            merged: false,
+            baseBranch: "release",
+            headBranch: "change-1",
+            headSha: "published-head",
+          },
         }),
       );
       const validationLayer = Layer.succeed(CandidateValidation, {
@@ -888,9 +932,56 @@ describe("Change Submit orchestration", () => {
       ).toMatchObject({
         ok: false,
         code: "reconciliation_rejected",
-        change: { rejection: "base_branch_mismatch" },
+        change: { changeId: change.id, rejection: "base_branch_mismatch" },
       });
-      expect(events).toEqual(["reconcile"]);
+      expect(events).toEqual(["observe_pull_request"]);
+    }),
+  );
+
+  it.effect("stops when owned pull request facts are unavailable", () =>
+    Effect.gen(function* () {
+      const events: string[] = [];
+      const change = readyChange({
+        publication: {
+          candidateId: "published-candidate",
+          validationRunId: "published-run",
+          target: { owner: "acme", repo: "repo", baseBranch: "main", remoteName: "origin" },
+          headBranch: "change-1",
+          expectedHeadSha: "published-head",
+          pullRequest: { number: 42, url: "https://github.test/acme/repo/pull/42" },
+        },
+      });
+      const submit = openChangeSubmit(
+        dependencies({
+          events,
+          change,
+          observedPullRequest: {
+            number: 42,
+            url: "https://github.test/acme/repo/pull/42",
+            repository: { owner: "acme", repo: "repo" },
+            baseBranch: "main",
+            headBranch: "change-1",
+            headSha: "published-head",
+          },
+        }),
+      );
+      const validationLayer = Layer.succeed(CandidateValidation, {
+        validateCandidate: () => Effect.die("Validation must not start"),
+        validateAcceptanceContextCandidate: () => Effect.die("Validation must not start"),
+        listFindings: () => Effect.succeed([]),
+        listToolingFailures: () => Effect.succeed([]),
+        listRounds: () => Effect.succeed([]),
+      });
+
+      expect(
+        yield* submit.submit({ changeId: change.id, now }).pipe(Effect.provide(validationLayer)),
+      ).toMatchObject({
+        ok: false,
+        code: "owned_pull_request_unavailable",
+        changeId: change.id,
+        reason: "pull_request_facts_unavailable",
+      });
+      expect(events).toEqual(["observe_pull_request"]);
     }),
   );
 
@@ -913,7 +1004,6 @@ describe("Change Submit orchestration", () => {
           dependencies({
             events,
             change,
-            reconciliationStatus: "open",
             trackPolicyResolution: true,
             publication: {
               publish: () => {
@@ -936,7 +1026,7 @@ describe("Change Submit orchestration", () => {
 
         expect(result).toMatchObject({ ok: true, status: "published", created: false });
         expect(events).toEqual([
-          "reconcile",
+          "observe_pull_request",
           "capture",
           "load_base_repo_config",
           "load_candidate_repo_config",
@@ -964,7 +1054,6 @@ describe("Change Submit orchestration", () => {
         dependencies({
           events,
           change,
-          reconciliationStatus: "open",
           publicationEvidence: null,
         }),
       );
@@ -996,7 +1085,7 @@ describe("Change Submit orchestration", () => {
         validationRunId: "new-run",
       });
       expect(events).toEqual([
-        "reconcile",
+        "observe_pull_request",
         "capture",
         "detect_target",
         "read_publication_evidence",
@@ -1040,7 +1129,7 @@ describe("Change Submit orchestration", () => {
         expect(
           yield* submit.submit({ changeId: "change-1", now }).pipe(Effect.provide(validationLayer)),
         ).toEqual(expected);
-        expect(events).toEqual(["reconcile", "capture"]);
+        expect(events).toEqual(["capture"]);
       }),
   );
 
@@ -1074,7 +1163,7 @@ describe("Change Submit orchestration", () => {
       expect(
         yield* submit.submit({ changeId: "change-1", now }).pipe(Effect.provide(validationLayer)),
       ).toEqual({ ok: true, status: "nothing_to_submit", changeId: "change-1" });
-      expect(events).toEqual(["reconcile", "capture"]);
+      expect(events).toEqual(["capture"]);
     }),
   );
 
@@ -1094,7 +1183,6 @@ describe("Change Submit orchestration", () => {
               pullRequest: { number: 42, url: "https://github.test/acme/repo/pull/42" },
             },
           }),
-          reconciliationStatus: "open",
           captureResult: { ...candidate, headSha: "base", trackedTreeMatchesChangeBase: true },
         }),
       );
@@ -1109,7 +1197,7 @@ describe("Change Submit orchestration", () => {
       expect(
         yield* submit.submit({ changeId: "change-1", now }).pipe(Effect.provide(validationLayer)),
       ).toEqual({ ok: true, status: "nothing_to_submit", changeId: "change-1" });
-      expect(events).toEqual(["reconcile", "capture"]);
+      expect(events).toEqual(["observe_pull_request", "capture"]);
     }),
   );
 
@@ -1160,7 +1248,7 @@ describe("Change Submit orchestration", () => {
           changeBaseRef: "refs/remotes/origin/main",
           changeBaseSha: "base",
         });
-        expect(events).toEqual(["reconcile", "refresh_base", "capture"]);
+        expect(events).toEqual(["refresh_base", "capture"]);
       }),
   );
 
@@ -1193,7 +1281,7 @@ describe("Change Submit orchestration", () => {
         code: "publication_remote_unreachable",
         remoteName: "origin",
       });
-      expect(events).toEqual(["reconcile", "refresh_base"]);
+      expect(events).toEqual(["refresh_base"]);
     }),
   );
 
@@ -1224,7 +1312,7 @@ describe("Change Submit orchestration", () => {
       expect(
         yield* submit.submit({ changeId: "change-1", now }).pipe(Effect.provide(validationLayer)),
       ).toMatchObject({ ok: false, code: "publication_remote_changed", remoteName: "origin" });
-      expect(events).toEqual(["reconcile", "refresh_base"]);
+      expect(events).toEqual(["refresh_base"]);
     }),
   );
 
@@ -1252,7 +1340,7 @@ describe("Change Submit orchestration", () => {
         .pipe(Effect.provide(validationLayer));
 
       expect(result).toEqual({ ok: false, code: "github_target_not_found" });
-      expect(events).toEqual(["reconcile", "capture", "detect_target"]);
+      expect(events).toEqual(["capture", "detect_target"]);
     }),
   );
 
@@ -1348,6 +1436,13 @@ type PublicationFixture = {
   readonly publish: (input: PublishCandidateInput) => PublishCandidateResult;
 };
 
+type PullRequestObservation =
+  | "not_owned"
+  | "exact_open"
+  | "exact_closed_unmerged"
+  | "exact_merged"
+  | "mismatch";
+
 const dependencies = (input: {
   readonly change: ChangeRecord;
   readonly events?: string[];
@@ -1368,17 +1463,9 @@ const dependencies = (input: {
   readonly findings?: readonly (typeof finding)[];
   readonly toolingFailures?: readonly (typeof toolingFailure)[];
   readonly publication?: PublicationFixture;
-  readonly reconciliationStatus?:
-    | "not_owned"
-    | "open"
-    | "rejected"
-    | "completed"
-    | "closed_unmerged";
-  readonly reconciliationStatuses?: readonly [
-    "not_owned" | "open" | "rejected" | "completed" | "closed_unmerged",
-    ...("not_owned" | "open" | "rejected" | "completed" | "closed_unmerged")[],
-  ];
-  readonly reconciliationRejection?: string;
+  readonly pullRequestObservation?: PullRequestObservation;
+  readonly pullRequestObservations?: readonly [PullRequestObservation, ...PullRequestObservation[]];
+  readonly observedPullRequest?: GitHubPullRequest;
   readonly captureResult?: CaptureLocalCandidateResult;
   readonly captureResults?: readonly CaptureLocalCandidateResult[];
   readonly refreshResult?: RemoteChangeBaseResult;
@@ -1408,7 +1495,7 @@ const dependencies = (input: {
   const events = input.events ?? [];
   const captureResults = [...(input.captureResults ?? [])];
   const refreshResults = [...(input.refreshResults ?? [])];
-  const reconciliationStatuses = [...(input.reconciliationStatuses ?? [])];
+  const pullRequestObservations = [...(input.pullRequestObservations ?? [])];
   let currentTargetSha: string = refreshedBase.commit;
   return {
     repositoryCommonDirectory: "/repo/.git",
@@ -1429,30 +1516,13 @@ const dependencies = (input: {
             }
           );
         }),
-    } as unknown as ChangePersistence,
-    reconciliation: {
-      reconcile: () =>
+      completeMergedChange: () =>
         Effect.sync(() => {
-          events.push("reconcile");
-          const status =
-            reconciliationStatuses.shift() ?? input.reconciliationStatus ?? "not_owned";
-          return {
-            rejected: status === "rejected",
-            changes: [
-              {
-                changeId: input.change.id,
-                status,
-                ...(status === "open" && input.change.publication?.pullRequest
-                  ? { pullRequest: input.change.publication.pullRequest }
-                  : {}),
-                ...(status === "rejected"
-                  ? { rejection: input.reconciliationRejection ?? "remote_mismatch" }
-                  : {}),
-              },
-            ],
-          };
+          events.push("complete_merged_change");
+          return { ok: true as const, changed: true, change: input.change };
         }),
-    } satisfies ChangeReconciliation,
+    } as unknown as ChangePersistence,
+    github: pullRequestGateway(input, events, pullRequestObservations),
     loadRepoConfig: () => {
       if (input.trackPolicyResolution) events.push("load_candidate_repo_config");
       const error = input.candidateRepoConfigError ?? input.agentEnvironmentError;
@@ -1584,6 +1654,67 @@ const dependencies = (input: {
     ...(input.executionLock === undefined ? {} : { executionLock: input.executionLock }),
   };
 };
+
+const pullRequestGateway = (
+  input: {
+    readonly change: ChangeRecord;
+    readonly pullRequestObservation?: PullRequestObservation;
+    readonly observedPullRequest?: GitHubPullRequest;
+  },
+  events: string[],
+  observations: PullRequestObservation[],
+): GitHubPullRequestGateway => ({
+  getPullRequest: () => {
+    events.push("observe_pull_request");
+    if (input.observedPullRequest !== undefined) return input.observedPullRequest;
+    const publication = input.change.publication;
+    if (publication === null || publication === undefined || publication.pullRequest === null) {
+      return undefined;
+    }
+    const observation = observations.shift() ?? input.pullRequestObservation ?? "exact_open";
+    const base = {
+      number: publication.pullRequest.number,
+      url: publication.pullRequest.url,
+      repository: { owner: publication.target.owner, repo: publication.target.repo },
+      baseBranch: publication.target.baseBranch,
+      headBranch: publication.headBranch,
+    };
+    if (observation === "not_owned") return undefined;
+    if (observation === "exact_open") {
+      return {
+        ...base,
+        state: "open" as const,
+        merged: false,
+        headSha: publication.expectedHeadSha,
+      };
+    }
+    if (observation === "exact_closed_unmerged") {
+      return {
+        ...base,
+        state: "closed" as const,
+        merged: false,
+        headSha: publication.expectedHeadSha,
+      };
+    }
+    if (observation === "exact_merged") {
+      return {
+        ...base,
+        state: "closed" as const,
+        merged: true,
+        headSha: publication.expectedHeadSha,
+      };
+    }
+    return {
+      ...base,
+      state: "open" as const,
+      merged: false,
+      headSha: "unexpected-remote-head",
+    };
+  },
+  findPullRequests: () => [],
+  createPullRequest: () => ({ ok: false, code: "remote_rejected" }),
+  updatePullRequest: () => ({ ok: false, code: "remote_rejected" }),
+});
 
 const readyChange = (overrides: Partial<ChangeRecord> = {}): ChangeRecord => ({
   id: "change-1",

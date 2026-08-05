@@ -76,9 +76,6 @@ A tooling-failed current Validation Run includes `by validation-run show <valida
 `by change validation-runs` reports every Validation Run identity, Candidate identity, state, outcome, and timestamp.
 It also reports total, outcome, and running counts.
 
-`by change publications` reports the complete ordered immutable Candidate Publication history.
-It returns an explicit zero-count result when no Candidate Publication exists.
-
 ## Submit Recovery Guidance
 
 Change Submit places Submit Recovery Guidance under `error.recovery` for `dirty_work`, `validation_findings`, and `change_base_not_ancestor`.
@@ -128,7 +125,6 @@ Its `count` is the number of returned Tasks and its `total` is the number matchi
 - `by change blocker list` owns complete Implementation Blocker and Implementation Blocker Resolution history.
 - `by change findings` owns complete Findings for the current Candidate.
 - `by change validation-runs` owns compact complete Validation Run History.
-- `by change publications` owns complete Candidate Publication history.
 - `by validation-run show` owns one Validation Run's policy and recorded evidence.
 - `by validation-run artifact` owns complete stored Artifact content.
 

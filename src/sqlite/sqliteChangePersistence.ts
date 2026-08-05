@@ -102,10 +102,6 @@ export const openSqliteChangePersistence = (): Effect.Effect<
       repository.transaction("read passing Change publication evidence", (sql) =>
         getPassingPublicationEvidence(sql, changeId, authority),
       ),
-    listCandidatePublications: (changeId) =>
-      repository.transaction("list Candidate Publications", (sql) =>
-        listCandidatePublications(sql, changeId),
-      ),
     listChanges: (input) =>
       repository.transaction("list Changes", (sql) => listChanges(sql, input)),
     listChangesForReconciliation: (commonDirectory) =>
@@ -420,50 +416,6 @@ const getPassingPublicationEvidence = (
     } satisfies ChangePublicationEvidence;
   });
 
-const listCandidatePublications = (sql: SqlClient.SqlClient, changeId: string) =>
-  Effect.map(
-    sql<{
-      readonly sequence: number | bigint;
-      readonly candidateId: string;
-      readonly validationRunId: string;
-      readonly changeBaseSha: string;
-      readonly headSha: string;
-      readonly owner: string;
-      readonly repo: string;
-      readonly baseBranch: string;
-      readonly remoteName: string;
-      readonly headBranch: string;
-      readonly pullRequestNumber: number;
-      readonly pullRequestUrl: string;
-      readonly publishedAt: string;
-    }>`
-      SELECT sequence, candidate_id AS candidateId, validation_run_id AS validationRunId,
-        change_base_sha AS changeBaseSha, head_sha AS headSha,
-        publication_owner AS owner, publication_repo AS repo,
-        publication_base_branch AS baseBranch, publication_remote_name AS remoteName,
-        publication_head_branch AS headBranch, pull_request_number AS pullRequestNumber,
-        pull_request_url AS pullRequestUrl, published_at AS publishedAt
-      FROM candidate_publications WHERE change_id = ${changeId} ORDER BY sequence ASC
-    `,
-    (rows) =>
-      rows.map((row) => ({
-        sequence: Number(row.sequence),
-        candidateId: row.candidateId,
-        validationRunId: row.validationRunId,
-        changeBaseSha: row.changeBaseSha,
-        headSha: row.headSha,
-        target: {
-          owner: row.owner,
-          repo: row.repo,
-          baseBranch: row.baseBranch,
-          remoteName: row.remoteName,
-        },
-        headBranch: row.headBranch,
-        pullRequest: { number: row.pullRequestNumber, url: row.pullRequestUrl },
-        publishedAt: row.publishedAt,
-      })),
-  );
-
 const listChanges = (sql: SqlClient.SqlClient, input: ListChangesInput) =>
   Effect.flatMap(
     sql.unsafe<ChangeRow>(
@@ -557,17 +509,6 @@ const recordPublishedPullRequest = (
       return { ok: false as const, code: "publication_state_conflict" as const };
     }
     yield* sql`UPDATE changes SET publication_candidate_id = ${input.candidateId}, publication_validation_run_id = ${input.validationRunId}, publication_expected_head_sha = ${input.expectedHeadSha}, publication_pr_number = ${input.pullRequest.number}, publication_pr_url = ${input.pullRequest.url}, updated_at = ${input.now} WHERE id = ${input.changeId}`;
-    yield* sql`
-      INSERT INTO candidate_publications
-        (change_id, candidate_id, validation_run_id, change_base_sha, head_sha,
-         publication_owner, publication_repo, publication_base_branch, publication_remote_name,
-         publication_head_branch, pull_request_number, pull_request_url, published_at)
-      VALUES (${input.changeId}, ${input.candidateId}, ${input.validationRunId}, ${input.changeBaseSha},
-        ${input.expectedHeadSha}, ${input.target.owner}, ${input.target.repo}, ${input.target.baseBranch},
-        ${input.target.remoteName}, ${input.headBranch}, ${input.pullRequest.number},
-        ${input.pullRequest.url}, ${input.now})
-      ON CONFLICT(change_id, candidate_id, validation_run_id, head_sha) DO NOTHING
-    `;
     return {
       ok: true as const,
       change: yield* requireChange(sql, input.changeId, "record Change publication"),

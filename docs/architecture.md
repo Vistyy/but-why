@@ -52,7 +52,7 @@ Recovery preserves every commit on the recorded branch and never resets, rebases
 A branch attached elsewhere, a missing recorded branch, or a managed path containing conflicting files stops with actionable identity and location facts, and conflicting files are never overwritten or removed.
 The operator may recover the branch externally or cancel the Change or its linked Task.
 
-`by change submit <change-id>` reconciles an existing owned pull request before starting a new Submission.
+`by change submit <change-id>` observes the current owned pull request before starting a new Submission.
 A new Submission selects the Change from Shared Repository State, reads the Repo Config from the exact fetched Change Base as the non-review policy baseline, and captures a Candidate.
 The caller checkout supplies only Local Repository identity, Shared Repository State, and Change selection.
 The caller checkout's Repo Config is not a Change Submit policy source.
@@ -77,10 +77,11 @@ Fresh passing evidence for the same Candidate already on the owned pull request 
 Change Submit performs no duplicate admission precheck and performs no transient Task state transitions.
 
 `by change reconcile [<change-id>]` observes owned pull requests.
-A merged owned pull request closes the Change and completes its linked Task only when its merged head matches the latest Candidate Publication.
+A merged owned pull request closes the Change and completes its linked Task only when its merged head matches the current publication facts.
 A merged-head mismatch rejects reconciliation and preserves the Open Change.
 Cleanup deletes a Remote Change Branch only when it still identifies the exact published Candidate head.
-Candidate Publication history is append-only and is exposed by `by change publications <change-id>`.
+Submit, publication, and reconciliation share one pure owned-pull-request identity classifier.
+Submit passes an exact merged owned pull request to terminal completion and does not run full reconciliation or cleanup.
 
 ## Storage
 

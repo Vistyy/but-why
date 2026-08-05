@@ -90,7 +90,6 @@ Automatic continuation waits while the exact current Candidate remains published
 Explicit `/continue-change` can resume revision work under the operator's direct instruction.
 After a review correction, record new Implementation Decisions, commit the revised Candidate, and run Change Submit again.
 Change Submit must pass before the same owned open pull request is updated.
-Use `by change publications <change-id>` to inspect the complete immutable publication history.
 
 ## 3. Submit the Candidate
 

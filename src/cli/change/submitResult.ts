@@ -40,7 +40,7 @@ export const submitResult = (result: ChangeSubmitResult, changeId: string): CliR
         ],
       });
     }
-    if (result.status === "reconciled")
+    if (result.status === "completed")
       return success({ status: result.status, change: result.change });
     return success({
       changeId: result.changeId,
@@ -224,6 +224,14 @@ export const submitResult = (result: ChangeSubmitResult, changeId: string): CliR
         ...(result.evidence === undefined ? {} : { evidence: result.evidence }),
       },
       help: ["Inspect the pending publication and retry Submit."],
+    });
+  }
+  if (result.code === "owned_pull_request_unavailable") {
+    return runtimeError({
+      code: result.code,
+      message: "The owned pull request facts are temporarily unavailable.",
+      details: { changeId: result.changeId, reason: result.reason },
+      help: ["Restore GitHub access and the owned pull request, then retry Submit."],
     });
   }
   if (result.code === "validation_policy_invalid") {

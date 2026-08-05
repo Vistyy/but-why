@@ -33,6 +33,19 @@ const migrationCount = Effect.gen(function* () {
   return rows[0]?.count ?? -1;
 });
 
+const repositoryTables = Effect.gen(function* () {
+  const repositorySql = yield* RepositorySql;
+  const rows = yield* repositorySql.operation(
+    "read repository table names",
+    (sql) => sql<{ readonly name: string }>`
+      SELECT name FROM sqlite_master
+      WHERE type = 'table' AND name NOT LIKE 'sqlite_%'
+      ORDER BY name
+    `,
+  );
+  return rows.map((row) => row.name);
+});
+
 describe("repository SQL storage", () => {
   it.scoped("persists Tasks through the Effect-native Task interface", () =>
     withTemporaryState(() =>
@@ -1005,26 +1018,44 @@ describe("repository SQL storage", () => {
     ),
   );
 
-  it.scoped("upgrades existing publication facts before appending history", () =>
-    withTemporaryState((input) =>
-      Effect.gen(function* () {
-        const repository = yield* RepositorySql;
-        const capture = yield* openSqliteCandidateCapturePersistence();
-        const captured = yield* capture.commitCapture({
-          repositoryCommonDirectory: input.commonDirectory,
-          branchRef: "refs/heads/legacy",
-          baseRef: "refs/remotes/origin/main",
-          changeBaseSha: "base-legacy",
-          headSha: "head-legacy",
-          now: "2026-07-25T15:30:00.000Z",
-        });
-        if (!captured.ok) return;
-        yield* repository.operation("install legacy publication facts", (sql) =>
-          Effect.gen(function* () {
-            yield* sql`UPDATE changes SET publication_candidate_id = ${captured.candidateId}, publication_validation_run_id = 'legacy-run', publication_owner = 'acme', publication_repo = 'repo', publication_base_branch = 'main', publication_remote_name = 'origin', publication_head_branch = 'legacy', publication_expected_head_sha = 'head-legacy', publication_pr_number = 7, publication_pr_url = 'https://github.test/pull/7' WHERE id = ${captured.changeId}`;
-            yield* sql`DROP TABLE candidate_publications`;
-            yield* sql.unsafe(`DROP TABLE implementation_decisions`);
-            yield* sql.unsafe(`CREATE TABLE implementation_decisions (
+  it.scoped(
+    "drops Candidate Publication chronology while preserving current publication facts",
+    () =>
+      withTemporaryState((input) =>
+        Effect.gen(function* () {
+          const repository = yield* RepositorySql;
+          const capture = yield* openSqliteCandidateCapturePersistence();
+          const captured = yield* capture.commitCapture({
+            repositoryCommonDirectory: input.commonDirectory,
+            branchRef: "refs/heads/legacy",
+            baseRef: "refs/remotes/origin/main",
+            changeBaseSha: "base-legacy",
+            headSha: "head-legacy",
+            now: "2026-07-25T15:30:00.000Z",
+          });
+          if (!captured.ok) return;
+          yield* repository.operation("install legacy publication facts", (sql) =>
+            Effect.gen(function* () {
+              yield* sql`UPDATE changes SET publication_candidate_id = ${captured.candidateId}, publication_validation_run_id = 'legacy-run', publication_owner = 'acme', publication_repo = 'repo', publication_base_branch = 'main', publication_remote_name = 'origin', publication_head_branch = 'legacy', publication_expected_head_sha = 'head-legacy', publication_pr_number = 7, publication_pr_url = 'https://github.test/pull/7' WHERE id = ${captured.changeId}`;
+              yield* sql.unsafe(`CREATE TABLE candidate_publications (
+              sequence INTEGER PRIMARY KEY AUTOINCREMENT,
+              change_id TEXT NOT NULL,
+              candidate_id TEXT NOT NULL,
+              validation_run_id TEXT NOT NULL,
+              change_base_sha TEXT NOT NULL,
+              head_sha TEXT NOT NULL,
+              publication_owner TEXT NOT NULL,
+              publication_repo TEXT NOT NULL,
+              publication_base_branch TEXT NOT NULL,
+              publication_remote_name TEXT NOT NULL,
+              publication_head_branch TEXT NOT NULL,
+              pull_request_number INTEGER NOT NULL,
+              pull_request_url TEXT NOT NULL,
+              published_at TEXT NOT NULL
+            )`);
+              yield* sql`INSERT INTO candidate_publications (change_id, candidate_id, validation_run_id, change_base_sha, head_sha, publication_owner, publication_repo, publication_base_branch, publication_remote_name, publication_head_branch, pull_request_number, pull_request_url, published_at) VALUES (${captured.changeId}, ${captured.candidateId}, 'legacy-run', 'base-legacy', 'head-legacy', 'acme', 'repo', 'main', 'origin', 'legacy', 7, 'https://github.test/pull/7', '2026-07-25T15:30:00.000Z')`;
+              yield* sql.unsafe(`DROP TABLE implementation_decisions`);
+              yield* sql.unsafe(`CREATE TABLE implementation_decisions (
               sequence INTEGER PRIMARY KEY AUTOINCREMENT,
               id TEXT NOT NULL UNIQUE,
               change_id TEXT NOT NULL,
@@ -1034,39 +1065,47 @@ describe("repository SQL storage", () => {
               rationale TEXT,
               FOREIGN KEY (change_id) REFERENCES changes(id)
             )`);
-            yield* sql.unsafe(
-              "CREATE INDEX implementation_decisions_change_sequence_idx ON implementation_decisions (change_id, sequence)",
-            );
-            yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id IN (11, 12, 13, 14, 15, 16, 17, 18)`;
-            yield* sql`INSERT INTO implementation_decisions (id, change_id, recorded_at, content) VALUES ('legacy-decision', ${captured.changeId}, '2026-07-25T15:30:00.000Z', 'Legacy unstructured decision')`;
-          }),
-        );
-        yield* Effect.scoped(
-          Effect.gen(function* () {
-            const upgraded = yield* openSqliteChangePersistence();
-            expect(yield* upgraded.listImplementationDecisions(captured.changeId)).toEqual([]);
-            expect(yield* upgraded.listCandidatePublications(captured.changeId)).toMatchObject([
-              {
+              yield* sql.unsafe(
+                "CREATE INDEX implementation_decisions_change_sequence_idx ON implementation_decisions (change_id, sequence)",
+              );
+              yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id IN (11, 12, 13, 14, 15, 16, 17, 18, 19)`;
+              yield* sql`INSERT INTO implementation_decisions (id, change_id, recorded_at, content) VALUES ('legacy-decision', ${captured.changeId}, '2026-07-25T15:30:00.000Z', 'Legacy unstructured decision')`;
+            }),
+          );
+          yield* Effect.scoped(
+            Effect.gen(function* () {
+              const upgraded = yield* openSqliteChangePersistence();
+              expect(yield* upgraded.listImplementationDecisions(captured.changeId)).toEqual([]);
+              const current = yield* upgraded.getChangeById(captured.changeId);
+              expect(current?.publication).toMatchObject({
                 candidateId: captured.candidateId,
-                headSha: "head-legacy",
+                validationRunId: "legacy-run",
+                expectedHeadSha: "head-legacy",
                 pullRequest: { number: 7 },
-              },
-            ]);
-            const nextCapture = yield* openSqliteCandidateCapturePersistence();
-            const next = yield* nextCapture.commitCapture({
-              repositoryCommonDirectory: input.commonDirectory,
-              branchRef: "refs/heads/legacy",
-              baseRef: "refs/remotes/origin/main",
-              expectedChangeId: captured.changeId,
-              changeBaseSha: "base-next",
-              headSha: "head-next",
-              now: "2026-07-25T15:31:00.000Z",
-            });
-            expect(next.ok).toBe(true);
-            if (!next.ok) throw new Error(next.code);
-            yield* repository.operation(
-              "prepare revised publication after upgrade",
-              (sql) => sql`
+              });
+              const tables = yield* repository.operation(
+                "read migrated table names",
+                (sql) => sql<{ readonly name: string }>`
+                SELECT name FROM sqlite_master
+                WHERE type = 'table' AND name = 'candidate_publications'
+              `,
+              );
+              expect(tables).toEqual([]);
+              const nextCapture = yield* openSqliteCandidateCapturePersistence();
+              const next = yield* nextCapture.commitCapture({
+                repositoryCommonDirectory: input.commonDirectory,
+                branchRef: "refs/heads/legacy",
+                baseRef: "refs/remotes/origin/main",
+                expectedChangeId: captured.changeId,
+                changeBaseSha: "base-next",
+                headSha: "head-next",
+                now: "2026-07-25T15:31:00.000Z",
+              });
+              expect(next.ok).toBe(true);
+              if (!next.ok) throw new Error(next.code);
+              yield* repository.operation(
+                "prepare revised publication after upgrade",
+                (sql) => sql`
                 UPDATE changes
                 SET publication_candidate_id = ${next.candidateId},
                     publication_validation_run_id = 'next-run',
@@ -1076,42 +1115,45 @@ describe("repository SQL storage", () => {
                     publication_pr_number = NULL, publication_pr_url = NULL
                 WHERE id = ${captured.changeId}
               `,
-            );
-            const nextPublication = {
-              changeId: captured.changeId,
-              candidateId: next.candidateId,
-              validationRunId: "next-run",
-              target: { owner: "acme", repo: "repo", baseBranch: "main", remoteName: "origin" },
-              headBranch: "legacy",
-              expectedHeadSha: "head-next",
-              changeBaseSha: "base-next",
-              now: "2026-07-25T15:32:00.000Z",
-            };
-            expect(yield* upgraded.beginPublication(nextPublication)).toMatchObject({ ok: true });
-            expect(
-              yield* upgraded.recordPublishedPullRequest({
-                ...nextPublication,
-                pullRequest: { number: 7, url: "https://github.test/pull/7" },
-              }),
-            ).toMatchObject({ ok: true });
-            expect(yield* upgraded.listCandidatePublications(captured.changeId)).toMatchObject([
-              { headSha: "head-legacy" },
-              { headSha: "head-next", changeBaseSha: "base-next" },
-            ]);
-          }).pipe(
-            Effect.provide(
-              repositorySqlLayer({
-                commonDirectory: input.commonDirectory,
-                statePath: input.statePath,
-              }),
+              );
+              const nextPublication = {
+                changeId: captured.changeId,
+                candidateId: next.candidateId,
+                validationRunId: "next-run",
+                target: { owner: "acme", repo: "repo", baseBranch: "main", remoteName: "origin" },
+                headBranch: "legacy",
+                expectedHeadSha: "head-next",
+                changeBaseSha: "base-next",
+                now: "2026-07-25T15:32:00.000Z",
+              };
+              expect(yield* upgraded.beginPublication(nextPublication)).toMatchObject({ ok: true });
+              expect(
+                yield* upgraded.recordPublishedPullRequest({
+                  ...nextPublication,
+                  pullRequest: { number: 7, url: "https://github.test/pull/7" },
+                }),
+              ).toMatchObject({ ok: true });
+              const revised = yield* upgraded.getChangeById(captured.changeId);
+              expect(revised?.publication).toMatchObject({
+                candidateId: next.candidateId,
+                validationRunId: "next-run",
+                expectedHeadSha: "head-next",
+                pullRequest: { number: 7 },
+              });
+            }).pipe(
+              Effect.provide(
+                repositorySqlLayer({
+                  commonDirectory: input.commonDirectory,
+                  statePath: input.statePath,
+                }),
+              ),
             ),
-          ),
-        );
-      }),
-    ),
+          );
+        }),
+      ),
   );
 
-  it.scoped("appends immutable Candidate Publication history for repeated heads", () =>
+  it.scoped("records the current publication facts without chronology", () =>
     withTemporaryState((input) =>
       Effect.gen(function* () {
         const capture = yield* openSqliteCandidateCapturePersistence();
@@ -1168,10 +1210,15 @@ describe("repository SQL storage", () => {
             now: "2026-07-25T16:03:00.000Z",
           }),
         ).toMatchObject({ ok: true });
-        expect(yield* changes.listCandidatePublications(first.changeId)).toMatchObject([
-          { candidateId: first.candidateId, headSha: "head-1", pullRequest: { number: 42 } },
-          { candidateId: second.candidateId, headSha: "head-2", pullRequest: { number: 42 } },
-        ]);
+        const revised = yield* changes.getChangeById(first.changeId);
+        expect(revised?.publication).toMatchObject({
+          candidateId: second.candidateId,
+          validationRunId: "run-2",
+          expectedHeadSha: "head-2",
+          pullRequest: { number: 42 },
+        });
+        const tables = yield* repositoryTables;
+        expect(tables).not.toContain("candidate_publications");
       }),
     ),
   );
@@ -1284,6 +1331,7 @@ describe("repository SQL storage", () => {
           { migration_id: 16, name: "remove_implementation_decision_content" },
           { migration_id: 17, name: "validation_run_blocker_identity" },
           { migration_id: 18, name: "remove_finding_severity" },
+          { migration_id: 19, name: "remove_candidate_publications" },
         ]);
         expect(identities).toEqual([{ common_directory: repositorySql.commonDirectory }]);
         expect(candidateColumns.map(({ name }) => name)).toEqual([
@@ -1359,7 +1407,7 @@ describe("repository SQL storage", () => {
                       '2026-07-25T16:30:00.000Z', '2026-07-25T16:30:00.000Z'
                     )
                   `;
-                  yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id IN (13, 14, 15, 16, 17, 18)`;
+                  yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id IN (13, 14, 15, 16, 17, 18, 19)`;
                 }),
               );
             }).pipe(Effect.provide(repositorySqlLayer({ commonDirectory: directory, statePath }))),
@@ -1450,7 +1498,7 @@ describe("repository SQL storage", () => {
                       '2026-07-25T16:30:00.000Z', '2026-07-25T16:30:00.000Z'
                     )
                   `;
-                  yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id = 18`;
+                  yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id IN (18, 19)`;
                 }),
               );
             }).pipe(Effect.provide(repositorySqlLayer({ commonDirectory: directory, statePath }))),
@@ -1521,7 +1569,7 @@ describe("repository SQL storage", () => {
                       'candidate-unsupported', 'run-unsupported'
                     )
                   `;
-                  yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id IN (13, 14, 15, 16, 17, 18)`;
+                  yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id IN (13, 14, 15, 16, 17, 18, 19)`;
                 }),
               );
             }).pipe(Effect.provide(repositorySqlLayer({ commonDirectory: directory, statePath }))),
@@ -1579,7 +1627,7 @@ describe("repository SQL storage", () => {
                       'with-failure', 'head-sha', 42, 'https://github.com/acme/repo/pull/42'
                     )
                   `;
-                  yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id IN (14, 15, 16, 17, 18)`;
+                  yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id IN (14, 15, 16, 17, 18, 19)`;
                 }),
               );
             }).pipe(Effect.provide(repositorySqlLayer({ commonDirectory: directory, statePath }))),
@@ -1677,7 +1725,7 @@ describe("repository SQL storage", () => {
                         'complete', 'passed', '2026-07-25T18:02:00.000Z', '2026-07-25T18:02:00.000Z'
                       )
                     `;
-                    yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id IN (15, 16, 17, 18)`;
+                    yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id IN (15, 16, 17, 18, 19)`;
                   }),
                 );
               }).pipe(
@@ -1782,7 +1830,7 @@ describe("repository SQL storage", () => {
                       'Legacy unstructured decision'
                     )
                   `;
-                  yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id IN (16, 17, 18)`;
+                  yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id IN (16, 17, 18, 19)`;
                 }),
               );
             }).pipe(Effect.provide(repositorySqlLayer({ commonDirectory: directory, statePath }))),
@@ -1866,7 +1914,7 @@ describe("repository SQL storage", () => {
                       'Legacy text', 'Partial choice', NULL
                     )
                   `;
-                  yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id IN (16, 17, 18)`;
+                  yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id IN (16, 17, 18, 19)`;
                 }),
               );
             }).pipe(Effect.provide(repositorySqlLayer({ commonDirectory: directory, statePath }))),
@@ -2149,8 +2197,8 @@ describe("repository SQL storage", () => {
         );
 
         return Effect.gen(function* () {
-          expect(yield* readMigrationCount).toBe(18);
-          expect(yield* readMigrationCount).toBe(18);
+          expect(yield* readMigrationCount).toBe(19);
+          expect(yield* readMigrationCount).toBe(19);
         });
       },
       (directory) => Effect.sync(() => rmSync(directory, { recursive: true, force: true })),
