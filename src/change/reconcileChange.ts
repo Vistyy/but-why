@@ -1,15 +1,11 @@
 import { Effect } from "effect";
 
 import type { RepositoryStorageError } from "../contracts/repositoryStorageError.js";
-import type {
-  ChangeCleanup,
-  ChangeOwnedPullRequest,
-  ChangeRecord,
-  RemoteChangeBranch,
-} from "./change.js";
+import type { ChangeCleanup, ChangeOwnedPullRequest, ChangeRecord } from "./change.js";
 import type { ChangePersistence } from "./changePersistence.js";
-import type { GitHubPullRequestGateway } from "./ownedPullRequestGateway.js";
+import type { TerminalCleanupOperation } from "./cleanupTerminalChange.js";
 import { observeOwnedPullRequest } from "./ownedPullRequestClassifier.js";
+import type { GitHubPullRequestGateway } from "./ownedPullRequestGateway.js";
 
 export type ReconciledChange = {
   readonly changeId: string;
@@ -27,10 +23,6 @@ export type ReconciledChange = {
   readonly rejection?: string;
 };
 
-export type ChangeCleanupOperationResult =
-  | { readonly state: "complete" }
-  | { readonly state: "pending"; readonly blockingReason: string };
-
 export type ChangeReconciliationResult = {
   readonly changes: readonly ReconciledChange[];
   readonly rejected: boolean;
@@ -47,14 +39,7 @@ export type ChangeReconciliation = {
 export const openChangeReconciliation = (input: {
   readonly persistence: ChangePersistence;
   readonly github: GitHubPullRequestGateway;
-  readonly cleanup: (input: {
-    readonly repositoryCommonDirectory: string;
-    readonly worktreePath: string | null;
-    readonly branchRef: string;
-    readonly remoteChangeBranch?: RemoteChangeBranch;
-    readonly reviewerSessionPath?: string;
-  }) => ChangeCleanupOperationResult;
-  readonly reviewerSessionPathFor?: (changeId: string) => string;
+  readonly cleanupTerminal: TerminalCleanupOperation;
 }): ChangeReconciliation => ({
   reconcile: (reconciliationInput) => reconcile(input, reconciliationInput),
 });
@@ -133,56 +118,17 @@ const reconcileCleanup = (
     if (change.cleanup.state === "complete") {
       return { changeId: change.id, status: "cleanup_complete", cleanup: change.cleanup };
     }
-    const remoteChangeBranch = remoteChangeBranchFor(change);
-    const result = dependencies.cleanup({
-      repositoryCommonDirectory: change.repositoryCommonDirectory,
-      worktreePath: change.worktreePath,
-      branchRef: change.branchRef,
-      ...(remoteChangeBranch === undefined ? {} : { remoteChangeBranch }),
-      ...(dependencies.reviewerSessionPathFor === undefined
-        ? {}
-        : { reviewerSessionPath: dependencies.reviewerSessionPathFor(change.id) }),
-    });
-    const cleanup = cleanupRecord(result);
-    const recorded = yield* dependencies.persistence.recordCleanup({
-      changeId: change.id,
-      cleanup,
-      now,
-    });
-    if (!recorded.ok) return rejected(change.id, recorded.code);
-    if (cleanup.state === "complete")
-      yield* dependencies.persistence.removeReviewerSessions(change.id);
+    const result = yield* dependencies.cleanupTerminal(change, now);
+    if (!result.ok) return rejected(change.id, result.code);
     return {
       changeId: change.id,
-      status: cleanupStatus(cleanup),
-      cleanup: recorded.change.cleanup,
+      status: cleanupStatus(result.cleanup),
+      cleanup: result.cleanup,
     };
   });
 
-const cleanupRecord = (result: ChangeCleanupOperationResult): ChangeCleanup =>
-  result.state === "complete"
-    ? { state: "complete", blockingReason: null }
-    : { state: "pending", blockingReason: result.blockingReason };
-
 const cleanupStatus = (cleanup: ChangeCleanup): "cleanup_complete" | "cleanup_pending" =>
   cleanup.state === "complete" ? "cleanup_complete" : "cleanup_pending";
-
-const remoteChangeBranchFor = (change: ChangeRecord) => {
-  const publication = change.publication;
-  return change.closeReason === "completed" &&
-    publication !== null &&
-    publication.pullRequest !== null
-    ? {
-        owner: publication.target.owner,
-        repo: publication.target.repo,
-        remoteName: publication.target.remoteName,
-        remoteUrl: change.baseRemoteUrl ?? "",
-        branchName: publication.headBranch,
-        targetBranch: publication.target.baseBranch,
-        expectedHeadSha: publication.expectedHeadSha,
-      }
-    : undefined;
-};
 
 const rejected = (changeId: string, rejection: string): ReconciledChange => ({
   changeId,

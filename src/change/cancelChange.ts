@@ -4,13 +4,14 @@ import type { RepositoryStorageError } from "../contracts/repositoryStorageError
 import type { TaskRecord } from "../task/task.js";
 import type { PublicTaskId } from "../task/taskId.js";
 import type { RepoTaskIdResolution } from "../task/repoTaskIds.js";
-import type { ChangeCleanup, ChangeRecord, RemoteChangeBranch } from "./change.js";
+import type { ChangeCleanup, ChangeRecord } from "./change.js";
 import type { ChangePersistence } from "./changePersistence.js";
-import type { ChangeCleanupOperationResult } from "./reconcileChange.js";
 import type { TaskPersistence } from "../task/taskPersistence.js";
-import type { GitHubPullRequest, GitHubPullRequestGateway } from "./ownedPullRequestGateway.js";
+import type { GitHubPullRequestGateway } from "./ownedPullRequestGateway.js";
+import { observeOwnedPullRequest } from "./ownedPullRequestClassifier.js";
 import type { ExecutionLock } from "../contracts/executionLock.js";
 import type { ChangeValidationPersistence } from "./validation/changeValidationPersistence.js";
+import type { TerminalCleanupOperation } from "./cleanupTerminalChange.js";
 
 export type CancellationUseCases = {
   readonly resolveTaskId: (taskId: PublicTaskId) => RepoTaskIdResolution;
@@ -30,24 +31,12 @@ export type CancellationDependencies = {
   readonly tasks: Pick<TaskPersistence, "getTaskById" | "cancelTask">;
   readonly changes: Pick<
     ChangePersistence,
-    | "getChangeById"
-    | "getChangeByTaskId"
-    | "completeMergedChange"
-    | "cancelChange"
-    | "recordCleanup"
-  > &
-    Partial<Pick<ChangePersistence, "removeReviewerSessions">>;
+    "getChangeById" | "getChangeByTaskId" | "completeMergedChange" | "cancelChange"
+  >;
   readonly github: Pick<GitHubPullRequestGateway, "getPullRequest" | "closePullRequest">;
-  readonly reviewerSessionPathFor?: (changeId: string) => string;
   readonly validation?: Pick<ChangeValidationPersistence, "getActiveForChange">;
   readonly executionLock?: ExecutionLock;
-  readonly cleanup: (input: {
-    readonly repositoryCommonDirectory: string;
-    readonly worktreePath: string | null;
-    readonly branchRef: string;
-    readonly remoteChangeBranch?: RemoteChangeBranch;
-    readonly reviewerSessionPath?: string;
-  }) => ChangeCleanupOperationResult;
+  readonly cleanupTerminal: TerminalCleanupOperation;
 };
 
 export type TaskCancellationResult =
@@ -176,13 +165,24 @@ const cancelTask = (
       return { ok: false, code: "task_already_done", taskId: input.taskId };
     if (task.state === "cancelled") {
       const existingChange = yield* dependencies.changes.getChangeByTaskId(input.taskId);
+      if (existingChange === undefined) {
+        return {
+          ok: true,
+          status: "cancelled",
+          changed: false,
+          task,
+          change: null,
+          cleanup: null,
+        };
+      }
+      const withCleanup = yield* cleanupTerminalChange(dependencies, existingChange, input.now);
       return {
         ok: true,
-        status: "cancelled",
+        status: "cancelled" as const,
         changed: false,
         task,
-        change: existingChange ?? null,
-        cleanup: existingChange?.cleanup ?? null,
+        change: withCleanup.change,
+        cleanup: withCleanup.cleanup,
       };
     }
 
@@ -215,29 +215,37 @@ const cancelTask = (
         return { ok: false, code: "change_already_completed", taskId: input.taskId };
       }
       const cancelled = yield* dependencies.tasks.cancelTask(input);
-      return cancelled.ok
-        ? {
-            ok: true,
-            status: "cancelled" as const,
-            changed: cancelled.changed,
-            task: cancelled.task,
-            change,
-            cleanup: change.cleanup,
-          }
-        : { ok: false, code: cancelled.code, taskId: input.taskId };
+      if (!cancelled.ok) return { ok: false, code: cancelled.code, taskId: input.taskId };
+      const withCleanup = yield* cleanupTerminalChange(dependencies, change, input.now);
+      return {
+        ok: true,
+        status: "cancelled" as const,
+        changed: cancelled.changed,
+        task: cancelled.task,
+        change: withCleanup.change,
+        cleanup: withCleanup.cleanup,
+      };
     }
 
-    const remote = observeOwnedPullRequest(dependencies, change);
-    if (!remote.ok) return { ...remote, taskId: input.taskId };
-    if (remote.status === "merged") {
-      return yield* completeMerged(dependencies, change, input.now);
-    }
-    if (remote.status === "open") {
-      const closed = closeOwnedPullRequest(dependencies, change);
-      if (!closed.ok) return { ...closed, taskId: input.taskId };
-      if (closed.status === "merged") {
+    const remote = observeOwnedPullRequest(dependencies.github, change);
+    switch (remote.kind) {
+      case "unavailable":
+        return { ok: false, code: "github_pull_request_unavailable", taskId: input.taskId };
+      case "mismatch":
+        return { ok: false, code: "owned_pull_request_mismatch", taskId: input.taskId };
+      case "exact_merged":
         return yield* completeMerged(dependencies, change, input.now);
+      case "exact_open": {
+        const closed = closeOwnedPullRequest(dependencies, change);
+        if (!closed.ok) return { ...closed, taskId: input.taskId };
+        if (closed.status === "merged") {
+          return yield* completeMerged(dependencies, change, input.now);
+        }
+        break;
       }
+      case "not_owned":
+      case "exact_closed_unmerged":
+        break;
     }
 
     const cancelled = yield* dependencies.changes.cancelChange({
@@ -246,7 +254,7 @@ const cancelTask = (
       now: input.now,
     });
     if (!cancelled.ok) return { ...cancelled, taskId: input.taskId };
-    const withCleanup = yield* cleanupClosedChange(dependencies, cancelled.change, input.now);
+    const withCleanup = yield* cleanupTerminalChange(dependencies, cancelled.change, input.now);
     const finalTask = yield* dependencies.tasks.getTaskById(input.taskId);
     if (finalTask === undefined) return { ok: false, code: "task_not_found", taskId: input.taskId };
     return {
@@ -286,22 +294,38 @@ const cancelChange = (
       } as const;
     }
     if (change.state === "closed") {
-      return change.closeReason === "cancelled"
-        ? { ok: true, status: "cancelled" as const, changed: false, change, task: null }
-        : { ok: false, code: "change_already_completed" as const, changeId: change.id };
+      if (change.closeReason !== "cancelled") {
+        return { ok: false, code: "change_already_completed" as const, changeId: change.id };
+      }
+      const withCleanup = yield* cleanupTerminalChange(dependencies, change, input.now);
+      return {
+        ok: true,
+        status: "cancelled" as const,
+        changed: false,
+        change: withCleanup.change,
+        task: null,
+      };
     }
 
-    const remote = observeOwnedPullRequest(dependencies, change);
-    if (!remote.ok) return { ...remote, changeId: change.id };
-    if (remote.status === "merged") {
-      return yield* completeMergedChange(dependencies, change, input.now);
-    }
-    if (remote.status === "open") {
-      const closed = closeOwnedPullRequest(dependencies, change);
-      if (!closed.ok) return { ...closed, changeId: change.id };
-      if (closed.status === "merged") {
+    const remote = observeOwnedPullRequest(dependencies.github, change);
+    switch (remote.kind) {
+      case "unavailable":
+        return { ok: false, code: "github_pull_request_unavailable", changeId: change.id };
+      case "mismatch":
+        return { ok: false, code: "owned_pull_request_mismatch", changeId: change.id };
+      case "exact_merged":
         return yield* completeMergedChange(dependencies, change, input.now);
+      case "exact_open": {
+        const closed = closeOwnedPullRequest(dependencies, change);
+        if (!closed.ok) return { ...closed, changeId: change.id };
+        if (closed.status === "merged") {
+          return yield* completeMergedChange(dependencies, change, input.now);
+        }
+        break;
       }
+      case "not_owned":
+      case "exact_closed_unmerged":
+        break;
     }
 
     const cancelled = yield* dependencies.changes.cancelChange({
@@ -310,7 +334,7 @@ const cancelChange = (
       now: input.now,
     });
     if (!cancelled.ok) return { ...cancelled, changeId: change.id };
-    const withCleanup = yield* cleanupClosedChange(dependencies, cancelled.change, input.now);
+    const withCleanup = yield* cleanupTerminalChange(dependencies, cancelled.change, input.now);
     return {
       ok: true,
       status: "cancelled" as const,
@@ -334,7 +358,7 @@ const completeMerged = (
       now,
     });
     if (!completed.ok) return { ok: false, code: "change_already_completed", taskId };
-    const withCleanup = yield* cleanupClosedChange(dependencies, completed.change, now);
+    const withCleanup = yield* cleanupTerminalChange(dependencies, completed.change, now);
     const task = yield* dependencies.tasks.getTaskById(taskId);
     if (task === undefined) return { ok: false, code: "task_not_found", taskId };
     return {
@@ -358,7 +382,7 @@ const completeMergedChange = (
       now,
     });
     if (!completed.ok) return { ok: false, code: "change_already_completed", changeId: change.id };
-    const withCleanup = yield* cleanupClosedChange(dependencies, completed.change, now);
+    const withCleanup = yield* cleanupTerminalChange(dependencies, completed.change, now);
     return {
       ok: true,
       status: "completed" as const,
@@ -367,42 +391,6 @@ const completeMergedChange = (
       task: null,
     };
   });
-
-type OwnedPullRequestObservation =
-  | { readonly ok: true; readonly status: "open" | "closed" | "merged" }
-  | {
-      readonly ok: false;
-      readonly code: "github_pull_request_unavailable" | "owned_pull_request_mismatch";
-    };
-
-const observeOwnedPullRequest = (
-  dependencies: CancellationDependencies,
-  change: ChangeRecord,
-): OwnedPullRequestObservation => {
-  const publication = change.publication;
-  if (publication === null || publication.pullRequest === null)
-    return { ok: true, status: "closed" };
-  let pullRequest: GitHubPullRequest | undefined;
-  try {
-    pullRequest = dependencies.github.getPullRequest(
-      publication.target,
-      publication.pullRequest.number,
-    );
-  } catch {
-    return { ok: false, code: "github_pull_request_unavailable" };
-  }
-  if (pullRequest === undefined) return { ok: false, code: "github_pull_request_unavailable" };
-  if (!matchesOwnedPullRequest(change, pullRequest)) {
-    return { ok: false, code: "owned_pull_request_mismatch" };
-  }
-  if (pullRequest.state === "closed" && pullRequest.merged === true)
-    return { ok: true, status: "merged" };
-  if (pullRequest.state === "closed" && pullRequest.merged === false)
-    return { ok: true, status: "closed" };
-  if (pullRequest.state === "open" && pullRequest.merged === false)
-    return { ok: true, status: "open" };
-  return { ok: false, code: "owned_pull_request_mismatch" };
-};
 
 const closeOwnedPullRequest = (
   dependencies: CancellationDependencies,
@@ -432,20 +420,7 @@ const closeOwnedPullRequest = (
   }
 };
 
-const matchesOwnedPullRequest = (change: ChangeRecord, pullRequest: GitHubPullRequest): boolean => {
-  const publication = change.publication;
-  return (
-    publication !== null &&
-    publication.pullRequest !== null &&
-    pullRequest.repository?.owner === publication.target.owner &&
-    pullRequest.repository.repo === publication.target.repo &&
-    pullRequest.baseBranch === publication.target.baseBranch &&
-    pullRequest.headBranch === publication.headBranch &&
-    pullRequest.headSha === publication.expectedHeadSha
-  );
-};
-
-const cleanupClosedChange = (
+const cleanupTerminalChange = (
   dependencies: CancellationDependencies,
   change: ChangeRecord,
   now: string,
@@ -453,46 +428,8 @@ const cleanupClosedChange = (
   { readonly change: ChangeRecord; readonly cleanup: ChangeCleanup },
   RepositoryStorageError
 > =>
-  Effect.gen(function* () {
-    if (change.cleanup.state === "complete") return { change, cleanup: change.cleanup };
-    const publication = change.publication;
-    const remoteChangeBranch =
-      change.closeReason === "completed" && publication !== null && publication.pullRequest !== null
-        ? {
-            owner: publication.target.owner,
-            repo: publication.target.repo,
-            remoteName: publication.target.remoteName,
-            remoteUrl: change.baseRemoteUrl ?? "",
-            branchName: publication.headBranch,
-            targetBranch: publication.target.baseBranch,
-            expectedHeadSha: publication.expectedHeadSha,
-          }
-        : undefined;
-    const result = dependencies.cleanup({
-      repositoryCommonDirectory: change.repositoryCommonDirectory,
-      worktreePath: change.worktreePath,
-      branchRef: change.branchRef,
-      ...(remoteChangeBranch === undefined ? {} : { remoteChangeBranch }),
-      ...(dependencies.reviewerSessionPathFor === undefined
-        ? {}
-        : { reviewerSessionPath: dependencies.reviewerSessionPathFor(change.id) }),
-    });
-    const cleanup: ChangeCleanup =
-      result.state === "complete"
-        ? { state: "complete", blockingReason: null }
-        : { state: "pending", blockingReason: result.blockingReason };
-    const recorded = yield* dependencies.changes.recordCleanup({
-      changeId: change.id,
-      cleanup,
-      now,
-    });
-    if (!recorded.ok)
-      return yield* Effect.die(new Error(`Unable to record cleanup: ${recorded.code}`));
-    if (
-      recorded.change.cleanup.state === "complete" &&
-      dependencies.changes.removeReviewerSessions !== undefined
-    ) {
-      yield* dependencies.changes.removeReviewerSessions(change.id);
-    }
-    return { change: recorded.change, cleanup: recorded.change.cleanup };
-  });
+  Effect.map(dependencies.cleanupTerminal(change, now), (result) =>
+    result.ok
+      ? { change: result.change, cleanup: result.cleanup }
+      : { change, cleanup: change.cleanup },
+  );

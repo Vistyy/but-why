@@ -4,6 +4,7 @@ import { Effect } from "effect";
 import { openHerdrInteractiveSessionHost } from "./herdrInteractiveSessionHost.js";
 import type { InteractiveSessionHost } from "./interactiveSessionHost.js";
 import { cleanupChangeResourcesWithRemote } from "./localChangeCleanupGit.js";
+import { openTerminalCleanup } from "./cleanupTerminalChange.js";
 import { openChangeReconciliation } from "./reconcileChange.js";
 import { reviewerSessionsChangeRoot } from "./reviewerSession/reviewerSession.js";
 import { openChangeUseCases, type ChangeUseCases } from "./changeUseCases.js";
@@ -68,9 +69,12 @@ export const withChangeUseCases = <A, E, R>(
           openChangeReconciliation({
             persistence: changePersistence,
             github,
-            cleanup: cleanupChangeResourcesWithRemote(githubChangeCleanupRemote(github)),
-            reviewerSessionPathFor: (changeId) =>
-              reviewerSessionsChangeRoot(repoContext.context.paths.operationalDir, changeId),
+            cleanupTerminal: openTerminalCleanup({
+              persistence: changePersistence,
+              cleanup: cleanupChangeResourcesWithRemote(githubChangeCleanupRemote(github)),
+              reviewerSessionPathFor: (changeId) =>
+                reviewerSessionsChangeRoot(repoContext.context.paths.operationalDir, changeId),
+            }),
           }),
           input.interactiveSessionHost ??
             openHerdrInteractiveSessionHost(undefined, {

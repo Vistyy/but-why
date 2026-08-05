@@ -80,8 +80,15 @@ Change Submit performs no duplicate admission precheck and performs no transient
 A merged owned pull request closes the Change and completes its linked Task only when its merged head matches the current publication facts.
 A merged-head mismatch rejects reconciliation and preserves the Open Change.
 Cleanup deletes a Remote Change Branch only when it still identifies the exact published Candidate head.
-Submit, publication, and reconciliation share one pure owned-pull-request identity classifier.
+Submit, publication, cancellation, and reconciliation share one pure owned-pull-request identity classifier.
 Submit passes an exact merged owned pull request to terminal completion and does not run full reconciliation or cleanup.
+
+Completion, cancellation, repeated cancellation, and reconciliation run one Change-owned terminal cleanup operation.
+Terminal state with cleanup pending is recorded before cleanup begins, and the operation retries idempotently when cleanup is already complete, a resource is already missing, or a prior attempt left cleanup pending.
+For an exact owned open pull request, cancellation closes the pull request before the cleanup operation deletes the Remote Change Branch.
+Completed and Cancelled Changes use the same cleanup scope and safeguards, covering the Managed Worktree, local Repository Branch, and Remote Change Branch.
+When cleanup completes, the operation invokes the Reviewer Session and Artifact lifecycle owners for the exact terminal Change.
+Dirty worktrees, unique local commits, changed Remote Change Branches, and unreadable identities keep cleanup pending without undoing terminal truth.
 
 ## Storage
 

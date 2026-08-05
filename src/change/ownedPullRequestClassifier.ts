@@ -40,7 +40,7 @@ export const ownedPublication = (change: ChangeRecord): OwnedPublication | undef
 };
 
 export const observeOwnedPullRequest = (
-  github: GitHubPullRequestGateway,
+  github: Pick<GitHubPullRequestGateway, "getPullRequest">,
   change: ChangeRecord,
 ): OwnedPullRequestClassification => {
   const publication = ownedPublication(change);

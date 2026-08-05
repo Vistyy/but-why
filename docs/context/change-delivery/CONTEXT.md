@@ -175,6 +175,11 @@ The point-in-time act of asking But Why to fetch the Change Base, inspect a Chan
 Later Change Base advancement does not alter a completed Submission or invalidate its Candidate automatically.
 _Avoid_: Push, Candidate, Validation Run, continuous merge gate
 
+**Terminal Cleanup**:
+The one idempotent Change-owned cleanup operation that runs for a Closed Change after completion or cancellation and retries on repeated cancellation and reconciliation.
+It covers the Managed Worktree, local Repository Branch, and Remote Change Branch, and it invokes the Reviewer Session and Artifact lifecycle owners for the exact terminal Change.
+_Avoid_: Generic cleanup framework, per-caller cleanup orchestration, worktree removal alone
+
 **No-Change Submission**:
 A Submission whose Repository Branch has the same tracked file tree as the exact fetched Change Base after the ancestry check passes.
 A No-Change Submission returns `nothing_to_submit`, keeps its Task and Change open, and does not run validation.

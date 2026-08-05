@@ -5,6 +5,7 @@ import { repositoryStorageErrorResult, repoStateLoadError, type CliResult } from
 import { loadRepoLocalContext } from "../init/repoContext.js";
 import { resolveRepoTaskId } from "../task/repoTaskIds.js";
 import { cleanupChangeResourcesWithRemote } from "./localChangeCleanupGit.js";
+import { openTerminalCleanup } from "./cleanupTerminalChange.js";
 import { reviewerSessionsChangeRoot } from "./reviewerSession/reviewerSession.js";
 import { openCancellationUseCases, type CancellationUseCases } from "./cancelChange.js";
 import {
@@ -61,9 +62,12 @@ export const withCancellation = <A, R>(
             commonDirectory: context.context.commonDirectory,
           }),
           github,
-          cleanup: cleanupChangeResourcesWithRemote(githubChangeCleanupRemote(github)),
-          reviewerSessionPathFor: (changeId) =>
-            reviewerSessionsChangeRoot(context.context.paths.operationalDir, changeId),
+          cleanupTerminal: openTerminalCleanup({
+            persistence: changes,
+            cleanup: cleanupChangeResourcesWithRemote(githubChangeCleanupRemote(github)),
+            reviewerSessionPathFor: (changeId) =>
+              reviewerSessionsChangeRoot(context.context.paths.operationalDir, changeId),
+          }),
         }),
       ),
     ),
