@@ -424,30 +424,17 @@ const recordRound = (sql: SqlClient.SqlClient, input: RecordCandidateValidationC
     const findings = input.findings ?? (input.finding === undefined ? [] : [input.finding]);
     yield* Effect.forEach(
       findings,
-      (finding) =>
-        finding.phase === "acceptance_review" || finding.phase === "specialist_review"
-          ? sql`
-              INSERT INTO candidate_validation_findings (
-                id, validation_run_id, phase, producer, title, description,
-                evidence, files, artifact_refs, created_at, updated_at
-              ) VALUES (
-                ${finding.id}, ${finding.validationRunId}, ${finding.phase}, ${finding.producer},
-                ${finding.title}, ${finding.description}, ${finding.evidence},
-                ${encodeSqliteJsonStringArray(finding.files)},
-                ${encodeSqliteJsonStringArray(finding.artifactRefs)}, ${input.now}, ${input.now}
-              )
-            `
-          : sql`
-              INSERT INTO candidate_validation_findings (
-                id, validation_run_id, phase, producer, title, description, severity,
-                evidence, files, artifact_refs, created_at, updated_at
-              ) VALUES (
-                ${finding.id}, ${finding.validationRunId}, ${finding.phase}, ${finding.producer},
-                ${finding.title}, ${finding.description}, ${finding.severity ?? null},
-                ${finding.evidence}, ${encodeSqliteJsonStringArray(finding.files)},
-                ${encodeSqliteJsonStringArray(finding.artifactRefs)}, ${input.now}, ${input.now}
-              )
-            `,
+      (finding) => sql`
+          INSERT INTO candidate_validation_findings (
+            id, validation_run_id, phase, producer, title, description,
+            evidence, files, artifact_refs, created_at, updated_at
+          ) VALUES (
+            ${finding.id}, ${finding.validationRunId}, ${finding.phase}, ${finding.producer},
+            ${finding.title}, ${finding.description}, ${finding.evidence},
+            ${encodeSqliteJsonStringArray(finding.files)},
+            ${encodeSqliteJsonStringArray(finding.artifactRefs)}, ${input.now}, ${input.now}
+          )
+        `,
       { discard: true },
     );
   });
@@ -470,7 +457,7 @@ const listRounds = (sql: SqlClient.SqlClient, validationRunId: string) =>
 
 const findingColumns = `
   id, validation_run_id AS validationRunId, phase, producer, title,
-  description, severity, evidence, files, artifact_refs AS artifactRefs,
+  description, evidence, files, artifact_refs AS artifactRefs,
   created_at AS createdAt, updated_at AS updatedAt
 `;
 
@@ -618,10 +605,9 @@ const decodeRun = (row: CandidateValidationRunRow) =>
 const decodeFinding = (row: CandidateValidationFindingRow) =>
   Effect.try({
     try: (): CandidateValidationFinding => {
-      const { severity, files, artifactRefs, ...finding } = row;
+      const { files, artifactRefs, ...finding } = row;
       return {
         ...finding,
-        ...(severity === null ? {} : { severity }),
         files: decodeSqliteJsonStringArray(files),
         artifactRefs: decodeSqliteJsonStringArray(artifactRefs),
       };
@@ -650,11 +636,7 @@ type CandidateValidationRunRow = Omit<
   readonly policySnapshot: string;
   readonly implementationDecisions: string;
 };
-type CandidateValidationFindingRow = Omit<
-  CandidateValidationFinding,
-  "severity" | "files" | "artifactRefs"
-> & {
-  readonly severity: Exclude<CandidateValidationFinding["severity"], undefined> | null;
+type CandidateValidationFindingRow = Omit<CandidateValidationFinding, "files" | "artifactRefs"> & {
   readonly files: string;
   readonly artifactRefs: string;
 };

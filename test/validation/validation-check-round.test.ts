@@ -42,7 +42,7 @@ describe("check round Findings", () => {
       expect(result).toEqual({ ok: true, findings: 1, validationRunId: "candidate-run" });
       expect(commands).toHaveLength(4);
       expect(recordedRounds).toHaveLength(2);
-      expect(recordedRounds.map((round) => round.phaseStatus)).toEqual(["failed", "failed"]);
+      expect(recordedRounds.map((round) => round.roundStatus)).toEqual(["failed", "passed"]);
       expect(recordedRounds.map((round) => round.finding?.id)).toEqual([
         "candidate-run-F1",
         undefined,

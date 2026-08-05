@@ -49,7 +49,7 @@ A complete result omits unnecessary expansion guidance.
 ## Findings and Validation Runs
 
 Finding inspection and failed Submission results preserve complete Findings, diagnostic details, and Artifact references needed for recovery.
-A Validation Run retains its immutable Validation Policy Snapshot, phase outcomes, Findings, Tooling Failures, and Artifact metadata.
+A Validation Run retains its immutable Validation Policy Snapshot, round outcomes, Findings, Tooling Failures, and Artifact metadata.
 `by validation-run show` provides Artifact detail commands and previews for Findings or tooling-failed runs.
 `by validation-run artifact` returns complete stored Artifact content.
 

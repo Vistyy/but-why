@@ -323,7 +323,6 @@ const runSpecialist = (
       producer: policy.id,
       roundNumber,
       roundStatus: passed ? "passed" : "failed",
-      phaseStatus: passed ? "passed" : "failed",
       artifactRecords: artifacts,
       findings,
       now: input.now,

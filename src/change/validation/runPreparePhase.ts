@@ -89,7 +89,6 @@ export const runPreparePhase = (
         validationRunId: input.validationRunId,
         roundNumber: 1,
         roundStatus: failed ? "failed" : "passed",
-        phaseStatus: failed ? "failed" : "passed",
         artifactRecords,
         ...(failed
           ? {
