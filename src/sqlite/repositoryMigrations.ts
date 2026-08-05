@@ -19,6 +19,7 @@ import { removeImplementationDecisionContentMigration as removeImplementationDec
 import { validationRunBlockerIdentityMigration as validationRunBlockerIdentity } from "./migrations/0017_validation_run_blocker_identity.js";
 import { removeFindingSeverityMigration as removeFindingSeverity } from "./migrations/0018_remove_finding_severity.js";
 import { simplifyReviewerSessionsMigration as simplifyReviewerSessions } from "./migrations/0019_simplify_reviewer_sessions.js";
+import { removeCandidatePublicationsMigration as removeCandidatePublications } from "./migrations/0020_remove_candidate_publications.js";
 
 export const migrateRepositoryState = Migrator.make({})({
   loader: Migrator.fromRecord({
@@ -41,5 +42,6 @@ export const migrateRepositoryState = Migrator.make({})({
     "0017_validation_run_blocker_identity": validationRunBlockerIdentity,
     "0018_remove_finding_severity": removeFindingSeverity,
     "0019_simplify_reviewer_sessions": simplifyReviewerSessions,
+    "0020_remove_candidate_publications": removeCandidatePublications,
   }),
 });

@@ -428,7 +428,6 @@ validationSetup:
           Effect.tap((rows) => {
             expect(rows).toEqual([
               { name: "active_validation_runs" },
-              { name: "candidate_publications" },
               { name: "candidate_validation_artifacts" },
               { name: "candidate_validation_findings" },
               { name: "candidate_validation_rounds" },
@@ -503,6 +502,7 @@ validationSetup:
         { migration_id: 17, name: "validation_run_blocker_identity" },
         { migration_id: 18, name: "remove_finding_severity" },
         { migration_id: 19, name: "simplify_reviewer_sessions" },
+        { migration_id: 20, name: "remove_candidate_publications" },
       ]);
     }),
   );

@@ -93,6 +93,7 @@ test("source workflow delegates a Candidate worktree to the canonical executable
     "validation_run_blocker_identity",
     "remove_finding_severity",
     "simplify_reviewer_sessions",
+    "remove_candidate_publications",
   ]);
   expect(readTableNames(main)).not.toContain("candidate_migration_probe");
 }, 30_000);

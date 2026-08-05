@@ -50,7 +50,6 @@ export const runShow = (
                     },
                   }),
               pullRequest: detail.change.publication?.pullRequest ?? null,
-              publicationsCommand: `by change publications ${detail.change.id}`,
               cleanup: detail.change.cleanup,
             }),
       ),

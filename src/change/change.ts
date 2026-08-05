@@ -65,18 +65,6 @@ export type ChangePublication = {
   readonly pullRequest: ChangeOwnedPullRequest | null;
 };
 
-export type CandidatePublicationRecord = {
-  readonly sequence: number;
-  readonly candidateId: string;
-  readonly validationRunId: string;
-  readonly changeBaseSha: string;
-  readonly headSha: string;
-  readonly target: ChangePublicationTarget;
-  readonly headBranch: string;
-  readonly pullRequest: ChangeOwnedPullRequest;
-  readonly publishedAt: string;
-};
-
 export type ChangeRecord = {
   readonly id: string;
   readonly repositoryCommonDirectory: string;

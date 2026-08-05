@@ -12,6 +12,14 @@ export const reconcileResult = (
       help: ["Use a Change ID returned by `by change start --json`."],
     });
   }
+  if (result.changes.some((change) => change.status === "unavailable")) {
+    return runtimeError({
+      code: "reconciliation_unavailable",
+      message: "The owned pull request facts are temporarily unavailable.",
+      details: { changes: result.changes },
+      help: ["Restore GitHub access and the pull request, then retry reconciliation."],
+    });
+  }
   return result.rejected
     ? runtimeError({
         code: "reconciliation_rejected",

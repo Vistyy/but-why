@@ -19,6 +19,7 @@ import type {
 import type { RepositoryStorageError } from "../../contracts/repositoryStorageError.js";
 import { implementationDecisionMarkdown } from "../implementationDecision.js";
 import { branchNameForRef } from "../changeBranch.js";
+import { observeOwnedPullRequest, ownedPublication } from "../ownedPullRequestClassifier.js";
 export type CommitSubjectResult =
   | { readonly ok: true; readonly subject: string | undefined }
   | { readonly ok: false };
@@ -498,19 +499,12 @@ const preparePullRequestUpdate = (
   headBranch: string,
   expectedHeadSha: string,
 ): UpdatePreparation => {
-  const owned = publishedChangePublication(change);
+  const owned = ownedPublication(change);
   if (owned === undefined) throw new Error("Missing owned pull request");
   if (!ownedPublicationMatchesTarget(owned, input.target, headBranch)) {
     return { proceed: false, result: { ok: false, code: "publication_state_conflict" } };
   }
-  return prepareOwnedPullRequestUpdate(
-    dependencies,
-    input,
-    change,
-    owned,
-    headBranch,
-    expectedHeadSha,
-  );
+  return prepareOwnedPullRequestUpdate(dependencies, input, change, owned, expectedHeadSha);
 };
 
 const ownedPublicationMatchesTarget = (
@@ -524,70 +518,67 @@ const prepareOwnedPullRequestUpdate = (
   input: PublishCandidateInput,
   change: ChangeRecord,
   owned: Published,
-  headBranch: string,
   expectedHeadSha: string,
 ): UpdatePreparation => {
-  const remote = dependencies.github.getPullRequest(input.target, owned.pullRequest.number);
-  if (remote === undefined) {
-    return {
-      proceed: false,
-      result: {
-        ok: false,
-        code: "publication_tooling_failed",
-        ...(dependencies.github.getLastFailureEvidence?.() === undefined
-          ? {}
-          : { evidence: dependencies.github.getLastFailureEvidence?.() }),
-      },
-    };
-  }
-  if (
-    isExpectedPullRequest(
-      remote,
-      owned.pullRequest.number,
-      input.target,
-      headBranch,
-      expectedHeadSha,
-    )
-  ) {
-    if (owned.expectedHeadSha === expectedHeadSha) {
-      if (owned.candidateId !== input.candidateId) {
-        return { proceed: false, result: { ok: false, code: "publication_state_conflict" } };
-      }
-      if (owned.validationRunId === input.validationRunId) {
-        return {
-          proceed: false,
-          result: { ok: true, created: false, pullRequest: owned.pullRequest },
-        };
-      }
+  const classification = observeOwnedPullRequest(dependencies.github, change);
+  switch (classification.kind) {
+    case "not_owned":
+      return { proceed: false, result: { ok: false, code: "publication_state_conflict" } };
+    case "exact_open":
+      return prepareExactOpenUpdate(
+        dependencies,
+        input,
+        change,
+        owned,
+        expectedHeadSha,
+        classification.pullRequest,
+      );
+    case "exact_closed_unmerged":
       return hasExpectedHead(dependencies.git, change.branchRef, expectedHeadSha)
-        ? { proceed: false, owned, recovered: remote }
+        ? { proceed: true, owned }
         : { proceed: false, result: { ok: false, code: "current_head_mismatch" } };
+    case "exact_merged":
+      return { proceed: false, result: { ok: false, code: "publication_state_conflict" } };
+    case "mismatch":
+      if (
+        classification.rejection === "head_sha_mismatch" &&
+        classification.pullRequest.headSha === expectedHeadSha
+      ) {
+        return hasExpectedHead(dependencies.git, change.branchRef, expectedHeadSha)
+          ? { proceed: false, owned, recovered: classification.pullRequest }
+          : { proceed: false, result: { ok: false, code: "current_head_mismatch" } };
+      }
+      return { proceed: false, result: { ok: false, code: "publication_remote_mismatch" } };
+    case "unavailable":
+      return { proceed: false, result: { ok: false, code: "publication_tooling_failed" } };
+  }
+};
+
+const prepareExactOpenUpdate = (
+  dependencies: Dependencies,
+  input: PublishCandidateInput,
+  change: ChangeRecord,
+  owned: Published,
+  expectedHeadSha: string,
+  remote: GitHubPullRequest,
+): UpdatePreparation => {
+  if (owned.expectedHeadSha === expectedHeadSha) {
+    if (owned.candidateId !== input.candidateId) {
+      return { proceed: false, result: { ok: false, code: "publication_state_conflict" } };
+    }
+    if (owned.validationRunId === input.validationRunId) {
+      return {
+        proceed: false,
+        result: { ok: true, created: false, pullRequest: owned.pullRequest },
+      };
     }
     return hasExpectedHead(dependencies.git, change.branchRef, expectedHeadSha)
       ? { proceed: false, owned, recovered: remote }
       : { proceed: false, result: { ok: false, code: "current_head_mismatch" } };
   }
-  if (
-    !isExpectedPullRequest(
-      remote,
-      owned.pullRequest.number,
-      input.target,
-      headBranch,
-      owned.expectedHeadSha,
-    )
-  ) {
-    return { proceed: false, result: { ok: false, code: "publication_remote_mismatch" } };
-  }
   return hasExpectedHead(dependencies.git, change.branchRef, expectedHeadSha)
     ? { proceed: true, owned }
     : { proceed: false, result: { ok: false, code: "current_head_mismatch" } };
-};
-
-const publishedChangePublication = (change: ChangeRecord): Published | undefined => {
-  const publication = change.publication;
-  return publication?.pullRequest === null || publication === null
-    ? undefined
-    : (publication as Published);
 };
 
 const executePullRequestUpdate = (

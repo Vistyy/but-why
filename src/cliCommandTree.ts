@@ -467,20 +467,6 @@ const changeFindingsCommand = withCliHandler(
       ),
     ),
 );
-const changePublicationsCommand = withCliHandler(
-  leaf("publications", "List immutable Candidate Publication history.", {
-    changeId: Args.optional(changeIdArgument),
-  }),
-  (values, environment) =>
-    Effect.promise(() => import("./cli/change/publications.js")).pipe(
-      Effect.flatMap(({ runPublications }) =>
-        runPublications(
-          { changeId: optionalString(values, "changeId") },
-          environment as ChangeCommandEnvironment,
-        ),
-      ),
-    ),
-);
 const changeValidationRunsCommand = withCliHandler(
   leaf("validation-runs", "List complete Validation Run history.", {
     changeId: Args.optional(changeIdArgument),
@@ -565,7 +551,6 @@ changeCommand = group(
     changeListCommand,
     changeShowCommand,
     changeFindingsCommand,
-    changePublicationsCommand,
     changeValidationRunsCommand,
     changeSubmitCommand,
     changeCancelCommand,

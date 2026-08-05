@@ -30,12 +30,17 @@ import type {
   PublishCandidateResult,
 } from "./publication/candidatePublication.js";
 import { changeState, type ChangePublicationTarget, type ChangeRecord } from "./change.js";
-import type { ChangeReconciliation, ReconciledChange } from "./reconcileChange.js";
+import type { ReconciledChange } from "./reconcileChange.js";
 import type { ChangePersistence } from "./changePersistence.js";
 import type {
   RemoteChangeBaseError,
   RemoteChangeBaseResult,
 } from "../submissionEnvironment/remoteChangeBase.js";
+import type { GitHubPullRequestGateway } from "./ownedPullRequestGateway.js";
+import {
+  observeOwnedPullRequest,
+  type OwnedPullRequestUnavailableReason,
+} from "./ownedPullRequestClassifier.js";
 import type { SubmitProgress } from "./validation/submitProgress.js";
 
 export type ChangeSubmitResult =
@@ -57,8 +62,8 @@ export type ChangeSubmitResult =
     }
   | {
       readonly ok: true;
-      readonly status: "reconciled";
-      readonly change: ReconciledChange;
+      readonly status: "completed";
+      readonly change: ChangeRecord;
     }
   | {
       readonly ok: false;
@@ -92,7 +97,12 @@ export type ChangeSubmitResult =
       readonly code: "reconciliation_rejected";
       readonly change: ReconciledChange;
     }
-  | { readonly ok: false; readonly code: "owned_pull_request_closed"; readonly changeId: string }
+  | {
+      readonly ok: false;
+      readonly code: "owned_pull_request_unavailable";
+      readonly changeId: string;
+      readonly reason: OwnedPullRequestUnavailableReason;
+    }
   | {
       readonly ok: false;
       readonly code: "validation_policy_invalid";
@@ -163,7 +173,7 @@ export const openChangeSubmit = (dependencies: {
   readonly repositoryCommonDirectory: string;
   readonly repositoryPath: string;
   readonly persistence: ChangePersistence;
-  readonly reconciliation: ChangeReconciliation;
+  readonly github: GitHubPullRequestGateway;
   readonly loadRepoConfig: (worktreePath: string) => ManagedRepoConfigResolution;
   readonly loadRepoConfigAtCommit: (
     worktreePath: string,
@@ -218,8 +228,8 @@ export const openChangeSubmit = (dependencies: {
 });
 
 type OpenChangeWithWorktree = ChangeRecord & { readonly worktreePath: string };
-type ReconciliationDecision =
-  | { readonly proceed: true; readonly reconciled: ReconciledChange }
+type SubmissionDecision =
+  | { readonly proceed: true; readonly ownedPullRequestOpen: boolean }
   | { readonly proceed: false; readonly result: ChangeSubmitResult };
 
 const submitChange = (
@@ -233,8 +243,8 @@ const submitChange = (
     if (change.baseRef === null || change.baseRemoteUrl === null) {
       return { ok: false, code: "invalid_remote_change_base", baseRef: "" } as const;
     }
-    const reconciliation = yield* reconcileBeforeSubmission(dependencies, change, input.now);
-    if (!reconciliation.proceed) return reconciliation.result;
+    const decision = yield* observeBeforeSubmission(dependencies, change, input.now);
+    if (!decision.proceed) return decision.result;
     const refreshedBase = dependencies.refreshBase(
       dependencies.repositoryPath,
       change.baseRef,
@@ -296,7 +306,7 @@ const submitChange = (
       change,
       candidate,
       policy.resolved,
-      reconciliation.reconciled.status === "open",
+      decision.ownedPullRequestOpen,
     );
     if (current.ok) return current.result;
     return yield* validateAndPublish(
@@ -352,41 +362,65 @@ const formatValidationPolicyFailure = (
   }
 };
 
-const reconcileBeforeSubmission = (
+const observeBeforeSubmission = (
   dependencies: Parameters<typeof openChangeSubmit>[0],
   change: OpenChangeWithWorktree,
   now: string,
-): Effect.Effect<ReconciliationDecision, RepositoryStorageError> =>
+): Effect.Effect<SubmissionDecision, RepositoryStorageError> =>
   Effect.gen(function* () {
-    const reconciliation = yield* dependencies.reconciliation.reconcile({
-      repositoryCommonDirectory: dependencies.repositoryCommonDirectory,
-      changeId: change.id,
-      now,
-    });
-    const reconciled = reconciliation.changes[0];
-    if (reconciled === undefined) {
-      return { proceed: false, result: { ok: false, code: "change_not_found" } };
+    const classification = observeOwnedPullRequest(dependencies.github, change);
+    switch (classification.kind) {
+      case "not_owned":
+      case "exact_open":
+      case "exact_closed_unmerged":
+        return {
+          proceed: true,
+          ownedPullRequestOpen: classification.kind === "exact_open",
+        };
+      case "exact_merged": {
+        const completed = yield* dependencies.persistence.completeMergedChange({
+          changeId: change.id,
+          now,
+        });
+        if (!completed.ok) {
+          return {
+            proceed: false,
+            result: {
+              ok: false,
+              code: "reconciliation_rejected",
+              change: { changeId: change.id, status: "rejected", rejection: completed.code },
+            } as const,
+          };
+        }
+        return {
+          proceed: false,
+          result: { ok: true, status: "completed", change: completed.change } as const,
+        };
+      }
+      case "mismatch":
+        return {
+          proceed: false,
+          result: {
+            ok: false,
+            code: "reconciliation_rejected",
+            change: {
+              changeId: change.id,
+              status: "rejected",
+              rejection: classification.rejection,
+            },
+          } as const,
+        };
+      case "unavailable":
+        return {
+          proceed: false,
+          result: {
+            ok: false,
+            code: "owned_pull_request_unavailable",
+            changeId: change.id,
+            reason: classification.reason,
+          } as const,
+        };
     }
-    if (reconciled.status === "rejected" && reconciled.rejection !== "head_sha_mismatch") {
-      return {
-        proceed: false,
-        result: { ok: false, code: "reconciliation_rejected", change: reconciled },
-      };
-    }
-    if (
-      reconciled.status === "completed" ||
-      reconciled.status === "cleanup_complete" ||
-      reconciled.status === "cleanup_pending"
-    ) {
-      return { proceed: false, result: { ok: true, status: "reconciled", change: reconciled } };
-    }
-    if (reconciled.status === "closed_unmerged") {
-      return {
-        proceed: false,
-        result: { ok: false, code: "owned_pull_request_closed", changeId: change.id },
-      };
-    }
-    return { proceed: true, reconciled };
   });
 
 const publicationPolicySnapshot = (

@@ -129,6 +129,8 @@ describe("GitHub pull request gateway", () => {
         "PATCH",
         "repos/acme/widgets/pulls/42",
         "-f",
+        "state=open",
+        "-f",
         "title=Publish Candidate",
         "-f",
         "body=Validation facts",

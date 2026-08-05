@@ -1,7 +1,7 @@
 import type { Effect } from "effect";
 
 import type { RepositoryStorageError } from "../contracts/repositoryStorageError.js";
-import type { CandidatePublicationRecord, ChangeRecord } from "./change.js";
+import type { ChangeRecord } from "./change.js";
 import type { ImplementationDecision } from "./implementationDecision.js";
 import type { CandidateValidationPolicySnapshot } from "./candidateValidation/candidateValidationRunStore.js";
 import type { ImplementationBlockerHistory } from "./implementationBlocker.js";
@@ -99,9 +99,6 @@ export type ChangePersistence = {
     changeId: string,
     authority: CurrentPublicationAuthority,
   ) => StorageEffect<ChangePublicationEvidence | undefined>;
-  readonly listCandidatePublications: (
-    changeId: string,
-  ) => StorageEffect<readonly CandidatePublicationRecord[] | undefined>;
   readonly listChanges: (input: ListChangesInput) => StorageEffect<readonly ChangeRecord[]>;
   readonly listChangesForReconciliation: (
     repositoryCommonDirectory: string,

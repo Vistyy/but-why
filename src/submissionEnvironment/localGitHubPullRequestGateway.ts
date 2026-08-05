@@ -470,6 +470,8 @@ const updatePullRequest = (
     "PATCH",
     `repos/${request.owner}/${request.repo}/pulls/${request.number}`,
     "-f",
+    "state=open",
+    "-f",
     `title=${request.title}`,
     "-f",
     `body=${request.body}`,
