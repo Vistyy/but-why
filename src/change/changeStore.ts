@@ -4,6 +4,7 @@ import type {
   ChangePublicationTarget,
   ChangeRecord,
 } from "./change.js";
+import type { ObservedMergedChangeEvidence } from "./ownedPullRequestClassifier.js";
 
 export type ListChangesInput = {
   readonly repositoryCommonDirectory: string;
@@ -13,6 +14,7 @@ export type ListChangesInput = {
 export type CompleteMergedChangeInput = {
   readonly changeId: string;
   readonly now: string;
+  readonly observed: ObservedMergedChangeEvidence;
 };
 
 export type CancelChangeInput = {
@@ -56,7 +58,10 @@ export type RecordPublishedPullRequestInput = BeginChangePublicationInput & {
 
 export type CompleteMergedChangeResult =
   | { readonly ok: true; readonly changed: boolean; readonly change: ChangeRecord }
-  | { readonly ok: false; readonly code: "change_not_found" | "change_already_closed" };
+  | {
+      readonly ok: false;
+      readonly code: "change_not_found" | "change_already_closed" | "publication_mismatch";
+    };
 
 export type CancelChangeResult =
   | { readonly ok: true; readonly changed: boolean; readonly change: ChangeRecord }

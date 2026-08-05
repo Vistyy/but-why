@@ -4,7 +4,10 @@ import type { RepositoryStorageError } from "../contracts/repositoryStorageError
 import type { ChangeCleanup, ChangeOwnedPullRequest, ChangeRecord } from "./change.js";
 import type { ChangePersistence } from "./changePersistence.js";
 import type { TerminalCleanupOperation } from "./cleanupTerminalChange.js";
-import { observeOwnedPullRequest } from "./ownedPullRequestClassifier.js";
+import {
+  observeOwnedPullRequest,
+  observedMergedChangeEvidence,
+} from "./ownedPullRequestClassifier.js";
 import type { GitHubPullRequestGateway } from "./ownedPullRequestGateway.js";
 
 export type ReconciledChange = {
@@ -90,9 +93,12 @@ const reconcileOne = (
           pullRequest: ownedIdentity(classification.pullRequest),
         };
       case "exact_merged": {
+        const observed = observedMergedChangeEvidence(change, classification.pullRequest);
+        if (observed === undefined) return rejected(change.id, "missing_publication_facts");
         const completed = yield* dependencies.persistence.completeMergedChange({
           changeId: change.id,
           now,
+          observed,
         });
         if (!completed.ok) return rejected(change.id, completed.code);
         const cleanup = yield* reconcileCleanup(dependencies, completed.change, now);

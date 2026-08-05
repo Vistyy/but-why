@@ -1,4 +1,4 @@
-import type { ChangePublication, ChangeRecord } from "./change.js";
+import type { ChangeOwnedPullRequest, ChangePublication, ChangeRecord } from "./change.js";
 import type { GitHubPullRequest, GitHubPullRequestGateway } from "./ownedPullRequestGateway.js";
 
 export type OwnedPullRequestRejection =
@@ -32,11 +32,42 @@ export type OwnedPublication = ChangePublication & {
   readonly pullRequest: NonNullable<ChangePublication["pullRequest"]>;
 };
 
+export type ObservedMergedChangeEvidence = {
+  readonly repository: { readonly owner: string; readonly repo: string };
+  readonly pullRequest: ChangeOwnedPullRequest;
+  readonly baseBranch: string;
+  readonly headBranch: string;
+  readonly mergedHeadSha: string;
+  readonly candidateId: string;
+  readonly validationRunId: string;
+  readonly expectedHeadSha: string;
+};
+
 export const ownedPublication = (change: ChangeRecord): OwnedPublication | undefined => {
   const publication = change.publication;
   return publication?.pullRequest === null || publication === null
     ? undefined
     : (publication as OwnedPublication);
+};
+
+export const observedMergedChangeEvidence = (
+  change: ChangeRecord,
+  pullRequest: GitHubPullRequest,
+): ObservedMergedChangeEvidence | undefined => {
+  const publication = ownedPublication(change);
+  if (publication === undefined) return undefined;
+  const repository = pullRequest.repository;
+  if (repository === undefined) return undefined;
+  return {
+    repository,
+    pullRequest: { number: pullRequest.number, url: pullRequest.url },
+    baseBranch: pullRequest.baseBranch,
+    headBranch: pullRequest.headBranch,
+    mergedHeadSha: pullRequest.headSha,
+    candidateId: publication.candidateId,
+    validationRunId: publication.validationRunId,
+    expectedHeadSha: publication.expectedHeadSha,
+  };
 };
 
 export const observeOwnedPullRequest = (

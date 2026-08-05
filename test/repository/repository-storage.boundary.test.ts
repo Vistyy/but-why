@@ -454,10 +454,42 @@ describe("repository SQL storage", () => {
           now: "2026-07-17T22:57:00.000Z",
         });
         if (!started.ok) return;
+        const publication = {
+          changeId: started.change.id,
+          candidateId: "candidate-1",
+          validationRunId: "validation-run-1",
+          target: {
+            owner: "acme",
+            repo: "widgets",
+            baseBranch: "main",
+            remoteName: "origin",
+          },
+          headBranch: "but-why/by-1",
+          expectedHeadSha: "1111111111111111111111111111111111111111",
+          changeBaseSha: "base",
+          now: "2026-07-17T22:57:30.000Z",
+        };
+        const begun = yield* changes.beginPublication(publication);
+        if (!begun.ok) throw new Error(begun.code);
+        const recorded = yield* changes.recordPublishedPullRequest({
+          ...publication,
+          pullRequest: { number: 42, url: "https://github.com/acme/widgets/pull/42" },
+        });
+        if (!recorded.ok) throw new Error(recorded.code);
 
         const completed = yield* changes.completeMergedChange({
           changeId: started.change.id,
           now: "2026-07-17T22:58:00.000Z",
+          observed: {
+            repository: { owner: "acme", repo: "widgets" },
+            pullRequest: { number: 42, url: "https://github.com/acme/widgets/pull/42" },
+            baseBranch: "main",
+            headBranch: "but-why/by-1",
+            mergedHeadSha: "1111111111111111111111111111111111111111",
+            candidateId: "candidate-1",
+            validationRunId: "validation-run-1",
+            expectedHeadSha: "1111111111111111111111111111111111111111",
+          },
         });
 
         expect(completed).toMatchObject({
@@ -466,6 +498,442 @@ describe("repository SQL storage", () => {
           change: { state: "closed", closeReason: "completed", cleanup: { state: "pending" } },
         });
         expect(yield* tasks.getTaskById(taskId)).toMatchObject({ state: "done" });
+      }),
+    ),
+  );
+
+  it.scoped("preserves an open Change when observed merge evidence is stale", () =>
+    withTemporaryState((input) =>
+      Effect.gen(function* () {
+        const tasks = yield* openSqliteTaskPersistence("BY");
+        const starts = yield* openSqliteChangeStartPersistence();
+        const changes = yield* openSqliteChangePersistence();
+        const created = yield* tasks.createTask({
+          title: "Stale merge evidence",
+          description: "Observed facts must match current publication.",
+          now: "2026-07-17T22:55:00.000Z",
+        });
+        if (!created.ok) return;
+        const taskId = storedPublicTaskId(created.task.id);
+        yield* tasks.approveTask({ taskId, now: "2026-07-17T22:56:00.000Z" });
+        const started = yield* starts.create({
+          id: "change-stale-evidence",
+          repositoryCommonDirectory: input.commonDirectory,
+          branchRef: "refs/heads/but-why/by-stale",
+          baseRef: "main",
+          baseRemoteUrl: "https://github.com/acme/repo.git",
+          startingCommit: "1111111111111111111111111111111111111111",
+          worktreePath: join(input.commonDirectory, "worktrees", "by-stale"),
+          taskId,
+          now: "2026-07-17T22:57:00.000Z",
+        });
+        if (!started.ok) return;
+        const publication = {
+          changeId: started.change.id,
+          candidateId: "candidate-1",
+          validationRunId: "validation-run-1",
+          target: {
+            owner: "acme",
+            repo: "widgets",
+            baseBranch: "main",
+            remoteName: "origin",
+          },
+          headBranch: "but-why/by-stale",
+          expectedHeadSha: "expected-head",
+          changeBaseSha: "base",
+          now: "2026-07-17T22:57:30.000Z",
+        };
+        const begun = yield* changes.beginPublication(publication);
+        if (!begun.ok) throw new Error(begun.code);
+        const recorded = yield* changes.recordPublishedPullRequest({
+          ...publication,
+          pullRequest: { number: 42, url: "https://github.com/acme/widgets/pull/42" },
+        });
+        if (!recorded.ok) throw new Error(recorded.code);
+
+        const exact = {
+          repository: { owner: "acme", repo: "widgets" },
+          pullRequest: { number: 42, url: "https://github.com/acme/widgets/pull/42" },
+          baseBranch: "main",
+          headBranch: "but-why/by-stale",
+          mergedHeadSha: "expected-head",
+          candidateId: "candidate-1",
+          validationRunId: "validation-run-1",
+          expectedHeadSha: "expected-head",
+        };
+        const staleVariants = [
+          { ...exact, repository: { owner: "other", repo: "widgets" } },
+          { ...exact, repository: { owner: "acme", repo: "other-repo" } },
+          { ...exact, pullRequest: { number: 43, url: "https://github.com/acme/widgets/pull/43" } },
+          { ...exact, baseBranch: "release" },
+          { ...exact, headBranch: "other-branch" },
+          { ...exact, mergedHeadSha: "merged-elsewhere" },
+          { ...exact, candidateId: "candidate-2" },
+          { ...exact, validationRunId: "validation-run-2" },
+          { ...exact, expectedHeadSha: "other-head" },
+        ] as const;
+
+        for (const observed of staleVariants) {
+          const result = yield* changes.completeMergedChange({
+            changeId: started.change.id,
+            now: "2026-07-17T22:58:00.000Z",
+            observed,
+          });
+          expect(result).toEqual({ ok: false, code: "publication_mismatch" });
+        }
+        expect(yield* changes.getChangeById(started.change.id)).toMatchObject({
+          state: "open",
+        });
+        expect(yield* tasks.getTaskById(taskId)).toMatchObject({ state: "implementing" });
+
+        const completed = yield* changes.completeMergedChange({
+          changeId: started.change.id,
+          now: "2026-07-17T22:59:00.000Z",
+          observed: exact,
+        });
+        expect(completed).toMatchObject({
+          ok: true,
+          changed: true,
+          change: { state: "closed", closeReason: "completed" },
+        });
+        expect(yield* tasks.getTaskById(taskId)).toMatchObject({ state: "done" });
+      }),
+    ),
+  );
+
+  it.scoped("rejects an older merged Candidate after a newer publication", () =>
+    withTemporaryState((input) =>
+      Effect.gen(function* () {
+        const tasks = yield* openSqliteTaskPersistence("BY");
+        const starts = yield* openSqliteChangeStartPersistence();
+        const changes = yield* openSqliteChangePersistence();
+        const created = yield* tasks.createTask({
+          title: "Newer publication wins",
+          description: "Only the current publication can complete.",
+          now: "2026-07-17T22:55:00.000Z",
+        });
+        if (!created.ok) return;
+        const taskId = storedPublicTaskId(created.task.id);
+        yield* tasks.approveTask({ taskId, now: "2026-07-17T22:56:00.000Z" });
+        const started = yield* starts.create({
+          id: "change-newer-publication",
+          repositoryCommonDirectory: input.commonDirectory,
+          branchRef: "refs/heads/but-why/by-newer",
+          baseRef: "main",
+          baseRemoteUrl: "https://github.com/acme/repo.git",
+          startingCommit: "1111111111111111111111111111111111111111",
+          worktreePath: join(input.commonDirectory, "worktrees", "by-newer"),
+          taskId,
+          now: "2026-07-17T22:57:00.000Z",
+        });
+        if (!started.ok) return;
+        const target = {
+          owner: "acme",
+          repo: "widgets",
+          baseBranch: "main",
+          remoteName: "origin",
+        };
+        const first = {
+          changeId: started.change.id,
+          candidateId: "candidate-1",
+          validationRunId: "validation-run-1",
+          target,
+          headBranch: "but-why/by-newer",
+          expectedHeadSha: "first-head",
+          changeBaseSha: "base",
+          now: "2026-07-17T22:57:30.000Z",
+        };
+        if (!(yield* changes.beginPublication(first)).ok) throw new Error("begin failed");
+        if (
+          !(yield* changes.recordPublishedPullRequest({
+            ...first,
+            pullRequest: { number: 42, url: "https://github.com/acme/widgets/pull/42" },
+          })).ok
+        )
+          throw new Error("record failed");
+        const newer = {
+          ...first,
+          candidateId: "candidate-2",
+          validationRunId: "validation-run-2",
+          expectedHeadSha: "second-head",
+          now: "2026-07-17T22:59:00.000Z",
+        };
+        const replaced = yield* changes.recordPublishedPullRequest({
+          ...newer,
+          pullRequest: { number: 42, url: "https://github.com/acme/widgets/pull/42" },
+          previousExpectedHeadSha: first.expectedHeadSha,
+          previousCandidateId: first.candidateId,
+          previousValidationRunId: first.validationRunId,
+          previousPullRequestNumber: 42,
+        });
+        if (!replaced.ok) throw new Error(replaced.code);
+
+        const olderEvidence = {
+          repository: { owner: "acme", repo: "widgets" },
+          pullRequest: { number: 42, url: "https://github.com/acme/widgets/pull/42" },
+          baseBranch: "main",
+          headBranch: "but-why/by-newer",
+          mergedHeadSha: first.expectedHeadSha,
+          candidateId: first.candidateId,
+          validationRunId: first.validationRunId,
+          expectedHeadSha: first.expectedHeadSha,
+        };
+        expect(
+          yield* changes.completeMergedChange({
+            changeId: started.change.id,
+            now: "2026-07-17T23:00:00.000Z",
+            observed: olderEvidence,
+          }),
+        ).toEqual({ ok: false, code: "publication_mismatch" });
+        expect(yield* changes.getChangeById(started.change.id)).toMatchObject({ state: "open" });
+        expect(yield* tasks.getTaskById(taskId)).toMatchObject({ state: "implementing" });
+
+        const newerEvidence = {
+          ...olderEvidence,
+          mergedHeadSha: newer.expectedHeadSha,
+          candidateId: newer.candidateId,
+          validationRunId: newer.validationRunId,
+          expectedHeadSha: newer.expectedHeadSha,
+        };
+        expect(
+          yield* changes.completeMergedChange({
+            changeId: started.change.id,
+            now: "2026-07-17T23:01:00.000Z",
+            observed: newerEvidence,
+          }),
+        ).toMatchObject({ ok: true, changed: true });
+        expect(yield* tasks.getTaskById(taskId)).toMatchObject({ state: "done" });
+      }),
+    ),
+  );
+
+  it.scoped("rolls back terminal completion when the linked Task transition fails", () =>
+    withTemporaryState((input) =>
+      Effect.gen(function* () {
+        const tasks = yield* openSqliteTaskPersistence("BY");
+        const starts = yield* openSqliteChangeStartPersistence();
+        const changes = yield* openSqliteChangePersistence();
+        const created = yield* tasks.createTask({
+          title: "Atomic terminal completion",
+          description: "Change and Task terminal writes commit together.",
+          now: "2026-07-17T22:55:00.000Z",
+        });
+        if (!created.ok) return;
+        const taskId = storedPublicTaskId(created.task.id);
+        yield* tasks.approveTask({ taskId, now: "2026-07-17T22:56:00.000Z" });
+        const started = yield* starts.create({
+          id: "change-atomic-completion",
+          repositoryCommonDirectory: input.commonDirectory,
+          branchRef: "refs/heads/but-why/by-atomic",
+          baseRef: "main",
+          baseRemoteUrl: "https://github.com/acme/repo.git",
+          startingCommit: "1111111111111111111111111111111111111111",
+          worktreePath: join(input.commonDirectory, "worktrees", "by-atomic"),
+          taskId,
+          now: "2026-07-17T22:57:00.000Z",
+        });
+        if (!started.ok) return;
+        const publication = {
+          changeId: started.change.id,
+          candidateId: "candidate-1",
+          validationRunId: "validation-run-1",
+          target: {
+            owner: "acme",
+            repo: "widgets",
+            baseBranch: "main",
+            remoteName: "origin",
+          },
+          headBranch: "but-why/by-atomic",
+          expectedHeadSha: "expected-head",
+          changeBaseSha: "base",
+          now: "2026-07-17T22:57:30.000Z",
+        };
+        if (!(yield* changes.beginPublication(publication)).ok) throw new Error("begin failed");
+        if (
+          !(yield* changes.recordPublishedPullRequest({
+            ...publication,
+            pullRequest: { number: 42, url: "https://github.com/acme/widgets/pull/42" },
+          })).ok
+        )
+          throw new Error("record failed");
+
+        const repository = yield* RepositorySql;
+        yield* repository.operation(
+          "install terminal Task completion failure",
+          (sql) => sql`
+            CREATE TRIGGER reject_terminal_task_completion
+            BEFORE UPDATE OF state ON tasks
+            WHEN NEW.state = 'done'
+            BEGIN
+              SELECT RAISE(ABORT, 'deliberate Task completion failure');
+            END
+          `,
+        );
+
+        yield* changes
+          .completeMergedChange({
+            changeId: started.change.id,
+            now: "2026-07-17T22:58:00.000Z",
+            observed: {
+              repository: { owner: "acme", repo: "widgets" },
+              pullRequest: { number: 42, url: "https://github.com/acme/widgets/pull/42" },
+              baseBranch: "main",
+              headBranch: "but-why/by-atomic",
+              mergedHeadSha: "expected-head",
+              candidateId: "candidate-1",
+              validationRunId: "validation-run-1",
+              expectedHeadSha: "expected-head",
+            },
+          })
+          .pipe(Effect.flip);
+
+        expect(yield* changes.getChangeById(started.change.id)).toMatchObject({ state: "open" });
+        expect(yield* tasks.getTaskById(taskId)).toMatchObject({ state: "implementing" });
+      }),
+    ),
+  );
+
+  it.scoped("completes a merged taskless Change without fabricating a Task", () =>
+    withTemporaryState((input) =>
+      Effect.gen(function* () {
+        const starts = yield* openSqliteChangeStartPersistence();
+        const changes = yield* openSqliteChangePersistence();
+        const started = yield* starts.create({
+          id: "change-taskless-completion",
+          repositoryCommonDirectory: input.commonDirectory,
+          branchRef: "refs/heads/but-why/by-taskless",
+          baseRef: "main",
+          baseRemoteUrl: "https://github.com/acme/repo.git",
+          startingCommit: "1111111111111111111111111111111111111111",
+          worktreePath: join(input.commonDirectory, "worktrees", "by-taskless"),
+          now: "2026-07-17T22:57:00.000Z",
+        });
+        if (!started.ok) return;
+        const publication = {
+          changeId: started.change.id,
+          candidateId: "candidate-1",
+          validationRunId: "validation-run-1",
+          target: {
+            owner: "acme",
+            repo: "widgets",
+            baseBranch: "main",
+            remoteName: "origin",
+          },
+          headBranch: "but-why/by-taskless",
+          expectedHeadSha: "expected-head",
+          changeBaseSha: "base",
+          now: "2026-07-17T22:57:30.000Z",
+        };
+        if (!(yield* changes.beginPublication(publication)).ok) throw new Error("begin failed");
+        if (
+          !(yield* changes.recordPublishedPullRequest({
+            ...publication,
+            pullRequest: { number: 42, url: "https://github.com/acme/widgets/pull/42" },
+          })).ok
+        )
+          throw new Error("record failed");
+
+        const completed = yield* changes.completeMergedChange({
+          changeId: started.change.id,
+          now: "2026-07-17T22:58:00.000Z",
+          observed: {
+            repository: { owner: "acme", repo: "widgets" },
+            pullRequest: { number: 42, url: "https://github.com/acme/widgets/pull/42" },
+            baseBranch: "main",
+            headBranch: "but-why/by-taskless",
+            mergedHeadSha: "expected-head",
+            candidateId: "candidate-1",
+            validationRunId: "validation-run-1",
+            expectedHeadSha: "expected-head",
+          },
+        });
+
+        expect(completed).toMatchObject({
+          ok: true,
+          changed: true,
+          change: { state: "closed", closeReason: "completed", taskId: null },
+        });
+      }),
+    ),
+  );
+
+  it.scoped("serializes concurrent terminal completions without repeating completion", () =>
+    withTemporaryState((input) =>
+      Effect.gen(function* () {
+        const starts = yield* openSqliteChangeStartPersistence();
+        const changes = yield* openSqliteChangePersistence();
+        const started = yield* starts.create({
+          id: "change-concurrent-completion",
+          repositoryCommonDirectory: input.commonDirectory,
+          branchRef: "refs/heads/but-why/by-concurrent",
+          baseRef: "main",
+          baseRemoteUrl: "https://github.com/acme/repo.git",
+          startingCommit: "1111111111111111111111111111111111111111",
+          worktreePath: join(input.commonDirectory, "worktrees", "by-concurrent"),
+          now: "2026-07-17T22:57:00.000Z",
+        });
+        if (!started.ok) return;
+        const publication = {
+          changeId: started.change.id,
+          candidateId: "candidate-1",
+          validationRunId: "validation-run-1",
+          target: {
+            owner: "acme",
+            repo: "widgets",
+            baseBranch: "main",
+            remoteName: "origin",
+          },
+          headBranch: "but-why/by-concurrent",
+          expectedHeadSha: "expected-head",
+          changeBaseSha: "base",
+          now: "2026-07-17T22:57:30.000Z",
+        };
+        if (!(yield* changes.beginPublication(publication)).ok) throw new Error("begin failed");
+        if (
+          !(yield* changes.recordPublishedPullRequest({
+            ...publication,
+            pullRequest: { number: 42, url: "https://github.com/acme/widgets/pull/42" },
+          })).ok
+        )
+          throw new Error("record failed");
+        const evidence = {
+          repository: { owner: "acme", repo: "widgets" },
+          pullRequest: { number: 42, url: "https://github.com/acme/widgets/pull/42" },
+          baseBranch: "main",
+          headBranch: "but-why/by-concurrent",
+          mergedHeadSha: "expected-head",
+          candidateId: "candidate-1",
+          validationRunId: "validation-run-1",
+          expectedHeadSha: "expected-head",
+        };
+
+        const results = yield* Effect.all(
+          [
+            changes.completeMergedChange({
+              changeId: started.change.id,
+              now: "2026-07-17T22:58:00.000Z",
+              observed: evidence,
+            }),
+            changes.completeMergedChange({
+              changeId: started.change.id,
+              now: "2026-07-17T22:58:00.000Z",
+              observed: evidence,
+            }),
+          ],
+          { concurrency: "unbounded" },
+        );
+
+        expect(
+          results.filter((result) => result.ok === true && result.changed === true),
+        ).toHaveLength(1);
+        expect(
+          results.filter((result) => result.ok === true && result.changed === false),
+        ).toHaveLength(1);
+        expect(yield* changes.getChangeById(started.change.id)).toMatchObject({
+          state: "closed",
+          closeReason: "completed",
+          cleanup: { state: "pending" },
+        });
       }),
     ),
   );

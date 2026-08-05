@@ -991,7 +991,46 @@ const completeChangeFixture = (root: string, changeId: string) =>
     root,
     Effect.gen(function* () {
       const changes = yield* openSqliteChangePersistence();
-      const result = yield* changes.completeMergedChange({ changeId, now: commandNow });
+      const change = yield* changes.getChangeById(changeId);
+      if (change === undefined) throw new Error("Change disappeared");
+      const target = {
+        owner: "acme",
+        repo: "widgets",
+        baseBranch: "main",
+        remoteName: "origin",
+      };
+      const headBranch = change.branchRef.replace(/^refs\/heads\//, "");
+      const publication = {
+        changeId,
+        candidateId: "candidate-1",
+        validationRunId: "validation-run-1",
+        target,
+        headBranch,
+        expectedHeadSha: "projection-head",
+        changeBaseSha: "base",
+        now: commandNow,
+      };
+      const begun = yield* changes.beginPublication(publication);
+      if (!begun.ok) throw new Error(begun.code);
+      const recorded = yield* changes.recordPublishedPullRequest({
+        ...publication,
+        pullRequest: { number: 42, url: "https://github.com/acme/widgets/pull/42" },
+      });
+      if (!recorded.ok) throw new Error(recorded.code);
+      const result = yield* changes.completeMergedChange({
+        changeId,
+        now: commandNow,
+        observed: {
+          repository: { owner: target.owner, repo: target.repo },
+          pullRequest: { number: 42, url: "https://github.com/acme/widgets/pull/42" },
+          baseBranch: target.baseBranch,
+          headBranch,
+          mergedHeadSha: publication.expectedHeadSha,
+          candidateId: publication.candidateId,
+          validationRunId: publication.validationRunId,
+          expectedHeadSha: publication.expectedHeadSha,
+        },
+      });
       if (!result.ok) throw new Error(result.code);
     }),
   );

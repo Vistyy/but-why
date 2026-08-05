@@ -7,6 +7,8 @@ import { describe } from "vitest";
 import { cleanupChangeResourcesWithRemote } from "../../src/change/localChangeCleanupGit.js";
 import { openTerminalCleanup } from "../../src/change/cleanupTerminalChange.js";
 import { openChangeReconciliation } from "../../src/change/reconcileChange.js";
+import type { ChangePersistence } from "../../src/change/changePersistence.js";
+import type { CompleteMergedChangeInput } from "../../src/change/changeStore.js";
 import type { GitHubPullRequest } from "../../src/change/ownedPullRequestGateway.js";
 import { openSqliteChangePersistence } from "../../src/sqlite/sqliteChangePersistence.js";
 import { openSqliteChangeStartPersistence } from "../../src/sqlite/sqliteChangeStartPersistence.js";
@@ -405,6 +407,326 @@ describe("by change reconcile", () => {
         expect(completedTask).toMatchObject({ state: "done" });
       }),
     ),
+  );
+
+  it.effect(
+    "completes a merged taskless Change through reconciliation",
+    () =>
+      withTemporaryRepositoryState((input) =>
+        Effect.gen(function* () {
+          const starts = yield* openSqliteChangeStartPersistence();
+          const created = yield* starts.create({
+            id: "change-taskless",
+            repositoryCommonDirectory: input.commonDirectory,
+            branchRef: "refs/heads/but-why/change-taskless",
+            baseRef: "refs/heads/main",
+            baseRemoteUrl: "https://github.com/acme/repo.git",
+            startingCommit: "head",
+            worktreePath: join(input.commonDirectory, "worktree"),
+            now,
+          });
+          if (!created.ok) throw new Error(created.code);
+          yield* starts.recordPrepareOutcome(created.change.id, null, now);
+          const changes = yield* openSqliteChangePersistence();
+          const publication = {
+            changeId: created.change.id,
+            candidateId: "candidate-1",
+            validationRunId: "validation-run-1",
+            target: publicationTarget,
+            headBranch: "but-why/change-taskless",
+            expectedHeadSha: "head",
+            changeBaseSha: "base",
+            now,
+          };
+          const begun = yield* changes.beginPublication(publication);
+          if (!begun.ok) throw new Error(begun.code);
+          const recorded = yield* changes.recordPublishedPullRequest({
+            ...publication,
+            pullRequest: { number: 42, url: "https://github.com/acme/widgets/pull/42" },
+          });
+          if (!recorded.ok) throw new Error(recorded.code);
+          const reconciliation = openChangeReconciliation({
+            persistence: changes,
+            github: {
+              findPullRequests: () => [],
+              getPullRequest: () => ({
+                number: 42,
+                url: "https://github.com/acme/widgets/pull/42",
+                repository: { owner: publicationTarget.owner, repo: publicationTarget.repo },
+                state: "closed",
+                merged: true,
+                baseBranch: publicationTarget.baseBranch,
+                headBranch: "but-why/change-taskless",
+                headSha: "head",
+              }),
+              createPullRequest: () => {
+                throw new Error("Reconciliation must not create a pull request");
+              },
+              updatePullRequest: () => {
+                throw new Error("Reconciliation must not update a pull request");
+              },
+            },
+            cleanupTerminal: openTerminalCleanup({
+              persistence: changes,
+              cleanup: () => ({ state: "complete", blockingReason: null }),
+            }),
+          });
+
+          expect(
+            yield* reconciliation.reconcile({
+              repositoryCommonDirectory: input.commonDirectory,
+              changeId: created.change.id,
+              now,
+            }),
+          ).toMatchObject({
+            rejected: false,
+            changes: [
+              {
+                changeId: created.change.id,
+                status: "completed",
+                cleanup: { state: "complete" },
+              },
+            ],
+          });
+          expect(yield* changes.getChangeById(created.change.id)).toMatchObject({
+            state: "closed",
+            closeReason: "completed",
+            taskId: null,
+          });
+        }),
+      ),
+    15_000,
+  );
+
+  it.effect(
+    "completes a merged Change with an unresolved Blocker without a synthetic Resolution",
+    () =>
+      withTemporaryRepositoryState((input) =>
+        Effect.gen(function* () {
+          const tasks = yield* openSqliteTaskPersistence("BY");
+          const createdTask = yield* tasks.createTask({
+            title: "Merged blocked Change",
+            description: "Exact merge evidence outranks the historical Blocker.",
+            now,
+          });
+          if (!createdTask.ok) throw new Error(createdTask.code);
+          const taskId = publicTaskId(createdTask.task.id);
+          const approved = yield* tasks.approveTask({ taskId, now });
+          if (!approved.ok) throw new Error(approved.code);
+
+          const starts = yield* openSqliteChangeStartPersistence();
+          const prepared = yield* starts.prepareTask(taskId);
+          if (!prepared.ok) throw new Error(prepared.code);
+          const created = yield* starts.create({
+            id: "change-blocked-merged",
+            repositoryCommonDirectory: input.commonDirectory,
+            branchRef: "refs/heads/but-why/change-blocked-merged",
+            baseRef: "refs/heads/main",
+            baseRemoteUrl: "https://github.com/acme/repo.git",
+            startingCommit: "head",
+            worktreePath: join(input.commonDirectory, "uncreated-worktree"),
+            taskId,
+            now,
+          });
+          if (!created.ok) throw new Error(created.code);
+          yield* starts.recordPrepareOutcome(created.change.id, null, now);
+          const changes = yield* openSqliteChangePersistence();
+          const raised = yield* changes.raiseImplementationBlocker({
+            changeId: created.change.id,
+            content: "Wait for an external decision that never arrived.",
+            now,
+          });
+          if (!raised.ok) throw new Error(raised.code);
+          const publication = {
+            changeId: created.change.id,
+            candidateId: "candidate-1",
+            validationRunId: "validation-run-1",
+            target: publicationTarget,
+            headBranch: "but-why/change-blocked-merged",
+            expectedHeadSha: "head",
+            changeBaseSha: "base",
+            now,
+          };
+          const begun = yield* changes.beginPublication(publication);
+          if (!begun.ok) throw new Error(begun.code);
+          const recorded = yield* changes.recordPublishedPullRequest({
+            ...publication,
+            pullRequest: { number: 42, url: "https://github.com/acme/widgets/pull/42" },
+          });
+          if (!recorded.ok) throw new Error(recorded.code);
+          const reconciliation = openChangeReconciliation({
+            persistence: changes,
+            github: {
+              findPullRequests: () => [],
+              getPullRequest: () => ({
+                number: 42,
+                url: "https://github.com/acme/widgets/pull/42",
+                repository: { owner: publicationTarget.owner, repo: publicationTarget.repo },
+                state: "closed",
+                merged: true,
+                baseBranch: publicationTarget.baseBranch,
+                headBranch: "but-why/change-blocked-merged",
+                headSha: "head",
+              }),
+              createPullRequest: () => {
+                throw new Error("Reconciliation must not create a pull request");
+              },
+              updatePullRequest: () => {
+                throw new Error("Reconciliation must not update a pull request");
+              },
+            },
+            cleanupTerminal: openTerminalCleanup({
+              persistence: changes,
+              cleanup: () => ({ state: "complete", blockingReason: null }),
+            }),
+          });
+
+          expect(
+            yield* reconciliation.reconcile({
+              repositoryCommonDirectory: input.commonDirectory,
+              changeId: created.change.id,
+              now,
+            }),
+          ).toMatchObject({
+            rejected: false,
+            changes: [
+              {
+                changeId: created.change.id,
+                status: "completed",
+                cleanup: { state: "complete" },
+              },
+            ],
+          });
+          expect(yield* changes.getChangeById(created.change.id)).toMatchObject({
+            state: "closed",
+            closeReason: "completed",
+          });
+          expect(yield* tasks.getTaskById(taskId)).toMatchObject({ state: "done" });
+          expect(yield* changes.listImplementationBlockers(created.change.id)).toMatchObject({
+            active: { content: "Wait for an external decision that never arrived." },
+            resolutions: [],
+          });
+        }),
+      ),
+    15_000,
+  );
+
+  it.effect(
+    "observes the owned pull request once and derives the linked Task without transition input",
+    () =>
+      withTemporaryRepositoryState((input) =>
+        Effect.gen(function* () {
+          const tasks = yield* openSqliteTaskPersistence("BY");
+          const createdTask = yield* tasks.createTask({
+            title: "Single observation",
+            description: "Completion derives the linked Task from durable Change state.",
+            now,
+          });
+          if (!createdTask.ok) throw new Error(createdTask.code);
+          const taskId = publicTaskId(createdTask.task.id);
+          const approved = yield* tasks.approveTask({ taskId, now });
+          if (!approved.ok) throw new Error(approved.code);
+
+          const starts = yield* openSqliteChangeStartPersistence();
+          const prepared = yield* starts.prepareTask(taskId);
+          if (!prepared.ok) throw new Error(prepared.code);
+          const created = yield* starts.create({
+            id: "change-single-observation",
+            repositoryCommonDirectory: input.commonDirectory,
+            branchRef: "refs/heads/but-why/change-single-observation",
+            baseRef: "refs/heads/main",
+            baseRemoteUrl: "https://github.com/acme/repo.git",
+            startingCommit: "head",
+            worktreePath: join(input.commonDirectory, "worktree"),
+            taskId,
+            now,
+          });
+          if (!created.ok) throw new Error(created.code);
+          yield* starts.recordPrepareOutcome(created.change.id, null, now);
+          const changes = yield* openSqliteChangePersistence();
+          const publication = {
+            changeId: created.change.id,
+            candidateId: "candidate-1",
+            validationRunId: "validation-run-1",
+            target: publicationTarget,
+            headBranch: "but-why/change-single-observation",
+            expectedHeadSha: "head",
+            changeBaseSha: "base",
+            now,
+          };
+          const begun = yield* changes.beginPublication(publication);
+          if (!begun.ok) throw new Error(begun.code);
+          const recorded = yield* changes.recordPublishedPullRequest({
+            ...publication,
+            pullRequest: { number: 42, url: "https://github.com/acme/widgets/pull/42" },
+          });
+          if (!recorded.ok) throw new Error(recorded.code);
+
+          let pullRequestObservations = 0;
+          let capturedInput: CompleteMergedChangeInput | undefined;
+          const persistence: ChangePersistence = {
+            ...changes,
+            completeMergedChange: (input) => {
+              capturedInput = input;
+              return changes.completeMergedChange(input);
+            },
+          };
+          const reconciliation = openChangeReconciliation({
+            persistence,
+            github: {
+              findPullRequests: () => [],
+              getPullRequest: () => {
+                pullRequestObservations += 1;
+                return {
+                  number: 42,
+                  url: "https://github.com/acme/widgets/pull/42",
+                  repository: { owner: publicationTarget.owner, repo: publicationTarget.repo },
+                  state: "closed",
+                  merged: true,
+                  baseBranch: publicationTarget.baseBranch,
+                  headBranch: "but-why/change-single-observation",
+                  headSha: "head",
+                };
+              },
+              createPullRequest: () => {
+                throw new Error("Reconciliation must not create a pull request");
+              },
+              updatePullRequest: () => {
+                throw new Error("Reconciliation must not update a pull request");
+              },
+            },
+            cleanupTerminal: openTerminalCleanup({
+              persistence: changes,
+              cleanup: () => ({ state: "complete", blockingReason: null }),
+            }),
+          });
+
+          expect(
+            yield* reconciliation.reconcile({
+              repositoryCommonDirectory: input.commonDirectory,
+              changeId: created.change.id,
+              now,
+            }),
+          ).toMatchObject({
+            rejected: false,
+            changes: [{ changeId: created.change.id, status: "completed" }],
+          });
+          expect(pullRequestObservations).toBe(1);
+          expect(capturedInput?.observed).toEqual({
+            repository: { owner: publicationTarget.owner, repo: publicationTarget.repo },
+            pullRequest: { number: 42, url: "https://github.com/acme/widgets/pull/42" },
+            baseBranch: publicationTarget.baseBranch,
+            headBranch: "but-why/change-single-observation",
+            mergedHeadSha: "head",
+            candidateId: "candidate-1",
+            validationRunId: "validation-run-1",
+            expectedHeadSha: "head",
+          });
+          expect("taskId" in (capturedInput ?? {})).toBe(false);
+          expect(yield* tasks.getTaskById(taskId)).toMatchObject({ state: "done" });
+        }),
+      ),
+    15_000,
   );
 });
 

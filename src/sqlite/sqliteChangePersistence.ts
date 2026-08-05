@@ -22,6 +22,7 @@ import type {
   RecordPublishedPullRequestInput,
   ReplacePendingChangePublicationInput,
 } from "../change/changeStore.js";
+import type { ObservedMergedChangeEvidence } from "../change/ownedPullRequestClassifier.js";
 import { RepositoryPersistedDataInvalid } from "../contracts/repositoryStorageError.js";
 import { storedPublicTaskId } from "../task/taskId.js";
 import { RepositorySql } from "./repositorySql.js";
@@ -512,6 +513,9 @@ const completeMergedChange = (sql: SqlClient.SqlClient, input: CompleteMergedCha
       return change.closeReason === "completed"
         ? { ok: true as const, changed: false, change }
         : { ok: false as const, code: "change_already_closed" as const };
+    if (!matchesExactMergedEvidence(change, input.observed)) {
+      return { ok: false as const, code: "publication_mismatch" as const };
+    }
     yield* sql`UPDATE changes SET state = 'closed', close_reason = 'completed', cleanup_state = 'pending', cleanup_blocking_reason = NULL, updated_at = ${input.now}, closed_at = ${input.now} WHERE id = ${input.changeId} AND state = 'open'`;
     if (change.taskId !== null)
       yield* sql`UPDATE tasks SET state = 'done', updated_at = ${input.now} WHERE id = ${change.taskId}`;
@@ -521,6 +525,26 @@ const completeMergedChange = (sql: SqlClient.SqlClient, input: CompleteMergedCha
       change: yield* requireChange(sql, input.changeId, "complete merged Change"),
     };
   });
+
+const matchesExactMergedEvidence = (
+  change: ChangeRecord,
+  observed: ObservedMergedChangeEvidence,
+): boolean => {
+  const publication = change.publication;
+  return (
+    publication !== null &&
+    publication.pullRequest !== null &&
+    publication.pullRequest.number === observed.pullRequest.number &&
+    publication.target.owner === observed.repository.owner &&
+    publication.target.repo === observed.repository.repo &&
+    publication.target.baseBranch === observed.baseBranch &&
+    publication.headBranch === observed.headBranch &&
+    publication.candidateId === observed.candidateId &&
+    publication.validationRunId === observed.validationRunId &&
+    publication.expectedHeadSha === observed.expectedHeadSha &&
+    publication.expectedHeadSha === observed.mergedHeadSha
+  );
+};
 
 const cancelChange = (sql: SqlClient.SqlClient, input: CancelChangeInput) =>
   Effect.gen(function* () {
