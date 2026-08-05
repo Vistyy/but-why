@@ -672,16 +672,28 @@ describe("repository SQL storage", () => {
           Effect.gen(function* () {
             yield* sql`UPDATE changes SET publication_candidate_id = ${captured.candidateId}, publication_validation_run_id = 'legacy-run', publication_owner = 'acme', publication_repo = 'repo', publication_base_branch = 'main', publication_remote_name = 'origin', publication_head_branch = 'legacy', publication_expected_head_sha = 'head-legacy', publication_pr_number = 7, publication_pr_url = 'https://github.test/pull/7' WHERE id = ${captured.changeId}`;
             yield* sql`DROP TABLE candidate_publications`;
-            yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id IN (11, 12, 13, 14, 15)`;
+            yield* sql.unsafe(`DROP TABLE implementation_decisions`);
+            yield* sql.unsafe(`CREATE TABLE implementation_decisions (
+              sequence INTEGER PRIMARY KEY AUTOINCREMENT,
+              id TEXT NOT NULL UNIQUE,
+              change_id TEXT NOT NULL,
+              recorded_at TEXT NOT NULL,
+              content TEXT NOT NULL,
+              choice TEXT,
+              rationale TEXT,
+              FOREIGN KEY (change_id) REFERENCES changes(id)
+            )`);
+            yield* sql.unsafe(
+              "CREATE INDEX implementation_decisions_change_sequence_idx ON implementation_decisions (change_id, sequence)",
+            );
+            yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id IN (11, 12, 13, 14, 15, 16)`;
             yield* sql`INSERT INTO implementation_decisions (id, change_id, recorded_at, content) VALUES ('legacy-decision', ${captured.changeId}, '2026-07-25T15:30:00.000Z', 'Legacy unstructured decision')`;
           }),
         );
         yield* Effect.scoped(
           Effect.gen(function* () {
             const upgraded = yield* openSqliteChangePersistence();
-            expect(yield* upgraded.listImplementationDecisions(captured.changeId)).toMatchObject([
-              { content: "Legacy unstructured decision", choice: "Legacy unstructured decision" },
-            ]);
+            expect(yield* upgraded.listImplementationDecisions(captured.changeId)).toEqual([]);
             expect(yield* upgraded.listCandidatePublications(captured.changeId)).toMatchObject([
               {
                 candidateId: captured.candidateId,
@@ -918,6 +930,7 @@ describe("repository SQL storage", () => {
           { migration_id: 13, name: "remove_no_change_completion" },
           { migration_id: 14, name: "remove_change_readiness" },
           { migration_id: 15, name: "remove_acceptance_context_versions" },
+          { migration_id: 16, name: "remove_implementation_decision_content" },
         ]);
         expect(identities).toEqual([{ common_directory: repositorySql.commonDirectory }]);
         expect(candidateColumns.map(({ name }) => name)).toEqual([
@@ -926,6 +939,18 @@ describe("repository SQL storage", () => {
           "change_base_sha",
           "head_sha",
           "created_at",
+        ]);
+        const decisionColumns = yield* repositorySql.operation(
+          "read Implementation Decision shape",
+          (sql) => sql<{ readonly name: string }>`PRAGMA table_info(implementation_decisions)`,
+        );
+        expect(decisionColumns.map(({ name }) => name)).toEqual([
+          "sequence",
+          "id",
+          "change_id",
+          "recorded_at",
+          "choice",
+          "rationale",
         ]);
         expect(taskColumns.map(({ name }) => name)).not.toContain("completion_kind");
         expect(changeColumns.map(({ name }) => name)).not.toContain("no_change_candidate_id");
@@ -976,7 +1001,7 @@ describe("repository SQL storage", () => {
                       '2026-07-25T16:30:00.000Z', '2026-07-25T16:30:00.000Z'
                     )
                   `;
-                  yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id IN (13, 14, 15)`;
+                  yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id IN (13, 14, 15, 16)`;
                 }),
               );
             }).pipe(Effect.provide(repositorySqlLayer({ commonDirectory: directory, statePath }))),
@@ -1050,7 +1075,7 @@ describe("repository SQL storage", () => {
                       'candidate-unsupported', 'run-unsupported'
                     )
                   `;
-                  yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id IN (13, 14, 15)`;
+                  yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id IN (13, 14, 15, 16)`;
                 }),
               );
             }).pipe(Effect.provide(repositorySqlLayer({ commonDirectory: directory, statePath }))),
@@ -1108,7 +1133,7 @@ describe("repository SQL storage", () => {
                       'with-failure', 'head-sha', 42, 'https://github.com/acme/repo/pull/42'
                     )
                   `;
-                  yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id IN (14, 15)`;
+                  yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id IN (14, 15, 16)`;
                 }),
               );
             }).pipe(Effect.provide(repositorySqlLayer({ commonDirectory: directory, statePath }))),
@@ -1206,7 +1231,7 @@ describe("repository SQL storage", () => {
                         'complete', 'passed', '2026-07-25T18:02:00.000Z', '2026-07-25T18:02:00.000Z'
                       )
                     `;
-                    yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id = 15`;
+                    yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id IN (15, 16)`;
                   }),
                 );
               }).pipe(
@@ -1259,6 +1284,166 @@ describe("repository SQL storage", () => {
           }),
         (directory) => Effect.sync(() => rmSync(directory, { recursive: true, force: true })),
       ),
+  );
+
+  it.effect("deletes legacy-only Implementation Decisions and preserves structured rows", () =>
+    Effect.acquireUseRelease(
+      Effect.sync(() => mkdtempSync(join(tmpdir(), "but-why-repository-sql-"))),
+      (directory) =>
+        Effect.gen(function* () {
+          const statePath = join(directory, "state.sqlite");
+          yield* Effect.scoped(
+            Effect.gen(function* () {
+              const repository = yield* RepositorySql;
+              yield* repository.operation("restore Implementation Decision rows", (sql) =>
+                Effect.gen(function* () {
+                  yield* sql.unsafe(`DROP TABLE implementation_decisions`);
+                  yield* sql.unsafe(`CREATE TABLE implementation_decisions (
+                    sequence INTEGER PRIMARY KEY AUTOINCREMENT,
+                    id TEXT NOT NULL UNIQUE,
+                    change_id TEXT NOT NULL,
+                    recorded_at TEXT NOT NULL,
+                    content TEXT NOT NULL,
+                    choice TEXT,
+                    rationale TEXT,
+                    FOREIGN KEY (change_id) REFERENCES changes(id)
+                  )`);
+                  yield* sql.unsafe(
+                    "CREATE INDEX implementation_decisions_change_sequence_idx ON implementation_decisions (change_id, sequence)",
+                  );
+                  yield* sql`
+                    INSERT INTO changes (
+                      id, repository_common_directory, branch_ref, state, close_reason,
+                      created_at, updated_at, closed_at
+                    ) VALUES (
+                      'change-decisions', ${directory}, 'refs/heads/decisions',
+                      'open', NULL, '2026-07-25T18:30:00.000Z', '2026-07-25T18:30:00.000Z', NULL
+                    )
+                  `;
+                  yield* sql`
+                    INSERT INTO implementation_decisions (
+                      id, change_id, recorded_at, content, choice, rationale
+                    ) VALUES (
+                      'structured-decision', 'change-decisions', '2026-07-25T18:31:00.000Z',
+                      '', 'Structured choice', 'Structured rationale'
+                    )
+                  `;
+                  yield* sql`
+                    INSERT INTO implementation_decisions (
+                      id, change_id, recorded_at, content
+                    ) VALUES (
+                      'legacy-decision', 'change-decisions', '2026-07-25T18:32:00.000Z',
+                      'Legacy unstructured decision'
+                    )
+                  `;
+                  yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id = 16`;
+                }),
+              );
+            }).pipe(Effect.provide(repositorySqlLayer({ commonDirectory: directory, statePath }))),
+          );
+
+          yield* Effect.scoped(
+            Effect.gen(function* () {
+              const repository = yield* RepositorySql;
+              const changes = yield* openSqliteChangePersistence();
+              const decisions = yield* changes.listImplementationDecisions("change-decisions");
+              expect(decisions).toEqual([
+                {
+                  id: "structured-decision",
+                  changeId: "change-decisions",
+                  sequence: 1,
+                  recordedAt: "2026-07-25T18:31:00.000Z",
+                  choice: "Structured choice",
+                  rationale: "Structured rationale",
+                },
+              ]);
+              const decisionColumns = yield* repository.operation(
+                "read migrated Implementation Decision columns",
+                (sql) =>
+                  sql<{ readonly name: string }>`PRAGMA table_info(implementation_decisions)`,
+              );
+              expect(decisionColumns.map(({ name }) => name)).not.toContain("content");
+              const migrations = yield* repository.operation(
+                "read re-run migration",
+                (sql) =>
+                  sql<{ readonly name: string }>`
+                    SELECT name FROM effect_sql_migrations WHERE migration_id = 16
+                  `,
+              );
+              expect(migrations).toEqual([{ name: "remove_implementation_decision_content" }]);
+            }).pipe(Effect.provide(repositorySqlLayer({ commonDirectory: directory, statePath }))),
+          );
+        }),
+      (directory) => Effect.sync(() => rmSync(directory, { recursive: true, force: true })),
+    ),
+  );
+
+  it.effect("stops migration with Decision and Change facts for malformed partial rows", () =>
+    Effect.acquireUseRelease(
+      Effect.sync(() => mkdtempSync(join(tmpdir(), "but-why-repository-sql-"))),
+      (directory) =>
+        Effect.gen(function* () {
+          const statePath = join(directory, "state.sqlite");
+          yield* Effect.scoped(
+            Effect.gen(function* () {
+              const repository = yield* RepositorySql;
+              yield* repository.operation("restore malformed partial Decision row", (sql) =>
+                Effect.gen(function* () {
+                  yield* sql.unsafe(`DROP TABLE implementation_decisions`);
+                  yield* sql.unsafe(`CREATE TABLE implementation_decisions (
+                    sequence INTEGER PRIMARY KEY AUTOINCREMENT,
+                    id TEXT NOT NULL UNIQUE,
+                    change_id TEXT NOT NULL,
+                    recorded_at TEXT NOT NULL,
+                    content TEXT NOT NULL,
+                    choice TEXT,
+                    rationale TEXT,
+                    FOREIGN KEY (change_id) REFERENCES changes(id)
+                  )`);
+                  yield* sql.unsafe(
+                    "CREATE INDEX implementation_decisions_change_sequence_idx ON implementation_decisions (change_id, sequence)",
+                  );
+                  yield* sql`
+                    INSERT INTO changes (
+                      id, repository_common_directory, branch_ref, state, close_reason,
+                      created_at, updated_at, closed_at
+                    ) VALUES (
+                      'change-partial', ${directory}, 'refs/heads/partial',
+                      'open', NULL, '2026-07-25T18:40:00.000Z', '2026-07-25T18:40:00.000Z', NULL
+                    )
+                  `;
+                  yield* sql`
+                    INSERT INTO implementation_decisions (
+                      id, change_id, recorded_at, content, choice, rationale
+                    ) VALUES (
+                      'partial-decision', 'change-partial', '2026-07-25T18:41:00.000Z',
+                      'Legacy text', 'Partial choice', NULL
+                    )
+                  `;
+                  yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id = 16`;
+                }),
+              );
+            }).pipe(Effect.provide(repositorySqlLayer({ commonDirectory: directory, statePath }))),
+          );
+
+          const error = yield* Effect.scoped(
+            RepositorySql.pipe(
+              Effect.provide(repositorySqlLayer({ commonDirectory: directory, statePath })),
+            ),
+          ).pipe(Effect.flip);
+
+          expect(error).toBeInstanceOf(RepositoryMigrationFailed);
+          const migrationError = Array.from(
+            Cause.defects(error.cause as Cause.Cause<unknown>),
+          )[0] as {
+            readonly cause?: unknown;
+          };
+          expect(String(migrationError.cause)).toContain("decisionId=partial-decision");
+          expect(String(migrationError.cause)).toContain("changeId=change-partial");
+          expect(String(migrationError.cause)).toContain("without inventing Choice or Rationale");
+        }),
+      (directory) => Effect.sync(() => rmSync(directory, { recursive: true, force: true })),
+    ),
   );
 
   it.effect("reports migration failures through the typed error channel", () =>
@@ -1481,8 +1666,8 @@ describe("repository SQL storage", () => {
         );
 
         return Effect.gen(function* () {
-          expect(yield* readMigrationCount).toBe(15);
-          expect(yield* readMigrationCount).toBe(15);
+          expect(yield* readMigrationCount).toBe(16);
+          expect(yield* readMigrationCount).toBe(16);
         });
       },
       (directory) => Effect.sync(() => rmSync(directory, { recursive: true, force: true })),
