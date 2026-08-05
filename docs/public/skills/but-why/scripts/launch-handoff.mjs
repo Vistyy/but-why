@@ -408,7 +408,7 @@ async function resolveChangeTarget(target, prefix) {
           result: taskResult,
           error: {
             code: "task_not_approved",
-            message: "Task handoff requires an approved Task without a linked Change.",
+            message: "Implementer handoff requires an approved Task without a linked Change.",
           },
         }),
       };

@@ -15,7 +15,7 @@ const section = (source: string, heading: string): string => {
 };
 
 describe("portable But Why skill", () => {
-  it("keeps Operator authority, Task authoring, and handoff in one model-visible skill", () => {
+  it("keeps Operator authority, Task authoring, and Implementer handoff in one model-visible skill", () => {
     const skill = readSkillArtifact("SKILL.md");
     const workflow = readSkillArtifact("references/operator-workflow.md");
 
@@ -35,7 +35,7 @@ describe("portable But Why skill", () => {
     const authorTasks = section(workflow, "Author Tasks");
     const approveTask = section(workflow, "Approve a Task");
     const authorizeImplementation = section(workflow, "Authorize Implementation");
-    const handoff = section(workflow, "Hand Off an Authorized Change");
+    const handoff = section(workflow, "Launch an Implementer Handoff");
 
     expect(selectRoute.indexOf("consequential uncertainty")).toBeLessThan(
       selectRoute.indexOf("Obtain the Operator's explicit Work Route Selection"),
@@ -51,13 +51,15 @@ describe("portable But Why skill", () => {
     );
     expect(authorTasks).not.toContain("by task approve");
     expect(approveTask).toContain("by task approve <task-id>");
-    expect(approveTask).toContain("Do not start a Change or hand off work");
-    expect(authority).toContain("Do not begin implementation, start a Change, or launch a handoff");
+    expect(approveTask).toContain("Do not start a Change or launch an Implementer handoff");
     expect(authority).toContain(
-      "A Task-backed Change Implementation Authorization includes handoff.",
+      "Do not begin implementation, start a Change, or launch an Implementer handoff",
+    );
+    expect(authority).toContain(
+      "A Task-backed Change Implementation Authorization includes an Implementer handoff.",
     );
     expect(authorizeImplementation).toContain(
-      "For a Task-backed Change, confirm that the selected Task is approved and hand it off",
+      "For a Task-backed Change, confirm that the selected Task is approved and launch an Implementer handoff",
     );
     expect(authorizeImplementation).toContain(
       "For a taskless Change, confirm that the selected work remains taskless and implement it in the current session",

@@ -154,8 +154,8 @@ _Avoid_: Agent launch alone, validation, arbitrary state assignment
 The Operator's explicit permission to begin implementing one selected work item through its selected Work Route.
 Task Recording Authorization and Task Approval do not grant it.
 It applies to Task-backed Changes, taskless Changes, and direct edits.
-A Task-backed Change authorization launches a fresh Interactive Session.
-A taskless Change authorization launches one only when it includes handoff.
+A Task-backed Change authorization includes an Implementer Handoff.
+A taskless Change authorization includes an Implementer Handoff only when the Operator explicitly authorizes one.
 _Avoid_: Task Approval, Task Recording Authorization, inferred permission to implement, authorization for unrelated work
 
 **Managed Worktree**:
@@ -169,6 +169,12 @@ _Avoid_: Task state, Validation Run, background Supervisor worker
 **Implementer**:
 The coding agent that changes a Change's Managed Worktree and may author Implementation Decisions or Implementation Blockers.
 _Avoid_: Acceptance Reviewer, Specialist Reviewer, reviewer process
+
+**Implementer Handoff**:
+The authorized operation that starts or verifies the Implementer Interactive Session for one exact Change.
+A Task-backed Change Implementation Authorization includes an Implementer Handoff.
+A taskless Change requires explicit Implementer Handoff authorization.
+_Avoid_: Session transfer, Task Approval, Change Start, agent launch
 
 **Submission**:
 The point-in-time act of asking But Why to fetch the Change Base, inspect a Change's Managed Worktree, select its Candidate or unchanged state, validate a changed Candidate, and publish when eligible.

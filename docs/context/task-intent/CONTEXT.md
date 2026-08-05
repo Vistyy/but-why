@@ -12,7 +12,7 @@ _Avoid_: Agent-selected workflow, Task Approval, Change Start
 
 **Task Recording Authorization**:
 The Operator's explicit permission to persist one proposed set of Task Contexts and Task Dependencies.
-It does not authorize Task Approval, Change Start, or an implementation handoff.
+It does not authorize Task Approval, Change Start, or an Implementer Handoff.
 _Avoid_: Task Approval, approval to implement, automatic Change Start
 
 **Task**:

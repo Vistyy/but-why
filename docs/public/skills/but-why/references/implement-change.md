@@ -1,6 +1,6 @@
 # Implement a Change
 
-The handoff identifies one open Change and its Managed Worktree.
+The Implementer handoff identifies one open Change and its Managed Worktree.
 Let `<but-why>` represent the command prefix resolved by the But Why command guidance.
 
 ## Completion control
