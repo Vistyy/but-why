@@ -296,6 +296,7 @@ const closedChange = (changeId: string, commonDirectory: string): ChangeRecord =
   cleanup: { state: "pending", blockingReason: null },
   state: "closed",
   closeReason: "cancelled",
+  cancelReason: null,
   createdAt: now,
   updatedAt: now,
   closedAt: now,

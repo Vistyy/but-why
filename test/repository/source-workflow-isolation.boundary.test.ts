@@ -95,6 +95,7 @@ test("source workflow delegates a Candidate worktree to the canonical executable
     "simplify_reviewer_sessions",
     "remove_candidate_publications",
     "reviewer_transcripts",
+    "change_cancel_reason",
   ]);
   expect(readTableNames(main)).not.toContain("candidate_migration_probe");
 }, 30_000);

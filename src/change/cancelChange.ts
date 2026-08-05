@@ -26,6 +26,7 @@ export type CancellationUseCases = {
   }) => Effect.Effect<TaskCancellationResult, RepositoryStorageError>;
   readonly cancelChange: (input: {
     readonly changeId: string;
+    readonly reason: string;
     readonly now: string;
   }) => Effect.Effect<ChangeCancellationResult, RepositoryStorageError>;
 };
@@ -81,7 +82,6 @@ export type ChangeCancellationResult =
       readonly code:
         | "change_not_found"
         | "change_already_completed"
-        | "task_backed_change"
         | "github_pull_request_unavailable"
         | "owned_pull_request_mismatch"
         | "github_close_failed"
@@ -89,7 +89,6 @@ export type ChangeCancellationResult =
         | "active_validation_run";
       readonly changeId: string;
       readonly validationRunId?: string;
-      readonly taskId?: PublicTaskId;
     };
 
 export const openCancellationUseCases = (
@@ -167,28 +166,6 @@ const cancelTask = (
     if (task === undefined) return { ok: false, code: "task_not_found", taskId: input.taskId };
     if (task.state === "done")
       return { ok: false, code: "task_already_done", taskId: input.taskId };
-    if (task.state === "cancelled") {
-      const existingChange = yield* dependencies.changes.getChangeByTaskId(input.taskId);
-      if (existingChange === undefined) {
-        return {
-          ok: true,
-          status: "cancelled",
-          changed: false,
-          task,
-          change: null,
-          cleanup: null,
-        };
-      }
-      const withCleanup = yield* cleanupTerminalChange(dependencies, existingChange, input.now);
-      return {
-        ok: true,
-        status: "cancelled" as const,
-        changed: false,
-        task,
-        change: withCleanup.change,
-        cleanup: withCleanup.cleanup,
-      };
-    }
 
     const change = yield* dependencies.changes.getChangeByTaskId(input.taskId);
     if (change === undefined) {
@@ -204,44 +181,78 @@ const cancelTask = (
           }
         : { ok: false, code: cancelled.code, taskId: input.taskId };
     }
+
+    const result = yield* cancelChange(dependencies, {
+      changeId: change.id,
+      reason: input.reason,
+      now: input.now,
+    });
+    if (!result.ok) {
+      return {
+        ok: false as const,
+        code: result.code,
+        taskId: input.taskId,
+        ...(result.validationRunId === undefined
+          ? {}
+          : { validationRunId: result.validationRunId }),
+      };
+    }
+    return {
+      ok: true,
+      status: result.status,
+      changed: result.changed,
+      task: result.task ?? task,
+      change: result.change,
+      cleanup: result.change.cleanup,
+    };
+  });
+
+const cancelChange = (
+  dependencies: CancellationDependencies,
+  input: Parameters<CancellationUseCases["cancelChange"]>[0],
+): Effect.Effect<ChangeCancellationResult, RepositoryStorageError> =>
+  Effect.gen(function* () {
+    const change = yield* dependencies.changes.getChangeById(input.changeId);
+    if (change === undefined)
+      return { ok: false, code: "change_not_found", changeId: input.changeId };
+
+    if (change.state === "closed") {
+      if (change.closeReason !== "cancelled") {
+        return { ok: false, code: "change_already_completed" as const, changeId: change.id };
+      }
+      const withCleanup = yield* cleanupTerminalChange(dependencies, change, input.now);
+      const task = yield* loadLinkedTask(dependencies, change);
+      return {
+        ok: true as const,
+        status: "cancelled" as const,
+        changed: false,
+        change: withCleanup.change,
+        task,
+      };
+    }
+
     const active = yield* dependencies.validation?.getActiveForChange(change.id) ??
       Effect.succeed(undefined);
     if (active !== undefined) {
       return {
         ok: false,
         code: "active_validation_run",
-        taskId: input.taskId,
+        changeId: change.id,
         validationRunId: active.validationRunId,
       } as const;
-    }
-    if (change.state === "closed") {
-      if (change.closeReason === "completed") {
-        return { ok: false, code: "change_already_completed", taskId: input.taskId };
-      }
-      const cancelled = yield* dependencies.tasks.cancelTask(input);
-      if (!cancelled.ok) return { ok: false, code: cancelled.code, taskId: input.taskId };
-      const withCleanup = yield* cleanupTerminalChange(dependencies, change, input.now);
-      return {
-        ok: true,
-        status: "cancelled" as const,
-        changed: cancelled.changed,
-        task: cancelled.task,
-        change: withCleanup.change,
-        cleanup: withCleanup.cleanup,
-      };
     }
 
     const remote = observeOwnedPullRequest(dependencies.github, change);
     switch (remote.kind) {
       case "unavailable":
-        return { ok: false, code: "github_pull_request_unavailable", taskId: input.taskId };
+        return { ok: false, code: "github_pull_request_unavailable", changeId: change.id };
       case "mismatch":
-        return { ok: false, code: "owned_pull_request_mismatch", taskId: input.taskId };
+        return { ok: false, code: "owned_pull_request_mismatch", changeId: change.id };
       case "exact_merged":
         return yield* completeMerged(dependencies, change, input.now, remote.pullRequest);
       case "exact_open": {
         const closed = closeOwnedPullRequest(dependencies, change);
-        if (!closed.ok) return { ...closed, taskId: input.taskId };
+        if (!closed.ok) return { ...closed, changeId: change.id };
         if (closed.status === "merged") {
           return yield* completeMerged(dependencies, change, input.now, closed.pullRequest);
         }
@@ -257,134 +268,27 @@ const cancelTask = (
       reason: input.reason,
       now: input.now,
     });
-    if (!cancelled.ok) return { ...cancelled, taskId: input.taskId };
-    const withCleanup = yield* cleanupTerminalChange(dependencies, cancelled.change, input.now);
-    const finalTask = yield* dependencies.tasks.getTaskById(input.taskId);
-    if (finalTask === undefined) return { ok: false, code: "task_not_found", taskId: input.taskId };
-    return {
-      ok: true,
-      status: "cancelled" as const,
-      changed: cancelled.changed,
-      task: finalTask,
-      change: withCleanup.change,
-      cleanup: withCleanup.cleanup,
-    };
-  });
-
-const cancelChange = (
-  dependencies: CancellationDependencies,
-  input: Parameters<CancellationUseCases["cancelChange"]>[0],
-): Effect.Effect<ChangeCancellationResult, RepositoryStorageError> =>
-  Effect.gen(function* () {
-    const change = yield* dependencies.changes.getChangeById(input.changeId);
-    if (change === undefined)
-      return { ok: false, code: "change_not_found", changeId: input.changeId };
-    if (change.taskId !== null) {
-      return {
-        ok: false,
-        code: "task_backed_change",
-        changeId: change.id,
-        taskId: change.taskId,
-      };
-    }
-    const active = yield* dependencies.validation?.getActiveForChange(change.id) ??
-      Effect.succeed(undefined);
-    if (active !== undefined) {
-      return {
-        ok: false,
-        code: "active_validation_run",
-        changeId: change.id,
-        validationRunId: active.validationRunId,
-      } as const;
-    }
-    if (change.state === "closed") {
-      if (change.closeReason !== "cancelled") {
-        return { ok: false, code: "change_already_completed" as const, changeId: change.id };
-      }
-      const withCleanup = yield* cleanupTerminalChange(dependencies, change, input.now);
-      return {
-        ok: true,
-        status: "cancelled" as const,
-        changed: false,
-        change: withCleanup.change,
-        task: null,
-      };
-    }
-
-    const remote = observeOwnedPullRequest(dependencies.github, change);
-    switch (remote.kind) {
-      case "unavailable":
-        return { ok: false, code: "github_pull_request_unavailable", changeId: change.id };
-      case "mismatch":
-        return { ok: false, code: "owned_pull_request_mismatch", changeId: change.id };
-      case "exact_merged":
-        return yield* completeMergedChange(dependencies, change, input.now, remote.pullRequest);
-      case "exact_open": {
-        const closed = closeOwnedPullRequest(dependencies, change);
-        if (!closed.ok) return { ...closed, changeId: change.id };
-        if (closed.status === "merged") {
-          return yield* completeMergedChange(dependencies, change, input.now, closed.pullRequest);
-        }
-        break;
-      }
-      case "not_owned":
-      case "exact_closed_unmerged":
-        break;
-    }
-
-    const cancelled = yield* dependencies.changes.cancelChange({
-      changeId: change.id,
-      reason: "Taskless Change cancelled",
-      now: input.now,
-    });
     if (!cancelled.ok) return { ...cancelled, changeId: change.id };
     const withCleanup = yield* cleanupTerminalChange(dependencies, cancelled.change, input.now);
+    const task = yield* loadLinkedTask(dependencies, change);
     return {
-      ok: true,
+      ok: true as const,
       status: "cancelled" as const,
       changed: cancelled.changed,
       change: withCleanup.change,
-      task: null,
+      task,
     };
   });
 
-const completeMerged = (
+const loadLinkedTask = (
   dependencies: CancellationDependencies,
   change: ChangeRecord,
-  now: string,
-  mergedPullRequest: GitHubPullRequest,
-): Effect.Effect<TaskCancellationResult, RepositoryStorageError> =>
-  Effect.gen(function* () {
-    if (change.taskId === null)
-      return yield* Effect.die(new Error("Merged Task Change lacks a Task"));
-    const taskId = change.taskId;
-    const observed = observedMergedChangeEvidence(change, mergedPullRequest);
-    if (observed === undefined)
-      return { ok: false as const, code: "owned_pull_request_mismatch" as const, taskId };
-    const completed = yield* dependencies.changes.completeMergedChange({
-      changeId: change.id,
-      now,
-      observed,
-    });
-    if (!completed.ok) {
-      return completed.code === "publication_mismatch"
-        ? { ok: false as const, code: "owned_pull_request_mismatch" as const, taskId }
-        : { ok: false as const, code: "change_already_completed" as const, taskId };
-    }
-    const withCleanup = yield* cleanupTerminalChange(dependencies, completed.change, now);
-    const task = yield* dependencies.tasks.getTaskById(taskId);
-    if (task === undefined) return { ok: false, code: "task_not_found", taskId };
-    return {
-      ok: true,
-      status: "completed" as const,
-      changed: completed.changed,
-      task,
-      change: withCleanup.change,
-      cleanup: withCleanup.cleanup,
-    };
-  });
+): Effect.Effect<TaskRecord | null, RepositoryStorageError> =>
+  change.taskId === null
+    ? Effect.succeed(null)
+    : Effect.map(dependencies.tasks.getTaskById(change.taskId), (task) => task ?? null);
 
-const completeMergedChange = (
+const completeMerged = (
   dependencies: CancellationDependencies,
   change: ChangeRecord,
   now: string,
@@ -413,12 +317,13 @@ const completeMergedChange = (
         : { ok: false as const, code: "change_already_completed" as const, changeId: change.id };
     }
     const withCleanup = yield* cleanupTerminalChange(dependencies, completed.change, now);
+    const task = yield* loadLinkedTask(dependencies, change);
     return {
-      ok: true,
+      ok: true as const,
       status: "completed" as const,
       changed: completed.changed,
       change: withCleanup.change,
-      task: null,
+      task,
     };
   });
 

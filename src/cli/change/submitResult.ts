@@ -36,7 +36,7 @@ export const submitResult = (result: ChangeSubmitResult, changeId: string): CliR
         status: result.status,
         help: [
           "Continue implementation in the Managed Worktree and retry Change Submit, or cancel explicitly.",
-          `Run \`by change cancel ${result.changeId}\` to cancel this unchanged Change.`,
+          `Run \`by change cancel ${result.changeId} --reason "<reason>"\` to cancel this unchanged Change.`,
         ],
       });
     }

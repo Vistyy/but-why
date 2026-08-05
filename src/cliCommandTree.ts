@@ -496,14 +496,18 @@ const changeSubmitCommand = withCliHandler(
     ),
 );
 const changeCancelCommand = withCliHandler(
-  leaf("cancel", "Cancel an open taskless Change.", {
+  leaf("cancel", "Cancel an unfinished Change.", {
     changeId: Args.optional(changeIdArgument),
+    reason: Options.text("reason"),
   }),
   (values, environment) =>
     Effect.promise(() => import("./cli/change/cancel.js")).pipe(
       Effect.flatMap(({ runCancel }) =>
         runCancel(
-          { changeId: optionalString(values, "changeId") },
+          {
+            changeId: optionalString(values, "changeId"),
+            reason: requiredString(values, "reason"),
+          },
           environment as ChangeCommandEnvironment,
         ),
       ),

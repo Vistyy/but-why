@@ -474,7 +474,7 @@ describe("Change Start Managed Worktree boundaries", () => {
         },
         help: [
           expect.stringContaining("Recover the branch externally"),
-          expect.stringContaining(`by change cancel ${output.change.id}`),
+          expect.stringContaining(`by change cancel ${output.change.id} --reason "<reason>"`),
         ],
       });
       expect(git(root, "branch", "--list", output.branch.slice("refs/heads/".length))).toBe("");
@@ -508,7 +508,7 @@ describe("Change Start Managed Worktree boundaries", () => {
         },
         help: [
           expect.stringContaining("Remove or relocate the worktree that holds the branch"),
-          expect.stringContaining(`by change cancel ${output.change.id}`),
+          expect.stringContaining(`by change cancel ${output.change.id} --reason "<reason>"`),
         ],
       });
       expect(existsSync(output.worktreePath)).toBe(false);
@@ -541,7 +541,7 @@ describe("Change Start Managed Worktree boundaries", () => {
         },
         help: [
           expect.stringContaining("Move the conflicting files aside or remove them"),
-          expect.stringContaining(`by change cancel ${output.change.id}`),
+          expect.stringContaining(`by change cancel ${output.change.id} --reason "<reason>"`),
         ],
       });
       expect(existsSync(join(output.worktreePath, "keep.txt"))).toBe(true);
@@ -574,7 +574,7 @@ describe("Change Start Managed Worktree boundaries", () => {
         },
         help: [
           expect.stringContaining("Move the conflicting files aside or remove them"),
-          expect.stringContaining(`by change cancel ${output.change.id}`),
+          expect.stringContaining(`by change cancel ${output.change.id} --reason "<reason>"`),
         ],
       });
       expect(existsSync(join(output.worktreePath, "keep.txt"))).toBe(true);
@@ -866,6 +866,7 @@ const changeStartRecord = (root: string): ChangeStartRecord => {
     cleanup: { state: "pending", blockingReason: null },
     state: "open",
     closeReason: null,
+    cancelReason: null,
     createdAt: now,
     updatedAt: now,
     closedAt: null,

@@ -395,7 +395,7 @@ help[1]: "Replace <git-common-dir>/but-why/state.sqlite with a known-good copy, 
         status: "nothing_to_submit",
         help: [
           "Continue implementation in the Managed Worktree and retry Change Submit, or cancel explicitly.",
-          `Run \`by change cancel ${change.change.id}\` to cancel this unchanged Change.`,
+          `Run \`by change cancel ${change.change.id} --reason "<reason>"\` to cancel this unchanged Change.`,
         ],
       });
     }),

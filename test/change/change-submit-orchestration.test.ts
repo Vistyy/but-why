@@ -1756,6 +1756,7 @@ const readyChange = (overrides: Partial<ChangeRecord> = {}): ChangeRecord => ({
   cleanup: { state: "pending", blockingReason: null },
   state: "open",
   closeReason: null,
+  cancelReason: null,
   createdAt: now,
   updatedAt: now,
   closedAt: null,

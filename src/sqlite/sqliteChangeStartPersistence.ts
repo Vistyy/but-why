@@ -50,6 +50,7 @@ const columns = [
   "cleanup_blocking_reason AS cleanupBlockingReason",
   "state",
   "close_reason AS closeReason",
+  "cancel_reason AS cancelReason",
   "created_at AS createdAt",
   "updated_at AS updatedAt",
   "closed_at AS closedAt",
@@ -238,6 +239,7 @@ const mapRow = (row: ChangeStartRow | undefined) => {
       cleanup: { state: row.cleanupState, blockingReason: row.cleanupBlockingReason },
       state: row.state,
       closeReason: row.closeReason,
+      cancelReason: row.cancelReason,
       createdAt: row.createdAt,
       updatedAt: row.updatedAt,
       closedAt: row.closedAt,
@@ -274,6 +276,7 @@ type ChangeStartRow = {
   readonly cleanupBlockingReason: string | null;
   readonly state: ChangeStartRecord["state"];
   readonly closeReason: ChangeStartRecord["closeReason"];
+  readonly cancelReason: ChangeStartRecord["cancelReason"];
   readonly createdAt: string;
   readonly updatedAt: string;
   readonly closedAt: string | null;

@@ -83,6 +83,7 @@ export type ChangeRecord = {
   readonly state: ChangeState;
   readonly activeBlocker?: import("./implementationBlocker.js").ImplementationBlocker | null;
   readonly closeReason: ChangeCloseReason | null;
+  readonly cancelReason: string | null;
   readonly createdAt: string;
   readonly updatedAt: string;
   readonly closedAt: string | null;
