@@ -8,6 +8,10 @@ import {
   type RemoteChangeBranch,
 } from "./change.js";
 import type { ChangePersistence } from "./changePersistence.js";
+import type {
+  TranscriptIndexOperation,
+  TranscriptIndexResult,
+} from "./reviewerSession/reviewerTranscript.js";
 
 export type ChangeCleanupOperationResult =
   | { readonly state: "complete" }
@@ -18,7 +22,6 @@ export type ChangeCleanupOperation = (input: {
   readonly worktreePath: string | null;
   readonly branchRef: string;
   readonly remoteChangeBranch?: RemoteChangeBranch;
-  readonly reviewerSessionPath?: string;
 }) => ChangeCleanupOperationResult;
 
 export type TerminalCleanupResult =
@@ -42,6 +45,7 @@ export const openTerminalCleanup =
   (dependencies: {
     readonly persistence: Pick<ChangePersistence, "recordCleanup" | "removeReviewerSessions">;
     readonly cleanup: ChangeCleanupOperation;
+    readonly indexTranscripts?: TranscriptIndexOperation;
     readonly reviewerSessionPathFor?: (changeId: string) => string;
     readonly artifactLifecycle?: ArtifactLifecycleOwner;
   }): TerminalCleanupOperation =>
@@ -59,15 +63,20 @@ const cleanupTerminalChange = (
     }
     if (change.state !== changeState.closed) return { ok: false, code: "change_not_closed" };
 
+    const indexResult = yield* indexTranscripts(dependencies, change);
+    if (indexResult !== undefined && !indexResult.ok) {
+      return yield* recordCleanup(dependencies, change, now, {
+        state: "pending",
+        blockingReason: "transcript_index_failed",
+      });
+    }
+
     const remoteChangeBranch = remoteChangeBranchFor(change);
     const result = dependencies.cleanup({
       repositoryCommonDirectory: change.repositoryCommonDirectory,
       worktreePath: change.worktreePath,
       branchRef: change.branchRef,
       ...(remoteChangeBranch === undefined ? {} : { remoteChangeBranch }),
-      ...(dependencies.reviewerSessionPathFor === undefined
-        ? {}
-        : { reviewerSessionPath: dependencies.reviewerSessionPathFor(change.id) }),
     });
     if (result.state === "pending") {
       return yield* recordCleanup(dependencies, change, now, {
@@ -111,6 +120,22 @@ const recordCleanup = (
     if (!recorded.ok) return { ok: false, code: recorded.code };
     return { ok: true, change: recorded.change, cleanup: recorded.change.cleanup };
   });
+
+const indexTranscripts = (
+  dependencies: Parameters<typeof openTerminalCleanup>[0],
+  change: ChangeRecord,
+): Effect.Effect<TranscriptIndexResult | undefined, RepositoryStorageError> => {
+  if (
+    dependencies.indexTranscripts === undefined ||
+    dependencies.reviewerSessionPathFor === undefined
+  ) {
+    return Effect.succeed(undefined);
+  }
+  return dependencies.indexTranscripts({
+    changeId: change.id,
+    reviewerSessionPath: dependencies.reviewerSessionPathFor(change.id),
+  });
+};
 
 const remoteChangeBranchFor = (change: ChangeRecord): RemoteChangeBranch | undefined => {
   const publication = change.publication;

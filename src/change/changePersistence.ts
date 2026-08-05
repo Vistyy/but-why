@@ -6,6 +6,7 @@ import type { ImplementationDecision } from "./implementationDecision.js";
 import type { CandidateValidationPolicySnapshot } from "./candidateValidation/candidateValidationRunStore.js";
 import type { ImplementationBlockerHistory } from "./implementationBlocker.js";
 import type { ReviewerSessionRecord } from "./reviewerSession/reviewerSession.js";
+import type { ReviewerTranscript } from "./reviewerSession/reviewerTranscript.js";
 import type {
   BeginChangePublicationInput,
   BeginChangePublicationResult,
@@ -117,6 +118,13 @@ export type ChangePersistence = {
   readonly saveReviewerSession: (input: ReviewerSessionRecord) => StorageEffect<void>;
   readonly removeReviewerSession: (changeId: string, producer: string) => StorageEffect<void>;
   readonly removeReviewerSessions: (changeId: string) => StorageEffect<void>;
+  readonly listReviewerTranscripts: (
+    changeId: string,
+  ) => StorageEffect<readonly ReviewerTranscript[]>;
+  readonly recordReviewerTranscripts: (input: {
+    readonly changeId: string;
+    readonly transcripts: readonly ReviewerTranscript[];
+  }) => StorageEffect<void>;
   readonly beginPublication: (
     input: BeginChangePublicationInput,
   ) => StorageEffect<BeginChangePublicationResult>;

@@ -40,6 +40,7 @@ export type ReviewerSessionStore = {
     producer: string,
   ) => Effect.Effect<ReviewerSessionRecord | undefined, RepositoryStorageError>;
   readonly save: (input: ReviewerSessionRecord) => Effect.Effect<void, RepositoryStorageError>;
+  // remove clears only the active continuation record; retained Reviewer Transcript files stay on disk for Terminal Cleanup indexing.
   readonly remove: (
     changeId: string,
     producer: string,
