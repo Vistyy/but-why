@@ -2,10 +2,6 @@
 
 import { runtimeError, success, type CliResult } from "../../cliResults.js";
 import type { ChangeSubmitResult } from "../../change/submitChange.js";
-import type { CandidateValidationFinding } from "../../change/candidateValidation/candidateValidationRunStore.js";
-
-const changeFindingView = ({ severity: _severity, ...finding }: CandidateValidationFinding) =>
-  finding;
 
 type SubmitRecoveryAction =
   | "resolve_dirty_work"
@@ -131,7 +127,7 @@ export const submitResult = (result: ChangeSubmitResult, changeId: string): CliR
         changeId: result.changeId,
         candidateId: result.candidateId,
         validationRunId: result.validationRunId,
-        findings: result.findings.map(changeFindingView),
+        findings: result.findings,
         ...(result.reviewerEvidence === undefined
           ? {}
           : { reviewerEvidence: result.reviewerEvidence }),

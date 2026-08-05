@@ -5,18 +5,7 @@ export const validationPhase = {
   specialistReview: "specialist_review",
 } as const;
 
-const validationPhaseStatuses = [
-  "pending",
-  "active",
-  "passed",
-  "failed",
-  "skipped",
-  "workflow_failed",
-] as const;
-
 export type ValidationPhase = (typeof validationPhase)[keyof typeof validationPhase];
-export type ValidationPhaseStatus = (typeof validationPhaseStatuses)[number];
-export type FindingSeverity = "critical" | "high" | "medium" | "low";
 
 export type GitHubPrTarget = {
   readonly owner: string;
@@ -33,7 +22,6 @@ export type ValidationRunFindingRecord = {
   readonly producer: string;
   readonly title: string;
   readonly description: string;
-  readonly severity?: FindingSeverity;
   readonly evidence: string;
   readonly files: readonly string[];
   readonly artifactRefs: readonly string[];

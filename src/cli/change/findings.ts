@@ -4,14 +4,10 @@
 import { Effect } from "effect";
 import type { CliResult } from "../../cliResults.js";
 import type { ChangeCommandEnvironment } from "./changeTypes.js";
-import type { CandidateValidationFinding } from "../../change/candidateValidation/candidateValidationRunStore.js";
 import { loadChangeInspection } from "../../change/loadChangeInspection.js";
 import { success } from "../../cliResults.js";
 import { structuredValue } from "../../output/structuredValue.js";
 import * as support from "./changeSupport.js";
-
-const changeFindingView = ({ severity: _severity, ...finding }: CandidateValidationFinding) =>
-  finding;
 
 export const runFindings = (
   command: { readonly changeId: string | undefined },
@@ -30,7 +26,7 @@ export const runFindings = (
               change: support.changeInspectionView(result.change),
               candidate: result.candidate,
               validationRun: structuredValue(result.validationRun),
-              findings: result.findings.map(changeFindingView),
+              findings: result.findings,
               toolingFailures: result.toolingFailures,
               count: result.findings.length,
             }),

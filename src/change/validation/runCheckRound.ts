@@ -59,8 +59,6 @@ type CheckRound = {
   readonly producer: string;
   readonly roundNumber: number;
   readonly failed: boolean;
-  readonly lastCheck: boolean;
-  readonly priorFailure: boolean;
   readonly artifactRecords: RecordCandidateValidationCheckRoundInput["artifactRecords"];
   readonly finding?: NonNullable<RecordCandidateValidationCheckRoundInput["finding"]>;
 };
@@ -76,7 +74,7 @@ export const runCheckPhase = (
         progress: input.progress,
         phase: { kind: "check", id: check.id },
         run: Effect.gen(function* () {
-          const checkRound = yield* runSingleCheck(input, check, index, foundFailure);
+          const checkRound = yield* runSingleCheck(input, check, index);
           yield* recordCheckRound(input, checkRound);
           return checkRound;
         }),
@@ -99,7 +97,6 @@ const runSingleCheck = (
   input: RunCheckPhaseInput,
   check: SubmitCheckConfig,
   index: number,
-  priorFailure: boolean,
 ): Effect.Effect<CheckRound, ValidationToolingFailure> =>
   Effect.gen(function* () {
     const startedAt = yield* Clock.currentTimeMillis;
@@ -127,8 +124,6 @@ const runSingleCheck = (
       producer: check.id,
       roundNumber: index + 1,
       failed,
-      lastCheck: index === input.checks.length - 1,
-      priorFailure,
       artifactRecords,
       ...(failed
         ? {
@@ -154,12 +149,6 @@ const recordCheckRound = (
     producer: checkRound.producer,
     roundNumber: checkRound.roundNumber,
     roundStatus: checkRound.failed ? "failed" : "passed",
-    phaseStatus:
-      checkRound.failed || (checkRound.lastCheck && checkRound.priorFailure)
-        ? "failed"
-        : checkRound.lastCheck
-          ? "passed"
-          : "active",
     artifactRecords: checkRound.artifactRecords,
     ...(checkRound.finding === undefined ? {} : { finding: checkRound.finding }),
     now: input.now,

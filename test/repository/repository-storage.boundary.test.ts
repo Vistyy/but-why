@@ -1037,7 +1037,7 @@ describe("repository SQL storage", () => {
             yield* sql.unsafe(
               "CREATE INDEX implementation_decisions_change_sequence_idx ON implementation_decisions (change_id, sequence)",
             );
-            yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id IN (11, 12, 13, 14, 15, 16, 17)`;
+            yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id IN (11, 12, 13, 14, 15, 16, 17, 18)`;
             yield* sql`INSERT INTO implementation_decisions (id, change_id, recorded_at, content) VALUES ('legacy-decision', ${captured.changeId}, '2026-07-25T15:30:00.000Z', 'Legacy unstructured decision')`;
           }),
         );
@@ -1283,6 +1283,7 @@ describe("repository SQL storage", () => {
           { migration_id: 15, name: "remove_acceptance_context_versions" },
           { migration_id: 16, name: "remove_implementation_decision_content" },
           { migration_id: 17, name: "validation_run_blocker_identity" },
+          { migration_id: 18, name: "remove_finding_severity" },
         ]);
         expect(identities).toEqual([{ common_directory: repositorySql.commonDirectory }]);
         expect(candidateColumns.map(({ name }) => name)).toEqual([
@@ -1292,6 +1293,11 @@ describe("repository SQL storage", () => {
           "head_sha",
           "created_at",
         ]);
+        const findingColumns = yield* repositorySql.operation(
+          "read Finding shape",
+          (sql) => sql<{ readonly name: string }>`PRAGMA table_info(candidate_validation_findings)`,
+        );
+        expect(findingColumns.map(({ name }) => name)).not.toContain("severity");
         const decisionColumns = yield* repositorySql.operation(
           "read Implementation Decision shape",
           (sql) => sql<{ readonly name: string }>`PRAGMA table_info(implementation_decisions)`,
@@ -1353,7 +1359,7 @@ describe("repository SQL storage", () => {
                       '2026-07-25T16:30:00.000Z', '2026-07-25T16:30:00.000Z'
                     )
                   `;
-                  yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id IN (13, 14, 15, 16, 17)`;
+                  yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id IN (13, 14, 15, 16, 17, 18)`;
                 }),
               );
             }).pipe(Effect.provide(repositorySqlLayer({ commonDirectory: directory, statePath }))),
@@ -1395,6 +1401,94 @@ describe("repository SQL storage", () => {
     ),
   );
 
+  it.effect("drops Finding severity while preserving supported Findings", () =>
+    Effect.acquireUseRelease(
+      Effect.sync(() => mkdtempSync(join(tmpdir(), "but-why-repository-sql-"))),
+      (directory) =>
+        Effect.gen(function* () {
+          const statePath = join(directory, "state.sqlite");
+          yield* Effect.scoped(
+            Effect.gen(function* () {
+              const repository = yield* RepositorySql;
+              yield* repository.operation("restore legacy Finding severity column", (sql) =>
+                Effect.gen(function* () {
+                  yield* sql`ALTER TABLE candidate_validation_findings ADD COLUMN severity TEXT`;
+                  yield* sql`
+                    INSERT INTO changes (
+                      id, repository_common_directory, branch_ref, state,
+                      created_at, updated_at
+                    ) VALUES (
+                      'change-severity', ${directory}, 'refs/heads/severity',
+                      'open', '2026-07-25T16:30:00.000Z', '2026-07-25T16:30:00.000Z'
+                    )
+                  `;
+                  yield* sql`
+                    INSERT INTO candidates (
+                      id, change_id, change_base_sha, head_sha, created_at
+                    ) VALUES (
+                      'candidate-severity', 'change-severity', 'base-sha', 'head-sha',
+                      '2026-07-25T16:30:00.000Z'
+                    )
+                  `;
+                  yield* sql`
+                    INSERT INTO candidate_validation_runs (
+                      id, candidate_id, policy_snapshot, state, outcome,
+                      created_at, updated_at
+                    ) VALUES (
+                      'run-severity', 'candidate-severity', '{}', 'complete', 'passed',
+                      '2026-07-25T16:30:00.000Z', '2026-07-25T16:30:00.000Z'
+                    )
+                  `;
+                  yield* sql`
+                    INSERT INTO candidate_validation_findings (
+                      id, validation_run_id, phase, producer, title, description, severity,
+                      evidence, files, artifact_refs, created_at, updated_at
+                    ) VALUES (
+                      'finding-severity', 'run-severity', 'checks', 'quality',
+                      'Historical Check Finding', 'Remains readable after migration.', 'high',
+                      'exitCode: 1', '[]', '[]',
+                      '2026-07-25T16:30:00.000Z', '2026-07-25T16:30:00.000Z'
+                    )
+                  `;
+                  yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id = 18`;
+                }),
+              );
+            }).pipe(Effect.provide(repositorySqlLayer({ commonDirectory: directory, statePath }))),
+          );
+
+          yield* Effect.scoped(
+            Effect.gen(function* () {
+              const repository = yield* RepositorySql;
+              const validation = yield* openSqliteChangeValidationPersistence();
+              const findings = yield* validation.listFindings("run-severity");
+              expect(findings).toEqual([
+                {
+                  id: "finding-severity",
+                  validationRunId: "run-severity",
+                  phase: "checks",
+                  producer: "quality",
+                  title: "Historical Check Finding",
+                  description: "Remains readable after migration.",
+                  evidence: "exitCode: 1",
+                  files: [],
+                  artifactRefs: [],
+                  createdAt: "2026-07-25T16:30:00.000Z",
+                  updatedAt: "2026-07-25T16:30:00.000Z",
+                },
+              ]);
+              const findingColumns = yield* repository.operation(
+                "read migrated Finding columns",
+                (sql) =>
+                  sql<{ readonly name: string }>`PRAGMA table_info(candidate_validation_findings)`,
+              );
+              expect(findingColumns.map(({ name }) => name)).not.toContain("severity");
+            }).pipe(Effect.provide(repositorySqlLayer({ commonDirectory: directory, statePath }))),
+          );
+        }),
+      (directory) => Effect.sync(() => rmSync(directory, { recursive: true, force: true })),
+    ),
+  );
+
   it.effect("stops migration with Task and Change facts for unsupported No-Change records", () =>
     Effect.acquireUseRelease(
       Effect.sync(() => mkdtempSync(join(tmpdir(), "but-why-repository-sql-"))),
@@ -1427,7 +1521,7 @@ describe("repository SQL storage", () => {
                       'candidate-unsupported', 'run-unsupported'
                     )
                   `;
-                  yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id IN (13, 14, 15, 16, 17)`;
+                  yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id IN (13, 14, 15, 16, 17, 18)`;
                 }),
               );
             }).pipe(Effect.provide(repositorySqlLayer({ commonDirectory: directory, statePath }))),
@@ -1485,7 +1579,7 @@ describe("repository SQL storage", () => {
                       'with-failure', 'head-sha', 42, 'https://github.com/acme/repo/pull/42'
                     )
                   `;
-                  yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id IN (14, 15, 16, 17)`;
+                  yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id IN (14, 15, 16, 17, 18)`;
                 }),
               );
             }).pipe(Effect.provide(repositorySqlLayer({ commonDirectory: directory, statePath }))),
@@ -1583,7 +1677,7 @@ describe("repository SQL storage", () => {
                         'complete', 'passed', '2026-07-25T18:02:00.000Z', '2026-07-25T18:02:00.000Z'
                       )
                     `;
-                    yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id IN (15, 16, 17)`;
+                    yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id IN (15, 16, 17, 18)`;
                   }),
                 );
               }).pipe(
@@ -1688,7 +1782,7 @@ describe("repository SQL storage", () => {
                       'Legacy unstructured decision'
                     )
                   `;
-                  yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id IN (16, 17)`;
+                  yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id IN (16, 17, 18)`;
                 }),
               );
             }).pipe(Effect.provide(repositorySqlLayer({ commonDirectory: directory, statePath }))),
@@ -1772,7 +1866,7 @@ describe("repository SQL storage", () => {
                       'Legacy text', 'Partial choice', NULL
                     )
                   `;
-                  yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id IN (16, 17)`;
+                  yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id IN (16, 17, 18)`;
                 }),
               );
             }).pipe(Effect.provide(repositorySqlLayer({ commonDirectory: directory, statePath }))),
@@ -1931,6 +2025,43 @@ describe("repository SQL storage", () => {
     ),
   );
 
+  it.scoped("reports a malformed Change record through the typed error channel", () =>
+    withTemporaryState((input) =>
+      Effect.gen(function* () {
+        const starts = yield* openSqliteChangeStartPersistence();
+        const changes = yield* openSqliteChangePersistence();
+        const started = yield* starts.create({
+          id: "change-malformed",
+          repositoryCommonDirectory: input.commonDirectory,
+          branchRef: "refs/heads/but-why/by-1-malformed",
+          baseRef: "main",
+          baseRemoteUrl: "https://github.com/acme/repo.git",
+          startingCommit: "1111111111111111111111111111111111111111",
+          worktreePath: join(input.commonDirectory, "worktrees", "by-1-malformed"),
+          now: "2026-07-17T23:10:00.000Z",
+        });
+        if (!started.ok) return;
+
+        const repository = yield* RepositorySql;
+        yield* repository.operation(
+          "corrupt Change publication marker",
+          (sql) => sql`
+            UPDATE changes
+            SET publication_candidate_id = 'candidate-malformed'
+            WHERE id = ${started.change.id}
+          `,
+        );
+
+        const error = yield* changes.getChangeById(started.change.id).pipe(Effect.flip);
+        expect(error).toBeInstanceOf(RepositoryPersistedDataInvalid);
+        expect(error).toMatchObject({
+          _tag: "RepositoryPersistedDataInvalid",
+          operationName: "read Change",
+        });
+      }),
+    ),
+  );
+
   it.scoped("reports SQL operation failures through the typed error channel", () =>
     withTemporaryState(() =>
       Effect.gen(function* () {
@@ -2018,8 +2149,8 @@ describe("repository SQL storage", () => {
         );
 
         return Effect.gen(function* () {
-          expect(yield* readMigrationCount).toBe(17);
-          expect(yield* readMigrationCount).toBe(17);
+          expect(yield* readMigrationCount).toBe(18);
+          expect(yield* readMigrationCount).toBe(18);
         });
       },
       (directory) => Effect.sync(() => rmSync(directory, { recursive: true, force: true })),

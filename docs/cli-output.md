@@ -46,10 +46,26 @@ An empty successful result states its applied scope and reports a zero count.
 When a result omits detail, it includes the exact public command that retrieves the detail.
 A complete result omits unnecessary expansion guidance.
 
+## Shared Repository State errors
+
+Commands that read Shared Repository State classify storage failures into stable results.
+Each classification keeps the same meaning in TOON and JSON.
+
+- `state_store_unavailable` reports that Shared Repository State cannot be opened or queried.
+  It covers an unavailable state path, SQL operation failure, and migration failure.
+- `persisted_data_invalid` reports that stored records cannot be decoded as the expected structure.
+  It includes the `operation` that failed to decode and no other identifiers.
+  It does not describe the data as unavailable and does not claim that But Why repairs the data.
+- `shared_state_identity_conflict` reports that Shared Repository State belongs to a different Git repository.
+
+Expected domain conflicts remain operation-specific results.
+Programmer defects remain `internal_error`.
+The `persisted_data_invalid` result does not include Submit Recovery Guidance and does not authorize an Implementer to repair Shared Repository State.
+
 ## Findings and Validation Runs
 
 Finding inspection and failed Submission results preserve complete Findings, diagnostic details, and Artifact references needed for recovery.
-A Validation Run retains its immutable Validation Policy Snapshot, phase outcomes, Findings, Tooling Failures, and Artifact metadata.
+A Validation Run retains its immutable Validation Policy Snapshot, round outcomes, Findings, Tooling Failures, and Artifact metadata.
 `by validation-run show` provides Artifact detail commands and previews for Findings or tooling-failed runs.
 `by validation-run artifact` returns complete stored Artifact content.
 

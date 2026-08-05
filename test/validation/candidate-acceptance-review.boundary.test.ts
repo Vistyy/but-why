@@ -330,24 +330,20 @@ layer(acceptanceTemplateLayer)("Task-backed Candidate Acceptance Review", (it) =
       const result = yield* runTaskBackedCandidate(ready);
 
       expect(result).toMatchObject({ ok: true, outcome: "blocked" });
-      const storedSeverity = yield* withTestRepository(
+      const findingColumns = yield* withTestRepository(
         ready.repo,
         Effect.gen(function* () {
           const repository = yield* RepositorySql;
           return yield* repository.operation(
-            "inspect reviewer Finding severity storage",
+            "inspect reviewer Finding table columns",
             (sql) =>
-              sql<{ readonly severity: string | null }>`
-                SELECT severity
-                FROM candidate_validation_findings
-                WHERE validation_run_id = ${result.validationRunId}
-                  AND phase = 'acceptance_review'
-                ORDER BY id
+              sql<{ readonly name: string }>`
+                PRAGMA table_info(candidate_validation_findings)
               `,
           );
         }),
       );
-      expect(storedSeverity).toEqual([{ severity: null }, { severity: null }]);
+      expect(findingColumns.map(({ name }) => name)).not.toContain("severity");
       yield* withTestRepository(
         ready.repo,
         Effect.gen(function* () {
@@ -357,12 +353,12 @@ layer(acceptanceTemplateLayer)("Task-backed Candidate Acceptance Review", (it) =
             (sql) =>
               sql`
                 INSERT INTO candidate_validation_findings (
-                  id, validation_run_id, phase, producer, title, description, severity,
+                  id, validation_run_id, phase, producer, title, description,
                   evidence, files, artifact_refs, created_at, updated_at
                 ) VALUES (
                   ${`${result.validationRunId}-historical`}, ${result.validationRunId},
                   'acceptance_review', 'acceptance', 'Historical Finding',
-                  'A historical reviewer Finding remains readable.', 'high',
+                  'A historical reviewer Finding remains readable.',
                   'Historical evidence.', '[]', '[]', ${now}, ${now}
                 )
               `,
@@ -372,7 +368,6 @@ layer(acceptanceTemplateLayer)("Task-backed Candidate Acceptance Review", (it) =
       const findings = yield* validation.listFindings(result.validationRunId);
       expect(findings).toHaveLength(3);
       expect(findings.find((finding) => finding.title === "Historical Finding")).toMatchObject({
-        severity: "high",
         evidence: "Historical evidence.",
       });
       expect(yield* validation.listArtifacts(result.validationRunId)).toEqual(
@@ -1621,7 +1616,6 @@ const runReviewPhases = (
         producer: "quality",
         roundNumber: 1,
         roundStatus: "passed",
-        phaseStatus: "passed",
         artifactRecords: [
           {
             ref: `artifact:${started.validationRunId}/checks/quality/stdout.txt`,
