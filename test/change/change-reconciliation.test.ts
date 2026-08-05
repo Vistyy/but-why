@@ -5,6 +5,7 @@ import { Effect } from "effect";
 import { describe } from "vitest";
 
 import { cleanupChangeResourcesWithRemote } from "../../src/change/localChangeCleanupGit.js";
+import { openTerminalCleanup } from "../../src/change/cleanupTerminalChange.js";
 import { openChangeReconciliation } from "../../src/change/reconcileChange.js";
 import type { GitHubPullRequest } from "../../src/change/ownedPullRequestGateway.js";
 import { openSqliteChangePersistence } from "../../src/sqlite/sqliteChangePersistence.js";
@@ -73,9 +74,12 @@ describe("by change reconcile", () => {
                 throw new Error("Reconciliation must not update a pull request");
               },
             },
-            cleanup: () => {
-              throw new Error("Open Changes must not be cleaned");
-            },
+            cleanupTerminal: openTerminalCleanup({
+              persistence: changes,
+              cleanup: () => {
+                throw new Error("Open Changes must not be cleaned");
+              },
+            }),
           });
 
           expect(
@@ -175,9 +179,12 @@ describe("by change reconcile", () => {
                   throw new Error("Reconciliation must not update a pull request");
                 },
               },
-              cleanup: () => {
-                throw new Error("Rejected Changes must not be cleaned");
-              },
+              cleanupTerminal: openTerminalCleanup({
+                persistence: changes,
+                cleanup: () => {
+                  throw new Error("Rejected Changes must not be cleaned");
+                },
+              }),
             });
             expect(
               yield* reconciliation.reconcile({
@@ -288,22 +295,26 @@ describe("by change reconcile", () => {
               throw new Error("Reconciliation must not update a pull request");
             },
           },
-          cleanup: (() => {
-            const cleanupRemote = cleanupChangeResourcesWithRemote({
-              readRemoteBranchHead: () => ({
-                state: "present",
-                headSha: "head",
-                remoteUrl: "https://github.com/acme/repo.git",
-              }),
-              deleteRemoteBranch: () => deletionResults[cleanupAttempts++] ?? { state: "missing" },
-            });
-            return (cleanupInput) =>
-              cleanupRemote({
-                ...cleanupInput,
-                repositoryCommonDirectory: gitCommonDirectory,
-                worktreePath: null,
+          cleanupTerminal: openTerminalCleanup({
+            persistence: changes,
+            cleanup: (() => {
+              const cleanupRemote = cleanupChangeResourcesWithRemote({
+                readRemoteBranchHead: () => ({
+                  state: "present",
+                  headSha: "head",
+                  remoteUrl: "https://github.com/acme/repo.git",
+                }),
+                deleteRemoteBranch: () =>
+                  deletionResults[cleanupAttempts++] ?? { state: "missing" },
               });
-          })(),
+              return (cleanupInput) =>
+                cleanupRemote({
+                  ...cleanupInput,
+                  repositoryCommonDirectory: gitCommonDirectory,
+                  worktreePath: null,
+                });
+            })(),
+          }),
         });
 
         expect(
