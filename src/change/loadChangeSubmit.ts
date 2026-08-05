@@ -15,6 +15,10 @@ import {
 import { cleanupChangeResourcesWithRemote } from "./localChangeCleanupGit.js";
 import { openChangeReconciliation } from "./reconcileChange.js";
 import {
+  reviewerSessionsChangeRoot,
+  reviewerSessionsProducerRoot,
+} from "./reviewerSession/reviewerSession.js";
+import {
   openChangeSubmit,
   type ChangeSubmit,
   type ChangeSubmitResult,
@@ -74,7 +78,8 @@ export const loadChangeSubmit = (input: {
       persistence: changePersistence,
       github,
       cleanup: cleanupChangeResourcesWithRemote(githubChangeCleanupRemote(github)),
-      reviewerSessionPathFor: (changeId) => join(context.paths.operationalDir, changeId),
+      reviewerSessionPathFor: (changeId) =>
+        reviewerSessionsChangeRoot(context.paths.operationalDir, changeId),
     });
     return openChangeSubmit({
       loadRepoConfig: (worktreePath): ManagedRepoConfigResolution => {
@@ -160,10 +165,13 @@ export const loadChangeSubmit = (input: {
           changePersistence.removeReviewerSession(changeId, producer).pipe(
             Effect.tap(() =>
               Effect.sync(() =>
-                rmSync(join(context.paths.operationalDir, changeId, producer), {
-                  recursive: true,
-                  force: true,
-                }),
+                rmSync(
+                  reviewerSessionsProducerRoot(context.paths.operationalDir, changeId, producer),
+                  {
+                    recursive: true,
+                    force: true,
+                  },
+                ),
               ),
             ),
           ),

@@ -26,7 +26,6 @@ import {
   continuationPrompt,
   reviewerSessionFingerprint,
   reviewerSessionsPath,
-  sessionIdentityMatches,
   type ReviewerSessionStore,
   type ReviewerContinuity,
 } from "../reviewerSession/reviewerSession.js";
@@ -169,10 +168,9 @@ const runAcceptanceReviewPhaseImpl = (
       input.sessionStore === undefined
         ? undefined
         : yield* input.sessionStore.get(identity.changeId, identity.producer);
-    const identityCompatible = stored !== undefined && sessionIdentityMatches(stored, identity);
     const compatible =
-      identityCompatible &&
-      typeof stored.sessionReference === "string" &&
+      stored !== undefined &&
+      stored.fingerprint === fingerprint &&
       stored.sessionReference.length > 0;
     let continuity: ReviewerContinuity = compatible
       ? "resumed"
@@ -182,16 +180,11 @@ const runAcceptanceReviewPhaseImpl = (
     let restartReason: string | undefined =
       stored === undefined
         ? undefined
-        : identityCompatible &&
-            typeof stored.sessionReference === "string" &&
-            stored.sessionReference.length === 0
+        : stored.fingerprint === fingerprint && stored.sessionReference.length === 0
           ? "session_capture_unavailable"
           : compatible
             ? undefined
             : "identity_mismatch";
-    if (stored !== undefined && !identityCompatible && input.sessionStore !== undefined) {
-      yield* input.sessionStore.remove(identity.changeId, identity.producer);
-    }
     let reviewCalls = 0;
     const review = (resumeSession?: string) => {
       reviewCalls += 1;
@@ -223,7 +216,9 @@ const runAcceptanceReviewPhaseImpl = (
           ? {}
           : {
               sessionStorageRoot: reviewerSessionsPath(
-                `${input.sessionStorageRoot}/${identity.changeId}`,
+                input.sessionStorageRoot,
+                identity.changeId,
+                identity.producer,
               ),
             }),
         ...(resumeSession === undefined ? {} : { resumeSession }),
@@ -294,10 +289,10 @@ const runAcceptanceReviewPhaseImpl = (
     }
     if (input.sessionStore !== undefined && sessionPermissionsOk) {
       yield* input.sessionStore.save({
-        identity,
+        changeId: identity.changeId,
+        producer: identity.producer,
         fingerprint,
         sessionReference: result.sessionReference ?? "",
-        lastCandidateId: input.candidate.candidateId,
       });
     }
     return {

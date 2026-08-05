@@ -1037,7 +1037,7 @@ describe("repository SQL storage", () => {
             yield* sql.unsafe(
               "CREATE INDEX implementation_decisions_change_sequence_idx ON implementation_decisions (change_id, sequence)",
             );
-            yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id IN (11, 12, 13, 14, 15, 16, 17, 18)`;
+            yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id IN (11, 12, 13, 14, 15, 16, 17, 18, 19)`;
             yield* sql`INSERT INTO implementation_decisions (id, change_id, recorded_at, content) VALUES ('legacy-decision', ${captured.changeId}, '2026-07-25T15:30:00.000Z', 'Legacy unstructured decision')`;
           }),
         );
@@ -1284,6 +1284,7 @@ describe("repository SQL storage", () => {
           { migration_id: 16, name: "remove_implementation_decision_content" },
           { migration_id: 17, name: "validation_run_blocker_identity" },
           { migration_id: 18, name: "remove_finding_severity" },
+          { migration_id: 19, name: "simplify_reviewer_sessions" },
         ]);
         expect(identities).toEqual([{ common_directory: repositorySql.commonDirectory }]);
         expect(candidateColumns.map(({ name }) => name)).toEqual([
@@ -1359,7 +1360,7 @@ describe("repository SQL storage", () => {
                       '2026-07-25T16:30:00.000Z', '2026-07-25T16:30:00.000Z'
                     )
                   `;
-                  yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id IN (13, 14, 15, 16, 17, 18)`;
+                  yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id IN (13, 14, 15, 16, 17, 18, 19)`;
                 }),
               );
             }).pipe(Effect.provide(repositorySqlLayer({ commonDirectory: directory, statePath }))),
@@ -1450,7 +1451,7 @@ describe("repository SQL storage", () => {
                       '2026-07-25T16:30:00.000Z', '2026-07-25T16:30:00.000Z'
                     )
                   `;
-                  yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id = 18`;
+                  yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id IN (18, 19)`;
                 }),
               );
             }).pipe(Effect.provide(repositorySqlLayer({ commonDirectory: directory, statePath }))),
@@ -1482,6 +1483,98 @@ describe("repository SQL storage", () => {
                   sql<{ readonly name: string }>`PRAGMA table_info(candidate_validation_findings)`,
               );
               expect(findingColumns.map(({ name }) => name)).not.toContain("severity");
+            }).pipe(Effect.provide(repositorySqlLayer({ commonDirectory: directory, statePath }))),
+          );
+        }),
+      (directory) => Effect.sync(() => rmSync(directory, { recursive: true, force: true })),
+    ),
+  );
+
+  it.effect("drops retired Reviewer Session fields while preserving supported sessions", () =>
+    Effect.acquireUseRelease(
+      Effect.sync(() => mkdtempSync(join(tmpdir(), "but-why-repository-sql-"))),
+      (directory) =>
+        Effect.gen(function* () {
+          const statePath = join(directory, "state.sqlite");
+          yield* Effect.scoped(
+            Effect.gen(function* () {
+              const repository = yield* RepositorySql;
+              yield* repository.operation("restore legacy Reviewer Session fields", (sql) =>
+                Effect.gen(function* () {
+                  yield* sql`ALTER TABLE reviewer_sessions ADD COLUMN identity TEXT`;
+                  yield* sql`ALTER TABLE reviewer_sessions ADD COLUMN last_candidate_id TEXT`;
+                  yield* sql`ALTER TABLE reviewer_sessions ADD COLUMN updated_at TEXT`;
+                  yield* sql.unsafe(
+                    "CREATE INDEX reviewer_sessions_fingerprint_idx ON reviewer_sessions (fingerprint)",
+                  );
+                  yield* sql`
+                      INSERT INTO changes (
+                        id, repository_common_directory, branch_ref, state,
+                        created_at, updated_at
+                      ) VALUES (
+                        'change-session', ${directory}, 'refs/heads/session',
+                        'open', '2026-07-25T16:30:00.000Z', '2026-07-25T16:30:00.000Z'
+                      )
+                    `;
+                  yield* sql`
+                      INSERT INTO reviewer_sessions (
+                        change_id, producer, identity, fingerprint, session_reference,
+                        last_candidate_id, updated_at
+                      ) VALUES (
+                        'change-session', 'acceptance', 'not-json',
+                        'fingerprint-legacy', 'session-legacy',
+                        'candidate-legacy', '2026-07-25T16:30:00.000Z'
+                      )
+                    `;
+                  yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id = 19`;
+                }),
+              );
+            }).pipe(Effect.provide(repositorySqlLayer({ commonDirectory: directory, statePath }))),
+          );
+
+          yield* Effect.scoped(
+            Effect.gen(function* () {
+              const repository = yield* RepositorySql;
+              const changes = yield* openSqliteChangePersistence();
+              const session = yield* changes.getReviewerSession("change-session", "acceptance");
+              expect(session).toEqual({
+                changeId: "change-session",
+                producer: "acceptance",
+                fingerprint: "fingerprint-legacy",
+                sessionReference: "session-legacy",
+              });
+              yield* changes.saveReviewerSession({
+                changeId: "change-session",
+                producer: "acceptance",
+                fingerprint: "fingerprint-new",
+                sessionReference: "session-new",
+              });
+              const replaced = yield* changes.getReviewerSession("change-session", "acceptance");
+              expect(replaced).toEqual({
+                changeId: "change-session",
+                producer: "acceptance",
+                fingerprint: "fingerprint-new",
+                sessionReference: "session-new",
+              });
+              const sessionColumns = yield* repository.operation(
+                "read migrated Reviewer Session columns",
+                (sql) => sql<{ readonly name: string }>`PRAGMA table_info(reviewer_sessions)`,
+              );
+              expect(sessionColumns.map(({ name }) => name)).toEqual([
+                "change_id",
+                "producer",
+                "fingerprint",
+                "session_reference",
+              ]);
+              const indexRows = yield* repository.operation(
+                "read migrated Reviewer Session indexes",
+                (sql) =>
+                  sql<{ readonly name: string }>`
+                    SELECT name FROM sqlite_master
+                    WHERE type = 'index' AND name = 'reviewer_sessions_fingerprint_idx'
+                  `,
+              );
+              expect(indexRows).toEqual([]);
             }).pipe(Effect.provide(repositorySqlLayer({ commonDirectory: directory, statePath }))),
           );
         }),
@@ -1521,7 +1614,7 @@ describe("repository SQL storage", () => {
                       'candidate-unsupported', 'run-unsupported'
                     )
                   `;
-                  yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id IN (13, 14, 15, 16, 17, 18)`;
+                  yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id IN (13, 14, 15, 16, 17, 18, 19)`;
                 }),
               );
             }).pipe(Effect.provide(repositorySqlLayer({ commonDirectory: directory, statePath }))),
@@ -1579,7 +1672,7 @@ describe("repository SQL storage", () => {
                       'with-failure', 'head-sha', 42, 'https://github.com/acme/repo/pull/42'
                     )
                   `;
-                  yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id IN (14, 15, 16, 17, 18)`;
+                  yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id IN (14, 15, 16, 17, 18, 19)`;
                 }),
               );
             }).pipe(Effect.provide(repositorySqlLayer({ commonDirectory: directory, statePath }))),
@@ -1677,7 +1770,7 @@ describe("repository SQL storage", () => {
                         'complete', 'passed', '2026-07-25T18:02:00.000Z', '2026-07-25T18:02:00.000Z'
                       )
                     `;
-                    yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id IN (15, 16, 17, 18)`;
+                    yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id IN (15, 16, 17, 18, 19)`;
                   }),
                 );
               }).pipe(
@@ -1782,7 +1875,7 @@ describe("repository SQL storage", () => {
                       'Legacy unstructured decision'
                     )
                   `;
-                  yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id IN (16, 17, 18)`;
+                  yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id IN (16, 17, 18, 19)`;
                 }),
               );
             }).pipe(Effect.provide(repositorySqlLayer({ commonDirectory: directory, statePath }))),
@@ -1866,7 +1959,7 @@ describe("repository SQL storage", () => {
                       'Legacy text', 'Partial choice', NULL
                     )
                   `;
-                  yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id IN (16, 17, 18)`;
+                  yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id IN (16, 17, 18, 19)`;
                 }),
               );
             }).pipe(Effect.provide(repositorySqlLayer({ commonDirectory: directory, statePath }))),
@@ -2149,8 +2242,8 @@ describe("repository SQL storage", () => {
         );
 
         return Effect.gen(function* () {
-          expect(yield* readMigrationCount).toBe(18);
-          expect(yield* readMigrationCount).toBe(18);
+          expect(yield* readMigrationCount).toBe(19);
+          expect(yield* readMigrationCount).toBe(19);
         });
       },
       (directory) => Effect.sync(() => rmSync(directory, { recursive: true, force: true })),

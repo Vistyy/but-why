@@ -1,11 +1,11 @@
 import { existsSync } from "node:fs";
-import { join } from "node:path";
 import { Effect } from "effect";
 
 import { openHerdrInteractiveSessionHost } from "./herdrInteractiveSessionHost.js";
 import type { InteractiveSessionHost } from "./interactiveSessionHost.js";
 import { cleanupChangeResourcesWithRemote } from "./localChangeCleanupGit.js";
 import { openChangeReconciliation } from "./reconcileChange.js";
+import { reviewerSessionsChangeRoot } from "./reviewerSession/reviewerSession.js";
 import { openChangeUseCases, type ChangeUseCases } from "./changeUseCases.js";
 import { provisionChangeWorktree, resolveChangeStartGitIntent } from "./changeStartGit.js";
 import { executeLocalRepositoryPreparation } from "../repositoryPreparation/localRepositoryPreparation.js";
@@ -70,7 +70,7 @@ export const withChangeUseCases = <A, E, R>(
             github,
             cleanup: cleanupChangeResourcesWithRemote(githubChangeCleanupRemote(github)),
             reviewerSessionPathFor: (changeId) =>
-              join(repoContext.context.paths.operationalDir, changeId),
+              reviewerSessionsChangeRoot(repoContext.context.paths.operationalDir, changeId),
           }),
           input.interactiveSessionHost ??
             openHerdrInteractiveSessionHost(undefined, {

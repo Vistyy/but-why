@@ -104,6 +104,54 @@ describe("Change cleanup Git adapter", () => {
     expect(existsSync(sharedStatePath)).toBe(true);
   });
 
+  it("removes the Change-owned Reviewer Session directory during cleanup", () => {
+    const repository = initializedRepository();
+    const commonDirectory = git(
+      repository,
+      "rev-parse",
+      "--path-format=absolute",
+      "--git-common-dir",
+    );
+    const worktreePath = join(commonDirectory, "but-why", "worktrees", "feature");
+    const reviewerSessionPath = join(commonDirectory, "but-why", "change-1");
+    git(repository, "worktree", "add", "-b", "feature", worktreePath, "main");
+    mkdirSync(reviewerSessionPath, { recursive: true });
+    writeFileSync(join(reviewerSessionPath, "review_session.jsonl"), "session\n");
+
+    expect(
+      cleanupChangeResources({
+        repositoryCommonDirectory: commonDirectory,
+        worktreePath,
+        branchRef: "refs/heads/feature",
+        reviewerSessionPath,
+      }),
+    ).toEqual({ state: "complete" });
+    expect(existsSync(reviewerSessionPath)).toBe(false);
+  });
+
+  it("treats a missing Reviewer Session directory as clean", () => {
+    const repository = initializedRepository();
+    const commonDirectory = git(
+      repository,
+      "rev-parse",
+      "--path-format=absolute",
+      "--git-common-dir",
+    );
+    const worktreePath = join(commonDirectory, "but-why", "worktrees", "feature");
+    const reviewerSessionPath = join(commonDirectory, "but-why", "change-1");
+    git(repository, "worktree", "add", "-b", "feature", worktreePath, "main");
+
+    expect(
+      cleanupChangeResources({
+        repositoryCommonDirectory: commonDirectory,
+        worktreePath,
+        branchRef: "refs/heads/feature",
+        reviewerSessionPath,
+      }),
+    ).toEqual({ state: "complete" });
+    expect(existsSync(reviewerSessionPath)).toBe(false);
+  });
+
   it("preserves a Managed Worktree behind a symlinked sibling container", () => {
     const repository = initializedRepository();
     const siblingRoot = join(dirname(repository), `${basename(repository)}-worktrees`);
