@@ -1536,7 +1536,8 @@ describe("repository SQL storage", () => {
               yield* sql.unsafe(
                 "CREATE INDEX implementation_decisions_change_sequence_idx ON implementation_decisions (change_id, sequence)",
               );
-              yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id IN (11, 12, 13, 14, 15, 16, 17, 18, 19, 20)`;
+              yield* sql`DROP TABLE IF EXISTS reviewer_transcripts`;
+              yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id IN (11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21)`;
               yield* sql`INSERT INTO implementation_decisions (id, change_id, recorded_at, content) VALUES ('legacy-decision', ${captured.changeId}, '2026-07-25T15:30:00.000Z', 'Legacy unstructured decision')`;
             }),
           );
@@ -1801,6 +1802,7 @@ describe("repository SQL storage", () => {
           { migration_id: 18, name: "remove_finding_severity" },
           { migration_id: 19, name: "simplify_reviewer_sessions" },
           { migration_id: 20, name: "remove_candidate_publications" },
+          { migration_id: 21, name: "reviewer_transcripts" },
         ]);
         expect(identities).toEqual([{ common_directory: repositorySql.commonDirectory }]);
         expect(candidateColumns.map(({ name }) => name)).toEqual([
@@ -1826,6 +1828,16 @@ describe("repository SQL storage", () => {
           "recorded_at",
           "choice",
           "rationale",
+        ]);
+        const transcriptColumns = yield* repositorySql.operation(
+          "read Reviewer Transcript shape",
+          (sql) => sql<{ readonly name: string }>`PRAGMA table_info(reviewer_transcripts)`,
+        );
+        expect(transcriptColumns.map(({ name }) => name)).toEqual([
+          "change_id",
+          "producer",
+          "pi_session_id",
+          "file_path",
         ]);
         expect(taskColumns.map(({ name }) => name)).not.toContain("completion_kind");
         expect(changeColumns.map(({ name }) => name)).not.toContain("no_change_candidate_id");
@@ -1876,7 +1888,8 @@ describe("repository SQL storage", () => {
                       '2026-07-25T16:30:00.000Z', '2026-07-25T16:30:00.000Z'
                     )
                   `;
-                  yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id IN (13, 14, 15, 16, 17, 18, 19, 20)`;
+                  yield* sql`DROP TABLE IF EXISTS reviewer_transcripts`;
+                  yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id IN (13, 14, 15, 16, 17, 18, 19, 20, 21)`;
                 }),
               );
             }).pipe(Effect.provide(repositorySqlLayer({ commonDirectory: directory, statePath }))),
@@ -1967,7 +1980,8 @@ describe("repository SQL storage", () => {
                       '2026-07-25T16:30:00.000Z', '2026-07-25T16:30:00.000Z'
                     )
                   `;
-                  yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id IN (18, 19, 20)`;
+                  yield* sql`DROP TABLE IF EXISTS reviewer_transcripts`;
+                  yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id IN (18, 19, 20, 21)`;
                 }),
               );
             }).pipe(Effect.provide(repositorySqlLayer({ commonDirectory: directory, statePath }))),
@@ -2042,7 +2056,8 @@ describe("repository SQL storage", () => {
                         'candidate-legacy', '2026-07-25T16:30:00.000Z'
                       )
                     `;
-                  yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id IN (19, 20)`;
+                  yield* sql`DROP TABLE IF EXISTS reviewer_transcripts`;
+                  yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id IN (19, 20, 21)`;
                 }),
               );
             }).pipe(Effect.provide(repositorySqlLayer({ commonDirectory: directory, statePath }))),
@@ -2098,6 +2113,238 @@ describe("repository SQL storage", () => {
     ),
   );
 
+  it.effect("preserves active Reviewer Sessions while adding Reviewer Transcript storage", () =>
+    Effect.acquireUseRelease(
+      Effect.sync(() => mkdtempSync(join(tmpdir(), "but-why-repository-sql-"))),
+      (directory) =>
+        Effect.gen(function* () {
+          const statePath = join(directory, "state.sqlite");
+          yield* Effect.scoped(
+            Effect.gen(function* () {
+              const repository = yield* RepositorySql;
+              yield* repository.operation("restore pre-transcript storage", (sql) =>
+                Effect.gen(function* () {
+                  yield* sql.unsafe(`DROP TABLE reviewer_transcripts`);
+                  yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id = 21`;
+                  yield* sql`
+                    INSERT INTO changes (
+                      id, repository_common_directory, branch_ref, state,
+                      created_at, updated_at
+                    ) VALUES (
+                      'change-session-retained', ${directory}, 'refs/heads/retained',
+                      'open', '2026-07-25T16:30:00.000Z', '2026-07-25T16:30:00.000Z'
+                    )
+                  `;
+                  yield* sql`
+                    INSERT INTO reviewer_sessions (
+                      change_id, producer, fingerprint, session_reference
+                    ) VALUES (
+                      'change-session-retained', 'acceptance', 'fingerprint-retained', 'session-1'
+                    )
+                  `;
+                }),
+              );
+            }).pipe(Effect.provide(repositorySqlLayer({ commonDirectory: directory, statePath }))),
+          );
+
+          yield* Effect.scoped(
+            Effect.gen(function* () {
+              const repository = yield* RepositorySql;
+              const changes = yield* openSqliteChangePersistence();
+              const session = yield* changes.getReviewerSession(
+                "change-session-retained",
+                "acceptance",
+              );
+              expect(session).toEqual({
+                changeId: "change-session-retained",
+                producer: "acceptance",
+                fingerprint: "fingerprint-retained",
+                sessionReference: "session-1",
+              });
+              yield* changes.recordReviewerTranscripts({
+                changeId: "change-session-retained",
+                transcripts: [
+                  {
+                    changeId: "change-session-retained",
+                    producer: "acceptance",
+                    piSessionId: "session-1",
+                    filePath: "reviewer-sessions/review_session-1.jsonl",
+                  },
+                ],
+              });
+              yield* changes.recordReviewerTranscripts({
+                changeId: "change-session-retained",
+                transcripts: [
+                  {
+                    changeId: "change-session-retained",
+                    producer: "acceptance",
+                    piSessionId: "session-1",
+                    filePath: "reviewer-sessions/review_session-1.jsonl",
+                  },
+                ],
+              });
+              const transcripts = yield* changes.listReviewerTranscripts("change-session-retained");
+              expect(transcripts).toEqual([
+                {
+                  changeId: "change-session-retained",
+                  producer: "acceptance",
+                  piSessionId: "session-1",
+                  filePath: "reviewer-sessions/review_session-1.jsonl",
+                },
+              ]);
+              const migrations = yield* repository.operation(
+                "read re-applied Reviewer Transcript migration",
+                (sql) =>
+                  sql<{ readonly name: string }>`
+                    SELECT name FROM effect_sql_migrations WHERE migration_id = 21
+                  `,
+              );
+              expect(migrations).toEqual([{ name: "reviewer_transcripts" }]);
+            }).pipe(Effect.provide(repositorySqlLayer({ commonDirectory: directory, statePath }))),
+          );
+        }),
+      (directory) => Effect.sync(() => rmSync(directory, { recursive: true, force: true })),
+    ),
+  );
+
+  it.scoped("returns Reviewer Transcript references for the exact Change only", () =>
+    withTemporaryState(() =>
+      Effect.gen(function* () {
+        const repository = yield* RepositorySql;
+        const changes = yield* openSqliteChangePersistence();
+        yield* repository.operation("insert transcript Changes", (sql) =>
+          Effect.gen(function* () {
+            yield* sql`
+              INSERT INTO changes (
+                id, repository_common_directory, branch_ref, state,
+                created_at, updated_at
+              ) VALUES (
+                'change-transcript-a', 'a', 'refs/heads/a',
+                'open', '2026-07-25T16:30:00.000Z', '2026-07-25T16:30:00.000Z'
+              )
+            `;
+            yield* sql`
+              INSERT INTO changes (
+                id, repository_common_directory, branch_ref, state,
+                created_at, updated_at
+              ) VALUES (
+                'change-transcript-b', 'b', 'refs/heads/b',
+                'open', '2026-07-25T16:30:00.000Z', '2026-07-25T16:30:00.000Z'
+              )
+            `;
+          }),
+        );
+        yield* changes.recordReviewerTranscripts({
+          changeId: "change-transcript-a",
+          transcripts: [
+            {
+              changeId: "change-transcript-a",
+              producer: "acceptance",
+              piSessionId: "session-a-1",
+              filePath: "reviewer-sessions/review_session-a-1.jsonl",
+            },
+            {
+              changeId: "change-transcript-a",
+              producer: "standards",
+              piSessionId: "session-a-2",
+              filePath: "reviewer-sessions/review_session-a-2.jsonl",
+            },
+          ],
+        });
+        yield* changes.recordReviewerTranscripts({
+          changeId: "change-transcript-b",
+          transcripts: [
+            {
+              changeId: "change-transcript-b",
+              producer: "acceptance",
+              piSessionId: "session-b-1",
+              filePath: "reviewer-sessions/review_session-b-1.jsonl",
+            },
+          ],
+        });
+
+        const first = yield* changes.listReviewerTranscripts("change-transcript-a");
+        const second = yield* changes.listReviewerTranscripts("change-transcript-b");
+
+        expect(first).toEqual([
+          {
+            changeId: "change-transcript-a",
+            producer: "acceptance",
+            piSessionId: "session-a-1",
+            filePath: "reviewer-sessions/review_session-a-1.jsonl",
+          },
+          {
+            changeId: "change-transcript-a",
+            producer: "standards",
+            piSessionId: "session-a-2",
+            filePath: "reviewer-sessions/review_session-a-2.jsonl",
+          },
+        ]);
+        expect(second).toEqual([
+          {
+            changeId: "change-transcript-b",
+            producer: "acceptance",
+            piSessionId: "session-b-1",
+            filePath: "reviewer-sessions/review_session-b-1.jsonl",
+          },
+        ]);
+      }),
+    ),
+  );
+
+  it.scoped("keeps Reviewer Transcript references after active Reviewer Sessions are removed", () =>
+    withTemporaryState(() =>
+      Effect.gen(function* () {
+        const repository = yield* RepositorySql;
+        const changes = yield* openSqliteChangePersistence();
+        yield* repository.operation("insert transcript Change", (sql) =>
+          Effect.gen(function* () {
+            yield* sql`
+              INSERT INTO changes (
+                id, repository_common_directory, branch_ref, state,
+                created_at, updated_at
+              ) VALUES (
+                'change-transcript-retained', 'retained', 'refs/heads/retained',
+                'open', '2026-07-25T16:30:00.000Z', '2026-07-25T16:30:00.000Z'
+              )
+            `;
+          }),
+        );
+        yield* changes.saveReviewerSession({
+          changeId: "change-transcript-retained",
+          producer: "acceptance",
+          fingerprint: "fingerprint",
+          sessionReference: "session-live",
+        });
+        yield* changes.recordReviewerTranscripts({
+          changeId: "change-transcript-retained",
+          transcripts: [
+            {
+              changeId: "change-transcript-retained",
+              producer: "acceptance",
+              piSessionId: "session-live",
+              filePath: "reviewer-sessions/review_session-live.jsonl",
+            },
+          ],
+        });
+
+        yield* changes.removeReviewerSessions("change-transcript-retained");
+
+        const live = yield* changes.getReviewerSession("change-transcript-retained", "acceptance");
+        expect(live).toBeUndefined();
+        const transcripts = yield* changes.listReviewerTranscripts("change-transcript-retained");
+        expect(transcripts).toEqual([
+          {
+            changeId: "change-transcript-retained",
+            producer: "acceptance",
+            piSessionId: "session-live",
+            filePath: "reviewer-sessions/review_session-live.jsonl",
+          },
+        ]);
+      }),
+    ),
+  );
+
   it.effect("stops migration with Task and Change facts for unsupported No-Change records", () =>
     Effect.acquireUseRelease(
       Effect.sync(() => mkdtempSync(join(tmpdir(), "but-why-repository-sql-"))),
@@ -2130,7 +2377,8 @@ describe("repository SQL storage", () => {
                       'candidate-unsupported', 'run-unsupported'
                     )
                   `;
-                  yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id IN (13, 14, 15, 16, 17, 18, 19, 20)`;
+                  yield* sql`DROP TABLE IF EXISTS reviewer_transcripts`;
+                  yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id IN (13, 14, 15, 16, 17, 18, 19, 20, 21)`;
                 }),
               );
             }).pipe(Effect.provide(repositorySqlLayer({ commonDirectory: directory, statePath }))),
@@ -2188,7 +2436,8 @@ describe("repository SQL storage", () => {
                       'with-failure', 'head-sha', 42, 'https://github.com/acme/repo/pull/42'
                     )
                   `;
-                  yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id IN (14, 15, 16, 17, 18, 19, 20)`;
+                  yield* sql`DROP TABLE IF EXISTS reviewer_transcripts`;
+                  yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id IN (14, 15, 16, 17, 18, 19, 20, 21)`;
                 }),
               );
             }).pipe(Effect.provide(repositorySqlLayer({ commonDirectory: directory, statePath }))),
@@ -2286,7 +2535,8 @@ describe("repository SQL storage", () => {
                         'complete', 'passed', '2026-07-25T18:02:00.000Z', '2026-07-25T18:02:00.000Z'
                       )
                     `;
-                    yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id IN (15, 16, 17, 18, 19, 20)`;
+                    yield* sql`DROP TABLE IF EXISTS reviewer_transcripts`;
+                    yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id IN (15, 16, 17, 18, 19, 20, 21)`;
                   }),
                 );
               }).pipe(
@@ -2391,7 +2641,8 @@ describe("repository SQL storage", () => {
                       'Legacy unstructured decision'
                     )
                   `;
-                  yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id IN (16, 17, 18, 19, 20)`;
+                  yield* sql`DROP TABLE IF EXISTS reviewer_transcripts`;
+                  yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id IN (16, 17, 18, 19, 20, 21)`;
                 }),
               );
             }).pipe(Effect.provide(repositorySqlLayer({ commonDirectory: directory, statePath }))),
@@ -2475,7 +2726,8 @@ describe("repository SQL storage", () => {
                       'Legacy text', 'Partial choice', NULL
                     )
                   `;
-                  yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id IN (16, 17, 18, 19, 20)`;
+                  yield* sql`DROP TABLE IF EXISTS reviewer_transcripts`;
+                  yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id IN (16, 17, 18, 19, 20, 21)`;
                 }),
               );
             }).pipe(Effect.provide(repositorySqlLayer({ commonDirectory: directory, statePath }))),
@@ -2758,8 +3010,8 @@ describe("repository SQL storage", () => {
         );
 
         return Effect.gen(function* () {
-          expect(yield* readMigrationCount).toBe(20);
-          expect(yield* readMigrationCount).toBe(20);
+          expect(yield* readMigrationCount).toBe(21);
+          expect(yield* readMigrationCount).toBe(21);
         });
       },
       (directory) => Effect.sync(() => rmSync(directory, { recursive: true, force: true })),

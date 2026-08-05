@@ -128,6 +128,11 @@ The complete Pi session conversation produced by one Reviewer Session.
 It is retained after its Change closes as debugging and improvement evidence.
 _Avoid_: Review report, reviewer stdout, security audit trail
 
+**Reviewer Transcript Reference**:
+The immutable persisted record of one retained Reviewer Transcript, identifying its exact Change, Reviewer Producer, Pi session ID, and file path relative to the per-producer reviewer-session root.
+Terminal Cleanup records one reference per retained JSONL file and never removes historical references.
+_Avoid_: Active Reviewer Session record, transcript copy, transcript move, CLI output
+
 **Reviewer Session Usability**:
 The Reviewer Agent Runtime classification after a failed resumed review.
 `unusable` means the stored Reviewer Session is proven unable to continue, while `unknown` means the failure does not establish that the stored session is unusable and the session remains preserved.
@@ -189,7 +194,8 @@ _Avoid_: Push, Candidate, Validation Run, continuous merge gate
 
 **Terminal Cleanup**:
 The one idempotent Change-owned cleanup operation that runs for a Closed Change after completion or cancellation and retries on repeated cancellation and reconciliation.
-It covers the Managed Worktree, local Repository Branch, and Remote Change Branch, and it invokes the Reviewer Session and Artifact lifecycle owners for the exact terminal Change.
+It indexes every retained Reviewer Session JSONL file into immutable Reviewer Transcript References, covers the Managed Worktree, local Repository Branch, and Remote Change Branch, and invokes the Reviewer Session and Artifact lifecycle owners for the exact terminal Change.
+Cleanup stays pending and retryable when transcript indexing cannot complete.
 _Avoid_: Generic cleanup framework, per-caller cleanup orchestration, worktree removal alone
 
 **No-Change Submission**:

@@ -7,6 +7,7 @@ import { cleanupChangeResourcesWithRemote } from "./localChangeCleanupGit.js";
 import { openTerminalCleanup } from "./cleanupTerminalChange.js";
 import { openChangeReconciliation } from "./reconcileChange.js";
 import { reviewerSessionsChangeRoot } from "./reviewerSession/reviewerSession.js";
+import { openReviewerTranscriptIndex } from "./reviewerSession/reviewerTranscript.js";
 import { openChangeUseCases, type ChangeUseCases } from "./changeUseCases.js";
 import { provisionChangeWorktree, resolveChangeStartGitIntent } from "./changeStartGit.js";
 import { executeLocalRepositoryPreparation } from "../repositoryPreparation/localRepositoryPreparation.js";
@@ -72,6 +73,9 @@ export const withChangeUseCases = <A, E, R>(
             cleanupTerminal: openTerminalCleanup({
               persistence: changePersistence,
               cleanup: cleanupChangeResourcesWithRemote(githubChangeCleanupRemote(github)),
+              indexTranscripts: openReviewerTranscriptIndex({
+                persistence: changePersistence,
+              }),
               reviewerSessionPathFor: (changeId) =>
                 reviewerSessionsChangeRoot(repoContext.context.paths.operationalDir, changeId),
             }),

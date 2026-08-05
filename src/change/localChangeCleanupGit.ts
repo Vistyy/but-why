@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { existsSync, lstatSync, rmdirSync, rmSync } from "node:fs";
+import { existsSync, lstatSync, rmdirSync } from "node:fs";
 import { basename, dirname } from "node:path";
 
 import type { RemoteChangeBranch } from "./change.js";
@@ -27,8 +27,7 @@ export type ChangeCleanupResult =
         | "remote_branch_exclusion_unavailable"
         | "remote_branch_excluded"
         | "remote_branch_head_mismatch"
-        | "remote_branch_deletion_failed"
-        | "reviewer_session_removal_failed";
+        | "remote_branch_deletion_failed";
     };
 
 export const cleanupChangeResourcesWithRemote =
@@ -42,7 +41,6 @@ export const cleanupChangeResources = (
     readonly worktreePath: string | null;
     readonly branchRef: string;
     readonly remoteChangeBranch?: RemoteChangeBranch;
-    readonly reviewerSessionPath?: string;
   },
   remote: ChangeCleanupRemote = localChangeCleanupRemote,
 ): ChangeCleanupResult => {
@@ -88,13 +86,6 @@ export const cleanupChangeResources = (
 
   if (input.worktreePath !== null && !removeEmptySiblingContainers(input.worktreePath)) {
     return { state: "pending", blockingReason: "worktree_container_removal_failed" };
-  }
-
-  if (
-    input.reviewerSessionPath !== undefined &&
-    !removeReviewerSession(input.reviewerSessionPath)
-  ) {
-    return { state: "pending", blockingReason: "reviewer_session_removal_failed" };
   }
 
   const branchName = branchNameForRef(input.branchRef);
@@ -248,16 +239,6 @@ const removeEmptySiblingContainers = (worktreePath: string): boolean => {
     return true;
   } catch (error) {
     return isFileSystemError(error, "ENOTEMPTY") || isFileSystemError(error, "ENOENT");
-  }
-};
-
-const removeReviewerSession = (path: string): boolean => {
-  try {
-    if (!existsSync(path)) return true;
-    rmSync(path, { recursive: true, force: true });
-    return true;
-  } catch {
-    return false;
   }
 };
 
