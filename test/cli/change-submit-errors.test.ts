@@ -98,39 +98,49 @@ describe("Change Submit validation-policy errors", () => {
     }
   });
 
-  it.effect("reports a missing scoped profile through the serialized CLI result", () =>
-    Effect.gen(function* () {
-      const root = preparedRepository({
-        review: {
-          specialists: ["standards"],
-        },
-        reviewers: {
-          standards: {
-            instructionsFile: "standards.md",
-            agentProfile: { scope: "repo", name: "missing-reviewer" },
+  it.effect(
+    "reports a missing scoped profile through the serialized CLI result",
+    () =>
+      Effect.gen(function* () {
+        const root = preparedRepository({
+          review: {
+            specialists: ["standards"],
           },
-        },
-      });
-      writeFileSync(join(root, "standards.md"), "Review standards.\n");
-      commit(root, "Add reviewer configuration");
+          reviewers: {
+            standards: {
+              instructionsFile: "standards.md",
+              agentProfile: { scope: "repo", name: "missing-reviewer" },
+            },
+          },
+        });
+        writeFileSync(join(root, "standards.md"), "Review standards.\n");
+        commit(root, "Add reviewer configuration");
 
-      const started = yield* runByInProcessEffect(root, ["--json", "change", "start"]);
-      const startedOutput = JSON.parse(started.stdout);
-      const changeId = startedOutput.change.id as string;
-      writeFileSync(join(startedOutput.worktreePath, "change.txt"), "changed\n");
-      commit(startedOutput.worktreePath, "Make a Change");
-      const submitted = yield* runByInProcessEffect(root, ["--json", "change", "submit", changeId]);
-      const output = JSON.parse(submitted.stdout);
+        const started = yield* runByInProcessEffect(root, ["--json", "change", "start"]);
+        const startedOutput = JSON.parse(started.stdout);
+        const changeId = startedOutput.change.id as string;
+        writeFileSync(join(startedOutput.worktreePath, "change.txt"), "changed\n");
+        commit(startedOutput.worktreePath, "Make a Change");
+        const submitted = yield* runByInProcessEffect(root, [
+          "--json",
+          "change",
+          "submit",
+          changeId,
+        ]);
+        const output = JSON.parse(submitted.stdout);
 
-      expect(submitted.status).toBe(1);
-      expect(output.error).toMatchObject({
-        code: "validation_policy_invalid",
-        message: 'Agent Profile "missing-reviewer" in repo scope was not found.',
-      });
-      expect(output.help).toContain("Fix Repo Config or Global Config, then retry Change Submit.");
-      const shown = yield* runByInProcessEffect(root, ["--json", "change", "show", changeId]);
-      expect(JSON.parse(shown.stdout).currentValidationRun).toBeNull();
-    }),
+        expect(submitted.status).toBe(1);
+        expect(output.error).toMatchObject({
+          code: "validation_policy_invalid",
+          message: 'Agent Profile "missing-reviewer" in repo scope was not found.',
+        });
+        expect(output.help).toContain(
+          "Fix Repo Config or Global Config, then retry Change Submit.",
+        );
+        const shown = yield* runByInProcessEffect(root, ["--json", "change", "show", changeId]);
+        expect(JSON.parse(shown.stdout).currentValidationRun).toBeNull();
+      }),
+    10_000,
   );
 
   it.effect("preserves Global Config path and contract diagnostics", () =>

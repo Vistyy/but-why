@@ -21,7 +21,7 @@ type HandoffResult = {
   };
 };
 
-type HandoffRoute = "task-backed" | "taskless-existing" | "taskless-new";
+type HandoffRoute = "task-backed" | "taskless-existing";
 
 type HandoffOptions = {
   readonly route: HandoffRoute;
@@ -29,9 +29,15 @@ type HandoffOptions = {
   readonly activeAgentName?: string;
   readonly implementationDelay?: string;
   readonly initialChangeId?: string;
-  readonly initialWorktreeMismatch?: boolean;
+  readonly linkedChangeId?: string;
+  readonly taskState?: string;
+  readonly taskResult?: string;
+  readonly taskExitCode?: string;
+  readonly startResult?: string;
+  readonly startExitCode?: string;
   readonly finalChangeId?: string;
   readonly finalWorktreeMismatch?: boolean;
+  readonly initialChangeTaskId?: string | null;
   readonly initialCommandResult?: string;
   readonly initialCommandExitCode?: string;
   readonly handoff?: string;
@@ -58,12 +64,12 @@ const runHandoff = (changeId: string, options: HandoffOptions): HandoffExecution
 set -eu
 printf '%s\\n' "$*" >> "$HANDOFF_CALLS"
 if [ "$1" = "by" ] && [ "$2" = "--json" ] && [ "$3" = "task" ] && [ "$4" = "show" ]; then
-  printf '%s\\n' '{"task":{"id":"BY-1","state":"todo"}}'
-  exit 0
+  printf '%s\\n' "$HANDOFF_TASK"
+  exit "$HANDOFF_TASK_EXIT"
 fi
 if [ "$1" = "by" ] && [ "$2" = "--json" ] && [ "$3" = "change" ] && [ "$4" = "start" ]; then
   printf '%s\\n' "$HANDOFF_START"
-  exit 0
+  exit "$HANDOFF_START_EXIT"
 fi
 if [ "$1" = "by" ] && [ "$2" = "--json" ] && [ "$3" = "change" ] && [ "$4" = "implement" ]; then
   sleep "$HANDOFF_IMPLEMENT_DELAY"
@@ -71,9 +77,7 @@ if [ "$1" = "by" ] && [ "$2" = "--json" ] && [ "$3" = "change" ] && [ "$4" = "im
   exit 0
 fi
 if [ "$1" = "by" ] && [ "$2" = "--json" ] && [ "$3" = "change" ] && [ "$4" = "show" ]; then
-  if [ "\${HANDOFF_PRELAUNCH:-}" = "1" ]; then
-    printf '%s\\n' "$HANDOFF_PRELAUNCH_SHOW"
-  elif [ ! -e "$HANDOFF_SHOW_COUNT" ]; then
+  if [ ! -e "$HANDOFF_SHOW_COUNT" ]; then
     : > "$HANDOFF_SHOW_COUNT"
     printf '%s\\n' "$HANDOFF_INITIAL_SHOW"
     exit "$HANDOFF_INITIAL_SHOW_EXIT"
@@ -104,25 +108,20 @@ exit 1
 
   const taskId = options.route === "task-backed" ? "BY-1" : null;
   const mismatchedWorktreePath = join(root, "mismatched-worktree");
-  const showResult = (shownChangeId: string, shownWorktreePath: string) =>
+  const showResult = (
+    shownChangeId: string,
+    shownWorktreePath: string,
+    shownTaskId: string | null = taskId,
+  ) =>
     JSON.stringify({
       change: {
         id: shownChangeId,
-        taskId,
+        taskId: shownTaskId,
         state: "open",
         worktreePath: shownWorktreePath,
       },
       worktreePath: shownWorktreePath,
     });
-  const prelaunch =
-    options.route === "task-backed"
-      ? [
-          ["by", "--json", "task", "show", "BY-1"],
-          ["by", "--json", "change", "start", "--task", "BY-1"],
-        ]
-      : options.route === "taskless-existing"
-        ? [["by", "--json", "change", "show", changeId]]
-        : [["by", "--json", "change", "start"]];
   const activeAgentSnapshot =
     options.activeAgentName === undefined
       ? ""
@@ -148,17 +147,28 @@ exit 1
     // biome-ignore lint/complexity/useLiteralKeys: ProcessEnv requires an index signature:
     PATH: `${bin}:${process.env["PATH"] ?? ""}`,
     HANDOFF_CALLS: callsPath,
-    HANDOFF_START: JSON.stringify({ change: { id: changeId }, worktreePath }),
+    HANDOFF_START:
+      options.startResult ?? JSON.stringify({ change: { id: changeId }, worktreePath }),
+    HANDOFF_START_EXIT: options.startExitCode ?? "0",
+    HANDOFF_TASK:
+      options.taskResult ??
+      JSON.stringify({
+        task: {
+          id: "BY-1",
+          state: options.taskState ?? "todo",
+          change:
+            options.linkedChangeId === undefined
+              ? null
+              : { id: options.linkedChangeId, activity: "implementing" },
+        },
+      }),
+    HANDOFF_TASK_EXIT: options.taskExitCode ?? "0",
     HANDOFF_IMPLEMENT:
       options.implementation ??
       JSON.stringify({ changeId, worktreePath, host: "herdr", status: "started" }),
-    HANDOFF_PRELAUNCH_SHOW: showResult(changeId, worktreePath),
     HANDOFF_INITIAL_SHOW:
       options.initialCommandResult ??
-      showResult(
-        options.initialChangeId ?? changeId,
-        options.initialWorktreeMismatch ? mismatchedWorktreePath : worktreePath,
-      ),
+      showResult(options.initialChangeId ?? changeId, worktreePath, options.initialChangeTaskId),
     HANDOFF_INITIAL_SHOW_EXIT: options.initialCommandExitCode ?? "0",
     HANDOFF_FINAL_SHOW: showResult(
       options.finalChangeId ?? changeId,
@@ -173,25 +183,13 @@ exit 1
     HANDOFF_OBSERVER_IMPLEMENT_TIMEOUT_MS: "50",
     HANDOFF_OBSERVER_LATE_GRACE_MS: "100",
   };
-  for (const args of prelaunch) {
-    const command = runTestProcess(just, args, {
-      cwd: root,
-      env: { ...environment, HANDOFF_PRELAUNCH: "1" },
-      isolatedHome: createTestWorkspace(),
-    });
-    expect(command.status, `${command.stdout}${command.stderr}`).toBe(0);
-  }
-
   const launched = runTestProcess(
     process.execPath,
     [
       join(repoRoot, "docs/public/skills/but-why/scripts/launch-handoff.mjs"),
       "--runner",
       "just",
-      "--change-id",
-      changeId,
-      "--worktree-path",
-      worktreePath,
+      ...(options.route === "task-backed" ? ["--task-id", "BY-1"] : ["--change-id", changeId]),
     ],
     {
       cwd: root,
@@ -212,7 +210,6 @@ describe("portable handoff observer", () => {
   it.each([
     ["Task-backed Change", "change-task-backed", "task-backed"],
     ["existing taskless Change", "change-taskless-existing", "taskless-existing"],
-    ["new taskless Change", "change-taskless-new", "taskless-new"],
   ] as const)("launches and verifies the documented %s route", (_kind, changeId, route) => {
     const handoff = runHandoff(changeId, { route });
 
@@ -225,12 +222,113 @@ describe("portable handoff observer", () => {
     if (route === "taskless-existing") {
       expect(handoff.calls).toContain(`by --json change show ${changeId}`);
     }
-    if (route === "taskless-new") {
-      expect(handoff.calls).toContain("by --json change start");
-    }
     expect(handoff.calls).toContain(`by --json change implement ${changeId}`);
     expect(handoff.calls).toContain("--handoff-file");
     expect(handoff.calls).toContain(`by --json change show ${changeId}`);
+  });
+
+  it("reuses the Change linked from a Task", () => {
+    const changeId = "linked-change";
+    const handoff = runHandoff(changeId, { route: "task-backed", linkedChangeId: changeId });
+
+    expect(handoff.status).toBe(0);
+    expect(handoff.calls).toContain("by --json task show BY-1");
+    expect(handoff.calls).toContain(`by --json change show ${changeId}`);
+    expect(handoff.calls).not.toContain("by --json change start --task BY-1");
+  });
+
+  it("rejects an unapproved Task before Change Start", () => {
+    const handoff = runHandoff("new-task-change", { route: "task-backed", taskState: "new" });
+
+    expect(handoff.status).toBe(1);
+    expect(handoff.result).toMatchObject({
+      status: "prelaunch_verification_failed",
+      error: { code: "task_not_approved" },
+    });
+    expect(handoff.calls).not.toContain("by --json change start --task BY-1");
+  });
+
+  it("reports Change Start failure before launch", () => {
+    const handoff = runHandoff("failed-start", {
+      route: "task-backed",
+      startResult: JSON.stringify({ error: { code: "change_start_conflict" } }),
+      startExitCode: "1",
+    });
+
+    expect(handoff.status).toBe(1);
+    expect(handoff.result).toMatchObject({
+      status: "prelaunch_verification_failed",
+      error: { code: "change_start_conflict" },
+    });
+  });
+
+  it.each([
+    [
+      "a failed Task Show",
+      JSON.stringify({ error: { code: "task_not_found" } }),
+      "1",
+      "task_not_found",
+    ],
+    [
+      "a mismatched Task identity",
+      JSON.stringify({ task: { id: "BY-2", state: "todo", change: null } }),
+      "0",
+      "task_verification_failed",
+    ],
+  ])("rejects %s before Change Start or Implement", (_kind, taskResult, taskExitCode, errorCode) => {
+    const handoff = runHandoff("unverified-task", {
+      route: "task-backed",
+      taskResult,
+      taskExitCode,
+    });
+
+    expect(handoff.status).toBe(1);
+    expect(handoff.result).toMatchObject({
+      status: "prelaunch_verification_failed",
+      changeVerified: false,
+      error: { code: errorCode },
+      preLaunch: { exitCode: Number(taskExitCode), timedOut: false },
+    });
+    expect(handoff.calls).not.toContain("by --json change start --task BY-1");
+    expect(handoff.calls).not.toContain("by --json change implement unverified-task");
+    if (handoff.result.tracePath === undefined) throw new Error("Expected a pre-launch trace path");
+    expect(existsSync(handoff.result.tracePath)).toBe(true);
+    rmSync(dirname(handoff.result.tracePath), { recursive: true, force: true });
+  });
+
+  it("rejects an invalid linked Change identity before Change Start or Implement", () => {
+    const handoff = runHandoff("invalid-linked-change", {
+      route: "task-backed",
+      taskResult: JSON.stringify({ task: { id: "BY-1", state: "todo", change: {} } }),
+    });
+
+    expect(handoff.status).toBe(1);
+    expect(handoff.result).toMatchObject({
+      status: "prelaunch_verification_failed",
+      changeVerified: false,
+      error: { code: "task_verification_failed" },
+      preLaunch: { exitCode: 0, timedOut: false },
+    });
+    expect(handoff.calls).not.toContain("by --json change start --task BY-1");
+    expect(handoff.calls).not.toContain("by --json change implement invalid-linked-change");
+  });
+
+  it("rejects a linked Change with a mismatched Task identity before Implement", () => {
+    const handoff = runHandoff("linked-change", {
+      route: "task-backed",
+      linkedChangeId: "linked-change",
+      initialChangeTaskId: "BY-2",
+    });
+
+    expect(handoff.status).toBe(1);
+    expect(handoff.result).toMatchObject({
+      status: "prelaunch_verification_failed",
+      changeVerified: false,
+      error: { code: "change_verification_failed" },
+      preLaunch: { exitCode: 0, timedOut: false },
+    });
+    expect(handoff.calls).not.toContain("by --json change start --task BY-1");
+    expect(handoff.calls).not.toContain("by --json change implement linked-change");
   });
 
   it.each(["", " \n\t"])("launches with no operator context for %j", (input) => {
@@ -289,11 +387,9 @@ describe("portable handoff observer", () => {
 
   it.each([
     ["Task-backed", "initial", "Change ID", { initialChangeId: "other-change" }],
-    ["Task-backed", "initial", "Managed Worktree", { initialWorktreeMismatch: true }],
     ["Task-backed", "final", "Change ID", { finalChangeId: "other-change" }],
     ["Task-backed", "final", "Managed Worktree", { finalWorktreeMismatch: true }],
     ["taskless", "initial", "Change ID", { initialChangeId: "other-change" }],
-    ["taskless", "initial", "Managed Worktree", { initialWorktreeMismatch: true }],
     ["taskless", "final", "Change ID", { finalChangeId: "other-change" }],
     ["taskless", "final", "Managed Worktree", { finalWorktreeMismatch: true }],
   ] as const)("rejects a mismatched %s %s %s", (_routeName, _phase, _identity, mismatch) => {

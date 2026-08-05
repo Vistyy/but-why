@@ -148,7 +148,8 @@ _Avoid_: Agent launch alone, validation, arbitrary state assignment
 The Operator's explicit permission to begin implementing one selected work item through its selected Work Route.
 Task Recording Authorization and Task Approval do not grant it.
 It applies to Task-backed Changes, taskless Changes, and direct edits.
-A handoff launches a fresh Interactive Session only when the authorization includes handoff.
+A Task-backed Change authorization launches a fresh Interactive Session.
+A taskless Change authorization launches one only when it includes handoff.
 _Avoid_: Task Approval, Task Recording Authorization, inferred permission to implement, authorization for unrelated work
 
 **Managed Worktree**:
