@@ -427,7 +427,6 @@ validationSetup:
         .pipe(
           Effect.tap((rows) => {
             expect(rows).toEqual([
-              { name: "acceptance_context_versions" },
               { name: "active_validation_runs" },
               { name: "candidate_publications" },
               { name: "candidate_validation_artifacts" },
@@ -499,6 +498,7 @@ validationSetup:
         { migration_id: 12, name: "structured_implementation_decisions" },
         { migration_id: 13, name: "remove_no_change_completion" },
         { migration_id: 14, name: "remove_change_readiness" },
+        { migration_id: 15, name: "remove_acceptance_context_versions" },
       ]);
     }),
   );

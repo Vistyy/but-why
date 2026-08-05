@@ -67,8 +67,6 @@ export type ImplementationBlockerMutationResult =
         | "change_not_found"
         | "change_not_open"
         | "change_blocked"
-        | "change_published"
-        | "change_candidate_passed"
         | "no_active_blocker";
     };
 
