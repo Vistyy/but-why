@@ -122,37 +122,26 @@ export const openSqliteChangePersistence = (): Effect.Effect<
       repository.transactionImmediate("record Change cleanup", (sql) => recordCleanup(sql, input)),
     getReviewerSession: (changeId, producer) =>
       repository.operation("read Reviewer Session", (sql) =>
-        Effect.flatMap(
-          sql<ReviewerSessionRow>`SELECT identity, fingerprint, session_reference AS sessionReference, last_candidate_id AS lastCandidateId FROM reviewer_sessions WHERE change_id = ${changeId} AND producer = ${producer}`,
+        Effect.map(
+          sql<ReviewerSessionRow>`SELECT change_id AS changeId, producer, fingerprint, session_reference AS sessionReference FROM reviewer_sessions WHERE change_id = ${changeId} AND producer = ${producer}`,
           (rows) => {
             const row = rows[0];
-            if (row === undefined) return Effect.succeed(undefined);
-            return Effect.sync(() => {
-              try {
-                return {
-                  identity: JSON.parse(row.identity),
-                  fingerprint: row.fingerprint,
-                  sessionReference: row.sessionReference,
-                  lastCandidateId: row.lastCandidateId,
-                } as ReviewerSessionRecord;
-              } catch {
-                return {
-                  identity: {} as ReviewerSessionRecord["identity"],
-                  fingerprint: "",
-                  sessionReference: "",
-                  lastCandidateId: "",
-                };
-              }
-            });
+            if (row === undefined) return undefined;
+            return {
+              changeId: row.changeId,
+              producer: row.producer,
+              fingerprint: row.fingerprint,
+              sessionReference: row.sessionReference,
+            } satisfies ReviewerSessionRecord;
           },
         ),
       ),
     saveReviewerSession: (input) =>
       repository.transactionImmediate("save Reviewer Session", (sql) =>
         Effect.asVoid(sql`
-      INSERT INTO reviewer_sessions (change_id, producer, identity, fingerprint, session_reference, last_candidate_id, updated_at)
-      VALUES (${input.identity.changeId}, ${input.identity.producer}, ${JSON.stringify(input.identity)}, ${input.fingerprint}, ${input.sessionReference}, ${input.lastCandidateId}, datetime('now'))
-      ON CONFLICT(change_id, producer) DO UPDATE SET identity = excluded.identity, fingerprint = excluded.fingerprint, session_reference = excluded.session_reference, last_candidate_id = excluded.last_candidate_id, updated_at = excluded.updated_at
+      INSERT INTO reviewer_sessions (change_id, producer, fingerprint, session_reference)
+      VALUES (${input.changeId}, ${input.producer}, ${input.fingerprint}, ${input.sessionReference})
+      ON CONFLICT(change_id, producer) DO UPDATE SET fingerprint = excluded.fingerprint, session_reference = excluded.session_reference
     `),
       ),
     removeReviewerSession: (changeId, producer) =>
@@ -767,10 +756,10 @@ const invalidData = (operationName: string, message: string) =>
   Effect.fail(new RepositoryPersistedDataInvalid({ operationName, cause: new Error(message) }));
 
 type ReviewerSessionRow = {
-  readonly identity: string;
+  readonly changeId: string;
+  readonly producer: string;
   readonly fingerprint: string;
   readonly sessionReference: string;
-  readonly lastCandidateId: string;
 };
 
 type PassingPublicationEvidenceRow = ChangePublicationEvidence & {

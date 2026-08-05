@@ -28,7 +28,6 @@ import {
 import {
   reviewerSessionFingerprint,
   reviewerSessionsPath,
-  sessionIdentityMatches,
   type ReviewerContinuity,
   type ReviewerSessionStore,
 } from "../reviewerSession/reviewerSession.js";
@@ -198,10 +197,9 @@ const runSpecialist = (
       input.sessionStore === undefined
         ? undefined
         : yield* input.sessionStore.get(input.changeId, policy.id);
-    const identityCompatible = stored !== undefined && sessionIdentityMatches(stored, identity);
     const compatible =
-      identityCompatible &&
-      typeof stored.sessionReference === "string" &&
+      stored !== undefined &&
+      stored.fingerprint === fingerprint &&
       stored.sessionReference.length > 0;
     let continuity: ReviewerContinuity = compatible
       ? "resumed"
@@ -211,16 +209,11 @@ const runSpecialist = (
     let restartReason: string | undefined =
       stored === undefined
         ? undefined
-        : identityCompatible &&
-            typeof stored.sessionReference === "string" &&
-            stored.sessionReference.length === 0
+        : stored.fingerprint === fingerprint && stored.sessionReference.length === 0
           ? "session_capture_unavailable"
           : compatible
             ? undefined
             : "identity_mismatch";
-    if (stored !== undefined && !identityCompatible && input.sessionStore !== undefined) {
-      yield* input.sessionStore.remove(input.changeId, policy.id);
-    }
 
     let reviewCalls = 0;
     const review = (resumeSession?: string, reviewPrompt = prompt) => {
@@ -254,7 +247,9 @@ const runSpecialist = (
           ? {}
           : {
               sessionStorageRoot: reviewerSessionsPath(
-                `${input.sessionStorageRoot}/${input.changeId}/${policy.id}`,
+                input.sessionStorageRoot,
+                input.changeId,
+                policy.id,
               ),
             }),
         ...(resumeSession === undefined ? {} : { resumeSession }),
@@ -330,10 +325,10 @@ const runSpecialist = (
 
     if (result.ok && input.sessionStore !== undefined && sessionPermissionsOk) {
       yield* input.sessionStore.save({
-        identity,
+        changeId: input.changeId,
+        producer: policy.id,
         fingerprint,
         sessionReference: result.sessionReference ?? "",
-        lastCandidateId: input.candidate.candidateId,
       });
     }
 

@@ -1,11 +1,11 @@
 import { existsSync } from "node:fs";
-import { join } from "node:path";
 import { Effect } from "effect";
 
 import { repositoryStorageErrorResult, repoStateLoadError, type CliResult } from "../cliResults.js";
 import { loadRepoLocalContext } from "../init/repoContext.js";
 import { resolveRepoTaskId } from "../task/repoTaskIds.js";
 import { cleanupChangeResourcesWithRemote } from "./localChangeCleanupGit.js";
+import { reviewerSessionsChangeRoot } from "./reviewerSession/reviewerSession.js";
 import { openCancellationUseCases, type CancellationUseCases } from "./cancelChange.js";
 import {
   githubChangeCleanupRemote,
@@ -63,7 +63,7 @@ export const withCancellation = <A, R>(
           github,
           cleanup: cleanupChangeResourcesWithRemote(githubChangeCleanupRemote(github)),
           reviewerSessionPathFor: (changeId) =>
-            join(context.context.paths.operationalDir, changeId),
+            reviewerSessionsChangeRoot(context.context.paths.operationalDir, changeId),
         }),
       ),
     ),

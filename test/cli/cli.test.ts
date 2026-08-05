@@ -502,6 +502,7 @@ validationSetup:
         { migration_id: 16, name: "remove_implementation_decision_content" },
         { migration_id: 17, name: "validation_run_blocker_identity" },
         { migration_id: 18, name: "remove_finding_severity" },
+        { migration_id: 19, name: "simplify_reviewer_sessions" },
       ]);
     }),
   );
