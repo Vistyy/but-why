@@ -275,7 +275,6 @@ const runAcceptanceReviewPhaseImpl = (
       validationRunId: input.validationRunId,
       roundNumber: 1,
       roundStatus: result.ok && findings.length === 0 ? "passed" : "failed",
-      phaseStatus: result.ok && findings.length === 0 ? "passed" : "failed",
       artifactRecords: artifacts,
       findings,
       now: input.now,

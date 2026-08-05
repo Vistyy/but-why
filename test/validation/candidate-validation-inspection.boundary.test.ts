@@ -204,7 +204,6 @@ describe("Candidate-owned Validation Run inspection", () => {
         validationRunId: fixture.validationRunId,
         roundNumber: 1,
         roundStatus: "passed",
-        phaseStatus: "passed",
         artifactRecords: [fixture.artifact("prepare", "prepare", "logs.txt", "prepare complete\n")],
         now,
       });
@@ -213,7 +212,6 @@ describe("Candidate-owned Validation Run inspection", () => {
         producer: "types",
         roundNumber: 1,
         roundStatus: "failed",
-        phaseStatus: "active",
         artifactRecords: [
           fixture.artifact("checks", "types", "logs.txt", "types failed\n"),
           fixture.artifact("checks", "types", "stdout.txt", longContent),
@@ -225,7 +223,6 @@ describe("Candidate-owned Validation Run inspection", () => {
           producer: "types",
           title: "Check failed: types",
           description: "Configured check types exited with code 1.",
-          severity: "high",
           evidence: "command: pnpm typecheck\nexitCode: 1",
           files: ["src/main.ts"],
           artifactRefs: [`artifact:${fixture.validationRunId}/checks/types/stdout.txt`],
@@ -237,7 +234,6 @@ describe("Candidate-owned Validation Run inspection", () => {
         producer: "tests",
         roundNumber: 2,
         roundStatus: "passed",
-        phaseStatus: "failed",
         artifactRecords: [fixture.artifact("checks", "tests", "stderr.txt", "")],
         now,
       });
@@ -413,7 +409,6 @@ describe("Candidate-owned Validation Run inspection", () => {
         validationRunId: empty.validationRunId,
         roundNumber: 1,
         roundStatus: "passed",
-        phaseStatus: "passed",
         artifactRecords: [empty.artifact("prepare", "prepare", "logs.txt", "prepare complete\n")],
         now,
       });
@@ -474,7 +469,6 @@ describe("Candidate-owned Validation Run inspection", () => {
         producer: "types",
         roundNumber: 1,
         roundStatus: "passed",
-        phaseStatus: "passed",
         artifactRecords: [missing],
         now,
       });

@@ -289,7 +289,6 @@ describe("Change inspection CLI", () => {
           producer: "types",
           roundNumber: 1,
           roundStatus: "failed",
-          phaseStatus: "failed",
           artifactRecords: [],
           finding: {
             id: `${newerRun.validationRunId}-F1`,

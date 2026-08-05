@@ -5,7 +5,6 @@ import type { ResolvedPiAgentProfile } from "../../agent/agentProfiles.js";
 import type { ValidationToolingFailureRecordInput } from "../validation/validationToolingFailures.js";
 import type {
   ValidationPhase,
-  ValidationPhaseStatus,
   ValidationRunArtifactRecord,
   ValidationRunFindingRecord,
 } from "../validationRun/validationRun.js";
@@ -17,8 +16,7 @@ export type RecordCandidateValidationCommandRoundInput = {
   readonly phase: ValidationPhase;
   readonly producer: string;
   readonly roundNumber: number;
-  readonly roundStatus: ValidationPhaseStatus;
-  readonly phaseStatus: ValidationPhaseStatus;
+  readonly roundStatus: "passed" | "failed";
   readonly artifactRecords: readonly Omit<ValidationRunArtifactRecord, "createdAt">[];
   readonly finding?: Omit<ValidationRunFindingRecord, "createdAt" | "updatedAt">;
   readonly findings?: readonly Omit<ValidationRunFindingRecord, "createdAt" | "updatedAt">[];
