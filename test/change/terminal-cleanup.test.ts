@@ -491,6 +491,7 @@ describe("Repeated cancellation retries the same cleanup operation", () => {
         "cleanup",
         "record-cleanup",
         "remove-reviewer-sessions:change-1",
+        "read-task",
       ]);
     }),
   );
@@ -507,6 +508,7 @@ describe("Repeated cancellation retries the same cleanup operation", () => {
 
       const result = yield* dependencies.cancellation.cancelChange({
         changeId: change.id,
+        reason: "Stop",
         now,
       });
 
@@ -533,6 +535,7 @@ describe("Repeated cancellation retries the same cleanup operation", () => {
 
       const result = yield* dependencies.cancellation.cancelChange({
         changeId: change.id,
+        reason: "Stop",
         now,
       });
 
@@ -578,6 +581,7 @@ const changeRecord = (input: {
   cleanup: input.cleanup,
   state: input.state ?? "closed",
   closeReason: input.closeReason,
+  cancelReason: input.closeReason === "cancelled" ? "Stop" : null,
   createdAt: now,
   updatedAt: now,
   closedAt: input.closeReason === null ? null : now,

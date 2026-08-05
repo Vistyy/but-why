@@ -21,7 +21,66 @@ import { publicTaskId, type PublicTaskId } from "../../src/task/taskId.js";
 import type { TaskRecord } from "../../src/task/task.js";
 
 describe("Change cancellation", () => {
-  it.effect("cancels an unfinished Task and its linked Change", () =>
+  it.effect(
+    "cancels a Task-backed Change through Change Cancel and stores the reason on the Task",
+    () =>
+      Effect.gen(function* () {
+        const root = createGitRepo();
+        const initialized = yield* runByInProcessEffect(root, ["init", "--task-prefix", "BY"]);
+        expect(initialized.status).toBe(0);
+        commitButWhyConfigAndRecordDefault(root);
+        writeFileSync(join(root, "task.md"), "Implement the requested change.");
+
+        expect(
+          (yield* runByInProcessEffect(root, [
+            "task",
+            "create",
+            "--title",
+            "Linked change",
+            "--file",
+            "task.md",
+          ])).status,
+        ).toBe(0);
+        expect((yield* runByInProcessEffect(root, ["task", "approve", "BY-1"])).status).toBe(0);
+        const started = yield* runByInProcessEffect(root, [
+          "--json",
+          "change",
+          "start",
+          "--task",
+          "BY-1",
+        ]);
+        expect(started.status).toBe(0);
+        const changeId = (
+          JSON.parse(started.stdout) as { readonly change: { readonly id: string } }
+        ).change.id;
+
+        const cancelled = yield* runByInProcessEffect(root, [
+          "change",
+          "cancel",
+          changeId,
+          "--reason",
+          "No longer needed",
+        ]);
+        expect(cancelled.status).toBe(0);
+        expect(cancelled.stdout).toContain("status: cancelled");
+        expect(cancelled.stdout).toContain("state: closed");
+        expect(cancelled.stdout).toContain("state: cancelled");
+        expect(cancelled.stdout).toContain("cancelReason: No longer needed");
+
+        const repeated = yield* runByInProcessEffect(root, [
+          "task",
+          "cancel",
+          "BY-1",
+          "--reason",
+          "A different reason",
+        ]);
+        expect(repeated.status).toBe(0);
+        expect(repeated.stdout).toContain("changed: false");
+        expect(repeated.stdout).toContain("reason: No longer needed");
+      }),
+  );
+
+  it.effect("cancels a Task-backed Change through Task Cancel and closes its linked Change", () =>
     Effect.gen(function* () {
       const root = createGitRepo();
       const initialized = yield* runByInProcessEffect(root, ["init", "--task-prefix", "BY"]);
@@ -51,19 +110,39 @@ describe("Change cancellation", () => {
       const changeId = (JSON.parse(started.stdout) as { readonly change: { readonly id: string } })
         .change.id;
 
-      const direct = yield* runByInProcessEffect(root, ["change", "cancel", changeId]);
-      expect(direct.status).toBe(1);
-      expect(direct.stdout).toContain("code: task_backed_change");
-      expect(direct.stdout).toContain("by task cancel BY-1 --reason <reason>");
-
-      const emptyReason = yield* runByInProcessEffect(root, [
+      const cancelled = yield* runByInProcessEffect(root, [
         "task",
         "cancel",
         "BY-1",
         "--reason",
-        "   ",
+        "No longer needed",
       ]);
-      expect(emptyReason.status).toBe(2);
+      expect(cancelled.status).toBe(0);
+      expect(cancelled.stdout).toContain("state: cancelled");
+      expect(cancelled.stdout).toContain("reason: No longer needed");
+      expect(cancelled.stdout).toContain("state: closed");
+      expect(cancelled.stdout).toContain(`id: ${changeId}`);
+    }),
+  );
+
+  it.effect("directly cancels an unlinked Task through Task Cancel", () =>
+    Effect.gen(function* () {
+      const root = createGitRepo();
+      const initialized = yield* runByInProcessEffect(root, ["init", "--task-prefix", "BY"]);
+      expect(initialized.status).toBe(0);
+      commitButWhyConfigAndRecordDefault(root);
+      writeFileSync(join(root, "task.md"), "Implement the requested change.");
+
+      expect(
+        (yield* runByInProcessEffect(root, [
+          "task",
+          "create",
+          "--title",
+          "Unlinked task",
+          "--file",
+          "task.md",
+        ])).status,
+      ).toBe(0);
 
       const cancelled = yield* runByInProcessEffect(root, [
         "task",
@@ -74,23 +153,12 @@ describe("Change cancellation", () => {
       ]);
       expect(cancelled.status).toBe(0);
       expect(cancelled.stdout).toContain("state: cancelled");
-      expect(cancelled.stdout).toContain("state: closed");
-
-      const repeated = yield* runByInProcessEffect(root, [
-        "task",
-        "cancel",
-        "BY-1",
-        "--reason",
-        "A different reason",
-      ]);
-      expect(repeated.status).toBe(0);
-      expect(repeated.stdout).toContain("changed: false");
-      expect(repeated.stdout).toContain("reason: No longer needed");
-      expect(repeated.stdout).toContain("state: complete");
+      expect(cancelled.stdout).toContain("reason: No longer needed");
+      expect(cancelled.stdout).not.toContain("change:");
     }),
   );
 
-  it.effect("cancels an open taskless Change and cleans its resources", () =>
+  it.effect("cancels a Taskless Change and exposes its reason through inspection", () =>
     Effect.gen(function* () {
       const root = createGitRepo();
       const initialized = yield* runByInProcessEffect(root, ["init", "--task-prefix", "BY"]);
@@ -102,17 +170,102 @@ describe("Change cancellation", () => {
       const changeId = (JSON.parse(started.stdout) as { readonly change: { readonly id: string } })
         .change.id;
 
-      const cancelled = yield* runByInProcessEffect(root, ["change", "cancel", changeId]);
-
+      const cancelled = yield* runByInProcessEffect(root, [
+        "change",
+        "cancel",
+        changeId,
+        "--reason",
+        "Not needed",
+      ]);
       expect(cancelled.status).toBe(0);
-      expect(cancelled.stdout).toContain(`id: ${changeId}`);
       expect(cancelled.stdout).toContain("status: cancelled");
       expect(cancelled.stdout).toContain("state: closed");
-      expect(cancelled.stdout).toContain("state: complete");
+      expect(cancelled.stdout).toContain("cancelReason: Not needed");
 
-      const repeated = yield* runByInProcessEffect(root, ["change", "cancel", changeId]);
+      const shown = yield* runByInProcessEffect(root, ["change", "show", changeId]);
+      expect(shown.status).toBe(0);
+      expect(shown.stdout).toContain("state: closed");
+      expect(shown.stdout).toContain("closeReason: cancelled");
+      expect(shown.stdout).toContain("cancelReason: Not needed");
+    }),
+  );
+
+  it.effect("rejects empty cancellation reasons for Change and Task Cancel", () =>
+    Effect.gen(function* () {
+      const root = createGitRepo();
+      const initialized = yield* runByInProcessEffect(root, ["init", "--task-prefix", "BY"]);
+      expect(initialized.status).toBe(0);
+      commitButWhyConfigAndRecordDefault(root);
+      writeFileSync(join(root, "task.md"), "Implement the requested change.");
+
+      expect(
+        (yield* runByInProcessEffect(root, [
+          "task",
+          "create",
+          "--title",
+          "Linked change",
+          "--file",
+          "task.md",
+        ])).status,
+      ).toBe(0);
+      const started = yield* runByInProcessEffect(root, ["--json", "change", "start"]);
+      const changeId = (JSON.parse(started.stdout) as { readonly change: { readonly id: string } })
+        .change.id;
+
+      const changeEmpty = yield* runByInProcessEffect(root, [
+        "change",
+        "cancel",
+        changeId,
+        "--reason",
+        "   ",
+      ]);
+      expect(changeEmpty.status).toBe(2);
+      expect(changeEmpty.stdout).toContain("code: empty_reason");
+
+      const taskEmpty = yield* runByInProcessEffect(root, [
+        "task",
+        "cancel",
+        "BY-1",
+        "--reason",
+        "",
+      ]);
+      expect(taskEmpty.status).toBe(2);
+      expect(taskEmpty.stdout).toContain("code: empty_reason");
+    }),
+  );
+
+  it.effect("retries a repeated Taskless Change cancellation without changing its reason", () =>
+    Effect.gen(function* () {
+      const root = createGitRepo();
+      const initialized = yield* runByInProcessEffect(root, ["init", "--task-prefix", "BY"]);
+      expect(initialized.status).toBe(0);
+      commitButWhyConfigAndRecordDefault(root);
+
+      const started = yield* runByInProcessEffect(root, ["--json", "change", "start"]);
+      expect(started.status).toBe(0);
+      const changeId = (JSON.parse(started.stdout) as { readonly change: { readonly id: string } })
+        .change.id;
+
+      const cancelled = yield* runByInProcessEffect(root, [
+        "change",
+        "cancel",
+        changeId,
+        "--reason",
+        "Not needed",
+      ]);
+      expect(cancelled.status).toBe(0);
+
+      const repeated = yield* runByInProcessEffect(root, [
+        "change",
+        "cancel",
+        changeId,
+        "--reason",
+        "A different reason",
+      ]);
       expect(repeated.status).toBe(0);
       expect(repeated.stdout).toContain("changed: false");
+      expect(repeated.stdout).toContain("cancelReason: Not needed");
+      expect(repeated.stdout).toContain("state: complete");
     }),
   );
 
@@ -129,7 +282,7 @@ describe("Change cancellation", () => {
       });
       const result = yield* runByInProcessEffect(
         createTestWorkspace(),
-        ["change", "cancel", "change-1"],
+        ["change", "cancel", "change-1", "--reason", "Stop"],
         now,
         { cancellationUseCases: openCancellationUseCases(dependencies) },
       );
@@ -144,6 +297,7 @@ describe("Change cancellation", () => {
         "record-cleanup",
         "remove-reviewer-sessions",
       ]);
+      expect(dependencies.closePullRequestInputs).toEqual([{ target, number: 42 }]);
     }),
   );
 
@@ -160,7 +314,7 @@ describe("Change cancellation", () => {
       });
       const result = yield* runByInProcessEffect(
         createTestWorkspace(),
-        ["change", "cancel", "change-1"],
+        ["change", "cancel", "change-1", "--reason", "Stop"],
         now,
         { cancellationUseCases: openCancellationUseCases(dependencies) },
       );
@@ -229,6 +383,62 @@ describe("Change cancellation", () => {
             taskId: publicTaskId(task.id),
           });
           expect(events).toEqual(["read-task", "read-change", "read-pr"]);
+          return result;
+        }),
+      );
+  });
+
+  it.effect("refuses cancellation while a Validation Run is active", () => {
+    const events: string[] = [];
+    const task = taskRecord("implementing");
+    const change = changeRecord(publicTaskId(task.id));
+    const dependencies = cancellationDependencies({
+      task,
+      change,
+      pullRequest: pullRequest("closed", false),
+      activeValidationRunId: "run-active",
+      events,
+    });
+
+    return openCancellationUseCases(dependencies)
+      .cancelTask({ taskId: publicTaskId(task.id), reason: "Stop", now })
+      .pipe(
+        Effect.map((result) => {
+          expect(result).toEqual({
+            ok: false,
+            code: "active_validation_run",
+            taskId: publicTaskId(task.id),
+            validationRunId: "run-active",
+          });
+          expect(events).toEqual(["read-task", "read-change"]);
+          return result;
+        }),
+      );
+  });
+
+  it.effect("refuses Change-selected cancellation while a Validation Run is active", () => {
+    const events: string[] = [];
+    const task = taskRecord("implementing");
+    const change = changeRecord(publicTaskId(task.id));
+    const dependencies = cancellationDependencies({
+      task,
+      change,
+      pullRequest: pullRequest("closed", false),
+      activeValidationRunId: "run-active",
+      events,
+    });
+
+    return openCancellationUseCases(dependencies)
+      .cancelChange({ changeId: change.id, reason: "Stop", now })
+      .pipe(
+        Effect.map((result) => {
+          expect(result).toEqual({
+            ok: false,
+            code: "active_validation_run",
+            changeId: change.id,
+            validationRunId: "run-active",
+          });
+          expect(events).toEqual([]);
           return result;
         }),
       );
@@ -501,6 +711,7 @@ const changeRecord = (taskId: PublicTaskId | null): ChangeRecord => ({
   cleanup: { state: "pending", blockingReason: null },
   state: "open",
   closeReason: null,
+  cancelReason: null,
   createdAt: now,
   updatedAt: now,
   closedAt: null,
@@ -529,10 +740,12 @@ const cancellationDependencies = (input: {
     | { readonly state: "pending"; readonly blockingReason: string };
   readonly cleanupRemoteBranches?: (object | undefined)[];
   readonly completeMergedFailure?: "change_already_closed" | "publication_mismatch";
+  readonly activeValidationRunId?: string;
   readonly events: string[];
-}): CancellationDependencies => {
+}): CancellationDependencies & { readonly closePullRequestInputs: unknown[] } => {
   let currentTask = input.task;
   let currentChange = input.change;
+  const closePullRequestInputs: unknown[] = [];
   const changes = {
     getChangeById: () => Effect.succeed(currentChange),
     getChangeByTaskId: () => {
@@ -551,10 +764,16 @@ const cancellationDependencies = (input: {
       currentTask = { ...currentTask, state: "done" };
       return Effect.succeed({ ok: true as const, changed: true, change: currentChange });
     },
-    cancelChange: () => {
+    cancelChange: (cancelInput: { readonly changeId: string; readonly reason: string }) => {
       input.events.push("cancel-change");
-      currentChange = { ...currentChange, state: "closed", closeReason: "cancelled" };
-      currentTask = { ...currentTask, state: "cancelled", cancelReason: "Stop" };
+      currentChange = {
+        ...currentChange,
+        state: "closed",
+        closeReason: "cancelled",
+        cancelReason:
+          currentChange.taskId === null ? cancelInput.reason : currentChange.cancelReason,
+      };
+      currentTask = { ...currentTask, state: "cancelled", cancelReason: cancelInput.reason };
       return Effect.succeed({ ok: true as const, changed: true, change: currentChange });
     },
     recordCleanup: () => {
@@ -584,13 +803,25 @@ const cancellationDependencies = (input: {
       },
     },
     changes,
+    ...(input.activeValidationRunId === undefined
+      ? {}
+      : {
+          validation: {
+            getActiveForChange: () =>
+              Effect.succeed({
+                validationRunId: input.activeValidationRunId ?? "",
+                changeId: currentChange.id,
+              }),
+          },
+        }),
     github: {
       getPullRequest: () => {
         input.events.push("read-pr");
         return input.pullRequest;
       },
-      closePullRequest: () => {
+      closePullRequest: (closeInput) => {
         input.events.push("close-pr");
+        closePullRequestInputs.push(closeInput);
         return input.closePullRequest ?? { ok: true, pullRequest: pullRequest("closed", false) };
       },
     },
@@ -602,5 +833,6 @@ const cancellationDependencies = (input: {
         return input.cleanupResult ?? { state: "complete", blockingReason: null };
       },
     }),
+    closePullRequestInputs,
   };
 };

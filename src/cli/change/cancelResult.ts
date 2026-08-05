@@ -11,8 +11,21 @@ export const changeCancelResult = (result: ChangeCancellationResult): CliResult 
         state: result.change.state,
         closeReason: result.change.closeReason,
         cleanup: result.change.cleanup,
+        ...(result.change.cancelReason === null
+          ? {}
+          : { cancelReason: result.change.cancelReason }),
       },
-      ...(result.task === null ? {} : { task: { id: result.task.id, state: result.task.state } }),
+      ...(result.task === null
+        ? {}
+        : {
+            task: {
+              id: result.task.id,
+              state: result.task.state,
+              ...(result.task.cancelReason === null
+                ? {}
+                : { cancelReason: result.task.cancelReason }),
+            },
+          }),
     });
   }
   if (result.code === "change_not_found") {
@@ -21,17 +34,6 @@ export const changeCancelResult = (result: ChangeCancellationResult): CliResult 
       message: "Change was not found.",
       details: { changeId: result.changeId },
       help: ["Use a Change ID returned by `by change start --json`."],
-    });
-  }
-  if (result.code === "task_backed_change") {
-    return runtimeError({
-      code: result.code,
-      message: "Task-backed Changes must be cancelled through their Task.",
-      details: {
-        changeId: result.changeId,
-        ...(result.taskId === undefined ? {} : { taskId: result.taskId }),
-      },
-      help: [`Run \`by task cancel ${result.taskId} --reason <reason>\`.`],
     });
   }
   if (result.code === "submission_in_progress") {
