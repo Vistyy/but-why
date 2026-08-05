@@ -28,14 +28,18 @@ export type TerminalCleanupResult =
   | { readonly ok: true; readonly change: ChangeRecord; readonly cleanup: ChangeCleanup }
   | { readonly ok: false; readonly code: "change_not_found" | "change_not_closed" };
 
+export type ArtifactContentRemovalResult = { readonly ok: true } | { readonly ok: false };
+
+export type ArtifactLifecycleOwner = {
+  readonly removeContent: (
+    changeId: string,
+  ) => Effect.Effect<ArtifactContentRemovalResult, RepositoryStorageError>;
+};
+
 export type TerminalCleanupOperation = (
   change: ChangeRecord,
   now: string,
 ) => Effect.Effect<TerminalCleanupResult, RepositoryStorageError>;
-
-export type ArtifactLifecycleOwner = {
-  readonly removeContent: (changeId: string) => Effect.Effect<void, RepositoryStorageError>;
-};
 
 export const openTerminalCleanup =
   (dependencies: {
@@ -61,7 +65,10 @@ const cleanupTerminalChange = (
 
     const indexResult = yield* indexTranscripts(dependencies, change);
     if (indexResult !== undefined && !indexResult.ok) {
-      return yield* recordPendingCleanup(dependencies, change, now, "transcript_index_failed");
+      return yield* recordCleanup(dependencies, change, now, {
+        state: "pending",
+        blockingReason: "transcript_index_failed",
+      });
     }
 
     const remoteChangeBranch = remoteChangeBranchFor(change);
@@ -71,22 +78,46 @@ const cleanupTerminalChange = (
       branchRef: change.branchRef,
       ...(remoteChangeBranch === undefined ? {} : { remoteChangeBranch }),
     });
-    const cleanup: ChangeCleanup =
-      result.state === "complete"
-        ? { state: "complete", blockingReason: null }
-        : { state: "pending", blockingReason: result.blockingReason };
+    if (result.state === "pending") {
+      return yield* recordCleanup(dependencies, change, now, {
+        state: "pending",
+        blockingReason: result.blockingReason,
+      });
+    }
+
+    const artifactContentRemoved = yield* removeArtifactContent(dependencies, change);
+    const cleanup: ChangeCleanup = artifactContentRemoved
+      ? { state: "complete", blockingReason: null }
+      : { state: "pending", blockingReason: "artifact_content_removal_failed" };
+    const recorded = yield* recordCleanup(dependencies, change, now, cleanup);
+    if (!recorded.ok) return recorded;
+    if (recorded.change.cleanup.state === "complete") {
+      yield* dependencies.persistence.removeReviewerSessions(change.id);
+    }
+    return { ok: true, change: recorded.change, cleanup: recorded.change.cleanup };
+  });
+
+const removeArtifactContent = (
+  dependencies: Parameters<typeof openTerminalCleanup>[0],
+  change: ChangeRecord,
+): Effect.Effect<boolean, RepositoryStorageError> =>
+  dependencies.artifactLifecycle === undefined
+    ? Effect.succeed(true)
+    : Effect.map(dependencies.artifactLifecycle.removeContent(change.id), (result) => result.ok);
+
+const recordCleanup = (
+  dependencies: Parameters<typeof openTerminalCleanup>[0],
+  change: ChangeRecord,
+  now: string,
+  cleanup: ChangeCleanup,
+): Effect.Effect<TerminalCleanupResult, RepositoryStorageError> =>
+  Effect.gen(function* () {
     const recorded = yield* dependencies.persistence.recordCleanup({
       changeId: change.id,
       cleanup,
       now,
     });
     if (!recorded.ok) return { ok: false, code: recorded.code };
-    if (recorded.change.cleanup.state === "complete") {
-      yield* dependencies.persistence.removeReviewerSessions(change.id);
-      if (dependencies.artifactLifecycle !== undefined) {
-        yield* dependencies.artifactLifecycle.removeContent(change.id);
-      }
-    }
     return { ok: true, change: recorded.change, cleanup: recorded.change.cleanup };
   });
 
@@ -105,22 +136,6 @@ const indexTranscripts = (
     reviewerSessionPath: dependencies.reviewerSessionPathFor(change.id),
   });
 };
-
-const recordPendingCleanup = (
-  dependencies: Parameters<typeof openTerminalCleanup>[0],
-  change: ChangeRecord,
-  now: string,
-  blockingReason: string,
-): Effect.Effect<TerminalCleanupResult, RepositoryStorageError> =>
-  Effect.gen(function* () {
-    const recorded = yield* dependencies.persistence.recordCleanup({
-      changeId: change.id,
-      cleanup: { state: "pending", blockingReason },
-      now,
-    });
-    if (!recorded.ok) return { ok: false, code: recorded.code };
-    return { ok: true, change: recorded.change, cleanup: recorded.change.cleanup };
-  });
 
 const remoteChangeBranchFor = (change: ChangeRecord): RemoteChangeBranch | undefined => {
   const publication = change.publication;

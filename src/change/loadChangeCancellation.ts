@@ -8,6 +8,7 @@ import { cleanupChangeResourcesWithRemote } from "./localChangeCleanupGit.js";
 import { openTerminalCleanup } from "./cleanupTerminalChange.js";
 import { reviewerSessionsChangeRoot } from "./reviewerSession/reviewerSession.js";
 import { openReviewerTranscriptIndex } from "./reviewerSession/reviewerTranscript.js";
+import { openArtifactLifecycle } from "./validationRun/artifactLifecycle.js";
 import { openCancellationUseCases, type CancellationUseCases } from "./cancelChange.js";
 import {
   githubChangeCleanupRemote,
@@ -71,6 +72,10 @@ export const withCancellation = <A, R>(
             }),
             reviewerSessionPathFor: (changeId) =>
               reviewerSessionsChangeRoot(context.context.paths.operationalDir, changeId),
+            artifactLifecycle: openArtifactLifecycle({
+              persistence: validation,
+              artifactsRoot: context.context.paths.artifactsPath,
+            }),
           }),
         }),
       ),

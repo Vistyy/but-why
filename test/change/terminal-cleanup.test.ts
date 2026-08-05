@@ -37,7 +37,7 @@ describe("Change-owned terminal cleanup operation", () => {
         artifactLifecycle: {
           removeContent: (changeId) => {
             events.push(`artifact:${changeId}`);
-            return Effect.void;
+            return Effect.succeed({ ok: true as const });
           },
         },
       });
@@ -54,9 +54,9 @@ describe("Change-owned terminal cleanup operation", () => {
       });
       expect(events).toEqual([
         "cleanup:remote",
+        "artifact:change-1",
         "record-cleanup",
         "remove-reviewer-sessions:change-1",
-        "artifact:change-1",
       ]);
     }),
   );
@@ -82,7 +82,7 @@ describe("Change-owned terminal cleanup operation", () => {
         artifactLifecycle: {
           removeContent: (changeId) => {
             events.push(`artifact:${changeId}`);
-            return Effect.void;
+            return Effect.succeed({ ok: true as const });
           },
         },
       });
@@ -99,9 +99,9 @@ describe("Change-owned terminal cleanup operation", () => {
       expect(events).toEqual([
         "index:change-1:/storage/change-1",
         "cleanup:remote",
+        "artifact:change-1",
         "record-cleanup",
         "remove-reviewer-sessions:change-1",
-        "artifact:change-1",
       ]);
     }),
   );
@@ -269,7 +269,7 @@ describe("Change-owned terminal cleanup operation", () => {
         artifactLifecycle: {
           removeContent: (changeId) => {
             events.push(`artifact:${changeId}`);
-            return Effect.void;
+            return Effect.succeed({ ok: true as const });
           },
         },
       });
@@ -290,6 +290,97 @@ describe("Change-owned terminal cleanup operation", () => {
     }),
   );
 
+  it.effect("keeps cleanup pending when Artifact Content removal fails", () =>
+    Effect.gen(function* () {
+      const events: string[] = [];
+      const change = changeRecord({ closeReason: "cancelled", cleanup: pendingCleanup });
+      const cleanup = openTerminalCleanup({
+        persistence: echoPersistence(events, change),
+        cleanup: (input) => {
+          events.push(`cleanup:${input.remoteChangeBranch === undefined ? "none" : "remote"}`);
+          return { state: "complete", blockingReason: null };
+        },
+        artifactLifecycle: {
+          removeContent: (changeId) => {
+            events.push(`artifact-failed:${changeId}`);
+            return Effect.succeed({ ok: false as const });
+          },
+        },
+      });
+
+      const result = yield* cleanup(change, now);
+
+      expect(result).toEqual({
+        ok: true,
+        change: expect.objectContaining({
+          cleanup: {
+            state: "pending",
+            blockingReason: "artifact_content_removal_failed",
+          },
+        }),
+        cleanup: {
+          state: "pending",
+          blockingReason: "artifact_content_removal_failed",
+        },
+      });
+      expect(events).toEqual(["cleanup:remote", "artifact-failed:change-1", "record-cleanup"]);
+    }),
+  );
+
+  it.effect("completes on retry after Artifact Content removal succeeds", () =>
+    Effect.gen(function* () {
+      const events: string[] = [];
+      const change = changeRecord({ closeReason: "cancelled", cleanup: pendingCleanup });
+      const attempts: { readonly changeId: string; readonly success: boolean }[] = [
+        { changeId: "change-1", success: false },
+        { changeId: "change-1", success: true },
+      ];
+      const cleanup = openTerminalCleanup({
+        persistence: echoPersistence(events, change),
+        cleanup: (input) => {
+          events.push(`cleanup:${input.remoteChangeBranch === undefined ? "none" : "remote"}`);
+          return { state: "complete", blockingReason: null };
+        },
+        artifactLifecycle: {
+          removeContent: (changeId) => {
+            const attempt = attempts.shift();
+            events.push(`artifact:${changeId}:${attempt?.success === true ? "ok" : "failed"}`);
+            return Effect.succeed(
+              attempt?.success === true ? { ok: true as const } : { ok: false as const },
+            );
+          },
+        },
+      });
+
+      const first = yield* cleanup(change, now);
+      expect(first).toMatchObject({
+        ok: true,
+        cleanup: {
+          state: "pending",
+          blockingReason: "artifact_content_removal_failed",
+        },
+      });
+
+      const retried = yield* cleanup(change, now);
+      expect(retried).toEqual({
+        ok: true,
+        change: expect.objectContaining({
+          cleanup: { state: "complete", blockingReason: null },
+        }),
+        cleanup: { state: "complete", blockingReason: null },
+      });
+      expect(events).toEqual([
+        "cleanup:remote",
+        "artifact:change-1:failed",
+        "record-cleanup",
+        "cleanup:remote",
+        "artifact:change-1:ok",
+        "record-cleanup",
+        "remove-reviewer-sessions:change-1",
+      ]);
+    }),
+  );
+
   it.effect("treats already-complete cleanup as an idempotent no-op", () =>
     Effect.gen(function* () {
       const events: string[] = [];
@@ -306,7 +397,7 @@ describe("Change-owned terminal cleanup operation", () => {
         artifactLifecycle: {
           removeContent: (changeId) => {
             events.push(`artifact:${changeId}`);
-            return Effect.void;
+            return Effect.succeed({ ok: true as const });
           },
         },
       });
@@ -503,6 +594,21 @@ const fakePersistence = (
       ok: true as const,
       changed: true,
       change: { ...recordedChange, cleanup: cleanupResult },
+    });
+  },
+  removeReviewerSessions: (changeId: string) => {
+    events.push(`remove-reviewer-sessions:${changeId}`);
+    return Effect.void;
+  },
+});
+
+const echoPersistence = (events: string[], change: ChangeRecord) => ({
+  recordCleanup: (input: { readonly changeId: string; readonly cleanup: ChangeCleanup }) => {
+    events.push("record-cleanup");
+    return Effect.succeed({
+      ok: true as const,
+      changed: true,
+      change: { ...change, cleanup: input.cleanup },
     });
   },
   removeReviewerSessions: (changeId: string) => {
