@@ -17,7 +17,6 @@ import type {
   PublishCandidateInput,
   PublishCandidateResult,
 } from "../../src/change/publication/candidatePublication.js";
-import type { TaskPersistence } from "../../src/task/taskPersistence.js";
 import { publicTaskId } from "../../src/task/taskId.js";
 import type { RemoteChangeBaseResult } from "../../src/submissionEnvironment/remoteChangeBase.js";
 import type { ChangeValidationPersistence } from "../../src/change/validation/changeValidationPersistence.js";
@@ -615,10 +614,9 @@ describe("Change Submit orchestration", () => {
     }),
   );
 
-  it.effect("uses Acceptance Context for a Task-backed Candidate without Task transitions", () =>
+  it.effect("uses Acceptance Context for a Task-backed Candidate", () =>
     Effect.gen(function* () {
       const events: string[] = [];
-      const transitions: string[] = [];
       const change = readyChange({
         taskId: publicTaskId("BY-1"),
         acceptanceContext: {
@@ -629,7 +627,7 @@ describe("Change Submit orchestration", () => {
         },
       });
       const submit = openChangeSubmit(
-        dependencies({ events, transitions, change, acceptanceContextSupplied: true }),
+        dependencies({ events, change, acceptanceContextSupplied: true }),
       );
       const validationLayer = Layer.succeed(CandidateValidation, {
         validateCandidate: () => Effect.die("Taskless validation was not expected"),
@@ -661,7 +659,6 @@ describe("Change Submit orchestration", () => {
         "validate_task_backed",
         "publish",
       ]);
-      expect(transitions).toEqual([]);
     }),
   );
 
@@ -1259,9 +1256,8 @@ describe("Change Submit orchestration", () => {
     }),
   );
 
-  it.effect("returns Findings without Task transitions", () =>
+  it.effect("returns Findings", () =>
     Effect.gen(function* () {
-      const transitions: string[] = [];
       const change = readyChange({
         taskId: publicTaskId("BY-1"),
         acceptanceContext: {
@@ -1272,7 +1268,7 @@ describe("Change Submit orchestration", () => {
         },
       });
       const submit = openChangeSubmit(
-        dependencies({ change, transitions, acceptanceContextSupplied: true, findings: [finding] }),
+        dependencies({ change, acceptanceContextSupplied: true, findings: [finding] }),
       );
       const validationLayer = Layer.succeed(CandidateValidation, {
         validateCandidate: () => Effect.die("Taskless validation was not expected"),
@@ -1300,13 +1296,11 @@ describe("Change Submit orchestration", () => {
         validationRunId: "run-1",
         findings: [finding],
       });
-      expect(transitions).toEqual([]);
     }),
   );
 
-  it.effect("returns Tooling Failures without Task transitions", () =>
+  it.effect("returns Tooling Failures", () =>
     Effect.gen(function* () {
-      const transitions: string[] = [];
       const change = readyChange({
         taskId: publicTaskId("BY-1"),
         acceptanceContext: {
@@ -1319,7 +1313,6 @@ describe("Change Submit orchestration", () => {
       const submit = openChangeSubmit(
         dependencies({
           change,
-          transitions,
           acceptanceContextSupplied: true,
           toolingFailures: [toolingFailure],
         }),
@@ -1347,7 +1340,6 @@ describe("Change Submit orchestration", () => {
         validationRunId: "run-1",
         toolingFailures: [toolingFailure],
       });
-      expect(transitions).toEqual([]);
     }),
   );
 });
@@ -1359,7 +1351,6 @@ type PublicationFixture = {
 const dependencies = (input: {
   readonly change: ChangeRecord;
   readonly events?: string[];
-  readonly transitions?: string[];
   readonly acceptanceContextSupplied?: boolean;
   readonly agentEnvironment?: readonly string[];
   readonly agentEnvironmentError?: string;
@@ -1419,7 +1410,6 @@ const dependencies = (input: {
   const refreshResults = [...(input.refreshResults ?? [])];
   const reconciliationStatuses = [...(input.reconciliationStatuses ?? [])];
   let currentTargetSha: string = refreshedBase.commit;
-  let taskState = "implementing";
   return {
     repositoryCommonDirectory: "/repo/.git",
     repositoryPath: "/repo",
@@ -1439,22 +1429,7 @@ const dependencies = (input: {
             }
           );
         }),
-      transitionLinkedTask: ({ to }: { readonly to: string }) =>
-        Effect.sync(() => {
-          input.transitions?.push(to);
-          taskState = to;
-          return true;
-        }),
     } as unknown as ChangePersistence,
-    taskPersistence: {
-      getTaskById: () => Effect.succeed({ state: taskState }),
-      transitionTaskState: ({ to }: { readonly to: string }) =>
-        Effect.sync(() => {
-          input.transitions?.push(to);
-          taskState = to;
-          return { ok: true, changed: true, task: {} };
-        }),
-    } as unknown as TaskPersistence,
     reconciliation: {
       reconcile: () =>
         Effect.sync(() => {

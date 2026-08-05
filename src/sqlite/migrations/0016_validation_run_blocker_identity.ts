@@ -3,6 +3,9 @@ import { Effect } from "effect";
 
 export const validationRunBlockerIdentityMigration = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
+  const beforeCount = yield* sql<{ readonly count: number | bigint }>`
+    SELECT COUNT(*) AS count FROM candidate_validation_runs
+  `;
   const runColumns = yield* sql<{
     readonly name: string;
   }>`PRAGMA table_info(candidate_validation_runs)`;
@@ -37,19 +40,19 @@ export const validationRunBlockerIdentityMigration = Effect.gen(function* () {
     WHERE outcome = 'passed'
   `);
 
-  const preservedRunCount = yield* sql<{ readonly count: number | bigint }>`
+  const afterCount = yield* sql<{ readonly count: number | bigint }>`
     SELECT COUNT(*) AS count FROM candidate_validation_runs
   `;
+  if (Number(afterCount[0]?.count ?? -1) < Number(beforeCount[0]?.count ?? -1)) {
+    return yield* Effect.fail(
+      new Error("Validation Run blocker identity migration lost Validation Runs"),
+    );
+  }
   const unsupportedRuns = yield* sql<{ readonly count: number | bigint }>`
     SELECT COUNT(*) AS count
     FROM candidate_validation_runs
     WHERE state = 'running' AND outcome IS NOT NULL
   `;
-  if (Number(preservedRunCount[0]?.count ?? -1) < 0) {
-    return yield* Effect.fail(
-      new Error("Validation Run blocker identity migration lost Validation Runs"),
-    );
-  }
   if (Number(unsupportedRuns[0]?.count ?? -1) > 0) {
     return yield* Effect.fail(
       new Error("Validation Run blocker identity migration found inconsistent run states"),
