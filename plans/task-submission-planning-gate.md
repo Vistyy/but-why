@@ -14,7 +14,7 @@ remove_when: the refreshed implementation slices are complete, accepted behavior
 ## Refresh notice
 
 The planning capability remains a future accepted direction, but its current detailed lifecycle is not the approved implementation target.
-The refresh must use [Lifecycle and evidence simplification review](lifecycle-evidence-simplification-review.md), the refreshed [Verification portfolio redesign](verification-portfolio-redesign.md), and implemented simplification outcomes.
+The refresh must use current Task Contexts and Task state, current contexts and ADRs, the refreshed [Verification portfolio redesign](verification-portfolio-redesign.md), and implemented product outcomes.
 
 The refresh must preserve Task-based planning, separate Planning Run and Validation Run ownership, mandatory Reviewer Session continuity, one material reviewer Finding contract, proportionate evidence, and explicit operator approval.
 It must reconsider exact immutable snapshot duplication, permanent Planning history, active-run and abandonment machinery, approval invalidation, drift rules, inspection breadth, and every constraint inherited from current Validation behavior.

@@ -18,9 +18,8 @@ The portfolio must test supported outcomes through their owning seams instead of
 
 ## Current planning relationship
 
-The accepted lifecycle and evidence decisions are recorded in [Lifecycle and evidence simplification review](lifecycle-evidence-simplification-review.md).
-The current simplification candidates and sequencing are recorded in [Codebase simplification audit](codebase-simplification-audit.md).
-The completed stale Task dispositions are authoritative in SQLite, and retained replacement requirements remain in the lifecycle review.
+SQLite Task Context and Task state record accepted simplification work and its implementation status.
+Current contexts, ADRs, executable sources, and Task Contexts define the supported product seams.
 
 The current root `VERIFICATION.md` intentionally contains only recurring But Why Material Risks and project-specific evidence constraints that affect work across Tasks.
 Commands, configuration, product behavior, temporary migration details, and generic verification guidance remain in their existing authorities.
