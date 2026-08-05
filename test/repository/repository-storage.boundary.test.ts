@@ -2025,6 +2025,43 @@ describe("repository SQL storage", () => {
     ),
   );
 
+  it.scoped("reports a malformed Change record through the typed error channel", () =>
+    withTemporaryState((input) =>
+      Effect.gen(function* () {
+        const starts = yield* openSqliteChangeStartPersistence();
+        const changes = yield* openSqliteChangePersistence();
+        const started = yield* starts.create({
+          id: "change-malformed",
+          repositoryCommonDirectory: input.commonDirectory,
+          branchRef: "refs/heads/but-why/by-1-malformed",
+          baseRef: "main",
+          baseRemoteUrl: "https://github.com/acme/repo.git",
+          startingCommit: "1111111111111111111111111111111111111111",
+          worktreePath: join(input.commonDirectory, "worktrees", "by-1-malformed"),
+          now: "2026-07-17T23:10:00.000Z",
+        });
+        if (!started.ok) return;
+
+        const repository = yield* RepositorySql;
+        yield* repository.operation(
+          "corrupt Change publication marker",
+          (sql) => sql`
+            UPDATE changes
+            SET publication_candidate_id = 'candidate-malformed'
+            WHERE id = ${started.change.id}
+          `,
+        );
+
+        const error = yield* changes.getChangeById(started.change.id).pipe(Effect.flip);
+        expect(error).toBeInstanceOf(RepositoryPersistedDataInvalid);
+        expect(error).toMatchObject({
+          _tag: "RepositoryPersistedDataInvalid",
+          operationName: "read Change",
+        });
+      }),
+    ),
+  );
+
   it.scoped("reports SQL operation failures through the typed error channel", () =>
     withTemporaryState(() =>
       Effect.gen(function* () {

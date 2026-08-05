@@ -238,6 +238,51 @@ describe("Change inspection CLI", () => {
     }),
   );
 
+  it.effect("reports malformed persisted data as persisted_data_invalid in TOON and JSON", () =>
+    Effect.gen(function* () {
+      const root = yield* initializedRepoCopy();
+      const change = yield* createChangeFixture(root, "refs/heads/malformed", firstNow);
+      yield* withTestRepository(
+        root,
+        Effect.gen(function* () {
+          const repository = yield* RepositorySql;
+          yield* repository.operation(
+            "corrupt Change publication marker",
+            (sql) => sql`
+              UPDATE changes
+              SET publication_candidate_id = 'candidate-malformed'
+              WHERE id = ${change.id}
+            `,
+          );
+        }),
+      );
+
+      const json = yield* runByInProcessEffect(root, ["--json", "change", "show", change.id]);
+      const toon = yield* runByInProcessEffect(root, ["change", "show", change.id]);
+
+      expect(json.status).toBe(1);
+      expect(json.stderr).toBe("");
+      expect(JSON.parse(json.stdout)).toEqual({
+        error: {
+          code: "persisted_data_invalid",
+          message: "Shared But Why? state contains malformed persisted data.",
+          operation: "read Change",
+        },
+        help: [
+          "Replace <git-common-dir>/but-why/state.sqlite with a known-good copy, then retry the command.",
+        ],
+      });
+      expect(toon.status).toBe(1);
+      expect(toon.stderr).toBe("");
+      expect(toon.stdout).toBe(`error:
+  code: persisted_data_invalid
+  message: Shared But Why? state contains malformed persisted data.
+  operation: read Change
+help[1]: "Replace <git-common-dir>/but-why/state.sqlite with a known-good copy, then retry the command."
+`);
+    }),
+  );
+
   it.effect("inspects current Findings and orders Validation Run History across Candidates", () =>
     Effect.gen(function* () {
       const root = yield* initializedRepoCopy();
