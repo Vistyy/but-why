@@ -205,6 +205,13 @@ It indexes every retained Reviewer Session JSONL file into immutable Reviewer Tr
 Cleanup stays pending and retryable when transcript indexing cannot complete.
 _Avoid_: Generic cleanup framework, per-caller cleanup orchestration, worktree removal alone
 
+**Discard Work**:
+The exact one-attempt terminal cleanup authority supplied only by `by change reconcile <exact-change-id> --discard-work`.
+It abandons all work in the selected Closed Change's recorded resources, including dirty Managed Worktree content, unique Repository Branch work, and a changed Remote Change Branch.
+It preserves exact resource identity and deletes the Remote Change Branch only when it still matches the head read during that attempt.
+It is not persisted.
+_Avoid_: Generic cleanup permission, Implementation Authorization, discard history
+
 **No-Change Submission**:
 A Submission whose Repository Branch has the same tracked file tree as the exact fetched Change Base after the ancestry check passes.
 A No-Change Submission returns `nothing_to_submit`, keeps its Task and Change open, and does not run validation.
