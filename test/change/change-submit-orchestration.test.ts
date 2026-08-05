@@ -691,6 +691,8 @@ describe("Change Submit orchestration", () => {
   it.effect("completes an exact merged owned pull request through terminal completion", () =>
     Effect.gen(function* () {
       const events: string[] = [];
+      const completeMergedInputs: Array<{ readonly changeId: string; readonly observed: unknown }> =
+        [];
       const change = readyChange({
         publication: {
           candidateId: "published-candidate",
@@ -706,6 +708,7 @@ describe("Change Submit orchestration", () => {
           events,
           change,
           pullRequestObservation: "exact_merged",
+          completeMergedInputs,
         }),
       );
       const validationLayer = Layer.succeed(CandidateValidation, {
@@ -724,6 +727,22 @@ describe("Change Submit orchestration", () => {
         change: { id: change.id },
       });
       expect(events).toEqual(["observe_pull_request", "complete_merged_change"]);
+      expect(completeMergedInputs).toEqual([
+        {
+          changeId: change.id,
+          now,
+          observed: {
+            repository: { owner: "acme", repo: "repo" },
+            pullRequest: { number: 42, url: "https://github.test/acme/repo/pull/42" },
+            baseBranch: "main",
+            headBranch: "change-1",
+            mergedHeadSha: "published-head",
+            candidateId: "published-candidate",
+            validationRunId: "published-run",
+            expectedHeadSha: "published-head",
+          },
+        },
+      ]);
     }),
   );
 
@@ -1479,6 +1498,7 @@ const dependencies = (input: {
   readonly validationPersistence?: Pick<ChangeValidationPersistence, "getActiveForChange">;
   readonly executionLock?: ExecutionLock;
   readonly refreshResults?: readonly RemoteChangeBaseResult[];
+  readonly completeMergedInputs?: Array<{ readonly changeId: string; readonly observed: unknown }>;
   readonly targetResult?:
     | { readonly ok: false; readonly code: "PR_TARGET_NOT_FOUND" }
     | {
@@ -1516,8 +1536,12 @@ const dependencies = (input: {
             }
           );
         }),
-      completeMergedChange: () =>
+      completeMergedChange: (completeInput: {
+        readonly changeId: string;
+        readonly observed: unknown;
+      }) =>
         Effect.sync(() => {
+          input.completeMergedInputs?.push(completeInput);
           events.push("complete_merged_change");
           return { ok: true as const, changed: true, change: input.change };
         }),

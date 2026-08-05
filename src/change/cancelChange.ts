@@ -8,7 +8,11 @@ import type { ChangeCleanup, ChangeRecord } from "./change.js";
 import type { ChangePersistence } from "./changePersistence.js";
 import type { TaskPersistence } from "../task/taskPersistence.js";
 import type { GitHubPullRequestGateway } from "./ownedPullRequestGateway.js";
-import { observeOwnedPullRequest } from "./ownedPullRequestClassifier.js";
+import {
+  observeOwnedPullRequest,
+  observedMergedChangeEvidence,
+} from "./ownedPullRequestClassifier.js";
+import type { GitHubPullRequest } from "./ownedPullRequestGateway.js";
 import type { ExecutionLock } from "../contracts/executionLock.js";
 import type { ChangeValidationPersistence } from "./validation/changeValidationPersistence.js";
 import type { TerminalCleanupOperation } from "./cleanupTerminalChange.js";
@@ -234,12 +238,12 @@ const cancelTask = (
       case "mismatch":
         return { ok: false, code: "owned_pull_request_mismatch", taskId: input.taskId };
       case "exact_merged":
-        return yield* completeMerged(dependencies, change, input.now);
+        return yield* completeMerged(dependencies, change, input.now, remote.pullRequest);
       case "exact_open": {
         const closed = closeOwnedPullRequest(dependencies, change);
         if (!closed.ok) return { ...closed, taskId: input.taskId };
         if (closed.status === "merged") {
-          return yield* completeMerged(dependencies, change, input.now);
+          return yield* completeMerged(dependencies, change, input.now, closed.pullRequest);
         }
         break;
       }
@@ -314,12 +318,12 @@ const cancelChange = (
       case "mismatch":
         return { ok: false, code: "owned_pull_request_mismatch", changeId: change.id };
       case "exact_merged":
-        return yield* completeMergedChange(dependencies, change, input.now);
+        return yield* completeMergedChange(dependencies, change, input.now, remote.pullRequest);
       case "exact_open": {
         const closed = closeOwnedPullRequest(dependencies, change);
         if (!closed.ok) return { ...closed, changeId: change.id };
         if (closed.status === "merged") {
-          return yield* completeMergedChange(dependencies, change, input.now);
+          return yield* completeMergedChange(dependencies, change, input.now, closed.pullRequest);
         }
         break;
       }
@@ -348,16 +352,25 @@ const completeMerged = (
   dependencies: CancellationDependencies,
   change: ChangeRecord,
   now: string,
+  mergedPullRequest: GitHubPullRequest,
 ): Effect.Effect<TaskCancellationResult, RepositoryStorageError> =>
   Effect.gen(function* () {
     if (change.taskId === null)
       return yield* Effect.die(new Error("Merged Task Change lacks a Task"));
     const taskId = change.taskId;
+    const observed = observedMergedChangeEvidence(change, mergedPullRequest);
+    if (observed === undefined)
+      return { ok: false as const, code: "owned_pull_request_mismatch" as const, taskId };
     const completed = yield* dependencies.changes.completeMergedChange({
       changeId: change.id,
       now,
+      observed,
     });
-    if (!completed.ok) return { ok: false, code: "change_already_completed", taskId };
+    if (!completed.ok) {
+      return completed.code === "publication_mismatch"
+        ? { ok: false as const, code: "owned_pull_request_mismatch" as const, taskId }
+        : { ok: false as const, code: "change_already_completed" as const, taskId };
+    }
     const withCleanup = yield* cleanupTerminalChange(dependencies, completed.change, now);
     const task = yield* dependencies.tasks.getTaskById(taskId);
     if (task === undefined) return { ok: false, code: "task_not_found", taskId };
@@ -375,13 +388,30 @@ const completeMergedChange = (
   dependencies: CancellationDependencies,
   change: ChangeRecord,
   now: string,
+  mergedPullRequest: GitHubPullRequest,
 ): Effect.Effect<ChangeCancellationResult, RepositoryStorageError> =>
   Effect.gen(function* () {
+    const observed = observedMergedChangeEvidence(change, mergedPullRequest);
+    if (observed === undefined)
+      return {
+        ok: false as const,
+        code: "owned_pull_request_mismatch" as const,
+        changeId: change.id,
+      };
     const completed = yield* dependencies.changes.completeMergedChange({
       changeId: change.id,
       now,
+      observed,
     });
-    if (!completed.ok) return { ok: false, code: "change_already_completed", changeId: change.id };
+    if (!completed.ok) {
+      return completed.code === "publication_mismatch"
+        ? {
+            ok: false as const,
+            code: "owned_pull_request_mismatch" as const,
+            changeId: change.id,
+          }
+        : { ok: false as const, code: "change_already_completed" as const, changeId: change.id };
+    }
     const withCleanup = yield* cleanupTerminalChange(dependencies, completed.change, now);
     return {
       ok: true,
@@ -396,11 +426,12 @@ const closeOwnedPullRequest = (
   dependencies: CancellationDependencies,
   change: ChangeRecord,
 ):
-  | { readonly ok: true; readonly status: "closed" | "merged" }
+  | { readonly ok: true; readonly status: "closed"; readonly pullRequest: null }
+  | { readonly ok: true; readonly status: "merged"; readonly pullRequest: GitHubPullRequest }
   | { readonly ok: false; readonly code: "github_close_failed" } => {
   const publication = change.publication;
   if (publication === null || publication.pullRequest === null)
-    return { ok: true, status: "closed" };
+    return { ok: true, status: "closed", pullRequest: null };
   try {
     if (dependencies.github.closePullRequest === undefined) {
       return { ok: false, code: "github_close_failed" };
@@ -411,9 +442,9 @@ const closeOwnedPullRequest = (
     });
     if (!result.ok) return { ok: false, code: "github_close_failed" };
     return result.pullRequest.merged === true
-      ? { ok: true, status: "merged" }
+      ? { ok: true, status: "merged", pullRequest: result.pullRequest }
       : result.pullRequest.state === "closed"
-        ? { ok: true, status: "closed" }
+        ? { ok: true, status: "closed", pullRequest: null }
         : { ok: false, code: "github_close_failed" };
   } catch {
     return { ok: false, code: "github_close_failed" };

@@ -39,6 +39,7 @@ import type {
 import type { GitHubPullRequestGateway } from "./ownedPullRequestGateway.js";
 import {
   observeOwnedPullRequest,
+  observedMergedChangeEvidence,
   type OwnedPullRequestUnavailableReason,
 } from "./ownedPullRequestClassifier.js";
 import type { SubmitProgress } from "./validation/submitProgress.js";
@@ -378,9 +379,25 @@ const observeBeforeSubmission = (
           ownedPullRequestOpen: classification.kind === "exact_open",
         };
       case "exact_merged": {
+        const observed = observedMergedChangeEvidence(change, classification.pullRequest);
+        if (observed === undefined) {
+          return {
+            proceed: false,
+            result: {
+              ok: false,
+              code: "reconciliation_rejected",
+              change: {
+                changeId: change.id,
+                status: "rejected",
+                rejection: "missing_publication_facts",
+              },
+            } as const,
+          };
+        }
         const completed = yield* dependencies.persistence.completeMergedChange({
           changeId: change.id,
           now,
+          observed,
         });
         if (!completed.ok) {
           return {
@@ -388,7 +405,11 @@ const observeBeforeSubmission = (
             result: {
               ok: false,
               code: "reconciliation_rejected",
-              change: { changeId: change.id, status: "rejected", rejection: completed.code },
+              change: {
+                changeId: change.id,
+                status: "rejected",
+                rejection: completed.code,
+              },
             } as const,
           };
         }

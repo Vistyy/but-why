@@ -299,6 +299,30 @@ describe("Change cancellation", () => {
     }),
   );
 
+  it.effect("reports stale merged publication as an owned pull request mismatch", () =>
+    Effect.gen(function* () {
+      const events: string[] = [];
+      const task = taskRecord("implementing");
+      const dependencies = cancellationDependencies({
+        task,
+        change: changeRecord(publicTaskId(task.id)),
+        pullRequest: pullRequest("closed", true),
+        completeMergedFailure: "publication_mismatch",
+        events,
+      });
+      const result = yield* runByInProcessEffect(
+        createTestWorkspace(),
+        ["task", "cancel", "BY-1", "--reason", "Stop"],
+        now,
+        { cancellationUseCases: openCancellationUseCases(dependencies) },
+      );
+
+      expect(result.status).toBe(1);
+      expect(result.stdout).toContain("code: owned_pull_request_mismatch");
+      expect(events).toEqual(["read-task", "read-change", "read-pr", "complete-change"]);
+    }),
+  );
+
   it.effect("closes an owned open pull request before deleting its Remote Change Branch", () => {
     const events: string[] = [];
     const cleanupRemoteBranches: (object | undefined)[] = [];
@@ -504,6 +528,7 @@ const cancellationDependencies = (input: {
     | { readonly state: "complete"; readonly blockingReason: null }
     | { readonly state: "pending"; readonly blockingReason: string };
   readonly cleanupRemoteBranches?: (object | undefined)[];
+  readonly completeMergedFailure?: "change_already_closed" | "publication_mismatch";
   readonly events: string[];
 }): CancellationDependencies => {
   let currentTask = input.task;
@@ -516,6 +541,12 @@ const cancellationDependencies = (input: {
     },
     completeMergedChange: () => {
       input.events.push("complete-change");
+      if (input.completeMergedFailure !== undefined) {
+        return Effect.succeed({
+          ok: false as const,
+          code: input.completeMergedFailure,
+        });
+      }
       currentChange = { ...currentChange, state: "closed", closeReason: "completed" };
       currentTask = { ...currentTask, state: "done" };
       return Effect.succeed({ ok: true as const, changed: true, change: currentChange });
