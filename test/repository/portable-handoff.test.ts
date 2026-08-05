@@ -157,7 +157,8 @@ exit 1
     HANDOFF_IMPLEMENT:
       options.implementation ??
       JSON.stringify({ changeId, worktreePath, host: "herdr", status: "started" }),
-    HANDOFF_INITIAL_SHOW: options.initialCommandResult ?? showResult(options.initialChangeId ?? changeId, worktreePath),
+    HANDOFF_INITIAL_SHOW:
+      options.initialCommandResult ?? showResult(options.initialChangeId ?? changeId, worktreePath),
     HANDOFF_INITIAL_SHOW_EXIT: options.initialCommandExitCode ?? "0",
     HANDOFF_FINAL_SHOW: showResult(
       options.finalChangeId ?? changeId,
