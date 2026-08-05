@@ -41,14 +41,16 @@ export const cleanupChangeResources = (
     readonly worktreePath: string | null;
     readonly branchRef: string;
     readonly remoteChangeBranch?: RemoteChangeBranch;
+    readonly discardWork?: boolean;
   },
   remote: ChangeCleanupRemote = localChangeCleanupRemote,
 ): ChangeCleanupResult => {
+  const discardWork = input.discardWork === true;
   if (input.worktreePath !== null && !isWorktreePathSafe(input.worktreePath)) {
     return { state: "pending", blockingReason: "worktree_path_unsafe" };
   }
   if (input.worktreePath !== null) {
-    if (existsSync(input.worktreePath)) {
+    if (existsSync(input.worktreePath) && !discardWork) {
       const status = gitAtWorktree(input.worktreePath, [
         "status",
         "--porcelain=v1",
@@ -67,10 +69,14 @@ export const cleanupChangeResources = (
     const registered = registration.stdout
       .split("\n")
       .some((line) => line === `worktree ${input.worktreePath}`);
-    if (
-      registered &&
-      !git(input.repositoryCommonDirectory, ["worktree", "remove", "--", input.worktreePath]).ok
-    ) {
+    const worktreeRemoval = git(input.repositoryCommonDirectory, [
+      "worktree",
+      "remove",
+      ...(discardWork ? ["--force"] : []),
+      "--",
+      input.worktreePath,
+    ]);
+    if (registered && !worktreeRemoval.ok) {
       return { state: "pending", blockingReason: "worktree_removal_failed" };
     }
 
@@ -118,7 +124,7 @@ export const cleanupChangeResources = (
     const reachableElsewhere = containingRefs.stdout
       .split("\n")
       .some((ref) => ref.length > 0 && ref !== input.branchRef);
-    if (!reachableElsewhere) {
+    if (!reachableElsewhere && !discardWork) {
       return { state: "pending", blockingReason: "branch_not_reachable_from_another_ref" };
     }
     if (!git(input.repositoryCommonDirectory, ["branch", "-D", "--", branchName]).ok) {
@@ -164,7 +170,7 @@ const cleanupRemoteChangeBranch = (
   if (observed.state === "excluded") {
     return { state: "pending", blockingReason: "remote_branch_excluded" };
   }
-  if (observed.headSha !== branch.expectedHeadSha) {
+  if (observed.headSha !== branch.expectedHeadSha && input.discardWork !== true) {
     return { state: "pending", blockingReason: "remote_branch_head_mismatch" };
   }
   const deletion = remote.deleteRemoteBranch({
@@ -176,12 +182,12 @@ const cleanupRemoteChangeBranch = (
     branchName: branch.branchName,
     targetBranch: branch.targetBranch,
     canonicalBranchRef: input.branchRef,
-    expectedHeadSha: branch.expectedHeadSha,
+    expectedHeadSha: observed.headSha,
     resolvedRemoteUrl: observed.remoteUrl,
     ...(observed.repositoryId === undefined ? {} : { repositoryId: observed.repositoryId }),
     ...(observed.refId === undefined ? {} : { refId: observed.refId }),
   });
-  return remoteDeletionResult(deletion, branch.expectedHeadSha);
+  return remoteDeletionResult(deletion, observed.headSha);
 };
 
 const remoteDeletionResult = (

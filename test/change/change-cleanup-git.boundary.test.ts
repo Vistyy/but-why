@@ -4,6 +4,8 @@ import { pathToFileURL } from "node:url";
 import { describe, expect, it } from "vitest";
 
 import { cleanupChangeResources } from "../../src/change/localChangeCleanupGit.js";
+import type { ChangeCleanupRemote } from "../../src/change/changeCleanupRemote.js";
+import type { ChangeCleanupResult } from "../../src/change/localChangeCleanupGit.js";
 import { createTestWorkspace } from "../support/testWorkspace.js";
 import { runTestProcessOrThrow } from "../support/testProcess.js";
 
@@ -606,6 +608,190 @@ console.log(JSON.stringify(cleanupChangeResources({ repositoryCommonDirectory, w
       ),
     ).toEqual({ state: "pending", blockingReason: "remote_branch_head_mismatch" });
     expect(deleted).toBe(false);
+  });
+
+  it("discards a dirty Managed Worktree and its unique branch for one attempt", () => {
+    const repository = initializedRepository();
+    const worktreePath = join(repository, "feature-worktree");
+    git(repository, "worktree", "add", "-b", "but-why/feature", worktreePath, "main");
+    writeFileSync(join(worktreePath, "feature.txt"), "unmerged work\n");
+    git(worktreePath, "add", "feature.txt");
+    git(worktreePath, "commit", "-m", "Feature");
+    writeFileSync(join(worktreePath, "dirty.txt"), "uncommitted work\n");
+
+    expect(
+      cleanupChangeResources({
+        repositoryCommonDirectory: git(
+          repository,
+          "rev-parse",
+          "--path-format=absolute",
+          "--git-common-dir",
+        ),
+        worktreePath,
+        branchRef: "refs/heads/but-why/feature",
+        discardWork: true,
+      }),
+    ).toEqual({ state: "complete" });
+    expect(existsSync(worktreePath)).toBe(false);
+    expect(git(repository, "branch", "--list", "but-why/feature")).toBe("");
+  });
+
+  it("deletes a changed Remote Change Branch at the exact observed head for a discard attempt", () => {
+    const repository = initializedRepository();
+    let deletedHead: string | undefined;
+
+    expect(
+      cleanupChangeResources(
+        {
+          repositoryCommonDirectory: git(
+            repository,
+            "rev-parse",
+            "--path-format=absolute",
+            "--git-common-dir",
+          ),
+          worktreePath: null,
+          branchRef: "refs/heads/but-why/feature",
+          discardWork: true,
+          remoteChangeBranch: {
+            owner: "acme",
+            repo: "widgets",
+            remoteName: "origin",
+            remoteUrl: "origin-url",
+            branchName: "but-why/feature",
+            targetBranch: "main",
+            expectedHeadSha: "candidate-head",
+          },
+        },
+        {
+          readRemoteBranchHead: () => ({
+            state: "present",
+            headSha: "moved-head",
+            remoteUrl: "origin-url",
+          }),
+          deleteRemoteBranch: (input) => {
+            deletedHead = input.expectedHeadSha;
+            return { state: "deleted" };
+          },
+        },
+      ),
+    ).toEqual({ state: "complete" });
+    expect(deletedHead).toBe("moved-head");
+  });
+
+  it("keeps a changed Remote Change Branch pending when it changed after read during discard", () => {
+    const repository = initializedRepository();
+    let deleted = false;
+
+    expect(
+      cleanupChangeResources(
+        {
+          repositoryCommonDirectory: git(
+            repository,
+            "rev-parse",
+            "--path-format=absolute",
+            "--git-common-dir",
+          ),
+          worktreePath: null,
+          branchRef: "refs/heads/but-why/feature",
+          discardWork: true,
+          remoteChangeBranch: {
+            owner: "acme",
+            repo: "widgets",
+            remoteName: "origin",
+            remoteUrl: "origin-url",
+            branchName: "but-why/feature",
+            targetBranch: "main",
+            expectedHeadSha: "candidate-head",
+          },
+        },
+        {
+          readRemoteBranchHead: () => ({
+            state: "present",
+            headSha: "moved-head",
+            remoteUrl: "origin-url",
+          }),
+          deleteRemoteBranch: () => {
+            deleted = true;
+            return {
+              state: "present",
+              headSha: "changed-after-read",
+              remoteUrl: "origin-url",
+            };
+          },
+        },
+      ),
+    ).toEqual({ state: "pending", blockingReason: "remote_branch_head_mismatch" });
+    expect(deleted).toBe(true);
+  });
+
+  it("keeps discard pending for unreadable, mismatched, excluded, and absent remote facts", () => {
+    const repository = initializedRepository();
+    const cases: readonly {
+      readonly name: string;
+      readonly read: () => ReturnType<ChangeCleanupRemote["readRemoteBranchHead"]>;
+      readonly expected: ChangeCleanupResult;
+    }[] = [
+      {
+        name: "missing",
+        read: () => ({ state: "missing" as const }),
+        expected: { state: "complete" as const },
+      },
+      {
+        name: "unavailable",
+        read: () => ({ state: "unavailable" as const }),
+        expected: { state: "pending" as const, blockingReason: "remote_branch_unavailable" },
+      },
+      {
+        name: "mismatch",
+        read: () => ({ state: "mismatch" as const }),
+        expected: {
+          state: "pending" as const,
+          blockingReason: "remote_branch_repository_mismatch",
+        },
+      },
+      {
+        name: "excluded",
+        read: () => ({ state: "excluded" as const }),
+        expected: { state: "pending" as const, blockingReason: "remote_branch_excluded" },
+      },
+    ];
+
+    for (const scenario of cases) {
+      let deleted = false;
+      expect(
+        cleanupChangeResources(
+          {
+            repositoryCommonDirectory: git(
+              repository,
+              "rev-parse",
+              "--path-format=absolute",
+              "--git-common-dir",
+            ),
+            worktreePath: null,
+            branchRef: "refs/heads/but-why/feature",
+            discardWork: true,
+            remoteChangeBranch: {
+              owner: "acme",
+              repo: "widgets",
+              remoteName: "origin",
+              remoteUrl: "origin-url",
+              branchName: "but-why/feature",
+              targetBranch: "main",
+              expectedHeadSha: "candidate-head",
+            },
+          },
+          {
+            readRemoteBranchHead: scenario.read,
+            deleteRemoteBranch: () => {
+              deleted = true;
+              return { state: "deleted" };
+            },
+          },
+        ),
+        scenario.name,
+      ).toEqual(scenario.expected);
+      if (scenario.name !== "missing") expect(deleted, scenario.name).toBe(false);
+    }
   });
 });
 

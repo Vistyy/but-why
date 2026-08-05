@@ -22,6 +22,7 @@ export type ChangeCleanupOperation = (input: {
   readonly worktreePath: string | null;
   readonly branchRef: string;
   readonly remoteChangeBranch?: RemoteChangeBranch;
+  readonly discardWork?: boolean;
 }) => ChangeCleanupOperationResult;
 
 export type TerminalCleanupResult =
@@ -39,6 +40,7 @@ export type ArtifactLifecycleOwner = {
 export type TerminalCleanupOperation = (
   change: ChangeRecord,
   now: string,
+  discardWork?: boolean,
 ) => Effect.Effect<TerminalCleanupResult, RepositoryStorageError>;
 
 export const openTerminalCleanup =
@@ -49,13 +51,14 @@ export const openTerminalCleanup =
     readonly reviewerSessionPathFor?: (changeId: string) => string;
     readonly artifactLifecycle?: ArtifactLifecycleOwner;
   }): TerminalCleanupOperation =>
-  (change, now) =>
-    cleanupTerminalChange(dependencies, change, now);
+  (change, now, discardWork) =>
+    cleanupTerminalChange(dependencies, change, now, discardWork);
 
 const cleanupTerminalChange = (
   dependencies: Parameters<typeof openTerminalCleanup>[0],
   change: ChangeRecord,
   now: string,
+  discardWork: boolean | undefined,
 ): Effect.Effect<TerminalCleanupResult, RepositoryStorageError> =>
   Effect.gen(function* () {
     if (change.cleanup.state === "complete") {
@@ -77,6 +80,7 @@ const cleanupTerminalChange = (
       worktreePath: change.worktreePath,
       branchRef: change.branchRef,
       ...(remoteChangeBranch === undefined ? {} : { remoteChangeBranch }),
+      ...(discardWork === undefined ? {} : { discardWork }),
     });
     if (result.state === "pending") {
       return yield* recordCleanup(dependencies, change, now, {

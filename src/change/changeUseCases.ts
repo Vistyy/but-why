@@ -50,6 +50,7 @@ export type ChangeUseCases = {
   readonly reconcile: (
     changeId: string | undefined,
     now: string,
+    discardWork?: boolean,
   ) => Effect.Effect<ChangeReconciliationResult, RepositoryStorageError>;
 };
 
@@ -108,11 +109,12 @@ export const openChangeUseCases = (
       changeId,
       implementerPrompt,
     ),
-  reconcile: (changeId, now) =>
+  reconcile: (changeId, now, discardWork) =>
     reconciliation.reconcile({
       repositoryCommonDirectory: context.commonDirectory,
       ...(changeId === undefined ? {} : { changeId }),
       now,
+      ...(discardWork === undefined ? {} : { discardWork }),
     }),
 });
 

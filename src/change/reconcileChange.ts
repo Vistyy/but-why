@@ -36,6 +36,7 @@ export type ChangeReconciliation = {
     readonly repositoryCommonDirectory: string;
     readonly changeId?: string;
     readonly now: string;
+    readonly discardWork?: boolean;
   }) => Effect.Effect<ChangeReconciliationResult, RepositoryStorageError>;
 };
 
@@ -52,6 +53,7 @@ const reconcile = (
   input: Parameters<ChangeReconciliation["reconcile"]>[0],
 ): Effect.Effect<ChangeReconciliationResult, RepositoryStorageError> =>
   Effect.gen(function* () {
+    const discardWork = input.discardWork === true;
     const changes =
       input.changeId === undefined
         ? yield* dependencies.persistence.listChangesForReconciliation(
@@ -61,7 +63,7 @@ const reconcile = (
             (change): change is ChangeRecord => change !== undefined,
           );
     const reconciled = yield* Effect.forEach(changes, (change) =>
-      reconcileOne(dependencies, change, input.now),
+      reconcileOne(dependencies, change, input.now, discardWork),
     );
     return {
       changes: reconciled,
@@ -73,9 +75,14 @@ const reconcileOne = (
   dependencies: Parameters<typeof openChangeReconciliation>[0],
   change: ChangeRecord,
   now: string,
+  discardWork: boolean,
 ): Effect.Effect<ReconciledChange, RepositoryStorageError> =>
   Effect.gen(function* () {
-    if (change.state === "closed") return yield* reconcileCleanup(dependencies, change, now);
+    if (discardWork && change.state !== "closed") {
+      return rejected(change.id, "discard_open_change");
+    }
+    if (change.state === "closed")
+      return yield* reconcileCleanup(dependencies, change, now, discardWork);
     const classification = observeOwnedPullRequest(dependencies.github, change);
     switch (classification.kind) {
       case "not_owned":
@@ -101,7 +108,7 @@ const reconcileOne = (
           observed,
         });
         if (!completed.ok) return rejected(change.id, completed.code);
-        const cleanup = yield* reconcileCleanup(dependencies, completed.change, now);
+        const cleanup = yield* reconcileCleanup(dependencies, completed.change, now, discardWork);
         return {
           ...cleanup,
           status: "completed",
@@ -119,12 +126,13 @@ const reconcileCleanup = (
   dependencies: Parameters<typeof openChangeReconciliation>[0],
   change: ChangeRecord,
   now: string,
+  discardWork: boolean,
 ): Effect.Effect<ReconciledChange, RepositoryStorageError> =>
   Effect.gen(function* () {
     if (change.cleanup.state === "complete") {
       return { changeId: change.id, status: "cleanup_complete", cleanup: change.cleanup };
     }
-    const result = yield* dependencies.cleanupTerminal(change, now);
+    const result = yield* dependencies.cleanupTerminal(change, now, discardWork);
     if (!result.ok) return rejected(change.id, result.code);
     return {
       changeId: change.id,

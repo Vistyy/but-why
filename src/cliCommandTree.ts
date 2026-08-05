@@ -516,12 +516,16 @@ const changeCancelCommand = withCliHandler(
 const changeReconcileCommand = withCliHandler(
   leaf("reconcile", "Read owned pull requests and clean up terminal Changes.", {
     changeId: Args.optional(changeIdArgument),
+    discardWork: Options.boolean("discard-work"),
   }),
   (values, environment) =>
     Effect.promise(() => import("./cli/change/reconcile.js")).pipe(
       Effect.flatMap(({ runReconcile }) =>
         runReconcile(
-          { changeId: optionalString(values, "changeId") },
+          {
+            changeId: optionalString(values, "changeId"),
+            discardWork: boolean(values, "discardWork"),
+          },
           environment as ChangeCommandEnvironment,
         ),
       ),

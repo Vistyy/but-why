@@ -3,19 +3,30 @@
 
 import { Effect } from "effect";
 import type { CliResult } from "../../cliResults.js";
+import { usageError } from "../../cliResults.js";
 import type { ChangeCommandEnvironment } from "./changeTypes.js";
 
 import * as support from "./changeSupport.js";
 import { reconcileResult } from "./reconcileResult.js";
 
 export const runReconcile = (
-  command: { readonly changeId: string | undefined },
+  command: { readonly changeId: string | undefined; readonly discardWork: boolean },
   environment: ChangeCommandEnvironment,
 ): Effect.Effect<CliResult> => {
   const changeId = command.changeId;
+  if (command.discardWork && changeId === undefined) {
+    return Effect.succeed(
+      usageError({
+        code: "discard_requires_change_id",
+        message: "--discard-work requires one exact terminal Change ID.",
+        help: ["Run `by change reconcile <change-id> --discard-work` for one exact Change."],
+      }),
+    );
+  }
   return support.withChanges(environment, (changes) =>
-    Effect.map(changes.reconcile(changeId, environment.now().toISOString()), (result) =>
-      reconcileResult(changeId, result),
+    Effect.map(
+      changes.reconcile(changeId, environment.now().toISOString(), command.discardWork),
+      (result) => reconcileResult(changeId, result, command.discardWork),
     ),
   );
 };
