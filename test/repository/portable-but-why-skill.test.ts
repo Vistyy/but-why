@@ -53,6 +53,9 @@ describe("portable But Why skill", () => {
     expect(approveTask).toContain("by task approve <task-id>");
     expect(approveTask).toContain("Do not start a Change or hand off work");
     expect(authority).toContain("Do not begin implementation, start a Change, or launch a handoff");
+    expect(authority).toContain(
+      "A Task-backed Change Implementation Authorization includes handoff.",
+    );
     expect(authorizeImplementation).toContain(
       "For a Task-backed Change, confirm that the selected Task is approved and hand it off",
     );

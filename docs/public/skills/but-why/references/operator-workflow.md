@@ -22,7 +22,8 @@ Task Approval does not start a Change or launch implementation.
 **Implementation Authorization** is the Operator's explicit permission to implement one selected work item through its selected Work Route.
 Task Recording Authorization and Task Approval do not grant Implementation Authorization.
 Do not begin implementation, start a Change, or launch a handoff without Implementation Authorization for that work item.
-Launch a handoff only when the Implementation Authorization explicitly includes handoff.
+A Task-backed Change Implementation Authorization includes handoff.
+A taskless Change launches a handoff only when the authorization explicitly includes one.
 
 ## Select a Work Route
 
@@ -82,8 +83,9 @@ This section is complete when the selected Task is approved and no Change has st
 ## Authorize Implementation
 
 When the Operator gives Implementation Authorization, confirm the selected work item and selected Work Route.
-Confirm whether the authorization includes handoff.
-Do not infer handoff permission from authorization to implement.
+For a Task-backed Change, treat the authorization as including handoff.
+For a taskless Change, confirm whether the authorization explicitly includes handoff.
+Do not infer taskless-handoff permission from authorization to implement.
 
 For a direct edit, implement only the authorized work in the current repository according to target-repository instructions.
 A direct edit does not start a Change, run But Why validation, publish a pull request, or launch an Interactive Session.

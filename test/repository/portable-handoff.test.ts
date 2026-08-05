@@ -30,7 +30,9 @@ type HandoffOptions = {
   readonly implementationDelay?: string;
   readonly initialChangeId?: string;
   readonly linkedChangeId?: string;
-  readonly initialWorktreeMismatch?: boolean;
+  readonly taskState?: string;
+  readonly startResult?: string;
+  readonly startExitCode?: string;
   readonly finalChangeId?: string;
   readonly finalWorktreeMismatch?: boolean;
   readonly initialCommandResult?: string;
@@ -60,11 +62,11 @@ set -eu
 printf '%s\\n' "$*" >> "$HANDOFF_CALLS"
 if [ "$1" = "by" ] && [ "$2" = "--json" ] && [ "$3" = "task" ] && [ "$4" = "show" ]; then
   printf '%s\\n' "$HANDOFF_TASK"
-  exit 0
+  exit "$HANDOFF_TASK_EXIT"
 fi
 if [ "$1" = "by" ] && [ "$2" = "--json" ] && [ "$3" = "change" ] && [ "$4" = "start" ]; then
   printf '%s\\n' "$HANDOFF_START"
-  exit 0
+  exit "$HANDOFF_START_EXIT"
 fi
 if [ "$1" = "by" ] && [ "$2" = "--json" ] && [ "$3" = "change" ] && [ "$4" = "implement" ]; then
   sleep "$HANDOFF_IMPLEMENT_DELAY"
@@ -72,9 +74,7 @@ if [ "$1" = "by" ] && [ "$2" = "--json" ] && [ "$3" = "change" ] && [ "$4" = "im
   exit 0
 fi
 if [ "$1" = "by" ] && [ "$2" = "--json" ] && [ "$3" = "change" ] && [ "$4" = "show" ]; then
-  if [ "\${HANDOFF_PRELAUNCH:-}" = "1" ]; then
-    printf '%s\\n' "$HANDOFF_PRELAUNCH_SHOW"
-  elif [ ! -e "$HANDOFF_SHOW_COUNT" ]; then
+  if [ ! -e "$HANDOFF_SHOW_COUNT" ]; then
     : > "$HANDOFF_SHOW_COUNT"
     printf '%s\\n' "$HANDOFF_INITIAL_SHOW"
     exit "$HANDOFF_INITIAL_SHOW_EXIT"
@@ -140,27 +140,24 @@ exit 1
     // biome-ignore lint/complexity/useLiteralKeys: ProcessEnv requires an index signature:
     PATH: `${bin}:${process.env["PATH"] ?? ""}`,
     HANDOFF_CALLS: callsPath,
-    HANDOFF_START: JSON.stringify({ change: { id: changeId }, worktreePath }),
+    HANDOFF_START:
+      options.startResult ?? JSON.stringify({ change: { id: changeId }, worktreePath }),
+    HANDOFF_START_EXIT: options.startExitCode ?? "0",
     HANDOFF_TASK: JSON.stringify({
       task: {
         id: "BY-1",
-        state: "todo",
+        state: options.taskState ?? "todo",
         change:
           options.linkedChangeId === undefined
             ? null
             : { id: options.linkedChangeId, activity: "implementing" },
       },
     }),
+    HANDOFF_TASK_EXIT: "0",
     HANDOFF_IMPLEMENT:
       options.implementation ??
       JSON.stringify({ changeId, worktreePath, host: "herdr", status: "started" }),
-    HANDOFF_PRELAUNCH_SHOW: showResult(changeId, worktreePath),
-    HANDOFF_INITIAL_SHOW:
-      options.initialCommandResult ??
-      showResult(
-        options.initialChangeId ?? changeId,
-        options.initialWorktreeMismatch ? mismatchedWorktreePath : worktreePath,
-      ),
+    HANDOFF_INITIAL_SHOW: options.initialCommandResult ?? showResult(options.initialChangeId ?? changeId, worktreePath),
     HANDOFF_INITIAL_SHOW_EXIT: options.initialCommandExitCode ?? "0",
     HANDOFF_FINAL_SHOW: showResult(
       options.finalChangeId ?? changeId,
@@ -227,6 +224,31 @@ describe("portable handoff observer", () => {
     expect(handoff.calls).toContain("by --json task show BY-1");
     expect(handoff.calls).toContain(`by --json change show ${changeId}`);
     expect(handoff.calls).not.toContain("by --json change start --task BY-1");
+  });
+
+  it("rejects an unapproved Task before Change Start", () => {
+    const handoff = runHandoff("new-task-change", { route: "task-backed", taskState: "new" });
+
+    expect(handoff.status).toBe(1);
+    expect(handoff.result).toMatchObject({
+      status: "prelaunch_verification_failed",
+      error: { code: "task_not_approved" },
+    });
+    expect(handoff.calls).not.toContain("by --json change start --task BY-1");
+  });
+
+  it("reports Change Start failure before launch", () => {
+    const handoff = runHandoff("failed-start", {
+      route: "task-backed",
+      startResult: JSON.stringify({ error: { code: "change_start_conflict" } }),
+      startExitCode: "1",
+    });
+
+    expect(handoff.status).toBe(1);
+    expect(handoff.result).toMatchObject({
+      status: "prelaunch_verification_failed",
+      error: { code: "change_start_conflict" },
+    });
   });
 
   it.each(["", " \n\t"])("launches with no operator context for %j", (input) => {
