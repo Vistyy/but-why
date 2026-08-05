@@ -92,7 +92,7 @@ const cancelChangeHelp = (change: ChangeRecord | undefined): string =>
   change === undefined
     ? "Or cancel the work with the applicable cancellation command."
     : change.taskId === null
-      ? `Or cancel the Change with \`by change cancel ${change.id}\`.`
+      ? `Or cancel the Change with \`by change cancel ${change.id} --reason "<reason>"\`.`
       : `Or cancel the Task with \`by task cancel ${change.taskId} --reason "<reason>"\`.`;
 
 export const operationalError = (result: OperationalErrorInput): CliResult => {

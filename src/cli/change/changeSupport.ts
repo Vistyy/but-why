@@ -36,6 +36,7 @@ export const changeInspectionView = (change: ChangeRecord) => ({
   taskId: change.taskId,
   state: change.state,
   closeReason: change.closeReason,
+  ...(change.cancelReason === null ? {} : { cancelReason: change.cancelReason }),
   branchRef: change.branchRef,
   baseRef: change.baseRef,
   worktreePath: change.worktreePath,

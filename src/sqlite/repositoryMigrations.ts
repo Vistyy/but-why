@@ -21,6 +21,7 @@ import { removeFindingSeverityMigration as removeFindingSeverity } from "./migra
 import { simplifyReviewerSessionsMigration as simplifyReviewerSessions } from "./migrations/0019_simplify_reviewer_sessions.js";
 import { removeCandidatePublicationsMigration as removeCandidatePublications } from "./migrations/0020_remove_candidate_publications.js";
 import { reviewerTranscriptsMigration as reviewerTranscripts } from "./migrations/0021_reviewer_transcripts.js";
+import { changeCancelReasonMigration as changeCancelReason } from "./migrations/0022_change_cancel_reason.js";
 
 export const migrateRepositoryState = Migrator.make({})({
   loader: Migrator.fromRecord({
@@ -45,5 +46,6 @@ export const migrateRepositoryState = Migrator.make({})({
     "0019_simplify_reviewer_sessions": simplifyReviewerSessions,
     "0020_remove_candidate_publications": removeCandidatePublications,
     "0021_reviewer_transcripts": reviewerTranscripts,
+    "0022_change_cancel_reason": changeCancelReason,
   }),
 });

@@ -157,7 +157,7 @@ by validation-run show <validation-run-id>
 by validation-run artifact <validation-run-id> <artifact-ref>
 by validation-run abandon <validation-run-id> --reason <reason>
 by change submit [<change-id>]
-by change cancel [<change-id>]
+by change cancel [<change-id>] --reason <reason>
 by change reconcile [<change-id>] [--discard-work]
 by change implement [<change-id>] [--implementer-prompt-file <path>]
 by change decision add <change-id> --choice "<selected approach>" --rationale "<reason>"

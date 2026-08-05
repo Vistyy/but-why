@@ -69,6 +69,7 @@ const columns = [
   "cleanup_blocking_reason AS cleanupBlockingReason",
   "state",
   "close_reason AS closeReason",
+  "cancel_reason AS cancelReason",
   "created_at AS createdAt",
   "updated_at AS updatedAt",
   "closed_at AS closedAt",
@@ -591,7 +592,7 @@ const cancelChange = (sql: SqlClient.SqlClient, input: CancelChangeInput) =>
         ? { ok: true as const, changed: false, change }
         : { ok: false as const, code: "change_already_completed" as const };
     }
-    yield* sql`UPDATE changes SET state = 'closed', close_reason = 'cancelled', cleanup_state = 'pending', cleanup_blocking_reason = NULL, updated_at = ${input.now}, closed_at = ${input.now} WHERE id = ${input.changeId} AND state IN ('open', 'blocked')`;
+    yield* sql`UPDATE changes SET state = 'closed', close_reason = 'cancelled', cancel_reason = ${change.taskId === null ? input.reason : null}, cleanup_state = 'pending', cleanup_blocking_reason = NULL, updated_at = ${input.now}, closed_at = ${input.now} WHERE id = ${input.changeId} AND state IN ('open', 'blocked')`;
     if (change.taskId !== null)
       yield* sql`UPDATE tasks SET state = 'cancelled', cancel_reason = ${input.reason}, updated_at = ${input.now} WHERE id = ${change.taskId}`;
     return {
@@ -746,6 +747,7 @@ const mapRow = (row: ChangeRow | undefined, operationName: string, sql: SqlClien
             state: row.state,
             activeBlocker: activeRows[0] === undefined ? null : mapBlocker(activeRows[0]),
             closeReason: row.closeReason,
+            cancelReason: row.cancelReason,
             createdAt: row.createdAt,
             updatedAt: row.updatedAt,
             closedAt: row.closedAt,

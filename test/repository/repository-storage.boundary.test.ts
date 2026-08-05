@@ -502,6 +502,117 @@ describe("repository SQL storage", () => {
     ),
   );
 
+  it.scoped("atomically cancels a Task-backed Change and its linked Task", () =>
+    withTemporaryState((input) =>
+      Effect.gen(function* () {
+        const tasks = yield* openSqliteTaskPersistence("BY");
+        const starts = yield* openSqliteChangeStartPersistence();
+        const changes = yield* openSqliteChangePersistence();
+        const created = yield* tasks.createTask({
+          title: "Cancel Task-backed Change",
+          description: "Cancel the Change and linked Task together.",
+          now: "2026-07-17T22:55:00.000Z",
+        });
+        if (!created.ok) return;
+        const taskId = storedPublicTaskId(created.task.id);
+        yield* tasks.approveTask({ taskId, now: "2026-07-17T22:56:00.000Z" });
+        const started = yield* starts.create({
+          id: "change-cancel",
+          repositoryCommonDirectory: input.commonDirectory,
+          branchRef: "refs/heads/but-why/by-cancel",
+          baseRef: "main",
+          baseRemoteUrl: "https://github.com/acme/repo.git",
+          startingCommit: "1111111111111111111111111111111111111111",
+          worktreePath: join(input.commonDirectory, "worktrees", "by-cancel"),
+          taskId,
+          now: "2026-07-17T22:57:00.000Z",
+        });
+        if (!started.ok) return;
+
+        const cancelled = yield* changes.cancelChange({
+          changeId: started.change.id,
+          reason: "Scope removed",
+          now: "2026-07-17T22:58:00.000Z",
+        });
+
+        expect(cancelled).toMatchObject({
+          ok: true,
+          changed: true,
+          change: {
+            state: "closed",
+            closeReason: "cancelled",
+            cancelReason: null,
+            cleanup: { state: "pending" },
+          },
+        });
+        expect(yield* tasks.getTaskById(taskId)).toMatchObject({
+          state: "cancelled",
+          cancelReason: "Scope removed",
+        });
+      }),
+    ),
+  );
+
+  it.scoped(
+    "rolls back the Change close when the linked Task cancellation fails in one transaction",
+    () =>
+      withTemporaryState((input) =>
+        Effect.gen(function* () {
+          const tasks = yield* openSqliteTaskPersistence("BY");
+          const starts = yield* openSqliteChangeStartPersistence();
+          const changes = yield* openSqliteChangePersistence();
+          const created = yield* tasks.createTask({
+            title: "Cancel Task-backed Change atomically",
+            description: "The linked Task mutation and Change close share one transaction.",
+            now: "2026-07-17T22:55:00.000Z",
+          });
+          if (!created.ok) return;
+          const taskId = storedPublicTaskId(created.task.id);
+          yield* tasks.approveTask({ taskId, now: "2026-07-17T22:56:00.000Z" });
+          const started = yield* starts.create({
+            id: "change-cancel-atomic",
+            repositoryCommonDirectory: input.commonDirectory,
+            branchRef: "refs/heads/but-why/by-cancel-atomic",
+            baseRef: "main",
+            baseRemoteUrl: "https://github.com/acme/repo.git",
+            startingCommit: "1111111111111111111111111111111111111111",
+            worktreePath: join(input.commonDirectory, "worktrees", "by-cancel-atomic"),
+            taskId,
+            now: "2026-07-17T22:57:00.000Z",
+          });
+          if (!started.ok) return;
+
+          const repository = yield* RepositorySql;
+          yield* repository.operation("inject linked Task cancellation failure", (sql) =>
+            sql.unsafe(`
+              CREATE TRIGGER fail_task_cancel
+              BEFORE UPDATE OF state ON tasks
+              WHEN NEW.state = 'cancelled'
+              BEGIN
+                SELECT RAISE(ABORT, 'injected Task cancellation failure');
+              END
+            `),
+          );
+
+          const error = yield* changes
+            .cancelChange({
+              changeId: started.change.id,
+              reason: "Scope removed",
+              now: "2026-07-17T22:58:00.000Z",
+            })
+            .pipe(Effect.flip);
+
+          expect(error).toBeInstanceOf(RepositorySqlOperationFailed);
+          expect(yield* changes.getChangeById(started.change.id)).toMatchObject({
+            state: "open",
+            closeReason: null,
+            cancelReason: null,
+          });
+          expect(yield* tasks.getTaskById(taskId)).toMatchObject({ state: "implementing" });
+        }),
+      ),
+  );
+
   it.scoped("preserves an open Change when observed merge evidence is stale", () =>
     withTemporaryState((input) =>
       Effect.gen(function* () {
@@ -1537,7 +1648,7 @@ describe("repository SQL storage", () => {
                 "CREATE INDEX implementation_decisions_change_sequence_idx ON implementation_decisions (change_id, sequence)",
               );
               yield* sql`DROP TABLE IF EXISTS reviewer_transcripts`;
-              yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id IN (11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21)`;
+              yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id IN (11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22)`;
               yield* sql`INSERT INTO implementation_decisions (id, change_id, recorded_at, content) VALUES ('legacy-decision', ${captured.changeId}, '2026-07-25T15:30:00.000Z', 'Legacy unstructured decision')`;
             }),
           );
@@ -1803,6 +1914,7 @@ describe("repository SQL storage", () => {
           { migration_id: 19, name: "simplify_reviewer_sessions" },
           { migration_id: 20, name: "remove_candidate_publications" },
           { migration_id: 21, name: "reviewer_transcripts" },
+          { migration_id: 22, name: "change_cancel_reason" },
         ]);
         expect(identities).toEqual([{ common_directory: repositorySql.commonDirectory }]);
         expect(candidateColumns.map(({ name }) => name)).toEqual([
@@ -1840,6 +1952,7 @@ describe("repository SQL storage", () => {
           "file_path",
         ]);
         expect(taskColumns.map(({ name }) => name)).not.toContain("completion_kind");
+        expect(changeColumns.map(({ name }) => name)).toContain("cancel_reason");
         expect(changeColumns.map(({ name }) => name)).not.toContain("no_change_candidate_id");
         expect(changeColumns.map(({ name }) => name)).not.toContain("no_change_validation_run_id");
         expect(changeColumns.map(({ name }) => name)).not.toContain("readiness");
@@ -1889,7 +2002,7 @@ describe("repository SQL storage", () => {
                     )
                   `;
                   yield* sql`DROP TABLE IF EXISTS reviewer_transcripts`;
-                  yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id IN (13, 14, 15, 16, 17, 18, 19, 20, 21)`;
+                  yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id IN (13, 14, 15, 16, 17, 18, 19, 20, 21, 22)`;
                 }),
               );
             }).pipe(Effect.provide(repositorySqlLayer({ commonDirectory: directory, statePath }))),
@@ -1928,6 +2041,76 @@ describe("repository SQL storage", () => {
           );
         }),
       (directory) => Effect.sync(() => rmSync(directory, { recursive: true, force: true })),
+    ),
+  );
+
+  it.scoped("upgrades Shared Repository State with a Taskless Change cancellation reason", () =>
+    withTemporaryState((input) =>
+      Effect.gen(function* () {
+        const starts = yield* openSqliteChangeStartPersistence();
+        const created = yield* starts.create({
+          id: "change-cancel-upgrade",
+          repositoryCommonDirectory: input.commonDirectory,
+          branchRef: "refs/heads/but-why/by-cancel-upgrade",
+          baseRef: "main",
+          baseRemoteUrl: "https://github.com/acme/repo.git",
+          startingCommit: "1111111111111111111111111111111111111111",
+          worktreePath: join(input.commonDirectory, "worktrees", "by-cancel-upgrade"),
+          now: "2026-07-17T23:00:00.000Z",
+        });
+        if (!created.ok) return;
+        yield* starts.recordPrepareOutcome(created.change.id, null, "2026-07-17T23:01:00.000Z");
+
+        const repository = yield* RepositorySql;
+        yield* repository.operation("simulate pre-upgrade Shared Repository State", (sql) =>
+          Effect.gen(function* () {
+            yield* sql.unsafe("ALTER TABLE changes DROP COLUMN cancel_reason");
+            yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id = 22`;
+          }),
+        );
+
+        yield* Effect.scoped(
+          Effect.gen(function* () {
+            const upgraded = yield* openSqliteChangePersistence();
+            expect(yield* upgraded.getChangeById(created.change.id)).toMatchObject({
+              id: created.change.id,
+              state: "open",
+              cancelReason: null,
+            });
+            const cancelled = yield* upgraded.cancelChange({
+              changeId: created.change.id,
+              reason: "Not needed after upgrade",
+              now: "2026-07-17T23:02:00.000Z",
+            });
+            expect(cancelled).toMatchObject({
+              ok: true,
+              changed: true,
+              change: {
+                state: "closed",
+                closeReason: "cancelled",
+                cancelReason: "Not needed after upgrade",
+              },
+            });
+            expect(yield* upgraded.getChangeById(created.change.id)).toMatchObject({
+              state: "closed",
+              closeReason: "cancelled",
+              cancelReason: "Not needed after upgrade",
+            });
+            const columns = yield* repository.operation(
+              "read upgraded Change cancellation reason column",
+              (sql) => sql<{ readonly name: string }>`PRAGMA table_info(changes)`,
+            );
+            expect(columns.map((column) => column.name)).toContain("cancel_reason");
+          }).pipe(
+            Effect.provide(
+              repositorySqlLayer({
+                commonDirectory: input.commonDirectory,
+                statePath: input.statePath,
+              }),
+            ),
+          ),
+        );
+      }),
     ),
   );
 
@@ -1981,7 +2164,7 @@ describe("repository SQL storage", () => {
                     )
                   `;
                   yield* sql`DROP TABLE IF EXISTS reviewer_transcripts`;
-                  yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id IN (18, 19, 20, 21)`;
+                  yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id IN (18, 19, 20, 21, 22)`;
                 }),
               );
             }).pipe(Effect.provide(repositorySqlLayer({ commonDirectory: directory, statePath }))),
@@ -2057,7 +2240,7 @@ describe("repository SQL storage", () => {
                       )
                     `;
                   yield* sql`DROP TABLE IF EXISTS reviewer_transcripts`;
-                  yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id IN (19, 20, 21)`;
+                  yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id IN (19, 20, 21, 22)`;
                 }),
               );
             }).pipe(Effect.provide(repositorySqlLayer({ commonDirectory: directory, statePath }))),
@@ -2125,7 +2308,7 @@ describe("repository SQL storage", () => {
               yield* repository.operation("restore pre-transcript storage", (sql) =>
                 Effect.gen(function* () {
                   yield* sql.unsafe(`DROP TABLE reviewer_transcripts`);
-                  yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id = 21`;
+                  yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id IN (21, 22)`;
                   yield* sql`
                     INSERT INTO changes (
                       id, repository_common_directory, branch_ref, state,
@@ -2196,10 +2379,13 @@ describe("repository SQL storage", () => {
                 "read re-applied Reviewer Transcript migration",
                 (sql) =>
                   sql<{ readonly name: string }>`
-                    SELECT name FROM effect_sql_migrations WHERE migration_id = 21
+                    SELECT name FROM effect_sql_migrations WHERE migration_id IN (21, 22)
                   `,
               );
-              expect(migrations).toEqual([{ name: "reviewer_transcripts" }]);
+              expect(migrations).toEqual([
+                { name: "reviewer_transcripts" },
+                { name: "change_cancel_reason" },
+              ]);
             }).pipe(Effect.provide(repositorySqlLayer({ commonDirectory: directory, statePath }))),
           );
         }),
@@ -2378,7 +2564,7 @@ describe("repository SQL storage", () => {
                     )
                   `;
                   yield* sql`DROP TABLE IF EXISTS reviewer_transcripts`;
-                  yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id IN (13, 14, 15, 16, 17, 18, 19, 20, 21)`;
+                  yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id IN (13, 14, 15, 16, 17, 18, 19, 20, 21, 22)`;
                 }),
               );
             }).pipe(Effect.provide(repositorySqlLayer({ commonDirectory: directory, statePath }))),
@@ -2437,7 +2623,7 @@ describe("repository SQL storage", () => {
                     )
                   `;
                   yield* sql`DROP TABLE IF EXISTS reviewer_transcripts`;
-                  yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id IN (14, 15, 16, 17, 18, 19, 20, 21)`;
+                  yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id IN (14, 15, 16, 17, 18, 19, 20, 21, 22)`;
                 }),
               );
             }).pipe(Effect.provide(repositorySqlLayer({ commonDirectory: directory, statePath }))),
@@ -2536,7 +2722,7 @@ describe("repository SQL storage", () => {
                       )
                     `;
                     yield* sql`DROP TABLE IF EXISTS reviewer_transcripts`;
-                    yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id IN (15, 16, 17, 18, 19, 20, 21)`;
+                    yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id IN (15, 16, 17, 18, 19, 20, 21, 22)`;
                   }),
                 );
               }).pipe(
@@ -2642,7 +2828,7 @@ describe("repository SQL storage", () => {
                     )
                   `;
                   yield* sql`DROP TABLE IF EXISTS reviewer_transcripts`;
-                  yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id IN (16, 17, 18, 19, 20, 21)`;
+                  yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id IN (16, 17, 18, 19, 20, 21, 22)`;
                 }),
               );
             }).pipe(Effect.provide(repositorySqlLayer({ commonDirectory: directory, statePath }))),
@@ -2727,7 +2913,7 @@ describe("repository SQL storage", () => {
                     )
                   `;
                   yield* sql`DROP TABLE IF EXISTS reviewer_transcripts`;
-                  yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id IN (16, 17, 18, 19, 20, 21)`;
+                  yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id IN (16, 17, 18, 19, 20, 21, 22)`;
                 }),
               );
             }).pipe(Effect.provide(repositorySqlLayer({ commonDirectory: directory, statePath }))),
@@ -3010,8 +3196,8 @@ describe("repository SQL storage", () => {
         );
 
         return Effect.gen(function* () {
-          expect(yield* readMigrationCount).toBe(21);
-          expect(yield* readMigrationCount).toBe(21);
+          expect(yield* readMigrationCount).toBe(22);
+          expect(yield* readMigrationCount).toBe(22);
         });
       },
       (directory) => Effect.sync(() => rmSync(directory, { recursive: true, force: true })),
