@@ -506,6 +506,7 @@ validationSetup:
         { migration_id: 20, name: "remove_candidate_publications" },
         { migration_id: 21, name: "reviewer_transcripts" },
         { migration_id: 22, name: "change_cancel_reason" },
+        { migration_id: 23, name: "restrict_lifecycle_states" },
       ]);
     }),
   );

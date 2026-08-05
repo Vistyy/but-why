@@ -5,7 +5,13 @@ import { dirname, join, resolve } from "node:path";
 import { Effect } from "effect";
 
 import type { CliEnvironment } from "../cli.js";
-import { runtimeError, success, usageError, type CliResult } from "../cliResults.js";
+import {
+  restoredTransientState,
+  runtimeError,
+  success,
+  usageError,
+  type CliResult,
+} from "../cliResults.js";
 import { initRepoLocalContext } from "../init/repoContext.js";
 import { structuredContractDiagnostics } from "../output/contractDiagnostics.js";
 
@@ -73,6 +79,8 @@ export const runInitCommand = (
                 "Restore the repository's own shared state, then run `by init --task-prefix <prefix>`.",
               ],
             });
+          case "restored_transient_state":
+            return restoredTransientState(initResult.error.tasks, initResult.error.changes);
         }
       }
 

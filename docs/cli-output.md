@@ -56,11 +56,15 @@ Each classification keeps the same meaning in TOON and JSON.
 - `persisted_data_invalid` reports that stored records cannot be decoded as the expected structure.
   It includes the `operation` that failed to decode and no other identifiers.
   It does not describe the data as unavailable and does not claim that But Why repairs the data.
+- `restored_transient_state` reports that Shared Repository State contains retired Task or Change lifecycle states.
+  It stops before migration creates resumable or terminal facts.
+  It identifies every affected Task and Change fact under `tasks` and `changes`.
 - `shared_state_identity_conflict` reports that Shared Repository State belongs to a different Git repository.
 
 Expected domain conflicts remain operation-specific results.
 Programmer defects remain `internal_error`.
 The `persisted_data_invalid` result does not include Submit Recovery Guidance and does not authorize an Implementer to repair Shared Repository State.
+The `restored_transient_state` result does not include Submit Recovery Guidance and does not authorize an Implementer to repair Shared Repository State.
 
 ## Findings and Validation Runs
 

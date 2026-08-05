@@ -4,7 +4,6 @@ import type { ImplementationDecision } from "./implementationDecision.js";
 
 export const changeState = {
   open: "open",
-  blocked: "blocked",
   closed: "closed",
 } as const;
 

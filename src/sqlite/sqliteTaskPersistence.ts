@@ -3,7 +3,7 @@ import type { SqlError } from "@effect/sql/SqlError";
 import { Effect } from "effect";
 import { randomUUID } from "node:crypto";
 
-import { canTransition, type TaskState } from "../task/lifecycle.js";
+import type { TaskState } from "../task/lifecycle.js";
 import type { TaskPersistence } from "../task/taskPersistence.js";
 import type {
   DependencyValidationCode,
@@ -21,8 +21,6 @@ import type {
   ListTasksInput,
   EditTaskDependenciesInput,
   StoredTaskRecord,
-  TaskStateTransitionResult,
-  TransitionTaskStateInput,
   UpdateTaskContextInput,
 } from "../task/taskStore.js";
 import { RepositoryPersistedDataInvalid } from "../contracts/repositoryStorageError.js";
@@ -52,10 +50,6 @@ export const openSqliteTaskPersistence = (
     updateTaskContext: (input) =>
       repository.transactionImmediate("update Task Context", (sql) =>
         updateTaskContext(sql, input),
-      ),
-    transitionTaskState: (input) =>
-      repository.transactionImmediate("transition Task state", (sql) =>
-        transitionTaskState(sql, input),
       ),
     cancelTask: (input) =>
       repository.transactionImmediate("cancel Task", (sql) => cancelTask(sql, input)),
@@ -217,9 +211,9 @@ const listActionableTasks = (sql: SqlClient.SqlClient) =>
     const rows = yield* sql<TaskSummaryRow>`
       SELECT id, title, state, created_at AS createdAt, updated_at AS updatedAt
       FROM tasks
-      WHERE state IN ('new', 'todo', 'ready')
+      WHERE state IN ('new', 'todo')
       ORDER BY
-        CASE state WHEN 'ready' THEN 0 WHEN 'new' THEN 1 WHEN 'todo' THEN 2 END ASC,
+        CASE state WHEN 'new' THEN 0 WHEN 'todo' THEN 1 END ASC,
         updated_at DESC,
         numeric_id ASC
     `;
@@ -345,73 +339,23 @@ const cancelTask = (
     return { ok: true as const, changed: true, task: updated };
   });
 
-const transitionTaskState = (sql: SqlClient.SqlClient, input: TransitionTaskStateInput) =>
-  Effect.gen(function* () {
-    const current = yield* getTaskById(sql, input.taskId);
-    if (current === undefined) return { ok: false as const, code: "task_not_found" as const };
-
-    const decision = taskTransitionDecision(current, input);
-    if (decision !== undefined) return decision;
-
-    const blocked = yield* blockedTaskTransition(sql, input);
-    if (blocked !== undefined) return blocked;
-
-    return yield* persistTaskTransition(sql, input);
-  });
-
-const taskTransitionDecision = (
-  current: StoredTaskRecord,
-  input: TransitionTaskStateInput,
-): TaskStateTransitionResult | undefined => {
-  if (current.state === input.to) {
-    return input.to === "implementing"
-      ? { ok: true, changed: false, task: current }
-      : {
-          ok: false,
-          code: "invalid_task_state_transition",
-          from: current.state,
-          to: input.to,
-        };
-  }
-  return canTransition(current.state, input.to)
-    ? undefined
-    : {
-        ok: false,
-        code: "invalid_task_state_transition",
-        from: current.state,
-        to: input.to,
-      };
-};
-
-const blockedTaskTransition = (sql: SqlClient.SqlClient, input: TransitionTaskStateInput) => {
-  if (input.to !== "implementing") return Effect.succeed(undefined);
-  return Effect.map(dependencyFacts(sql, input.taskId, "prerequisites"), (dependencies) => {
-    const blockedBy = dependencies.filter((dependency) => dependency.state !== "done");
-    return blockedBy.length === 0
-      ? undefined
-      : { ok: false as const, code: "task_dependencies_unsatisfied" as const, blockedBy };
-  });
-};
-
-const persistTaskTransition = (sql: SqlClient.SqlClient, input: TransitionTaskStateInput) =>
-  Effect.gen(function* () {
-    yield* sql`
-      UPDATE tasks SET state = ${input.to}, updated_at = ${input.now} WHERE id = ${input.taskId}
-    `;
-    const updated = yield* getTaskById(sql, input.taskId);
-    if (updated === undefined) return yield* invalidData("transition Task", "Task disappeared");
-    return { ok: true as const, changed: true, task: updated };
-  });
-
 const taskDependenciesAreEditable = (state: TaskState): boolean =>
   state === "new" || state === "todo";
 
 const taskDependencyEditTarget = (sql: SqlClient.SqlClient, taskId: PublicTaskId) =>
-  Effect.map(getTaskById(sql, taskId), (current) => {
+  Effect.gen(function* () {
+    const current = yield* getTaskById(sql, taskId);
     if (current === undefined) return { ok: false as const, code: "task_not_found" as const };
-    return taskDependenciesAreEditable(current.state)
-      ? { ok: true as const, task: current }
-      : { ok: false as const, code: "dependencies_locked" as const, state: current.state };
+    if (!taskDependenciesAreEditable(current.state)) {
+      return { ok: false as const, code: "dependencies_locked" as const, state: current.state };
+    }
+    const linked = yield* sql<{ readonly id: string }>`
+      SELECT id FROM changes WHERE task_id = ${taskId} LIMIT 1
+    `;
+    if (linked.length > 0) {
+      return { ok: false as const, code: "dependencies_locked" as const, state: current.state };
+    }
+    return { ok: true as const, task: current };
   });
 
 type DependencyValidationResult = {

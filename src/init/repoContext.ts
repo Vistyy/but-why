@@ -4,7 +4,12 @@ import { join } from "node:path";
 import { Effect } from "effect";
 
 import type { RepoConfig } from "../contracts/repoConfig.js";
-import { RepositoryIdentityConflict } from "../contracts/repositoryStorageError.js";
+import {
+  RepositoryIdentityConflict,
+  RepositoryRestoredTransientState,
+  type RestoredTransientChangeFact,
+  type RestoredTransientTaskFact,
+} from "../contracts/repositoryStorageError.js";
 import { RepositorySql, repositorySqlLayer } from "../sqlite/repositorySql.js";
 import { isTaskPrefix } from "../contracts/taskPrefix.js";
 import { findGitRoot } from "./git.js";
@@ -75,6 +80,11 @@ export type InitRepoError =
     }
   | {
       readonly code: "shared_state_identity_conflict";
+    }
+  | {
+      readonly code: "restored_transient_state";
+      readonly tasks: readonly RestoredTransientTaskFact[];
+      readonly changes: readonly RestoredTransientChangeFact[];
     };
 
 export type RepoLocalSubmissionContext = Omit<RepoLocalContext, "config" | "taskPrefix">;
@@ -238,7 +248,16 @@ export const initRepoLocalContext = (input: InitRepoInput): Effect.Effect<InitRe
               ok: false,
               error: { code: "shared_state_identity_conflict" },
             })
-          : Effect.die(error),
+          : error instanceof RepositoryRestoredTransientState
+            ? Effect.succeed<InitRepoResult>({
+                ok: false,
+                error: {
+                  code: "restored_transient_state",
+                  tasks: error.tasks,
+                  changes: error.changes,
+                },
+              })
+            : Effect.die(error),
       onSuccess: () => Effect.sync(() => completeRepoInitialization(prepared, stateChange)),
     }),
   );

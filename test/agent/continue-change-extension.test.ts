@@ -252,7 +252,7 @@ describe("packaged Change Implement continuation extension", () => {
   it("does not wake a session for durable stopping conditions", async () => {
     const harness = createHarness();
     await harness.emit("session_start", { type: "session_start", reason: "startup" });
-    harness.setSnapshot(snapshot({ change: { state: "blocked", closeReason: null } }));
+    harness.setSnapshot(snapshot({ toolingFailureCount: 1 }));
 
     await harness.emit("agent_settled");
 
@@ -371,7 +371,7 @@ describe("packaged Change Implement continuation extension", () => {
 
   it("does not wake after an external blocker Resolution and explains it before old Findings", async () => {
     const harness = createHarness();
-    harness.setSnapshot(snapshot({ change: { state: "blocked", closeReason: null } }));
+    harness.setSnapshot(snapshot({ change: { state: "open", closeReason: null } }));
     await harness.emit("session_start", { type: "session_start", reason: "startup" });
 
     harness.setSnapshot(snapshot({ findingCount: 1 }));

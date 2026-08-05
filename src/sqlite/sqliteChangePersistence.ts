@@ -446,7 +446,7 @@ const getPassingPublicationEvidence = (
 const listChanges = (sql: SqlClient.SqlClient, input: ListChangesInput) =>
   Effect.flatMap(
     sql.unsafe<ChangeRow>(
-      `SELECT ${columns} FROM changes WHERE repository_common_directory = ? AND (? = 1 OR state IN ('open', 'blocked')) ORDER BY created_at ASC, id ASC`,
+      `SELECT ${columns} FROM changes WHERE repository_common_directory = ? AND (? = 1 OR state = 'open') ORDER BY created_at ASC, id ASC`,
       [input.repositoryCommonDirectory, input.includeClosed ? 1 : 0],
     ),
     (rows) => Effect.forEach(rows, (row) => mapRequiredRow(row, "list Changes", sql)),
@@ -592,7 +592,7 @@ const cancelChange = (sql: SqlClient.SqlClient, input: CancelChangeInput) =>
         ? { ok: true as const, changed: false, change }
         : { ok: false as const, code: "change_already_completed" as const };
     }
-    yield* sql`UPDATE changes SET state = 'closed', close_reason = 'cancelled', cancel_reason = ${change.taskId === null ? input.reason : null}, cleanup_state = 'pending', cleanup_blocking_reason = NULL, updated_at = ${input.now}, closed_at = ${input.now} WHERE id = ${input.changeId} AND state IN ('open', 'blocked')`;
+    yield* sql`UPDATE changes SET state = 'closed', close_reason = 'cancelled', cancel_reason = ${change.taskId === null ? input.reason : null}, cleanup_state = 'pending', cleanup_blocking_reason = NULL, updated_at = ${input.now}, closed_at = ${input.now} WHERE id = ${input.changeId} AND state = 'open'`;
     if (change.taskId !== null)
       yield* sql`UPDATE tasks SET state = 'cancelled', cancel_reason = ${input.reason}, updated_at = ${input.now} WHERE id = ${change.taskId}`;
     return {
@@ -633,7 +633,7 @@ const selectOpenChange = (
       readonly code: "change_not_found" | "change_closed";
     } => {
   if (change === undefined) return { ok: false, code: "change_not_found" };
-  return change.state === changeState.closed || change.state === changeState.blocked
+  return change.state === changeState.closed
     ? { ok: false, code: "change_closed" }
     : { ok: true, change };
 };

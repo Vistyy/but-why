@@ -7,6 +7,7 @@ import {
   RepositoryIdentityConflict,
   RepositoryMigrationFailed,
   RepositoryPersistedDataInvalid,
+  RepositoryRestoredTransientState,
   RepositorySqlOperationFailed,
   RepositoryStateUnavailable,
 } from "../../src/contracts/repositoryStorageError.js";
@@ -66,6 +67,52 @@ help[1]: "Replace <git-common-dir>/but-why/state.sqlite with a known-good copy, 
       }
     },
   );
+
+  ordinaryIt("reports restored retired lifecycle states as restored_transient_state", () => {
+    const result = repositoryStorageErrorResult(
+      new RepositoryRestoredTransientState({
+        tasks: [
+          {
+            id: "BY-1",
+            numericId: 1,
+            title: "Restored Task",
+            state: "implementing",
+            changeId: "change-1",
+          },
+        ],
+        changes: [{ id: "change-1", taskId: "BY-1", state: "blocked" }],
+      }),
+    );
+
+    expect(result.exitCode).toBe(1);
+    expect(JSON.parse(JSON.stringify(result.stdout))).toEqual({
+      error: {
+        code: "restored_transient_state",
+        message: "Shared But Why? state contains retired lifecycle states.",
+        tasks: [
+          {
+            id: "BY-1",
+            numericId: 1,
+            title: "Restored Task",
+            state: "implementing",
+            changeId: "change-1",
+          },
+        ],
+        changes: [{ id: "change-1", taskId: "BY-1", state: "blocked" }],
+      },
+      help: [
+        "Restore a known-good copy of <git-common-dir>/but-why/state.sqlite, then retry the command.",
+      ],
+    });
+    expect(encodeToon(result.stdout)).toBe(`error:
+  code: restored_transient_state
+  message: Shared But Why? state contains retired lifecycle states.
+  tasks[1]{id,numericId,title,state,changeId}:
+    BY-1,1,Restored Task,implementing,change-1
+  changes[1]{id,taskId,state}:
+    change-1,BY-1,blocked
+help[1]: "Restore a known-good copy of <git-common-dir>/but-why/state.sqlite, then retry the command."`);
+  });
 
   ordinaryIt("keeps repository identity conflict as its own result", () => {
     const result = repositoryStorageErrorResult(

@@ -1,48 +1,21 @@
 import { describe, expect, it } from "vitest";
 
-import {
-  taskStates,
-  canTransition,
-  isTaskState,
-  type TaskState,
-} from "../../src/task/lifecycle.js";
+import { taskStates, isTaskState } from "../../src/task/lifecycle.js";
 
 describe("Task lifecycle", () => {
-  it("owns the canonical Task state vocabulary and legal transitions", () => {
-    expect(taskStates).toEqual([
-      "new",
-      "todo",
-      "implementing",
-      "blocked",
-      "validating",
-      "ready",
-      "done",
-      "cancelled",
-    ]);
-
-    const expectedTransitions = new Map<TaskState, readonly TaskState[]>([
-      ["new", ["todo"]],
-      ["todo", ["implementing"]],
-      ["implementing", ["blocked", "validating"]],
-      ["blocked", ["implementing"]],
-      ["validating", ["implementing", "ready"]],
-      ["ready", ["validating", "done"]],
-      ["done", []],
-      ["cancelled", []],
-    ]);
-
-    for (const from of taskStates) {
-      for (const to of taskStates) {
-        expect(canTransition(from, to), `${from} -> ${to}`).toBe(
-          expectedTransitions.get(from)?.includes(to) ?? false,
-        );
-      }
-    }
+  it("owns the canonical four-state Task vocabulary", () => {
+    expect(taskStates).toEqual(["new", "todo", "done", "cancelled"]);
   });
 
   it("recognizes Task states at boundaries", () => {
     expect(isTaskState("new")).toBe(true);
     expect(isTaskState("todo")).toBe(true);
+    expect(isTaskState("done")).toBe(true);
+    expect(isTaskState("cancelled")).toBe(true);
+    expect(isTaskState("implementing")).toBe(false);
+    expect(isTaskState("blocked")).toBe(false);
+    expect(isTaskState("validating")).toBe(false);
+    expect(isTaskState("ready")).toBe(false);
     expect(isTaskState("unknown")).toBe(false);
   });
 });

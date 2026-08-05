@@ -25,8 +25,6 @@ import type {
   EditTaskDependenciesInput,
   EditTaskDependenciesResult,
   TaskApprovalResult,
-  TaskStateTransitionResult,
-  TransitionTaskStateInput,
 } from "./taskStore.js";
 
 export type TaskUseCases = {
@@ -64,9 +62,6 @@ export type TaskUseCases = {
   readonly appendTaskComment: (
     input: AppendTaskCommentInput,
   ) => Effect.Effect<AppendTaskCommentResult, RepositoryStorageError>;
-  readonly transitionTaskState: (
-    input: TransitionTaskStateInput,
-  ) => Effect.Effect<RepoTaskStateTransitionResult, RepositoryStorageError>;
 };
 
 export type TaskContextDraft = { readonly path: string; readonly content: string };
@@ -88,7 +83,6 @@ export type ApplyTaskContextDraftResult =
       readonly path: string;
     };
 
-export type RepoTaskStateTransitionResult = TaskStateTransitionResult;
 export type RepoTaskApprovalResult = TaskApprovalResult;
 export type RepoEditTaskDependenciesResult = EditTaskDependenciesResult;
 
@@ -109,7 +103,6 @@ export const openTaskUseCases = (
   applyTaskContextDraft: (input) => applyTaskContextDraft(context, tasks, input),
   approveTask: (taskId, now) => tasks.approveTask({ taskId, now }),
   appendTaskComment: tasks.appendTaskComment,
-  transitionTaskState: tasks.transitionTaskState,
 });
 
 const createTaskContextDraft = (

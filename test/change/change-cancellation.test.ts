@@ -272,7 +272,7 @@ describe("Change cancellation", () => {
   it.effect("proves PR closure ordering through the Change CLI", () =>
     Effect.gen(function* () {
       const events: string[] = [];
-      const task = taskRecord("implementing");
+      const task = taskRecord("todo");
       const dependencies = cancellationDependencies({
         task,
         change: changeRecord(null),
@@ -304,7 +304,7 @@ describe("Change cancellation", () => {
   it.effect("reports a fake GitHub closure failure through the Change CLI", () =>
     Effect.gen(function* () {
       const events: string[] = [];
-      const task = taskRecord("implementing");
+      const task = taskRecord("todo");
       const dependencies = cancellationDependencies({
         task,
         change: changeRecord(null),
@@ -328,7 +328,7 @@ describe("Change cancellation", () => {
 
   it.effect("refuses cancellation when the owned pull request is unavailable", () => {
     const events: string[] = [];
-    const task = taskRecord("implementing");
+    const task = taskRecord("todo");
     const change = changeRecord(publicTaskId(task.id));
     const base = cancellationDependencies({
       task,
@@ -364,7 +364,7 @@ describe("Change cancellation", () => {
 
   it.effect("refuses cancellation when the owned pull request facts mismatch", () => {
     const events: string[] = [];
-    const task = taskRecord("implementing");
+    const task = taskRecord("todo");
     const change = changeRecord(publicTaskId(task.id));
     const dependencies = cancellationDependencies({
       task,
@@ -390,7 +390,7 @@ describe("Change cancellation", () => {
 
   it.effect("refuses cancellation while a Validation Run is active", () => {
     const events: string[] = [];
-    const task = taskRecord("implementing");
+    const task = taskRecord("todo");
     const change = changeRecord(publicTaskId(task.id));
     const dependencies = cancellationDependencies({
       task,
@@ -418,7 +418,7 @@ describe("Change cancellation", () => {
 
   it.effect("refuses Change-selected cancellation while a Validation Run is active", () => {
     const events: string[] = [];
-    const task = taskRecord("implementing");
+    const task = taskRecord("todo");
     const change = changeRecord(publicTaskId(task.id));
     const dependencies = cancellationDependencies({
       task,
@@ -446,7 +446,7 @@ describe("Change cancellation", () => {
 
   it.effect("uses repository-local Task ID resolution before cancellation", () =>
     Effect.gen(function* () {
-      const task = taskRecord("implementing");
+      const task = taskRecord("todo");
       const dependencies = cancellationDependencies({
         task,
         change: changeRecord(null),
@@ -479,7 +479,7 @@ describe("Change cancellation", () => {
   it.effect("reports merged observation through the Task CLI", () =>
     Effect.gen(function* () {
       const events: string[] = [];
-      const task = taskRecord("implementing");
+      const task = taskRecord("todo");
       const dependencies = cancellationDependencies({
         task,
         change: changeRecord(publicTaskId(task.id)),
@@ -512,7 +512,7 @@ describe("Change cancellation", () => {
   it.effect("reports stale merged publication as an owned pull request mismatch", () =>
     Effect.gen(function* () {
       const events: string[] = [];
-      const task = taskRecord("implementing");
+      const task = taskRecord("todo");
       const dependencies = cancellationDependencies({
         task,
         change: changeRecord(publicTaskId(task.id)),
@@ -536,7 +536,7 @@ describe("Change cancellation", () => {
   it.effect("closes an owned open pull request before deleting its Remote Change Branch", () => {
     const events: string[] = [];
     const cleanupRemoteBranches: (object | undefined)[] = [];
-    const task = taskRecord("implementing");
+    const task = taskRecord("todo");
     const change = changeRecord(publicTaskId(task.id));
     const dependencies = cancellationDependencies({
       task,
@@ -581,7 +581,7 @@ describe("Change cancellation", () => {
 
   it.effect("leaves the lifecycle open when owned pull request closure fails", () => {
     const events: string[] = [];
-    const task = taskRecord("implementing");
+    const task = taskRecord("todo");
     const change = changeRecord(publicTaskId(task.id));
     const dependencies = cancellationDependencies({
       task,
@@ -608,7 +608,7 @@ describe("Change cancellation", () => {
 
   it.effect("keeps unsafe cleanup pending without reopening the cancelled lifecycle", () => {
     const events: string[] = [];
-    const task = taskRecord("implementing");
+    const task = taskRecord("todo");
     const change = changeRecord(publicTaskId(task.id));
     const dependencies = cancellationDependencies({
       task,
@@ -635,7 +635,7 @@ describe("Change cancellation", () => {
 
   it.effect("completes a Change and linked Task when the owned pull request is merged", () => {
     const events: string[] = [];
-    const task = taskRecord("implementing");
+    const task = taskRecord("todo");
     const change = changeRecord(publicTaskId(task.id));
     const dependencies = cancellationDependencies({
       task,
