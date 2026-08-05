@@ -1,4 +1,4 @@
-import { existsSync, rmSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { join } from "node:path";
 
 import { Effect } from "effect";
@@ -12,7 +12,6 @@ import {
   localCandidateCaptureGit,
   readRepositoryBranchHead,
 } from "./candidateCapture/localGitCandidate.js";
-import { reviewerSessionsProducerRoot } from "./reviewerSession/reviewerSession.js";
 import {
   openChangeSubmit,
   type ChangeSubmit,
@@ -147,19 +146,7 @@ export const loadChangeSubmit = (input: {
         get: changePersistence.getReviewerSession,
         save: changePersistence.saveReviewerSession,
         remove: (changeId: string, producer: string) =>
-          changePersistence.removeReviewerSession(changeId, producer).pipe(
-            Effect.tap(() =>
-              Effect.sync(() =>
-                rmSync(
-                  reviewerSessionsProducerRoot(context.paths.operationalDir, changeId, producer),
-                  {
-                    recursive: true,
-                    force: true,
-                  },
-                ),
-              ),
-            ),
-          ),
+          changePersistence.removeReviewerSession(changeId, producer),
       },
       reviewerSessionsRoot: context.paths.operationalDir,
     });

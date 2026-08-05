@@ -812,6 +812,81 @@ layer(acceptanceTemplateLayer)("Task-backed Candidate Acceptance Review", (it) =
       }),
   );
 
+  it.scoped(
+    "retains the superseded Reviewer Session JSONL file when a resumed session is unusable",
+    () =>
+      Effect.gen(function* () {
+        const sessions = new Map<string, ReviewerSessionRecord>();
+        const sessionStorageRoot = createTestWorkspace();
+        const sessionStore: ReviewerSessionStore = {
+          get: (changeId, producer) => Effect.succeed(sessions.get(`${changeId}/${producer}`)),
+          save: (record) =>
+            Effect.sync(() => sessions.set(`${record.changeId}/${record.producer}`, record)),
+          remove: (changeId, producer) =>
+            Effect.sync(() => sessions.delete(`${changeId}/${producer}`)),
+        };
+        const unusable = new SandcastleToolingFailed({
+          operationName: "run_reviewer_agent",
+          message: "provider detail hidden behind the runtime",
+        });
+        let freshCalls = 0;
+        const review = vi.fn<ReviewerAgentRuntime["review"]>((input) => {
+          if (input.resumeSession !== undefined) {
+            return Effect.succeed({
+              ok: false as const,
+              failure: unusable,
+              sessionUsability: "unusable" as const,
+              attempts: 1,
+              stdout: "",
+            });
+          }
+          freshCalls += 1;
+          const sessionReference = freshCalls === 1 ? "superseded-session" : "fresh-session";
+          writeFileSync(
+            join(
+              input.sessionStorageRoot ?? sessionStorageRoot,
+              `review_${sessionReference}.jsonl`,
+            ),
+            `{"type":"session","id":"${sessionReference}"}\n`,
+          );
+          return Effect.succeed({
+            ok: true as const,
+            report: { findings: [] },
+            attempts: 1,
+            stdout: "fresh acceptance report",
+            sessionReference,
+          });
+        });
+        const ready = yield* acceptanceReadyRepo(
+          { review },
+          { sessionStore, reviewerSessionsRoot: sessionStorageRoot },
+        );
+        const sessionPath = reviewerSessionsPath(
+          sessionStorageRoot,
+          ready.captured.changeId,
+          "acceptance",
+        );
+
+        const initial = yield* runTaskBackedCandidate(ready);
+        expect(initial).toMatchObject({ ok: true, outcome: "passed" });
+        const supersededPath = join(sessionPath, "review_superseded-session.jsonl");
+        expect(existsSync(supersededPath)).toBe(true);
+
+        git(ready.repo, "commit", "--allow-empty", "-m", "unusable resumed session");
+        const successor = yield* captureLocalCandidate({ cwd: ready.repo, now: successorNow });
+        if (!successor.ok) throw new Error(`Candidate capture failed: ${successor.code}`);
+        const result = yield* runTaskBackedCandidate(ready, passingValidationPolicy, successor);
+
+        expect(result).toMatchObject({ ok: true, outcome: "passed" });
+        expect(review).toHaveBeenCalledTimes(3);
+        expect(sessions.get(`${successor.changeId}/acceptance`)?.sessionReference).toBe(
+          "fresh-session",
+        );
+        expect(existsSync(supersededPath)).toBe(true);
+        expect(existsSync(join(sessionPath, "review_fresh-session.jsonl"))).toBe(true);
+      }),
+  );
+
   it.scoped("does not restart or succeed after a failed fresh review", () =>
     Effect.gen(function* () {
       const failure = new SandcastleToolingFailed({
