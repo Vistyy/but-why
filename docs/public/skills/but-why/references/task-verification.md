@@ -31,35 +31,26 @@ This step is complete when every Material Risk has sufficient Claims and every C
 ## 2. Select proportionate evidence
 
 For each Verification Claim, select the least costly evidence that can establish it reliably.
-Use the least costly supported seam that observes the complete Claim.
-Use integration or end-to-end evidence only when interaction across that boundary is part of the Claim.
-Treat existing tests and checks as evidence inventory, not as authority for the required technique or seam.
+Use evidence that observes the complete Claim.
+Use integration or end-to-end evidence only when interaction between system parts is part of the Claim.
+Treat existing tests and checks as evidence inventory, not as authority for the required technique.
 Do not use test count, coverage percentage, file category, or integration level as a substitute for a Claim.
 
 Evidence can include type checking, static analysis, focused commands, tests, inspection, rendered behavior, logs, traces, reproducible procedures, measurements, experiments, and mandatory repository gates.
 These examples do not limit the available techniques.
-Lifecycle cost includes authoring and review, code and fixtures, execution time and resources, stability, failure diagnosis, coupling, and future maintenance.
-Compare that cost with the least-cost feasible evidence that can establish the Claim.
-Do not use a numerical score or test-to-production line ratio to replace judgment about confidence and cost.
-
-Require a durable automated test only when it protects accepted behavior or an invariant, detects an identified plausible regression that other selected or retained evidence would not reveal, existing retained evidence and proportionate one-time evidence are insufficient, the selected seam observes the Claim reliably, and its additional coverage justifies its additional lifecycle cost over the least-cost feasible alternative.
-Before requiring durable automation, state the regression, why existing or one-time evidence is insufficient, and why lifecycle cost is proportionate.
-Apply these conditions to every required test case, including each parameterized case.
-Map each test case to the regression that other selected or retained evidence would not reveal.
-A different input, fixture, branch, assertion, or code path does not make a regression distinct by itself.
-A parameterized test can use one table or matrix when that mapping remains explicit.
-Remove or consolidate a test case that does not satisfy these conditions.
+Require durable automated evidence only when maintained automation protects accepted behavior or an invariant against a plausible regression that existing or one-time evidence would not address sufficiently, and that protection justifies its authoring, execution, and maintenance cost.
 Do not translate each accepted-behavior statement or evidence example into a test.
+Do not use a numerical score or test-to-production line ratio to justify durable automation.
 
-Specify a mechanism or seam only to the precision needed to protect required confidence.
-An Implementer may use another mechanism that establishes the same Claim through each seam the contract requires because interaction across it is part of the Claim.
+Specify a mechanism only when it is necessary to observe an interaction that is part of the Claim.
+An Implementer may use another mechanism that establishes the same Claim, including every interaction the contract requires.
 When no Material Risk needs evidence beyond applicable mandatory gates, do not add verification work by convention.
 
 When accepted intent or target-repository instructions retire a concept, identify its replacement, affected surfaces, targeted search scope, and accepted exceptions.
 Use targeted diff, search, and inspection as one-time removal evidence.
 Do not create durable evidence whose only purpose is to prove that a retired concept is absent.
 
-This step is complete when every Claim has feasible, proportionate Evidence, each required seam is justified by the Claim, and every required durable test case satisfies the admission rule.
+This step is complete when every Claim has feasible, proportionate Evidence, each required interaction and mechanism is justified by the Claim, and every requirement for durable automation explains why maintained evidence is necessary and proportionate.
 
 ## 3. Write the contract
 
@@ -79,7 +70,7 @@ Use this structure and omit empty optional sections:
 
 ### Required evidence
 
-- <Observation or artifact, naming each seam required because interaction across it is part of the Claim.>
+- <Observation or artifact, naming a mechanism only when needed to observe an interaction that is part of the Claim.>
 
 ### Escalation
 
@@ -100,14 +91,14 @@ Applicable mandatory gates provide sufficient evidence.
 No additional durable evidence is required.
 ```
 
-When the contract requires durable automated evidence, record the admission reasons for every required test case under `Required evidence`.
-A parameterized test can use one explicit mapping from each case to the regression that other selected or retained evidence would not reveal.
+When the contract requires durable automated evidence, explain under `Required evidence` why maintained evidence is necessary and why its regression protection justifies its cost.
+Do not prescribe individual test cases unless one is necessary to protect required confidence.
 
-This step is complete when the contract states the required confidence without unnecessarily constraining implementation technique and every durable-evidence requirement includes its case-level admission reasons.
+This step is complete when the contract states the required confidence without unnecessarily constraining implementation technique.
 
 ## 4. Confirm feasibility
 
-Confirm that each required mechanism and seam exists in the target repository or its supported environment.
+Confirm that each required mechanism exists in the target repository or its supported environment.
 Resolve a consequential unknown technique before recording the Task.
 Do not assume that a future Implementer or reviewer has an unavailable tool.
 If required confidence cannot be established feasibly, expose the unresolved requirement or product decision instead of silently weakening the contract.

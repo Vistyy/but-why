@@ -1,6 +1,6 @@
 # Implement a Change
 
-The Implementer handoff identifies one open Change and its Managed Worktree.
+Change implementation uses one open Change and its Managed Worktree.
 Let `<but-why>` represent the command prefix resolved by the But Why command guidance.
 
 ## Completion control
@@ -30,7 +30,11 @@ Follow the repository instructions in the Managed Worktree.
 Use task-specific verification requirements in accepted Task Context when present.
 Before you add a Shared Repository State Migration Artifact, run `<but-why> snapshot`.
 Otherwise, select focused evidence that is proportionate to the Candidate's material risks under the repository's accepted verification policy.
-Do not require a durable automated test unless accepted verification requirements require one.
+Do not add a durable automated test unless accepted verification requirements require maintained automation.
+For each added test case, including each parameterized case, identify a plausible regression that other evidence for the Candidate would not reveal.
+A different input, fixture, branch, assertion, or code path does not make a regression distinct by itself.
+Remove or consolidate an added test case that does not detect such a regression.
+Choose the least-cost arrangement after considering authoring and review, code and fixtures, execution time and resources, stability, failure diagnosis, coupling, and future maintenance.
 When multiple approaches remain compliant with accepted intent, select one.
 Record the choice as an Implementation Decision when it affects observable behavior, an interface, stored data, failure handling, or a meaningful trade-off.
 Use `by change decision add <change-id> --choice "<selected approach>" --rationale "<reason and material trade-off>"` when the decision is made.
@@ -85,7 +89,7 @@ The extension explains the Resolution before it directs the Implementer to Findi
 If inspection fails, `/continue-change` retries the local inspection and reports the recovery action.
 A Validation Tooling Failure receives recovery guidance only after the operator runs `/continue-change`.
 
-Candidate Publication is an Implementer handoff, not durable Change completion.
+Candidate Publication is a delivery state, not durable Change completion.
 Automatic continuation waits while the exact current Candidate remains published.
 Explicit `/continue-change` can resume revision work under the operator's direct instruction.
 After a review correction, record new Implementation Decisions, commit the revised Candidate, and run Change Submit again.
