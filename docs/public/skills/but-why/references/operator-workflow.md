@@ -1,6 +1,6 @@
 # Operator Workflow
 
-Use this reference when selecting a Work Route, recording Tasks, approving a Task, authorizing implementation, or handing work to a fresh Interactive Session.
+Use this reference when selecting a Work Route, recording Tasks, approving a Task, authorizing implementation, or starting a fresh Implementer Interactive Session.
 Read target-repository instructions and current repository state before you act.
 Use a repository documentation authority map when one exists.
 Do not infer documentation authority from a file name, directory, or document label.
@@ -14,16 +14,16 @@ If the selected Work Route conflicts with a higher-priority instruction, support
 
 **Task Recording Authorization** is the Operator's explicit permission to record one complete proposed Task graph.
 It permits only the approved Task Context and Task Dependency mutations.
-It does not permit Task Approval, Change Start, implementation, or an Implementer handoff.
+It does not permit Task Approval, Change Start, implementation, or Implementation Authorization.
 
 **Task Approval** is a separate Operator action for one recorded Task.
 Task Approval does not start a Change or launch implementation.
 
 **Implementation Authorization** is the Operator's explicit permission to implement one selected work item through its selected Work Route.
 Task Recording Authorization and Task Approval do not grant Implementation Authorization.
-Do not begin implementation, start a Change, or launch an Implementer handoff without Implementation Authorization for that work item.
-A Task-backed Change Implementation Authorization includes an Implementer handoff.
-A taskless Change launches an Implementer handoff only when the authorization explicitly includes one.
+Do not begin implementation or start a Change without Implementation Authorization for that work item.
+A Task-backed Change Implementation Authorization requires starting or verifying a fresh Implementer Interactive Session.
+A taskless Change uses the current session unless Implementation Authorization explicitly requests a fresh Implementer Interactive Session.
 
 ## Select a Work Route
 
@@ -76,44 +76,44 @@ This section is complete when every authorized Task and Task Dependency is recor
 
 When the Operator explicitly requests Task Approval, inspect the selected recorded Task and run `by task approve <task-id>`.
 Treat the returned Task state as authoritative, and run `by task show <task-id>` only when required approval or Change-link state is omitted.
-Do not start a Change or launch an Implementer handoff as part of Task Approval.
+Do not start a Change or launch an Implementer Interactive Session as part of Task Approval.
 
 This section is complete when the selected Task is approved and no Change has started from this action.
 
 ## Authorize Implementation
 
 When the Operator gives Implementation Authorization, confirm the selected work item and selected Work Route.
-For a Task-backed Change, treat the authorization as including an Implementer handoff.
-For a taskless Change, confirm whether the authorization explicitly includes an Implementer handoff.
-Do not infer taskless Implementer handoff permission from authorization to implement.
+For a Task-backed Change, require starting or verifying a fresh Implementer Interactive Session.
+For a taskless Change, confirm whether the authorization explicitly requests a fresh Implementer Interactive Session.
+Do not infer permission to start a fresh taskless Implementer Interactive Session from authorization to implement.
 
 For a direct edit, implement only the authorized work in the current repository according to target-repository instructions.
 A direct edit does not start a Change, run But Why validation, publish a pull request, or launch an Interactive Session.
 
-For a Task-backed Change, confirm that the selected Task is approved and launch an Implementer handoff to a fresh Implementer session.
-For a taskless Change, confirm that the selected work remains taskless and implement it in the current session unless the authorization explicitly includes an Implementer handoff.
+For a Task-backed Change, confirm that the selected Task is approved and start or verify a fresh Implementer Interactive Session.
+For a taskless Change, confirm that the selected work remains taskless and implement it in the current session unless Implementation Authorization explicitly requests a fresh Implementer Interactive Session.
 
-This section is complete when the authorization identifies one work item and one Work Route, and selects the required Task-backed Implementer handoff or any optional taskless Implementer handoff.
+This section is complete when the authorization identifies one work item and one Work Route, and the required fresh Implementer Interactive Session or current-session implementation is selected.
 
-## Launch an Implementer Handoff
+## Start or Verify an Implementer Interactive Session
 
-Operator context is optional.
+The Implementer Prompt is optional.
 The Change ID and Managed Worktree are already bound to Change Implement.
 The captured Task Context and packaged Implementer instructions already provide accepted intent and the implementation procedure.
-Provide Implementer handoff Markdown only when the Implementer needs current operator context that Change inspection, Task Context, and packaged instructions do not provide.
+Provide an Implementer Prompt only when the Implementer needs current information that Change inspection, Task Context, and packaged instructions do not provide.
 Do not repeat the Change ID, Task ID, Change state, Managed Worktree path, Task Context, or packaged instructions.
 If a fact requires durable authority, record it through the applicable Task or Change operation instead.
 Do not include sensitive information.
 
-Resolve `scripts/launch-handoff.mjs` relative to this skill directory.
+Resolve `scripts/start-implementer-session.mjs` relative to this skill directory.
 For a Task-backed Change, run it with `--task-id <task-id>`.
 The script reads the Task, reuses its linked Change or starts one, then derives and verifies the exact open Change and Managed Worktree.
-For an explicitly authorized taskless Implementer handoff, run it with `--change-id <change-id>`.
-When no operator context is required, run the script with empty standard input.
-When operator context is required, pipe only that Markdown to the script with the runner that matches the resolved But Why command prefix.
+For an explicitly authorized fresh taskless Implementer Interactive Session, run it with `--change-id <change-id>`.
+When no Implementer Prompt is needed, run the script with empty standard input.
+When an Implementer Prompt is needed, pipe only that Markdown to the script with the runner that matches the resolved But Why command prefix.
 
 ```sh
-node <skill-directory>/scripts/launch-handoff.mjs \
+node <skill-directory>/scripts/start-implementer-session.mjs \
   --runner <just|pnpx|npx> \
   --task-id <task-id> </dev/null
 ```
@@ -125,7 +125,7 @@ For any other result, report the structured result and diagnostic paths, then st
 Do not retry an indeterminate launch.
 Keep the current session open.
 
-This section is complete when the script reports an accepted Implementer handoff result with `changeVerified: true`.
+This section is complete when the script reports an accepted Implementer Interactive Session result with `changeVerified: true`.
 
 ## Command templates
 
@@ -159,7 +159,7 @@ by validation-run abandon <validation-run-id> --reason <reason>
 by change submit [<change-id>]
 by change cancel [<change-id>]
 by change reconcile [<change-id>]
-by change implement [<change-id>] [--handoff-file <path>]
+by change implement [<change-id>] [--implementer-prompt-file <path>]
 by change decision add <change-id> --choice "<selected approach>" --rationale "<reason>"
 by change blocker raise <change-id> --file <path|->
 by change blocker resolve <change-id> --file <path|->

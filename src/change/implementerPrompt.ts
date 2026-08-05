@@ -18,7 +18,7 @@ export const buildImplementerInitialPrompt = (input: {
   readonly changeId: string;
   readonly worktreePath: string;
   readonly prepareFailure?: ChangePrepareFailure;
-  readonly handoff?: string;
+  readonly implementerPrompt?: string;
 }): string =>
   [
     `Change identity: ${input.changeId}.`,
@@ -33,5 +33,5 @@ export const buildImplementerInitialPrompt = (input: {
           `- stdout (bounded): ${boundedEvidence(input.prepareFailure.stdout)}`,
           `- stderr (bounded): ${boundedEvidence(input.prepareFailure.stderr)}`,
         ]),
-    ...(input.handoff === undefined ? [] : [input.handoff]),
+    ...(input.implementerPrompt === undefined ? [] : [input.implementerPrompt]),
   ].join("\n\n");

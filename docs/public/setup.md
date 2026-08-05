@@ -2,7 +2,7 @@
 
 This guide is for a user or agent that installs But Why in one Git repository.
 It answers how to install the CLI and the portable Pi skill, initialize repository policy, and find the workflow authority.
-The installed `but-why` skill owns Work Route Selection, Task authoring, implementation authorization, and handoff.
+The installed `but-why` skill owns Work Route Selection, Task authoring, and Implementation Authorization.
 
 ## Install the CLI
 
@@ -64,7 +64,7 @@ pi --skill /absolute/path/to/but-why/docs/public/skills/but-why
 ```
 
 Do not copy the skill into another skill directory.
-The package directory contains the references and handoff script that the skill requires.
+The package directory contains the references and Implementer Interactive Session script that the skill requires.
 
 ## Initialize repository policy
 
@@ -133,4 +133,4 @@ See [Global Config and Agent Profiles](config.md#global-config-and-agent-profile
 
 Start Pi in the target repository and use the installed `but-why` skill.
 The skill loads this setup guide before it gives setup guidance.
-It loads its operator workflow before it selects work, records Tasks, authorizes implementation, or hands off a Change.
+It loads its operator workflow before it selects work, records Tasks, or authorizes implementation.

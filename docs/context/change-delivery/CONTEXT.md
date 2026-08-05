@@ -172,8 +172,8 @@ _Avoid_: Agent launch alone, validation, arbitrary state assignment
 The Operator's explicit permission to begin implementing one selected work item through its selected Work Route.
 Task Recording Authorization and Task Approval do not grant it.
 It applies to Task-backed Changes, taskless Changes, and direct edits.
-A Task-backed Change authorization includes an Implementer Handoff.
-A taskless Change authorization includes an Implementer Handoff only when the Operator explicitly authorizes one.
+For a Task-backed Change, Implementation Authorization requires starting or verifying a fresh Implementer Interactive Session.
+For taskless work, implementation remains in the current session unless Implementation Authorization explicitly requests a fresh Implementer Interactive Session.
 _Avoid_: Task Approval, Task Recording Authorization, inferred permission to implement, authorization for unrelated work
 
 **Managed Worktree**:
@@ -188,11 +188,11 @@ _Avoid_: Task state, Validation Run, background Supervisor worker
 The coding agent that changes a Change's Managed Worktree and may author Implementation Decisions or Implementation Blockers.
 _Avoid_: Acceptance Reviewer, Specialist Reviewer, reviewer process
 
-**Implementer Handoff**:
-The authorized operation that starts or verifies the Implementer Interactive Session for one exact Change.
-A Task-backed Change Implementation Authorization includes an Implementer Handoff.
-A taskless Change requires explicit Implementer Handoff authorization.
-_Avoid_: Session transfer, Task Approval, Change Start, agent launch
+**Implementer Prompt**:
+Optional non-authoritative Markdown supplied to Change Implement and appended to the Implementer's initial prompt.
+It carries current information that the Implementer cannot obtain from Change inspection, accepted intent, or packaged instructions.
+Durable authority must use the applicable Task or Change operation instead.
+_Avoid_: Task Context, Acceptance Context, Implementation Decision, complete implementation instructions
 
 **Submission**:
 The point-in-time act of asking But Why to fetch the Change Base, inspect a Change's Managed Worktree, select its Candidate or unchanged state, validate a changed Candidate, and publish when eligible.

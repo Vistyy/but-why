@@ -58,7 +58,8 @@ if [ "$1" = "worktree" ] && [ "$2" = "open" ]; then
   exit 0
 fi
 if [ "$1" = "pane" ] && [ "$2" = "run" ]; then
-  printf '%s\\n' "$4" > "$BY_FAKE_CAPTURE"
+  launch_script=$(printf '%s' "$4" | sed "s/^exec '//; s/'$//")
+  cat "$launch_script" > "$BY_FAKE_CAPTURE"
   : > "$BY_FAKE_CAPTURE.started"
   printf '{"result":{}}\\n'
   exit 0
@@ -94,20 +95,20 @@ exit 1
 
     const piped = runBuiltByWithInput(
       root,
-      "Handoff from piped stdin\n",
+      "Implementer prompt from piped stdin\n",
       env,
       "--json",
       "change",
       "implement",
       change.change.id,
-      "--handoff-file",
+      "--implementer-prompt-file",
       "-",
     );
     expect(piped.status, `${piped.stdout}${piped.stderr}`).toBe(0);
-    expect(readFileSync(capture, "utf8")).toContain("Handoff from piped stdin");
+    expect(readFileSync(capture, "utf8")).toContain("Implementer prompt from piped stdin");
   }, 30_000);
 
-  it("preserves handoff input errors for piped stdin", () => {
+  it("preserves implementer prompt input errors for piped stdin", () => {
     const root = createTestWorkspace();
 
     const invalid = runBuiltByWithInput(
@@ -118,12 +119,12 @@ exit 1
       "change",
       "implement",
       "change-1",
-      "--handoff-file",
+      "--implementer-prompt-file",
       "-",
     );
     expect(invalid.status).toBe(2);
     expect(JSON.parse(invalid.stdout)).toMatchObject({
-      error: { code: "invalid_handoff_encoding" },
+      error: { code: "invalid_implementer_prompt_encoding" },
     });
 
     const terminal = runTestProcess(
@@ -131,7 +132,7 @@ exit 1
 
       [
         "-qec",
-        `${process.execPath} ${builtByExecutable()} --json change implement change-1 --handoff-file -`,
+        `${process.execPath} ${builtByExecutable()} --json change implement change-1 --implementer-prompt-file -`,
         "/dev/null",
       ],
       { cwd: root },

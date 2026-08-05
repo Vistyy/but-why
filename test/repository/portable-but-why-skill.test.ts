@@ -15,7 +15,7 @@ const section = (source: string, heading: string): string => {
 };
 
 describe("portable But Why skill", () => {
-  it("keeps Operator authority, Task authoring, and Implementer handoff in one model-visible skill", () => {
+  it("keeps Operator authority, Task authoring, and Implementation Authorization in one model-visible skill", () => {
     const skill = readSkillArtifact("SKILL.md");
     const workflow = readSkillArtifact("references/operator-workflow.md");
 
@@ -24,7 +24,6 @@ describe("portable But Why skill", () => {
     expect(skill).toContain("Operator workflow");
     expect(skill).toContain("Implement a Change");
     expect(workflow).not.toContain("to-tasks-by");
-    expect(workflow).not.toContain("handoff-to-worktree");
   });
 
   it("orders authority guards before each permitted operation", () => {
@@ -35,7 +34,10 @@ describe("portable But Why skill", () => {
     const authorTasks = section(workflow, "Author Tasks");
     const approveTask = section(workflow, "Approve a Task");
     const authorizeImplementation = section(workflow, "Authorize Implementation");
-    const handoff = section(workflow, "Launch an Implementer Handoff");
+    const implementerSession = section(
+      workflow,
+      "Start or Verify an Implementer Interactive Session",
+    );
 
     expect(selectRoute.indexOf("consequential uncertainty")).toBeLessThan(
       selectRoute.indexOf("Obtain the Operator's explicit Work Route Selection"),
@@ -51,23 +53,25 @@ describe("portable But Why skill", () => {
     );
     expect(authorTasks).not.toContain("by task approve");
     expect(approveTask).toContain("by task approve <task-id>");
-    expect(approveTask).toContain("Do not start a Change or launch an Implementer handoff");
-    expect(authority).toContain(
-      "Do not begin implementation, start a Change, or launch an Implementer handoff",
+    expect(approveTask).toContain(
+      "Do not start a Change or launch an Implementer Interactive Session",
     );
     expect(authority).toContain(
-      "A Task-backed Change Implementation Authorization includes an Implementer handoff.",
+      "Do not begin implementation or start a Change without Implementation Authorization",
+    );
+    expect(authority).toContain(
+      "A Task-backed Change Implementation Authorization requires starting or verifying a fresh Implementer Interactive Session.",
     );
     expect(authorizeImplementation).toContain(
-      "For a Task-backed Change, confirm that the selected Task is approved and launch an Implementer handoff",
+      "For a Task-backed Change, confirm that the selected Task is approved and start or verify a fresh Implementer Interactive Session",
     );
     expect(authorizeImplementation).toContain(
       "For a taskless Change, confirm that the selected work remains taskless and implement it in the current session",
     );
-    expect(handoff).toContain("--task-id <task-id>");
-    expect(handoff).toContain("--change-id <change-id>");
-    expect(handoff).toContain("scripts/launch-handoff.mjs");
-    expect(handoff).toContain("changeVerified: true");
+    expect(implementerSession).toContain("--task-id <task-id>");
+    expect(implementerSession).toContain("--change-id <change-id>");
+    expect(implementerSession).toContain("scripts/start-implementer-session.mjs");
+    expect(implementerSession).toContain("changeVerified: true");
     expect(authorTasks).toContain("[Task verification](task-verification.md)");
     expect(taskVerification).toContain("Task Verification Contract");
     expect(taskVerification).toContain("Do not require tests by default.");

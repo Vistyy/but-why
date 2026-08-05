@@ -45,7 +45,7 @@ export type ChangeUseCases = {
   ) => Effect.Effect<ChangePrepareResult, RepositoryStorageError>;
   readonly implement: (
     changeId: string,
-    initialPrompt: string | undefined,
+    implementerPrompt: string | undefined,
   ) => Effect.Effect<ChangeImplementResult, RepositoryStorageError>;
   readonly reconcile: (
     changeId: string | undefined,
@@ -99,14 +99,14 @@ export const openChangeUseCases = (
 ): ChangeUseCases => ({
   start: (input) => startChange(store, git, executor, input),
   prepare: (changeId, now) => prepareChange(store, git, executor, changeId, now),
-  implement: (changeId, initialPrompt) =>
+  implement: (changeId, implementerPrompt) =>
     implementChange(
       context,
       store,
       interactiveSessionHost,
       globalConfigPath,
       changeId,
-      initialPrompt,
+      implementerPrompt,
     ),
   reconcile: (changeId, now) =>
     reconciliation.reconcile({
@@ -201,7 +201,7 @@ const implementChange = (
   interactiveSessionHost: InteractiveSessionHost,
   globalConfigPath: string,
   changeId: string,
-  handoff: string | undefined,
+  implementerPrompt: string | undefined,
 ): Effect.Effect<ChangeImplementResult, RepositoryStorageError> =>
   Effect.gen(function* () {
     const change = yield* store.getById(changeId);
@@ -271,7 +271,7 @@ const implementChange = (
               changeId: change.id,
               worktreePath: change.worktreePath,
               ...(change.prepareFailure === null ? {} : { prepareFailure: change.prepareFailure }),
-              ...(handoff === undefined ? {} : { handoff }),
+              ...(implementerPrompt === undefined ? {} : { implementerPrompt }),
             }),
             agentProfile: resolvedAgentProfile,
             globalConfigDirectory: dirname(globalConfigPath),

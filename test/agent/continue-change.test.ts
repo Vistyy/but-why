@@ -118,7 +118,7 @@ describe("Change Implement continuation policy", () => {
     expect(message).toContain("until Change Submit passes");
   });
 
-  it("extracts the Change identity from the user handoff", () => {
+  it("extracts the Change identity from the implementer prompt", () => {
     expect(extractChangeId("Change identity: de32d32a-ecd8-46b4-b2d8-5a08d2128869.")).toBe(
       "de32d32a-ecd8-46b4-b2d8-5a08d2128869",
     );

@@ -20,14 +20,14 @@ const runnerCommands = {
   npx: ["npx", "-y", "but-why"],
 };
 
-const pollMs = positiveInteger(process.env.HANDOFF_OBSERVER_POLL_MS, 250);
-const lateGraceMs = positiveInteger(process.env.HANDOFF_OBSERVER_LATE_GRACE_MS, 15_000);
-const slowMs = positiveInteger(process.env.HANDOFF_OBSERVER_SLOW_MS, 5_000);
+const pollMs = positiveInteger(process.env.IMPLEMENTER_SESSION_OBSERVER_POLL_MS, 250);
+const lateGraceMs = positiveInteger(process.env.IMPLEMENTER_SESSION_OBSERVER_LATE_GRACE_MS, 15_000);
+const slowMs = positiveInteger(process.env.IMPLEMENTER_SESSION_OBSERVER_SLOW_MS, 5_000);
 const implementTimeoutMs = positiveInteger(
-  process.env.HANDOFF_OBSERVER_IMPLEMENT_TIMEOUT_MS,
+  process.env.IMPLEMENTER_SESSION_OBSERVER_IMPLEMENT_TIMEOUT_MS,
   60_000,
 );
-const showTimeoutMs = positiveInteger(process.env.HANDOFF_OBSERVER_SHOW_TIMEOUT_MS, 15_000);
+const showTimeoutMs = positiveInteger(process.env.IMPLEMENTER_SESSION_OBSERVER_SHOW_TIMEOUT_MS, 15_000);
 const maxCapturedBytes = 1024 * 1024;
 const maxTraceBytes = 1024 * 1024;
 
@@ -44,15 +44,15 @@ const startedAt = performance.now();
 const wallStartedAt = new Date().toISOString();
 const targetId = args.taskId ?? args.changeId;
 const safeId = targetId.replaceAll(/[^a-zA-Z0-9._-]/g, "_");
-const diagnosticBaseDirectory = process.env.HANDOFF_DIAGNOSTIC_DIRECTORY ?? tmpdir();
+const diagnosticBaseDirectory = process.env.IMPLEMENTER_SESSION_DIAGNOSTIC_DIRECTORY ?? tmpdir();
 let expectedSessionName;
 let changeId;
 let worktreePath;
 const diagnosticDirectory = await mkdtemp(join(diagnosticBaseDirectory, `but-why-launch-${safeId}.`));
 const tracePath = join(diagnosticDirectory, "trace.jsonl");
 const diagnosticPath = join(diagnosticDirectory, "pane.txt");
-let handoffDirectory;
-let handoffPath;
+let implementerPromptDirectory;
+let implementerPromptPath;
 const activeChildren = new Set();
 let observerRunning = true;
 let preserveTrace = false;
@@ -76,7 +76,7 @@ try {
   const target = await resolveChangeTarget(args, commandPrefix);
   if (!target.ok) {
     preLaunchFailure = target.failure;
-    throw new Error("Pre-launch Change inspection did not verify handoff ownership.");
+    throw new Error("Pre-launch Change inspection did not verify Implementer Interactive Session ownership.");
   }
   changeId = target.changeId;
   worktreePath = target.worktreePath;
@@ -91,14 +91,14 @@ try {
         message: "Change Show did not identify the selected Change's Interactive Session.",
       },
     });
-    throw new Error("Pre-launch Change inspection did not verify handoff ownership.");
+    throw new Error("Pre-launch Change inspection did not verify Implementer Interactive Session ownership.");
   }
 
-  const handoff = await readStdin();
-  if (handoff.toString("utf8").trim().length > 0) {
-    handoffDirectory = await mkdtemp(join(tmpdir(), "but-why-handoff."));
-    handoffPath = join(handoffDirectory, "handoff.md");
-    await writeFile(handoffPath, handoff, { mode: 0o600 });
+  const implementerPrompt = await readStdin();
+  if (implementerPrompt.toString("utf8").trim().length > 0) {
+    implementerPromptDirectory = await mkdtemp(join(tmpdir(), "but-why-implementer-prompt."));
+    implementerPromptPath = join(implementerPromptDirectory, "implementer-prompt.md");
+    await writeFile(implementerPromptPath, implementerPrompt, { mode: 0o600 });
   }
   await appendTrace("observer_started", {
     wallStartedAt,
@@ -117,7 +117,7 @@ try {
       "change",
       "implement",
       changeId,
-      ...(handoffPath === undefined ? [] : ["--handoff-file", handoffPath]),
+      ...(implementerPromptPath === undefined ? [] : ["--implementer-prompt-file", implementerPromptPath]),
     ],
     implementTimeoutMs,
   );
@@ -238,8 +238,8 @@ try {
   }
 } finally {
   observerRunning = false;
-  if (handoffDirectory !== undefined) {
-    await rm(handoffDirectory, { recursive: true, force: true });
+  if (implementerPromptDirectory !== undefined) {
+    await rm(implementerPromptDirectory, { recursive: true, force: true });
   }
 }
 
@@ -408,7 +408,7 @@ async function resolveChangeTarget(target, prefix) {
           result: taskResult,
           error: {
             code: "task_not_approved",
-            message: "Implementer handoff requires an approved Task without a linked Change.",
+            message: "An Implementer Interactive Session requires an approved Task without a linked Change.",
           },
         }),
       };
@@ -632,7 +632,7 @@ async function terminate(signal, exitCode) {
   observerRunning = false;
   for (const activeChild of activeChildren) killProcessTree(activeChild);
   await appendTrace("observer_interrupted", { signal }).catch(() => {});
-  await rm(handoffDirectory, { recursive: true, force: true });
+  await rm(implementerPromptDirectory, { recursive: true, force: true });
   process.stdout.write(
     `${JSON.stringify(
       {

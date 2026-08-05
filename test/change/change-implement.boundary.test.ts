@@ -20,7 +20,7 @@ import {
 import { runTestProcessOrThrow } from "../support/testProcess.js";
 
 const now = "2026-06-30T12:00:00.000Z";
-const contractMaxHandoffBytes = 256 * 1024;
+const contractMaxImplementerPromptBytes = 256 * 1024;
 let readyRepositoryTemplate: string;
 let unreadyRepositoryTemplate: string;
 
@@ -54,38 +54,39 @@ const readyRepository = () =>
   });
 const unreadyRepository = () => cloneInitializedTestRepository(unreadyRepositoryTemplate);
 
-const invalidHandoffCases = [
+const invalidImplementerPromptCases = [
   [
     "missing",
     {
       fileName: "missing.md",
       setup: (_path: string): void => undefined,
-      code: "handoff_file_not_found",
-      message: "Change handoff file was not found.",
+      code: "implementer_prompt_file_not_found",
+      message: "Implementer Prompt file was not found.",
       maxBytes: undefined,
-      help: "Create the handoff file, then rerun Change Implement.",
+      help: "Create the Implementer Prompt file, then rerun Change Implement.",
     },
   ],
   [
     "non-regular",
     {
-      fileName: "handoff-directory",
+      fileName: "implementer-prompt-directory",
       setup: (path: string): void => mkdirSync(path),
-      code: "handoff_file_unreadable",
-      message: "Change handoff must be a readable regular file.",
+      code: "implementer_prompt_file_unreadable",
+      message: "Implementer Prompt must be a readable regular file.",
       maxBytes: undefined,
-      help: "Use a readable regular file for --handoff-file.",
+      help: "Use a readable regular file for --implementer-prompt-file.",
     },
   ],
   [
     "oversized",
     {
       fileName: "large.md",
-      setup: (path: string): void => writeFileSync(path, "x".repeat(contractMaxHandoffBytes + 1)),
-      code: "handoff_file_too_large",
-      message: "Change handoff file is larger than 256 KiB.",
-      maxBytes: contractMaxHandoffBytes,
-      help: "Shorten the handoff file to 256 KiB or less.",
+      setup: (path: string): void =>
+        writeFileSync(path, "x".repeat(contractMaxImplementerPromptBytes + 1)),
+      code: "implementer_prompt_file_too_large",
+      message: "Implementer Prompt file is larger than 256 KiB.",
+      maxBytes: contractMaxImplementerPromptBytes,
+      help: "Shorten the Implementer Prompt file to 256 KiB or less.",
     },
   ],
   [
@@ -93,10 +94,10 @@ const invalidHandoffCases = [
     {
       fileName: "invalid.bin",
       setup: (path: string): void => writeFileSync(path, Buffer.from([0xff])),
-      code: "invalid_handoff_encoding",
-      message: "Change handoff file must be valid UTF-8.",
+      code: "invalid_implementer_prompt_encoding",
+      message: "Implementer Prompt file must be valid UTF-8.",
       maxBytes: undefined,
-      help: "Rewrite the handoff file as UTF-8, then retry Change Implement.",
+      help: "Rewrite the Implementer Prompt file as UTF-8, then retry Change Implement.",
     },
   ],
   [
@@ -104,16 +105,16 @@ const invalidHandoffCases = [
     {
       fileName: "empty.md",
       setup: (path: string): void => writeFileSync(path, ""),
-      code: "empty_handoff_file",
-      message: "Change handoff file must not be empty.",
+      code: "empty_implementer_prompt_file",
+      message: "Implementer Prompt file must not be empty.",
       maxBytes: undefined,
-      help: "Write a non-empty handoff file, then retry Change Implement.",
+      help: "Write a non-empty Implementer Prompt file, then retry Change Implement.",
     },
   ],
 ] as const;
 
 describe("by change implement", () => {
-  it.effect("launches a ready Change and passes a 256 KiB handoff unchanged", () =>
+  it.effect("launches a ready Change and passes a 256 KiB implementer prompt unchanged", () =>
     Effect.gen(function* () {
       const root = yield* readyRepository();
       const started = yield* runByInProcessEffect(root, ["--json", "change", "start"], now);
@@ -192,13 +193,20 @@ describe("by change implement", () => {
         ),
       );
 
-      const handoff = "x".repeat(contractMaxHandoffBytes);
-      const handoffPath = join(root, "handoff.md");
-      writeFileSync(handoffPath, handoff);
+      const implementerPrompt = "x".repeat(contractMaxImplementerPromptBytes);
+      const implementerPromptPath = join(root, "implementer-prompt.md");
+      writeFileSync(implementerPromptPath, implementerPrompt);
       const received: string[] = [];
-      const handoffResult = yield* runByInProcessEffect(
+      const implementerPromptResult = yield* runByInProcessEffect(
         root,
-        ["--json", "change", "implement", change.change.id, "--handoff-file", handoffPath],
+        [
+          "--json",
+          "change",
+          "implement",
+          change.change.id,
+          "--implementer-prompt-file",
+          implementerPromptPath,
+        ],
         now,
         {
           interactiveSessionHost: {
@@ -209,13 +217,13 @@ describe("by change implement", () => {
           },
         },
       );
-      expect(handoffResult.status).toBe(0);
+      expect(implementerPromptResult.status).toBe(0);
       expect(received).toHaveLength(1);
       expect(received[0]).toBe(
         [
           `Change identity: ${change.change.id}.`,
           `Managed Worktree: ${change.worktreePath}.`,
-          handoff,
+          implementerPrompt,
         ].join("\n\n"),
       );
     }),
@@ -533,61 +541,63 @@ describe("by change implement", () => {
     }),
   );
 
-  it.effect("keeps implementation and the handoff available after failed preparation", () =>
-    Effect.gen(function* () {
-      const root = yield* unreadyRepository();
-      writeFileSync(
-        join(root, ".test-global-config.json"),
-        JSON.stringify({
-          defaultAgentProfile: { scope: "global", name: "implementation" },
-          agentProfiles: {
-            implementation: {
-              agentRuntime: "pi",
-              runtimeConfig: { model: "openai-codex/gpt-5.6-luna", thinking: "high" },
+  it.effect(
+    "keeps implementation and the implementer prompt available after failed preparation",
+    () =>
+      Effect.gen(function* () {
+        const root = yield* unreadyRepository();
+        writeFileSync(
+          join(root, ".test-global-config.json"),
+          JSON.stringify({
+            defaultAgentProfile: { scope: "global", name: "implementation" },
+            agentProfiles: {
+              implementation: {
+                agentRuntime: "pi",
+                runtimeConfig: { model: "openai-codex/gpt-5.6-luna", thinking: "high" },
+              },
             },
-          },
-        }),
-      );
-      const started = yield* runByInProcessEffect(root, ["--json", "change", "start"], now);
-      expect(started.status).toBe(0);
-      const output = JSON.parse(started.stdout) as {
-        readonly change: { readonly id: string };
-        readonly worktreePath: string;
-        readonly prepareFailure: {
-          readonly command: string;
-          readonly exitCode: number;
-          readonly stderr: string;
+          }),
+        );
+        const started = yield* runByInProcessEffect(root, ["--json", "change", "start"], now);
+        expect(started.status).toBe(0);
+        const output = JSON.parse(started.stdout) as {
+          readonly change: { readonly id: string };
+          readonly worktreePath: string;
+          readonly prepareFailure: {
+            readonly command: string;
+            readonly exitCode: number;
+            readonly stderr: string;
+          };
         };
-      };
-      expect(output.prepareFailure).toMatchObject({ exitCode: 7 });
+        expect(output.prepareFailure).toMatchObject({ exitCode: 7 });
 
-      let launchedPrompt: string | undefined;
-      const host: InteractiveSessionHost = {
-        launch: async (input) => {
-          launchedPrompt = input.initialPrompt;
-          return { ok: true, host: "herdr", status: "started" };
-        },
-      };
+        let launchedPrompt: string | undefined;
+        const host: InteractiveSessionHost = {
+          launch: async (input) => {
+            launchedPrompt = input.initialPrompt;
+            return { ok: true, host: "herdr", status: "started" };
+          },
+        };
 
-      const result = yield* runByInProcessEffect(
-        root,
-        ["--json", "change", "implement", output.change.id],
-        now,
-        { interactiveSessionHost: host },
-      );
+        const result = yield* runByInProcessEffect(
+          root,
+          ["--json", "change", "implement", output.change.id],
+          now,
+          { interactiveSessionHost: host },
+        );
 
-      expect(result.status).toBe(0);
-      expect(JSON.parse(result.stdout)).toMatchObject({
-        changeId: output.change.id,
-        worktreePath: output.worktreePath,
-        host: "herdr",
-        status: "started",
-      });
-      expect(launchedPrompt).toContain(`Change identity: ${output.change.id}.`);
-      expect(launchedPrompt).toContain("Current Repository Preparation failure");
-      expect(launchedPrompt).toContain("exit code: 7");
-      expect(launchedPrompt).toContain("stderr (bounded): failed");
-    }),
+        expect(result.status).toBe(0);
+        expect(JSON.parse(result.stdout)).toMatchObject({
+          changeId: output.change.id,
+          worktreePath: output.worktreePath,
+          host: "herdr",
+          status: "started",
+        });
+        expect(launchedPrompt).toContain(`Change identity: ${output.change.id}.`);
+        expect(launchedPrompt).toContain("Current Repository Preparation failure");
+        expect(launchedPrompt).toContain("exit code: 7");
+        expect(launchedPrompt).toContain("stderr (bounded): failed");
+      }),
   );
 
   it.effect(
@@ -722,8 +732,8 @@ describe("by change implement", () => {
       const root = yield* readyRepository();
       const started = yield* runByInProcessEffect(root, ["--json", "change", "start"], now);
       const change = JSON.parse(started.stdout) as { readonly change: { readonly id: string } };
-      const stdinPath = join(root, "stdin-handoff.md");
-      writeFileSync(stdinPath, "Handoff from stdin: Héllo\n");
+      const stdinPath = join(root, "stdin-implementer-prompt.md");
+      writeFileSync(stdinPath, "Implementer prompt from stdin: Héllo\n");
       const stdin = openSync(stdinPath, "r");
       let prompt: string | undefined;
       const host: InteractiveSessionHost = {
@@ -736,12 +746,12 @@ describe("by change implement", () => {
       try {
         const result = yield* runByInProcessEffect(
           root,
-          ["--json", "change", "implement", change.change.id, "--handoff-file", "-"],
+          ["--json", "change", "implement", change.change.id, "--implementer-prompt-file", "-"],
           now,
           { interactiveSessionHost: host, stdin: { fd: stdin, isTerminal: false } },
         );
         expect(result.status).toBe(0);
-        expect(prompt).toContain("Handoff from stdin: Héllo\n");
+        expect(prompt).toContain("Implementer prompt from stdin: Héllo\n");
       } finally {
         closeSync(stdin);
       }
@@ -754,7 +764,7 @@ describe("by change implement", () => {
 
       const result = yield* runByInProcessEffect(
         root,
-        ["--json", "change", "implement", "change-1", "--handoff-file", "-"],
+        ["--json", "change", "implement", "change-1", "--implementer-prompt-file", "-"],
         now,
       );
 
@@ -765,9 +775,9 @@ describe("by change implement", () => {
     }),
   );
 
-  it.effect.each(invalidHandoffCases)(
-    "maps %s handoff input to its structured usage error",
-    ([_name, handoffCase]) =>
+  it.effect.each(invalidImplementerPromptCases)(
+    "maps %s implementer prompt input to its structured usage error",
+    ([_name, implementerPromptCase]) =>
       Effect.gen(function* () {
         const root = createTestWorkspace();
         let launches = 0;
@@ -777,12 +787,19 @@ describe("by change implement", () => {
             return { ok: true, host: "herdr", status: "started" };
           },
         };
-        const handoffPath = join(root, handoffCase.fileName);
-        handoffCase.setup(handoffPath);
+        const implementerPromptPath = join(root, implementerPromptCase.fileName);
+        implementerPromptCase.setup(implementerPromptPath);
 
         const result = yield* runByInProcessEffect(
           root,
-          ["--json", "change", "implement", "change-1", "--handoff-file", handoffPath],
+          [
+            "--json",
+            "change",
+            "implement",
+            "change-1",
+            "--implementer-prompt-file",
+            implementerPromptPath,
+          ],
           now,
           { interactiveSessionHost: host },
         );
@@ -790,12 +807,14 @@ describe("by change implement", () => {
         expect(result.status).toBe(2);
         expect(JSON.parse(result.stdout)).toEqual({
           error: {
-            code: handoffCase.code,
-            message: handoffCase.message,
-            path: handoffPath,
-            ...(handoffCase.maxBytes === undefined ? {} : { maxBytes: handoffCase.maxBytes }),
+            code: implementerPromptCase.code,
+            message: implementerPromptCase.message,
+            path: implementerPromptPath,
+            ...(implementerPromptCase.maxBytes === undefined
+              ? {}
+              : { maxBytes: implementerPromptCase.maxBytes }),
           },
-          help: [handoffCase.help],
+          help: [implementerPromptCase.help],
         });
         expect(launches).toBe(0);
       }),

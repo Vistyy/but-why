@@ -1,50 +1,50 @@
 import { runtimeError, success, type CliResult } from "../../cliResults.js";
 import type { ChangeImplementResult } from "../../change/changeUseCases.js";
-import type { HandoffFileReadError } from "../../change/handoffFile.js";
+import type { ImplementerPromptFileReadError } from "../../change/implementerPromptFile.js";
 import { usageError } from "../../cliResults.js";
 
-export const handoffFileError = (error: HandoffFileReadError): CliResult => {
+export const implementerPromptFileError = (error: ImplementerPromptFileReadError): CliResult => {
   switch (error.code) {
-    case "handoff_file_not_found":
+    case "implementer_prompt_file_not_found":
       return usageError({
         code: error.code,
-        message: "Change handoff file was not found.",
+        message: "Implementer Prompt file was not found.",
         details: { path: error.path },
-        help: ["Create the handoff file, then rerun Change Implement."],
+        help: ["Create the Implementer Prompt file, then rerun Change Implement."],
       });
-    case "handoff_file_unreadable":
+    case "implementer_prompt_file_unreadable":
       return usageError({
         code: error.code,
-        message: "Change handoff must be a readable regular file.",
+        message: "Implementer Prompt must be a readable regular file.",
         details: { path: error.path },
-        help: ["Use a readable regular file for --handoff-file."],
+        help: ["Use a readable regular file for --implementer-prompt-file."],
       });
-    case "handoff_file_too_large":
+    case "implementer_prompt_file_too_large":
       return usageError({
         code: error.code,
-        message: "Change handoff file is larger than 256 KiB.",
+        message: "Implementer Prompt file is larger than 256 KiB.",
         details: { path: error.path, maxBytes: error.maxBytes },
-        help: ["Shorten the handoff file to 256 KiB or less."],
+        help: ["Shorten the Implementer Prompt file to 256 KiB or less."],
       });
-    case "invalid_handoff_encoding":
+    case "invalid_implementer_prompt_encoding":
       return usageError({
         code: error.code,
-        message: "Change handoff file must be valid UTF-8.",
+        message: "Implementer Prompt file must be valid UTF-8.",
         details: { path: error.path },
-        help: ["Rewrite the handoff file as UTF-8, then retry Change Implement."],
+        help: ["Rewrite the Implementer Prompt file as UTF-8, then retry Change Implement."],
       });
-    case "empty_handoff_file":
+    case "empty_implementer_prompt_file":
       return usageError({
         code: error.code,
-        message: "Change handoff file must not be empty.",
+        message: "Implementer Prompt file must not be empty.",
         details: { path: error.path },
-        help: ["Write a non-empty handoff file, then retry Change Implement."],
+        help: ["Write a non-empty Implementer Prompt file, then retry Change Implement."],
       });
     case "stdin_is_terminal":
       return usageError({
         code: error.code,
         message: "Standard input is an interactive terminal.",
-        help: ["Pipe UTF-8 text or use a shell heredoc with --handoff-file -."],
+        help: ["Pipe UTF-8 text or use a shell heredoc with --implementer-prompt-file -."],
       });
   }
 };

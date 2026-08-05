@@ -7,7 +7,7 @@ import { repoRoot } from "../support/by-cli.js";
 import { createTestWorkspace } from "../support/testWorkspace.js";
 import { runTestProcess } from "../support/testProcess.js";
 
-type HandoffResult = {
+type ImplementerSessionResult = {
   readonly changeId: string;
   readonly worktreePath: string;
   readonly status: string;
@@ -21,10 +21,10 @@ type HandoffResult = {
   };
 };
 
-type HandoffRoute = "task-backed" | "taskless-existing";
+type ImplementerSessionRoute = "task-backed" | "taskless-existing";
 
-type HandoffOptions = {
-  readonly route: HandoffRoute;
+type ImplementerSessionOptions = {
+  readonly route: ImplementerSessionRoute;
   readonly implementation?: string;
   readonly activeAgentName?: string;
   readonly implementationDelay?: string;
@@ -40,16 +40,19 @@ type HandoffOptions = {
   readonly initialChangeTaskId?: string | null;
   readonly initialCommandResult?: string;
   readonly initialCommandExitCode?: string;
-  readonly handoff?: string;
+  readonly implementerPrompt?: string;
 };
 
-type HandoffExecution = {
+type ImplementerSessionExecution = {
   readonly status: number | null;
-  readonly result: HandoffResult;
+  readonly result: ImplementerSessionResult;
   readonly calls: string;
 };
 
-const runHandoff = (changeId: string, options: HandoffOptions): HandoffExecution => {
+const runImplementerSession = (
+  changeId: string,
+  options: ImplementerSessionOptions,
+): ImplementerSessionExecution => {
   const root = createTestWorkspace();
   const bin = join(root, "bin");
   const worktreePath = join(root, "managed-worktree");
@@ -62,27 +65,27 @@ const runHandoff = (changeId: string, options: HandoffOptions): HandoffExecution
     just,
     `#!/usr/bin/env sh
 set -eu
-printf '%s\\n' "$*" >> "$HANDOFF_CALLS"
+printf '%s\\n' "$*" >> "$IMPLEMENTER_SESSION_CALLS"
 if [ "$1" = "by" ] && [ "$2" = "--json" ] && [ "$3" = "task" ] && [ "$4" = "show" ]; then
-  printf '%s\\n' "$HANDOFF_TASK"
-  exit "$HANDOFF_TASK_EXIT"
+  printf '%s\\n' "$IMPLEMENTER_SESSION_TASK"
+  exit "$IMPLEMENTER_SESSION_TASK_EXIT"
 fi
 if [ "$1" = "by" ] && [ "$2" = "--json" ] && [ "$3" = "change" ] && [ "$4" = "start" ]; then
-  printf '%s\\n' "$HANDOFF_START"
-  exit "$HANDOFF_START_EXIT"
+  printf '%s\\n' "$IMPLEMENTER_SESSION_START"
+  exit "$IMPLEMENTER_SESSION_START_EXIT"
 fi
 if [ "$1" = "by" ] && [ "$2" = "--json" ] && [ "$3" = "change" ] && [ "$4" = "implement" ]; then
-  sleep "$HANDOFF_IMPLEMENT_DELAY"
-  printf '%s\\n' "$HANDOFF_IMPLEMENT"
+  sleep "$IMPLEMENTER_SESSION_IMPLEMENT_DELAY"
+  printf '%s\\n' "$IMPLEMENTER_SESSION_IMPLEMENT"
   exit 0
 fi
 if [ "$1" = "by" ] && [ "$2" = "--json" ] && [ "$3" = "change" ] && [ "$4" = "show" ]; then
-  if [ ! -e "$HANDOFF_SHOW_COUNT" ]; then
-    : > "$HANDOFF_SHOW_COUNT"
-    printf '%s\\n' "$HANDOFF_INITIAL_SHOW"
-    exit "$HANDOFF_INITIAL_SHOW_EXIT"
+  if [ ! -e "$IMPLEMENTER_SESSION_SHOW_COUNT" ]; then
+    : > "$IMPLEMENTER_SESSION_SHOW_COUNT"
+    printf '%s\\n' "$IMPLEMENTER_SESSION_INITIAL_SHOW"
+    exit "$IMPLEMENTER_SESSION_INITIAL_SHOW_EXIT"
   else
-    printf '%s\\n' "$HANDOFF_FINAL_SHOW"
+    printf '%s\\n' "$IMPLEMENTER_SESSION_FINAL_SHOW"
   fi
   exit 0
 fi
@@ -93,8 +96,8 @@ exit 2
     herdr,
     `#!/usr/bin/env sh
 if [ "$1" = "api" ] && [ "$2" = "snapshot" ]; then
-  if [ -n "$HANDOFF_AGENT_SNAPSHOT" ]; then
-    printf '%s\\n' "$HANDOFF_AGENT_SNAPSHOT"
+  if [ -n "$IMPLEMENTER_SESSION_AGENT_SNAPSHOT" ]; then
+    printf '%s\\n' "$IMPLEMENTER_SESSION_AGENT_SNAPSHOT"
   else
     printf '%s\\n' '{"result":{"snapshot":{"agents":[],"panes":[],"workspaces":[]}}}'
   fi
@@ -146,11 +149,11 @@ exit 1
   const environment = {
     // biome-ignore lint/complexity/useLiteralKeys: ProcessEnv requires an index signature:
     PATH: `${bin}:${process.env["PATH"] ?? ""}`,
-    HANDOFF_CALLS: callsPath,
-    HANDOFF_START:
+    IMPLEMENTER_SESSION_CALLS: callsPath,
+    IMPLEMENTER_SESSION_START:
       options.startResult ?? JSON.stringify({ change: { id: changeId }, worktreePath }),
-    HANDOFF_START_EXIT: options.startExitCode ?? "0",
-    HANDOFF_TASK:
+    IMPLEMENTER_SESSION_START_EXIT: options.startExitCode ?? "0",
+    IMPLEMENTER_SESSION_TASK:
       options.taskResult ??
       JSON.stringify({
         task: {
@@ -162,31 +165,31 @@ exit 1
               : { id: options.linkedChangeId, activity: "implementing" },
         },
       }),
-    HANDOFF_TASK_EXIT: options.taskExitCode ?? "0",
-    HANDOFF_IMPLEMENT:
+    IMPLEMENTER_SESSION_TASK_EXIT: options.taskExitCode ?? "0",
+    IMPLEMENTER_SESSION_IMPLEMENT:
       options.implementation ??
       JSON.stringify({ changeId, worktreePath, host: "herdr", status: "started" }),
-    HANDOFF_INITIAL_SHOW:
+    IMPLEMENTER_SESSION_INITIAL_SHOW:
       options.initialCommandResult ??
       showResult(options.initialChangeId ?? changeId, worktreePath, options.initialChangeTaskId),
-    HANDOFF_INITIAL_SHOW_EXIT: options.initialCommandExitCode ?? "0",
-    HANDOFF_FINAL_SHOW: showResult(
+    IMPLEMENTER_SESSION_INITIAL_SHOW_EXIT: options.initialCommandExitCode ?? "0",
+    IMPLEMENTER_SESSION_FINAL_SHOW: showResult(
       options.finalChangeId ?? changeId,
       options.finalWorktreeMismatch ? mismatchedWorktreePath : worktreePath,
     ),
-    HANDOFF_SHOW_COUNT: join(root, "show-count"),
-    HANDOFF_DIAGNOSTIC_DIRECTORY: root,
-    HANDOFF_AGENT_SNAPSHOT: activeAgentSnapshot,
-    HANDOFF_IMPLEMENT_DELAY: options.implementationDelay ?? "0",
-    HANDOFF_OBSERVER_POLL_MS: "5",
-    HANDOFF_OBSERVER_SLOW_MS: "10000",
-    HANDOFF_OBSERVER_IMPLEMENT_TIMEOUT_MS: "50",
-    HANDOFF_OBSERVER_LATE_GRACE_MS: "100",
+    IMPLEMENTER_SESSION_SHOW_COUNT: join(root, "show-count"),
+    IMPLEMENTER_SESSION_DIAGNOSTIC_DIRECTORY: root,
+    IMPLEMENTER_SESSION_AGENT_SNAPSHOT: activeAgentSnapshot,
+    IMPLEMENTER_SESSION_IMPLEMENT_DELAY: options.implementationDelay ?? "0",
+    IMPLEMENTER_SESSION_OBSERVER_POLL_MS: "5",
+    IMPLEMENTER_SESSION_OBSERVER_SLOW_MS: "10000",
+    IMPLEMENTER_SESSION_OBSERVER_IMPLEMENT_TIMEOUT_MS: "50",
+    IMPLEMENTER_SESSION_OBSERVER_LATE_GRACE_MS: "100",
   };
   const launched = runTestProcess(
     process.execPath,
     [
-      join(repoRoot, "docs/public/skills/but-why/scripts/launch-handoff.mjs"),
+      join(repoRoot, "docs/public/skills/but-why/scripts/start-implementer-session.mjs"),
       "--runner",
       "just",
       ...(options.route === "task-backed" ? ["--task-id", "BY-1"] : ["--change-id", changeId]),
@@ -195,68 +198,78 @@ exit 1
       cwd: root,
       env: environment,
       isolatedHome: createTestWorkspace(),
-      input: options.handoff ?? "Implement the authorized work.\n",
+      input: options.implementerPrompt ?? "Implement the authorized work.\n",
       timeout: 10_000,
     },
   );
   return {
     status: launched.status,
-    result: JSON.parse(launched.stdout) as HandoffResult,
+    result: JSON.parse(launched.stdout) as ImplementerSessionResult,
     calls: readFileSync(callsPath, "utf8"),
   };
 };
 
-describe("portable handoff observer", () => {
+describe("portable Implementer Session observer", () => {
   it.each([
     ["Task-backed Change", "change-task-backed", "task-backed"],
     ["existing taskless Change", "change-taskless-existing", "taskless-existing"],
   ] as const)("launches and verifies the documented %s route", (_kind, changeId, route) => {
-    const handoff = runHandoff(changeId, { route });
+    const implementerSession = runImplementerSession(changeId, { route });
 
-    expect(handoff.status).toBe(0);
-    expect(handoff.result).toMatchObject({ changeId, status: "started", changeVerified: true });
+    expect(implementerSession.status).toBe(0);
+    expect(implementerSession.result).toMatchObject({
+      changeId,
+      status: "started",
+      changeVerified: true,
+    });
     if (route === "task-backed") {
-      expect(handoff.calls).toContain("by --json task show BY-1");
-      expect(handoff.calls).toContain("by --json change start --task BY-1");
+      expect(implementerSession.calls).toContain("by --json task show BY-1");
+      expect(implementerSession.calls).toContain("by --json change start --task BY-1");
     }
     if (route === "taskless-existing") {
-      expect(handoff.calls).toContain(`by --json change show ${changeId}`);
+      expect(implementerSession.calls).toContain(`by --json change show ${changeId}`);
     }
-    expect(handoff.calls).toContain(`by --json change implement ${changeId}`);
-    expect(handoff.calls).toContain("--handoff-file");
-    expect(handoff.calls).toContain(`by --json change show ${changeId}`);
+    expect(implementerSession.calls).toContain(`by --json change implement ${changeId}`);
+    expect(implementerSession.calls).toContain("--implementer-prompt-file");
+    expect(implementerSession.calls).toContain(`by --json change show ${changeId}`);
   });
 
   it("reuses the Change linked from a Task", () => {
     const changeId = "linked-change";
-    const handoff = runHandoff(changeId, { route: "task-backed", linkedChangeId: changeId });
+    const implementerSession = runImplementerSession(changeId, {
+      route: "task-backed",
+      linkedChangeId: changeId,
+    });
 
-    expect(handoff.status).toBe(0);
-    expect(handoff.calls).toContain("by --json task show BY-1");
-    expect(handoff.calls).toContain(`by --json change show ${changeId}`);
-    expect(handoff.calls).not.toContain("by --json change start --task BY-1");
+    expect(implementerSession.status).toBe(0);
+    expect(implementerSession.calls).toContain("by --json task show BY-1");
+    expect(implementerSession.calls).toContain(`by --json change show ${changeId}`);
+    expect(implementerSession.calls).not.toContain("by --json change start --task BY-1");
   });
 
   it("rejects an unapproved Task before Change Start", () => {
-    const handoff = runHandoff("new-task-change", { route: "task-backed", taskState: "new" });
+    const implementerSession = runImplementerSession("new-task-change", {
+      route: "task-backed",
+      taskState: "new",
+    });
 
-    expect(handoff.status).toBe(1);
-    expect(handoff.result).toMatchObject({
+    expect(implementerSession.status).toBe(1);
+    expect(implementerSession.result).toMatchObject({
       status: "prelaunch_verification_failed",
       error: { code: "task_not_approved" },
     });
-    expect(handoff.calls).not.toContain("by --json change start --task BY-1");
+    expect(implementerSession.calls).not.toContain("by --json change start --task BY-1");
   });
 
   it("reports Change Start failure before launch", () => {
-    const handoff = runHandoff("failed-start", {
+    const implementerSession = runImplementerSession("failed-start", {
       route: "task-backed",
       startResult: JSON.stringify({ error: { code: "change_start_conflict" } }),
       startExitCode: "1",
     });
 
-    expect(handoff.status).toBe(1);
-    expect(handoff.result).toMatchObject({
+    expect(implementerSession.status).toBe(1);
+    expect(implementerSession.result).toMatchObject({
       status: "prelaunch_verification_failed",
       error: { code: "change_start_conflict" },
     });
@@ -276,72 +289,79 @@ describe("portable handoff observer", () => {
       "task_verification_failed",
     ],
   ])("rejects %s before Change Start or Implement", (_kind, taskResult, taskExitCode, errorCode) => {
-    const handoff = runHandoff("unverified-task", {
+    const implementerSession = runImplementerSession("unverified-task", {
       route: "task-backed",
       taskResult,
       taskExitCode,
     });
 
-    expect(handoff.status).toBe(1);
-    expect(handoff.result).toMatchObject({
+    expect(implementerSession.status).toBe(1);
+    expect(implementerSession.result).toMatchObject({
       status: "prelaunch_verification_failed",
       changeVerified: false,
       error: { code: errorCode },
       preLaunch: { exitCode: Number(taskExitCode), timedOut: false },
     });
-    expect(handoff.calls).not.toContain("by --json change start --task BY-1");
-    expect(handoff.calls).not.toContain("by --json change implement unverified-task");
-    if (handoff.result.tracePath === undefined) throw new Error("Expected a pre-launch trace path");
-    expect(existsSync(handoff.result.tracePath)).toBe(true);
-    rmSync(dirname(handoff.result.tracePath), { recursive: true, force: true });
+    expect(implementerSession.calls).not.toContain("by --json change start --task BY-1");
+    expect(implementerSession.calls).not.toContain("by --json change implement unverified-task");
+    if (implementerSession.result.tracePath === undefined)
+      throw new Error("Expected a pre-launch trace path");
+    expect(existsSync(implementerSession.result.tracePath)).toBe(true);
+    rmSync(dirname(implementerSession.result.tracePath), { recursive: true, force: true });
   });
 
   it("rejects an invalid linked Change identity before Change Start or Implement", () => {
-    const handoff = runHandoff("invalid-linked-change", {
+    const implementerSession = runImplementerSession("invalid-linked-change", {
       route: "task-backed",
       taskResult: JSON.stringify({ task: { id: "BY-1", state: "todo", change: {} } }),
     });
 
-    expect(handoff.status).toBe(1);
-    expect(handoff.result).toMatchObject({
+    expect(implementerSession.status).toBe(1);
+    expect(implementerSession.result).toMatchObject({
       status: "prelaunch_verification_failed",
       changeVerified: false,
       error: { code: "task_verification_failed" },
       preLaunch: { exitCode: 0, timedOut: false },
     });
-    expect(handoff.calls).not.toContain("by --json change start --task BY-1");
-    expect(handoff.calls).not.toContain("by --json change implement invalid-linked-change");
+    expect(implementerSession.calls).not.toContain("by --json change start --task BY-1");
+    expect(implementerSession.calls).not.toContain(
+      "by --json change implement invalid-linked-change",
+    );
   });
 
   it("rejects a linked Change with a mismatched Task identity before Implement", () => {
-    const handoff = runHandoff("linked-change", {
+    const implementerSession = runImplementerSession("linked-change", {
       route: "task-backed",
       linkedChangeId: "linked-change",
       initialChangeTaskId: "BY-2",
     });
 
-    expect(handoff.status).toBe(1);
-    expect(handoff.result).toMatchObject({
+    expect(implementerSession.status).toBe(1);
+    expect(implementerSession.result).toMatchObject({
       status: "prelaunch_verification_failed",
       changeVerified: false,
       error: { code: "change_verification_failed" },
       preLaunch: { exitCode: 0, timedOut: false },
     });
-    expect(handoff.calls).not.toContain("by --json change start --task BY-1");
-    expect(handoff.calls).not.toContain("by --json change implement linked-change");
+    expect(implementerSession.calls).not.toContain("by --json change start --task BY-1");
+    expect(implementerSession.calls).not.toContain("by --json change implement linked-change");
   });
 
-  it.each(["", " \n\t"])("launches with no operator context for %j", (input) => {
+  it.each(["", " \n\t"])("launches with no Implementer Prompt for %j", (input) => {
     const changeId = "change-no-context";
-    const handoff = runHandoff(changeId, {
+    const implementerSession = runImplementerSession(changeId, {
       route: "taskless-existing",
-      handoff: input,
+      implementerPrompt: input,
     });
 
-    expect(handoff.status).toBe(0);
-    expect(handoff.result).toMatchObject({ changeId, status: "started", changeVerified: true });
-    expect(handoff.calls).toContain(`by --json change implement ${changeId}`);
-    expect(handoff.calls).not.toContain("--handoff-file");
+    expect(implementerSession.status).toBe(0);
+    expect(implementerSession.result).toMatchObject({
+      changeId,
+      status: "started",
+      changeVerified: true,
+    });
+    expect(implementerSession.calls).toContain(`by --json change implement ${changeId}`);
+    expect(implementerSession.calls).not.toContain("--implementer-prompt-file");
   });
 
   it.each([
@@ -353,36 +373,40 @@ describe("portable handoff observer", () => {
       taskSlugForId(publicTaskId("BY-1")),
     ],
   ] as const)("accepts late recovery from %s", (_kind, changeId, route, activeAgentName) => {
-    const handoff = runHandoff(changeId, {
+    const implementerSession = runImplementerSession(changeId, {
       route,
       activeAgentName,
       implementationDelay: "1",
     });
 
-    expect(handoff.status).toBe(0);
-    expect(handoff.result).toMatchObject({ status: "late_active", changeVerified: true });
+    expect(implementerSession.status).toBe(0);
+    expect(implementerSession.result).toMatchObject({
+      status: "late_active",
+      changeVerified: true,
+    });
   });
 
   it("preserves a pre-launch Change Show failure", () => {
     const commandResult = {
       error: { code: "change_not_found", message: "Change was not found." },
     };
-    const handoff = runHandoff("missing-change", {
+    const implementerSession = runImplementerSession("missing-change", {
       route: "taskless-existing",
       initialCommandResult: JSON.stringify(commandResult),
       initialCommandExitCode: "1",
     });
 
-    expect(handoff.status).toBe(1);
-    expect(handoff.result).toMatchObject({
+    expect(implementerSession.status).toBe(1);
+    expect(implementerSession.result).toMatchObject({
       status: "prelaunch_verification_failed",
       changeVerified: false,
       error: commandResult.error,
       preLaunch: { exitCode: 1, timedOut: false, result: commandResult },
     });
-    if (handoff.result.tracePath === undefined) throw new Error("Expected a pre-launch trace path");
-    expect(existsSync(handoff.result.tracePath)).toBe(true);
-    rmSync(dirname(handoff.result.tracePath), { recursive: true, force: true });
+    if (implementerSession.result.tracePath === undefined)
+      throw new Error("Expected a pre-launch trace path");
+    expect(existsSync(implementerSession.result.tracePath)).toBe(true);
+    rmSync(dirname(implementerSession.result.tracePath), { recursive: true, force: true });
   });
 
   it.each([
@@ -394,21 +418,24 @@ describe("portable handoff observer", () => {
     ["taskless", "final", "Managed Worktree", { finalWorktreeMismatch: true }],
   ] as const)("rejects a mismatched %s %s %s", (_routeName, _phase, _identity, mismatch) => {
     const route = _routeName === "Task-backed" ? "task-backed" : "taskless-existing";
-    const handoff = runHandoff("change-identity", { route, ...mismatch });
+    const implementerSession = runImplementerSession("change-identity", { route, ...mismatch });
 
-    expect(handoff.status).toBe(1);
-    expect(handoff.result.changeVerified).toBe(false);
+    expect(implementerSession.status).toBe(1);
+    expect(implementerSession.result.changeVerified).toBe(false);
   });
 
   it("rejects an unrelated active session after Change Implement times out", () => {
     const changeId = "change-timeout";
-    const handoff = runHandoff(changeId, {
+    const implementerSession = runImplementerSession(changeId, {
       route: "taskless-existing",
       activeAgentName: "but-why-unrelated-change",
       implementationDelay: "1",
     });
 
-    expect(handoff.status).toBe(1);
-    expect(handoff.result).toMatchObject({ status: "launch_indeterminate", changeVerified: false });
+    expect(implementerSession.status).toBe(1);
+    expect(implementerSession.result).toMatchObject({
+      status: "launch_indeterminate",
+      changeVerified: false,
+    });
   });
 });

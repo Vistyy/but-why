@@ -526,7 +526,7 @@ const changeReconcileCommand = withCliHandler(
 const changeImplementCommand = withCliHandler(
   leaf("implement", "Launch an Interactive Session in a Change worktree.", {
     changeId: Args.optional(changeIdArgument),
-    handoffFile: optionalText("handoff-file"),
+    implementerPromptFile: optionalText("implementer-prompt-file"),
   }),
   (values, environment) =>
     Effect.promise(() => import("./cli/change/implement.js")).pipe(
@@ -534,7 +534,7 @@ const changeImplementCommand = withCliHandler(
         runImplement(
           {
             changeId: optionalString(values, "changeId"),
-            handoffFile: optionalString(values, "handoffFile"),
+            implementerPromptFile: optionalString(values, "implementerPromptFile"),
           },
           environment as ChangeCommandEnvironment,
         ),
