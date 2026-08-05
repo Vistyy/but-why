@@ -7,6 +7,7 @@ import { cleanupChangeResourcesWithRemote } from "./localChangeCleanupGit.js";
 import { openTerminalCleanup } from "./cleanupTerminalChange.js";
 import { openChangeReconciliation } from "./reconcileChange.js";
 import { reviewerSessionsChangeRoot } from "./reviewerSession/reviewerSession.js";
+import { openArtifactLifecycle } from "./validationRun/artifactLifecycle.js";
 import { openChangeUseCases, type ChangeUseCases } from "./changeUseCases.js";
 import { provisionChangeWorktree, resolveChangeStartGitIntent } from "./changeStartGit.js";
 import { executeLocalRepositoryPreparation } from "../repositoryPreparation/localRepositoryPreparation.js";
@@ -15,6 +16,7 @@ import type { RepositoryStorageError } from "../contracts/repositoryStorageError
 import { repositorySqlLayer } from "../sqlite/repositorySql.js";
 import { openSqliteChangePersistence } from "../sqlite/sqliteChangePersistence.js";
 import { openSqliteChangeStartPersistence } from "../sqlite/sqliteChangeStartPersistence.js";
+import { openSqliteChangeValidationPersistence } from "../sqlite/sqliteChangeValidationPersistence.js";
 import {
   githubChangeCleanupRemote,
   localGitHubPullRequestGateway,
@@ -53,8 +55,9 @@ export const withChangeUseCases = <A, E, R>(
   return Effect.all({
     startPersistence: openSqliteChangeStartPersistence(),
     changePersistence: openSqliteChangePersistence(),
+    validationPersistence: openSqliteChangeValidationPersistence(),
   }).pipe(
-    Effect.flatMap(({ startPersistence, changePersistence }) =>
+    Effect.flatMap(({ startPersistence, changePersistence, validationPersistence }) =>
       use(
         openChangeUseCases(
           repoContext.context,
@@ -74,6 +77,10 @@ export const withChangeUseCases = <A, E, R>(
               cleanup: cleanupChangeResourcesWithRemote(githubChangeCleanupRemote(github)),
               reviewerSessionPathFor: (changeId) =>
                 reviewerSessionsChangeRoot(repoContext.context.paths.operationalDir, changeId),
+              artifactLifecycle: openArtifactLifecycle({
+                persistence: validationPersistence,
+                artifactsRoot: repoContext.context.paths.artifactsPath,
+              }),
             }),
           }),
           input.interactiveSessionHost ??
