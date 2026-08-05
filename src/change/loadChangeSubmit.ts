@@ -32,7 +32,6 @@ import { repositorySqlLayer } from "../sqlite/repositorySql.js";
 import { openSqliteCandidateCapturePersistence } from "../sqlite/sqliteCandidateCapturePersistence.js";
 import { openSqliteChangePersistence } from "../sqlite/sqliteChangePersistence.js";
 import { openSqliteChangeValidationPersistence } from "../sqlite/sqliteChangeValidationPersistence.js";
-import { openSqliteTaskPersistence } from "../sqlite/sqliteTaskPersistence.js";
 import { openCandidatePublication } from "./publication/candidatePublication.js";
 import { detectGitHubPrTarget } from "../submissionEnvironment/githubTarget.js";
 import { refreshRemoteChangeBase } from "../submissionEnvironment/remoteChangeBase.js";
@@ -69,7 +68,6 @@ export const loadChangeSubmit = (input: {
     capturePersistence: CandidateCapturePersistence,
     validationPersistence: ChangeValidationPersistence,
     changePersistence: import("./changePersistence.js").ChangePersistence,
-    taskPersistence: import("../task/taskPersistence.js").TaskPersistence,
   ) => {
     const github = localGitHubPullRequestGateway({ cwd: context.root });
     const reconciliation = openChangeReconciliation({
@@ -115,7 +113,6 @@ export const loadChangeSubmit = (input: {
       repositoryCommonDirectory: context.commonDirectory,
       repositoryPath: context.root,
       persistence: changePersistence,
-      taskPersistence,
       reconciliation,
       resolvePolicy: (acceptanceContextSupplied, repoConfig, worktreePath, validationRepoConfig) =>
         resolveCandidateValidationPolicy({
@@ -142,7 +139,6 @@ export const loadChangeSubmit = (input: {
         persistence: capturePersistence,
         git: localCandidateCaptureGit,
       }).capture,
-      validationPersistence,
       executionLock: openSqliteExecutionLock({ commonDirectory: context.commonDirectory }),
     });
   };
@@ -188,10 +184,9 @@ export const loadChangeSubmit = (input: {
           capture: openSqliteCandidateCapturePersistence(),
           validation: openSqliteChangeValidationPersistence(),
           change: openSqliteChangePersistence(),
-          task: openSqliteTaskPersistence(""),
         }).pipe(
-          Effect.flatMap(({ capture, validation, change, task }) =>
-            programFor(capture, validation, change, task)
+          Effect.flatMap(({ capture, validation, change }) =>
+            programFor(capture, validation, change)
               .submit(submitInput)
               .pipe(Effect.provide(layerFor(validation, change))),
           ),

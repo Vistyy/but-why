@@ -127,6 +127,7 @@ describe("Candidate-owned Validation Run inspection", () => {
         reused: false,
         validationRunId: "run-with-atomic-workspace",
       });
+      if ("blocked" in started) throw new Error("Expected a new Validation Run");
       expect(yield* fixture.runStore.getAbandonmentContext(started.validationRunId)).toMatchObject(
         workspace,
       );
@@ -143,7 +144,8 @@ describe("Candidate-owned Validation Run inspection", () => {
         now,
       });
       expect(second.reused).toBe(false);
-      expect("active" in second && second.active).toBe(true);
+      if (!("active" in second) || !second.active)
+        throw new Error("Expected an Active Validation Run");
       expect(second.validationRunId).toBe(fixture.validationRunId);
 
       yield* fixture.runStore.complete({
@@ -158,6 +160,7 @@ describe("Candidate-owned Validation Run inspection", () => {
         now: later,
       });
       expect(third.reused).toBe(false);
+      if ("blocked" in third) throw new Error("Expected a new Validation Run");
       expect(third.validationRunId).not.toBe(fixture.validationRunId);
     }),
   );
@@ -186,6 +189,7 @@ describe("Candidate-owned Validation Run inspection", () => {
         now,
       });
       expect(first.reused).toBe(false);
+      if ("blocked" in first) throw new Error("Expected a new Validation Run");
       const stored = yield* fixture.runStore.getRunById(first.validationRunId);
       expect(stored?.implementationDecisions).toEqual([decision]);
     }),
@@ -586,6 +590,7 @@ const candidateValidationFixture = () =>
       }),
     );
     if (runResult.reused) throw new Error("Expected a new Validation Run");
+    if ("blocked" in runResult) throw new Error("Expected a new Validation Run");
 
     const artifact = (
       phase: "prepare" | "checks" | "acceptance_review",

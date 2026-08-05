@@ -499,6 +499,7 @@ validationSetup:
         { migration_id: 13, name: "remove_no_change_completion" },
         { migration_id: 14, name: "remove_change_readiness" },
         { migration_id: 15, name: "remove_acceptance_context_versions" },
+        { migration_id: 16, name: "validation_run_blocker_identity" },
       ]);
     }),
   );

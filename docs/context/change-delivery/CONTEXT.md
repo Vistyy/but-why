@@ -61,6 +61,8 @@ _Avoid_: Latest historical Candidate, dirty workspace
 
 **Candidate Publication**:
 An immutable record that one exact Candidate and its passed Validation Run were confirmed as the head of a Change's owned open pull request at publication time.
+Publication requires complete, passed evidence that exactly matches the current Candidate, Change Base, Acceptance Context when present, Validation Policy Snapshot, Implementation Decisions, and latest resolved Implementation Blocker identity.
+Fresh passing evidence for the same Candidate already on the owned pull request records the new Validation Run without artificial republication.
 A later Candidate Publication for the same Change and owned pull request does not alter an earlier Candidate Publication.
 Candidate Publication history is ordered, immutable evidence exposed by `by change publications <change-id>`.
 _Avoid_: Current Candidate, mutable pull request state, Submission
@@ -77,7 +79,11 @@ _Avoid_: Current mutable Task text, Specialist instructions, inferred intent, Im
 
 **Validation Run**:
 One durable execution and judgment of one Candidate under one resolved validation policy.
-Only a passed Validation Run is reusable because unchanged validation can produce new execution evidence.
+Validation persistence admits a new Run only when no unresolved Implementation Blocker exists for the Change, and it keeps at most one Active Validation Run per Change.
+Each Validation Run records the exact Candidate, the Validation Policy Snapshot including the current Acceptance Context when present, the Implementation Decision input, and the latest resolved Implementation Blocker identity at admission.
+Reuse and publication require the exact Candidate, Change Base, current Acceptance Context when present, Validation Policy Snapshot, Implementation Decision input, and latest resolved Implementation Blocker identity, plus Run state `complete` and outcome `passed`.
+A changed Candidate, Resolution, Acceptance Context, policy, or implementation input invalidates current validity without deleting historical evidence.
+For a taskless Change, a later Resolution makes earlier Runs historical without creating Acceptance Context or Acceptance Review input.
 _Avoid_: Candidate, retry Attempt, generic job
 
 **Active Validation Run**:

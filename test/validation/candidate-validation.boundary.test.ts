@@ -120,7 +120,7 @@ describe("Candidate validation", () => {
       });
 
       expect(result).toMatchObject({ ok: false, outcome: "tooling_failed" });
-      if (result.ok) return;
+      if (result.ok || "code" in result) return;
       expect(yield* validation.listToolingFailures(result.validationRunId)).toEqual(
         expect.arrayContaining([
           expect.objectContaining({ operationName: "verify_candidate_head" }),
@@ -208,6 +208,7 @@ describe("Candidate validation", () => {
           now,
         });
         expect(firstResult).toMatchObject({ ok: true, outcome: "passed", reused: false });
+        if (!firstResult.ok) throw new Error("Expected a passed first Validation Run");
         expect(readFileSync(callLog, "utf8")).toBe("PC");
         expect(review).toHaveBeenCalledOnce();
 
@@ -227,6 +228,7 @@ describe("Candidate validation", () => {
           now,
         });
         expect(secondResult).toMatchObject({ ok: true, outcome: "passed", reused: false });
+        if (!secondResult.ok) throw new Error("Expected a passed second Validation Run");
         expect(secondResult).not.toMatchObject({ validationRunId: firstResult.validationRunId });
         expect(readFileSync(callLog, "utf8")).toBe("PCPC");
         expect(review).toHaveBeenCalledTimes(2);

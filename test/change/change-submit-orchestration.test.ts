@@ -41,22 +41,18 @@ const tasklessPolicy = {
 } as const;
 
 describe("Change Submit orchestration", () => {
-  it.effect("reports the exact Active Validation Run before Candidate capture", () =>
+  it.effect("reports the exact Active Validation Run rejected at admission", () =>
     Effect.gen(function* () {
       const events: string[] = [];
-      const submit = openChangeSubmit(
-        dependencies({
-          events,
-          change: readyChange(),
-          validationPersistence: {
-            getActiveForChange: () =>
-              Effect.succeed({ validationRunId: "run-active", changeId: "change-1" }),
-          },
-        }),
-      );
+      const submit = openChangeSubmit(dependencies({ events, change: readyChange() }));
       const validationLayer = Layer.succeed(CandidateValidation, {
-        validateCandidate: () => Effect.die("Validation must not start"),
-        validateAcceptanceContextCandidate: () => Effect.die("Validation must not start"),
+        validateCandidate: () =>
+          Effect.succeed({
+            ok: false as const,
+            code: "active_validation_run" as const,
+            validationRunId: "run-active",
+          }),
+        validateAcceptanceContextCandidate: () => Effect.die("Acceptance Review was not expected"),
         listFindings: () => Effect.succeed([]),
         listToolingFailures: () => Effect.succeed([]),
         listRounds: () => Effect.succeed([]),
@@ -72,7 +68,7 @@ describe("Change Submit orchestration", () => {
         changeId: "change-1",
         validationRunId: "run-active",
       });
-      expect(events).toEqual(["reconcile"]);
+      expect(events).toEqual(["reconcile", "capture", "detect_target"]);
     }),
   );
 
@@ -619,7 +615,7 @@ describe("Change Submit orchestration", () => {
     }),
   );
 
-  it.effect("uses Acceptance Context for a Task-backed Candidate and marks the Task ready", () =>
+  it.effect("uses Acceptance Context for a Task-backed Candidate without Task transitions", () =>
     Effect.gen(function* () {
       const events: string[] = [];
       const transitions: string[] = [];
@@ -665,7 +661,7 @@ describe("Change Submit orchestration", () => {
         "validate_task_backed",
         "publish",
       ]);
-      expect(transitions).toEqual(["validating", "ready"]);
+      expect(transitions).toEqual([]);
     }),
   );
 
@@ -921,7 +917,7 @@ describe("Change Submit orchestration", () => {
             events,
             change,
             reconciliationStatus: "open",
-            agentEnvironmentError: "Managed Worktree Repo Config is invalid.",
+            trackPolicyResolution: true,
             publication: {
               publish: () => {
                 throw new Error("Duplicate publication");
@@ -942,7 +938,15 @@ describe("Change Submit orchestration", () => {
           .pipe(Effect.provide(validationLayer));
 
         expect(result).toMatchObject({ ok: true, status: "published", created: false });
-        expect(events).toEqual(["reconcile", "capture", "read_publication_evidence"]);
+        expect(events).toEqual([
+          "reconcile",
+          "capture",
+          "load_base_repo_config",
+          "load_candidate_repo_config",
+          "resolve_policy",
+          "detect_target",
+          "read_publication_evidence",
+        ]);
       }),
   );
 
@@ -997,8 +1001,8 @@ describe("Change Submit orchestration", () => {
       expect(events).toEqual([
         "reconcile",
         "capture",
-        "read_publication_evidence",
         "detect_target",
+        "read_publication_evidence",
         "validate_taskless",
         "publish",
       ]);
@@ -1255,7 +1259,7 @@ describe("Change Submit orchestration", () => {
     }),
   );
 
-  it.effect("returns Findings and moves a linked Task back to implementing", () =>
+  it.effect("returns Findings without Task transitions", () =>
     Effect.gen(function* () {
       const transitions: string[] = [];
       const change = readyChange({
@@ -1296,11 +1300,11 @@ describe("Change Submit orchestration", () => {
         validationRunId: "run-1",
         findings: [finding],
       });
-      expect(transitions).toEqual(["validating", "implementing"]);
+      expect(transitions).toEqual([]);
     }),
   );
 
-  it.effect("returns Tooling Failures and moves a linked Task back to implementing", () =>
+  it.effect("returns Tooling Failures without Task transitions", () =>
     Effect.gen(function* () {
       const transitions: string[] = [];
       const change = readyChange({
@@ -1343,7 +1347,7 @@ describe("Change Submit orchestration", () => {
         validationRunId: "run-1",
         toolingFailures: [toolingFailure],
       });
-      expect(transitions).toEqual(["validating", "implementing"]);
+      expect(transitions).toEqual([]);
     }),
   );
 });

@@ -265,6 +265,7 @@ describe("Change inspection CLI", () => {
         }),
       );
       if (olderCandidateRun.reused) throw new Error("Expected new Validation Run");
+      if ("blocked" in olderCandidateRun) throw new Error("Expected new Validation Run");
       yield* withValidationPersistence(root, (persistence) =>
         persistence.complete({
           validationRunId: olderCandidateRun.validationRunId,
@@ -281,6 +282,7 @@ describe("Change inspection CLI", () => {
         }),
       );
       if (newerRun.reused) throw new Error("Expected new Validation Run");
+      if ("blocked" in newerRun) throw new Error("Expected new Validation Run");
       yield* withValidationPersistence(root, (persistence) =>
         persistence.recordCheckRound({
           validationRunId: newerRun.validationRunId,
@@ -851,6 +853,7 @@ describe("Change inspection CLI", () => {
         }),
       );
       if (activeValidation.reused) throw new Error("Expected an active Validation Run");
+      if ("blocked" in activeValidation) throw new Error("Expected an active Validation Run");
       const validating = yield* runByInProcessEffect(root, ["--json", "task", "show", "BY-1"]);
       expect(JSON.parse(validating.stdout).task.change).toEqual({
         id: changeId,

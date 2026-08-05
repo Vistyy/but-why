@@ -10,6 +10,7 @@ import { storedPublicTaskId } from "../../src/task/taskId.js";
 import { openSqliteCandidateCapturePersistence } from "../../src/sqlite/sqliteCandidateCapturePersistence.js";
 import { openSqliteChangePersistence } from "../../src/sqlite/sqliteChangePersistence.js";
 import { openSqliteChangeStartPersistence } from "../../src/sqlite/sqliteChangeStartPersistence.js";
+import { openSqliteChangeValidationPersistence } from "../../src/sqlite/sqliteChangeValidationPersistence.js";
 import { openSqliteTaskPersistence } from "../../src/sqlite/sqliteTaskPersistence.js";
 import {
   RepositoryIdentityConflict,
@@ -505,7 +506,7 @@ describe("repository SQL storage", () => {
     ),
   );
 
-  it.scoped("returns only exact passing publication evidence", () =>
+  it.scoped("returns only exact complete passing publication evidence", () =>
     withTemporaryState((input) =>
       Effect.gen(function* () {
         const repository = yield* RepositorySql;
@@ -520,13 +521,21 @@ describe("repository SQL storage", () => {
           now: "2026-07-25T15:00:00.000Z",
         });
         if (!captured.ok) return;
+        const authority = {
+          changeBaseSha: "base-sha",
+          policy: { checks: [], copyFiles: [], specialistReviews: [] },
+          implementationDecisions: [],
+        };
         yield* repository.operation("install passing publication evidence", (sql) =>
           Effect.gen(function* () {
             yield* sql`
               INSERT INTO candidate_validation_runs (
-                id, candidate_id, policy_snapshot, state, outcome, created_at, updated_at
+                id, candidate_id, policy_snapshot, implementation_decisions,
+                latest_resolved_blocker_id, state, outcome, created_at, updated_at
               ) VALUES (
-                'run-1', ${captured.candidateId}, '{}', 'complete', 'passed',
+                'run-1', ${captured.candidateId},
+                '{"checks":[],"copyFiles":[],"specialistReviews":[]}', '[]', NULL,
+                'complete', 'passed',
                 '2026-07-25T15:01:00.000Z', '2026-07-25T15:01:00.000Z'
               )
             `;
@@ -543,7 +552,7 @@ describe("repository SQL storage", () => {
           }),
         );
 
-        expect(yield* changes.getPassingPublicationEvidence(captured.changeId)).toEqual({
+        expect(yield* changes.getPassingPublicationEvidence(captured.changeId, authority)).toEqual({
           candidateId: captured.candidateId,
           validationRunId: "run-1",
           changeBaseSha: "base-sha",
@@ -551,10 +560,62 @@ describe("repository SQL storage", () => {
         });
 
         yield* repository.operation(
-          "invalidate publication evidence",
+          "invalidate publication evidence outcome",
           (sql) => sql`UPDATE candidate_validation_runs SET outcome = 'blocked' WHERE id = 'run-1'`,
         );
-        expect(yield* changes.getPassingPublicationEvidence(captured.changeId)).toBeUndefined();
+        expect(
+          yield* changes.getPassingPublicationEvidence(captured.changeId, authority),
+        ).toBeUndefined();
+        yield* repository.operation(
+          "restore publication evidence outcome",
+          (sql) => sql`UPDATE candidate_validation_runs SET outcome = 'passed' WHERE id = 'run-1'`,
+        );
+
+        yield* repository.operation(
+          "invalidate publication evidence state",
+          (sql) =>
+            sql`UPDATE candidate_validation_runs SET state = 'running', outcome = NULL WHERE id = 'run-1'`,
+        );
+        expect(
+          yield* changes.getPassingPublicationEvidence(captured.changeId, authority),
+        ).toBeUndefined();
+        yield* repository.operation(
+          "restore publication evidence state",
+          (sql) =>
+            sql`UPDATE candidate_validation_runs SET state = 'complete', outcome = 'passed' WHERE id = 'run-1'`,
+        );
+
+        expect(
+          yield* changes.getPassingPublicationEvidence(captured.changeId, {
+            ...authority,
+            changeBaseSha: "advanced-base",
+          }),
+        ).toBeUndefined();
+        expect(
+          yield* changes.getPassingPublicationEvidence(captured.changeId, {
+            ...authority,
+            policy: {
+              checks: [{ id: "extra", command: "true", timeoutSeconds: 30 }],
+              copyFiles: [],
+              specialistReviews: [],
+            },
+          }),
+        ).toBeUndefined();
+        expect(
+          yield* changes.getPassingPublicationEvidence(captured.changeId, {
+            ...authority,
+            implementationDecisions: [
+              {
+                id: "decision-1",
+                changeId: captured.changeId,
+                sequence: 1,
+                recordedAt: "2026-07-25T15:01:00.000Z",
+                choice: "Choose the passing path",
+                rationale: "Prove that decisions are part of publication identity.",
+              },
+            ],
+          }),
+        ).toBeUndefined();
 
         const other = yield* capture.commitCapture({
           repositoryCommonDirectory: input.commonDirectory,
@@ -569,9 +630,12 @@ describe("repository SQL storage", () => {
           Effect.gen(function* () {
             yield* sql`
               INSERT INTO candidate_validation_runs (
-                id, candidate_id, policy_snapshot, state, outcome, created_at, updated_at
+                id, candidate_id, policy_snapshot, implementation_decisions,
+                latest_resolved_blocker_id, state, outcome, created_at, updated_at
               ) VALUES (
-                'run-2', ${other.candidateId}, '{}', 'complete', 'passed',
+                'run-2', ${other.candidateId},
+                '{"checks":[],"copyFiles":[],"specialistReviews":[]}', '[]', NULL,
+                'complete', 'passed',
                 '2026-07-25T15:03:00.000Z', '2026-07-25T15:03:00.000Z'
               )
             `;
@@ -583,7 +647,294 @@ describe("repository SQL storage", () => {
             `;
           }),
         );
-        expect(yield* changes.getPassingPublicationEvidence(captured.changeId)).toBeUndefined();
+        expect(
+          yield* changes.getPassingPublicationEvidence(captured.changeId, authority),
+        ).toBeUndefined();
+      }),
+    ),
+  );
+
+  it.scoped(
+    "reuses only an exact complete passing Validation Run across authority differences",
+    () =>
+      withTemporaryState((input) =>
+        Effect.gen(function* () {
+          const repository = yield* RepositorySql;
+          const capture = yield* openSqliteCandidateCapturePersistence();
+          const changes = yield* openSqliteChangePersistence();
+          const validation = yield* openSqliteChangeValidationPersistence();
+          const captured = yield* capture.commitCapture({
+            repositoryCommonDirectory: input.commonDirectory,
+            branchRef: "refs/heads/feature",
+            baseRef: "refs/remotes/origin/main",
+            changeBaseSha: "base-sha",
+            headSha: "head-sha",
+            now: "2026-07-25T16:10:00.000Z",
+          });
+          if (!captured.ok) return;
+          const decision = {
+            id: "decision-1",
+            changeId: captured.changeId,
+            sequence: 1,
+            recordedAt: "2026-07-25T16:10:00.000Z",
+            choice: "Choose the passing path",
+            rationale: "Prove that decisions are part of Validation Run identity.",
+          };
+          const policy = { checks: [], copyFiles: [], specialistReviews: [] };
+          const exact = {
+            candidateId: captured.candidateId,
+            changeBaseSha: "base-sha",
+            headSha: "head-sha",
+            policy,
+            implementationDecisions: [decision],
+            now: "2026-07-25T16:11:00.000Z",
+          };
+          const first = yield* validation.startOrReuse(exact);
+          if (first.reused || "blocked" in first) throw new Error("Expected a new Validation Run");
+          yield* validation.complete({
+            validationRunId: first.validationRunId,
+            outcome: "passed",
+            now: "2026-07-25T16:12:00.000Z",
+          });
+
+          expect(yield* validation.startOrReuse(exact)).toMatchObject({
+            reused: true,
+            validationRunId: first.validationRunId,
+          });
+
+          const policyMismatch = yield* validation.startOrReuse({
+            ...exact,
+            policy: {
+              checks: [{ id: "extra", command: "true", timeoutSeconds: 30 }],
+              copyFiles: [],
+              specialistReviews: [],
+            },
+          });
+          expect(policyMismatch.reused).toBe(false);
+          if (policyMismatch.reused || "blocked" in policyMismatch)
+            throw new Error("Expected a policy-distinct Validation Run");
+          yield* validation.complete({
+            validationRunId: policyMismatch.validationRunId,
+            outcome: "passed",
+            now: "2026-07-25T16:13:00.000Z",
+          });
+
+          const decisionsMismatch = yield* validation.startOrReuse({
+            ...exact,
+            implementationDecisions: [],
+          });
+          expect(decisionsMismatch.reused).toBe(false);
+          if (decisionsMismatch.reused || "blocked" in decisionsMismatch)
+            throw new Error("Expected a decision-distinct Validation Run");
+          yield* validation.complete({
+            validationRunId: decisionsMismatch.validationRunId,
+            outcome: "passed",
+            now: "2026-07-25T16:14:00.000Z",
+          });
+
+          const contextMismatch = yield* validation.startOrReuse({
+            ...exact,
+            policy: {
+              ...policy,
+              acceptanceContext: {
+                version: 1,
+                title: "Changed approved intent",
+                description: "The acceptance context changed after review.",
+                comments: [],
+              },
+            },
+          });
+          expect(contextMismatch.reused).toBe(false);
+          if (contextMismatch.reused || "blocked" in contextMismatch)
+            throw new Error("Expected a context-distinct Validation Run");
+          yield* validation.complete({
+            validationRunId: contextMismatch.validationRunId,
+            outcome: "passed",
+            now: "2026-07-25T16:15:00.000Z",
+          });
+
+          yield* repository.operation(
+            "invalidate run state",
+            (sql) =>
+              sql`UPDATE candidate_validation_runs SET state = 'running', outcome = NULL WHERE id = ${first.validationRunId}`,
+          );
+          expect(yield* validation.startOrReuse(exact)).toMatchObject({ reused: false });
+          yield* repository.operation(
+            "restore run state",
+            (sql) =>
+              sql`UPDATE candidate_validation_runs SET state = 'complete', outcome = 'passed' WHERE id = ${first.validationRunId}`,
+          );
+          yield* repository.operation(
+            "invalidate run outcome",
+            (sql) =>
+              sql`UPDATE candidate_validation_runs SET outcome = 'blocked' WHERE id = ${first.validationRunId}`,
+          );
+          expect(yield* validation.startOrReuse(exact)).toMatchObject({ reused: false });
+          yield* repository.operation(
+            "restore run outcome",
+            (sql) =>
+              sql`UPDATE candidate_validation_runs SET outcome = 'passed' WHERE id = ${first.validationRunId}`,
+          );
+
+          const identityError = yield* validation
+            .startOrReuse({ ...exact, headSha: "other-head" })
+            .pipe(Effect.flip);
+          expect(identityError).toBeInstanceOf(RepositoryPersistedDataInvalid);
+
+          const raised = yield* changes.raiseImplementationBlocker({
+            changeId: captured.changeId,
+            content: "Wait for an external decision.",
+            now: "2026-07-25T16:15:00.000Z",
+          });
+          expect(raised.ok).toBe(true);
+          const resolved = yield* changes.resolveImplementationBlocker({
+            changeId: captured.changeId,
+            content: "Proceed without taskless intent.",
+            now: "2026-07-25T16:16:00.000Z",
+          });
+          expect(resolved.ok).toBe(true);
+          const afterResolution = yield* validation.startOrReuse(exact);
+          expect(afterResolution.reused).toBe(false);
+          if (afterResolution.reused || "blocked" in afterResolution)
+            throw new Error("Expected a fresh Validation Run after Resolution");
+          expect(afterResolution.validationRunId).not.toBe(first.validationRunId);
+
+          const history = yield* validation.listRunsForCandidate(captured.candidateId);
+          expect(history.map((run) => run.id).sort()).toEqual(
+            [
+              first.validationRunId,
+              policyMismatch.validationRunId,
+              decisionsMismatch.validationRunId,
+              contextMismatch.validationRunId,
+              afterResolution.validationRunId,
+            ].sort(),
+          );
+        }),
+      ),
+  );
+
+  it.scoped("rejects Validation admission for an unresolved Implementation Blocker", () =>
+    withTemporaryState((input) =>
+      Effect.gen(function* () {
+        const capture = yield* openSqliteCandidateCapturePersistence();
+        const changes = yield* openSqliteChangePersistence();
+        const validation = yield* openSqliteChangeValidationPersistence();
+        const captured = yield* capture.commitCapture({
+          repositoryCommonDirectory: input.commonDirectory,
+          branchRef: "refs/heads/feature",
+          baseRef: "refs/remotes/origin/main",
+          changeBaseSha: "base-sha",
+          headSha: "head-sha",
+          now: "2026-07-25T16:20:00.000Z",
+        });
+        if (!captured.ok) return;
+        const raised = yield* changes.raiseImplementationBlocker({
+          changeId: captured.changeId,
+          content: "Wait for an external decision.",
+          now: "2026-07-25T16:21:00.000Z",
+        });
+        expect(raised.ok).toBe(true);
+
+        const rejected = yield* validation.startOrReuse({
+          candidateId: captured.candidateId,
+          changeBaseSha: "base-sha",
+          headSha: "head-sha",
+          policy: { checks: [], copyFiles: [], specialistReviews: [] },
+          now: "2026-07-25T16:22:00.000Z",
+        });
+        expect(rejected).toEqual({ reused: false, blocked: true });
+        expect(yield* validation.getActiveForChange(captured.changeId)).toBeUndefined();
+
+        const resolved = yield* changes.resolveImplementationBlocker({
+          changeId: captured.changeId,
+          content: "Proceed with the accepted implementation.",
+          now: "2026-07-25T16:23:00.000Z",
+        });
+        expect(resolved.ok).toBe(true);
+        const admitted = yield* validation.startOrReuse({
+          candidateId: captured.candidateId,
+          changeBaseSha: "base-sha",
+          headSha: "head-sha",
+          policy: { checks: [], copyFiles: [], specialistReviews: [] },
+          now: "2026-07-25T16:24:00.000Z",
+        });
+        expect(admitted.reused).toBe(false);
+        expect("blocked" in admitted).toBe(false);
+      }),
+    ),
+  );
+
+  it.scoped("a later taskless Resolution starts fresh Validation without Acceptance Context", () =>
+    withTemporaryState((input) =>
+      Effect.gen(function* () {
+        const capture = yield* openSqliteCandidateCapturePersistence();
+        const changes = yield* openSqliteChangePersistence();
+        const validation = yield* openSqliteChangeValidationPersistence();
+        const captured = yield* capture.commitCapture({
+          repositoryCommonDirectory: input.commonDirectory,
+          branchRef: "refs/heads/feature",
+          baseRef: "refs/remotes/origin/main",
+          changeBaseSha: "base-sha",
+          headSha: "head-sha",
+          now: "2026-07-25T16:30:00.000Z",
+        });
+        if (!captured.ok) return;
+        const policy = { checks: [], copyFiles: [], specialistReviews: [] };
+        const start = (at: string) =>
+          validation.startOrReuse({
+            candidateId: captured.candidateId,
+            changeBaseSha: "base-sha",
+            headSha: "head-sha",
+            policy,
+            now: at,
+          });
+        const first = yield* start("2026-07-25T16:31:00.000Z");
+        if (first.reused || "blocked" in first) throw new Error("Expected a new Validation Run");
+        yield* validation.complete({
+          validationRunId: first.validationRunId,
+          outcome: "passed",
+          now: "2026-07-25T16:32:00.000Z",
+        });
+        expect(yield* start("2026-07-25T16:33:00.000Z")).toMatchObject({
+          reused: true,
+          validationRunId: first.validationRunId,
+        });
+
+        const raised = yield* changes.raiseImplementationBlocker({
+          changeId: captured.changeId,
+          content: "Wait for an external decision.",
+          now: "2026-07-25T16:34:00.000Z",
+        });
+        expect(raised.ok).toBe(true);
+        const resolved = yield* changes.resolveImplementationBlocker({
+          changeId: captured.changeId,
+          content: "Proceed without taskless intent.",
+          now: "2026-07-25T16:35:00.000Z",
+        });
+        expect(resolved.ok).toBe(true);
+
+        const second = yield* start("2026-07-25T16:36:00.000Z");
+        expect(second.reused).toBe(false);
+        if ("blocked" in second) throw new Error("Resolution must admit Validation");
+        expect(second.validationRunId).not.toBe(first.validationRunId);
+        expect(yield* changes.getChangeById(captured.changeId)).toMatchObject({
+          acceptanceContext: null,
+        });
+        yield* validation.complete({
+          validationRunId: second.validationRunId,
+          outcome: "passed",
+          now: "2026-07-25T16:37:00.000Z",
+        });
+        expect(yield* start("2026-07-25T16:38:00.000Z")).toMatchObject({
+          reused: true,
+          validationRunId: second.validationRunId,
+        });
+
+        const history = yield* validation.listRunsForCandidate(captured.candidateId);
+        expect(history.map((run) => run.id)).toEqual([
+          first.validationRunId,
+          second.validationRunId,
+        ]);
       }),
     ),
   );
@@ -672,7 +1023,7 @@ describe("repository SQL storage", () => {
           Effect.gen(function* () {
             yield* sql`UPDATE changes SET publication_candidate_id = ${captured.candidateId}, publication_validation_run_id = 'legacy-run', publication_owner = 'acme', publication_repo = 'repo', publication_base_branch = 'main', publication_remote_name = 'origin', publication_head_branch = 'legacy', publication_expected_head_sha = 'head-legacy', publication_pr_number = 7, publication_pr_url = 'https://github.test/pull/7' WHERE id = ${captured.changeId}`;
             yield* sql`DROP TABLE candidate_publications`;
-            yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id IN (11, 12, 13, 14, 15)`;
+            yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id IN (11, 12, 13, 14, 15, 16)`;
             yield* sql`INSERT INTO implementation_decisions (id, change_id, recorded_at, content) VALUES ('legacy-decision', ${captured.changeId}, '2026-07-25T15:30:00.000Z', 'Legacy unstructured decision')`;
           }),
         );
@@ -918,6 +1269,7 @@ describe("repository SQL storage", () => {
           { migration_id: 13, name: "remove_no_change_completion" },
           { migration_id: 14, name: "remove_change_readiness" },
           { migration_id: 15, name: "remove_acceptance_context_versions" },
+          { migration_id: 16, name: "validation_run_blocker_identity" },
         ]);
         expect(identities).toEqual([{ common_directory: repositorySql.commonDirectory }]);
         expect(candidateColumns.map(({ name }) => name)).toEqual([
@@ -976,7 +1328,7 @@ describe("repository SQL storage", () => {
                       '2026-07-25T16:30:00.000Z', '2026-07-25T16:30:00.000Z'
                     )
                   `;
-                  yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id IN (13, 14, 15)`;
+                  yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id IN (13, 14, 15, 16)`;
                 }),
               );
             }).pipe(Effect.provide(repositorySqlLayer({ commonDirectory: directory, statePath }))),
@@ -1050,7 +1402,7 @@ describe("repository SQL storage", () => {
                       'candidate-unsupported', 'run-unsupported'
                     )
                   `;
-                  yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id IN (13, 14, 15)`;
+                  yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id IN (13, 14, 15, 16)`;
                 }),
               );
             }).pipe(Effect.provide(repositorySqlLayer({ commonDirectory: directory, statePath }))),
@@ -1108,7 +1460,7 @@ describe("repository SQL storage", () => {
                       'with-failure', 'head-sha', 42, 'https://github.com/acme/repo/pull/42'
                     )
                   `;
-                  yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id IN (14, 15)`;
+                  yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id IN (14, 15, 16)`;
                 }),
               );
             }).pipe(Effect.provide(repositorySqlLayer({ commonDirectory: directory, statePath }))),
@@ -1206,7 +1558,7 @@ describe("repository SQL storage", () => {
                         'complete', 'passed', '2026-07-25T18:02:00.000Z', '2026-07-25T18:02:00.000Z'
                       )
                     `;
-                    yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id = 15`;
+                    yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id IN (15, 16)`;
                   }),
                 );
               }).pipe(
@@ -1481,8 +1833,8 @@ describe("repository SQL storage", () => {
         );
 
         return Effect.gen(function* () {
-          expect(yield* readMigrationCount).toBe(15);
-          expect(yield* readMigrationCount).toBe(15);
+          expect(yield* readMigrationCount).toBe(16);
+          expect(yield* readMigrationCount).toBe(16);
         });
       },
       (directory) => Effect.sync(() => rmSync(directory, { recursive: true, force: true })),
