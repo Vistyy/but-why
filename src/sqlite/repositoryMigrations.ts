@@ -16,6 +16,7 @@ import { removeNoChangeCompletionMigration as removeNoChangeCompletion } from ".
 import { removeChangeReadinessMigration as removeChangeReadiness } from "./migrations/0014_remove_change_readiness.js";
 import { removeAcceptanceContextVersionsMigration as removeAcceptanceContextVersions } from "./migrations/0015_remove_acceptance_context_versions.js";
 import { removeImplementationDecisionContentMigration as removeImplementationDecisionContent } from "./migrations/0016_remove_implementation_decision_content.js";
+import { validationRunBlockerIdentityMigration as validationRunBlockerIdentity } from "./migrations/0017_validation_run_blocker_identity.js";
 
 export const migrateRepositoryState = Migrator.make({})({
   loader: Migrator.fromRecord({
@@ -35,5 +36,6 @@ export const migrateRepositoryState = Migrator.make({})({
     "0014_remove_change_readiness": removeChangeReadiness,
     "0015_remove_acceptance_context_versions": removeAcceptanceContextVersions,
     "0016_remove_implementation_decision_content": removeImplementationDecisionContent,
+    "0017_validation_run_blocker_identity": validationRunBlockerIdentity,
   }),
 });

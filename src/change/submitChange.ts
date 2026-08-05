@@ -25,13 +25,10 @@ import type {
 import type { RepositoryBranchHeadResult } from "./candidateCapture/candidateCaptureGit.js";
 import type { RepositoryStorageError } from "../contracts/repositoryStorageError.js";
 import type { ExecutionLock } from "../contracts/executionLock.js";
-import type { ChangeValidationPersistence } from "./validation/changeValidationPersistence.js";
 import type {
   CandidatePublication,
   PublishCandidateResult,
 } from "./publication/candidatePublication.js";
-import type { TaskState } from "../task/lifecycle.js";
-import type { TaskPersistence } from "../task/taskPersistence.js";
 import { changeState, type ChangePublicationTarget, type ChangeRecord } from "./change.js";
 import type { ChangeReconciliation, ReconciledChange } from "./reconcileChange.js";
 import type { ChangePersistence } from "./changePersistence.js";
@@ -96,7 +93,6 @@ export type ChangeSubmitResult =
       readonly change: ReconciledChange;
     }
   | { readonly ok: false; readonly code: "owned_pull_request_closed"; readonly changeId: string }
-  | { readonly ok: false; readonly code: "task_transition_failed"; readonly changeId: string }
   | {
       readonly ok: false;
       readonly code: "validation_policy_invalid";
@@ -167,7 +163,6 @@ export const openChangeSubmit = (dependencies: {
   readonly repositoryCommonDirectory: string;
   readonly repositoryPath: string;
   readonly persistence: ChangePersistence;
-  readonly taskPersistence: Pick<TaskPersistence, "transitionTaskState">;
   readonly reconciliation: ChangeReconciliation;
   readonly loadRepoConfig: (worktreePath: string) => ManagedRepoConfigResolution;
   readonly loadRepoConfigAtCommit: (
@@ -197,7 +192,6 @@ export const openChangeSubmit = (dependencies: {
     baseRemoteUrl: string,
   ) => PublicationTargetDetectionResult;
   readonly captureCandidate: CaptureCandidate;
-  readonly validationPersistence?: Pick<ChangeValidationPersistence, "getActiveForChange">;
   readonly executionLock?: ExecutionLock;
 }): CandidateValidationChangeSubmit => ({
   submit: (input) => {
@@ -241,16 +235,6 @@ const submitChange = (
     }
     const reconciliation = yield* reconcileBeforeSubmission(dependencies, change, input.now);
     if (!reconciliation.proceed) return reconciliation.result;
-    const active = yield* dependencies.validationPersistence?.getActiveForChange(change.id) ??
-      Effect.succeed(undefined);
-    if (active !== undefined) {
-      return {
-        ok: false,
-        code: "active_validation_run",
-        changeId: change.id,
-        validationRunId: active.validationRunId,
-      } as const;
-    }
     const refreshedBase = dependencies.refreshBase(
       dependencies.repositoryPath,
       change.baseRef,
@@ -266,26 +250,6 @@ const submitChange = (
     if (!candidate.ok) return candidate;
     if (candidate.trackedTreeMatchesChangeBase) {
       return { ok: true, status: "nothing_to_submit", changeId: change.id } as const;
-    }
-    if (change.publication !== null && reconciliation.reconciled.status === "open") {
-      const branchHead = yield* dependencies.readBranchHead(change.worktreePath, change.branchRef);
-      if (!branchHead.ok) return branchHead;
-      if (branchHead.headSha === change.publication.expectedHeadSha) {
-        const evidence = yield* dependencies.persistence.getPassingPublicationEvidence(change.id);
-        if (
-          evidence?.candidateId === change.publication.candidateId &&
-          evidence.validationRunId === change.publication.validationRunId &&
-          evidence.headSha === branchHead.headSha
-        ) {
-          if (
-            change.taskId !== null &&
-            !(yield* transitionTask(dependencies.persistence, change, "ready", input.now))
-          ) {
-            return taskTransitionFailure(change);
-          }
-          return publishedResult(change, false);
-        }
-      }
     }
     const baselineRepoConfig = dependencies.loadRepoConfigAtCommit(
       change.worktreePath,
@@ -327,6 +291,14 @@ const submitChange = (
     }
     const target = detectPublicationTarget(dependencies, change, candidate);
     if (!target.ok) return githubTargetFailure(target);
+    const current = yield* currentPublicationEvidence(
+      dependencies,
+      change,
+      candidate,
+      policy.resolved,
+      reconciliation.reconciled.status === "open",
+    );
+    if (current.ok) return current.result;
     return yield* validateAndPublish(
       dependencies,
       change,
@@ -417,6 +389,47 @@ const reconcileBeforeSubmission = (
     return { proceed: true, reconciled };
   });
 
+const publicationPolicySnapshot = (
+  change: ChangeRecord,
+  policy: ResolvedCandidateValidationPolicy,
+) => ({
+  ...policy.policy,
+  ...(change.acceptanceContext === null ? {} : { acceptanceContext: change.acceptanceContext }),
+});
+
+const currentPublicationEvidence = (
+  dependencies: Parameters<typeof openChangeSubmit>[0],
+  change: OpenChangeWithWorktree,
+  candidate: CapturedCandidate,
+  policy: ResolvedCandidateValidationPolicy,
+  ownedPullRequestOpen: boolean,
+): Effect.Effect<
+  { readonly ok: true; readonly result: ChangeSubmitResult } | { readonly ok: false },
+  RepositoryStorageError
+> =>
+  Effect.gen(function* () {
+    if (change.publication === null || change.publication.pullRequest === null)
+      return { ok: false };
+    if (!ownedPullRequestOpen) return { ok: false };
+    const branchHead = yield* dependencies.readBranchHead(change.worktreePath, change.branchRef);
+    if (!branchHead.ok) return { ok: false };
+    if (branchHead.headSha !== change.publication.expectedHeadSha) return { ok: false };
+    const evidence = yield* dependencies.persistence.getPassingPublicationEvidence(change.id, {
+      changeBaseSha: candidate.changeBaseSha,
+      policy: publicationPolicySnapshot(change, policy),
+      implementationDecisions: change.implementationDecisions ?? [],
+    });
+    if (
+      evidence === undefined ||
+      evidence.candidateId !== change.publication.candidateId ||
+      evidence.validationRunId !== change.publication.validationRunId ||
+      evidence.headSha !== branchHead.headSha
+    ) {
+      return { ok: false };
+    }
+    return { ok: true, result: publishedResult(change, false) };
+  });
+
 const validateAndPublish = (
   dependencies: Parameters<typeof openChangeSubmit>[0],
   change: OpenChangeWithWorktree,
@@ -427,13 +440,6 @@ const validateAndPublish = (
   progress: SubmitProgress | undefined,
 ): Effect.Effect<ChangeSubmitResult, RepositoryStorageError, CandidateValidation> =>
   Effect.gen(function* () {
-    if (
-      change.taskId !== null &&
-      !(yield* transitionTask(dependencies.persistence, change, "validating", now))
-    ) {
-      return taskTransitionFailure(change);
-    }
-
     const validation = yield* CandidateValidation;
     const validationResult =
       policy.acceptanceContextSupplied && change.acceptanceContext !== null
@@ -464,6 +470,9 @@ const validateAndPublish = (
             now,
           });
     if ("code" in validationResult) {
+      if (validationResult.code === "blocked") {
+        return { ok: false, code: "change_blocked" } as const;
+      }
       return {
         ok: false,
         code: "active_validation_run",
@@ -472,23 +481,16 @@ const validateAndPublish = (
       } as const;
     }
     if (validationResult.outcome !== "passed") {
-      return yield* blockedValidationResult(
-        validation,
-        dependencies,
-        change,
-        candidate,
-        {
-          validationRunId: validationResult.validationRunId,
-          outcome: validationResult.outcome === "blocked" ? "blocked" : "tooling_failed",
-          ...(validationResult.reviewerEvidence === undefined
-            ? {}
-            : { reviewerEvidence: validationResult.reviewerEvidence }),
-          ...(validationResult.specialistReviewerEvidence === undefined
-            ? {}
-            : { specialistReviewerEvidence: validationResult.specialistReviewerEvidence }),
-        },
-        now,
-      );
+      return yield* blockedValidationResult(validation, change, candidate, {
+        validationRunId: validationResult.validationRunId,
+        outcome: validationResult.outcome === "blocked" ? "blocked" : "tooling_failed",
+        ...(validationResult.reviewerEvidence === undefined
+          ? {}
+          : { reviewerEvidence: validationResult.reviewerEvidence }),
+        ...(validationResult.specialistReviewerEvidence === undefined
+          ? {}
+          : { specialistReviewerEvidence: validationResult.specialistReviewerEvidence }),
+      });
     }
     if (!validationResult.ok) {
       return yield* Effect.die(new Error("Unexpected active Validation Run result."));
@@ -499,23 +501,12 @@ const validateAndPublish = (
       candidateId: candidate.candidateId,
       validationRunId: validationResult.validationRunId,
       changeBaseSha: candidate.changeBaseSha,
-      policy: {
-        ...policy.policy,
-        ...(change.acceptanceContext === null
-          ? {}
-          : { acceptanceContext: change.acceptanceContext }),
-      },
+      policy: publicationPolicySnapshot(change, policy),
       target,
       now,
     });
     if (!publication.ok) {
-      return yield* restoreImplementationThen(dependencies, change, publication, now);
-    }
-    if (
-      change.taskId !== null &&
-      !(yield* transitionTask(dependencies.persistence, change, "ready", now))
-    ) {
-      return taskTransitionFailure(change);
+      return publication;
     }
     return {
       ok: true,
@@ -536,7 +527,6 @@ const validateAndPublish = (
 
 const blockedValidationResult = (
   candidateValidation: CandidateValidationService,
-  dependencies: Parameters<typeof openChangeSubmit>[0],
   change: OpenChangeWithWorktree,
   candidate: CapturedCandidate,
   validation: {
@@ -545,15 +535,8 @@ const blockedValidationResult = (
     readonly reviewerEvidence?: ReviewerContinuityEvidence;
     readonly specialistReviewerEvidence?: readonly SpecialistReviewerContinuityEvidence[];
   },
-  now: string,
 ): Effect.Effect<ChangeSubmitResult, RepositoryStorageError> =>
   Effect.gen(function* () {
-    if (
-      change.taskId !== null &&
-      !(yield* transitionTask(dependencies.persistence, change, "implementing", now))
-    ) {
-      return taskTransitionFailure(change);
-    }
     return validation.outcome === "blocked"
       ? {
           ok: false,
@@ -587,29 +570,11 @@ const blockedValidationResult = (
         };
   });
 
-const restoreImplementationThen = (
-  dependencies: Parameters<typeof openChangeSubmit>[0],
-  change: ChangeRecord,
-  result: ChangeSubmitResult,
-  now: string,
-): Effect.Effect<ChangeSubmitResult, RepositoryStorageError> =>
-  Effect.map(
-    transitionTask(dependencies.persistence, change, "implementing", now),
-    (transitioned) =>
-      change.taskId !== null && !transitioned ? taskTransitionFailure(change) : result,
-  );
-
 const githubTargetFailure = (
   target: Exclude<PublicationTargetDetectionResult, { readonly ok: true }>,
 ): ChangeSubmitResult => ({
   ok: false,
   code: target.code === "PR_TARGET_NOT_FOUND" ? "github_target_not_found" : "github_tooling_error",
-});
-
-const taskTransitionFailure = (change: ChangeRecord): ChangeSubmitResult => ({
-  ok: false,
-  code: "task_transition_failed",
-  changeId: change.id,
 });
 
 const selectOpenChange = (
@@ -628,7 +593,6 @@ const selectOpenChange = (
   Effect.gen(function* () {
     const change = yield* persistence.getChangeById(changeId);
     if (change === undefined) return { ok: false, code: "change_not_found" };
-    if (change.state === changeState.blocked) return { ok: false, code: "change_blocked" };
     if (change.state !== changeState.open) return { ok: false, code: "change_not_open" };
     if (change.worktreePath === null) {
       return { ok: false, code: "change_not_open" };
@@ -641,21 +605,6 @@ const candidateIdentity = (candidate: CapturedCandidate) => ({
   changeBaseSha: candidate.changeBaseSha,
   headSha: candidate.headSha,
 });
-
-const transitionTask = (
-  changes: Pick<ChangePersistence, "transitionLinkedTask">,
-  change: ChangeRecord,
-  to: TaskState,
-  now: string,
-): Effect.Effect<boolean, RepositoryStorageError> =>
-  change.taskId === null
-    ? Effect.succeed(false)
-    : changes.transitionLinkedTask({
-        changeId: change.id,
-        taskId: change.taskId,
-        to,
-        now,
-      });
 
 const detectPublicationTarget = (
   dependencies: Parameters<typeof openChangeSubmit>[0],

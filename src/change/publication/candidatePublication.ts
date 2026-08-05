@@ -107,8 +107,13 @@ const publish = (dependencies: Dependencies, input: PublishCandidateInput): Publ
     if (
       validationRun === undefined ||
       validationRun.candidateId !== input.candidateId ||
+      validationRun.state !== "complete" ||
       validationRun.outcome !== "passed" ||
       !isDeepStrictEqual(validationRun.policy, publicationInput.policy) ||
+      !isDeepStrictEqual(
+        validationRun.implementationDecisions,
+        change.implementationDecisions ?? [],
+      ) ||
       candidate.headSha.length === 0
     )
       return { ok: false, code: "validation_evidence_invalid" };
@@ -545,7 +550,18 @@ const prepareOwnedPullRequestUpdate = (
     )
   ) {
     if (owned.expectedHeadSha === expectedHeadSha) {
-      return { proceed: false, result: reusePublishedCandidate(owned, input) };
+      if (owned.candidateId !== input.candidateId) {
+        return { proceed: false, result: { ok: false, code: "publication_state_conflict" } };
+      }
+      if (owned.validationRunId === input.validationRunId) {
+        return {
+          proceed: false,
+          result: { ok: true, created: false, pullRequest: owned.pullRequest },
+        };
+      }
+      return hasExpectedHead(dependencies.git, change.branchRef, expectedHeadSha)
+        ? { proceed: false, owned, recovered: remote }
+        : { proceed: false, result: { ok: false, code: "current_head_mismatch" } };
     }
     return hasExpectedHead(dependencies.git, change.branchRef, expectedHeadSha)
       ? { proceed: false, owned, recovered: remote }
@@ -573,14 +589,6 @@ const publishedChangePublication = (change: ChangeRecord): Published | undefined
     ? undefined
     : (publication as Published);
 };
-
-const reusePublishedCandidate = (
-  owned: Published,
-  input: PublishCandidateInput,
-): PublishCandidateResult =>
-  owned.candidateId === input.candidateId && owned.validationRunId === input.validationRunId
-    ? { ok: true, created: false, pullRequest: owned.pullRequest }
-    : { ok: false, code: "publication_state_conflict" };
 
 const executePullRequestUpdate = (
   dependencies: Dependencies,

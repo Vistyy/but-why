@@ -230,7 +230,8 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
           now,
         });
         expect(recorded.ok).toBe(true);
-        const recordedDecisionId = recorded.ok ? recorded.decision.id : "";
+        if (!recorded.ok) return;
+        const recordedDecisionId = recorded.decision.id;
         const second = yield* fixture.changes.recordImplementationDecision({
           changeId: fixture.captured.changeId,
           choice: "Preserve chronological order",
@@ -238,6 +239,13 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
           now: "2026-07-22T10:01:00.000Z",
         });
         expect(second.ok).toBe(true);
+        if (!second.ok) return;
+        const validationRunId = yield* completeValidation(
+          fixture.validation,
+          fixture.captured,
+          "2026-07-22T10:02:00.000Z",
+          [recorded.decision, second.decision],
+        );
         const publication = openCandidatePublication({
           changePersistence: fixture.changes,
           validationPersistence: fixture.validation,
@@ -247,7 +255,13 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
           },
           github: successfulCreation(requests),
         });
-        expect(yield* publication.publish(input(fixture))).toMatchObject({ ok: true });
+        expect(
+          yield* publication.publish({
+            ...input(fixture),
+            validationRunId,
+            now: "2026-07-22T10:02:00.000Z",
+          }),
+        ).toMatchObject({ ok: true });
         expect((requests[0] as { readonly body: string }).body).toContain(
           "<details>\n<summary>Keep &amp; preserve &lt;details&gt;</summary>",
         );
@@ -795,6 +809,73 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
     ),
   );
 
+  it.scoped(
+    "records fresh passing evidence for the same Candidate without artificial republication",
+    () =>
+      withFixture((fixture) =>
+        Effect.gen(function* () {
+          let updates = 0;
+          const publication = openCandidatePublication({
+            changePersistence: fixture.changes,
+            validationPersistence: fixture.validation,
+            git: {
+              readBranchHead: () => fixture.captured.headSha,
+              readFirstNonMergeCommitSubject: () => ({ ok: true, subject: "Publication" }),
+            },
+            github: {
+              findPullRequests: () => [],
+              getPullRequest: () => pullRequest(fixture.captured.headSha),
+              createPullRequest: () => ({
+                ok: true as const,
+                pullRequest: pullRequest(fixture.captured.headSha),
+              }),
+              updatePullRequest: () => {
+                updates += 1;
+                return { ok: true as const, pullRequest: pullRequest(fixture.captured.headSha) };
+              },
+            },
+          });
+          const first = yield* publication.publish(input(fixture));
+          expect(first).toMatchObject({ ok: true, created: true, pullRequest: { number: 42 } });
+
+          const recorded = yield* fixture.changes.recordImplementationDecision({
+            changeId: fixture.captured.changeId,
+            choice: "Revise the implementation",
+            rationale: "Resolution requires fresh Validation evidence.",
+            now: "2026-07-25T15:20:00.000Z",
+          });
+          expect(recorded.ok).toBe(true);
+          const decisions =
+            (yield* fixture.changes.listImplementationDecisions(fixture.captured.changeId)) ?? [];
+          const freshRunId = yield* completeValidation(
+            fixture.validation,
+            fixture.captured,
+            "2026-07-25T15:21:00.000Z",
+            decisions,
+          );
+
+          const refreshed = yield* publication.publish({
+            ...input(fixture),
+            validationRunId: freshRunId,
+            now: "2026-07-25T15:21:00.000Z",
+          });
+          expect(refreshed).toMatchObject({
+            ok: true,
+            created: false,
+            pullRequest: { number: 42 },
+          });
+          expect(updates).toBe(0);
+          expect(yield* fixture.changes.getChangeById(fixture.captured.changeId)).toMatchObject({
+            publication: {
+              candidateId: fixture.captured.candidateId,
+              validationRunId: freshRunId,
+              pullRequest: { number: 42 },
+            },
+          });
+        }),
+      ),
+  );
+
   it.scoped("bounds empty recovery creation and final confirmation", () =>
     withFixture((fixture) =>
       Effect.gen(function* () {
@@ -966,15 +1047,18 @@ function completeValidation(
   validation: ChangeValidationPersistence,
   captured: Captured,
   at: string,
+  implementationDecisions: readonly import("../../src/change/implementationDecision.js").ImplementationDecision[] = [],
 ) {
   return Effect.gen(function* () {
     const run = yield* validation.startOrReuse({
       candidateId: captured.candidateId,
       headSha: captured.headSha,
       policy,
+      implementationDecisions,
       now: at,
     });
     if (run.reused) throw new Error("Expected a new Validation Run");
+    if ("blocked" in run) throw new Error("Expected a new Validation Run");
     yield* validation.complete({
       validationRunId: run.validationRunId,
       outcome: "passed",
@@ -1007,7 +1091,9 @@ const nextCandidate = (fixture: Fixture, subject: string, at: string) =>
       headSha,
       trackedTreeMatchesChangeBase: false,
     };
-    const validationRunId = yield* completeValidation(fixture.validation, captured, at);
+    const decisions =
+      (yield* fixture.changes.listImplementationDecisions(fixture.captured.changeId)) ?? [];
+    const validationRunId = yield* completeValidation(fixture.validation, captured, at, decisions);
     return { captured, validationRunId };
   });
 

@@ -201,21 +201,41 @@ const startOrReuse = (sql: SqlClient.SqlClient, input: StartCandidateValidationR
       });
     }
 
-    const changes = yield* sql<{
-      readonly state: string;
-    }>`SELECT state FROM changes WHERE id = ${candidate.changeId}`;
-    if (changes[0]?.state === "blocked") {
-      return yield* new RepositoryPersistedDataInvalid({
-        operationName: "start Candidate Validation Run",
-        cause: new Error("An active Implementation Blocker prevents Validation Run creation."),
-      });
+    const unresolvedBlockers = yield* sql<{ readonly id: string }>`
+      SELECT blocker.id
+      FROM implementation_blockers AS blocker
+      WHERE blocker.change_id = ${candidate.changeId}
+        AND blocker.resolved_at IS NULL
+      LIMIT 1
+    `;
+    if (unresolvedBlockers.length > 0) {
+      return {
+        reused: false,
+        blocked: true,
+      } satisfies StartCandidateValidationRunResult;
     }
+    const latestResolved = yield* sql<{ readonly id: string }>`
+      SELECT blocker.id
+      FROM implementation_blockers AS blocker
+      WHERE blocker.change_id = ${candidate.changeId}
+        AND blocker.resolved_at IS NOT NULL
+      ORDER BY blocker.resolved_at DESC, blocker.sequence DESC
+      LIMIT 1
+    `;
+    const latestResolvedBlockerId = latestResolved[0]?.id ?? null;
     const policySnapshot = encodeSqliteCandidateValidationPolicy(input.policy);
+    const decisionsSnapshot = JSON.stringify(input.implementationDecisions ?? []);
     const reusable = yield* sql<{ readonly id: string }>`
       SELECT id FROM candidate_validation_runs
       WHERE candidate_id = ${input.candidateId}
         AND policy_snapshot = ${policySnapshot}
+        AND implementation_decisions = ${decisionsSnapshot}
+        AND state = 'complete'
         AND outcome = 'passed'
+        AND (
+          (latest_resolved_blocker_id IS NULL AND ${latestResolvedBlockerId} IS NULL)
+          OR latest_resolved_blocker_id = ${latestResolvedBlockerId}
+        )
       LIMIT 1
     `;
     const existing = reusable[0];
@@ -243,10 +263,11 @@ const startOrReuse = (sql: SqlClient.SqlClient, input: StartCandidateValidationR
 
     yield* sql`
       INSERT INTO candidate_validation_runs (
-        id, candidate_id, policy_snapshot, implementation_decisions, state, created_at, updated_at
+        id, candidate_id, policy_snapshot, implementation_decisions, latest_resolved_blocker_id,
+        state, created_at, updated_at
       ) VALUES (
-        ${validationRunId}, ${input.candidateId}, ${policySnapshot}, ${JSON.stringify(input.implementationDecisions ?? [])}, 'running',
-        ${input.now}, ${input.now}
+        ${validationRunId}, ${input.candidateId}, ${policySnapshot}, ${decisionsSnapshot},
+        ${latestResolvedBlockerId}, 'running', ${input.now}, ${input.now}
       )
     `;
     yield* sql`

@@ -3,6 +3,7 @@ import type { Effect } from "effect";
 import type { RepositoryStorageError } from "../contracts/repositoryStorageError.js";
 import type { CandidatePublicationRecord, ChangeRecord } from "./change.js";
 import type { ImplementationDecision } from "./implementationDecision.js";
+import type { CandidateValidationPolicySnapshot } from "./candidateValidation/candidateValidationRunStore.js";
 import type { ImplementationBlockerHistory } from "./implementationBlocker.js";
 import type { ReviewerSessionRecord } from "./reviewerSession/reviewerSession.js";
 import type {
@@ -70,6 +71,12 @@ export type ImplementationBlockerMutationResult =
         | "no_active_blocker";
     };
 
+export type CurrentPublicationAuthority = {
+  readonly changeBaseSha: string;
+  readonly policy: CandidateValidationPolicySnapshot;
+  readonly implementationDecisions: readonly ImplementationDecision[];
+};
+
 export type ChangePersistence = {
   readonly raiseImplementationBlocker: (
     input: RaiseImplementationBlockerInput,
@@ -80,12 +87,6 @@ export type ChangePersistence = {
   readonly listImplementationBlockers: (
     changeId: string,
   ) => StorageEffect<ImplementationBlockerHistory | undefined>;
-  readonly transitionLinkedTask: (input: {
-    readonly changeId: string;
-    readonly taskId: string;
-    readonly to: import("../task/lifecycle.js").TaskState;
-    readonly now: string;
-  }) => StorageEffect<boolean>;
   readonly getChangeById: (changeId: string) => StorageEffect<ChangeRecord | undefined>;
   readonly getChangeByTaskId: (taskId: string) => StorageEffect<ChangeRecord | undefined>;
   readonly listImplementationDecisions: (
@@ -96,6 +97,7 @@ export type ChangePersistence = {
   ) => StorageEffect<RecordImplementationDecisionResult>;
   readonly getPassingPublicationEvidence: (
     changeId: string,
+    authority: CurrentPublicationAuthority,
   ) => StorageEffect<ChangePublicationEvidence | undefined>;
   readonly listCandidatePublications: (
     changeId: string,

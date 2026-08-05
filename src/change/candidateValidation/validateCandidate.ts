@@ -90,6 +90,7 @@ type ValidateCandidateResult =
       readonly code: "active_validation_run";
       readonly validationRunId: string;
     }
+  | { readonly ok: false; readonly code: "blocked" }
   | {
       readonly ok: false;
       readonly validationRunId: string;
@@ -188,6 +189,9 @@ const makeCandidateValidation = (dependencies: {
       },
       now: input.now,
     });
+    if ("blocked" in started) {
+      return { ok: false, code: "blocked" } as const;
+    }
     if ("active" in started && started.active === true) {
       return {
         ok: false,

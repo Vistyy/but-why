@@ -286,7 +286,7 @@ layer(acceptanceTemplateLayer)("Task-backed Candidate Acceptance Review", (it) =
 
       expect(result).toMatchObject({ ok: false, outcome: "tooling_failed" });
       expect(review).toHaveBeenCalledOnce();
-      if (result.ok) return;
+      if (result.ok || "code" in result) return;
       expect(yield* ready.validation.listToolingFailures(result.validationRunId)).toEqual(
         expect.arrayContaining([
           expect.objectContaining({ operationName: "verify_candidate_head" }),
@@ -1612,6 +1612,9 @@ const runReviewPhases = (
         now,
       });
       if (started.reused) return { ok: true as const, ...started, outcome: "passed" as const };
+      if ("blocked" in started) {
+        throw new Error("Unexpected active Blocker in Acceptance Review fixture");
+      }
 
       yield* persistence.recordCheckRound({
         validationRunId: started.validationRunId,

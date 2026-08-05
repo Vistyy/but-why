@@ -79,7 +79,8 @@ export type StartCandidateValidationRunInput = {
 export type StartCandidateValidationRunResult =
   | { readonly reused: true; readonly validationRunId: string; readonly outcome: "passed" }
   | { readonly reused: false; readonly validationRunId: string }
-  | { readonly reused: false; readonly active: true; readonly validationRunId: string };
+  | { readonly reused: false; readonly active: true; readonly validationRunId: string }
+  | { readonly reused: false; readonly blocked: true };
 
 export type CompleteCandidateValidationRunInput = {
   readonly validationRunId: string;

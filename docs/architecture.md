@@ -68,6 +68,14 @@ A Candidate is identified by its Change, `changeBaseSha`, and `headSha`.
 Tracked-tree equality with the fetched Change Base returns `nothing_to_submit` after the ancestry check passes.
 A changed Candidate passes through Repository Preparation, Checks, Acceptance Review when task-backed, configured Specialists, and publication policy.
 
+Validation persistence owns one-active-run uniqueness and unresolved-Blocker rejection.
+Validation admission refuses a Change with an unresolved Implementation Blocker, and each admitted Validation Run records the exact Candidate, Change Base, Validation Policy Snapshot (including the current Acceptance Context when present), Implementation Decision input, and the latest resolved Implementation Blocker identity at admission.
+Validation Run reuse and publication require the exact stored Candidate identity, complete state, a passed outcome, and the current authority: the exact Change Base, current Acceptance Context when present, the resolved Validation Policy Snapshot, the current Implementation Decisions, and the same latest resolved Implementation Blocker identity.
+A changed Candidate, Resolution, Acceptance Context, policy, or implementation input invalidates current validity without deleting historical evidence.
+For a taskless Change, a later Resolution makes earlier Runs historical without creating Acceptance Context or Acceptance Review.
+Fresh passing evidence for the same Candidate already on the owned pull request records the new Validation Run without artificial republication.
+Change Submit performs no duplicate admission precheck and performs no transient Task state transitions.
+
 `by change reconcile [<change-id>]` observes owned pull requests.
 A merged owned pull request closes the Change and completes its linked Task only when its merged head matches the latest Candidate Publication.
 A merged-head mismatch rejects reconciliation and preserves the Open Change.

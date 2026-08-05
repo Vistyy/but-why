@@ -1,7 +1,6 @@
 import type * as SqlClient from "@effect/sql/SqlClient";
 import { Effect } from "effect";
 import { randomUUID } from "node:crypto";
-import { canTransition } from "../task/lifecycle.js";
 
 import {
   changeState,
@@ -9,7 +8,11 @@ import {
   type ChangePublication,
   type ChangeRecord,
 } from "../change/change.js";
-import type { ChangePersistence, ChangePublicationEvidence } from "../change/changePersistence.js";
+import type {
+  ChangePersistence,
+  ChangePublicationEvidence,
+  CurrentPublicationAuthority,
+} from "../change/changePersistence.js";
 import type {
   BeginChangePublicationInput,
   CancelChangeInput,
@@ -28,6 +31,7 @@ import {
   type SqliteChangePublicationRow,
 } from "./sqliteChangePublication.js";
 import { decodeSqliteAcceptanceContextSnapshot } from "./sqliteAcceptanceContextSnapshot.js";
+import { encodeSqliteCandidateValidationPolicy } from "./sqliteCandidateValidationPolicy.js";
 import type { ReviewerSessionRecord } from "../change/reviewerSession/reviewerSession.js";
 import type { ImplementationDecision } from "../change/implementationDecision.js";
 import type {
@@ -84,10 +88,6 @@ export const openSqliteChangePersistence = (): Effect.Effect<
       ),
     listImplementationBlockers: (changeId) =>
       repository.operation("list Implementation Blockers", (sql) => listBlockers(sql, changeId)),
-    transitionLinkedTask: (input) =>
-      repository.transactionImmediate("transition linked Task", (sql) =>
-        transitionLinkedTask(sql, input),
-      ),
     getChangeById: (changeId) =>
       repository.transaction("read Change", (sql) => getById(sql, changeId)),
     getChangeByTaskId: (taskId) =>
@@ -98,9 +98,9 @@ export const openSqliteChangePersistence = (): Effect.Effect<
       repository.transactionImmediate("record Implementation Decision", (sql) =>
         recordDecision(sql, input),
       ),
-    getPassingPublicationEvidence: (changeId) =>
+    getPassingPublicationEvidence: (changeId, authority) =>
       repository.transaction("read passing Change publication evidence", (sql) =>
-        getPassingPublicationEvidence(sql, changeId),
+        getPassingPublicationEvidence(sql, changeId, authority),
       ),
     listCandidatePublications: (changeId) =>
       repository.transaction("list Candidate Publications", (sql) =>
@@ -241,41 +241,6 @@ const resolveBlocker = (
     };
   });
 
-const transitionLinkedTask = (
-  sql: SqlClient.SqlClient,
-  input: {
-    readonly changeId: string;
-    readonly taskId: string;
-    readonly to: string;
-    readonly now: string;
-  },
-) =>
-  Effect.gen(function* () {
-    const taskRows = yield* sql<{
-      readonly state: import("../task/lifecycle.js").TaskState;
-    }>`SELECT state FROM tasks WHERE id = ${input.taskId}`;
-    const current = taskRows[0];
-    if (
-      current === undefined ||
-      (current.state !== input.to &&
-        !canTransition(current.state, input.to as import("../task/lifecycle.js").TaskState))
-    )
-      return false;
-    if (input.to === "implementing") {
-      const blocked = yield* sql<{
-        readonly id: string;
-      }>`SELECT tasks.id FROM task_dependencies JOIN tasks ON tasks.id = task_dependencies.prerequisite_task_id WHERE task_dependencies.dependent_task_id = ${input.taskId} AND tasks.state <> 'done' LIMIT 1`;
-      if (blocked.length > 0) return false;
-    }
-    yield* sql`
-      UPDATE tasks SET state = ${input.to}, updated_at = ${input.now}
-      WHERE id = ${input.taskId}
-        AND EXISTS (SELECT 1 FROM changes WHERE id = ${input.changeId} AND state = 'open')
-    `;
-    const rows = yield* sql<{ readonly changed: number }>`SELECT changes() AS changed`;
-    return Number(rows[0]?.changed ?? 0) > 0;
-  });
-
 const listBlockers = (sql: SqlClient.SqlClient, changeId: string) =>
   Effect.gen(function* () {
     const exists = yield* sql`SELECT id FROM changes WHERE id = ${changeId}`;
@@ -394,14 +359,20 @@ const getByTaskId = (sql: SqlClient.SqlClient, taskId: string) =>
     (rows) => mapRow(rows[0], "read Change by Task", sql),
   );
 
-const getPassingPublicationEvidence = (sql: SqlClient.SqlClient, changeId: string) =>
-  Effect.map(
-    sql<ChangePublicationEvidence>`
+const getPassingPublicationEvidence = (
+  sql: SqlClient.SqlClient,
+  changeId: string,
+  authority: CurrentPublicationAuthority,
+) =>
+  Effect.gen(function* () {
+    const rows = yield* sql<PassingPublicationEvidenceRow>`
       SELECT
         candidate.id AS candidateId,
         run.id AS validationRunId,
         candidate.change_base_sha AS changeBaseSha,
-        candidate.head_sha AS headSha
+        candidate.head_sha AS headSha,
+        run.policy_snapshot AS policySnapshot,
+        run.implementation_decisions AS implementationDecisions
       FROM changes AS change
       JOIN candidates AS candidate
         ON candidate.id = change.publication_candidate_id
@@ -413,9 +384,41 @@ const getPassingPublicationEvidence = (sql: SqlClient.SqlClient, changeId: strin
         AND change.publication_pr_number IS NOT NULL
         AND run.state = 'complete'
         AND run.outcome = 'passed'
-    `,
-    (rows) => rows[0],
-  );
+        AND candidate.change_base_sha = ${authority.changeBaseSha}
+        AND (
+          (run.latest_resolved_blocker_id IS NULL AND NOT EXISTS (
+            SELECT 1
+            FROM implementation_blockers AS blocker
+            WHERE blocker.change_id = change.id
+              AND blocker.resolved_at IS NOT NULL
+          ))
+          OR run.latest_resolved_blocker_id = (
+            SELECT blocker.id
+            FROM implementation_blockers AS blocker
+            WHERE blocker.change_id = change.id
+              AND blocker.resolved_at IS NOT NULL
+            ORDER BY blocker.resolved_at DESC, blocker.sequence DESC
+            LIMIT 1
+          )
+        )
+    `;
+    const row = rows[0];
+    if (row === undefined) return undefined;
+    const expectedPolicySnapshot = encodeSqliteCandidateValidationPolicy(authority.policy);
+    const expectedDecisionsSnapshot = JSON.stringify(authority.implementationDecisions ?? []);
+    if (
+      row.policySnapshot !== expectedPolicySnapshot ||
+      row.implementationDecisions !== expectedDecisionsSnapshot
+    ) {
+      return undefined;
+    }
+    return {
+      candidateId: row.candidateId,
+      validationRunId: row.validationRunId,
+      changeBaseSha: row.changeBaseSha,
+      headSha: row.headSha,
+    } satisfies ChangePublicationEvidence;
+  });
 
 const listCandidatePublications = (sql: SqlClient.SqlClient, changeId: string) =>
   Effect.map(
@@ -768,6 +771,11 @@ type ReviewerSessionRow = {
   readonly fingerprint: string;
   readonly sessionReference: string;
   readonly lastCandidateId: string;
+};
+
+type PassingPublicationEvidenceRow = ChangePublicationEvidence & {
+  readonly policySnapshot: string;
+  readonly implementationDecisions: string;
 };
 
 type ChangeRow = Omit<
