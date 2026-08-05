@@ -346,11 +346,10 @@ const listDecisions = (sql: SqlClient.SqlClient, changeId: string) =>
       readonly changeId: string;
       readonly sequence: number | bigint;
       readonly recordedAt: string;
-      readonly content: string | null;
-      readonly choice: string | null;
-      readonly rationale: string | null;
+      readonly choice: string;
+      readonly rationale: string;
     }>`
-      SELECT id, change_id AS changeId, sequence, recorded_at AS recordedAt, content, choice, rationale
+      SELECT id, change_id AS changeId, sequence, recorded_at AS recordedAt, choice, rationale
       FROM implementation_decisions WHERE change_id = ${changeId}
       ORDER BY sequence ASC
     `,
@@ -361,9 +360,8 @@ const listDecisions = (sql: SqlClient.SqlClient, changeId: string) =>
           changeId: row.changeId,
           sequence: Number(row.sequence),
           recordedAt: row.recordedAt,
-          choice: row.choice ?? row.content ?? "",
-          rationale: row.rationale ?? "",
-          ...(row.choice === null && row.rationale === null ? { content: row.content ?? "" } : {}),
+          choice: row.choice,
+          rationale: row.rationale,
         }),
       ),
   );
@@ -380,8 +378,8 @@ const recordDecision = (sql: SqlClient.SqlClient, input: RecordImplementationDec
     if (change.state !== "open") return { ok: false as const, code: "change_not_open" as const };
     const id = randomUUID();
     yield* sql`
-      INSERT INTO implementation_decisions (id, change_id, recorded_at, content, choice, rationale)
-      VALUES (${id}, ${input.changeId}, ${input.now}, '', ${input.choice}, ${input.rationale})
+      INSERT INTO implementation_decisions (id, change_id, recorded_at, choice, rationale)
+      VALUES (${id}, ${input.changeId}, ${input.now}, ${input.choice}, ${input.rationale})
     `;
     const decisions = yield* listDecisions(sql, input.changeId);
     const decision = decisions.find((item) => item.id === id);
