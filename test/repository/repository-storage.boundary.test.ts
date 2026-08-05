@@ -102,133 +102,184 @@ describe("repository SQL storage", () => {
     ),
   );
 
-  it.scoped("rejects a Task-backed blocker when its linked Task is not Implementing", () =>
+  it.scoped("raises a Blocker without writing blocked Change or Task lifecycle state", () =>
     withTemporaryState((input) =>
       Effect.gen(function* () {
         const tasks = yield* openSqliteTaskPersistence("BY");
         const starts = yield* openSqliteChangeStartPersistence();
         const changes = yield* openSqliteChangePersistence();
         const created = yield* tasks.createTask({
-          title: "Reject mismatched blocker",
-          description: "Keep the Change unchanged when its Task state is inconsistent.",
+          title: "Raise blocker without lifecycle writes",
+          description: "One unresolved row must be the active Blocker authority.",
           now: "2026-07-17T22:53:00.000Z",
         });
         if (!created.ok) return;
         const taskId = storedPublicTaskId(created.task.id);
         yield* tasks.approveTask({ taskId, now: "2026-07-17T22:54:00.000Z" });
         const started = yield* starts.create({
-          id: "change-mismatched-blocker",
+          id: "change-raise-blocker",
           repositoryCommonDirectory: input.commonDirectory,
-          branchRef: "refs/heads/but-why/by-1-mismatched-blocker",
+          branchRef: "refs/heads/but-why/by-1-raise-blocker",
           baseRef: "main",
           baseRemoteUrl: "https://github.com/acme/repo.git",
           startingCommit: "1111111111111111111111111111111111111111",
-          worktreePath: join(input.commonDirectory, "worktrees", "by-1-mismatched-blocker"),
+          worktreePath: join(input.commonDirectory, "worktrees", "by-1-raise-blocker"),
           taskId,
           now: "2026-07-17T22:55:00.000Z",
         });
         if (!started.ok) return;
 
-        const repository = yield* RepositorySql;
-        yield* repository.operation(
-          "create mismatched linked Task state",
-          (sql) => sql`UPDATE tasks SET state = 'blocked' WHERE id = ${taskId}`,
-        );
-
-        const error = yield* changes
-          .raiseImplementationBlocker({
-            changeId: started.change.id,
-            content: "This blocker must not be recorded.",
-            now: "2026-07-17T22:56:00.000Z",
-          })
-          .pipe(Effect.flip);
-
-        expect(error).toBeInstanceOf(RepositoryPersistedDataInvalid);
-        expect(error).toMatchObject({ operationName: "raise Implementation Blocker" });
-        expect(yield* changes.getChangeById(started.change.id)).toMatchObject({
-          state: "open",
-          activeBlocker: null,
+        const raised = yield* changes.raiseImplementationBlocker({
+          changeId: started.change.id,
+          content: "Wait for approved intent.",
+          now: "2026-07-17T22:56:00.000Z",
         });
-        expect(yield* tasks.getTaskById(taskId)).toMatchObject({ state: "blocked" });
-        expect(yield* changes.listImplementationBlockers(started.change.id)).toEqual({
-          blockers: [],
+
+        expect(raised).toMatchObject({
+          ok: true,
+          change: {
+            state: "open",
+            activeBlocker: { content: "Wait for approved intent.", resolvedAt: null },
+          },
+          blocker: { content: "Wait for approved intent.", resolvedAt: null },
+        });
+        expect(yield* tasks.getTaskById(taskId)).toMatchObject({ state: "implementing" });
+        expect(yield* changes.listImplementationBlockers(started.change.id)).toMatchObject({
+          blockers: [{ content: "Wait for approved intent.", resolvedAt: null }],
           resolutions: [],
-          active: null,
+          active: { content: "Wait for approved intent.", resolvedAt: null },
         });
       }),
     ),
   );
 
-  it.scoped("rejects a Resolution when its linked Task is not Blocked", () =>
+  it.scoped("rejects a duplicate Blocker while one is unresolved", () =>
     withTemporaryState((input) =>
       Effect.gen(function* () {
         const tasks = yield* openSqliteTaskPersistence("BY");
         const starts = yield* openSqliteChangeStartPersistence();
         const changes = yield* openSqliteChangePersistence();
         const created = yield* tasks.createTask({
-          title: "Reject mismatched Resolution",
-          description: "Keep the blocker active when its Task state is inconsistent.",
-          now: "2026-07-17T22:57:00.000Z",
+          title: "Reject duplicate blocker",
+          description: "One unresolved Implementation Blocker may exist for an open Change.",
+          now: "2026-07-17T22:53:00.000Z",
         });
         if (!created.ok) return;
         const taskId = storedPublicTaskId(created.task.id);
-        yield* tasks.approveTask({ taskId, now: "2026-07-17T22:58:00.000Z" });
+        yield* tasks.approveTask({ taskId, now: "2026-07-17T22:54:00.000Z" });
         const started = yield* starts.create({
-          id: "change-mismatched-resolution",
+          id: "change-duplicate-blocker",
           repositoryCommonDirectory: input.commonDirectory,
-          branchRef: "refs/heads/but-why/by-1-mismatched-resolution",
+          branchRef: "refs/heads/but-why/by-1-duplicate-blocker",
           baseRef: "main",
           baseRemoteUrl: "https://github.com/acme/repo.git",
           startingCommit: "1111111111111111111111111111111111111111",
-          worktreePath: join(input.commonDirectory, "worktrees", "by-1-mismatched-resolution"),
+          worktreePath: join(input.commonDirectory, "worktrees", "by-1-duplicate-blocker"),
           taskId,
-          now: "2026-07-17T22:59:00.000Z",
+          now: "2026-07-17T22:55:00.000Z",
         });
         if (!started.ok) return;
-        const raised = yield* changes.raiseImplementationBlocker({
+        const first = yield* changes.raiseImplementationBlocker({
           changeId: started.change.id,
           content: "Wait for approved intent.",
-          now: "2026-07-17T23:00:00.000Z",
+          now: "2026-07-17T22:56:00.000Z",
         });
-        if (!raised.ok) return;
+        if (!first.ok) return;
 
-        const repository = yield* RepositorySql;
-        yield* repository.operation(
-          "create mismatched linked Task state",
-          (sql) => sql`UPDATE tasks SET state = 'implementing' WHERE id = ${taskId}`,
-        );
-
-        const error = yield* changes
-          .resolveImplementationBlocker({
-            changeId: started.change.id,
-            content: "Use the approved approach.",
-            now: "2026-07-17T23:01:00.000Z",
-          })
-          .pipe(Effect.flip);
-
-        expect(error).toBeInstanceOf(RepositoryPersistedDataInvalid);
-        expect(error).toMatchObject({ operationName: "resolve Implementation Blocker" });
-        const unchanged = yield* changes.getChangeById(started.change.id);
-        expect(unchanged).toMatchObject({
-          state: "blocked",
-          activeBlocker: { id: raised.blocker.id, resolvedAt: null },
+        const duplicate = yield* changes.raiseImplementationBlocker({
+          changeId: started.change.id,
+          content: "A second blocker must not be recorded.",
+          now: "2026-07-17T22:57:00.000Z",
         });
-        expect(unchanged?.acceptanceContext).toEqual({
-          version: 1,
-          title: "Reject mismatched Resolution",
-          description: "Keep the blocker active when its Task state is inconsistent.",
-          comments: [],
+
+        expect(duplicate).toEqual({ ok: false, code: "change_blocked" });
+        expect(yield* changes.getChangeById(started.change.id)).toMatchObject({
+          state: "open",
+          activeBlocker: { id: first.blocker.id, resolvedAt: null },
         });
-        expect(yield* tasks.getTaskById(taskId)).toMatchObject({ state: "implementing" });
         expect(yield* changes.listImplementationBlockers(started.change.id)).toMatchObject({
-          resolutions: [],
-          active: { id: raised.blocker.id, resolvedAt: null },
+          blockers: [{ id: first.blocker.id }],
+          active: { id: first.blocker.id, resolvedAt: null },
         });
       }),
     ),
   );
 
-  it.scoped("resolves a Task-backed blocker and returns its linked Task to Implementing", () =>
+  it.scoped("raises a Blocker after publication or a passing Candidate", () =>
+    withTemporaryState((input) =>
+      Effect.gen(function* () {
+        const tasks = yield* openSqliteTaskPersistence("BY");
+        const starts = yield* openSqliteChangeStartPersistence();
+        const changes = yield* openSqliteChangePersistence();
+        const created = yield* tasks.createTask({
+          title: "Raise after publication",
+          description: "Publication and earlier passing evidence must not prevent a Blocker.",
+          now: "2026-07-17T22:53:00.000Z",
+        });
+        if (!created.ok) return;
+        const taskId = storedPublicTaskId(created.task.id);
+        yield* tasks.approveTask({ taskId, now: "2026-07-17T22:54:00.000Z" });
+        const started = yield* starts.create({
+          id: "change-published-blocker",
+          repositoryCommonDirectory: input.commonDirectory,
+          branchRef: "refs/heads/but-why/by-1-published-blocker",
+          baseRef: "main",
+          baseRemoteUrl: "https://github.com/acme/repo.git",
+          startingCommit: "1111111111111111111111111111111111111111",
+          worktreePath: join(input.commonDirectory, "worktrees", "by-1-published-blocker"),
+          taskId,
+          now: "2026-07-17T22:55:00.000Z",
+        });
+        if (!started.ok) return;
+
+        const repository = yield* RepositorySql;
+        yield* repository.operation("install published passing Candidate evidence", (sql) =>
+          Effect.gen(function* () {
+            yield* sql`
+              INSERT INTO candidates (id, change_id, change_base_sha, head_sha, created_at)
+              VALUES ('candidate-published', ${started.change.id}, 'base-sha', 'head-sha', '2026-07-17T22:56:00.000Z')
+            `;
+            yield* sql`
+              INSERT INTO candidate_validation_runs (
+                id, candidate_id, policy_snapshot, state, outcome, created_at, updated_at
+              ) VALUES (
+                'run-published', 'candidate-published', '{}', 'complete', 'passed',
+                '2026-07-17T22:56:01.000Z', '2026-07-17T22:56:01.000Z'
+              )
+            `;
+            yield* sql`
+              UPDATE changes SET
+                publication_candidate_id = 'candidate-published',
+                publication_validation_run_id = 'run-published',
+                publication_owner = 'acme', publication_repo = 'repo',
+                publication_base_branch = 'main', publication_remote_name = 'origin',
+                publication_head_branch = 'published-blocker',
+                publication_expected_head_sha = 'head-sha',
+                publication_pr_number = 42, publication_pr_url = 'https://github.test/pull/42'
+              WHERE id = ${started.change.id}
+            `;
+          }),
+        );
+
+        const raised = yield* changes.raiseImplementationBlocker({
+          changeId: started.change.id,
+          content: "The published Candidate still needs an external decision.",
+          now: "2026-07-17T22:57:00.000Z",
+        });
+
+        expect(raised).toMatchObject({
+          ok: true,
+          change: { state: "open", activeBlocker: { resolvedAt: null } },
+        });
+        expect(yield* changes.listImplementationBlockers(started.change.id)).toMatchObject({
+          blockers: [{ content: "The published Candidate still needs an external decision." }],
+          active: { content: "The published Candidate still needs an external decision." },
+        });
+      }),
+    ),
+  );
+
+  it.scoped("resolves a Task-backed blocker and appends to current Acceptance Context", () =>
     withTemporaryState((input) =>
       Effect.gen(function* () {
         const tasks = yield* openSqliteTaskPersistence("BY");
@@ -284,6 +335,80 @@ describe("repository SQL storage", () => {
         expect(yield* changes.listImplementationBlockers(started.change.id)).toMatchObject({
           active: null,
           resolutions: [{ content: "Use the approved approach." }],
+        });
+      }),
+    ),
+  );
+
+  it.scoped("resolves a taskless blocker without creating Acceptance Context", () =>
+    withTemporaryState((input) =>
+      Effect.gen(function* () {
+        const starts = yield* openSqliteChangeStartPersistence();
+        const changes = yield* openSqliteChangePersistence();
+        const started = yield* starts.create({
+          id: "change-taskless-blocker",
+          repositoryCommonDirectory: input.commonDirectory,
+          branchRef: "refs/heads/but-why/by-1-taskless-blocker",
+          baseRef: "main",
+          baseRemoteUrl: "https://github.com/acme/repo.git",
+          startingCommit: "1111111111111111111111111111111111111111",
+          worktreePath: join(input.commonDirectory, "worktrees", "by-1-taskless-blocker"),
+          now: "2026-07-17T23:02:00.000Z",
+        });
+        if (!started.ok) return;
+        const raised = yield* changes.raiseImplementationBlocker({
+          changeId: started.change.id,
+          content: "Wait for an operator decision.",
+          now: "2026-07-17T23:03:00.000Z",
+        });
+        if (!raised.ok) return;
+
+        const resolved = yield* changes.resolveImplementationBlocker({
+          changeId: started.change.id,
+          content: "Continue without taskless intent.",
+          now: "2026-07-17T23:04:00.000Z",
+        });
+
+        expect(resolved).toMatchObject({
+          ok: true,
+          change: { state: "open", activeBlocker: null, acceptanceContext: null },
+          blocker: { resolution: { content: "Continue without taskless intent." } },
+        });
+        expect(yield* changes.listImplementationBlockers(started.change.id)).toMatchObject({
+          active: null,
+          resolutions: [{ content: "Continue without taskless intent." }],
+        });
+      }),
+    ),
+  );
+
+  it.scoped("rejects a Resolution when no Blocker is active", () =>
+    withTemporaryState((input) =>
+      Effect.gen(function* () {
+        const starts = yield* openSqliteChangeStartPersistence();
+        const changes = yield* openSqliteChangePersistence();
+        const started = yield* starts.create({
+          id: "change-no-blocker",
+          repositoryCommonDirectory: input.commonDirectory,
+          branchRef: "refs/heads/but-why/by-1-no-blocker",
+          baseRef: "main",
+          baseRemoteUrl: "https://github.com/acme/repo.git",
+          startingCommit: "1111111111111111111111111111111111111111",
+          worktreePath: join(input.commonDirectory, "worktrees", "by-1-no-blocker"),
+          now: "2026-07-17T23:02:00.000Z",
+        });
+        if (!started.ok) return;
+
+        const result = yield* changes.resolveImplementationBlocker({
+          changeId: started.change.id,
+          content: "There is nothing to resolve.",
+          now: "2026-07-17T23:03:00.000Z",
+        });
+
+        expect(result).toEqual({ ok: false, code: "no_active_blocker" });
+        expect(yield* changes.getChangeById(started.change.id)).toMatchObject({
+          state: "open",
+          activeBlocker: null,
         });
       }),
     ),
@@ -547,7 +672,7 @@ describe("repository SQL storage", () => {
           Effect.gen(function* () {
             yield* sql`UPDATE changes SET publication_candidate_id = ${captured.candidateId}, publication_validation_run_id = 'legacy-run', publication_owner = 'acme', publication_repo = 'repo', publication_base_branch = 'main', publication_remote_name = 'origin', publication_head_branch = 'legacy', publication_expected_head_sha = 'head-legacy', publication_pr_number = 7, publication_pr_url = 'https://github.test/pull/7' WHERE id = ${captured.changeId}`;
             yield* sql`DROP TABLE candidate_publications`;
-            yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id IN (11, 12, 13, 14)`;
+            yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id IN (11, 12, 13, 14, 15)`;
             yield* sql`INSERT INTO implementation_decisions (id, change_id, recorded_at, content) VALUES ('legacy-decision', ${captured.changeId}, '2026-07-25T15:30:00.000Z', 'Legacy unstructured decision')`;
           }),
         );
@@ -792,6 +917,7 @@ describe("repository SQL storage", () => {
           { migration_id: 12, name: "structured_implementation_decisions" },
           { migration_id: 13, name: "remove_no_change_completion" },
           { migration_id: 14, name: "remove_change_readiness" },
+          { migration_id: 15, name: "remove_acceptance_context_versions" },
         ]);
         expect(identities).toEqual([{ common_directory: repositorySql.commonDirectory }]);
         expect(candidateColumns.map(({ name }) => name)).toEqual([
@@ -805,6 +931,14 @@ describe("repository SQL storage", () => {
         expect(changeColumns.map(({ name }) => name)).not.toContain("no_change_candidate_id");
         expect(changeColumns.map(({ name }) => name)).not.toContain("no_change_validation_run_id");
         expect(changeColumns.map(({ name }) => name)).not.toContain("readiness");
+        const tableNames = yield* repositorySql.operation(
+          "read migrated table names",
+          (sql) => sql<{ readonly name: string }>`
+            SELECT name FROM sqlite_master
+            WHERE type = 'table' AND name = 'acceptance_context_versions'
+          `,
+        );
+        expect(tableNames).toEqual([]);
       }),
     ),
   );
@@ -842,7 +976,7 @@ describe("repository SQL storage", () => {
                       '2026-07-25T16:30:00.000Z', '2026-07-25T16:30:00.000Z'
                     )
                   `;
-                  yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id IN (13, 14)`;
+                  yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id IN (13, 14, 15)`;
                 }),
               );
             }).pipe(Effect.provide(repositorySqlLayer({ commonDirectory: directory, statePath }))),
@@ -916,7 +1050,7 @@ describe("repository SQL storage", () => {
                       'candidate-unsupported', 'run-unsupported'
                     )
                   `;
-                  yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id IN (13, 14)`;
+                  yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id IN (13, 14, 15)`;
                 }),
               );
             }).pipe(Effect.provide(repositorySqlLayer({ commonDirectory: directory, statePath }))),
@@ -974,7 +1108,7 @@ describe("repository SQL storage", () => {
                       'with-failure', 'head-sha', 42, 'https://github.com/acme/repo/pull/42'
                     )
                   `;
-                  yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id = 14`;
+                  yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id IN (14, 15)`;
                 }),
               );
             }).pipe(Effect.provide(repositorySqlLayer({ commonDirectory: directory, statePath }))),
@@ -1017,6 +1151,114 @@ describe("repository SQL storage", () => {
         }),
       (directory) => Effect.sync(() => rmSync(directory, { recursive: true, force: true })),
     ),
+  );
+
+  it.effect(
+    "removes Acceptance Context version history while preserving current context and snapshots",
+    () =>
+      Effect.acquireUseRelease(
+        Effect.sync(() => mkdtempSync(join(tmpdir(), "but-why-repository-sql-"))),
+        (directory) =>
+          Effect.gen(function* () {
+            const statePath = join(directory, "state.sqlite");
+            yield* Effect.scoped(
+              Effect.gen(function* () {
+                const repository = yield* RepositorySql;
+                yield* repository.operation("restore Acceptance Context version history", (sql) =>
+                  Effect.gen(function* () {
+                    yield* sql.unsafe(`CREATE TABLE acceptance_context_versions (
+                      change_id TEXT NOT NULL,
+                      version INTEGER NOT NULL,
+                      context TEXT NOT NULL,
+                      created_at TEXT NOT NULL,
+                      PRIMARY KEY (change_id, version),
+                      FOREIGN KEY (change_id) REFERENCES changes(id)
+                    )`);
+                    yield* sql`
+                      INSERT INTO changes (
+                        id, repository_common_directory, branch_ref, state, close_reason,
+                        created_at, updated_at, closed_at, acceptance_context
+                      ) VALUES (
+                        'change-with-context', ${directory}, 'refs/heads/with-context',
+                        'open', NULL, '2026-07-25T18:00:00.000Z', '2026-07-25T18:00:00.000Z',
+                        NULL,
+                        '{"version":1,"title":"Current intent","description":"Must survive.","comments":[]}'
+                      )
+                    `;
+                    yield* sql`
+                      INSERT INTO acceptance_context_versions (change_id, version, context, created_at)
+                      VALUES (
+                        'change-with-context', 1,
+                        '{"version":1,"title":"Current intent","description":"Must survive.","comments":[]}',
+                        '2026-07-25T18:00:00.000Z'
+                      )
+                    `;
+                    yield* sql`
+                      INSERT INTO candidates (id, change_id, change_base_sha, head_sha, created_at)
+                      VALUES ('candidate-1', 'change-with-context', 'base-sha', 'head-sha', '2026-07-25T18:01:00.000Z')
+                    `;
+                    yield* sql`
+                      INSERT INTO candidate_validation_runs (
+                        id, candidate_id, policy_snapshot, state, outcome, created_at, updated_at
+                      ) VALUES (
+                        'run-1', 'candidate-1',
+                        '{"checks":[],"copyFiles":[],"specialistReviews":[],"acceptanceContext":{"version":1,"title":"Current intent","description":"Must survive.","comments":[]}}',
+                        'complete', 'passed', '2026-07-25T18:02:00.000Z', '2026-07-25T18:02:00.000Z'
+                      )
+                    `;
+                    yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id = 15`;
+                  }),
+                );
+              }).pipe(
+                Effect.provide(repositorySqlLayer({ commonDirectory: directory, statePath })),
+              ),
+            );
+
+            yield* Effect.scoped(
+              Effect.gen(function* () {
+                const repository = yield* RepositorySql;
+                const tables = yield* repository.operation(
+                  "read migrated Acceptance Context version tables",
+                  (sql) => sql<{ readonly name: string }>`
+                    SELECT name FROM sqlite_master
+                    WHERE type = 'table' AND name = 'acceptance_context_versions'
+                  `,
+                );
+                expect(tables).toEqual([]);
+                const changes = yield* openSqliteChangePersistence();
+                const stored = yield* changes.getChangeById("change-with-context");
+                expect(stored?.acceptanceContext).toEqual({
+                  version: 1,
+                  title: "Current intent",
+                  description: "Must survive.",
+                  comments: [],
+                });
+                const runs = yield* repository.operation(
+                  "read preserved Validation Run snapshot",
+                  (sql) => sql<{ readonly policySnapshot: string }>`
+                    SELECT policy_snapshot AS policySnapshot
+                    FROM candidate_validation_runs WHERE id = 'run-1'
+                  `,
+                );
+                const run = runs[0];
+                expect(run).toBeDefined();
+                if (run !== undefined) {
+                  expect(JSON.parse(run.policySnapshot)).toMatchObject({
+                    acceptanceContext: {
+                      version: 1,
+                      title: "Current intent",
+                      description: "Must survive.",
+                      comments: [],
+                    },
+                  });
+                }
+              }).pipe(
+                Effect.provide(repositorySqlLayer({ commonDirectory: directory, statePath })),
+              ),
+            );
+          }),
+        (directory) => Effect.sync(() => rmSync(directory, { recursive: true, force: true })),
+      ),
   );
 
   it.effect("reports migration failures through the typed error channel", () =>
@@ -1239,8 +1481,8 @@ describe("repository SQL storage", () => {
         );
 
         return Effect.gen(function* () {
-          expect(yield* readMigrationCount).toBe(14);
-          expect(yield* readMigrationCount).toBe(14);
+          expect(yield* readMigrationCount).toBe(15);
+          expect(yield* readMigrationCount).toBe(15);
         });
       },
       (directory) => Effect.sync(() => rmSync(directory, { recursive: true, force: true })),

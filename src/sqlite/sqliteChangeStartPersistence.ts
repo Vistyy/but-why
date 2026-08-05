@@ -139,7 +139,6 @@ const create = (sql: SqlClient.SqlClient, input: CreateChangeStartInput) =>
         UPDATE tasks SET state = 'implementing', updated_at = ${input.now}
         WHERE id = ${input.taskId}
       `;
-      yield* sql`INSERT INTO acceptance_context_versions (change_id, version, context, created_at) VALUES (${input.id}, 1, ${JSON.stringify(acceptanceContext)}, ${input.now})`;
     }
     const change = yield* getById(sql, input.id);
     if (change === undefined)

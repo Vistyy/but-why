@@ -28,8 +28,9 @@ It is distinct from Task Lifecycle and is not persisted as Task state.
 _Avoid_: Task State, Task progress
 
 **Blocked Change**:
-A temporary Change state caused by one active Implementation Blocker.
-A Blocked Change cannot be submitted and returns to Open when its blocker is resolved.
+An Open Change with one unresolved Implementation Blocker.
+Blocked Change activity is derived from the unresolved Blocker row and is not persisted as Change or Task lifecycle state.
+Blocker operations neither write nor depend on blocked lifecycle state.
 _Avoid_: Closed Change, Validation Run blocked by Findings
 
 **Closed Change**:
@@ -69,8 +70,9 @@ One immutable version of approved intent.
 A task-backed Change captures its initial version from the approved Task when the Task starts.
 Acceptance Review uses supplied Acceptance Context as review authority.
 A Specialist Review that receives Acceptance Context uses it only as an authoritative scope constraint.
-Each approved Implementation Blocker Resolution creates a new version by appending the Resolution to the original approved intent and earlier Resolutions.
-A Validation Run retains the exact Acceptance Context version it reviewed.
+A Task-backed Implementation Blocker Resolution appends the Resolution to the current Acceptance Context.
+A taskless Resolution remains Change history and creates no Acceptance Context.
+A Validation Run retains the exact Acceptance Context it used through its Validation Policy Snapshot.
 _Avoid_: Current mutable Task text, Specialist instructions, inferred intent, Implementation Blocker report
 
 **Validation Run**:
@@ -177,12 +179,16 @@ _Avoid_: Task Comment, Acceptance Context amendment, ADR, Finding
 
 **Implementation Blocker**:
 An immutable Implementer-authored problem report for one Open Change when implementation cannot safely continue under the accepted intent without an external decision or action.
-An active Implementation Blocker moves a Change and its linked Task to Blocked and prevents Submission until it is resolved or the work is cancelled.
+At most one unresolved Implementation Blocker may exist for an open Change.
+The unresolved Blocker row is the active authority for blocked Change activity and remains available after publication or an earlier passing Candidate.
+Blocker operations do not write or depend on blocked Change or Task lifecycle state.
 _Avoid_: Finding, Validation Tooling Failure, Task Dependency, Implementation Decision, cancellation
 
 **Implementation Blocker Resolution**:
-A user-approved answer to one active Implementation Blocker that returns the Change to Open.
-For a Task-backed Change, the Resolution succeeds only when the linked Task is Blocked, returns the Task to Implementing, and creates a new Acceptance Context version.
+A user-approved answer to one active Implementation Blocker.
+The Resolution record remains immutable Change history and is not classified by whether it changes intent.
+For a Task-backed Change, the Resolution appends to the current Acceptance Context.
+A taskless Resolution creates no Acceptance Context or Acceptance Review input.
 _Avoid_: Implementation Decision, Task Comment, silent Task edit, automatic recovery
 
 **Validation Gate**:

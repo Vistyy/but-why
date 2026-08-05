@@ -1,7 +1,7 @@
 import type * as SqlClient from "@effect/sql/SqlClient";
 import { Effect } from "effect";
 import { randomUUID } from "node:crypto";
-import { canTransition, type TaskState } from "../task/lifecycle.js";
+import { canTransition } from "../task/lifecycle.js";
 
 import {
   changeState,
@@ -190,29 +190,13 @@ const raiseBlocker = (
   Effect.gen(function* () {
     const change = yield* getById(sql, input.changeId);
     if (change === undefined) return { ok: false as const, code: "change_not_found" as const };
-    if (change.state !== "open")
-      return {
-        ok: false as const,
-        code:
-          change.state === "blocked" ? ("change_blocked" as const) : ("change_not_open" as const),
-      };
-    if (change.publication !== null)
-      return { ok: false as const, code: "change_published" as const };
-    const passed = yield* sql<{
-      readonly found: number;
-    }>`SELECT 1 AS found FROM candidates c JOIN candidate_validation_runs r ON r.candidate_id = c.id WHERE c.id = (SELECT id FROM candidates WHERE change_id = ${input.changeId} ORDER BY created_at DESC, id DESC LIMIT 1) AND r.outcome = 'passed' LIMIT 1`;
-    if (passed.length > 0) return { ok: false as const, code: "change_candidate_passed" as const };
-    if (change.taskId !== null)
-      yield* requireLinkedTaskState(sql, {
-        taskId: change.taskId,
-        expected: "implementing",
-        operationName: "raise Implementation Blocker",
-      });
+    if (change.state === changeState.closed)
+      return { ok: false as const, code: "change_not_open" as const };
+    const activeRows =
+      yield* sql<ImplementationBlockerRow>`SELECT sequence, id, change_id AS changeId, reported_at AS reportedAt, content, resolved_at AS resolvedAt FROM implementation_blockers WHERE change_id = ${input.changeId} AND resolved_at IS NULL LIMIT 1`;
+    if (activeRows.length > 0) return { ok: false as const, code: "change_blocked" as const };
     const id = randomUUID();
     yield* sql`INSERT INTO implementation_blockers (id, change_id, reported_at, content) VALUES (${id}, ${input.changeId}, ${input.now}, ${input.content})`;
-    yield* sql`UPDATE changes SET state = 'blocked', updated_at = ${input.now} WHERE id = ${input.changeId}`;
-    if (change.taskId !== null)
-      yield* sql`UPDATE tasks SET state = 'blocked', updated_at = ${input.now} WHERE id = ${change.taskId}`;
     const updated = yield* requireChange(sql, input.changeId, "raise Implementation Blocker");
     const rows =
       yield* sql<ImplementationBlockerRow>`SELECT sequence, id, change_id AS changeId, reported_at AS reportedAt, content, resolved_at AS resolvedAt FROM implementation_blockers WHERE id = ${id}`;
@@ -229,34 +213,17 @@ const resolveBlocker = (
   Effect.gen(function* () {
     const change = yield* getById(sql, input.changeId);
     if (change === undefined) return { ok: false as const, code: "change_not_found" as const };
-    if (change.state !== "blocked")
+    if (change.state === changeState.closed)
       return { ok: false as const, code: "no_active_blocker" as const };
     const rows =
       yield* sql<ImplementationBlockerRow>`SELECT sequence, id, change_id AS changeId, reported_at AS reportedAt, content, resolved_at AS resolvedAt FROM implementation_blockers WHERE change_id = ${input.changeId} AND resolved_at IS NULL LIMIT 1`;
     const blocker = rows[0];
     if (blocker === undefined) return { ok: false as const, code: "no_active_blocker" as const };
-    if (change.taskId !== null)
-      yield* requireLinkedTaskState(sql, {
-        taskId: change.taskId,
-        expected: "blocked",
-        operationName: "resolve Implementation Blocker",
-      });
     const resolutionId = randomUUID();
-    if (change.acceptanceContext !== null) {
-      const context = {
-        ...change.acceptanceContext,
-        resolutions: [...(change.acceptanceContext.resolutions ?? []), input.content],
-      };
-      const versions = yield* sql<{
-        readonly version: number | bigint;
-      }>`SELECT COALESCE(MAX(version), 0) + 1 AS version FROM acceptance_context_versions WHERE change_id = ${input.changeId}`;
-      const version = Number(versions[0]?.version ?? 1);
-      yield* sql`INSERT INTO acceptance_context_versions (change_id, version, context, created_at) VALUES (${input.changeId}, ${version}, ${JSON.stringify(context)}, ${input.now})`;
-    }
     yield* sql`UPDATE implementation_blockers SET resolved_at = ${input.now}, resolution_id = ${resolutionId}, resolution_recorded_at = ${input.now}, resolution_content = ${input.content} WHERE id = ${blocker.id}`;
-    yield* sql`UPDATE changes SET state = 'open', acceptance_context = CASE WHEN task_id IS NULL THEN acceptance_context ELSE json_set(acceptance_context, '$.resolutions', json_insert(COALESCE(json_extract(acceptance_context, '$.resolutions'), '[]'), '$[#]', ${input.content})) END, updated_at = ${input.now} WHERE id = ${input.changeId}`;
-    if (change.taskId !== null)
-      yield* sql`UPDATE tasks SET state = 'implementing', updated_at = ${input.now} WHERE id = ${change.taskId}`;
+    if (change.taskId !== null && change.acceptanceContext !== null) {
+      yield* sql`UPDATE changes SET acceptance_context = json_set(acceptance_context, '$.resolutions', json_insert(COALESCE(json_extract(acceptance_context, '$.resolutions'), '[]'), '$[#]', ${input.content})), updated_at = ${input.now} WHERE id = ${input.changeId}`;
+    }
     const updated = yield* requireChange(sql, input.changeId, "resolve Implementation Blocker");
     return {
       ok: true as const,
@@ -272,22 +239,6 @@ const resolveBlocker = (
         },
       },
     };
-  });
-
-const requireLinkedTaskState = (
-  sql: SqlClient.SqlClient,
-  input: {
-    readonly taskId: string;
-    readonly expected: TaskState;
-    readonly operationName: string;
-  },
-) =>
-  Effect.gen(function* () {
-    const rows = yield* sql<{ readonly state: TaskState }>`
-      SELECT state FROM tasks WHERE id = ${input.taskId}
-    `;
-    if (rows[0]?.state !== input.expected)
-      return yield* invalidData(input.operationName, `Linked Task must be ${input.expected}`);
   });
 
 const transitionLinkedTask = (
