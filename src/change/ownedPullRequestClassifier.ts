@@ -32,7 +32,7 @@ export type OwnedPublication = ChangePublication & {
   readonly pullRequest: NonNullable<ChangePublication["pullRequest"]>;
 };
 
-const ownedPublication = (change: ChangeRecord): OwnedPublication | undefined => {
+export const ownedPublication = (change: ChangeRecord): OwnedPublication | undefined => {
   const publication = change.publication;
   return publication?.pullRequest === null || publication === null
     ? undefined

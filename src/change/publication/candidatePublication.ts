@@ -19,7 +19,7 @@ import type {
 import type { RepositoryStorageError } from "../../contracts/repositoryStorageError.js";
 import { implementationDecisionMarkdown } from "../implementationDecision.js";
 import { branchNameForRef } from "../changeBranch.js";
-import { observeOwnedPullRequest } from "../ownedPullRequestClassifier.js";
+import { observeOwnedPullRequest, ownedPublication } from "../ownedPullRequestClassifier.js";
 export type CommitSubjectResult =
   | { readonly ok: true; readonly subject: string | undefined }
   | { readonly ok: false };
@@ -499,7 +499,7 @@ const preparePullRequestUpdate = (
   headBranch: string,
   expectedHeadSha: string,
 ): UpdatePreparation => {
-  const owned = publishedChangePublication(change);
+  const owned = ownedPublication(change);
   if (owned === undefined) throw new Error("Missing owned pull request");
   if (!ownedPublicationMatchesTarget(owned, input.target, headBranch)) {
     return { proceed: false, result: { ok: false, code: "publication_state_conflict" } };
@@ -579,13 +579,6 @@ const prepareExactOpenUpdate = (
   return hasExpectedHead(dependencies.git, change.branchRef, expectedHeadSha)
     ? { proceed: true, owned }
     : { proceed: false, result: { ok: false, code: "current_head_mismatch" } };
-};
-
-const publishedChangePublication = (change: ChangeRecord): Published | undefined => {
-  const publication = change.publication;
-  return publication?.pullRequest === null || publication === null
-    ? undefined
-    : (publication as Published);
 };
 
 const executePullRequestUpdate = (

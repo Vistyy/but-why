@@ -12,6 +12,7 @@ import {
   localCandidateCaptureGit,
   readRepositoryBranchHead,
 } from "./candidateCapture/localGitCandidate.js";
+import { reviewerSessionsProducerRoot } from "./reviewerSession/reviewerSession.js";
 import {
   openChangeSubmit,
   type ChangeSubmit,
@@ -149,10 +150,13 @@ export const loadChangeSubmit = (input: {
           changePersistence.removeReviewerSession(changeId, producer).pipe(
             Effect.tap(() =>
               Effect.sync(() =>
-                rmSync(join(context.paths.operationalDir, changeId, producer), {
-                  recursive: true,
-                  force: true,
-                }),
+                rmSync(
+                  reviewerSessionsProducerRoot(context.paths.operationalDir, changeId, producer),
+                  {
+                    recursive: true,
+                    force: true,
+                  },
+                ),
               ),
             ),
           ),

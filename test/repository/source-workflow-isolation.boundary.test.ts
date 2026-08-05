@@ -92,6 +92,7 @@ test("source workflow delegates a Candidate worktree to the canonical executable
     "remove_implementation_decision_content",
     "validation_run_blocker_identity",
     "remove_finding_severity",
+    "simplify_reviewer_sessions",
     "remove_candidate_publications",
   ]);
   expect(readTableNames(main)).not.toContain("candidate_migration_probe");

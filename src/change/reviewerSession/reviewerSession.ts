@@ -28,10 +28,10 @@ export type ReviewerSessionIdentity = {
 };
 
 export type ReviewerSessionRecord = {
-  readonly identity: ReviewerSessionIdentity;
+  readonly changeId: string;
+  readonly producer: string;
   readonly fingerprint: string;
   readonly sessionReference: string;
-  readonly lastCandidateId: string;
 };
 
 export type ReviewerSessionStore = {
@@ -51,31 +51,25 @@ export type ReviewerContinuity = "fresh" | "resumed" | "restarted";
 export const reviewerSessionFingerprint = (identity: ReviewerSessionIdentity): string =>
   createHash("sha256").update(JSON.stringify(identity)).digest("hex");
 
-export const sessionIdentityMatches = (
-  record: ReviewerSessionRecord,
-  identity: ReviewerSessionIdentity,
-): boolean => {
-  try {
-    return (
-      typeof record.fingerprint === "string" &&
-      typeof record.sessionReference === "string" &&
-      record.identity !== null &&
-      typeof record.identity === "object" &&
-      record.fingerprint === reviewerSessionFingerprint(record.identity) &&
-      record.fingerprint === reviewerSessionFingerprint(identity) &&
-      record.identity.changeId === identity.changeId
-    );
-  } catch {
-    return false;
-  }
-};
-
-export const reviewerSessionsPath = (operationalDir: string): string => {
-  const path = join(operationalDir, "reviewer-sessions");
+export const reviewerSessionsPath = (
+  sessionStorageRoot: string,
+  changeId: string,
+  producer: string,
+): string => {
+  const path = join(sessionStorageRoot, changeId, producer, "reviewer-sessions");
   mkdirSync(path, { recursive: true, mode: 0o700 });
   chmodSync(path, 0o700);
   return path;
 };
+
+export const reviewerSessionsProducerRoot = (
+  sessionStorageRoot: string,
+  changeId: string,
+  producer: string,
+): string => join(sessionStorageRoot, changeId, producer);
+
+export const reviewerSessionsChangeRoot = (sessionStorageRoot: string, changeId: string): string =>
+  join(sessionStorageRoot, changeId);
 
 export const continuationPrompt = (input: {
   readonly candidate: {

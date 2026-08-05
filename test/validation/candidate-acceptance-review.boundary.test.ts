@@ -27,6 +27,7 @@ import type {
   ReviewerSessionRecord,
   ReviewerSessionStore,
 } from "../../src/change/reviewerSession/reviewerSession.js";
+import { reviewerSessionsPath } from "../../src/change/reviewerSession/reviewerSession.js";
 import {
   ReviewerOutputContractFailed,
   SandcastleToolingFailed,
@@ -39,7 +40,11 @@ import {
   git,
 } from "../support/candidateReadyRepo.js";
 import { cloneInitializedTestRepository } from "../support/initializedRepo.js";
-import { acquireTestWorkspace, releaseTestWorkspace } from "../support/testWorkspace.js";
+import {
+  acquireTestWorkspace,
+  createTestWorkspace,
+  releaseTestWorkspace,
+} from "../support/testWorkspace.js";
 import { withTestRepository } from "../support/repository.js";
 
 const now = "2026-07-15T10:00:00.000Z";
@@ -574,7 +579,7 @@ layer(acceptanceTemplateLayer)("Task-backed Candidate Acceptance Review", (it) =
       const sessions = new Map<string, ReviewerSessionRecord>();
       const sessionStore: ReviewerSessionStore = {
         get: (changeId) => Effect.succeed(sessions.get(changeId)),
-        save: (record) => Effect.sync(() => sessions.set(record.identity.changeId, record)),
+        save: (record) => Effect.sync(() => sessions.set(record.changeId, record)),
         remove: (changeId) => Effect.sync(() => sessions.delete(changeId)),
       };
       const temporaryFailure = new SandcastleToolingFailed({
@@ -615,13 +620,158 @@ layer(acceptanceTemplateLayer)("Task-backed Candidate Acceptance Review", (it) =
   );
 
   it.scoped(
+    "uses one canonical per-producer Reviewer Session path for Acceptance and Specialists",
+    () =>
+      Effect.gen(function* () {
+        const sessions = new Map<string, ReviewerSessionRecord>();
+        const sessionStore: ReviewerSessionStore = {
+          get: (changeId, producer) => Effect.succeed(sessions.get(`${changeId}/${producer}`)),
+          save: (record) =>
+            Effect.sync(() => sessions.set(`${record.changeId}/${record.producer}`, record)),
+          remove: (changeId, producer) =>
+            Effect.sync(() => sessions.delete(`${changeId}/${producer}`)),
+        };
+        const sessionStorageRoot = createTestWorkspace();
+        const review = vi.fn<ReviewerAgentRuntime["review"]>((input) =>
+          Effect.succeed({
+            ok: true as const,
+            report: { findings: [] },
+            attempts: 1,
+            stdout: `${input.reviewer} report`,
+            sessionReference: `${input.reviewer}-session`,
+          }),
+        );
+        const ready = yield* acceptanceReadyRepo(
+          { review },
+          { sessionStore, reviewerSessionsRoot: sessionStorageRoot },
+        );
+        const policy = {
+          ...passingValidationPolicy,
+          specialistReviews: [specialistPolicy("standards")],
+        };
+        const result = yield* runTaskBackedCandidate(ready, policy);
+
+        expect(result).toMatchObject({ ok: true, outcome: "passed" });
+        expect(review.mock.calls.map(([input]) => input.sessionStorageRoot)).toEqual([
+          reviewerSessionsPath(sessionStorageRoot, ready.captured.changeId, "acceptance"),
+          reviewerSessionsPath(sessionStorageRoot, ready.captured.changeId, "standards"),
+        ]);
+      }),
+  );
+
+  it.scoped(
+    "starts a fresh Reviewer Session and replaces it when the identity fingerprint changes",
+    () =>
+      Effect.gen(function* () {
+        const sessions = new Map<string, ReviewerSessionRecord>();
+        const sessionStore: ReviewerSessionStore = {
+          get: (changeId) => Effect.succeed(sessions.get(changeId)),
+          save: (record) => Effect.sync(() => sessions.set(record.changeId, record)),
+          remove: (changeId) => Effect.sync(() => sessions.delete(changeId)),
+        };
+        const review = vi.fn<ReviewerAgentRuntime["review"]>((input) =>
+          Effect.succeed({
+            ok: true as const,
+            report: { findings: [] },
+            attempts: 1,
+            stdout: "acceptance report",
+            sessionReference:
+              input.resumeSession === undefined ? "fresh-session" : "resumed-session",
+          }),
+        );
+        const ready = yield* acceptanceReadyRepo({ review }, { sessionStore });
+        const initial = yield* runTaskBackedCandidate(ready);
+        expect(initial).toMatchObject({ ok: true, outcome: "passed" });
+        const initialFingerprint = sessions.get(ready.captured.changeId)?.fingerprint;
+
+        git(ready.repo, "commit", "--allow-empty", "-m", "changed reviewer settings");
+        const successor = yield* captureLocalCandidate({ cwd: ready.repo, now: successorNow });
+        if (!successor.ok) throw new Error(`Candidate capture failed: ${successor.code}`);
+        const changedPolicy = {
+          ...passingValidationPolicy,
+          acceptanceReview: {
+            ...acceptancePolicy,
+            instructions: "Changed Acceptance instructions",
+          },
+        };
+        const result = yield* runTaskBackedCandidate(ready, changedPolicy, successor);
+
+        expect(result).toMatchObject({
+          ok: true,
+          outcome: "passed",
+          reviewerEvidence: { continuity: "restarted", reviewCalls: 1 },
+        });
+        expect(review.mock.calls[1]?.[0].resumeSession).toBeUndefined();
+        const stored = sessions.get(successor.changeId);
+        expect(stored?.sessionReference).toBe("fresh-session");
+        expect(stored?.fingerprint).not.toBe(initialFingerprint);
+      }),
+  );
+
+  it.scoped("preserves a fingerprint-mismatched stored session when the fresh review fails", () =>
+    Effect.gen(function* () {
+      const sessions = new Map<string, ReviewerSessionRecord>();
+      const sessionStore: ReviewerSessionStore = {
+        get: (changeId) => Effect.succeed(sessions.get(changeId)),
+        save: (record) => Effect.sync(() => sessions.set(record.changeId, record)),
+        remove: (changeId) => Effect.sync(() => sessions.delete(changeId)),
+      };
+      const freshFailure = new SandcastleToolingFailed({
+        operationName: "run_reviewer_agent",
+        message: "fresh review failed",
+      });
+      let calls = 0;
+      const review = vi.fn<ReviewerAgentRuntime["review"]>(() => {
+        calls += 1;
+        if (calls === 1)
+          return Effect.succeed({
+            ok: true as const,
+            report: { findings: [] },
+            attempts: 1,
+            stdout: "initial acceptance report",
+            sessionReference: "first-session",
+          });
+        return Effect.succeed({
+          ok: false as const,
+          failure: freshFailure,
+          sessionUsability: "unknown" as const,
+          attempts: 1,
+          stdout: "",
+        });
+      });
+      const ready = yield* acceptanceReadyRepo({ review }, { sessionStore });
+      const initial = yield* runTaskBackedCandidate(ready);
+      expect(initial).toMatchObject({ ok: true, outcome: "passed" });
+      const initialFingerprint = sessions.get(ready.captured.changeId)?.fingerprint;
+
+      git(ready.repo, "commit", "--allow-empty", "-m", "changed reviewer settings");
+      const successor = yield* captureLocalCandidate({ cwd: ready.repo, now: successorNow });
+      if (!successor.ok) throw new Error(`Candidate capture failed: ${successor.code}`);
+      const changedPolicy = {
+        ...passingValidationPolicy,
+        acceptanceReview: {
+          ...acceptancePolicy,
+          instructions: "Changed Acceptance instructions",
+        },
+      };
+      const result = yield* runTaskBackedCandidate(ready, changedPolicy, successor);
+
+      expect(result).toMatchObject({ ok: false, outcome: "tooling_failed" });
+      expect(review.mock.calls[1]?.[0].resumeSession).toBeUndefined();
+      const stored = sessions.get(successor.changeId);
+      expect(stored?.sessionReference).toBe("first-session");
+      expect(stored?.fingerprint).toBe(initialFingerprint);
+    }),
+  );
+
+  it.scoped(
     "restarts exactly once when the Reviewer Agent Runtime reports an unusable session",
     () =>
       Effect.gen(function* () {
         const sessions = new Map<string, ReviewerSessionRecord>();
         const sessionStore: ReviewerSessionStore = {
           get: (changeId) => Effect.succeed(sessions.get(changeId)),
-          save: (record) => Effect.sync(() => sessions.set(record.identity.changeId, record)),
+          save: (record) => Effect.sync(() => sessions.set(record.changeId, record)),
           remove: (changeId) => Effect.sync(() => sessions.delete(changeId)),
         };
         const unusable = new SandcastleToolingFailed({
@@ -1492,9 +1642,7 @@ layer(acceptanceTemplateLayer)("Task-backed Candidate Acceptance Review", (it) =
       const sessionStore: ReviewerSessionStore = {
         get: (changeId, producer) => Effect.succeed(sessions.get(`${changeId}/${producer}`)),
         save: (record) =>
-          Effect.sync(() =>
-            sessions.set(`${record.identity.changeId}/${record.identity.producer}`, record),
-          ),
+          Effect.sync(() => sessions.set(`${record.changeId}/${record.producer}`, record)),
         remove: (changeId, producer) =>
           Effect.sync(() => sessions.delete(`${changeId}/${producer}`)),
       };
@@ -1565,6 +1713,7 @@ type AcceptanceReadyRepo = {
   readonly validation: ReturnType<typeof candidateValidationForTest>;
   readonly reviewerAgentRuntime: ReviewerAgentRuntime;
   readonly sessionStore?: ReviewerSessionStore;
+  readonly reviewerSessionsRoot?: string;
 };
 
 const runFullTaskBackedCandidate = (
@@ -1652,6 +1801,9 @@ const runReviewPhases = (
           : { agentEnvironment: policy.agentEnvironment }),
         runtime: ready.reviewerAgentRuntime,
         ...(ready.sessionStore === undefined ? {} : { sessionStore: ready.sessionStore }),
+        ...(ready.reviewerSessionsRoot === undefined
+          ? {}
+          : { sessionStorageRoot: ready.reviewerSessionsRoot }),
         sandbox,
         artifactsRoot: join(commonDirectory(ready.repo), "but-why", "artifacts"),
         artifactMaxBytes: maxValidationArtifactBytes,
@@ -1724,6 +1876,9 @@ const runReviewPhases = (
           : { agentEnvironment: policy.agentEnvironment }),
         runtime: ready.reviewerAgentRuntime,
         ...(ready.sessionStore === undefined ? {} : { sessionStore: ready.sessionStore }),
+        ...(ready.reviewerSessionsRoot === undefined
+          ? {}
+          : { sessionStorageRoot: ready.reviewerSessionsRoot }),
         sandbox,
         artifactsRoot: join(commonDirectory(ready.repo), "but-why", "artifacts"),
         artifactMaxBytes: maxValidationArtifactBytes,
@@ -1777,15 +1932,16 @@ const specialistSessionStore = (
 ): ReviewerSessionStore => ({
   get: (changeId, producer) => Effect.succeed(sessions.get(`${changeId}/${producer}`)),
   save: (record) =>
-    Effect.sync(() =>
-      sessions.set(`${record.identity.changeId}/${record.identity.producer}`, record),
-    ),
+    Effect.sync(() => sessions.set(`${record.changeId}/${record.producer}`, record)),
   remove: (changeId, producer) => Effect.sync(() => sessions.delete(`${changeId}/${producer}`)),
 });
 
 const acceptanceReadyRepo = (
   reviewerAgentRuntime: ReviewerAgentRuntime,
-  session?: { readonly sessionStore: ReviewerSessionStore },
+  session?: {
+    readonly sessionStore?: ReviewerSessionStore;
+    readonly reviewerSessionsRoot?: string;
+  },
 ): Effect.Effect<AcceptanceReadyRepo, RepositoryStorageError, AcceptanceTemplate> =>
   Effect.gen(function* () {
     const template = yield* AcceptanceTemplate;
