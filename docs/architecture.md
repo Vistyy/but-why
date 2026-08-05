@@ -83,6 +83,12 @@ Cleanup deletes a Remote Change Branch only when it still identifies the exact p
 Submit, publication, cancellation, and reconciliation share one pure owned-pull-request identity classifier.
 Submit passes an exact merged owned pull request to terminal completion and does not run full reconciliation or cleanup.
 
+`by change reconcile <exact-change-id> --discard-work` authorizes one discard attempt for that exact terminal Change.
+The flag is rejected without one exact Change ID and when the selected Change is open.
+For that one attempt it may remove a dirty Managed Worktree, delete unique local Repository Branch work, and delete a changed Remote Change Branch using the exact head observed for that attempt.
+Unreadable, mismatched, or changed-after-read remote facts stay pending and are never deleted.
+The authorization is not persisted and ordinary reconciliation without the flag retains every preservation safeguard.
+
 Completion, cancellation, repeated cancellation, and reconciliation run one Change-owned terminal cleanup operation.
 Terminal state with cleanup pending is recorded before cleanup begins, and the operation retries idempotently when cleanup is already complete, a resource is already missing, or a prior attempt left cleanup pending.
 For an exact owned open pull request, cancellation closes the pull request before the cleanup operation deletes the Remote Change Branch.
