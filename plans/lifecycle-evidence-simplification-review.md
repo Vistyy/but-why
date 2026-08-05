@@ -161,6 +161,9 @@ Acceptance and Specialist phases should consume only a project-owned `unusable |
 The current Acceptance Reviewer Session cleanup path mismatch must be corrected through one canonical path function.
 Reviewer Session storage should retain only Change ID, producer, identity fingerprint, and session reference.
 The fingerprint remains the runtime compatibility identity for profiles, instructions, Agent Environment, tools, skills, and extensions.
+Each Submission resolves current reviewer settings instead of snapshotting them at Change Start.
+A changed fingerprint starts a fresh Reviewer Session so changed settings do not resume an incompatible conversation.
+A fingerprint-mismatched stored session remains until a fresh review succeeds and replaces it.
 No supported inspection or recovery path uses the full identity JSON, and comparing two duplicated identity representations protects only their agreement.
 The stored last Candidate ID and update timestamp are written but never read, and no query uses the fingerprint index.
 The full identity JSON, last Candidate ID, update timestamp, fingerprint index, related parsing and mapping, compatibility behavior, and durable tests should be removed together.
@@ -242,6 +245,8 @@ Delete Acceptance Context Version history while retaining current Acceptance Con
 Delete Candidate Publication chronology while retaining current publication facts.
 Drop Finding severity while retaining Findings.
 Drop removed Reviewer Session fields while retaining Change ID, producer, fingerprint, and session reference.
+A forward migration copies those retained fields without parsing or validating retired identity JSON.
+An unreadable retired identity JSON does not stop migration when the retained fields are readable.
 Preserve existing terminal Task states while dropping the completion-kind label.
 Do not map transient Task states to `todo` or infer resumable work from a linked Change.
 The active database has no transient Task states, and the eight unique transient Tasks found across historical snapshots are all Done through merged pull requests in active state.

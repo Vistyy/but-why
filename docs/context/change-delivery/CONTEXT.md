@@ -117,6 +117,11 @@ A continuing reviewer conversation owned by one Change and one Reviewer Session 
 It can resume across that Change's Candidates and disposable Validation Workspaces so a reviewer can reuse repository orientation.
 _Avoid_: Fresh reviewer session per Candidate, cross-Change reviewer conversation
 
+**Reviewer Transcript**:
+The complete Pi session conversation produced by one Reviewer Session.
+It is retained after its Change closes as debugging and improvement evidence.
+_Avoid_: Review report, reviewer stdout, security audit trail
+
 **Reviewer Session Usability**:
 The Reviewer Agent Runtime classification after a failed resumed review.
 `unusable` means the stored Reviewer Session is proven unable to continue, while `unknown` means the failure does not establish that the stored session is unusable and the session remains preserved.
@@ -133,6 +138,7 @@ _Avoid_: Agent Profile, generic validation phase, cross-Change reviewer
 
 **Reviewer Session Identity**:
 The Change, Reviewer Producer, resolved Agent Profile, reviewer instructions, Agent Environment, and curated resources that determine whether a Reviewer Session can safely continue.
+Its fingerprint is the sole persisted compatibility identity.
 _Avoid_: Session file path, Candidate identity, Validation Run identity
 
 **Artifact**:
