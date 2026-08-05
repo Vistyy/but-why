@@ -38,24 +38,28 @@ Do not use test count, coverage percentage, file category, or integration level 
 
 Evidence can include type checking, static analysis, focused commands, tests, inspection, rendered behavior, logs, traces, reproducible procedures, measurements, experiments, and mandatory repository gates.
 These examples do not limit the available techniques.
-Lifecycle cost includes authoring and review, code and fixture size, execution time and resources, stability, failure diagnosis, coupling, and future maintenance.
+Lifecycle cost includes authoring and review, code and fixtures, execution time and resources, stability, failure diagnosis, coupling, and future maintenance.
+Compare that cost with the least-cost feasible evidence that can establish the Claim.
 Do not use a numerical score or test-to-production line ratio to replace judgment about confidence and cost.
 
-Require a durable automated test or coherent test group only when it detects a distinct plausible regression failure, existing retained evidence and proportionate one-time evidence are insufficient, the selected seam observes the Claim reliably, and the distinct confidence gained justifies lifecycle cost.
-Before requiring durable automation, state the distinct regression failure, why existing or one-time evidence is insufficient, and why lifecycle cost is proportionate.
-For each additional durable case, identify the materially distinct failure that retained evidence would otherwise miss.
-Consolidate or omit cases that add no distinct failure, especially when they repeat the same Claim through an equally or more expensive seam.
+Require a durable automated test only when it protects accepted behavior or an invariant, detects an identified plausible regression that other selected or retained evidence would not reveal, existing retained evidence and proportionate one-time evidence are insufficient, the selected seam observes the Claim reliably, and its additional coverage justifies its additional lifecycle cost over the least-cost feasible alternative.
+Before requiring durable automation, state the regression, why existing or one-time evidence is insufficient, and why lifecycle cost is proportionate.
+Apply these conditions to every required test case, including each parameterized case.
+Map each test case to the regression that other selected or retained evidence would not reveal.
+A different input, fixture, branch, assertion, or code path does not make a regression distinct by itself.
+A parameterized test can use one table or matrix when that mapping remains explicit.
+Remove or consolidate a test case that does not satisfy these conditions.
 Do not translate each accepted-behavior statement or evidence example into a test.
 
 Specify a mechanism or seam only to the precision needed to protect required confidence.
-An Implementer may use another mechanism that establishes the same Claim through every materially required seam.
+An Implementer may use another mechanism that establishes the same Claim through each seam the contract requires because interaction across it is part of the Claim.
 When no Material Risk needs evidence beyond applicable mandatory gates, do not add verification work by convention.
 
 When accepted intent or target-repository instructions retire a concept, identify its replacement, affected surfaces, targeted search scope, and accepted exceptions.
 Use targeted diff, search, and inspection as one-time removal evidence.
 Do not create durable evidence whose only purpose is to prove that a retired concept is absent.
 
-This step is complete when every Claim has feasible, proportionate Evidence, each required seam is justified by the Claim, and every required durable test or test group satisfies the admission rule.
+This step is complete when every Claim has feasible, proportionate Evidence, each required seam is justified by the Claim, and every required durable test case satisfies the admission rule.
 
 ## 3. Write the contract
 
@@ -75,7 +79,7 @@ Use this structure and omit empty optional sections:
 
 ### Required evidence
 
-- <Observation or artifact, with a mechanism or seam only when materially required.>
+- <Observation or artifact, naming each seam required because interaction across it is part of the Claim.>
 
 ### Escalation
 
@@ -96,9 +100,10 @@ Applicable mandatory gates provide sufficient evidence.
 No additional durable evidence is required.
 ```
 
-When the contract requires durable automated evidence, record its admission reasons under `Required evidence`.
+When the contract requires durable automated evidence, record the admission reasons for every required test case under `Required evidence`.
+A parameterized test can use one explicit mapping from each case to the regression that other selected or retained evidence would not reveal.
 
-This step is complete when the contract states the required confidence without unnecessarily constraining implementation technique and every durable-evidence requirement includes its admission reasons.
+This step is complete when the contract states the required confidence without unnecessarily constraining implementation technique and every durable-evidence requirement includes its case-level admission reasons.
 
 ## 4. Confirm feasibility
 
