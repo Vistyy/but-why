@@ -7,6 +7,7 @@ remove_when: the operator approves the complete target, every accepted requireme
 # Lifecycle and evidence simplification review
 
 > Non-authoritative working plan.
+> SQLite Task Context and Task state are authoritative for implementation status.
 > This file preserves accepted planning decisions and open questions from the lifecycle and evidence review.
 > The approved replacement graph is recorded in BY-100 through BY-120, with existing BY-60 and BY-70 retained.
 > It does not describe current implemented behavior and does not authorize Task approval, Change Start, or implementation.
@@ -207,7 +208,8 @@ The option must not create persisted discard authorization or another cleanup st
 
 Every closed Change should use one idempotent terminal cleanup operation for completion, cancellation, repeated cancellation, and reconciliation.
 Cancellation should persist terminal state with cleanup pending before cleanup begins.
-Cleanup should close an owned pull request before deleting its Remote Change Branch and should include the Managed Worktree, local Repository Branch, Remote Change Branch, Reviewer Sessions, and Artifact content.
+Cleanup should close an owned pull request before deleting its Remote Change Branch and should include the Managed Worktree, local Repository Branch, Remote Change Branch, active Reviewer Session records, and Artifact content.
+BY-126 owns retaining and indexing Reviewer Transcripts before terminal cleanup removes active Reviewer Session records.
 Cancelled and completed Changes should use the same cleanup scope and safeguards.
 Repeated cancellation of an already cancelled Change should retry pending cleanup.
 If cleanup or cleanup-result persistence fails, the terminal cancellation remains true and the command should report cleanup as uncertain or pending with retry guidance.
@@ -270,27 +272,23 @@ An active Implementation Blocker remains scoped to completing its current Change
 When the operator accepts out-of-scope work, the operator may create a normal unapproved Task.
 Future follow-up capture should wait for concrete examples showing that manual operator-created Tasks are insufficient.
 
-## Accepted stale Task dispositions
+## Recorded Task dispositions
 
-No Task mutation is authorized by this plan alone.
-The operator accepted these proposed dispositions for the later reconciliation mutation:
+SQLite Task state is authoritative for these dispositions.
+This summary identifies the retained replacement work.
 
-- BY-14 should be cancelled as stale and recreated only when first npm publication becomes the immediate outcome.
-- BY-15 should be cancelled as premature and recreated only when a real post-publication upgrade is ready to implement and verify.
-- BY-41 should be cancelled as superseded, while local taskless cancellation-reason storage moves into terminal lifecycle work.
-- BY-42 should be cancelled as superseded, while targeted `change reconcile <change-id> --discard-work` moves into terminal cleanup work.
-- BY-53 should be cancelled as superseded, while an explicit immutable SQLite snapshot command remains a replacement requirement.
-- BY-60 should remain approved and should deepen the existing Reviewer Agent Runtime without adding a generic coordinator.
-- BY-66 should be cancelled as superseded, while its durable linked-Task identity invariant moves into Task and Change lifecycle work.
-- BY-68 should be cancelled as effectively satisfied, with optional command-runner cleanup left to the codebase simplification audit.
-- BY-69 should be cancelled as overbroad, while one shared `persisted_data_invalid` CLI behavior remains replacement work.
-- BY-70 should remain approved and implement the operator-approved GraphQL Remote Change Branch deletion replacement proved by the completed spike.
-- BY-71 should be cancelled as obsolete without preserving setup deduplication as a product requirement.
-
-BY-89 is cancelled and its Change is closed.
-Its cleanup remains pending because its unique local branch is not reachable from another ref.
-The accepted targeted discard behavior should provide its future explicit cleanup path.
-BY-99 is Done, merged through pull request 78, and fully cleaned up.
+- BY-14 and BY-15 are cancelled until first-release or upgrade work becomes immediate.
+- BY-41 is cancelled. BY-115 owns cancellation reasons and taskless cancellation storage.
+- BY-42 is cancelled. BY-116 owns targeted `change reconcile <change-id> --discard-work`.
+- BY-53 is cancelled. BY-118 implements the immutable Shared Repository State Snapshot replacement.
+- BY-60 is Done. It owns Reviewer Agent Runtime usability classification without a generic coordinator.
+- BY-66 is cancelled. BY-101, BY-114, and BY-115 own the remaining linked-Task lifecycle work.
+- BY-68 is cancelled as effectively satisfied. Optional command-runner cleanup remains an investigation candidate in the codebase simplification audit and has no current product Task.
+- BY-69 is cancelled. BY-120 implements the shared `persisted_data_invalid` result.
+- BY-70 and BY-125 are Done. They implement exact Remote Change Branch deletion and its post-error readback.
+- BY-71 is cancelled. Remaining validation-orchestration cleanup is optional codebase simplification work.
+- BY-89 is cancelled. BY-107 owns current structured Implementation Decisions.
+- BY-99 is Done and fully cleaned up.
 
 ## Future first-release direction
 
@@ -330,7 +328,8 @@ Task list and show should expose a linked Change only through its ID and optiona
 They should remove `startable` and linked Change `state`, `readiness`, and `activeBlocker` fields.
 When Change facts overlap, Change Activity is `blocked` for an unresolved Implementation Blocker, then `validating` for an Active Validation Run, then `ready` for current passing Validation evidence, and otherwise `implementing`.
 Complete Change facts remain owned by Change inspection.
-This correction requires later Task Context and Task Dependency mutations, but does not authorize them.
+The SQLite Task graph records the required Task Context and Task Dependencies.
+This correction does not authorize implementation.
 
 ## Accepted final gate-audit consequences
 
@@ -359,9 +358,9 @@ The GraphQL Adapter can use already-recorded owner, repository, branch, and expe
 The exact-head safeguard, missing-branch idempotence, uncertain-response recovery, cleanup ordering, and pending reconciliation remain.
 
 The operator approved the GraphQL replacement and reported deleting the private spike repository `Vistyy/by70-graphql-delete-ref-20260803140717-2`.
-BY-70 should remain approved and own the replacement.
-The implementation should use one focused GraphQL Adapter with pre-read, exact `beforeOid`, all-zero `afterOid`, and post-error readback.
-The completed BY-70 Task explicitly excludes immediate post-failure readback, so unapproved Task BY-125 owns this follow-up.
+BY-70 implements the replacement.
+The focused GraphQL Adapter uses pre-read, exact `beforeOid`, all-zero `afterOid`, and post-error readback.
+BY-125 implements the post-failure readback follow-up.
 It must not add storage, configuration, a generic GraphQL framework, or duplicated recovery state.
 
 ## Deferred review triggers
@@ -375,5 +374,5 @@ These deferred triggers are not current requirements and do not block the lifecy
 
 The operator approved every individual decision identified as accepted in this plan.
 The operator approved the complete lifecycle and evidence simplification target and replacement Task graph.
-The approved graph is recorded as unapproved Tasks BY-100 through BY-120, with existing BY-60 and BY-70 retained unchanged.
-The operator has not approved any new Task, Change Start, or implementation Change.
+SQLite Task Context and Task state record the graph's current implementation status.
+This plan does not itself authorize a new Task, Change Start, or implementation Change.

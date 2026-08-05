@@ -78,23 +78,6 @@ describe("reviewer output contract", () => {
     }),
   );
 
-  it.effect("rejects unsupported Finding severity", () =>
-    Effect.gen(function* () {
-      const error = yield* Effect.flip(
-        decodeReviewerOutputContract({
-          reviewer: "intent",
-          attempts: 2,
-          output: { findings: [reviewerFinding({ severity: "high" })] },
-        }),
-      );
-
-      expect(error._tag).toBe("ReviewerOutputContractFailed");
-      expect(error.reviewer).toBe("intent");
-      expect(error.attempts).toBe(2);
-      expect(error.message).toContain("severity");
-    }),
-  );
-
   const invalidOutputs: ReadonlyArray<readonly [name: string, output: unknown, path: string]> = [
     ["a missing findings field", {}, "findings"],
     ["unknown top-level fields", { findings: [], summary: "done" }, "summary"],

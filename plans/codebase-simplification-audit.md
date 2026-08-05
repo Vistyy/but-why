@@ -7,6 +7,7 @@ remove_when: every candidate has an authoritative disposition, accepted simplifi
 # Codebase simplification audit
 
 > Non-authoritative working plan.
+> SQLite Task Context and Task state are authoritative for implementation status.
 > This file records the accepted audit direction and current simplification candidates.
 > It does not authorize implementation or describe current product behavior.
 
@@ -125,7 +126,8 @@ Keep active Validation and unsafe or uncertain owned pull-request facts as immed
 Use one idempotent terminal cleanup operation for completed and cancelled Changes, repeated cancellation, and reconciliation.
 Persist terminal state with cleanup pending before cleanup begins.
 Close any owned pull request before remote deletion.
-Clean the Managed Worktree, local Repository Branch, Remote Change Branch, Reviewer Sessions, and Artifact content with the same default safeguards for completion and cancellation.
+Clean the Managed Worktree, local Repository Branch, Remote Change Branch, active Reviewer Session records, and Artifact content with the same default safeguards for completion and cancellation.
+BY-126 owns retaining and indexing Reviewer Transcripts before cleanup removes active Reviewer Session records.
 Retry cleanup through repeated cancellation or reconciliation.
 Report terminal success with uncertain or pending cleanup when cleanup-result persistence fails instead of crashing or adding states.
 
@@ -178,6 +180,7 @@ Do not add storage, configuration, a general GraphQL framework, or duplicated re
 ### Validation command runner
 
 Current observable working-directory behavior is satisfied.
+BY-68 is cancelled as effectively satisfied.
 Investigate deleting duplicated async and Effect command-runner mechanics or tightening optional inputs only if the change reduces caller knowledge without adding another execution abstraction.
 Do not create a standalone product Task for cwd propagation.
 
