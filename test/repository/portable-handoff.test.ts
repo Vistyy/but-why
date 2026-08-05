@@ -31,10 +31,13 @@ type HandoffOptions = {
   readonly initialChangeId?: string;
   readonly linkedChangeId?: string;
   readonly taskState?: string;
+  readonly taskResult?: string;
+  readonly taskExitCode?: string;
   readonly startResult?: string;
   readonly startExitCode?: string;
   readonly finalChangeId?: string;
   readonly finalWorktreeMismatch?: boolean;
+  readonly initialChangeTaskId?: string | null;
   readonly initialCommandResult?: string;
   readonly initialCommandExitCode?: string;
   readonly handoff?: string;
@@ -105,11 +108,15 @@ exit 1
 
   const taskId = options.route === "task-backed" ? "BY-1" : null;
   const mismatchedWorktreePath = join(root, "mismatched-worktree");
-  const showResult = (shownChangeId: string, shownWorktreePath: string) =>
+  const showResult = (
+    shownChangeId: string,
+    shownWorktreePath: string,
+    shownTaskId: string | null = taskId,
+  ) =>
     JSON.stringify({
       change: {
         id: shownChangeId,
-        taskId,
+        taskId: shownTaskId,
         state: "open",
         worktreePath: shownWorktreePath,
       },
@@ -143,22 +150,25 @@ exit 1
     HANDOFF_START:
       options.startResult ?? JSON.stringify({ change: { id: changeId }, worktreePath }),
     HANDOFF_START_EXIT: options.startExitCode ?? "0",
-    HANDOFF_TASK: JSON.stringify({
-      task: {
-        id: "BY-1",
-        state: options.taskState ?? "todo",
-        change:
-          options.linkedChangeId === undefined
-            ? null
-            : { id: options.linkedChangeId, activity: "implementing" },
-      },
-    }),
-    HANDOFF_TASK_EXIT: "0",
+    HANDOFF_TASK:
+      options.taskResult ??
+      JSON.stringify({
+        task: {
+          id: "BY-1",
+          state: options.taskState ?? "todo",
+          change:
+            options.linkedChangeId === undefined
+              ? null
+              : { id: options.linkedChangeId, activity: "implementing" },
+        },
+      }),
+    HANDOFF_TASK_EXIT: options.taskExitCode ?? "0",
     HANDOFF_IMPLEMENT:
       options.implementation ??
       JSON.stringify({ changeId, worktreePath, host: "herdr", status: "started" }),
     HANDOFF_INITIAL_SHOW:
-      options.initialCommandResult ?? showResult(options.initialChangeId ?? changeId, worktreePath),
+      options.initialCommandResult ??
+      showResult(options.initialChangeId ?? changeId, worktreePath, options.initialChangeTaskId),
     HANDOFF_INITIAL_SHOW_EXIT: options.initialCommandExitCode ?? "0",
     HANDOFF_FINAL_SHOW: showResult(
       options.finalChangeId ?? changeId,
@@ -250,6 +260,75 @@ describe("portable handoff observer", () => {
       status: "prelaunch_verification_failed",
       error: { code: "change_start_conflict" },
     });
+  });
+
+  it.each([
+    [
+      "a failed Task Show",
+      JSON.stringify({ error: { code: "task_not_found" } }),
+      "1",
+      "task_not_found",
+    ],
+    [
+      "a mismatched Task identity",
+      JSON.stringify({ task: { id: "BY-2", state: "todo", change: null } }),
+      "0",
+      "task_verification_failed",
+    ],
+  ])("rejects %s before Change Start or Implement", (_kind, taskResult, taskExitCode, errorCode) => {
+    const handoff = runHandoff("unverified-task", {
+      route: "task-backed",
+      taskResult,
+      taskExitCode,
+    });
+
+    expect(handoff.status).toBe(1);
+    expect(handoff.result).toMatchObject({
+      status: "prelaunch_verification_failed",
+      changeVerified: false,
+      error: { code: errorCode },
+      preLaunch: { exitCode: Number(taskExitCode), timedOut: false },
+    });
+    expect(handoff.calls).not.toContain("by --json change start --task BY-1");
+    expect(handoff.calls).not.toContain("by --json change implement unverified-task");
+    if (handoff.result.tracePath === undefined) throw new Error("Expected a pre-launch trace path");
+    expect(existsSync(handoff.result.tracePath)).toBe(true);
+    rmSync(dirname(handoff.result.tracePath), { recursive: true, force: true });
+  });
+
+  it("rejects an invalid linked Change identity before Change Start or Implement", () => {
+    const handoff = runHandoff("invalid-linked-change", {
+      route: "task-backed",
+      taskResult: JSON.stringify({ task: { id: "BY-1", state: "todo", change: {} } }),
+    });
+
+    expect(handoff.status).toBe(1);
+    expect(handoff.result).toMatchObject({
+      status: "prelaunch_verification_failed",
+      changeVerified: false,
+      error: { code: "task_verification_failed" },
+      preLaunch: { exitCode: 0, timedOut: false },
+    });
+    expect(handoff.calls).not.toContain("by --json change start --task BY-1");
+    expect(handoff.calls).not.toContain("by --json change implement invalid-linked-change");
+  });
+
+  it("rejects a linked Change with a mismatched Task identity before Implement", () => {
+    const handoff = runHandoff("linked-change", {
+      route: "task-backed",
+      linkedChangeId: "linked-change",
+      initialChangeTaskId: "BY-2",
+    });
+
+    expect(handoff.status).toBe(1);
+    expect(handoff.result).toMatchObject({
+      status: "prelaunch_verification_failed",
+      changeVerified: false,
+      error: { code: "change_verification_failed" },
+      preLaunch: { exitCode: 0, timedOut: false },
+    });
+    expect(handoff.calls).not.toContain("by --json change start --task BY-1");
+    expect(handoff.calls).not.toContain("by --json change implement linked-change");
   });
 
   it.each(["", " \n\t"])("launches with no operator context for %j", (input) => {
