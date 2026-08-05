@@ -54,14 +54,13 @@ describe("portable But Why skill", () => {
     expect(approveTask).toContain("Do not start a Change or hand off work");
     expect(authority).toContain("Do not begin implementation, start a Change, or launch a handoff");
     expect(authorizeImplementation).toContain(
-      "Use the applicable handoff branch only when the authorization includes handoff.",
+      "For a Task-backed Change, confirm that the selected Task is approved and hand it off",
     );
-    expect(handoff.indexOf("by task show <task-id>")).toBeLessThan(
-      handoff.indexOf("by change start --task <task-id>"),
+    expect(authorizeImplementation).toContain(
+      "For a taskless Change, confirm that the selected work remains taskless and implement it in the current session",
     );
-    expect(handoff.indexOf("For a taskless Change")).toBeLessThan(
-      handoff.indexOf("After Change Start or reuse"),
-    );
+    expect(handoff).toContain("--task-id <task-id>");
+    expect(handoff).toContain("--change-id <change-id>");
     expect(handoff).toContain("scripts/launch-handoff.mjs");
     expect(handoff).toContain("changeVerified: true");
     expect(authorTasks).toContain("[Task verification](task-verification.md)");

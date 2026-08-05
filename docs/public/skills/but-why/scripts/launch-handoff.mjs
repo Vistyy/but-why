@@ -42,9 +42,12 @@ if (!args.ok) {
 const commandPrefix = runnerCommands[args.runner];
 const startedAt = performance.now();
 const wallStartedAt = new Date().toISOString();
-const safeId = args.changeId.replaceAll(/[^a-zA-Z0-9._-]/g, "_");
+const targetId = args.taskId ?? args.changeId;
+const safeId = targetId.replaceAll(/[^a-zA-Z0-9._-]/g, "_");
 const diagnosticBaseDirectory = process.env.HANDOFF_DIAGNOSTIC_DIRECTORY ?? tmpdir();
 let expectedSessionName;
+let changeId;
+let worktreePath;
 const diagnosticDirectory = await mkdtemp(join(diagnosticBaseDirectory, `but-why-launch-${safeId}.`));
 const tracePath = join(diagnosticDirectory, "trace.jsonl");
 const diagnosticPath = join(diagnosticDirectory, "pane.txt");
@@ -70,43 +73,24 @@ for (const [signal, exitCode] of [
 }
 
 try {
-  const preLaunchInspection = await run(
-    commandPrefix,
-    ["--json", "change", "show", args.changeId],
-    showTimeoutMs,
-  );
-  if (preLaunchInspection.stderr.trim()) process.stderr.write(preLaunchInspection.stderr);
-  const preLaunchChange = parseJson(preLaunchInspection.stdout);
-  const preLaunchVerified =
-    preLaunchInspection.code === 0 &&
-    preLaunchChange !== undefined &&
-    verifyChange(preLaunchChange, args.changeId, args.worktreePath);
-  expectedSessionName = sessionNameForChange(preLaunchChange, args.changeId);
-  if (!preLaunchVerified || expectedSessionName === undefined) {
-    const commandResult = preLaunchChange ?? {
+  const target = await resolveChangeTarget(args, commandPrefix);
+  if (!target.ok) {
+    preLaunchFailure = target.failure;
+    throw new Error("Pre-launch Change inspection did not verify handoff ownership.");
+  }
+  changeId = target.changeId;
+  worktreePath = target.worktreePath;
+  expectedSessionName = sessionNameForChange(target.change, changeId);
+  if (expectedSessionName === undefined) {
+    preLaunchFailure = targetFailure({
+      target: args,
+      inspection: target.inspection,
+      result: target.change,
       error: {
-        code: "invalid_command_output",
-        message: "Change Show did not return valid JSON.",
+        code: "change_verification_failed",
+        message: "Change Show did not identify the selected Change's Interactive Session.",
       },
-    };
-    preLaunchFailure = {
-      changeId: args.changeId,
-      worktreePath: args.worktreePath,
-      status: "prelaunch_verification_failed",
-      elapsedMs: elapsed(),
-      changeVerified: false,
-      tracePath,
-      preLaunch: {
-        exitCode: preLaunchInspection.code,
-        timedOut: preLaunchInspection.timedOut,
-        result: commandResult,
-      },
-      error:
-        commandResult.error ?? {
-          code: "change_verification_failed",
-          message: "Change Show did not verify the selected Change and Managed Worktree.",
-        },
-    };
+    });
     throw new Error("Pre-launch Change inspection did not verify handoff ownership.");
   }
 
@@ -118,8 +102,8 @@ try {
   }
   await appendTrace("observer_started", {
     wallStartedAt,
-    changeId: args.changeId,
-    worktreePath: args.worktreePath,
+    changeId,
+    worktreePath,
     sessionMatch: "active Change Interactive Session in the Managed Worktree",
     expectedSessionName,
     runner: args.runner,
@@ -132,7 +116,7 @@ try {
       "--json",
       "change",
       "implement",
-      args.changeId,
+      changeId,
       ...(handoffPath === undefined ? [] : ["--handoff-file", handoffPath]),
     ],
     implementTimeoutMs,
@@ -185,7 +169,7 @@ try {
   if (successfulLaunch) {
     verification = await run(
       commandPrefix,
-      ["--json", "change", "show", args.changeId],
+      ["--json", "change", "show", changeId],
       showTimeoutMs,
     );
     if (verification.stderr.trim()) process.stderr.write(verification.stderr);
@@ -193,7 +177,7 @@ try {
     changeVerified =
       verification.code === 0 &&
       shown !== undefined &&
-      verifyChange(shown, args.changeId, args.worktreePath);
+      verifyChange(shown, changeId, worktreePath);
     await appendTrace("change_verification", {
       exitCode: verification.code,
       verified: changeVerified,
@@ -207,8 +191,8 @@ try {
   }
 
   const output = {
-    changeId: args.changeId,
-    worktreePath: args.worktreePath,
+    changeId,
+    worktreePath,
     status: status ?? errorCode ?? "launch_failed",
     elapsedMs,
     changeVerified,
@@ -242,8 +226,8 @@ try {
     await appendTrace("observer_failed", { message: errorMessage(error) }).catch(() => {});
     exitWith(
       {
-        changeId: args.changeId,
-        worktreePath: args.worktreePath,
+        changeId,
+        worktreePath,
         status: "observer_failed",
         changeVerified: false,
         tracePath,
@@ -283,7 +267,7 @@ async function observeOnce() {
   }
 
   const workspace = (snapshot.workspaces ?? []).find(
-    (candidate) => candidate?.worktree?.checkout_path === args.worktreePath,
+    (candidate) => candidate?.worktree?.checkout_path === worktreePath,
   );
   const agents = (snapshot.agents ?? []).map((candidate) => ({
     name: agentName(candidate),
@@ -295,14 +279,14 @@ async function observeOnce() {
   const agent = (snapshot.agents ?? []).find(
     (candidate) =>
       agentName(candidate) === expectedSessionName &&
-      candidate?.cwd === args.worktreePath &&
+      candidate?.cwd === worktreePath &&
       ["idle", "working", "blocked"].includes(candidate?.agent_status),
   );
   const pane = agent
     ? (snapshot.panes ?? []).find((candidate) => candidate?.pane_id === agent.pane_id)
     : (snapshot.panes ?? []).find(
         (candidate) =>
-          candidate?.workspace_id === workspace?.workspace_id || candidate?.cwd === args.worktreePath,
+          candidate?.workspace_id === workspace?.workspace_id || candidate?.cwd === worktreePath,
       );
   const paneId = agent?.pane_id ?? pane?.pane_id;
   const observation = {
@@ -391,24 +375,170 @@ async function hostPressure() {
   };
 }
 
+async function resolveChangeTarget(target, prefix) {
+  if (target.changeId !== undefined) return inspectChangeTarget(prefix, target.changeId);
+
+  const taskInspection = await run(prefix, ["--json", "task", "show", target.taskId], showTimeoutMs);
+  if (taskInspection.stderr.trim()) process.stderr.write(taskInspection.stderr);
+  const taskResult = parseJson(taskInspection.stdout);
+  const task = taskResult?.task;
+  if (taskInspection.code !== 0 || task?.id !== target.taskId) {
+    return {
+      ok: false,
+      failure: targetFailure({
+        target,
+        inspection: taskInspection,
+        result: taskResult,
+        error:
+          taskResult?.error ?? {
+            code: "task_verification_failed",
+            message: "Task Show did not verify the selected Task.",
+          },
+      }),
+    };
+  }
+
+  if (task.change === null) {
+    if (task.state !== "todo") {
+      return {
+        ok: false,
+        failure: targetFailure({
+          target,
+          inspection: taskInspection,
+          result: taskResult,
+          error: {
+            code: "task_not_approved",
+            message: "Task handoff requires an approved Task without a linked Change.",
+          },
+        }),
+      };
+    }
+    const started = await run(
+      prefix,
+      ["--json", "change", "start", "--task", target.taskId],
+      showTimeoutMs,
+    );
+    if (started.stderr.trim()) process.stderr.write(started.stderr);
+    const startedResult = parseJson(started.stdout);
+    const startedChangeId = startedResult?.change?.id;
+    if (started.code !== 0 || typeof startedChangeId !== "string") {
+      return {
+        ok: false,
+        failure: targetFailure({
+          target,
+          inspection: started,
+          result: startedResult,
+          error:
+            startedResult?.error ?? {
+              code: "change_start_failed",
+              message: "Change Start did not return the Task's Change identity.",
+            },
+        }),
+      };
+    }
+    return inspectChangeTarget(prefix, startedChangeId, target.taskId);
+  }
+
+  if (typeof task.change?.id !== "string") {
+    return {
+      ok: false,
+      failure: targetFailure({
+        target,
+        inspection: taskInspection,
+        result: taskResult,
+        error: {
+          code: "task_verification_failed",
+          message: "Task Show returned an invalid linked Change identity.",
+        },
+      }),
+    };
+  }
+  return inspectChangeTarget(prefix, task.change.id, target.taskId);
+}
+
+async function inspectChangeTarget(prefix, selectedChangeId, taskId = undefined) {
+  const inspection = await run(prefix, ["--json", "change", "show", selectedChangeId], showTimeoutMs);
+  if (inspection.stderr.trim()) process.stderr.write(inspection.stderr);
+  const result = parseJson(inspection.stdout);
+  const shownChange = result?.change ?? result;
+  const selectedWorktreePath = worktreePathFor(result);
+  const taskMatches = taskId === undefined || shownChange?.taskId === taskId;
+  if (
+    inspection.code !== 0 ||
+    selectedWorktreePath === undefined ||
+    !taskMatches ||
+    !verifyChange(result, selectedChangeId, selectedWorktreePath)
+  ) {
+    return {
+      ok: false,
+      failure: targetFailure({
+        target: taskId === undefined ? { changeId: selectedChangeId } : { taskId },
+        inspection,
+        result,
+        error:
+          result?.error ?? {
+            code: "change_verification_failed",
+            message: "Change Show did not verify the selected open Change and Managed Worktree.",
+          },
+      }),
+    };
+  }
+  return {
+    ok: true,
+    changeId: selectedChangeId,
+    worktreePath: selectedWorktreePath,
+    change: result,
+    inspection,
+  };
+}
+
+function targetFailure({ target, inspection, result, error }) {
+  return {
+    ...(target.taskId === undefined ? { changeId: target.changeId } : { taskId: target.taskId }),
+    status: "prelaunch_verification_failed",
+    elapsedMs: elapsed(),
+    changeVerified: false,
+    tracePath,
+    preLaunch: {
+      exitCode: inspection.code,
+      timedOut: inspection.timedOut,
+      result:
+        result ?? {
+          error: {
+            code: "invalid_command_output",
+            message: "But Why did not return valid JSON.",
+          },
+        },
+    },
+    error,
+  };
+}
+
 function isActiveInWorktree(agent) {
   return (
     agentName(agent) === expectedSessionName &&
-    agent?.cwd === args.worktreePath &&
+    agent?.cwd === worktreePath &&
     ["idle", "working", "blocked"].includes(agent?.agent_status)
   );
 }
 
-function verifyChange(result, changeId, worktreePath) {
-  const change = result.change ?? result;
-  const paths = [result.worktreePath, change.worktreePath].filter(
-    (candidate) => candidate !== undefined,
+function worktreePathFor(result) {
+  const change = result?.change ?? result;
+  const paths = [result?.worktreePath, change?.worktreePath].filter(
+    (candidate) => typeof candidate === "string",
   );
+  const [worktreePath] = paths;
+  return worktreePath === undefined || paths.some((candidate) => candidate !== worktreePath)
+    ? undefined
+    : worktreePath;
+}
+
+function verifyChange(result, changeId, worktreePath) {
+  const change = result?.change ?? result;
   return (
-    change.id === changeId &&
-    change.state === "open" &&
-    paths.length > 0 &&
-    paths.every((candidate) => candidate === worktreePath)
+    change?.id === changeId &&
+    change?.state === "open" &&
+    worktreePathFor(result) === worktreePath
   );
 }
 
@@ -506,8 +636,8 @@ async function terminate(signal, exitCode) {
   process.stdout.write(
     `${JSON.stringify(
       {
-        changeId: args.changeId,
-        worktreePath: args.worktreePath,
+        ...(args.taskId === undefined ? { changeId } : { taskId: args.taskId }),
+        ...(worktreePath === undefined ? {} : { worktreePath }),
         status: "observer_interrupted",
         changeVerified: false,
         tracePath,
@@ -550,21 +680,25 @@ function parseArgs(values) {
     const flag = values[index];
     const value = values[index + 1];
     if (!flag?.startsWith("--") || value === undefined) {
-      return { ok: false, message: "Use --runner, --change-id, and --worktree-path." };
+      return { ok: false, message: "Use --runner and exactly one of --task-id or --change-id." };
     }
     parsed[flag.slice(2)] = value;
   }
-  if (!Object.hasOwn(runnerCommands, parsed.runner)) {
+  if (
+    Object.keys(parsed).some((key) => !["runner", "task-id", "change-id"].includes(key)) ||
+    !Object.hasOwn(runnerCommands, parsed.runner)
+  ) {
     return { ok: false, message: "--runner must be just, pnpx, or npx." };
   }
-  if (!parsed["change-id"] || !parsed["worktree-path"]) {
-    return { ok: false, message: "--change-id and --worktree-path are required." };
+  const taskId = parsed["task-id"];
+  const changeId = parsed["change-id"];
+  if ((taskId === undefined) === (changeId === undefined)) {
+    return { ok: false, message: "Use exactly one of --task-id or --change-id." };
   }
   return {
     ok: true,
     runner: parsed.runner,
-    changeId: parsed["change-id"],
-    worktreePath: parsed["worktree-path"],
+    ...(taskId === undefined ? { changeId } : { taskId }),
   };
 }
 

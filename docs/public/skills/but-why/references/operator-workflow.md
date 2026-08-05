@@ -86,13 +86,12 @@ Confirm whether the authorization includes handoff.
 Do not infer handoff permission from authorization to implement.
 
 For a direct edit, implement only the authorized work in the current repository according to target-repository instructions.
-A direct edit does not start a Change or launch an Interactive Session.
+A direct edit does not start a Change, run But Why validation, publish a pull request, or launch an Interactive Session.
 
-For a Task-backed Change, confirm that the selected Task is approved.
-For a taskless Change, confirm that the selected work remains taskless.
-Use the applicable handoff branch only when the authorization includes handoff.
+For a Task-backed Change, confirm that the selected Task is approved and hand it off to a fresh Implementer session.
+For a taskless Change, confirm that the selected work remains taskless and implement it in the current session unless the authorization explicitly includes handoff.
 
-This section is complete when the authorization identifies one work item, one Work Route, and whether handoff is permitted.
+This section is complete when the authorization identifies one work item and one Work Route, and selects the required Task-backed handoff or any optional taskless handoff.
 
 ## Hand Off an Authorized Change
 
@@ -104,24 +103,17 @@ Do not repeat the Change ID, Task ID, Change state, Managed Worktree path, Task 
 If a fact requires durable authority, record it through the applicable Task or Change operation instead.
 Do not include sensitive information.
 
-For a Task-backed Change, run `by task show <task-id>`.
-Reuse its open linked Change when one exists.
-When no linked Change exists, run `by change start --task <task-id>`.
-
-For a taskless Change, run `by change show <change-id>` when the Operator selected an existing Change.
-When no selected taskless Change exists, run `by change start`.
-
-After Change Start or reuse, run `by change show <change-id>`.
-Verify the exact Change ID, `open` state, and exact Managed Worktree path.
 Resolve `scripts/launch-handoff.mjs` relative to this skill directory.
+For a Task-backed Change, run it with `--task-id <task-id>`.
+The script reads the Task, reuses its linked Change or starts one, then derives and verifies the exact open Change and Managed Worktree.
+For an explicitly authorized taskless handoff, run it with `--change-id <change-id>`.
 When no operator context is required, run the script with empty standard input.
 When operator context is required, pipe only that Markdown to the script with the runner that matches the resolved But Why command prefix.
 
 ```sh
 node <skill-directory>/scripts/launch-handoff.mjs \
   --runner <just|pnpx|npx> \
-  --change-id <change-id> \
-  --worktree-path <managed-worktree-path> </dev/null
+  --task-id <task-id> </dev/null
 ```
 
 The script verifies the exact Change and Managed Worktree before it runs Change Implement and after launch.
