@@ -67,6 +67,12 @@ Current publication facts record the exact Candidate, Validation Run, target, he
 A changed Candidate invalidates current publication until that Candidate is on the owned pull request.
 _Avoid_: Current Candidate, mutable pull request state, Submission
 
+**Exact Merged Candidate**:
+An Exact Merged Candidate is the Candidate in current publication.
+Its owned pull request is observed as closed and merged with matching repository, base branch, head branch, head commit, and pull request identity.
+It is the only external evidence that can complete the Change and, when present, its linked Task.
+_Avoid_: Merged pull request, historical Candidate, current Candidate
+
 **Acceptance Context**:
 One immutable version of approved intent.
 A task-backed Change captures its initial version from the approved Task when the Task starts.
