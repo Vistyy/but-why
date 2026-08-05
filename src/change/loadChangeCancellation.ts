@@ -7,6 +7,7 @@ import { resolveRepoTaskId } from "../task/repoTaskIds.js";
 import { cleanupChangeResourcesWithRemote } from "./localChangeCleanupGit.js";
 import { openTerminalCleanup } from "./cleanupTerminalChange.js";
 import { reviewerSessionsChangeRoot } from "./reviewerSession/reviewerSession.js";
+import { openReviewerTranscriptIndex } from "./reviewerSession/reviewerTranscript.js";
 import { openCancellationUseCases, type CancellationUseCases } from "./cancelChange.js";
 import {
   githubChangeCleanupRemote,
@@ -65,6 +66,9 @@ export const withCancellation = <A, R>(
           cleanupTerminal: openTerminalCleanup({
             persistence: changes,
             cleanup: cleanupChangeResourcesWithRemote(githubChangeCleanupRemote(github)),
+            indexTranscripts: openReviewerTranscriptIndex({
+              persistence: changes,
+            }),
             reviewerSessionPathFor: (changeId) =>
               reviewerSessionsChangeRoot(context.context.paths.operationalDir, changeId),
           }),

@@ -87,8 +87,9 @@ Completion, cancellation, repeated cancellation, and reconciliation run one Chan
 Terminal state with cleanup pending is recorded before cleanup begins, and the operation retries idempotently when cleanup is already complete, a resource is already missing, or a prior attempt left cleanup pending.
 For an exact owned open pull request, cancellation closes the pull request before the cleanup operation deletes the Remote Change Branch.
 Completed and Cancelled Changes use the same cleanup scope and safeguards, covering the Managed Worktree, local Repository Branch, and Remote Change Branch.
+Terminal cleanup first records one immutable Reviewer Transcript reference for every retained Reviewer Session JSONL file in the Change's per-producer storage, then removes active Reviewer Session records after successful transcript indexing without deleting the retained JSONL files or historical references.
 When cleanup completes, the operation invokes the Reviewer Session and Artifact lifecycle owners for the exact terminal Change.
-Dirty worktrees, unique local commits, changed Remote Change Branches, and unreadable identities keep cleanup pending without undoing terminal truth.
+Dirty worktrees, unique local commits, changed Remote Change Branches, unreadable identities, and incomplete transcript indexing keep cleanup pending without undoing terminal truth.
 
 ## Storage
 

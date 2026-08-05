@@ -61,6 +61,152 @@ describe("Change-owned terminal cleanup operation", () => {
     }),
   );
 
+  it.effect("indexes Reviewer Transcripts before delegating resource cleanup", () =>
+    Effect.gen(function* () {
+      const events: string[] = [];
+      const change = changeRecord({ closeReason: "cancelled", cleanup: pendingCleanup });
+      const cleanup = openTerminalCleanup({
+        persistence: fakePersistence(
+          events,
+          changeRecord({ closeReason: "cancelled", cleanup: pendingCleanup }),
+        ),
+        cleanup: (input) => {
+          events.push(`cleanup:${input.remoteChangeBranch === undefined ? "none" : "remote"}`);
+          return { state: "complete", blockingReason: null };
+        },
+        indexTranscripts: (input) => {
+          events.push(`index:${input.changeId}:${input.reviewerSessionPath}`);
+          return Effect.succeed({ ok: true as const });
+        },
+        reviewerSessionPathFor: (changeId) => `/storage/${changeId}`,
+        artifactLifecycle: {
+          removeContent: (changeId) => {
+            events.push(`artifact:${changeId}`);
+            return Effect.void;
+          },
+        },
+      });
+
+      const result = yield* cleanup(change, now);
+
+      expect(result).toEqual({
+        ok: true,
+        change: expect.objectContaining({
+          cleanup: { state: "complete", blockingReason: null },
+        }),
+        cleanup: { state: "complete", blockingReason: null },
+      });
+      expect(events).toEqual([
+        "index:change-1:/storage/change-1",
+        "cleanup:remote",
+        "record-cleanup",
+        "remove-reviewer-sessions:change-1",
+        "artifact:change-1",
+      ]);
+    }),
+  );
+
+  it.effect("keeps cleanup pending without resource cleanup when transcript indexing fails", () =>
+    Effect.gen(function* () {
+      const events: string[] = [];
+      const change = changeRecord({ closeReason: "cancelled", cleanup: pendingCleanup });
+      const cleanup = openTerminalCleanup({
+        persistence: fakePersistence(
+          events,
+          changeRecord({ closeReason: "cancelled", cleanup: pendingCleanup }),
+          { state: "pending", blockingReason: "transcript_index_failed" },
+        ),
+        cleanup: () => {
+          events.push("cleanup");
+          return { state: "complete", blockingReason: null };
+        },
+        indexTranscripts: () =>
+          Effect.succeed({
+            ok: false as const,
+            reason: "unidentified_reviewer_session:acceptance/review_unknown.jsonl",
+          }),
+        reviewerSessionPathFor: (changeId) => `/storage/${changeId}`,
+      });
+
+      const result = yield* cleanup(change, now);
+
+      expect(result).toEqual({
+        ok: true,
+        change: expect.objectContaining({
+          cleanup: {
+            state: "pending",
+            blockingReason: "transcript_index_failed",
+          },
+        }),
+        cleanup: { state: "pending", blockingReason: "transcript_index_failed" },
+      });
+      expect(events).toEqual(["record-cleanup"]);
+    }),
+  );
+
+  it.effect("retries transcript indexing and completes cleanup after the failure clears", () =>
+    Effect.gen(function* () {
+      const events: string[] = [];
+      let attempts = 0;
+      let cleanupRecorded = 0;
+      const change = changeRecord({ closeReason: "cancelled", cleanup: pendingCleanup });
+      const cleanup = openTerminalCleanup({
+        persistence: {
+          recordCleanup: () => {
+            events.push("record-cleanup");
+            cleanupRecorded += 1;
+            return Effect.succeed({
+              ok: true as const,
+              changed: true,
+              change: {
+                ...change,
+                cleanup:
+                  cleanupRecorded === 1
+                    ? { state: "pending" as const, blockingReason: "transcript_index_failed" }
+                    : { state: "complete" as const, blockingReason: null },
+              },
+            });
+          },
+          removeReviewerSessions: (changeId) => {
+            events.push(`remove-reviewer-sessions:${changeId}`);
+            return Effect.void;
+          },
+        },
+        cleanup: () => {
+          events.push("cleanup");
+          return { state: "complete", blockingReason: null };
+        },
+        indexTranscripts: () => {
+          attempts += 1;
+          events.push(`index:${attempts}`);
+          return Effect.succeed(
+            attempts === 1 ? { ok: false as const, reason: "temporary" } : { ok: true as const },
+          );
+        },
+        reviewerSessionPathFor: (changeId) => `/storage/${changeId}`,
+      });
+
+      const first = yield* cleanup(change, now);
+      expect(first).toMatchObject({
+        cleanup: { state: "pending", blockingReason: "transcript_index_failed" },
+      });
+
+      const retry = yield* cleanup(change, now);
+      expect(retry).toMatchObject({
+        ok: true,
+        cleanup: { state: "complete", blockingReason: null },
+      });
+      expect(events).toEqual([
+        "index:1",
+        "record-cleanup",
+        "index:2",
+        "cleanup",
+        "record-cleanup",
+        "remove-reviewer-sessions:change-1",
+      ]);
+    }),
+  );
+
   it.effect("delegates cleanup without a Remote Change Branch for an unpublished Change", () =>
     Effect.gen(function* () {
       const events: string[] = [];

@@ -34,6 +34,7 @@ import {
 import { decodeSqliteAcceptanceContextSnapshot } from "./sqliteAcceptanceContextSnapshot.js";
 import { encodeSqliteCandidateValidationPolicy } from "./sqliteCandidateValidationPolicy.js";
 import type { ReviewerSessionRecord } from "../change/reviewerSession/reviewerSession.js";
+import type { ReviewerTranscript } from "../change/reviewerSession/reviewerTranscript.js";
 import type { ImplementationDecision } from "../change/implementationDecision.js";
 import type {
   ImplementationBlocker,
@@ -150,6 +151,41 @@ export const openSqliteChangePersistence = (): Effect.Effect<
     removeReviewerSessions: (changeId) =>
       repository.transactionImmediate("remove Reviewer Sessions", (sql) =>
         Effect.asVoid(sql`DELETE FROM reviewer_sessions WHERE change_id = ${changeId}`),
+      ),
+    listReviewerTranscripts: (changeId) =>
+      repository.operation("list Reviewer Transcripts", (sql) =>
+        Effect.map(
+          sql<ReviewerTranscriptRow>`SELECT change_id AS changeId, producer, pi_session_id AS piSessionId, file_path AS filePath FROM reviewer_transcripts WHERE change_id = ${changeId} ORDER BY producer, file_path`,
+          (rows) =>
+            rows.map(
+              (row) =>
+                ({
+                  changeId: row.changeId,
+                  producer: row.producer,
+                  piSessionId: row.piSessionId,
+                  filePath: row.filePath,
+                }) satisfies ReviewerTranscript,
+            ),
+        ),
+      ),
+    recordReviewerTranscripts: (input) =>
+      repository.transactionImmediate("record Reviewer Transcripts", (sql) =>
+        input.transcripts.length === 0
+          ? Effect.void
+          : Effect.asVoid(
+              sql`
+      INSERT INTO reviewer_transcripts
+      ${sql.insert(
+        input.transcripts.map((transcript) => ({
+          change_id: input.changeId,
+          producer: transcript.producer,
+          pi_session_id: transcript.piSessionId,
+          file_path: transcript.filePath,
+        })),
+      )}
+      ON CONFLICT(change_id, producer, file_path) DO NOTHING
+    `,
+            ),
       ),
     beginPublication: (input) =>
       repository.transactionImmediate("begin Change publication", (sql) =>
@@ -725,6 +761,13 @@ type ReviewerSessionRow = {
   readonly producer: string;
   readonly fingerprint: string;
   readonly sessionReference: string;
+};
+
+type ReviewerTranscriptRow = {
+  readonly changeId: string;
+  readonly producer: string;
+  readonly piSessionId: string;
+  readonly filePath: string;
 };
 
 type PassingPublicationEvidenceRow = ChangePublicationEvidence & {
