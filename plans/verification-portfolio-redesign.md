@@ -1,5 +1,5 @@
 ---
-status: requires-refresh-before-task-creation
+status: recorded-first-task-graph-in-progress
 artifact_kind: working-plan
 remove_when: the refreshed strategy is recorded in VERIFICATION.md, every approved migration slice is complete, obsolete evidence is removed, and all deferred product decisions have authoritative dispositions
 ---
@@ -48,6 +48,203 @@ Do not convert uncertain external or tooling facts into false success.
 The stability target remains zero known intermittent failures in retained blocking evidence.
 Current worker limits and Git-common-directory capacity locks remain temporary operational controls until the refreshed portfolio proves they can be removed.
 
+## Concurrency measurement
+
+### Hypothesis
+
+One mixed `just quality` and `just full-quality` pair in isolated linked worktrees can run without the shared capacity lock without failures or a material workflow-cost increase.
+
+### Baseline
+
+The measurement used detached linked worktrees at `7a15da7`, shared locked dependencies, and wall-clock time from process start to exit.
+A single `just quality` run completed in 22.529 seconds.
+A single `just full-quality` run completed in 76.152 seconds.
+Both exceed the current 10-second and 30-second operating budgets.
+
+### Experiment
+
+One linked worktree ran `just quality` while another ran `just full-quality`.
+The first pair used the existing shared Git-common-directory capacity lock.
+The second pair bypassed only that lock with `BY_CAPACITY_LOCK_HELD=1`.
+No source or product files changed, and both temporary linked worktrees were removed after the measurement.
+
+### Evidence
+
+With the lock, `full-quality` completed in 75.835 seconds and `quality` waited for capacity, then completed in 22.399 seconds.
+The pair took 98.334 seconds in total.
+Without the lock, both runs passed, but `quality` took 42.177 seconds, `full-quality` took 91.950 seconds, and the pair took 91.969 seconds.
+Each process reported approximately 1.1 GB maximum resident memory.
+
+### Conclusion
+
+The result is inconclusive for the intended parallel-work throughput goal.
+Removing the lock saved about 6 seconds for one mixed pair but made both individual commands slower and doubled concurrent memory demand.
+One successful unlocked pair does not establish that three concurrent Change Submit workloads are safe or more productive.
+
+### Effect on plan
+
+Retain the current capacity lock until a throughput measurement compares three concurrent Change Submit workloads at different per-run worker limits.
+Do not choose routine versus complete evidence scheduling from filename suffixes.
+Treat the current operating budgets as measurement signals, not as criteria for retaining or removing individual evidence.
+
+### Limitations
+
+This measured one mixed pair on one machine and one checkout revision.
+It did not compare three concurrent `just quality` workloads at different Vitest worker limits.
+It did not measure two simultaneous complete workloads, coverage workloads, interruption, or a workload that mutates the repository's own Shared Repository State.
+It does not establish the cause of the current baseline cost.
+
+## Worker-limit measurement
+
+### Hypothesis
+
+A lower Vitest worker limit improves one `quality` or `full-quality` workload enough to replace the current limit of three workers.
+
+### Baseline
+
+The measurement used one detached linked worktree at `7a15da7`, shared locked dependencies, and wall-clock time from process start to exit.
+Each worker limit ran the same `just quality` and `just full-quality` workloads sequentially.
+
+### Experiment
+
+The temporary worktree changed only `vitest.config.ts` `maxWorkers` from three to one, two, and three in turn.
+No source or product files changed, and the temporary linked worktree was removed after the measurement.
+
+### Evidence
+
+One worker completed `quality` in 40.128 seconds and `full-quality` in 140.888 seconds, with approximately 591 MB and 599 MB maximum resident memory.
+Two workers completed `quality` in 28.293 seconds and `full-quality` in 92.743 seconds, with approximately 963 MB and 976 MB maximum resident memory.
+Three workers completed `quality` in 22.331 seconds and `full-quality` in 73.335 seconds, with approximately 1.21 GB and 1.03 GB maximum resident memory.
+All six workloads passed.
+All runs exceeded the current 10-second and 30-second operating budgets.
+
+### Conclusion
+
+Three workers are the fastest measured limit for one workload on this machine.
+Lower limits reduce memory demand but materially increase single-workload time.
+The result does not answer the parallel-work throughput goal.
+
+### Effect on plan
+
+The throughput measurement below shows that no unlocked one-, two-, or three-worker configuration is currently valid for concurrent Change Submit workloads.
+Retain the three-worker limit only while the capacity lock remains because it is the fastest valid measured configuration.
+Treat this as host-specific single-workload evidence, not a universal worker policy or a reason to retain any individual test.
+
+### Limitations
+
+This measured one machine, one revision, and sequential workloads only.
+It did not measure more than three workers, coverage, interruption, or other host sizes.
+It does not establish why the workloads exceed their current operating budgets.
+
+## Concurrent Change Submit throughput measurement
+
+### Hypothesis
+
+Three isolated Change Submit workloads can complete safely and with better total throughput when the shared capacity lock is removed and each workload uses one, two, or three Vitest workers.
+
+### Baseline
+
+The measurement used three detached linked worktrees at `7a15da7`, shared locked dependencies, and wall-clock time from process start to exit.
+Each worktree ran `just quality`, the current Change Submit gate.
+The locked baseline used three Vitest workers per workload.
+
+### Experiment
+
+Three `just quality` workloads started at the same time.
+The baseline retained the capacity lock with three workers per workload.
+The remaining scenarios bypassed only that lock with `BY_CAPACITY_LOCK_HELD=1` and used one, two, or three Vitest workers per workload.
+No source or product files changed, and all temporary linked worktrees were removed after the measurement.
+
+### Evidence
+
+With the lock, all three workloads passed in 68.187 seconds total.
+Without the lock and with shared temporary storage, one worker completed one workload but two workloads failed in 62.459 seconds total.
+Without the lock and with shared temporary storage, two workers completed two workloads but one failed in 59.283 seconds total.
+Without the lock and with shared temporary storage, three workers caused all three workloads to fail in 63.046 seconds total.
+The one- and two-worker failures included `test/agent/reviewer-agent-runtime.test.ts` observing inconsistent Reviewer Session working directories.
+After giving each one-worker workload an isolated temporary directory, all three workloads passed in 68.864 seconds total.
+With isolated temporary directories, two-worker workloads still all failed because `test/change/change-reconcile-discard.cli.test.ts` exceeded its five-second timeout.
+With isolated temporary directories, three-worker workloads all failed with multiple timeouts and took 98.359 seconds total.
+The main checkout status was unchanged after every scenario.
+
+### Conclusion
+
+The hypothesis is refuted for the current test portfolio.
+One-worker unlocked workloads can become valid after temporary-storage isolation, but they do not improve total throughput over the locked baseline.
+Two- and three-worker unlocked workloads remain invalid because their retained process-heavy evidence exceeds its test timeouts under contention.
+
+### Effect on plan
+
+Retain the current capacity lock and the current three-worker limit.
+Do not replace the lock with a lower per-workload worker limit.
+The portfolio redesign must reduce or isolate expensive retained evidence before it can justify another concurrency-policy experiment.
+
+### Limitations
+
+This measured only the `just quality` gate on one machine and one revision.
+It did not run actual Change Submit operations, full-quality, coverage, interruption, more than three workloads, or more than three workers per workload.
+It does not establish a safe future concurrency limit.
+
+## Concurrent-workload diagnosis
+
+### Cause
+
+`test/agent/reviewer-agent-runtime.test.ts` has a confirmed test-isolation defect.
+Its fixed Reviewer Session ID is searched under the parent of its session directory, which is the shared process temporary directory.
+Concurrent test processes can therefore select another process's fixture session file.
+This does not establish that production Reviewer Sessions collide because production session IDs and roots are different.
+
+### Supporting experiments
+
+Three concurrent direct runs of that test with the ordinary shared temporary directory produced one failure with the inconsistent working-directory symptom.
+The same three direct runs with one isolated temporary directory per process all passed.
+Three one-worker `just quality` workloads likewise all passed after temporary-directory isolation.
+
+### Diagnostic loop
+
+Run three detached linked worktrees concurrently with `just test test/agent/reviewer-agent-runtime.test.ts`.
+Use the normal shared temporary directory to reproduce the failure.
+Then set distinct `TMPDIR`, `TEMP`, and `TMP` paths for each workload to test the isolation hypothesis.
+
+### Final verification
+
+The isolated direct-test loop passed three of three runs.
+The isolated one-worker `just quality` loop passed three of three runs in 68.864 seconds total.
+The original three-workload shared-temporary-directory loop still reproduces the failure.
+
+### Remaining uncertainty
+
+The confirmed temporary-storage defect explains the Reviewer Session failure but not the explicit-discard and other timeouts under two or three workers per workload.
+Those timeouts remain resource-contention symptoms with an unconfirmed exact cause.
+
+## Routine evidence cost measurement
+
+### Question
+
+Which routine-gate evidence files have enough measured cost to need first review during portfolio redesign?
+
+### Method
+
+One current-checkout run used `BY_TEST_SUITE=routine just test` with Vitest JSON output.
+The result sums test-body duration by file.
+It excludes static checks, build time, worker startup, and boundary-only evidence.
+
+### Results
+
+The slowest routine files were `test/repository/package-contents.test.ts` at 15.679 seconds, `test/change/change-reconcile-discard.cli.test.ts` at 7.855 seconds, `test/cli/change-submit-errors.test.ts` at 5.802 seconds, `test/task/task-cli.test.ts` at 4.825 seconds, and `test/change/change-cancellation.test.ts` at 4.336 seconds.
+The next files were `test/task/task-dependencies.test.ts` at 2.332 seconds, `test/change/change-implement-main-checkout-failure.test.ts` at 2.195 seconds, `test/repository/portable-implementer-session.test.ts` at 1.828 seconds, `test/change/change-reconciliation.test.ts` at 1.468 seconds, and `test/cli/cli.test.ts` at 1.354 seconds.
+
+### Use in the portfolio
+
+Cost alone does not justify removing evidence.
+Review these files first for duplicate full-process setup, duplicate end-to-end wiring, or assertions that can move to a cheaper owner without losing a distinct Verification Claim.
+`change-reconcile-discard.cli.test.ts` is the first concrete consolidation candidate because it is both costly and the confirmed two-worker timeout source.
+
+### Limitations
+
+This is one run on one machine and ranks test-body time rather than complete file wall-clock time.
+It is a targeting measurement, not a performance budget or a retention decision.
+
 ## Protected product outcomes
 
 The refreshed portfolio must begin from these accepted outcomes:
@@ -60,6 +257,51 @@ The refreshed portfolio must begin from these accepted outcomes:
 6. Only authoritative terminal facts complete or cancel work.
 
 The review must not derive additional product constraints only to make testing easier.
+
+## Approved interim portfolio baseline
+
+The operator approved this interim baseline for the later complete portfolio proposal.
+It does not approve broad evidence migration, portfolio Task creation, or a `VERIFICATION.md` update.
+
+### Material Risks
+
+1. Approved-intent identity loss.
+2. Candidate or validation-identity loss.
+3. External-target identity loss.
+4. Durable-state inconsistency.
+5. Destructive cleanup loss.
+6. False terminal result.
+
+Trusted But Why Executable selection remains a temporary source-repository evidence constraint in `VERIFICATION.md`.
+It is not a durable product Material Risk because first-release executable selection will replace the Source Checkout Guard.
+
+### Verification Claims
+
+- Change Start links only an approved Task whose dependencies are satisfied, and captures that exact Task Context as Acceptance Context.
+- Review uses captured Acceptance Context, not later mutable Task text.
+- Candidate capture identifies the exact fetched Change Base and Repository Branch head, and rejects unsafe workspace or ancestry facts.
+- Change Start and recovery provision or reattach only the exact recorded Repository Branch in a safe Managed Worktree, without overwriting, guessing, or attaching another Change's work.
+- A passed Validation Run represents completion of every required Validation Gate producer under the resolved Validation Policy.
+- Validation Policy resolves the Change Base configuration, Candidate reviewer configuration, Global Config, Acceptance Context, and Implementation Decisions from their accepted authorities.
+- Reuse and publication require the same Candidate, current Acceptance Context, Validation Policy Snapshot, Implementation Decisions, and resolved Implementation Blocker identity.
+- A reviewer judges the exact Candidate, and a resumed Reviewer Session has a compatible fingerprint.
+- An Implementer handoff starts only for the exact recorded Change and Managed Worktree, and missing or mismatched bindings stop without starting another Change's work.
+- An unresolved Implementation Blocker prevents authoritative Validation, and a Resolution makes earlier Validation evidence historical when accepted authority requires fresh Validation.
+- Publication and reconciliation accept an owned pull request only when repository, base branch, head branch, state, and head commit match recorded facts.
+- Remote Change Branch cleanup acts only on the expected branch commit or reports an uncertain or changed fact without deleting it.
+- SQLite admits at most one Active Validation Run and performs Change-linked Task terminal updates atomically.
+- Forward migrations preserve supported current facts and reject persisted transient Task states or malformed consequential data truthfully.
+- The explicit SQLite snapshot operation creates one independently readable, coherent Shared Repository State copy without overwriting an earlier snapshot or mutating source state.
+- Malformed consequential persisted data produces `persisted_data_invalid`, not an unavailable-storage result or a valid-looking domain record.
+- Ordinary recovery and cleanup preserve dirty work, unique local commits, advanced recorded Repository Branches, and changed Remote Change Branch heads.
+- Terminal Cleanup removes all and only the exact Closed Change's Validation Artifact Content, keeps Artifact metadata and another Change's active content, and remains pending for retry after removal failure.
+- Terminal Cleanup retains and indexes every exact Reviewer Transcript, including restarted sessions, removes active Reviewer Session records only after indexing succeeds, and retry does not duplicate references or delete transcripts.
+- Explicit discard applies only to one exact Change and does not bypass repository, branch, or Remote Change Branch head identity checks.
+- Only exact merged-Candidate observation completes a Task-backed Change, and `nothing_to_submit` does not complete or cancel work.
+- Cancellation requires explicit operator authority and updates only the Change and any Task that the Change owns.
+- A successful CLI mutation returns its committed supported facts, and an invalid, unavailable, or uncertain operation returns a distinct actionable result rather than a successful or terminal-looking domain record.
+- Repository initialization creates or repairs required Local Repository artifacts at the Git root and Git Common Directory without replacing valid configured policy.
+- Repository initialization rejects invalid existing Repository Runtime facts with a truthful actionable result.
 
 ## Capability map requiring refresh
 
@@ -75,6 +317,135 @@ The refreshed portfolio must cover the supported system after accepted simplific
 
 The map must not treat removed transient Task states, Candidate Publication chronology, Acceptance Context version history, Finding severity, Validation phase status, legacy Implementation Decision content, or permanent Artifact content as supported target behavior.
 The unimplemented Task Submission Planning Gate must remain outside the current-system portfolio.
+
+## Draft evidence-owner map
+
+This is a proposal from the full current-suite map.
+It requires operator approval before evidence migration or Task creation.
+Each primary owner is the lowest supported seam that can prove the claim.
+Other tests may supply focused variations, but must not duplicate the primary proof without a distinct regression failure.
+
+| Claim group | Primary evidence owner | Required real integration |
+| --- | --- | --- |
+| Approved Task, captured Acceptance Context, and Managed Worktree identity | Change Start and recovery evidence, led by `change-start-managed-worktree.boundary.test.ts` | SQLite and Git |
+| Review uses the captured Acceptance Context, Candidate identity, and Reviewer Session continuity | Candidate capture plus Acceptance Review evidence, led by `change-candidate-capture.boundary.test.ts` and `candidate-acceptance-review.boundary.test.ts` | Git, SQLite, one real Check command, filesystem |
+| Validation Gate completion and policy resolution | Candidate validation and policy-resolver evidence, led by `candidate-validation.boundary.test.ts` and `candidate-validation-policy.test.ts` | Git, SQLite, real Check command, filesystem |
+| Reuse, Blocker, and Resolution decisions | Submit orchestration evidence | Captured domain Adapters, with SQLite only where stored equality matters |
+| Exact Implementer handoff | Portable Implementer Session evidence, supported by Change Implement prompt evidence | Filesystem and one portable process sentinel |
+| Owned pull request, publication, and remote branch cleanup | Publication policy, pull-request gateway, and cleanup-Git evidence | Git, SQLite, captured GitHub command facts |
+| Active Validation Run, atomic terminal writes, migration preservation, and persisted-data truthfulness | Repository Storage evidence | Real SQLite |
+| Explicit immutable snapshot | Shared-state snapshot evidence | Real SQLite, Git worktree, filesystem |
+| Ordinary cleanup, Artifact Content cleanup, Reviewer Transcript retention, and targeted discard | Cleanup-Git, Artifact Lifecycle, Reviewer Transcript, and Reconcile Discard evidence | Git, SQLite, filesystem |
+| Exact merged completion and cancellation | Change Reconciliation and Change Cancellation evidence | SQLite, Git where the observed fact requires it, captured GitHub facts |
+| Truthful CLI results | The command evidence owned by the capability that mutates or reports the fact | In-process CLI, with a real process only for output, stdin, or executable behavior that cannot be observed in-process |
+
+The truthful-CLI-result claim is a rule carried by each capability owner, not a new generic CLI test suite.
+A command test may stay only when it proves command parsing, structured output, stdin, or process behavior that the capability's lower seam cannot prove.
+
+### Temporary operational checks
+
+Some checks protect the development and portable-product workflow rather than a product Material Risk.
+They must remain separately named and justified instead of being misclassified as product-claim evidence.
+
+- The Source Checkout Guard requires its linked-worktree real-process sentinel while `VERIFICATION.md` requires it.
+- Package contents, release CLI loading, and public documentation checks own portable product interfaces under `docs/tooling.md`.
+- Capacity-lock and process-isolation checks protect temporary test operation while those controls remain.
+- Fallow, ast-grep, type, format, and documentation checks own their named structural or reader-visible contracts under `docs/tooling.md`.
+
+No temporary operational check becomes permanent merely because it exists today.
+Each must have a current owner and a removal or retention decision when the related control changes.
+
+## Approved first Task graph
+
+The first graph covers only the approved concrete evidence changes.
+It does not complete the whole verification-portfolio strategy.
+
+1. Isolate Reviewer Session test fixtures from concurrent workloads.
+2. Give targeted discard one primary evidence owner per rule.
+3. Give Candidate capture one primary evidence owner per rule.
+4. Keep Task-dependency rejection persistence under the SQLite owner.
+5. Consolidate duplicate CLI help, terminal-input, and internal-error evidence.
+
+The five Tasks have no dependencies.
+Each can be implemented and verified without another Task being Done.
+Repository Storage allocation, portable-package evidence, and the final scheduling measurement remain plan-only work.
+
+The operator authorized recording, and the complete Task Contexts are recorded as New unlinked Tasks:
+
+1. `BY-129` Isolate concurrent Reviewer Session test fixtures.
+2. `BY-130` Consolidate targeted-discard evidence.
+3. `BY-131` Consolidate Candidate-capture evidence.
+4. `BY-132` Separate Task-dependency CLI and SQLite evidence.
+5. `BY-133` Consolidate small CLI-output evidence.
+
+Task Approval and Implementation Authorization remain separate operator actions.
+
+## Draft migration approach
+
+This is a migration order proposal, not an approved Task graph.
+No source change begins from it until the operator approves the complete strategy.
+
+1. Correct the Reviewer Session test fixture so it does not search a shared temporary directory.
+   Keep its real-process reviewer sentinel.
+   Repeat the direct parallel test and three-workload measurement to prove the false collision is gone.
+2. Reduce `change-reconcile-discard.cli.test.ts` to its two distinct command proofs: missing exact Change ID and actionable retry output.
+   Let the existing real-Git cleanup evidence own terminal-worktree deletion and open-Change rejection.
+   Add a pure `reconcileResult` test that owns `discard_open_change` structured-result serialization before removing the real-Git CLI case.
+   Recheck focused behavior and concurrent Change Submit throughput.
+3. Keep Repository Storage allocation as plan-only work outside the first Task graph.
+   Before changing the file, make a case-by-case claim-owner map.
+   Keep real-SQLite atomicity, migration, snapshot, and persisted-data proofs.
+   Remove duplicate lifecycle and publication matrices only after their approved primary owners prove the same current fact.
+4. Consolidate small pure command, input, and configuration cases only when the destination file already owns the same claim.
+   For Candidate capture, remove only the orchestration tracked-tree-equality case.
+   Keep its supplied-interface sequencing case and unsafe-base, rebind, and provenance matrix.
+   For Task-dependency rejections, use in-process CLI tests with fake Task Use Cases for structured-result mapping.
+   Keep the real SQLite graph-unchanged proof in `task-dependency-persistence.test.ts`.
+   Keep `internal_error` output in `cli.test.ts` and prove both TOON and JSON there.
+   Remove only the literal duplicate JSON-help case and the duplicate terminal-stdin case in `recording-text.test.ts`.
+   Keep byte-limit and other input behavior.
+   Do not merge tests merely to reduce file count.
+5. Review portable package and source-workflow sentinels as one portable-interface group.
+   Retain their real-process proof where required, but remove repeated package setup only when one retained sentinel proves the same installed-package fact.
+6. Make the final scheduling decision only after every retained claim has a named owner and the costly evidence has been measured again.
+   Do not remove the capacity lock, lower the worker limit, or remove the `boundary` execution category before that result.
+7. Rename or move tests only after evidence ownership and scheduling are settled.
+   Filenames must describe their capability, not an old test category.
+
+Each migration slice must first state its affected Material Risk, Verification Claim, primary evidence owner, evidence it replaces, and focused verification command.
+The slice must remove only the evidence that its retained owner makes redundant.
+
+## Draft retained integration sentinels
+
+This is the smallest current set proposed for evidence that cannot reliably use a cheaper seam.
+It requires operator approval.
+
+| Integration | What it must prove | Proposed owner |
+| --- | --- | --- |
+| SQLite | Atomic Change-linked Task writes, migration preservation, snapshots, and malformed-data truthfulness | Shared Repository State evidence |
+| Git | Exact Candidate capture, Managed Worktree identity, and work-preserving cleanup | Candidate, Managed Worktree, and Cleanup evidence |
+| Check command | A Validation Gate Check runs against a fresh exact Candidate workspace | Candidate Validation evidence |
+| Pi reviewer process | The reviewer process receives only its intended runtime resources | Reviewer Agent Runtime evidence |
+| Installed package | The packaged CLI, extensions, and public skill work from an installed layout | Package contents evidence |
+| Portable Implementer Session | The portable handoff script rejects mismatched Change and worktree facts before launch | Portable Implementer Session evidence |
+| Source Checkout Guard | A linked Candidate worktree delegates to the Trusted But Why Executable | Source-workflow isolation evidence, only while `VERIFICATION.md` requires it |
+| Command process | Piped stdin, terminal input, output envelope, and descendant interruption work through the OS process boundary | Focused CLI and host-command evidence |
+
+GitHub behavior does not need a live GitHub repository.
+Captured GitHub command and response facts are sufficient because the claim is But Why's classification and retry behavior, not GitHub service availability.
+
+## Draft cost controls
+
+A retained test must protect a distinct current claim at a seam that the lower-cost evidence cannot reliably observe.
+Its execution and maintenance cost must be justified by that distinct failure.
+
+- Prefer pure or captured evidence for decision variations.
+- Use real SQLite, Git, filesystem, or process behavior only for the facts that require it.
+- Share expensive setup only when doing so preserves independent test cleanup and failure diagnosis.
+- Treat any intermittent retained blocking evidence as a defect to correct, isolate, replace, or remove.
+- Measure the modified focused evidence and `just quality` after every costly migration slice.
+- Repeat the three-concurrent-workload measurement before changing the capacity lock or worker limit.
+- Do not adopt fixed time limits as a reason to keep or remove evidence.
 
 ## Known product corrections and simplifications that affect claims
 
@@ -113,7 +484,7 @@ The refreshed design must account for these accepted changes before broad eviden
 - Persisted invalid data receives one truthful shared CLI result.
 - An explicit immutable SQLite snapshot command replaces Task Archive machinery.
 
-The immutable `0001` through `0012` chain remains, and focused forward migrations should produce the simplified supported schema without discarding Shared Repository State.
+The immutable `0001` through `0023` chain remains, and focused forward migrations should produce the simplified supported schema without discarding Shared Repository State.
 Migration evidence must show that supported current facts survive, retired history and fields are removed, and restored transient Task states are rejected rather than mapped to startable work.
 
 ## Focused evidence during simplification
@@ -184,6 +555,20 @@ Sequence does not establish a Task Dependency unless implementation or verificat
 
 ## Approval state
 
-The operator approved the verification principles, the early-design and later-migration split, and the need to target simplified ownership seams.
-The operator has not approved a refreshed complete risk list, claim set, evidence-owner map, sentinel set, cost controls, or migration Task graph.
-No verification portfolio Task may be created from this plan until that approval occurs.
+The operator approved the verification principles, the early-design and later-migration split, the interim Material Risk and Verification Claim baseline, and the refreshed strategy in this plan.
+The approved strategy includes the evidence-owner map, retained integration sentinels, cost controls, and temporary capacity-lock decision.
+The operator agreed to retain the capacity lock and three-worker limit, correct the temporary-storage test isolation defect, and remeasure only after costly retained evidence is reduced or isolated.
+The operator approved a bottom-up evidence allocation before a migration Task graph is proposed.
+The operator approved the first five-Task graph for the concrete evidence changes.
+The operator approved a pure `reconcileResult` owner for `discard_open_change` structured-result serialization before the real-Git CLI case is removed.
+The operator approved removing only the Candidate-capture orchestration tracked-tree-equality case and retaining its sequencing and unsafe-fact evidence.
+The operator approved fake Task Use Cases for Task-dependency CLI rejection mapping and retained real SQLite persistence evidence for the unchanged graph.
+The operator approved `cli.test.ts` as the sole `internal_error` owner, with TOON and JSON proof, plus the narrow help and terminal-stdin duplicate removals.
+The operator approved keeping Repository Storage allocation as plan-only work outside the first Task graph until a case-by-case claim-owner map exists.
+The operator approved the complete Task Contexts and authorized recording the first five-Task graph.
+`BY-129` through `BY-133` are recorded without dependencies.
+The operator approved `BY-129` and authorized its Task-backed implementation.
+Change `8920442d-e011-4abb-970e-a25ce2b7a3a5` started in a fresh Implementer Interactive Session with `changeVerified: true`.
+The operator approved `BY-130` and authorized its Task-backed implementation.
+Change `3226d86a-0f1e-4e52-8a54-78bf7a05db35` started in a fresh Implementer Interactive Session with `changeVerified: true`.
+`BY-131` through `BY-133` remain New and unlinked.

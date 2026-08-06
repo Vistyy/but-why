@@ -123,6 +123,12 @@ They identified these current costs:
 These constraints are integration evidence, not reasons to weaken the Validation Workspace invariants that But Why owns.
 A replacement must preserve exact Candidate binding, integrity checks, bounded cleanup evidence, and Reviewer Session continuity.
 
+## Deferred repository ignore ownership
+
+Sandcastle currently requires But Why to manage a repository-root `.gitignore` block for `.sandcastle/` content.
+When Sandcastle is removed and no replacement needs a repository-root ignore rule, But Why should stop changing the repository-root `.gitignore`.
+If But Why still needs ignore rules, it should own them in `.but-why/.gitignore` without hiding tracked Repo Config or reviewer files.
+
 ## Replacement choices
 
 | Choice | Fit | Main limitation |
