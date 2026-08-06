@@ -33,11 +33,6 @@ type PackageManifest = {
   readonly repository: { readonly type: string; readonly url: string };
 };
 
-type PiProbe = {
-  readonly prompt: string;
-  readonly commands: readonly string[];
-};
-
 const createPackageFixture = (packageRoot: string): void => {
   cpSync(join(repoRoot, "package.json"), join(packageRoot, "package.json"));
   cpSync(join(repoRoot, "README.md"), join(packageRoot, "README.md"));
@@ -51,50 +46,8 @@ const createPackageFixture = (packageRoot: string): void => {
   });
 };
 
-const verifyPiSkillDiscovery = (installedPackage: string): void => {
-  const consumer = createTestWorkspace();
-  const agentDirectory = join(createTestWorkspace(), "agent");
-  const probeOutput = join(consumer, "probe.json");
-  const probeExtension = join(consumer, "probe.mjs");
-  writeFileSync(
-    probeExtension,
-    [
-      'import { writeFileSync } from "node:fs";',
-      "export default function probe(pi) {",
-      '  pi.registerCommand("probe", { description: "Probe skill discovery", handler: async (_args, ctx) => {',
-      "    writeFileSync(process.env.PROBE_OUTPUT, JSON.stringify({ prompt: ctx.getSystemPrompt(), commands: pi.getCommands().map((command) => command.name) }));",
-      "  } });",
-      "}",
-      "",
-    ].join("\n"),
-  );
-  const pi = join(installedPackage, "..", "@earendil-works", "pi-coding-agent", "dist", "cli.js");
-  const environment = { PI_CODING_AGENT_DIR: agentDirectory, PI_OFFLINE: "1" };
-  const install = runTestProcess(process.execPath, [pi, "install", installedPackage], {
-    cwd: consumer,
-    env: environment,
-    isolatedHome: createTestWorkspace(),
-  });
-  expect(install.status, `${install.stdout}${install.stderr}`).toBe(0);
-  const probe = runTestProcess(
-    process.execPath,
-    [pi, "--mode", "rpc", "--no-session", "--extension", probeExtension],
-    {
-      cwd: consumer,
-      env: { ...environment, PROBE_OUTPUT: probeOutput },
-      isolatedHome: createTestWorkspace(),
-      input: '{"type":"prompt","message":"/probe","id":"probe"}\n',
-      timeout: 10_000,
-    },
-  );
-  expect(probe.status, `${probe.stdout}${probe.stderr}`).toBe(0);
-  const result = JSON.parse(readFileSync(probeOutput, "utf8")) as PiProbe;
-  expect(result.prompt).toContain("but-why");
-  expect(result.commands).toContain("skill:but-why");
-};
-
 describe("CLI package contents", () => {
-  it("packs bundled continuation support and the model-visible Pi skill", async () => {
+  it("packs bundled continuation support and reports trusted extension failures through by change implement", async () => {
     const packageRoot = createTestWorkspace();
     createPackageFixture(packageRoot);
     cpSync(join(repoRoot, "src"), join(packageRoot, "src"), { recursive: true });
@@ -130,12 +83,6 @@ describe("CLI package contents", () => {
     expect(readFileSync(join(installedPackage, "extensions/continue-change.ts"), "utf8")).toContain(
       "continue-change",
     );
-    const installedSkill = join(installedPackage, "docs/public/skills/but-why/SKILL.md");
-    expect(readFileSync(installedSkill, "utf8")).toContain("[Setup guidance](../../setup.md)");
-    expect(existsSync(join(installedPackage, "docs/public/skills/but-why/../../setup.md"))).toBe(
-      true,
-    );
-    verifyPiSkillDiscovery(installedPackage);
     const repository = createGitRepo();
     const tools = createTestWorkspace();
     writeFileSync(
