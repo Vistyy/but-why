@@ -57,10 +57,7 @@ const flushPendingUncertainLaunchScripts = async (): Promise<void> => {
   await Promise.all(pending.map((script) => script.cleanup()));
 };
 
-const retainUncertainLaunchScript = (
-  script: PiLaunchScript,
-  options: ResolvedOptions,
-): void => {
+const retainUncertainLaunchScript = (script: PiLaunchScript, options: ResolvedOptions): void => {
   pendingUncertainLaunchScripts.add(script);
   const deferredMs = options.readinessTimeoutMs + options.commandTimeoutMs + 1000;
   const timer = setTimeout(() => {

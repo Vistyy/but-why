@@ -4,9 +4,9 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import {
   flushHerdrLaunchArtifactsForTesting,
+  type HerdrCommandExecutor,
   openHerdrInteractiveSessionHost,
   pendingHerdrLaunchArtifactsForTesting,
-  type HerdrCommandExecutor,
 } from "../../src/change/interactiveSession/herdrInteractiveSessionHost.js";
 
 const readPiLaunchScriptPath = (command: string | undefined): string | undefined => {
@@ -92,39 +92,17 @@ describe("Herdr Interactive Session Host artifact lifecycle", () => {
     });
 
     expect(result).toEqual({ ok: true, host: "herdr", status: "started" });
-    // Launch script was created and contained the Pi command
     expect(launchScriptContent).toContain("exec pi");
-    // Artifact is owned through use and then released: pane run saw the file, host removed it
     expect(capture.paths).toHaveLength(1);
-    expect(existsSync(capture.paths[0]!)).toBe(false);
+    expect(existsSync(capture.paths[0] as string)).toBe(false);
     expect(pendingHerdrLaunchArtifactsForTesting()).toBe(0);
     capture.cleanup();
   });
 
   it("removes the launch script after a deterministic pane failure without hiding the failure", async () => {
     const capture = captureLaunchScripts();
-    const execute: HerdrCommandExecutor = async (args) => {
-      if (args[0] === "pane" && args[1] === "run") {
-        capture.track(readPiLaunchScriptPath(args[3]));
-      }
-      if (args[0] === "agent" && args[1] === "list") {
-        return { ok: true, stdout: '{"result":{"type":"agent_list","agents":[]}}' };
-      }
-      if (args[0] === "worktree") {
-        return {
-          ok: true,
-          stdout:
-            '{"result":{"type":"worktree_opened","workspace":{"workspace_id":"workspace-1"},"root_pane":{"pane_id":"workspace-1:pane-1"},"already_open":false}}',
-        };
-      }
-      if (args[0] === "pane" && args[1] === "run") return { ok: false, message: "pane unavailable" } as never;
-      return { ok: true, stdout: "{}" };
-    };
-    // Override to ensure deterministic failure path
-    let paneRuns = 0;
     const failingExecute: HerdrCommandExecutor = async (args) => {
       if (args[0] === "pane" && args[1] === "run") {
-        paneRuns += 1;
         capture.track(readPiLaunchScriptPath(args[3]));
         return { ok: false, message: "pane unavailable" };
       }
@@ -153,7 +131,7 @@ describe("Herdr Interactive Session Host artifact lifecycle", () => {
 
     expect(result).toMatchObject({ ok: false, code: "launch_failed" });
     expect(capture.paths).toHaveLength(1);
-    expect(existsSync(capture.paths[0]!)).toBe(false);
+    expect(existsSync(capture.paths[0] as string)).toBe(false);
     expect(pendingHerdrLaunchArtifactsForTesting()).toBe(0);
     capture.cleanup();
   });
@@ -195,10 +173,11 @@ describe("Herdr Interactive Session Host artifact lifecycle", () => {
     });
 
     expect(result).toMatchObject({ ok: false, code: "launch_indeterminate" });
-    expect((result as { ok: false; evidence?: { startupOutput?: string } }).evidence?.startupOutput).toBe("Starting Pi");
-    // Temporary launch artifact is gone, diagnostic evidence remains
+    expect(
+      (result as { ok: false; evidence?: { startupOutput?: string } }).evidence?.startupOutput,
+    ).toBe("Starting Pi");
     expect(capture.paths).toHaveLength(1);
-    expect(existsSync(capture.paths[0]!)).toBe(false);
+    expect(existsSync(capture.paths[0] as string)).toBe(false);
     expect(pendingHerdrLaunchArtifactsForTesting()).toBe(0);
     capture.cleanup();
   });
@@ -238,14 +217,12 @@ describe("Herdr Interactive Session Host artifact lifecycle", () => {
     });
 
     expect(result).toMatchObject({ ok: false, code: "launch_indeterminate" });
-    // Artifact remains owned while late Herdr command can still consume it
     expect(capture.paths).toHaveLength(1);
-    expect(existsSync(capture.paths[0]!)).toBe(true);
+    expect(existsSync(capture.paths[0] as string)).toBe(true);
     expect(pendingHerdrLaunchArtifactsForTesting()).toBe(1);
 
-    // Explicit later cleanup route releases it without accumulating
     await flushHerdrLaunchArtifactsForTesting();
-    expect(existsSync(capture.paths[0]!)).toBe(false);
+    expect(existsSync(capture.paths[0] as string)).toBe(false);
     expect(pendingHerdrLaunchArtifactsForTesting()).toBe(0);
     capture.cleanup();
   });
@@ -289,21 +266,18 @@ describe("Herdr Interactive Session Host artifact lifecycle", () => {
 
     expect(result).toMatchObject({ ok: false });
     expect(closedWorkspaces).toContainEqual(["workspace", "close", "workspace-1"]);
-    // After workspace close, artifact is released
     expect(capture.paths).toHaveLength(1);
-    expect(existsSync(capture.paths[0]!)).toBe(false);
+    expect(existsSync(capture.paths[0] as string)).toBe(false);
     expect(pendingHerdrLaunchArtifactsForTesting()).toBe(0);
     capture.cleanup();
   });
 
   it("does not accumulate obsolete artifacts across repeated uncertain attempts", async () => {
     const capture = captureLaunchScripts();
-    let attempt = 0;
     const execute: HerdrCommandExecutor = async (args) => {
       if (args[0] === "pane" && args[1] === "run") {
         const p = readPiLaunchScriptPath(args[3]);
         capture.track(p);
-        attempt += 1;
         return { ok: false, message: "connection reset" };
       }
       if (args[0] === "agent" && args[1] === "list") {
@@ -334,7 +308,7 @@ describe("Herdr Interactive Session Host artifact lifecycle", () => {
     });
     expect(first.ok).toBe(false);
     expect(capture.paths).toHaveLength(1);
-    const firstPath = capture.paths[0]!;
+    const firstPath = capture.paths[0] as string;
     expect(existsSync(firstPath)).toBe(true);
     expect(pendingHerdrLaunchArtifactsForTesting()).toBe(1);
 
@@ -346,8 +320,7 @@ describe("Herdr Interactive Session Host artifact lifecycle", () => {
     });
     expect(second.ok).toBe(false);
     expect(capture.paths).toHaveLength(2);
-    const secondPath = capture.paths[1]!;
-    // First obsolete artifact was released before second attempt completed
+    const secondPath = capture.paths[1] as string;
     expect(existsSync(firstPath)).toBe(false);
     expect(existsSync(secondPath)).toBe(true);
     expect(pendingHerdrLaunchArtifactsForTesting()).toBe(1);
@@ -366,7 +339,6 @@ describe("Herdr Interactive Session Host artifact lifecycle", () => {
         return { ok: true, stdout: "{}" };
       }
       if (args[0] === "agent" && args[1] === "list") {
-        // Never detect Pi, cause readiness failure
         return { ok: true, stdout: '{"result":{"type":"agent_list","agents":[]}}' };
       }
       if (args[0] === "worktree") {
@@ -400,9 +372,8 @@ describe("Herdr Interactive Session Host artifact lifecycle", () => {
       code: "launch_indeterminate",
       evidence: { startupOutput: "diagnostic startup log", exitEvidence: "exit code 1" },
     });
-    // Diagnostics remain available, launch artifact does not
     expect(capture.paths).toHaveLength(1);
-    expect(existsSync(capture.paths[0]!)).toBe(false);
+    expect(existsSync(capture.paths[0] as string)).toBe(false);
     expect(pendingHerdrLaunchArtifactsForTesting()).toBe(0);
     capture.cleanup();
   });
