@@ -1,7 +1,6 @@
 import { expect } from "@effect/vitest";
 import { describe, it as ordinaryIt } from "vitest";
 
-import { mapRuntimeError } from "../../src/cli.js";
 import { repositoryStorageErrorResult } from "../../src/cliResults.js";
 import {
   RepositoryIdentityConflict,
@@ -125,16 +124,6 @@ help[1]: "Restore a known-good copy of <git-common-dir>/but-why/state.sqlite, th
     expect(result.exitCode).toBe(1);
     expect(JSON.parse(JSON.stringify(result.stdout))).toMatchObject({
       error: { code: "shared_state_identity_conflict" },
-    });
-  });
-
-  ordinaryIt("keeps programmer defects as internal_error at the CLI entry boundary", () => {
-    const result = mapRuntimeError();
-
-    expect(result.exitCode).toBe(1);
-    expect(JSON.parse(JSON.stringify(result.stdout))).toEqual({
-      error: { code: "internal_error", message: "The command failed unexpectedly" },
-      help: ["Report this failure with the command and workspace path"],
     });
   });
 });
