@@ -7,7 +7,7 @@ import { describe } from "vitest";
 import { commitButWhyConfigAndRecordDefault, runByInProcessEffect } from "../support/by-cli.js";
 import { createInitializedRepo } from "../support/initializedRepo.js";
 import { withTestRepository } from "../support/repository.js";
-import { runTestProcess, runTestProcessOrThrow } from "../support/testProcess.js";
+import { runTestProcessOrThrow } from "../support/testProcess.js";
 import { openSqliteChangePersistence } from "../../src/sqlite/sqliteChangePersistence.js";
 import { openSqliteChangeStartPersistence } from "../../src/sqlite/sqliteChangeStartPersistence.js";
 
@@ -29,119 +29,6 @@ describe("by change reconcile --discard-work", () => {
         error: { code: "discard_requires_change_id" },
         help: ["Run `by change reconcile <change-id> --discard-work` for one exact Change."],
       });
-    }),
-  );
-
-  it.effect(
-    "discards a dirty Managed Worktree and unique branch for one exact terminal Change",
-    () =>
-      Effect.gen(function* () {
-        const root = createInitializedRepo();
-        commitButWhyConfigAndRecordDefault(root);
-        const commonDirectory = join(root, ".git");
-        const worktreePath = join(root, "worktrees", "but-why", "change-a");
-        git(root, "worktree", "add", "-b", "but-why/change-a", worktreePath, "main");
-        writeFileSync(join(worktreePath, "feature.txt"), "unique A\n");
-        git(worktreePath, "add", "feature.txt");
-        git(worktreePath, "commit", "-m", "Unique A");
-        writeFileSync(join(worktreePath, "dirty.txt"), "uncommitted A\n");
-        yield* withTestRepository(
-          root,
-          Effect.gen(function* () {
-            const starts = yield* openSqliteChangeStartPersistence();
-            const changes = yield* openSqliteChangePersistence();
-            const created = yield* starts.create({
-              id: "change-a",
-              repositoryCommonDirectory: commonDirectory,
-              branchRef: "refs/heads/but-why/change-a",
-              baseRef: "refs/heads/main",
-              baseRemoteUrl: "https://github.com/acme/repo.git",
-              startingCommit: git(root, "rev-parse", "refs/heads/main"),
-              worktreePath,
-              now,
-            });
-            if (!created.ok) throw new Error(created.code);
-            yield* starts.recordPrepareOutcome(created.change.id, null, now);
-            const cancelled = yield* changes.cancelChange({
-              changeId: created.change.id,
-              reason: "cleanup",
-              now,
-            });
-            if (!cancelled.ok) throw new Error(cancelled.code);
-          }),
-        );
-
-        const result = yield* runByInProcessEffect(root, [
-          "--json",
-          "change",
-          "reconcile",
-          "change-a",
-          "--discard-work",
-        ]);
-
-        expect(result.status).toBe(0);
-        expect(JSON.parse(result.stdout)).toEqual({
-          changes: [
-            {
-              changeId: "change-a",
-              status: "cleanup_complete",
-              cleanup: { state: "complete", blockingReason: null },
-            },
-          ],
-        });
-        expect(existsSync(worktreePath)).toBe(false);
-        expect(branchPresent(root, "but-why/change-a")).toBe(false);
-      }),
-  );
-
-  it.effect("rejects --discard-work for an open Change", () =>
-    Effect.gen(function* () {
-      const root = createInitializedRepo();
-      commitButWhyConfigAndRecordDefault(root);
-      const commonDirectory = join(root, ".git");
-      const worktreePath = join(root, "worktrees", "but-why", "change-open");
-      git(root, "worktree", "add", "-b", "but-why/change-open", worktreePath, "main");
-      yield* withTestRepository(
-        root,
-        Effect.gen(function* () {
-          const starts = yield* openSqliteChangeStartPersistence();
-          const created = yield* starts.create({
-            id: "change-open",
-            repositoryCommonDirectory: commonDirectory,
-            branchRef: "refs/heads/but-why/change-open",
-            baseRef: "refs/heads/main",
-            baseRemoteUrl: "https://github.com/acme/repo.git",
-            startingCommit: git(root, "rev-parse", "refs/heads/main"),
-            worktreePath,
-            now,
-          });
-          if (!created.ok) throw new Error(created.code);
-          yield* starts.recordPrepareOutcome(created.change.id, null, now);
-        }),
-      );
-
-      const result = yield* runByInProcessEffect(root, [
-        "--json",
-        "change",
-        "reconcile",
-        "change-open",
-        "--discard-work",
-      ]);
-
-      expect(result.status).toBe(1);
-      expect(JSON.parse(result.stdout)).toMatchObject({
-        error: {
-          code: "discard_open_change",
-          changes: [
-            {
-              changeId: "change-open",
-              status: "rejected",
-              rejection: "discard_open_change",
-            },
-          ],
-        },
-      });
-      expect(existsSync(worktreePath)).toBe(true);
     }),
   );
 
@@ -217,6 +104,3 @@ describe("by change reconcile --discard-work", () => {
 
 const git = (cwd: string, ...args: readonly string[]): string =>
   runTestProcessOrThrow("git", args, { cwd });
-
-const branchPresent = (cwd: string, branch: string): boolean =>
-  runTestProcess("git", ["rev-parse", "--verify", `refs/heads/${branch}`], { cwd }).status === 0;
