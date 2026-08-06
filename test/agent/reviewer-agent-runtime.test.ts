@@ -90,7 +90,7 @@ describe("Pi reviewer agent runtime", () => {
 
   it.effect("stores host-run Pi sessions in the Change-owned session directory", () =>
     Effect.gen(function* () {
-      const sessionRoot = mkdtempSync(join(tmpdir(), "but-why-reviewer-sessions-"));
+      const { fixtureRoot, sessionRoot } = isolatedSessionRoot();
       const workspace = "/validation-workspace-two";
       const sessionId = "123e4567-e89b-42d3-a456-426614174001";
       let command = "";
@@ -125,14 +125,14 @@ describe("Pi reviewer agent runtime", () => {
           sessionFilePath: expect.stringContaining(`review_${sessionId}.jsonl`),
         });
       } finally {
-        rmSync(sessionRoot, { recursive: true, force: true });
+        rmSync(fixtureRoot, { recursive: true, force: true });
       }
     }),
   );
 
   it.effect("does not promote session metadata after capture-failure recovery", () =>
     Effect.gen(function* () {
-      const sessionRoot = mkdtempSync(join(tmpdir(), "but-why-uncaptured-reviewer-session-"));
+      const { fixtureRoot, sessionRoot } = isolatedSessionRoot();
       const sessionId = "123e4567-e89b-42d3-a456-426614174003";
       const sessionFile = join(sessionRoot, `review_${sessionId}.jsonl`);
       writeFileSync(
@@ -175,14 +175,14 @@ describe("Pi reviewer agent runtime", () => {
         expect(observedCwds).toEqual(["/validation-workspace", "/validation-workspace"]);
         expect(readFileSync(sessionFile, "utf8")).toContain('"cwd":"/removed-workspace"');
       } finally {
-        rmSync(sessionRoot, { recursive: true, force: true });
+        rmSync(fixtureRoot, { recursive: true, force: true });
       }
     }),
   );
 
   it.effect("rejects a corrupt stored Pi session before resume", () =>
     Effect.gen(function* () {
-      const sessionRoot = mkdtempSync(join(tmpdir(), "but-why-corrupt-reviewer-session-"));
+      const { fixtureRoot, sessionRoot } = isolatedSessionRoot();
       const sessionId = "123e4567-e89b-42d3-a456-426614174002";
       writeFileSync(join(sessionRoot, `review_${sessionId}.jsonl`), "not-json\n");
       const run = vi.fn<Pick<Sandbox, "run">["run"]>(() =>
@@ -212,7 +212,7 @@ describe("Pi reviewer agent runtime", () => {
         });
         expect(run).not.toHaveBeenCalled();
       } finally {
-        rmSync(sessionRoot, { recursive: true, force: true });
+        rmSync(fixtureRoot, { recursive: true, force: true });
       }
     }),
   );
@@ -554,6 +554,13 @@ describe("Pi reviewer agent runtime", () => {
     }),
   );
 });
+
+const isolatedSessionRoot = (): { readonly fixtureRoot: string; readonly sessionRoot: string } => {
+  const fixtureRoot = mkdtempSync(join(tmpdir(), "but-why-reviewer-session-fixture-"));
+  const sessionRoot = join(fixtureRoot, "sessions");
+  mkdirSync(sessionRoot, { recursive: true });
+  return { fixtureRoot, sessionRoot };
+};
 
 const runResult = (stdout: string, resume?: SandboxRunResult["resume"]): SandboxRunResult => ({
   iterations: [],
