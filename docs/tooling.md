@@ -71,8 +71,8 @@ The following operations are manual and non-blocking.
 They do not block the routine or complete quality suites and remain available as targeted commands.
 
 - A real Herdr smoke check verifies that `by change implement` can open an existing ready Managed Worktree under its stable session name.
-  The check is environment-gated: without a running Herdr and the required environment, the test skips and never blocks a suite.
-  Start Herdr, point `HERDR_SMOKE_WORKTREE` at an existing ready Managed Worktree, point `HERDR_SMOKE_REPOSITORY` at that Worktree's repository, optionally point `HERDR_SMOKE_PATH` at the Herdr executable path, then run `just test test/agent/herdr-smoke.test.ts`.
+  The check is excluded from the routine and complete quality suites and never blocks them.
+  Start Herdr, point `HERDR_SMOKE_WORKTREE` at an existing ready Managed Worktree, point `HERDR_SMOKE_REPOSITORY` at that Worktree's repository, optionally point `HERDR_SMOKE_PATH` at the Herdr executable path, then run `BY_MANUAL_DIAGNOSTICS=1 just test test/agent/herdr-smoke.test.ts`.
   The captured Herdr host tests own launch classification and recovery; this check is an optional live-environment confirmation.
 
 ## CLI loading verification

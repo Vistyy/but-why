@@ -6,8 +6,10 @@ import {
 } from "../../src/change/herdrInteractiveSessionHost.js";
 
 // Manual, non-blocking Herdr smoke diagnostic.
-// This environment-gated test skips without a live Herdr and is not part of the maintained blocking evidence portfolio.
-// Set HERDR_SMOKE_WORKTREE to an existing ready Managed Worktree after starting Herdr.
+// Maintained suites exclude this file; live Herdr is never required by blocking evidence.
+// To run the documented manual diagnostic, start Herdr, set HERDR_SMOKE_WORKTREE and
+// HERDR_SMOKE_REPOSITORY (optionally HERDR_SMOKE_PATH), and run
+// `BY_MANUAL_DIAGNOSTICS=1 just test test/agent/herdr-smoke.test.ts`.
 // See docs/tooling.md for the documented manual diagnostic command.
 // biome-ignore lint/complexity/useLiteralKeys: NodeJS.ProcessEnv has an index signature.
 const smokeWorktree = process.env["HERDR_SMOKE_WORKTREE"];
