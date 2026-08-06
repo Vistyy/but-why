@@ -231,8 +231,11 @@ It excludes static checks, build time, worker startup, and boundary-only evidenc
 
 ### Results
 
-The slowest routine files were `test/repository/package-contents.test.ts` at 15.679 seconds, `test/change/change-reconcile-discard.cli.test.ts` at 7.855 seconds, `test/cli/change-submit-errors.test.ts` at 5.802 seconds, `test/task/task-cli.test.ts` at 4.825 seconds, and `test/change/change-cancellation.test.ts` at 4.336 seconds.
-The next files were `test/task/task-dependencies.test.ts` at 2.332 seconds, `test/change/change-implement-main-checkout-failure.test.ts` at 2.195 seconds, `test/repository/portable-implementer-session.test.ts` at 1.828 seconds, `test/change/change-reconciliation.test.ts` at 1.468 seconds, and `test/cli/cli.test.ts` at 1.354 seconds.
+The slowest routine files were `test/repository/package-contents.test.ts` at 34.177 seconds, `test/cli/change-submit-errors.test.ts` at 11.169 seconds, `test/task/task-cli.test.ts` at 8.404 seconds, `test/change/change-reconcile-discard.cli.test.ts` at 8.156 seconds, and `test/change/change-cancellation.test.ts` at 8.093 seconds.
+The next files were `test/change/change-implement-main-checkout-failure.test.ts` at 4.995 seconds, `test/cli/cli.test.ts` at 3.501 seconds, `test/repository/portable-implementer-session.test.ts` at 3.373 seconds, `test/change/change-reconciliation.test.ts` at 2.251 seconds, and `test/agent/reviewer-agent-runtime.test.ts` at 1.668 seconds.
+The run followed BY-134 removing duplicate Task-backed completion, Task-backed cancellation, and taskless completion evidence from `repository-storage.boundary.test.ts`.
+One `change-submit-errors.test.ts` case exceeded the default five-second Vitest timeout under the three-worker routine run and passed in isolation, so its measured cost includes that timeout.
+The `herdr-smoke.test.ts` case remained skipped in this environment.
 
 ### Use in the portfolio
 
