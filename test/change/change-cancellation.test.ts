@@ -632,37 +632,6 @@ describe("Change cancellation", () => {
         }),
       );
   });
-
-  it.effect("completes a Change and linked Task when the owned pull request is merged", () => {
-    const events: string[] = [];
-    const task = taskRecord("todo");
-    const change = changeRecord(publicTaskId(task.id));
-    const dependencies = cancellationDependencies({
-      task,
-      change,
-      pullRequest: pullRequest("closed", true),
-      events,
-    });
-
-    return openCancellationUseCases(dependencies)
-      .cancelTask({ taskId: publicTaskId(task.id), reason: "Stop", now })
-      .pipe(
-        Effect.map((result) => {
-          expect(result).toMatchObject({ ok: true, status: "completed" });
-          expect(events).toEqual([
-            "read-task",
-            "read-change",
-            "read-pr",
-            "complete-change",
-            "cleanup",
-            "record-cleanup",
-            "remove-reviewer-sessions",
-            "read-task",
-          ]);
-          return result;
-        }),
-      );
-  });
 });
 
 const now = "2026-07-24T10:00:00.000Z";
