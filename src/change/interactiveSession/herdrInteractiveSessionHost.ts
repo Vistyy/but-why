@@ -1,5 +1,7 @@
+import { randomUUID } from "node:crypto";
 import { statSync } from "node:fs";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
+// rename is used via dynamic import to avoid top-level wall-clock rule side effects
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { createJiti } from "jiti/static";
@@ -57,7 +59,7 @@ const flushPendingUncertainLaunchScripts = async (): Promise<void> => {
   await Promise.all(pending.map((script) => script.cleanup()));
 };
 
-const pendingLaunchRegistryPath = (): string => join(tmpdir(), "but-why-pending-pi-launches.json");
+const pendingLaunchRegistryDir = (): string => join(tmpdir(), "but-why-pending-pi-launches");
 
 type PendingLaunchRecord = {
   readonly dir: string;
@@ -88,70 +90,70 @@ const recordPendingLaunchForCrossProcessPrune = async (
     createdAt: Date.now(),
     retentionMs: options.readinessTimeoutMs + options.commandTimeoutMs + 1000,
   };
+  const registryDir = pendingLaunchRegistryDir();
   try {
-    const raw = await readFile(pendingLaunchRegistryPath(), "utf8").catch(() => "[]");
-    const parsed = JSON.parse(raw) as unknown;
-    const list = Array.isArray(parsed) ? (parsed as PendingLaunchRecord[] & string[]) : [];
-    const normalized: PendingLaunchRecord[] = list
-      .map((entry) =>
-        typeof entry === "string"
-          ? { dir: entry, createdAt: 0, retentionMs: 0 }
-          : (entry as PendingLaunchRecord),
-      )
-      .filter((entry) => typeof entry.dir === "string");
-    if (!normalized.some((entry) => entry.dir === dir)) normalized.push(record);
-    await writeFile(pendingLaunchRegistryPath(), JSON.stringify(normalized), "utf8");
+    await mkdir(registryDir, { recursive: true });
+    const entryPath = join(registryDir, `${randomUUID()}.json`);
+    await writeFile(entryPath, JSON.stringify(record), "utf8");
   } catch {}
 };
 
 const pruneStaleFilesystemLaunchArtifacts = async (): Promise<void> => {
-  const registryPath = pendingLaunchRegistryPath();
-  let raw: string;
+  const registryDir = pendingLaunchRegistryDir();
+  let entries: string[];
   try {
-    raw = await readFile(registryPath, "utf8");
+    entries = await readdir(registryDir);
   } catch {
-    return;
-  }
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(raw) as unknown;
-  } catch {
-    try {
-      await rm(registryPath, { force: true });
-    } catch {}
-    return;
-  }
-  if (!Array.isArray(parsed) || parsed.length === 0) {
-    try {
-      await rm(registryPath, { force: true });
-    } catch {}
     return;
   }
   const now = Date.now();
-  const entries = parsed as (PendingLaunchRecord & string)[];
-  const remaining: PendingLaunchRecord[] = [];
   await Promise.all(
     entries.map(async (entry) => {
-      const record =
-        typeof entry === "string"
-          ? { dir: entry, createdAt: 0, retentionMs: 0 }
-          : (entry as PendingLaunchRecord);
-      const isStale =
-        typeof record.createdAt !== "number" ||
-        typeof record.retentionMs !== "number" ||
-        now - record.createdAt > record.retentionMs;
-      if (isStale) {
-        try {
-          await rm(record.dir, { recursive: true, force: true });
-        } catch {}
-      } else {
-        remaining.push(record);
+      if (!entry.endsWith(".json")) return;
+      const entryPath = join(registryDir, entry);
+      let raw: string;
+      try {
+        raw = await readFile(entryPath, "utf8");
+      } catch {
+        return;
       }
+      let record: PendingLaunchRecord;
+      try {
+        const parsed = JSON.parse(raw) as unknown;
+        if (typeof parsed === "string") {
+          record = { dir: parsed, createdAt: 0, retentionMs: 0 };
+        } else if (
+          typeof (parsed as PendingLaunchRecord).dir === "string" &&
+          typeof (parsed as PendingLaunchRecord).createdAt === "number" &&
+          typeof (parsed as PendingLaunchRecord).retentionMs === "number"
+        ) {
+          record = parsed as PendingLaunchRecord;
+        } else {
+          return;
+        }
+      } catch {
+        try {
+          await rm(entryPath, { force: true });
+        } catch {}
+        return;
+      }
+      const isStale = now - record.createdAt > record.retentionMs;
+      if (!isStale) return;
+      try {
+        await rm(record.dir, { recursive: true, force: true });
+      } catch {}
+      try {
+        await rm(entryPath, { force: true });
+      } catch {}
     }),
   );
+  // Best-effort cleanup of empty registry dir and legacy single-file registry
   try {
-    if (remaining.length === 0) await rm(registryPath, { force: true });
-    else await writeFile(registryPath, JSON.stringify(remaining), "utf8");
+    const remaining = await readdir(registryDir);
+    if (remaining.length === 0) await rm(registryDir, { recursive: true, force: true });
+  } catch {}
+  try {
+    await rm(join(tmpdir(), "but-why-pending-pi-launches.json"), { force: true });
   } catch {}
 };
 
@@ -162,8 +164,15 @@ export const openHerdrInteractiveSessionHost = (
   launch: async (input, signal) => launchHerdrSession(execute, input, environment, signal),
 });
 
-export const flushHerdrLaunchArtifactsForTesting = async (): Promise<void> =>
-  flushPendingUncertainLaunchScripts();
+export const flushHerdrLaunchArtifactsForTesting = async (): Promise<void> => {
+  await flushPendingUncertainLaunchScripts();
+  try {
+    await rm(pendingLaunchRegistryDir(), { recursive: true, force: true });
+  } catch {}
+  try {
+    await rm(join(tmpdir(), "but-why-pending-pi-launches.json"), { force: true });
+  } catch {}
+};
 
 export const pendingHerdrLaunchArtifactsForTesting = (): number =>
   pendingUncertainLaunchScripts.size;
