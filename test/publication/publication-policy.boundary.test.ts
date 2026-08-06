@@ -291,7 +291,7 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
           "create publication Task",
           (sql) => sql`
         INSERT INTO tasks (id, numeric_id, title, description, state, created_at, updated_at)
-        VALUES ('BY-1', 1, 'Publish exact Candidate', 'Description', 'implementing', ${now}, ${now})
+        VALUES ('BY-1', 1, 'Publish exact Candidate', 'Description', 'todo', ${now}, ${now})
       `,
         );
         yield* repository.operation(

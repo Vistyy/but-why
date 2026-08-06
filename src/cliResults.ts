@@ -1,5 +1,9 @@
 import type { LoadRepoLocalContextError } from "./init/repoContext.js";
-import type { RepositoryStorageError } from "./contracts/repositoryStorageError.js";
+import type {
+  RepositoryStorageError,
+  RestoredTransientChangeFact,
+  RestoredTransientTaskFact,
+} from "./contracts/repositoryStorageError.js";
 import { structuredContractDiagnostics } from "./output/contractDiagnostics.js";
 import type { OutputFormat, StructuredObject } from "./output/structured.js";
 import { structuredError, type StructuredErrorInput } from "./cliError.js";
@@ -113,6 +117,8 @@ export const repositoryStorageErrorResult = (
       return sharedStateIdentityConflict();
     case "RepositoryPersistedDataInvalid":
       return persistedDataInvalid(error.operationName);
+    case "RepositoryRestoredTransientState":
+      return restoredTransientState(error.tasks, error.changes);
     default:
       return stateStoreUnavailable(taskPrefix);
   }
@@ -125,6 +131,22 @@ const persistedDataInvalid = (operation: string): CliResult =>
     details: { operation },
     help: [
       "Replace <git-common-dir>/but-why/state.sqlite with a known-good copy, then retry the command.",
+    ],
+  });
+
+export const restoredTransientState = (
+  tasks: readonly RestoredTransientTaskFact[],
+  changes: readonly RestoredTransientChangeFact[],
+): CliResult =>
+  runtimeError({
+    code: "restored_transient_state",
+    message: "Shared But Why? state contains retired lifecycle states.",
+    details: {
+      ...(tasks.length === 0 ? {} : { tasks }),
+      ...(changes.length === 0 ? {} : { changes }),
+    },
+    help: [
+      "Restore a known-good copy of <git-common-dir>/but-why/state.sqlite, then retry the command.",
     ],
   });
 

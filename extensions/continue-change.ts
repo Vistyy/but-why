@@ -4,7 +4,7 @@ import { join } from "node:path";
 
 import type { ExtensionAPI, ExtensionContext, SessionEntry } from "@earendil-works/pi-coding-agent";
 
-type ChangeState = "open" | "blocked" | "closed";
+type ChangeState = "open" | "closed";
 
 type ChangeCleanup = {
   readonly state: "complete" | "pending";
@@ -128,7 +128,6 @@ export const decideContinuation = (
 ): ContinuationDecision => {
   if (
     snapshot.change.state === "closed" ||
-    snapshot.change.state === "blocked" ||
     snapshot.toolingFailureCount > 0
   ) {
     return { kind: "idle" };
@@ -268,7 +267,7 @@ export default function continueChange(pi: ExtensionAPI): void {
     git: GitInspection,
     blockerHistory: BlockerHistory,
   ): WatcherDisplay => {
-    if (blockerHistory.active !== null || snapshot.change.state === "blocked") {
+    if (blockerHistory.active !== null) {
       return { kind: "blocked" };
     }
     if (snapshot.change.state === "closed") {
@@ -810,7 +809,6 @@ const isSnapshot = (value: unknown): value is ChangeInspectionSnapshot => {
   return (
     isRecord(change) &&
     (recordValue(change, "state") === "open" ||
-      recordValue(change, "state") === "blocked" ||
       recordValue(change, "state") === "closed") &&
     (typeof recordValue(change, "closeReason") === "string" ||
       recordValue(change, "closeReason") === null) &&

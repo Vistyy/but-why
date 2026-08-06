@@ -28,7 +28,6 @@ describe("Change Implement continuation policy", () => {
 
   it.each([
     ["closed Change", { change: { state: "closed", closeReason: "completed" } } as const],
-    ["blocked Change", { change: { state: "blocked", closeReason: null } } as const],
     [
       "tooling failure",
       { change: { state: "open", closeReason: null }, toolingFailureCount: 1 } as const,
@@ -42,19 +41,6 @@ describe("Change Implement continuation policy", () => {
         toolingFailureCount: 0,
         pullRequest: null,
         ...input,
-      }),
-    ).toEqual({ kind: "idle" });
-  });
-
-  it("permits idle state for a blocked Change even when Findings exist", () => {
-    expect(
-      decideContinuation({
-        change: { state: "blocked", closeReason: null },
-        currentCandidate: null,
-        currentValidationRun: null,
-        findingCount: 1,
-        toolingFailureCount: 0,
-        pullRequest: null,
       }),
     ).toEqual({ kind: "idle" });
   });

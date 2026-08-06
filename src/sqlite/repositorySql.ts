@@ -1,15 +1,18 @@
 import * as SqlClient from "@effect/sql/SqlClient";
 import type { SqlError } from "@effect/sql/SqlError";
+import { MigrationError } from "@effect/sql/Migrator";
 import { nodeSqliteLayer } from "./nodeSqliteClient.js";
-import { Context, Effect, Layer } from "effect";
+import { Cause, Context, Effect, Layer } from "effect";
 
 import { migrateRepositoryState } from "./repositoryMigrations.js";
 import {
   RepositoryIdentityConflict,
   RepositoryMigrationFailed,
   RepositoryPersistedDataInvalid,
+  RepositoryRestoredTransientState,
   RepositorySqlOperationFailed,
   RepositoryStateUnavailable,
+  RestoredTransientStateError,
   type RepositoryStorageError,
 } from "../contracts/repositoryStorageError.js";
 import { decodeSqliteJsonStringArray } from "./sqliteJsonStringArray.js";
@@ -78,6 +81,23 @@ const ensureRepositoryIdentity = (sql: SqlClient.SqlClient, commonDirectory: str
     }
   });
 
+const migrationFailureToStorageError = (
+  cause: Cause.Cause<unknown>,
+  statePath: string,
+): RepositoryStorageError => {
+  const restored = Array.from(Cause.defects(cause)).find(
+    (defect): defect is MigrationError & { readonly cause: RestoredTransientStateError } =>
+      defect instanceof MigrationError && defect.cause instanceof RestoredTransientStateError,
+  );
+  if (restored !== undefined) {
+    return new RepositoryRestoredTransientState({
+      tasks: restored.cause.tasks,
+      changes: restored.cause.changes,
+    });
+  }
+  return new RepositoryMigrationFailed({ statePath, cause });
+};
+
 export const repositorySqlLayer = (
   config: RepositorySqlConfig,
 ): Layer.Layer<RepositorySql, RepositoryStorageError> => {
@@ -106,12 +126,7 @@ export const repositorySqlLayer = (
         );
       yield* migrateRepositoryState.pipe(
         Effect.catchAllCause((cause) =>
-          Effect.fail(
-            new RepositoryMigrationFailed({
-              statePath: config.statePath,
-              cause,
-            }),
-          ),
+          Effect.fail(migrationFailureToStorageError(cause, config.statePath)),
         ),
       );
       yield* sql

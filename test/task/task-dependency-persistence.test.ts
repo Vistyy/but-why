@@ -2,6 +2,7 @@ import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
 
 import { openSqliteTaskPersistence } from "../../src/sqlite/sqliteTaskPersistence.js";
+import { RepositorySql } from "../../src/sqlite/repositorySql.js";
 import type { TaskPersistence } from "../../src/task/taskPersistence.js";
 import { publicTaskId } from "../../src/task/taskId.js";
 import { withTemporaryRepositoryState } from "../support/repository.js";
@@ -85,20 +86,21 @@ it.scoped("rejects Task dependency cycles without changing the graph", () =>
 );
 
 it.scoped("returns direct Task dependency facts and start eligibility", () =>
-  withTasks((tasks) =>
+  withTemporaryRepositoryState(() =>
     Effect.gen(function* () {
+      const tasks = yield* openSqliteTaskPersistence("BY");
+      const repository = yield* RepositorySql;
       yield* createTask(tasks, "Done prerequisite");
       yield* createTask(tasks, "Open prerequisite");
       yield* createTask(tasks, "Dependent", ["BY-1", "BY-2"]);
       yield* tasks.approveTask({ taskId: publicTaskId("BY-1"), now: secondNow });
       yield* tasks.approveTask({ taskId: publicTaskId("BY-3"), now: secondNow });
-      for (const state of ["implementing", "validating", "ready", "done"] as const) {
-        yield* tasks.transitionTaskState({
-          taskId: publicTaskId("BY-1"),
-          to: state,
-          now: secondNow,
-        });
-      }
+      yield* repository.operation(
+        "set done prerequisite fixture",
+        (sql) => sql`
+        UPDATE tasks SET state = 'done', updated_at = ${secondNow} WHERE id = ${publicTaskId("BY-1")}
+      `,
+      );
 
       expect(yield* tasks.getTaskById(publicTaskId("BY-3"))).toMatchObject({
         prerequisites: [

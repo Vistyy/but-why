@@ -80,7 +80,7 @@ const prepareTask = (sql: SqlClient.SqlClient, taskId: PublicTaskId) =>
     if (existing !== undefined) {
       const task = yield* readTask(sql, taskId);
       if (task === undefined) return { ok: false as const, code: "task_not_found" as const };
-      return task.state === "implementing"
+      return task.state === "todo"
         ? { ok: true as const, existing }
         : { ok: false as const, code: "invalid_task_state" as const, state: task.state };
     }
@@ -135,12 +135,6 @@ const create = (sql: SqlClient.SqlClient, input: CreateChangeStartInput) =>
         NULL, 'open', NULL, ${input.now}, ${input.now}, NULL
       )
     `;
-    if (input.taskId !== undefined) {
-      yield* sql`
-        UPDATE tasks SET state = 'implementing', updated_at = ${input.now}
-        WHERE id = ${input.taskId}
-      `;
-    }
     const change = yield* getById(sql, input.id);
     if (change === undefined)
       return yield* invalidData("create Change Start", "Change disappeared");

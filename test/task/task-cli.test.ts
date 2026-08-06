@@ -126,7 +126,7 @@ help[1]: Run \`by task list\` to see open tasks.
         thirdNow,
         {
           taskUseCases: fakeTaskUseCases({
-            approveTask: () => ({ ok: false, code: "invalid_task_state", state: "implementing" }),
+            approveTask: () => ({ ok: false, code: "invalid_task_state", state: "done" }),
           }),
         },
       );
@@ -134,8 +134,8 @@ help[1]: Run \`by task list\` to see open tasks.
       expect(result.status).toBe(1);
       expect(result.stderr).toBe("");
       expect(result.stdout).toContain("code: invalid_task_state");
-      expect(result.stdout).toContain("Cannot approve task BY-1 from state implementing");
-      expect(result.stdout).toContain("by change submit <change-id>");
+      expect(result.stdout).toContain("Cannot approve task BY-1 from state done");
+      expect(result.stdout).toContain("Task is already done.");
     }),
   );
 
@@ -184,7 +184,7 @@ help[1]: Run \`by task list\` to see open tasks.
             {
               id: "BY-2",
               title: "Second",
-              state: "ready",
+              state: "todo",
               createdAt: secondNow,
               updatedAt: thirdNow,
               startable: false,
@@ -213,7 +213,7 @@ tasks[2]:
     change: null
   - id: BY-2
     title: Second
-    state: ready
+    state: todo
     createdAt: "${secondNow}"
     updatedAt: "${thirdNow}"
     blockedBy: []
@@ -334,15 +334,15 @@ tasks[2]:
     }),
   );
 
-  it.effect("removes started Tasks from the default dashboard", () =>
+  it.effect("removes completed Tasks from the default dashboard", () =>
     Effect.gen(function* () {
       const root = yield* initializedRepoWithDefault();
 
-      yield* createTask(root, firstNow, "Started");
+      yield* createTask(root, firstNow, "Completed");
       expect(
         (yield* runByInProcessEffect(root, ["task", "approve", "BY-1"], firstNow)).status,
       ).toBe(0);
-      yield* setTaskState(root, "BY-1", "implementing", secondNow);
+      yield* setTaskState(root, "BY-1", "done", secondNow);
 
       expect((yield* runByInProcessEffect(root, [])).stdout).toBe(`bin: ${expectedBin}
 description: Validate completed code changes against approved human intent.
@@ -391,7 +391,7 @@ help[1]: "Run \`by task create --title \\"...\\" --file <path|->\` to create a t
         {
           taskUseCases: fakeTaskUseCases({
             getTaskById: () =>
-              taskRecord({ title: "Inspect task", state: "ready", updatedAt: secondNow }),
+              taskRecord({ title: "Inspect task", state: "todo", updatedAt: secondNow }),
           }),
         },
       );
@@ -401,7 +401,7 @@ help[1]: "Run \`by task create --title \\"...\\" --file <path|->\` to create a t
       expect(result.stdout).toBe(`task:
   id: BY-1
   title: Inspect task
-  state: ready
+  state: todo
   createdAt: "${firstNow}"
   updatedAt: "${secondNow}"
   commentCount: 0
@@ -632,7 +632,7 @@ contextCommand: by task context BY-1
     }),
   );
 
-  it.effect.each(["implementing", "done"] as const)(
+  it.effect.each(["done", "cancelled"] as const)(
     "retains Task Context drafts when applying to a %s Task",
     (state) =>
       Effect.gen(function* () {
@@ -740,11 +740,11 @@ contextCommand: by task context BY-1
         thirdNow,
         {
           taskUseCases: fakeTaskUseCases({
-            getTaskById: () => taskRecord({ state: "implementing" }),
+            getTaskById: () => taskRecord({ state: "done" }),
             appendTaskComment: () => ({
               ok: false,
               code: "invalid_task_state",
-              state: "implementing",
+              state: "done",
             }),
           }),
         },
@@ -753,9 +753,7 @@ contextCommand: by task context BY-1
       expect(result.status).toBe(1);
       expect(result.stderr).toBe("");
       expect(result.stdout).toContain("code: invalid_task_state");
-      expect(result.stdout).toContain(
-        "Cannot append a Task comment to task BY-1 from state implementing",
-      );
+      expect(result.stdout).toContain("Cannot append a Task comment to task BY-1 from state done");
     }),
   );
 
@@ -991,11 +989,11 @@ help[1]: "Run \`by task create --title \\"...\\" --file <path|->\` to create a t
       const actionable: readonly TaskSummary[] = [
         taskSummary({
           id: "BY-2",
-          title: "Ready",
-          state: "ready",
+          title: "Todo newer",
+          state: "todo",
           createdAt: secondNow,
           updatedAt: secondNow,
-          startable: false,
+          startable: true,
         }),
         taskSummary({
           id: "BY-4",
@@ -1020,7 +1018,7 @@ help[1]: "Run \`by task create --title \\"...\\" --file <path|->\` to create a t
 description: Validate completed code changes against approved human intent.
 count: 3
 tasks[3]{id,title,state,createdAt,updatedAt}:
-  BY-2,Ready,ready,"${secondNow}","${secondNow}"
+  BY-2,Todo newer,todo,"${secondNow}","${secondNow}"
   BY-4,Todo new,todo,"${firstNow}","${thirdNow}"
   BY-1,Todo old,todo,"${firstNow}","${firstNow}"
 `);
@@ -1057,7 +1055,7 @@ help[1]: "Run \`by task create --title \\"...\\" --file <path|->\` to create a t
       expect(result.stderr).toBe("");
       expect(result.stdout).toBe(`error:
   code: invalid_usage
-  message: "Expected one of the following cases: new, todo, implementing, blocked, validating, ready, done, cancelled"
+  message: "Expected one of the following cases: new, todo, done, cancelled"
 help[1]: Run \`by --help\` for generated command help.
 `);
     }),
@@ -1204,7 +1202,7 @@ const listedTasks: readonly TaskSummary[] = [
   taskSummary({
     id: "BY-2",
     title: "Second",
-    state: "ready",
+    state: "todo",
     createdAt: secondNow,
     updatedAt: thirdNow,
   }),

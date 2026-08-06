@@ -14,8 +14,6 @@ import type {
   EditTaskDependenciesResult,
   StoredTaskRecord,
   TaskApprovalResult,
-  TaskStateTransitionResult,
-  TransitionTaskStateInput,
   UpdateTaskContextInput,
   UpdateTaskContextResult,
 } from "./taskStore.js";
@@ -56,9 +54,6 @@ export type TaskPersistence = {
   readonly updateTaskContext: (
     input: UpdateTaskContextInput,
   ) => Effect.Effect<UpdateTaskContextResult, RepositoryStorageError>;
-  readonly transitionTaskState: (
-    input: TransitionTaskStateInput,
-  ) => Effect.Effect<TaskStateTransitionResult, RepositoryStorageError>;
   readonly cancelTask: (
     input: CancelTaskInput,
   ) => Effect.Effect<CancelTaskResult, RepositoryStorageError>;

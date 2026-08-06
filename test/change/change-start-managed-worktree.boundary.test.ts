@@ -338,7 +338,7 @@ describe("Change Start Managed Worktree boundaries", () => {
         join(dirname(root), `${basename(root)}-worktrees`, "but-why"),
       );
       expect((yield* runByInProcessEffect(root, ["task", "show", taskId])).stdout).toContain(
-        "state: implementing",
+        "state: todo",
       );
       const conflictingBase = yield* runByInProcessEffect(
         root,
@@ -374,7 +374,7 @@ describe("Change Start Managed Worktree boundaries", () => {
         now,
       );
       expect(JSON.parse(locked.stdout)).toMatchObject({
-        error: { code: "dependencies_locked", taskId, state: "implementing" },
+        error: { code: "dependencies_locked", taskId, state: "todo" },
         help: ["Dependency edits are available only before Change Start."],
       });
 

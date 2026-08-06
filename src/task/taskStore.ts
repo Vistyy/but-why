@@ -1,11 +1,6 @@
 import type { TaskState } from "./lifecycle.js";
 import type { TaskContext } from "./task.js";
-import type {
-  DependencyValidationCode,
-  TaskDependencyFact,
-  TaskRecord,
-  TaskSummary,
-} from "./task.js";
+import type { DependencyValidationCode, TaskRecord, TaskSummary } from "./task.js";
 import type { PublicTaskId } from "./taskId.js";
 
 export type StoredTaskRecord = TaskRecord;
@@ -124,12 +119,6 @@ export type UpdateTaskContextResult =
       readonly state: TaskState;
     };
 
-export type TransitionTaskStateInput = {
-  readonly taskId: PublicTaskId;
-  readonly to: TaskState;
-  readonly now: string;
-};
-
 export type CancelTaskInput = {
   readonly taskId: PublicTaskId;
   readonly reason: string;
@@ -140,25 +129,3 @@ export type CancelTaskResult =
   | { readonly ok: true; readonly changed: boolean; readonly task: StoredTaskRecord }
   | { readonly ok: false; readonly code: "task_not_found" }
   | { readonly ok: false; readonly code: "task_already_done" };
-
-export type TaskStateTransitionResult =
-  | {
-      readonly ok: true;
-      readonly changed: boolean;
-      readonly task: StoredTaskRecord;
-    }
-  | {
-      readonly ok: false;
-      readonly code: "task_not_found";
-    }
-  | {
-      readonly ok: false;
-      readonly code: "invalid_task_state_transition";
-      readonly from: TaskState;
-      readonly to: TaskState;
-    }
-  | {
-      readonly ok: false;
-      readonly code: "task_dependencies_unsatisfied";
-      readonly blockedBy: readonly TaskDependencyFact[];
-    };

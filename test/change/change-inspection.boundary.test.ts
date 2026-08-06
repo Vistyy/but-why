@@ -755,7 +755,7 @@ help[1]: "Replace <git-common-dir>/but-why/state.sqlite with a known-good copy, 
         task: {
           id: "BY-1",
           title: "Task-backed Change",
-          state: "implementing",
+          state: "todo",
           change: { id: changeId, activity: "implementing" },
         },
       });
@@ -863,18 +863,10 @@ help[1]: "Replace <git-common-dir>/but-why/state.sqlite with a known-good copy, 
           (task: { readonly id: string }) => task.id === "BY-1",
         ).change,
       ).toEqual({ id: changeId, activity: "ready" });
-
-      yield* transitionTaskFixture(root, "validating");
       expect(
         JSON.parse((yield* runByInProcessEffect(root, ["--json", "task", "show", "BY-1"])).stdout)
           .task.state,
-      ).toBe("validating");
-
-      yield* transitionTaskFixture(root, "ready");
-      expect(
-        JSON.parse((yield* runByInProcessEffect(root, ["--json", "task", "show", "BY-1"])).stdout)
-          .task.state,
-      ).toBe("ready");
+      ).toBe("todo");
 
       yield* completeChangeFixture(root, changeId);
       const completed = yield* runByInProcessEffect(root, ["--json", "change", "show", changeId]);
@@ -969,20 +961,6 @@ const captureCandidateFixture = (
       });
       if (!result.ok) throw new Error(result.code);
       return { id: result.candidateId, headSha };
-    }),
-  );
-
-const transitionTaskFixture = (root: string, state: "validating" | "ready") =>
-  withTestRepository(
-    root,
-    Effect.gen(function* () {
-      const tasks = yield* openSqliteTaskPersistence("BY");
-      const result = yield* tasks.transitionTaskState({
-        taskId: publicTaskId("BY-1"),
-        to: state,
-        now: commandNow,
-      });
-      if (!result.ok) throw new Error(result.code);
     }),
   );
 
