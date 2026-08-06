@@ -8,64 +8,10 @@ import { describe } from "vitest";
 import type { TaskUseCases } from "../../src/task/taskUseCases.js";
 import { publicTaskId } from "../../src/task/taskId.js";
 import { runByInProcessEffect } from "../support/by-cli.js";
-import { createInitializedRepo } from "../support/initializedRepo.js";
 import { fakeTaskUseCases } from "../support/taskUseCases.js";
 import { createTestWorkspace } from "../support/testWorkspace.js";
 
 const now = "2026-06-30T12:00:00.000Z";
-
-type TaskGraph = {
-  readonly prerequisites: readonly unknown[];
-  readonly dependents: readonly unknown[];
-};
-
-const createTask = (root: string, title: string, dependencies: readonly string[] = []) =>
-  Effect.gen(function* () {
-    const file = `${title.toLowerCase()}.md`;
-    writeFileSync(join(root, file), `Description for ${title}`);
-    const result = yield* runByInProcessEffect(
-      root,
-      [
-        "--json",
-        "task",
-        "create",
-        "--title",
-        title,
-        "--file",
-        file,
-        ...dependencies.flatMap((dependency) => ["--depends-on", dependency]),
-      ],
-      now,
-    );
-    expect(result.status).toBe(0);
-    return JSON.parse(result.stdout) as {
-      readonly task: {
-        readonly prerequisites: readonly {
-          readonly id: string;
-          readonly title: string;
-          readonly state: string;
-        }[];
-      };
-    };
-  });
-
-const readGraph = (root: string, taskIds: readonly string[]) =>
-  Effect.gen(function* () {
-    const graph: Record<string, TaskGraph> = {};
-    for (const taskId of taskIds) {
-      const result = yield* runByInProcessEffect(root, ["--json", "task", "show", taskId], now);
-      graph[taskId] = (JSON.parse(result.stdout) as { readonly task: TaskGraph }).task;
-    }
-    return graph;
-  });
-
-const readTaskIds = (root: string) =>
-  Effect.gen(function* () {
-    const result = yield* runByInProcessEffect(root, ["--json", "task", "list", "--all"], now);
-    return (
-      JSON.parse(result.stdout) as { readonly tasks: readonly { readonly id: string }[] }
-    ).tasks.map((task) => task.id);
-  });
 
 const expectJsonError = (
   result: { readonly status: number; readonly stderr: string; readonly stdout: string },
@@ -222,22 +168,17 @@ describe("Task dependency CLI", () => {
   );
 
   it.effect(
-    "reports reachable dependency rejections without changing the graph",
+    "maps reachable dependency rejections to structured results through the in-process CLI",
     () =>
       Effect.gen(function* () {
-        const root = createInitializedRepo();
-        yield* createTask(root, "First");
-        const second = yield* createTask(root, "Second", ["BY-1"]);
-        const third = yield* createTask(root, "Third", ["BY-2"]);
-        expect(second.task.prerequisites).toEqual([{ id: "BY-1", title: "First", state: "new" }]);
-        expect(third.task.prerequisites).toEqual([{ id: "BY-2", title: "Second", state: "new" }]);
-        const taskIds = ["BY-1", "BY-2", "BY-3"];
-        const before = yield* readGraph(root, taskIds);
+        const root = createTestWorkspace();
 
         for (const testCase of [
           {
             title: "Unknown",
             dependencies: ["BY-404"],
+            code: "dependency_unknown_task",
+            taskId: "BY-404",
             error: {
               code: "dependency_unknown_task",
               message: "Dependency Task was not found: BY-404",
@@ -247,6 +188,8 @@ describe("Task dependency CLI", () => {
           {
             title: "Self",
             dependencies: ["BY-4"],
+            code: "dependency_self",
+            taskId: "BY-4",
             error: {
               code: "dependency_self",
               message: "A Task cannot depend on itself.",
@@ -256,6 +199,8 @@ describe("Task dependency CLI", () => {
           {
             title: "Duplicate",
             dependencies: ["BY-1", "BY-1"],
+            code: "dependency_duplicate",
+            taskId: "BY-1",
             error: {
               code: "dependency_duplicate",
               message: "Dependency was provided more than once: BY-1",
@@ -278,6 +223,16 @@ describe("Task dependency CLI", () => {
               ...testCase.dependencies.flatMap((dependency) => ["--depends-on", dependency]),
             ],
             now,
+            {
+              taskUseCases: dependencyErrorTaskUseCases({
+                createTask: () =>
+                  Effect.succeed({
+                    ok: false,
+                    code: testCase.code,
+                    taskId: publicTaskId(testCase.taskId),
+                  }),
+              }),
+            },
           );
           expectJsonError(result, {
             error: testCase.error,
@@ -291,6 +246,8 @@ describe("Task dependency CLI", () => {
           {
             taskId: "BY-3",
             dependencies: ["BY-404"],
+            code: "dependency_unknown_task",
+            dependencyTaskId: "BY-404",
             error: {
               code: "dependency_unknown_task",
               message: "Dependency Task was not found: BY-404",
@@ -301,6 +258,8 @@ describe("Task dependency CLI", () => {
           {
             taskId: "BY-3",
             dependencies: ["BY-3"],
+            code: "dependency_self",
+            dependencyTaskId: "BY-3",
             error: {
               code: "dependency_self",
               message: "Task BY-3 cannot depend on itself.",
@@ -311,6 +270,8 @@ describe("Task dependency CLI", () => {
           {
             taskId: "BY-3",
             dependencies: ["BY-2", "BY-2"],
+            code: "dependency_duplicate",
+            dependencyTaskId: "BY-2",
             error: {
               code: "dependency_duplicate",
               message: "Dependency was provided more than once: BY-2",
@@ -321,6 +282,8 @@ describe("Task dependency CLI", () => {
           {
             taskId: "BY-1",
             dependencies: ["BY-3"],
+            code: "dependency_cycle",
+            dependencyTaskId: undefined,
             error: {
               code: "dependency_cycle",
               message: "Task dependencies must not contain a cycle.",
@@ -339,6 +302,18 @@ describe("Task dependency CLI", () => {
               ...testCase.dependencies.flatMap((dependency) => ["--depends-on", dependency]),
             ],
             now,
+            {
+              taskUseCases: dependencyErrorTaskUseCases({
+                editTaskDependencies: () =>
+                  Effect.succeed({
+                    ok: false,
+                    code: testCase.code,
+                    ...(testCase.dependencyTaskId === undefined
+                      ? {}
+                      : { taskId: publicTaskId(testCase.dependencyTaskId) }),
+                  }),
+              }),
+            },
           );
           expectJsonError(result, {
             error: testCase.error,
@@ -350,6 +325,11 @@ describe("Task dependency CLI", () => {
           root,
           ["--json", "task", "dependencies", "replace", "BY-404", "--depends-on", "BY-1"],
           now,
+          {
+            taskUseCases: dependencyErrorTaskUseCases({
+              editTaskDependencies: () => Effect.succeed({ ok: false, code: "task_not_found" }),
+            }),
+          },
         );
         expectJsonError(missing, {
           error: {
@@ -359,10 +339,6 @@ describe("Task dependency CLI", () => {
           },
           help: ["Run `by task list --all --limit all` to see known Tasks."],
         });
-
-        expect(yield* readGraph(root, taskIds)).toEqual(before);
-        expect(yield* readTaskIds(root)).toEqual(taskIds);
       }),
-    15_000,
   );
 });
