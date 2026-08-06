@@ -248,6 +248,73 @@ Review these files first for duplicate full-process setup, duplicate end-to-end 
 This is one run on one machine and ranks test-body time rather than complete file wall-clock time.
 It is a targeting measurement, not a performance budget or a retention decision.
 
+## Final scheduling measurement
+
+### Question
+
+Does the corrected and reduced portfolio after `BY-129` through `BY-135` prove a faster valid three-concurrent `just quality` result without the capacity lock?
+
+### Hypothesis
+
+Three isolated `just quality` workloads can complete without the capacity lock faster than the locked baseline and without timeouts or fixture collisions.
+
+### Baseline
+
+The measurement used three detached linked worktrees at `fa7a98d`, the reduced portfolio after `BY-134` and `BY-135`, and wall-clock time from process start to exit.
+Each worktree installed dependencies from the shared pnpm store.
+Each workload ran `just quality`, the current Change Submit gate, with `maxWorkers: 3` and the capacity lock active.
+All three workloads passed in 99.007 seconds total.
+Per-workload quality time was 35.061s, 33.135s, and 30.574s.
+The second workload waited about 35.2 seconds for capacity, and the third waited about 68.3 seconds.
+Peak process-tree resident memory was about 2.1 GB, 2.0 GB, and 2.1 GB.
+
+### Experiment
+
+Three `just quality` workloads started at the same time in the same detached linked worktrees.
+Each unlocked scenario bypassed only the capacity lock with `BY_CAPACITY_LOCK_HELD=1` and gave each workload a distinct `TMPDIR`, `TEMP`, and `TMP`.
+The temporary worktrees changed only `vitest.config.ts` `maxWorkers` to one, two, or three in turn.
+No source or product files changed, and all temporary linked worktrees were removed after the measurement.
+
+### Evidence
+
+Unlocked one worker with isolated temporary directories: all three workloads passed in 74.960 seconds total.
+Per-workload quality time was 74.559s, 74.128s, and 74.720s.
+Peak process-tree resident memory was about 1.4 GB, 1.5 GB, and 1.4 GB.
+
+Unlocked two workers with isolated temporary directories: two workloads passed and one failed in 65.034 seconds total.
+Per-workload quality time was 64.826s, 63.759s, and 64.628s.
+The failing workload timed out in `test/change/change-implement-main-checkout-failure.test.ts` at the five-second default Vitest timeout.
+Peak process-tree resident memory was about 1.5 GB, 1.5 GB, and 1.6 GB.
+
+Unlocked three workers with isolated temporary directories: all three workloads failed in 103.066 seconds total.
+Per-workload quality time was 102.897s, 92.228s, and 90.654s.
+The failing workloads timed out in `test/change/change-implement-main-checkout-failure.test.ts`, `test/cli/change-submit-errors.test.ts`, and `test/change/change-reconcile-discard.cli.test.ts` at the five-second default Vitest timeout.
+Peak process-tree resident memory was about 1.9 GB, 1.8 GB, and 1.9 GB.
+No fixture-collision or working-directory symptom appeared in any unlocked run.
+
+The main checkout ran `just quality` once after the measurement and passed in 21.830 seconds with no new intermittent failure.
+
+### Conclusion
+
+The hypothesis is refuted for lock removal.
+The one-worker unlocked limit is the only valid unlocked limit, and it is faster than the locked baseline in total wall-clock (74.960s versus 99.007s).
+It makes every individual workload materially slower (about 74.5s versus about 33s average quality time).
+The two- and three-worker unlocked limits remain invalid because retained process-heavy evidence still exceeds its test timeouts under contention.
+
+### Effect on plan
+
+Keep the current capacity lock and the current three-worker Vitest limit.
+The only passing unlocked limit does not satisfy the removal criterion because it makes individual workloads materially slower, even though its total wall-clock is faster.
+Do not update `VERIFICATION.md` temporary controls because no valid faster result is proven.
+The portfolio must further reduce or isolate expensive process-heavy evidence before it can justify another concurrency-policy experiment.
+
+### Limitations
+
+This measured only the `just quality` gate on one machine and one revision (`fa7a98d`).
+It did not run actual Change Submit operations, full-quality, coverage, interruption, more than three workloads, or more than three workers per workload.
+Peak resident memory is the summed RSS of the workload process tree, sampled every 0.2 seconds, not a single-process measurement.
+It does not establish a safe future concurrency limit.
+
 ## Protected product outcomes
 
 The refreshed portfolio must begin from these accepted outcomes:
