@@ -43,12 +43,47 @@ const defaultOptions = {
   observationRetries: 2,
 } as const;
 
+type PiLaunchScript = {
+  readonly path: string;
+  readonly cleanup: () => Promise<void>;
+};
+
+const pendingUncertainLaunchScripts = new Set<PiLaunchScript>();
+
+const flushPendingUncertainLaunchScripts = async (): Promise<void> => {
+  if (pendingUncertainLaunchScripts.size === 0) return;
+  const pending = [...pendingUncertainLaunchScripts];
+  pendingUncertainLaunchScripts.clear();
+  await Promise.all(pending.map((script) => script.cleanup()));
+};
+
+const retainUncertainLaunchScript = (
+  script: PiLaunchScript,
+  options: ResolvedOptions,
+): void => {
+  pendingUncertainLaunchScripts.add(script);
+  const deferredMs = options.readinessTimeoutMs + options.commandTimeoutMs + 1000;
+  const timer = setTimeout(() => {
+    if (pendingUncertainLaunchScripts.has(script)) {
+      pendingUncertainLaunchScripts.delete(script);
+      void script.cleanup();
+    }
+  }, deferredMs);
+  timer.unref?.();
+};
+
 export const openHerdrInteractiveSessionHost = (
   execute: HerdrCommandExecutor = executeHerdr,
   environment: HerdrInteractiveSessionHostOptions = {},
 ): InteractiveSessionHost => ({
   launch: async (input, signal) => launchHerdrSession(execute, input, environment, signal),
 });
+
+export const flushHerdrLaunchArtifactsForTesting = async (): Promise<void> =>
+  flushPendingUncertainLaunchScripts();
+
+export const pendingHerdrLaunchArtifactsForTesting = (): number =>
+  pendingUncertainLaunchScripts.size;
 
 export const herdrSessionName = (changeId: string): string => `but-why-${changeId}`;
 
@@ -87,6 +122,7 @@ const launchHerdrSession = async (
   environment: HerdrInteractiveSessionHostOptions,
   signal: AbortSignal | undefined,
 ): Promise<InteractiveSessionLaunchResult> => {
+  await flushPendingUncertainLaunchScripts();
   const options = { ...defaultOptions, ...environment };
   const continuationExtension = trustedContinuationExtensionPath();
   const continuationPreflight = await preflightTrustedExtension(continuationExtension);
@@ -254,6 +290,7 @@ const launchInOpenedWorktree = async (
     return launchFailure("Another Interactive Session is already active in this worktree.");
   }
 
+  await flushPendingUncertainLaunchScripts();
   let launchScript: PiLaunchScript;
   try {
     launchScript = await createPiLaunchScript(piCommand(input, path, continuationExtension));
@@ -272,12 +309,15 @@ const launchInOpenedWorktree = async (
     const observed = isUncertainMutationFailure(launched.message)
       ? await waitForAgent(execute, input, sessionName, opened.rootPaneId, signal, options, "named")
       : ({ kind: "absent" } as const);
-    if (
-      !isUncertainMutationFailure(launched.message) ||
-      observed.kind === "ready" ||
-      observed.kind === "exited"
-    ) {
+    const isUncertain = isUncertainMutationFailure(launched.message);
+    const shouldRetainForLateExecution =
+      isUncertain && observed.kind !== "ready" && observed.kind !== "exited";
+    if (!shouldRetainForLateExecution) {
       await launchScript.cleanup();
+    } else if (!opened.alreadyOpen && observed.kind === "absent") {
+      // Retain until after workspace close determines late execution is impossible.
+    } else {
+      retainUncertainLaunchScript(launchScript, options);
     }
     if (observed.kind === "ready") {
       return {
@@ -289,6 +329,12 @@ const launchInOpenedWorktree = async (
     const evidence = await launchEvidence(execute, opened.rootPaneId, signal);
     if (!opened.alreadyOpen && observed.kind === "absent") {
       await closeWorkspace(execute, opened.workspaceId, signal);
+      if (shouldRetainForLateExecution) {
+        if (pendingUncertainLaunchScripts.has(launchScript)) {
+          pendingUncertainLaunchScripts.delete(launchScript);
+        }
+        await launchScript.cleanup();
+      }
     }
     return observed.kind === "malformed"
       ? launchIndeterminate(observed.message, evidence)
@@ -299,7 +345,7 @@ const launchInOpenedWorktree = async (
               : "Pi exited during startup.",
             evidence,
           )
-        : isUncertainMutationFailure(launched.message)
+        : isUncertain
           ? launchIndeterminate(
               `Herdr did not confirm whether Pi started: ${launched.message}`,
               evidence,
@@ -316,9 +362,7 @@ const launchInOpenedWorktree = async (
     options,
     "detected",
   );
-  if (detected.kind === "ready" || detected.kind === "exited") {
-    await launchScript.cleanup();
-  }
+  await launchScript.cleanup();
   if (detected.kind !== "ready") {
     const evidence = await launchEvidence(execute, opened.rootPaneId, signal);
     return detected.kind === "exited"
@@ -628,11 +672,6 @@ const launchEvidence = async (
         ...(startupOutput === undefined ? {} : { startupOutput }),
         ...(exitEvidence === undefined ? {} : { exitEvidence }),
       };
-};
-
-type PiLaunchScript = {
-  readonly path: string;
-  readonly cleanup: () => Promise<void>;
 };
 
 const createPiLaunchScript = async (command: string): Promise<PiLaunchScript> => {
