@@ -80,8 +80,8 @@ They do not block the routine or complete quality suites and remain available as
 The production CLI keeps the complete Effect CLI descriptor tree in `src/cliCommandTree.ts` and loads command implementations through literal native dynamic imports after command selection.
 
 The release-package boundary test verifies the bundled entry graph and generated dynamic targets.
-See [`test/repository/cli-loading.boundary.test.ts`](../test/repository/cli-loading.boundary.test.ts).
-Run it with `just test test/repository/cli-loading.boundary.test.ts`.
+See [`test/repository/cli-loading.test.ts`](../test/repository/cli-loading.test.ts).
+Run it with `just test test/repository/cli-loading.test.ts`.
 
 The package contract test owns the one real-process sentinel for the packaged CLI and extensions from an installed layout: it builds and installs the packed package, then proves the CLI loads and reports trusted continuation extension preflight and missing-extension failures through `by change implement`.
 See [`test/repository/package-contents.test.ts`](../test/repository/package-contents.test.ts).
