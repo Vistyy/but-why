@@ -173,6 +173,7 @@ files:
 ignores:
   - test/agent/herdr-smoke.test.ts
   - test/agent/herdr-interactive-session-host.test.ts
+  - test/agent/herdr-interactive-session-host-artifact-lifecycle.test.ts
 rule:
   any:
     - pattern: openHerdrInteractiveSessionHost($$$ARGS)
