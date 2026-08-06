@@ -1,5 +1,5 @@
 ---
-status: recorded-first-task-graph-in-progress
+status: complete-portfolio-allocation-in-progress
 artifact_kind: working-plan
 remove_when: the refreshed strategy is recorded in VERIFICATION.md, every approved migration slice is complete, obsolete evidence is removed, and all deferred product decisions have authoritative dispositions
 ---
@@ -582,6 +582,21 @@ These examples are not an approved complete claim set.
 
 ## Broad portfolio migration
 
+### Closure correction
+
+`BY-129` through `BY-137` completed the first evidence corrections, selected duplicate removals, and the scheduling measurement.
+They did not complete the broad portfolio reconciliation.
+`BY-138` was cancelled after its named primary owners did not prove the evidence that it proposed removing.
+`BY-139` was cancelled before approval because another local duplicate-removal slice would not establish a bounded route to portfolio closure.
+
+Do not record or approve another evidence-removal Task until one complete bottom-up allocation maps every retained test and check to one approved Verification Claim or one named non-product owner.
+The allocation must give every retained case a distinct regression, primary owner, required seam, and disposition.
+It must also identify every removal, consolidation, claim gap, retained integration sentinel, and final scheduling decision that remains.
+The complete proposed allocation and migration Task Context are in [`verification-portfolio-allocation.md`](./verification-portfolio-allocation.md).
+
+After the operator approves that complete allocation, implement the migration as one Task unless the allocation establishes independently verifiable supported outcomes that require separate Tasks.
+The migration Task must execute the complete approved map, make the final capacity-lock, worker-limit, and `boundary` category decisions, record the accepted strategy, and remove this plan.
+
 After lifecycle and shared-foundation ownership stabilizes:
 
 1. Refresh the complete capability map.
@@ -636,7 +651,11 @@ The operator approved fake Task Use Cases for Task-dependency CLI rejection mapp
 The operator approved `cli.test.ts` as the sole `internal_error` owner, with TOON and JSON proof, plus the narrow help and terminal-stdin duplicate removals.
 The operator approved keeping Repository Storage allocation as plan-only work outside the first Task graph until a case-by-case claim-owner map exists.
 The operator approved the complete Task Contexts and authorized recording the first five-Task graph.
-`BY-129` through `BY-133` are recorded without dependencies.
+`BY-129` through `BY-137` are Done.
+`BY-138` was cancelled because its named primary owners did not prove the proposed removed evidence.
+`BY-139` was cancelled to stop local evidence deletion until the complete bottom-up allocation defines a bounded migration.
+No later migration Task is approved or authorized.
+The current approved planning direction is to complete and approve one portfolio-wide allocation before recording another migration Task.
 The operator approved `BY-129` and authorized its Task-backed implementation.
 Change `8920442d-e011-4abb-970e-a25ce2b7a3a5` started in a fresh Implementer Interactive Session with `changeVerified: true`.
 The operator approved `BY-130` and authorized its Task-backed implementation.
