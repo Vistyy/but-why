@@ -1,7 +1,7 @@
 import { statSync } from "node:fs";
-import { mkdtemp, readdir, rm, stat, writeFile } from "node:fs/promises";
+import { mkdtemp, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { createJiti } from "jiti/static";
 import { prependAgentEnvironment, shellQuote } from "../../agent/agentEnvironment.js";
 import { piResourceFlags } from "../../agent/piRuntime.js";
@@ -57,8 +57,11 @@ const flushPendingUncertainLaunchScripts = async (): Promise<void> => {
   await Promise.all(pending.map((script) => script.cleanup()));
 };
 
+const pendingLaunchRegistryPath = (): string => join(tmpdir(), "but-why-pending-pi-launches.json");
+
 const retainUncertainLaunchScript = (script: PiLaunchScript, options: ResolvedOptions): void => {
   pendingUncertainLaunchScripts.add(script);
+  void recordPendingLaunchForCrossProcessPrune(script.path).catch(() => undefined);
   const deferredMs = options.readinessTimeoutMs + options.commandTimeoutMs + 1000;
   const timer = setTimeout(() => {
     if (pendingUncertainLaunchScripts.has(script)) {
@@ -69,7 +72,42 @@ const retainUncertainLaunchScript = (script: PiLaunchScript, options: ResolvedOp
   timer.unref?.();
 };
 
+const recordPendingLaunchForCrossProcessPrune = async (scriptPath: string): Promise<void> => {
+  const dir = dirname(scriptPath);
+  try {
+    const raw = await readFile(pendingLaunchRegistryPath(), "utf8").catch(() => "[]");
+    const parsed = JSON.parse(raw) as unknown;
+    const list = Array.isArray(parsed) ? (parsed as string[]) : [];
+    if (!list.includes(dir)) list.push(dir);
+    await writeFile(pendingLaunchRegistryPath(), JSON.stringify(list), "utf8");
+  } catch {}
+};
+
 const pruneStaleFilesystemLaunchArtifacts = async (): Promise<void> => {
+  // Best-effort cross-process prune of retained uncertain artifacts.
+  // Reads the shared registry written by retainUncertainLaunchScript in any process and removes each listed directory.
+  // Also prunes very old but-why-pi-launch-* directories that may have been left by older versions or crashes.
+  const registryPath = pendingLaunchRegistryPath();
+  let registryEntries: string[] = [];
+  try {
+    const raw = await readFile(registryPath, "utf8");
+    const parsed = JSON.parse(raw) as unknown;
+    if (Array.isArray(parsed)) registryEntries = parsed as string[];
+  } catch {}
+  if (registryEntries.length > 0) {
+    await Promise.all(
+      registryEntries.map(async (dir) => {
+        try {
+          await rm(dir, { recursive: true, force: true });
+        } catch {}
+      }),
+    );
+    try {
+      await rm(registryPath, { force: true });
+    } catch {}
+  }
+  // Fallback: prune very old directories that may have been orphaned before registry existed.
+  // Only directories older than the retention window are considered stale, preserving in-flight concurrent launches.
   let entries: string[];
   try {
     entries = await readdir(tmpdir());
@@ -77,6 +115,8 @@ const pruneStaleFilesystemLaunchArtifacts = async (): Promise<void> => {
     return;
   }
   const prefix = "but-why-pi-launch-";
+  const now = Date.now();
+  const staleThresholdMs = 60_000;
   await Promise.all(
     entries
       .filter((entry) => entry.startsWith(prefix))
@@ -85,6 +125,7 @@ const pruneStaleFilesystemLaunchArtifacts = async (): Promise<void> => {
         try {
           const s = await stat(fullPath);
           if (!s.isDirectory()) return;
+          if (now - s.mtimeMs < staleThresholdMs) return;
           await rm(fullPath, { recursive: true, force: true });
         } catch {}
       }),
