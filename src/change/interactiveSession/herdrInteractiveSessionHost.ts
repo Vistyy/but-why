@@ -59,9 +59,15 @@ const flushPendingUncertainLaunchScripts = async (): Promise<void> => {
 
 const pendingLaunchRegistryPath = (): string => join(tmpdir(), "but-why-pending-pi-launches.json");
 
+type PendingLaunchRecord = {
+  readonly dir: string;
+  readonly createdAt: number;
+  readonly retentionMs: number;
+};
+
 const retainUncertainLaunchScript = (script: PiLaunchScript, options: ResolvedOptions): void => {
   pendingUncertainLaunchScripts.add(script);
-  void recordPendingLaunchForCrossProcessPrune(script.path).catch(() => undefined);
+  void recordPendingLaunchForCrossProcessPrune(script.path, options).catch(() => undefined);
   const deferredMs = options.readinessTimeoutMs + options.commandTimeoutMs + 1000;
   const timer = setTimeout(() => {
     if (pendingUncertainLaunchScripts.has(script)) {
@@ -72,35 +78,80 @@ const retainUncertainLaunchScript = (script: PiLaunchScript, options: ResolvedOp
   timer.unref?.();
 };
 
-const recordPendingLaunchForCrossProcessPrune = async (scriptPath: string): Promise<void> => {
+const recordPendingLaunchForCrossProcessPrune = async (
+  scriptPath: string,
+  options: ResolvedOptions,
+): Promise<void> => {
   const dir = dirname(scriptPath);
+  const record: PendingLaunchRecord = {
+    dir,
+    createdAt: Date.now(),
+    retentionMs: options.readinessTimeoutMs + options.commandTimeoutMs + 1000,
+  };
   try {
     const raw = await readFile(pendingLaunchRegistryPath(), "utf8").catch(() => "[]");
     const parsed = JSON.parse(raw) as unknown;
-    const list = Array.isArray(parsed) ? (parsed as string[]) : [];
-    if (!list.includes(dir)) list.push(dir);
-    await writeFile(pendingLaunchRegistryPath(), JSON.stringify(list), "utf8");
+    const list = Array.isArray(parsed) ? (parsed as PendingLaunchRecord[] & string[]) : [];
+    const normalized: PendingLaunchRecord[] = list
+      .map((entry) =>
+        typeof entry === "string"
+          ? { dir: entry, createdAt: 0, retentionMs: 0 }
+          : (entry as PendingLaunchRecord),
+      )
+      .filter((entry) => typeof entry.dir === "string");
+    if (!normalized.some((entry) => entry.dir === dir)) normalized.push(record);
+    await writeFile(pendingLaunchRegistryPath(), JSON.stringify(normalized), "utf8");
   } catch {}
 };
 
 const pruneStaleFilesystemLaunchArtifacts = async (): Promise<void> => {
   const registryPath = pendingLaunchRegistryPath();
-  let registryEntries: string[] = [];
+  let raw: string;
   try {
-    const raw = await readFile(registryPath, "utf8");
-    const parsed = JSON.parse(raw) as unknown;
-    if (Array.isArray(parsed)) registryEntries = parsed as string[];
-  } catch {}
-  if (registryEntries.length === 0) return;
+    raw = await readFile(registryPath, "utf8");
+  } catch {
+    return;
+  }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw) as unknown;
+  } catch {
+    try {
+      await rm(registryPath, { force: true });
+    } catch {}
+    return;
+  }
+  if (!Array.isArray(parsed) || parsed.length === 0) {
+    try {
+      await rm(registryPath, { force: true });
+    } catch {}
+    return;
+  }
+  const now = Date.now();
+  const entries = parsed as (PendingLaunchRecord & string)[];
+  const remaining: PendingLaunchRecord[] = [];
   await Promise.all(
-    registryEntries.map(async (dir) => {
-      try {
-        await rm(dir, { recursive: true, force: true });
-      } catch {}
+    entries.map(async (entry) => {
+      const record =
+        typeof entry === "string"
+          ? { dir: entry, createdAt: 0, retentionMs: 0 }
+          : (entry as PendingLaunchRecord);
+      const isStale =
+        typeof record.createdAt !== "number" ||
+        typeof record.retentionMs !== "number" ||
+        now - record.createdAt > record.retentionMs;
+      if (isStale) {
+        try {
+          await rm(record.dir, { recursive: true, force: true });
+        } catch {}
+      } else {
+        remaining.push(record);
+      }
     }),
   );
   try {
-    await rm(registryPath, { force: true });
+    if (remaining.length === 0) await rm(registryPath, { force: true });
+    else await writeFile(registryPath, JSON.stringify(remaining), "utf8");
   } catch {}
 };
 
