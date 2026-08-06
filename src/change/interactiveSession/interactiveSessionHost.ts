@@ -1,5 +1,5 @@
-import type { InteractiveSessionAgentProfile } from "../agent/agentProfiles.js";
-import type { AgentEnvironmentCommand } from "../agent/agentEnvironment.js";
+import type { AgentEnvironmentCommand } from "../../agent/agentEnvironment.js";
+import type { InteractiveSessionAgentProfile } from "../../agent/agentProfiles.js";
 
 export type InteractiveSessionHost = {
   readonly launch: (
@@ -10,8 +10,8 @@ export type InteractiveSessionHost = {
 
 export type InteractiveSessionLaunchInput = {
   readonly changeId: string;
-  readonly herdrName?: string;
-  readonly piSessionName?: string;
+  readonly hostSessionName?: string;
+  readonly agentSessionName?: string;
   readonly repositoryPath: string;
   readonly worktreePath: string;
   readonly systemPrompt?: string;

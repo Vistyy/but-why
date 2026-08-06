@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 import {
   maxImplementerPromptBytes,
   readImplementerPromptFile,
-} from "../../src/change/implementerPromptFile.js";
+} from "../../src/cli/change/implementerPromptFile.js";
 import { createTestWorkspace } from "../support/testWorkspace.js";
 
 describe("Change implementer prompt files", () => {

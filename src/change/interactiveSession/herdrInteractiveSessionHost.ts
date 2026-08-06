@@ -3,16 +3,15 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createJiti } from "jiti/static";
-import { executeHostCommand } from "../command/hostCommand.js";
-
-import { prependAgentEnvironment, shellQuote } from "../agent/agentEnvironment.js";
-import { piResourceFlags } from "../agent/piRuntime.js";
-import { resolvePackageAsset } from "./packageAssetPath.js";
+import { prependAgentEnvironment, shellQuote } from "../../agent/agentEnvironment.js";
+import { piResourceFlags } from "../../agent/piRuntime.js";
+import { executeHostCommand } from "../../command/hostCommand.js";
+import { resolvePackageAsset } from "../packageAssetPath.js";
 import type {
   InteractiveSessionHost,
+  InteractiveSessionLaunchEvidence,
   InteractiveSessionLaunchInput,
   InteractiveSessionLaunchResult,
-  InteractiveSessionLaunchEvidence,
 } from "./interactiveSessionHost.js";
 
 export type HerdrCommandExecutor = (
@@ -99,7 +98,7 @@ const launchHerdrSession = async (
     );
   }
   const command = boundedExecutor(execute, options.commandTimeoutMs);
-  const sessionName = input.herdrName ?? herdrSessionName(input.changeId);
+  const sessionName = input.hostSessionName ?? herdrSessionName(input.changeId);
   let agents = await observe(command, ["agent", "list"], signal, options.observationRetries);
   if (!agents.ok) {
     return {
@@ -682,7 +681,7 @@ const piCommand = (
       ? []
       : ["--system-prompt", shellQuote(input.systemPrompt)]),
     "--name",
-    shellQuote(input.piSessionName ?? input.herdrName ?? herdrSessionName(input.changeId)),
+    shellQuote(input.agentSessionName ?? input.hostSessionName ?? herdrSessionName(input.changeId)),
     ...(model === undefined ? [] : ["--model", shellQuote(model)]),
     ...(thinking === undefined ? [] : ["--thinking", shellQuote(thinking)]),
     ...(profileFlags.length === 0 ? [] : [profileFlags]),

@@ -1,19 +1,8 @@
 import { existsSync } from "node:fs";
 import { Effect } from "effect";
-
-import { openHerdrInteractiveSessionHost } from "./herdrInteractiveSessionHost.js";
-import type { InteractiveSessionHost } from "./interactiveSessionHost.js";
-import { cleanupChangeResourcesWithRemote } from "./localChangeCleanupGit.js";
-import { openTerminalCleanup } from "./cleanupTerminalChange.js";
-import { openChangeReconciliation } from "./reconcileChange.js";
-import { reviewerSessionsChangeRoot } from "./reviewerSession/reviewerSession.js";
-import { openReviewerTranscriptIndex } from "./reviewerSession/reviewerTranscript.js";
-import { openArtifactLifecycle } from "./validationRun/artifactLifecycle.js";
-import { openChangeUseCases, type ChangeUseCases } from "./changeUseCases.js";
-import { provisionChangeWorktree, resolveChangeStartGitIntent } from "./changeStartGit.js";
-import { executeLocalRepositoryPreparation } from "../repositoryPreparation/localRepositoryPreparation.js";
-import { loadRepoLocalContext, type LoadRepoLocalContextError } from "../init/repoContext.js";
 import type { RepositoryStorageError } from "../contracts/repositoryStorageError.js";
+import { type LoadRepoLocalContextError, loadRepoLocalContext } from "../init/repoContext.js";
+import { executeLocalRepositoryPreparation } from "../repositoryPreparation/localRepositoryPreparation.js";
 import { repositorySqlLayer } from "../sqlite/repositorySql.js";
 import { openSqliteChangePersistence } from "../sqlite/sqliteChangePersistence.js";
 import { openSqliteChangeStartPersistence } from "../sqlite/sqliteChangeStartPersistence.js";
@@ -22,6 +11,16 @@ import {
   githubChangeCleanupRemote,
   localGitHubPullRequestGateway,
 } from "../submissionEnvironment/localGitHubPullRequestGateway.js";
+import { provisionChangeWorktree, resolveChangeStartGitIntent } from "./changeStartGit.js";
+import { type ChangeUseCases, openChangeUseCases } from "./changeUseCases.js";
+import { openTerminalCleanup } from "./cleanupTerminalChange.js";
+import { openHerdrInteractiveSessionHost } from "./interactiveSession/herdrInteractiveSessionHost.js";
+import type { InteractiveSessionHost } from "./interactiveSession/interactiveSessionHost.js";
+import { cleanupChangeResourcesWithRemote } from "./localChangeCleanupGit.js";
+import { openChangeReconciliation } from "./reconcileChange.js";
+import { reviewerSessionsChangeRoot } from "./reviewerSession/reviewerSession.js";
+import { openReviewerTranscriptIndex } from "./reviewerSession/reviewerTranscript.js";
+import { openArtifactLifecycle } from "./validationRun/artifactLifecycle.js";
 
 export type LoadChangeUseCasesError =
   | LoadRepoLocalContextError

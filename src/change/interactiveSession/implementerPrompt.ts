@@ -1,8 +1,8 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import type { ChangePrepareFailure } from "./change.js";
-import { boundedEvidence } from "./preparationEvidence.js";
-import { resolvePackageAsset } from "./packageAssetPath.js";
+import type { ChangePrepareFailure } from "../change.js";
+import { resolvePackageAsset } from "../packageAssetPath.js";
+import { boundedEvidence } from "../preparationEvidence.js";
 
 const skillDirectory = resolvePackageAsset("docs/public/skills/but-why");
 
