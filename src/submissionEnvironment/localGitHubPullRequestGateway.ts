@@ -321,7 +321,7 @@ const deleteRemoteBranch = (
     `name=refs/heads/${input.branchName}`,
     "-F",
     `beforeOid=${input.expectedHeadSha}`,
-    "-F",
+    "-f",
     `afterOid=${zeroSha}`,
   ]);
   if (!result.ok) return readAfterUncertainDeletion(runGh, input);

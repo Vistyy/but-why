@@ -519,7 +519,10 @@ describe("GitHub pull request gateway", () => {
     const deletionArgs = ghCalls[1]?.join(" ") ?? "";
     expect(deletionArgs).toContain("name=refs/heads/but-why/feature");
     expect(deletionArgs).toContain("beforeOid=candidate-sha");
-    expect(deletionArgs).toContain(`afterOid=${"0".repeat(40)}`);
+    const afterOid = `afterOid=${"0".repeat(40)}`;
+    expect(deletionArgs).toContain(afterOid);
+    const afterOidIndex = ghCalls[1]?.indexOf(afterOid) ?? -1;
+    expect(ghCalls[1]?.[afterOidIndex - 1]).toBe("-f");
     expect(
       gateway.readRemoteBranchHead?.({
         ...branch,
