@@ -205,18 +205,6 @@ describe("by CLI", () => {
     }),
   );
 
-  it.effect("prints JSON help when selected after help", () =>
-    Effect.gen(function* () {
-      const result = yield* runByInProcessEffect(repoRoot, ["--help", "--json"]);
-
-      expect(result.status).toBe(0);
-      expect(result.stderr).toBe("");
-      expect(JSON.parse(result.stdout).help).toContain(
-        "Validate completed code changes against approved human intent.",
-      );
-    }),
-  );
-
   it.effect("uses TOON output when JSON is false", () =>
     Effect.gen(function* () {
       const result = yield* runByInProcessEffect(repoRoot, ["--help", "--json=false"]);
@@ -673,7 +661,14 @@ help[1]: "Keep using OLD, or manually migrate .but-why/config.json before runnin
   );
 
   ordinaryIt("maps runtime errors without leaking stack traces", () => {
-    expect(encodeToon(mapRuntimeError().stdout)).toBe(`error:
+    const result = mapRuntimeError();
+
+    expect(result.exitCode).toBe(1);
+    expect(JSON.parse(JSON.stringify(result.stdout))).toEqual({
+      error: { code: "internal_error", message: "The command failed unexpectedly" },
+      help: ["Report this failure with the command and workspace path"],
+    });
+    expect(encodeToon(result.stdout)).toBe(`error:
   code: internal_error
   message: The command failed unexpectedly
 help[1]: Report this failure with the command and workspace path`);

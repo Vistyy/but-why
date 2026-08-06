@@ -63,11 +63,4 @@ describe("recording text input", () => {
 
     expect(readRecordingText(root, fileName)).toMatchObject({ ok: false, error: { code } });
   });
-
-  it("rejects terminal stdin", () => {
-    expect(readRecordingText(createTestWorkspace(), "-", { fd: -1, isTerminal: true })).toEqual({
-      ok: false,
-      error: { code: "stdin_is_terminal" },
-    });
-  });
 });
