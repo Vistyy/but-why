@@ -1,5 +1,5 @@
 import { statSync } from "node:fs";
-import { mkdtemp, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { createJiti } from "jiti/static";
@@ -84,9 +84,6 @@ const recordPendingLaunchForCrossProcessPrune = async (scriptPath: string): Prom
 };
 
 const pruneStaleFilesystemLaunchArtifacts = async (): Promise<void> => {
-  // Best-effort cross-process prune of retained uncertain artifacts.
-  // Reads the shared registry written by retainUncertainLaunchScript in any process and removes each listed directory.
-  // Also prunes very old but-why-pi-launch-* directories that may have been left by older versions or crashes.
   const registryPath = pendingLaunchRegistryPath();
   let registryEntries: string[] = [];
   try {
@@ -94,42 +91,17 @@ const pruneStaleFilesystemLaunchArtifacts = async (): Promise<void> => {
     const parsed = JSON.parse(raw) as unknown;
     if (Array.isArray(parsed)) registryEntries = parsed as string[];
   } catch {}
-  if (registryEntries.length > 0) {
-    await Promise.all(
-      registryEntries.map(async (dir) => {
-        try {
-          await rm(dir, { recursive: true, force: true });
-        } catch {}
-      }),
-    );
-    try {
-      await rm(registryPath, { force: true });
-    } catch {}
-  }
-  // Fallback: prune very old directories that may have been orphaned before registry existed.
-  // Only directories older than the retention window are considered stale, preserving in-flight concurrent launches.
-  let entries: string[];
-  try {
-    entries = await readdir(tmpdir());
-  } catch {
-    return;
-  }
-  const prefix = "but-why-pi-launch-";
-  const now = Date.now();
-  const staleThresholdMs = 60_000;
+  if (registryEntries.length === 0) return;
   await Promise.all(
-    entries
-      .filter((entry) => entry.startsWith(prefix))
-      .map(async (entry) => {
-        const fullPath = join(tmpdir(), entry);
-        try {
-          const s = await stat(fullPath);
-          if (!s.isDirectory()) return;
-          if (now - s.mtimeMs < staleThresholdMs) return;
-          await rm(fullPath, { recursive: true, force: true });
-        } catch {}
-      }),
+    registryEntries.map(async (dir) => {
+      try {
+        await rm(dir, { recursive: true, force: true });
+      } catch {}
+    }),
   );
+  try {
+    await rm(registryPath, { force: true });
+  } catch {}
 };
 
 export const openHerdrInteractiveSessionHost = (
