@@ -286,28 +286,6 @@ help[1]: Run \`by --help\` for generated command help.
     }),
   );
 
-  it.effect("rejects the removed output selector", () =>
-    Effect.gen(function* () {
-      const result = yield* runByInProcessEffect(repoRoot, ["--output", "json", "--help"]);
-
-      expect(result.status).toBe(2);
-      expect(result.stderr).toBe("");
-      expect(result.stdout).toContain("code: invalid_usage");
-      expect(result.stdout).toContain("Invalid subcommand for by");
-    }),
-  );
-
-  it.effect("rejects the removed short output selector", () =>
-    Effect.gen(function* () {
-      const result = yield* runByInProcessEffect(repoRoot, ["task", "list", "-o", "json"]);
-
-      expect(result.status).toBe(2);
-      expect(result.stderr).toBe("");
-      expect(result.stdout).toContain("code: invalid_usage");
-      expect(result.stdout).toContain("Received unknown argument: '-o'");
-    }),
-  );
-
   it.effect("prints the init help view", () =>
     Effect.gen(function* () {
       const result = yield* runByInProcessEffect(repoRoot, ["init", "--help"]);

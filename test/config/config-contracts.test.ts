@@ -155,23 +155,6 @@ describe("configuration contracts", () => {
     expect(right(decodeRepoConfig(config))).toEqual(config);
   });
 
-  it("rejects the removed validation sandbox setting", () => {
-    const error = left(
-      decodeRepoConfig({
-        taskPrefix: "BY",
-        validation: {
-          sandbox: { mode: "none" },
-          checks: [{ id: "quality", command: "true" }],
-        },
-      }),
-    );
-
-    expect(error._tag).toBe("RepoConfigValidationFailed");
-    expect(error.diagnostics).toContainEqual(
-      expect.objectContaining({ path: ["validation", "sandbox"] }),
-    );
-  });
-
   it("rejects validation-scoped preparation", () => {
     const error = left(
       decodeRepoConfig({

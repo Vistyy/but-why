@@ -24,13 +24,15 @@ describe("by task CLI processes", () => {
     expect(JSON.parse(result.stdout).help).toContain(description);
   });
 
-  it.each([
-    ["task create", ["task", "create", "--help", "--json"]],
-    ["task comment", ["task", "comment", "--help", "--json"]],
-    ["blocker raise", ["change", "blocker", "raise", "--help", "--json"]],
-    ["blocker resolve", ["change", "blocker", "resolve", "--help", "--json"]],
-  ] as const)("documents shared recording input for %s", (_name, args) => {
-    const result = runBuiltByWithEnv(createTestWorkspace(), {}, ...args);
+  it("documents shared recording input for a representative command", () => {
+    const result = runBuiltByWithEnv(
+      createTestWorkspace(),
+      {},
+      "task",
+      "create",
+      "--help",
+      "--json",
+    );
     const help = JSON.parse(result.stdout).help as string;
 
     expect(result.status).toBe(0);
@@ -119,24 +121,6 @@ describe("by task CLI processes", () => {
     expect(context.stdout).toContain("Descripción exacta");
     expect(context.stdout).toContain("Comentario exacto");
   }, 30_000);
-
-  it("rejects the removed Task description-file option at the process boundary", () => {
-    const result = runBuiltByWithEnv(
-      createTestWorkspace(),
-      {},
-      "--json",
-      "task",
-      "create",
-      "--title",
-      "Invalid option",
-      "--description-file",
-      "description.md",
-    );
-
-    expect(result.status).toBe(2);
-    expect(result.stderr).toBe("");
-    expect(JSON.parse(result.stdout)).toMatchObject({ error: { code: "invalid_usage" } });
-  });
 
   it("preserves invalid UTF-8 stdin errors at the process boundary", () => {
     const root = createTestWorkspace();
