@@ -24,7 +24,12 @@ import type {
   GitHubPullRequestGateway,
 } from "../../src/change/ownedPullRequestGateway.js";
 import { ExecutionLockUnavailable, type ExecutionLock } from "../../src/contracts/executionLock.js";
-import { RepoConfigValidationFailed } from "../../src/contracts/configErrors.js";
+import {
+  GlobalConfigValidationFailed,
+  RepoConfigValidationFailed,
+} from "../../src/contracts/configErrors.js";
+import { MissingAgentProfile } from "../../src/agent/agentProfileErrors.js";
+import type { SubmitRejectionError } from "../../src/change/submit/submitRejectionErrors.js";
 
 const now = "2026-06-30T12:00:00.000Z";
 const candidate = {
@@ -413,6 +418,94 @@ describe("Change Submit orchestration", () => {
         ok: false,
         code: "validation_policy_invalid",
         message: "Change Base Repo Config is invalid.",
+      });
+      expect(events).toEqual(["capture"]);
+    }),
+  );
+
+  it.effect("rejects a missing reviewer Agent Profile before Validation starts", () =>
+    Effect.gen(function* () {
+      const events: string[] = [];
+      const submit = openChangeSubmit(
+        dependencies({
+          events,
+          change: readyChange(),
+          policyRejection: new MissingAgentProfile({
+            profileName: "missing-reviewer",
+            scope: "repo",
+            selection: "explicit",
+          }),
+        }),
+      );
+      const validationLayer = Layer.succeed(CandidateValidation, {
+        validateCandidate: () => Effect.die("Validation must not start"),
+        validateAcceptanceContextCandidate: () => Effect.die("Validation must not start"),
+        listFindings: () => Effect.succeed([]),
+        listToolingFailures: () => Effect.succeed([]),
+        listRounds: () => Effect.succeed([]),
+      });
+
+      const result = yield* submit
+        .submit({ changeId: "change-1", now })
+        .pipe(Effect.provide(validationLayer));
+
+      expect(result).toEqual({
+        ok: false,
+        code: "validation_policy_invalid",
+        message: 'Agent Profile "missing-reviewer" in repo scope was not found.',
+      });
+      expect(events).toEqual(["capture"]);
+    }),
+  );
+
+  it.effect("propagates malformed Global Config path and diagnostics without Git", () =>
+    Effect.gen(function* () {
+      const events: string[] = [];
+      const submit = openChangeSubmit(
+        dependencies({
+          events,
+          change: readyChange(),
+          policyRejection: new GlobalConfigValidationFailed({
+            path: "/repo/global-config.json",
+            diagnostics: [
+              {
+                path: ["agentProfiles", "implementation", "agentModel"],
+                expected: "a Pi runtimeConfig model",
+                actual: undefined,
+                message: "Required value is missing.",
+              },
+            ],
+            message: "Global Config is invalid.",
+          }),
+        }),
+      );
+      const validationLayer = Layer.succeed(CandidateValidation, {
+        validateCandidate: () => Effect.die("Validation must not start"),
+        validateAcceptanceContextCandidate: () => Effect.die("Validation must not start"),
+        listFindings: () => Effect.succeed([]),
+        listToolingFailures: () => Effect.succeed([]),
+        listRounds: () => Effect.succeed([]),
+      });
+
+      const result = yield* submit
+        .submit({ changeId: "change-1", now })
+        .pipe(Effect.provide(validationLayer));
+
+      expect(result).toEqual({
+        ok: false,
+        code: "validation_policy_invalid",
+        message: "Global Config is invalid.",
+        details: {
+          path: "/repo/global-config.json",
+          diagnostics: [
+            {
+              path: ["agentProfiles", "implementation", "agentModel"],
+              expected: "a Pi runtimeConfig model",
+              actual: undefined,
+              message: "Required value is missing.",
+            },
+          ],
+        },
       });
       expect(events).toEqual(["capture"]);
     }),
@@ -1479,6 +1572,7 @@ const dependencies = (input: {
     worktreePath: string,
     validationRepoConfig?: RepoConfig,
   ) => CandidateValidationPolicyResolution;
+  readonly policyRejection?: SubmitRejectionError | GlobalConfigValidationFailed;
   readonly findings?: readonly (typeof finding)[];
   readonly toolingFailures?: readonly (typeof toolingFailure)[];
   readonly publication?: PublicationFixture;
@@ -1584,6 +1678,9 @@ const dependencies = (input: {
             message: input.agentEnvironmentError,
           }),
         };
+      }
+      if (input.policyRejection !== undefined) {
+        return { ok: false as const, error: input.policyRejection };
       }
       return input.acceptanceContextSupplied
         ? ({

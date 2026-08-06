@@ -102,9 +102,9 @@ files:
 ignores:
   - test/support/by-cli.ts
   - test/support/initializedRepo.ts
-  - test/repository/quality-interface.boundary.test.ts
-  - test/task/task-cli-process.boundary.test.ts
-  - test/change/change-implement-process.boundary.test.ts
+  - test/repository/quality-interface.test.ts
+  - test/task/task-cli-process.test.ts
+  - test/change/change-implement-process.test.ts
   - test/change/change-implement-main-checkout-failure.test.ts
 rule:
   any:
@@ -181,11 +181,9 @@ rule:
 id: direct-sandcastle-helpers-belong-to-validation-workspace
 language: TypeScript
 severity: error
-message: Do not use Sandcastle factories outside the focused cross-workspace boundary test because validation workspace composition owns Sandcastle setup; use the Candidate Validation seam for behavior variations.
+message: Do not use Sandcastle factories in tests because validation workspace composition owns Sandcastle setup; use the Candidate Validation seam for behavior variations.
 files:
   - test/**/*.ts
-ignores:
-  - test/validation/reviewer-session-cross-workspace.boundary.test.ts
 rule:
   any:
     - all:

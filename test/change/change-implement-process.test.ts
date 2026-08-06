@@ -5,9 +5,7 @@ import { join } from "node:path";
 import { expect, it } from "@effect/vitest";
 import { describe } from "vitest";
 
-import { runTestProcess } from "../support/testProcess.js";
 import {
-  builtByExecutable,
   commitButWhyConfigAndRecordDefault,
   runBuiltByWithEnv,
   runBuiltByWithInput,
@@ -106,41 +104,6 @@ exit 1
     );
     expect(piped.status, `${piped.stdout}${piped.stderr}`).toBe(0);
     expect(readFileSync(capture, "utf8")).toContain("Implementer prompt from piped stdin");
-  }, 30_000);
-
-  it("preserves implementer prompt input errors for piped stdin", () => {
-    const root = createTestWorkspace();
-
-    const invalid = runBuiltByWithInput(
-      root,
-      Buffer.from([0xff]),
-      {},
-      "--json",
-      "change",
-      "implement",
-      "change-1",
-      "--implementer-prompt-file",
-      "-",
-    );
-    expect(invalid.status).toBe(2);
-    expect(JSON.parse(invalid.stdout)).toMatchObject({
-      error: { code: "invalid_implementer_prompt_encoding" },
-    });
-
-    const terminal = runTestProcess(
-      "script",
-
-      [
-        "-qec",
-        `${process.execPath} ${builtByExecutable()} --json change implement change-1 --implementer-prompt-file -`,
-        "/dev/null",
-      ],
-      { cwd: root },
-    );
-    expect(terminal.status).toBe(2);
-    expect(JSON.parse(terminal.stdout.trim())).toMatchObject({
-      error: { code: "stdin_is_terminal" },
-    });
   }, 30_000);
 
   it.effect(

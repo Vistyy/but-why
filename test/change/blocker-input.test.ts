@@ -8,6 +8,27 @@ import { runByInProcessEffect } from "../support/by-cli.js";
 import { createTestWorkspace } from "../support/testWorkspace.js";
 
 describe("Implementation Blocker recording input", () => {
+  it.effect.each(["raise", "resolve"] as const)(
+    "documents shared recording input for Blocker %s in generated help",
+    (action) =>
+      Effect.gen(function* () {
+        const result = yield* runByInProcessEffect(createTestWorkspace(), [
+          "--json",
+          "change",
+          "blocker",
+          action,
+          "--help",
+        ]);
+
+        expect(result.status).toBe(0);
+        expect(result.stderr).toBe("");
+        const help = (JSON.parse(result.stdout) as { readonly help: string }).help;
+        expect(help).toContain("regular UTF-8 text file path");
+        expect(help).toContain("standard input");
+        expect(help).not.toContain("description-file");
+      }),
+  );
+
   it.effect.each(["raise", "resolve"] as const)("applies the shared text policy to %s", (action) =>
     Effect.gen(function* () {
       const root = createTestWorkspace();

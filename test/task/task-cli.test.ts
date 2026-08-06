@@ -20,6 +20,42 @@ const secondNow = "2026-06-30T12:05:00.000Z";
 const thirdNow = "2026-06-30T12:10:00.000Z";
 
 describe("by task CLI", () => {
+  it.effect("documents shared recording input for Task create in generated help", () =>
+    Effect.gen(function* () {
+      const result = yield* runByInProcessEffect(createTestWorkspace(), [
+        "--json",
+        "task",
+        "create",
+        "--help",
+      ]);
+
+      expect(result.status).toBe(0);
+      expect(result.stderr).toBe("");
+      const help = (JSON.parse(result.stdout) as { readonly help: string }).help;
+      expect(help).toContain("regular UTF-8 text file path");
+      expect(help).toContain("standard input");
+      expect(help).not.toContain("description-file");
+    }),
+  );
+
+  it.effect("documents shared recording input for Task comment in generated help", () =>
+    Effect.gen(function* () {
+      const result = yield* runByInProcessEffect(createTestWorkspace(), [
+        "--json",
+        "task",
+        "comment",
+        "--help",
+      ]);
+
+      expect(result.status).toBe(0);
+      expect(result.stderr).toBe("");
+      const help = (JSON.parse(result.stdout) as { readonly help: string }).help;
+      expect(help).toContain("regular UTF-8 text file path");
+      expect(help).toContain("standard input");
+      expect(help).not.toContain("description-file");
+    }),
+  );
+
   it.effect(
     "creates a new Task with trimmed title, exact description, configured prefix, and summary output",
     () =>

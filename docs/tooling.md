@@ -64,13 +64,24 @@ Fallow and ast-grep own their named structural contracts.
 
 `just health` produces advisory coverage, complexity, duplication, and code-health reports.
 Advisory findings become implementation work only when repository evidence shows a concrete defect or maintenance cost.
+
+## Manual diagnostics
+
+The following operations are manual and non-blocking.
+They do not block the routine or complete quality suites and remain available as targeted commands.
+
+- A real Herdr smoke check verifies that `by change implement` can open an existing ready Managed Worktree under its stable session name.
+  The check is excluded from the routine and complete quality suites and never blocks them.
+  Start Herdr, point `HERDR_SMOKE_WORKTREE` at an existing ready Managed Worktree, point `HERDR_SMOKE_REPOSITORY` at that Worktree's repository, optionally point `HERDR_SMOKE_PATH` at the Herdr executable path, then run `BY_MANUAL_DIAGNOSTICS=1 just test test/agent/herdr-smoke.test.ts`.
+  The captured Herdr host tests own launch classification and recovery; this check is an optional live-environment confirmation.
+
 ## CLI loading verification
 
 The production CLI keeps the complete Effect CLI descriptor tree in `src/cliCommandTree.ts` and loads command implementations through literal native dynamic imports after command selection.
 
 The release-package boundary test verifies the bundled entry graph and generated dynamic targets.
-See [`test/repository/cli-loading.boundary.test.ts`](../test/repository/cli-loading.boundary.test.ts).
-Run it with `just test test/repository/cli-loading.boundary.test.ts`.
+See [`test/repository/cli-loading.test.ts`](../test/repository/cli-loading.test.ts).
+Run it with `just test test/repository/cli-loading.test.ts`.
 
 The package contract test owns the one real-process sentinel for the packaged CLI and extensions from an installed layout: it builds and installs the packed package, then proves the CLI loads and reports trusted continuation extension preflight and missing-extension failures through `by change implement`.
 See [`test/repository/package-contents.test.ts`](../test/repository/package-contents.test.ts).

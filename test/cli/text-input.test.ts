@@ -1,4 +1,4 @@
-import { closeSync, openSync, writeFileSync } from "node:fs";
+import { closeSync, mkdirSync, openSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
@@ -50,5 +50,60 @@ describe("bounded text input", () => {
     } finally {
       closeSync(stdin);
     }
+  });
+
+  it("rejects a missing file", () => {
+    const root = createTestWorkspace();
+    const path = join(root, "missing.md");
+
+    expect(readTextInput(root, "missing.md")).toEqual({
+      ok: false,
+      error: { code: "text_input_file_not_found", path },
+    });
+  });
+
+  it("rejects a non-regular file", () => {
+    const root = createTestWorkspace();
+    const path = join(root, "directory");
+    mkdirSync(path);
+
+    expect(readTextInput(root, "directory")).toEqual({
+      ok: false,
+      error: { code: "text_input_file_unreadable", path },
+    });
+  });
+
+  it("rejects a file over the byte limit", () => {
+    const root = createTestWorkspace();
+    const path = join(root, "large.md");
+    writeFileSync(path, "12345");
+
+    expect(readTextInput(root, "large.md", { maxBytes: 4 })).toEqual({
+      ok: false,
+      error: { code: "text_input_too_large", source: "file", path, maxBytes: 4 },
+    });
+  });
+
+  it("rejects invalid UTF-8 file content", () => {
+    const root = createTestWorkspace();
+    const path = join(root, "invalid.bin");
+    writeFileSync(path, Buffer.from([0xff]));
+
+    expect(readTextInput(root, "invalid.bin")).toEqual({
+      ok: false,
+      error: { code: "text_input_invalid_utf8", source: "file", path },
+    });
+  });
+
+  it("reads an empty file as empty content", () => {
+    const root = createTestWorkspace();
+    const path = join(root, "empty.md");
+    writeFileSync(path, "");
+
+    expect(readTextInput(root, "empty.md")).toEqual({
+      ok: true,
+      content: "",
+      byteLength: 0,
+    });
   });
 });
