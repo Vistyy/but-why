@@ -1,5 +1,5 @@
 import { statSync } from "node:fs";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createJiti } from "jiti/static";
@@ -69,6 +69,28 @@ const retainUncertainLaunchScript = (script: PiLaunchScript, options: ResolvedOp
   timer.unref?.();
 };
 
+const pruneStaleFilesystemLaunchArtifacts = async (): Promise<void> => {
+  let entries: string[];
+  try {
+    entries = await readdir(tmpdir());
+  } catch {
+    return;
+  }
+  const prefix = "but-why-pi-launch-";
+  await Promise.all(
+    entries
+      .filter((entry) => entry.startsWith(prefix))
+      .map(async (entry) => {
+        const fullPath = join(tmpdir(), entry);
+        try {
+          const s = await stat(fullPath);
+          if (!s.isDirectory()) return;
+          await rm(fullPath, { recursive: true, force: true });
+        } catch {}
+      }),
+  );
+};
+
 export const openHerdrInteractiveSessionHost = (
   execute: HerdrCommandExecutor = executeHerdr,
   environment: HerdrInteractiveSessionHostOptions = {},
@@ -119,6 +141,7 @@ const launchHerdrSession = async (
   environment: HerdrInteractiveSessionHostOptions,
   signal: AbortSignal | undefined,
 ): Promise<InteractiveSessionLaunchResult> => {
+  await pruneStaleFilesystemLaunchArtifacts();
   await flushPendingUncertainLaunchScripts();
   const options = { ...defaultOptions, ...environment };
   const continuationExtension = trustedContinuationExtensionPath();
