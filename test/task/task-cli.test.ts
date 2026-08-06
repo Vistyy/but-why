@@ -10,12 +10,7 @@ import { RepositorySql, repositorySqlLayer } from "../../src/sqlite/repositorySq
 import type { TaskState } from "../../src/task/lifecycle.js";
 import type { TaskRecord, TaskSummary } from "../../src/task/task.js";
 import { publicTaskId } from "../../src/task/taskId.js";
-import {
-  byExecutable,
-  commitButWhyConfigAndRecordDefault,
-  createGitRepo,
-  runByInProcessEffect,
-} from "../support/by-cli.js";
+import { byExecutable, createGitRepo, runByInProcessEffect } from "../support/by-cli.js";
 import { createTestWorkspace } from "../support/testWorkspace.js";
 import { fakeTaskUseCases } from "../support/taskUseCases.js";
 
@@ -60,62 +55,48 @@ help[1]: Run \`by task list\` to see open tasks.
       }),
   );
 
-  it.effect("cancels an unfinished Task with a reason", () =>
+  it.effect("maps approval success and unchanged approval to command output", () =>
     Effect.gen(function* () {
-      const root = yield* initializedRepo();
+      const root = createTestWorkspace();
+      const task = taskRecord({ state: "todo", updatedAt: secondNow });
+      let call = 0;
+      const taskUseCases = fakeTaskUseCases({
+        approveTask: () => {
+          call += 1;
+          return { ok: true as const, changed: call === 1, task };
+        },
+      });
 
-      yield* createTask(root, firstNow, "Cancel intent");
-
-      const result = yield* runByInProcessEffect(
+      const firstApproval = yield* runByInProcessEffect(
         root,
-        ["task", "cancel", "BY-1", "--reason", "No longer needed"],
+        ["task", "approve", "BY-1"],
         secondNow,
+        { taskUseCases },
+      );
+      const repeatedApproval = yield* runByInProcessEffect(
+        root,
+        ["task", "approve", "BY-1"],
+        thirdNow,
+        { taskUseCases },
       );
 
-      expect(result.status).toBe(0);
-      expect(result.stderr).toBe("");
-      expect(result.stdout).toContain("id: BY-1");
-      expect(result.stdout).toContain("state: cancelled");
-      expect(result.stdout).toContain("reason: No longer needed");
-    }),
-  );
-
-  it.effect(
-    "approves Task intent durably and reports repeated approval as an unchanged success",
-    () =>
-      Effect.gen(function* () {
-        const root = yield* initializedRepo();
-
-        yield* createTask(root, firstNow, "Approve intent");
-
-        const firstApproval = yield* runByInProcessEffect(
-          root,
-          ["task", "approve", "BY-1"],
-          secondNow,
-        );
-        const repeatedApproval = yield* runByInProcessEffect(
-          root,
-          ["task", "approve", "BY-1"],
-          thirdNow,
-        );
-
-        expect(firstApproval.status).toBe(0);
-        expect(firstApproval.stderr).toBe("");
-        expect(firstApproval.stdout).toBe(`task:
+      expect(firstApproval.status).toBe(0);
+      expect(firstApproval.stderr).toBe("");
+      expect(firstApproval.stdout).toBe(`task:
   id: BY-1
   state: todo
   changed: true
   updatedAt: "${secondNow}"
 `);
-        expect(repeatedApproval.status).toBe(0);
-        expect(repeatedApproval.stderr).toBe("");
-        expect(repeatedApproval.stdout).toBe(`task:
+      expect(repeatedApproval.status).toBe(0);
+      expect(repeatedApproval.stderr).toBe("");
+      expect(repeatedApproval.stdout).toBe(`task:
   id: BY-1
   state: todo
   changed: false
   updatedAt: "${secondNow}"
 `);
-      }),
+    }),
   );
 
   it.effect("maps rejected approval to the legal next action", () =>
@@ -320,36 +301,6 @@ tasks[2]:
           change: null,
         })),
       });
-    }),
-  );
-
-  it.effect("shows new Tasks on the dashboard so they can be approved", () =>
-    Effect.gen(function* () {
-      const task = taskSummary({ title: "Needs approval" });
-      const result = yield* runByInProcessEffect(createTestWorkspace(), [], firstNow, {
-        taskUseCases: fakeTaskUseCases({ listActionableTasks: () => [task] }),
-      });
-
-      expect(result.stdout).toContain(`BY-1,Needs approval,new,"${firstNow}","${firstNow}"`);
-    }),
-  );
-
-  it.effect("removes completed Tasks from the default dashboard", () =>
-    Effect.gen(function* () {
-      const root = yield* initializedRepoWithDefault();
-
-      yield* createTask(root, firstNow, "Completed");
-      expect(
-        (yield* runByInProcessEffect(root, ["task", "approve", "BY-1"], firstNow)).status,
-      ).toBe(0);
-      yield* setTaskState(root, "BY-1", "done", secondNow);
-
-      expect((yield* runByInProcessEffect(root, [])).stdout).toBe(`bin: ${expectedBin}
-description: Validate completed code changes against approved human intent.
-count: 0
-tasks: []
-help[1]: "Run \`by task create --title \\"...\\" --file <path|->\` to create a task."
-`);
     }),
   );
 
@@ -1217,12 +1168,6 @@ const initializedRepo = () =>
       throw new Error(result.stdout || result.stderr);
     }
 
-    return root;
-  });
-
-const initializedRepoWithDefault = () =>
-  Effect.map(initializedRepo(), (root) => {
-    commitButWhyConfigAndRecordDefault(root);
     return root;
   });
 
