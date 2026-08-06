@@ -1,13 +1,12 @@
 import type { Effect } from "effect";
-
-import { runCommandTree } from "./cliCommandTree.js";
-import { runtimeError, type CliResult } from "./cliResults.js";
-import type { OutputFormat } from "./output/structured.js";
-import type { InteractiveSessionHost } from "./change/interactiveSessionHost.js";
 import type { ReviewerAgentRuntime } from "./agent/reviewerAgentRuntime.js";
-import type { TaskUseCases } from "./task/taskUseCases.js";
 import type { CancellationUseCases } from "./change/cancelChange.js";
+import type { InteractiveSessionHost } from "./change/interactiveSession/interactiveSessionHost.js";
 import type { TextInputStdin } from "./cli/input/textInput.js";
+import { runCommandTree } from "./cliCommandTree.js";
+import { type CliResult, runtimeError } from "./cliResults.js";
+import type { OutputFormat } from "./output/structured.js";
+import type { TaskUseCases } from "./task/taskUseCases.js";
 
 export type { CliResult } from "./cliResults.js";
 export type CliEnvironment = {

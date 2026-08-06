@@ -1,30 +1,14 @@
 import { randomUUID } from "node:crypto";
-import { dirname, join } from "node:path";
 import { Effect } from "effect";
-
-import { repoAgentEnvironment } from "../agent/agentEnvironment.js";
-import { resolveInteractiveSessionAgentProfile } from "../agent/agentProfiles.js";
-import { validatePiAgentProfileResources } from "../agent/piRuntime.js";
-import type { RepoLocalContext } from "../init/repoContext.js";
-import { readGlobalConfig } from "../init/globalConfig.js";
-import { readRepoConfig } from "../init/repoConfig.js";
 import type { RepositoryStorageError } from "../contracts/repositoryStorageError.js";
-import { parseRemoteChangeBaseRef } from "../submissionEnvironment/remoteChangeBase.js";
+import type { RepoLocalContext } from "../init/repoContext.js";
 import {
-  runRepositoryPreparationEffect,
   type RepositoryPreparationEffectExecutor,
+  runRepositoryPreparationEffect,
 } from "../repositoryPreparation/runRepositoryPreparation.js";
-import { taskSlugForId, type PublicTaskId } from "../task/taskId.js";
-import { changeState, type ChangePrepareFailure } from "./change.js";
-import type {
-  InteractiveSessionHost,
-  InteractiveSessionLaunchEvidence,
-} from "./interactiveSessionHost.js";
-import {
-  buildImplementerInitialPrompt,
-  buildImplementerSystemPrompt,
-} from "./implementerPrompt.js";
-import type { ChangeReconciliation, ChangeReconciliationResult } from "./reconcileChange.js";
+import { parseRemoteChangeBaseRef } from "../submissionEnvironment/remoteChangeBase.js";
+import { type PublicTaskId, taskSlugForId } from "../task/taskId.js";
+import { type ChangePrepareFailure, changeState } from "./change.js";
 import type {
   ChangeStartGitOperations,
   ProvisionChangeWorktreeFailure,
@@ -32,6 +16,12 @@ import type {
 } from "./changeStartGitOperations.js";
 import type { ChangeStartPersistence } from "./changeStartPersistence.js";
 import type { ChangeStartEligibilityError, ChangeStartRecord } from "./changeStartStore.js";
+import type { InteractiveSessionHost } from "./interactiveSession/interactiveSessionHost.js";
+import type { ChangeImplementResult } from "./interactiveSession/launchInteractiveImplementer.js";
+import { launchInteractiveImplementer } from "./interactiveSession/launchInteractiveImplementer.js";
+import type { ChangeReconciliation, ChangeReconciliationResult } from "./reconcileChange.js";
+
+export type { ChangeImplementResult };
 
 export type ChangeUseCases = {
   readonly start: (input: {
@@ -59,29 +49,6 @@ export type ChangeStartResult =
   | ChangeStartEligibilityError
   | Exclude<ResolveChangeStartGitResult, { readonly ok: true }>
   | (ProvisionChangeWorktreeFailure & { readonly change: ChangeStartRecord });
-
-export type ChangeImplementResult =
-  | {
-      readonly ok: true;
-      readonly change: ChangeStartRecord;
-      readonly host: "herdr";
-      readonly status: "started" | "already_active";
-      readonly agentProfile?: string;
-      readonly profileScope?: "repo" | "global";
-    }
-  | {
-      readonly ok: false;
-      readonly change: ChangeStartRecord;
-      readonly code:
-        | "host_unavailable"
-        | "launch_failed"
-        | "launch_indeterminate"
-        | "agent_environment_invalid"
-        | "agent_profile_invalid";
-      readonly message: string;
-      readonly evidence?: InteractiveSessionLaunchEvidence;
-    }
-  | { readonly ok: false; readonly code: "change_not_found" | "change_not_open" };
 
 export type ChangePrepareResult =
   | { readonly ok: true; readonly change: ChangeStartRecord }
@@ -209,123 +176,14 @@ const implementChange = (
     const change = yield* store.getById(changeId);
     if (change === undefined) return { ok: false, code: "change_not_found" };
     if (change.state !== changeState.open) return { ok: false, code: "change_not_open" };
-    const managedRepoConfig = readRepoConfig(join(change.worktreePath, ".but-why", "config.json"));
-    if (!managedRepoConfig.ok) {
-      return {
-        ok: false,
-        code: "agent_environment_invalid",
-        message: `Managed Worktree Repo Config is invalid: ${managedRepoConfig.error.message}`,
-        change,
-      };
-    }
-    const globalConfig = readGlobalConfig(globalConfigPath);
-    if (!globalConfig.ok) {
-      return {
-        ok: false,
-        code: "agent_profile_invalid",
-        message: `Global Config is invalid: ${globalConfig.error.message}`,
-        change,
-      };
-    }
-    const agentProfile = resolveInteractiveSessionAgentProfile({
-      repoConfig: managedRepoConfig.config,
-      globalConfig: globalConfig.config,
-      globalConfigDirectory: dirname(globalConfigPath),
-    });
-    if (!agentProfile.ok) {
-      return {
-        ok: false,
-        code: "agent_profile_invalid",
-        message: agentProfileErrorMessage(agentProfile.error),
-        change,
-      };
-    }
-    const resolvedAgentProfile = agentProfile.profile;
-    if (resolvedAgentProfile === undefined) {
-      return {
-        ok: false,
-        code: "agent_profile_invalid",
-        message: "Interactive Session Agent Profile is not configured.",
-        change,
-      };
-    }
-    const resources = validatePiAgentProfileResources(resolvedAgentProfile, change.worktreePath);
-    if (!resources.ok) {
-      return {
-        ok: false,
-        code: "agent_profile_invalid",
-        message: resources.error.message,
-        change,
-      };
-    }
-    const agentEnvironment = repoAgentEnvironment(managedRepoConfig.config);
-    const launched = yield* Effect.tryPromise({
-      try: (signal) =>
-        interactiveSessionHost.launch(
-          {
-            changeId: change.id,
-            herdrName: herdrNameForChange(change),
-            piSessionName: piSessionNameForChange(change),
-            repositoryPath: context.mainCheckoutRoot,
-            worktreePath: change.worktreePath,
-            systemPrompt: buildImplementerSystemPrompt(),
-            initialPrompt: buildImplementerInitialPrompt({
-              changeId: change.id,
-              worktreePath: change.worktreePath,
-              ...(change.prepareFailure === null ? {} : { prepareFailure: change.prepareFailure }),
-              ...(implementerPrompt === undefined ? {} : { implementerPrompt }),
-            }),
-            agentProfile: resolvedAgentProfile,
-            globalConfigDirectory: dirname(globalConfigPath),
-            ...(agentEnvironment === undefined ? {} : { agentEnvironment }),
-          },
-          signal,
-        ),
-      catch: (error) => (error instanceof Error ? error.message : String(error)),
-    }).pipe(
-      Effect.match({
-        onFailure: (message) => ({ ok: false as const, message }),
-        onSuccess: (result) => ({ ok: true as const, result }),
-      }),
-    );
-    if (!launched.ok) {
-      return { ok: false, code: "launch_failed", message: launched.message, change };
-    }
-    if (!launched.result.ok) {
-      return { change, ...launched.result };
-    }
-    return {
+    return yield* launchInteractiveImplementer({
+      context,
       change,
-      ...launched.result,
-      agentProfile: resolvedAgentProfile.agentProfile,
-      profileScope: resolvedAgentProfile.scope,
-    };
+      interactiveSessionHost,
+      globalConfigPath,
+      implementerPrompt,
+    });
   });
-
-const herdrNameForChange = (change: ChangeStartRecord): string =>
-  change.taskId === null ? `change-${change.id.slice(0, 8)}` : taskSlugForId(change.taskId);
-
-const piSessionNameForChange = (change: ChangeStartRecord): string =>
-  change.taskId === null || change.acceptanceContext === null
-    ? `Change ${change.id}`
-    : `${change.taskId} ${change.acceptanceContext.title}`;
-
-const agentProfileErrorMessage = (error: {
-  readonly _tag: string;
-  readonly profileName?: string;
-  readonly scope?: "repo" | "global";
-  readonly agentRuntime?: string;
-}): string => {
-  const profile = `Interactive Session Agent Profile "${error.profileName ?? "<missing>"}"`;
-  const scope = error.scope === undefined ? "" : ` in ${error.scope} scope`;
-  if (error._tag === "MissingAgentProfile") {
-    return `${profile}${scope} was not found.`;
-  }
-  if (error._tag === "MissingAgentModel") {
-    return `${profile}${scope} has no Pi model in runtimeConfig.`;
-  }
-  return `${profile}${scope} must use the Pi agent runtime; it uses "${error.agentRuntime ?? "unknown"}".`;
-};
 
 type PreparationResult = { readonly ok: true; readonly change: ChangeStartRecord };
 

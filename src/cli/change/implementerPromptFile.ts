@@ -1,7 +1,7 @@
 import { resolve } from "node:path";
 
-import type { TextInputStdin } from "../cli/input/textInput.js";
-import { readTextInput } from "../cli/input/textInput.js";
+import type { TextInputStdin } from "../input/textInput.js";
+import { readTextInput } from "../input/textInput.js";
 
 export const maxImplementerPromptBytes = 256 * 1024;
 

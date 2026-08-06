@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   herdrSessionName,
   openHerdrInteractiveSessionHost,
-} from "../../src/change/herdrInteractiveSessionHost.js";
+} from "../../src/change/interactiveSession/herdrInteractiveSessionHost.js";
 
 // Manual, non-blocking Herdr smoke diagnostic.
 // Maintained suites exclude this file; live Herdr is never required by blocking evidence.

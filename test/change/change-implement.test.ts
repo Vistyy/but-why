@@ -5,19 +5,19 @@ import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
 import { afterAll, beforeAll, describe } from "vitest";
 
-import type { InteractiveSessionHost } from "../../src/change/interactiveSessionHost.js";
+import type { InteractiveSessionHost } from "../../src/change/interactiveSession/interactiveSessionHost.js";
 import { publicTaskId, taskSlugForId } from "../../src/task/taskId.js";
 import { commitButWhyConfigAndRecordDefault, runByInProcessEffect } from "../support/by-cli.js";
 import {
   cloneInitializedTestRepository,
   createInitializedRepo,
 } from "../support/initializedRepo.js";
+import { runTestProcessOrThrow } from "../support/testProcess.js";
 import {
   acquireTestWorkspace,
   createTestWorkspace,
   releaseTestWorkspace,
 } from "../support/testWorkspace.js";
-import { runTestProcessOrThrow } from "../support/testProcess.js";
 
 const now = "2026-06-30T12:00:00.000Z";
 const contractMaxImplementerPromptBytes = 256 * 1024;
@@ -156,8 +156,8 @@ describe("by change implement", () => {
       expect(launches).toHaveLength(1);
       expect(launches[0]).toMatchObject({
         changeId: change.change.id,
-        herdrName: `change-${change.change.id.slice(0, 8)}`,
-        piSessionName: `Change ${change.change.id}`,
+        hostSessionName: `change-${change.change.id.slice(0, 8)}`,
+        agentSessionName: `Change ${change.change.id}`,
         repositoryPath: root,
         worktreePath: change.worktreePath,
         agentEnvironment: ["nix", "develop", "-c"],
@@ -265,8 +265,8 @@ describe("by change implement", () => {
       expect(result.status).toBe(0);
       expect(launchInput).toMatchObject({
         changeId: change.change.id,
-        herdrName: taskSlugForId(publicTaskId(taskId)),
-        piSessionName: `${taskId} Record cancellation reasons`,
+        hostSessionName: taskSlugForId(publicTaskId(taskId)),
+        agentSessionName: `${taskId} Record cancellation reasons`,
       });
     }),
   );

@@ -1,19 +1,17 @@
 import { cpSync, symlinkSync, writeFileSync } from "node:fs";
-import { Effect } from "effect";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { Effect } from "effect";
 import { expect, onTestFinished } from "vitest";
-
-import { createTestWorkspace } from "./testWorkspace.js";
-import { runTestProcess } from "./testProcess.js";
-
-import { runCli, type CliResult } from "../../src/cli.js";
-import type { InteractiveSessionHost } from "../../src/change/interactiveSessionHost.js";
-import type { CancellationUseCases } from "../../src/change/cancelChange.js";
 import type { ReviewerAgentRuntime } from "../../src/agent/reviewerAgentRuntime.js";
+import type { CancellationUseCases } from "../../src/change/cancelChange.js";
+import type { InteractiveSessionHost } from "../../src/change/interactiveSession/interactiveSessionHost.js";
+import type { TextInputStdin } from "../../src/cli/input/textInput.js";
+import { type CliResult, runCli } from "../../src/cli.js";
 import { serializeOutput } from "../../src/output/serialize.js";
 import type { TaskUseCases } from "../../src/task/taskUseCases.js";
-import type { TextInputStdin } from "../../src/cli/input/textInput.js";
+import { runTestProcess } from "./testProcess.js";
+import { createTestWorkspace } from "./testWorkspace.js";
 
 export const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 export const byExecutable = join(repoRoot, "bin/by");

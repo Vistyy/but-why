@@ -17,9 +17,12 @@ The source hierarchy follows these owners:
 
 - `src/task/` owns Task records, lifecycle rules, identity, persistence interfaces, files, and composition.
 - `src/change/` owns Change records, Candidates, Candidate capture, Validation Runs, validation phases, publication, submission, and composition.
+- `src/change/interactiveSession/` owns Interactive Session launch preparation and host execution, including configuration resolution, resource validation, prompt construction, session naming, host invocation, and launch-result production. `ChangeUseCases.implement` retains Change lookup and open-state validation and delegates to `launchInteractiveImplementer.ts`. `InteractiveSessionHost` remains the only injected Interactive Session seam and `loadChangeUseCases.ts` selects `herdrInteractiveSessionHost.ts` as the default and only supported host.
+- `src/change/packageAssetPath.ts` owns package-asset resolution and remains in its current location.
 - `src/agent/` owns reviewer-agent execution Adapters and Agent Profile resolution.
 - `src/cliCommandTree.ts` owns the Effect CLI command tree, routing, syntax, and generated help.
 - `src/cli/` owns command Adapters, and `src/cli.ts` owns the executable entry boundary.
+- `src/cli/change/implementerPromptFile.ts` owns Implementer Prompt file input handling and `src/cli/change/implementResult.ts` owns Change Implement result rendering.
 - `src/contracts/` owns configuration, output, and shared error contracts.
 - `src/init/` owns Local Repository initialization and repository-context Adapters.
 - `src/output/` owns structured output codecs and serializers.

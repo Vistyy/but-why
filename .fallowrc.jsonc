@@ -88,7 +88,7 @@
         "name": "adapters",
         "patterns": [
           "src/change/changeStartGit.ts",
-          "src/change/herdrInteractiveSessionHost.ts",
+          "src/change/interactiveSession/herdrInteractiveSessionHost.ts",
           "src/change/localChangeCleanupGit.ts",
           "src/change/candidateCapture/localGitCandidate.ts",
           "src/change/publication/localCandidatePublicationGit.ts",

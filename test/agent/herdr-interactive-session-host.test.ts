@@ -2,11 +2,11 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 import {
+  type HerdrCommandExecutor,
   herdrSessionName,
   openHerdrInteractiveSessionHost,
   trustedContinuationExtensionPath,
-  type HerdrCommandExecutor,
-} from "../../src/change/herdrInteractiveSessionHost.js";
+} from "../../src/change/interactiveSession/herdrInteractiveSessionHost.js";
 
 const unavailableHerdr: HerdrCommandExecutor = async () => ({
   ok: false,
@@ -62,8 +62,8 @@ describe("Herdr Interactive Session Host", () => {
     await expect(
       openHerdrInteractiveSessionHost(execute).launch({
         changeId: "change-123",
-        herdrName: "BY-41",
-        piSessionName: "BY-41 Name Interactive Sessions",
+        hostSessionName: "BY-41",
+        agentSessionName: "BY-41 Name Interactive Sessions",
         repositoryPath: "/repository",
         worktreePath: "/workspace/change-123",
         initialPrompt: "Implement",
@@ -382,8 +382,8 @@ describe("Herdr Interactive Session Host", () => {
     await expect(
       openHerdrInteractiveSessionHost(execute).launch({
         changeId: "change-123",
-        herdrName: sessionName,
-        piSessionName: "BY-41 Name Interactive Sessions",
+        hostSessionName: sessionName,
+        agentSessionName: "BY-41 Name Interactive Sessions",
         repositoryPath: "/repository",
         worktreePath: "/workspace/change-123",
         initialPrompt: undefined,
