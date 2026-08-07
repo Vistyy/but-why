@@ -166,6 +166,44 @@ describe("Herdr Interactive Session Host", () => {
     expect(commands).toEqual([["agent", "list"]]);
   });
 
+  it("does not start when another unknown agent occupies the Managed Worktree", async () => {
+    const commands: string[][] = [];
+    const execute: HerdrCommandExecutor = async (args) => {
+      commands.push([...args]);
+      return {
+        ok: true,
+        stdout:
+          '{"result":{"type":"agent_list","agents":[{"name":"other-session","cwd":"/workspace/change-123","pane_id":"pane-2","agent_status":"unknown"}]}}',
+      };
+    };
+
+    await expect(openHerdrInteractiveSessionHost(execute).launch(input)).resolves.toMatchObject({
+      ok: false,
+      code: "launch_indeterminate",
+    });
+    expect(commands).toEqual([["agent", "list"]]);
+  });
+
+  it("does not prompt after a definite native start failure", async () => {
+    const commands: string[][] = [];
+    const execute: HerdrCommandExecutor = async (args) => {
+      commands.push([...args]);
+      if (args[0] === "agent" && args[1] === "list") return emptyAgents();
+      if (args[0] === "worktree") return openedWorktree();
+      if (args[0] === "agent" && args[1] === "start") {
+        return { ok: false, message: "agent pane is not available" };
+      }
+      return { ok: false, message: "unexpected Herdr command" };
+    };
+
+    await expect(openHerdrInteractiveSessionHost(execute).launch(input)).resolves.toMatchObject({
+      ok: false,
+      code: "launch_failed",
+    });
+    expect(commands.at(-1)?.slice(0, 2)).toEqual(["agent", "start"]);
+    expect(commands.some((args) => args[0] === "agent" && args[1] === "prompt")).toBe(false);
+  });
+
   it("observes an uncertain native start and never retries it", async () => {
     const commands: string[][] = [];
     const execute: HerdrCommandExecutor = async (args) => {

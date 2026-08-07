@@ -130,7 +130,10 @@ const launchHerdrSession = async (
   if (hasActiveSession(existing.stdout, input, sessionName)) {
     return { ok: true, host: "herdr", status: "already_active" };
   }
-  if (hasUnknownSession(existing.stdout, input, sessionName)) {
+  if (
+    hasUnknownSession(existing.stdout, input, sessionName) ||
+    hasUnknownAgentInWorktree(existing.stdout, input)
+  ) {
     return launchIndeterminate("Herdr could not determine the existing session state.");
   }
 
@@ -180,7 +183,10 @@ const launchHerdrSession = async (
   if (hasActiveSession(beforeStart.stdout, input, sessionName)) {
     return { ok: true, host: "herdr", status: "already_active" };
   }
-  if (hasUnknownSession(beforeStart.stdout, input, sessionName)) {
+  if (
+    hasUnknownSession(beforeStart.stdout, input, sessionName) ||
+    hasUnknownAgentInWorktree(beforeStart.stdout, input)
+  ) {
     return launchIndeterminate("Herdr could not determine the existing session state.");
   }
   if (hasActiveAgentInWorktree(beforeStart.stdout, input)) {
@@ -202,6 +208,8 @@ const launchHerdrSession = async (
   ];
   const started = await command(startArgs, signal);
   const startConfirmed = started.ok && isConfirmedAgentStart(started.stdout);
+  if (!started.ok && !isUncertainMutationFailure(started.message))
+    return launchFailure(started.message);
   if (!startConfirmed) {
     const afterStart = await observe(
       command,
@@ -217,8 +225,6 @@ const launchHerdrSession = async (
         return launchIndeterminate("Herdr reported an unknown state after native agent start.");
       }
     }
-    if (!started.ok && !isUncertainMutationFailure(started.message))
-      return launchFailure(started.message);
     return launchIndeterminate(
       started.ok
         ? "Herdr did not confirm that native Pi startup reached readiness."
@@ -434,6 +440,20 @@ const findSession = (
           agent.cwd === input.worktreePath,
       ) as JsonRecord | undefined)
     : undefined;
+};
+
+const hasUnknownAgentInWorktree = (
+  source: string,
+  input: InteractiveSessionLaunchInput,
+): boolean => {
+  const result = herdrResult(source);
+  return (
+    Array.isArray(result?.agents) &&
+    result.agents.some(
+      (agent: unknown) =>
+        isRecord(agent) && agent.cwd === input.worktreePath && agent.agent_status === "unknown",
+    )
+  );
 };
 
 const hasActiveAgentInWorktree = (

@@ -175,8 +175,19 @@ exit 1
       isolatedHome,
     });
     expect(implement.status, `${implement.stdout}${implement.stderr}`).toBe(0);
+    const startArgs = readFileSync(`${env.BY_FAKE_CAPTURE}.args`, "utf8");
     const extension = join(installedPackage, "extensions/continue-change.ts");
-    expect(readFileSync(`${env.BY_FAKE_CAPTURE}.args`, "utf8")).toContain(extension);
+    const commandGuidance = join(
+      installedPackage,
+      "docs/public/skills/but-why/references/command-guidance.md",
+    );
+    const implementationInstructions = join(
+      installedPackage,
+      "docs/public/skills/but-why/references/implement-change.md",
+    );
+    expect(startArgs).toContain(extension);
+    expect(startArgs).toContain(commandGuidance);
+    expect(startArgs).toContain(implementationInstructions);
     expect(readFileSync(env.BY_FAKE_CAPTURE, "utf8")).toContain("Change identity:");
 
     writeFileSync(extension, "export default 42;\n");
