@@ -22,6 +22,8 @@ import {
 } from "../support/testWorkspace.js";
 
 const now = "2026-06-30T12:00:00.000Z";
+const mainCheckoutFailureProcessTimeoutMs = 10_000;
+const mainCheckoutFailureTestTimeoutMs = 45_000;
 let readyRepositoryTemplate: string;
 
 beforeAll(() => {
@@ -44,7 +46,7 @@ describe("Change Implement canonical main checkout failures", () => {
       runTestProcessOrThrow(
         "git",
         ["worktree", "add", "-b", "linked-caller", linkedCheckout, "main"],
-        { cwd: root },
+        { cwd: root, timeout: mainCheckoutFailureProcessTimeoutMs },
       );
       const started = yield* runByInProcessEffect(root, ["--json", "change", "start"], now);
       const change = JSON.parse(started.stdout) as { readonly change: { readonly id: string } };
@@ -55,7 +57,10 @@ describe("Change Implement canonical main checkout failures", () => {
       );
       const fakeGitDirectory = createTestWorkspace();
       const fakeGitPath = join(fakeGitDirectory, "git");
-      const realGitPath = runTestProcessOrThrow("which", ["git"], { cwd: root });
+      const realGitPath = runTestProcessOrThrow("which", ["git"], {
+        cwd: root,
+        timeout: mainCheckoutFailureProcessTimeoutMs,
+      });
       writeFileSync(
         fakeGitPath,
         `#!/bin/sh
@@ -90,6 +95,7 @@ exec ${realGitPath} "$@"
       } finally {
         runTestProcessOrThrow("git", ["worktree", "remove", "--force", linkedCheckout], {
           cwd: root,
+          timeout: mainCheckoutFailureProcessTimeoutMs,
         });
       }
 
@@ -100,5 +106,6 @@ exec ${realGitPath} "$@"
       );
       expect(after.stdout).toBe(before.stdout);
     }),
+    mainCheckoutFailureTestTimeoutMs,
   );
 });

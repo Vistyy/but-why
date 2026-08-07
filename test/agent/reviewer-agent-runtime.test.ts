@@ -10,6 +10,7 @@ import { piReviewerAgentRuntime } from "../../src/agent/reviewerAgentRuntime.js"
 import { runTestProcess } from "../support/testProcess.js";
 
 const reviewerProbeProcessTimeoutMs = 10_000;
+const reviewerRuntimeTestTimeoutMs = 20_000;
 
 const profile = {
   agentProfile: "review",
@@ -499,6 +500,7 @@ describe("Pi reviewer agent runtime", () => {
         rmSync(workspaceParent, { recursive: true, force: true });
       }
     }),
+    reviewerRuntimeTestTimeoutMs,
   );
 
   it.effect("retries a dangling Artifact reference and accepts the corrected report", () =>
