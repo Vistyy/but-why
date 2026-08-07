@@ -74,7 +74,7 @@ export const implementResult = (result: ChangeImplementResult): CliResult => {
       help: ["Use an open Change ID returned by `by change start --json`."],
     });
   }
-  if (result.code === "agent_environment_invalid") {
+  if (result.code === "repo_config_invalid") {
     return runtimeError({
       code: result.code,
       message: result.message,

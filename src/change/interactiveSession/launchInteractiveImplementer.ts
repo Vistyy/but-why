@@ -30,7 +30,7 @@ export type ChangeImplementResult =
         | "host_unavailable"
         | "launch_failed"
         | "launch_indeterminate"
-        | "agent_environment_invalid"
+        | "repo_config_invalid"
         | "agent_profile_invalid";
       readonly message: string;
     }
@@ -49,7 +49,7 @@ export const launchInteractiveImplementer = (input: {
     if (!managedRepoConfig.ok) {
       return {
         ok: false as const,
-        code: "agent_environment_invalid" as const,
+        code: "repo_config_invalid" as const,
         message: `Managed Worktree Repo Config is invalid: ${managedRepoConfig.error.message}`,
         change,
       };

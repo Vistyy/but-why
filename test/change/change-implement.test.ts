@@ -529,7 +529,7 @@ describe("by change implement", () => {
 
       expect(result.status).toBe(1);
       expect(JSON.parse(result.stdout)).toMatchObject({
-        error: { code: "agent_environment_invalid" },
+        error: { code: "repo_config_invalid" },
       });
       expect(launches).toBe(0);
     }),
