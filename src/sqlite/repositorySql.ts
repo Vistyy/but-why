@@ -150,7 +150,8 @@ export const repositorySqlLayer = (
         );
       yield* ensureRepositoryIdentity(sql, config.commonDirectory).pipe(
         Effect.mapError((cause) =>
-          cause instanceof RepositoryIdentityConflict
+          cause instanceof RepositoryIdentityConflict ||
+          cause instanceof RepositoryPersistedDataInvalid
             ? cause
             : new RepositorySqlOperationFailed({
                 operationName: "validate repository identity",

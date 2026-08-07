@@ -175,7 +175,9 @@ const listTasks = (sql: SqlClient.SqlClient, input: ListTasksInput) =>
           `;
     const orderedRows = yield* orderTaskRows(rows, "list Tasks");
     const selectedRows = limit === -1 ? orderedRows : orderedRows.slice(0, limit);
-    const tasks = yield* Effect.forEach(selectedRows, (row) => rowToTaskSummary(sql, row));
+    const tasks = yield* Effect.forEach(selectedRows, (row) =>
+      rowToTaskSummary(sql, row, "list Tasks"),
+    );
     return {
       tasks,
       total: yield* countTasks(sql, input),
@@ -246,7 +248,9 @@ const listActionableTasks = (sql: SqlClient.SqlClient) =>
       WHERE state IN ('new', 'todo')
     `;
     const orderedRows = yield* orderActionableTaskRows(rows, "list actionable Tasks");
-    return yield* Effect.forEach(orderedRows, (row) => rowToTaskSummary(sql, row));
+    return yield* Effect.forEach(orderedRows, (row) =>
+      rowToTaskSummary(sql, row, "list actionable Tasks"),
+    );
   });
 
 const getTaskById = (sql: SqlClient.SqlClient, taskId: PublicTaskId) =>

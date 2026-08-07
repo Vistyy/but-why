@@ -277,42 +277,18 @@ const listBlockers = (sql: SqlClient.SqlClient, changeId: string) =>
   Effect.gen(function* () {
     const exists = yield* sql`SELECT id FROM changes WHERE id = ${changeId}`;
     if (exists.length === 0) return undefined;
-    const rows = yield* sql<
-      ImplementationBlockerRow & {
-        readonly resolutionId: string | null;
-        readonly resolutionRecordedAt: string | null;
-        readonly resolutionContent: string | null;
-      }
-    >`SELECT sequence, id, change_id AS changeId, reported_at AS reportedAt, content, resolved_at AS resolvedAt, resolution_id AS resolutionId, resolution_recorded_at AS resolutionRecordedAt, resolution_content AS resolutionContent FROM implementation_blockers WHERE change_id = ${changeId} ORDER BY sequence`;
+    const rows = yield* sql<ImplementationBlockerWithResolutionRow>`
+      SELECT sequence, id, change_id AS changeId, reported_at AS reportedAt, content,
+        resolved_at AS resolvedAt, resolution_id AS resolutionId,
+        resolution_recorded_at AS resolutionRecordedAt, resolution_content AS resolutionContent
+      FROM implementation_blockers
+      WHERE change_id = ${changeId}
+    `;
     const blockers = yield* Effect.try({
       try: () =>
         rows.map((row) => {
           const blocker = mapBlocker(row);
-          const resolutionValues = [
-            row.resolutionId,
-            row.resolutionRecordedAt,
-            row.resolutionContent,
-          ];
-          if (resolutionValues.every((value) => value === null))
-            return { ...blocker, resolution: null };
-          if (resolutionValues.some((value) => value === null)) {
-            throw new Error("Stored Implementation Blocker Resolution is incomplete");
-          }
-          return {
-            ...blocker,
-            resolution: {
-              id: requiredString(row.resolutionId, "Implementation Blocker Resolution ID"),
-              blockerId: blocker.id,
-              recordedAt: requiredString(
-                row.resolutionRecordedAt,
-                "Implementation Blocker Resolution timestamp",
-              ),
-              content: requiredString(
-                row.resolutionContent,
-                "Implementation Blocker Resolution content",
-              ),
-            },
-          };
+          return { ...blocker, resolution: decodeBlockerResolution(row, blocker) };
         }),
       catch: (cause) =>
         new RepositoryPersistedDataInvalid({
@@ -328,6 +304,28 @@ const listBlockers = (sql: SqlClient.SqlClient, changeId: string) =>
       active: blockers.find((blocker) => blocker.resolvedAt === null) ?? null,
     } satisfies ImplementationBlockerHistory;
   });
+
+const decodeBlockerResolution = (
+  row: ImplementationBlockerWithResolutionRow,
+  blocker: ImplementationBlocker,
+): ImplementationBlocker["resolution"] => {
+  const resolutionValues = [row.resolutionId, row.resolutionRecordedAt, row.resolutionContent];
+  const hasResolution = resolutionValues.some((value) => value !== null);
+  if ((row.resolvedAt !== null) !== hasResolution)
+    throw new Error("Stored Implementation Blocker resolution lifecycle is inconsistent");
+  if (!hasResolution) return null;
+  if (resolutionValues.some((value) => value === null))
+    throw new Error("Stored Implementation Blocker Resolution is incomplete");
+  return {
+    id: requiredString(row.resolutionId, "Implementation Blocker Resolution ID"),
+    blockerId: blocker.id,
+    recordedAt: requiredString(
+      row.resolutionRecordedAt,
+      "Implementation Blocker Resolution timestamp",
+    ),
+    content: requiredString(row.resolutionContent, "Implementation Blocker Resolution content"),
+  };
+};
 
 const mapBlocker = (row: ImplementationBlockerRow): ImplementationBlocker => ({
   id: requiredString(row.id, "Implementation Blocker ID"),
@@ -355,6 +353,11 @@ type ImplementationBlockerRow = {
   readonly reportedAt: unknown;
   readonly content: unknown;
   readonly resolvedAt: unknown;
+};
+type ImplementationBlockerWithResolutionRow = ImplementationBlockerRow & {
+  readonly resolutionId: unknown;
+  readonly resolutionRecordedAt: unknown;
+  readonly resolutionContent: unknown;
 };
 
 const getById = (sql: SqlClient.SqlClient, changeId: string) =>
@@ -798,8 +801,14 @@ const mapRow = (row: ChangeRow | undefined, operationName: string, sql: SqlClien
     ? Effect.succeed(undefined)
     : Effect.gen(function* () {
         const decisions = yield* listDecisions(sql, row.id, operationName);
-        const activeRows =
-          yield* sql<ImplementationBlockerRow>`SELECT sequence, id, change_id AS changeId, reported_at AS reportedAt, content, resolved_at AS resolvedAt FROM implementation_blockers WHERE change_id = ${row.id} AND resolved_at IS NULL LIMIT 1`;
+        const activeRows = yield* sql<ImplementationBlockerWithResolutionRow>`
+          SELECT sequence, id, change_id AS changeId, reported_at AS reportedAt, content,
+            resolved_at AS resolvedAt, resolution_id AS resolutionId,
+            resolution_recorded_at AS resolutionRecordedAt, resolution_content AS resolutionContent
+          FROM implementation_blockers
+          WHERE change_id = ${row.id} AND resolved_at IS NULL
+          LIMIT 1
+        `;
         return yield* Effect.try({
           try: (): ChangeRecord => {
             const state = decodeChangeState(row.state);
@@ -847,7 +856,14 @@ const mapRow = (row: ChangeRow | undefined, operationName: string, sql: SqlClien
               publication: decodeSqliteChangePublication(row),
               cleanup: decodeChangeCleanup(row.cleanupState, row.cleanupBlockingReason),
               state,
-              activeBlocker: activeRows[0] === undefined ? null : mapBlocker(activeRows[0]),
+              activeBlocker:
+                activeRows[0] === undefined
+                  ? null
+                  : (() => {
+                      const blocker = mapBlocker(activeRows[0]);
+                      decodeBlockerResolution(activeRows[0], blocker);
+                      return blocker;
+                    })(),
               closeReason,
               cancelReason:
                 row.cancelReason === null
