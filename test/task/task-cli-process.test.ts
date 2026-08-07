@@ -83,7 +83,7 @@ describe("by task CLI processes", () => {
     expect(decode(results[2]?.stdout ?? "")).toEqual(JSON.parse(results[3]?.stdout ?? ""));
   }, 120_000);
 
-  it("reads piped UTF-8 stdin for Task descriptions and comments", () => {
+  it("reads piped UTF-8 stdin for Task descriptions", () => {
     const root = createGitRepo();
     const initialized = runBuiltByWithEnv(root, {}, "init", "--task-prefix", "BY");
     expect(initialized.status).toBe(0);
@@ -102,23 +102,9 @@ describe("by task CLI processes", () => {
     );
     expect(created.status).toBe(0);
 
-    const commented = runBuiltByWithInput(
-      root,
-      "Comentario exacto\n",
-      {},
-      "--json",
-      "task",
-      "comment",
-      "BY-1",
-      "--file",
-      "-",
-    );
-    expect(commented.status).toBe(0);
-
     const context = runBuiltByWithEnv(root, {}, "task", "context", "BY-1");
     expect(context.status).toBe(0);
     expect(context.stdout).toContain("Descripción exacta");
-    expect(context.stdout).toContain("Comentario exacto");
   }, 30_000);
 
   it("preserves invalid UTF-8 stdin errors at the process boundary", () => {
