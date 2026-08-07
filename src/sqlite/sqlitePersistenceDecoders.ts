@@ -13,7 +13,7 @@ import { isTaskState, type TaskState } from "../task/lifecycle.js";
 
 type RecordValue = Record<string, unknown>;
 
-export const isRecord = (value: unknown): value is RecordValue =>
+const isRecord = (value: unknown): value is RecordValue =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
 const get = (record: RecordValue, key: string): unknown => record[key];

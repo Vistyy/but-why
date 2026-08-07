@@ -1251,7 +1251,10 @@ const setTaskState = (root: string, id: string, state: TaskState, updatedAt: str
           "set Task fixture state",
           (sql) => sql`
           UPDATE tasks
-          SET state = ${state}, updated_at = ${updatedAt}
+          SET
+            state = ${state},
+            cancel_reason = ${state === "cancelled" ? "fixture cancellation" : null},
+            updated_at = ${updatedAt}
           WHERE id = ${id}
         `,
         ),

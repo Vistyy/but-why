@@ -423,6 +423,8 @@ const isAgentPaneBusyFailure = (message: string): boolean => {
 
 type JsonRecord = Record<string, unknown> & {
   readonly type?: unknown;
+  readonly error?: unknown;
+  readonly code?: unknown;
   readonly terminal_id?: unknown;
   readonly result?: unknown;
   readonly agents?: unknown;

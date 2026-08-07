@@ -29,7 +29,12 @@ it.scoped("preserves terminal Task policy", () => {
         yield* repository.operation(
           "set terminal Task fixture state",
           (sql) => sql`
-            UPDATE tasks SET state = ${state}, updated_at = ${secondNow} WHERE id = ${taskId}
+            UPDATE tasks
+            SET
+              state = ${state},
+              cancel_reason = ${state === "cancelled" ? "fixture cancellation" : null},
+              updated_at = ${secondNow}
+            WHERE id = ${taskId}
           `,
         );
         const contextBefore = yield* tasks.getTaskContextById(taskId);
