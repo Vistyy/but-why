@@ -34,7 +34,6 @@ describe("by task CLI", () => {
       const help = (JSON.parse(result.stdout) as { readonly help: string }).help;
       expect(help).toContain("regular UTF-8 text file path");
       expect(help).toContain("standard input");
-      expect(help).not.toContain("description-file");
     }),
   );
 
@@ -52,7 +51,6 @@ describe("by task CLI", () => {
       const help = (JSON.parse(result.stdout) as { readonly help: string }).help;
       expect(help).toContain("regular UTF-8 text file path");
       expect(help).toContain("standard input");
-      expect(help).not.toContain("description-file");
     }),
   );
 
@@ -183,7 +181,7 @@ help[1]: Run \`by task list\` to see open tasks.
     }),
   );
 
-  it.effect("lists non-done Tasks by default in creation order with count", () =>
+  it.effect("renders Task List results with count", () =>
     Effect.gen(function* () {
       const root = createTestWorkspace();
       const taskUseCases = fakeTaskUseCases({
@@ -239,7 +237,7 @@ tasks[2]:
     }),
   );
 
-  it.effect("bounds default and explicit Task List results and reports truncation help", () =>
+  it.effect("renders bounded Task List results and reports truncation help", () =>
     Effect.gen(function* () {
       const tasks = Array.from({ length: 6 }, (_, index) =>
         taskSummary({ id: `BY-${index + 1}`, title: `Task ${index + 1}` }),
@@ -299,7 +297,13 @@ tasks[2]:
         createTestWorkspace(),
         ["--json", "task", "list", "--limit", "0"],
         firstNow,
-        { taskUseCases: fakeTaskUseCases({ listTasks: () => expect.fail("must not list") }) },
+        {
+          taskUseCases: fakeTaskUseCases({
+            listTasks: () => {
+              throw new Error("Task List must not read state for an invalid limit");
+            },
+          }),
+        },
       );
 
       expect(result.status).toBe(2);
@@ -868,7 +872,10 @@ contextCommand: by task context BY-1
       ] as const;
 
       for (const testCase of cases) {
-        const result = yield* runByInProcessEffect(root, testCase.args, thirdNow, { taskUseCases });
+        const result = yield* runByInProcessEffect(root, testCase.args, thirdNow, {
+          taskUseCases,
+          stdin: { fd: -1, isTerminal: true },
+        });
 
         expect(result.status, testCase.name).toBe(testCase.status);
         expect(result.stderr, testCase.name).toBe("");

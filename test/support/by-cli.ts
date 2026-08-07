@@ -2,7 +2,7 @@ import { cpSync, symlinkSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Effect } from "effect";
-import { expect, onTestFinished } from "vitest";
+import { onTestFinished } from "vitest";
 import type { ReviewerAgentRuntime } from "../../src/agent/reviewerAgentRuntime.js";
 import type { CancellationUseCases } from "../../src/change/cancelChange.js";
 import type { InteractiveSessionHost } from "../../src/change/interactiveSession/interactiveSessionHost.js";
@@ -151,11 +151,7 @@ const runByInProcessEffectRaw = (
 export const runByInProcessEffect = runByInProcessEffectRaw;
 
 export const createGitRepo = (root = createTestWorkspace()) => {
-  const result = runTestProcess("git", ["init", "-q"], { cwd: root });
-
-  expect(result.status).toBe(0);
-  expect(result.stderr).toBe("");
-
+  runGit(root, "init", "-q");
   return root;
 };
 
@@ -174,5 +170,12 @@ export const commitButWhyConfigAndRecordDefault = (root: string): void => {
 
 const runGit = (cwd: string, ...args: readonly string[]): void => {
   const result = runTestProcess("git", args, { cwd });
-  expect(result.status, result.stderr).toBe(0);
+  const command = `git ${args.join(" ")}`;
+  if (result.error !== undefined) throw result.error;
+  if (result.status !== 0) {
+    throw new Error(
+      `${command} failed with exit code ${result.status}: ${result.stderr || result.stdout}`,
+    );
+  }
+  if (result.stderr !== "") throw new Error(`${command} wrote to stderr: ${result.stderr}`);
 };

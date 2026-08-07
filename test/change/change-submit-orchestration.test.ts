@@ -174,7 +174,7 @@ describe("Change Submit orchestration", () => {
     }),
   );
 
-  it.effect("publishes a Candidate when a current preparation failure is recorded", () =>
+  it.effect("publishes a Candidate without rerunning a recorded preparation failure", () =>
     Effect.gen(function* () {
       const events: string[] = [];
       const change = readyChange({

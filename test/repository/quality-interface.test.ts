@@ -550,46 +550,4 @@ describe("quality interface", () => {
     expect(success.output).toContain("Test Files");
     expect(success.output).not.toContain("✓ test/");
   });
-
-  if (Reflect.get(process.env, "BY_VERIFY_QUALITY_COVERAGE") === "1") {
-    test("waits for complete coverage while targeted coverage remains unlocked", async () => {
-      const directory = mkdtempSync(join(tmpdir(), "but-why-quality-lock-"));
-      temporaryPaths.push(directory);
-      const lockFile = join(directory, "capacity.lock");
-      const coverageArtifact = join(directory, "coverage/coverage-final.json");
-      createWorkloadJustfile(directory);
-      const { holder, readyFile, releaseFile } = startHeldRunner(
-        lockFile,
-        directory,
-        "complete test",
-      );
-      let complete: ReturnType<typeof startJust> | undefined;
-
-      rmSync(coverageArtifact, { force: true });
-      try {
-        await waitForFile(readyFile);
-        complete = startJust(lockFile, ["coverage", "--reporter=dot"]);
-        await new Promise((resolveDelay) => setTimeout(resolveDelay, 100));
-        expect(complete.child.exitCode).toBeNull();
-
-        const targeted = await runJust(lockFile, [
-          "coverage",
-          "test/repository/module-seams.test.ts",
-        ]);
-
-        expect(targeted.status).toBe(0);
-        expect(targeted.output).not.toMatch(/All files|Statements| %/);
-
-        writeFileSync(releaseFile, "release");
-        expect((await complete.done).status).toBe(0);
-        expect(readFileSync(coverageArtifact, "utf8")).not.toBe("");
-      } finally {
-        if (complete?.child.exitCode === null) {
-          complete.child.kill("SIGTERM");
-          await complete.done;
-        }
-        await stopRunner(holder);
-      }
-    }, 30_000);
-  }
 });

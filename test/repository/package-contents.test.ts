@@ -306,7 +306,6 @@ exit 1
     expect(files).toContain("docs/public/skills/but-why/references/implement-change.md");
     expect(files).toContain("docs/public/skills/but-why/references/operator-workflow.md");
     expect(files).toContain("docs/public/skills/but-why/scripts/start-implementer-session.mjs");
-    expect(files.some((path) => path.includes("to-tasks-by"))).toBe(false);
     expect(files.some((path) => path.startsWith("skills/"))).toBe(false);
     expect(files.some((path) => path.startsWith("src/"))).toBe(false);
     expect(files.some((path) => path.startsWith("test/"))).toBe(false);

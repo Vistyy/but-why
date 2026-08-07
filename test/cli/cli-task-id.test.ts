@@ -1,25 +1,26 @@
-import { describe, expect, it } from "vitest";
+import { expect, it } from "@effect/vitest";
+import { Effect } from "effect";
+import { describe } from "vitest";
 
-import { parseCliTaskIdArg } from "../../src/cliTaskId.js";
+import { runByInProcessEffect } from "../support/by-cli.js";
+import { createTestWorkspace } from "../support/testWorkspace.js";
 
-const parse = (args: readonly string[]) =>
-  parseCliTaskIdArg(args, {
-    missingHelp: "Run `by task show <task-id>`.",
-    extraHelp: "Run `by task show <task-id>`.",
-  });
+describe("CLI Task ID boundary", () => {
+  it.effect("rejects an overlong Task ID at the CLI boundary", () =>
+    Effect.gen(function* () {
+      const taskId = "A".repeat(257);
+      const result = yield* runByInProcessEffect(createTestWorkspace(), [
+        "--json",
+        "task",
+        "show",
+        taskId,
+      ]);
 
-describe("CLI Task ID arguments", () => {
-  it.each([
-    ["missing", [], "missing_task_id"],
-    ["leading whitespace", [" BY-1"], "invalid_task_id"],
-    ["line break", ["BY-1\n"], "invalid_task_id"],
-    ["control character", ["BY-\u00001"], "invalid_task_id"],
-  ] as const)("rejects %s Task IDs", (_name, args, code) => {
-    const result = parse(args);
-
-    expect(result).toMatchObject({
-      ok: false,
-      result: { exitCode: 2, stdout: { error: { code } } },
-    });
-  });
+      expect(result.status).toBe(2);
+      expect(result.stderr).toBe("");
+      expect(JSON.parse(result.stdout)).toMatchObject({
+        error: { code: "invalid_task_id" },
+      });
+    }),
+  );
 });

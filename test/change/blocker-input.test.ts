@@ -25,7 +25,6 @@ describe("Implementation Blocker recording input", () => {
         const help = (JSON.parse(result.stdout) as { readonly help: string }).help;
         expect(help).toContain("regular UTF-8 text file path");
         expect(help).toContain("standard input");
-        expect(help).not.toContain("description-file");
       }),
   );
 

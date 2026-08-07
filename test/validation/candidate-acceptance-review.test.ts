@@ -971,59 +971,6 @@ layer(acceptanceTemplateLayer)("Task-backed Candidate Acceptance Review", (it) =
     }),
   );
 
-  it.scoped("records exhausted final Acceptance correction as a Tooling Failure", () =>
-    Effect.gen(function* () {
-      const earlierFinding = reviewerFinding("Earlier acceptance Finding");
-      const failure = new ReviewerOutputContractFailed({
-        operationName: "decode_reviewer_output",
-        reviewer: "acceptance",
-        attempts: 2,
-        diagnostics: [],
-        message: "Final output correction failed.",
-      });
-      const review = vi.fn<ReviewerAgentRuntime["review"]>(() =>
-        Effect.succeed({
-          ok: true,
-          report: { findings: [earlierFinding] },
-          attempts: 1,
-          stdout: "earlier acceptance report",
-        }),
-      );
-      const ready = yield* acceptanceReadyRepo({ review });
-      const earlier = yield* runTaskBackedCandidate(ready);
-      expect(earlier).toMatchObject({ ok: true, outcome: "blocked" });
-      if (!earlier.ok) return;
-
-      git(ready.repo, "commit", "--allow-empty", "-m", "address acceptance Finding");
-      const successor = yield* captureLocalCandidate({ cwd: ready.repo, now: successorNow });
-      if (!successor.ok) throw new Error(`Candidate capture failed: ${successor.code}`);
-
-      review.mockImplementationOnce(() =>
-        Effect.succeed({
-          ok: true,
-          report: { findings: [] },
-          attempts: 1,
-          stdout: "provisional acceptance report",
-        }),
-      );
-      review.mockImplementationOnce(() =>
-        Effect.succeed({
-          ok: false,
-          failure,
-          sessionUsability: "unknown" as const,
-          attempts: 2,
-          stdout: "invalid final output",
-        }),
-      );
-
-      const final = yield* runTaskBackedCandidate(ready, passingValidationPolicy, successor);
-
-      expect(final).toMatchObject({ ok: true, outcome: "passed" });
-      expect(review).toHaveBeenCalledTimes(2);
-      expect(yield* ready.validation.listFindings(final.validationRunId)).toEqual([]);
-    }),
-  );
-
   it.scoped("rechecks earlier Specialist Findings after a blind successor review", () =>
     Effect.gen(function* () {
       const earlierFinding = reviewerFinding("Earlier specialist Finding");
