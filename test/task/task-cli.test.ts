@@ -316,7 +316,7 @@ tasks[2]:
     }),
   );
 
-  it.effect("lists Tasks as compact JSON when selected after the command", () =>
+  it.effect("serializes Task List summaries as compact JSON", () =>
     Effect.gen(function* () {
       const result = yield* runByInProcessEffect(
         createTestWorkspace(),
@@ -324,7 +324,7 @@ tasks[2]:
         firstNow,
         {
           taskUseCases: fakeTaskUseCases({
-            listTasks: () => ({ tasks: listedTasks, total: listedTasks.length }),
+            listTasks: () => ({ tasks: compactJsonTasks, total: compactJsonTasks.length }),
           }),
         },
       );
@@ -336,7 +336,7 @@ tasks[2]:
       expect(JSON.parse(result.stdout)).toEqual({
         count: 2,
         total: 2,
-        tasks: listedTasks.map(({ startable: _startable, ...task }) => ({
+        tasks: compactJsonTasks.map(({ startable: _startable, ...task }) => ({
           ...task,
           change: null,
         })),
@@ -351,7 +351,7 @@ tasks[2]:
       const taskUseCases = fakeTaskUseCases({
         listTasks: (input) => {
           inputs.push(input);
-          return { tasks: listedTasks, total: listedTasks.length };
+          return { tasks: compactJsonTasks, total: compactJsonTasks.length };
         },
       });
 
@@ -1194,7 +1194,7 @@ const taskRecord = (overrides: Partial<TaskRecord> = {}): TaskRecord => ({
   ...overrides,
 });
 
-const listedTasks: readonly TaskSummary[] = [
+const compactJsonTasks: readonly TaskSummary[] = [
   taskSummary(),
   taskSummary({
     id: "BY-2",
