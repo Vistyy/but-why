@@ -4,7 +4,6 @@
     "src/main.ts",
     "extensions/**/*.ts",
     "docs/public/skills/but-why/scripts/start-implementer-session.mjs",
-    "scripts/cli-loading-benchmark.mjs",
     "test/**/*.ts"
   ],
   "ignoreDependencies": [
