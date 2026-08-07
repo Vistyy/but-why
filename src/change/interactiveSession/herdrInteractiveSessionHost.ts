@@ -1,7 +1,8 @@
+import { randomUUID } from "node:crypto";
 import { statSync } from "node:fs";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { createJiti } from "jiti/static";
 import { prependAgentEnvironment, shellQuote } from "../../agent/agentEnvironment.js";
 import { piResourceFlags } from "../../agent/piRuntime.js";
@@ -43,12 +44,142 @@ const defaultOptions = {
   observationRetries: 2,
 } as const;
 
+type PiLaunchScript = {
+  readonly path: string;
+  readonly cleanup: () => Promise<void>;
+};
+
+const pendingUncertainLaunchScripts = new Set<PiLaunchScript>();
+
+const flushPendingUncertainLaunchScripts = async (): Promise<void> => {
+  if (pendingUncertainLaunchScripts.size === 0) return;
+  const pending = [...pendingUncertainLaunchScripts];
+  pendingUncertainLaunchScripts.clear();
+  await Promise.all(pending.map((script) => script.cleanup()));
+};
+
+const pendingLaunchRegistryDir = (): string => join(tmpdir(), "but-why-pending-pi-launches");
+
+type PendingLaunchRecord = {
+  readonly dir: string;
+  readonly createdAt: number;
+  readonly retentionMs: number;
+};
+
+const retainUncertainLaunchScript = (script: PiLaunchScript, options: ResolvedOptions): void => {
+  pendingUncertainLaunchScripts.add(script);
+  void recordPendingLaunchForCrossProcessPrune(script.path, options).catch(() => undefined);
+  const deferredMs = options.readinessTimeoutMs + options.commandTimeoutMs + 1000;
+  const timer = setTimeout(() => {
+    if (pendingUncertainLaunchScripts.has(script)) {
+      pendingUncertainLaunchScripts.delete(script);
+      void script.cleanup();
+    }
+  }, deferredMs);
+  timer.unref?.();
+};
+
+const recordPendingLaunchForCrossProcessPrune = async (
+  scriptPath: string,
+  options: ResolvedOptions,
+): Promise<void> => {
+  const dir = dirname(scriptPath);
+  const record: PendingLaunchRecord = {
+    dir,
+    createdAt: Date.now(),
+    retentionMs: options.readinessTimeoutMs + options.commandTimeoutMs + 1000,
+  };
+  const registryDir = pendingLaunchRegistryDir();
+  try {
+    await mkdir(registryDir, { recursive: true });
+    const entryPath = join(registryDir, `${randomUUID()}.json`);
+    await writeFile(entryPath, JSON.stringify(record), "utf8");
+  } catch {}
+};
+
+const isValidLaunchArtifactDir = (dir: string): boolean => {
+  const tmp = tmpdir();
+  return dirname(dir) === tmp && basename(dir).startsWith("but-why-pi-launch-");
+};
+
+const pruneStaleFilesystemLaunchArtifacts = async (): Promise<void> => {
+  const registryDir = pendingLaunchRegistryDir();
+  let entries: string[];
+  try {
+    entries = await readdir(registryDir);
+  } catch {
+    return;
+  }
+  const now = Date.now();
+  await Promise.all(
+    entries.map(async (entry) => {
+      if (!entry.endsWith(".json")) return;
+      const entryPath = join(registryDir, entry);
+      let raw: string;
+      try {
+        raw = await readFile(entryPath, "utf8");
+      } catch {
+        return;
+      }
+      let record: PendingLaunchRecord;
+      try {
+        const parsed = JSON.parse(raw) as unknown;
+        if (
+          typeof (parsed as PendingLaunchRecord).dir === "string" &&
+          typeof (parsed as PendingLaunchRecord).createdAt === "number" &&
+          typeof (parsed as PendingLaunchRecord).retentionMs === "number"
+        ) {
+          record = parsed as PendingLaunchRecord;
+        } else {
+          try {
+            await rm(entryPath, { force: true });
+          } catch {}
+          return;
+        }
+      } catch {
+        try {
+          await rm(entryPath, { force: true });
+        } catch {}
+        return;
+      }
+      if (!isValidLaunchArtifactDir(record.dir)) {
+        try {
+          await rm(entryPath, { force: true });
+        } catch {}
+        return;
+      }
+      const isStale = now - record.createdAt > record.retentionMs;
+      if (!isStale) return;
+      try {
+        await rm(record.dir, { recursive: true, force: true });
+      } catch {}
+      try {
+        await rm(entryPath, { force: true });
+      } catch {}
+    }),
+  );
+  try {
+    const remaining = await readdir(registryDir);
+    if (remaining.length === 0) await rm(registryDir, { recursive: true, force: true });
+  } catch {}
+};
+
 export const openHerdrInteractiveSessionHost = (
   execute: HerdrCommandExecutor = executeHerdr,
   environment: HerdrInteractiveSessionHostOptions = {},
 ): InteractiveSessionHost => ({
   launch: async (input, signal) => launchHerdrSession(execute, input, environment, signal),
 });
+
+export const flushHerdrLaunchArtifactsForTesting = async (): Promise<void> => {
+  await flushPendingUncertainLaunchScripts();
+  try {
+    await rm(pendingLaunchRegistryDir(), { recursive: true, force: true });
+  } catch {}
+};
+
+export const pendingHerdrLaunchArtifactsForTesting = (): number =>
+  pendingUncertainLaunchScripts.size;
 
 export const herdrSessionName = (changeId: string): string => `but-why-${changeId}`;
 
@@ -87,6 +218,8 @@ const launchHerdrSession = async (
   environment: HerdrInteractiveSessionHostOptions,
   signal: AbortSignal | undefined,
 ): Promise<InteractiveSessionLaunchResult> => {
+  await pruneStaleFilesystemLaunchArtifacts();
+  await flushPendingUncertainLaunchScripts();
   const options = { ...defaultOptions, ...environment };
   const continuationExtension = trustedContinuationExtensionPath();
   const continuationPreflight = await preflightTrustedExtension(continuationExtension);
@@ -254,6 +387,7 @@ const launchInOpenedWorktree = async (
     return launchFailure("Another Interactive Session is already active in this worktree.");
   }
 
+  await flushPendingUncertainLaunchScripts();
   let launchScript: PiLaunchScript;
   try {
     launchScript = await createPiLaunchScript(piCommand(input, path, continuationExtension));
@@ -272,12 +406,15 @@ const launchInOpenedWorktree = async (
     const observed = isUncertainMutationFailure(launched.message)
       ? await waitForAgent(execute, input, sessionName, opened.rootPaneId, signal, options, "named")
       : ({ kind: "absent" } as const);
-    if (
-      !isUncertainMutationFailure(launched.message) ||
-      observed.kind === "ready" ||
-      observed.kind === "exited"
-    ) {
+    const isUncertain = isUncertainMutationFailure(launched.message);
+    const shouldRetainForLateExecution =
+      isUncertain && observed.kind !== "ready" && observed.kind !== "exited";
+    if (!shouldRetainForLateExecution) {
       await launchScript.cleanup();
+    } else if (!opened.alreadyOpen && observed.kind === "absent") {
+      // Retain until after workspace close determines late execution is impossible.
+    } else {
+      retainUncertainLaunchScript(launchScript, options);
     }
     if (observed.kind === "ready") {
       return {
@@ -289,6 +426,12 @@ const launchInOpenedWorktree = async (
     const evidence = await launchEvidence(execute, opened.rootPaneId, signal);
     if (!opened.alreadyOpen && observed.kind === "absent") {
       await closeWorkspace(execute, opened.workspaceId, signal);
+      if (shouldRetainForLateExecution) {
+        if (pendingUncertainLaunchScripts.has(launchScript)) {
+          pendingUncertainLaunchScripts.delete(launchScript);
+        }
+        await launchScript.cleanup();
+      }
     }
     return observed.kind === "malformed"
       ? launchIndeterminate(observed.message, evidence)
@@ -299,7 +442,7 @@ const launchInOpenedWorktree = async (
               : "Pi exited during startup.",
             evidence,
           )
-        : isUncertainMutationFailure(launched.message)
+        : isUncertain
           ? launchIndeterminate(
               `Herdr did not confirm whether Pi started: ${launched.message}`,
               evidence,
@@ -316,9 +459,7 @@ const launchInOpenedWorktree = async (
     options,
     "detected",
   );
-  if (detected.kind === "ready" || detected.kind === "exited") {
-    await launchScript.cleanup();
-  }
+  await launchScript.cleanup();
   if (detected.kind !== "ready") {
     const evidence = await launchEvidence(execute, opened.rootPaneId, signal);
     return detected.kind === "exited"
@@ -628,11 +769,6 @@ const launchEvidence = async (
         ...(startupOutput === undefined ? {} : { startupOutput }),
         ...(exitEvidence === undefined ? {} : { exitEvidence }),
       };
-};
-
-type PiLaunchScript = {
-  readonly path: string;
-  readonly cleanup: () => Promise<void>;
 };
 
 const createPiLaunchScript = async (command: string): Promise<PiLaunchScript> => {

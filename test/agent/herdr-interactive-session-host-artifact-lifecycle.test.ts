@@ -1,0 +1,634 @@
+import { existsSync, readFileSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { dirname, join } from "node:path";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+
+import {
+  flushHerdrLaunchArtifactsForTesting,
+  type HerdrCommandExecutor,
+  openHerdrInteractiveSessionHost,
+  pendingHerdrLaunchArtifactsForTesting,
+} from "../../src/change/interactiveSession/herdrInteractiveSessionHost.js";
+
+const readPiLaunchScriptPath = (command: string | undefined): string | undefined => {
+  const match = /^exec '([^']+)'$/.exec(command ?? "");
+  return match?.[1];
+};
+
+const captureLaunchScripts = (): {
+  paths: string[];
+  dirs: string[];
+  track: (path: string | undefined) => void;
+  cleanup: () => void;
+} => {
+  const paths: string[] = [];
+  const dirs: string[] = [];
+  return {
+    paths,
+    dirs,
+    track: (path) => {
+      if (path === undefined) return;
+      paths.push(path);
+      dirs.push(dirname(path));
+    },
+    cleanup: () => {
+      for (const dir of dirs) rmSync(dir, { recursive: true, force: true });
+      paths.length = 0;
+      dirs.length = 0;
+    },
+  };
+};
+
+describe("Herdr Interactive Session Host artifact lifecycle", () => {
+  beforeEach(async () => {
+    await flushHerdrLaunchArtifactsForTesting();
+  });
+
+  afterEach(async () => {
+    await flushHerdrLaunchArtifactsForTesting();
+  });
+
+  it("removes the launch script after a successful start and preserves the structured result", async () => {
+    const capture = captureLaunchScripts();
+    let launchScriptContent = "";
+    const execute: HerdrCommandExecutor = async (args) => {
+      if (args[0] === "pane" && args[1] === "run") {
+        const scriptPath = readPiLaunchScriptPath(args[3]);
+        capture.track(scriptPath);
+        if (scriptPath !== undefined && existsSync(scriptPath)) {
+          launchScriptContent = readFileSync(scriptPath, "utf8");
+        }
+      }
+      if (args[0] === "agent" && args[1] === "list") {
+        return capture.paths.length > 0
+          ? {
+              ok: true,
+              stdout:
+                '{"result":{"type":"agent_list","agents":[{"name":"but-why-change-123","cwd":"/workspace/change-123","pane_id":"workspace-1:pane-1","agent_status":"working"}]}}',
+            }
+          : { ok: true, stdout: '{"result":{"type":"agent_list","agents":[]}}' };
+      }
+      if (args[0] === "worktree") {
+        return {
+          ok: true,
+          stdout:
+            '{"result":{"type":"worktree_opened","workspace":{"workspace_id":"workspace-1"},"root_pane":{"pane_id":"workspace-1:pane-1"},"already_open":false}}',
+        };
+      }
+      if (args[0] === "agent" && args[1] === "rename") {
+        return {
+          ok: true,
+          stdout:
+            '{"result":{"agent":{"name":"but-why-change-123","pane_id":"workspace-1:pane-1","cwd":"/workspace/change-123"}}}',
+        };
+      }
+      return { ok: true, stdout: "{}" };
+    };
+
+    const result = await openHerdrInteractiveSessionHost(execute).launch({
+      changeId: "change-123",
+      repositoryPath: "/repository",
+      worktreePath: "/workspace/change-123",
+      initialPrompt: "Implement",
+    });
+
+    expect(result).toEqual({ ok: true, host: "herdr", status: "started" });
+    expect(launchScriptContent).toContain("exec pi");
+    expect(capture.paths).toHaveLength(1);
+    expect(existsSync(capture.paths[0] as string)).toBe(false);
+    expect(pendingHerdrLaunchArtifactsForTesting()).toBe(0);
+    capture.cleanup();
+  });
+
+  it("removes the launch script after a deterministic pane failure without hiding the failure", async () => {
+    const capture = captureLaunchScripts();
+    const failingExecute: HerdrCommandExecutor = async (args) => {
+      if (args[0] === "pane" && args[1] === "run") {
+        capture.track(readPiLaunchScriptPath(args[3]));
+        return { ok: false, message: "pane unavailable" };
+      }
+      if (args[0] === "agent" && args[1] === "list") {
+        return { ok: true, stdout: '{"result":{"type":"agent_list","agents":[]}}' };
+      }
+      if (args[0] === "worktree") {
+        return {
+          ok: true,
+          stdout:
+            '{"result":{"type":"worktree_opened","workspace":{"workspace_id":"workspace-1"},"root_pane":{"pane_id":"workspace-1:pane-1"},"already_open":false}}',
+        };
+      }
+      if (args[0] === "workspace" && args[1] === "close") return { ok: true, stdout: "{}" };
+      if (args[0] === "pane" && args[1] === "read") return { ok: true, stdout: "" };
+      if (args[0] === "pane" && args[1] === "process-info") return { ok: true, stdout: "" };
+      return { ok: true, stdout: "{}" };
+    };
+
+    const result = await openHerdrInteractiveSessionHost(failingExecute).launch({
+      changeId: "change-123",
+      repositoryPath: "/repository",
+      worktreePath: "/workspace/change-123",
+      initialPrompt: undefined,
+    });
+
+    expect(result).toMatchObject({ ok: false, code: "launch_failed" });
+    expect(capture.paths).toHaveLength(1);
+    expect(existsSync(capture.paths[0] as string)).toBe(false);
+    expect(pendingHerdrLaunchArtifactsForTesting()).toBe(0);
+    capture.cleanup();
+  });
+
+  it("removes the launch script after a readiness failure and keeps diagnostic evidence", async () => {
+    const capture = captureLaunchScripts();
+    const execute: HerdrCommandExecutor = async (args) => {
+      if (args[0] === "pane" && args[1] === "run") {
+        capture.track(readPiLaunchScriptPath(args[3]));
+        return { ok: true, stdout: "{}" };
+      }
+      if (args[0] === "agent" && args[1] === "list") {
+        return { ok: true, stdout: '{"result":{"type":"agent_list","agents":[]}}' };
+      }
+      if (args[0] === "worktree") {
+        return {
+          ok: true,
+          stdout:
+            '{"result":{"type":"worktree_opened","workspace":{"workspace_id":"workspace-1"},"root_pane":{"pane_id":"workspace-1:pane-1"},"already_open":false}}',
+        };
+      }
+      if (args[0] === "pane" && args[1] === "read") {
+        return { ok: true, stdout: "Starting Pi" };
+      }
+      if (args[0] === "pane" && args[1] === "process-info") {
+        return { ok: true, stdout: '{"result":{"processes":[{"name":"pi"}]}}' };
+      }
+      return { ok: true, stdout: "{}" };
+    };
+
+    const result = await openHerdrInteractiveSessionHost(execute, {
+      readinessTimeoutMs: 5,
+      readinessPollMs: 1,
+    }).launch({
+      changeId: "change-123",
+      repositoryPath: "/repository",
+      worktreePath: "/workspace/change-123",
+      initialPrompt: undefined,
+    });
+
+    expect(result).toMatchObject({ ok: false, code: "launch_indeterminate" });
+    expect(
+      (result as { ok: false; evidence?: { startupOutput?: string } }).evidence?.startupOutput,
+    ).toBe("Starting Pi");
+    expect(capture.paths).toHaveLength(1);
+    expect(existsSync(capture.paths[0] as string)).toBe(false);
+    expect(pendingHerdrLaunchArtifactsForTesting()).toBe(0);
+    capture.cleanup();
+  });
+
+  it("retains the launch script while a late uncertain pane run can still consume it, then releases via explicit route", async () => {
+    const capture = captureLaunchScripts();
+    const execute: HerdrCommandExecutor = async (args) => {
+      if (args[0] === "pane" && args[1] === "run") {
+        capture.track(readPiLaunchScriptPath(args[3]));
+        return { ok: false, message: "response lost" };
+      }
+      if (args[0] === "agent" && args[1] === "list") {
+        return { ok: true, stdout: '{"result":{"type":"agent_list","agents":[]}}' };
+      }
+      if (args[0] === "worktree") {
+        return {
+          ok: true,
+          stdout:
+            '{"result":{"type":"worktree_opened","workspace":{"workspace_id":"workspace-1"},"root_pane":{"pane_id":"workspace-1:pane-1"},"already_open":true}}',
+        };
+      }
+      if (args[0] === "pane" && args[1] === "read") return { ok: true, stdout: "" };
+      if (args[0] === "pane" && args[1] === "process-info") return { ok: true, stdout: "" };
+      return { ok: true, stdout: "{}" };
+    };
+
+    const host = openHerdrInteractiveSessionHost(execute, {
+      readinessTimeoutMs: 5,
+      readinessPollMs: 1,
+    });
+
+    const result = await host.launch({
+      changeId: "change-123",
+      repositoryPath: "/repository",
+      worktreePath: "/workspace/change-123",
+      initialPrompt: undefined,
+    });
+
+    expect(result).toMatchObject({ ok: false, code: "launch_indeterminate" });
+    expect(capture.paths).toHaveLength(1);
+    expect(existsSync(capture.paths[0] as string)).toBe(true);
+    expect(pendingHerdrLaunchArtifactsForTesting()).toBe(1);
+
+    await flushHerdrLaunchArtifactsForTesting();
+    expect(existsSync(capture.paths[0] as string)).toBe(false);
+    expect(pendingHerdrLaunchArtifactsForTesting()).toBe(0);
+    capture.cleanup();
+  });
+
+  it("cleans the uncertain artifact after workspace close when late execution can no longer consume it", async () => {
+    const capture = captureLaunchScripts();
+    const closedWorkspaces: string[][] = [];
+    const execute: HerdrCommandExecutor = async (args) => {
+      if (args[0] === "pane" && args[1] === "run") {
+        capture.track(readPiLaunchScriptPath(args[3]));
+        return { ok: false, message: "timed out" };
+      }
+      if (args[0] === "agent" && args[1] === "list") {
+        return { ok: true, stdout: '{"result":{"type":"agent_list","agents":[]}}' };
+      }
+      if (args[0] === "worktree") {
+        return {
+          ok: true,
+          stdout:
+            '{"result":{"type":"worktree_opened","workspace":{"workspace_id":"workspace-1"},"root_pane":{"pane_id":"workspace-1:pane-1"},"already_open":false}}',
+        };
+      }
+      if (args[0] === "workspace" && args[1] === "close") {
+        closedWorkspaces.push([...args]);
+        return { ok: true, stdout: "{}" };
+      }
+      if (args[0] === "pane" && args[1] === "read") return { ok: true, stdout: "" };
+      if (args[0] === "pane" && args[1] === "process-info") return { ok: true, stdout: "" };
+      return { ok: true, stdout: "{}" };
+    };
+
+    const result = await openHerdrInteractiveSessionHost(execute, {
+      readinessTimeoutMs: 5,
+      readinessPollMs: 1,
+    }).launch({
+      changeId: "change-123",
+      repositoryPath: "/repository",
+      worktreePath: "/workspace/change-123",
+      initialPrompt: undefined,
+    });
+
+    expect(result).toMatchObject({ ok: false });
+    expect(closedWorkspaces).toContainEqual(["workspace", "close", "workspace-1"]);
+    expect(capture.paths).toHaveLength(1);
+    expect(existsSync(capture.paths[0] as string)).toBe(false);
+    expect(pendingHerdrLaunchArtifactsForTesting()).toBe(0);
+    capture.cleanup();
+  });
+
+  it("does not accumulate obsolete artifacts across repeated uncertain attempts", async () => {
+    const capture = captureLaunchScripts();
+    const execute: HerdrCommandExecutor = async (args) => {
+      if (args[0] === "pane" && args[1] === "run") {
+        const p = readPiLaunchScriptPath(args[3]);
+        capture.track(p);
+        return { ok: false, message: "connection reset" };
+      }
+      if (args[0] === "agent" && args[1] === "list") {
+        return { ok: true, stdout: '{"result":{"type":"agent_list","agents":[]}}' };
+      }
+      if (args[0] === "worktree") {
+        return {
+          ok: true,
+          stdout:
+            '{"result":{"type":"worktree_opened","workspace":{"workspace_id":"workspace-1"},"root_pane":{"pane_id":"workspace-1:pane-1"},"already_open":true}}',
+        };
+      }
+      if (args[0] === "pane" && args[1] === "read") return { ok: true, stdout: "" };
+      if (args[0] === "pane" && args[1] === "process-info") return { ok: true, stdout: "" };
+      return { ok: true, stdout: "{}" };
+    };
+
+    const host = openHerdrInteractiveSessionHost(execute, {
+      readinessTimeoutMs: 5,
+      readinessPollMs: 1,
+    });
+
+    const first = await host.launch({
+      changeId: "change-123",
+      repositoryPath: "/repository",
+      worktreePath: "/workspace/change-123",
+      initialPrompt: undefined,
+    });
+    expect(first.ok).toBe(false);
+    expect(capture.paths).toHaveLength(1);
+    const firstPath = capture.paths[0] as string;
+    expect(existsSync(firstPath)).toBe(true);
+    expect(pendingHerdrLaunchArtifactsForTesting()).toBe(1);
+
+    const second = await host.launch({
+      changeId: "change-123",
+      repositoryPath: "/repository",
+      worktreePath: "/workspace/change-123",
+      initialPrompt: undefined,
+    });
+    expect(second.ok).toBe(false);
+    expect(capture.paths).toHaveLength(2);
+    const secondPath = capture.paths[1] as string;
+    expect(existsSync(firstPath)).toBe(false);
+    expect(existsSync(secondPath)).toBe(true);
+    expect(pendingHerdrLaunchArtifactsForTesting()).toBe(1);
+
+    await flushHerdrLaunchArtifactsForTesting();
+    expect(existsSync(secondPath)).toBe(false);
+    expect(pendingHerdrLaunchArtifactsForTesting()).toBe(0);
+    capture.cleanup();
+  });
+
+  it("distinguishes temporary launch artifacts from intentionally retained diagnostics", async () => {
+    const capture = captureLaunchScripts();
+    const execute: HerdrCommandExecutor = async (args) => {
+      if (args[0] === "pane" && args[1] === "run") {
+        capture.track(readPiLaunchScriptPath(args[3]));
+        return { ok: true, stdout: "{}" };
+      }
+      if (args[0] === "agent" && args[1] === "list") {
+        return { ok: true, stdout: '{"result":{"type":"agent_list","agents":[]}}' };
+      }
+      if (args[0] === "worktree") {
+        return {
+          ok: true,
+          stdout:
+            '{"result":{"type":"worktree_opened","workspace":{"workspace_id":"workspace-1"},"root_pane":{"pane_id":"workspace-1:pane-1"},"already_open":false}}',
+        };
+      }
+      if (args[0] === "pane" && args[1] === "read") {
+        return { ok: true, stdout: "diagnostic startup log" };
+      }
+      if (args[0] === "pane" && args[1] === "process-info") {
+        return { ok: true, stdout: "exit code 1" };
+      }
+      return { ok: true, stdout: "{}" };
+    };
+
+    const result = await openHerdrInteractiveSessionHost(execute, {
+      readinessTimeoutMs: 5,
+      readinessPollMs: 1,
+    }).launch({
+      changeId: "change-123",
+      repositoryPath: "/repository",
+      worktreePath: "/workspace/change-123",
+      initialPrompt: undefined,
+    });
+
+    expect(result).toMatchObject({
+      ok: false,
+      code: "launch_indeterminate",
+      evidence: { startupOutput: "diagnostic startup log", exitEvidence: "exit code 1" },
+    });
+    expect(capture.paths).toHaveLength(1);
+    expect(existsSync(capture.paths[0] as string)).toBe(false);
+    expect(pendingHerdrLaunchArtifactsForTesting()).toBe(0);
+    capture.cleanup();
+  });
+
+  it("preserves Herdr launch inputs and classifications when cleanup succeeds", async () => {
+    const commands: string[][] = [];
+    let launchScript = "";
+    const execute: HerdrCommandExecutor = async (args) => {
+      commands.push([...args]);
+      if (args[0] === "pane" && args[1] === "run") {
+        const p = readPiLaunchScriptPath(args[3]);
+        if (p) launchScript = readFileSync(p, "utf8");
+      }
+      if (args[0] === "agent" && args[1] === "list") {
+        return commands.some(([c, o]) => c === "pane" && o === "run")
+          ? {
+              ok: true,
+              stdout:
+                '{"result":{"type":"agent_list","agents":[{"name":"but-why-change-123","cwd":"/workspace/change-123","pane_id":"workspace-1:pane-1","agent_status":"working"}]}}',
+            }
+          : { ok: true, stdout: '{"result":{"type":"agent_list","agents":[]}}' };
+      }
+      if (args[0] === "worktree") {
+        return {
+          ok: true,
+          stdout:
+            '{"result":{"type":"worktree_opened","workspace":{"workspace_id":"workspace-1"},"root_pane":{"pane_id":"workspace-1:pane-1"},"already_open":false}}',
+        };
+      }
+      if (args[0] === "agent" && args[1] === "rename") {
+        return {
+          ok: true,
+          stdout:
+            '{"result":{"agent":{"name":"but-why-change-123","pane_id":"workspace-1:pane-1","cwd":"/workspace/change-123"}}}',
+        };
+      }
+      return { ok: true, stdout: "{}" };
+    };
+
+    const result = await openHerdrInteractiveSessionHost(execute).launch({
+      changeId: "change-123",
+      repositoryPath: "/repository",
+      worktreePath: "/workspace/change-123",
+      systemPrompt: "system",
+      initialPrompt: "prompt",
+    });
+
+    expect(result).toEqual({ ok: true, host: "herdr", status: "started" });
+    expect(commands.map((c) => c.slice(0, 3))).toEqual([
+      ["agent", "list"],
+      ["worktree", "open", "--cwd"],
+      ["agent", "list"],
+      ["pane", "run", "workspace-1:pane-1"],
+      ["agent", "list"],
+      ["agent", "rename", "workspace-1:pane-1"],
+    ]);
+    expect(launchScript).toContain("system");
+    expect(launchScript).toContain("prompt");
+    await flushHerdrLaunchArtifactsForTesting();
+  });
+
+  it("cross-process prune removes stale retained artifacts after retention window", async () => {
+    const registryDir = join(tmpdir(), "but-why-pending-pi-launches");
+    const staleDir = mkdtempSync(join(tmpdir(), "but-why-pi-launch-"));
+    writeFileSync(join(staleDir, "launch.sh"), "#!/bin/sh\necho stale\n");
+    const freshDir = mkdtempSync(join(tmpdir(), "but-why-pi-launch-"));
+    writeFileSync(join(freshDir, "launch.sh"), "#!/bin/sh\necho fresh\n");
+    mkdirSync(registryDir, { recursive: true });
+    const staleRecord = {
+      dir: staleDir,
+      createdAt: Date.now() - 20_000,
+      retentionMs: 1000,
+    };
+    const freshRecord = {
+      dir: freshDir,
+      createdAt: Date.now(),
+      retentionMs: 60_000,
+    };
+    writeFileSync(join(registryDir, "stale.json"), JSON.stringify(staleRecord));
+    writeFileSync(join(registryDir, "fresh.json"), JSON.stringify(freshRecord));
+    const execute: HerdrCommandExecutor = async (args) => {
+      if (args[0] === "agent" && args[1] === "list") {
+        return { ok: true, stdout: '{"result":{"type":"agent_list","agents":[]}}' };
+      }
+      if (args[0] === "worktree") {
+        return {
+          ok: true,
+          stdout:
+            '{"result":{"type":"worktree_opened","workspace":{"workspace_id":"workspace-1"},"root_pane":{"pane_id":"workspace-1:pane-1"},"already_open":false}}',
+        };
+      }
+      if (args[0] === "pane" && args[1] === "run") return { ok: true, stdout: "{}" };
+      if (args[0] === "agent" && args[1] === "rename") {
+        return {
+          ok: true,
+          stdout:
+            '{"result":{"agent":{"name":"but-why-change-123","pane_id":"workspace-1:pane-1","cwd":"/workspace/change-123"}}}',
+        };
+      }
+      if (args[0] === "pane" && args[1] === "read") return { ok: true, stdout: "" };
+      if (args[0] === "pane" && args[1] === "process-info") return { ok: true, stdout: "" };
+      return { ok: true, stdout: "{}" };
+    };
+    let launched = false;
+    const countingExecute: HerdrCommandExecutor = async (args) => {
+      if (args[0] === "pane" && args[1] === "run") launched = true;
+      const result = await execute(args);
+      if (args[0] === "agent" && args[1] === "list" && launched) {
+        return {
+          ok: true,
+          stdout:
+            '{"result":{"type":"agent_list","agents":[{"name":"but-why-change-123","cwd":"/workspace/change-123","pane_id":"workspace-1:pane-1","agent_status":"working"}]}}',
+        };
+      }
+      return result;
+    };
+    await openHerdrInteractiveSessionHost(countingExecute, {
+      readinessTimeoutMs: 5,
+      readinessPollMs: 1,
+    }).launch({
+      changeId: "change-123",
+      repositoryPath: "/repository",
+      worktreePath: "/workspace/change-123",
+      initialPrompt: undefined,
+    });
+    expect(existsSync(staleDir)).toBe(false);
+    expect(existsSync(join(registryDir, "stale.json"))).toBe(false);
+    expect(existsSync(freshDir)).toBe(true);
+    expect(existsSync(join(registryDir, "fresh.json"))).toBe(true);
+    rmSync(freshDir, { recursive: true, force: true });
+    rmSync(join(registryDir, "fresh.json"), { force: true });
+    await flushHerdrLaunchArtifactsForTesting();
+  });
+
+  it("cross-process prune leaves fresh retained artifacts within window", async () => {
+    const registryDir = join(tmpdir(), "but-why-pending-pi-launches");
+    const freshDir = mkdtempSync(join(tmpdir(), "but-why-pi-launch-"));
+    writeFileSync(join(freshDir, "launch.sh"), "#!/bin/sh\necho fresh\n");
+    mkdirSync(registryDir, { recursive: true });
+    const freshRecord = {
+      dir: freshDir,
+      createdAt: Date.now(),
+      retentionMs: 60_000,
+    };
+    writeFileSync(join(registryDir, "fresh2.json"), JSON.stringify(freshRecord));
+    const execute: HerdrCommandExecutor = async (args) => {
+      if (args[0] === "agent" && args[1] === "list") {
+        return { ok: true, stdout: '{"result":{"type":"agent_list","agents":[]}}' };
+      }
+      if (args[0] === "worktree") {
+        return {
+          ok: true,
+          stdout:
+            '{"result":{"type":"worktree_opened","workspace":{"workspace_id":"workspace-1"},"root_pane":{"pane_id":"workspace-1:pane-1"},"already_open":false}}',
+        };
+      }
+      if (args[0] === "pane" && args[1] === "run") return { ok: true, stdout: "{}" };
+      if (args[0] === "agent" && args[1] === "rename") {
+        return {
+          ok: true,
+          stdout:
+            '{"result":{"agent":{"name":"but-why-change-123","pane_id":"workspace-1:pane-1","cwd":"/workspace/change-123"}}}',
+        };
+      }
+      return { ok: true, stdout: "{}" };
+    };
+    let launched = false;
+    const countingExecute: HerdrCommandExecutor = async (args) => {
+      if (args[0] === "pane" && args[1] === "run") launched = true;
+      const result = await execute(args);
+      if (args[0] === "agent" && args[1] === "list" && launched) {
+        return {
+          ok: true,
+          stdout:
+            '{"result":{"type":"agent_list","agents":[{"name":"but-why-change-123","cwd":"/workspace/change-123","pane_id":"workspace-1:pane-1","agent_status":"working"}]}}',
+        };
+      }
+      return result;
+    };
+    await openHerdrInteractiveSessionHost(countingExecute, {
+      readinessTimeoutMs: 5,
+      readinessPollMs: 1,
+    }).launch({
+      changeId: "change-123",
+      repositoryPath: "/repository",
+      worktreePath: "/workspace/change-123",
+      initialPrompt: undefined,
+    });
+    expect(existsSync(freshDir)).toBe(true);
+    expect(existsSync(join(registryDir, "fresh2.json"))).toBe(true);
+    rmSync(freshDir, { recursive: true, force: true });
+    rmSync(join(registryDir, "fresh2.json"), { force: true });
+    await flushHerdrLaunchArtifactsForTesting();
+  });
+
+  it("cross-process prune does not delete non-artifact directories", async () => {
+    const registryDir = join(tmpdir(), "but-why-pending-pi-launches");
+    const victimDir = mkdtempSync(join(tmpdir(), "victim-dir-"));
+    writeFileSync(join(victimDir, "sentinel.txt"), "do not delete");
+    mkdirSync(registryDir, { recursive: true });
+    const victimRecord = {
+      dir: victimDir,
+      createdAt: 0,
+      retentionMs: 0,
+    };
+    writeFileSync(join(registryDir, "victim.json"), JSON.stringify(victimRecord));
+    const execute: HerdrCommandExecutor = async (args) => {
+      if (args[0] === "agent" && args[1] === "list") {
+        return { ok: true, stdout: '{"result":{"type":"agent_list","agents":[]}}' };
+      }
+      if (args[0] === "worktree") {
+        return {
+          ok: true,
+          stdout:
+            '{"result":{"type":"worktree_opened","workspace":{"workspace_id":"workspace-1"},"root_pane":{"pane_id":"workspace-1:pane-1"},"already_open":false}}',
+        };
+      }
+      if (args[0] === "pane" && args[1] === "run") return { ok: true, stdout: "{}" };
+      if (args[0] === "agent" && args[1] === "rename") {
+        return {
+          ok: true,
+          stdout:
+            '{"result":{"agent":{"name":"but-why-change-123","pane_id":"workspace-1:pane-1","cwd":"/workspace/change-123"}}}',
+        };
+      }
+      return { ok: true, stdout: "{}" };
+    };
+    let launched = false;
+    const countingExecute: HerdrCommandExecutor = async (args) => {
+      if (args[0] === "pane" && args[1] === "run") launched = true;
+      const result = await execute(args);
+      if (args[0] === "agent" && args[1] === "list" && launched) {
+        return {
+          ok: true,
+          stdout:
+            '{"result":{"type":"agent_list","agents":[{"name":"but-why-change-123","cwd":"/workspace/change-123","pane_id":"workspace-1:pane-1","agent_status":"working"}]}}',
+        };
+      }
+      return result;
+    };
+    await openHerdrInteractiveSessionHost(countingExecute, {
+      readinessTimeoutMs: 5,
+      readinessPollMs: 1,
+    }).launch({
+      changeId: "change-123",
+      repositoryPath: "/repository",
+      worktreePath: "/workspace/change-123",
+      initialPrompt: undefined,
+    });
+    expect(existsSync(victimDir)).toBe(true);
+    expect(existsSync(join(victimDir, "sentinel.txt"))).toBe(true);
+    expect(existsSync(join(registryDir, "victim.json"))).toBe(false);
+    rmSync(victimDir, { recursive: true, force: true });
+    await flushHerdrLaunchArtifactsForTesting();
+  });
+});
