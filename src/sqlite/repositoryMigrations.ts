@@ -23,6 +23,7 @@ import { removeCandidatePublicationsMigration as removeCandidatePublications } f
 import { reviewerTranscriptsMigration as reviewerTranscripts } from "./migrations/0021_reviewer_transcripts.js";
 import { changeCancelReasonMigration as changeCancelReason } from "./migrations/0022_change_cancel_reason.js";
 import { restrictLifecycleStatesMigration as restrictLifecycleStates } from "./migrations/0023_restrict_lifecycle_states.js";
+import { removeTaskCommentsMigration as removeTaskComments } from "./migrations/0024_remove_task_comments.js";
 
 export const migrateRepositoryState = Migrator.make({})({
   loader: Migrator.fromRecord({
@@ -49,5 +50,6 @@ export const migrateRepositoryState = Migrator.make({})({
     "0021_reviewer_transcripts": reviewerTranscripts,
     "0022_change_cancel_reason": changeCancelReason,
     "0023_restrict_lifecycle_states": restrictLifecycleStates,
+    "0024_remove_task_comments": removeTaskComments,
   }),
 });

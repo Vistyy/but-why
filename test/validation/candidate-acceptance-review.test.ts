@@ -81,7 +81,6 @@ const acceptanceContext = Object.freeze({
   version: 1 as const,
   title: "Keep the exact intent",
   description: "Review the Candidate against this immutable context.",
-  comments: Object.freeze(["Do not infer intent from mutable Task state."]),
 }) satisfies AcceptanceContextSnapshotV1;
 
 const acceptancePolicy = {

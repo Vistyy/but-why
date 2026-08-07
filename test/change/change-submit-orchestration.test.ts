@@ -604,7 +604,6 @@ describe("Change Submit orchestration", () => {
           version: 1,
           title: "Approved intent",
           description: "Deliver it",
-          comments: [],
         },
         implementationDecisions: [
           {
@@ -699,7 +698,6 @@ describe("Change Submit orchestration", () => {
           version: 1,
           title: "Approved intent",
           description: "Deliver it",
-          comments: [],
         },
       });
       const submit = openChangeSubmit(
@@ -907,7 +905,6 @@ describe("Change Submit orchestration", () => {
           version: 1,
           title: "Approved intent",
           description: "Deliver it",
-          comments: [],
         },
         publication: {
           candidateId: "published-candidate",
@@ -1256,7 +1253,6 @@ describe("Change Submit orchestration", () => {
               version: 1,
               title: "Approved intent",
               description: "Deliver it",
-              comments: [],
             },
           }),
           acceptanceContextSupplied: true,
@@ -1326,7 +1322,6 @@ describe("Change Submit orchestration", () => {
                 version: 1,
                 title: "Approved intent",
                 description: "Deliver it",
-                comments: [],
               },
             }),
             acceptanceContextSupplied: true,
@@ -1463,7 +1458,6 @@ describe("Change Submit orchestration", () => {
           version: 1,
           title: "Approved intent",
           description: "Deliver it",
-          comments: [],
         },
       });
       const submit = openChangeSubmit(
@@ -1506,7 +1500,6 @@ describe("Change Submit orchestration", () => {
           version: 1,
           title: "Approved intent",
           description: "Deliver it",
-          comments: [],
         },
       });
       const submit = openChangeSubmit(

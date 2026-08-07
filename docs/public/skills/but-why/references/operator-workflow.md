@@ -142,7 +142,6 @@ by task approve <task-id>
 by task context <task-id>
 by task context draft <task-id>
 by task context apply <task-id>
-by task comment <task-id> --file <path|->
 by task cancel <task-id> --reason <reason>
 by change start [--task <task-id>] [--base <branch>]
 by change prepare [<change-id>]

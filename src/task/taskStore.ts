@@ -70,31 +70,6 @@ export type TaskApprovalResult =
       readonly state: TaskState;
     };
 
-export type AppendTaskCommentInput = {
-  readonly taskId: PublicTaskId;
-  readonly content: string;
-  readonly now: () => string;
-};
-
-export type AppendTaskCommentResult =
-  | {
-      readonly ok: true;
-      readonly taskId: PublicTaskId;
-      readonly commentCount: number;
-      readonly state: TaskState;
-      readonly updatedAt: string;
-      readonly content: string;
-    }
-  | {
-      readonly ok: false;
-      readonly code: "task_not_found";
-    }
-  | {
-      readonly ok: false;
-      readonly code: "invalid_task_state";
-      readonly state: TaskState;
-    };
-
 export type UpdateTaskContextInput = {
   readonly taskId: PublicTaskId;
   readonly title: string;

@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import type * as SqlClient from "@effect/sql/SqlClient";
 import type { SqlError } from "@effect/sql/SqlError";
 import { Effect } from "effect";
@@ -13,7 +12,6 @@ import type {
 import { generatedPublicTaskId, type PublicTaskId, storedPublicTaskId } from "../task/taskId.js";
 import type { TaskPersistence } from "../task/taskPersistence.js";
 import type {
-  AppendTaskCommentInput,
   ApproveTaskInput,
   CancelTaskInput,
   CancelTaskResult,
@@ -42,10 +40,6 @@ export const openSqliteTaskPersistence = (
       repository.transaction("read Task Context", (sql) => getTaskContextById(sql, taskId)),
     approveTask: (input) =>
       repository.transactionImmediate("approve Task", (sql) => approveTask(sql, input)),
-    appendTaskComment: (input) =>
-      repository.transactionImmediate("append Task comment", (sql) =>
-        appendTaskComment(sql, input),
-      ),
     updateTaskContext: (input) =>
       repository.transactionImmediate("update Task Context", (sql) =>
         updateTaskContext(sql, input),
@@ -225,8 +219,7 @@ const getTaskById = (sql: SqlClient.SqlClient, taskId: PublicTaskId) =>
       SELECT id, title, description, state,
         cancel_reason AS cancelReason,
         created_at AS createdAt,
-        updated_at AS updatedAt,
-        (SELECT COUNT(*) FROM task_comments WHERE task_id = tasks.id) AS commentCount
+        updated_at AS updatedAt
       FROM tasks
       WHERE id = ${taskId}
     `;
@@ -241,11 +234,6 @@ const getTaskContextById = (sql: SqlClient.SqlClient, taskId: PublicTaskId) =>
     `;
     const task = rows[0];
     if (task === undefined) return undefined;
-    const comments = yield* sql<CommentContentRow>`
-      SELECT content FROM task_comments
-      WHERE task_id = ${taskId}
-      ORDER BY sequence ASC
-    `;
     const resolutions = yield* sql<{ readonly content: string }>`
       SELECT resolution_content AS content FROM implementation_blockers
       JOIN changes ON changes.id = implementation_blockers.change_id
@@ -254,7 +242,6 @@ const getTaskContextById = (sql: SqlClient.SqlClient, taskId: PublicTaskId) =>
     `;
     return {
       ...task,
-      comments: comments.map((row) => row.content),
       ...(resolutions.length === 0 ? {} : { resolutions: resolutions.map((row) => row.content) }),
     } satisfies TaskContext;
   });
@@ -271,31 +258,6 @@ const approveTask = (sql: SqlClient.SqlClient, input: ApproveTaskInput) =>
     const updated = yield* getTaskById(sql, input.taskId);
     if (updated === undefined) return yield* invalidData("approve Task", "Task disappeared");
     return { ok: true as const, changed: true, task: updated };
-  });
-
-const appendTaskComment = (sql: SqlClient.SqlClient, input: AppendTaskCommentInput) =>
-  Effect.gen(function* () {
-    const task = yield* getTaskById(sql, input.taskId);
-    if (task === undefined) return { ok: false as const, code: "task_not_found" as const };
-    if (task.state !== "new" && task.state !== "todo") {
-      return { ok: false as const, code: "invalid_task_state" as const, state: task.state };
-    }
-    const now = input.now();
-    yield* sql`
-      INSERT INTO task_comments (id, task_id, created_at, content)
-      VALUES (${randomUUID()}, ${input.taskId}, ${now}, ${input.content})
-    `;
-    yield* sql`UPDATE tasks SET updated_at = ${now} WHERE id = ${input.taskId}`;
-    const updated = yield* getTaskById(sql, input.taskId);
-    if (updated === undefined) return yield* invalidData("append Task comment", "Task disappeared");
-    return {
-      ok: true as const,
-      taskId: input.taskId,
-      commentCount: updated.commentCount,
-      state: updated.state,
-      updatedAt: updated.updatedAt,
-      content: input.content,
-    };
   });
 
 const updateTaskContext = (sql: SqlClient.SqlClient, input: UpdateTaskContextInput) =>
@@ -501,7 +463,6 @@ const rowToStoredTaskRecord = (sql: SqlClient.SqlClient, row: StoredTaskRecordRo
     return {
       ...summary,
       description: row.description,
-      commentCount: Number(row.commentCount),
       cancelReason: row.cancelReason,
       prerequisites,
       dependents,
@@ -527,7 +488,6 @@ type TaskSummaryRow = {
 };
 type StoredTaskRecordRow = TaskSummaryRow & {
   readonly description: string;
-  readonly commentCount: number | bigint;
   readonly cancelReason: string | null;
 };
 type TaskContextHeaderRow = {
@@ -535,4 +495,3 @@ type TaskContextHeaderRow = {
   readonly title: string;
   readonly description: string;
 };
-type CommentContentRow = { readonly content: string };

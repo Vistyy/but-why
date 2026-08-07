@@ -108,16 +108,10 @@ const create = (sql: SqlClient.SqlClient, input: CreateChangeStartInput) =>
       if ((yield* getByTaskId(sql, input.taskId)) !== undefined) {
         return { ok: false as const, code: "change_start_conflict" as const };
       }
-      const comments = yield* sql<{ readonly content: string }>`
-        SELECT content FROM task_comments
-        WHERE task_id = ${input.taskId}
-        ORDER BY sequence ASC
-      `;
       acceptanceContext = {
         version: 1,
         title: eligibility.task.title,
         description: eligibility.task.description,
-        comments: comments.map((row) => row.content),
       };
     }
 

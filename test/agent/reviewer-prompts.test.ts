@@ -22,7 +22,6 @@ describe("reviewer prompts", () => {
         version: 1,
         title: "Intent",
         description: "Description",
-        comments: [],
       },
       implementationDecisions: [
         {
@@ -76,7 +75,6 @@ describe("reviewer prompts", () => {
         version: 1,
         title: "Intent",
         description: "Description",
-        comments: [],
       },
     });
 
@@ -99,7 +97,6 @@ describe("reviewer prompts", () => {
         version: 1,
         title: "Intent",
         description: "Description",
-        comments: [],
       },
       implementationDecisions: [],
       availableArtifactRefs: [],
@@ -132,7 +129,7 @@ describe("reviewer prompts", () => {
   });
 
   it("injects Acceptance Context into Specialist prompts only when supplied", () => {
-    const context = { version: 1 as const, title: "Approved", description: "Scope", comments: [] };
+    const context = { version: 1 as const, title: "Approved", description: "Scope" };
     const initial = buildSpecialistReviewerPrompt({
       specialist: "standards",
       instructions: "Concern instructions",

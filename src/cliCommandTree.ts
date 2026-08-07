@@ -226,25 +226,6 @@ const taskApproveCommand = withCliHandler(
       Effect.flatMap(({ runApproveCommand }) => runApproveCommand(taskId(values), environment)),
     ),
 );
-const taskCommentCommand = withCliHandler(
-  leaf("comment", "Append a Task comment.", {
-    taskId: taskIdArgument,
-    file: Options.text("file").pipe(
-      Options.withDescription(
-        "Use --file <path|-> with a regular UTF-8 text file path or - to read standard input.",
-      ),
-    ),
-  }),
-  (values, environment) =>
-    Effect.promise(() => import("./cli/task/commands/comment.js")).pipe(
-      Effect.flatMap(({ runCommentCommand }) =>
-        runCommentCommand(
-          { taskId: requiredString(values, "taskId"), file: requiredString(values, "file") },
-          environment,
-        ),
-      ),
-    ),
-);
 const taskCancelCommand = withCliHandler(
   leaf("cancel", "Permanently cancel an unfinished Task.", {
     taskId: taskIdArgument,
@@ -271,7 +252,6 @@ taskCommand = group(
     taskShowCommand,
     taskApproveCommand,
     taskContextCommand,
-    taskCommentCommand,
     taskCancelCommand,
   ],
   {},
