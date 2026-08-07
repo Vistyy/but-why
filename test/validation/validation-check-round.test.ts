@@ -18,7 +18,7 @@ describe("check round Findings", () => {
         const workspace = createTestWorkspace();
         const marker = join(workspace, "check-started");
         const shPath = runTestProcessOrThrow("sh", ["-c", "command -v sh"], { cwd: workspace });
-        const restrictedPath = (process.env["PATH"] ?? "")
+        const restrictedPath = (process.env.PATH ?? "")
           .split(delimiter)
           .filter((entry) => entry !== "" && !existsSync(join(entry, "timeout")))
           .join(delimiter);

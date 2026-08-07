@@ -39,73 +39,75 @@ afterAll(() => {
 const readyRepository = () => cloneInitializedTestRepository(readyRepositoryTemplate);
 
 describe("Change Implement canonical main checkout failures", () => {
-  it.effect("returns a retryable error without changing the Change", () =>
-    Effect.gen(function* () {
-      const root = yield* readyRepository();
-      const linkedCheckout = join(dirname(root), `${basename(root)}-linked-caller`);
-      runTestProcessOrThrow(
-        "git",
-        ["worktree", "add", "-b", "linked-caller", linkedCheckout, "main"],
-        { cwd: root, timeout: mainCheckoutFailureProcessTimeoutMs },
-      );
-      const started = yield* runByInProcessEffect(root, ["--json", "change", "start"], now);
-      const change = JSON.parse(started.stdout) as { readonly change: { readonly id: string } };
-      const before = yield* runByInProcessEffect(
-        root,
-        ["--json", "change", "show", change.change.id],
-        now,
-      );
-      const fakeGitDirectory = createTestWorkspace();
-      const fakeGitPath = join(fakeGitDirectory, "git");
-      const realGitPath = runTestProcessOrThrow("which", ["git"], {
-        cwd: root,
-        timeout: mainCheckoutFailureProcessTimeoutMs,
-      });
-      writeFileSync(
-        fakeGitPath,
-        `#!/bin/sh
+  it.effect(
+    "returns a retryable error without changing the Change",
+    () =>
+      Effect.gen(function* () {
+        const root = yield* readyRepository();
+        const linkedCheckout = join(dirname(root), `${basename(root)}-linked-caller`);
+        runTestProcessOrThrow(
+          "git",
+          ["worktree", "add", "-b", "linked-caller", linkedCheckout, "main"],
+          { cwd: root, timeout: mainCheckoutFailureProcessTimeoutMs },
+        );
+        const started = yield* runByInProcessEffect(root, ["--json", "change", "start"], now);
+        const change = JSON.parse(started.stdout) as { readonly change: { readonly id: string } };
+        const before = yield* runByInProcessEffect(
+          root,
+          ["--json", "change", "show", change.change.id],
+          now,
+        );
+        const fakeGitDirectory = createTestWorkspace();
+        const fakeGitPath = join(fakeGitDirectory, "git");
+        const realGitPath = runTestProcessOrThrow("which", ["git"], {
+          cwd: root,
+          timeout: mainCheckoutFailureProcessTimeoutMs,
+        });
+        writeFileSync(
+          fakeGitPath,
+          `#!/bin/sh
 if [ "$1" = "worktree" ] && [ "$2" = "list" ]; then
   exit 1
 fi
 exec ${realGitPath} "$@"
 `,
-      );
-      chmodSync(fakeGitPath, 0o755);
-
-      try {
-        // biome-ignore lint/complexity/useLiteralKeys: NodeJS.ProcessEnv has an index signature.
-        const inheritedPath = process.env["PATH"] ?? "";
-        const result = runByWithEnv(
-          linkedCheckout,
-          { PATH: `${fakeGitDirectory}:${inheritedPath}` },
-          "--json",
-          "change",
-          "implement",
-          change.change.id,
         );
+        chmodSync(fakeGitPath, 0o755);
 
-        expect(result.status).toBe(1);
-        expect(JSON.parse(result.stdout)).toMatchObject({
-          error: {
-            code: "main_checkout_unavailable",
-            message: "The Local Repository's canonical main checkout is unavailable.",
-          },
-          help: ["Restore the canonical main checkout, then retry the command."],
-        });
-      } finally {
-        runTestProcessOrThrow("git", ["worktree", "remove", "--force", linkedCheckout], {
-          cwd: root,
-          timeout: mainCheckoutFailureProcessTimeoutMs,
-        });
-      }
+        try {
+          // biome-ignore lint/complexity/useLiteralKeys: NodeJS.ProcessEnv has an index signature.
+          const inheritedPath = process.env["PATH"] ?? "";
+          const result = runByWithEnv(
+            linkedCheckout,
+            { PATH: `${fakeGitDirectory}:${inheritedPath}` },
+            "--json",
+            "change",
+            "implement",
+            change.change.id,
+          );
 
-      const after = yield* runByInProcessEffect(
-        root,
-        ["--json", "change", "show", change.change.id],
-        now,
-      );
-      expect(after.stdout).toBe(before.stdout);
-    }),
+          expect(result.status).toBe(1);
+          expect(JSON.parse(result.stdout)).toMatchObject({
+            error: {
+              code: "main_checkout_unavailable",
+              message: "The Local Repository's canonical main checkout is unavailable.",
+            },
+            help: ["Restore the canonical main checkout, then retry the command."],
+          });
+        } finally {
+          runTestProcessOrThrow("git", ["worktree", "remove", "--force", linkedCheckout], {
+            cwd: root,
+            timeout: mainCheckoutFailureProcessTimeoutMs,
+          });
+        }
+
+        const after = yield* runByInProcessEffect(
+          root,
+          ["--json", "change", "show", change.change.id],
+          now,
+        );
+        expect(after.stdout).toBe(before.stdout);
+      }),
     mainCheckoutFailureTestTimeoutMs,
   );
 });
