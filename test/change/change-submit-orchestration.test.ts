@@ -119,7 +119,7 @@ describe("Change Submit orchestration", () => {
     }),
   );
 
-  it.effect("observes the owned pull request and publishes one passing taskless Candidate", () =>
+  it.effect("uses the Agent Environment to validate and publish a passing taskless Candidate", () =>
     Effect.gen(function* () {
       const events: string[] = [];
       const submit = openChangeSubmit(
