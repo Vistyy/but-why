@@ -19,7 +19,6 @@ export type CliEnvironment = {
   readonly cancellationUseCases?: CancellationUseCases;
   readonly reviewerAgentRuntime?: ReviewerAgentRuntime;
   readonly interactiveSessionHost?: InteractiveSessionHost;
-  readonly interactiveSessionPath?: string;
   readonly writeStderr?: (message: string) => void;
 };
 

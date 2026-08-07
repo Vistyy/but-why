@@ -54,15 +54,15 @@ if [ "$1" = "worktree" ] && [ "$2" = "open" ]; then
   printf '{"result":{"type":"worktree_opened","workspace":{"workspace_id":"workspace"},"root_pane":{"pane_id":"pane"},"already_open":false}}\\n'
   exit 0
 fi
-if [ "$1" = "pane" ] && [ "$2" = "run" ]; then
-  launch_script=$(printf '%s' "$4" | sed "s/^exec '//; s/'$//")
-  cat "$launch_script" > "$BY_FAKE_CAPTURE"
+if [ "$1" = "agent" ] && [ "$2" = "start" ]; then
+  printf '%s\\n' "$@" > "$BY_FAKE_CAPTURE.args"
   : > "$BY_FAKE_CAPTURE.started"
-  printf '{"result":{}}\\n'
+  printf '{"result":{"type":"agent_started","terminal_id":"terminal"}}\\n'
   exit 0
 fi
-if [ "$1" = "agent" ] && [ "$2" = "rename" ]; then
-  printf '{"result":{"agent":{"name":"%s","cwd":"%s","pane_id":"%s"}}}\\n' "$4" "$BY_FAKE_WORKTREE" "$3"
+if [ "$1" = "agent" ] && [ "$2" = "prompt" ]; then
+  printf '%s' "$4" > "$BY_FAKE_CAPTURE"
+  printf '{"result":{"type":"agent_prompted"}}\\n'
   exit 0
 fi
 exit 1

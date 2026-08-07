@@ -63,7 +63,7 @@ A complete example is:
 ```
 
 `taskPrefix` is the repository's uppercase Task ID prefix.
-`agentEnvironment.command` is an optional non-empty argument list for host-run Implementers and reviewers.
+`agentEnvironment.command` is an optional non-empty argument list for headless reviewers.
 `prepare` is an optional setup command.
 `validation.checks` is a non-empty ordered list of Checks.
 `validationWorkspace.copyFiles` is an optional list of local regular files copied into each Validation Workspace.
@@ -153,14 +153,15 @@ Configured instructions define the concern, but cannot override these common bou
 
 Repo Config may define one `agentEnvironment.command` argument list.
 Every entry must be a non-empty string.
-But Why prepends the list to the complete Pi invocation after it resolves the Agent Profile.
+But Why prepends the list to the complete Pi invocation for headless reviewers after it resolves the Agent Profile.
 
-Change Implement reads the setting from the Change Managed Worktree.
-Change Submit resolves the setting from the exact fetched Change Base Repo Config and records it in the Validation Policy Snapshot.
+Interactive Sessions run Pi through the Herdr pane shell environment.
+Change Implement does not read or apply `agentEnvironment.command`.
+Change Submit resolves the setting from the exact fetched Change Base Repo Config and records it in the Validation Policy Snapshot for headless reviewers.
 Candidate reviewer configuration does not change this setting.
-Missing configuration preserves direct Pi launch.
-An invalid configuration rejects the applicable command before agent launch.
-A configured wrapper failure stops the operation without an unwrapped retry.
+Missing configuration preserves direct reviewer launch.
+An invalid configuration rejects the applicable headless reviewer operation before agent launch.
+A configured wrapper failure stops the reviewer operation without an unwrapped retry.
 The Agent Environment does not alter Repository Preparation or Checks.
 
 ## Global Config and Agent Profiles

@@ -12,6 +12,5 @@ export type ChangeCommandEnvironment = {
   readonly writeStderr?: (message: string) => void;
   readonly reviewerAgentRuntime?: ReviewerAgentRuntime;
   readonly interactiveSessionHost?: InteractiveSessionHost;
-  readonly interactiveSessionPath?: string;
   readonly cancellationUseCases?: CancellationUseCases;
 };

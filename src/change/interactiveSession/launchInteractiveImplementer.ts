@@ -1,7 +1,6 @@
 import { dirname, join } from "node:path";
 import { Effect } from "effect";
 
-import { repoAgentEnvironment } from "../../agent/agentEnvironment.js";
 import { resolveInteractiveSessionAgentProfile } from "../../agent/agentProfiles.js";
 import { validatePiAgentProfileResources } from "../../agent/piRuntime.js";
 import { readGlobalConfig } from "../../init/globalConfig.js";
@@ -11,12 +10,9 @@ import { taskSlugForId } from "../../task/taskId.js";
 import type { ChangeStartRecord } from "../changeStartStore.js";
 import {
   buildImplementerInitialPrompt,
-  buildImplementerSystemPrompt,
+  buildImplementerSystemPromptPaths,
 } from "./implementerPrompt.js";
-import type {
-  InteractiveSessionHost,
-  InteractiveSessionLaunchEvidence,
-} from "./interactiveSessionHost.js";
+import type { InteractiveSessionHost } from "./interactiveSessionHost.js";
 
 export type ChangeImplementResult =
   | {
@@ -37,7 +33,6 @@ export type ChangeImplementResult =
         | "agent_environment_invalid"
         | "agent_profile_invalid";
       readonly message: string;
-      readonly evidence?: InteractiveSessionLaunchEvidence;
     }
   | { readonly ok: false; readonly code: "change_not_found" | "change_not_open" };
 
@@ -99,7 +94,6 @@ export const launchInteractiveImplementer = (input: {
         change,
       };
     }
-    const agentEnvironment = repoAgentEnvironment(managedRepoConfig.config);
     const launched = yield* Effect.tryPromise({
       try: (signal) =>
         interactiveSessionHost.launch(
@@ -109,7 +103,7 @@ export const launchInteractiveImplementer = (input: {
             agentSessionName: agentSessionNameForChange(change),
             repositoryPath: context.mainCheckoutRoot,
             worktreePath: change.worktreePath,
-            systemPrompt: buildImplementerSystemPrompt(),
+            systemPromptPaths: buildImplementerSystemPromptPaths(),
             initialPrompt: buildImplementerInitialPrompt({
               changeId: change.id,
               worktreePath: change.worktreePath,
@@ -118,7 +112,6 @@ export const launchInteractiveImplementer = (input: {
             }),
             agentProfile: resolvedAgentProfile,
             globalConfigDirectory: dirname(globalConfigPath),
-            ...(agentEnvironment === undefined ? {} : { agentEnvironment }),
           },
           signal,
         ),

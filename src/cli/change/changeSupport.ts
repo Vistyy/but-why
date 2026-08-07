@@ -102,9 +102,6 @@ export const withChanges = (
         ? {}
         : { interactiveSessionHost: environment.interactiveSessionHost }),
       globalConfigPath: environment.globalConfigPath,
-      ...(environment.interactiveSessionPath === undefined
-        ? {}
-        : { interactiveSessionPath: environment.interactiveSessionPath }),
     },
     use,
   ).pipe(

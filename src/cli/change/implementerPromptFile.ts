@@ -19,6 +19,7 @@ export type ImplementerPromptFileReadError =
     }
   | { readonly code: "invalid_implementer_prompt_encoding"; readonly path: string }
   | { readonly code: "empty_implementer_prompt_file"; readonly path: string }
+  | { readonly code: "implementer_prompt_contains_nul"; readonly path: string }
   | { readonly code: "stdin_is_terminal" };
 
 export const readImplementerPromptFile = (
@@ -65,13 +66,17 @@ export const readImplementerPromptFile = (
     }
   }
 
+  const path = implementerPromptFile === "-" ? "-" : resolve(cwd, implementerPromptFile);
   if (input.byteLength === 0) {
     return {
       ok: false,
-      error: {
-        code: "empty_implementer_prompt_file",
-        path: implementerPromptFile === "-" ? "-" : resolve(cwd, implementerPromptFile),
-      },
+      error: { code: "empty_implementer_prompt_file", path },
+    };
+  }
+  if (input.content.includes("\u0000")) {
+    return {
+      ok: false,
+      error: { code: "implementer_prompt_contains_nul", path },
     };
   }
 

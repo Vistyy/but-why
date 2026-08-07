@@ -80,7 +80,7 @@ invalid:
   - spawnSync("npm", ["pack"])
   - execFileSync("npm", ["pack"])
 ---
-id: live-agent-helper-belongs-to-smoke
+id: live-agent-helper-belongs-to-test-host
 valid:
   - openInteractiveSessionHost(adapter)
 invalid:

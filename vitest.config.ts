@@ -1,12 +1,6 @@
 import { configDefaults, defineConfig } from "vitest/config";
 
 const sandcastleWorkspaceGlob = ".sandcastle/**";
-const manualDiagnosticGlob = "test/agent/herdr-smoke.test.ts";
-// The real Herdr smoke check is a manual, non-blocking diagnostic.
-// Maintained suites exclude it unless the documented manual command sets
-// BY_MANUAL_DIAGNOSTICS=1 so live Herdr is never required by blocking evidence.
-const includeManualDiagnostics = process.env.BY_MANUAL_DIAGNOSTICS === "1";
-const manualDiagnosticExcludes = includeManualDiagnostics ? [] : [manualDiagnosticGlob];
 
 // Complete-evidence files require the focused external boundaries
 // (real SQLite, Git, processes, package, or linked-worktree sentinels).
@@ -52,16 +46,10 @@ const suiteSelection =
             ".direnv/**",
             sandcastleWorkspaceGlob,
             ...completeEvidenceFiles,
-            ...manualDiagnosticExcludes,
           ],
         }
       : {
-          exclude: [
-            ...configDefaults.exclude,
-            ".direnv/**",
-            sandcastleWorkspaceGlob,
-            ...manualDiagnosticExcludes,
-          ],
+          exclude: [...configDefaults.exclude, ".direnv/**", sandcastleWorkspaceGlob],
         };
 
 export default defineConfig({

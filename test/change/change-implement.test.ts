@@ -1,4 +1,4 @@
-import { closeSync, mkdirSync, openSync, readFileSync, writeFileSync } from "node:fs";
+import { closeSync, mkdirSync, openSync, writeFileSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 
 import { expect, it } from "@effect/vitest";
@@ -111,6 +111,17 @@ const invalidImplementerPromptCases = [
       help: "Write a non-empty Implementer Prompt file, then retry Change Implement.",
     },
   ],
+  [
+    "NUL",
+    {
+      fileName: "nul.md",
+      setup: (path: string): void => writeFileSync(path, "before\u0000after"),
+      code: "implementer_prompt_contains_nul",
+      message: "Implementer Prompt must not contain NUL characters.",
+      maxBytes: undefined,
+      help: "Remove NUL characters from the Implementer Prompt, then retry Change Implement.",
+    },
+  ],
 ] as const;
 
 describe("by change implement", () => {
@@ -160,33 +171,16 @@ describe("by change implement", () => {
         agentSessionName: `Change ${change.change.id}`,
         repositoryPath: root,
         worktreePath: change.worktreePath,
-        agentEnvironment: ["nix", "develop", "-c"],
       });
       const launch = launches[0] as {
         readonly initialPrompt: string;
-        readonly systemPrompt: string;
+        readonly systemPromptPaths: readonly [string, string];
       };
-      const commandGuidance = readFileSync(
-        "docs/public/skills/but-why/references/command-guidance.md",
-        "utf8",
-      ).trim();
-      const implementationReference = readFileSync(
-        "docs/public/skills/but-why/references/implement-change.md",
-        "utf8",
-      ).trim();
-      expect(launch.systemPrompt).toContain(commandGuidance);
-      expect(launch.systemPrompt).toContain(implementationReference);
-      expect(launch.systemPrompt.indexOf(commandGuidance)).toBe(0);
-      expect(launch.systemPrompt.indexOf(implementationReference)).toBeGreaterThan(
-        launch.systemPrompt.indexOf(commandGuidance),
-      );
-      expect(launch.systemPrompt).not.toContain(
-        "# But Why\n\nBefore setup or workflow guidance, read",
-      );
-      expect(launch.systemPrompt).not.toContain("docs/public/setup.md");
-      expect(launch.systemPrompt).toContain(
-        "The Implementer must not return a final progress report.",
-      );
+      expect(launch.systemPromptPaths).toEqual([
+        expect.stringContaining("docs/public/skills/but-why/references/command-guidance.md"),
+        expect.stringContaining("docs/public/skills/but-why/references/implement-change.md"),
+      ]);
+      expect(launch).not.toHaveProperty("agentEnvironment");
       expect(launch.initialPrompt).toBe(
         [`Change identity: ${change.change.id}.`, `Managed Worktree: ${change.worktreePath}.`].join(
           "\n\n",

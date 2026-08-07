@@ -72,10 +72,9 @@ describe("portable But Why skill", () => {
     expect(authorizeImplementation).toContain(
       "For a taskless Change, confirm that the selected work remains taskless and implement it in the current session",
     );
-    expect(implementerSession).toContain("--task-id <task-id>");
-    expect(implementerSession).toContain("--change-id <change-id>");
-    expect(implementerSession).toContain("scripts/start-implementer-session.mjs");
-    expect(implementerSession).toContain("changeVerified: true");
+    expect(implementerSession).toContain("change implement <change-id>");
+    expect(implementerSession).toContain("Do not repeat the Change ID, Task ID");
+    expect(implementerSession).toContain("Do not retry an uncertain start or initial prompt.");
     expect(authorTasks).toContain("[Task verification](task-verification.md)");
     expect(taskVerification).toContain("Task Verification Contract");
     expect(taskVerification).toContain("Do not require tests by default.");
