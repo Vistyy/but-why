@@ -49,6 +49,8 @@ type ImplementerSessionExecution = {
   readonly calls: string;
 };
 
+const implementerSessionProcessTimeoutMs = 10_000;
+
 const runImplementerSession = (
   changeId: string,
   options: ImplementerSessionOptions,
@@ -199,7 +201,7 @@ exit 1
       env: environment,
       isolatedHome: createTestWorkspace(),
       input: options.implementerPrompt ?? "Implement the authorized work.\n",
-      timeout: 10_000,
+      timeout: implementerSessionProcessTimeoutMs,
     },
   );
   return {

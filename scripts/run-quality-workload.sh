@@ -115,10 +115,5 @@ if (( interrupted_status != 0 )); then
     echo "$mode interrupted after ${elapsed}s; rerun just $mode to retry" >&2
 else
     echo "$mode completed in ${elapsed}s"
-    if [[ "$mode" == "quality" && $elapsed_ms -gt 10000 ]]; then
-        echo "warning: quality exceeded its 10s operating budget"
-    elif [[ "$mode" == "full-quality" && $elapsed_ms -gt 30000 ]]; then
-        echo "warning: full-quality exceeded its 30s operating budget"
-    fi
 fi
 exit "$exit_status"
