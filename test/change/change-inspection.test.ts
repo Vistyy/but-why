@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { rmSync, writeFileSync } from "node:fs";
+import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { expect, it } from "@effect/vitest";
@@ -360,25 +360,6 @@ help[1]: "Replace <git-common-dir>/but-why/state.sqlite with a known-good copy, 
         validationRunCommand: `by validation-run show ${newerRun.validationRunId}`,
       });
       expect(JSON.parse(shown.stdout).currentValidationRun.policy).toBeUndefined();
-    }),
-  );
-
-  it.effect("rejects a remote Task comment before requiring local state", () =>
-    Effect.gen(function* () {
-      const root = yield* initializedRepoCopy();
-      writeFileSync(join(root, "comment.md"), "Valid comment");
-      rmSync(join(root, ".git", "but-why", "state.sqlite"));
-
-      const result = yield* runByInProcessEffect(root, [
-        "task",
-        "comment",
-        "linear/ENG-123:acceptance",
-        "--file",
-        "comment.md",
-      ]);
-
-      expect(result.status).toBe(1);
-      expect(result.stdout).toContain("code: remote_tasks_not_supported");
     }),
   );
 

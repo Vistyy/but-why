@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import type * as SqlClient from "@effect/sql/SqlClient";
 import type { SqlError } from "@effect/sql/SqlError";
 import { Effect } from "effect";
@@ -8,7 +7,6 @@ import type { DependencyValidationCode, TaskContext, TaskSummary } from "../task
 import { generatedPublicTaskId, type PublicTaskId, storedPublicTaskId } from "../task/taskId.js";
 import type { TaskPersistence } from "../task/taskPersistence.js";
 import type {
-  AppendTaskCommentInput,
   ApproveTaskInput,
   CancelTaskInput,
   CancelTaskResult,
@@ -22,7 +20,6 @@ import { RepositorySql } from "./repositorySql.js";
 import {
   decodeTaskLifecycleConsistency,
   decodeTaskState,
-  requiredInteger,
   requiredPositiveInteger,
   requiredString,
 } from "./sqlitePersistenceDecoders.js";
@@ -44,10 +41,6 @@ export const openSqliteTaskPersistence = (
       repository.transaction("read Task Context", (sql) => getTaskContextById(sql, taskId)),
     approveTask: (input) =>
       repository.transactionImmediate("approve Task", (sql) => approveTask(sql, input)),
-    appendTaskComment: (input) =>
-      repository.transactionImmediate("append Task comment", (sql) =>
-        appendTaskComment(sql, input),
-      ),
     updateTaskContext: (input) =>
       repository.transactionImmediate("update Task Context", (sql) =>
         updateTaskContext(sql, input),
@@ -186,7 +179,7 @@ const listTasks = (sql: SqlClient.SqlClient, input: ListTasksInput) =>
             ORDER BY created_at ASC, numeric_id ASC
             LIMIT ${limit}
           `;
-    const tasks = yield* Effect.forEach(rows, (row) => rowToTaskSummary(sql, row, "list Tasks"));
+    const tasks = yield* Effect.forEach(rows, (row) => rowToTaskSummary(sql, row));
     return {
       tasks,
       total: Number(rows[0]?.totalCount ?? (yield* countTasks(sql, input))),
@@ -218,9 +211,7 @@ const listActionableTasks = (sql: SqlClient.SqlClient) =>
         updated_at DESC,
         numeric_id ASC
     `;
-    return yield* Effect.forEach(rows, (row) =>
-      rowToTaskSummary(sql, row, "list actionable Tasks"),
-    );
+    return yield* Effect.forEach(rows, (row) => rowToTaskSummary(sql, row));
   });
 
 const getTaskById = (sql: SqlClient.SqlClient, taskId: PublicTaskId) =>
@@ -229,8 +220,7 @@ const getTaskById = (sql: SqlClient.SqlClient, taskId: PublicTaskId) =>
       SELECT id, title, description, state,
         cancel_reason AS cancelReason,
         created_at AS createdAt,
-        updated_at AS updatedAt,
-        (SELECT COUNT(*) FROM task_comments WHERE task_id = tasks.id) AS commentCount
+        updated_at AS updatedAt
       FROM tasks
       WHERE id = ${taskId}
     `;
@@ -245,12 +235,7 @@ const getTaskContextById = (sql: SqlClient.SqlClient, taskId: PublicTaskId) =>
     `;
     const task = rows[0];
     if (task === undefined) return undefined;
-    const comments = yield* sql<CommentContentRow>`
-      SELECT content FROM task_comments
-      WHERE task_id = ${taskId}
-      ORDER BY sequence ASC
-    `;
-    const resolutions = yield* sql<{ readonly content: string }>`
+    const resolutions = yield* sql<{ readonly content: unknown }>`
       SELECT resolution_content AS content FROM implementation_blockers
       JOIN changes ON changes.id = implementation_blockers.change_id
       WHERE changes.task_id = ${taskId} AND resolution_content IS NOT NULL
@@ -262,7 +247,6 @@ const getTaskContextById = (sql: SqlClient.SqlClient, taskId: PublicTaskId) =>
           id: storedPublicTaskId(requiredString(task.id, "Task Context ID")),
           title: requiredString(task.title, "Task Context title"),
           description: requiredString(task.description, "Task Context description"),
-          comments: comments.map((row) => requiredString(row.content, "Task comment content")),
           ...(resolutions.length === 0
             ? {}
             : {
@@ -287,31 +271,6 @@ const approveTask = (sql: SqlClient.SqlClient, input: ApproveTaskInput) =>
     const updated = yield* getTaskById(sql, input.taskId);
     if (updated === undefined) return yield* invalidData("approve Task", "Task disappeared");
     return { ok: true as const, changed: true, task: updated };
-  });
-
-const appendTaskComment = (sql: SqlClient.SqlClient, input: AppendTaskCommentInput) =>
-  Effect.gen(function* () {
-    const task = yield* getTaskById(sql, input.taskId);
-    if (task === undefined) return { ok: false as const, code: "task_not_found" as const };
-    if (task.state !== "new" && task.state !== "todo") {
-      return { ok: false as const, code: "invalid_task_state" as const, state: task.state };
-    }
-    const now = input.now();
-    yield* sql`
-      INSERT INTO task_comments (id, task_id, created_at, content)
-      VALUES (${randomUUID()}, ${input.taskId}, ${now}, ${input.content})
-    `;
-    yield* sql`UPDATE tasks SET updated_at = ${now} WHERE id = ${input.taskId}`;
-    const updated = yield* getTaskById(sql, input.taskId);
-    if (updated === undefined) return yield* invalidData("append Task comment", "Task disappeared");
-    return {
-      ok: true as const,
-      taskId: input.taskId,
-      commentCount: updated.commentCount,
-      state: updated.state,
-      updatedAt: updated.updatedAt,
-      content: input.content,
-    };
   });
 
 const updateTaskContext = (sql: SqlClient.SqlClient, input: UpdateTaskContextInput) =>
@@ -492,12 +451,6 @@ const dependencyFacts = (
         ORDER BY tasks.numeric_id ASC
       `;
 
-const decodeTaskValue = <A>(decode: () => A, operationName: string) =>
-  Effect.try({
-    try: decode,
-    catch: (cause) => new RepositoryPersistedDataInvalid({ operationName, cause }),
-  });
-
 const decodeDependencyFacts = (
   sql: SqlClient.SqlClient,
   taskId: string,
@@ -536,14 +489,15 @@ const rowToTaskSummary = (
   operationName = "read Task",
 ) =>
   Effect.gen(function* () {
+    const id = yield* decodeTaskValue(
+      () => storedPublicTaskId(requiredString(row.id, "Task ID")),
+      operationName,
+    );
     const state = yield* decodeTaskValue(() => decodeTaskState(row.state), operationName);
-    const prerequisites = yield* decodeDependencyFacts(sql, row.id, "prerequisites", operationName);
+    const prerequisites = yield* decodeDependencyFacts(sql, id, "prerequisites", operationName);
     const blockedBy = prerequisites.filter((dependency) => dependency.state !== "done");
     return {
-      id: yield* decodeTaskValue(
-        () => storedPublicTaskId(requiredString(row.id, "Task ID")),
-        operationName,
-      ),
+      id,
       title: yield* decodeTaskValue(() => requiredString(row.title, "Task title"), operationName),
       state,
       createdAt: yield* decodeTaskValue(
@@ -562,8 +516,13 @@ const rowToTaskSummary = (
 const rowToStoredTaskRecord = (sql: SqlClient.SqlClient, row: StoredTaskRecordRow) =>
   Effect.gen(function* () {
     const summary = yield* rowToTaskSummary(sql, row, "read Task");
-    const prerequisites = yield* decodeDependencyFacts(sql, row.id, "prerequisites", "read Task");
-    const dependents = yield* decodeDependencyFacts(sql, row.id, "dependents", "read Task");
+    const prerequisites = yield* decodeDependencyFacts(
+      sql,
+      summary.id,
+      "prerequisites",
+      "read Task",
+    );
+    const dependents = yield* decodeDependencyFacts(sql, summary.id, "dependents", "read Task");
     const cancelReason = yield* decodeTaskValue(
       () => decodeTaskLifecycleConsistency(summary.state, row.cancelReason),
       "read Task",
@@ -574,15 +533,16 @@ const rowToStoredTaskRecord = (sql: SqlClient.SqlClient, row: StoredTaskRecordRo
         () => requiredString(row.description, "Task description"),
         "read Task",
       ),
-      commentCount: yield* decodeTaskValue(() => {
-        const count = requiredInteger(row.commentCount, "Task comment count");
-        if (count < 0) throw new Error("Stored Task comment count is negative");
-        return count;
-      }, "read Task"),
       cancelReason,
       prerequisites,
       dependents,
     } satisfies StoredTaskRecord;
+  });
+
+const decodeTaskValue = <A>(decode: () => A, operationName: string) =>
+  Effect.try({
+    try: decode,
+    catch: (cause) => new RepositoryPersistedDataInvalid({ operationName, cause }),
   });
 
 const invalidData = (operationName: string, message: string) =>
@@ -593,14 +553,14 @@ const invalidData = (operationName: string, message: string) =>
     }),
   );
 
-type NumericIdRow = { readonly numericId: number | bigint };
+type NumericIdRow = { readonly numericId: unknown };
 type TaskSummaryRow = {
-  readonly id: PublicTaskId;
-  readonly title: string;
-  readonly state: string;
-  readonly createdAt: string;
-  readonly updatedAt: string;
-  readonly totalCount?: number | bigint;
+  readonly id: unknown;
+  readonly title: unknown;
+  readonly state: unknown;
+  readonly createdAt: unknown;
+  readonly updatedAt: unknown;
+  readonly totalCount?: unknown;
 };
 type TaskDependencyFactRow = {
   readonly id: unknown;
@@ -608,13 +568,11 @@ type TaskDependencyFactRow = {
   readonly state: unknown;
 };
 type StoredTaskRecordRow = TaskSummaryRow & {
-  readonly description: string;
-  readonly commentCount: number | bigint;
-  readonly cancelReason: string | null;
+  readonly description: unknown;
+  readonly cancelReason: unknown;
 };
 type TaskContextHeaderRow = {
-  readonly id: PublicTaskId;
-  readonly title: string;
-  readonly description: string;
+  readonly id: unknown;
+  readonly title: unknown;
+  readonly description: unknown;
 };
-type CommentContentRow = { readonly content: string };

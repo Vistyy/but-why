@@ -8,7 +8,7 @@ export const encodeSqliteAcceptanceContextSnapshot = (
     version: 1,
     title: snapshot.title,
     description: snapshot.description,
-    comments: [...snapshot.comments],
+    ...(snapshot.comments === undefined ? {} : { comments: [...snapshot.comments] }),
     ...(snapshot.resolutions === undefined ? {} : { resolutions: [...snapshot.resolutions] }),
   });
 

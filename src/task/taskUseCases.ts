@@ -16,8 +16,6 @@ import type { TaskContext, TaskRecord, TaskSummary } from "./task.js";
 import type { PublicTaskId } from "./taskId.js";
 import type { CreateTaskPersistenceResult, TaskPersistence } from "./taskPersistence.js";
 import type {
-  AppendTaskCommentInput,
-  AppendTaskCommentResult,
   CreateTaskInput,
   EditTaskDependenciesInput,
   EditTaskDependenciesResult,
@@ -58,9 +56,6 @@ export type TaskUseCases = {
     taskId: PublicTaskId,
     now: string,
   ) => Effect.Effect<RepoTaskApprovalResult, RepositoryStorageError>;
-  readonly appendTaskComment: (
-    input: AppendTaskCommentInput,
-  ) => Effect.Effect<AppendTaskCommentResult, RepositoryStorageError>;
 };
 
 export type TaskContextDraft = { readonly path: string; readonly content: string };
@@ -101,7 +96,6 @@ export const openTaskUseCases = (
   createTaskContextDraft: (taskId) => createTaskContextDraft(context, tasks, taskId),
   applyTaskContextDraft: (input) => applyTaskContextDraft(context, tasks, input),
   approveTask: (taskId, now) => tasks.approveTask({ taskId, now }),
-  appendTaskComment: tasks.appendTaskComment,
 });
 
 const createTaskContextDraft = (

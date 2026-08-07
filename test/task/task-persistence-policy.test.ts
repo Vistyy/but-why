@@ -44,13 +44,6 @@ it.scoped("preserves terminal Task policy", () => {
           code: "invalid_task_state",
           state,
         });
-        expect(
-          yield* tasks.appendTaskComment({
-            taskId,
-            content: "Too late",
-            now: () => thirdNow,
-          }),
-        ).toEqual({ ok: false, code: "invalid_task_state", state });
         expect(yield* tasks.getTaskContextById(taskId)).toEqual(contextBefore);
         expect(yield* tasks.getTaskById(taskId)).toMatchObject({ updatedAt: secondNow });
       }

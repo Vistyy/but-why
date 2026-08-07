@@ -105,7 +105,6 @@ describe("Task dependency CLI", () => {
                   updatedAt: now,
                   startable: false,
                   blockedBy: [],
-                  commentCount: 0,
                   cancelReason: null,
                   prerequisites: [
                     { id: "BY-1", title: "First", state: "new" },

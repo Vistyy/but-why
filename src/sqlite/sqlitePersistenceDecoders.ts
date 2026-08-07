@@ -180,8 +180,9 @@ export const decodeAcceptanceContextValue = (value: unknown) => {
     get(value, "version") !== 1 ||
     typeof get(value, "title") !== "string" ||
     typeof get(value, "description") !== "string" ||
-    !Array.isArray(get(value, "comments")) ||
-    !(get(value, "comments") as unknown[]).every((comment) => typeof comment === "string")
+    (get(value, "comments") !== undefined &&
+      (!Array.isArray(get(value, "comments")) ||
+        !(get(value, "comments") as unknown[]).every((comment) => typeof comment === "string")))
   ) {
     throw new Error("Stored Acceptance Context Snapshot is invalid");
   }
@@ -196,7 +197,9 @@ export const decodeAcceptanceContextValue = (value: unknown) => {
     version: 1 as const,
     title: get(value, "title") as string,
     description: get(value, "description") as string,
-    comments: get(value, "comments") as string[],
+    ...(get(value, "comments") === undefined
+      ? {}
+      : { comments: get(value, "comments") as string[] }),
     ...(resolutions === undefined ? {} : { resolutions: resolutions as string[] }),
   };
 };

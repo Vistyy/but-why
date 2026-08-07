@@ -365,7 +365,6 @@ describe("Change Start Managed Worktree boundaries", () => {
           version: 1,
           title: "Prepared change",
           description: "Prepare this Change.\n",
-          comments: [],
         },
       });
       const locked = yield* runByInProcessEffect(

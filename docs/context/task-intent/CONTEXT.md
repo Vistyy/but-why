@@ -20,17 +20,13 @@ The durable record of one requested outcome, its approved intent, dependencies, 
 _Avoid_: Change, issue draft, implementation session
 
 **Task Context**:
-The current Task title, description, and ordered comments before Change Start.
+The current Task title and description before Change Start.
 _Avoid_: Acceptance Context, operational metadata
 
 **Task Verification Contract**:
 The Task Context section that identifies Material Risks, required Verification Claims and evidence, escalation conditions, and explicit exclusions for implementation confidence.
 It is preserved in Acceptance Context when the Task starts.
 _Avoid_: Validation Policy Snapshot, Check list, coverage target
-
-**Task Comment**:
-An ordered Markdown addition to Task Context before Change Start.
-_Avoid_: Finding, cancellation reason, Implementation Decision
 
 **Task Context Draft**:
 A disposable editable copy of Task Context prepared before its proposed changes are applied.

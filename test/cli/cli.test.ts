@@ -32,7 +32,6 @@ const expectedCommandPaths = [
   "task context",
   "task context draft",
   "task context apply",
-  "task comment",
   "task cancel",
   "change start",
   "change prepare",
@@ -423,7 +422,6 @@ validationSetup:
               { name: "reviewer_sessions" },
               { name: "reviewer_transcripts" },
               { name: "shared_state_identity" },
-              { name: "task_comments" },
               { name: "task_dependencies" },
               { name: "tasks" },
             ]);
@@ -488,6 +486,7 @@ validationSetup:
         { migration_id: 21, name: "reviewer_transcripts" },
         { migration_id: 22, name: "change_cancel_reason" },
         { migration_id: 23, name: "restrict_lifecycle_states" },
+        { migration_id: 24, name: "remove_task_comments" },
       ]);
     }),
   );

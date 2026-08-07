@@ -9,7 +9,6 @@ import { collapseHome } from "../../src/cli/cliPath.js";
 import { RepositorySql, repositorySqlLayer } from "../../src/sqlite/repositorySql.js";
 import type { TaskState } from "../../src/task/lifecycle.js";
 import type { TaskRecord, TaskSummary } from "../../src/task/task.js";
-import { publicTaskId } from "../../src/task/taskId.js";
 import { byExecutable, createGitRepo, runByInProcessEffect } from "../support/by-cli.js";
 import { fakeTaskUseCases } from "../support/taskUseCases.js";
 import { createTestWorkspace } from "../support/testWorkspace.js";
@@ -20,29 +19,27 @@ const secondNow = "2026-06-30T12:05:00.000Z";
 const thirdNow = "2026-06-30T12:10:00.000Z";
 
 describe("by task CLI", () => {
+  it.effect("does not expose retired Task Comment commands or completion", () =>
+    Effect.gen(function* () {
+      const help = yield* runByInProcessEffect(createTestWorkspace(), ["--json", "task", "--help"]);
+      expect(help.status).toBe(0);
+      expect((JSON.parse(help.stdout) as { readonly help: string }).help).not.toContain("comment");
+
+      const completion = yield* runByInProcessEffect(createTestWorkspace(), [
+        "--completions",
+        "bash",
+      ]);
+      expect(completion.status).toBe(0);
+      expect(completion.stdout).not.toContain("task comment");
+    }),
+  );
+
   it.effect("documents shared recording input for Task create in generated help", () =>
     Effect.gen(function* () {
       const result = yield* runByInProcessEffect(createTestWorkspace(), [
         "--json",
         "task",
         "create",
-        "--help",
-      ]);
-
-      expect(result.status).toBe(0);
-      expect(result.stderr).toBe("");
-      const help = (JSON.parse(result.stdout) as { readonly help: string }).help;
-      expect(help).toContain("regular UTF-8 text file path");
-      expect(help).toContain("standard input");
-    }),
-  );
-
-  it.effect("documents shared recording input for Task comment in generated help", () =>
-    Effect.gen(function* () {
-      const result = yield* runByInProcessEffect(createTestWorkspace(), [
-        "--json",
-        "task",
-        "comment",
         "--help",
       ]);
 
@@ -75,7 +72,6 @@ describe("by task CLI", () => {
   state: new
   createdAt: "${firstNow}"
   updatedAt: "${firstNow}"
-  commentCount: 0
   prerequisites: []
   dependents: []
   change: null
@@ -83,7 +79,6 @@ context:
   id: BY-1
   title: Add   login
   description: "  Preserve me exactly.\\n\\n"
-  comments: []
 help[1]: Run \`by task list\` to see open tasks.
 `);
       }),
@@ -395,7 +390,6 @@ tasks[2]:
   state: todo
   createdAt: "${firstNow}"
   updatedAt: "${secondNow}"
-  commentCount: 0
   prerequisites: []
   dependents: []
   change: null
@@ -416,7 +410,6 @@ contextCommand: by task context BY-1
               id: "BY-1",
               title: "Use context",
               description: "Full intent\n\nWith details.",
-              comments: [],
             }),
           }),
         },
@@ -428,7 +421,6 @@ contextCommand: by task context BY-1
   id: BY-1
   title: Use context
   description: "Full intent\\n\\nWith details."
-  comments: []
 `);
     }),
   );
@@ -551,7 +543,6 @@ contextCommand: by task context BY-1
           id: "BY-1",
           title: "Updated title",
           description: "Updated description\n\n",
-          comments: [],
         },
       });
       expect(existsSync(draft.draft.path)).toBe(false);
@@ -655,236 +646,6 @@ contextCommand: by task context BY-1
           "title: Original title\n  description: Description for Original title",
         );
       }),
-  );
-
-  it.effect(
-    "appends Task comments as ordered raw Task Context before Start without changing state",
-    () =>
-      Effect.gen(function* () {
-        const root = yield* initializedRepo();
-
-        yield* createTask(root, firstNow, "Commented task");
-        writeFileSync(join(root, "comment-1.md"), "First comment\n\nWith Markdown.\n");
-        writeFileSync(join(root, "comment-2.md"), "First comment\n\nWith Markdown.\n");
-
-        const firstResult = yield* runByInProcessEffect(
-          root,
-          ["task", "comment", "BY-1", "--file", "comment-1.md"],
-          thirdNow,
-        );
-        expect(
-          (yield* runByInProcessEffect(root, ["task", "approve", "BY-1"], thirdNow)).status,
-        ).toBe(0);
-        const duplicateResult = yield* runByInProcessEffect(
-          root,
-          ["task", "comment", "BY-1", "--file", "comment-2.md"],
-          "2026-06-30T12:15:00.000Z",
-        );
-
-        expect(firstResult.status).toBe(0);
-        expect(firstResult.stderr).toBe("");
-        expect(firstResult.stdout).toBe(`task:
-  id: BY-1
-  state: new
-  commentCount: 1
-  updatedAt: "${thirdNow}"
-content: "First comment\\n\\nWith Markdown.\\n"
-`);
-        expect(duplicateResult.status).toBe(0);
-        expect(duplicateResult.stdout).toBe(`task:
-  id: BY-1
-  state: todo
-  commentCount: 2
-  updatedAt: "2026-06-30T12:15:00.000Z"
-content: "First comment\\n\\nWith Markdown.\\n"
-`);
-
-        expect((yield* runByInProcessEffect(root, ["task", "show", "BY-1"])).stdout).toBe(`task:
-  id: BY-1
-  title: Commented task
-  state: todo
-  createdAt: "${firstNow}"
-  updatedAt: "2026-06-30T12:15:00.000Z"
-  commentCount: 2
-  prerequisites: []
-  dependents: []
-  change: null
-contextCommand: by task context BY-1
-`);
-        expect((yield* runByInProcessEffect(root, ["task", "context", "BY-1"])).stdout).toBe(`task:
-  id: BY-1
-  title: Commented task
-  description: Description for Commented task
-  comments[2]: "First comment\\n\\nWith Markdown.\\n","First comment\\n\\nWith Markdown.\\n"
-`);
-      }),
-  );
-
-  it.effect("maps rejected Task comments to command output", () =>
-    Effect.gen(function* () {
-      const root = createTestWorkspace();
-      writeFileSync(join(root, "comment.md"), "Too late");
-
-      const result = yield* runByInProcessEffect(
-        root,
-        ["task", "comment", "BY-1", "--file", "comment.md"],
-        thirdNow,
-        {
-          taskUseCases: fakeTaskUseCases({
-            getTaskById: () => taskRecord({ state: "done" }),
-            appendTaskComment: () => ({
-              ok: false,
-              code: "invalid_task_state",
-              state: "done",
-            }),
-          }),
-        },
-      );
-
-      expect(result.status).toBe(1);
-      expect(result.stderr).toBe("");
-      expect(result.stdout).toContain("code: invalid_task_state");
-      expect(result.stdout).toContain("Cannot append a Task comment to task BY-1 from state done");
-    }),
-  );
-
-  it.effect("ignores a leading UTF-8 BOM in Task comment content", () =>
-    Effect.gen(function* () {
-      const root = yield* initializedRepo();
-
-      yield* createTask(root, firstNow, "BOM comment");
-      writeFileSync(join(root, "bom.md"), Buffer.from([0xef, 0xbb, 0xbf, 0x42, 0x4f, 0x4d]));
-
-      const result = yield* runByInProcessEffect(
-        root,
-        ["task", "comment", "BY-1", "--file", "bom.md"],
-        secondNow,
-      );
-
-      expect(result.status).toBe(0);
-
-      expect((yield* runByInProcessEffect(root, ["task", "context", "BY-1"])).stdout).toContain(
-        "comments[1]: BOM",
-      );
-    }),
-  );
-
-  it.effect("reports actionable Task comment input errors without changing the Task", () =>
-    Effect.gen(function* () {
-      const root = createTestWorkspace();
-      let appendCalls = 0;
-      writeFileSync(join(root, "valid.md"), "Valid comment");
-      mkdirSync(join(root, "comment-dir"));
-      writeFileSync(join(root, "empty.md"), " \n\t");
-      writeFileSync(join(root, "invalid.bin"), Buffer.from([0xff]));
-      writeFileSync(join(root, "large.md"), Buffer.alloc(256 * 1024 + 1, "x"));
-
-      const taskUseCases = fakeTaskUseCases({
-        resolveTaskId: (taskId) =>
-          taskId === "by-1"
-            ? {
-                ok: false,
-                code: "remote_tasks_not_supported",
-                taskId,
-                help: "Use a repo-local Task ID such as BY-1.",
-              }
-            : { ok: true, taskId },
-        getTaskById: (taskId) => (taskId === "BY-1" ? taskRecord() : undefined),
-        appendTaskComment: () => {
-          appendCalls += 1;
-          return {
-            ok: true,
-            taskId: publicTaskId("BY-1"),
-            commentCount: 1,
-            state: "new",
-            updatedAt: secondNow,
-            content: "Valid comment",
-          };
-        },
-      });
-      const cases = [
-        {
-          name: "missing file flag",
-          args: ["task", "comment", "BY-1"],
-          status: 2,
-          code: "invalid_usage",
-        },
-        {
-          name: "remote-backed task ID",
-          args: ["task", "comment", "by-1", "--file", "valid.md"],
-          status: 1,
-          code: "remote_tasks_not_supported",
-        },
-        {
-          name: "unknown task",
-          args: ["task", "comment", "BY-999", "--file", "valid.md"],
-          status: 1,
-          code: "task_not_found",
-        },
-        {
-          name: "unknown task before missing file",
-          args: ["task", "comment", "BY-999", "--file", "missing.md"],
-          status: 1,
-          code: "task_not_found",
-        },
-        {
-          name: "unknown task before stdin file",
-          args: ["task", "comment", "BY-999", "--file", "-"],
-          status: 1,
-          code: "task_not_found",
-        },
-        {
-          name: "missing file",
-          args: ["task", "comment", "BY-1", "--file", "missing.md"],
-          status: 1,
-          code: "comment_file_not_found",
-        },
-        {
-          name: "unreadable file",
-          args: ["task", "comment", "BY-1", "--file", "comment-dir"],
-          status: 1,
-          code: "comment_file_unreadable",
-        },
-        {
-          name: "invalid UTF-8",
-          args: ["task", "comment", "BY-1", "--file", "invalid.bin"],
-          status: 1,
-          code: "comment_file_unreadable",
-        },
-        {
-          name: "oversized comment",
-          args: ["task", "comment", "BY-1", "--file", "large.md"],
-          status: 1,
-          code: "comment_file_unreadable",
-        },
-        {
-          name: "empty comment",
-          args: ["task", "comment", "BY-1", "--file", "empty.md"],
-          status: 1,
-          code: "empty_comment",
-        },
-        {
-          name: "stdin file",
-          args: ["task", "comment", "BY-1", "--file", "-"],
-          status: 1,
-          code: "stdin_is_terminal",
-        },
-      ] as const;
-
-      for (const testCase of cases) {
-        const result = yield* runByInProcessEffect(root, testCase.args, thirdNow, {
-          taskUseCases,
-          stdin: { fd: -1, isTerminal: true },
-        });
-
-        expect(result.status, testCase.name).toBe(testCase.status);
-        expect(result.stderr, testCase.name).toBe("");
-        expect(result.stdout, testCase.name).toContain(`code: ${testCase.code}`);
-        expect(result.stdout, testCase.name).toContain("help[1]");
-      }
-
-      expect(appendCalls).toBe(0);
-    }),
   );
 
   it.effect("serializes missing Task IDs before command lookup", () =>
@@ -1187,7 +948,6 @@ const taskSummary = (overrides: Partial<TaskSummary> = {}): TaskSummary => ({
 const taskRecord = (overrides: Partial<TaskRecord> = {}): TaskRecord => ({
   ...taskSummary(),
   description: "Description",
-  commentCount: 0,
   cancelReason: null,
   prerequisites: [],
   dependents: [],

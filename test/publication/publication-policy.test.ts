@@ -301,7 +301,7 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
           "attach Task publication metadata",
           (sql) => sql`
         UPDATE changes
-        SET task_id = 'BY-1', acceptance_context = ${JSON.stringify({ version: 1, title: "Publish exact Candidate", description: "Description", comments: [] })}
+        SET task_id = 'BY-1', acceptance_context = ${JSON.stringify({ version: 1, title: "Publish exact Candidate", description: "Description" })}
         WHERE id = ${fixture.captured.changeId}
       `,
         );

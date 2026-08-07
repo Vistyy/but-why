@@ -38,7 +38,6 @@ export const fakeTaskUseCases = (overrides: Partial<SyncTaskUseCases> = {}): Tas
     createTaskContextDraft: () => unexpected("createTaskContextDraft"),
     applyTaskContextDraft: () => unexpected("applyTaskContextDraft"),
     approveTask: () => unexpected("approveTask"),
-    appendTaskComment: () => unexpected("appendTaskComment"),
     ...overrides,
   };
 
@@ -52,7 +51,6 @@ export const fakeTaskUseCases = (overrides: Partial<SyncTaskUseCases> = {}): Tas
         task: {
           ...task,
           description: args[0].description,
-          commentCount: 0,
           cancelReason: null,
           prerequisites: [],
           dependents: [],
@@ -61,7 +59,6 @@ export const fakeTaskUseCases = (overrides: Partial<SyncTaskUseCases> = {}): Tas
           id: task.id,
           title: task.title,
           description: args[0].description,
-          comments: [],
         },
       });
     },
@@ -74,6 +71,5 @@ export const fakeTaskUseCases = (overrides: Partial<SyncTaskUseCases> = {}): Tas
     createTaskContextDraft: (...args) => Effect.succeed(sync.createTaskContextDraft(...args)),
     applyTaskContextDraft: (...args) => Effect.succeed(sync.applyTaskContextDraft(...args)),
     approveTask: (...args) => Effect.succeed(sync.approveTask(...args)),
-    appendTaskComment: (...args) => Effect.succeed(sync.appendTaskComment(...args)),
   };
 };
