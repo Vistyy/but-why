@@ -27,6 +27,10 @@ export type InteractiveSessionLaunchResult =
     }
   | {
       readonly ok: false;
-      readonly code: "host_unavailable" | "launch_failed" | "launch_indeterminate";
+      readonly code:
+        | "host_unavailable"
+        | "launch_failed"
+        | "launch_indeterminate"
+        | "pane_not_ready";
       readonly message: string;
     };
