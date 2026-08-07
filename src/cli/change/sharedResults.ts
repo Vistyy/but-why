@@ -1,8 +1,8 @@
-import { runtimeError, type CliResult } from "../../cliResults.js";
-import type { ChangeStartResult } from "../../change/changeUseCases.js";
-import type { ChangeSubmitResult } from "../../change/submitChange.js";
 import type { ChangeRecord } from "../../change/change.js";
+import type { ChangeStartResult } from "../../change/changeUseCases.js";
 import { boundedEvidence } from "../../change/preparationEvidence.js";
+import type { ChangeSubmitResult } from "../../change/submitChange.js";
+import { type CliResult, runtimeError } from "../../cliResults.js";
 
 export const prepareFailureView = (failure: NonNullable<ChangeRecord["prepareFailure"]>) => ({
   command: failure.command,

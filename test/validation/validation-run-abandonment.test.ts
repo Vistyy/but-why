@@ -3,14 +3,14 @@ import { Effect } from "effect";
 import { describe, expect } from "vitest";
 
 import {
-  openAbandonValidationRun,
   type AbandonValidationPersistence,
+  openAbandonValidationRun,
 } from "../../src/change/abandonValidationRun.js";
-import type { ExecutionLock } from "../../src/contracts/executionLock.js";
 import type {
   CandidateValidationRunAbandonmentContext,
   CandidateValidationRunRecord,
 } from "../../src/change/candidateValidation/candidateValidationRunStore.js";
+import type { ExecutionLock } from "../../src/contracts/executionLock.js";
 
 const validationRunId = "run-1";
 const changeId = "change-1";

@@ -1,7 +1,7 @@
-import type { ChangeRecord } from "./change.js";
+import type { TaskState } from "../task/lifecycle.js";
 import type { TaskDependencyFact } from "../task/task.js";
 import type { PublicTaskId } from "../task/taskId.js";
-import type { TaskState } from "../task/lifecycle.js";
+import type { ChangeRecord } from "./change.js";
 
 export type ChangeStartRecord = ChangeRecord & {
   readonly baseRef: string;

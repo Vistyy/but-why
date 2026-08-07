@@ -5,15 +5,14 @@ import { join } from "node:path";
 import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
 import { describe, it as ordinaryIt } from "vitest";
-
-import { mapRuntimeError } from "../../src/cli.js";
 import { collapseHome } from "../../src/cli/cliPath.js";
+import { mapRuntimeError } from "../../src/cli.js";
 import { butWhyGitignoreBlock } from "../../src/init/gitignore.js";
-import { RepositorySql, repositorySqlLayer } from "../../src/sqlite/repositorySql.js";
 import { encodeToon } from "../../src/output/toon.js";
+import { RepositorySql, repositorySqlLayer } from "../../src/sqlite/repositorySql.js";
 import { createGitRepo, repoRoot, runByInProcessEffect } from "../support/by-cli.js";
-import { createTestWorkspace } from "../support/testWorkspace.js";
 import { runTestProcess } from "../support/testProcess.js";
+import { createTestWorkspace } from "../support/testWorkspace.js";
 
 const expectedBin = collapseHome(join(repoRoot, "bin/by"));
 const expectedConfigDoc = join(repoRoot, "docs/public/config.md");

@@ -1,12 +1,11 @@
 import { existsSync } from "node:fs";
 
 import { Effect } from "effect";
-
-import { openChangeInspection, type ChangeInspection } from "./inspectChange.js";
-import { loadRepoLocalContext, type LoadRepoLocalContextError } from "../init/repoContext.js";
+import { type LoadRepoLocalContextError, loadRepoLocalContext } from "../init/repoContext.js";
 import { repositorySqlLayer } from "../sqlite/repositorySql.js";
 import { openSqliteChangePersistence } from "../sqlite/sqliteChangePersistence.js";
 import { openSqliteChangeValidationPersistence } from "../sqlite/sqliteChangeValidationPersistence.js";
+import { type ChangeInspection, openChangeInspection } from "./inspectChange.js";
 
 export type LoadChangeInspectionResult =
   | {

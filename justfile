@@ -20,6 +20,16 @@ init:
     fi
     pnpm install --frozen-lockfile
 
+# Check Just formatting plus Biome formatting, lint rules, and the organizeImports assist without modifying files.
+check:
+    @just --unstable --fmt --check
+    @pnpm exec biome check .
+
+# Apply Just formatting plus Biome formatting, safe lint fixes, and the organizeImports assist.
+fix:
+    @just --unstable --fmt
+    @pnpm exec biome check --write .
+
 # Run routine product feedback without coverage or slow external boundaries.
 quality:
     @exec ./scripts/run-quality-workload.sh quality
@@ -33,20 +43,15 @@ _quality-static-routine:
     #!/usr/bin/env bash
     set -uo pipefail
     just docs-check & docs_pid=$!
-    just _biome-check & biome_pid=$!
+    just check & check_pid=$!
     just ast-grep-check & ast_grep_pid=$!
     just typecheck & typecheck_pid=$!
     just _fallow-routine-check & fallow_pid=$!
     status=0
-    for pid in "$docs_pid" "$biome_pid" "$ast_grep_pid" "$typecheck_pid" "$fallow_pid"; do
+    for pid in "$docs_pid" "$check_pid" "$ast_grep_pid" "$typecheck_pid" "$fallow_pid"; do
         wait "$pid" || status=1
     done
     exit "$status"
-
-# Check Just formatting plus Biome formatting and lint rules in one source scan.
-_biome-check:
-    @just --unstable --fmt --check
-    @pnpm exec biome check --assist-enabled=false .
 
 # Validate links and anchors in tracked and non-ignored untracked Markdown files.
 docs-check:

@@ -1,7 +1,7 @@
 import { existsSync } from "node:fs";
 import { Effect } from "effect";
 
-import { loadRepoLocalContext, type LoadRepoLocalContextError } from "../init/repoContext.js";
+import { type LoadRepoLocalContextError, loadRepoLocalContext } from "../init/repoContext.js";
 import { createSqliteSnapshot } from "../sqlite/sqliteSnapshot.js";
 import type {
   SharedRepositoryStateSnapshot,

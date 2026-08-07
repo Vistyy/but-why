@@ -3,9 +3,8 @@
 
 import { Effect } from "effect";
 import type { CliResult } from "../../cliResults.js";
-import type { ChangeCommandEnvironment } from "./changeTypes.js";
-
 import * as support from "./changeSupport.js";
+import type { ChangeCommandEnvironment } from "./changeTypes.js";
 import { prepareResult } from "./lifecycleResults.js";
 
 export const runPrepare = (

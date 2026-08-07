@@ -1,6 +1,6 @@
-import type { Sandbox } from "@ai-hero/sandcastle";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import type { Sandbox } from "@ai-hero/sandcastle";
 import { expect, layer } from "@effect/vitest";
 import { Context, Effect, Layer } from "effect";
 import { afterAll, beforeAll, vi } from "vitest";
@@ -9,43 +9,43 @@ import type {
   ReviewerAgentResult,
   ReviewerAgentRuntime,
 } from "../../src/agent/reviewerAgentRuntime.js";
-import type { CaptureLocalCandidateResult } from "../../src/change/candidateCapture/captureLocalCandidate.js";
-import { captureLocalCandidate } from "../support/candidateCapture.js";
 import { runAcceptanceReviewPhase } from "../../src/change/acceptanceReview/runAcceptanceReviewPhase.js";
-import { runSpecialistReviewPhase } from "../../src/change/specialistReview/runSpecialistReviewPhase.js";
-import {
-  CandidateValidation,
-  type AcceptanceContextCandidateValidationPolicy,
-} from "../../src/change/candidateValidation/validateCandidate.js";
+import type { CaptureLocalCandidateResult } from "../../src/change/candidateCapture/captureLocalCandidate.js";
 import type { CandidateValidationPolicySnapshot } from "../../src/change/candidateValidation/candidateValidationRunStore.js";
-import { maxValidationArtifactBytes } from "../../src/change/validationRun/artifactFiles.js";
-import { validationToolingFailureRecord } from "../../src/change/validation/validationToolingFailures.js";
-import { candidateValidationForTest } from "../support/candidateValidation.js";
-import { RepositorySql } from "../../src/sqlite/repositorySql.js";
-import type { RepositoryStorageError } from "../../src/contracts/repositoryStorageError.js";
+import {
+  type AcceptanceContextCandidateValidationPolicy,
+  CandidateValidation,
+} from "../../src/change/candidateValidation/validateCandidate.js";
 import type {
   ReviewerSessionRecord,
   ReviewerSessionStore,
 } from "../../src/change/reviewerSession/reviewerSession.js";
 import { reviewerSessionsPath } from "../../src/change/reviewerSession/reviewerSession.js";
+import { runSpecialistReviewPhase } from "../../src/change/specialistReview/runSpecialistReviewPhase.js";
 import {
   ReviewerOutputContractFailed,
   SandcastleToolingFailed,
+  validationToolingFailureRecord,
 } from "../../src/change/validation/validationToolingFailures.js";
 import type { AcceptanceContextSnapshotV1 } from "../../src/change/validationRun/acceptanceContextSnapshot.js";
+import { maxValidationArtifactBytes } from "../../src/change/validationRun/artifactFiles.js";
+import type { RepositoryStorageError } from "../../src/contracts/repositoryStorageError.js";
+import { RepositorySql } from "../../src/sqlite/repositorySql.js";
+import { captureLocalCandidate } from "../support/candidateCapture.js";
 import {
   candidateReadyRepo,
   candidateRepositoryConfig,
   commonDirectory,
   git,
 } from "../support/candidateReadyRepo.js";
+import { candidateValidationForTest } from "../support/candidateValidation.js";
 import { cloneInitializedTestRepository } from "../support/initializedRepo.js";
+import { withTestRepository } from "../support/repository.js";
 import {
   acquireTestWorkspace,
   createTestWorkspace,
   releaseTestWorkspace,
 } from "../support/testWorkspace.js";
-import { withTestRepository } from "../support/repository.js";
 
 const now = "2026-07-15T10:00:00.000Z";
 const successorNow = "2026-07-15T10:05:00.000Z";

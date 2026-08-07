@@ -1,8 +1,11 @@
 import { Effect } from "effect";
-
+import type { RepositoryStorageError } from "../../contracts/repositoryStorageError.js";
 import type { CandidateRecord } from "../candidate/candidate.js";
 import type { ChangeRecord } from "../change.js";
 import type { ChangePersistence } from "../changePersistence.js";
+import type { ChangeValidationPersistence } from "../validation/changeValidationPersistence.js";
+import { readValidationArtifactContent } from "../validationRun/artifactContent.js";
+import { validationPhase } from "../validationRun/validationRun.js";
 import type {
   CandidateValidationArtifact,
   CandidateValidationFinding,
@@ -10,10 +13,6 @@ import type {
   CandidateValidationRunRecord,
   CandidateValidationToolingFailure,
 } from "./candidateValidationRunStore.js";
-import type { ChangeValidationPersistence } from "../validation/changeValidationPersistence.js";
-import type { RepositoryStorageError } from "../../contracts/repositoryStorageError.js";
-import { readValidationArtifactContent } from "../validationRun/artifactContent.js";
-import { validationPhase } from "../validationRun/validationRun.js";
 
 const candidateValidationArtifactPreviewBytes = 1_000;
 

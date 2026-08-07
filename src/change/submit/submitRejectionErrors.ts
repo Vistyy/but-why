@@ -6,8 +6,8 @@ import type {
   MissingAgentProfileResource,
   UnsupportedAgentRuntime,
 } from "../../agent/agentProfileErrors.js";
-import { RepoConfigValidationFailed } from "../../contracts/configErrors.js";
 import type { GlobalConfigValidationFailed } from "../../contracts/configErrors.js";
+import { RepoConfigValidationFailed } from "../../contracts/configErrors.js";
 
 export { RepoConfigValidationFailed };
 

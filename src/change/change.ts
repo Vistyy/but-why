@@ -1,6 +1,6 @@
 import type { PublicTaskId } from "../task/taskId.js";
-import type { AcceptanceContextSnapshotV1 } from "./validationRun/acceptanceContextSnapshot.js";
 import type { ImplementationDecision } from "./implementationDecision.js";
+import type { AcceptanceContextSnapshotV1 } from "./validationRun/acceptanceContextSnapshot.js";
 
 export const changeState = {
   open: "open",

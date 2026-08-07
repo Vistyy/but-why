@@ -3,22 +3,21 @@ import { join } from "node:path";
 import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
 import { describe } from "vitest";
-
+import {
+  type CancellationDependencies,
+  openCancellationUseCases,
+} from "../../src/change/cancelChange.js";
+import type { ChangeRecord } from "../../src/change/change.js";
+import { openTerminalCleanup } from "../../src/change/cleanupTerminalChange.js";
+import type { GitHubPullRequest } from "../../src/change/ownedPullRequestGateway.js";
+import type { TaskRecord } from "../../src/task/task.js";
+import { type PublicTaskId, publicTaskId } from "../../src/task/taskId.js";
 import {
   commitButWhyConfigAndRecordDefault,
-  runByInProcessEffect,
   createGitRepo,
+  runByInProcessEffect,
 } from "../support/by-cli.js";
 import { createTestWorkspace } from "../support/testWorkspace.js";
-import {
-  openCancellationUseCases,
-  type CancellationDependencies,
-} from "../../src/change/cancelChange.js";
-import { openTerminalCleanup } from "../../src/change/cleanupTerminalChange.js";
-import type { ChangeRecord } from "../../src/change/change.js";
-import type { GitHubPullRequest } from "../../src/change/ownedPullRequestGateway.js";
-import { publicTaskId, type PublicTaskId } from "../../src/task/taskId.js";
-import type { TaskRecord } from "../../src/task/task.js";
 
 describe("Change cancellation", () => {
   it.effect(

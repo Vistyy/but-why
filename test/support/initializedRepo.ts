@@ -1,6 +1,6 @@
-import { SqlClient } from "@effect/sql";
 import { copyFileSync, cpSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
+import { SqlClient } from "@effect/sql";
 import { Effect } from "effect";
 
 import { nodeSqliteLayer } from "../../src/sqlite/nodeSqliteClient.js";

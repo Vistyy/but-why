@@ -1,6 +1,6 @@
-import { it } from "@effect/vitest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { it } from "@effect/vitest";
 import { Effect } from "effect";
 import { describe, expect } from "vitest";
 

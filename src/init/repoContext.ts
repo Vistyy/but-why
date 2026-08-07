@@ -10,8 +10,8 @@ import {
   type RestoredTransientChangeFact,
   type RestoredTransientTaskFact,
 } from "../contracts/repositoryStorageError.js";
-import { RepositorySql, repositorySqlLayer } from "../sqlite/repositorySql.js";
 import { isTaskPrefix } from "../contracts/taskPrefix.js";
+import { RepositorySql, repositorySqlLayer } from "../sqlite/repositorySql.js";
 import { findGitRoot } from "./git.js";
 import { ensureGitignoreBlock } from "./gitignore.js";
 import { readRepoConfig, writeRepoConfig } from "./repoConfig.js";

@@ -1,5 +1,5 @@
-import { runtimeError, success, type CliResult } from "../../cliResults.js";
 import type { ChangeReconciliationResult } from "../../change/reconcileChange.js";
+import { type CliResult, runtimeError, success } from "../../cliResults.js";
 
 export const reconcileResult = (
   changeId: string | undefined,

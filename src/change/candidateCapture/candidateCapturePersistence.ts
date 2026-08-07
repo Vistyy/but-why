@@ -1,7 +1,6 @@
 import type { Effect } from "effect";
-
-import type { ChangeState } from "../change.js";
 import type { RepositoryStorageError } from "../../contracts/repositoryStorageError.js";
+import type { ChangeState } from "../change.js";
 export type CommitCandidateCaptureInput = {
   readonly repositoryCommonDirectory: string;
   readonly branchRef: string;

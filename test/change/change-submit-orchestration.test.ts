@@ -1,35 +1,34 @@
 import { expect, it } from "@effect/vitest";
 import { Effect, Layer } from "effect";
 import { describe } from "vitest";
-
-import { CandidateValidation } from "../../src/change/candidateValidation/validateCandidate.js";
-import type { CandidateValidationPolicyResolution } from "../../src/change/candidateValidation/resolveCandidateValidationPolicy.js";
-import type { ChangeRecord } from "../../src/change/change.js";
-import type { RepoConfig } from "../../src/contracts/repoConfig.js";
-import type { ChangePersistence } from "../../src/change/changePersistence.js";
-import { openChangeSubmit } from "../../src/change/submitChange.js";
+import { MissingAgentProfile } from "../../src/agent/agentProfileErrors.js";
 import type {
   CaptureLocalCandidateInput,
   CaptureLocalCandidateResult,
 } from "../../src/change/candidateCapture/captureLocalCandidate.js";
-import type {
-  PublishCandidateInput,
-  PublishCandidateResult,
-} from "../../src/change/publication/candidatePublication.js";
-import { publicTaskId } from "../../src/task/taskId.js";
-import type { RemoteChangeBaseResult } from "../../src/submissionEnvironment/remoteChangeBase.js";
-import type { ChangeValidationPersistence } from "../../src/change/validation/changeValidationPersistence.js";
+import type { CandidateValidationPolicyResolution } from "../../src/change/candidateValidation/resolveCandidateValidationPolicy.js";
+import { CandidateValidation } from "../../src/change/candidateValidation/validateCandidate.js";
+import type { ChangeRecord } from "../../src/change/change.js";
+import type { ChangePersistence } from "../../src/change/changePersistence.js";
 import type {
   GitHubPullRequest,
   GitHubPullRequestGateway,
 } from "../../src/change/ownedPullRequestGateway.js";
-import { ExecutionLockUnavailable, type ExecutionLock } from "../../src/contracts/executionLock.js";
+import type {
+  PublishCandidateInput,
+  PublishCandidateResult,
+} from "../../src/change/publication/candidatePublication.js";
+import type { SubmitRejectionError } from "../../src/change/submit/submitRejectionErrors.js";
+import { openChangeSubmit } from "../../src/change/submitChange.js";
+import type { ChangeValidationPersistence } from "../../src/change/validation/changeValidationPersistence.js";
 import {
   GlobalConfigValidationFailed,
   RepoConfigValidationFailed,
 } from "../../src/contracts/configErrors.js";
-import { MissingAgentProfile } from "../../src/agent/agentProfileErrors.js";
-import type { SubmitRejectionError } from "../../src/change/submit/submitRejectionErrors.js";
+import { type ExecutionLock, ExecutionLockUnavailable } from "../../src/contracts/executionLock.js";
+import type { RepoConfig } from "../../src/contracts/repoConfig.js";
+import type { RemoteChangeBaseResult } from "../../src/submissionEnvironment/remoteChangeBase.js";
+import { publicTaskId } from "../../src/task/taskId.js";
 
 const now = "2026-06-30T12:00:00.000Z";
 const candidate = {

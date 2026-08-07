@@ -1,12 +1,11 @@
-import type { Sandbox } from "@ai-hero/sandcastle";
 import { chmodSync, readdirSync, statSync } from "node:fs";
+import type { Sandbox } from "@ai-hero/sandcastle";
 import { Clock, Effect } from "effect";
 
 import type { AgentEnvironmentCommand } from "../../agent/agentEnvironment.js";
-import type { SpecialistReviewPolicy } from "./specialistReviewConfig.js";
 import type {
-  ReviewerAgentRuntime,
   ReviewerAgentResult,
+  ReviewerAgentRuntime,
 } from "../../agent/reviewerAgentRuntime.js";
 import {
   buildReviewerRevisionPrompt,
@@ -14,25 +13,26 @@ import {
   buildSpecialistReviewerPrompt,
   reviewerFindingHistory,
 } from "../../agent/reviewerPrompts.js";
-import type { RecordCandidateSpecialistRoundInput } from "../candidateValidation/candidateValidationRunStore.js";
 import type { RepositoryStorageError } from "../../contracts/repositoryStorageError.js";
-import type { ValidationToolingFailure } from "../validation/validationToolingFailures.js";
-import { verifyCandidateIntegrity } from "../validation/verifyCandidateIntegrity.js";
-import { writeReviewerArtifacts } from "../validationRun/reviewerArtifacts.js";
-import { validationPhase } from "../validationRun/validationRun.js";
+import type { ReviewerContinuityEvidence } from "../acceptanceReview/runAcceptanceReviewPhase.js";
+import type { RecordCandidateSpecialistRoundInput } from "../candidateValidation/candidateValidationRunStore.js";
+import {
+  type ReviewerContinuity,
+  type ReviewerSessionStore,
+  reviewerSessionFingerprint,
+  reviewerSessionsPath,
+} from "../reviewerSession/reviewerSession.js";
 import {
   runWithSubmitProgress,
   type SubmitProgress,
   type SubmitProgressProfile,
 } from "../validation/submitProgress.js";
-import {
-  reviewerSessionFingerprint,
-  reviewerSessionsPath,
-  type ReviewerContinuity,
-  type ReviewerSessionStore,
-} from "../reviewerSession/reviewerSession.js";
-import type { ReviewerContinuityEvidence } from "../acceptanceReview/runAcceptanceReviewPhase.js";
+import type { ValidationToolingFailure } from "../validation/validationToolingFailures.js";
+import { verifyCandidateIntegrity } from "../validation/verifyCandidateIntegrity.js";
 import type { AcceptanceContextSnapshotV1 } from "../validationRun/acceptanceContextSnapshot.js";
+import { writeReviewerArtifacts } from "../validationRun/reviewerArtifacts.js";
+import { validationPhase } from "../validationRun/validationRun.js";
+import type { SpecialistReviewPolicy } from "./specialistReviewConfig.js";
 
 export type RunSpecialistReviewPhaseInput = {
   readonly validationRunId: string;

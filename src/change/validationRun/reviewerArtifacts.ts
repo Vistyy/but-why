@@ -1,7 +1,6 @@
 import { Effect } from "effect";
-
-import { encodeReviewerWireValue } from "../../agent/reviewerOutputWire.js";
 import type { ReviewerAgentResult } from "../../agent/reviewerAgentRuntime.js";
+import { encodeReviewerWireValue } from "../../agent/reviewerOutputWire.js";
 import {
   InfrastructureToolingFailed,
   type ValidationToolingFailure,

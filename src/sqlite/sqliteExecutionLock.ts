@@ -1,11 +1,11 @@
-import { DatabaseSync } from "node:sqlite";
-import { Effect } from "effect";
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
+import { DatabaseSync } from "node:sqlite";
+import { Effect } from "effect";
 
 import {
-  ExecutionLockUnavailable as ExecutionLockUnavailableError,
   type ExecutionLock,
+  ExecutionLockUnavailable as ExecutionLockUnavailableError,
 } from "../contracts/executionLock.js";
 
 export type SqliteExecutionLockConfig = {

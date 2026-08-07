@@ -1,19 +1,19 @@
 import { repoAgentEnvironment } from "../../agent/agentEnvironment.js";
-import {
-  RepoConfigValidationFailed,
-  type GlobalConfigValidationFailed,
-} from "../../contracts/configErrors.js";
 import { validatePiAgentProfileResources } from "../../agent/piRuntime.js";
+import {
+  type GlobalConfigValidationFailed,
+  RepoConfigValidationFailed,
+} from "../../contracts/configErrors.js";
 import type { RepoConfig } from "../../contracts/repoConfig.js";
 import { readGlobalConfig } from "../../init/globalConfig.js";
 import type { RepoLocalContext } from "../../init/repoContext.js";
 import { resolveAcceptanceReviewPolicy } from "../acceptanceReview/acceptanceReviewConfig.js";
 import { resolveSpecialistReviewPolicies } from "../specialistReview/specialistReviewConfig.js";
-import { submitRepoConfig } from "../submit/submitRepoConfig.js";
 import type { SubmitRejectionError } from "../submit/submitRejectionErrors.js";
+import { submitRepoConfig } from "../submit/submitRepoConfig.js";
 import type {
-  CandidateValidationPolicy,
   AcceptanceContextCandidateValidationPolicy,
+  CandidateValidationPolicy,
 } from "./validateCandidate.js";
 
 export type ResolvedCandidateValidationPolicy =

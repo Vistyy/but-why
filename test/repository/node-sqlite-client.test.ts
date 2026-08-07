@@ -1,9 +1,8 @@
 import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-
-import { expect, it } from "@effect/vitest";
 import * as SqlClient from "@effect/sql/SqlClient";
+import { expect, it } from "@effect/vitest";
 import { Effect, Stream } from "effect";
 import { describe } from "vitest";
 

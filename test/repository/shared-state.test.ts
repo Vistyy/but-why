@@ -7,8 +7,8 @@ import { describe } from "vitest";
 
 import { RepositorySql, repositorySqlLayer } from "../../src/sqlite/repositorySql.js";
 import { createGitRepo, runByInProcessEffect } from "../support/by-cli.js";
-import { createTestWorkspace } from "../support/testWorkspace.js";
 import { runTestProcess } from "../support/testProcess.js";
+import { createTestWorkspace } from "../support/testWorkspace.js";
 
 const now = "2026-06-30T12:00:00.000Z";
 

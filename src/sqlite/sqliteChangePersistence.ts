@@ -1,17 +1,18 @@
+import { randomUUID } from "node:crypto";
 import type * as SqlClient from "@effect/sql/SqlClient";
 import { Effect } from "effect";
-import { randomUUID } from "node:crypto";
 
 import {
-  changeState,
   type ChangeCleanup,
   type ChangePublication,
   type ChangeRecord,
+  changeState,
 } from "../change/change.js";
 import type {
   ChangePersistence,
   ChangePublicationEvidence,
   CurrentPublicationAuthority,
+  RecordImplementationDecisionInput,
 } from "../change/changePersistence.js";
 import type {
   BeginChangePublicationInput,
@@ -22,25 +23,24 @@ import type {
   RecordPublishedPullRequestInput,
   ReplacePendingChangePublicationInput,
 } from "../change/changeStore.js";
+import type {
+  ImplementationBlocker,
+  ImplementationBlockerHistory,
+} from "../change/implementationBlocker.js";
+import type { ImplementationDecision } from "../change/implementationDecision.js";
 import type { ObservedMergedChangeEvidence } from "../change/ownedPullRequestClassifier.js";
+import type { ReviewerSessionRecord } from "../change/reviewerSession/reviewerSession.js";
+import type { ReviewerTranscript } from "../change/reviewerSession/reviewerTranscript.js";
 import { RepositoryPersistedDataInvalid } from "../contracts/repositoryStorageError.js";
 import { storedPublicTaskId } from "../task/taskId.js";
 import { RepositorySql } from "./repositorySql.js";
+import { decodeSqliteAcceptanceContextSnapshot } from "./sqliteAcceptanceContextSnapshot.js";
+import { encodeSqliteCandidateValidationPolicy } from "./sqliteCandidateValidationPolicy.js";
 import { decodeSqliteChangePrepareFailure } from "./sqliteChangePreparation.js";
 import {
   decodeSqliteChangePublication,
   type SqliteChangePublicationRow,
 } from "./sqliteChangePublication.js";
-import { decodeSqliteAcceptanceContextSnapshot } from "./sqliteAcceptanceContextSnapshot.js";
-import { encodeSqliteCandidateValidationPolicy } from "./sqliteCandidateValidationPolicy.js";
-import type { ReviewerSessionRecord } from "../change/reviewerSession/reviewerSession.js";
-import type { ReviewerTranscript } from "../change/reviewerSession/reviewerTranscript.js";
-import type { ImplementationDecision } from "../change/implementationDecision.js";
-import type {
-  ImplementationBlocker,
-  ImplementationBlockerHistory,
-} from "../change/implementationBlocker.js";
-import type { RecordImplementationDecisionInput } from "../change/changePersistence.js";
 
 const columns = [
   "id",

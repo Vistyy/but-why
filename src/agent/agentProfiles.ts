@@ -2,10 +2,10 @@ import type { AgentProfileReference, PiAgentProfileConfig } from "../contracts/a
 import type { GlobalConfig } from "../contracts/globalConfig.js";
 import type { RepoConfig } from "../contracts/repoConfig.js";
 import {
+  type AgentProfileResolutionError,
   MissingAgentModel,
   MissingAgentProfile,
   UnsupportedAgentRuntime,
-  type AgentProfileResolutionError,
 } from "./agentProfileErrors.js";
 
 export type ResolvedPiAgentProfile = {

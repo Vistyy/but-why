@@ -1,15 +1,13 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-
-import { expect, it } from "@effect/vitest";
-import * as SqlClient from "@effect/sql/SqlClient";
 import * as Migrator from "@effect/sql/Migrator";
+import * as SqlClient from "@effect/sql/SqlClient";
+import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
 import { describe } from "vitest";
 
 import { isTaskPrefix } from "../../src/contracts/taskPrefix.js";
 import { initRepoLocalContext } from "../../src/init/repoContext.js";
-import { nodeSqliteLayer } from "../../src/sqlite/nodeSqliteClient.js";
 import { baselineMigration } from "../../src/sqlite/migrations/0001_baseline.js";
 import { reviewerSessionsMigration } from "../../src/sqlite/migrations/0002_reviewer_sessions.js";
 import { implementationDecisionsMigration } from "../../src/sqlite/migrations/0003_implementation_decisions.js";
@@ -32,6 +30,7 @@ import { simplifyReviewerSessionsMigration } from "../../src/sqlite/migrations/0
 import { removeCandidatePublicationsMigration } from "../../src/sqlite/migrations/0020_remove_candidate_publications.js";
 import { reviewerTranscriptsMigration } from "../../src/sqlite/migrations/0021_reviewer_transcripts.js";
 import { changeCancelReasonMigration } from "../../src/sqlite/migrations/0022_change_cancel_reason.js";
+import { nodeSqliteLayer } from "../../src/sqlite/nodeSqliteClient.js";
 import { createGitRepo, runByInProcessEffect } from "../support/by-cli.js";
 
 const writeConfig = (root: string, taskPrefix = "BY") => {

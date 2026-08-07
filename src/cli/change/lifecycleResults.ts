@@ -1,8 +1,8 @@
 // fallow-ignore-file unused-export -- dynamically imported by the CLI
 
-import { runtimeError, success, type CliResult } from "../../cliResults.js";
 import type { ChangeRecord } from "../../change/change.js";
-import type { ChangeStartResult, ChangePrepareResult } from "../../change/changeUseCases.js";
+import type { ChangePrepareResult, ChangeStartResult } from "../../change/changeUseCases.js";
+import { type CliResult, runtimeError, success } from "../../cliResults.js";
 import { prepareFailureView, remoteChangeBaseError } from "./sharedResults.js";
 
 export const startResult = (result: ChangeStartResult): CliResult => {

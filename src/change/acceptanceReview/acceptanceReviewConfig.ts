@@ -1,9 +1,9 @@
 import { dirname, join } from "node:path";
 
-import { resolveAgentProfile, type ResolvedPiAgentProfile } from "../../agent/agentProfiles.js";
+import { type ResolvedPiAgentProfile, resolveAgentProfile } from "../../agent/agentProfiles.js";
+import { defaultAcceptanceInstructions } from "../../agent/reviewerPrompts.js";
 import type { GlobalConfig } from "../../contracts/globalConfig.js";
 import type { RepoConfig } from "../../contracts/repoConfig.js";
-import { defaultAcceptanceInstructions } from "../../agent/reviewerPrompts.js";
 import { readAcceptanceInstructions } from "../../init/acceptanceInstructions.js";
 import {
   InvalidReviewerConfig,

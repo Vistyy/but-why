@@ -1,4 +1,4 @@
-import { readSync, readFileSync, statSync } from "node:fs";
+import { readFileSync, readSync, statSync } from "node:fs";
 import { resolve } from "node:path";
 import { TextDecoder } from "node:util";
 

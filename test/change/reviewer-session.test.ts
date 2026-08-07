@@ -3,11 +3,11 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import {
+  type ReviewerSessionIdentity,
   reviewerSessionFingerprint,
   reviewerSessionsChangeRoot,
   reviewerSessionsPath,
   reviewerSessionsProducerRoot,
-  type ReviewerSessionIdentity,
 } from "../../src/change/reviewerSession/reviewerSession.js";
 import { createTestWorkspace } from "../support/testWorkspace.js";
 

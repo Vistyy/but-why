@@ -1,12 +1,11 @@
-import { DatabaseSync } from "node:sqlite";
-import { existsSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { isAbsolute, join } from "node:path";
-
+import { DatabaseSync } from "node:sqlite";
+import { it } from "@effect/vitest";
 import { Effect } from "effect";
 import { describe, expect } from "vitest";
-import { it } from "@effect/vitest";
 
-import { runByInProcessEffect, createGitRepo } from "../support/by-cli.js";
+import { createGitRepo, runByInProcessEffect } from "../support/by-cli.js";
 import { runTestProcess } from "../support/testProcess.js";
 
 const statePath = (root: string): string => join(root, ".git", "but-why", "state.sqlite");

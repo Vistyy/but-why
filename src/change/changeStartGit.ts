@@ -1,11 +1,11 @@
 import { spawnSync } from "node:child_process";
-import { constants, existsSync, lstatSync, mkdirSync, realpathSync, accessSync } from "node:fs";
+import { accessSync, constants, existsSync, lstatSync, mkdirSync, realpathSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 
 import { decodeRepoConfigSource } from "../init/repoConfig.js";
-import { resolveLocalBranch } from "./candidateCapture/localGitCandidate.js";
-import { fetchRemoteChangeBase } from "../submissionEnvironment/remoteChangeBase.js";
 import type { RepoLocalContext } from "../init/repoContext.js";
+import { fetchRemoteChangeBase } from "../submissionEnvironment/remoteChangeBase.js";
+import { resolveLocalBranch } from "./candidateCapture/localGitCandidate.js";
 import { changeBranchRefForSlug } from "./changeBranch.js";
 import type {
   ProvisionChangeWorktreeResult,

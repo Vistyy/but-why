@@ -3,18 +3,17 @@ import { join } from "node:path";
 import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
 import { describe } from "vitest";
-
-import { cleanupChangeResources } from "../../src/change/localChangeCleanupGit.js";
 import { openTerminalCleanup } from "../../src/change/cleanupTerminalChange.js";
+import { cleanupChangeResources } from "../../src/change/localChangeCleanupGit.js";
 import { openChangeReconciliation } from "../../src/change/reconcileChange.js";
-import { openSqliteChangePersistence } from "../../src/sqlite/sqliteChangePersistence.js";
-import { openSqliteChangeStartPersistence } from "../../src/sqlite/sqliteChangeStartPersistence.js";
+import type { RepositoryStorageError } from "../../src/contracts/repositoryStorageError.js";
 import {
   RepositorySql,
-  repositorySqlLayer,
   type RepositorySqlConfig,
+  repositorySqlLayer,
 } from "../../src/sqlite/repositorySql.js";
-import type { RepositoryStorageError } from "../../src/contracts/repositoryStorageError.js";
+import { openSqliteChangePersistence } from "../../src/sqlite/sqliteChangePersistence.js";
+import { openSqliteChangeStartPersistence } from "../../src/sqlite/sqliteChangeStartPersistence.js";
 import { runTestProcess, runTestProcessOrThrow } from "../support/testProcess.js";
 import { createTestWorkspace } from "../support/testWorkspace.js";
 

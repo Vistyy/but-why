@@ -1,9 +1,9 @@
 import type { CliResult } from "./cli.js";
 import { runtimeError, usageError } from "./cliResults.js";
 import {
-  parsePublicTaskId,
   type PublicTaskId,
   type PublicTaskIdParseResult,
+  parsePublicTaskId,
 } from "./task/taskId.js";
 
 export type CliTaskIdParseResult =

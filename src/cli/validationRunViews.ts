@@ -6,12 +6,12 @@ import type {
   CandidateValidationRunInspection,
 } from "../change/candidateValidation/inspectCandidateValidationRun.js";
 import type { ChangeRecord } from "../change/change.js";
+import {
+  type ValidationRunFindingRecord,
+  validationPhase,
+} from "../change/validationRun/validationRun.js";
 import type { StructuredObject } from "../output/structured.js";
 import { structuredValue } from "../output/structuredValue.js";
-import {
-  validationPhase,
-  type ValidationRunFindingRecord,
-} from "../change/validationRun/validationRun.js";
 
 const validationRunFindingView = (finding: ValidationRunFindingRecord): StructuredObject => ({
   id: finding.id,

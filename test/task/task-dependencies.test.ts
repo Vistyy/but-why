@@ -4,9 +4,8 @@ import { join } from "node:path";
 import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
 import { describe } from "vitest";
-
-import type { TaskUseCases } from "../../src/task/taskUseCases.js";
 import { publicTaskId } from "../../src/task/taskId.js";
+import type { TaskUseCases } from "../../src/task/taskUseCases.js";
 import { runByInProcessEffect } from "../support/by-cli.js";
 import { fakeTaskUseCases } from "../support/taskUseCases.js";
 import { createTestWorkspace } from "../support/testWorkspace.js";

@@ -3,9 +3,9 @@
 
 import { Effect } from "effect";
 import type { CliResult } from "../../cliResults.js";
-import type { ChangeCommandEnvironment } from "./changeTypes.js";
 import { parseCliTaskIdValue } from "../../cliTaskId.js";
 import * as support from "./changeSupport.js";
+import type { ChangeCommandEnvironment } from "./changeTypes.js";
 import { startResult } from "./lifecycleResults.js";
 
 type ChangeStartCommand = {

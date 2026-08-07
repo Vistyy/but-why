@@ -1,10 +1,10 @@
-import { encodeReviewerWireValue, reviewerOutputTag } from "./reviewerOutputWire.js";
+import type { ImplementationBlockerHistory } from "../change/implementationBlocker.js";
+import type { ImplementationDecision } from "../change/implementationDecision.js";
 import type { ReviewerOutputContractFailed } from "../change/validation/validationToolingFailures.js";
+import type { AcceptanceContextSnapshotV1 } from "../change/validationRun/acceptanceContextSnapshot.js";
 import type { ReviewerFindingCore } from "../contracts/reviewerFinding.js";
 import type { ReviewerOutput } from "../contracts/reviewerOutput.js";
-import type { AcceptanceContextSnapshotV1 } from "../change/validationRun/acceptanceContextSnapshot.js";
-import type { ImplementationDecision } from "../change/implementationDecision.js";
-import type { ImplementationBlockerHistory } from "../change/implementationBlocker.js";
+import { encodeReviewerWireValue, reviewerOutputTag } from "./reviewerOutputWire.js";
 
 const reviewerExecutionInstructions = [
   "When inspection is insufficient, you may use bash and operating-system temporary space for targeted experiments, generated scripts, fixtures, and other disposable evidence.",

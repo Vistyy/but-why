@@ -2,10 +2,10 @@ import { existsSync } from "node:fs";
 import { Effect } from "effect";
 
 import type { RepositoryStorageError } from "../contracts/repositoryStorageError.js";
+import { type LoadRepoLocalContextError, loadRepoLocalContext } from "../init/repoContext.js";
 import { repositorySqlLayer } from "../sqlite/repositorySql.js";
 import { openSqliteTaskPersistence } from "../sqlite/sqliteTaskPersistence.js";
 import { openTaskUseCases, type TaskUseCases } from "./taskUseCases.js";
-import { loadRepoLocalContext, type LoadRepoLocalContextError } from "../init/repoContext.js";
 
 export type LoadTaskUseCasesInput = {
   readonly cwd: string;

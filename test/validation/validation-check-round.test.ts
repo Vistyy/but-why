@@ -1,11 +1,10 @@
-import { expect, it } from "@effect/vitest";
-import { Cause, Effect, Exit } from "effect";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { expect, it } from "@effect/vitest";
+import { Cause, Effect, Exit } from "effect";
 import { describe } from "vitest";
-
-import { runCheckPhase } from "../../src/change/validation/runCheckRound.js";
 import type { RecordCandidateValidationCheckRoundInput } from "../../src/change/candidateValidation/candidateValidationRunStore.js";
+import { runCheckPhase } from "../../src/change/validation/runCheckRound.js";
 import { createTestWorkspace } from "../support/testWorkspace.js";
 
 const now = "2026-06-30T12:00:00.000Z";

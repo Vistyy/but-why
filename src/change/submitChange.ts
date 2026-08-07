@@ -1,47 +1,46 @@
 import { Effect } from "effect";
-
-import type { RepoConfig } from "../contracts/repoConfig.js";
-import type { ContractDiagnostic } from "../contracts/contractDiagnostics.js";
 import type { GlobalConfigValidationFailed } from "../contracts/configErrors.js";
-import type { SubmitRejectionError } from "./submit/submitRejectionErrors.js";
-import type {
-  CandidateValidationPolicyResolution,
-  ResolvedCandidateValidationPolicy,
-} from "./candidateValidation/resolveCandidateValidationPolicy.js";
-import type { ReviewerContinuityEvidence } from "./acceptanceReview/runAcceptanceReviewPhase.js";
-import type { SpecialistReviewerContinuityEvidence } from "./specialistReview/runSpecialistReviewPhase.js";
-import type {
-  CandidateValidationFinding,
-  CandidateValidationToolingFailure,
-} from "./candidateValidation/candidateValidationRunStore.js";
-import {
-  CandidateValidation,
-  type CandidateValidationService,
-} from "./candidateValidation/validateCandidate.js";
-import type {
-  CaptureLocalCandidateInput,
-  CaptureLocalCandidateResult,
-} from "./candidateCapture/captureLocalCandidate.js";
-import type { RepositoryBranchHeadResult } from "./candidateCapture/candidateCaptureGit.js";
-import type { RepositoryStorageError } from "../contracts/repositoryStorageError.js";
+import type { ContractDiagnostic } from "../contracts/contractDiagnostics.js";
 import type { ExecutionLock } from "../contracts/executionLock.js";
-import type {
-  CandidatePublication,
-  PublishCandidateResult,
-} from "./publication/candidatePublication.js";
-import { changeState, type ChangePublicationTarget, type ChangeRecord } from "./change.js";
-import type { ReconciledChange } from "./reconcileChange.js";
-import type { ChangePersistence } from "./changePersistence.js";
+import type { RepoConfig } from "../contracts/repoConfig.js";
+import type { RepositoryStorageError } from "../contracts/repositoryStorageError.js";
 import type {
   RemoteChangeBaseError,
   RemoteChangeBaseResult,
 } from "../submissionEnvironment/remoteChangeBase.js";
-import type { GitHubPullRequestGateway } from "./ownedPullRequestGateway.js";
+import type { ReviewerContinuityEvidence } from "./acceptanceReview/runAcceptanceReviewPhase.js";
+import type { RepositoryBranchHeadResult } from "./candidateCapture/candidateCaptureGit.js";
+import type {
+  CaptureLocalCandidateInput,
+  CaptureLocalCandidateResult,
+} from "./candidateCapture/captureLocalCandidate.js";
+import type {
+  CandidateValidationFinding,
+  CandidateValidationToolingFailure,
+} from "./candidateValidation/candidateValidationRunStore.js";
+import type {
+  CandidateValidationPolicyResolution,
+  ResolvedCandidateValidationPolicy,
+} from "./candidateValidation/resolveCandidateValidationPolicy.js";
 import {
-  observeOwnedPullRequest,
-  observedMergedChangeEvidence,
+  CandidateValidation,
+  type CandidateValidationService,
+} from "./candidateValidation/validateCandidate.js";
+import { type ChangePublicationTarget, type ChangeRecord, changeState } from "./change.js";
+import type { ChangePersistence } from "./changePersistence.js";
+import {
   type OwnedPullRequestUnavailableReason,
+  observedMergedChangeEvidence,
+  observeOwnedPullRequest,
 } from "./ownedPullRequestClassifier.js";
+import type { GitHubPullRequestGateway } from "./ownedPullRequestGateway.js";
+import type {
+  CandidatePublication,
+  PublishCandidateResult,
+} from "./publication/candidatePublication.js";
+import type { ReconciledChange } from "./reconcileChange.js";
+import type { SpecialistReviewerContinuityEvidence } from "./specialistReview/runSpecialistReviewPhase.js";
+import type { SubmitRejectionError } from "./submit/submitRejectionErrors.js";
 import type { SubmitProgress } from "./validation/submitProgress.js";
 
 export type ChangeSubmitResult =

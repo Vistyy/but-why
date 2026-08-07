@@ -1,19 +1,18 @@
 import { randomUUID } from "node:crypto";
 import { chmodSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { Effect } from "effect";
 import { join } from "node:path";
 import { expect, it } from "@effect/vitest";
+import { Effect } from "effect";
 import { describe } from "vitest";
-
+import { RepositorySql } from "../../src/sqlite/repositorySql.js";
 import {
   commitButWhyConfigAndRecordDefault,
   runBuiltByWithEnv,
   runBuiltByWithInput,
 } from "../support/by-cli.js";
 import { createInitializedRepo } from "../support/initializedRepo.js";
-import { createTestWorkspace } from "../support/testWorkspace.js";
-import { RepositorySql } from "../../src/sqlite/repositorySql.js";
 import { withTestRepository } from "../support/repository.js";
+import { createTestWorkspace } from "../support/testWorkspace.js";
 
 describe("by change implement stdin process boundary", () => {
   it("forwards piped stdin through a real process", () => {

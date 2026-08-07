@@ -1,24 +1,25 @@
+import { randomUUID } from "node:crypto";
 import type * as SqlClient from "@effect/sql/SqlClient";
 import { Effect } from "effect";
-import { randomUUID } from "node:crypto";
 
 import type { CandidateRecord } from "../change/candidate/candidate.js";
-import type { ImplementationDecision } from "../change/implementationDecision.js";
 import type {
   ActiveCandidateValidationRun,
   CandidateValidationArtifact,
   CandidateValidationFinding,
   CandidateValidationRound,
+  CandidateValidationRunAbandonmentContext,
   CandidateValidationRunRecord,
   CandidateValidationToolingFailure,
-  CandidateValidationRunAbandonmentContext,
   RecordCandidateValidationCommandRoundInput,
   StartCandidateValidationRunInput,
   StartCandidateValidationRunResult,
 } from "../change/candidateValidation/candidateValidationRunStore.js";
+import type { ImplementationDecision } from "../change/implementationDecision.js";
 import type { ChangeValidationPersistence } from "../change/validation/changeValidationPersistence.js";
-import { RepositoryPersistedDataInvalid } from "../contracts/repositoryStorageError.js";
 import { validationPhase } from "../change/validationRun/validationRun.js";
+import { RepositoryPersistedDataInvalid } from "../contracts/repositoryStorageError.js";
+import { RepositorySql } from "./repositorySql.js";
 import {
   decodeSqliteCandidateValidationPolicy,
   encodeSqliteCandidateValidationPolicy,
@@ -27,7 +28,6 @@ import {
   decodeSqliteJsonStringArray,
   encodeSqliteJsonStringArray,
 } from "./sqliteJsonStringArray.js";
-import { RepositorySql } from "./repositorySql.js";
 
 export const openSqliteChangeValidationPersistence = (): Effect.Effect<
   ChangeValidationPersistence,

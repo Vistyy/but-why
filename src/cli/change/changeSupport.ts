@@ -1,22 +1,21 @@
 // fallow-ignore-file duplicate-export -- shared Change command support
 
 import { Effect } from "effect";
-
+import type { CandidateValidationRunRecord } from "../../change/candidateValidation/candidateValidationRunStore.js";
+import type { ChangeRecord } from "../../change/change.js";
+import type { ChangeUseCases } from "../../change/changeUseCases.js";
+import { withChangeUseCases } from "../../change/loadChangeUseCases.js";
+import type { RepoStateLoadError } from "../../cliResults.js";
 import {
-  repositoryStorageErrorResult,
+  type CliResult,
   repoStateLoadError,
+  repositoryStorageErrorResult,
   runtimeError,
   stateStoreUnavailable,
-  type CliResult,
 } from "../../cliResults.js";
-import { withChangeUseCases } from "../../change/loadChangeUseCases.js";
-import type { ChangeRecord } from "../../change/change.js";
-import type { CandidateValidationRunRecord } from "../../change/candidateValidation/candidateValidationRunStore.js";
-import type { ChangeUseCases } from "../../change/changeUseCases.js";
 import type { RepositoryStorageError } from "../../contracts/repositoryStorageError.js";
-import type { RepoStateLoadError } from "../../cliResults.js";
-import type { ChangeCommandEnvironment } from "./changeTypes.js";
 import { resolveChangeId } from "./changeTarget.js";
+import type { ChangeCommandEnvironment } from "./changeTypes.js";
 import { prepareFailureView } from "./sharedResults.js";
 
 export const withResolvedChangeId = <E, R>(

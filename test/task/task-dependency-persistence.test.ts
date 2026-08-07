@@ -1,10 +1,9 @@
 import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
-
-import { openSqliteTaskPersistence } from "../../src/sqlite/sqliteTaskPersistence.js";
 import { RepositorySql } from "../../src/sqlite/repositorySql.js";
-import type { TaskPersistence } from "../../src/task/taskPersistence.js";
+import { openSqliteTaskPersistence } from "../../src/sqlite/sqliteTaskPersistence.js";
 import { publicTaskId } from "../../src/task/taskId.js";
+import type { TaskPersistence } from "../../src/task/taskPersistence.js";
 import { withTemporaryRepositoryState } from "../support/repository.js";
 
 const firstNow = "2026-06-30T12:00:00.000Z";

@@ -3,9 +3,9 @@ import { join } from "node:path";
 import { Effect } from "effect";
 
 import {
-  openCandidateCapture,
   type CaptureLocalCandidateInput,
   type CaptureLocalCandidateResult,
+  openCandidateCapture,
 } from "../../src/change/candidateCapture/captureLocalCandidate.js";
 import { localCandidateCaptureGit } from "../../src/change/candidateCapture/localGitCandidate.js";
 import { repositorySqlLayer } from "../../src/sqlite/repositorySql.js";

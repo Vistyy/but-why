@@ -11,8 +11,8 @@ import {
   openReviewerTranscriptIndex,
   type ReviewerTranscript,
 } from "../../src/change/reviewerSession/reviewerTranscript.js";
-import { openSqliteChangePersistence } from "../../src/sqlite/sqliteChangePersistence.js";
 import { RepositorySql } from "../../src/sqlite/repositorySql.js";
+import { openSqliteChangePersistence } from "../../src/sqlite/sqliteChangePersistence.js";
 import { withTemporaryRepositoryState as withTemporaryState } from "../support/repository.js";
 import { createTestWorkspace } from "../support/testWorkspace.js";
 

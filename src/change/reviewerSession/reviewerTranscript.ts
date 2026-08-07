@@ -1,4 +1,4 @@
-import { readFileSync, readdirSync, type Dirent } from "node:fs";
+import { type Dirent, readdirSync, readFileSync } from "node:fs";
 import { basename, join, relative } from "node:path";
 
 import { Effect } from "effect";

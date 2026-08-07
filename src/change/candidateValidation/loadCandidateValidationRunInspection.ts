@@ -1,15 +1,14 @@
 import { existsSync } from "node:fs";
 
 import { Effect } from "effect";
-
-import {
-  openCandidateValidationRunInspection,
-  type CandidateValidationRunInspectionUseCases,
-} from "./inspectCandidateValidationRun.js";
-import { loadRepoLocalContext, type LoadRepoLocalContextError } from "../../init/repoContext.js";
+import { type LoadRepoLocalContextError, loadRepoLocalContext } from "../../init/repoContext.js";
 import { repositorySqlLayer } from "../../sqlite/repositorySql.js";
 import { openSqliteChangePersistence } from "../../sqlite/sqliteChangePersistence.js";
 import { openSqliteChangeValidationPersistence } from "../../sqlite/sqliteChangeValidationPersistence.js";
+import {
+  type CandidateValidationRunInspectionUseCases,
+  openCandidateValidationRunInspection,
+} from "./inspectCandidateValidationRun.js";
 
 export type LoadCandidateValidationRunInspectionResult =
   | {

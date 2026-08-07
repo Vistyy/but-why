@@ -6,13 +6,13 @@ import type { CliResult } from "../../../cliResults.js";
 import { runtimeError, success } from "../../../cliResults.js";
 import { parseCliTaskIdValue } from "../../../cliTaskId.js";
 import type { PublicTaskId } from "../../../task/taskId.js";
-import { taskApprovalStateHelp } from "../taskStateHelp.js";
 import {
   resolveTaskId,
+  type TaskCommandEnvironment,
   taskNotFound,
   withTasks,
-  type TaskCommandEnvironment,
 } from "../taskCliSupport.js";
+import { taskApprovalStateHelp } from "../taskStateHelp.js";
 
 export type TaskIdCommand = { readonly taskId: string };
 

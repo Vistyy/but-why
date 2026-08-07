@@ -1,5 +1,5 @@
-import { runtimeError, success, type CliResult } from "../../cliResults.js";
 import type { ChangeCancellationResult } from "../../change/cancelChange.js";
+import { type CliResult, runtimeError, success } from "../../cliResults.js";
 
 export const changeCancelResult = (result: ChangeCancellationResult): CliResult => {
   if (result.ok) {

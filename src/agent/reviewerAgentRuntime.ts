@@ -1,4 +1,3 @@
-import { pi, type AgentProvider, type Sandbox, type SandboxRunResult } from "@ai-hero/sandcastle";
 import {
   chmodSync,
   cpSync,
@@ -9,28 +8,28 @@ import {
   rmSync,
   writeFileSync,
 } from "node:fs";
-import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
+import { dirname, join } from "node:path";
+import { type AgentProvider, pi, type Sandbox, type SandboxRunResult } from "@ai-hero/sandcastle";
 import { Effect } from "effect";
-
-import {
-  prependAgentEnvironment,
-  shellQuote,
-  type AgentEnvironmentCommand,
-} from "./agentEnvironment.js";
-import { piResourceFlags } from "./piRuntime.js";
-import type { ResolvedPiAgentProfile } from "./agentProfiles.js";
-import { parseTaggedReviewerOutput } from "./reviewerOutputWire.js";
-import { buildReviewerOutputCorrectionPrompt } from "./reviewerPrompts.js";
-import {
-  decodeReviewerOutputContract,
-  validateReviewerArtifactRefs,
-  type ReviewerOutput,
-} from "../contracts/reviewerOutput.js";
 import {
   SandcastleToolingFailed,
   type ValidationToolingFailure,
 } from "../change/validation/validationToolingFailures.js";
+import {
+  decodeReviewerOutputContract,
+  type ReviewerOutput,
+  validateReviewerArtifactRefs,
+} from "../contracts/reviewerOutput.js";
+import {
+  type AgentEnvironmentCommand,
+  prependAgentEnvironment,
+  shellQuote,
+} from "./agentEnvironment.js";
+import type { ResolvedPiAgentProfile } from "./agentProfiles.js";
+import { piResourceFlags } from "./piRuntime.js";
+import { parseTaggedReviewerOutput } from "./reviewerOutputWire.js";
+import { buildReviewerOutputCorrectionPrompt } from "./reviewerPrompts.js";
 
 export type ReviewerAgentRuntime = {
   readonly review: (input: ReviewerAgentInput) => Effect.Effect<ReviewerAgentResult>;
