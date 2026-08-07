@@ -66,6 +66,52 @@ describe("Acceptance Review configuration", () => {
     ).toMatchObject({ ok: true, policy: { instructionsSource: "built_in" } });
   });
 
+  it("rejects a configured missing repo instructions file without fallback", () => {
+    const root = createTestWorkspace();
+    const globalConfigPath = join(root, "global", "config.json");
+    mkdirSync(join(root, "global", "reviewers"), { recursive: true });
+    writeFileSync(join(root, "global", "reviewers", "acceptance.md"), "global\n");
+
+    expect(
+      resolveAcceptanceReviewPolicy({
+        repoConfig: repoConfig(".but-why/reviewers/acceptance.md"),
+        globalConfig: globalConfig("reviewers/acceptance.md"),
+        repoRoot: join(root, "repo"),
+        globalConfigPath,
+      }),
+    ).toMatchObject({
+      ok: false,
+      error: {
+        _tag: "InvalidReviewerConfig",
+        message: expect.stringContaining("Could not read Acceptance instructions file"),
+      },
+    });
+  });
+
+  it("rejects a configured unreadable instructions file instead of falling back", () => {
+    const root = createTestWorkspace();
+    const repo = join(root, "repo");
+    const globalConfigPath = join(root, "global", "config.json");
+    mkdirSync(join(repo, "reviewers", "acceptance.md"), { recursive: true });
+    mkdirSync(join(root, "global", "reviewers"), { recursive: true });
+    writeFileSync(join(root, "global", "reviewers", "acceptance.md"), "global\n");
+
+    expect(
+      resolveAcceptanceReviewPolicy({
+        repoConfig: repoConfig("reviewers/acceptance.md"),
+        globalConfig: globalConfig("reviewers/acceptance.md"),
+        repoRoot: repo,
+        globalConfigPath,
+      }),
+    ).toMatchObject({
+      ok: false,
+      error: {
+        _tag: "InvalidReviewerConfig",
+        message: expect.stringContaining("Could not read Acceptance instructions file"),
+      },
+    });
+  });
+
   it("resolves scoped repository, global, then default Agent Profile selection", () => {
     const root = createTestWorkspace();
     const profiles = {

@@ -100,6 +100,34 @@ describe("GitHub PR target detection", () => {
     });
   });
 
+  it.each([
+    "main",
+    "refs/heads/main",
+    "refs/remotes/origin",
+    "refs/remotes/origin/",
+    "refs/remotes//main",
+    "origin/main",
+    "",
+  ])("rejects the malformed Change Base ref %s before invoking GitHub", (baseRef) => {
+    let ghCalls = 0;
+    const gh: GhCommandRunner = () => {
+      ghCalls += 1;
+      return { ok: true, stdout: '{"defaultBranchRef":{"name":"main"}}' };
+    };
+
+    expect(
+      detectGitHubPrTarget(
+        cwd,
+        "feature",
+        gitFor("https://github.com/acme/widgets"),
+        gh,
+        baseRef,
+        "https://github.com/acme/widgets",
+      ),
+    ).toEqual({ ok: false, code: "PR_TARGET_NOT_FOUND" });
+    expect(ghCalls).toBe(0);
+  });
+
   it("uses the existing pull request base branch", () => {
     const gh: GhCommandRunner = (args) =>
       args[0] === "pr"
