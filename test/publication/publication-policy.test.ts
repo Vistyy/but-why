@@ -406,6 +406,116 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
     ),
   );
 
+  it.scoped("records an uncertain update only after exact read-back agreement", () =>
+    withFixture((fixture) =>
+      Effect.gen(function* () {
+        let branchHead = fixture.captured.headSha;
+        let remote = pullRequest(branchHead);
+        let updateCalls = 0;
+        let readBacks = 0;
+        const publication = openCandidatePublication({
+          changePersistence: fixture.changes,
+          validationPersistence: fixture.validation,
+          git: {
+            readBranchHead: () => branchHead,
+            readFirstNonMergeCommitSubject: () => ({ ok: true, subject: "Publication" }),
+          },
+          github: {
+            findPullRequests: () => [],
+            getPullRequest: () => {
+              readBacks += 1;
+              return remote;
+            },
+            createPullRequest: () => ({ ok: true, pullRequest: remote }),
+            updatePullRequest: (request) => {
+              updateCalls += 1;
+              remote = pullRequest(request.expectedHeadSha);
+              return { ok: false as const, code: "remote_response_lost" as const };
+            },
+          },
+        });
+        expect(yield* publication.publish(input(fixture))).toMatchObject({
+          ok: true,
+          created: true,
+        });
+
+        const next = yield* nextCandidate(
+          fixture,
+          "Uncertain Update Candidate",
+          "2026-07-22T10:05:00.000Z",
+        );
+        branchHead = next.captured.headSha;
+        readBacks = 0;
+        expect(
+          yield* publication.publish({
+            ...input(fixture),
+            candidateId: next.captured.candidateId,
+            validationRunId: next.validationRunId,
+            now: "2026-07-22T10:05:00.000Z",
+          }),
+        ).toMatchObject({ ok: true, created: false, pullRequest: { number: 42 } });
+        expect(updateCalls).toBe(1);
+        expect(readBacks).toBe(2);
+        expect(yield* fixture.changes.getChangeById(fixture.captured.changeId)).toMatchObject({
+          publication: {
+            candidateId: next.captured.candidateId,
+            expectedHeadSha: next.captured.headSha,
+          },
+        });
+      }),
+    ),
+  );
+
+  it.scoped("rejects an uncertain update whose read-back disagrees", () =>
+    withFixture((fixture) =>
+      Effect.gen(function* () {
+        let branchHead = fixture.captured.headSha;
+        const remote = pullRequest(branchHead);
+        let updateCalls = 0;
+        const publication = openCandidatePublication({
+          changePersistence: fixture.changes,
+          validationPersistence: fixture.validation,
+          git: {
+            readBranchHead: () => branchHead,
+            readFirstNonMergeCommitSubject: () => ({ ok: true, subject: "Publication" }),
+          },
+          github: {
+            findPullRequests: () => [],
+            getPullRequest: () => remote,
+            createPullRequest: () => ({ ok: true, pullRequest: remote }),
+            updatePullRequest: () => {
+              updateCalls += 1;
+              return { ok: false as const, code: "remote_response_lost" as const };
+            },
+          },
+        });
+        expect(yield* publication.publish(input(fixture))).toMatchObject({ ok: true });
+
+        const next = yield* nextCandidate(
+          fixture,
+          "Disagreed Update Candidate",
+          "2026-07-22T10:05:00.000Z",
+        );
+        branchHead = next.captured.headSha;
+        expect(
+          yield* publication.publish({
+            ...input(fixture),
+            candidateId: next.captured.candidateId,
+            validationRunId: next.validationRunId,
+            now: "2026-07-22T10:05:00.000Z",
+          }),
+        ).toEqual({ ok: false, code: "publication_remote_mismatch" });
+        expect(updateCalls).toBe(1);
+        expect(yield* fixture.changes.getChangeById(fixture.captured.changeId)).toMatchObject({
+          publication: {
+            candidateId: fixture.captured.candidateId,
+            expectedHeadSha: fixture.captured.headSha,
+          },
+        });
+      }),
+    ),
+  );
+
   it.scoped("returns a remote mismatch after three stale confirmation reads", () =>
     withFixture((fixture) =>
       Effect.gen(function* () {

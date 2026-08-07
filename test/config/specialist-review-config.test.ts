@@ -90,6 +90,40 @@ describe("Specialist Review configuration", () => {
     });
   });
 
+  it("rejects a configured missing or unreadable Specialist instructions file", () => {
+    const root = configRoot();
+    const repoConfig = {
+      taskPrefix: "BY",
+      review: { specialists: ["security"] },
+      reviewers: {
+        security: {
+          instructionsFile: "repo-security.md",
+          agentProfile: { scope: "repo", name: "review" },
+        },
+      },
+      agentProfiles: { review: piProfile("repo-model") },
+    } satisfies RepoConfig;
+
+    const missing = resolve(root, repoConfig, {});
+    expect(missing).toMatchObject({
+      ok: false,
+      error: {
+        _tag: "InvalidReviewerConfig",
+        message: expect.stringContaining("Could not read Acceptance instructions file"),
+      },
+    });
+
+    mkdirSync(join(root.repo, "repo-security.md"), { recursive: true });
+    const unreadable = resolve(root, repoConfig, {});
+    expect(unreadable).toMatchObject({
+      ok: false,
+      error: {
+        _tag: "InvalidReviewerConfig",
+        message: expect.stringContaining("Could not read Acceptance instructions file"),
+      },
+    });
+  });
+
   it("accepts an empty Repo list and rejects duplicate, reserved, or unresolved Specialists", () => {
     const root = configRoot();
     const globalConfig = {

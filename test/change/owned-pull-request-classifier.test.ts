@@ -1,9 +1,11 @@
 import { expect, it } from "@effect/vitest";
 import { describe } from "vitest";
 
+import type { ChangePublication, ChangeRecord } from "../../src/change/change.js";
 import {
   classifyOwnedPullRequest,
   type OwnedPublication,
+  observeOwnedPullRequest,
 } from "../../src/change/ownedPullRequestClassifier.js";
 import type { GitHubPullRequest } from "../../src/change/ownedPullRequestGateway.js";
 
@@ -90,6 +92,16 @@ describe("owned pull request classifier", () => {
       fact: observed({ state: "closed", merged: true, headSha: "unexpected-head" }),
       rejection: "merged_head_mismatch",
     },
+    {
+      name: "impossible open merged state",
+      fact: observed({ state: "open", merged: true }),
+      rejection: "pull_request_state_invalid",
+    },
+    {
+      name: "impossible open merged state with unexpected head",
+      fact: observed({ state: "open", merged: true, headSha: "unexpected-head" }),
+      rejection: "merged_head_mismatch",
+    },
   ])("rejects a mismatched $name fact", ({ fact, rejection }) => {
     expect(classifyOwnedPullRequest(publication, fact)).toEqual({
       kind: "mismatch",
@@ -112,5 +124,62 @@ describe("owned pull request classifier", () => {
       kind: "unavailable",
       reason: "pull_request_facts_unavailable",
     });
+  });
+});
+
+describe("owned pull request observation", () => {
+  const change = (publication: ChangePublication | null): ChangeRecord =>
+    ({
+      id: "change-1",
+      repositoryCommonDirectory: "/repo/.git",
+      branchRef: "refs/heads/change-1",
+      baseRef: "refs/remotes/origin/main",
+      baseRemoteUrl: "https://github.com/acme/repo.git",
+      taskId: null,
+      startingCommit: null,
+      worktreePath: "/repo",
+      acceptanceContext: null,
+      prepare: null,
+      prepareFailure: null,
+      publication,
+      cleanup: { state: "complete", blockingReason: null },
+      state: "open",
+      closeReason: null,
+      cancelReason: null,
+      createdAt: "2026-07-24T10:00:00.000Z",
+      updatedAt: "2026-07-24T10:00:00.000Z",
+      closedAt: null,
+    }) as ChangeRecord;
+
+  it("reports not owned only when no owned pull request facts exist", () => {
+    expect(
+      observeOwnedPullRequest(
+        {
+          getPullRequest: () => {
+            throw new Error("No owned pull request must be observed");
+          },
+        },
+        change(null),
+      ),
+    ).toEqual({ kind: "not_owned" });
+  });
+
+  it("classifies a vanished owned pull request as unavailable, never not owned", () => {
+    expect(
+      observeOwnedPullRequest({ getPullRequest: () => undefined }, change(publication)),
+    ).toEqual({ kind: "unavailable", reason: "pull_request_unavailable" });
+  });
+
+  it("classifies an unreadable owned pull request as unavailable, never not owned", () => {
+    expect(
+      observeOwnedPullRequest(
+        {
+          getPullRequest: () => {
+            throw new Error("remote read failed");
+          },
+        },
+        change(publication),
+      ),
+    ).toEqual({ kind: "unavailable", reason: "github_unavailable" });
   });
 });
