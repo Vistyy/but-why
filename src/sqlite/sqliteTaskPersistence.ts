@@ -4,12 +4,7 @@ import type { SqlError } from "@effect/sql/SqlError";
 import { Effect } from "effect";
 import { RepositoryPersistedDataInvalid } from "../contracts/repositoryStorageError.js";
 import type { TaskState } from "../task/lifecycle.js";
-import type {
-  DependencyValidationCode,
-  TaskContext,
-  TaskDependencyFact,
-  TaskSummary,
-} from "../task/task.js";
+import type { DependencyValidationCode, TaskContext, TaskSummary } from "../task/task.js";
 import { generatedPublicTaskId, type PublicTaskId, storedPublicTaskId } from "../task/taskId.js";
 import type { TaskPersistence } from "../task/taskPersistence.js";
 import type {
@@ -24,6 +19,12 @@ import type {
   UpdateTaskContextInput,
 } from "../task/taskStore.js";
 import { RepositorySql } from "./repositorySql.js";
+import {
+  decodeTaskLifecycleConsistency,
+  decodeTaskState,
+  requiredInteger,
+  requiredString,
+} from "./sqlitePersistenceDecoders.js";
 
 export const openSqliteTaskPersistence = (
   taskPrefix: string,
@@ -184,7 +185,7 @@ const listTasks = (sql: SqlClient.SqlClient, input: ListTasksInput) =>
             ORDER BY created_at ASC, numeric_id ASC
             LIMIT ${limit}
           `;
-    const tasks = yield* Effect.forEach(rows, (row) => rowToTaskSummary(sql, row));
+    const tasks = yield* Effect.forEach(rows, (row) => rowToTaskSummary(sql, row, "list Tasks"));
     return {
       tasks,
       total: Number(rows[0]?.totalCount ?? (yield* countTasks(sql, input))),
@@ -216,7 +217,9 @@ const listActionableTasks = (sql: SqlClient.SqlClient) =>
         updated_at DESC,
         numeric_id ASC
     `;
-    return yield* Effect.forEach(rows, (row) => rowToTaskSummary(sql, row));
+    return yield* Effect.forEach(rows, (row) =>
+      rowToTaskSummary(sql, row, "list actionable Tasks"),
+    );
   });
 
 const getTaskById = (sql: SqlClient.SqlClient, taskId: PublicTaskId) =>
@@ -252,11 +255,23 @@ const getTaskContextById = (sql: SqlClient.SqlClient, taskId: PublicTaskId) =>
       WHERE changes.task_id = ${taskId} AND resolution_content IS NOT NULL
       ORDER BY implementation_blockers.sequence ASC
     `;
-    return {
-      ...task,
-      comments: comments.map((row) => row.content),
-      ...(resolutions.length === 0 ? {} : { resolutions: resolutions.map((row) => row.content) }),
-    } satisfies TaskContext;
+    return yield* decodeTaskValue(
+      () =>
+        ({
+          id: requiredString(task.id, "Task Context ID"),
+          title: requiredString(task.title, "Task Context title"),
+          description: requiredString(task.description, "Task Context description"),
+          comments: comments.map((row) => requiredString(row.content, "Task comment content")),
+          ...(resolutions.length === 0
+            ? {}
+            : {
+                resolutions: resolutions.map((row) =>
+                  requiredString(row.content, "Task Resolution content"),
+                ),
+              }),
+        }) satisfies TaskContext,
+      "read Task Context",
+    );
   });
 
 const approveTask = (sql: SqlClient.SqlClient, input: ApproveTaskInput) =>
@@ -461,20 +476,45 @@ const dependencyFacts = (
   direction: "prerequisites" | "dependents",
 ) =>
   direction === "prerequisites"
-    ? sql<TaskDependencyFact>`
+    ? sql<TaskDependencyFactRow>`
         SELECT tasks.id, tasks.title, tasks.state
         FROM task_dependencies
         JOIN tasks ON tasks.id = task_dependencies.prerequisite_task_id
         WHERE task_dependencies.dependent_task_id = ${taskId}
         ORDER BY tasks.numeric_id ASC
       `
-    : sql<TaskDependencyFact>`
+    : sql<TaskDependencyFactRow>`
         SELECT tasks.id, tasks.title, tasks.state
         FROM task_dependencies
         JOIN tasks ON tasks.id = task_dependencies.dependent_task_id
         WHERE task_dependencies.prerequisite_task_id = ${taskId}
         ORDER BY tasks.numeric_id ASC
       `;
+
+const decodeTaskValue = <A>(decode: () => A, operationName: string) =>
+  Effect.try({
+    try: decode,
+    catch: (cause) => new RepositoryPersistedDataInvalid({ operationName, cause }),
+  });
+
+const decodeDependencyFacts = (
+  sql: SqlClient.SqlClient,
+  taskId: string,
+  direction: "prerequisites" | "dependents",
+  operationName: string,
+) =>
+  Effect.flatMap(dependencyFacts(sql, taskId, direction), (rows) =>
+    Effect.forEach(rows, (row) =>
+      decodeTaskValue(
+        () => ({
+          id: requiredString(row.id, "Task dependency ID"),
+          title: requiredString(row.title, "Task dependency title"),
+          state: decodeTaskState(row.state),
+        }),
+        operationName,
+      ),
+    ),
+  );
 
 const nextTaskNumericId = (sql: SqlClient.SqlClient) =>
   Effect.gen(function* () {
@@ -486,23 +526,53 @@ const nextTaskNumericId = (sql: SqlClient.SqlClient) =>
     return Number(row.numericId);
   });
 
-const rowToTaskSummary = (sql: SqlClient.SqlClient, row: TaskSummaryRow) =>
-  Effect.map(dependencyFacts(sql, row.id, "prerequisites"), (prerequisites): TaskSummary => {
-    const { totalCount: _totalCount, ...summary } = row;
+const rowToTaskSummary = (
+  sql: SqlClient.SqlClient,
+  row: TaskSummaryRow,
+  operationName = "read Task",
+) =>
+  Effect.gen(function* () {
+    const state = yield* decodeTaskValue(() => decodeTaskState(row.state), operationName);
+    const prerequisites = yield* decodeDependencyFacts(sql, row.id, "prerequisites", operationName);
     const blockedBy = prerequisites.filter((dependency) => dependency.state !== "done");
-    return { ...summary, startable: row.state === "todo" && blockedBy.length === 0, blockedBy };
+    return {
+      id: yield* decodeTaskValue(() => requiredString(row.id, "Task ID"), operationName),
+      title: yield* decodeTaskValue(() => requiredString(row.title, "Task title"), operationName),
+      state,
+      createdAt: yield* decodeTaskValue(
+        () => requiredString(row.createdAt, "Task creation timestamp"),
+        operationName,
+      ),
+      updatedAt: yield* decodeTaskValue(
+        () => requiredString(row.updatedAt, "Task update timestamp"),
+        operationName,
+      ),
+      startable: state === "todo" && blockedBy.length === 0,
+      blockedBy,
+    } satisfies TaskSummary;
   });
 
 const rowToStoredTaskRecord = (sql: SqlClient.SqlClient, row: StoredTaskRecordRow) =>
   Effect.gen(function* () {
-    const summary = yield* rowToTaskSummary(sql, row);
-    const prerequisites = yield* dependencyFacts(sql, row.id, "prerequisites");
-    const dependents = yield* dependencyFacts(sql, row.id, "dependents");
+    const summary = yield* rowToTaskSummary(sql, row, "read Task");
+    const prerequisites = yield* decodeDependencyFacts(sql, row.id, "prerequisites", "read Task");
+    const dependents = yield* decodeDependencyFacts(sql, row.id, "dependents", "read Task");
+    const cancelReason = yield* decodeTaskValue(
+      () => decodeTaskLifecycleConsistency(summary.state, row.cancelReason),
+      "read Task",
+    );
     return {
       ...summary,
-      description: row.description,
-      commentCount: Number(row.commentCount),
-      cancelReason: row.cancelReason,
+      description: yield* decodeTaskValue(
+        () => requiredString(row.description, "Task description"),
+        "read Task",
+      ),
+      commentCount: yield* decodeTaskValue(() => {
+        const count = requiredInteger(row.commentCount, "Task comment count");
+        if (count < 0) throw new Error("Stored Task comment count is negative");
+        return count;
+      }, "read Task"),
+      cancelReason,
       prerequisites,
       dependents,
     } satisfies StoredTaskRecord;
@@ -520,10 +590,15 @@ type NumericIdRow = { readonly numericId: number | bigint };
 type TaskSummaryRow = {
   readonly id: PublicTaskId;
   readonly title: string;
-  readonly state: TaskState;
+  readonly state: string;
   readonly createdAt: string;
   readonly updatedAt: string;
   readonly totalCount?: number | bigint;
+};
+type TaskDependencyFactRow = {
+  readonly id: unknown;
+  readonly title: unknown;
+  readonly state: unknown;
 };
 type StoredTaskRecordRow = TaskSummaryRow & {
   readonly description: string;

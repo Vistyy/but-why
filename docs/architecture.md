@@ -104,6 +104,8 @@ Dirty worktrees, unique local commits, changed Remote Change Branches, unreadabl
 
 Shared Repository State lives under `<git-common-dir>/but-why/`.
 SQLite, Artifacts, and other operational state are shared by linked worktrees.
+SQLite Adapters strictly decode persisted structured values and required row fields at their owning read seams.
+Malformed stored data returns `RepositoryPersistedDataInvalid` with the owning operation context and is never repaired, normalized, or replaced with fallback state.
 Repo Config remains tracked at `.but-why/config.json`.
 
 State databases initialize through immutable ordered Effect SQL migrations beginning with `0001_baseline`.

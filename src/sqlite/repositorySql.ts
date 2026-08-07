@@ -19,10 +19,14 @@ import { decodeSqliteJsonStringArray } from "./sqliteJsonStringArray.js";
 type RepositorySqlService = {
   readonly statePath: string;
   readonly commonDirectory: string;
-  readonly operation: <A, R>(
+  readonly operation: <A, E, R>(
     operationName: string,
-    use: (sql: SqlClient.SqlClient) => Effect.Effect<A, SqlError, R>,
-  ) => Effect.Effect<A, RepositorySqlOperationFailed, R>;
+    use: (sql: SqlClient.SqlClient) => Effect.Effect<A, E | SqlError, R>,
+  ) => Effect.Effect<
+    A,
+    Exclude<E, { readonly _tag: "SqlError" }> | RepositorySqlOperationFailed,
+    R
+  >;
   readonly transaction: <A, E, R>(
     operationName: string,
     use: (sql: SqlClient.SqlClient) => Effect.Effect<A, E, R>,
@@ -151,12 +155,13 @@ export const repositorySqlLayer = (
         commonDirectory: config.commonDirectory,
         operation: (operationName, use) =>
           use(sql).pipe(
-            Effect.mapError(
-              (cause) =>
+            Effect.catchTag("SqlError", (cause) =>
+              Effect.fail(
                 new RepositorySqlOperationFailed({
                   operationName,
                   cause,
                 }),
+              ),
             ),
           ),
         transaction: (operationName, use) =>

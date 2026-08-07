@@ -41,6 +41,17 @@ import {
   decodeSqliteChangePublication,
   type SqliteChangePublicationRow,
 } from "./sqliteChangePublication.js";
+import {
+  decodeChangeCleanup,
+  decodeChangeCloseReason,
+  decodeChangeLifecycleConsistency,
+  decodeChangePrepare,
+  decodeChangeState,
+  decodeSqliteCandidateValidationPolicy,
+  decodeSqliteImplementationDecisions,
+  requiredInteger,
+  requiredString,
+} from "./sqlitePersistenceDecoders.js";
 
 const columns = [
   "id",
@@ -275,23 +286,41 @@ const listBlockers = (sql: SqlClient.SqlClient, changeId: string) =>
         readonly resolutionContent: string | null;
       }
     >`SELECT sequence, id, change_id AS changeId, reported_at AS reportedAt, content, resolved_at AS resolvedAt, resolution_id AS resolutionId, resolution_recorded_at AS resolutionRecordedAt, resolution_content AS resolutionContent FROM implementation_blockers WHERE change_id = ${changeId} ORDER BY sequence`;
-    const blockers = rows.map((row) => {
-      if (
-        row.resolutionId === null ||
-        row.resolutionRecordedAt === null ||
-        row.resolutionContent === null
-      ) {
-        return { ...mapBlocker(row), resolution: null };
-      }
-      return {
-        ...mapBlocker(row),
-        resolution: {
-          id: row.resolutionId,
-          blockerId: row.id,
-          recordedAt: row.resolutionRecordedAt,
-          content: row.resolutionContent,
-        },
-      };
+    const blockers = yield* Effect.try({
+      try: () =>
+        rows.map((row) => {
+          const blocker = mapBlocker(row);
+          const resolutionValues = [
+            row.resolutionId,
+            row.resolutionRecordedAt,
+            row.resolutionContent,
+          ];
+          if (resolutionValues.every((value) => value === null))
+            return { ...blocker, resolution: null };
+          if (resolutionValues.some((value) => value === null)) {
+            throw new Error("Stored Implementation Blocker Resolution is incomplete");
+          }
+          return {
+            ...blocker,
+            resolution: {
+              id: requiredString(row.resolutionId, "Implementation Blocker Resolution ID"),
+              blockerId: blocker.id,
+              recordedAt: requiredString(
+                row.resolutionRecordedAt,
+                "Implementation Blocker Resolution timestamp",
+              ),
+              content: requiredString(
+                row.resolutionContent,
+                "Implementation Blocker Resolution content",
+              ),
+            },
+          };
+        }),
+      catch: (cause) =>
+        new RepositoryPersistedDataInvalid({
+          operationName: "list Implementation Blockers",
+          cause,
+        }),
     });
     return {
       blockers,
@@ -303,12 +332,15 @@ const listBlockers = (sql: SqlClient.SqlClient, changeId: string) =>
   });
 
 const mapBlocker = (row: ImplementationBlockerRow): ImplementationBlocker => ({
-  id: row.id,
-  changeId: row.changeId,
-  sequence: Number(row.sequence),
-  reportedAt: row.reportedAt,
-  content: row.content,
-  resolvedAt: row.resolvedAt,
+  id: requiredString(row.id, "Implementation Blocker ID"),
+  changeId: requiredString(row.changeId, "Implementation Blocker Change ID"),
+  sequence: requiredInteger(row.sequence, "Implementation Blocker sequence"),
+  reportedAt: requiredString(row.reportedAt, "Implementation Blocker timestamp"),
+  content: requiredString(row.content, "Implementation Blocker content"),
+  resolvedAt:
+    row.resolvedAt === null
+      ? null
+      : requiredString(row.resolvedAt, "Implementation Blocker resolution timestamp"),
   resolution: null,
 });
 
@@ -327,31 +359,43 @@ const getById = (sql: SqlClient.SqlClient, changeId: string) =>
     (rows) => mapRow(rows[0], "read Change", sql),
   );
 
-const listDecisions = (sql: SqlClient.SqlClient, changeId: string) =>
-  Effect.map(
+const listDecisions = (
+  sql: SqlClient.SqlClient,
+  changeId: string,
+  operationName = "list Implementation Decisions",
+) =>
+  Effect.flatMap(
     sql<{
-      readonly id: string;
-      readonly changeId: string;
-      readonly sequence: number | bigint;
-      readonly recordedAt: string;
-      readonly choice: string;
-      readonly rationale: string;
+      readonly id: unknown;
+      readonly changeId: unknown;
+      readonly sequence: unknown;
+      readonly recordedAt: unknown;
+      readonly choice: unknown;
+      readonly rationale: unknown;
     }>`
       SELECT id, change_id AS changeId, sequence, recorded_at AS recordedAt, choice, rationale
       FROM implementation_decisions WHERE change_id = ${changeId}
       ORDER BY sequence ASC
     `,
     (rows) =>
-      rows.map(
-        (row): ImplementationDecision => ({
-          id: row.id,
-          changeId: row.changeId,
-          sequence: Number(row.sequence),
-          recordedAt: row.recordedAt,
-          choice: row.choice,
-          rationale: row.rationale,
-        }),
-      ),
+      Effect.try({
+        try: () =>
+          rows.map(
+            (row): ImplementationDecision => ({
+              id: requiredString(row.id, "Implementation Decision ID"),
+              changeId: requiredString(row.changeId, "Implementation Decision Change ID"),
+              sequence: requiredInteger(row.sequence, "Implementation Decision sequence"),
+              recordedAt: requiredString(row.recordedAt, "Implementation Decision timestamp"),
+              choice: requiredString(row.choice, "Implementation Decision choice"),
+              rationale: requiredString(row.rationale, "Implementation Decision rationale"),
+            }),
+          ),
+        catch: (cause) =>
+          new RepositoryPersistedDataInvalid({
+            operationName,
+            cause,
+          }),
+      }),
   );
 
 const recordDecision = (sql: SqlClient.SqlClient, input: RecordImplementationDecisionInput) =>
@@ -427,11 +471,22 @@ const getPassingPublicationEvidence = (
     `;
     const row = rows[0];
     if (row === undefined) return undefined;
+    const storedEvidence = yield* Effect.try({
+      try: () => ({
+        policy: decodeSqliteCandidateValidationPolicy(row.policySnapshot),
+        implementationDecisions: decodeSqliteImplementationDecisions(row.implementationDecisions),
+      }),
+      catch: (cause) =>
+        new RepositoryPersistedDataInvalid({
+          operationName: "read passing Change publication evidence",
+          cause,
+        }),
+    });
     const expectedPolicySnapshot = encodeSqliteCandidateValidationPolicy(authority.policy);
     const expectedDecisionsSnapshot = JSON.stringify(authority.implementationDecisions ?? []);
     if (
-      row.policySnapshot !== expectedPolicySnapshot ||
-      row.implementationDecisions !== expectedDecisionsSnapshot
+      JSON.stringify(storedEvidence.policy) !== expectedPolicySnapshot ||
+      JSON.stringify(storedEvidence.implementationDecisions) !== expectedDecisionsSnapshot
     ) {
       return undefined;
     }
@@ -716,42 +771,67 @@ const mapRow = (row: ChangeRow | undefined, operationName: string, sql: SqlClien
   row === undefined
     ? Effect.succeed(undefined)
     : Effect.gen(function* () {
-        const decisions = yield* listDecisions(sql, row.id);
+        const decisions = yield* listDecisions(sql, row.id, operationName);
         const activeRows =
           yield* sql<ImplementationBlockerRow>`SELECT sequence, id, change_id AS changeId, reported_at AS reportedAt, content, resolved_at AS resolvedAt FROM implementation_blockers WHERE change_id = ${row.id} AND resolved_at IS NULL LIMIT 1`;
         return yield* Effect.try({
-          try: (): ChangeRecord => ({
-            id: row.id,
-            repositoryCommonDirectory: row.repositoryCommonDirectory,
-            branchRef: row.branchRef,
-            baseRef: row.baseRef,
-            baseRemoteUrl: row.baseRemoteUrl,
-            taskId: row.taskId === null ? null : storedPublicTaskId(row.taskId),
-            startingCommit: row.startingCommit,
-            worktreePath: row.worktreePath,
-            acceptanceContext:
-              row.acceptanceContext === null
-                ? null
-                : decodeSqliteAcceptanceContextSnapshot(row.acceptanceContext),
-            implementationDecisions: decisions,
-            prepare:
-              row.prepareCommand === null || row.prepareTimeoutSeconds === null
-                ? null
-                : { command: row.prepareCommand, timeoutSeconds: row.prepareTimeoutSeconds },
-            prepareFailure:
-              row.prepareFailure === null
-                ? null
-                : decodeSqliteChangePrepareFailure(row.prepareFailure),
-            publication: decodeSqliteChangePublication(row),
-            cleanup: { state: row.cleanupState, blockingReason: row.cleanupBlockingReason },
-            state: row.state,
-            activeBlocker: activeRows[0] === undefined ? null : mapBlocker(activeRows[0]),
-            closeReason: row.closeReason,
-            cancelReason: row.cancelReason,
-            createdAt: row.createdAt,
-            updatedAt: row.updatedAt,
-            closedAt: row.closedAt,
-          }),
+          try: (): ChangeRecord => {
+            const state = decodeChangeState(row.state);
+            const closeReason = decodeChangeCloseReason(row.closeReason);
+            const closedAt = decodeChangeLifecycleConsistency(state, closeReason, row.closedAt);
+            return {
+              id: requiredString(row.id, "Change ID"),
+              repositoryCommonDirectory: requiredString(
+                row.repositoryCommonDirectory,
+                "Change repository common directory",
+              ),
+              branchRef: requiredString(row.branchRef, "Change branch reference"),
+              baseRef:
+                row.baseRef === null ? null : requiredString(row.baseRef, "Change base reference"),
+              baseRemoteUrl:
+                row.baseRemoteUrl === null
+                  ? null
+                  : requiredString(row.baseRemoteUrl, "Change base remote URL"),
+              taskId:
+                row.taskId === null
+                  ? null
+                  : storedPublicTaskId(requiredString(row.taskId, "Change Task ID")),
+              startingCommit:
+                row.startingCommit === null
+                  ? null
+                  : requiredString(row.startingCommit, "Change starting commit"),
+              worktreePath:
+                row.worktreePath === null
+                  ? null
+                  : requiredString(row.worktreePath, "Change worktree path"),
+              acceptanceContext:
+                row.acceptanceContext === null
+                  ? null
+                  : decodeSqliteAcceptanceContextSnapshot(
+                      requiredString(row.acceptanceContext, "Change Acceptance Context"),
+                    ),
+              implementationDecisions: decisions,
+              prepare: decodeChangePrepare(row.prepareCommand, row.prepareTimeoutSeconds),
+              prepareFailure:
+                row.prepareFailure === null
+                  ? null
+                  : decodeSqliteChangePrepareFailure(
+                      requiredString(row.prepareFailure, "Change preparation failure"),
+                    ),
+              publication: decodeSqliteChangePublication(row),
+              cleanup: decodeChangeCleanup(row.cleanupState, row.cleanupBlockingReason),
+              state,
+              activeBlocker: activeRows[0] === undefined ? null : mapBlocker(activeRows[0]),
+              closeReason,
+              cancelReason:
+                row.cancelReason === null
+                  ? null
+                  : requiredString(row.cancelReason, "Change cancel reason"),
+              createdAt: requiredString(row.createdAt, "Change creation timestamp"),
+              updatedAt: requiredString(row.updatedAt, "Change update timestamp"),
+              closedAt,
+            };
+          },
           catch: (cause) => new RepositoryPersistedDataInvalid({ operationName, cause }),
         });
       });

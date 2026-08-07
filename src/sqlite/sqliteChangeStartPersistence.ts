@@ -6,7 +6,6 @@ import type { ChangeStartPersistence } from "../change/changeStartPersistence.js
 import type { ChangeStartRecord, CreateChangeStartInput } from "../change/changeStartStore.js";
 import type { AcceptanceContextSnapshotV1 } from "../change/validationRun/acceptanceContextSnapshot.js";
 import { RepositoryPersistedDataInvalid } from "../contracts/repositoryStorageError.js";
-import type { TaskState } from "../task/lifecycle.js";
 import type { TaskDependencyFact } from "../task/task.js";
 import { type PublicTaskId, storedPublicTaskId } from "../task/taskId.js";
 import { RepositorySql } from "./repositorySql.js";
@@ -22,6 +21,15 @@ import {
   decodeSqliteChangePublication,
   type SqliteChangePublicationRow,
 } from "./sqliteChangePublication.js";
+import {
+  decodeChangeCleanup,
+  decodeChangeCloseReason,
+  decodeChangeLifecycleConsistency,
+  decodeChangePrepare,
+  decodeChangeState,
+  decodeTaskState,
+  requiredString,
+} from "./sqlitePersistenceDecoders.js";
 
 const columns = [
   "id",
@@ -80,9 +88,10 @@ const prepareTask = (sql: SqlClient.SqlClient, taskId: PublicTaskId) =>
     if (existing !== undefined) {
       const task = yield* readTask(sql, taskId);
       if (task === undefined) return { ok: false as const, code: "task_not_found" as const };
-      return task.state === "todo"
+      const state = decodeTaskState(task.state);
+      return state === "todo"
         ? { ok: true as const, existing }
-        : { ok: false as const, code: "invalid_task_state" as const, state: task.state };
+        : { ok: false as const, code: "invalid_task_state" as const, state };
     }
     const eligibility = yield* readEligibility(sql, taskId);
     return eligibility.ok ? { ok: true as const, existing: undefined } : eligibility;
@@ -145,8 +154,9 @@ const readEligibility = (sql: SqlClient.SqlClient, taskId: PublicTaskId) =>
   Effect.gen(function* () {
     const task = yield* readTask(sql, taskId);
     if (task === undefined) return { ok: false as const, code: "task_not_found" as const };
-    if (task.state !== "todo") {
-      return { ok: false as const, code: "invalid_task_state" as const, state: task.state };
+    const state = decodeTaskState(task.state);
+    if (state !== "todo") {
+      return { ok: false as const, code: "invalid_task_state" as const, state };
     }
     const blockedBy = yield* sql<TaskDependencyFact>`
       SELECT tasks.id, tasks.title, tasks.state
@@ -161,9 +171,21 @@ const readEligibility = (sql: SqlClient.SqlClient, taskId: PublicTaskId) =>
   });
 
 const readTask = (sql: SqlClient.SqlClient, taskId: PublicTaskId) =>
-  Effect.map(
+  Effect.flatMap(
     sql<TaskRow>`SELECT id, title, description, state FROM tasks WHERE id = ${taskId}`,
-    (rows) => rows[0],
+    (rows) => {
+      const row = rows[0];
+      return row === undefined
+        ? Effect.succeed(undefined)
+        : Effect.try({
+            try: () => ({ ...row, state: decodeTaskState(row.state) }),
+            catch: (cause) =>
+              new RepositoryPersistedDataInvalid({
+                operationName: "read Change Start Task",
+                cause,
+              }),
+          });
+    },
   );
 
 const recordPrepareOutcome = (
@@ -196,48 +218,57 @@ const getById = (sql: SqlClient.SqlClient, changeId: string) =>
   );
 
 const mapRow = (row: ChangeStartRow | undefined) => {
-  if (
-    row === undefined ||
-    row.baseRef === null ||
-    row.baseRemoteUrl === null ||
-    row.startingCommit === null ||
-    row.worktreePath === null
-  ) {
-    return Effect.succeed(undefined);
-  }
-  const baseRef = row.baseRef;
-  const baseRemoteUrl = row.baseRemoteUrl;
-  const startingCommit = row.startingCommit;
-  const worktreePath = row.worktreePath;
+  if (row === undefined) return Effect.succeed(undefined);
   return Effect.try({
-    try: (): ChangeStartRecord => ({
-      id: row.id,
-      repositoryCommonDirectory: row.repositoryCommonDirectory,
-      branchRef: row.branchRef,
-      baseRef,
-      baseRemoteUrl,
-      taskId: row.taskId === null ? null : storedPublicTaskId(row.taskId),
-      startingCommit,
-      worktreePath,
-      acceptanceContext:
-        row.acceptanceContext === null
-          ? null
-          : decodeSqliteAcceptanceContextSnapshot(row.acceptanceContext),
-      prepare:
-        row.prepareCommand === null || row.prepareTimeoutSeconds === null
-          ? null
-          : { command: row.prepareCommand, timeoutSeconds: row.prepareTimeoutSeconds },
-      prepareFailure:
-        row.prepareFailure === null ? null : decodeSqliteChangePrepareFailure(row.prepareFailure),
-      publication: decodeSqliteChangePublication(row),
-      cleanup: { state: row.cleanupState, blockingReason: row.cleanupBlockingReason },
-      state: row.state,
-      closeReason: row.closeReason,
-      cancelReason: row.cancelReason,
-      createdAt: row.createdAt,
-      updatedAt: row.updatedAt,
-      closedAt: row.closedAt,
-    }),
+    try: (): ChangeStartRecord => {
+      const baseRef = requiredString(row.baseRef, "Change Start base reference");
+      const baseRemoteUrl = requiredString(row.baseRemoteUrl, "Change Start base remote URL");
+      const startingCommit = requiredString(row.startingCommit, "Change Start starting commit");
+      const worktreePath = requiredString(row.worktreePath, "Change Start worktree path");
+      const state = decodeChangeState(row.state);
+      const closeReason = decodeChangeCloseReason(row.closeReason);
+      const closedAt = decodeChangeLifecycleConsistency(state, closeReason, row.closedAt);
+      return {
+        id: requiredString(row.id, "Change Start ID"),
+        repositoryCommonDirectory: requiredString(
+          row.repositoryCommonDirectory,
+          "Change Start repository common directory",
+        ),
+        branchRef: requiredString(row.branchRef, "Change Start branch reference"),
+        baseRef,
+        baseRemoteUrl,
+        taskId:
+          row.taskId === null
+            ? null
+            : storedPublicTaskId(requiredString(row.taskId, "Change Start Task ID")),
+        startingCommit,
+        worktreePath,
+        acceptanceContext:
+          row.acceptanceContext === null
+            ? null
+            : decodeSqliteAcceptanceContextSnapshot(
+                requiredString(row.acceptanceContext, "Change Start Acceptance Context"),
+              ),
+        prepare: decodeChangePrepare(row.prepareCommand, row.prepareTimeoutSeconds),
+        prepareFailure:
+          row.prepareFailure === null
+            ? null
+            : decodeSqliteChangePrepareFailure(
+                requiredString(row.prepareFailure, "Change Start preparation failure"),
+              ),
+        publication: decodeSqliteChangePublication(row),
+        cleanup: decodeChangeCleanup(row.cleanupState, row.cleanupBlockingReason),
+        state,
+        closeReason,
+        cancelReason:
+          row.cancelReason === null
+            ? null
+            : requiredString(row.cancelReason, "Change Start cancel reason"),
+        createdAt: requiredString(row.createdAt, "Change Start creation timestamp"),
+        updatedAt: requiredString(row.updatedAt, "Change Start update timestamp"),
+        closedAt,
+      };
+    },
     catch: (cause) =>
       new RepositoryPersistedDataInvalid({ operationName: "read Change Start", cause }),
   });
@@ -250,7 +281,7 @@ type TaskRow = {
   readonly id: string;
   readonly title: string;
   readonly description: string;
-  readonly state: TaskState;
+  readonly state: string;
 };
 
 type ChangeStartRow = {

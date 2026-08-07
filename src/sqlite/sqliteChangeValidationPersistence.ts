@@ -15,19 +15,22 @@ import type {
   StartCandidateValidationRunInput,
   StartCandidateValidationRunResult,
 } from "../change/candidateValidation/candidateValidationRunStore.js";
-import type { ImplementationDecision } from "../change/implementationDecision.js";
 import type { ChangeValidationPersistence } from "../change/validation/changeValidationPersistence.js";
 import { validationPhase } from "../change/validationRun/validationRun.js";
 import { RepositoryPersistedDataInvalid } from "../contracts/repositoryStorageError.js";
 import { RepositorySql } from "./repositorySql.js";
-import {
-  decodeSqliteCandidateValidationPolicy,
-  encodeSqliteCandidateValidationPolicy,
-} from "./sqliteCandidateValidationPolicy.js";
+import { encodeSqliteCandidateValidationPolicy } from "./sqliteCandidateValidationPolicy.js";
 import {
   decodeSqliteJsonStringArray,
   encodeSqliteJsonStringArray,
 } from "./sqliteJsonStringArray.js";
+import {
+  decodeSqliteCandidateValidationPolicy,
+  decodeSqliteImplementationDecisions,
+  requiredInteger,
+  requiredPositiveInteger,
+  requiredString,
+} from "./sqlitePersistenceDecoders.js";
 
 export const openSqliteChangeValidationPersistence = (): Effect.Effect<
   ChangeValidationPersistence,
@@ -158,7 +161,18 @@ export const openSqliteChangeValidationPersistence = (): Effect.Effect<
         .operation("list Candidate validation Artifacts", (sql) =>
           listArtifacts(sql, validationRunId),
         )
-        .pipe(Effect.map((rows) => rows.map(decodeArtifact))),
+        .pipe(
+          Effect.flatMap((rows) =>
+            Effect.try({
+              try: () => rows.map(decodeArtifact),
+              catch: (cause) =>
+                new RepositoryPersistedDataInvalid({
+                  operationName: "list Candidate validation Artifacts",
+                  cause,
+                }),
+            }),
+          ),
+        ),
   }));
 
 const candidateColumns = `
@@ -167,20 +181,24 @@ const candidateColumns = `
 `;
 
 const getCandidateById = (sql: SqlClient.SqlClient, candidateId: string) =>
-  Effect.map(
-    sql.unsafe<CandidateRecord>(`SELECT ${candidateColumns} FROM candidates WHERE id = ?`, [
+  Effect.flatMap(
+    sql.unsafe<CandidateRow>(`SELECT ${candidateColumns} FROM candidates WHERE id = ?`, [
       candidateId,
     ]),
-    (rows) => rows[0],
+    (rows) => decodeCandidateOptional(rows[0], "read Candidate for validation history"),
   );
 
 const listCandidatesForChange = (sql: SqlClient.SqlClient, changeId: string) =>
-  sql.unsafe<CandidateRecord>(
-    `SELECT ${candidateColumns}
-     FROM candidates
-     WHERE change_id = ?
-     ORDER BY created_at ASC, id ASC`,
-    [changeId],
+  Effect.flatMap(
+    sql.unsafe<CandidateRow>(
+      `SELECT ${candidateColumns}
+       FROM candidates
+       WHERE change_id = ?
+       ORDER BY created_at ASC, id ASC`,
+      [changeId],
+    ),
+    (rows) =>
+      Effect.forEach(rows, (row) => decodeCandidate(row, "list Candidates for validation history")),
   );
 
 const startOrReuse = (sql: SqlClient.SqlClient, input: StartCandidateValidationRunInput) =>
@@ -190,10 +208,27 @@ const startOrReuse = (sql: SqlClient.SqlClient, input: StartCandidateValidationR
       FROM candidates WHERE id = ${input.candidateId}
     `;
     const candidate = candidates[0];
+    if (candidate === undefined) {
+      return yield* new RepositoryPersistedDataInvalid({
+        operationName: "start Candidate Validation Run",
+        cause: new Error("Candidate validation requires the exact stored Candidate identity."),
+      });
+    }
+    const storedCandidate = yield* Effect.try({
+      try: () => ({
+        headSha: requiredString(candidate.headSha, "Candidate head SHA"),
+        changeBaseSha: requiredString(candidate.changeBaseSha, "Candidate base SHA"),
+        changeId: requiredString(candidate.changeId, "Candidate Change ID"),
+      }),
+      catch: (cause) =>
+        new RepositoryPersistedDataInvalid({
+          operationName: "start Candidate Validation Run",
+          cause,
+        }),
+    });
     if (
-      candidate === undefined ||
-      candidate.headSha !== input.headSha ||
-      (input.changeBaseSha !== undefined && candidate.changeBaseSha !== input.changeBaseSha)
+      storedCandidate.headSha !== input.headSha ||
+      (input.changeBaseSha !== undefined && storedCandidate.changeBaseSha !== input.changeBaseSha)
     ) {
       return yield* new RepositoryPersistedDataInvalid({
         operationName: "start Candidate Validation Run",
@@ -204,7 +239,7 @@ const startOrReuse = (sql: SqlClient.SqlClient, input: StartCandidateValidationR
     const unresolvedBlockers = yield* sql<{ readonly id: string }>`
       SELECT blocker.id
       FROM implementation_blockers AS blocker
-      WHERE blocker.change_id = ${candidate.changeId}
+      WHERE blocker.change_id = ${storedCandidate.changeId}
         AND blocker.resolved_at IS NULL
       LIMIT 1
     `;
@@ -217,7 +252,7 @@ const startOrReuse = (sql: SqlClient.SqlClient, input: StartCandidateValidationR
     const latestResolved = yield* sql<{ readonly id: string }>`
       SELECT blocker.id
       FROM implementation_blockers AS blocker
-      WHERE blocker.change_id = ${candidate.changeId}
+      WHERE blocker.change_id = ${storedCandidate.changeId}
         AND blocker.resolved_at IS NOT NULL
       ORDER BY blocker.resolved_at DESC, blocker.sequence DESC
       LIMIT 1
@@ -225,24 +260,48 @@ const startOrReuse = (sql: SqlClient.SqlClient, input: StartCandidateValidationR
     const latestResolvedBlockerId = latestResolved[0]?.id ?? null;
     const policySnapshot = encodeSqliteCandidateValidationPolicy(input.policy);
     const decisionsSnapshot = JSON.stringify(input.implementationDecisions ?? []);
-    const reusable = yield* sql<{ readonly id: string }>`
-      SELECT id FROM candidate_validation_runs
+    const reusable = yield* sql<{
+      readonly id: unknown;
+      readonly policySnapshot: unknown;
+      readonly implementationDecisions: unknown;
+    }>`
+      SELECT id, policy_snapshot AS policySnapshot, implementation_decisions AS implementationDecisions
+      FROM candidate_validation_runs
       WHERE candidate_id = ${input.candidateId}
-        AND policy_snapshot = ${policySnapshot}
-        AND implementation_decisions = ${decisionsSnapshot}
         AND state = 'complete'
         AND outcome = 'passed'
         AND (
           (latest_resolved_blocker_id IS NULL AND ${latestResolvedBlockerId} IS NULL)
           OR latest_resolved_blocker_id = ${latestResolvedBlockerId}
         )
-      LIMIT 1
+      ORDER BY created_at ASC, id ASC
     `;
-    const existing = reusable[0];
+    const reusableIds = yield* Effect.forEach(reusable, (row) =>
+      Effect.try({
+        try: () => {
+          const storedPolicy = decodeSqliteCandidateValidationPolicy(
+            requiredString(row.policySnapshot, "Validation Policy Snapshot"),
+          );
+          const storedDecisions = decodeSqliteImplementationDecisions(
+            requiredString(row.implementationDecisions, "Validation Run Implementation Decisions"),
+          );
+          return JSON.stringify(storedPolicy) === policySnapshot &&
+            JSON.stringify(storedDecisions) === decisionsSnapshot
+            ? requiredString(row.id, "Validation Run ID")
+            : undefined;
+        },
+        catch: (cause) =>
+          new RepositoryPersistedDataInvalid({
+            operationName: "start Candidate Validation Run",
+            cause,
+          }),
+      }),
+    );
+    const existing = reusableIds.find((id) => id !== undefined);
     if (existing !== undefined) {
       return {
         reused: true,
-        validationRunId: existing.id,
+        validationRunId: existing,
         outcome: "passed",
       } satisfies StartCandidateValidationRunResult;
     }
@@ -251,7 +310,7 @@ const startOrReuse = (sql: SqlClient.SqlClient, input: StartCandidateValidationR
     const active = yield* sql<{ readonly validationRunId: string }>`
       SELECT validation_run_id AS validationRunId
       FROM active_validation_runs
-      WHERE change_id = ${candidate.changeId}
+      WHERE change_id = ${storedCandidate.changeId}
     `;
     if (active[0] !== undefined) {
       return {
@@ -440,20 +499,47 @@ const recordRound = (sql: SqlClient.SqlClient, input: RecordCandidateValidationC
   });
 
 const listRounds = (sql: SqlClient.SqlClient, validationRunId: string) =>
-  sql<CandidateValidationRound>`
-    SELECT validation_run_id AS validationRunId, phase, producer,
-      round_number AS roundNumber, status, created_at AS createdAt
-    FROM candidate_validation_rounds
-    WHERE validation_run_id = ${validationRunId}
-    ORDER BY
-      CASE phase
-        WHEN 'prepare' THEN 0
-        WHEN 'checks' THEN 1
-        WHEN 'acceptance_review' THEN 2
-        ELSE 3
-      END,
-      round_number, producer
-  `;
+  Effect.flatMap(
+    sql<CandidateValidationRoundRow>`
+      SELECT validation_run_id AS validationRunId, phase, producer,
+        round_number AS roundNumber, status, created_at AS createdAt
+      FROM candidate_validation_rounds
+      WHERE validation_run_id = ${validationRunId}
+      ORDER BY
+        CASE phase
+          WHEN 'prepare' THEN 0
+          WHEN 'checks' THEN 1
+          WHEN 'acceptance_review' THEN 2
+          ELSE 3
+        END,
+        round_number, producer
+    `,
+    (rows) =>
+      Effect.try({
+        try: () =>
+          rows.map((row): CandidateValidationRound => {
+            const status = requiredString(row.status, "Validation round status");
+            if (status !== "passed" && status !== "failed")
+              throw new Error("Stored Validation round status is invalid");
+            return {
+              validationRunId: requiredString(
+                row.validationRunId,
+                "Validation round Validation Run ID",
+              ),
+              phase: decodeValidationPhase(row.phase),
+              producer: requiredString(row.producer, "Validation round producer"),
+              roundNumber: requiredPositiveInteger(row.roundNumber, "Validation round number"),
+              status,
+              createdAt: requiredString(row.createdAt, "Validation round timestamp"),
+            };
+          }),
+        catch: (cause) =>
+          new RepositoryPersistedDataInvalid({
+            operationName: "list Candidate validation rounds",
+            cause,
+          }),
+      }),
+  );
 
 const findingColumns = `
   id, validation_run_id AS validationRunId, phase, producer, title,
@@ -583,18 +669,30 @@ const decodeRunOptional = (row: CandidateValidationRunRow | undefined) =>
 
 const decodeRun = (row: CandidateValidationRunRow) =>
   Effect.try({
-    try: (): CandidateValidationRunRecord => ({
-      id: row.id,
-      candidateId: row.candidateId,
-      policy: decodeSqliteCandidateValidationPolicy(row.policySnapshot),
-      implementationDecisions: JSON.parse(
-        row.implementationDecisions,
-      ) as readonly ImplementationDecision[],
-      state: row.state,
-      outcome: row.outcome,
-      createdAt: row.createdAt,
-      updatedAt: row.updatedAt,
-    }),
+    try: (): CandidateValidationRunRecord => {
+      const state = requiredString(row.state, "Validation Run state");
+      if (state !== "running" && state !== "complete") {
+        throw new Error("Stored Validation Run state is invalid");
+      }
+      const outcome =
+        row.outcome === null ? null : requiredString(row.outcome, "Validation Run outcome");
+      if (outcome !== null && !["passed", "blocked", "tooling_failed"].includes(outcome)) {
+        throw new Error("Stored Validation Run outcome is invalid");
+      }
+      if ((state === "running") !== (outcome === null)) {
+        throw new Error("Stored Validation Run state and outcome are inconsistent");
+      }
+      return {
+        id: requiredString(row.id, "Validation Run ID"),
+        candidateId: requiredString(row.candidateId, "Validation Run Candidate ID"),
+        policy: decodeSqliteCandidateValidationPolicy(row.policySnapshot),
+        implementationDecisions: decodeSqliteImplementationDecisions(row.implementationDecisions),
+        state,
+        outcome: outcome as CandidateValidationRunRecord["outcome"],
+        createdAt: requiredString(row.createdAt, "Validation Run creation timestamp"),
+        updatedAt: requiredString(row.updatedAt, "Validation Run update timestamp"),
+      };
+    },
     catch: (cause) =>
       new RepositoryPersistedDataInvalid({
         operationName: "decode Candidate Validation Run",
@@ -605,11 +703,22 @@ const decodeRun = (row: CandidateValidationRunRow) =>
 const decodeFinding = (row: CandidateValidationFindingRow) =>
   Effect.try({
     try: (): CandidateValidationFinding => {
+      const phase = decodeValidationPhase(row.phase);
       const { files, artifactRefs, ...finding } = row;
       return {
-        ...finding,
-        files: decodeSqliteJsonStringArray(files),
-        artifactRefs: decodeSqliteJsonStringArray(artifactRefs),
+        id: requiredString(finding.id, "Finding ID"),
+        validationRunId: requiredString(finding.validationRunId, "Finding Validation Run ID"),
+        phase,
+        producer: requiredString(finding.producer, "Finding producer"),
+        title: requiredString(finding.title, "Finding title"),
+        description: requiredString(finding.description, "Finding description"),
+        evidence: requiredString(finding.evidence, "Finding evidence"),
+        files: decodeSqliteJsonStringArray(requiredString(files, "Finding files")),
+        artifactRefs: decodeSqliteJsonStringArray(
+          requiredString(artifactRefs, "Finding Artifact references"),
+        ),
+        createdAt: requiredString(finding.createdAt, "Finding creation timestamp"),
+        updatedAt: requiredString(finding.updatedAt, "Finding update timestamp"),
       };
     },
     catch: (cause) =>
@@ -619,15 +728,75 @@ const decodeFinding = (row: CandidateValidationFindingRow) =>
       }),
   });
 
-const decodeArtifact = (artifact: CandidateValidationArtifactRow): CandidateValidationArtifact => ({
-  ...artifact,
-  truncated: artifact.truncated === 1,
+const decodeArtifact = (artifact: CandidateValidationArtifactRow): CandidateValidationArtifact => {
+  const phase = decodeValidationPhase(artifact.phase);
+  const truncated = requiredInteger(artifact.truncated, "Validation Artifact truncated flag");
+  if (truncated !== 0 && truncated !== 1)
+    throw new Error("Stored Validation Artifact truncated flag is invalid");
+  return {
+    ref: requiredString(artifact.ref, "Validation Artifact reference"),
+    validationRunId: requiredString(
+      artifact.validationRunId,
+      "Validation Artifact Validation Run ID",
+    ),
+    phase,
+    producer: requiredString(artifact.producer, "Validation Artifact producer"),
+    path: requiredString(artifact.path, "Validation Artifact path"),
+    originalBytes: requiredInteger(artifact.originalBytes, "Validation Artifact original bytes"),
+    storedBytes: requiredInteger(artifact.storedBytes, "Validation Artifact stored bytes"),
+    truncated: truncated === 1,
+    createdAt: requiredString(artifact.createdAt, "Validation Artifact creation timestamp"),
+  };
+};
+
+const decodeValidationPhase = (value: unknown) => {
+  const phase = requiredString(value, "Validation phase");
+  if (
+    !Object.values(validationPhase).includes(
+      phase as (typeof validationPhase)[keyof typeof validationPhase],
+    )
+  ) {
+    throw new Error("Stored Validation phase is invalid");
+  }
+  return phase as CandidateValidationRound["phase"];
+};
+
+const decodeCandidateValues = (row: CandidateRow): CandidateRecord => ({
+  id: requiredString(row.id, "Candidate ID"),
+  changeId: requiredString(row.changeId, "Candidate Change ID"),
+  changeBaseSha: requiredString(row.changeBaseSha, "Candidate base SHA"),
+  headSha: requiredString(row.headSha, "Candidate head SHA"),
+  createdAt: requiredString(row.createdAt, "Candidate creation timestamp"),
 });
 
+const decodeCandidate = (row: CandidateRow, operationName: string) =>
+  Effect.try({
+    try: () => decodeCandidateValues(row),
+    catch: (cause) => new RepositoryPersistedDataInvalid({ operationName, cause }),
+  });
+
+const decodeCandidateOptional = (row: CandidateRow | undefined, operationName: string) =>
+  row === undefined ? Effect.succeed(undefined) : decodeCandidate(row, operationName);
+
+type CandidateRow = {
+  readonly id: unknown;
+  readonly changeId: unknown;
+  readonly changeBaseSha: unknown;
+  readonly headSha: unknown;
+  readonly createdAt: unknown;
+};
 type CandidateIdentityRow = {
-  readonly headSha: string;
-  readonly changeBaseSha: string;
-  readonly changeId: string;
+  readonly headSha: unknown;
+  readonly changeBaseSha: unknown;
+  readonly changeId: unknown;
+};
+type CandidateValidationRoundRow = {
+  readonly validationRunId: unknown;
+  readonly phase: unknown;
+  readonly producer: unknown;
+  readonly roundNumber: unknown;
+  readonly status: unknown;
+  readonly createdAt: unknown;
 };
 type CandidateValidationRunRow = Omit<
   CandidateValidationRunRecord,
