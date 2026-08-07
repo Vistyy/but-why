@@ -18,6 +18,7 @@ describe("check round Findings", () => {
         const workspace = createTestWorkspace();
         const marker = join(workspace, "check-started");
         const shPath = runTestProcessOrThrow("sh", ["-c", "command -v sh"], { cwd: workspace });
+        // biome-ignore lint/complexity/useLiteralKeys: NodeJS.ProcessEnv has an index signature.
         const restrictedPath = (process.env["PATH"] ?? "")
           .split(delimiter)
           .filter((entry) => entry !== "" && !existsSync(join(entry, "timeout")))
