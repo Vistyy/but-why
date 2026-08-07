@@ -410,8 +410,18 @@ const isUncertainMutationFailure = (message: string): boolean =>
     message,
   );
 
-const isAgentPaneBusyFailure = (message: string): boolean =>
-  message.trim().split(/[:\s]/, 1)[0] === "agent_pane_busy";
+const isAgentPaneBusyFailure = (message: string): boolean => {
+  const trimmed = message.trim();
+  if (trimmed.split(/[:\s]/, 1)[0] === "agent_pane_busy") return true;
+  try {
+    const parsed = JSON.parse(trimmed) as unknown;
+    return (
+      isRecord(parsed) && isRecord(parsed["error"]) && parsed["error"]["code"] === "agent_pane_busy"
+    );
+  } catch {
+    return false;
+  }
+};
 
 type JsonRecord = Record<string, unknown> & {
   readonly type?: unknown;

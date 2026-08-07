@@ -109,7 +109,11 @@ describe("Herdr Interactive Session Host", () => {
         startAttempts += 1;
         if (startAttempts === 1) {
           await new Promise((resolve) => setTimeout(resolve, 20));
-          return { ok: false, message: "agent_pane_busy: pane shell is still starting" };
+          return {
+            ok: false,
+            message:
+              '{"error":{"code":"agent_pane_busy","message":"pane shell is still starting"}}',
+          };
         }
         return { ok: true, stdout: '{"result":{"type":"agent_started","terminal_id":"t-1"}}' };
       }
@@ -141,7 +145,10 @@ describe("Herdr Interactive Session Host", () => {
       if (args[0] === "agent" && args[1] === "list") return emptyAgents();
       if (args[0] === "worktree" && args[1] === "open") return openedWorktree();
       if (args[0] === "agent" && args[1] === "start")
-        return { ok: false, message: "agent_pane_busy: pane shell is still starting" };
+        return {
+          ok: false,
+          message: '{"error":{"code":"agent_pane_busy","message":"pane shell is still starting"}}',
+        };
       return { ok: false, message: `unexpected Herdr command: ${args.join(" ")}` };
     };
 
