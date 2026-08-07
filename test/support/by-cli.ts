@@ -16,6 +16,9 @@ import { createTestWorkspace } from "./testWorkspace.js";
 export const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 export const byExecutable = join(repoRoot, "bin/by");
 
+// Keep CLI process sentinels bounded without changing Vitest's global timeout.
+const cliProcessTimeoutMs = 30_000;
+
 export const testProcessEnvironment = (environment: NodeJS.ProcessEnv) => {
   const { HOME: isolatedHome, ...controlledEnvironment } = environment;
   return isolatedHome === undefined
@@ -59,6 +62,7 @@ export const runBuiltByWithEnv = (
 ) =>
   runTestProcess(process.execPath, [builtByExecutable(), ...args], {
     cwd,
+    timeout: cliProcessTimeoutMs,
     ...testProcessEnvironment({ ...env, BUT_WHY_EXECUTABLE_PATH: byExecutable }),
   });
 
@@ -71,6 +75,7 @@ export const runBuiltByWithInput = (
   runTestProcess(process.execPath, [builtByExecutable(), ...args], {
     cwd,
     input,
+    timeout: cliProcessTimeoutMs,
     ...testProcessEnvironment({ ...env, BUT_WHY_EXECUTABLE_PATH: byExecutable }),
   });
 
@@ -87,6 +92,7 @@ export const runByWithEnv = (cwd: string, env: NodeJS.ProcessEnv, ...args: reado
     ],
     {
       cwd,
+      timeout: cliProcessTimeoutMs,
       ...testProcessEnvironment({ ...env, BUT_WHY_EXECUTABLE_PATH: byExecutable }),
     },
   );

@@ -54,14 +54,29 @@ describe("repository-authored blocking diagnostics", () => {
     ],
     ["task-identity-branding-belongs-to-task-id", "const value = input as PublicTaskId;"],
     ["wall-clock-belongs-to-cli-entry", "const value = Date.now();"],
+    ["process-test-helpers-belong-to-process-boundaries", 'const result = runBy("/tmp/fixture");'],
+    [
+      "package-installation-belongs-to-package-contract",
+      'const result = spawnSync("npm", ["pack"]);',
+    ],
+    ["live-agent-helper-belongs-to-smoke", "const host = openHerdrInteractiveSessionHost();"],
+    [
+      "direct-sandcastle-helpers-belong-to-validation-workspace",
+      "const sandbox = createSandbox();",
+    ],
   ])("ast-grep rule %s explains the supported path", (ruleId, source) => {
     const fixtureRoot = mkdtempSync(join(tmpdir(), "but-why-diagnostic-ast-grep-"));
     temporaryPaths.push(fixtureRoot);
-    const fixtureDirectory =
-      ruleId === "effect-tests-use-effect-vitest-runtime" ||
-      ruleId === "test-child-processes-use-test-process-adapter"
-        ? "test"
-        : "src";
+    const fixtureDirectory = [
+      "effect-tests-use-effect-vitest-runtime",
+      "test-child-processes-use-test-process-adapter",
+      "process-test-helpers-belong-to-process-boundaries",
+      "package-installation-belongs-to-package-contract",
+      "live-agent-helper-belongs-to-smoke",
+      "direct-sandcastle-helpers-belong-to-validation-workspace",
+    ].includes(ruleId)
+      ? "test"
+      : "src";
     mkdirSync(join(fixtureRoot, fixtureDirectory));
     mkdirSync(join(fixtureRoot, "ast-grep/rules"), { recursive: true });
     copyFileSync(astGrepRulePath, join(fixtureRoot, "ast-grep/rules/structural-bans.yml"));

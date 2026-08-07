@@ -9,6 +9,8 @@ import { describe, expect, vi } from "vitest";
 import { piReviewerAgentRuntime } from "../../src/agent/reviewerAgentRuntime.js";
 import { runTestProcess } from "../support/testProcess.js";
 
+const reviewerProbeProcessTimeoutMs = 10_000;
+
 const profile = {
   agentProfile: "review",
   scope: "global" as const,
@@ -429,7 +431,7 @@ describe("Pi reviewer agent runtime", () => {
           isolatedHome: home,
           input:
             '{"type":"get_commands","id":"commands"}\n{"type":"prompt","message":"/probe-command","id":"probe"}\n',
-          timeout: 10_000,
+          timeout: reviewerProbeProcessTimeoutMs,
         });
         if (spawned.error) throw spawned.error;
         if (spawned.status !== 0) {
