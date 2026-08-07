@@ -69,7 +69,6 @@ export const taskMutationView = (task: TaskRecord) => ({
   state: task.state,
   createdAt: task.createdAt,
   updatedAt: task.updatedAt,
-  commentCount: task.commentCount,
   ...(task.cancelReason === null ? {} : { cancelReason: task.cancelReason }),
   prerequisites: task.prerequisites,
   dependents: task.dependents,

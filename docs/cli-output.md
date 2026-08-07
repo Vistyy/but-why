@@ -124,7 +124,7 @@ Its `count` is the number of returned Tasks and its `total` is the number matchi
 ## Command ownership
 
 - `by task show` owns Task lifecycle, dependency, and linked Change metadata.
-- `by task context` owns the complete Task title, description, comments, and approved Resolution context.
+- `by task context` owns the complete Task title, description, and approved Resolution context.
 - `by change show` owns current implementation, validation, delivery, blocker, and cleanup state.
 - `by change blocker list` owns complete Implementation Blocker and Implementation Blocker Resolution history.
 - `by change findings` owns complete Findings for the current Candidate.

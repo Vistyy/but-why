@@ -7,7 +7,7 @@ export const encodeSqliteAcceptanceContextSnapshot = (
     version: 1,
     title: snapshot.title,
     description: snapshot.description,
-    comments: [...snapshot.comments],
+    ...(snapshot.comments === undefined ? {} : { comments: [...snapshot.comments] }),
     ...(snapshot.resolutions === undefined ? {} : { resolutions: [...snapshot.resolutions] }),
   });
 
@@ -25,9 +25,9 @@ export const decodeSqliteAcceptanceContextSnapshot = (
     typeof value.title !== "string" ||
     !("description" in value) ||
     typeof value.description !== "string" ||
-    !("comments" in value) ||
-    !Array.isArray(value.comments) ||
-    !value.comments.every((comment) => typeof comment === "string")
+    ("comments" in value &&
+      (!Array.isArray(value.comments) ||
+        !value.comments.every((comment) => typeof comment === "string")))
   ) {
     throw new Error("Stored Acceptance Context Snapshot is invalid");
   }
@@ -36,7 +36,7 @@ export const decodeSqliteAcceptanceContextSnapshot = (
     version: 1,
     title: value.title,
     description: value.description,
-    comments: value.comments,
+    ...("comments" in value ? { comments: value.comments as string[] } : {}),
     ...("resolutions" in value &&
     Array.isArray(value.resolutions) &&
     value.resolutions.every((resolution) => typeof resolution === "string")

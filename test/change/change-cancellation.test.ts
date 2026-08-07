@@ -650,7 +650,6 @@ const taskRecord = (state: TaskRecord["state"]): TaskRecord => ({
   updatedAt: now,
   startable: false,
   blockedBy: [],
-  commentCount: 0,
   cancelReason: state === "cancelled" ? "Stop" : null,
   prerequisites: [],
   dependents: [],

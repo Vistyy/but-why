@@ -47,13 +47,6 @@ The remaining design question is whether later runtimes require a separate execu
 Evaluate whether Sandcastle can support that design through extension, requires a maintained fork, or should be replaced by another execution boundary.
 Keep Sandcastle behind its current domain seams until evidence justifies that decision.
 
-## What role should Task Comments have before Start?
-
-Task Comments currently append Markdown to Task Context before Change Start and become part of approved Acceptance Context.
-Direct Task Context editing may be simpler when one operator is refining intent.
-Future planning agents or multiple reviewers may instead need durable feedback that remains distinct from accepted intent.
-Keep current behavior until observed planning or review usage establishes whether comments should remain intent additions or become a separate record.
-
 ## How should But Why represent and review planning above individual Tasks?
 
 Tasks do not currently represent membership in one overarching planning effort, and Task Dependencies represent only implementation or verification prerequisites.

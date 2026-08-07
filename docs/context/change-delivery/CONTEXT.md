@@ -116,7 +116,7 @@ _Avoid_: Needs Input, reviewer status, Task state
 
 **Validation Run History**:
 The ordered immutable Validation Runs retained for one Change and its Candidates.
-_Avoid_: Mutable current report, Task comments
+_Avoid_: Mutable current report
 
 **Validation Policy Snapshot**:
 The immutable resolved Prepare, Checks, reviewer instructions, Agent Profiles, and output contract used by one Validation Run.
@@ -225,12 +225,12 @@ _Avoid_: Empty commit, comparison with the Change's starting tree, caller assert
 **Finding**:
 An immutable report that states one material problem and its evidence from Prepare, a Check, Acceptance Review, or a Specialist for one Candidate review.
 Every Finding is blocking, so it has no severity classification.
-_Avoid_: Tooling Failure, Task Comment, mutable issue
+_Avoid_: Tooling Failure, mutable issue
 
 **Implementation Decision**:
 An immutable Implementer-authored record of one material choice and its reasoning during a Change.
 Implementation Decisions are non-authoritative rationale supplied separately from Acceptance Context.
-_Avoid_: Task Comment, Acceptance Context amendment, ADR, Finding
+_Avoid_: Acceptance Context amendment, ADR, Finding
 
 **Implementation Blocker**:
 An immutable Implementer-authored problem report for one Open Change when implementation cannot safely continue under the accepted intent without an external decision or action.
@@ -244,7 +244,7 @@ A user-approved answer to one active Implementation Blocker.
 The Resolution record remains immutable Change history and is not classified by whether it changes intent.
 For a Task-backed Change, the Resolution appends to the current Acceptance Context.
 A taskless Resolution creates no Acceptance Context or Acceptance Review input.
-_Avoid_: Implementation Decision, Task Comment, silent Task edit, automatic recovery
+_Avoid_: Implementation Decision, silent Task edit, automatic recovery
 
 **Validation Gate**:
 The fixed read-only sequence that judges changed code through Repository Preparation, Checks, Acceptance Review for a Task-backed Change, and configured Specialists.
