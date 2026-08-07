@@ -79,7 +79,7 @@ describe("Herdr Interactive Session Host", () => {
         "--pane",
         "pane-1",
         "--timeout",
-        "30000",
+        "120000",
         "--",
         "--system-prompt",
         systemPromptPaths[0],
