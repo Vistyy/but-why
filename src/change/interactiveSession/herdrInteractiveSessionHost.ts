@@ -35,6 +35,8 @@ const defaultOptions: ResolvedOptions = {
   observationRetries: 2,
 };
 
+const agentPaneBusyRetryIntervalMs = 100;
+
 export const openHerdrInteractiveSessionHost = (
   execute: HerdrCommandExecutor = executeHerdr,
   environment: HerdrInteractiveSessionHostOptions = {},
@@ -206,10 +208,18 @@ const launchHerdrSession = async (
     "--",
     ...piArguments(input, continuationExtension),
   ];
-  const started = await command(startArgs, signal);
-  const startConfirmed = started.ok && isConfirmedAgentStart(started.stdout);
-  if (!started.ok && !isUncertainMutationFailure(started.message))
-    return launchFailure(started.message);
+  const started = await startAgentWhenPaneReady(
+    execute,
+    startArgs,
+    signal,
+    options.commandTimeoutMs,
+    options.readinessTimeoutMs,
+  );
+  if (started.paneReadinessTimedOut) return paneNotReady(options.readinessTimeoutMs);
+  const startResult = started.result;
+  const startConfirmed = startResult.ok && isConfirmedAgentStart(startResult.stdout);
+  if (!startResult.ok && !isUncertainMutationFailure(startResult.message))
+    return launchFailure(startResult.message);
   if (!startConfirmed) {
     const afterStart = await observe(
       command,
@@ -226,13 +236,43 @@ const launchHerdrSession = async (
       }
     }
     return launchIndeterminate(
-      started.ok
+      startResult.ok
         ? "Herdr did not confirm that native Pi startup reached readiness."
-        : `Herdr did not confirm whether native Pi startup succeeded: ${started.message}`,
+        : `Herdr did not confirm whether native Pi startup succeeded: ${startResult.message}`,
     );
   }
 
   return submitInitialPrompt(command, input, sessionName, signal, options);
+};
+
+type NativeAgentStart = {
+  readonly result: HerdrCommandExecutorResult;
+  readonly paneReadinessTimedOut: boolean;
+};
+
+const startAgentWhenPaneReady = async (
+  execute: HerdrCommandExecutor,
+  args: readonly string[],
+  signal: AbortSignal | undefined,
+  commandTimeoutMs: number,
+  readinessTimeoutMs: number,
+): Promise<NativeAgentStart> => {
+  const deadline = performance.now() + readinessTimeoutMs;
+  let result = await boundedExecutor(execute, Math.max(commandTimeoutMs, readinessTimeoutMs))(
+    args,
+    signal,
+  );
+  while (!result.ok && isAgentPaneBusyFailure(result.message)) {
+    const remainingMs = deadline - performance.now();
+    if (remainingMs <= 0) return { result, paneReadinessTimedOut: true };
+    await new Promise<void>((resolve) => {
+      setTimeout(resolve, Math.min(agentPaneBusyRetryIntervalMs, remainingMs));
+    });
+    const nextAttemptTimeoutMs = deadline - performance.now();
+    if (nextAttemptTimeoutMs <= 0) return { result, paneReadinessTimedOut: true };
+    result = await boundedExecutor(execute, nextAttemptTimeoutMs)(args, signal);
+  }
+  return { result, paneReadinessTimedOut: false };
 };
 
 const submitInitialPrompt = async (
@@ -305,6 +345,12 @@ const launchIndeterminate = (message: string): InteractiveSessionLaunchResult =>
   message: `Herdr could not prove that the Interactive Session launched: ${message}`,
 });
 
+const paneNotReady = (readinessTimeoutMs: number): InteractiveSessionLaunchResult => ({
+  ok: false,
+  code: "pane_not_ready",
+  message: `The Herdr Managed Worktree pane shell did not become ready for native Pi startup within ${readinessTimeoutMs} ms. Wait for shell startup to finish, then retry Change Implement.`,
+});
+
 const isConfirmedAgentStart = (source: string): boolean => {
   const result = herdrResult(source);
   return (
@@ -363,6 +409,9 @@ const isUncertainMutationFailure = (message: string): boolean =>
   /timed out|connection reset|ECONNRESET|response.*lost|lost response|no response|transport|connection.*closed|disconnected|broken pipe|eof/i.test(
     message,
   );
+
+const isAgentPaneBusyFailure = (message: string): boolean =>
+  message.trim().split(/[:\s]/, 1)[0] === "agent_pane_busy";
 
 type JsonRecord = Record<string, unknown> & {
   readonly type?: unknown;

@@ -689,6 +689,22 @@ describe("by change implement", () => {
         },
         {
           host: {
+            launch: async () => ({
+              ok: false,
+              code: "pane_not_ready",
+              message: "The Herdr Managed Worktree pane shell did not become ready.",
+            }),
+          },
+          status: 1,
+          expected: {
+            error: { code: "pane_not_ready" },
+            help: [
+              "Wait for the Managed Worktree pane shell to finish startup, then retry Change Implement.",
+            ],
+          },
+        },
+        {
+          host: {
             launch: async () => {
               throw new Error("Pane creation rejected");
             },
