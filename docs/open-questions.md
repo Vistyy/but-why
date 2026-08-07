@@ -88,14 +88,15 @@ Later design must decide whether the budget belongs to a Task, Change, or indivi
 It must also define exhaustion behavior, additional authorization, resume behavior, evidence, and whether enforcement can be hard or only advisory.
 An agent completion signal can report claimed completion, but it does not enforce the budget.
 
-## How should But Why separate operator and Implementer authority?
+## How should But Why separate operator, Implementer, and reviewer authority?
 
-Implementers currently use the same local CLI and Shared Repository State as the main operator.
+Implementers and reviewers currently use the same local CLI and Shared Repository State as the main operator.
 An Implementer can therefore invoke operator-owned lifecycle commands or edit local state as an easier substitute for completing accepted work.
-Future design should make accidental and reward-seeking destructive actions impractical without obstructing normal implementation.
+A reviewer may need read-only Task inspection without authority to mutate Task or Change lifecycle state.
+Future design should make accidental and reward-seeking destructive actions impractical without obstructing normal implementation or required review evidence gathering.
 It does not need to defend against a fully hostile process running as the same operating-system user.
 
-The design must define operator authority, Implementer authority, subagent delegation, and the trust boundary around Shared Repository State.
+The design must define operator authority, Implementer authority, reviewer authority, subagent delegation, and the trust boundary around Shared Repository State.
 Scoped capabilities, a local authority broker, signed authoritative state, and stronger process isolation have been discussed only as possible approaches.
 None is accepted architecture.
 Revisit this before supporting unattended implementation or automated destructive operations.
@@ -121,6 +122,19 @@ The agent must not receive GitHub credentials or direct push access.
 But Why must revalidate before an expected-SHA push.
 A human must retain merge authority.
 Conflict remediation should merge the latest base into the PR branch, then run the complete Validation Gate.
+
+## How should Operator Review Feedback re-enter an Open Change?
+
+Dogfooding identified a need for the Operator to annotate code on an owned pull request and return one review to the Implementer without managing each GitHub conversation as workflow state.
+
+Any imported feedback must be bound to the exact owned pull request, reviewed head commit, and configured Operator identity.
+Text authored by another identity must remain untrusted and must not become agent instructions.
+
+The design must determine which explicit Operator action authorizes import, whether the feedback is Change-owned correction input or an accepted-intent change, and what evidence establishes that the Implementer reassessed it.
+It must also determine how the Implementer and validation reviewers receive the same immutable feedback and when But Why may resolve corresponding GitHub conversations without requiring individual Operator decisions.
+
+Do not require draft pull request publication for this capability.
+Reconsider publishing unvalidated implementation only after dogfooding establishes that inspecting unfinished work provides material value.
 
 ## Should exploratory work be imported into a Change?
 
