@@ -1,12 +1,11 @@
 import { existsSync } from "node:fs";
 
 import { Effect } from "effect";
-
-import { openAbandonValidationRun, type AbandonValidationRun } from "./abandonValidationRun.js";
-import { loadRepoLocalContext, type LoadRepoLocalContextError } from "../init/repoContext.js";
+import { type LoadRepoLocalContextError, loadRepoLocalContext } from "../init/repoContext.js";
 import { repositorySqlLayer } from "../sqlite/repositorySql.js";
 import { openSqliteChangeValidationPersistence } from "../sqlite/sqliteChangeValidationPersistence.js";
 import { openSqliteExecutionLock } from "../sqlite/sqliteExecutionLock.js";
+import { type AbandonValidationRun, openAbandonValidationRun } from "./abandonValidationRun.js";
 import {
   deleteValidationTempRef,
   removeValidationWorktree,

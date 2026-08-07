@@ -2,12 +2,12 @@
 // fallow-ignore-file unused-export -- dynamically imported by the CLI
 
 import { Effect } from "effect";
+import { withCancellation } from "../../change/loadChangeCancellation.js";
 import type { CliResult } from "../../cliResults.js";
 import { usageError } from "../../cliResults.js";
-import type { ChangeCommandEnvironment } from "./changeTypes.js";
-import { withCancellation } from "../../change/loadChangeCancellation.js";
-import * as support from "./changeSupport.js";
 import { changeCancelResult } from "./cancelResult.js";
+import * as support from "./changeSupport.js";
+import type { ChangeCommandEnvironment } from "./changeTypes.js";
 
 export const runCancel = (
   command: { readonly changeId: string | undefined; readonly reason: string },

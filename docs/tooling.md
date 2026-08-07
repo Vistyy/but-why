@@ -25,15 +25,27 @@ Run Candidate CLI and migration tests through the supported test seams with an i
 Run `just` to list recipes.
 Use Just recipes instead of direct package-manager commands for repository workflows.
 
+- `just check` checks Just formatting and the configured Biome formatter, lint rules, and `organizeImports` assist in one source scan without modifying files.
+- `just fix` applies Just formatting, Biome formatting, safe lint fixes, and the `organizeImports` assist without user interaction.
 - `just test <focused-path-or-selection>` runs focused tests without the complete-workload lock.
 - `just typecheck` runs the TypeScript checker.
-- `just lint` runs Biome linting.
-- `just format-check` checks Just and Biome formatting.
+- `just lint` runs Biome linting only.
+- `just format` applies Biome formatting only.
+- `just format-check` checks Just and Biome formatting only.
 - `just docs-check` validates links and anchors in tracked and non-ignored Markdown files.
 - `just ast-grep-check` checks structural TypeScript contracts.
 - `just fallow-check` checks dead code and named architecture contracts with coverage.
-- `just quality` runs the blocking routine test, static-check, and build workflow.
+- `just quality` runs the blocking routine test, static-check, and build workflow, including the `just check` source-style policy.
 - `just full-quality` runs the complete selected test suite with the same blocking checks.
+
+### Source-style policy
+
+`just check` is the single source-style gate.
+It covers Just formatting and the configured Biome formatter, lint rules, and `organizeImports` assist.
+`just fix` applies the same policy without user interaction.
+`just quality` runs the same `just check` policy as part of its static checks.
+The narrower recipes remain available for focused diagnostics:
+`just format` applies Biome formatting only, `just format-check` checks Just and Biome formatting only, and `just lint` runs Biome linting only.
 
 Change Submit owns the configured blocking Check and review phases.
 Do not duplicate those broad checks manually during Change implementation.

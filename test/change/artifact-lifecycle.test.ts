@@ -8,14 +8,14 @@ import { afterAll, beforeAll, describe } from "vitest";
 import type { CandidateRecord } from "../../src/change/candidate/candidate.js";
 import type { CandidateValidationRunRecord } from "../../src/change/candidateValidation/candidateValidationRunStore.js";
 import type { ChangePersistence } from "../../src/change/changePersistence.js";
-import type { ChangeValidationPersistence } from "../../src/change/validation/changeValidationPersistence.js";
 import { openTerminalCleanup } from "../../src/change/cleanupTerminalChange.js";
+import type { ChangeValidationPersistence } from "../../src/change/validation/changeValidationPersistence.js";
 import { openArtifactLifecycle } from "../../src/change/validationRun/artifactLifecycle.js";
+import type { RepositoryStorageError } from "../../src/contracts/repositoryStorageError.js";
+import { repositorySqlLayer } from "../../src/sqlite/repositorySql.js";
 import { openSqliteCandidateCapturePersistence } from "../../src/sqlite/sqliteCandidateCapturePersistence.js";
 import { openSqliteChangePersistence } from "../../src/sqlite/sqliteChangePersistence.js";
-import { repositorySqlLayer } from "../../src/sqlite/repositorySql.js";
 import { openSqliteChangeValidationPersistence } from "../../src/sqlite/sqliteChangeValidationPersistence.js";
-import type { RepositoryStorageError } from "../../src/contracts/repositoryStorageError.js";
 import {
   cloneInitializedTestRepository,
   createInitializedRepo,

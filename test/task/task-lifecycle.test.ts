@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { taskStates, isTaskState } from "../../src/task/lifecycle.js";
+import { isTaskState, taskStates } from "../../src/task/lifecycle.js";
 
 describe("Task lifecycle", () => {
   it("owns the canonical four-state Task vocabulary", () => {

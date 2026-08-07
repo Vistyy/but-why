@@ -3,9 +3,9 @@ import { homedir } from "node:os";
 import { isAbsolute, join, resolve } from "node:path";
 
 import type { PiRuntimeConfig } from "../contracts/agentConfig.js";
-import type { ResolvedPiAgentProfile } from "./agentProfiles.js";
-import { MissingAgentProfileResource } from "./agentProfileErrors.js";
 import { shellQuote } from "./agentEnvironment.js";
+import { MissingAgentProfileResource } from "./agentProfileErrors.js";
+import type { ResolvedPiAgentProfile } from "./agentProfiles.js";
 
 export type PiRuntimeResourceScope = "repo" | "global";
 

@@ -7,13 +7,13 @@ import {
   symlinkSync,
   writeFileSync,
 } from "node:fs";
-import { DatabaseSync } from "node:sqlite";
 import { join } from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import { expect, test } from "vitest";
 
 import { repoRoot } from "../support/by-cli.js";
-import { createTestWorkspace } from "../support/testWorkspace.js";
 import { runTestProcess, runTestProcessOrThrow } from "../support/testProcess.js";
+import { createTestWorkspace } from "../support/testWorkspace.js";
 
 const sourceNow = "2026-06-30T12:00:00.000Z";
 

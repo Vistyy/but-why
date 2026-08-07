@@ -9,10 +9,10 @@ import {
   currentCandidateReReviewInstructions,
   previousFindingsPrompt,
 } from "../../agent/reviewerPrompts.js";
-import type { AcceptanceContextSnapshotV1 } from "../validationRun/acceptanceContextSnapshot.js";
-import type { ImplementationDecision } from "../implementationDecision.js";
-import type { ImplementationBlockerHistory } from "../implementationBlocker.js";
 import type { RepositoryStorageError } from "../../contracts/repositoryStorageError.js";
+import type { ImplementationBlockerHistory } from "../implementationBlocker.js";
+import type { ImplementationDecision } from "../implementationDecision.js";
+import type { AcceptanceContextSnapshotV1 } from "../validationRun/acceptanceContextSnapshot.js";
 
 export type ReviewerSessionIdentity = {
   readonly changeId: string;

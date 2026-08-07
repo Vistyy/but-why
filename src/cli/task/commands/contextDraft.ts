@@ -7,9 +7,9 @@ import { success } from "../../../cliResults.js";
 import { parseCliTaskIdValue } from "../../../cliTaskId.js";
 import {
   resolveTaskId,
+  type TaskCommandEnvironment,
   taskNotFound,
   withTasks,
-  type TaskCommandEnvironment,
 } from "../taskCliSupport.js";
 
 export const runContextDraftCommand = (

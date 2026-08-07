@@ -1,4 +1,4 @@
-import { runtimeError, usageError, type CliResult } from "../../cliResults.js";
+import { type CliResult, runtimeError, usageError } from "../../cliResults.js";
 
 export const decisionMutationError = (code: string, changeId: string): CliResult =>
   runtimeError({

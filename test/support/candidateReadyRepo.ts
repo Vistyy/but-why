@@ -1,6 +1,6 @@
 import { join } from "node:path";
-import { runTestProcess } from "./testProcess.js";
 import { createInitializedRepo } from "./initializedRepo.js";
+import { runTestProcess } from "./testProcess.js";
 
 export const candidateReadyRepo = (workspace?: string): string => {
   const root = createInitializedRepo(workspace);

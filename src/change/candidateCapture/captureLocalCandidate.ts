@@ -1,11 +1,11 @@
 import { Effect } from "effect";
 
 import type { RepositoryStorageError } from "../../contracts/repositoryStorageError.js";
+import type { CandidateCaptureGit, LocalCandidateWorkspace } from "./candidateCaptureGit.js";
 import type {
   CandidateCaptureChange,
   CandidateCapturePersistence,
 } from "./candidateCapturePersistence.js";
-import type { CandidateCaptureGit, LocalCandidateWorkspace } from "./candidateCaptureGit.js";
 
 export type CaptureLocalCandidateInput = {
   readonly cwd: string;

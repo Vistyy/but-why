@@ -4,22 +4,22 @@ import { join } from "node:path";
 import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
 import { describe, vi } from "vitest";
-import { captureLocalCandidate } from "../support/candidateCapture.js";
+import type { ReviewerAgentRuntime } from "../../src/agent/reviewerAgentRuntime.js";
 import {
   CandidateValidation,
   type ValidateCandidateInput,
 } from "../../src/change/candidateValidation/validateCandidate.js";
-import { candidateValidationForTest } from "../support/candidateValidation.js";
+import { RepositorySql } from "../../src/sqlite/repositorySql.js";
+import { captureLocalCandidate } from "../support/candidateCapture.js";
 import {
   candidateReadyRepo,
   candidateRepositoryConfig,
   commonDirectory,
   git,
 } from "../support/candidateReadyRepo.js";
-import { RepositorySql } from "../../src/sqlite/repositorySql.js";
+import { candidateValidationForTest } from "../support/candidateValidation.js";
 import { withTestRepository } from "../support/repository.js";
 import { createTestWorkspace } from "../support/testWorkspace.js";
-import type { ReviewerAgentRuntime } from "../../src/agent/reviewerAgentRuntime.js";
 
 const now = "2026-07-15T10:00:00.000Z";
 

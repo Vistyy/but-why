@@ -5,8 +5,8 @@ import {
   agentProfileSchema,
   configNameSchema,
 } from "./agentConfig.js";
-import { contractDiagnostics, formatContractDiagnostics } from "./contractDiagnostics.js";
 import { GlobalConfigValidationFailed } from "./configErrors.js";
+import { contractDiagnostics, formatContractDiagnostics } from "./contractDiagnostics.js";
 import { repoRelativePathSchema } from "./repoConfig.js";
 
 const globalAcceptanceReviewConfigSchema = Schema.Struct({

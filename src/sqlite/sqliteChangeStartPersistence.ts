@@ -4,12 +4,16 @@ import { Effect } from "effect";
 import type { ChangePrepareFailure } from "../change/change.js";
 import type { ChangeStartPersistence } from "../change/changeStartPersistence.js";
 import type { ChangeStartRecord, CreateChangeStartInput } from "../change/changeStartStore.js";
-import type { TaskState } from "../task/lifecycle.js";
-import type { TaskDependencyFact } from "../task/task.js";
-import { storedPublicTaskId, type PublicTaskId } from "../task/taskId.js";
 import type { AcceptanceContextSnapshotV1 } from "../change/validationRun/acceptanceContextSnapshot.js";
 import { RepositoryPersistedDataInvalid } from "../contracts/repositoryStorageError.js";
+import type { TaskState } from "../task/lifecycle.js";
+import type { TaskDependencyFact } from "../task/task.js";
+import { type PublicTaskId, storedPublicTaskId } from "../task/taskId.js";
 import { RepositorySql } from "./repositorySql.js";
+import {
+  decodeSqliteAcceptanceContextSnapshot,
+  encodeSqliteAcceptanceContextSnapshot,
+} from "./sqliteAcceptanceContextSnapshot.js";
 import {
   decodeSqliteChangePrepareFailure,
   encodeSqliteChangePrepareFailure,
@@ -18,10 +22,6 @@ import {
   decodeSqliteChangePublication,
   type SqliteChangePublicationRow,
 } from "./sqliteChangePublication.js";
-import {
-  decodeSqliteAcceptanceContextSnapshot,
-  encodeSqliteAcceptanceContextSnapshot,
-} from "./sqliteAcceptanceContextSnapshot.js";
 
 const columns = [
   "id",

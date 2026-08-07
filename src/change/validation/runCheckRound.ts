@@ -1,20 +1,19 @@
 import type { Sandbox } from "@ai-hero/sandcastle";
 import { Clock, Effect } from "effect";
-
-import type { SubmitCheckConfig } from "../submit/submitRepoConfig.js";
-import { ensureCandidateIntegrity } from "./ensureCandidateIntegrity.js";
-import { runWithSubmitProgress, type SubmitProgress } from "./submitProgress.js";
-import { runValidationCommand } from "./runValidationCommand.js";
-import { writeCommandEvidence } from "./writeCommandEvidence.js";
-import { validationPhase } from "../validationRun/validationRun.js";
-import type { RecordCandidateValidationCheckRoundInput } from "../candidateValidation/candidateValidationRunStore.js";
 import type { RepositoryStorageError } from "../../contracts/repositoryStorageError.js";
+import type { RecordCandidateValidationCheckRoundInput } from "../candidateValidation/candidateValidationRunStore.js";
+import type { SubmitCheckConfig } from "../submit/submitRepoConfig.js";
+import { validationPhase } from "../validationRun/validationRun.js";
+import { ensureCandidateIntegrity } from "./ensureCandidateIntegrity.js";
+import { runValidationCommand } from "./runValidationCommand.js";
+import { runWithSubmitProgress, type SubmitProgress } from "./submitProgress.js";
 import {
   CheckCommandExecutionToolingFailed,
   GitToolingFailed,
   InfrastructureToolingFailed,
   type ValidationToolingFailure,
 } from "./validationToolingFailures.js";
+import { writeCommandEvidence } from "./writeCommandEvidence.js";
 
 export type RunCheckPhaseInput = {
   readonly validationRunId: string;

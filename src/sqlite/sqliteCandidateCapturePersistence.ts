@@ -1,13 +1,12 @@
-import type * as SqlClient from "@effect/sql/SqlClient";
 import { randomUUID } from "node:crypto";
+import type * as SqlClient from "@effect/sql/SqlClient";
 import { Effect } from "effect";
-
-import { changeState } from "../change/change.js";
 import type {
   CandidateCaptureChange,
   CandidateCapturePersistence,
   CommitCandidateCaptureInput,
 } from "../change/candidateCapture/candidateCapturePersistence.js";
+import { changeState } from "../change/change.js";
 import { RepositoryPersistedDataInvalid } from "../contracts/repositoryStorageError.js";
 import { RepositorySql } from "./repositorySql.js";
 

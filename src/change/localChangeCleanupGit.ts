@@ -3,8 +3,9 @@ import { existsSync, lstatSync, rmdirSync } from "node:fs";
 import { basename, dirname } from "node:path";
 
 import type { RemoteChangeBranch } from "./change.js";
-import { changeBranchNameForRef, branchNameForRef } from "./changeBranch.js";
+import { branchNameForRef, changeBranchNameForRef } from "./changeBranch.js";
 import type { ChangeCleanupRemote, RemoteBranchDeletionResult } from "./changeCleanupRemote.js";
+
 export type { ChangeCleanupRemote } from "./changeCleanupRemote.js";
 
 export type ChangeCleanupResult =

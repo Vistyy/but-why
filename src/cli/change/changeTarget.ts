@@ -1,12 +1,11 @@
 import { Effect } from "effect";
-
-import {
-  repositoryStorageErrorResult,
-  repoStateLoadError,
-  runtimeError,
-  type CliResult,
-} from "../../cliResults.js";
 import { loadChangeInspection } from "../../change/loadChangeInspection.js";
+import {
+  type CliResult,
+  repoStateLoadError,
+  repositoryStorageErrorResult,
+  runtimeError,
+} from "../../cliResults.js";
 import { findCurrentWorktreeFacts } from "../../init/git.js";
 
 type ChangeTargetResolution =

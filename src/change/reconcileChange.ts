@@ -5,8 +5,8 @@ import type { ChangeCleanup, ChangeOwnedPullRequest, ChangeRecord } from "./chan
 import type { ChangePersistence } from "./changePersistence.js";
 import type { TerminalCleanupOperation } from "./cleanupTerminalChange.js";
 import {
-  observeOwnedPullRequest,
   observedMergedChangeEvidence,
+  observeOwnedPullRequest,
 } from "./ownedPullRequestClassifier.js";
 import type { GitHubPullRequestGateway } from "./ownedPullRequestGateway.js";
 

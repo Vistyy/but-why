@@ -1,3 +1,4 @@
+import { createRequire } from "node:module";
 import * as Args from "@effect/cli/Args";
 import * as CliConfig from "@effect/cli/CliConfig";
 import * as Command from "@effect/cli/Command";
@@ -5,19 +6,17 @@ import * as HelpDoc from "@effect/cli/HelpDoc";
 import * as Options from "@effect/cli/Options";
 import * as ValidationError from "@effect/cli/ValidationError";
 import { NodeFileSystem, NodePath, NodeTerminal } from "@effect/platform-node";
-import { createRequire } from "node:module";
 import { Console, Context, Effect, Layer, Logger, Ref } from "effect";
-
-import type { CliEnvironment } from "./cli.js";
-import { collapseHome } from "./cli/cliPath.js";
-import { success, usageError, type CliResult } from "./cliResults.js";
 import type { ChangeCommandEnvironment } from "./cli/change/changeTypes.js";
+import { collapseHome } from "./cli/cliPath.js";
+import type { CliEnvironment } from "./cli.js";
+import { type CliResult, success, usageError } from "./cliResults.js";
 import {
   hasInvalidJsonSelector,
   nativeBooleanValue,
   outputFormatForArgs,
 } from "./output/selection.js";
-import { taskStates, type TaskState } from "./task/lifecycle.js";
+import { type TaskState, taskStates } from "./task/lifecycle.js";
 
 class CliEnvironmentContext extends Context.Tag("@but-why/CliEnvironment")<
   CliEnvironmentContext,

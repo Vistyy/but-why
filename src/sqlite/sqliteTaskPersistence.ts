@@ -1,29 +1,28 @@
+import { randomUUID } from "node:crypto";
 import type * as SqlClient from "@effect/sql/SqlClient";
 import type { SqlError } from "@effect/sql/SqlError";
 import { Effect } from "effect";
-import { randomUUID } from "node:crypto";
-
+import { RepositoryPersistedDataInvalid } from "../contracts/repositoryStorageError.js";
 import type { TaskState } from "../task/lifecycle.js";
-import type { TaskPersistence } from "../task/taskPersistence.js";
 import type {
   DependencyValidationCode,
   TaskContext,
   TaskDependencyFact,
   TaskSummary,
 } from "../task/task.js";
-import { generatedPublicTaskId, storedPublicTaskId, type PublicTaskId } from "../task/taskId.js";
+import { generatedPublicTaskId, type PublicTaskId, storedPublicTaskId } from "../task/taskId.js";
+import type { TaskPersistence } from "../task/taskPersistence.js";
 import type {
   AppendTaskCommentInput,
   ApproveTaskInput,
   CancelTaskInput,
   CancelTaskResult,
   CreateTaskInput,
-  ListTasksInput,
   EditTaskDependenciesInput,
+  ListTasksInput,
   StoredTaskRecord,
   UpdateTaskContextInput,
 } from "../task/taskStore.js";
-import { RepositoryPersistedDataInvalid } from "../contracts/repositoryStorageError.js";
 import { RepositorySql } from "./repositorySql.js";
 
 export const openSqliteTaskPersistence = (

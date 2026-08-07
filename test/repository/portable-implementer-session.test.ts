@@ -4,8 +4,8 @@ import { describe, expect, it } from "vitest";
 
 import { publicTaskId, taskSlugForId } from "../../src/task/taskId.js";
 import { repoRoot } from "../support/by-cli.js";
-import { createTestWorkspace } from "../support/testWorkspace.js";
 import { runTestProcess } from "../support/testProcess.js";
+import { createTestWorkspace } from "../support/testWorkspace.js";
 
 type ImplementerSessionResult = {
   readonly changeId: string;

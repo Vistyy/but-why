@@ -1,12 +1,12 @@
-import type { LoadRepoLocalContextError } from "./init/repoContext.js";
+import { type StructuredErrorInput, structuredError } from "./cliError.js";
 import type {
   RepositoryStorageError,
   RestoredTransientChangeFact,
   RestoredTransientTaskFact,
 } from "./contracts/repositoryStorageError.js";
+import type { LoadRepoLocalContextError } from "./init/repoContext.js";
 import { structuredContractDiagnostics } from "./output/contractDiagnostics.js";
 import type { OutputFormat, StructuredObject } from "./output/structured.js";
-import { structuredError, type StructuredErrorInput } from "./cliError.js";
 
 export type CliResult = CliSuccessResult | CliRuntimeErrorResult | CliUsageErrorResult;
 

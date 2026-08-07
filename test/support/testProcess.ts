@@ -1,13 +1,14 @@
 import {
-  spawn,
-  spawnSync,
   type ChildProcessByStdio,
   type SpawnSyncReturns,
+  spawn,
+  spawnSync,
 } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import type { Readable } from "node:stream";
+
 const repositoryRoot = resolve(import.meta.dirname, "../..");
 
 const isInDirectory = (directory: string, path: string): boolean => {

@@ -1,12 +1,13 @@
 // fallow-ignore-file unused-export -- dynamically imported by the CLI
 
-import { runtimeError, success, type CliResult } from "../../cliResults.js";
 import type { ChangeSubmitResult } from "../../change/submitChange.js";
+import { type CliResult, runtimeError, success } from "../../cliResults.js";
 
 type SubmitRecoveryAction =
   | "resolve_dirty_work"
   | "fix_validation_findings"
   | "integrate_change_base";
+
 import { structuredContractDiagnostics } from "../../output/contractDiagnostics.js";
 import { remoteChangeBaseError } from "./sharedResults.js";
 

@@ -1,6 +1,5 @@
 import type { TaskState } from "./lifecycle.js";
-import type { TaskContext } from "./task.js";
-import type { DependencyValidationCode, TaskRecord, TaskSummary } from "./task.js";
+import type { DependencyValidationCode, TaskContext, TaskRecord, TaskSummary } from "./task.js";
 import type { PublicTaskId } from "./taskId.js";
 
 export type StoredTaskRecord = TaskRecord;

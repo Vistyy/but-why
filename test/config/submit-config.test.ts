@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
-
-import type { RepoConfig } from "../../src/contracts/repoConfig.js";
 import { submitRepoConfig } from "../../src/change/submit/submitRepoConfig.js";
+import type { RepoConfig } from "../../src/contracts/repoConfig.js";
 
 const checkConfig = {
   taskPrefix: "BY",

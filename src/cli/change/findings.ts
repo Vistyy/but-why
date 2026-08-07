@@ -2,12 +2,12 @@
 // fallow-ignore-file unused-export -- dynamically imported by the CLI
 
 import { Effect } from "effect";
-import type { CliResult } from "../../cliResults.js";
-import type { ChangeCommandEnvironment } from "./changeTypes.js";
 import { loadChangeInspection } from "../../change/loadChangeInspection.js";
+import type { CliResult } from "../../cliResults.js";
 import { success } from "../../cliResults.js";
 import { structuredValue } from "../../output/structuredValue.js";
 import * as support from "./changeSupport.js";
+import type { ChangeCommandEnvironment } from "./changeTypes.js";
 
 export const runFindings = (
   command: { readonly changeId: string | undefined },

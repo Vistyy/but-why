@@ -1,17 +1,16 @@
 import { Layer } from "effect";
-
-import {
-  type CandidateValidation,
-  CandidateValidationLive,
-  CandidateValidationPaths,
-  CandidateValidationPersistence,
-  CandidateReviewerAgentRuntime,
-} from "./validateCandidate.js";
-import type { ChangeValidationPersistence } from "../validation/changeValidationPersistence.js";
 import {
   piReviewerAgentRuntime,
   type ReviewerAgentRuntime,
 } from "../../agent/reviewerAgentRuntime.js";
+import type { ChangeValidationPersistence } from "../validation/changeValidationPersistence.js";
+import {
+  CandidateReviewerAgentRuntime,
+  type CandidateValidation,
+  CandidateValidationLive,
+  CandidateValidationPaths,
+  CandidateValidationPersistence,
+} from "./validateCandidate.js";
 
 export const candidateValidationLayer = (input: {
   readonly localRepositoryMainCheckoutRoot: string;

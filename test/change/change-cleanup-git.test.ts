@@ -2,12 +2,11 @@ import { existsSync, mkdirSync, rmSync, symlinkSync, writeFileSync } from "node:
 import { basename, dirname, join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { describe, expect, it } from "vitest";
-
-import { cleanupChangeResources } from "../../src/change/localChangeCleanupGit.js";
 import type { ChangeCleanupRemote } from "../../src/change/changeCleanupRemote.js";
 import type { ChangeCleanupResult } from "../../src/change/localChangeCleanupGit.js";
-import { createTestWorkspace } from "../support/testWorkspace.js";
+import { cleanupChangeResources } from "../../src/change/localChangeCleanupGit.js";
 import { runTestProcessOrThrow } from "../support/testProcess.js";
+import { createTestWorkspace } from "../support/testWorkspace.js";
 
 describe("Change cleanup Git adapter", () => {
   it("removes empty sibling containers after the final Managed Worktree", () => {

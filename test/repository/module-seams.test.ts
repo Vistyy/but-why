@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { runtimeError, success, usageError } from "../../src/cliResults.js";
+
 describe("module seams", () => {
   it("constructs shared CLI result objects without serialization concerns", () => {
     expect(success({ ok: true })).toEqual({ exitCode: 0, stdout: { ok: true } });

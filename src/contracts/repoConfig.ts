@@ -7,9 +7,9 @@ import {
   configNameSchema,
   nonBlankStringSchema,
 } from "./agentConfig.js";
+import { RepoConfigValidationFailed } from "./configErrors.js";
 import { contractDiagnostics, formatContractDiagnostics } from "./contractDiagnostics.js";
 import { taskPrefixPattern } from "./taskPrefix.js";
-import { RepoConfigValidationFailed } from "./configErrors.js";
 
 const taskPrefixSchema = Schema.String.pipe(Schema.pattern(taskPrefixPattern));
 const checkIdSchema = Schema.String.pipe(Schema.pattern(/^[a-z0-9][a-z0-9_-]*$/u));

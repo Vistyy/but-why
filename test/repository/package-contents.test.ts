@@ -12,8 +12,8 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import { createGitRepo, repoRoot } from "../support/by-cli.js";
-import { createTestWorkspace } from "../support/testWorkspace.js";
 import { runTestProcess } from "../support/testProcess.js";
+import { createTestWorkspace } from "../support/testWorkspace.js";
 
 type PackedPackageMetadata = {
   readonly id: string;

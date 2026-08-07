@@ -1,10 +1,7 @@
+import { MigrationError } from "@effect/sql/Migrator";
 import * as SqlClient from "@effect/sql/SqlClient";
 import type { SqlError } from "@effect/sql/SqlError";
-import { MigrationError } from "@effect/sql/Migrator";
-import { nodeSqliteLayer } from "./nodeSqliteClient.js";
 import { Cause, Context, Effect, Layer } from "effect";
-
-import { migrateRepositoryState } from "./repositoryMigrations.js";
 import {
   RepositoryIdentityConflict,
   RepositoryMigrationFailed,
@@ -12,9 +9,11 @@ import {
   RepositoryRestoredTransientState,
   RepositorySqlOperationFailed,
   RepositoryStateUnavailable,
-  RestoredTransientStateError,
   type RepositoryStorageError,
+  RestoredTransientStateError,
 } from "../contracts/repositoryStorageError.js";
+import { nodeSqliteLayer } from "./nodeSqliteClient.js";
+import { migrateRepositoryState } from "./repositoryMigrations.js";
 import { decodeSqliteJsonStringArray } from "./sqliteJsonStringArray.js";
 
 type RepositorySqlService = {

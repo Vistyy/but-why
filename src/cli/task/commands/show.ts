@@ -1,16 +1,15 @@
 // fallow-ignore-file unused-export -- dynamically imported by the CLI
 
 import { Effect } from "effect";
-
+import { loadChangeInspection } from "../../../change/loadChangeInspection.js";
 import type { CliResult } from "../../../cliResults.js";
 import { stateStoreUnavailable, success } from "../../../cliResults.js";
-import { loadChangeInspection } from "../../../change/loadChangeInspection.js";
 import { parseCliTaskIdValue } from "../../../cliTaskId.js";
 import {
   resolveTaskId,
+  type TaskCommandEnvironment,
   taskNotFound,
   withTasks,
-  type TaskCommandEnvironment,
 } from "../taskCliSupport.js";
 import type { TaskIdCommand } from "./approve.js";
 

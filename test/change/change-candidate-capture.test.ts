@@ -10,11 +10,11 @@ import {
 } from "../../src/change/candidateCapture/localGitCandidate.js";
 import { createGitRepo } from "../support/by-cli.js";
 import { captureLocalCandidate } from "../support/candidateCapture.js";
-import { runTestProcess } from "../support/testProcess.js";
 import {
   cloneInitializedTestRepository,
   createInitializedRepo,
 } from "../support/initializedRepo.js";
+import { runTestProcess } from "../support/testProcess.js";
 import {
   acquireTestWorkspace,
   createTestWorkspace,

@@ -1,20 +1,11 @@
-import { mkdtempSync, mkdirSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-
-import { expect, it } from "@effect/vitest";
-import * as SqlClient from "@effect/sql/SqlClient";
 import * as Migrator from "@effect/sql/Migrator";
+import * as SqlClient from "@effect/sql/SqlClient";
+import { expect, it } from "@effect/vitest";
 import { Cause, Effect } from "effect";
 import { describe } from "vitest";
-
-import { storedPublicTaskId } from "../../src/task/taskId.js";
-import { openSqliteCandidateCapturePersistence } from "../../src/sqlite/sqliteCandidateCapturePersistence.js";
-import { openSqliteChangePersistence } from "../../src/sqlite/sqliteChangePersistence.js";
-import { openSqliteChangeStartPersistence } from "../../src/sqlite/sqliteChangeStartPersistence.js";
-import { openSqliteChangeValidationPersistence } from "../../src/sqlite/sqliteChangeValidationPersistence.js";
-import { openSqliteTaskPersistence } from "../../src/sqlite/sqliteTaskPersistence.js";
-import { nodeSqliteLayer } from "../../src/sqlite/nodeSqliteClient.js";
 import {
   RepositoryIdentityConflict,
   RepositoryMigrationFailed,
@@ -23,7 +14,6 @@ import {
   RepositorySqlOperationFailed,
   RepositoryStateUnavailable,
 } from "../../src/contracts/repositoryStorageError.js";
-import { RepositorySql, repositorySqlLayer } from "../../src/sqlite/repositorySql.js";
 import { baselineMigration } from "../../src/sqlite/migrations/0001_baseline.js";
 import { reviewerSessionsMigration } from "../../src/sqlite/migrations/0002_reviewer_sessions.js";
 import { implementationDecisionsMigration } from "../../src/sqlite/migrations/0003_implementation_decisions.js";
@@ -46,6 +36,14 @@ import { simplifyReviewerSessionsMigration } from "../../src/sqlite/migrations/0
 import { removeCandidatePublicationsMigration } from "../../src/sqlite/migrations/0020_remove_candidate_publications.js";
 import { reviewerTranscriptsMigration } from "../../src/sqlite/migrations/0021_reviewer_transcripts.js";
 import { changeCancelReasonMigration } from "../../src/sqlite/migrations/0022_change_cancel_reason.js";
+import { nodeSqliteLayer } from "../../src/sqlite/nodeSqliteClient.js";
+import { RepositorySql, repositorySqlLayer } from "../../src/sqlite/repositorySql.js";
+import { openSqliteCandidateCapturePersistence } from "../../src/sqlite/sqliteCandidateCapturePersistence.js";
+import { openSqliteChangePersistence } from "../../src/sqlite/sqliteChangePersistence.js";
+import { openSqliteChangeStartPersistence } from "../../src/sqlite/sqliteChangeStartPersistence.js";
+import { openSqliteChangeValidationPersistence } from "../../src/sqlite/sqliteChangeValidationPersistence.js";
+import { openSqliteTaskPersistence } from "../../src/sqlite/sqliteTaskPersistence.js";
+import { storedPublicTaskId } from "../../src/task/taskId.js";
 import { withTemporaryRepositoryState as withTemporaryState } from "../support/repository.js";
 
 const migrationCount = Effect.gen(function* () {

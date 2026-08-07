@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { TextDecoder } from "node:util";
 
 import type { TaskContext } from "../task.js";
-import { taskSlugForId, type PublicTaskId } from "../taskId.js";
+import { type PublicTaskId, taskSlugForId } from "../taskId.js";
 
 export type ParsedTaskContextDraft = {
   readonly path: string;

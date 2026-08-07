@@ -1,25 +1,24 @@
 import { isDeepStrictEqual } from "node:util";
 import { Effect } from "effect";
-
+import type { RepositoryStorageError } from "../../contracts/repositoryStorageError.js";
 import type { CandidateValidationPolicySnapshot } from "../candidateValidation/candidateValidationRunStore.js";
-import type { ChangeValidationPersistence } from "../validation/changeValidationPersistence.js";
-import type { ChangePersistence } from "../changePersistence.js";
 import type {
   ChangeOwnedPullRequest,
   ChangePublication,
   ChangePublicationTarget,
   ChangeRecord,
 } from "../change.js";
+import { branchNameForRef } from "../changeBranch.js";
+import type { ChangePersistence } from "../changePersistence.js";
+import { implementationDecisionMarkdown } from "../implementationDecision.js";
+import { observeOwnedPullRequest, ownedPublication } from "../ownedPullRequestClassifier.js";
 import type {
   GitHubPullRequest,
   GitHubPullRequestGateway,
   GitHubPullRequestMutationResult,
   GitHubPullRequestRequest,
 } from "../ownedPullRequestGateway.js";
-import type { RepositoryStorageError } from "../../contracts/repositoryStorageError.js";
-import { implementationDecisionMarkdown } from "../implementationDecision.js";
-import { branchNameForRef } from "../changeBranch.js";
-import { observeOwnedPullRequest, ownedPublication } from "../ownedPullRequestClassifier.js";
+import type { ChangeValidationPersistence } from "../validation/changeValidationPersistence.js";
 export type CommitSubjectResult =
   | { readonly ok: true; readonly subject: string | undefined }
   | { readonly ok: false };

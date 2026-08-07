@@ -1,8 +1,8 @@
 import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { describe, it as effectIt, expect } from "@effect/vitest";
 import { Effect, Fiber } from "effect";
-import { describe, expect, it as effectIt } from "@effect/vitest";
 import { it } from "vitest";
 
 import {

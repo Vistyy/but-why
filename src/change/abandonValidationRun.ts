@@ -1,7 +1,6 @@
 import { Effect } from "effect";
-
-import type { RepositoryStorageError } from "../contracts/repositoryStorageError.js";
 import type { ExecutionLock } from "../contracts/executionLock.js";
+import type { RepositoryStorageError } from "../contracts/repositoryStorageError.js";
 import type { ChangeValidationPersistence } from "./validation/changeValidationPersistence.js";
 import type { ValidationWorkspaceCleanup } from "./validation/validationWorkspaceCleanup.js";
 

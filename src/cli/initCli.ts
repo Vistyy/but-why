@@ -6,11 +6,11 @@ import { Effect } from "effect";
 
 import type { CliEnvironment } from "../cli.js";
 import {
+  type CliResult,
   restoredTransientState,
   runtimeError,
   success,
   usageError,
-  type CliResult,
 } from "../cliResults.js";
 import { initRepoLocalContext } from "../init/repoContext.js";
 import { structuredContractDiagnostics } from "../output/contractDiagnostics.js";

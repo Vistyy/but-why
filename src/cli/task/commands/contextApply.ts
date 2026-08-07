@@ -9,10 +9,10 @@ import type { TaskContextDraftReadError } from "../../../task/files/contextDraft
 import type { PublicTaskId } from "../../../task/taskId.js";
 import {
   resolveTaskId,
+  type TaskCommandEnvironment,
   taskMutationView,
   taskNotFound,
   withTasks,
-  type TaskCommandEnvironment,
 } from "../taskCliSupport.js";
 
 export const runContextApplyCommand = (

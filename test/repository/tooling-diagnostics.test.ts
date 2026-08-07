@@ -1,8 +1,8 @@
-import { copyFileSync, mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { copyFileSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { runTestProcess } from "../support/testProcess.js";
 import { afterEach, describe, expect, test } from "vitest";
+import { runTestProcess } from "../support/testProcess.js";
 
 const repositoryRoot = resolve(import.meta.dirname, "../..");
 const astGrepRulePath = join(repositoryRoot, "ast-grep/rules/structural-bans.yml");

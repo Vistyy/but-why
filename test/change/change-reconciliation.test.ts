@@ -3,19 +3,18 @@ import { join } from "node:path";
 import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
 import { describe } from "vitest";
-
-import { cleanupChangeResourcesWithRemote } from "../../src/change/localChangeCleanupGit.js";
-import { openTerminalCleanup } from "../../src/change/cleanupTerminalChange.js";
-import { openChangeReconciliation } from "../../src/change/reconcileChange.js";
 import type { ChangePersistence } from "../../src/change/changePersistence.js";
 import type { CompleteMergedChangeInput } from "../../src/change/changeStore.js";
+import { openTerminalCleanup } from "../../src/change/cleanupTerminalChange.js";
+import { cleanupChangeResourcesWithRemote } from "../../src/change/localChangeCleanupGit.js";
 import type { GitHubPullRequest } from "../../src/change/ownedPullRequestGateway.js";
+import { openChangeReconciliation } from "../../src/change/reconcileChange.js";
 import { openSqliteChangePersistence } from "../../src/sqlite/sqliteChangePersistence.js";
 import { openSqliteChangeStartPersistence } from "../../src/sqlite/sqliteChangeStartPersistence.js";
 import { openSqliteTaskPersistence } from "../../src/sqlite/sqliteTaskPersistence.js";
 import { publicTaskId } from "../../src/task/taskId.js";
-import { runTestProcess } from "../support/testProcess.js";
 import { withTemporaryRepositoryState } from "../support/repository.js";
+import { runTestProcess } from "../support/testProcess.js";
 
 const now = "2026-07-24T10:00:00.000Z";
 describe("by change reconcile", () => {

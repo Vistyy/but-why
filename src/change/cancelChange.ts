@@ -1,21 +1,19 @@
 import { Effect } from "effect";
-
+import type { ExecutionLock } from "../contracts/executionLock.js";
 import type { RepositoryStorageError } from "../contracts/repositoryStorageError.js";
+import type { RepoTaskIdResolution } from "../task/repoTaskIds.js";
 import type { TaskRecord } from "../task/task.js";
 import type { PublicTaskId } from "../task/taskId.js";
-import type { RepoTaskIdResolution } from "../task/repoTaskIds.js";
+import type { TaskPersistence } from "../task/taskPersistence.js";
 import type { ChangeCleanup, ChangeRecord } from "./change.js";
 import type { ChangePersistence } from "./changePersistence.js";
-import type { TaskPersistence } from "../task/taskPersistence.js";
-import type { GitHubPullRequestGateway } from "./ownedPullRequestGateway.js";
-import {
-  observeOwnedPullRequest,
-  observedMergedChangeEvidence,
-} from "./ownedPullRequestClassifier.js";
-import type { GitHubPullRequest } from "./ownedPullRequestGateway.js";
-import type { ExecutionLock } from "../contracts/executionLock.js";
-import type { ChangeValidationPersistence } from "./validation/changeValidationPersistence.js";
 import type { TerminalCleanupOperation } from "./cleanupTerminalChange.js";
+import {
+  observedMergedChangeEvidence,
+  observeOwnedPullRequest,
+} from "./ownedPullRequestClassifier.js";
+import type { GitHubPullRequest, GitHubPullRequestGateway } from "./ownedPullRequestGateway.js";
+import type { ChangeValidationPersistence } from "./validation/changeValidationPersistence.js";
 
 export type CancellationUseCases = {
   readonly resolveTaskId: (taskId: PublicTaskId) => RepoTaskIdResolution;

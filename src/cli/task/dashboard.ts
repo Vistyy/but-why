@@ -6,7 +6,7 @@ import type { CliResult } from "../../cliResults.js";
 import { success } from "../../cliResults.js";
 import type { StructuredValue } from "../../output/structured.js";
 import type { TaskSummary } from "../../task/task.js";
-import { withTasks, type TaskCommandEnvironment } from "./taskCliSupport.js";
+import { type TaskCommandEnvironment, withTasks } from "./taskCliSupport.js";
 
 export const dashboard = (
   bin: string,

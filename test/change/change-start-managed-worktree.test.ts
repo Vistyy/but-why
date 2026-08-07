@@ -14,9 +14,9 @@ import { Effect } from "effect";
 import { afterAll, beforeAll, describe } from "vitest";
 
 import { provisionChangeWorktree } from "../../src/change/changeStartGit.js";
-import { refreshRemoteChangeBase } from "../../src/submissionEnvironment/remoteChangeBase.js";
 import type { ChangeStartRecord } from "../../src/change/changeStartStore.js";
 import { openSqliteChangeStartPersistence } from "../../src/sqlite/sqliteChangeStartPersistence.js";
+import { refreshRemoteChangeBase } from "../../src/submissionEnvironment/remoteChangeBase.js";
 import { runByInProcessEffect } from "../support/by-cli.js";
 import {
   cloneInitializedTestRepository,

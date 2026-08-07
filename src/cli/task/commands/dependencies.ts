@@ -6,13 +6,13 @@ import type { CliResult } from "../../../cliResults.js";
 import { runtimeError, success, usageError } from "../../../cliResults.js";
 import { parseCliTaskIdValue } from "../../../cliTaskId.js";
 import type { PublicTaskId } from "../../../task/taskId.js";
-import type { RepoEditTaskDependenciesResult } from "../../../task/taskUseCases.js";
 import type { TaskDependencyOperation } from "../../../task/taskStore.js";
+import type { RepoEditTaskDependenciesResult } from "../../../task/taskUseCases.js";
 import {
   resolveTaskId,
-  withTasks,
-  taskNotFound,
   type TaskCommandEnvironment,
+  taskNotFound,
+  withTasks,
 } from "../taskCliSupport.js";
 
 export type TaskDependenciesCommand = {

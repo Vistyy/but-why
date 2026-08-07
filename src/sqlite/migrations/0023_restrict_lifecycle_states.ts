@@ -2,8 +2,8 @@ import * as SqlClient from "@effect/sql/SqlClient";
 import { Effect } from "effect";
 
 import {
-  RestoredTransientStateError,
   type RestoredTransientChangeFact,
+  RestoredTransientStateError,
   type RestoredTransientTaskFact,
 } from "../../contracts/repositoryStorageError.js";
 

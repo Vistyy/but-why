@@ -11,8 +11,8 @@ import type { TaskState } from "../../src/task/lifecycle.js";
 import type { TaskRecord, TaskSummary } from "../../src/task/task.js";
 import { publicTaskId } from "../../src/task/taskId.js";
 import { byExecutable, createGitRepo, runByInProcessEffect } from "../support/by-cli.js";
-import { createTestWorkspace } from "../support/testWorkspace.js";
 import { fakeTaskUseCases } from "../support/taskUseCases.js";
+import { createTestWorkspace } from "../support/testWorkspace.js";
 
 const expectedBin = collapseHome(byExecutable);
 const firstNow = "2026-06-30T12:00:00.000Z";
