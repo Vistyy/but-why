@@ -261,7 +261,7 @@ const startOrReuse = (sql: SqlClient.SqlClient, input: StartCandidateValidationR
         blocked: true,
       } satisfies StartCandidateValidationRunResult;
     }
-    const latestResolved = yield* sql<{ readonly id: string }>`
+    const latestResolved = yield* sql<{ readonly id: unknown }>`
       SELECT blocker.id
       FROM implementation_blockers AS blocker
       WHERE blocker.change_id = ${storedCandidate.changeId}
@@ -269,7 +269,17 @@ const startOrReuse = (sql: SqlClient.SqlClient, input: StartCandidateValidationR
       ORDER BY blocker.resolved_at DESC, blocker.sequence DESC
       LIMIT 1
     `;
-    const latestResolvedBlockerId = latestResolved[0]?.id ?? null;
+    const latestResolvedBlockerId = yield* Effect.try({
+      try: () =>
+        latestResolved[0] === undefined
+          ? null
+          : requiredString(latestResolved[0].id, "Latest resolved Implementation Blocker ID"),
+      catch: (cause) =>
+        new RepositoryPersistedDataInvalid({
+          operationName: "start Candidate Validation Run",
+          cause,
+        }),
+    });
     const policySnapshot = encodeSqliteCandidateValidationPolicy(input.policy);
     const decisionsSnapshot = JSON.stringify(input.implementationDecisions ?? []);
     const reusable = yield* sql<{

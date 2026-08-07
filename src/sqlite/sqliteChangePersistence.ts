@@ -49,7 +49,7 @@ import {
   decodeChangeState,
   decodeSqliteCandidateValidationPolicy,
   decodeSqliteImplementationDecisions,
-  requiredInteger,
+  requiredPositiveInteger,
   requiredString,
 } from "./sqlitePersistenceDecoders.js";
 
@@ -331,7 +331,7 @@ const listBlockers = (sql: SqlClient.SqlClient, changeId: string) =>
 const mapBlocker = (row: ImplementationBlockerRow): ImplementationBlocker => ({
   id: requiredString(row.id, "Implementation Blocker ID"),
   changeId: requiredString(row.changeId, "Implementation Blocker Change ID"),
-  sequence: requiredInteger(row.sequence, "Implementation Blocker sequence"),
+  sequence: requiredPositiveInteger(row.sequence, "Implementation Blocker sequence"),
   reportedAt: requiredString(row.reportedAt, "Implementation Blocker timestamp"),
   content: requiredString(row.content, "Implementation Blocker content"),
   resolvedAt:
@@ -387,7 +387,7 @@ const listDecisions = (
             (row): ImplementationDecision => ({
               id: requiredString(row.id, "Implementation Decision ID"),
               changeId: requiredString(row.changeId, "Implementation Decision Change ID"),
-              sequence: requiredInteger(row.sequence, "Implementation Decision sequence"),
+              sequence: requiredPositiveInteger(row.sequence, "Implementation Decision sequence"),
               recordedAt: requiredString(row.recordedAt, "Implementation Decision timestamp"),
               choice: requiredString(row.choice, "Implementation Decision choice"),
               rationale: requiredString(row.rationale, "Implementation Decision rationale"),
@@ -424,7 +424,7 @@ const recordDecision = (sql: SqlClient.SqlClient, input: RecordImplementationDec
       INSERT INTO implementation_decisions (id, change_id, recorded_at, choice, rationale)
       VALUES (${id}, ${input.changeId}, ${input.now}, ${input.choice}, ${input.rationale})
     `;
-    const decisions = yield* listDecisions(sql, input.changeId);
+    const decisions = yield* listDecisions(sql, input.changeId, "record Implementation Decision");
     const decision = decisions.find((item) => item.id === id);
     if (decision === undefined)
       return yield* invalidData("record Implementation Decision", "Decision disappeared");
@@ -443,6 +443,28 @@ const getPassingPublicationEvidence = (
   authority: CurrentPublicationAuthority,
 ) =>
   Effect.gen(function* () {
+    const latestResolvedBlockers = yield* sql<{ readonly id: unknown }>`
+      SELECT blocker.id
+      FROM implementation_blockers AS blocker
+      WHERE blocker.change_id = ${changeId}
+        AND blocker.resolved_at IS NOT NULL
+      ORDER BY blocker.resolved_at DESC, blocker.sequence DESC
+      LIMIT 1
+    `;
+    const latestResolvedBlockerId = yield* Effect.try({
+      try: () =>
+        latestResolvedBlockers[0] === undefined
+          ? null
+          : requiredString(
+              latestResolvedBlockers[0].id,
+              "Latest resolved Implementation Blocker ID",
+            ),
+      catch: (cause) =>
+        new RepositoryPersistedDataInvalid({
+          operationName: "read passing Change publication evidence",
+          cause,
+        }),
+    });
     const rows = yield* sql<PassingPublicationEvidenceRow>`
       SELECT
         candidate.id AS candidateId,
@@ -464,20 +486,8 @@ const getPassingPublicationEvidence = (
         AND run.outcome = 'passed'
         AND candidate.change_base_sha = ${authority.changeBaseSha}
         AND (
-          (run.latest_resolved_blocker_id IS NULL AND NOT EXISTS (
-            SELECT 1
-            FROM implementation_blockers AS blocker
-            WHERE blocker.change_id = change.id
-              AND blocker.resolved_at IS NOT NULL
-          ))
-          OR run.latest_resolved_blocker_id = (
-            SELECT blocker.id
-            FROM implementation_blockers AS blocker
-            WHERE blocker.change_id = change.id
-              AND blocker.resolved_at IS NOT NULL
-            ORDER BY blocker.resolved_at DESC, blocker.sequence DESC
-            LIMIT 1
-          )
+          (run.latest_resolved_blocker_id IS NULL AND ${latestResolvedBlockerId} IS NULL)
+          OR run.latest_resolved_blocker_id = ${latestResolvedBlockerId}
         )
     `;
     const row = rows[0];
