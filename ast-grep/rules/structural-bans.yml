@@ -168,7 +168,7 @@ rule:
 id: live-agent-helper-belongs-to-test-host
 language: TypeScript
 severity: error
-message: Do not use the live Herdr helper outside the Interactive Session host test; use the Interactive Session interface with a test Adapter.
+message: Do not use the live Herdr helper outside the Interactive Session host test because that host owns the live boundary; use the Interactive Session interface with a test Adapter.
 files:
   - test/**/*.ts
 ignores:

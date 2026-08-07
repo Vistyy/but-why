@@ -59,7 +59,7 @@ describe("repository-authored blocking diagnostics", () => {
       "package-installation-belongs-to-package-contract",
       'const result = spawnSync("npm", ["pack"]);',
     ],
-    ["live-agent-helper-belongs-to-smoke", "const host = openHerdrInteractiveSessionHost();"],
+    ["live-agent-helper-belongs-to-test-host", "const host = openHerdrInteractiveSessionHost();"],
     [
       "direct-sandcastle-helpers-belong-to-validation-workspace",
       "const sandbox = createSandbox();",
@@ -72,7 +72,7 @@ describe("repository-authored blocking diagnostics", () => {
       "test-child-processes-use-test-process-adapter",
       "process-test-helpers-belong-to-process-boundaries",
       "package-installation-belongs-to-package-contract",
-      "live-agent-helper-belongs-to-smoke",
+      "live-agent-helper-belongs-to-test-host",
       "direct-sandcastle-helpers-belong-to-validation-workspace",
     ].includes(ruleId)
       ? "test"
