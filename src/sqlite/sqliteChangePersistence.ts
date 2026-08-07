@@ -286,10 +286,12 @@ const listBlockers = (sql: SqlClient.SqlClient, changeId: string) =>
     `;
     const blockers = yield* Effect.try({
       try: () =>
-        rows.map((row) => {
-          const blocker = mapBlocker(row);
-          return { ...blocker, resolution: decodeBlockerResolution(row, blocker) };
-        }),
+        rows
+          .map((row) => {
+            const blocker = mapBlocker(row);
+            return { ...blocker, resolution: decodeBlockerResolution(row, blocker) };
+          })
+          .sort((left, right) => left.sequence - right.sequence),
       catch: (cause) =>
         new RepositoryPersistedDataInvalid({
           operationName: "list Implementation Blockers",
