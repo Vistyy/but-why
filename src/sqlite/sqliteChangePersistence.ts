@@ -476,7 +476,8 @@ const getPassingPublicationEvidence = (
         run.policy_snapshot AS policySnapshot,
         run.implementation_decisions AS implementationDecisions,
         run.state AS validationRunState,
-        run.outcome AS validationRunOutcome
+        run.outcome AS validationRunOutcome,
+        run.latest_resolved_blocker_id AS latestResolvedBlockerId
       FROM changes AS change
       JOIN candidates AS candidate
         ON candidate.id = change.publication_candidate_id
@@ -487,15 +488,18 @@ const getPassingPublicationEvidence = (
       WHERE change.id = ${changeId}
         AND change.publication_pr_number IS NOT NULL
         AND candidate.change_base_sha = ${authority.changeBaseSha}
-        AND (
-          (run.latest_resolved_blocker_id IS NULL AND ${latestResolvedBlockerId} IS NULL)
-          OR run.latest_resolved_blocker_id = ${latestResolvedBlockerId}
-        )
     `;
     const row = rows[0];
     if (row === undefined) return undefined;
     const storedEvidence = yield* Effect.try({
       try: () => {
+        const storedLatestResolvedBlockerId =
+          row.latestResolvedBlockerId === null
+            ? null
+            : requiredString(
+                row.latestResolvedBlockerId,
+                "Publication Validation Run latest resolved Implementation Blocker ID",
+              );
         const state = requiredString(row.validationRunState, "Publication Validation Run state");
         const outcome =
           row.validationRunOutcome === null
@@ -511,6 +515,7 @@ const getPassingPublicationEvidence = (
           throw new Error("Stored Publication Validation Run state and outcome are inconsistent");
         }
         return {
+          latestResolvedBlockerId: storedLatestResolvedBlockerId,
           state,
           outcome,
           candidateId: requiredString(row.candidateId, "Publication Candidate ID"),
@@ -531,7 +536,11 @@ const getPassingPublicationEvidence = (
           cause,
         }),
     });
-    if (storedEvidence.state !== "complete" || storedEvidence.outcome !== "passed") {
+    if (
+      storedEvidence.latestResolvedBlockerId !== latestResolvedBlockerId ||
+      storedEvidence.state !== "complete" ||
+      storedEvidence.outcome !== "passed"
+    ) {
       return undefined;
     }
     const expectedPolicySnapshot = encodeSqliteCandidateValidationPolicy(authority.policy);
@@ -959,6 +968,7 @@ type PassingPublicationEvidenceRow = ChangePublicationEvidence & {
   readonly implementationDecisions: unknown;
   readonly validationRunState: unknown;
   readonly validationRunOutcome: unknown;
+  readonly latestResolvedBlockerId: unknown;
 };
 
 type ChangeRow = Omit<

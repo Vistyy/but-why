@@ -282,24 +282,41 @@ const startOrReuse = (sql: SqlClient.SqlClient, input: StartCandidateValidationR
     });
     const policySnapshot = encodeSqliteCandidateValidationPolicy(input.policy);
     const decisionsSnapshot = JSON.stringify(input.implementationDecisions ?? []);
-    const reusable = yield* sql<CandidateValidationRunRow>`
+    const reusable = yield* sql<
+      CandidateValidationRunRow & { readonly latestResolvedBlockerId: unknown }
+    >`
       SELECT id, candidate_id AS candidateId,
         policy_snapshot AS policySnapshot,
         implementation_decisions AS implementationDecisions,
-        state, outcome, created_at AS createdAt, updated_at AS updatedAt
+        state, outcome, created_at AS createdAt, updated_at AS updatedAt,
+        latest_resolved_blocker_id AS latestResolvedBlockerId
       FROM candidate_validation_runs
       WHERE candidate_id = ${input.candidateId}
-        AND (
-          (latest_resolved_blocker_id IS NULL AND ${latestResolvedBlockerId} IS NULL)
-          OR latest_resolved_blocker_id = ${latestResolvedBlockerId}
-        )
     `;
     const reusableRuns = yield* Effect.forEach(reusable, (row) =>
-      decodeRun(row, "start Candidate Validation Run"),
+      Effect.gen(function* () {
+        const storedLatestResolvedBlockerId = yield* Effect.try({
+          try: () =>
+            row.latestResolvedBlockerId === null
+              ? null
+              : requiredString(
+                  row.latestResolvedBlockerId,
+                  "Validation Run latest resolved Implementation Blocker ID",
+                ),
+          catch: (cause) =>
+            new RepositoryPersistedDataInvalid({
+              operationName: "start Candidate Validation Run",
+              cause,
+            }),
+        });
+        const run = yield* decodeRun(row, "start Candidate Validation Run");
+        return storedLatestResolvedBlockerId === latestResolvedBlockerId ? run : undefined;
+      }),
     );
     const existing = reusableRuns
       .filter(
-        (run) =>
+        (run): run is CandidateValidationRunRecord =>
+          run !== undefined &&
           run.state === "complete" &&
           run.outcome === "passed" &&
           JSON.stringify(run.policy) === policySnapshot &&
