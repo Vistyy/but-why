@@ -31,7 +31,7 @@ type ResolvedOptions = {
 
 const defaultOptions: ResolvedOptions = {
   commandTimeoutMs: 5_000,
-  readinessTimeoutMs: 30_000,
+  readinessTimeoutMs: 120_000,
   observationRetries: 2,
 };
 
