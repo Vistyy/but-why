@@ -6,6 +6,7 @@ import type { ChangeStartPersistence } from "../change/changeStartPersistence.js
 import type { ChangeStartRecord, CreateChangeStartInput } from "../change/changeStartStore.js";
 import type { AcceptanceContextSnapshotV1 } from "../change/validationRun/acceptanceContextSnapshot.js";
 import { RepositoryPersistedDataInvalid } from "../contracts/repositoryStorageError.js";
+import type { TaskState } from "../task/lifecycle.js";
 import type { TaskDependencyFact } from "../task/task.js";
 import { type PublicTaskId, storedPublicTaskId } from "../task/taskId.js";
 import { RepositorySql } from "./repositorySql.js";
@@ -93,7 +94,7 @@ const prepareTask = (sql: SqlClient.SqlClient, taskId: PublicTaskId) =>
         ? { ok: true as const, existing }
         : { ok: false as const, code: "invalid_task_state" as const, state };
     }
-    const eligibility = yield* readEligibility(sql, taskId);
+    const eligibility = yield* readEligibility(sql, taskId, "prepare Change Start");
     return eligibility.ok ? { ok: true as const, existing: undefined } : eligibility;
   });
 
@@ -112,21 +113,26 @@ const create = (sql: SqlClient.SqlClient, input: CreateChangeStartInput) =>
 
     let acceptanceContext: AcceptanceContextSnapshotV1 | null = null;
     if (input.taskId !== undefined) {
-      const eligibility = yield* readEligibility(sql, input.taskId);
+      const eligibility = yield* readEligibility(sql, input.taskId, "create Change Start");
       if (!eligibility.ok) return eligibility;
       if ((yield* getByTaskId(sql, input.taskId)) !== undefined) {
         return { ok: false as const, code: "change_start_conflict" as const };
       }
-      const comments = yield* sql<{ readonly content: string }>`
+      const comments = yield* sql<{ readonly content: unknown }>`
         SELECT content FROM task_comments
         WHERE task_id = ${input.taskId}
         ORDER BY sequence ASC
       `;
+      const commentContents = yield* Effect.try({
+        try: () => comments.map((row) => requiredString(row.content, "Task comment content")),
+        catch: (cause) =>
+          new RepositoryPersistedDataInvalid({ operationName: "create Change Start", cause }),
+      });
       acceptanceContext = {
         version: 1,
         title: eligibility.task.title,
         description: eligibility.task.description,
-        comments: comments.map((row) => row.content),
+        comments: commentContents,
       };
     }
 
@@ -150,21 +156,32 @@ const create = (sql: SqlClient.SqlClient, input: CreateChangeStartInput) =>
     return { ok: true as const, change };
   });
 
-const readEligibility = (sql: SqlClient.SqlClient, taskId: PublicTaskId) =>
+const readEligibility = (sql: SqlClient.SqlClient, taskId: PublicTaskId, operationName: string) =>
   Effect.gen(function* () {
     const task = yield* readTask(sql, taskId);
     if (task === undefined) return { ok: false as const, code: "task_not_found" as const };
-    const state = decodeTaskState(task.state);
+    const state = task.state;
     if (state !== "todo") {
       return { ok: false as const, code: "invalid_task_state" as const, state };
     }
-    const blockedBy = yield* sql<TaskDependencyFact>`
+    const rows = yield* sql<TaskDependencyFact>`
       SELECT tasks.id, tasks.title, tasks.state
       FROM task_dependencies
       JOIN tasks ON tasks.id = task_dependencies.prerequisite_task_id
       WHERE task_dependencies.dependent_task_id = ${taskId} AND tasks.state <> 'done'
       ORDER BY tasks.numeric_id ASC
     `;
+    const blockedBy = yield* Effect.try({
+      try: () =>
+        rows.map(
+          (row): TaskDependencyFact => ({
+            id: requiredString(row.id, "Change Start dependency Task ID"),
+            title: requiredString(row.title, "Change Start dependency Task title"),
+            state: decodeTaskState(row.state),
+          }),
+        ),
+      catch: (cause) => new RepositoryPersistedDataInvalid({ operationName, cause }),
+    });
     return blockedBy.length === 0
       ? { ok: true as const, task }
       : { ok: false as const, code: "task_dependencies_unsatisfied" as const, blockedBy };
@@ -178,7 +195,13 @@ const readTask = (sql: SqlClient.SqlClient, taskId: PublicTaskId) =>
       return row === undefined
         ? Effect.succeed(undefined)
         : Effect.try({
-            try: () => ({ ...row, state: decodeTaskState(row.state) }),
+            try: () => ({
+              ...row,
+              id: requiredString(row.id, "Change Start Task ID"),
+              title: requiredString(row.title, "Change Start Task title"),
+              description: requiredString(row.description, "Change Start Task description"),
+              state: decodeTaskState(row.state),
+            }),
             catch: (cause) =>
               new RepositoryPersistedDataInvalid({
                 operationName: "read Change Start Task",
@@ -281,7 +304,7 @@ type TaskRow = {
   readonly id: string;
   readonly title: string;
   readonly description: string;
-  readonly state: string;
+  readonly state: TaskState;
 };
 
 type ChangeStartRow = {

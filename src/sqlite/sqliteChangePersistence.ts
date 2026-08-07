@@ -132,17 +132,13 @@ export const openSqliteChangePersistence = (): Effect.Effect<
       repository.transactionImmediate("record Change cleanup", (sql) => recordCleanup(sql, input)),
     getReviewerSession: (changeId, producer) =>
       repository.operation("read Reviewer Session", (sql) =>
-        Effect.map(
+        Effect.flatMap(
           sql<ReviewerSessionRow>`SELECT change_id AS changeId, producer, fingerprint, session_reference AS sessionReference FROM reviewer_sessions WHERE change_id = ${changeId} AND producer = ${producer}`,
           (rows) => {
             const row = rows[0];
-            if (row === undefined) return undefined;
-            return {
-              changeId: row.changeId,
-              producer: row.producer,
-              fingerprint: row.fingerprint,
-              sessionReference: row.sessionReference,
-            } satisfies ReviewerSessionRecord;
+            return row === undefined
+              ? Effect.succeed(undefined)
+              : decodeReviewerSession(row, "read Reviewer Session");
           },
         ),
       ),
@@ -166,18 +162,17 @@ export const openSqliteChangePersistence = (): Effect.Effect<
       ),
     listReviewerTranscripts: (changeId) =>
       repository.operation("list Reviewer Transcripts", (sql) =>
-        Effect.map(
+        Effect.flatMap(
           sql<ReviewerTranscriptRow>`SELECT change_id AS changeId, producer, pi_session_id AS piSessionId, file_path AS filePath FROM reviewer_transcripts WHERE change_id = ${changeId} ORDER BY producer, file_path`,
           (rows) =>
-            rows.map(
-              (row) =>
-                ({
-                  changeId: row.changeId,
-                  producer: row.producer,
-                  piSessionId: row.piSessionId,
-                  filePath: row.filePath,
-                }) satisfies ReviewerTranscript,
-            ),
+            Effect.try({
+              try: () => rows.map((row) => decodeReviewerTranscriptValue(row)),
+              catch: (cause) =>
+                new RepositoryPersistedDataInvalid({
+                  operationName: "list Reviewer Transcripts",
+                  cause,
+                }),
+            }),
         ),
       ),
     recordReviewerTranscripts: (input) =>
@@ -237,7 +232,8 @@ const raiseBlocker = (
     const stored = rows[0];
     if (stored === undefined)
       return yield* invalidData("raise Implementation Blocker", "Blocker disappeared");
-    return { ok: true as const, change: updated, blocker: mapBlocker(stored) };
+    const blocker = yield* decodeBlocker(stored, "raise Implementation Blocker");
+    return { ok: true as const, change: updated, blocker };
   });
 
 const resolveBlocker = (
@@ -259,15 +255,16 @@ const resolveBlocker = (
       yield* sql`UPDATE changes SET acceptance_context = json_set(acceptance_context, '$.resolutions', json_insert(COALESCE(json_extract(acceptance_context, '$.resolutions'), '[]'), '$[#]', ${input.content})), updated_at = ${input.now} WHERE id = ${input.changeId}`;
     }
     const updated = yield* requireChange(sql, input.changeId, "resolve Implementation Blocker");
+    const decodedBlocker = yield* decodeBlocker(blocker, "resolve Implementation Blocker");
     return {
       ok: true as const,
       change: updated,
       blocker: {
-        ...mapBlocker(blocker),
+        ...decodedBlocker,
         resolvedAt: input.now,
         resolution: {
           id: resolutionId,
-          blockerId: blocker.id,
+          blockerId: decodedBlocker.id,
           recordedAt: input.now,
           content: input.content,
         },
@@ -344,13 +341,19 @@ const mapBlocker = (row: ImplementationBlockerRow): ImplementationBlocker => ({
   resolution: null,
 });
 
+const decodeBlocker = (row: ImplementationBlockerRow, operationName: string) =>
+  Effect.try({
+    try: () => mapBlocker(row),
+    catch: (cause) => new RepositoryPersistedDataInvalid({ operationName, cause }),
+  });
+
 type ImplementationBlockerRow = {
-  readonly sequence: number | bigint;
-  readonly id: string;
-  readonly changeId: string;
-  readonly reportedAt: string;
-  readonly content: string;
-  readonly resolvedAt: string | null;
+  readonly sequence: unknown;
+  readonly id: unknown;
+  readonly changeId: unknown;
+  readonly reportedAt: unknown;
+  readonly content: unknown;
+  readonly resolvedAt: unknown;
 };
 
 const getById = (sql: SqlClient.SqlClient, changeId: string) =>
@@ -407,7 +410,15 @@ const recordDecision = (sql: SqlClient.SqlClient, input: RecordImplementationDec
     `;
     const change = changes[0];
     if (change === undefined) return { ok: false as const, code: "change_not_found" as const };
-    if (change.state !== "open") return { ok: false as const, code: "change_not_open" as const };
+    const state = yield* Effect.try({
+      try: () => decodeChangeState(change.state),
+      catch: (cause) =>
+        new RepositoryPersistedDataInvalid({
+          operationName: "record Implementation Decision",
+          cause,
+        }),
+    });
+    if (state !== "open") return { ok: false as const, code: "change_not_open" as const };
     const id = randomUUID();
     yield* sql`
       INSERT INTO implementation_decisions (id, change_id, recorded_at, choice, rationale)
@@ -473,8 +484,16 @@ const getPassingPublicationEvidence = (
     if (row === undefined) return undefined;
     const storedEvidence = yield* Effect.try({
       try: () => ({
-        policy: decodeSqliteCandidateValidationPolicy(row.policySnapshot),
-        implementationDecisions: decodeSqliteImplementationDecisions(row.implementationDecisions),
+        candidateId: requiredString(row.candidateId, "Publication Candidate ID"),
+        validationRunId: requiredString(row.validationRunId, "Publication Validation Run ID"),
+        changeBaseSha: requiredString(row.changeBaseSha, "Publication Change base SHA"),
+        headSha: requiredString(row.headSha, "Publication Candidate head SHA"),
+        policy: decodeSqliteCandidateValidationPolicy(
+          requiredString(row.policySnapshot, "Validation Policy Snapshot"),
+        ),
+        implementationDecisions: decodeSqliteImplementationDecisions(
+          requiredString(row.implementationDecisions, "Validation Run Implementation Decisions"),
+        ),
       }),
       catch: (cause) =>
         new RepositoryPersistedDataInvalid({
@@ -491,10 +510,10 @@ const getPassingPublicationEvidence = (
       return undefined;
     }
     return {
-      candidateId: row.candidateId,
-      validationRunId: row.validationRunId,
-      changeBaseSha: row.changeBaseSha,
-      headSha: row.headSha,
+      candidateId: storedEvidence.candidateId,
+      validationRunId: storedEvidence.validationRunId,
+      changeBaseSha: storedEvidence.changeBaseSha,
+      headSha: storedEvidence.headSha,
     } satisfies ChangePublicationEvidence;
   });
 
@@ -839,18 +858,36 @@ const invalidData = (operationName: string, message: string) =>
   Effect.fail(new RepositoryPersistedDataInvalid({ operationName, cause: new Error(message) }));
 
 type ReviewerSessionRow = {
-  readonly changeId: string;
-  readonly producer: string;
-  readonly fingerprint: string;
-  readonly sessionReference: string;
+  readonly changeId: unknown;
+  readonly producer: unknown;
+  readonly fingerprint: unknown;
+  readonly sessionReference: unknown;
 };
 
 type ReviewerTranscriptRow = {
-  readonly changeId: string;
-  readonly producer: string;
-  readonly piSessionId: string;
-  readonly filePath: string;
+  readonly changeId: unknown;
+  readonly producer: unknown;
+  readonly piSessionId: unknown;
+  readonly filePath: unknown;
 };
+
+const decodeReviewerSession = (row: ReviewerSessionRow, operationName: string) =>
+  Effect.try({
+    try: (): ReviewerSessionRecord => ({
+      changeId: requiredString(row.changeId, "Reviewer Session Change ID"),
+      producer: requiredString(row.producer, "Reviewer Session producer"),
+      fingerprint: requiredString(row.fingerprint, "Reviewer Session fingerprint"),
+      sessionReference: requiredString(row.sessionReference, "Reviewer Session reference"),
+    }),
+    catch: (cause) => new RepositoryPersistedDataInvalid({ operationName, cause }),
+  });
+
+const decodeReviewerTranscriptValue = (row: ReviewerTranscriptRow): ReviewerTranscript => ({
+  changeId: requiredString(row.changeId, "Reviewer Transcript Change ID"),
+  producer: requiredString(row.producer, "Reviewer Transcript producer"),
+  piSessionId: requiredString(row.piSessionId, "Reviewer Transcript Pi Session ID"),
+  filePath: requiredString(row.filePath, "Reviewer Transcript file path"),
+});
 
 type PassingPublicationEvidenceRow = ChangePublicationEvidence & {
   readonly policySnapshot: string;

@@ -55,31 +55,29 @@ export const openSqliteChangeValidationPersistence = (): Effect.Effect<
         complete(sql, input),
       ),
     getActiveForChange: (changeId) =>
-      repository
-        .operation("read Active Candidate Validation Run", (sql) =>
-          getActiveForChange(sql, changeId),
-        )
-        .pipe(Effect.map((row) => row)),
+      repository.operation("read Active Candidate Validation Run", (sql) =>
+        getActiveForChange(sql, changeId),
+      ),
     getAbandonmentContext: (validationRunId) =>
-      repository
-        .operation("read Candidate Validation Run abandonment context", (sql) =>
-          getAbandonmentContext(sql, validationRunId),
-        )
-        .pipe(Effect.map((row) => row)),
+      repository.operation("read Candidate Validation Run abandonment context", (sql) =>
+        getAbandonmentContext(sql, validationRunId),
+      ),
     abandon: (input) =>
       repository.transactionImmediate("abandon Candidate Validation Run", (sql) =>
         abandon(sql, input),
       ),
     getRunById: (validationRunId) =>
-      repository
-        .operation("read Candidate Validation Run", (sql) => getRunById(sql, validationRunId))
-        .pipe(Effect.flatMap(decodeRunOptional)),
+      repository.operation("read Candidate Validation Run", (sql) =>
+        Effect.flatMap(getRunById(sql, validationRunId), (row) =>
+          decodeRunOptional(row, "read Candidate Validation Run"),
+        ),
+      ),
     listRunsForCandidate: (candidateId) =>
-      repository
-        .operation("list Candidate Validation Runs", (sql) =>
-          listRunsForCandidate(sql, candidateId),
-        )
-        .pipe(Effect.flatMap((rows) => Effect.forEach(rows, decodeRun))),
+      repository.operation("list Candidate Validation Runs", (sql) =>
+        Effect.flatMap(listRunsForCandidate(sql, candidateId), (rows) =>
+          Effect.forEach(rows, (row) => decodeRun(row, "list Candidate Validation Runs")),
+        ),
+      ),
     recordWorkspaceSetup: (input) =>
       repository.operation("record Candidate validation workspace setup", (sql) =>
         Effect.asVoid(sql`
@@ -154,7 +152,11 @@ export const openSqliteChangeValidationPersistence = (): Effect.Effect<
         .pipe(Effect.flatMap((rows) => Effect.forEach(rows, decodeFinding))),
     listToolingFailures: (validationRunId) =>
       repository.operation("list Candidate validation Tooling Failures", (sql) =>
-        listToolingFailures(sql, validationRunId),
+        Effect.flatMap(listToolingFailures(sql, validationRunId), (rows) =>
+          Effect.forEach(rows, (row) =>
+            decodeToolingFailure(row, "list Candidate validation Tooling Failures"),
+          ),
+        ),
       ),
     listArtifacts: (validationRunId) =>
       repository
@@ -312,11 +314,20 @@ const startOrReuse = (sql: SqlClient.SqlClient, input: StartCandidateValidationR
       FROM active_validation_runs
       WHERE change_id = ${storedCandidate.changeId}
     `;
-    if (active[0] !== undefined) {
+    const activeRow = active[0];
+    if (activeRow !== undefined) {
+      const activeValidationRunId = yield* Effect.try({
+        try: () => requiredString(activeRow.validationRunId, "Active Validation Run ID"),
+        catch: (cause) =>
+          new RepositoryPersistedDataInvalid({
+            operationName: "start Candidate Validation Run",
+            cause,
+          }),
+      });
       return {
         reused: false,
         active: true,
-        validationRunId: active[0].validationRunId,
+        validationRunId: activeValidationRunId,
       } satisfies StartCandidateValidationRunResult;
     }
 
@@ -361,28 +372,18 @@ const complete = (
   ).pipe(Effect.asVoid);
 
 const getActiveForChange = (sql: SqlClient.SqlClient, changeId: string) =>
-  Effect.map(
-    sql<ActiveCandidateValidationRun>`
+  Effect.flatMap(
+    sql<ActiveCandidateValidationRunRow>`
       SELECT validation_run_id AS validationRunId, change_id AS changeId
       FROM active_validation_runs
       WHERE change_id = ${changeId}
     `,
-    (rows) => rows[0],
+    (rows) => decodeActiveRunOptional(rows[0], "read Active Candidate Validation Run"),
   );
 
 const getAbandonmentContext = (sql: SqlClient.SqlClient, validationRunId: string) =>
-  Effect.map(
-    sql<
-      Omit<
-        CandidateValidationRunAbandonmentContext,
-        "tempRefName" | "worktreePath" | "cleanupWorktree" | "cleanupTempRef"
-      > & {
-        readonly tempRefName: string | null;
-        readonly worktreePath: string | null;
-        readonly cleanupWorktree: CandidateValidationRunAbandonmentContext["cleanupWorktree"];
-        readonly cleanupTempRef: CandidateValidationRunAbandonmentContext["cleanupTempRef"];
-      }
-    >`
+  Effect.flatMap(
+    sql<AbandonmentContextRow>`
       SELECT run.id AS validationRunId,
         candidate.change_id AS changeId,
         candidate.id AS candidateId,
@@ -397,16 +398,11 @@ const getAbandonmentContext = (sql: SqlClient.SqlClient, validationRunId: string
         ON setup.validation_run_id = run.id
       WHERE run.id = ${validationRunId}
     `,
-    (rows) => {
-      const row = rows[0];
-      if (row === undefined) return undefined;
-      const { tempRefName, worktreePath, ...rest } = row;
-      return {
-        ...rest,
-        ...(tempRefName === null ? {} : { tempRefName }),
-        ...(worktreePath === null ? {} : { worktreePath }),
-      };
-    },
+    (rows) =>
+      decodeAbandonmentContextOptional(
+        rows[0],
+        "read Candidate Validation Run abandonment context",
+      ),
   );
 
 const abandon = (
@@ -630,7 +626,7 @@ const listPreviousCandidateReviewerFindings = (
   );
 
 const listToolingFailures = (sql: SqlClient.SqlClient, validationRunId: string) =>
-  sql<CandidateValidationToolingFailure>`
+  sql<CandidateValidationToolingFailureRow>`
     SELECT sequence, validation_run_id AS validationRunId, error_kind AS errorKind,
       operation_name AS operationName, error_message AS errorMessage,
       created_at AS createdAt
@@ -638,6 +634,75 @@ const listToolingFailures = (sql: SqlClient.SqlClient, validationRunId: string) 
     WHERE validation_run_id = ${validationRunId}
     ORDER BY sequence
   `;
+
+const decodeActiveRunOptional = (
+  row: ActiveCandidateValidationRunRow | undefined,
+  operationName: string,
+) =>
+  row === undefined
+    ? Effect.succeed(undefined)
+    : Effect.try({
+        try: (): ActiveCandidateValidationRun => ({
+          validationRunId: requiredString(row.validationRunId, "Active Validation Run ID"),
+          changeId: requiredString(row.changeId, "Active Validation Run Change ID"),
+        }),
+        catch: (cause) => new RepositoryPersistedDataInvalid({ operationName, cause }),
+      });
+
+const decodeAbandonmentContextOptional = (
+  row: AbandonmentContextRow | undefined,
+  operationName: string,
+) =>
+  row === undefined
+    ? Effect.succeed(undefined)
+    : Effect.try({
+        try: (): CandidateValidationRunAbandonmentContext => {
+          const cleanupWorktree = decodeCleanupStatus(
+            row.cleanupWorktree,
+            "Validation abandonment worktree cleanup",
+          );
+          const cleanupTempRef = decodeCleanupStatus(
+            row.cleanupTempRef,
+            "Validation abandonment temporary ref cleanup",
+          );
+          return {
+            validationRunId: requiredString(row.validationRunId, "Validation Run ID"),
+            changeId: requiredString(row.changeId, "Validation Run Change ID"),
+            candidateId: requiredString(row.candidateId, "Validation Run Candidate ID"),
+            submittedSha: requiredString(row.submittedSha, "Validation Run submitted SHA"),
+            ...(row.tempRefName === null
+              ? {}
+              : { tempRefName: requiredString(row.tempRefName, "Validation temporary ref name") }),
+            ...(row.worktreePath === null
+              ? {}
+              : { worktreePath: requiredString(row.worktreePath, "Validation worktree path") }),
+            cleanupWorktree,
+            cleanupTempRef,
+          };
+        },
+        catch: (cause) => new RepositoryPersistedDataInvalid({ operationName, cause }),
+      });
+
+const decodeCleanupStatus = (value: unknown, description: string) => {
+  if (value === null) return null;
+  const status = requiredString(value, description);
+  if (status !== "removed" && status !== "not_created" && status !== "failed")
+    throw new Error(`Stored ${description} is invalid`);
+  return status;
+};
+
+const decodeToolingFailure = (row: CandidateValidationToolingFailureRow, operationName: string) =>
+  Effect.try({
+    try: (): CandidateValidationToolingFailure => ({
+      sequence: requiredPositiveInteger(row.sequence, "Tooling Failure sequence"),
+      validationRunId: requiredString(row.validationRunId, "Tooling Failure Validation Run ID"),
+      errorKind: requiredString(row.errorKind, "Tooling Failure kind"),
+      operationName: requiredString(row.operationName, "Tooling Failure operation"),
+      errorMessage: requiredString(row.errorMessage, "Tooling Failure message"),
+      createdAt: requiredString(row.createdAt, "Tooling Failure timestamp"),
+    }),
+    catch: (cause) => new RepositoryPersistedDataInvalid({ operationName, cause }),
+  });
 
 const listArtifacts = (sql: SqlClient.SqlClient, validationRunId: string) =>
   sql<CandidateValidationArtifactRow>`
@@ -664,10 +729,10 @@ const listArtifacts = (sql: SqlClient.SqlClient, validationRunId: string) =>
       ref
   `;
 
-const decodeRunOptional = (row: CandidateValidationRunRow | undefined) =>
-  row === undefined ? Effect.succeed(undefined) : decodeRun(row);
+const decodeRunOptional = (row: CandidateValidationRunRow | undefined, operationName: string) =>
+  row === undefined ? Effect.succeed(undefined) : decodeRun(row, operationName);
 
-const decodeRun = (row: CandidateValidationRunRow) =>
+const decodeRun = (row: CandidateValidationRunRow, operationName: string) =>
   Effect.try({
     try: (): CandidateValidationRunRecord => {
       const state = requiredString(row.state, "Validation Run state");
@@ -685,19 +750,19 @@ const decodeRun = (row: CandidateValidationRunRow) =>
       return {
         id: requiredString(row.id, "Validation Run ID"),
         candidateId: requiredString(row.candidateId, "Validation Run Candidate ID"),
-        policy: decodeSqliteCandidateValidationPolicy(row.policySnapshot),
-        implementationDecisions: decodeSqliteImplementationDecisions(row.implementationDecisions),
+        policy: decodeSqliteCandidateValidationPolicy(
+          requiredString(row.policySnapshot, "Validation Policy Snapshot"),
+        ),
+        implementationDecisions: decodeSqliteImplementationDecisions(
+          requiredString(row.implementationDecisions, "Validation Run Implementation Decisions"),
+        ),
         state,
         outcome: outcome as CandidateValidationRunRecord["outcome"],
         createdAt: requiredString(row.createdAt, "Validation Run creation timestamp"),
         updatedAt: requiredString(row.updatedAt, "Validation Run update timestamp"),
       };
     },
-    catch: (cause) =>
-      new RepositoryPersistedDataInvalid({
-        operationName: "decode Candidate Validation Run",
-        cause,
-      }),
+    catch: (cause) => new RepositoryPersistedDataInvalid({ operationName, cause }),
   });
 
 const decodeFinding = (row: CandidateValidationFindingRow) =>
@@ -798,17 +863,45 @@ type CandidateValidationRoundRow = {
   readonly status: unknown;
   readonly createdAt: unknown;
 };
-type CandidateValidationRunRow = Omit<
-  CandidateValidationRunRecord,
-  "policy" | "implementationDecisions"
-> & {
-  readonly policySnapshot: string;
-  readonly implementationDecisions: string;
+type CandidateValidationRunRow = {
+  readonly id: unknown;
+  readonly candidateId: unknown;
+  readonly policySnapshot: unknown;
+  readonly implementationDecisions: unknown;
+  readonly state: unknown;
+  readonly outcome: unknown;
+  readonly createdAt: unknown;
+  readonly updatedAt: unknown;
 };
 type CandidateValidationFindingRow = Omit<CandidateValidationFinding, "files" | "artifactRefs"> & {
   readonly files: string;
   readonly artifactRefs: string;
 };
 type CandidateValidationArtifactRow = Omit<CandidateValidationArtifact, "truncated"> & {
-  readonly truncated: number;
+  readonly truncated: unknown;
+};
+
+type ActiveCandidateValidationRunRow = {
+  readonly validationRunId: unknown;
+  readonly changeId: unknown;
+};
+
+type AbandonmentContextRow = {
+  readonly validationRunId: unknown;
+  readonly changeId: unknown;
+  readonly candidateId: unknown;
+  readonly submittedSha: unknown;
+  readonly tempRefName: unknown;
+  readonly worktreePath: unknown;
+  readonly cleanupWorktree: unknown;
+  readonly cleanupTempRef: unknown;
+};
+
+type CandidateValidationToolingFailureRow = {
+  readonly sequence: unknown;
+  readonly validationRunId: unknown;
+  readonly errorKind: unknown;
+  readonly operationName: unknown;
+  readonly errorMessage: unknown;
+  readonly createdAt: unknown;
 };

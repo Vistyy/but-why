@@ -3092,6 +3092,156 @@ describe("repository SQL storage", () => {
     ),
   );
 
+  it.scoped("decodes malformed Candidate capture lifecycle state at the Adapter trust seam", () =>
+    withTemporaryState((input) =>
+      Effect.gen(function* () {
+        const capture = yield* openSqliteCandidateCapturePersistence();
+        const captured = yield* capture.commitCapture({
+          repositoryCommonDirectory: input.commonDirectory,
+          branchRef: "refs/heads/by-1-malformed-state",
+          baseRef: "refs/remotes/origin/main",
+          changeBaseSha: "base-sha",
+          headSha: "head-sha",
+          now: "2026-07-17T23:19:00.000Z",
+        });
+        if (!captured.ok) throw new Error(`Candidate capture failed: ${captured.code}`);
+        const repository = yield* RepositorySql;
+        yield* repository.operation("corrupt Candidate capture Change state", (sql) =>
+          Effect.gen(function* () {
+            yield* sql.unsafe("PRAGMA ignore_check_constraints = ON");
+            yield* sql`UPDATE changes SET state = ${"corrupt"} WHERE id = ${captured.changeId}`;
+          }),
+        );
+
+        const error = yield* capture.getChangeById(captured.changeId).pipe(Effect.flip);
+        expect(error).toMatchObject({
+          _tag: "RepositoryPersistedDataInvalid",
+          operationName: "read Change for Candidate capture",
+        });
+      }),
+    ),
+  );
+
+  it.scoped("decodes malformed Change Start JSON at the Adapter trust seam", () =>
+    withTemporaryState((input) =>
+      Effect.gen(function* () {
+        const tasks = yield* openSqliteTaskPersistence("BY");
+        const starts = yield* openSqliteChangeStartPersistence();
+        const created = yield* tasks.createTask({
+          title: "Malformed Change Start",
+          description: "Exercise the persisted Acceptance Context trust seam.",
+          now: "2026-07-17T23:20:00.000Z",
+        });
+        if (!created.ok) throw new Error(`Task creation failed: ${created.code}`);
+        const taskId = storedPublicTaskId(created.task.id);
+        yield* tasks.approveTask({ taskId, now: "2026-07-17T23:21:00.000Z" });
+        const started = yield* starts.create({
+          id: "change-malformed-context",
+          repositoryCommonDirectory: input.commonDirectory,
+          branchRef: "refs/heads/by-1-malformed-context",
+          baseRef: "main",
+          baseRemoteUrl: "https://github.com/acme/repo.git",
+          startingCommit: "1111111111111111111111111111111111111111",
+          worktreePath: join(input.commonDirectory, "worktrees", "malformed-context"),
+          taskId,
+          now: "2026-07-17T23:22:00.000Z",
+        });
+        if (!started.ok) throw new Error(`Change Start failed: ${started.code}`);
+        const repository = yield* RepositorySql;
+        yield* repository.operation(
+          "corrupt Change Start Acceptance Context",
+          (sql) =>
+            sql`UPDATE changes SET acceptance_context = ${'{"version":1,"resolutions":[1]}'} WHERE id = ${started.change.id}`,
+        );
+
+        const error = yield* starts.getById(started.change.id).pipe(Effect.flip);
+        expect(error).toMatchObject({
+          _tag: "RepositoryPersistedDataInvalid",
+          operationName: "read Change Start",
+        });
+      }),
+    ),
+  );
+
+  it.scoped("decodes malformed Validation Run policy at the Adapter trust seam", () =>
+    withTemporaryState((input) =>
+      Effect.gen(function* () {
+        const capture = yield* openSqliteCandidateCapturePersistence();
+        const validation = yield* openSqliteChangeValidationPersistence();
+        const captured = yield* capture.commitCapture({
+          repositoryCommonDirectory: input.commonDirectory,
+          branchRef: "refs/heads/by-1-malformed-policy",
+          baseRef: "refs/remotes/origin/main",
+          changeBaseSha: "base-sha",
+          headSha: "head-sha",
+          now: "2026-07-17T23:23:00.000Z",
+        });
+        if (!captured.ok) throw new Error(`Candidate capture failed: ${captured.code}`);
+        const started = yield* validation.startOrReuse({
+          candidateId: captured.candidateId,
+          headSha: "head-sha",
+          policy: { checks: [], copyFiles: [] },
+          now: "2026-07-17T23:24:00.000Z",
+        });
+        if (started.reused || "blocked" in started)
+          throw new Error("Expected a new Validation Run");
+        const repository = yield* RepositorySql;
+        const valid = yield* validation.getRunById(started.validationRunId);
+        expect(valid).toMatchObject({ id: started.validationRunId, state: "running" });
+        yield* repository.operation(
+          "corrupt Validation Run policy",
+          (sql) =>
+            sql`UPDATE candidate_validation_runs SET policy_snapshot = ${"[]"} WHERE id = ${started.validationRunId}`,
+        );
+
+        const error = yield* validation.getRunById(started.validationRunId).pipe(Effect.flip);
+        expect(error).toMatchObject({
+          _tag: "RepositoryPersistedDataInvalid",
+          operationName: "read Candidate Validation Run",
+        });
+      }),
+    ),
+  );
+
+  it.scoped("decodes malformed Implementation Decisions at the Adapter trust seam", () =>
+    withTemporaryState((input) =>
+      Effect.gen(function* () {
+        const capture = yield* openSqliteCandidateCapturePersistence();
+        const validation = yield* openSqliteChangeValidationPersistence();
+        const captured = yield* capture.commitCapture({
+          repositoryCommonDirectory: input.commonDirectory,
+          branchRef: "refs/heads/by-1-malformed-decisions",
+          baseRef: "refs/remotes/origin/main",
+          changeBaseSha: "base-sha",
+          headSha: "head-sha",
+          now: "2026-07-17T23:25:00.000Z",
+        });
+        if (!captured.ok) throw new Error(`Candidate capture failed: ${captured.code}`);
+        const started = yield* validation.startOrReuse({
+          candidateId: captured.candidateId,
+          headSha: "head-sha",
+          policy: { checks: [], copyFiles: [] },
+          implementationDecisions: [],
+          now: "2026-07-17T23:26:00.000Z",
+        });
+        if (started.reused || "blocked" in started)
+          throw new Error("Expected a new Validation Run");
+        const repository = yield* RepositorySql;
+        yield* repository.operation(
+          "corrupt Validation Run decisions",
+          (sql) =>
+            sql`UPDATE candidate_validation_runs SET implementation_decisions = ${JSON.stringify([{ id: "missing-fields" }])} WHERE id = ${started.validationRunId}`,
+        );
+
+        const error = yield* validation.getRunById(started.validationRunId).pipe(Effect.flip);
+        expect(error).toMatchObject({
+          _tag: "RepositoryPersistedDataInvalid",
+          operationName: "read Candidate Validation Run",
+        });
+      }),
+    ),
+  );
+
   it.scoped("reports malformed persisted string arrays through the typed error channel", () =>
     withTemporaryState(() =>
       Effect.gen(function* () {

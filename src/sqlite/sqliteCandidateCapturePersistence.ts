@@ -9,9 +9,10 @@ import type {
 import { changeState } from "../change/change.js";
 import { RepositoryPersistedDataInvalid } from "../contracts/repositoryStorageError.js";
 import { RepositorySql } from "./repositorySql.js";
+import { decodeChangeState, requiredString } from "./sqlitePersistenceDecoders.js";
 
 type StoredCandidate = {
-  readonly id: string;
+  readonly id: unknown;
 };
 
 export const openSqliteCandidateCapturePersistence = (): Effect.Effect<
@@ -22,11 +23,16 @@ export const openSqliteCandidateCapturePersistence = (): Effect.Effect<
   Effect.map(RepositorySql, (repository) => ({
     getChangeById: (changeId) =>
       repository.operation("read Change for Candidate capture", (sql) =>
-        getChangeById(sql, changeId),
+        getChangeById(sql, changeId, "read Change for Candidate capture"),
       ),
     getChangeByRepositoryBranch: (repositoryCommonDirectory, branchRef) =>
       repository.operation("read Change branch for Candidate capture", (sql) =>
-        getChangeByBranch(sql, repositoryCommonDirectory, branchRef),
+        getChangeByBranch(
+          sql,
+          repositoryCommonDirectory,
+          branchRef,
+          "read Change branch for Candidate capture",
+        ),
       ),
     commitCapture: (input) =>
       repository.transactionImmediate("commit Candidate capture", (sql) =>
@@ -157,7 +163,15 @@ const captureStoredCandidate = (
     `;
     const existing = rows[0];
     if (existing !== undefined) {
-      return { ok: true, candidateId: existing.id, reused: true } as const;
+      const candidateId = yield* Effect.try({
+        try: () => requiredString(existing.id, "Candidate capture Candidate ID"),
+        catch: (cause) =>
+          new RepositoryPersistedDataInvalid({
+            operationName: "commit Candidate capture",
+            cause,
+          }),
+      });
+      return { ok: true, candidateId, reused: true } as const;
     }
 
     const candidateId = randomUUID();
@@ -171,23 +185,28 @@ const captureStoredCandidate = (
     return { ok: true, candidateId, reused: false } as const;
   });
 
-const getChangeById = (sql: SqlClient.SqlClient, changeId: string) =>
-  Effect.map(
+const getChangeById = (
+  sql: SqlClient.SqlClient,
+  changeId: string,
+  operationName = "read Change for Candidate capture",
+) =>
+  Effect.flatMap(
     sql<CandidateCaptureChange>`
       SELECT id, repository_common_directory AS repositoryCommonDirectory,
         branch_ref AS branchRef, base_ref AS baseRef, state
       FROM changes
       WHERE id = ${changeId}
     `,
-    (rows) => rows[0],
+    (rows) => decodeCandidateCaptureChange(rows[0], operationName),
   );
 
 const getChangeByBranch = (
   sql: SqlClient.SqlClient,
   repositoryCommonDirectory: string,
   branchRef: string,
+  operationName = "read Change branch for Candidate capture",
 ) =>
-  Effect.map(
+  Effect.flatMap(
     sql<CandidateCaptureChange>`
       SELECT id, repository_common_directory AS repositoryCommonDirectory,
         branch_ref AS branchRef, base_ref AS baseRef, state
@@ -195,8 +214,35 @@ const getChangeByBranch = (
       WHERE repository_common_directory = ${repositoryCommonDirectory}
         AND branch_ref = ${branchRef}
     `,
-    (rows) => rows[0],
+    (rows) => decodeCandidateCaptureChange(rows[0], operationName),
   );
+
+const decodeCandidateCaptureChange = (
+  row: CandidateCaptureChange | undefined,
+  operationName: string,
+) =>
+  row === undefined
+    ? Effect.succeed(undefined)
+    : Effect.try({
+        try: (): CandidateCaptureChange => ({
+          id: requiredString(row.id, "Candidate capture Change ID"),
+          repositoryCommonDirectory: requiredString(
+            row.repositoryCommonDirectory,
+            "Candidate capture repository common directory",
+          ),
+          branchRef: requiredString(row.branchRef, "Candidate capture branch reference"),
+          baseRef:
+            row.baseRef === null
+              ? null
+              : requiredString(row.baseRef, "Candidate capture base reference"),
+          state: decodeChangeState(row.state),
+        }),
+        catch: (cause) =>
+          new RepositoryPersistedDataInvalid({
+            operationName,
+            cause,
+          }),
+      });
 
 const invalidData = (message: string) =>
   Effect.fail(
