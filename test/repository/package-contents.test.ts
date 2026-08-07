@@ -104,16 +104,15 @@ if [ "$1" = "worktree" ] && [ "$2" = "open" ]; then
   printf '{"result":{"type":"worktree_opened","workspace":{"workspace_id":"workspace"},"root_pane":{"pane_id":"pane"},"already_open":false}}\\n'
   exit 0
 fi
-if [ "$1" = "pane" ] && [ "$2" = "run" ]; then
-  launch_path=\${4#exec \\'}
-  launch_path=\${launch_path%\\'}
-  cp "$launch_path" "$BY_FAKE_CAPTURE"
+if [ "$1" = "agent" ] && [ "$2" = "start" ]; then
+  printf '%s\\n' "$@" > "$BY_FAKE_CAPTURE.args"
   : > "$BY_FAKE_CAPTURE.started"
-  printf '{"result":{}}\\n'
+  printf '{"result":{"type":"agent_started","terminal_id":"terminal"}}\\n'
   exit 0
 fi
-if [ "$1" = "agent" ] && [ "$2" = "rename" ]; then
-  printf '{"result":{"agent":{"name":"change-agent","cwd":"%s","pane_id":"pane"}}}\\n' "$BY_FAKE_WORKTREE"
+if [ "$1" = "agent" ] && [ "$2" = "prompt" ]; then
+  printf '%s' "$4" > "$BY_FAKE_CAPTURE"
+  printf '{"result":{"type":"agent_prompted"}}\\n'
   exit 0
 fi
 exit 1
@@ -176,8 +175,20 @@ exit 1
       isolatedHome,
     });
     expect(implement.status, `${implement.stdout}${implement.stderr}`).toBe(0);
+    const startArgs = readFileSync(`${env.BY_FAKE_CAPTURE}.args`, "utf8");
     const extension = join(installedPackage, "extensions/continue-change.ts");
-    expect(readFileSync(env.BY_FAKE_CAPTURE, "utf8")).toContain(`--extension '${extension}'`);
+    const commandGuidance = join(
+      installedPackage,
+      "docs/public/skills/but-why/references/command-guidance.md",
+    );
+    const implementationInstructions = join(
+      installedPackage,
+      "docs/public/skills/but-why/references/implement-change.md",
+    );
+    expect(startArgs).toContain(extension);
+    expect(startArgs).toContain(commandGuidance);
+    expect(startArgs).toContain(implementationInstructions);
+    expect(readFileSync(env.BY_FAKE_CAPTURE, "utf8")).toContain("Change identity:");
 
     writeFileSync(extension, "export default 42;\n");
     rmSync(env.BY_FAKE_CAPTURE);
@@ -305,7 +316,6 @@ exit 1
     expect(files).toContain("docs/public/skills/but-why/references/command-guidance.md");
     expect(files).toContain("docs/public/skills/but-why/references/implement-change.md");
     expect(files).toContain("docs/public/skills/but-why/references/operator-workflow.md");
-    expect(files).toContain("docs/public/skills/but-why/scripts/start-implementer-session.mjs");
     expect(files.some((path) => path.startsWith("skills/"))).toBe(false);
     expect(files.some((path) => path.startsWith("src/"))).toBe(false);
     expect(files.some((path) => path.startsWith("test/"))).toBe(false);

@@ -39,6 +39,13 @@ export const implementerPromptFileError = (error: ImplementerPromptFileReadError
         details: { path: error.path },
         help: ["Write a non-empty Implementer Prompt file, then retry Change Implement."],
       });
+    case "implementer_prompt_contains_nul":
+      return usageError({
+        code: error.code,
+        message: "Implementer Prompt must not contain NUL characters.",
+        details: { path: error.path },
+        help: ["Remove NUL characters from the Implementer Prompt, then retry Change Implement."],
+      });
     case "stdin_is_terminal":
       return usageError({
         code: error.code,
@@ -67,7 +74,7 @@ export const implementResult = (result: ChangeImplementResult): CliResult => {
       help: ["Use an open Change ID returned by `by change start --json`."],
     });
   }
-  if (result.code === "agent_environment_invalid") {
+  if (result.code === "repo_config_invalid") {
     return runtimeError({
       code: result.code,
       message: result.message,
@@ -91,11 +98,6 @@ export const implementResult = (result: ChangeImplementResult): CliResult => {
         changeId: result.change.id,
         worktreePath: result.change.worktreePath,
         host: "herdr",
-        ...(result.code === "launch_failed" || result.code === "launch_indeterminate"
-          ? result.evidence === undefined
-            ? {}
-            : { evidence: result.evidence }
-          : {}),
       },
       help:
         result.code === "launch_indeterminate"

@@ -64,7 +64,7 @@ pi --skill /absolute/path/to/but-why/docs/public/skills/but-why
 ```
 
 Do not copy the skill into another skill directory.
-The package directory contains the references and Implementer Interactive Session script that the skill requires.
+The package directory contains the references and Implementer instructions that the skill requires.
 
 ## Initialize repository policy
 
@@ -104,7 +104,8 @@ Use the same remote that Change Start selects because Change Start reads Repo Co
 Repo Config is tracked at `.but-why/config.json`.
 Global Config is stored at `~/.config/but-why/config.json`.
 
-Set `agentEnvironment.command` when host-run agents must enter the repository development environment:
+Set `agentEnvironment.command` when headless reviewers must enter the repository development environment.
+Interactive Implementer Sessions use the Herdr pane shell environment and do not apply this setting:
 
 ```json
 {

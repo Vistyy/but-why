@@ -1,11 +1,6 @@
 {
   "$schema": "https://raw.githubusercontent.com/fallow-rs/fallow/main/config-schema.json",
-  "entry": [
-    "src/main.ts",
-    "extensions/**/*.ts",
-    "docs/public/skills/but-why/scripts/start-implementer-session.mjs",
-    "test/**/*.ts"
-  ],
+  "entry": ["src/main.ts", "extensions/**/*.ts", "test/**/*.ts"],
   "ignoreDependencies": [
     "@ai-hero/sandcastle",
     "@effect/cli",

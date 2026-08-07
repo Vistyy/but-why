@@ -1,4 +1,3 @@
-import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import type { ChangePrepareFailure } from "../change.js";
 import { resolvePackageAsset } from "../packageAssetPath.js";
@@ -6,13 +5,10 @@ import { boundedEvidence } from "../preparationEvidence.js";
 
 const skillDirectory = resolvePackageAsset("docs/public/skills/but-why");
 
-const implementerContract = (): string =>
-  [
-    readFileSync(resolve(skillDirectory, "references/command-guidance.md"), "utf8").trim(),
-    readFileSync(resolve(skillDirectory, "references/implement-change.md"), "utf8").trim(),
-  ].join("\n\n");
-
-export const buildImplementerSystemPrompt = (): string => implementerContract();
+export const buildImplementerSystemPromptPaths = (): readonly [string, string] => [
+  resolve(skillDirectory, "references/command-guidance.md"),
+  resolve(skillDirectory, "references/implement-change.md"),
+];
 
 export const buildImplementerInitialPrompt = (input: {
   readonly changeId: string;

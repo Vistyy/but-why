@@ -1,4 +1,3 @@
-import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -7,843 +6,243 @@ import {
   openHerdrInteractiveSessionHost,
   trustedContinuationExtensionPath,
 } from "../../src/change/interactiveSession/herdrInteractiveSessionHost.js";
+import { resolvePackageAsset } from "../../src/change/packageAssetPath.js";
 
-const unavailableHerdr: HerdrCommandExecutor = async () => ({
-  ok: false,
-  message: "connect ECONNREFUSED",
+const systemPromptPaths = [
+  resolvePackageAsset("docs/public/skills/but-why/references/command-guidance.md"),
+  resolvePackageAsset("docs/public/skills/but-why/references/implement-change.md"),
+] as const;
+
+const emptyAgents = (): { readonly ok: true; readonly stdout: string } => ({
+  ok: true,
+  stdout: '{"result":{"type":"agent_list","agents":[]}}',
 });
 
-const workspaceFailure: HerdrCommandExecutor = async (args) =>
-  args[0] === "agent"
-    ? { ok: true, stdout: '{"result":{"type":"agent_list","agents":[]}}' }
-    : { ok: false, message: "workspace unavailable" };
+const openedWorktree = (): { readonly ok: true; readonly stdout: string } => ({
+  ok: true,
+  stdout:
+    '{"result":{"type":"worktree_opened","workspace":{"workspace_id":"workspace-1"},"root_pane":{"pane_id":"pane-1"},"already_open":false}}',
+});
 
-const readPiLaunchScript = (command: string | undefined): string => {
-  const match = /^exec '([^']+)'$/.exec(command ?? "");
-  expect(match).not.toBeNull();
-  return readFileSync(match?.[1] ?? "", "utf8");
-};
+const input = {
+  changeId: "change-123",
+  hostSessionName: herdrSessionName("change-123"),
+  agentSessionName: "Change 123 descriptive name",
+  repositoryPath: "/repository",
+  worktreePath: "/workspace/change-123",
+  systemPromptPaths,
+  initialPrompt: "Change identity: change-123.\n\nManaged Worktree: /workspace/change-123.",
+} as const;
 
 describe("Herdr Interactive Session Host", () => {
-  it("supplies compact Herdr names independently from descriptive Pi names", async () => {
+  it("starts a named Pi agent natively and submits one complete handoff", async () => {
     const commands: readonly string[][] = [];
-    let launchScript = "";
     const execute: HerdrCommandExecutor = async (args) => {
       (commands as string[][]).push([...args]);
-      if (args[0] === "pane" && args[1] === "run") {
-        launchScript = readPiLaunchScript(args[3]);
+      if (args[0] === "agent" && args[1] === "list") return emptyAgents();
+      if (args[0] === "worktree" && args[1] === "open") return openedWorktree();
+      if (args[0] === "agent" && args[1] === "start") {
+        return { ok: true, stdout: '{"result":{"type":"agent_started","terminal_id":"t-1"}}' };
       }
-      if (args[0] === "agent" && args[1] === "list") {
-        return commands.some(([command, operation]) => command === "pane" && operation === "run")
-          ? {
-              ok: true,
-              stdout:
-                '{"result":{"type":"agent_list","agents":[{"name":"BY-41","cwd":"/workspace/change-123","pane_id":"workspace-1:pane-1","agent_status":"working"}]}}',
-            }
-          : { ok: true, stdout: '{"result":{"type":"agent_list","agents":[]}}' };
+      if (args[0] === "agent" && args[1] === "prompt") {
+        return { ok: true, stdout: '{"result":{"type":"agent_prompted"}}' };
       }
-      if (args[0] === "worktree") {
-        return {
-          ok: true,
-          stdout:
-            '{"result":{"type":"worktree_opened","workspace":{"workspace_id":"workspace-1"},"root_pane":{"pane_id":"workspace-1:pane-1"},"already_open":false}}',
-        };
-      }
-      if (args[0] === "agent" && args[1] === "rename") {
-        return {
-          ok: true,
-          stdout:
-            '{"result":{"agent":{"name":"BY-41","pane_id":"workspace-1:pane-1","cwd":"/workspace/change-123"}}}',
-        };
-      }
-      return { ok: true, stdout: "{}" };
+      return { ok: false, message: `unexpected Herdr command: ${args.join(" ")}` };
     };
 
-    await expect(
-      openHerdrInteractiveSessionHost(execute).launch({
-        changeId: "change-123",
-        hostSessionName: "BY-41",
-        agentSessionName: "BY-41 Name Interactive Sessions",
-        repositoryPath: "/repository",
-        worktreePath: "/workspace/change-123",
-        initialPrompt: "Implement",
-      }),
-    ).resolves.toEqual({ ok: true, host: "herdr", status: "started" });
-
-    expect(commands).toContainEqual([
-      "worktree",
-      "open",
-      "--cwd",
-      "/repository",
-      "--path",
-      "/workspace/change-123",
-      "--label",
-      "BY-41",
-      "--no-focus",
-    ]);
-    expect(commands).toContainEqual([
-      "pane",
-      "run",
-      "workspace-1:pane-1",
-      expect.stringMatching(/^exec '\/.*\/but-why-pi-launch-.*\/launch\.sh'$/),
-    ]);
-    expect(launchScript).toContain(
-      `exec pi --name 'BY-41 Name Interactive Sessions' --extension '${trustedContinuationExtensionPath()}' 'Implement'`,
-    );
-    expect(commands).toContainEqual(["agent", "rename", "workspace-1:pane-1", "BY-41"]);
-  });
-
-  it("opens an existing Managed Worktree and starts a named Pi session", async () => {
-    const commands: readonly string[][] = [];
-    let launchScript = "";
-    const execute: HerdrCommandExecutor = async (args) => {
-      (commands as string[][]).push([...args]);
-      if (args[0] === "pane" && args[1] === "run") {
-        launchScript = readPiLaunchScript(args[3]);
-      }
-      if (args[0] === "agent" && args[1] === "list") {
-        return commands.some(([command, operation]) => command === "pane" && operation === "run")
-          ? {
-              ok: true,
-              stdout:
-                '{"result":{"type":"agent_list","agents":[{"name":"but-why-change-123","cwd":"/workspace/change-123","pane_id":"workspace-1:pane-1","agent_status":"working"}]}}',
-            }
-          : { ok: true, stdout: '{"result":{"type":"agent_list","agents":[]}}' };
-      }
-      if (args[0] === "worktree") {
-        return {
-          ok: true,
-          stdout:
-            '{"result":{"type":"worktree_opened","workspace":{"workspace_id":"workspace-1"},"root_pane":{"pane_id":"workspace-1:pane-1"},"already_open":false}}',
-        };
-      }
-      if (args[0] === "agent" && args[1] === "rename") {
-        return {
-          ok: true,
-          stdout:
-            '{"result":{"agent":{"name":"but-why-change-123","pane_id":"workspace-1:pane-1","cwd":"/workspace/change-123"}}}',
-        };
-      }
-      return { ok: true, stdout: "{}" };
-    };
-
-    const result = await openHerdrInteractiveSessionHost(execute, {
-      path: "/usr/local/bin:/opt/pi/bin",
-    }).launch({
-      changeId: "change-123",
-      repositoryPath: "/repository",
-      worktreePath: "/workspace/change-123",
-      systemPrompt: "Canonical Implementer contract",
-      initialPrompt: "---\ndescription: Continue from the recorded decision.\n---",
-      agentProfile: {
-        agentProfile: "implementation",
-        scope: "global",
-        profile: {
-          agentRuntime: "pi",
-          runtimeConfig: { model: "openai-codex/gpt-5.6-luna", thinking: "high" },
-        },
-      },
-      globalConfigDirectory: "/home/test/.config/but-why",
-      agentEnvironment: ["nix", "develop", "-c"],
-    });
-
-    expect(result).toEqual({ ok: true, host: "herdr", status: "started" });
-    expect(commands.map((command) => command.slice(0, 3))).toEqual([
-      ["agent", "list"],
-      ["worktree", "open", "--cwd"],
-      ["agent", "list"],
-      ["pane", "run", "workspace-1:pane-1"],
-      ["agent", "list"],
-      ["agent", "rename", "workspace-1:pane-1"],
-    ]);
-    expect(commands[1]).toEqual([
-      "worktree",
-      "open",
-      "--cwd",
-      "/repository",
-      "--path",
-      "/workspace/change-123",
-      "--label",
-      herdrSessionName("change-123"),
-      "--no-focus",
-    ]);
-    expect(commands[5]).toEqual([
-      "agent",
-      "rename",
-      "workspace-1:pane-1",
-      herdrSessionName("change-123"),
-    ]);
-    expect(launchScript).toContain(
-      `PATH='/usr/local/bin:/opt/pi/bin' exec 'nix' 'develop' '-c' pi --system-prompt 'Canonical Implementer contract' --name 'but-why-change-123' --model 'openai-codex/gpt-5.6-luna' --thinking 'high' --extension '${trustedContinuationExtensionPath()}' '\n---\ndescription: Continue from the recorded decision.\n---'`,
-    );
-  });
-
-  it("materializes scoped Pi resource allowlists for the Implementer", async () => {
-    const commands: readonly string[][] = [];
-    let launchScript = "";
-    const execute: HerdrCommandExecutor = async (args) => {
-      (commands as string[][]).push([...args]);
-      if (args[0] === "pane" && args[1] === "run") {
-        launchScript = readPiLaunchScript(args[3]);
-      }
-      if (args[0] === "agent" && args[1] === "list") {
-        return commands.some(([command, operation]) => command === "pane" && operation === "run")
-          ? {
-              ok: true,
-              stdout:
-                '{"result":{"type":"agent_list","agents":[{"name":"but-why-change-123","cwd":"/workspace/change-123","pane_id":"workspace-1:pane-1","agent_status":"working"}]}}',
-            }
-          : { ok: true, stdout: '{"result":{"type":"agent_list","agents":[]}}' };
-      }
-      if (args[0] === "worktree") {
-        return {
-          ok: true,
-          stdout:
-            '{"result":{"type":"worktree_opened","workspace":{"workspace_id":"workspace-1"},"root_pane":{"pane_id":"workspace-1:pane-1"},"already_open":false}}',
-        };
-      }
-      if (args[0] === "agent" && args[1] === "rename") {
-        return {
-          ok: true,
-          stdout:
-            '{"result":{"agent":{"name":"but-why-change-123","pane_id":"workspace-1:pane-1","cwd":"/workspace/change-123"}}}',
-        };
-      }
-      return { ok: true, stdout: "{}" };
-    };
-
-    await expect(
-      openHerdrInteractiveSessionHost(execute).launch({
-        changeId: "change-123",
-        repositoryPath: "/repository",
-        worktreePath: "/workspace/change-123",
-        initialPrompt: "Implement",
-        agentProfile: {
-          agentProfile: "implementation",
-          scope: "repo",
-          profile: {
-            agentRuntime: "pi",
-            runtimeConfig: {
-              extensions: ["extensions/one.ts", trustedContinuationExtensionPath()],
-              skills: ["skills/one"],
-              tools: [],
-              contextFileDiscovery: false,
-            },
-          },
-        },
-        globalConfigDirectory: "/global/config",
-      }),
-    ).resolves.toEqual({ ok: true, host: "herdr", status: "started" });
-
-    expect(launchScript).toContain(
-      "--no-extensions --extension '/workspace/change-123/extensions/one.ts'",
-    );
-    expect(
-      launchScript.match(new RegExp(trustedContinuationExtensionPath(), "g")) ?? [],
-    ).toHaveLength(1);
-    expect(launchScript).toContain("--no-skills --skill '/workspace/change-123/skills/one'");
-    expect(launchScript).toContain("--tools '' --no-context-files");
-  });
-
-  it("keeps large Pi launch payloads out of terminal input", async () => {
-    const initialPrompt = "x".repeat(100_000);
-    let paneCommand = "";
-    let launchScript = "";
-    let launched = false;
-    const execute: HerdrCommandExecutor = async (args) => {
-      if (args[0] === "agent" && args[1] === "list") {
-        return launched
-          ? {
-              ok: true,
-              stdout:
-                '{"result":{"type":"agent_list","agents":[{"name":"but-why-change-123","cwd":"/workspace/change-123","pane_id":"workspace-1:pane-1","agent_status":"working"}]}}',
-            }
-          : { ok: true, stdout: '{"result":{"type":"agent_list","agents":[]}}' };
-      }
-      if (args[0] === "worktree") {
-        return {
-          ok: true,
-          stdout:
-            '{"result":{"type":"worktree_opened","workspace":{"workspace_id":"workspace-1"},"root_pane":{"pane_id":"workspace-1:pane-1"},"already_open":false}}',
-        };
-      }
-      if (args[0] === "pane" && args[1] === "run") {
-        paneCommand = args[3] ?? "";
-        launchScript = readPiLaunchScript(paneCommand);
-        launched = true;
-        return { ok: true, stdout: "{}" };
-      }
-      if (args[0] === "agent" && args[1] === "rename") {
-        return {
-          ok: true,
-          stdout:
-            '{"result":{"agent":{"name":"but-why-change-123","pane_id":"workspace-1:pane-1","cwd":"/workspace/change-123"}}}',
-        };
-      }
-      return { ok: true, stdout: "{}" };
-    };
-
-    await expect(
-      openHerdrInteractiveSessionHost(execute).launch({
-        changeId: "change-123",
-        repositoryPath: "/repository",
-        worktreePath: "/workspace/change-123",
-        initialPrompt,
-      }),
-    ).resolves.toEqual({ ok: true, host: "herdr", status: "started" });
-
-    expect(paneCommand.length).toBeLessThan(200);
-    expect(launchScript).toContain(initialPrompt);
-  });
-
-  it("returns a retryable failure when a concurrent launch claims the session name", async () => {
-    const commands: string[][] = [];
-    const sessionName = herdrSessionName("change-123");
-    const execute: HerdrCommandExecutor = async (args) => {
-      commands.push([...args]);
-      const agentListCount = commands.filter(
-        ([command, operation]) => command === "agent" && operation === "list",
-      ).length;
-      if (args[0] === "agent" && args[1] === "list" && agentListCount <= 2) {
-        return { ok: true, stdout: '{"result":{"type":"agent_list","agents":[]}}' };
-      }
-      if (args[0] === "agent" && args[1] === "list" && agentListCount === 3) {
-        return {
-          ok: true,
-          stdout:
-            '{"result":{"type":"agent_list","agents":[{"agent":"pi","cwd":"/workspace/change-123","pane_id":"workspace-1:pane-1","agent_status":"working"}]}}',
-        };
-      }
-      if (args[0] === "worktree") {
-        return {
-          ok: true,
-          stdout:
-            '{"result":{"type":"worktree_opened","workspace":{"workspace_id":"workspace-1"},"root_pane":{"pane_id":"workspace-1:pane-1"},"already_open":false}}',
-        };
-      }
-      if (args[0] === "agent" && args[1] === "rename") {
-        return { ok: false, message: "agent_name_taken" };
-      }
-      if (args[0] === "agent" && args[1] === "list") {
-        return {
-          ok: true,
-          stdout: `{"result":{"type":"agent_list","agents":[{"agent":"${sessionName}","cwd":"/workspace/change-123","pane_id":"other-pane","agent_status":"working"}]}}`,
-        };
-      }
-      return { ok: true, stdout: "{}" };
-    };
-
-    await expect(
-      openHerdrInteractiveSessionHost(execute).launch({
-        changeId: "change-123",
-        repositoryPath: "/repository",
-        worktreePath: "/workspace/change-123",
-        initialPrompt: undefined,
-      }),
-    ).resolves.toMatchObject({ ok: false, code: "launch_failed" });
-    expect(commands).toContainEqual(["workspace", "close", "workspace-1"]);
-  });
-
-  it("reuses an idle Herdr workspace after a done Interactive Session", async () => {
-    const commands: string[][] = [];
-    const sessionName = "BY-41";
-    const execute: HerdrCommandExecutor = async (args) => {
-      commands.push([...args]);
-      if (args[0] === "agent" && args[1] === "list") {
-        return {
-          ok: true,
-          stdout:
-            commands.filter(([command, operation]) => command === "agent" && operation === "list")
-              .length === 1
-              ? `{"result":{"type":"agent_list","agents":[{"agent":"${sessionName}","cwd":"/workspace/change-123","pane_id":"workspace-1:pane-1","agent_status":"done"}]}}`
-              : commands.filter(
-                    ([command, operation]) => command === "agent" && operation === "list",
-                  ).length === 2
-                ? `{"result":{"type":"agent_list","agents":[]}}`
-                : `{"result":{"type":"agent_list","agents":[{"agent":"${sessionName}","cwd":"/workspace/change-123","pane_id":"workspace-1:pane-1","agent_status":"working"}]}}`,
-        };
-      }
-      if (args[0] === "worktree") {
-        return {
-          ok: true,
-          stdout:
-            '{"result":{"type":"worktree_opened","workspace":{"workspace_id":"workspace-1"},"root_pane":{"pane_id":"workspace-1:pane-1"},"already_open":true}}',
-        };
-      }
-      if (args[0] === "agent" && args[1] === "rename") {
-        return {
-          ok: true,
-          stdout: `{"result":{"agent":{"name":"${sessionName}","pane_id":"workspace-1:pane-1","cwd":"/workspace/change-123"}}}`,
-        };
-      }
-      return { ok: true, stdout: "{}" };
-    };
-
-    await expect(
-      openHerdrInteractiveSessionHost(execute).launch({
-        changeId: "change-123",
-        hostSessionName: sessionName,
-        agentSessionName: "BY-41 Name Interactive Sessions",
-        repositoryPath: "/repository",
-        worktreePath: "/workspace/change-123",
-        initialPrompt: undefined,
-      }),
-    ).resolves.toEqual({ ok: true, host: "herdr", status: "started" });
-    expect(commands).toContainEqual([
-      "worktree",
-      "open",
-      "--cwd",
-      "/repository",
-      "--path",
-      "/workspace/change-123",
-      "--label",
-      sessionName,
-      "--no-focus",
-    ]);
-  });
-
-  it("interrupts Pi after a rename failure in an existing workspace", async () => {
-    const commands: string[][] = [];
-    const execute: HerdrCommandExecutor = async (args) => {
-      commands.push([...args]);
-      if (args[0] === "agent" && args[1] === "list") {
-        return commands.some(([command, operation]) => command === "pane" && operation === "run")
-          ? {
-              ok: true,
-              stdout:
-                '{"result":{"type":"agent_list","agents":[{"name":"pi","cwd":"/workspace/change-123","pane_id":"workspace-1:pane-1","agent_status":"working"}]}}',
-            }
-          : { ok: true, stdout: '{"result":{"type":"agent_list","agents":[]}}' };
-      }
-      if (args[0] === "worktree") {
-        return {
-          ok: true,
-          stdout:
-            '{"result":{"type":"worktree_opened","workspace":{"workspace_id":"workspace-1"},"root_pane":{"pane_id":"workspace-1:pane-1"},"already_open":true}}',
-        };
-      }
-      if (args[0] === "agent" && args[1] === "rename") {
-        return { ok: false, message: "agent_name_taken" };
-      }
-      return { ok: true, stdout: "{}" };
-    };
-
-    await expect(
-      openHerdrInteractiveSessionHost(execute).launch({
-        changeId: "change-123",
-        repositoryPath: "/repository",
-        worktreePath: "/workspace/change-123",
-        initialPrompt: undefined,
-      }),
-    ).resolves.toMatchObject({ ok: false, code: "launch_failed" });
-    expect(commands).toContainEqual(["pane", "send-keys", "workspace-1:pane-1", "ctrl-c"]);
-    expect(commands).not.toContainEqual(["workspace", "close", "workspace-1"]);
-  });
-
-  it("removes its workspace after a pane-run failure so a retry can start", async () => {
-    let paneRuns = 0;
-    const commands: string[][] = [];
-    const execute: HerdrCommandExecutor = async (args) => {
-      commands.push([...args]);
-      if (args[0] === "agent" && args[1] === "list") {
-        return paneRuns < 2
-          ? { ok: true, stdout: '{"result":{"type":"agent_list","agents":[]}}' }
-          : {
-              ok: true,
-              stdout:
-                '{"result":{"type":"agent_list","agents":[{"name":"but-why-change-123","cwd":"/workspace/change-123","pane_id":"workspace-1:pane-1","agent_status":"working"}]}}',
-            };
-      }
-      if (args[0] === "worktree") {
-        return {
-          ok: true,
-          stdout:
-            '{"result":{"type":"worktree_opened","workspace":{"workspace_id":"workspace-1"},"root_pane":{"pane_id":"workspace-1:pane-1"},"already_open":false}}',
-        };
-      }
-      if (args[0] === "pane" && args[1] === "run") {
-        paneRuns += 1;
-        return paneRuns === 1
-          ? { ok: false, message: "pane unavailable" }
-          : { ok: true, stdout: "{}" };
-      }
-      if (args[0] === "agent" && args[1] === "rename") {
-        return {
-          ok: true,
-          stdout:
-            '{"result":{"agent":{"name":"but-why-change-123","pane_id":"workspace-1:pane-1","cwd":"/workspace/change-123"}}}',
-        };
-      }
-      return { ok: true, stdout: "{}" };
-    };
-    const host = openHerdrInteractiveSessionHost(execute);
-    const input = {
-      changeId: "change-123",
-      repositoryPath: "/repository",
-      worktreePath: "/workspace/change-123",
-      initialPrompt: undefined,
-    } as const;
-
-    await expect(host.launch(input)).resolves.toMatchObject({ ok: false, code: "launch_failed" });
-    await expect(host.launch(input)).resolves.toEqual({
+    await expect(openHerdrInteractiveSessionHost(execute).launch(input)).resolves.toEqual({
       ok: true,
       host: "herdr",
       status: "started",
     });
-    expect(commands).toContainEqual(["workspace", "close", "workspace-1"]);
-  });
 
-  it("returns already active without creating another workspace", async () => {
-    const execute: HerdrCommandExecutor = async () => ({
-      ok: true,
-      stdout: `{"id":"cli:agent:list","result":{"agents":[{"agent":"${herdrSessionName("change-123")}","cwd":"/workspace/change-123","pane_id":"workspace-1:pane-1","agent_status":"working"}],"type":"agent_list"}}`,
-    });
-
-    await expect(
-      openHerdrInteractiveSessionHost(execute).launch({
-        changeId: "change-123",
-        repositoryPath: "/repository",
-        worktreePath: "/workspace/change-123",
-        initialPrompt: undefined,
-      }),
-    ).resolves.toEqual({ ok: true, host: "herdr", status: "already_active" });
-  });
-
-  it("reconciles an uncertain worktree open before retrying the mutation", async () => {
-    const commands: string[][] = [];
-    const execute: HerdrCommandExecutor = async (args) => {
-      commands.push([...args]);
-      if (args[0] === "agent" && args[1] === "list") {
-        return commands.some(([command, operation]) => command === "pane" && operation === "run")
-          ? {
-              ok: true,
-              stdout:
-                '{"result":{"type":"agent_list","agents":[{"name":"but-why-change-123","cwd":"/workspace/change-123","pane_id":"workspace-1:pane-1","agent_status":"working"}]}}',
-            }
-          : { ok: true, stdout: '{"result":{"type":"agent_list","agents":[]}}' };
-      }
-      if (args[0] === "worktree" && args[1] === "open") {
-        const opens = commands.filter(
-          ([command, operation]) => command === "worktree" && operation === "open",
-        ).length;
-        return opens === 1
-          ? { ok: false, message: "response lost" }
-          : {
-              ok: true,
-              stdout:
-                '{"result":{"type":"worktree_opened","workspace":{"workspace_id":"workspace-1"},"root_pane":{"pane_id":"workspace-1:pane-1"},"already_open":false}}',
-            };
-      }
-      if (args[0] === "worktree" && args[1] === "list") {
-        return {
-          ok: true,
-          stdout:
-            '{"result":{"type":"worktree_list","worktrees":[{"path":"/workspace/change-123","branch":"but-why/change-123","repository_path":"/repository"}]}}',
-        };
-      }
-      if (args[0] === "agent" && args[1] === "rename") {
-        return {
-          ok: true,
-          stdout:
-            '{"result":{"agent":{"name":"but-why-change-123","pane_id":"workspace-1:pane-1","cwd":"/workspace/change-123"}}}',
-        };
-      }
-      if (args[0] === "pane" && args[1] === "run") return { ok: true, stdout: "{}" };
-      return { ok: true, stdout: "{}" };
-    };
-
-    await expect(
-      openHerdrInteractiveSessionHost(execute).launch({
-        changeId: "change-123",
-        repositoryPath: "/repository",
-        worktreePath: "/workspace/change-123",
-        initialPrompt: undefined,
-      }),
-    ).resolves.toEqual({ ok: true, host: "herdr", status: "started" });
-    expect(
-      commands.filter(([command, operation]) => command === "worktree" && operation === "open"),
-    ).toHaveLength(2);
-  });
-
-  it("waits for Herdr to detect Pi before naming the session", async () => {
-    let agentLists = 0;
-    const execute: HerdrCommandExecutor = async (args) => {
-      if (args[0] === "agent" && args[1] === "list") {
-        agentLists += 1;
-        return agentLists < 4
-          ? { ok: true, stdout: '{"result":{"type":"agent_list","agents":[]}}' }
-          : {
-              ok: true,
-              stdout:
-                '{"result":{"type":"agent_list","agents":[{"name":"pi","cwd":"/workspace/change-123","pane_id":"workspace-1:pane-1","agent_status":"working"}]}}',
-            };
-      }
-      if (args[0] === "worktree") {
-        return {
-          ok: true,
-          stdout:
-            '{"result":{"type":"worktree_opened","workspace":{"workspace_id":"workspace-1"},"root_pane":{"pane_id":"workspace-1:pane-1"},"already_open":false}}',
-        };
-      }
-      if (args[0] === "pane" && args[1] === "run") return { ok: true, stdout: "{}" };
-      if (args[0] === "agent" && args[1] === "rename") {
-        return {
-          ok: true,
-          stdout:
-            '{"result":{"agent":{"name":"but-why-change-123","cwd":"/workspace/change-123","pane_id":"workspace-1:pane-1"}}}',
-        };
-      }
-      return { ok: true, stdout: "{}" };
-    };
-
-    await expect(
-      openHerdrInteractiveSessionHost(execute).launch({
-        changeId: "change-123",
-        repositoryPath: "/repository",
-        worktreePath: "/workspace/change-123",
-        initialPrompt: undefined,
-      }),
-    ).resolves.toEqual({ ok: true, host: "herdr", status: "started" });
-    expect(agentLists).toBe(4);
-  });
-
-  it("preserves a launched pane when Herdr has not detected Pi yet", async () => {
-    const commands: string[][] = [];
-    const execute: HerdrCommandExecutor = async (args) => {
-      commands.push([...args]);
-      if (args[0] === "agent" && args[1] === "list") {
-        return { ok: true, stdout: '{"result":{"type":"agent_list","agents":[]}}' };
-      }
-      if (args[0] === "worktree") {
-        return {
-          ok: true,
-          stdout:
-            '{"result":{"type":"worktree_opened","workspace":{"workspace_id":"workspace-1"},"root_pane":{"pane_id":"workspace-1:pane-1"},"already_open":false}}',
-        };
-      }
-      if (args[0] === "pane" && args[1] === "run") return { ok: true, stdout: "{}" };
-      if (args[0] === "pane" && args[1] === "read") {
-        return { ok: true, stdout: "Starting Pi" };
-      }
-      if (args[0] === "pane" && args[1] === "process-info") {
-        return { ok: true, stdout: '{"result":{"processes":[{"name":"fish"}]}}' };
-      }
-      return { ok: true, stdout: "{}" };
-    };
-
-    await expect(
-      openHerdrInteractiveSessionHost(execute, {
-        readinessTimeoutMs: 5,
-        readinessPollMs: 1,
-      }).launch({
-        changeId: "change-123",
-        repositoryPath: "/repository",
-        worktreePath: "/workspace/change-123",
-        initialPrompt: undefined,
-      }),
-    ).resolves.toMatchObject({ ok: false, code: "launch_indeterminate" });
-    expect(commands).not.toContainEqual([
-      "agent",
-      "rename",
-      "workspace-1:pane-1",
-      "but-why-change-123",
+    expect(commands).toEqual([
+      ["agent", "list"],
+      [
+        "worktree",
+        "open",
+        "--cwd",
+        "/repository",
+        "--path",
+        "/workspace/change-123",
+        "--label",
+        herdrSessionName("change-123"),
+        "--no-focus",
+      ],
+      ["agent", "list"],
+      [
+        "agent",
+        "start",
+        herdrSessionName("change-123"),
+        "--kind",
+        "pi",
+        "--pane",
+        "pane-1",
+        "--timeout",
+        "30000",
+        "--",
+        "--system-prompt",
+        systemPromptPaths[0],
+        "--append-system-prompt",
+        systemPromptPaths[1],
+        "--name",
+        "Change 123 descriptive name",
+        "--extension",
+        trustedContinuationExtensionPath(),
+      ],
+      ["agent", "prompt", herdrSessionName("change-123"), input.initialPrompt],
     ]);
-    expect(commands).not.toContainEqual(["pane", "send-keys", "workspace-1:pane-1", "ctrl-c"]);
-    expect(commands).not.toContainEqual(["workspace", "close", "workspace-1"]);
+
+    const start = commands[3] ?? [];
+    expect(start.join(" ")).not.toContain("# But Why");
+    expect(start.join(" ")).not.toContain("The Implementer must");
   });
 
-  it("returns indeterminate after an uncertain worktree retry remains unresolved", async () => {
+  it("passes selected Pi model, thinking, tools, and context settings to native start", async () => {
+    const commands: readonly string[][] = [];
+    const execute: HerdrCommandExecutor = async (args) => {
+      (commands as string[][]).push([...args]);
+      if (args[0] === "agent" && args[1] === "list") return emptyAgents();
+      if (args[0] === "worktree" && args[1] === "open") return openedWorktree();
+      if (args[0] === "agent" && args[1] === "start") {
+        return { ok: true, stdout: '{"result":{"type":"agent_started","terminal_id":"t-1"}}' };
+      }
+      if (args[0] === "agent" && args[1] === "prompt") {
+        return { ok: true, stdout: '{"result":{"type":"agent_prompted"}}' };
+      }
+      return { ok: false, message: `unexpected Herdr command: ${args.join(" ")}` };
+    };
+
+    await expect(
+      openHerdrInteractiveSessionHost(execute).launch({
+        ...input,
+        globalConfigDirectory: "/global-config",
+        agentProfile: {
+          agentProfile: "implementation",
+          scope: "global",
+          globalConfigDirectory: "/global-config",
+          profile: {
+            agentRuntime: "pi",
+            runtimeConfig: {
+              model: "model-x",
+              thinking: "high",
+              tools: ["read"],
+              contextFileDiscovery: false,
+            },
+          },
+        },
+      }),
+    ).resolves.toMatchObject({ ok: true, status: "started" });
+
+    const start = commands.find((args) => args[0] === "agent" && args[1] === "start");
+    expect(start).toEqual(
+      expect.arrayContaining([
+        "--model",
+        "model-x",
+        "--thinking",
+        "high",
+        "--tools",
+        "read",
+        "--no-context-files",
+      ]),
+    );
+  });
+
+  it("does not start or prompt another agent when the named session is active", async () => {
+    const commands: readonly string[][] = [];
+    const execute: HerdrCommandExecutor = async (args) => {
+      (commands as string[][]).push([...args]);
+      return {
+        ok: true,
+        stdout: `{"result":{"type":"agent_list","agents":[{"name":"${input.hostSessionName}","cwd":"${input.worktreePath}","pane_id":"pane-1","agent_status":"working"}]}}`,
+      };
+    };
+
+    await expect(openHerdrInteractiveSessionHost(execute).launch(input)).resolves.toEqual({
+      ok: true,
+      host: "herdr",
+      status: "already_active",
+    });
+    expect(commands).toEqual([["agent", "list"]]);
+  });
+
+  it("does not start when another unknown agent occupies the Managed Worktree", async () => {
     const commands: string[][] = [];
     const execute: HerdrCommandExecutor = async (args) => {
       commands.push([...args]);
-      if (args[0] === "agent" && args[1] === "list") {
-        return { ok: true, stdout: '{"result":{"type":"agent_list","agents":[]}}' };
+      return {
+        ok: true,
+        stdout:
+          '{"result":{"type":"agent_list","agents":[{"name":"other-session","cwd":"/workspace/change-123","pane_id":"pane-2","agent_status":"unknown"}]}}',
+      };
+    };
+
+    await expect(openHerdrInteractiveSessionHost(execute).launch(input)).resolves.toMatchObject({
+      ok: false,
+      code: "launch_indeterminate",
+    });
+    expect(commands).toEqual([["agent", "list"]]);
+  });
+
+  it("does not prompt after a definite native start failure", async () => {
+    const commands: string[][] = [];
+    const execute: HerdrCommandExecutor = async (args) => {
+      commands.push([...args]);
+      if (args[0] === "agent" && args[1] === "list") return emptyAgents();
+      if (args[0] === "worktree") return openedWorktree();
+      if (args[0] === "agent" && args[1] === "start") {
+        return { ok: false, message: "agent pane is not available" };
       }
-      if (args[0] === "worktree" && args[1] === "open") {
+      return { ok: false, message: "unexpected Herdr command" };
+    };
+
+    await expect(openHerdrInteractiveSessionHost(execute).launch(input)).resolves.toMatchObject({
+      ok: false,
+      code: "launch_failed",
+    });
+    expect(commands.at(-1)?.slice(0, 2)).toEqual(["agent", "start"]);
+    expect(commands.some((args) => args[0] === "agent" && args[1] === "prompt")).toBe(false);
+  });
+
+  it("observes an uncertain native start and never retries it", async () => {
+    const commands: string[][] = [];
+    const execute: HerdrCommandExecutor = async (args) => {
+      commands.push([...args]);
+      if (args[0] === "agent" && args[1] === "list") return emptyAgents();
+      if (args[0] === "worktree") return openedWorktree();
+      if (args[0] === "agent" && args[1] === "start") {
         return { ok: false, message: "response lost" };
       }
-      if (args[0] === "worktree" && args[1] === "list") {
-        return {
-          ok: true,
-          stdout:
-            '{"result":{"type":"worktree_list","worktrees":[{"path":"/workspace/change-123","branch":"but-why/change-123","repository_path":"/repository"}]}}',
-        };
-      }
-      return { ok: true, stdout: "{}" };
+      return { ok: false, message: "unexpected retry" };
     };
 
     await expect(
-      openHerdrInteractiveSessionHost(execute).launch({
-        changeId: "change-123",
-        repositoryPath: "/repository",
-        worktreePath: "/workspace/change-123",
-        initialPrompt: undefined,
-      }),
+      openHerdrInteractiveSessionHost(execute, { commandTimeoutMs: 20 }).launch(input),
     ).resolves.toMatchObject({ ok: false, code: "launch_indeterminate" });
-    expect(
-      commands.filter(([command, operation]) => command === "worktree" && operation === "open"),
-    ).toHaveLength(2);
+    expect(commands.filter((args) => args[0] === "agent" && args[1] === "start")).toHaveLength(1);
+    expect(commands.at(-1)).toEqual(["agent", "list"]);
   });
 
-  it("reconciles a lost rename response before retrying", async () => {
-    let renameAttempts = 0;
+  it("observes an uncertain initial prompt without replaying it", async () => {
     const commands: string[][] = [];
     const execute: HerdrCommandExecutor = async (args) => {
       commands.push([...args]);
-      if (args[0] === "agent" && args[1] === "list") {
-        if (!commands.some(([command, operation]) => command === "pane" && operation === "run")) {
-          return { ok: true, stdout: '{"result":{"type":"agent_list","agents":[]}}' };
-        }
-        return renameAttempts > 1
-          ? {
-              ok: true,
-              stdout:
-                '{"result":{"type":"agent_list","agents":[{"name":"but-why-change-123","cwd":"/workspace/change-123","pane_id":"workspace-1:pane-1","agent_status":"working"}]}}',
-            }
-          : {
-              ok: true,
-              stdout:
-                '{"result":{"type":"agent_list","agents":[{"name":"pi","cwd":"/workspace/change-123","pane_id":"workspace-1:pane-1","agent_status":"working"}]}}',
-            };
+      if (args[0] === "agent" && args[1] === "list") return emptyAgents();
+      if (args[0] === "worktree") return openedWorktree();
+      if (args[0] === "agent" && args[1] === "start") {
+        return { ok: true, stdout: '{"result":{"type":"agent_started","terminal_id":"t-1"}}' };
       }
-      if (args[0] === "worktree") {
-        return {
-          ok: true,
-          stdout:
-            '{"result":{"type":"worktree_opened","workspace":{"workspace_id":"workspace-1"},"root_pane":{"pane_id":"workspace-1:pane-1"},"already_open":false}}',
-        };
+      if (args[0] === "agent" && args[1] === "prompt") {
+        return { ok: false, message: "response lost" };
       }
-      if (args[0] === "pane" && args[1] === "run") return { ok: true, stdout: "{}" };
-      if (args[0] === "agent" && args[1] === "rename") {
-        renameAttempts += 1;
-        return renameAttempts === 1
-          ? { ok: false, message: "lost response" }
-          : {
-              ok: true,
-              stdout:
-                '{"result":{"agent":{"name":"but-why-change-123","cwd":"/workspace/change-123","pane_id":"workspace-1:pane-1"}}}',
-            };
-      }
-      return { ok: true, stdout: "{}" };
+      return { ok: false, message: "unexpected prompt retry" };
     };
 
-    await expect(
-      openHerdrInteractiveSessionHost(execute).launch({
-        changeId: "change-123",
-        repositoryPath: "/repository",
-        worktreePath: "/workspace/change-123",
-        initialPrompt: undefined,
-      }),
-    ).resolves.toEqual({ ok: true, host: "herdr", status: "started" });
-    expect(renameAttempts).toBe(2);
-  });
-
-  it("preserves evidence when Pi exits before naming", async () => {
-    let paneStarted = false;
-    const execute: HerdrCommandExecutor = async (args) => {
-      if (args[0] === "agent" && args[1] === "list") {
-        return paneStarted
-          ? {
-              ok: true,
-              stdout:
-                '{"result":{"type":"agent_list","agents":[{"name":"pi","cwd":"/workspace/change-123","pane_id":"workspace-1:pane-1","agent_status":"done"}]}}',
-            }
-          : { ok: true, stdout: '{"result":{"type":"agent_list","agents":[]}}' };
-      }
-      if (args[0] === "worktree") {
-        return {
-          ok: true,
-          stdout:
-            '{"result":{"type":"worktree_opened","workspace":{"workspace_id":"workspace-1"},"root_pane":{"pane_id":"workspace-1:pane-1"},"already_open":false}}',
-        };
-      }
-      if (args[0] === "pane" && args[1] === "run") {
-        paneStarted = true;
-        return { ok: true, stdout: "{}" };
-      }
-      if (args[0] === "pane" && args[1] === "read") {
-        return { ok: false, message: "pane no-such-pane not found" };
-      }
-      if (args[0] === "pane" && args[1] === "process-info") {
-        return { ok: false, message: "pane_not_found" };
-      }
-      return { ok: true, stdout: "{}" };
-    };
-
-    await expect(
-      openHerdrInteractiveSessionHost(execute).launch({
-        changeId: "change-123",
-        repositoryPath: "/repository",
-        worktreePath: "/workspace/change-123",
-        initialPrompt: undefined,
-      }),
-    ).resolves.toMatchObject({
+    await expect(openHerdrInteractiveSessionHost(execute).launch(input)).resolves.toMatchObject({
       ok: false,
-      code: "launch_failed",
-      evidence: {
-        exitEvidence: "Herdr process inspection failed: pane_not_found",
-      },
+      code: "launch_indeterminate",
     });
-  });
-
-  it("does not retry an uncertain pane run and preserves early-exit evidence", async () => {
-    const commands: string[][] = [];
-    const execute: HerdrCommandExecutor = async (args) => {
-      commands.push([...args]);
-      if (args[0] === "agent" && args[1] === "list") {
-        return { ok: true, stdout: '{"result":{"type":"agent_list","agents":[]}}' };
-      }
-      if (args[0] === "worktree") {
-        return {
-          ok: true,
-          stdout:
-            '{"result":{"type":"worktree_opened","workspace":{"workspace_id":"workspace-1"},"root_pane":{"pane_id":"workspace-1:pane-1"},"already_open":false}}',
-        };
-      }
-      if (args[0] === "pane" && args[1] === "run") return new Promise(() => {});
-      if (args[0] === "pane" && args[1] === "read")
-        return { ok: false, message: "pane no-such-pane not found" };
-      if (args[0] === "pane" && args[1] === "process-info")
-        return { ok: false, message: "pane_not_found" };
-      return { ok: true, stdout: "{}" };
-    };
-
-    await expect(
-      openHerdrInteractiveSessionHost(execute, {
-        commandTimeoutMs: 5,
-        readinessTimeoutMs: 20,
-        readinessPollMs: 1,
-      }).launch({
-        changeId: "change-123",
-        repositoryPath: "/repository",
-        worktreePath: "/workspace/change-123",
-        initialPrompt: undefined,
-      }),
-    ).resolves.toEqual({
-      ok: false,
-      code: "launch_failed",
-      message: expect.stringContaining("exited during startup"),
-      evidence: {
-        startupOutput: "Herdr pane read failed: pane no-such-pane not found",
-        exitEvidence: "Herdr process inspection failed: pane_not_found",
-      },
-    });
-    expect(
-      commands.filter(([command, operation]) => command === "pane" && operation === "run"),
-    ).toHaveLength(1);
-  });
-
-  it.each([
-    ["cannot reach Herdr", unavailableHerdr, "host_unavailable"],
-    ["cannot open the worktree", workspaceFailure, "launch_failed"],
-  ] as const)("returns retryable failure when it %s", async (_name, execute, code) => {
-    await expect(
-      openHerdrInteractiveSessionHost(execute).launch({
-        changeId: "change-123",
-        repositoryPath: "/repository",
-        worktreePath: "/workspace/change-123",
-        initialPrompt: undefined,
-      }),
-    ).resolves.toMatchObject({ ok: false, code });
+    expect(commands.filter((args) => args[0] === "agent" && args[1] === "prompt")).toHaveLength(1);
+    expect(commands.at(-1)).toEqual(["agent", "list"]);
   });
 });

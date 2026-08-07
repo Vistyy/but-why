@@ -105,27 +105,24 @@ Do not repeat the Change ID, Task ID, Change state, Managed Worktree path, Task 
 If a fact requires durable authority, record it through the applicable Task or Change operation instead.
 Do not include sensitive information.
 
-Resolve `scripts/start-implementer-session.mjs` relative to this skill directory.
-For a Task-backed Change, run it with `--task-id <task-id>`.
-The script reads the Task, reuses its linked Change or starts one, then derives and verifies the exact open Change and Managed Worktree.
-For an explicitly authorized fresh taskless Implementer Interactive Session, run it with `--change-id <change-id>`.
-When no Implementer Prompt is needed, run the script with empty standard input.
-When an Implementer Prompt is needed, pipe only that Markdown to the script with the runner that matches the resolved But Why command prefix.
+Use Change Implement with the selected open Change ID.
+Use the resolved But Why command prefix for the command.
+When no Implementer Prompt is needed, omit `--implementer-prompt-file`.
+When an Implementer Prompt is needed, provide its UTF-8 Markdown file with `--implementer-prompt-file <path>`.
 
 ```sh
-node <skill-directory>/scripts/start-implementer-session.mjs \
-  --runner <just|pnpx|npx> \
-  --task-id <task-id> </dev/null
+<but-why> change implement <change-id> [--implementer-prompt-file <path>]
 ```
 
-The script verifies the exact Change and Managed Worktree before it runs Change Implement and after launch.
-Accept `started`, `already_active`, or `late_active` only when `changeVerified` is `true`.
-`started` confirms But Why dispatch and the named Interactive Session, but it does not confirm that Pi is active or ready.
-For any other result, report the structured result and diagnostic paths, then stop.
-Do not retry an indeterminate launch.
+Change Implement opens or reuses the Managed Worktree workspace.
+It starts a named Pi agent through Herdr and submits the initial Change handoff through Herdr.
+A successful `started` result confirms that Herdr accepted both native agent readiness and the initial prompt.
+`already_active` means that an active named agent was reused without another start or prompt.
+For `launch_indeterminate`, inspect the existing Herdr session before taking any recovery action.
+Do not retry an uncertain start or initial prompt.
 Keep the current session open.
 
-This section is complete when the script reports an accepted Implementer Interactive Session result with `changeVerified: true`.
+This section is complete when Change Implement reports `started` or `already_active` for the exact Change.
 
 ## Command templates
 

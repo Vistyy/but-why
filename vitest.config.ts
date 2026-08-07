@@ -1,15 +1,8 @@
 import { configDefaults, defineConfig } from "vitest/config";
 
-import { completeOnlyTestFiles, smokeOrManualTestFiles } from "./test/suiteSchedule.js";
+import { completeOnlyTestFiles } from "./test/suiteSchedule.js";
 
 const sandcastleWorkspaceGlob = ".sandcastle/**";
-const manualDiagnosticGlob = smokeOrManualTestFiles[0];
-// The real Herdr smoke check is a manual, non-blocking diagnostic.
-// Maintained suites exclude it unless the documented manual command sets
-// BY_MANUAL_DIAGNOSTICS=1 so live Herdr is never required by blocking evidence.
-const includeManualDiagnostics = process.env.BY_MANUAL_DIAGNOSTICS === "1";
-const manualDiagnosticExcludes = includeManualDiagnostics ? [] : [manualDiagnosticGlob];
-
 // Complete-only files require focused external evidence.
 // The routine quality suite excludes this explicit list; the complete
 // quality suite includes it. Scheduling never derives evidence from a
@@ -28,16 +21,10 @@ const suiteSelection =
             ".direnv/**",
             sandcastleWorkspaceGlob,
             ...completeOnlyTestFiles,
-            ...manualDiagnosticExcludes,
           ],
         }
       : {
-          exclude: [
-            ...configDefaults.exclude,
-            ".direnv/**",
-            sandcastleWorkspaceGlob,
-            ...manualDiagnosticExcludes,
-          ],
+          exclude: [...configDefaults.exclude, ".direnv/**", sandcastleWorkspaceGlob],
         };
 
 export default defineConfig({

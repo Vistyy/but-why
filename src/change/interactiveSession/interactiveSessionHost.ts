@@ -1,4 +1,3 @@
-import type { AgentEnvironmentCommand } from "../../agent/agentEnvironment.js";
 import type { InteractiveSessionAgentProfile } from "../../agent/agentProfiles.js";
 
 export type InteractiveSessionHost = {
@@ -14,11 +13,10 @@ export type InteractiveSessionLaunchInput = {
   readonly agentSessionName?: string;
   readonly repositoryPath: string;
   readonly worktreePath: string;
-  readonly systemPrompt?: string;
+  readonly systemPromptPaths: readonly [string, string];
   readonly initialPrompt: string | undefined;
   readonly agentProfile?: InteractiveSessionAgentProfile;
   readonly globalConfigDirectory?: string;
-  readonly agentEnvironment?: AgentEnvironmentCommand;
 };
 
 export type InteractiveSessionLaunchResult =
@@ -31,10 +29,4 @@ export type InteractiveSessionLaunchResult =
       readonly ok: false;
       readonly code: "host_unavailable" | "launch_failed" | "launch_indeterminate";
       readonly message: string;
-      readonly evidence?: InteractiveSessionLaunchEvidence;
     };
-
-export type InteractiveSessionLaunchEvidence = {
-  readonly startupOutput?: string;
-  readonly exitEvidence?: string;
-};

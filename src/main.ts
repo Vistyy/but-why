@@ -15,12 +15,6 @@ const args = process.argv.slice(2);
 // biome-ignore lint/complexity/useLiteralKeys: TS index signature
 const fixedNow = process.env["BUT_WHY_NOW"];
 
-const interactiveSessionPath = () => {
-  // biome-ignore lint/complexity/useLiteralKeys: NodeJS.ProcessEnv has an index signature.
-  const path = process.env["PATH"];
-  return path === undefined ? {} : { interactiveSessionPath: path };
-};
-
 Effect.runPromise(
   runCli(args, {
     executablePath,
@@ -29,7 +23,6 @@ Effect.runPromise(
     now: fixedNow === undefined ? () => new Date() : () => new Date(fixedNow),
     stdin: { fd: 0, isTerminal: process.stdin.isTTY === true },
     writeStderr: (message) => process.stderr.write(message),
-    ...interactiveSessionPath(),
   }),
 )
   .then((result) => {

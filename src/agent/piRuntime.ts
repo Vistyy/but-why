@@ -54,23 +54,23 @@ export const validatePiAgentProfileResources = (
   return { ok: true };
 };
 
-export const piResourceFlags = (
+export const piResourceArgs = (
   runtimeConfig: PiRuntimeConfig | undefined,
   context: PiRuntimeResourceContext,
   options: {
     readonly reviewerHygiene?: boolean;
     readonly trustedExtensions?: readonly string[];
   } = {},
-): string => {
-  const flags: string[] = [];
-  if (options.reviewerHygiene === true) flags.push("--no-prompt-templates", "--no-themes");
+): readonly string[] => {
+  const args: string[] = [];
+  if (options.reviewerHygiene === true) args.push("--no-prompt-templates", "--no-themes");
 
   const trustedExtensions = options.trustedExtensions ?? [];
   const configuredExtensions =
     runtimeConfig?.extensions?.map((extension) =>
       canonicalizeExistingPath(resolvePiResource(extension, context)),
     ) ?? [];
-  if (runtimeConfig?.extensions !== undefined) flags.push("--no-extensions");
+  if (runtimeConfig?.extensions !== undefined) args.push("--no-extensions");
   const extensions: string[] = [];
   const seenExtensionPaths = new Set<string>();
   for (const extension of [
@@ -81,23 +81,35 @@ export const piResourceFlags = (
     seenExtensionPaths.add(extension);
     extensions.push(extension);
   }
-  for (const extension of extensions) flags.push("--extension", shellQuote(extension));
+  for (const extension of extensions) args.push("--extension", extension);
 
   if (runtimeConfig?.skills !== undefined) {
-    flags.push("--no-skills");
+    args.push("--no-skills");
     for (const skill of runtimeConfig.skills) {
-      flags.push("--skill", shellQuote(resolvePiResource(skill, context)));
+      args.push("--skill", resolvePiResource(skill, context));
     }
   }
 
   if (runtimeConfig?.tools !== undefined) {
-    flags.push("--tools", shellQuote(runtimeConfig.tools.join(",")));
+    args.push("--tools", runtimeConfig.tools.join(","));
   }
 
-  if (runtimeConfig?.contextFileDiscovery === false) flags.push("--no-context-files");
+  if (runtimeConfig?.contextFileDiscovery === false) args.push("--no-context-files");
 
-  return flags.join(" ");
+  return args;
 };
+
+export const piResourceFlags = (
+  runtimeConfig: PiRuntimeConfig | undefined,
+  context: PiRuntimeResourceContext,
+  options: {
+    readonly reviewerHygiene?: boolean;
+    readonly trustedExtensions?: readonly string[];
+  } = {},
+): string =>
+  piResourceArgs(runtimeConfig, context, options)
+    .map((argument) => (argument.startsWith("--") ? argument : shellQuote(argument)))
+    .join(" ");
 
 const resolveLocalPiResource = (
   source: string,

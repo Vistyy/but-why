@@ -35,7 +35,6 @@ export const withChangeUseCases = <A, E, R>(
     readonly cwd: string;
     readonly globalConfigPath: string;
     readonly interactiveSessionHost?: InteractiveSessionHost;
-    readonly interactiveSessionPath?: string;
   },
   use: (changes: ChangeUseCases) => Effect.Effect<A, E, R>,
 ): Effect.Effect<WithChangeUseCasesResult<A>, E | RepositoryStorageError, R> => {
@@ -86,12 +85,7 @@ export const withChangeUseCases = <A, E, R>(
               }),
             }),
           }),
-          input.interactiveSessionHost ??
-            openHerdrInteractiveSessionHost(undefined, {
-              ...(input.interactiveSessionPath === undefined
-                ? {}
-                : { path: input.interactiveSessionPath }),
-            }),
+          input.interactiveSessionHost ?? openHerdrInteractiveSessionHost(),
           input.globalConfigPath,
         ),
       ),

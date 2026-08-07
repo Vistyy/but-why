@@ -77,16 +77,6 @@ Fallow and ast-grep own their named structural contracts.
 `just health` produces advisory coverage, complexity, duplication, and code-health reports.
 Advisory findings become implementation work only when repository evidence shows a concrete defect or maintenance cost.
 
-## Manual diagnostics
-
-The following operations are manual and non-blocking.
-They do not block the routine or complete quality suites and remain available as targeted commands.
-
-- A real Herdr smoke check verifies that `by change implement` can open an existing ready Managed Worktree under its stable session name.
-  The check is excluded from the routine and complete quality suites and never blocks them.
-  Start Herdr, point `HERDR_SMOKE_WORKTREE` at an existing ready Managed Worktree, point `HERDR_SMOKE_REPOSITORY` at that Worktree's repository, optionally point `HERDR_SMOKE_PATH` at the Herdr executable path, then run `BY_MANUAL_DIAGNOSTICS=1 just test test/agent/herdr-smoke.test.ts`.
-  The captured Herdr host tests own launch classification and recovery; this check is an optional live-environment confirmation.
-
 ## CLI loading verification
 
 The production CLI keeps the complete Effect CLI descriptor tree in `src/cliCommandTree.ts` and loads command implementations through literal native dynamic imports after command selection.

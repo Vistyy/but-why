@@ -7,7 +7,6 @@ import {
   assertValidSchedule,
   completeOnlyTestFiles,
   scheduleErrors,
-  smokeOrManualTestFiles,
 } from "../suiteSchedule.js";
 
 const repositoryRoot = resolve(import.meta.dirname, "../..");
@@ -26,24 +25,18 @@ const actualMaintainedTestFiles = [...maintainedTestFiles(testRoot)].sort();
 const baseSchedule = {
   maintainedTestFiles: actualMaintainedTestFiles,
   completeOnlyTestFiles,
-  smokeOrManualTestFiles,
   approvedCompleteOnlyTestFiles,
 };
 
 describe("maintained test scheduling", () => {
-  test("assigns every maintained test exactly one complete-only, smoke or manual, or derived routine owner", () => {
+  test("assigns every maintained test exactly one complete-only or derived routine owner", () => {
     assertValidSchedule(baseSchedule);
 
     const completeOnly = new Set<string>(completeOnlyTestFiles);
-    const smokeOrManual = new Set<string>(smokeOrManualTestFiles);
-    const routine = actualMaintainedTestFiles.filter(
-      (file) => !completeOnly.has(file) && !smokeOrManual.has(file),
-    );
+    const routine = actualMaintainedTestFiles.filter((file) => !completeOnly.has(file));
 
     expect(new Set(actualMaintainedTestFiles).size).toBe(actualMaintainedTestFiles.length);
-    expect(new Set([...completeOnly, ...smokeOrManual, ...routine]).size).toBe(
-      actualMaintainedTestFiles.length,
-    );
+    expect(new Set([...completeOnly, ...routine]).size).toBe(actualMaintainedTestFiles.length);
     expect(routine).not.toContain("test/change/change-implement-main-checkout-failure.test.ts");
     expect(completeOnlyTestFiles).toContain(
       "test/change/change-implement-main-checkout-failure.test.ts",
@@ -66,10 +59,6 @@ describe("maintained test scheduling", () => {
     [
       "duplicate entry",
       { completeOnlyTestFiles: [...completeOnlyTestFiles, completeOnlyTestFiles[0]] },
-    ],
-    [
-      "smoke or manual ownership conflict",
-      { completeOnlyTestFiles: [...completeOnlyTestFiles, smokeOrManualTestFiles[0]] },
     ],
   ] as const)("rejects a %s", (_reason, change) => {
     const errors = scheduleErrors({ ...baseSchedule, ...change });

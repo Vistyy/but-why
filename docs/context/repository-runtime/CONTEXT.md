@@ -39,10 +39,11 @@ Existing Migration Artifacts are immutable, and a schema change adds the next Mi
 _Avoid_: Migration file, migration script, editable migration
 
 **Agent Environment**:
-The optional command wrapper read from Repo Config that starts each host-run Implementer and reviewer with the repository's required development tools.
-The same Agent Environment applies in the Managed Worktree and in a host-run Validation Workspace.
+The optional command wrapper read from Repo Config that starts each headless reviewer with the repository's required development tools.
+Interactive Sessions use the Herdr pane shell environment instead of this wrapper.
+The Agent Environment applies in a headless Validation Workspace.
 It does not alter Repository Preparation or Checks.
-If the configured wrapper fails, But Why stops the agent operation without an unwrapped retry.
+If the configured wrapper fails, But Why stops the reviewer operation without an unwrapped retry.
 _Avoid_: Interactive Session Environment, Reviewer Environment, Caller-checkout config, Global Config preference, Repository Preparation, Herdr configuration
 
 **Repository Preparation**:
