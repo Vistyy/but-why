@@ -90,30 +90,44 @@ describe("Validation Workspace scoped lifecycle", () => {
     "fails without retrying removal when close remains in flight at the cleanup limit",
     () =>
       Effect.gen(function* () {
-        const events: string[] = [];
-        const createValidationWorkspace = yield* Effect.promise(() =>
-          loadCreateValidationWorkspace(events, { neverFinishClose: true }),
-        );
-        const fiber = yield* Effect.fork(createValidationWorkspace(input));
-        const result = yield* Fiber.join(fiber);
+        vi.useFakeTimers();
+        try {
+          const events: string[] = [];
+          let resolveCloseStarted: () => void = () => {};
+          const closeStarted = new Promise<void>((resolve) => {
+            resolveCloseStarted = resolve;
+          });
+          const createValidationWorkspace = yield* Effect.promise(() =>
+            loadCreateValidationWorkspace(events, {
+              neverFinishClose: true,
+              onCloseStarted: resolveCloseStarted,
+            }),
+          );
+          const fiber = yield* Effect.fork(createValidationWorkspace(input));
+          yield* Effect.promise(() => closeStarted);
+          vi.advanceTimersByTime(30_000);
+          const result = yield* Fiber.join(fiber);
 
-        expect(result).toMatchObject({
-          ok: false,
-          toolingError: {
-            operationName: "cleanup_validation_workspace",
-            cleanupResult: {
-              worktree: "failed",
-              tempRef: "removed",
+          expect(result).toMatchObject({
+            ok: false,
+            toolingError: {
+              operationName: "cleanup_validation_workspace",
+              cleanupResult: {
+                worktree: "failed",
+                tempRef: "removed",
+              },
             },
-          },
-        });
-        expect(events).toEqual([
-          "acquire:temp_ref",
-          "acquire:worktree",
-          "read:worktree_head",
-          "close:worktree",
-          "release:temp_ref",
-        ]);
+          });
+          expect(events).toEqual([
+            "acquire:temp_ref",
+            "acquire:worktree",
+            "read:worktree_head",
+            "close:worktree",
+            "release:temp_ref",
+          ]);
+        } finally {
+          vi.useRealTimers();
+        }
       }),
     45_000,
   );
@@ -573,6 +587,7 @@ type FakeOptions = {
   readonly worktreeCreationFailure?: string;
   readonly neverFinishWorktreeCreation?: boolean;
   readonly neverFinishClose?: boolean;
+  readonly onCloseStarted?: () => void;
   readonly closeDelayMs?: number;
   readonly onWorktreeAcquired?: () => void;
   readonly worktreeHead?: string;
@@ -609,6 +624,7 @@ const loadCreateValidationWorkspace = async (
         worktreePath: expectedWorktreePath,
         close: async () => {
           events.push("close:worktree");
+          options.onCloseStarted?.();
           if (options.neverFinishClose) {
             await new Promise(() => {});
           }
