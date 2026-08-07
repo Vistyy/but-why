@@ -115,7 +115,8 @@ They identified these current costs:
 - But Why must locate the session JSONL itself because host-run results can omit its path.
 - But Why rewrites the Pi session header before resume because a continued session retains the removed Validation Workspace path.
 - Sandcastle host session lookup can select the first duplicate session ID rather than an authoritative file.
-- Host cancellation does not prove that the complete Pi process tree stopped.
+- Sandcastle `0.12.0` host cancellation can abandon an in-flight `noSandbox()` command without stopping its child process, so it does not prove that the complete Pi process tree stopped.
+- But Why's executable entry does not translate host termination signals into Effect interruption, so scoped process cleanup is not guaranteed before exit.
 - Sandcastle controls placement under `.sandcastle/worktrees/`, which requires repository-wide exclusions.
 - `noSandbox()` workspace setup can add `safe.directory` entries to the user's global Git configuration.
 - Sandcastle does not provide trustworthy Pi token or monetary usage.
@@ -176,6 +177,7 @@ Replacing Sandcastle with current behavior requires this complete set:
 
 1. A Validation Workspace Adapter creates the Git worktree on But Why's temporary ref, copies allowlisted files, returns its path, and removes it.
 2. A Command Execution Adapter runs preparation, Checks, and Git integrity commands in that workspace, handles cancellation, and reports whether process termination is proved.
+   The executable entry must translate supported host termination signals into Effect interruption so the Adapter can stop its supervised process group and complete scoped cleanup before exit.
 3. A Pi Reviewer Adapter resolves the model and resources, starts or resumes one Change-owned session, collects the reviewer result, performs the correction attempt, and returns session and usage evidence.
 4. The Validation Workspace scope composes those Adapters behind one `exec`, reviewer-run, and `close` handle so existing Validation Gate phases do not learn provider details.
 5. Migration removes Sandcastle types, failure names, `.sandcastle` path assumptions, ignore rules, tests, documentation, and the package dependency after equivalent conformance tests pass.
