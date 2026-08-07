@@ -1,15 +1,74 @@
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, readFileSync } from "node:fs";
+import { delimiter, join } from "node:path";
 import { expect, it } from "@effect/vitest";
 import { Cause, Effect, Exit } from "effect";
 import { describe } from "vitest";
 import type { RecordCandidateValidationCheckRoundInput } from "../../src/change/candidateValidation/candidateValidationRunStore.js";
 import { runCheckPhase } from "../../src/change/validation/runCheckRound.js";
+import { runTestProcess, runTestProcessOrThrow } from "../support/testProcess.js";
 import { createTestWorkspace } from "../support/testWorkspace.js";
 
 const now = "2026-06-30T12:00:00.000Z";
 
 describe("check round Findings", () => {
+  it.effect(
+    "fails as Validation Tooling Failure when the timeout utility is unavailable before the Check starts",
+    () =>
+      Effect.gen(function* () {
+        const workspace = createTestWorkspace();
+        const marker = join(workspace, "check-started");
+        const shPath = runTestProcessOrThrow("sh", ["-c", "command -v sh"], { cwd: workspace });
+        const restrictedPath = (process.env["PATH"] ?? "")
+          .split(delimiter)
+          .filter((entry) => entry !== "" && !existsSync(join(entry, "timeout")))
+          .join(delimiter);
+
+        expect(
+          runTestProcess(shPath, ["-c", "command -v timeout"], {
+            cwd: workspace,
+            env: { PATH: restrictedPath },
+          }).status,
+        ).not.toBe(0);
+        expect(
+          runTestProcess(shPath, ["-c", "printf ok"], {
+            cwd: workspace,
+            env: { PATH: restrictedPath },
+          }).status,
+        ).toBe(0);
+
+        const exit = yield* Effect.exit(
+          runCheckPhase({
+            validationRunId: "candidate-run",
+            checks: [{ id: "quality", command: `printf started > '${marker}'`, timeoutSeconds: 1 }],
+            artifactsRoot: createTestWorkspace(),
+            now,
+            sandbox: {
+              exec: async (command, options) => {
+                const result = runTestProcess(shPath, ["-c", command], {
+                  cwd: options?.cwd ?? workspace,
+                  env: { PATH: restrictedPath },
+                });
+                return {
+                  exitCode: result.status ?? 0,
+                  stdout: result.stdout,
+                  stderr: result.stderr,
+                };
+              },
+            },
+            recordCheckRound: () => Effect.void,
+          }),
+        );
+
+        expect(Exit.isFailure(exit)).toBe(true);
+        if (Exit.isFailure(exit)) {
+          expect(Cause.pretty(exit.cause)).toContain(
+            "Could not find timeout command for check quality.",
+          );
+        }
+        expect(existsSync(marker)).toBe(false);
+      }),
+  );
+
   it.effect("records every configured Check after failures when continuation is enabled", () =>
     Effect.gen(function* () {
       const recordedRounds: RecordCandidateValidationCheckRoundInput[] = [];

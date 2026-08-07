@@ -53,6 +53,70 @@ it.scoped("preserves terminal Task policy", () => {
   );
 });
 
+it.scoped(
+  "orders actionable Tasks new before todo, newer updated time first, then numeric ID",
+  () => {
+    return withTemporaryRepositoryState(() =>
+      Effect.gen(function* () {
+        const tasks = yield* openSqliteTaskPersistence("BY");
+        const repository = yield* RepositorySql;
+
+        yield* tasks.createTask({
+          title: "Todo oldest",
+          description: "Todo oldest",
+          now: firstNow,
+        });
+        yield* tasks.createTask({
+          title: "Todo newest",
+          description: "Todo newest",
+          now: firstNow,
+        });
+        yield* tasks.createTask({ title: "New tied A", description: "New tied A", now: firstNow });
+        yield* tasks.createTask({ title: "New middle", description: "New middle", now: firstNow });
+        yield* tasks.createTask({ title: "New tied B", description: "New tied B", now: firstNow });
+        yield* tasks.createTask({ title: "Done", description: "Done", now: firstNow });
+        yield* tasks.createTask({ title: "Cancelled", description: "Cancelled", now: firstNow });
+
+        yield* repository.operation(
+          "set actionable Task fixture states and timestamps",
+          (sql) => sql`
+          UPDATE tasks SET
+            state = CASE id
+              WHEN 'BY-1' THEN 'todo'
+              WHEN 'BY-2' THEN 'todo'
+              WHEN 'BY-3' THEN 'new'
+              WHEN 'BY-4' THEN 'new'
+              WHEN 'BY-5' THEN 'new'
+              WHEN 'BY-6' THEN 'done'
+              WHEN 'BY-7' THEN 'cancelled'
+            END,
+            updated_at = CASE id
+              WHEN 'BY-1' THEN ${firstNow}
+              WHEN 'BY-2' THEN ${thirdNow}
+              WHEN 'BY-3' THEN ${thirdNow}
+              WHEN 'BY-4' THEN ${secondNow}
+              WHEN 'BY-5' THEN ${thirdNow}
+              WHEN 'BY-6' THEN ${thirdNow}
+              WHEN 'BY-7' THEN ${thirdNow}
+            END
+          WHERE id IN ('BY-1', 'BY-2', 'BY-3', 'BY-4', 'BY-5', 'BY-6', 'BY-7')
+        `,
+        );
+
+        const actionable = yield* tasks.listActionableTasks();
+        expect(actionable.map(({ id, state, updatedAt }) => ({ id, state, updatedAt }))).toEqual([
+          { id: "BY-3", state: "new", updatedAt: thirdNow },
+          { id: "BY-5", state: "new", updatedAt: thirdNow },
+          { id: "BY-4", state: "new", updatedAt: secondNow },
+          { id: "BY-2", state: "todo", updatedAt: thirdNow },
+          { id: "BY-1", state: "todo", updatedAt: firstNow },
+        ]);
+        expect(actionable.some(({ id }) => id === "BY-6" || id === "BY-7")).toBe(false);
+      }),
+    );
+  },
+);
+
 it.scoped("bounds Task lists after filtering and preserves the matching total", () => {
   return withTemporaryRepositoryState(() =>
     Effect.gen(function* () {

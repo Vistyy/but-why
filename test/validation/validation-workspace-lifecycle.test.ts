@@ -400,6 +400,80 @@ describe("Validation Workspace scoped lifecycle", () => {
     }),
   );
 
+  it.scoped(
+    "rejects a freshly created Validation Workspace whose HEAD differs from the Candidate head",
+    () =>
+      Effect.gen(function* () {
+        const events: string[] = [];
+        const createValidationWorkspace = yield* Effect.promise(() =>
+          loadCreateValidationWorkspace(events, { worktreeHead: "different-commit" }),
+        );
+
+        const result = yield* createValidationWorkspace(input);
+
+        expect(result).toMatchObject({
+          ok: false,
+          toolingError: {
+            operationName: "create_sandcastle_workspace",
+            errorMessage: `Validation worktree HEAD different-commit did not match submitted SHA ${input.submittedSha}.`,
+            cleanupResult: {
+              worktree: "removed",
+              tempRef: "removed",
+            },
+          },
+        });
+        expect(events).toEqual([
+          "acquire:temp_ref",
+          "acquire:worktree",
+          "read:worktree_head",
+          "close:worktree",
+          "remove:worktree",
+          "release:temp_ref",
+        ]);
+      }),
+  );
+
+  it.scoped("does not report a passed run when cleanup fails after successful workspace use", () =>
+    Effect.gen(function* () {
+      const events: string[] = [];
+      let phasesRan = false;
+      const createValidationWorkspace = yield* Effect.promise(() =>
+        loadCreateValidationWorkspace(events, { worktreeCleanup: "failed" }),
+      );
+
+      const result = yield* createValidationWorkspace({
+        ...input,
+        runInWorkspace: (workspace) =>
+          Effect.sync(() => {
+            phasesRan = true;
+            expect(workspace.worktreePath).toBe(expectedWorktreePath);
+            return { validationFindings: 0 as const };
+          }),
+      });
+
+      expect(phasesRan).toBe(true);
+      expect(result).toMatchObject({
+        ok: false,
+        toolingError: {
+          operationName: "cleanup_validation_workspace",
+          errorMessage: "Validation workspace cleanup failed after successful setup.",
+          cleanupResult: {
+            worktree: "failed",
+            tempRef: "removed",
+          },
+        },
+      });
+      expect(events).toEqual([
+        "acquire:temp_ref",
+        "acquire:worktree",
+        "read:worktree_head",
+        "close:worktree",
+        "remove:worktree",
+        "release:temp_ref",
+      ]);
+    }),
+  );
+
   it.scoped("runs acquired-resource cleanup when the workflow defects", () =>
     Effect.gen(function* () {
       const events: string[] = [];
@@ -434,6 +508,7 @@ type FakeOptions = {
   readonly worktreeCreationFailure?: string;
   readonly neverFinishWorktreeCreation?: boolean;
   readonly onWorktreeAcquired?: () => void;
+  readonly worktreeHead?: string;
   readonly worktreeHeadFailure?: boolean;
   readonly worktreeCleanup?: "removed" | "failed";
   readonly worktreeDisappearsAfterFailedRemoval?: boolean;
@@ -476,7 +551,11 @@ const loadCreateValidationWorkspace = async (
             throw new Error("boom");
           }
 
-          return { exitCode: 0, stdout: `${input.submittedSha}\n`, stderr: "" };
+          return {
+            exitCode: 0,
+            stdout: `${options.worktreeHead ?? input.submittedSha}\n`,
+            stderr: "",
+          };
         },
       };
     },
