@@ -126,6 +126,7 @@ A replacement must preserve exact Candidate binding, integrity checks, bounded c
 ## Validation Workspace cleanup limits
 
 But Why owns a finite 30-second limit for the original Sandcastle `Sandbox.close()` operation.
+The Git Adapter uses the same finite limit for worktree removal and registration verification.
 The limit is longer than the former five-second limit so a clean workspace that Sandcastle removes slowly can still complete cleanup.
 
 The timeout does not cancel Sandcastle's promise.

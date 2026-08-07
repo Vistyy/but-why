@@ -4,7 +4,7 @@ import { resolve } from "node:path";
 import type { CleanupState } from "../validationRun/cleanup.js";
 
 const zeroSha = "0000000000000000000000000000000000000000";
-const validationGitOperationTimeoutMs = 5_000;
+const validationGitOperationTimeoutMs = 30_000;
 
 export const ensureValidationTempRef = (
   repoRoot: string,
