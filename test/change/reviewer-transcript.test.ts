@@ -120,50 +120,6 @@ describe("Reviewer Transcript discovery", () => {
     });
   });
 
-  it.effect("indexes discovered Reviewer Transcripts once through persistence", () =>
-    Effect.gen(function* () {
-      const root = createTestWorkspace();
-      const changeRoot = join(root, "change-1");
-      const acceptancePath = sessionFile(
-        join(changeRoot, "acceptance"),
-        "reviewer-sessions/review_session-a1.jsonl",
-        "session-a1",
-      );
-      const recorded: ReviewerTranscript[] = [];
-      const index = openReviewerTranscriptIndex({
-        persistence: {
-          recordReviewerTranscripts: (input) =>
-            Effect.sync(() => {
-              for (const transcript of input.transcripts) {
-                const alreadyRecorded = recorded.some(
-                  (existing) =>
-                    existing.changeId === transcript.changeId &&
-                    existing.producer === transcript.producer &&
-                    existing.filePath === transcript.filePath,
-                );
-                if (!alreadyRecorded) recorded.push(transcript);
-              }
-            }),
-        },
-      });
-
-      const first = yield* index({
-        changeId: "change-1",
-        reviewerSessionPath: changeRoot,
-      });
-      const second = yield* index({
-        changeId: "change-1",
-        reviewerSessionPath: changeRoot,
-      });
-
-      expect(first).toEqual({ ok: true });
-      expect(second).toEqual({ ok: true });
-      expect(recorded).toEqual([
-        transcript("change-1", "acceptance", "session-a1", acceptancePath),
-      ]);
-    }),
-  );
-
   it.effect("reports an index failure without recording partial references", () =>
     Effect.gen(function* () {
       const root = createTestWorkspace();

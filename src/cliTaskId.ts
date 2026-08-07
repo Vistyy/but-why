@@ -1,5 +1,6 @@
 import type { CliResult } from "./cli.js";
 import { runtimeError, usageError } from "./cliResults.js";
+import type { RepoTaskIdResolution } from "./task/repoTaskIds.js";
 import {
   type PublicTaskId,
   type PublicTaskIdParseResult,
@@ -16,59 +17,6 @@ export type CliTaskIdParseResult =
       readonly result: CliResult;
     };
 
-type CliTaskIdResolution =
-  | {
-      readonly ok: true;
-      readonly taskId: PublicTaskId;
-    }
-  | {
-      readonly ok: false;
-      readonly code: "remote_tasks_not_supported";
-      readonly taskId: PublicTaskId;
-      readonly help: string;
-    };
-
-type UnknownExtraArgCode = "unknown_argument" | "unknown_flag";
-
-type CliTaskIdArgParseInput = {
-  readonly missingHelp: string;
-  readonly extraHelp: string;
-  readonly classifyExtraArg?: (arg: string) => UnknownExtraArgCode;
-};
-
-export const parseCliTaskIdArg = (
-  args: readonly string[],
-  input: CliTaskIdArgParseInput,
-): CliTaskIdParseResult => {
-  const [taskId, extraArg] = args;
-
-  if (taskId === undefined) {
-    return {
-      ok: false,
-      result: usageError({
-        code: "missing_task_id",
-        message: "Task ID is required.",
-        help: [input.missingHelp],
-      }),
-    };
-  }
-
-  if (extraArg !== undefined) {
-    const code = input.classifyExtraArg?.(extraArg) ?? "unknown_argument";
-
-    return {
-      ok: false,
-      result: usageError({
-        code,
-        message: `${code === "unknown_flag" ? "Unknown flag" : "Unknown argument"}: ${extraArg}`,
-        help: [input.extraHelp],
-      }),
-    };
-  }
-
-  return parseCliTaskIdValue(taskId);
-};
-
 export const parseCliTaskIdValue = (taskId: string): CliTaskIdParseResult => {
   const parsed = parsePublicTaskId(taskId);
 
@@ -80,7 +28,7 @@ export const parseCliTaskIdValue = (taskId: string): CliTaskIdParseResult => {
 };
 
 export const taskIdResolutionError = (
-  resolution: Extract<CliTaskIdResolution, { readonly ok: false }>,
+  resolution: Extract<RepoTaskIdResolution, { readonly ok: false }>,
 ): CliResult =>
   runtimeError({
     code: resolution.code,

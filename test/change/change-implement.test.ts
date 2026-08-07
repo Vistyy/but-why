@@ -766,6 +766,7 @@ describe("by change implement", () => {
         root,
         ["--json", "change", "implement", "change-1", "--implementer-prompt-file", "-"],
         now,
+        { stdin: { fd: -1, isTerminal: true } },
       );
 
       expect(result.status).toBe(2);

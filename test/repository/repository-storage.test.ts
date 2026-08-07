@@ -130,7 +130,7 @@ describe("repository SQL storage", () => {
           description: "Change Activity reports active work without Task state.",
           now: "2026-07-17T22:50:00.000Z",
         });
-        if (!created.ok) return;
+        if (!created.ok) throw new Error(`Task creation failed: ${created.code}`);
         const taskId = storedPublicTaskId(created.task.id);
         yield* tasks.approveTask({ taskId, now: "2026-07-17T22:51:00.000Z" });
 
@@ -145,7 +145,7 @@ describe("repository SQL storage", () => {
           taskId,
           now: "2026-07-17T22:52:00.000Z",
         });
-        if (!started.ok) return;
+        if (!started.ok) throw new Error(`Change Start failed: ${started.code}`);
 
         expect(yield* tasks.getTaskById(taskId)).toMatchObject({ state: "todo" });
         expect(yield* changes.getById(started.change.id)).toMatchObject({
@@ -167,7 +167,7 @@ describe("repository SQL storage", () => {
           description: "One unresolved row must be the active Blocker authority.",
           now: "2026-07-17T22:53:00.000Z",
         });
-        if (!created.ok) return;
+        if (!created.ok) throw new Error(`Task creation failed: ${created.code}`);
         const taskId = storedPublicTaskId(created.task.id);
         yield* tasks.approveTask({ taskId, now: "2026-07-17T22:54:00.000Z" });
         const started = yield* starts.create({
@@ -181,7 +181,7 @@ describe("repository SQL storage", () => {
           taskId,
           now: "2026-07-17T22:55:00.000Z",
         });
-        if (!started.ok) return;
+        if (!started.ok) throw new Error(`Change Start failed: ${started.code}`);
 
         const raised = yield* changes.raiseImplementationBlocker({
           changeId: started.change.id,
@@ -218,7 +218,7 @@ describe("repository SQL storage", () => {
           description: "One unresolved Implementation Blocker may exist for an open Change.",
           now: "2026-07-17T22:53:00.000Z",
         });
-        if (!created.ok) return;
+        if (!created.ok) throw new Error(`Task creation failed: ${created.code}`);
         const taskId = storedPublicTaskId(created.task.id);
         yield* tasks.approveTask({ taskId, now: "2026-07-17T22:54:00.000Z" });
         const started = yield* starts.create({
@@ -232,13 +232,13 @@ describe("repository SQL storage", () => {
           taskId,
           now: "2026-07-17T22:55:00.000Z",
         });
-        if (!started.ok) return;
+        if (!started.ok) throw new Error(`Change Start failed: ${started.code}`);
         const first = yield* changes.raiseImplementationBlocker({
           changeId: started.change.id,
           content: "Wait for approved intent.",
           now: "2026-07-17T22:56:00.000Z",
         });
-        if (!first.ok) return;
+        if (!first.ok) throw new Error(`Blocker creation failed: ${first.code}`);
 
         const duplicate = yield* changes.raiseImplementationBlocker({
           changeId: started.change.id,
@@ -270,7 +270,7 @@ describe("repository SQL storage", () => {
           description: "Publication and earlier passing evidence must not prevent a Blocker.",
           now: "2026-07-17T22:53:00.000Z",
         });
-        if (!created.ok) return;
+        if (!created.ok) throw new Error(`Task creation failed: ${created.code}`);
         const taskId = storedPublicTaskId(created.task.id);
         yield* tasks.approveTask({ taskId, now: "2026-07-17T22:54:00.000Z" });
         const started = yield* starts.create({
@@ -284,7 +284,7 @@ describe("repository SQL storage", () => {
           taskId,
           now: "2026-07-17T22:55:00.000Z",
         });
-        if (!started.ok) return;
+        if (!started.ok) throw new Error(`Change Start failed: ${started.code}`);
 
         const repository = yield* RepositorySql;
         yield* repository.operation("install published passing Candidate evidence", (sql) =>
@@ -344,7 +344,7 @@ describe("repository SQL storage", () => {
           description: "Resume implementation with approved intent.",
           now: "2026-07-17T23:02:00.000Z",
         });
-        if (!created.ok) return;
+        if (!created.ok) throw new Error(`Task creation failed: ${created.code}`);
         const taskId = storedPublicTaskId(created.task.id);
         yield* tasks.approveTask({ taskId, now: "2026-07-17T23:03:00.000Z" });
         const started = yield* starts.create({
@@ -358,13 +358,13 @@ describe("repository SQL storage", () => {
           taskId,
           now: "2026-07-17T23:04:00.000Z",
         });
-        if (!started.ok) return;
+        if (!started.ok) throw new Error(`Change Start failed: ${started.code}`);
         const raised = yield* changes.raiseImplementationBlocker({
           changeId: started.change.id,
           content: "Wait for approved intent.",
           now: "2026-07-17T23:05:00.000Z",
         });
-        if (!raised.ok) return;
+        if (!raised.ok) throw new Error(`Blocker creation failed: ${raised.code}`);
 
         const resolved = yield* changes.resolveImplementationBlocker({
           changeId: started.change.id,
@@ -409,13 +409,13 @@ describe("repository SQL storage", () => {
           worktreePath: join(input.commonDirectory, "worktrees", "by-1-taskless-blocker"),
           now: "2026-07-17T23:02:00.000Z",
         });
-        if (!started.ok) return;
+        if (!started.ok) throw new Error(`Change Start failed: ${started.code}`);
         const raised = yield* changes.raiseImplementationBlocker({
           changeId: started.change.id,
           content: "Wait for an operator decision.",
           now: "2026-07-17T23:03:00.000Z",
         });
-        if (!raised.ok) return;
+        if (!raised.ok) throw new Error(`Blocker creation failed: ${raised.code}`);
 
         const resolved = yield* changes.resolveImplementationBlocker({
           changeId: started.change.id,
@@ -451,7 +451,7 @@ describe("repository SQL storage", () => {
           worktreePath: join(input.commonDirectory, "worktrees", "by-1-no-blocker"),
           now: "2026-07-17T23:02:00.000Z",
         });
-        if (!started.ok) return;
+        if (!started.ok) throw new Error(`Change Start failed: ${started.code}`);
 
         const result = yield* changes.resolveImplementationBlocker({
           changeId: started.change.id,
@@ -481,7 +481,7 @@ describe("repository SQL storage", () => {
             description: "The linked Task mutation and Change close share one transaction.",
             now: "2026-07-17T22:55:00.000Z",
           });
-          if (!created.ok) return;
+          if (!created.ok) throw new Error(`Task creation failed: ${created.code}`);
           const taskId = storedPublicTaskId(created.task.id);
           yield* tasks.approveTask({ taskId, now: "2026-07-17T22:56:00.000Z" });
           const started = yield* starts.create({
@@ -495,7 +495,7 @@ describe("repository SQL storage", () => {
             taskId,
             now: "2026-07-17T22:57:00.000Z",
           });
-          if (!started.ok) return;
+          if (!started.ok) throw new Error(`Change Start failed: ${started.code}`);
 
           const repository = yield* RepositorySql;
           yield* repository.operation("inject linked Task cancellation failure", (sql) =>
@@ -539,7 +539,7 @@ describe("repository SQL storage", () => {
           description: "Observed facts must match current publication.",
           now: "2026-07-17T22:55:00.000Z",
         });
-        if (!created.ok) return;
+        if (!created.ok) throw new Error(`Task creation failed: ${created.code}`);
         const taskId = storedPublicTaskId(created.task.id);
         yield* tasks.approveTask({ taskId, now: "2026-07-17T22:56:00.000Z" });
         const started = yield* starts.create({
@@ -553,7 +553,7 @@ describe("repository SQL storage", () => {
           taskId,
           now: "2026-07-17T22:57:00.000Z",
         });
-        if (!started.ok) return;
+        if (!started.ok) throw new Error(`Change Start failed: ${started.code}`);
         const publication = {
           changeId: started.change.id,
           candidateId: "candidate-1",
@@ -638,7 +638,7 @@ describe("repository SQL storage", () => {
           description: "Only the current publication can complete.",
           now: "2026-07-17T22:55:00.000Z",
         });
-        if (!created.ok) return;
+        if (!created.ok) throw new Error(`Task creation failed: ${created.code}`);
         const taskId = storedPublicTaskId(created.task.id);
         yield* tasks.approveTask({ taskId, now: "2026-07-17T22:56:00.000Z" });
         const started = yield* starts.create({
@@ -652,7 +652,7 @@ describe("repository SQL storage", () => {
           taskId,
           now: "2026-07-17T22:57:00.000Z",
         });
-        if (!started.ok) return;
+        if (!started.ok) throw new Error(`Change Start failed: ${started.code}`);
         const target = {
           owner: "acme",
           repo: "widgets",
@@ -744,7 +744,7 @@ describe("repository SQL storage", () => {
           description: "Change and Task terminal writes commit together.",
           now: "2026-07-17T22:55:00.000Z",
         });
-        if (!created.ok) return;
+        if (!created.ok) throw new Error(`Task creation failed: ${created.code}`);
         const taskId = storedPublicTaskId(created.task.id);
         yield* tasks.approveTask({ taskId, now: "2026-07-17T22:56:00.000Z" });
         const started = yield* starts.create({
@@ -758,7 +758,7 @@ describe("repository SQL storage", () => {
           taskId,
           now: "2026-07-17T22:57:00.000Z",
         });
-        if (!started.ok) return;
+        if (!started.ok) throw new Error(`Change Start failed: ${started.code}`);
         const publication = {
           changeId: started.change.id,
           candidateId: "candidate-1",
@@ -834,7 +834,7 @@ describe("repository SQL storage", () => {
           worktreePath: join(input.commonDirectory, "worktrees", "by-concurrent"),
           now: "2026-07-17T22:57:00.000Z",
         });
-        if (!started.ok) return;
+        if (!started.ok) throw new Error(`Change Start failed: ${started.code}`);
         const publication = {
           changeId: started.change.id,
           candidateId: "candidate-1",
@@ -963,7 +963,7 @@ describe("repository SQL storage", () => {
           headSha: "head-sha",
           now: "2026-07-25T15:00:00.000Z",
         });
-        if (!captured.ok) return;
+        if (!captured.ok) throw new Error(`Candidate capture failed: ${captured.code}`);
         const authority = {
           changeBaseSha: "base-sha",
           policy: { checks: [], copyFiles: [], specialistReviews: [] },
@@ -1068,7 +1068,7 @@ describe("repository SQL storage", () => {
           headSha: "head-sha",
           now: "2026-07-25T15:02:00.000Z",
         });
-        if (!other.ok) return;
+        if (!other.ok) throw new Error(`Candidate capture failed: ${other.code}`);
         yield* repository.operation("install another Change publication evidence", (sql) =>
           Effect.gen(function* () {
             yield* sql`
@@ -1114,7 +1114,7 @@ describe("repository SQL storage", () => {
             headSha: "head-sha",
             now: "2026-07-25T16:10:00.000Z",
           });
-          if (!captured.ok) return;
+          if (!captured.ok) throw new Error(`Candidate capture failed: ${captured.code}`);
           const decision = {
             id: "decision-1",
             changeId: captured.changeId,
@@ -1270,7 +1270,7 @@ describe("repository SQL storage", () => {
           headSha: "head-sha",
           now: "2026-07-25T16:20:00.000Z",
         });
-        if (!captured.ok) return;
+        if (!captured.ok) throw new Error(`Candidate capture failed: ${captured.code}`);
         const raised = yield* changes.raiseImplementationBlocker({
           changeId: captured.changeId,
           content: "Wait for an external decision.",
@@ -1321,7 +1321,7 @@ describe("repository SQL storage", () => {
           headSha: "head-sha",
           now: "2026-07-25T16:30:00.000Z",
         });
-        if (!captured.ok) return;
+        if (!captured.ok) throw new Error(`Candidate capture failed: ${captured.code}`);
         const policy = { checks: [], copyFiles: [], specialistReviews: [] };
         const start = (at: string) =>
           validation.startOrReuse({
@@ -1395,7 +1395,7 @@ describe("repository SQL storage", () => {
           headSha: "first-head",
           now: "2026-07-25T15:10:00.000Z",
         });
-        if (!first.ok) return;
+        if (!first.ok) throw new Error(`Candidate capture failed: ${first.code}`);
         const target = {
           owner: "acme",
           repo: "repo",
@@ -1421,7 +1421,7 @@ describe("repository SQL storage", () => {
           headSha: "second-head",
           now: "2026-07-25T15:12:00.000Z",
         });
-        if (!second.ok) return;
+        if (!second.ok) throw new Error(`Candidate capture failed: ${second.code}`);
         const replacement = {
           ...pending,
           candidateId: second.candidateId,
@@ -1463,7 +1463,7 @@ describe("repository SQL storage", () => {
             headSha: "head-legacy",
             now: "2026-07-25T15:30:00.000Z",
           });
-          if (!captured.ok) return;
+          if (!captured.ok) throw new Error(`Candidate capture failed: ${captured.code}`);
           yield* repository.operation("install legacy publication facts", (sql) =>
             Effect.gen(function* () {
               yield* sql`UPDATE changes SET publication_candidate_id = ${captured.candidateId}, publication_validation_run_id = 'legacy-run', publication_owner = 'acme', publication_repo = 'repo', publication_base_branch = 'main', publication_remote_name = 'origin', publication_head_branch = 'legacy', publication_expected_head_sha = 'head-legacy', publication_pr_number = 7, publication_pr_url = 'https://github.test/pull/7' WHERE id = ${captured.changeId}`;
@@ -1597,7 +1597,7 @@ describe("repository SQL storage", () => {
           headSha: "head-1",
           now: "2026-07-25T16:00:00.000Z",
         });
-        if (!first.ok) return;
+        if (!first.ok) throw new Error(`Candidate capture failed: ${first.code}`);
         const target = { owner: "acme", repo: "repo", baseBranch: "main", remoteName: "origin" };
         const publication = {
           changeId: first.changeId,
@@ -1619,28 +1619,29 @@ describe("repository SQL storage", () => {
         const second = yield* capture.commitCapture({
           repositoryCommonDirectory: input.commonDirectory,
           branchRef: "refs/heads/revision",
+          expectedChangeId: first.changeId,
           baseRef: "refs/remotes/origin/main",
           changeBaseSha: "base-2",
           headSha: "head-2",
           now: "2026-07-25T16:02:00.000Z",
         });
-        if (!second.ok) return;
-        expect(
-          yield* changes.recordPublishedPullRequest({
-            changeId: first.changeId,
-            candidateId: second.candidateId,
-            validationRunId: "run-2",
-            target,
-            headBranch: "revision",
-            expectedHeadSha: "head-2",
-            changeBaseSha: "base-2",
-            previousExpectedHeadSha: "head-1",
-            previousCandidateId: first.candidateId,
-            previousValidationRunId: "run-1",
-            pullRequest: { number: 42, url: "https://github.test/pull/42" },
-            now: "2026-07-25T16:03:00.000Z",
-          }),
-        ).toMatchObject({ ok: true });
+        if (!second.ok) throw new Error(`Candidate capture failed: ${second.code}`);
+        const recorded = yield* changes.recordPublishedPullRequest({
+          changeId: first.changeId,
+          candidateId: second.candidateId,
+          validationRunId: "run-2",
+          target,
+          headBranch: "revision",
+          expectedHeadSha: "head-2",
+          changeBaseSha: "base-2",
+          previousExpectedHeadSha: "head-1",
+          previousCandidateId: first.candidateId,
+          previousValidationRunId: "run-1",
+          previousPullRequestNumber: 42,
+          pullRequest: { number: 42, url: "https://github.test/pull/42" },
+          now: "2026-07-25T16:03:00.000Z",
+        });
+        if (!recorded.ok) throw new Error(`Publication record failed: ${recorded.code}`);
         const revised = yield* changes.getChangeById(first.changeId);
         expect(revised?.publication).toMatchObject({
           candidateId: second.candidateId,
@@ -1705,7 +1706,7 @@ describe("repository SQL storage", () => {
   );
 
   it.scoped("acquires migrated repository state through one scoped SQL service", () =>
-    withTemporaryState(() =>
+    withTemporaryState((input) =>
       Effect.gen(function* () {
         const repositorySql = yield* RepositorySql;
         const migrations = yield* repositorySql.operation(
@@ -1768,7 +1769,7 @@ describe("repository SQL storage", () => {
           { migration_id: 22, name: "change_cancel_reason" },
           { migration_id: 23, name: "restrict_lifecycle_states" },
         ]);
-        expect(identities).toEqual([{ common_directory: repositorySql.commonDirectory }]);
+        expect(identities).toEqual([{ common_directory: input.commonDirectory }]);
         expect(candidateColumns.map(({ name }) => name)).toEqual([
           "id",
           "change_id",
@@ -2094,7 +2095,7 @@ describe("repository SQL storage", () => {
           worktreePath: join(input.commonDirectory, "worktrees", "by-cancel-upgrade"),
           now: "2026-07-17T23:00:00.000Z",
         });
-        if (!created.ok) return;
+        if (!created.ok) throw new Error(`Change Start failed: ${created.code}`);
         yield* starts.recordPrepareOutcome(created.change.id, null, "2026-07-17T23:01:00.000Z");
 
         const repository = yield* RepositorySql;
@@ -3123,7 +3124,7 @@ describe("repository SQL storage", () => {
           worktreePath: join(input.commonDirectory, "worktrees", "by-1-malformed"),
           now: "2026-07-17T23:10:00.000Z",
         });
-        if (!started.ok) return;
+        if (!started.ok) throw new Error(`Change Start failed: ${started.code}`);
 
         const repository = yield* RepositorySql;
         yield* repository.operation(

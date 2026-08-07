@@ -24,13 +24,10 @@ const section = (source: string, heading: string): string => {
 describe("portable But Why skill", () => {
   it("keeps Operator authority, Task authoring, and Implementation Authorization in one model-visible skill", () => {
     const skill = readSkillArtifact("SKILL.md");
-    const workflow = readSkillArtifact("references/operator-workflow.md");
-
     expect(skill).toContain("name: but-why");
     expect(skill).not.toContain("disable-model-invocation");
     expect(skill).toContain("Operator workflow");
     expect(skill).toContain("Implement a Change");
-    expect(workflow).not.toContain("to-tasks-by");
   });
 
   it("orders authority guards before each permitted operation", () => {

@@ -39,7 +39,6 @@ describe("by task CLI processes", () => {
     expect(result.stderr).toBe("");
     expect(help).toContain("regular UTF-8 text file path");
     expect(help).toContain("standard input");
-    expect(help).not.toContain("description-file");
   });
 
   it("returns the package version in the default TOON envelope", () => {

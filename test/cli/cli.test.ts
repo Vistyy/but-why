@@ -14,7 +14,6 @@ import { createGitRepo, repoRoot, runByInProcessEffect } from "../support/by-cli
 import { runTestProcess } from "../support/testProcess.js";
 import { createTestWorkspace } from "../support/testWorkspace.js";
 
-const expectedBin = collapseHome(join(repoRoot, "bin/by"));
 const expectedConfigDoc = join(repoRoot, "docs/public/config.md");
 const expectedSetupDoc = join(repoRoot, "docs/public/setup.md");
 const managedGitignoreBlock = `${butWhyGitignoreBlock}\n`;
@@ -653,6 +652,5 @@ help[1]: Report this failure with the command and workspace path`);
 
   ordinaryIt("collapses the home directory in executable paths", () => {
     expect(collapseHome(join(homedir(), ".local/bin/by"))).toBe("~/.local/bin/by");
-    expect(expectedBin).toBe(collapseHome(join(repoRoot, "bin/by")));
   });
 });

@@ -165,7 +165,7 @@ describe("Change Candidate capture boundaries", () => {
       const repo = yield* captureReadyRepoCopy();
       const startingCommit = git(repo, "rev-parse", "refs/heads/main");
       const changed = yield* captureLocalCandidate({ cwd: repo, now });
-      if (!changed.ok) return;
+      if (!changed.ok) throw new Error(`Candidate capture failed: ${changed.code}`);
 
       git(repo, "reset", "--hard", startingCommit);
       const reverted = yield* captureLocalCandidate({

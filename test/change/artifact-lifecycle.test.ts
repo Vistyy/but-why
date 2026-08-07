@@ -124,7 +124,7 @@ describe("Artifact Content removal through Terminal Cleanup", () => {
     ),
   );
 
-  it.effect(
+  it.effect.skipIf(process.getuid?.() === 0)(
     "reports failure when Artifact Content removal cannot complete and succeeds after repair",
     () =>
       withArtifactLifecycleFixture((fixture) =>
@@ -136,12 +136,9 @@ describe("Artifact Content removal through Terminal Cleanup", () => {
           const runDirectory = join(fixture.artifactsRoot, fixture.first.validationRunId);
 
           // A directory without write permission makes the removal fail deterministically.
-          const removalBlockedByPermissions = process.getuid?.() !== 0;
-          if (removalBlockedByPermissions) {
-            chmodSync(runDirectory, 0o500);
-            expect(yield* lifecycle.removeContent(fixture.first.changeId)).toEqual({ ok: false });
-            chmodSync(runDirectory, 0o700);
-          }
+          chmodSync(runDirectory, 0o500);
+          expect(yield* lifecycle.removeContent(fixture.first.changeId)).toEqual({ ok: false });
+          chmodSync(runDirectory, 0o700);
 
           expect(yield* lifecycle.removeContent(fixture.first.changeId)).toEqual({ ok: true });
           expect(existsSync(runDirectory)).toBe(false);
