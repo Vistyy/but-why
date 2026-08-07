@@ -415,9 +415,7 @@ const isAgentPaneBusyFailure = (message: string): boolean => {
   if (trimmed.split(/[:\s]/, 1)[0] === "agent_pane_busy") return true;
   try {
     const parsed = JSON.parse(trimmed) as unknown;
-    return (
-      isRecord(parsed) && isRecord(parsed["error"]) && parsed["error"]["code"] === "agent_pane_busy"
-    );
+    return isRecord(parsed) && isRecord(parsed.error) && parsed.error.code === "agent_pane_busy";
   } catch {
     return false;
   }
