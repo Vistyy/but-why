@@ -3,7 +3,7 @@ import { join } from "node:path";
 
 import { createSandbox, type Sandbox, type SandboxProvider } from "@ai-hero/sandcastle";
 import { noSandbox } from "@ai-hero/sandcastle/sandboxes/no-sandbox";
-import { Effect, Option, Ref, type Scope } from "effect";
+import { Effect, Ref, type Scope } from "effect";
 import type { RepositoryStorageError } from "../../contracts/repositoryStorageError.js";
 import {
   deleteValidationTempRef,
@@ -592,16 +592,12 @@ const cleanupWorktree = (
 
   return Effect.gen(function* () {
     if (state.sandbox !== undefined) {
-      const closeResult = yield* Effect.tryPromise({
-        try: (): Promise<{ readonly preservedWorktreePath?: string }> =>
-          state.sandbox?.close() ?? Promise.resolve({}),
-        catch: () => undefined,
-      }).pipe(
-        Effect.timeoutOption(`${cleanupStepTimeoutMs} millis`),
-        Effect.catchAll(() => Effect.succeed(Option.none())),
+      const sandbox = state.sandbox;
+      const closeAttempt = yield* Effect.promise(() =>
+        closeSandboxWithTimeout(sandbox, cleanupStepTimeoutMs),
       );
 
-      if (Option.isNone(closeResult)) return "failed";
+      if (!closeAttempt.ok) return "failed";
 
       const cleanupPath = state.worktreePath ?? state.expectedWorktreePath;
 
@@ -626,6 +622,39 @@ const cleanupWorktree = (
       : "failed";
   });
 };
+
+type SandcastleCloseResult = { readonly preservedWorktreePath?: string };
+
+type SandcastleCloseAttempt =
+  | { readonly ok: true; readonly result: SandcastleCloseResult }
+  | { readonly ok: false };
+
+const closeSandboxWithTimeout = (
+  sandbox: SandboxLike,
+  timeoutMs: number,
+): Promise<SandcastleCloseAttempt> =>
+  new Promise((resolve) => {
+    let settled = false;
+    const timeout = setTimeout(() => {
+      settled = true;
+      resolve({ ok: false });
+    }, timeoutMs);
+
+    void sandbox.close().then(
+      (result) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timeout);
+        resolve({ ok: true, result });
+      },
+      () => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timeout);
+        resolve({ ok: false });
+      },
+    );
+  });
 
 const releaseTempRef = (
   repoRoot: string,

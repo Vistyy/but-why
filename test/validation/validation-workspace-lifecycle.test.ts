@@ -86,6 +86,38 @@ describe("Validation Workspace scoped lifecycle", () => {
     15_000,
   );
 
+  it.scoped(
+    "fails without retrying removal when close remains in flight at the cleanup limit",
+    () =>
+      Effect.gen(function* () {
+        const events: string[] = [];
+        const createValidationWorkspace = yield* Effect.promise(() =>
+          loadCreateValidationWorkspace(events, { neverFinishClose: true }),
+        );
+        const fiber = yield* Effect.fork(createValidationWorkspace(input));
+        const result = yield* Fiber.join(fiber);
+
+        expect(result).toMatchObject({
+          ok: false,
+          toolingError: {
+            operationName: "cleanup_validation_workspace",
+            cleanupResult: {
+              worktree: "failed",
+              tempRef: "removed",
+            },
+          },
+        });
+        expect(events).toEqual([
+          "acquire:temp_ref",
+          "acquire:worktree",
+          "read:worktree_head",
+          "close:worktree",
+          "release:temp_ref",
+        ]);
+      }),
+    45_000,
+  );
+
   it.scoped("reuses a matching clean Validation Workspace", () =>
     Effect.gen(function* () {
       const events: string[] = [];
@@ -540,6 +572,7 @@ type FakeOptions = {
   readonly tempRefFailure?: string;
   readonly worktreeCreationFailure?: string;
   readonly neverFinishWorktreeCreation?: boolean;
+  readonly neverFinishClose?: boolean;
   readonly closeDelayMs?: number;
   readonly onWorktreeAcquired?: () => void;
   readonly worktreeHead?: string;
@@ -576,6 +609,9 @@ const loadCreateValidationWorkspace = async (
         worktreePath: expectedWorktreePath,
         close: async () => {
           events.push("close:worktree");
+          if (options.neverFinishClose) {
+            await new Promise(() => {});
+          }
           if (options.closeDelayMs !== undefined) {
             await new Promise((resolve) => setTimeout(resolve, options.closeDelayMs));
             worktreeExists = false;
