@@ -95,6 +95,23 @@ describe("by CLI", () => {
     }),
   );
 
+  it.effect("classifies Change Submit as a long-running command in generated help", () =>
+    Effect.gen(function* () {
+      const result = yield* runByInProcessEffect(repoRoot, [
+        "--json",
+        "change",
+        "submit",
+        "--help",
+      ]);
+
+      expect(result.status).toBe(0);
+      expect(result.stderr).toBe("");
+      expect(JSON.parse(result.stdout).help).toContain(
+        "Validate and publish a Change. This is a long-running command.",
+      );
+    }),
+  );
+
   it.effect("uses native help behavior for trailing arguments", () =>
     Effect.gen(function* () {
       const result = yield* runByInProcessEffect(repoRoot, ["--json", "task", "--help", "extra"]);

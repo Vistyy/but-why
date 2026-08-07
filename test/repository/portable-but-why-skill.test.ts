@@ -83,6 +83,23 @@ describe("portable But Why skill", () => {
     expect(taskVerification).toContain("Do not require tests by default.");
   });
 
+  it("preserves Change Submit long-running caller guidance", () => {
+    const implementation = readSkillArtifact("references/implement-change.md");
+
+    expect(implementation).toContain(
+      "Change Submit is a long-running command, as classified by its CLI help.",
+    );
+    expect(implementation).toContain(
+      "Run it without a caller timeout when the execution harness supports that behavior.",
+    );
+    expect(implementation).toContain(
+      "When the execution harness requires a finite timeout, allow at least 30 minutes.",
+    );
+    expect(implementation).toContain(
+      "Increase the timeout when configured phase limits or reviewer duration require more time.",
+    );
+  });
+
   it("is discoverable through Pi from the packaged skill layout and references shipped setup guidance", () => {
     const fixture = createTestWorkspace();
     cpSync(join(repoRoot, "package.json"), join(fixture, "package.json"));

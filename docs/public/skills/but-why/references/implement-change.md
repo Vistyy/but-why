@@ -99,7 +99,7 @@ Change Submit must pass before the same owned open pull request is updated.
 
 Run `<but-why> change submit <change-id>`.
 Change Submit owns Acceptance Review, configured Specialists, the Validation Gate, and eligible publication.
-Treat Change Submit as a long-running command.
+Change Submit is a long-running command, as classified by its CLI help.
 Run it without a caller timeout when the execution harness supports that behavior.
 When the execution harness requires a finite timeout, allow at least 30 minutes.
 Increase the timeout when configured phase limits or reviewer duration require more time.

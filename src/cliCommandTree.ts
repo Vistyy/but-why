@@ -481,7 +481,7 @@ const changeValidationRunsCommand = withCliHandler(
     ),
 );
 const changeSubmitCommand = withCliHandler(
-  leaf("submit", "Validate and publish a Change.", {
+  leaf("submit", "Validate and publish a Change. This is a long-running command.", {
     changeId: Args.optional(changeIdArgument),
   }),
   (values, environment) =>
