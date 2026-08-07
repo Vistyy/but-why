@@ -11,6 +11,9 @@ type PiProbe = {
   readonly commands: readonly string[];
 };
 
+const portableSkillInstallTimeoutMs = 30_000;
+const portableSkillProcessTimeoutMs = 10_000;
+
 const readSkillArtifact = (path: string): string =>
   readFileSync(join(repoRoot, "docs/public/skills/but-why", path), "utf8");
 
@@ -114,6 +117,7 @@ describe("portable But Why skill", () => {
       cwd: consumer,
       env: environment,
       isolatedHome: createTestWorkspace(),
+      timeout: portableSkillInstallTimeoutMs,
     });
     expect(install.status, `${install.stdout}${install.stderr}`).toBe(0);
     const probe = runTestProcess(
@@ -124,7 +128,7 @@ describe("portable But Why skill", () => {
         env: { ...environment, PROBE_OUTPUT: probeOutput },
         isolatedHome: createTestWorkspace(),
         input: '{"type":"prompt","message":"/probe","id":"probe"}\n',
-        timeout: 10_000,
+        timeout: portableSkillProcessTimeoutMs,
       },
     );
     expect(probe.status, `${probe.stdout}${probe.stderr}`).toBe(0);

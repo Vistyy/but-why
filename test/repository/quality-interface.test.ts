@@ -12,6 +12,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, test } from "vitest";
 
+import { observeUntil } from "../support/observe.js";
 import { startTestProcess } from "../support/testProcess.js";
 
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
@@ -126,30 +127,43 @@ const runVitest = (fixtureRoot: string, fixture: string): Promise<CommandResult>
     child.on("close", (status) => resolveResult({ status, output }));
   });
 
-const waitForFile = async (file: string): Promise<void> => {
-  for (let attempt = 0; attempt < 250; attempt += 1) {
-    try {
-      if (readFileSync(file, "utf8").trim() !== "") return;
-    } catch {
-      // The child has not reached the readiness handshake yet.
-    }
-    await new Promise((resolveDelay) => setTimeout(resolveDelay, 20));
-  }
-  throw new Error(`The child did not reach its readiness handshake: ${file}`);
+const waitForFile = (file: string): Promise<string> =>
+  observeUntil({
+    description: `file ${file} to contain its readiness handshake`,
+    observe: () => {
+      try {
+        return readFileSync(file, "utf8");
+      } catch {
+        return "";
+      }
+    },
+    isReady: (contents) => contents.trim() !== "",
+    timeoutMs: 5_000,
+  });
+
+const waitForProcessExit = async (pidFile: string): Promise<boolean> => {
+  const pid = Number(await waitForFile(pidFile));
+  return observeUntil({
+    description: `descendant process ${pid} to exit`,
+    observe: () => {
+      try {
+        process.kill(pid, 0);
+        return false;
+      } catch {
+        return true;
+      }
+    },
+    timeoutMs: 5_000,
+  });
 };
 
-const waitForProcessExit = async (pidFile: string): Promise<void> => {
-  const pid = Number(readFileSync(pidFile, "utf8"));
-  for (let attempt = 0; attempt < 250; attempt += 1) {
-    try {
-      process.kill(pid, 0);
-    } catch {
-      return;
-    }
-    await new Promise((resolveDelay) => setTimeout(resolveDelay, 20));
-  }
-  throw new Error(`The descendant process is still running: ${pid}`);
-};
+const waitForOutput = (process: { readonly output: string }, text: string): Promise<string> =>
+  observeUntil({
+    description: `quality process output to contain ${JSON.stringify(text)}`,
+    observe: () => process.output,
+    isReady: (output) => output.includes(text),
+    timeoutMs: 5_000,
+  });
 
 const createWorkloadJustfile = (directory: string): void => {
   cpSync(join(repositoryRoot, "package.json"), join(directory, "package.json"));
@@ -286,7 +300,7 @@ describe("quality interface", () => {
         },
         directory,
       );
-      await new Promise((resolveDelay) => setTimeout(resolveDelay, 100));
+      await waitForOutput(quality, "waiting: complete quality is waiting for capacity");
 
       expect(quality.child.exitCode).toBeNull();
       expect(quality.output).toContain("waiting: complete quality is waiting for capacity");
@@ -298,6 +312,8 @@ describe("quality interface", () => {
       const result = await quality.done;
       expect(result.status, result.output).toBe(0);
       expect(result.output).toContain("quality completed in");
+      expect(result.output).not.toContain("warning: quality exceeded");
+      expect(result.output).not.toContain("warning: full-quality exceeded");
       expect(readFileSync(staticFile, "utf8")).toBe("static");
       expect(readFileSync(buildFile, "utf8")).toBe("build");
       expect(readFileSync(testFile, "utf8")).toBe("test");
@@ -324,7 +340,7 @@ describe("quality interface", () => {
       complete = startJust(lockFile, ["test", "--reporter=dot"], {
         PATH: `${directory}:${Reflect.get(process.env, "PATH") ?? ""}`,
       });
-      await new Promise((resolveDelay) => setTimeout(resolveDelay, 100));
+      await waitForOutput(complete, "waiting: complete test is waiting for capacity");
       expect(complete.child.exitCode).toBeNull();
       expect(complete.output).toContain("waiting: complete test is waiting for capacity");
 
@@ -363,7 +379,7 @@ describe("quality interface", () => {
         "sh",
         acquiredFile,
       ]);
-      await new Promise((resolveDelay) => setTimeout(resolveDelay, 100));
+      await waitForOutput(waiter, "waiting: complete test is waiting for capacity");
       expect(waiter.child.exitCode).toBeNull();
       expect(waiter.output).toContain("waiting: complete test is waiting for capacity");
       waiter.child.kill("SIGTERM");

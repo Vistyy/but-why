@@ -1,12 +1,10 @@
 import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 
 import { repoRoot } from "../support/by-cli.js";
 import { runTestProcess } from "../support/testProcess.js";
-
-vi.setConfig({ testTimeout: 360_000 });
 
 describe("CLI loading and package boundary", () => {
   it("builds literal lazy targets and verifies generated dynamic targets exist in the built package", () => {

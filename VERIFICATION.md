@@ -26,7 +26,7 @@
 - Trusted But Why Executable selection requires a focused real-process sentinel from a linked worktree until first-release executable selection replaces the Source Checkout Guard.
 - Package, public documentation, structural-tooling, and temporary test-operation checks have their own workflow owners.
   Do not misclassify them as product-risk evidence.
-- Complete-workload scheduling uses the explicit complete-evidence file list in `vitest.config.ts`.
+- Complete-workload scheduling uses the explicit complete-only file registry in `test/suiteSchedule.ts`, which `vitest.config.ts` applies to the complete and routine suites.
   Scheduling never derives evidence from a filename suffix.
 - Evidence with a known intermittent failure cannot remain blocking.
 - Retain the shared capacity lock and the three-worker Vitest limit.

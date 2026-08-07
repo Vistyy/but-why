@@ -10,6 +10,7 @@ import {
   executeHostCommandEffect,
   HostCommandError,
 } from "../../src/command/hostCommand.js";
+import { observeUntil } from "../support/observe.js";
 
 describe("host command Adapter", () => {
   it("captures stdout, stderr, and the exit status", async () => {
@@ -51,17 +52,26 @@ describe("host command Adapter", () => {
   );
 });
 
-const waitForFile = async (path: string): Promise<void> => {
-  for (let attempt = 0; attempt < 20 && !existsSync(path); attempt += 1) {
-    await new Promise((resolve) => setTimeout(resolve, 25));
-  }
-};
+const waitForFile = (path: string): Promise<string> =>
+  observeUntil({
+    description: `file ${path} to contain the child PID`,
+    observe: () => {
+      try {
+        return readFileSync(path, "utf8");
+      } catch {
+        return "";
+      }
+    },
+    isReady: (contents) => contents.length > 0,
+    timeoutMs: 5_000,
+  });
 
-const waitForProcessExit = async (pid: number): Promise<void> => {
-  for (let attempt = 0; attempt < 20 && !processIsGone(pid); attempt += 1) {
-    await new Promise((resolve) => setTimeout(resolve, 25));
-  }
-};
+const waitForProcessExit = (pid: number): Promise<boolean> =>
+  observeUntil({
+    description: `process ${pid} to exit`,
+    observe: () => processIsGone(pid),
+    timeoutMs: 5_000,
+  });
 
 const processIsGone = (pid: number): boolean => {
   try {

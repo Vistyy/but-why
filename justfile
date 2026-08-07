@@ -118,10 +118,6 @@ build:
 pack:
     pnpm pack
 
-# Run comparative cold-start measurements for the production and package executables.
-cli-loading-benchmark:
-    @node scripts/cli-loading-benchmark.mjs
-
 # Format the codebase.
 format:
     pnpm run format
