@@ -143,13 +143,23 @@ export const openSqliteChangeValidationPersistence = (): Effect.Effect<
         .operation("list Candidate validation Findings", (sql) =>
           listFindings(sql, validationRunId),
         )
-        .pipe(Effect.flatMap((rows) => Effect.forEach(rows, decodeFinding))),
+        .pipe(
+          Effect.flatMap((rows) =>
+            Effect.forEach(rows, (row) => decodeFinding(row, "list Candidate validation Findings")),
+          ),
+        ),
     listPreviousCandidateReviewerFindings: (input) =>
       repository
         .operation("list previous Candidate reviewer Findings", (sql) =>
           listPreviousCandidateReviewerFindings(sql, input),
         )
-        .pipe(Effect.flatMap((rows) => Effect.forEach(rows, decodeFinding))),
+        .pipe(
+          Effect.flatMap((rows) =>
+            Effect.forEach(rows, (row) =>
+              decodeFinding(row, "list previous Candidate reviewer Findings"),
+            ),
+          ),
+        ),
     listToolingFailures: (validationRunId) =>
       repository.operation("list Candidate validation Tooling Failures", (sql) =>
         Effect.flatMap(listToolingFailures(sql, validationRunId), (rows) =>
@@ -765,7 +775,7 @@ const decodeRun = (row: CandidateValidationRunRow, operationName: string) =>
     catch: (cause) => new RepositoryPersistedDataInvalid({ operationName, cause }),
   });
 
-const decodeFinding = (row: CandidateValidationFindingRow) =>
+const decodeFinding = (row: CandidateValidationFindingRow, operationName: string) =>
   Effect.try({
     try: (): CandidateValidationFinding => {
       const phase = decodeValidationPhase(row.phase);
@@ -786,11 +796,7 @@ const decodeFinding = (row: CandidateValidationFindingRow) =>
         updatedAt: requiredString(finding.updatedAt, "Finding update timestamp"),
       };
     },
-    catch: (cause) =>
-      new RepositoryPersistedDataInvalid({
-        operationName: "decode Candidate validation Finding",
-        cause,
-      }),
+    catch: (cause) => new RepositoryPersistedDataInvalid({ operationName, cause }),
   });
 
 const decodeArtifact = (artifact: CandidateValidationArtifactRow): CandidateValidationArtifact => {

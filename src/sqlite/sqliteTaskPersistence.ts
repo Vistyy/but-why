@@ -23,6 +23,7 @@ import {
   decodeTaskLifecycleConsistency,
   decodeTaskState,
   requiredInteger,
+  requiredPositiveInteger,
   requiredString,
 } from "./sqlitePersistenceDecoders.js";
 
@@ -523,7 +524,10 @@ const nextTaskNumericId = (sql: SqlClient.SqlClient) =>
     `;
     const row = rows[0];
     if (row === undefined) return yield* invalidData("create Task", "Missing numeric ID");
-    return Number(row.numericId);
+    return yield* decodeTaskValue(
+      () => requiredPositiveInteger(row.numericId, "Task numeric ID"),
+      "create Task",
+    );
   });
 
 const rowToTaskSummary = (
