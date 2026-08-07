@@ -1,9 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { statSync } from "node:fs";
 import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
-// rename is used via dynamic import to avoid top-level wall-clock rule side effects
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { createJiti } from "jiti/static";
 import { prependAgentEnvironment, shellQuote } from "../../agent/agentEnvironment.js";
 import { piResourceFlags } from "../../agent/piRuntime.js";
@@ -98,6 +97,11 @@ const recordPendingLaunchForCrossProcessPrune = async (
   } catch {}
 };
 
+const isValidLaunchArtifactDir = (dir: string): boolean => {
+  const tmp = tmpdir();
+  return dirname(dir) === tmp && basename(dir).startsWith("but-why-pi-launch-");
+};
+
 const pruneStaleFilesystemLaunchArtifacts = async (): Promise<void> => {
   const registryDir = pendingLaunchRegistryDir();
   let entries: string[];
@@ -120,18 +124,25 @@ const pruneStaleFilesystemLaunchArtifacts = async (): Promise<void> => {
       let record: PendingLaunchRecord;
       try {
         const parsed = JSON.parse(raw) as unknown;
-        if (typeof parsed === "string") {
-          record = { dir: parsed, createdAt: 0, retentionMs: 0 };
-        } else if (
+        if (
           typeof (parsed as PendingLaunchRecord).dir === "string" &&
           typeof (parsed as PendingLaunchRecord).createdAt === "number" &&
           typeof (parsed as PendingLaunchRecord).retentionMs === "number"
         ) {
           record = parsed as PendingLaunchRecord;
         } else {
+          try {
+            await rm(entryPath, { force: true });
+          } catch {}
           return;
         }
       } catch {
+        try {
+          await rm(entryPath, { force: true });
+        } catch {}
+        return;
+      }
+      if (!isValidLaunchArtifactDir(record.dir)) {
         try {
           await rm(entryPath, { force: true });
         } catch {}
@@ -147,13 +158,9 @@ const pruneStaleFilesystemLaunchArtifacts = async (): Promise<void> => {
       } catch {}
     }),
   );
-  // Best-effort cleanup of empty registry dir and legacy single-file registry
   try {
     const remaining = await readdir(registryDir);
     if (remaining.length === 0) await rm(registryDir, { recursive: true, force: true });
-  } catch {}
-  try {
-    await rm(join(tmpdir(), "but-why-pending-pi-launches.json"), { force: true });
   } catch {}
 };
 
@@ -168,9 +175,6 @@ export const flushHerdrLaunchArtifactsForTesting = async (): Promise<void> => {
   await flushPendingUncertainLaunchScripts();
   try {
     await rm(pendingLaunchRegistryDir(), { recursive: true, force: true });
-  } catch {}
-  try {
-    await rm(join(tmpdir(), "but-why-pending-pi-launches.json"), { force: true });
   } catch {}
 };
 
