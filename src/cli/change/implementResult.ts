@@ -102,7 +102,11 @@ export const implementResult = (result: ChangeImplementResult): CliResult => {
       help:
         result.code === "launch_indeterminate"
           ? ["Inspect the existing Herdr session, then retry only after launch state is resolved."]
-          : ["Confirm Herdr is installed and running, then retry Change Implement."],
+          : result.code === "pane_not_ready"
+            ? [
+                "Wait for the Managed Worktree pane shell to finish startup, then retry Change Implement.",
+              ]
+            : ["Confirm Herdr is installed and running, then retry Change Implement."],
     });
   }
   throw new Error("Unhandled Change Implement result");

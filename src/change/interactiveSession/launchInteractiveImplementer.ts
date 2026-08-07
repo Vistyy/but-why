@@ -30,6 +30,7 @@ export type ChangeImplementResult =
         | "host_unavailable"
         | "launch_failed"
         | "launch_indeterminate"
+        | "pane_not_ready"
         | "repo_config_invalid"
         | "agent_profile_invalid";
       readonly message: string;
