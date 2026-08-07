@@ -474,7 +474,9 @@ const getPassingPublicationEvidence = (
         candidate.change_base_sha AS changeBaseSha,
         candidate.head_sha AS headSha,
         run.policy_snapshot AS policySnapshot,
-        run.implementation_decisions AS implementationDecisions
+        run.implementation_decisions AS implementationDecisions,
+        run.state AS validationRunState,
+        run.outcome AS validationRunOutcome
       FROM changes AS change
       JOIN candidates AS candidate
         ON candidate.id = change.publication_candidate_id
@@ -484,8 +486,6 @@ const getPassingPublicationEvidence = (
         AND run.candidate_id = candidate.id
       WHERE change.id = ${changeId}
         AND change.publication_pr_number IS NOT NULL
-        AND run.state = 'complete'
-        AND run.outcome = 'passed'
         AND candidate.change_base_sha = ${authority.changeBaseSha}
         AND (
           (run.latest_resolved_blocker_id IS NULL AND ${latestResolvedBlockerId} IS NULL)
@@ -495,24 +495,45 @@ const getPassingPublicationEvidence = (
     const row = rows[0];
     if (row === undefined) return undefined;
     const storedEvidence = yield* Effect.try({
-      try: () => ({
-        candidateId: requiredString(row.candidateId, "Publication Candidate ID"),
-        validationRunId: requiredString(row.validationRunId, "Publication Validation Run ID"),
-        changeBaseSha: requiredString(row.changeBaseSha, "Publication Change base SHA"),
-        headSha: requiredString(row.headSha, "Publication Candidate head SHA"),
-        policy: decodeSqliteCandidateValidationPolicy(
-          requiredString(row.policySnapshot, "Validation Policy Snapshot"),
-        ),
-        implementationDecisions: decodeSqliteImplementationDecisions(
-          requiredString(row.implementationDecisions, "Validation Run Implementation Decisions"),
-        ),
-      }),
+      try: () => {
+        const state = requiredString(row.validationRunState, "Publication Validation Run state");
+        const outcome =
+          row.validationRunOutcome === null
+            ? null
+            : requiredString(row.validationRunOutcome, "Publication Validation Run outcome");
+        if (state !== "running" && state !== "complete") {
+          throw new Error("Stored Publication Validation Run state is invalid");
+        }
+        if (outcome !== null && !["passed", "blocked", "tooling_failed"].includes(outcome)) {
+          throw new Error("Stored Publication Validation Run outcome is invalid");
+        }
+        if ((state === "running") !== (outcome === null)) {
+          throw new Error("Stored Publication Validation Run state and outcome are inconsistent");
+        }
+        return {
+          state,
+          outcome,
+          candidateId: requiredString(row.candidateId, "Publication Candidate ID"),
+          validationRunId: requiredString(row.validationRunId, "Publication Validation Run ID"),
+          changeBaseSha: requiredString(row.changeBaseSha, "Publication Change base SHA"),
+          headSha: requiredString(row.headSha, "Publication Candidate head SHA"),
+          policy: decodeSqliteCandidateValidationPolicy(
+            requiredString(row.policySnapshot, "Validation Policy Snapshot"),
+          ),
+          implementationDecisions: decodeSqliteImplementationDecisions(
+            requiredString(row.implementationDecisions, "Validation Run Implementation Decisions"),
+          ),
+        };
+      },
       catch: (cause) =>
         new RepositoryPersistedDataInvalid({
           operationName: "read passing Change publication evidence",
           cause,
         }),
     });
+    if (storedEvidence.state !== "complete" || storedEvidence.outcome !== "passed") {
+      return undefined;
+    }
     const expectedPolicySnapshot = encodeSqliteCandidateValidationPolicy(authority.policy);
     const expectedDecisionsSnapshot = JSON.stringify(authority.implementationDecisions ?? []);
     if (
@@ -530,23 +551,42 @@ const getPassingPublicationEvidence = (
   });
 
 const listChanges = (sql: SqlClient.SqlClient, input: ListChangesInput) =>
-  Effect.flatMap(
-    sql.unsafe<ChangeRow>(
-      `SELECT ${columns} FROM changes WHERE repository_common_directory = ? AND (? = 1 OR state = 'open') ORDER BY created_at ASC, id ASC`,
-      [input.repositoryCommonDirectory, input.includeClosed ? 1 : 0],
-    ),
-    (rows) => Effect.forEach(rows, (row) => mapRequiredRow(row, "list Changes", sql)),
-  );
+  Effect.gen(function* () {
+    const rows = yield* sql.unsafe<ChangeRow>(
+      `SELECT ${columns} FROM changes WHERE repository_common_directory = ?`,
+      [input.repositoryCommonDirectory],
+    );
+    const changes = yield* Effect.forEach(rows, (row) => mapRequiredRow(row, "list Changes", sql));
+    return changes
+      .filter((change) => input.includeClosed || change.state === "open")
+      .sort(
+        (left, right) =>
+          left.createdAt.localeCompare(right.createdAt) || left.id.localeCompare(right.id),
+      );
+  });
 
 const listForReconciliation = (sql: SqlClient.SqlClient, commonDirectory: string) =>
-  Effect.flatMap(
-    sql.unsafe<ChangeRow>(
-      `SELECT ${columns} FROM changes WHERE repository_common_directory = ? AND ((state = 'open' AND publication_pr_number IS NOT NULL) OR (state = 'closed' AND cleanup_state = 'pending')) ORDER BY created_at ASC, id ASC`,
+  Effect.gen(function* () {
+    const rows = yield* sql.unsafe<ChangeRow>(
+      `SELECT ${columns} FROM changes WHERE repository_common_directory = ?`,
       [commonDirectory],
-    ),
-    (rows) =>
-      Effect.forEach(rows, (row) => mapRequiredRow(row, "list Changes for reconciliation", sql)),
-  );
+    );
+    const changes = yield* Effect.forEach(rows, (row) =>
+      mapRequiredRow(row, "list Changes for reconciliation", sql),
+    );
+    return changes
+      .filter(
+        (change) =>
+          (change.state === "open" &&
+            change.publication !== null &&
+            change.publication.pullRequest !== null) ||
+          (change.state === "closed" && change.cleanup.state === "pending"),
+      )
+      .sort(
+        (left, right) =>
+          left.createdAt.localeCompare(right.createdAt) || left.id.localeCompare(right.id),
+      );
+  });
 
 const beginPublication = (sql: SqlClient.SqlClient, input: BeginChangePublicationInput) =>
   Effect.gen(function* () {
@@ -915,8 +955,10 @@ const decodeReviewerTranscriptValue = (row: ReviewerTranscriptRow): ReviewerTran
 });
 
 type PassingPublicationEvidenceRow = ChangePublicationEvidence & {
-  readonly policySnapshot: string;
-  readonly implementationDecisions: string;
+  readonly policySnapshot: unknown;
+  readonly implementationDecisions: unknown;
+  readonly validationRunState: unknown;
+  readonly validationRunOutcome: unknown;
 };
 
 type ChangeRow = Omit<

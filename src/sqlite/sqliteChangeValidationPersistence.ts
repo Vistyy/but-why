@@ -282,44 +282,33 @@ const startOrReuse = (sql: SqlClient.SqlClient, input: StartCandidateValidationR
     });
     const policySnapshot = encodeSqliteCandidateValidationPolicy(input.policy);
     const decisionsSnapshot = JSON.stringify(input.implementationDecisions ?? []);
-    const reusable = yield* sql<{
-      readonly id: unknown;
-      readonly policySnapshot: unknown;
-      readonly implementationDecisions: unknown;
-    }>`
-      SELECT id, policy_snapshot AS policySnapshot, implementation_decisions AS implementationDecisions
+    const reusable = yield* sql<CandidateValidationRunRow>`
+      SELECT id, candidate_id AS candidateId,
+        policy_snapshot AS policySnapshot,
+        implementation_decisions AS implementationDecisions,
+        state, outcome, created_at AS createdAt, updated_at AS updatedAt
       FROM candidate_validation_runs
       WHERE candidate_id = ${input.candidateId}
-        AND state = 'complete'
-        AND outcome = 'passed'
         AND (
           (latest_resolved_blocker_id IS NULL AND ${latestResolvedBlockerId} IS NULL)
           OR latest_resolved_blocker_id = ${latestResolvedBlockerId}
         )
-      ORDER BY created_at ASC, id ASC
     `;
-    const reusableIds = yield* Effect.forEach(reusable, (row) =>
-      Effect.try({
-        try: () => {
-          const storedPolicy = decodeSqliteCandidateValidationPolicy(
-            requiredString(row.policySnapshot, "Validation Policy Snapshot"),
-          );
-          const storedDecisions = decodeSqliteImplementationDecisions(
-            requiredString(row.implementationDecisions, "Validation Run Implementation Decisions"),
-          );
-          return JSON.stringify(storedPolicy) === policySnapshot &&
-            JSON.stringify(storedDecisions) === decisionsSnapshot
-            ? requiredString(row.id, "Validation Run ID")
-            : undefined;
-        },
-        catch: (cause) =>
-          new RepositoryPersistedDataInvalid({
-            operationName: "start Candidate Validation Run",
-            cause,
-          }),
-      }),
+    const reusableRuns = yield* Effect.forEach(reusable, (row) =>
+      decodeRun(row, "start Candidate Validation Run"),
     );
-    const existing = reusableIds.find((id) => id !== undefined);
+    const existing = reusableRuns
+      .filter(
+        (run) =>
+          run.state === "complete" &&
+          run.outcome === "passed" &&
+          JSON.stringify(run.policy) === policySnapshot &&
+          JSON.stringify(run.implementationDecisions) === decisionsSnapshot,
+      )
+      .sort(
+        (left, right) =>
+          left.createdAt.localeCompare(right.createdAt) || left.id.localeCompare(right.id),
+      )[0]?.id;
     if (existing !== undefined) {
       return {
         reused: true,

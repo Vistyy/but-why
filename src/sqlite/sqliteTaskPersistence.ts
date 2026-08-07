@@ -154,26 +154,12 @@ const editTaskDependencies = (sql: SqlClient.SqlClient, input: EditTaskDependenc
 const listTasks = (sql: SqlClient.SqlClient, input: ListTasksInput) =>
   Effect.gen(function* () {
     const limit = input.limit === "all" || input.limit === undefined ? -1 : input.limit;
-    const rows = input.state
-      ? yield* sql<TaskSummaryRow>`
-          SELECT id, title, state, created_at AS createdAt, updated_at AS updatedAt,
-            numeric_id AS numericId
-          FROM tasks
-          WHERE state = ${input.state}
-        `
-      : input.includeDone
-        ? yield* sql<TaskSummaryRow>`
-            SELECT id, title, state, created_at AS createdAt, updated_at AS updatedAt,
-              numeric_id AS numericId
-            FROM tasks
-          `
-        : yield* sql<TaskSummaryRow>`
-            SELECT id, title, state, created_at AS createdAt, updated_at AS updatedAt,
-              numeric_id AS numericId
-            FROM tasks
-            WHERE state NOT IN ('done', 'cancelled')
-          `;
-    const orderedRows = yield* orderTaskRows(rows, "list Tasks");
+    const rows = yield* sql<TaskSummaryRow>`
+      SELECT id, title, state, created_at AS createdAt, updated_at AS updatedAt,
+        numeric_id AS numericId
+      FROM tasks
+    `;
+    const orderedRows = yield* orderTaskRows(rows, input, "list Tasks");
     const selectedRows = limit === -1 ? orderedRows : orderedRows.slice(0, limit);
     const tasks = yield* Effect.forEach(selectedRows, (row) =>
       rowToTaskSummary(sql, row, "list Tasks"),
@@ -185,29 +171,40 @@ const listTasks = (sql: SqlClient.SqlClient, input: ListTasksInput) =>
   });
 
 const countTasks = (sql: SqlClient.SqlClient, input: ListTasksInput) =>
-  Effect.map(
-    input.state
-      ? sql<{ readonly total: number | bigint }>`
-          SELECT COUNT(*) AS total FROM tasks WHERE state = ${input.state}
-        `
-      : input.includeDone
-        ? sql<{ readonly total: number | bigint }>`SELECT COUNT(*) AS total FROM tasks`
-        : sql<{ readonly total: number | bigint }>`
-            SELECT COUNT(*) AS total FROM tasks WHERE state NOT IN ('done', 'cancelled')
-          `,
-    (rows) => Number(rows[0]?.total ?? 0),
-  );
+  Effect.gen(function* () {
+    const rows = yield* sql<{ readonly state: unknown }>`SELECT state FROM tasks`;
+    return yield* Effect.try({
+      try: () =>
+        rows.filter((row) => {
+          const state = decodeTaskState(row.state);
+          return input.state === undefined
+            ? input.includeDone || (state !== "done" && state !== "cancelled")
+            : state === input.state;
+        }).length,
+      catch: (cause) => new RepositoryPersistedDataInvalid({ operationName: "list Tasks", cause }),
+    });
+  });
 
-const orderTaskRows = (rows: readonly TaskSummaryRow[], operationName: string) =>
+const orderTaskRows = (
+  rows: readonly TaskSummaryRow[],
+  input: ListTasksInput,
+  operationName: string,
+) =>
   Effect.map(
     Effect.try({
       try: () =>
         rows
           .map((row) => ({
             row,
+            state: decodeTaskState(row.state),
             createdAt: requiredString(row.createdAt, "Task creation timestamp"),
             numericId: requiredPositiveInteger(row.numericId, "Task numeric ID"),
           }))
+          .filter(({ state }) =>
+            input.state === undefined
+              ? input.includeDone || (state !== "done" && state !== "cancelled")
+              : state === input.state,
+          )
           .sort(
             (left, right) =>
               left.createdAt.localeCompare(right.createdAt) || left.numericId - right.numericId,
@@ -228,6 +225,7 @@ const orderActionableTaskRows = (rows: readonly TaskSummaryRow[], operationName:
             updatedAt: requiredString(row.updatedAt, "Task update timestamp"),
             numericId: requiredPositiveInteger(row.numericId, "Task numeric ID"),
           }))
+          .filter(({ state }) => state === "new" || state === "todo")
           .sort(
             (left, right) =>
               (left.state === "new" ? 0 : 1) - (right.state === "new" ? 0 : 1) ||
@@ -245,7 +243,6 @@ const listActionableTasks = (sql: SqlClient.SqlClient) =>
       SELECT id, title, state, created_at AS createdAt, updated_at AS updatedAt,
         numeric_id AS numericId
       FROM tasks
-      WHERE state IN ('new', 'todo')
     `;
     const orderedRows = yield* orderActionableTaskRows(rows, "list actionable Tasks");
     return yield* Effect.forEach(orderedRows, (row) =>
