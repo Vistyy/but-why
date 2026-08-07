@@ -1023,12 +1023,29 @@ type CandidateValidationRunRow = {
   readonly createdAt: unknown;
   readonly updatedAt: unknown;
 };
-type CandidateValidationFindingRow = Omit<CandidateValidationFinding, "files" | "artifactRefs"> & {
-  readonly files: string;
-  readonly artifactRefs: string;
+type CandidateValidationFindingRow = {
+  readonly id: unknown;
+  readonly validationRunId: unknown;
+  readonly phase: unknown;
+  readonly producer: unknown;
+  readonly title: unknown;
+  readonly description: unknown;
+  readonly evidence: unknown;
+  readonly files: unknown;
+  readonly artifactRefs: unknown;
+  readonly createdAt: unknown;
+  readonly updatedAt: unknown;
 };
-type CandidateValidationArtifactRow = Omit<CandidateValidationArtifact, "truncated"> & {
+type CandidateValidationArtifactRow = {
+  readonly ref: unknown;
+  readonly validationRunId: unknown;
+  readonly phase: unknown;
+  readonly producer: unknown;
+  readonly path: unknown;
+  readonly originalBytes: unknown;
+  readonly storedBytes: unknown;
   readonly truncated: unknown;
+  readonly createdAt: unknown;
 };
 
 type ActiveCandidateValidationRunRow = {

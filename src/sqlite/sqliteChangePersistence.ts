@@ -37,10 +37,7 @@ import { RepositorySql } from "./repositorySql.js";
 import { decodeSqliteAcceptanceContextSnapshot } from "./sqliteAcceptanceContextSnapshot.js";
 import { encodeSqliteCandidateValidationPolicy } from "./sqliteCandidateValidationPolicy.js";
 import { decodeSqliteChangePrepareFailure } from "./sqliteChangePreparation.js";
-import {
-  decodeSqliteChangePublication,
-  type SqliteChangePublicationRow,
-} from "./sqliteChangePublication.js";
+import { decodeSqliteChangePublication } from "./sqliteChangePublication.js";
 import {
   decodeChangeCleanup,
   decodeChangeCloseReason,
@@ -851,13 +848,17 @@ const mapRow = (row: ChangeRow | undefined, operationName: string, sql: SqlClien
   row === undefined
     ? Effect.succeed(undefined)
     : Effect.gen(function* () {
-        const decisions = yield* listDecisions(sql, row.id, operationName);
+        const id = yield* Effect.try({
+          try: () => requiredString(row.id, "Change ID"),
+          catch: (cause) => new RepositoryPersistedDataInvalid({ operationName, cause }),
+        });
+        const decisions = yield* listDecisions(sql, id, operationName);
         const activeRows = yield* sql<ImplementationBlockerWithResolutionRow>`
           SELECT sequence, id, change_id AS changeId, reported_at AS reportedAt, content,
             resolved_at AS resolvedAt, resolution_id AS resolutionId,
             resolution_recorded_at AS resolutionRecordedAt, resolution_content AS resolutionContent
           FROM implementation_blockers
-          WHERE change_id = ${row.id} AND resolved_at IS NULL
+          WHERE change_id = ${id} AND resolved_at IS NULL
           LIMIT 1
         `;
         return yield* Effect.try({
@@ -866,7 +867,7 @@ const mapRow = (row: ChangeRow | undefined, operationName: string, sql: SqlClien
             const closeReason = decodeChangeCloseReason(row.closeReason);
             const closedAt = decodeChangeLifecycleConsistency(state, closeReason, row.closedAt);
             return {
-              id: requiredString(row.id, "Change ID"),
+              id,
               repositoryCommonDirectory: requiredString(
                 row.repositoryCommonDirectory,
                 "Change repository common directory",
@@ -971,15 +972,35 @@ type PassingPublicationEvidenceRow = ChangePublicationEvidence & {
   readonly latestResolvedBlockerId: unknown;
 };
 
-type ChangeRow = Omit<
-  ChangeRecord,
-  "taskId" | "acceptanceContext" | "prepare" | "prepareFailure" | "publication"
-> & {
-  readonly taskId: string | null;
-  readonly acceptanceContext: string | null;
-  readonly prepareCommand: string | null;
-  readonly prepareTimeoutSeconds: number | null;
-  readonly prepareFailure: string | null;
-  readonly cleanupState: ChangeCleanup["state"];
-  readonly cleanupBlockingReason: string | null;
-} & SqliteChangePublicationRow;
+type ChangeRow = {
+  readonly id: unknown;
+  readonly repositoryCommonDirectory: unknown;
+  readonly branchRef: unknown;
+  readonly baseRef: unknown;
+  readonly baseRemoteUrl: unknown;
+  readonly taskId: unknown;
+  readonly startingCommit: unknown;
+  readonly worktreePath: unknown;
+  readonly acceptanceContext: unknown;
+  readonly prepareCommand: unknown;
+  readonly prepareTimeoutSeconds: unknown;
+  readonly prepareFailure: unknown;
+  readonly publicationCandidateId: unknown;
+  readonly publicationValidationRunId: unknown;
+  readonly publicationOwner: unknown;
+  readonly publicationRepo: unknown;
+  readonly publicationBaseBranch: unknown;
+  readonly publicationRemoteName: unknown;
+  readonly publicationHeadBranch: unknown;
+  readonly publicationExpectedHeadSha: unknown;
+  readonly publicationPrNumber: unknown;
+  readonly publicationPrUrl: unknown;
+  readonly cleanupState: unknown;
+  readonly cleanupBlockingReason: unknown;
+  readonly state: unknown;
+  readonly closeReason: unknown;
+  readonly cancelReason: unknown;
+  readonly createdAt: unknown;
+  readonly updatedAt: unknown;
+  readonly closedAt: unknown;
+};
