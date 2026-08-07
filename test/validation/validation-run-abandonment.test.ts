@@ -20,7 +20,10 @@ const worktreePath = "/linked-main/.sandcastle/worktrees/validation-run";
 const runningRun: CandidateValidationRunRecord = {
   id: validationRunId,
   candidateId: "candidate-1",
-  policy: { checks: [], copyFiles: [] },
+  policy: {
+    checks: [{ id: "test", command: "true", timeoutSeconds: 30 }],
+    copyFiles: [],
+  },
   implementationDecisions: [],
   state: "running",
   outcome: null,

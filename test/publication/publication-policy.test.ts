@@ -21,7 +21,11 @@ import { withTestRepository } from "../support/repository.js";
 import { acquireTestWorkspace, releaseTestWorkspace } from "../support/testWorkspace.js";
 
 const now = "2026-07-22T10:00:00.000Z";
-const policy = { checks: [], copyFiles: [], specialistReviews: [] };
+const policy = {
+  checks: [{ id: "test", command: "true", timeoutSeconds: 30 }],
+  copyFiles: [],
+  specialistReviews: [],
+};
 const target = { owner: "acme", repo: "widgets", baseBranch: "main", remoteName: "origin" };
 type Captured = Extract<CaptureLocalCandidateResult, { readonly ok: true }>;
 let candidateRepoTemplate: string;

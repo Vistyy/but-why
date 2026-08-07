@@ -240,7 +240,10 @@ help[1]: "Replace <git-common-dir>/but-why/state.sqlite with a known-good copy, 
         persistence.startOrReuse({
           candidateId: firstCandidate.id,
           headSha: firstCandidate.headSha,
-          policy: { checks: [], copyFiles: [] },
+          policy: {
+            checks: [{ id: "test", command: "true", timeoutSeconds: 30 }],
+            copyFiles: [],
+          },
           now: commandNow,
         }),
       );
@@ -257,7 +260,10 @@ help[1]: "Replace <git-common-dir>/but-why/state.sqlite with a known-good copy, 
         persistence.startOrReuse({
           candidateId: secondCandidate.id,
           headSha: secondCandidate.headSha,
-          policy: { checks: [], copyFiles: [] },
+          policy: {
+            checks: [{ id: "test", command: "true", timeoutSeconds: 30 }],
+            copyFiles: [],
+          },
           now: secondNow,
         }),
       );
@@ -827,7 +833,10 @@ help[1]: "Replace <git-common-dir>/but-why/state.sqlite with a known-good copy, 
         persistence.startOrReuse({
           candidateId: candidate.id,
           headSha: candidate.headSha,
-          policy: { checks: [], copyFiles: [] },
+          policy: {
+            checks: [{ id: "test", command: "true", timeoutSeconds: 30 }],
+            copyFiles: [],
+          },
           now: commandNow,
         }),
       );

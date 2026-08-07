@@ -197,7 +197,7 @@ const readTask = (sql: SqlClient.SqlClient, taskId: PublicTaskId) =>
         : Effect.try({
             try: () => ({
               ...row,
-              id: requiredString(row.id, "Change Start Task ID"),
+              id: storedPublicTaskId(requiredString(row.id, "Change Start Task ID")),
               title: requiredString(row.title, "Change Start Task title"),
               description: requiredString(row.description, "Change Start Task description"),
               state: decodeTaskState(row.state),

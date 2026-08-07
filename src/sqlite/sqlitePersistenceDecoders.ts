@@ -45,8 +45,65 @@ export const requiredPositiveInteger = (value: unknown, description: string): nu
   return number;
 };
 
+export const decodeLatestResolvedBlockerId = (
+  rows: readonly {
+    readonly id: unknown;
+    readonly resolvedAt: unknown;
+    readonly sequence: unknown;
+  }[],
+): string | null => {
+  const decoded = rows.map((row) => ({
+    id: requiredString(row.id, "Implementation Blocker ID"),
+    resolvedAt: requiredString(row.resolvedAt, "Implementation Blocker resolution timestamp"),
+    sequence: requiredPositiveInteger(row.sequence, "Implementation Blocker sequence"),
+  }));
+  return (
+    [...decoded].sort((left, right) =>
+      left.resolvedAt < right.resolvedAt
+        ? 1
+        : left.resolvedAt > right.resolvedAt
+          ? -1
+          : right.sequence - left.sequence,
+    )[0]?.id ?? null
+  );
+};
+
 const optionalString = (value: unknown, description: string): string | null =>
   value === null ? null : requiredString(value, description);
+
+const nonBlankString = (value: unknown, description: string): string => {
+  const string = requiredString(value, description);
+  if (string.trim().length === 0) throw new Error(`Stored ${description} is blank`);
+  return string;
+};
+
+const configName = (value: unknown, description: string): string => {
+  const name = nonBlankString(value, description);
+  if (!/^[a-z0-9][a-z0-9._-]*$/u.test(name))
+    throw new Error(`Stored ${description} is not a valid configuration name`);
+  return name;
+};
+
+const checkId = (value: unknown, description: string): string => {
+  const id = nonBlankString(value, description);
+  if (!/^[a-z0-9][a-z0-9_-]*$/u.test(id))
+    throw new Error(`Stored ${description} is not a valid check ID`);
+  return id;
+};
+
+const repoRelativePath = (value: unknown, description: string): string => {
+  const path = nonBlankString(value, description);
+  if (
+    path === "." ||
+    path.startsWith("/") ||
+    path.startsWith("\\") ||
+    path.includes(":") ||
+    path.split(/[\\/]/u).includes("..") ||
+    path.includes("\\")
+  )
+    throw new Error(`Stored ${description} is not a repository-relative path`);
+  return path;
+};
 
 export const decodeTaskState = (value: unknown): TaskState => {
   const state = requiredString(value, "Task lifecycle state");
@@ -145,14 +202,14 @@ export const decodeAcceptanceContextValue = (value: unknown) => {
 };
 
 const decodeAgentEnvironment = (value: unknown): AgentEnvironmentCommand => {
-  if (!Array.isArray(value) || !value.every((item) => typeof item === "string"))
+  if (!Array.isArray(value) || value.length === 0)
     throw new Error("Stored Agent Environment is invalid");
-  return value;
+  return value.map((item) => nonBlankString(item, "Agent Environment entry"));
 };
 
 const decodeRuntimeProfile = (value: unknown): ResolvedPiAgentProfile => {
   if (!isRecord(value)) throw new Error("Stored Agent Profile is invalid");
-  const agentProfile = requiredString(get(value, "agentProfile"), "Agent Profile name");
+  const agentProfile = configName(get(value, "agentProfile"), "Agent Profile name");
   const scope = requiredString(get(value, "scope"), "Agent Profile scope");
   if (scope !== "repo" && scope !== "global")
     throw new Error("Stored Agent Profile scope is invalid");
@@ -163,7 +220,7 @@ const decodeRuntimeProfile = (value: unknown): ResolvedPiAgentProfile => {
   if (runtimeConfig !== undefined) {
     if (!isRecord(runtimeConfig)) throw new Error("Stored Agent Profile runtime config is invalid");
     if (get(runtimeConfig, "model") !== undefined)
-      requiredString(get(runtimeConfig, "model"), "Agent Profile model");
+      nonBlankString(get(runtimeConfig, "model"), "Agent Profile model");
     const thinking = get(runtimeConfig, "thinking");
     if (
       thinking !== undefined &&
@@ -174,7 +231,8 @@ const decodeRuntimeProfile = (value: unknown): ResolvedPiAgentProfile => {
       const list = get(runtimeConfig, key);
       if (
         list !== undefined &&
-        (!Array.isArray(list) || !list.every((item) => typeof item === "string"))
+        (!Array.isArray(list) ||
+          !list.every((item) => typeof item === "string" && item.trim() !== ""))
       )
         throw new Error(`Stored Agent Profile ${key} are invalid`);
     }
@@ -188,7 +246,7 @@ const decodeRuntimeProfile = (value: unknown): ResolvedPiAgentProfile => {
 const decodeCommand = (value: unknown, description: string) => {
   if (!isRecord(value)) throw new Error(`Stored ${description} is invalid`);
   return {
-    command: requiredString(get(value, "command"), `${description} command`),
+    command: nonBlankString(get(value, "command"), `${description} command`),
     timeoutSeconds: requiredPositiveInteger(get(value, "timeoutSeconds"), `${description} timeout`),
   };
 };
@@ -204,10 +262,10 @@ const decodeReviewerPolicy = (value: unknown, specialist: boolean) => {
   if (scope !== "repo" && scope !== "global")
     throw new Error("Stored reviewer profile scope is invalid");
   return {
-    ...(specialist ? { id: requiredString(get(value, "id"), "Specialist ID") } : {}),
-    instructions: requiredString(get(value, "instructions"), "reviewer instructions"),
+    ...(specialist ? { id: configName(get(value, "id"), "Specialist ID") } : {}),
+    instructions: nonBlankString(get(value, "instructions"), "reviewer instructions"),
     instructionsSource: source as "repo" | "global" | "built_in",
-    agentProfile: requiredString(get(value, "agentProfile"), "reviewer Agent Profile"),
+    agentProfile: configName(get(value, "agentProfile"), "reviewer Agent Profile"),
     profileScope: scope as "repo" | "global",
     profile: decodeRuntimeProfile(get(value, "profile")),
   };
@@ -220,9 +278,9 @@ export const decodeSqliteCandidateValidationPolicy = (
   if (!isRecord(value)) throw new Error("Stored Candidate Validation Policy Snapshot is invalid");
   const checksValue = get(value, "checks");
   const copyFiles = get(value, "copyFiles");
-  if (!Array.isArray(checksValue) || !checksValue.every(isRecord))
+  if (!Array.isArray(checksValue) || checksValue.length === 0 || !checksValue.every(isRecord))
     throw new Error("Stored Candidate Validation Policy checks are invalid");
-  if (!Array.isArray(copyFiles) || !copyFiles.every((item) => typeof item === "string"))
+  if (!Array.isArray(copyFiles))
     throw new Error("Stored Candidate Validation Policy copy files are invalid");
   const policy: CandidateValidationPolicySnapshot = {
     ...(get(value, "acceptanceContext") === undefined
@@ -235,14 +293,14 @@ export const decodeSqliteCandidateValidationPolicy = (
       ? {}
       : { prepare: decodeCommand(get(value, "prepare"), "validation prepare") }),
     checks: checksValue.map((check) => ({
-      id: requiredString(get(check, "id"), "validation check ID"),
-      command: requiredString(get(check, "command"), "validation check command"),
+      id: checkId(get(check, "id"), "validation check ID"),
+      command: nonBlankString(get(check, "command"), "validation check command"),
       timeoutSeconds: requiredPositiveInteger(
         get(check, "timeoutSeconds"),
         "validation check timeout",
       ),
     })),
-    copyFiles,
+    copyFiles: copyFiles.map((file) => repoRelativePath(file, "validation copy file")),
     ...(get(value, "acceptanceReview") === undefined
       ? {}
       : { acceptanceReview: decodeReviewerPolicy(get(value, "acceptanceReview"), false) }),

@@ -966,7 +966,11 @@ describe("repository SQL storage", () => {
         if (!captured.ok) throw new Error(`Candidate capture failed: ${captured.code}`);
         const authority = {
           changeBaseSha: "base-sha",
-          policy: { checks: [], copyFiles: [], specialistReviews: [] },
+          policy: {
+            checks: [{ id: "test", command: "true", timeoutSeconds: 30 }],
+            copyFiles: [],
+            specialistReviews: [],
+          },
           implementationDecisions: [],
         };
         yield* repository.operation("install passing publication evidence", (sql) =>
@@ -977,7 +981,7 @@ describe("repository SQL storage", () => {
                 latest_resolved_blocker_id, state, outcome, created_at, updated_at
               ) VALUES (
                 'run-1', ${captured.candidateId},
-                '{"checks":[],"copyFiles":[],"specialistReviews":[]}', '[]', NULL,
+                '{"checks":[{"id":"test","command":"true","timeoutSeconds":30}],"copyFiles":[],"specialistReviews":[]}', '[]', NULL,
                 'complete', 'passed',
                 '2026-07-25T15:01:00.000Z', '2026-07-25T15:01:00.000Z'
               )
@@ -1077,7 +1081,7 @@ describe("repository SQL storage", () => {
                 latest_resolved_blocker_id, state, outcome, created_at, updated_at
               ) VALUES (
                 'run-2', ${other.candidateId},
-                '{"checks":[],"copyFiles":[],"specialistReviews":[]}', '[]', NULL,
+                '{"checks":[{"id":"test","command":"true","timeoutSeconds":30}],"copyFiles":[],"specialistReviews":[]}', '[]', NULL,
                 'complete', 'passed',
                 '2026-07-25T15:03:00.000Z', '2026-07-25T15:03:00.000Z'
               )
@@ -1123,7 +1127,11 @@ describe("repository SQL storage", () => {
             choice: "Choose the passing path",
             rationale: "Prove that decisions are part of Validation Run identity.",
           };
-          const policy = { checks: [], copyFiles: [], specialistReviews: [] };
+          const policy = {
+            checks: [{ id: "test", command: "true", timeoutSeconds: 30 }],
+            copyFiles: [],
+            specialistReviews: [],
+          };
           const exact = {
             candidateId: captured.candidateId,
             changeBaseSha: "base-sha",
@@ -1282,7 +1290,11 @@ describe("repository SQL storage", () => {
           candidateId: captured.candidateId,
           changeBaseSha: "base-sha",
           headSha: "head-sha",
-          policy: { checks: [], copyFiles: [], specialistReviews: [] },
+          policy: {
+            checks: [{ id: "test", command: "true", timeoutSeconds: 30 }],
+            copyFiles: [],
+            specialistReviews: [],
+          },
           now: "2026-07-25T16:22:00.000Z",
         });
         expect(rejected).toEqual({ reused: false, blocked: true });
@@ -1298,7 +1310,11 @@ describe("repository SQL storage", () => {
           candidateId: captured.candidateId,
           changeBaseSha: "base-sha",
           headSha: "head-sha",
-          policy: { checks: [], copyFiles: [], specialistReviews: [] },
+          policy: {
+            checks: [{ id: "test", command: "true", timeoutSeconds: 30 }],
+            copyFiles: [],
+            specialistReviews: [],
+          },
           now: "2026-07-25T16:24:00.000Z",
         });
         expect(admitted.reused).toBe(false);
@@ -1322,7 +1338,11 @@ describe("repository SQL storage", () => {
           now: "2026-07-25T16:30:00.000Z",
         });
         if (!captured.ok) throw new Error(`Candidate capture failed: ${captured.code}`);
-        const policy = { checks: [], copyFiles: [], specialistReviews: [] };
+        const policy = {
+          checks: [{ id: "test", command: "true", timeoutSeconds: 30 }],
+          copyFiles: [],
+          specialistReviews: [],
+        };
         const start = (at: string) =>
           validation.startOrReuse({
             candidateId: captured.candidateId,
@@ -2754,7 +2774,7 @@ describe("repository SQL storage", () => {
                         id, candidate_id, policy_snapshot, state, outcome, created_at, updated_at
                       ) VALUES (
                         'run-1', 'candidate-1',
-                        '{"checks":[],"copyFiles":[],"specialistReviews":[],"acceptanceContext":{"version":1,"title":"Current intent","description":"Must survive.","comments":[]}}',
+                        '{"checks":[{"id":"test","command":"true","timeoutSeconds":30}],"copyFiles":[],"specialistReviews":[],"acceptanceContext":{"version":1,"title":"Current intent","description":"Must survive.","comments":[]}}',
                         'complete', 'passed', '2026-07-25T18:02:00.000Z', '2026-07-25T18:02:00.000Z'
                       )
                     `;
@@ -3180,7 +3200,10 @@ describe("repository SQL storage", () => {
         const started = yield* validation.startOrReuse({
           candidateId: captured.candidateId,
           headSha: "head-sha",
-          policy: { checks: [], copyFiles: [] },
+          policy: {
+            checks: [{ id: "test", command: "true", timeoutSeconds: 30 }],
+            copyFiles: [],
+          },
           now: "2026-07-17T23:24:00.000Z",
         });
         if (started.reused || "blocked" in started)
@@ -3220,7 +3243,10 @@ describe("repository SQL storage", () => {
         const started = yield* validation.startOrReuse({
           candidateId: captured.candidateId,
           headSha: "head-sha",
-          policy: { checks: [], copyFiles: [] },
+          policy: {
+            checks: [{ id: "test", command: "true", timeoutSeconds: 30 }],
+            copyFiles: [],
+          },
           implementationDecisions: [],
           now: "2026-07-17T23:26:00.000Z",
         });

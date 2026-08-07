@@ -25,6 +25,7 @@ import {
   encodeSqliteJsonStringArray,
 } from "./sqliteJsonStringArray.js";
 import {
+  decodeLatestResolvedBlockerId,
   decodeSqliteCandidateValidationPolicy,
   decodeSqliteImplementationDecisions,
   requiredInteger,
@@ -261,19 +262,18 @@ const startOrReuse = (sql: SqlClient.SqlClient, input: StartCandidateValidationR
         blocked: true,
       } satisfies StartCandidateValidationRunResult;
     }
-    const latestResolved = yield* sql<{ readonly id: unknown }>`
-      SELECT blocker.id
+    const resolvedBlockers = yield* sql<{
+      readonly id: unknown;
+      readonly resolvedAt: unknown;
+      readonly sequence: unknown;
+    }>`
+      SELECT blocker.id, blocker.resolved_at AS resolvedAt, blocker.sequence
       FROM implementation_blockers AS blocker
       WHERE blocker.change_id = ${storedCandidate.changeId}
         AND blocker.resolved_at IS NOT NULL
-      ORDER BY blocker.resolved_at DESC, blocker.sequence DESC
-      LIMIT 1
     `;
     const latestResolvedBlockerId = yield* Effect.try({
-      try: () =>
-        latestResolved[0] === undefined
-          ? null
-          : requiredString(latestResolved[0].id, "Latest resolved Implementation Blocker ID"),
+      try: () => decodeLatestResolvedBlockerId(resolvedBlockers),
       catch: (cause) =>
         new RepositoryPersistedDataInvalid({
           operationName: "start Candidate Validation Run",
@@ -595,55 +595,118 @@ const listPreviousCandidateReviewerFindings = (
     readonly producer: string;
   },
 ) =>
-  sql.unsafe<CandidateValidationFindingRow>(
-    `WITH current_candidate AS (
-       SELECT change_id, created_at, id
-       FROM candidates
-       WHERE id = ?
-     ), latest_valid_reviewer_round AS (
-       SELECT prior_round.validation_run_id
-       FROM candidates AS prior_candidate
-       JOIN current_candidate AS current
-         ON current.change_id = prior_candidate.change_id
-       JOIN candidate_validation_runs AS prior_run
-         ON prior_run.candidate_id = prior_candidate.id
-       JOIN candidate_validation_rounds AS prior_round
-         ON prior_round.validation_run_id = prior_run.id
-       WHERE (
-         prior_candidate.created_at < current.created_at
-         OR (
-           prior_candidate.created_at = current.created_at
-           AND prior_candidate.id < current.id
-         )
-       )
-         AND prior_round.phase = ?
-         AND prior_round.producer = ?
-         AND (
-           prior_round.status = 'passed'
-           OR EXISTS (
-             SELECT 1
-             FROM candidate_validation_findings AS finding
-             WHERE finding.validation_run_id = prior_round.validation_run_id
-               AND finding.phase = prior_round.phase
-               AND finding.producer = prior_round.producer
-           )
-         )
-       ORDER BY
-         prior_candidate.created_at DESC,
-         prior_candidate.id DESC,
-         prior_run.created_at DESC,
-         prior_run.id DESC,
-         prior_round.round_number DESC
-       LIMIT 1
-     )
-     SELECT ${findingColumns}
-     FROM candidate_validation_findings
-     WHERE validation_run_id = (SELECT validation_run_id FROM latest_valid_reviewer_round)
-       AND phase = ?
-       AND producer = ?
-     ORDER BY id`,
-    [input.candidateId, input.phase, input.producer, input.phase, input.producer],
-  );
+  Effect.gen(function* () {
+    const currentRows = yield* sql<CurrentCandidateHistoryRow>`
+      SELECT id, change_id AS changeId, created_at AS createdAt
+      FROM candidates
+      WHERE id = ${input.candidateId}
+    `;
+    const current = currentRows[0];
+    if (current === undefined) return [];
+    const currentCandidate = yield* decodeCandidateHistoryRow(
+      current,
+      "list previous Candidate reviewer Findings",
+    );
+    const roundRows = yield* sql<PreviousReviewerRoundRow>`
+      SELECT
+        prior_candidate.id AS priorCandidateId,
+        prior_candidate.change_id AS priorChangeId,
+        prior_candidate.created_at AS priorCandidateCreatedAt,
+        prior_run.id AS priorRunId,
+        prior_run.created_at AS priorRunCreatedAt,
+        prior_round.validation_run_id AS validationRunId,
+        prior_round.phase,
+        prior_round.producer,
+        prior_round.round_number AS roundNumber,
+        prior_round.status,
+        CASE WHEN EXISTS (
+          SELECT 1
+          FROM candidate_validation_findings AS finding
+          WHERE finding.validation_run_id = prior_round.validation_run_id
+            AND finding.phase = prior_round.phase
+            AND finding.producer = prior_round.producer
+        ) THEN 1 ELSE 0 END AS hasFindings
+      FROM candidates AS prior_candidate
+      JOIN candidate_validation_runs AS prior_run
+        ON prior_run.candidate_id = prior_candidate.id
+      JOIN candidate_validation_rounds AS prior_round
+        ON prior_round.validation_run_id = prior_run.id
+      WHERE prior_candidate.change_id = ${currentCandidate.changeId}
+    `;
+    const decodedRounds = yield* Effect.try({
+      try: () =>
+        roundRows
+          .map((row) => ({
+            priorCandidateId: requiredString(row.priorCandidateId, "Prior Candidate ID"),
+            priorChangeId: requiredString(row.priorChangeId, "Prior Candidate Change ID"),
+            priorCandidateCreatedAt: requiredString(
+              row.priorCandidateCreatedAt,
+              "Prior Candidate creation timestamp",
+            ),
+            priorRunId: requiredString(row.priorRunId, "Prior Validation Run ID"),
+            priorRunCreatedAt: requiredString(
+              row.priorRunCreatedAt,
+              "Prior Validation Run creation timestamp",
+            ),
+            validationRunId: requiredString(row.validationRunId, "Validation Run ID"),
+            phase: decodeValidationPhase(row.phase),
+            producer: requiredString(row.producer, "Prior review producer"),
+            roundNumber: requiredPositiveInteger(row.roundNumber, "Prior round number"),
+            status: requiredString(row.status, "Prior round status"),
+            hasFindings: requiredInteger(row.hasFindings, "Prior round finding flag"),
+          }))
+          .map((row) => {
+            if (row.status !== "passed" && row.status !== "failed")
+              throw new Error("Stored Prior round status is invalid");
+            if (row.hasFindings !== 0 && row.hasFindings !== 1)
+              throw new Error("Stored Prior round finding flag is invalid");
+            return row;
+          }),
+      catch: (cause) =>
+        new RepositoryPersistedDataInvalid({
+          operationName: "list previous Candidate reviewer Findings",
+          cause,
+        }),
+    });
+    const selected = decodedRounds
+      .filter(
+        (row) =>
+          row.priorChangeId === currentCandidate.changeId &&
+          (row.priorCandidateCreatedAt < currentCandidate.createdAt ||
+            (row.priorCandidateCreatedAt === currentCandidate.createdAt &&
+              row.priorCandidateId < currentCandidate.id)) &&
+          row.phase === input.phase &&
+          row.producer === input.producer &&
+          (row.status === "passed" || row.hasFindings === 1),
+      )
+      .sort((left, right) =>
+        left.priorCandidateCreatedAt < right.priorCandidateCreatedAt
+          ? 1
+          : left.priorCandidateCreatedAt > right.priorCandidateCreatedAt
+            ? -1
+            : left.priorCandidateId < right.priorCandidateId
+              ? 1
+              : left.priorCandidateId > right.priorCandidateId
+                ? -1
+                : left.priorRunCreatedAt < right.priorRunCreatedAt
+                  ? 1
+                  : left.priorRunCreatedAt > right.priorRunCreatedAt
+                    ? -1
+                    : left.priorRunId < right.priorRunId
+                      ? 1
+                      : left.priorRunId > right.priorRunId
+                        ? -1
+                        : right.roundNumber - left.roundNumber,
+      )[0];
+    if (selected === undefined) return [];
+    return yield* sql.unsafe<CandidateValidationFindingRow>(
+      `SELECT ${findingColumns}
+       FROM candidate_validation_findings
+       WHERE validation_run_id = ? AND phase = ? AND producer = ?
+       ORDER BY id`,
+      [selected.validationRunId, input.phase, input.producer],
+    );
+  });
 
 const listToolingFailures = (sql: SqlClient.SqlClient, validationRunId: string) =>
   sql<CandidateValidationToolingFailureRow>`
@@ -859,6 +922,16 @@ const decodeCandidate = (row: CandidateRow, operationName: string) =>
 const decodeCandidateOptional = (row: CandidateRow | undefined, operationName: string) =>
   row === undefined ? Effect.succeed(undefined) : decodeCandidate(row, operationName);
 
+const decodeCandidateHistoryRow = (row: CurrentCandidateHistoryRow, operationName: string) =>
+  Effect.try({
+    try: () => ({
+      id: requiredString(row.id, "Current Candidate ID"),
+      changeId: requiredString(row.changeId, "Current Candidate Change ID"),
+      createdAt: requiredString(row.createdAt, "Current Candidate creation timestamp"),
+    }),
+    catch: (cause) => new RepositoryPersistedDataInvalid({ operationName, cause }),
+  });
+
 type CandidateRow = {
   readonly id: unknown;
   readonly changeId: unknown;
@@ -870,6 +943,24 @@ type CandidateIdentityRow = {
   readonly headSha: unknown;
   readonly changeBaseSha: unknown;
   readonly changeId: unknown;
+};
+type CurrentCandidateHistoryRow = {
+  readonly id: unknown;
+  readonly changeId: unknown;
+  readonly createdAt: unknown;
+};
+type PreviousReviewerRoundRow = {
+  readonly priorCandidateId: unknown;
+  readonly priorChangeId: unknown;
+  readonly priorCandidateCreatedAt: unknown;
+  readonly priorRunId: unknown;
+  readonly priorRunCreatedAt: unknown;
+  readonly validationRunId: unknown;
+  readonly phase: unknown;
+  readonly producer: unknown;
+  readonly roundNumber: unknown;
+  readonly status: unknown;
+  readonly hasFindings: unknown;
 };
 type CandidateValidationRoundRow = {
   readonly validationRunId: unknown;

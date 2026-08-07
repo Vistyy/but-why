@@ -47,6 +47,7 @@ import {
   decodeChangeLifecycleConsistency,
   decodeChangePrepare,
   decodeChangeState,
+  decodeLatestResolvedBlockerId,
   decodeSqliteCandidateValidationPolicy,
   decodeSqliteImplementationDecisions,
   requiredPositiveInteger,
@@ -443,22 +444,18 @@ const getPassingPublicationEvidence = (
   authority: CurrentPublicationAuthority,
 ) =>
   Effect.gen(function* () {
-    const latestResolvedBlockers = yield* sql<{ readonly id: unknown }>`
-      SELECT blocker.id
+    const resolvedBlockers = yield* sql<{
+      readonly id: unknown;
+      readonly resolvedAt: unknown;
+      readonly sequence: unknown;
+    }>`
+      SELECT blocker.id, blocker.resolved_at AS resolvedAt, blocker.sequence
       FROM implementation_blockers AS blocker
       WHERE blocker.change_id = ${changeId}
         AND blocker.resolved_at IS NOT NULL
-      ORDER BY blocker.resolved_at DESC, blocker.sequence DESC
-      LIMIT 1
     `;
     const latestResolvedBlockerId = yield* Effect.try({
-      try: () =>
-        latestResolvedBlockers[0] === undefined
-          ? null
-          : requiredString(
-              latestResolvedBlockers[0].id,
-              "Latest resolved Implementation Blocker ID",
-            ),
+      try: () => decodeLatestResolvedBlockerId(resolvedBlockers),
       catch: (cause) =>
         new RepositoryPersistedDataInvalid({
           operationName: "read passing Change publication evidence",

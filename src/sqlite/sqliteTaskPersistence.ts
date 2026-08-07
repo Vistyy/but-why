@@ -259,7 +259,7 @@ const getTaskContextById = (sql: SqlClient.SqlClient, taskId: PublicTaskId) =>
     return yield* decodeTaskValue(
       () =>
         ({
-          id: requiredString(task.id, "Task Context ID"),
+          id: storedPublicTaskId(requiredString(task.id, "Task Context ID")),
           title: requiredString(task.title, "Task Context title"),
           description: requiredString(task.description, "Task Context description"),
           comments: comments.map((row) => requiredString(row.content, "Task comment content")),
@@ -508,7 +508,7 @@ const decodeDependencyFacts = (
     Effect.forEach(rows, (row) =>
       decodeTaskValue(
         () => ({
-          id: requiredString(row.id, "Task dependency ID"),
+          id: storedPublicTaskId(requiredString(row.id, "Task dependency ID")),
           title: requiredString(row.title, "Task dependency title"),
           state: decodeTaskState(row.state),
         }),
@@ -540,7 +540,10 @@ const rowToTaskSummary = (
     const prerequisites = yield* decodeDependencyFacts(sql, row.id, "prerequisites", operationName);
     const blockedBy = prerequisites.filter((dependency) => dependency.state !== "done");
     return {
-      id: yield* decodeTaskValue(() => requiredString(row.id, "Task ID"), operationName),
+      id: yield* decodeTaskValue(
+        () => storedPublicTaskId(requiredString(row.id, "Task ID")),
+        operationName,
+      ),
       title: yield* decodeTaskValue(() => requiredString(row.title, "Task title"), operationName),
       state,
       createdAt: yield* decodeTaskValue(
