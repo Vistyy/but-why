@@ -514,47 +514,55 @@ const recordRound = (sql: SqlClient.SqlClient, input: RecordCandidateValidationC
     );
   });
 
-const listRounds = (sql: SqlClient.SqlClient, validationRunId: string) =>
+const validationPhaseOrder = (phase: CandidateValidationRound["phase"]) =>
+  phase === "prepare" ? 0 : phase === "checks" ? 1 : phase === "acceptance_review" ? 2 : 3;
+
+const sortValidationRounds = (rounds: readonly CandidateValidationRound[]) =>
+  [...rounds].sort(
+    (left, right) =>
+      validationPhaseOrder(left.phase) - validationPhaseOrder(right.phase) ||
+      left.roundNumber - right.roundNumber ||
+      left.producer.localeCompare(right.producer),
+  );
+
+const decodeValidationRound = (row: CandidateValidationRoundRow): CandidateValidationRound => {
+  const status = requiredString(row.status, "Validation round status");
+  if (status !== "passed" && status !== "failed")
+    throw new Error("Stored Validation round status is invalid");
+  return {
+    validationRunId: requiredString(row.validationRunId, "Validation round Validation Run ID"),
+    phase: decodeValidationPhase(row.phase),
+    producer: requiredString(row.producer, "Validation round producer"),
+    roundNumber: requiredPositiveInteger(row.roundNumber, "Validation round number"),
+    status,
+    createdAt: requiredString(row.createdAt, "Validation round timestamp"),
+  };
+};
+
+const listRounds = (
+  sql: SqlClient.SqlClient,
+  validationRunId: string,
+  operationName = "list Candidate validation rounds",
+) =>
   Effect.flatMap(
     sql<CandidateValidationRoundRow>`
       SELECT validation_run_id AS validationRunId, phase, producer,
         round_number AS roundNumber, status, created_at AS createdAt
       FROM candidate_validation_rounds
       WHERE validation_run_id = ${validationRunId}
-      ORDER BY
-        CASE phase
-          WHEN 'prepare' THEN 0
-          WHEN 'checks' THEN 1
-          WHEN 'acceptance_review' THEN 2
-          ELSE 3
-        END,
-        round_number, producer
     `,
     (rows) =>
-      Effect.try({
-        try: () =>
-          rows.map((row): CandidateValidationRound => {
-            const status = requiredString(row.status, "Validation round status");
-            if (status !== "passed" && status !== "failed")
-              throw new Error("Stored Validation round status is invalid");
-            return {
-              validationRunId: requiredString(
-                row.validationRunId,
-                "Validation round Validation Run ID",
-              ),
-              phase: decodeValidationPhase(row.phase),
-              producer: requiredString(row.producer, "Validation round producer"),
-              roundNumber: requiredPositiveInteger(row.roundNumber, "Validation round number"),
-              status,
-              createdAt: requiredString(row.createdAt, "Validation round timestamp"),
-            };
-          }),
-        catch: (cause) =>
-          new RepositoryPersistedDataInvalid({
-            operationName: "list Candidate validation rounds",
-            cause,
-          }),
-      }),
+      Effect.map(
+        Effect.try({
+          try: () => rows.map((row) => decodeValidationRound(row)),
+          catch: (cause) =>
+            new RepositoryPersistedDataInvalid({
+              operationName,
+              cause,
+            }),
+        }),
+        sortValidationRounds,
+      ),
   );
 
 const findingColumns = `
@@ -564,28 +572,41 @@ const findingColumns = `
 `;
 
 const listFindings = (sql: SqlClient.SqlClient, validationRunId: string) =>
-  sql.unsafe<CandidateValidationFindingRow>(
-    `SELECT ${findingColumns}
-     FROM candidate_validation_findings AS finding
-     WHERE validation_run_id = ?
-     ORDER BY
-       CASE phase
-         WHEN 'prepare' THEN 0
-         WHEN 'checks' THEN 1
-         WHEN 'acceptance_review' THEN 2
-         ELSE 3
-       END,
-       COALESCE((
-         SELECT round_number
-         FROM candidate_validation_rounds AS round
-         WHERE round.validation_run_id = finding.validation_run_id
-           AND round.phase = finding.phase
-           AND round.producer = finding.producer
-         LIMIT 1
-       ), 0),
-       id`,
-    [validationRunId],
-  );
+  Effect.gen(function* () {
+    const rounds = yield* listRounds(sql, validationRunId, "list Candidate validation Findings");
+    const roundNumbers = new Map(
+      rounds.map((round) => [JSON.stringify([round.phase, round.producer]), round.roundNumber]),
+    );
+    const rows = yield* sql.unsafe<CandidateValidationFindingRow>(
+      `SELECT ${findingColumns}
+       FROM candidate_validation_findings
+       WHERE validation_run_id = ?`,
+      [validationRunId],
+    );
+    const ordered = yield* Effect.try({
+      try: () =>
+        rows
+          .map((row) => ({
+            row,
+            id: requiredString(row.id, "Finding ID"),
+            phase: decodeValidationPhase(row.phase),
+            producer: requiredString(row.producer, "Finding producer"),
+          }))
+          .sort(
+            (left, right) =>
+              validationPhaseOrder(left.phase) - validationPhaseOrder(right.phase) ||
+              (roundNumbers.get(JSON.stringify([left.phase, left.producer])) ?? 0) -
+                (roundNumbers.get(JSON.stringify([right.phase, right.producer])) ?? 0) ||
+              left.id.localeCompare(right.id),
+          ),
+      catch: (cause) =>
+        new RepositoryPersistedDataInvalid({
+          operationName: "list Candidate validation Findings",
+          cause,
+        }),
+    });
+    return ordered.map(({ row }) => row);
+  });
 
 const listPreviousCandidateReviewerFindings = (
   sql: SqlClient.SqlClient,
@@ -877,6 +898,15 @@ const decodeArtifact = (artifact: CandidateValidationArtifactRow): CandidateVali
   const truncated = requiredInteger(artifact.truncated, "Validation Artifact truncated flag");
   if (truncated !== 0 && truncated !== 1)
     throw new Error("Stored Validation Artifact truncated flag is invalid");
+  const originalBytes = requiredInteger(
+    artifact.originalBytes,
+    "Validation Artifact original bytes",
+  );
+  const storedBytes = requiredInteger(artifact.storedBytes, "Validation Artifact stored bytes");
+  if (originalBytes < 0 || storedBytes < 0 || storedBytes > originalBytes)
+    throw new Error("Stored Validation Artifact byte counts are invalid");
+  if (storedBytes < originalBytes !== (truncated === 1))
+    throw new Error("Stored Validation Artifact truncation is inconsistent");
   return {
     ref: requiredString(artifact.ref, "Validation Artifact reference"),
     validationRunId: requiredString(
@@ -886,8 +916,8 @@ const decodeArtifact = (artifact: CandidateValidationArtifactRow): CandidateVali
     phase,
     producer: requiredString(artifact.producer, "Validation Artifact producer"),
     path: requiredString(artifact.path, "Validation Artifact path"),
-    originalBytes: requiredInteger(artifact.originalBytes, "Validation Artifact original bytes"),
-    storedBytes: requiredInteger(artifact.storedBytes, "Validation Artifact stored bytes"),
+    originalBytes,
+    storedBytes,
     truncated: truncated === 1,
     createdAt: requiredString(artifact.createdAt, "Validation Artifact creation timestamp"),
   };

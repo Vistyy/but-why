@@ -157,7 +157,7 @@ export const decodeChangePrepare = (
   if (command === null || timeoutSeconds === null)
     throw new Error("Stored Change preparation command and timeout are incomplete");
   return {
-    command: requiredString(command, "Change preparation command"),
+    command: nonBlankString(command, "Change preparation command"),
     timeoutSeconds: requiredPositiveInteger(timeoutSeconds, "Change preparation timeout"),
   };
 };
@@ -232,12 +232,13 @@ const decodeRuntimeProfile = (value: unknown): ResolvedPiAgentProfile => {
       throw new Error("Stored Agent Profile thinking level is invalid");
     for (const key of ["extensions", "skills", "tools"]) {
       const list = get(runtimeConfig, key);
-      if (
-        list !== undefined &&
-        (!Array.isArray(list) ||
-          !list.every((item) => typeof item === "string" && item.trim() !== ""))
-      )
-        throw new Error(`Stored Agent Profile ${key} are invalid`);
+      if (list === undefined) continue;
+      if (!Array.isArray(list)) throw new Error(`Stored Agent Profile ${key} are invalid`);
+      for (const item of list) {
+        if (scope === "repo" && (key === "extensions" || key === "skills"))
+          repoRelativePath(item, `Agent Profile ${key} entry`);
+        else nonBlankString(item, `Agent Profile ${key} entry`);
+      }
     }
     const discovery = get(runtimeConfig, "contextFileDiscovery");
     if (discovery !== undefined && typeof discovery !== "boolean")
@@ -349,7 +350,7 @@ export const decodeChangePrepareFailureValue = (encoded: string): ChangePrepareF
   if (typeof timedOut !== "boolean")
     throw new Error("Stored Change preparation timeout flag is invalid");
   return {
-    command: requiredString(get(value, "command"), "Change preparation failure command"),
+    command: nonBlankString(get(value, "command"), "Change preparation failure command"),
     exitCode: requiredInteger(get(value, "exitCode"), "Change preparation failure exit code"),
     timedOut,
     stdout: requiredString(get(value, "stdout"), "Change preparation failure stdout"),
