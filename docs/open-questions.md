@@ -54,6 +54,19 @@ Direct Task Context editing may be simpler when one operator is refining intent.
 Future planning agents or multiple reviewers may instead need durable feedback that remains distinct from accepted intent.
 Keep current behavior until observed planning or review usage establishes whether comments should remain intent additions or become a separate record.
 
+## How should But Why represent and review planning above individual Tasks?
+
+Tasks do not currently represent membership in one overarching planning effort, and Task Dependencies represent only implementation or verification prerequisites.
+Future design must decide whether a durable planning aggregate should own the overarching outcome, accepted requirements and constraints, unresolved decisions, holistic verification mapping, and intended decomposition.
+It must support partial Task materialization without treating the currently recorded Tasks as the complete plan.
+
+The design must determine whether review targets the complete aggregate, an explicitly bounded Task set, or both.
+It must define how reviewers judge requirement coverage, Task ownership and overlap, decomposition, and initiative-level overengineering or underengineering when only part of the work has become Tasks.
+An arbitrary Task set must not imply completeness or shared planning authority without an explicit boundary that gives the set that meaning.
+
+Before implementation, define approval authority, lifecycle, storage, review history, Task derivation, revision behavior, and the relationship with Task Approval and Task Recording Authorization.
+The design should replace temporary tracked planning artifacts without moving active planning intent into another repository document convention.
+
 ## Does Task readiness need another gate?
 
 A Task can depend on uncertain external integration or runtime behavior.
