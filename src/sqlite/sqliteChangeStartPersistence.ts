@@ -21,7 +21,16 @@ import {
   decodeSqliteChangePublication,
   type SqliteChangePublicationRow,
 } from "./sqliteChangePublication.js";
-import { decodeTaskState, requiredString } from "./sqlitePersistenceDecoders.js";
+import {
+  decodeChangeCleanup,
+  decodeChangeCloseReason,
+  decodeChangeLifecycleConsistency,
+  decodeChangePrepare,
+  decodeChangeState,
+  decodeTaskState,
+  requiredPositiveInteger,
+  requiredString,
+} from "./sqlitePersistenceDecoders.js";
 
 const columns = [
   "id",
@@ -146,22 +155,29 @@ const readEligibility = (sql: SqlClient.SqlClient, taskId: PublicTaskId) =>
       readonly id: unknown;
       readonly title: unknown;
       readonly state: unknown;
+      readonly numericId: unknown;
     }>`
-      SELECT tasks.id, tasks.title, tasks.state
+      SELECT tasks.id, tasks.title, tasks.state, tasks.numeric_id AS numericId
       FROM task_dependencies
       JOIN tasks ON tasks.id = task_dependencies.prerequisite_task_id
       WHERE task_dependencies.dependent_task_id = ${taskId} AND tasks.state <> 'done'
-      ORDER BY tasks.numeric_id ASC
     `;
     const blockedBy = yield* Effect.try({
       try: () =>
-        blockedByRows.map(
-          (row): TaskDependencyFact => ({
-            id: storedPublicTaskId(requiredString(row.id, "Change Start dependency Task ID")),
-            title: requiredString(row.title, "Change Start dependency Task title"),
-            state: decodeTaskState(row.state),
-          }),
-        ),
+        blockedByRows
+          .map((row) => ({
+            fact: {
+              id: storedPublicTaskId(requiredString(row.id, "Change Start dependency Task ID")),
+              title: requiredString(row.title, "Change Start dependency Task title"),
+              state: decodeTaskState(row.state),
+            } satisfies TaskDependencyFact,
+            numericId: requiredPositiveInteger(
+              row.numericId,
+              "Change Start dependency Task numeric ID",
+            ),
+          }))
+          .sort((left, right) => left.numericId - right.numericId)
+          .map(({ fact }) => fact),
       catch: (cause) =>
         new RepositoryPersistedDataInvalid({
           operationName: "read Change Start Task eligibility",
@@ -226,48 +242,54 @@ const getById = (sql: SqlClient.SqlClient, changeId: string) =>
   );
 
 const mapRow = (row: ChangeStartRow | undefined) => {
-  if (
-    row === undefined ||
-    row.baseRef === null ||
-    row.baseRemoteUrl === null ||
-    row.startingCommit === null ||
-    row.worktreePath === null
-  ) {
-    return Effect.succeed(undefined);
-  }
-  const baseRef = row.baseRef;
-  const baseRemoteUrl = row.baseRemoteUrl;
-  const startingCommit = row.startingCommit;
-  const worktreePath = row.worktreePath;
+  if (row === undefined) return Effect.succeed(undefined);
   return Effect.try({
-    try: (): ChangeStartRecord => ({
-      id: row.id,
-      repositoryCommonDirectory: row.repositoryCommonDirectory,
-      branchRef: row.branchRef,
-      baseRef,
-      baseRemoteUrl,
-      taskId: row.taskId === null ? null : storedPublicTaskId(row.taskId),
-      startingCommit,
-      worktreePath,
-      acceptanceContext:
-        row.acceptanceContext === null
-          ? null
-          : decodeSqliteAcceptanceContextSnapshot(row.acceptanceContext),
-      prepare:
-        row.prepareCommand === null || row.prepareTimeoutSeconds === null
-          ? null
-          : { command: row.prepareCommand, timeoutSeconds: row.prepareTimeoutSeconds },
-      prepareFailure:
-        row.prepareFailure === null ? null : decodeSqliteChangePrepareFailure(row.prepareFailure),
-      publication: decodeSqliteChangePublication(row),
-      cleanup: { state: row.cleanupState, blockingReason: row.cleanupBlockingReason },
-      state: row.state,
-      closeReason: row.closeReason,
-      cancelReason: row.cancelReason,
-      createdAt: row.createdAt,
-      updatedAt: row.updatedAt,
-      closedAt: row.closedAt,
-    }),
+    try: (): ChangeStartRecord => {
+      const state = decodeChangeState(row.state);
+      const closeReason = decodeChangeCloseReason(row.closeReason);
+      const closedAt = decodeChangeLifecycleConsistency(state, closeReason, row.closedAt);
+      const prepare = decodeChangePrepare(row.prepareCommand, row.prepareTimeoutSeconds);
+      return {
+        id: requiredString(row.id, "Change Start ID"),
+        repositoryCommonDirectory: requiredString(
+          row.repositoryCommonDirectory,
+          "Change Start repository common directory",
+        ),
+        branchRef: requiredString(row.branchRef, "Change Start branch ref"),
+        baseRef: requiredString(row.baseRef, "Change Start base ref"),
+        baseRemoteUrl: requiredString(row.baseRemoteUrl, "Change Start base remote URL"),
+        taskId:
+          row.taskId === null
+            ? null
+            : storedPublicTaskId(requiredString(row.taskId, "Change Start Task ID")),
+        startingCommit: requiredString(row.startingCommit, "Change Start starting commit"),
+        worktreePath: requiredString(row.worktreePath, "Change Start worktree path"),
+        acceptanceContext:
+          row.acceptanceContext === null
+            ? null
+            : decodeSqliteAcceptanceContextSnapshot(
+                requiredString(row.acceptanceContext, "Change Start Acceptance Context"),
+              ),
+        prepare,
+        prepareFailure:
+          row.prepareFailure === null
+            ? null
+            : decodeSqliteChangePrepareFailure(
+                requiredString(row.prepareFailure, "Change preparation failure"),
+              ),
+        publication: decodeSqliteChangePublication(row),
+        cleanup: decodeChangeCleanup(row.cleanupState, row.cleanupBlockingReason),
+        state,
+        closeReason,
+        cancelReason:
+          row.cancelReason === null
+            ? null
+            : requiredString(row.cancelReason, "Change cancel reason"),
+        createdAt: requiredString(row.createdAt, "Change creation timestamp"),
+        updatedAt: requiredString(row.updatedAt, "Change update timestamp"),
+        closedAt,
+      };
+    },
     catch: (cause) =>
       new RepositoryPersistedDataInvalid({ operationName: "read Change Start", cause }),
   });
@@ -284,24 +306,24 @@ type TaskRow = {
 };
 
 type ChangeStartRow = {
-  readonly id: string;
-  readonly repositoryCommonDirectory: string;
-  readonly branchRef: string;
-  readonly baseRef: string | null;
-  readonly baseRemoteUrl: string | null;
-  readonly taskId: string | null;
-  readonly startingCommit: string | null;
-  readonly worktreePath: string | null;
-  readonly acceptanceContext: string | null;
-  readonly prepareCommand: string | null;
-  readonly prepareTimeoutSeconds: number | null;
-  readonly prepareFailure: string | null;
-  readonly cleanupState: ChangeStartRecord["cleanup"]["state"];
-  readonly cleanupBlockingReason: string | null;
-  readonly state: ChangeStartRecord["state"];
-  readonly closeReason: ChangeStartRecord["closeReason"];
-  readonly cancelReason: ChangeStartRecord["cancelReason"];
-  readonly createdAt: string;
-  readonly updatedAt: string;
-  readonly closedAt: string | null;
+  readonly id: unknown;
+  readonly repositoryCommonDirectory: unknown;
+  readonly branchRef: unknown;
+  readonly baseRef: unknown;
+  readonly baseRemoteUrl: unknown;
+  readonly taskId: unknown;
+  readonly startingCommit: unknown;
+  readonly worktreePath: unknown;
+  readonly acceptanceContext: unknown;
+  readonly prepareCommand: unknown;
+  readonly prepareTimeoutSeconds: unknown;
+  readonly prepareFailure: unknown;
+  readonly cleanupState: unknown;
+  readonly cleanupBlockingReason: unknown;
+  readonly state: unknown;
+  readonly closeReason: unknown;
+  readonly cancelReason: unknown;
+  readonly createdAt: unknown;
+  readonly updatedAt: unknown;
+  readonly closedAt: unknown;
 } & SqliteChangePublicationRow;

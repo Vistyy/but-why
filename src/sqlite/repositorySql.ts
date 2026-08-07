@@ -15,6 +15,7 @@ import {
 import { nodeSqliteLayer } from "./nodeSqliteClient.js";
 import { migrateRepositoryState } from "./repositoryMigrations.js";
 import { decodeSqliteJsonStringArray } from "./sqliteJsonStringArray.js";
+import { requiredString } from "./sqlitePersistenceDecoders.js";
 
 type RepositorySqlService = {
   readonly statePath: string;
@@ -61,7 +62,7 @@ export type RepositorySqlConfig = {
 
 const ensureRepositoryIdentity = (sql: SqlClient.SqlClient, commonDirectory: string) =>
   Effect.gen(function* () {
-    const identities = yield* sql<{ readonly commonDirectory: string }>`
+    const identities = yield* sql<{ readonly commonDirectory: unknown }>`
       SELECT common_directory AS commonDirectory
       FROM shared_state_identity
       WHERE id = 1
@@ -76,10 +77,18 @@ const ensureRepositoryIdentity = (sql: SqlClient.SqlClient, commonDirectory: str
       return;
     }
 
-    if (identity.commonDirectory !== commonDirectory) {
+    const actualCommonDirectory = yield* Effect.try({
+      try: () => requiredString(identity.commonDirectory, "Repository common directory"),
+      catch: (cause) =>
+        new RepositoryPersistedDataInvalid({
+          operationName: "read Repository identity",
+          cause,
+        }),
+    });
+    if (actualCommonDirectory !== commonDirectory) {
       return yield* new RepositoryIdentityConflict({
         expectedCommonDirectory: commonDirectory,
-        actualCommonDirectory: identity.commonDirectory,
+        actualCommonDirectory,
       });
     }
   });

@@ -2,16 +2,16 @@ import type { ChangePublication } from "../change/change.js";
 import { requiredPositiveInteger, requiredString } from "./sqlitePersistenceDecoders.js";
 
 export type SqliteChangePublicationRow = {
-  readonly publicationCandidateId: string | null;
-  readonly publicationValidationRunId: string | null;
-  readonly publicationOwner: string | null;
-  readonly publicationRepo: string | null;
-  readonly publicationBaseBranch: string | null;
-  readonly publicationRemoteName: string | null;
-  readonly publicationHeadBranch: string | null;
-  readonly publicationExpectedHeadSha: string | null;
-  readonly publicationPrNumber: number | null;
-  readonly publicationPrUrl: string | null;
+  readonly publicationCandidateId: unknown;
+  readonly publicationValidationRunId: unknown;
+  readonly publicationOwner: unknown;
+  readonly publicationRepo: unknown;
+  readonly publicationBaseBranch: unknown;
+  readonly publicationRemoteName: unknown;
+  readonly publicationHeadBranch: unknown;
+  readonly publicationExpectedHeadSha: unknown;
+  readonly publicationPrNumber: unknown;
+  readonly publicationPrUrl: unknown;
 };
 
 export const decodeSqliteChangePublication = (

@@ -91,6 +91,11 @@ const checkId = (value: unknown, description: string): string => {
   return id;
 };
 
+const requireUnique = (values: readonly string[], description: string): void => {
+  if (new Set(values).size !== values.length)
+    throw new Error(`Stored ${description} contain duplicates`);
+};
+
 const repoRelativePath = (value: unknown, description: string): string => {
   const path = nonBlankString(value, description);
   if (
@@ -290,6 +295,18 @@ export const decodeSqliteCandidateValidationPolicy = (
     throw new Error("Stored Candidate Validation Policy checks are invalid");
   if (!Array.isArray(copyFiles))
     throw new Error("Stored Candidate Validation Policy copy files are invalid");
+  const checks = checksValue.map((check) => ({
+    id: checkId(get(check, "id"), "validation check ID"),
+    command: nonBlankString(get(check, "command"), "validation check command"),
+    timeoutSeconds: requiredPositiveInteger(
+      get(check, "timeoutSeconds"),
+      "validation check timeout",
+    ),
+  }));
+  requireUnique(
+    checks.map((check) => check.id),
+    "Candidate Validation Policy check IDs",
+  );
   const policy: CandidateValidationPolicySnapshot = {
     ...(get(value, "acceptanceContext") === undefined
       ? {}
@@ -300,14 +317,7 @@ export const decodeSqliteCandidateValidationPolicy = (
     ...(get(value, "prepare") === undefined
       ? {}
       : { prepare: decodeCommand(get(value, "prepare"), "validation prepare") }),
-    checks: checksValue.map((check) => ({
-      id: checkId(get(check, "id"), "validation check ID"),
-      command: nonBlankString(get(check, "command"), "validation check command"),
-      timeoutSeconds: requiredPositiveInteger(
-        get(check, "timeoutSeconds"),
-        "validation check timeout",
-      ),
-    })),
+    checks,
     copyFiles: copyFiles.map((file) => repoRelativePath(file, "validation copy file")),
     ...(get(value, "acceptanceReview") === undefined
       ? {}
@@ -318,9 +328,14 @@ export const decodeSqliteCandidateValidationPolicy = (
           specialistReviews: (() => {
             const reviews = get(value, "specialistReviews");
             if (!Array.isArray(reviews)) throw new Error("Stored Specialist Reviews are invalid");
-            return reviews.map((review) => decodeReviewerPolicy(review, true)) as NonNullable<
-              CandidateValidationPolicySnapshot["specialistReviews"]
-            >;
+            const decoded = reviews.map((review) =>
+              decodeReviewerPolicy(review, true),
+            ) as NonNullable<CandidateValidationPolicySnapshot["specialistReviews"]>;
+            requireUnique(
+              decoded.map((review) => review.id),
+              "Candidate Validation Policy Specialist IDs",
+            );
+            return decoded;
           })(),
         }),
   };

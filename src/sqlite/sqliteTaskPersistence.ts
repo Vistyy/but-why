@@ -215,18 +215,38 @@ const orderTaskRows = (rows: readonly TaskSummaryRow[], operationName: string) =
     (ordered) => ordered.map(({ row }) => row),
   );
 
+const orderActionableTaskRows = (rows: readonly TaskSummaryRow[], operationName: string) =>
+  Effect.map(
+    Effect.try({
+      try: () =>
+        rows
+          .map((row) => ({
+            row,
+            state: decodeTaskState(row.state),
+            updatedAt: requiredString(row.updatedAt, "Task update timestamp"),
+            numericId: requiredPositiveInteger(row.numericId, "Task numeric ID"),
+          }))
+          .sort(
+            (left, right) =>
+              (left.state === "new" ? 0 : 1) - (right.state === "new" ? 0 : 1) ||
+              right.updatedAt.localeCompare(left.updatedAt) ||
+              left.numericId - right.numericId,
+          ),
+      catch: (cause) => new RepositoryPersistedDataInvalid({ operationName, cause }),
+    }),
+    (ordered) => ordered.map(({ row }) => row),
+  );
+
 const listActionableTasks = (sql: SqlClient.SqlClient) =>
   Effect.gen(function* () {
     const rows = yield* sql<TaskSummaryRow>`
-      SELECT id, title, state, created_at AS createdAt, updated_at AS updatedAt
+      SELECT id, title, state, created_at AS createdAt, updated_at AS updatedAt,
+        numeric_id AS numericId
       FROM tasks
       WHERE state IN ('new', 'todo')
-      ORDER BY
-        CASE state WHEN 'new' THEN 0 WHEN 'todo' THEN 1 END ASC,
-        updated_at DESC,
-        numeric_id ASC
     `;
-    return yield* Effect.forEach(rows, (row) => rowToTaskSummary(sql, row));
+    const orderedRows = yield* orderActionableTaskRows(rows, "list actionable Tasks");
+    return yield* Effect.forEach(orderedRows, (row) => rowToTaskSummary(sql, row));
   });
 
 const getTaskById = (sql: SqlClient.SqlClient, taskId: PublicTaskId) =>
@@ -250,25 +270,33 @@ const getTaskContextById = (sql: SqlClient.SqlClient, taskId: PublicTaskId) =>
     `;
     const task = rows[0];
     if (task === undefined) return undefined;
-    const resolutions = yield* sql<{ readonly content: unknown }>`
-      SELECT resolution_content AS content FROM implementation_blockers
+    const resolutions = yield* sql<{
+      readonly content: unknown;
+      readonly sequence: unknown;
+    }>`
+      SELECT resolution_content AS content, implementation_blockers.sequence
+      FROM implementation_blockers
       JOIN changes ON changes.id = implementation_blockers.change_id
       WHERE changes.task_id = ${taskId} AND resolution_content IS NOT NULL
-      ORDER BY implementation_blockers.sequence ASC
     `;
+    const orderedResolutions = yield* decodeTaskValue(
+      () =>
+        resolutions
+          .map((row) => ({
+            content: requiredString(row.content, "Task Resolution content"),
+            sequence: requiredPositiveInteger(row.sequence, "Implementation Blocker sequence"),
+          }))
+          .sort((left, right) => left.sequence - right.sequence)
+          .map(({ content }) => content),
+      "read Task Context",
+    );
     return yield* decodeTaskValue(
       () =>
         ({
           id: storedPublicTaskId(requiredString(task.id, "Task Context ID")),
           title: requiredString(task.title, "Task Context title"),
           description: requiredString(task.description, "Task Context description"),
-          ...(resolutions.length === 0
-            ? {}
-            : {
-                resolutions: resolutions.map((row) =>
-                  requiredString(row.content, "Task Resolution content"),
-                ),
-              }),
+          ...(orderedResolutions.length === 0 ? {} : { resolutions: orderedResolutions }),
         }) satisfies TaskContext,
       "read Task Context",
     );
@@ -452,18 +480,16 @@ const dependencyFacts = (
 ) =>
   direction === "prerequisites"
     ? sql<TaskDependencyFactRow>`
-        SELECT tasks.id, tasks.title, tasks.state
+        SELECT tasks.id, tasks.title, tasks.state, tasks.numeric_id AS numericId
         FROM task_dependencies
         JOIN tasks ON tasks.id = task_dependencies.prerequisite_task_id
         WHERE task_dependencies.dependent_task_id = ${taskId}
-        ORDER BY tasks.numeric_id ASC
       `
     : sql<TaskDependencyFactRow>`
-        SELECT tasks.id, tasks.title, tasks.state
+        SELECT tasks.id, tasks.title, tasks.state, tasks.numeric_id AS numericId
         FROM task_dependencies
         JOIN tasks ON tasks.id = task_dependencies.dependent_task_id
         WHERE task_dependencies.prerequisite_task_id = ${taskId}
-        ORDER BY tasks.numeric_id ASC
       `;
 
 const decodeDependencyFacts = (
@@ -473,29 +499,40 @@ const decodeDependencyFacts = (
   operationName: string,
 ) =>
   Effect.flatMap(dependencyFacts(sql, taskId, direction), (rows) =>
-    Effect.forEach(rows, (row) =>
-      decodeTaskValue(
-        () => ({
-          id: storedPublicTaskId(requiredString(row.id, "Task dependency ID")),
-          title: requiredString(row.title, "Task dependency title"),
-          state: decodeTaskState(row.state),
-        }),
-        operationName,
-      ),
+    Effect.map(
+      Effect.try({
+        try: () =>
+          rows
+            .map((row) => ({
+              fact: {
+                id: storedPublicTaskId(requiredString(row.id, "Task dependency ID")),
+                title: requiredString(row.title, "Task dependency title"),
+                state: decodeTaskState(row.state),
+              },
+              numericId: requiredPositiveInteger(row.numericId, "Task numeric ID"),
+            }))
+            .sort((left, right) => left.numericId - right.numericId),
+        catch: (cause) => new RepositoryPersistedDataInvalid({ operationName, cause }),
+      }),
+      (ordered) => ordered.map(({ fact }) => fact),
     ),
   );
 
 const nextTaskNumericId = (sql: SqlClient.SqlClient) =>
   Effect.gen(function* () {
-    const rows = yield* sql<NumericIdRow>`
-      SELECT COALESCE(MAX(numeric_id), 0) + 1 AS numericId FROM tasks
-    `;
-    const row = rows[0];
-    if (row === undefined) return yield* invalidData("create Task", "Missing numeric ID");
-    return yield* decodeTaskValue(
-      () => requiredPositiveInteger(row.numericId, "Task numeric ID"),
+    const rows = yield* sql<NumericIdRow>`SELECT numeric_id AS numericId FROM tasks`;
+    const maximum = yield* decodeTaskValue(
+      () =>
+        rows.reduce(
+          (current, row) =>
+            Math.max(current, requiredPositiveInteger(row.numericId, "Task numeric ID")),
+          0,
+        ),
       "create Task",
     );
+    const next = maximum + 1;
+    if (!Number.isSafeInteger(next)) return yield* invalidData("create Task", "Invalid numeric ID");
+    return next;
   });
 
 const rowToTaskSummary = (
@@ -582,6 +619,7 @@ type TaskDependencyFactRow = {
   readonly id: unknown;
   readonly title: unknown;
   readonly state: unknown;
+  readonly numericId: unknown;
 };
 type StoredTaskRecordRow = TaskSummaryRow & {
   readonly description: unknown;
