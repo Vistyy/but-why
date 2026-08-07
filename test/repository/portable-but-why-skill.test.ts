@@ -11,6 +11,7 @@ type PiProbe = {
   readonly commands: readonly string[];
 };
 
+const portableSkillInstallTimeoutMs = 30_000;
 const portableSkillProcessTimeoutMs = 10_000;
 
 const readSkillArtifact = (path: string): string =>
@@ -116,6 +117,7 @@ describe("portable But Why skill", () => {
       cwd: consumer,
       env: environment,
       isolatedHome: createTestWorkspace(),
+      timeout: portableSkillInstallTimeoutMs,
     });
     expect(install.status, `${install.stdout}${install.stderr}`).toBe(0);
     const probe = runTestProcess(

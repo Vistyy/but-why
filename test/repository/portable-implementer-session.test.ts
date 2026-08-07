@@ -49,7 +49,8 @@ type ImplementerSessionExecution = {
   readonly calls: string;
 };
 
-const implementerSessionProcessTimeoutMs = 10_000;
+// The portable session's supported default timeout is 60 seconds.
+const implementerSessionProcessTimeoutMs = 90_000;
 
 const runImplementerSession = (
   changeId: string,
