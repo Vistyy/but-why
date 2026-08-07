@@ -971,37 +971,40 @@ help[1]: "Run \`by task create --title \\"...\\" --file <path|->\` to create a t
     }),
   );
 
-  it.effect("prints bare dashboard with only actionable Tasks by priority and updated time", () =>
-    Effect.gen(function* () {
-      const actionable: readonly TaskSummary[] = [
-        taskSummary({
-          id: "BY-2",
-          title: "Todo newer",
-          state: "todo",
-          createdAt: secondNow,
-          updatedAt: secondNow,
-          startable: true,
-        }),
-        taskSummary({
-          id: "BY-4",
-          title: "Todo new",
-          state: "todo",
-          updatedAt: thirdNow,
-          startable: true,
-        }),
-        taskSummary({
-          title: "Todo old",
-          state: "todo",
-          startable: true,
-        }),
-      ];
-      const result = yield* runByInProcessEffect(createTestWorkspace(), [], firstNow, {
-        taskUseCases: fakeTaskUseCases({ listActionableTasks: () => actionable }),
-      });
+  it.effect(
+    "prints bare dashboard rows for the actionable Tasks supplied by the Task use case",
+    () =>
+      Effect.gen(function* () {
+        // The fixture supplies a preordered list; this test observes rendering and delegation only.
+        const actionable: readonly TaskSummary[] = [
+          taskSummary({
+            id: "BY-2",
+            title: "Todo newer",
+            state: "todo",
+            createdAt: secondNow,
+            updatedAt: secondNow,
+            startable: true,
+          }),
+          taskSummary({
+            id: "BY-4",
+            title: "Todo new",
+            state: "todo",
+            updatedAt: thirdNow,
+            startable: true,
+          }),
+          taskSummary({
+            title: "Todo old",
+            state: "todo",
+            startable: true,
+          }),
+        ];
+        const result = yield* runByInProcessEffect(createTestWorkspace(), [], firstNow, {
+          taskUseCases: fakeTaskUseCases({ listActionableTasks: () => actionable }),
+        });
 
-      expect(result.status).toBe(0);
-      expect(result.stderr).toBe("");
-      expect(result.stdout).toBe(`bin: ${expectedBin}
+        expect(result.status).toBe(0);
+        expect(result.stderr).toBe("");
+        expect(result.stdout).toBe(`bin: ${expectedBin}
 description: Validate completed code changes against approved human intent.
 count: 3
 tasks[3]{id,title,state,createdAt,updatedAt}:
@@ -1009,7 +1012,7 @@ tasks[3]{id,title,state,createdAt,updatedAt}:
   BY-4,Todo new,todo,"${firstNow}","${thirdNow}"
   BY-1,Todo old,todo,"${firstNow}","${firstNow}"
 `);
-    }),
+      }),
   );
 
   it.effect("prints explicit empty dashboard output with create help", () =>

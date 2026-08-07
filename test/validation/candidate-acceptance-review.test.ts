@@ -1113,6 +1113,100 @@ layer(acceptanceTemplateLayer)("Task-backed Candidate Acceptance Review", (it) =
     }),
   );
 
+  it.scoped("fails tooling when the Specialist revision call fails after earlier Findings", () =>
+    Effect.gen(function* () {
+      const earlierFinding = reviewerFinding("Earlier specialist Finding");
+      const revisionFailure = new SandcastleToolingFailed({
+        operationName: "run_reviewer_agent",
+        message: "Specialist revision call failed.",
+      });
+      const reports: readonly ReviewerAgentResult[] = [
+        { ok: true, report: { findings: [] }, attempts: 1, stdout: "accepted" },
+        {
+          ok: true,
+          report: { findings: [earlierFinding] },
+          attempts: 1,
+          stdout: "earlier standards",
+        },
+        { ok: true, report: { findings: [] }, attempts: 1, stdout: "accepted successor" },
+        {
+          ok: true,
+          report: { findings: [reviewerFinding("Provisional specialist Finding")] },
+          attempts: 1,
+          stdout: "provisional standards",
+        },
+        {
+          ok: false,
+          failure: revisionFailure,
+          sessionUsability: "unknown",
+          attempts: 2,
+          stdout: "revision standards failure",
+        },
+      ];
+      let reportIndex = 0;
+      const review = vi.fn<ReviewerAgentRuntime["review"]>(() => {
+        const report = reports[reportIndex++];
+        if (report === undefined) throw new Error("Unexpected review request.");
+        return Effect.succeed(report);
+      });
+      const ready = yield* acceptanceReadyRepo({ review });
+      const policy = {
+        ...passingValidationPolicy,
+        specialistReviews: [specialistPolicy("standards")],
+      };
+
+      const earlier = yield* runTaskBackedCandidate(ready, policy);
+      expect(earlier).toMatchObject({ ok: true, outcome: "blocked" });
+      if (!earlier.ok) return;
+
+      git(ready.repo, "commit", "--allow-empty", "-m", "address specialist Finding");
+      const successor = yield* captureLocalCandidate({ cwd: ready.repo, now: successorNow });
+      if (!successor.ok) throw new Error(`Candidate capture failed: ${successor.code}`);
+
+      const final = yield* runTaskBackedCandidate(ready, policy, successor);
+
+      expect(final).toMatchObject({ ok: false, outcome: "tooling_failed" });
+      if (final.ok || "code" in final) return;
+      expect(review.mock.calls.map(([input]) => input.reviewer)).toEqual([
+        "acceptance",
+        "standards",
+        "acceptance",
+        "standards",
+        "standards",
+      ]);
+      const revisionPrompt = review.mock.calls[4]?.[0].prompt;
+      expect(revisionPrompt).toContain("Provisional specialist Finding");
+      expect(revisionPrompt).toContain(earlierFinding.title);
+      expect(
+        JSON.parse(
+          readFileSync(
+            join(
+              commonDirectory(ready.repo),
+              "but-why",
+              "artifacts",
+              final.validationRunId,
+              "specialist_review",
+              "standards",
+              "execution.json",
+            ),
+            "utf8",
+          ),
+        ),
+      ).toMatchObject({ reviewCalls: 2 });
+      expect(yield* ready.validation.listFindings(final.validationRunId)).toEqual([]);
+      expect(
+        (yield* ready.validation.listToolingFailures(final.validationRunId)).map(
+          (failure) => failure.errorMessage,
+        ),
+      ).toEqual(["Specialist revision call failed."]);
+      expect(yield* ready.validation.listRounds(final.validationRunId)).toEqual([
+        { producer: "quality", status: "passed" },
+        { producer: "acceptance", status: "passed" },
+        { producer: "standards", status: "failed" },
+      ]);
+    }),
+  );
+
   it.scoped("rechecks earlier Specialist Findings after a skipped successor review", () =>
     Effect.gen(function* () {
       const earlierFinding = reviewerFinding("Earlier specialist Finding");
