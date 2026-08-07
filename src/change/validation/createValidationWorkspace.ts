@@ -3,12 +3,13 @@ import { join } from "node:path";
 
 import { createSandbox, type Sandbox, type SandboxProvider } from "@ai-hero/sandcastle";
 import { noSandbox } from "@ai-hero/sandcastle/sandboxes/no-sandbox";
-import { Effect, Option, Ref, type Scope } from "effect";
+import { Effect, Ref, type Scope } from "effect";
 import type { RepositoryStorageError } from "../../contracts/repositoryStorageError.js";
 import {
   deleteValidationTempRef,
   ensureValidationTempRef,
   inspectExistingWorktree,
+  isValidationWorktreeRemoved,
   removeValidationWorktree,
 } from "./validationGitGlue.js";
 import type { ValidationToolingFailure } from "./validationToolingFailures.js";
@@ -71,6 +72,7 @@ type ValidationWorkspaceAdapters = {
   readonly allowlistedFileIsRegular: (repoRoot: string, path: string) => boolean;
   readonly inspectExistingWorktree: (worktreePath: string) => ExistingWorktree;
   readonly removeWorktree: (repoRoot: string, worktreePath: string) => CleanupAttempt;
+  readonly verifyWorktreeRemoved: (repoRoot: string, worktreePath: string) => boolean;
   readonly createSandcastleWorktree: (input: {
     readonly repoRoot: string;
     readonly tempRefName: string;
@@ -132,7 +134,7 @@ type WorkspaceSetupFailure = {
   readonly worktreePath?: string;
 };
 
-const cleanupStepTimeoutMs = 5_000;
+const cleanupStepTimeoutMs = 30_000;
 
 const initialCleanupResult: ValidationWorkspaceCleanupResult = {
   worktree: "not_created",
@@ -418,7 +420,7 @@ const prepareExistingWorktree = (
   state.worktreePath = state.expectedWorktreePath;
   const removed = adapters.removeWorktree(input.repoRoot, state.expectedWorktreePath);
 
-  if (!removed.ok && adapters.inspectExistingWorktree(state.expectedWorktreePath).exists) {
+  if (!removed.ok && !adapters.verifyWorktreeRemoved(input.repoRoot, state.expectedWorktreePath)) {
     return setupFailed(
       "create_sandcastle_workspace",
       `Validation worktree already exists with uncommitted changes: ${state.expectedWorktreePath}`,
@@ -530,6 +532,7 @@ const productionValidationWorkspaceAdapters: ValidationWorkspaceAdapters = {
     removeValidationWorktree(repoRoot, worktreePath)
       ? { ok: true }
       : { ok: false, message: "Validation worktree removal failed." },
+  verifyWorktreeRemoved: isValidationWorktreeRemoved,
   createSandcastleWorktree: (input) =>
     Effect.promise(async () => {
       try {
@@ -589,24 +592,21 @@ const cleanupWorktree = (
 
   return Effect.gen(function* () {
     if (state.sandbox !== undefined) {
-      const closeResult = yield* Effect.tryPromise({
-        try: (): Promise<{ readonly preservedWorktreePath?: string }> =>
-          state.sandbox?.close() ?? Promise.resolve({}),
-        catch: () => undefined,
-      }).pipe(
-        Effect.timeoutOption(`${cleanupStepTimeoutMs} millis`),
-        Effect.catchAll(() => Effect.succeed(Option.none())),
+      const sandbox = state.sandbox;
+      const closeAttempt = yield* Effect.promise(() =>
+        closeSandboxWithTimeout(sandbox, cleanupStepTimeoutMs),
       );
 
-      if (Option.isNone(closeResult)) return "failed";
+      if (!closeAttempt.ok) return "failed";
 
-      const preservedPath = closeResult.value.preservedWorktreePath ?? state.worktreePath;
+      const cleanupPath = state.worktreePath ?? state.expectedWorktreePath;
 
-      if (preservedPath === undefined || !adapters.inspectExistingWorktree(preservedPath).exists) {
-        return "removed";
-      }
+      if (adapters.verifyWorktreeRemoved(repoRoot, cleanupPath)) return "removed";
 
-      return adapters.removeWorktree(repoRoot, preservedPath).ok ? "removed" : "failed";
+      const removed = adapters.removeWorktree(repoRoot, cleanupPath);
+      return removed.ok && adapters.verifyWorktreeRemoved(repoRoot, cleanupPath)
+        ? "removed"
+        : "failed";
     }
 
     if (
@@ -616,9 +616,45 @@ const cleanupWorktree = (
       return "not_created";
     }
 
-    return adapters.removeWorktree(repoRoot, state.worktreePath).ok ? "removed" : "failed";
+    const removed = adapters.removeWorktree(repoRoot, state.worktreePath);
+    return removed.ok && adapters.verifyWorktreeRemoved(repoRoot, state.worktreePath)
+      ? "removed"
+      : "failed";
   });
 };
+
+type SandcastleCloseResult = { readonly preservedWorktreePath?: string };
+
+type SandcastleCloseAttempt =
+  | { readonly ok: true; readonly result: SandcastleCloseResult }
+  | { readonly ok: false };
+
+const closeSandboxWithTimeout = (
+  sandbox: SandboxLike,
+  timeoutMs: number,
+): Promise<SandcastleCloseAttempt> =>
+  new Promise((resolve) => {
+    let settled = false;
+    const timeout = setTimeout(() => {
+      settled = true;
+      resolve({ ok: false });
+    }, timeoutMs);
+
+    void sandbox.close().then(
+      (result) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timeout);
+        resolve({ ok: true, result });
+      },
+      () => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timeout);
+        resolve({ ok: false });
+      },
+    );
+  });
 
 const releaseTempRef = (
   repoRoot: string,
