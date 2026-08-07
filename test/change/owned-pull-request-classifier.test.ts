@@ -4,8 +4,8 @@ import { describe } from "vitest";
 import type { ChangePublication, ChangeRecord } from "../../src/change/change.js";
 import {
   classifyOwnedPullRequest,
-  observeOwnedPullRequest,
   type OwnedPublication,
+  observeOwnedPullRequest,
 } from "../../src/change/ownedPullRequestClassifier.js";
 import type { GitHubPullRequest } from "../../src/change/ownedPullRequestGateway.js";
 
