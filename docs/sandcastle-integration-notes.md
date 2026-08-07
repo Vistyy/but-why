@@ -123,6 +123,24 @@ They identified these current costs:
 These constraints are integration evidence, not reasons to weaken the Validation Workspace invariants that But Why owns.
 A replacement must preserve exact Candidate binding, integrity checks, bounded cleanup evidence, and Reviewer Session continuity.
 
+## Validation Workspace cleanup limits
+
+But Why owns a finite 30-second limit for the original Sandcastle `Sandbox.close()` operation.
+The limit is longer than the former five-second limit so a clean workspace that Sandcastle removes slowly can still complete cleanup.
+
+The timeout does not cancel Sandcastle's promise.
+A timed-out close can therefore finish in the background after But Why has recorded a Validation Tooling Failure.
+But Why does not call `Sandbox.close()` again because Sandcastle makes later calls no-ops.
+But Why does not start Git removal while the original close can still be running.
+
+When the original close returns and leaves the workspace preserved, But Why may retry removal through Git.
+That retry is allowed only after the original close has returned.
+A timeout remains a tooling failure even when background completion later removes the workspace because completion was not proved within But Why's limit.
+
+But Why reports a removed Validation Workspace only after it verifies both that the exact workspace path is absent and that Git's exact worktree registration is absent.
+Filesystem absence alone is not sufficient evidence.
+If Git worktree inspection cannot prove registration absence, cleanup fails closed and the Validation Run cannot pass.
+
 ## Deferred repository ignore ownership
 
 Sandcastle currently requires But Why to manage a repository-root `.gitignore` block for `.sandcastle/` content.

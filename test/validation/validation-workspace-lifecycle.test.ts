@@ -53,6 +53,39 @@ describe("Validation Workspace scoped lifecycle", () => {
     }),
   );
 
+  it.scoped(
+    "accepts a clean workspace removed after the old cleanup limit",
+    () =>
+      Effect.gen(function* () {
+        const events: string[] = [];
+        const createValidationWorkspace = yield* Effect.promise(() =>
+          loadCreateValidationWorkspace(events, { closeDelayMs: 5_100 }),
+        );
+
+        const result = yield* createValidationWorkspace(input);
+
+        expect(result).toMatchObject({
+          ok: true,
+          setup: {
+            submittedSha: input.submittedSha,
+            worktreeHead: input.submittedSha,
+            cleanupResult: {
+              worktree: "removed",
+              tempRef: "removed",
+            },
+          },
+        });
+        expect(events).toEqual([
+          "acquire:temp_ref",
+          "acquire:worktree",
+          "read:worktree_head",
+          "close:worktree",
+          "release:temp_ref",
+        ]);
+      }),
+    15_000,
+  );
+
   it.scoped("reuses a matching clean Validation Workspace", () =>
     Effect.gen(function* () {
       const events: string[] = [];
@@ -507,6 +540,7 @@ type FakeOptions = {
   readonly tempRefFailure?: string;
   readonly worktreeCreationFailure?: string;
   readonly neverFinishWorktreeCreation?: boolean;
+  readonly closeDelayMs?: number;
   readonly onWorktreeAcquired?: () => void;
   readonly worktreeHead?: string;
   readonly worktreeHeadFailure?: boolean;
@@ -542,6 +576,11 @@ const loadCreateValidationWorkspace = async (
         worktreePath: expectedWorktreePath,
         close: async () => {
           events.push("close:worktree");
+          if (options.closeDelayMs !== undefined) {
+            await new Promise((resolve) => setTimeout(resolve, options.closeDelayMs));
+            worktreeExists = false;
+            return { preservedWorktreePath: undefined };
+          }
           return { preservedWorktreePath: expectedWorktreePath };
         },
         exec: async () => {
@@ -599,6 +638,7 @@ const loadCreateValidationWorkspace = async (
 
       return removed;
     },
+    isValidationWorktreeRemoved: () => !worktreeExists && existingWorktree === undefined,
   }));
 
   const module = await import("../../src/change/validation/createValidationWorkspace.js");

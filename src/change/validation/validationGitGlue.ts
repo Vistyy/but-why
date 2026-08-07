@@ -1,5 +1,6 @@
 import { spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
+import { resolve } from "node:path";
 import type { CleanupState } from "../validationRun/cleanup.js";
 
 const zeroSha = "0000000000000000000000000000000000000000";
@@ -67,10 +68,25 @@ export const inspectExistingWorktree = (
 };
 
 export const removeValidationWorktree = (repoRoot: string, worktreePath: string): boolean => {
-  const removed = git(repoRoot, ["worktree", "remove", "--force", worktreePath]);
+  git(repoRoot, ["worktree", "remove", "--force", worktreePath]);
 
-  return removed.ok || !existsSync(worktreePath);
+  return isValidationWorktreeRemoved(repoRoot, worktreePath);
 };
+
+export const isValidationWorktreeRemoved = (repoRoot: string, worktreePath: string): boolean => {
+  if (existsSync(worktreePath)) return false;
+
+  const worktrees = git(repoRoot, ["worktree", "list", "--porcelain"]);
+  if (!worktrees.ok) return false;
+
+  return !worktreePaths(worktrees.stdout).includes(resolve(worktreePath));
+};
+
+const worktreePaths = (porcelain: string): readonly string[] =>
+  porcelain
+    .split("\n")
+    .filter((line) => line.startsWith("worktree "))
+    .map((line) => resolve(line.slice("worktree ".length)));
 
 export const deleteValidationTempRef = (repoRoot: string, tempRefName: string): CleanupState => {
   const result = git(repoRoot, ["update-ref", "-d", tempRefName]);
