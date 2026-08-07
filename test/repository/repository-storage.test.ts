@@ -2239,6 +2239,14 @@ describe("repository SQL storage", () => {
                     )
                   `;
                   yield* sql`
+                    INSERT INTO candidate_validation_rounds (
+                      validation_run_id, phase, producer, round_number, status, created_at
+                    ) VALUES (
+                      'run-severity', 'checks', 'quality', 1, 'failed',
+                      '2026-07-25T16:30:00.000Z'
+                    )
+                  `;
+                  yield* sql`
                     INSERT INTO candidate_validation_findings (
                       id, validation_run_id, phase, producer, title, description, severity,
                       evidence, files, artifact_refs, created_at, updated_at

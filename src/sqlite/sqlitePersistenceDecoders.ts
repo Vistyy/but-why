@@ -265,13 +265,17 @@ const decodeReviewerPolicy = (value: unknown, specialist: boolean) => {
   const scope = requiredString(get(value, "profileScope"), "reviewer profile scope");
   if (scope !== "repo" && scope !== "global")
     throw new Error("Stored reviewer profile scope is invalid");
+  const agentProfile = configName(get(value, "agentProfile"), "reviewer Agent Profile");
+  const profile = decodeRuntimeProfile(get(value, "profile"));
+  if (agentProfile !== profile.agentProfile || scope !== profile.scope)
+    throw new Error("Stored reviewer profile identity is inconsistent");
   return {
     ...(specialist ? { id: configName(get(value, "id"), "Specialist ID") } : {}),
     instructions: nonBlankString(get(value, "instructions"), "reviewer instructions"),
     instructionsSource: source as "repo" | "global" | "built_in",
-    agentProfile: configName(get(value, "agentProfile"), "reviewer Agent Profile"),
+    agentProfile,
     profileScope: scope as "repo" | "global",
-    profile: decodeRuntimeProfile(get(value, "profile")),
+    profile,
   };
 };
 

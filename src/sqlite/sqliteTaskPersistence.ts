@@ -157,32 +157,28 @@ const listTasks = (sql: SqlClient.SqlClient, input: ListTasksInput) =>
     const rows = input.state
       ? yield* sql<TaskSummaryRow>`
           SELECT id, title, state, created_at AS createdAt, updated_at AS updatedAt,
-            COUNT(*) OVER () AS totalCount
+            numeric_id AS numericId
           FROM tasks
           WHERE state = ${input.state}
-          ORDER BY created_at ASC, numeric_id ASC
-          LIMIT ${limit}
         `
       : input.includeDone
         ? yield* sql<TaskSummaryRow>`
             SELECT id, title, state, created_at AS createdAt, updated_at AS updatedAt,
-              COUNT(*) OVER () AS totalCount
+              numeric_id AS numericId
             FROM tasks
-            ORDER BY created_at ASC, numeric_id ASC
-            LIMIT ${limit}
           `
         : yield* sql<TaskSummaryRow>`
             SELECT id, title, state, created_at AS createdAt, updated_at AS updatedAt,
-              COUNT(*) OVER () AS totalCount
+              numeric_id AS numericId
             FROM tasks
             WHERE state NOT IN ('done', 'cancelled')
-            ORDER BY created_at ASC, numeric_id ASC
-            LIMIT ${limit}
           `;
-    const tasks = yield* Effect.forEach(rows, (row) => rowToTaskSummary(sql, row));
+    const orderedRows = yield* orderTaskRows(rows, "list Tasks");
+    const selectedRows = limit === -1 ? orderedRows : orderedRows.slice(0, limit);
+    const tasks = yield* Effect.forEach(selectedRows, (row) => rowToTaskSummary(sql, row));
     return {
       tasks,
-      total: Number(rows[0]?.totalCount ?? (yield* countTasks(sql, input))),
+      total: yield* countTasks(sql, input),
     };
   });
 
@@ -198,6 +194,25 @@ const countTasks = (sql: SqlClient.SqlClient, input: ListTasksInput) =>
             SELECT COUNT(*) AS total FROM tasks WHERE state NOT IN ('done', 'cancelled')
           `,
     (rows) => Number(rows[0]?.total ?? 0),
+  );
+
+const orderTaskRows = (rows: readonly TaskSummaryRow[], operationName: string) =>
+  Effect.map(
+    Effect.try({
+      try: () =>
+        rows
+          .map((row) => ({
+            row,
+            createdAt: requiredString(row.createdAt, "Task creation timestamp"),
+            numericId: requiredPositiveInteger(row.numericId, "Task numeric ID"),
+          }))
+          .sort(
+            (left, right) =>
+              left.createdAt.localeCompare(right.createdAt) || left.numericId - right.numericId,
+          ),
+      catch: (cause) => new RepositoryPersistedDataInvalid({ operationName, cause }),
+    }),
+    (ordered) => ordered.map(({ row }) => row),
   );
 
 const listActionableTasks = (sql: SqlClient.SqlClient) =>
@@ -561,6 +576,7 @@ type TaskSummaryRow = {
   readonly createdAt: unknown;
   readonly updatedAt: unknown;
   readonly totalCount?: unknown;
+  readonly numericId: unknown;
 };
 type TaskDependencyFactRow = {
   readonly id: unknown;

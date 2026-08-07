@@ -586,17 +586,24 @@ const listFindings = (sql: SqlClient.SqlClient, validationRunId: string) =>
     const ordered = yield* Effect.try({
       try: () =>
         rows
-          .map((row) => ({
-            row,
-            id: requiredString(row.id, "Finding ID"),
-            phase: decodeValidationPhase(row.phase),
-            producer: requiredString(row.producer, "Finding producer"),
-          }))
+          .map((row) => {
+            const phase = decodeValidationPhase(row.phase);
+            const producer = requiredString(row.producer, "Finding producer");
+            const roundNumber = roundNumbers.get(JSON.stringify([phase, producer]));
+            if (roundNumber === undefined)
+              throw new Error("Stored Finding has no matching Validation round");
+            return {
+              row,
+              id: requiredString(row.id, "Finding ID"),
+              phase,
+              producer,
+              roundNumber,
+            };
+          })
           .sort(
             (left, right) =>
               validationPhaseOrder(left.phase) - validationPhaseOrder(right.phase) ||
-              (roundNumbers.get(JSON.stringify([left.phase, left.producer])) ?? 0) -
-                (roundNumbers.get(JSON.stringify([right.phase, right.producer])) ?? 0) ||
+              left.roundNumber - right.roundNumber ||
               left.id.localeCompare(right.id),
           ),
       catch: (cause) =>
