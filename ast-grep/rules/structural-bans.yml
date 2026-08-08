@@ -94,7 +94,7 @@ rule:
     - pattern: globalThis.Date["now"]()
 ---
 # Parsed JSON keeps an unknown runtime shape until the owning boundary decodes it.
-# The reviewed serialization transform JSON.parse(JSON.stringify(value)) as StructuredValue is the sole supported exception because its immediately preceding JSON serialization establishes exactly the StructuredValue representation; the ignores list keeps that exception scoped to src/output/structuredValue.ts.
+# src/output/structuredValue.ts is the sole file-scoped exception because its immediately preceding JSON serialization establishes exactly the StructuredValue representation; the serialization transform remains prohibited outside that ignored file.
 id: json-parse-assertions-keep-unknown
 language: TypeScript
 severity: error
@@ -116,7 +116,6 @@ rule:
           - pattern: (JSON.parse($$$ARGS)) as unknown
           - pattern: <unknown>JSON.parse($$$ARGS)
           - pattern: <unknown>(JSON.parse($$$ARGS))
-          - pattern: JSON.parse(JSON.stringify($$$VALUE)) as StructuredValue
 ---
 # Expensive process startup belongs only to tests that prove an operating-system boundary.
 id: process-test-helpers-belong-to-process-boundaries
