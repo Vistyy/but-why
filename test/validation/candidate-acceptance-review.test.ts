@@ -11,7 +11,7 @@ import type {
 } from "../../src/agent/reviewerAgentRuntime.js";
 import { runAcceptanceReviewPhase } from "../../src/change/acceptanceReview/runAcceptanceReviewPhase.js";
 import type { CaptureLocalCandidateResult } from "../../src/change/candidateCapture/captureLocalCandidate.js";
-import type { CandidateValidationPolicySnapshot } from "../../src/change/candidateValidation/candidateValidationRunStore.js";
+import type { CandidateValidationPolicySnapshot } from "../../src/change/candidateValidation/candidateValidationPolicySnapshot.js";
 import {
   type AcceptanceContextCandidateValidationPolicy,
   CandidateValidation,
