@@ -63,6 +63,10 @@ invalid:
   - globalThis.Date["now"]()
 ---
 id: json-parse-assertions-keep-unknown
+# The reviewed exception: src/output/structuredValue.ts may assert
+# JSON.parse(JSON.stringify(value)) as StructuredValue because its immediately
+# preceding JSON serialization establishes exactly the StructuredValue
+# representation; the rule's ignores list limits the exception to that file.
 valid:
   - JSON.parse(x) as unknown
   - "<unknown>JSON.parse(x)"
