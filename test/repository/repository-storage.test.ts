@@ -6,6 +6,7 @@ import * as SqlClient from "@effect/sql/SqlClient";
 import { expect, it } from "@effect/vitest";
 import { Cause, Effect } from "effect";
 import { describe } from "vitest";
+import type { CurrentPublicationAuthority } from "../../src/change/changePersistence.js";
 import {
   RepositoryIdentityConflict,
   RepositoryMigrationFailed,
@@ -40,6 +41,7 @@ import { restrictLifecycleStatesMigration } from "../../src/sqlite/migrations/00
 import { nodeSqliteLayer } from "../../src/sqlite/nodeSqliteClient.js";
 import { RepositorySql, repositorySqlLayer } from "../../src/sqlite/repositorySql.js";
 import { openSqliteCandidateCapturePersistence } from "../../src/sqlite/sqliteCandidateCapturePersistence.js";
+import { encodeSqliteCandidateValidationPolicy } from "../../src/sqlite/sqliteCandidateValidationPolicy.js";
 import { openSqliteChangePersistence } from "../../src/sqlite/sqliteChangePersistence.js";
 import { openSqliteChangeStartPersistence } from "../../src/sqlite/sqliteChangeStartPersistence.js";
 import { openSqliteChangeValidationPersistence } from "../../src/sqlite/sqliteChangeValidationPersistence.js";
@@ -125,6 +127,48 @@ const migrateThrough22 = Migrator.make({})({
     "0022_change_cancel_reason": changeCancelReasonMigration,
   }),
 });
+
+const simplifiedReviewPolicy = {
+  checks: [],
+  copyFiles: [],
+  specialistReviews: [
+    {
+      id: "standards",
+      instructions: "Review standards.",
+      instructionsSource: "repo",
+      profile: {
+        agentProfile: "standards",
+        scope: "repo",
+        profile: {
+          agentRuntime: "pi",
+          runtimeConfig: { model: "standards-model" },
+        },
+      },
+    },
+  ],
+} as const;
+
+const duplicateReviewPolicy = {
+  checks: [],
+  copyFiles: [],
+  specialistReviews: [
+    {
+      id: "standards",
+      instructions: "Review standards.",
+      instructionsSource: "repo",
+      agentProfile: "standards",
+      profileScope: "repo",
+      profile: {
+        agentProfile: "standards",
+        scope: "repo",
+        profile: {
+          agentRuntime: "pi",
+          runtimeConfig: { model: "standards-model" },
+        },
+      },
+    },
+  ],
+} as const;
 
 describe("repository SQL storage", () => {
   it.scoped("persists Tasks through the Effect-native Task interface", () =>
@@ -995,9 +1039,9 @@ describe("repository SQL storage", () => {
         if (!captured.ok) throw new Error(`Candidate capture failed: ${captured.code}`);
         const authority = {
           changeBaseSha: "base-sha",
-          policy: { checks: [], copyFiles: [], specialistReviews: [] },
+          policy: simplifiedReviewPolicy,
           implementationDecisions: [],
-        };
+        } satisfies CurrentPublicationAuthority;
         yield* repository.operation("install passing publication evidence", (sql) =>
           Effect.gen(function* () {
             yield* sql`
@@ -1006,8 +1050,8 @@ describe("repository SQL storage", () => {
                 latest_resolved_blocker_id, state, outcome, created_at, updated_at
               ) VALUES (
                 'run-1', ${captured.candidateId},
-                '{"checks":[],"copyFiles":[],"specialistReviews":[]}', '[]', NULL,
-                'complete', 'passed',
+                '{"checks":[],"copyFiles":[],"specialistReviews":[{"id":"standards","instructions":"Review standards.","instructionsSource":"repo","profile":{"agentProfile":"standards","scope":"repo","profile":{"agentRuntime":"pi","runtimeConfig":{"model":"standards-model"}}}}]}',
+                '[]', NULL, 'complete', 'passed',
                 '2026-07-25T15:01:00.000Z', '2026-07-25T15:01:00.000Z'
               )
             `;
@@ -1073,6 +1117,42 @@ describe("repository SQL storage", () => {
             },
           }),
         ).toBeUndefined();
+        yield* repository.operation(
+          "install duplicate-representation publication evidence",
+          (sql) =>
+            Effect.gen(function* () {
+              yield* sql`
+                INSERT INTO candidate_validation_runs (
+                  id, candidate_id, policy_snapshot, implementation_decisions,
+                  latest_resolved_blocker_id, state, outcome, created_at, updated_at
+                ) VALUES (
+                  'run-duplicate-representation', ${captured.candidateId},
+                  '{"checks":[],"copyFiles":[],"specialistReviews":[{"id":"standards","instructions":"Review standards.","instructionsSource":"repo","agentProfile":"standards","profileScope":"repo","profile":{"agentProfile":"standards","scope":"repo","profile":{"agentRuntime":"pi","runtimeConfig":{"model":"standards-model"}}}}]}',
+                  '[]', NULL, 'complete', 'passed',
+                  '2026-07-25T15:01:30.000Z', '2026-07-25T15:01:30.000Z'
+                )
+              `;
+              yield* sql`
+                UPDATE changes SET
+                  publication_validation_run_id = 'run-duplicate-representation'
+                WHERE id = ${captured.changeId}
+              `;
+            }),
+        );
+        expect(
+          yield* changes.getPassingPublicationEvidence(captured.changeId, authority),
+        ).toBeUndefined();
+        yield* repository.operation(
+          "restore publication evidence reference",
+          (sql) =>
+            sql`UPDATE changes SET publication_validation_run_id = 'run-1' WHERE id = ${captured.changeId}`,
+        );
+        expect(yield* changes.getPassingPublicationEvidence(captured.changeId, authority)).toEqual({
+          candidateId: captured.candidateId,
+          validationRunId: "run-1",
+          changeBaseSha: "base-sha",
+          headSha: "head-sha",
+        });
         expect(
           yield* changes.getPassingPublicationEvidence(captured.changeId, {
             ...authority,
@@ -1169,6 +1249,42 @@ describe("repository SQL storage", () => {
             now: "2026-07-25T16:12:00.000Z",
           });
 
+          expect(yield* validation.startOrReuse(exact)).toMatchObject({
+            reused: true,
+            validationRunId: first.validationRunId,
+          });
+
+          yield* repository.operation(
+            "install duplicate-representation Validation Run evidence",
+            (sql) =>
+              sql`
+                INSERT INTO candidate_validation_runs (
+                  id, candidate_id, policy_snapshot, implementation_decisions,
+                  latest_resolved_blocker_id, state, outcome, created_at, updated_at
+                ) VALUES (
+                  'run-duplicate-representation', ${captured.candidateId},
+                  ${encodeSqliteCandidateValidationPolicy(duplicateReviewPolicy)},
+                  '[]', NULL, 'complete', 'passed',
+                  '2026-07-25T16:12:30.000Z', '2026-07-25T16:12:30.000Z'
+                )
+              `,
+          );
+          const simplifiedCurrentRejected = yield* validation.startOrReuse({
+            candidateId: captured.candidateId,
+            changeBaseSha: "base-sha",
+            headSha: "head-sha",
+            policy: simplifiedReviewPolicy,
+            implementationDecisions: [],
+            now: "2026-07-25T16:12:40.000Z",
+          });
+          expect(simplifiedCurrentRejected.reused).toBe(false);
+          if (simplifiedCurrentRejected.reused || "blocked" in simplifiedCurrentRejected)
+            throw new Error("Expected the duplicate representation to be rejected");
+          yield* validation.complete({
+            validationRunId: simplifiedCurrentRejected.validationRunId,
+            outcome: "passed",
+            now: "2026-07-25T16:12:45.000Z",
+          });
           expect(yield* validation.startOrReuse(exact)).toMatchObject({
             reused: true,
             validationRunId: first.validationRunId,
@@ -1277,7 +1393,9 @@ describe("repository SQL storage", () => {
               policyMismatch.validationRunId,
               decisionsMismatch.validationRunId,
               contextMismatch.validationRunId,
+              simplifiedCurrentRejected.validationRunId,
               afterResolution.validationRunId,
+              "run-duplicate-representation",
             ].sort(),
           );
         }),

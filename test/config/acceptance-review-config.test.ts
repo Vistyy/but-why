@@ -143,7 +143,7 @@ describe("Acceptance Review configuration", () => {
           review: { acceptance: { agentProfile: { scope: "global", name: "global" } } },
         },
       ),
-    ).toMatchObject({ ok: true, policy: { agentProfile: "repo", profileScope: "repo" } });
+    ).toMatchObject({ ok: true, policy: { profile: { agentProfile: "repo", scope: "repo" } } });
     expect(
       resolve(
         { taskPrefix: "BY" },
@@ -152,10 +152,10 @@ describe("Acceptance Review configuration", () => {
           review: { acceptance: { agentProfile: { scope: "global", name: "global" } } },
         },
       ),
-    ).toMatchObject({ ok: true, policy: { agentProfile: "global", profileScope: "global" } });
+    ).toMatchObject({ ok: true, policy: { profile: { agentProfile: "global", scope: "global" } } });
     expect(resolve({ taskPrefix: "BY" }, baseGlobal)).toMatchObject({
       ok: true,
-      policy: { agentProfile: "default", profileScope: "global" },
+      policy: { profile: { agentProfile: "default", scope: "global" } },
     });
   });
 });

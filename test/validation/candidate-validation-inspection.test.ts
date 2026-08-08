@@ -402,6 +402,76 @@ describe("Candidate-owned Validation Run inspection", () => {
     }),
   );
 
+  it.effect("shows each review policy with one Agent Profile identity in the Snapshot", () =>
+    Effect.gen(function* () {
+      const fixture = yield* candidateValidationFixture();
+      yield* fixture.runStore.complete({
+        validationRunId: fixture.validationRunId,
+        outcome: "tooling_failed",
+        now,
+      });
+      const reviewPolicy = {
+        checks: [],
+        copyFiles: [],
+        acceptanceReview: {
+          instructions: "Review intent",
+          instructionsSource: "built_in",
+          profile: {
+            agentProfile: "acceptance",
+            scope: "global",
+            profile: {
+              agentRuntime: "pi",
+              runtimeConfig: { model: "acceptance-model" },
+            },
+          },
+        },
+        specialistReviews: [
+          {
+            id: "standards",
+            instructions: "Review standards.",
+            instructionsSource: "repo",
+            profile: {
+              agentProfile: "standards",
+              scope: "repo",
+              profile: {
+                agentRuntime: "pi",
+                runtimeConfig: { model: "standards-model" },
+              },
+            },
+          },
+        ],
+      } as const;
+      const started = yield* fixture.runStore.startOrReuse({
+        candidateId: fixture.candidateId,
+        headSha: "head-sha",
+        policy: reviewPolicy,
+        validationRunId: "run-review-policy",
+        now: later,
+      });
+      expect(started.reused).toBe(false);
+      if ("blocked" in started) throw new Error("Expected a new Validation Run");
+      yield* fixture.runStore.complete({
+        validationRunId: started.validationRunId,
+        outcome: "passed",
+        now: later,
+      });
+
+      const result = yield* runByInProcessEffect(fixture.root, [
+        "--json",
+        "validation-run",
+        "show",
+        started.validationRunId,
+      ]);
+      expect(result.status).toBe(0);
+      const shown = JSON.parse(result.stdout);
+      expect(shown.policy).toEqual(reviewPolicy);
+      expect(shown.policy.acceptanceReview).not.toHaveProperty("agentProfile");
+      expect(shown.policy.acceptanceReview).not.toHaveProperty("profileScope");
+      expect(shown.policy.specialistReviews[0]).not.toHaveProperty("agentProfile");
+      expect(shown.policy.specialistReviews[0]).not.toHaveProperty("profileScope");
+    }),
+  );
+
   it.effect("keeps empty evidence distinct from unavailable artifact content", () =>
     Effect.gen(function* () {
       const empty = yield* candidateValidationFixture();

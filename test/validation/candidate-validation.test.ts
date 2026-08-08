@@ -151,8 +151,6 @@ describe("Candidate validation", () => {
           id: "standards",
           instructions: "Review standards.",
           instructionsSource: "repo" as const,
-          agentProfile: "standards",
-          profileScope: "repo" as const,
           profile: {
             agentProfile: "standards",
             scope: "repo" as const,

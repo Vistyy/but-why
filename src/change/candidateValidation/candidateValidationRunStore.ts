@@ -46,16 +46,12 @@ export type CandidateValidationPolicySnapshot = {
   readonly acceptanceReview?: {
     readonly instructions: string;
     readonly instructionsSource: "repo" | "global" | "built_in";
-    readonly agentProfile: string;
-    readonly profileScope: "repo" | "global";
     readonly profile: ResolvedPiAgentProfile;
   };
   readonly specialistReviews?: readonly {
     readonly id: string;
     readonly instructions: string;
     readonly instructionsSource: "repo" | "global";
-    readonly agentProfile: string;
-    readonly profileScope: "repo" | "global";
     readonly profile: ResolvedPiAgentProfile;
   }[];
 };

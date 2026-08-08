@@ -13,8 +13,6 @@ export type SpecialistReviewPolicy = {
   readonly id: string;
   readonly instructions: string;
   readonly instructionsSource: "repo" | "global";
-  readonly agentProfile: string;
-  readonly profileScope: "repo" | "global";
   readonly profile: ResolvedPiAgentProfile;
 };
 
@@ -94,8 +92,6 @@ const resolveSpecialist = (
       id,
       instructions: instructions.instructions,
       instructionsSource,
-      agentProfile: profileResolution.resolved.agentProfile,
-      profileScope: profileResolution.resolved.scope,
       profile: profileResolution.resolved,
     },
   };
