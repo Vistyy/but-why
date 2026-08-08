@@ -1402,6 +1402,136 @@ describe("repository SQL storage", () => {
       ),
   );
 
+  it.scoped(
+    "round-trips a current ordered Implementation Decision Snapshot through the real SQLite Adapter",
+    () =>
+      withTemporaryState((input) =>
+        Effect.gen(function* () {
+          const capture = yield* openSqliteCandidateCapturePersistence();
+          const validation = yield* openSqliteChangeValidationPersistence();
+          const captured = yield* capture.commitCapture({
+            repositoryCommonDirectory: input.commonDirectory,
+            branchRef: "refs/heads/feature",
+            baseRef: "refs/remotes/origin/main",
+            changeBaseSha: "base-sha",
+            headSha: "head-sha",
+            now: "2026-07-25T17:00:00.000Z",
+          });
+          if (!captured.ok) throw new Error(`Candidate capture failed: ${captured.code}`);
+          const decisions = [
+            {
+              id: "decision-1",
+              changeId: captured.changeId,
+              sequence: 1,
+              recordedAt: "2026-07-25T17:01:00.000Z",
+              choice: "Keep rationale separate from intent",
+              rationale: "Preserve rationale separately from approved intent.",
+            },
+            {
+              id: "decision-2",
+              changeId: captured.changeId,
+              sequence: 2,
+              recordedAt: "2026-07-25T17:02:00.000Z",
+              choice: "Use the current snapshot schema",
+              rationale: "Reject retired content without rewriting stored rows.",
+            },
+          ];
+          const started = yield* validation.startOrReuse({
+            candidateId: captured.candidateId,
+            changeBaseSha: "base-sha",
+            headSha: "head-sha",
+            policy: { checks: [], copyFiles: [], specialistReviews: [] },
+            implementationDecisions: decisions,
+            now: "2026-07-25T17:03:00.000Z",
+          });
+          if (started.reused || "blocked" in started)
+            throw new Error("Expected a new Validation Run");
+          yield* validation.complete({
+            validationRunId: started.validationRunId,
+            outcome: "passed",
+            now: "2026-07-25T17:04:00.000Z",
+          });
+
+          const stored = yield* validation.getRunById(started.validationRunId);
+          expect(stored?.implementationDecisions).toEqual(decisions);
+          const history = yield* validation.listRunsForCandidate(captured.candidateId);
+          expect(history[0]?.implementationDecisions).toEqual(decisions);
+        }),
+      ),
+  );
+
+  it.scoped(
+    "rejects malformed or retired Implementation Decision Snapshots as RepositoryPersistedDataInvalid",
+    () =>
+      withTemporaryState((input) =>
+        Effect.gen(function* () {
+          const repository = yield* RepositorySql;
+          const capture = yield* openSqliteCandidateCapturePersistence();
+          const validation = yield* openSqliteChangeValidationPersistence();
+          const captured = yield* capture.commitCapture({
+            repositoryCommonDirectory: input.commonDirectory,
+            branchRef: "refs/heads/feature",
+            baseRef: "refs/remotes/origin/main",
+            changeBaseSha: "base-sha",
+            headSha: "head-sha",
+            now: "2026-07-25T17:10:00.000Z",
+          });
+          if (!captured.ok) throw new Error(`Candidate capture failed: ${captured.code}`);
+          const malformedSnapshots = [
+            { label: "malformed syntax", snapshot: "{not-json" },
+            { label: "non-array container", snapshot: '{"id":"not-an-array"}' },
+            { label: "string container", snapshot: '"not-an-array"' },
+            {
+              label: "missing field",
+              snapshot:
+                '[{"id":"decision-1","changeId":"change-1","sequence":1,"recordedAt":"2026-07-25T17:11:00.000Z","choice":"Missing rationale"}]',
+            },
+            {
+              label: "wrong primitive type",
+              snapshot:
+                '[{"id":"decision-1","changeId":"change-1","sequence":"1","recordedAt":"2026-07-25T17:11:00.000Z","choice":"Sequence as text","rationale":"Wrong type."}]',
+            },
+            {
+              label: "retired content representation",
+              snapshot:
+                '[{"id":"decision-1","changeId":"change-1","sequence":1,"recordedAt":"2026-07-25T17:11:00.000Z","content":"Legacy unstructured decision"}]',
+            },
+            {
+              label: "unknown field",
+              snapshot:
+                '[{"id":"decision-1","changeId":"change-1","sequence":1,"recordedAt":"2026-07-25T17:11:00.000Z","choice":"Valid","rationale":"Valid.","extra":1}]',
+            },
+          ];
+          yield* Effect.forEach(malformedSnapshots, ({ label, snapshot }, index) =>
+            Effect.gen(function* () {
+              const runId = `run-${index}`;
+              yield* repository.operation(
+                `install malformed Implementation Decision Snapshot: ${label}`,
+                (sql) =>
+                  sql`
+                    INSERT INTO candidate_validation_runs (
+                      id, candidate_id, policy_snapshot, implementation_decisions,
+                      latest_resolved_blocker_id, state, outcome, created_at, updated_at
+                    ) VALUES (
+                      ${runId}, ${captured.candidateId},
+                      '{"checks":[],"copyFiles":[],"specialistReviews":[]}',
+                      ${snapshot}, NULL, 'complete', 'passed',
+                      '2026-07-25T17:12:00.000Z', '2026-07-25T17:12:00.000Z'
+                    )
+                  `,
+              );
+              const runError = yield* validation.getRunById(runId).pipe(Effect.flip);
+              expect(runError).toBeInstanceOf(RepositoryPersistedDataInvalid);
+              const listError = yield* validation
+                .listRunsForCandidate(captured.candidateId)
+                .pipe(Effect.flip);
+              expect(listError).toBeInstanceOf(RepositoryPersistedDataInvalid);
+            }),
+          );
+        }),
+      ),
+  );
+
   it.scoped("rejects Validation admission for an unresolved Implementation Blocker", () =>
     withTemporaryState((input) =>
       Effect.gen(function* () {
