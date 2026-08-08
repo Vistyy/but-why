@@ -2515,6 +2515,7 @@ describe("repository SQL storage", () => {
             '"instructionsSource":"built_in"',
             '"instructionsSource":"built_in","__proto__":{"polluted":true}',
           );
+          const whitespaceAffectedBuggyText = `{\n${affectedBuggyText.slice(1)}`;
           const currentPolicy = { checks: [], copyFiles: [], specialistReviews: [] };
           const currentPolicyText = JSON.stringify(currentPolicy);
           const legacyPolicyText =
@@ -2553,6 +2554,11 @@ describe("repository SQL storage", () => {
                   policy: protoAffectedBuggyText,
                   now: "2026-07-25T16:32:00.750Z",
                 },
+                {
+                  id: "run-whitespace",
+                  policy: whitespaceAffectedBuggyText,
+                  now: "2026-07-25T16:32:00.875Z",
+                },
                 { id: "run-legacy", policy: legacyPolicyText, now: "2026-07-25T16:32:01.000Z" },
                 {
                   id: "run-malformed",
@@ -2590,6 +2596,7 @@ describe("repository SQL storage", () => {
               expect(byId.get("run-affected")).toBe(affectedCorrectedText);
               expect(byId.get("run-affected-reordered")).toBe(reorderedAffectedBuggyText);
               expect(byId.get("run-proto")).toBe(protoAffectedBuggyText);
+              expect(byId.get("run-whitespace")).toBe(whitespaceAffectedBuggyText);
               expect(byId.get("run-legacy")).toBe(legacyPolicyText);
               expect(byId.get("run-malformed")).toBe(malformedPolicyText);
               expect(byId.get("run-current")).toBe(currentPolicyText);
@@ -2603,6 +2610,10 @@ describe("repository SQL storage", () => {
               expect(reorderedError).toBeInstanceOf(RepositoryPersistedDataInvalid);
               const protoError = yield* validation.getRunById("run-proto").pipe(Effect.flip);
               expect(protoError).toBeInstanceOf(RepositoryPersistedDataInvalid);
+              const whitespaceError = yield* validation
+                .getRunById("run-whitespace")
+                .pipe(Effect.flip);
+              expect(whitespaceError).toBeInstanceOf(RepositoryPersistedDataInvalid);
               const legacyError = yield* validation.getRunById("run-legacy").pipe(Effect.flip);
               expect(legacyError).toBeInstanceOf(RepositoryPersistedDataInvalid);
               const malformedError = yield* validation

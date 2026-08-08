@@ -172,32 +172,35 @@ export const repairValidationPolicySnapshotOkFieldMigration = Effect.gen(functio
     FROM candidate_validation_runs
   `;
 
+  const okFieldPrefix = '"acceptanceReview":{"ok":true,';
+  const acceptanceReviewOpen = '"acceptanceReview":{';
+
   for (const run of runs) {
+    if (!run.policySnapshot.includes(okFieldPrefix)) continue;
+    // Remove only the ok field bytes from the exact historical writer output. The
+    // buggy writer always serialized acceptanceReview with ok first, so the raw
+    // prefix identifies the exact defect without parsing or re-serializing.
+    const repairedText = run.policySnapshot.replace(okFieldPrefix, acceptanceReviewOpen);
+    if (repairedText === run.policySnapshot) continue;
     let parsed: unknown;
     try {
-      parsed = JSON.parse(run.policySnapshot);
+      parsed = JSON.parse(repairedText);
     } catch {
       continue;
     }
     if (!isJsonObject(parsed)) continue;
-    const acceptanceReview = parsed["acceptanceReview"];
-    if (!isJsonObject(acceptanceReview)) continue;
-    if (acceptanceReview["ok"] !== true) continue;
-    const { ok: _ignored, ...rest } = acceptanceReview;
-    const withoutOk = { ...parsed, acceptanceReview: rest };
-    const repairedJson = JSON.stringify(withoutOk);
-    // Repair only the exact historical writer defect: removing acceptanceReview.ok
-    // must already produce the corrected writer's serialized identity. Alternate
-    // key orderings remain byte-for-byte unchanged and rejected by strict decode.
-    if (repairedJson !== JSON.stringify(canonicalize(withoutOk, "top"))) continue;
+    // Require the raw repaired text to be byte-for-byte the corrected writer's
+    // serialized identity. Alternate whitespace, escapes, number formatting, key
+    // order, or excess fields keep the row unchanged and rejected by strict decode.
+    if (repairedText !== JSON.stringify(canonicalize(parsed, "top"))) continue;
     try {
-      decodePolicySnapshot(repairedJson);
+      decodePolicySnapshot(repairedText);
     } catch {
       continue;
     }
     yield* sql`
       UPDATE candidate_validation_runs
-      SET policy_snapshot = ${repairedJson}
+      SET policy_snapshot = ${repairedText}
       WHERE id = ${run.id}
     `;
   }
