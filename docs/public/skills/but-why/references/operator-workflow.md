@@ -31,8 +31,9 @@ A taskless Change uses the current session unless Implementation Authorization e
    Identify consequential assumptions or trade-offs that could change Task boundaries, observable behavior, or implementation.
 2. Resolve each consequential uncertainty before you split Tasks or implement affected work.
    Ask the Operator for a decision when available evidence cannot resolve it.
-3. Recommend the smallest suitable Work Route.
+3. Recommend a suitable Work Route from the required intent and validation authority.
    Use a Task-backed Change for durable approved intent, a taskless Change for a validated code change without Task intent, or a direct edit when But Why is not required.
+   After the Operator selects a Task-backed Change, Work Route Selection does not determine Task count or size.
 4. Obtain the Operator's explicit Work Route Selection.
    Do not substitute another Work Route after the Operator selects one.
 
@@ -48,17 +49,24 @@ Before designing or revising a Task Verification Contract, read [Task verificati
    Inspect current Tasks, their complete Task Context, and their dependencies.
    Identify one current Task owner or one ownership gap for every requirement.
 2. Propose the complete Task graph before mutation.
-   Compare every approved requirement with the proposed graph and give each requirement exactly one Task owner.
+   Account for every approved requirement exactly once across the graph and assign each approved behavior and constraint to one Task.
    Do not omit, replace, defer, or reduce approved behavior to make a Task smaller.
    Treat any such proposal as a requirements change that requires an explicit Operator decision.
-   Each proposed Task must deliver one independently verifiable observable capability.
-   Keep all work for one capability in one Task unless a split creates independently verifiable capabilities with necessary dependencies.
-   Keep the capability in one Task when no such split exists, even when the Task is large.
+   Each proposed Task must deliver one bounded supported result: a completed state that is distinguishable from the prior supported state, is independently acceptable progress toward approved intent, and can be implemented, reviewed, and verified coherently.
+   A quality, theme, final objective, shared owner, implementation area, or preferred sequence is not by itself a Task result.
+   Split approved intent when it contains multiple bounded supported results.
+   Do not merge results to minimize Task count or because they contribute to one final objective.
+   Do not split solely by files, modules, layers, commands, test categories, or implementation effort.
+   Treat implementation, review, or verification difficulty as evidence that the proposed boundary must be reconsidered.
+   If no practical bounded result is clear, present the evidence and obtain an Operator decision before recording the Task.
+   A migration stage or caller population can be a Task when it ends in an approved coherent supported state with a bounded passing condition.
+   A preparatory activity is a Task only when its output is itself an approved bounded supported result.
    Add a Task Dependency only when the dependent Task cannot be implemented or verified until the prerequisite Task is Done.
 3. Give each proposed Task behavior-based acceptance criteria and a complete Task Verification Contract.
-   Do not use generic verification gates, test counts, coverage targets, or unsupported test categories as acceptance criteria.
+   Keep acceptance criteria separate from verification mechanisms.
+   Do not use generic gates, test counts, coverage targets, or unsupported test categories as acceptance criteria.
    Follow the Task verification reference to define proportionate implementation confidence.
-4. Before requesting Task Recording Authorization for a consequential multi-Task graph, independently audit the exact final Task Contexts and dependencies against current authority, ownership, verification feasibility, and cross-Task overlap.
+4. Before requesting Task Recording Authorization, review the exact final Task Contexts and dependencies against current authority, ownership, verification feasibility, and cross-Task overlap.
    Task lifecycle state does not establish implementation readiness.
 5. Present the complete Task graph, Task Context, Task Dependency rationale, and recording order.
    Obtain Task Recording Authorization before any Task or Task Dependency mutation.

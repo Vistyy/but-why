@@ -30,11 +30,16 @@ Follow the repository instructions in the Managed Worktree.
 Use task-specific verification requirements in accepted Task Context when present.
 Before you add a Shared Repository State Migration Artifact, run `<but-why> snapshot`.
 Otherwise, select focused evidence that is proportionate to the Candidate's material risks under the repository's accepted verification policy.
+Before selecting or adding Verification Evidence, read [Task verification](task-verification.md) completely.
+A requirement, code change, branch, scenario, or Verification Claim does not by itself require new durable automation.
+Start with accepted mandatory gates, retained evidence, and proportionate one-time evidence.
 Do not add a durable automated test unless accepted verification requirements require maintained automation.
-For each added test case, including each parameterized case, identify a plausible regression that other evidence for the Candidate would not reveal.
+For each additional test case, including each parameterized case, identify a plausible regression that other evidence for the Candidate would not reveal.
 A different input, fixture, branch, assertion, or code path does not make a regression distinct by itself.
-Remove or consolidate an added test case that does not detect such a regression.
-Choose the least-cost arrangement after considering authoring and review, code and fixtures, execution time and resources, stability, failure diagnosis, coupling, and future maintenance.
+Confirm that the selected seam observes the required behavior reliably and that retained and one-time evidence are insufficient.
+Prefer updating, reusing, consolidating, or removing retained evidence when that provides sufficient confidence at lower lifecycle cost.
+Updating an existing expectation because the accepted contract changed does not by itself justify another test case or suite.
+Remove or consolidate an additional test case whose regression protection does not justify its Lifecycle Cost over the least-cost feasible alternative.
 When multiple approaches remain compliant with accepted intent, select one.
 Record the choice as an Implementation Decision when it affects observable behavior, an interface, stored data, failure handling, or a meaningful trade-off.
 Use `by change decision add <change-id> --choice "<selected approach>" --rationale "<reason and material trade-off>"` when the decision is made.
