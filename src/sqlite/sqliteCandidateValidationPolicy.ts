@@ -7,7 +7,11 @@ import {
 
 export const encodeSqliteCandidateValidationPolicy = (
   policy: CandidateValidationPolicySnapshot,
-): string => JSON.stringify(policy);
+): string => {
+  const json = JSON.stringify(policy);
+  decodePolicySnapshot(json);
+  return json;
+};
 
 const decodePolicySnapshot = Schema.decodeUnknownSync(
   Schema.parseJson(candidateValidationPolicySnapshotSchema),

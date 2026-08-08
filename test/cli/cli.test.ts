@@ -487,6 +487,7 @@ validationSetup:
         { migration_id: 22, name: "change_cancel_reason" },
         { migration_id: 23, name: "restrict_lifecycle_states" },
         { migration_id: 24, name: "remove_task_comments" },
+        { migration_id: 25, name: "repair_validation_policy_snapshot_ok_field" },
       ]);
     }),
   );
