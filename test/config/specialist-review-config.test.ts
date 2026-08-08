@@ -53,9 +53,7 @@ describe("Specialist Review configuration", () => {
           id: "security",
           instructions: "Repo security instructions\n",
           instructionsSource: "repo",
-          agentProfile: "review",
-          profileScope: "repo",
-          profile: { scope: "repo" },
+          profile: { agentProfile: "review", scope: "repo" },
         },
       ],
     });
@@ -82,9 +80,11 @@ describe("Specialist Review configuration", () => {
         {
           id: "standards",
           instructionsSource: "global",
-          agentProfile: "default",
-          profileScope: "global",
-          profile: { profile: { runtimeConfig: { model: "default-model" } } },
+          profile: {
+            agentProfile: "default",
+            scope: "global",
+            profile: { runtimeConfig: { model: "default-model" } },
+          },
         },
       ],
     });

@@ -13,8 +13,6 @@ import {
 export type AcceptanceReviewPolicy = {
   readonly instructions: string;
   readonly instructionsSource: "repo" | "global" | "built_in";
-  readonly agentProfile: string;
-  readonly profileScope: "repo" | "global";
   readonly profile: ResolvedPiAgentProfile;
 };
 
@@ -53,8 +51,6 @@ export const resolveAcceptanceReviewPolicy = (input: {
     ok: true,
     policy: {
       ...instructions,
-      agentProfile: resolution.resolved.agentProfile,
-      profileScope: resolution.resolved.scope,
       profile: resolution.resolved,
     },
   };

@@ -86,8 +86,6 @@ const acceptanceContext = Object.freeze({
 const acceptancePolicy = {
   instructions: "Repository Acceptance instructions",
   instructionsSource: "repo" as const,
-  agentProfile: "strict",
-  profileScope: "repo" as const,
   profile: {
     agentProfile: "strict",
     scope: "repo" as const,
@@ -102,8 +100,6 @@ const specialistPolicy = (id: string) => ({
   id,
   instructions: `${id} review instructions`,
   instructionsSource: "repo" as const,
-  agentProfile: "strict",
-  profileScope: "repo" as const,
   profile: acceptancePolicy.profile,
 });
 

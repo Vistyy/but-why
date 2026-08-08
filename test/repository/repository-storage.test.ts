@@ -40,6 +40,7 @@ import { restrictLifecycleStatesMigration } from "../../src/sqlite/migrations/00
 import { nodeSqliteLayer } from "../../src/sqlite/nodeSqliteClient.js";
 import { RepositorySql, repositorySqlLayer } from "../../src/sqlite/repositorySql.js";
 import { openSqliteCandidateCapturePersistence } from "../../src/sqlite/sqliteCandidateCapturePersistence.js";
+import { encodeSqliteCandidateValidationPolicy } from "../../src/sqlite/sqliteCandidateValidationPolicy.js";
 import { openSqliteChangePersistence } from "../../src/sqlite/sqliteChangePersistence.js";
 import { openSqliteChangeStartPersistence } from "../../src/sqlite/sqliteChangeStartPersistence.js";
 import { openSqliteChangeValidationPersistence } from "../../src/sqlite/sqliteChangeValidationPersistence.js";
@@ -1073,6 +1074,42 @@ describe("repository SQL storage", () => {
             },
           }),
         ).toBeUndefined();
+        yield* repository.operation(
+          "install duplicate-representation publication evidence",
+          (sql) =>
+            Effect.gen(function* () {
+              yield* sql`
+                INSERT INTO candidate_validation_runs (
+                  id, candidate_id, policy_snapshot, implementation_decisions,
+                  latest_resolved_blocker_id, state, outcome, created_at, updated_at
+                ) VALUES (
+                  'run-duplicate-representation', ${captured.candidateId},
+                  '{"checks":[],"copyFiles":[],"specialistReviews":[{"id":"standards","instructions":"Review standards.","instructionsSource":"repo","agentProfile":"standards","profileScope":"repo","profile":{"agentProfile":"standards","scope":"repo","profile":{"agentRuntime":"pi","runtimeConfig":{"model":"standards-model"}}}}]}',
+                  '[]', NULL, 'complete', 'passed',
+                  '2026-07-25T15:01:30.000Z', '2026-07-25T15:01:30.000Z'
+                )
+              `;
+              yield* sql`
+                UPDATE changes SET
+                  publication_validation_run_id = 'run-duplicate-representation'
+                WHERE id = ${captured.changeId}
+              `;
+            }),
+        );
+        expect(
+          yield* changes.getPassingPublicationEvidence(captured.changeId, authority),
+        ).toBeUndefined();
+        yield* repository.operation(
+          "restore publication evidence reference",
+          (sql) =>
+            sql`UPDATE changes SET publication_validation_run_id = 'run-1' WHERE id = ${captured.changeId}`,
+        );
+        expect(yield* changes.getPassingPublicationEvidence(captured.changeId, authority)).toEqual({
+          candidateId: captured.candidateId,
+          validationRunId: "run-1",
+          changeBaseSha: "base-sha",
+          headSha: "head-sha",
+        });
         expect(
           yield* changes.getPassingPublicationEvidence(captured.changeId, {
             ...authority,
@@ -1169,6 +1206,59 @@ describe("repository SQL storage", () => {
             now: "2026-07-25T16:12:00.000Z",
           });
 
+          expect(yield* validation.startOrReuse(exact)).toMatchObject({
+            reused: true,
+            validationRunId: first.validationRunId,
+          });
+
+          const duplicateRepresentationPolicy = {
+            checks: [],
+            copyFiles: [],
+            specialistReviews: [
+              {
+                id: "standards",
+                instructions: "Review standards.",
+                instructionsSource: "repo",
+                agentProfile: "standards",
+                profileScope: "repo",
+                profile: {
+                  agentProfile: "standards",
+                  scope: "repo",
+                  profile: {
+                    agentRuntime: "pi",
+                    runtimeConfig: { model: "standards-model" },
+                  },
+                },
+              },
+            ],
+          } as const;
+          yield* repository.operation(
+            "install duplicate-representation Validation Run evidence",
+            (sql) =>
+              sql`
+                INSERT INTO candidate_validation_runs (
+                  id, candidate_id, policy_snapshot, implementation_decisions,
+                  latest_resolved_blocker_id, state, outcome, created_at, updated_at
+                ) VALUES (
+                  'run-duplicate-representation', ${captured.candidateId},
+                  ${encodeSqliteCandidateValidationPolicy(duplicateRepresentationPolicy)},
+                  '[]', NULL, 'complete', 'passed',
+                  '2026-07-25T16:12:30.000Z', '2026-07-25T16:12:30.000Z'
+                )
+              `,
+          );
+          const duplicateRejected = yield* validation.startOrReuse({
+            ...exact,
+            policy: duplicateRepresentationPolicy,
+          });
+          expect(duplicateRejected.reused).toBe(false);
+          if (duplicateRejected.reused || "blocked" in duplicateRejected)
+            throw new Error("Expected the duplicate representation to be rejected");
+          yield* validation.complete({
+            validationRunId: duplicateRejected.validationRunId,
+            outcome: "passed",
+            now: "2026-07-25T16:12:45.000Z",
+          });
           expect(yield* validation.startOrReuse(exact)).toMatchObject({
             reused: true,
             validationRunId: first.validationRunId,
@@ -1277,7 +1367,9 @@ describe("repository SQL storage", () => {
               policyMismatch.validationRunId,
               decisionsMismatch.validationRunId,
               contextMismatch.validationRunId,
+              duplicateRejected.validationRunId,
               afterResolution.validationRunId,
+              "run-duplicate-representation",
             ].sort(),
           );
         }),
