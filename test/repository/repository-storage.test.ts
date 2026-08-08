@@ -1269,15 +1269,19 @@ describe("repository SQL storage", () => {
                 )
               `,
           );
-          const simplifiedRejected = yield* validation.startOrReuse({
-            ...exact,
+          const simplifiedCurrentRejected = yield* validation.startOrReuse({
+            candidateId: captured.candidateId,
+            changeBaseSha: "base-sha",
+            headSha: "head-sha",
             policy: simplifiedReviewPolicy,
+            implementationDecisions: [],
+            now: "2026-07-25T16:12:40.000Z",
           });
-          expect(simplifiedRejected.reused).toBe(false);
-          if (simplifiedRejected.reused || "blocked" in simplifiedRejected)
+          expect(simplifiedCurrentRejected.reused).toBe(false);
+          if (simplifiedCurrentRejected.reused || "blocked" in simplifiedCurrentRejected)
             throw new Error("Expected the duplicate representation to be rejected");
           yield* validation.complete({
-            validationRunId: simplifiedRejected.validationRunId,
+            validationRunId: simplifiedCurrentRejected.validationRunId,
             outcome: "passed",
             now: "2026-07-25T16:12:45.000Z",
           });
@@ -1389,7 +1393,7 @@ describe("repository SQL storage", () => {
               policyMismatch.validationRunId,
               decisionsMismatch.validationRunId,
               contextMismatch.validationRunId,
-              simplifiedRejected.validationRunId,
+              simplifiedCurrentRejected.validationRunId,
               afterResolution.validationRunId,
               "run-duplicate-representation",
             ].sort(),
