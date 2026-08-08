@@ -1,6 +1,6 @@
 import { Schema } from "effect";
 
-export const implementationDecisionSchema = Schema.Struct({
+const implementationDecisionSchema = Schema.Struct({
   id: Schema.String,
   changeId: Schema.String,
   sequence: Schema.Number,
