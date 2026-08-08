@@ -1386,18 +1386,14 @@ describe("repository SQL storage", () => {
             throw new Error("Expected a fresh Validation Run after Resolution");
           expect(afterResolution.validationRunId).not.toBe(first.validationRunId);
 
-          const history = yield* validation.listRunsForCandidate(captured.candidateId);
-          expect(history.map((run) => run.id).sort()).toEqual(
-            [
-              first.validationRunId,
-              policyMismatch.validationRunId,
-              decisionsMismatch.validationRunId,
-              contextMismatch.validationRunId,
-              simplifiedCurrentRejected.validationRunId,
-              afterResolution.validationRunId,
-              "run-duplicate-representation",
-            ].sort(),
-          );
+          const historyError = yield* validation
+            .listRunsForCandidate(captured.candidateId)
+            .pipe(Effect.flip);
+          expect(historyError).toBeInstanceOf(RepositoryPersistedDataInvalid);
+          expect(historyError).toMatchObject({
+            _tag: "RepositoryPersistedDataInvalid",
+            operationName: "decode Candidate Validation Run",
+          });
         }),
       ),
   );

@@ -1,7 +1,7 @@
 import type { Effect } from "effect";
 
 import type { RepositoryStorageError } from "../contracts/repositoryStorageError.js";
-import type { CandidateValidationPolicySnapshot } from "./candidateValidation/candidateValidationRunStore.js";
+import type { CandidateValidationPolicySnapshot } from "./candidateValidation/candidateValidationPolicySnapshot.js";
 import type { ChangeRecord } from "./change.js";
 import type {
   BeginChangePublicationInput,

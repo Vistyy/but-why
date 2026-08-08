@@ -1,13 +1,11 @@
-import type { AgentEnvironmentCommand } from "../../agent/agentEnvironment.js";
-import type { ResolvedPiAgentProfile } from "../../agent/agentProfiles.js";
 import type { ImplementationDecision } from "../implementationDecision.js";
 import type { ValidationToolingFailureRecordInput } from "../validation/validationToolingFailures.js";
-import type { AcceptanceContextSnapshotV1 } from "../validationRun/acceptanceContextSnapshot.js";
 import type {
   ValidationPhase,
   ValidationRunArtifactRecord,
   ValidationRunFindingRecord,
 } from "../validationRun/validationRun.js";
+import type { CandidateValidationPolicySnapshot } from "./candidateValidationPolicySnapshot.js";
 
 export type CandidateValidationOutcome = "passed" | "blocked" | "tooling_failed";
 
@@ -32,29 +30,6 @@ export type RecordCandidateValidationPrepareRoundInput = Omit<
   RecordCandidateValidationCommandRoundInput,
   "phase" | "producer"
 >;
-
-export type CandidateValidationPolicySnapshot = {
-  readonly acceptanceContext?: AcceptanceContextSnapshotV1;
-  readonly agentEnvironment?: AgentEnvironmentCommand;
-  readonly prepare?: { readonly command: string; readonly timeoutSeconds: number };
-  readonly checks: readonly {
-    readonly id: string;
-    readonly command: string;
-    readonly timeoutSeconds: number;
-  }[];
-  readonly copyFiles: readonly string[];
-  readonly acceptanceReview?: {
-    readonly instructions: string;
-    readonly instructionsSource: "repo" | "global" | "built_in";
-    readonly profile: ResolvedPiAgentProfile;
-  };
-  readonly specialistReviews?: readonly {
-    readonly id: string;
-    readonly instructions: string;
-    readonly instructionsSource: "repo" | "global";
-    readonly profile: ResolvedPiAgentProfile;
-  }[];
-};
 
 export type StartCandidateValidationRunInput = {
   readonly candidateId: string;
