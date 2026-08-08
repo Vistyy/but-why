@@ -1,11 +1,17 @@
-export type ImplementationDecision = {
-  readonly id: string;
-  readonly changeId: string;
-  readonly sequence: number;
-  readonly recordedAt: string;
-  readonly choice: string;
-  readonly rationale: string;
-};
+import { Schema } from "effect";
+
+const implementationDecisionSchema = Schema.Struct({
+  id: Schema.String,
+  changeId: Schema.String,
+  sequence: Schema.Number,
+  recordedAt: Schema.String,
+  choice: Schema.String,
+  rationale: Schema.String,
+});
+
+export const implementationDecisionSnapshotSchema = Schema.Array(implementationDecisionSchema);
+
+export type ImplementationDecision = Schema.Schema.Type<typeof implementationDecisionSchema>;
 
 const escapeHtml = (value: string): string => {
   const entities: Readonly<Record<string, string>> = {

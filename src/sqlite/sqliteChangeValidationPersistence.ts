@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type * as SqlClient from "@effect/sql/SqlClient";
-import { Effect } from "effect";
+import { Effect, Schema } from "effect";
 
 import type { CandidateRecord } from "../change/candidate/candidate.js";
 import type {
@@ -15,7 +15,7 @@ import type {
   StartCandidateValidationRunInput,
   StartCandidateValidationRunResult,
 } from "../change/candidateValidation/candidateValidationRunStore.js";
-import type { ImplementationDecision } from "../change/implementationDecision.js";
+import { implementationDecisionSnapshotSchema } from "../change/implementationDecision.js";
 import type { ChangeValidationPersistence } from "../change/validation/changeValidationPersistence.js";
 import { validationPhase } from "../change/validationRun/validationRun.js";
 import { RepositoryPersistedDataInvalid } from "../contracts/repositoryStorageError.js";
@@ -587,9 +587,10 @@ const decodeRun = (row: CandidateValidationRunRow) =>
       id: row.id,
       candidateId: row.candidateId,
       policy: decodeSqliteCandidateValidationPolicy(row.policySnapshot),
-      implementationDecisions: JSON.parse(
-        row.implementationDecisions,
-      ) as readonly ImplementationDecision[],
+      implementationDecisions: Schema.decodeUnknownSync(
+        Schema.parseJson(implementationDecisionSnapshotSchema),
+        { onExcessProperty: "error" },
+      )(row.implementationDecisions),
       state: row.state,
       outcome: row.outcome,
       createdAt: row.createdAt,

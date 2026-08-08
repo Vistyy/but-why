@@ -6,7 +6,7 @@ import { Effect } from "effect";
 import { afterAll, beforeAll, describe } from "vitest";
 
 import type { ChangeValidationPersistence } from "../../src/change/validation/changeValidationPersistence.js";
-import { repositorySqlLayer } from "../../src/sqlite/repositorySql.js";
+import { RepositorySql, repositorySqlLayer } from "../../src/sqlite/repositorySql.js";
 import { openSqliteCandidateCapturePersistence } from "../../src/sqlite/sqliteCandidateCapturePersistence.js";
 import { openSqliteChangeValidationPersistence } from "../../src/sqlite/sqliteChangeValidationPersistence.js";
 import { runByInProcessEffect } from "../support/by-cli.js";
@@ -14,6 +14,7 @@ import {
   cloneInitializedTestRepository,
   createInitializedRepo,
 } from "../support/initializedRepo.js";
+import { withTestRepository } from "../support/repository.js";
 import { acquireTestWorkspace, releaseTestWorkspace } from "../support/testWorkspace.js";
 
 const now = "2026-07-18T10:00:00.000Z";
@@ -193,6 +194,58 @@ describe("Candidate-owned Validation Run inspection", () => {
       const stored = yield* fixture.runStore.getRunById(first.validationRunId);
       expect(stored?.implementationDecisions).toEqual([decision]);
     }),
+  );
+
+  it.effect(
+    "reports a payload-bearing Implementation Decision Snapshot decode failure without exposing the payload",
+    () =>
+      Effect.gen(function* () {
+        const fixture = yield* candidateValidationFixture();
+        const payload = "top-secret-decision-payload";
+        yield* withTestRepository(
+          fixture.root,
+          Effect.gen(function* () {
+            const repository = yield* RepositorySql;
+            yield* repository.operation(
+              "corrupt Implementation Decision Snapshot",
+              (sql) =>
+                sql`
+                UPDATE candidate_validation_runs
+                SET implementation_decisions = ${JSON.stringify([
+                  {
+                    id: "decision-1",
+                    changeId: fixture.changeId,
+                    sequence: 1,
+                    recordedAt: now,
+                    content: payload,
+                  },
+                ])}
+                WHERE id = ${fixture.validationRunId}
+              `,
+            );
+          }),
+        );
+
+        const result = yield* runByInProcessEffect(fixture.root, [
+          "--json",
+          "validation-run",
+          "show",
+          fixture.validationRunId,
+        ]);
+
+        expect(result.status).toBe(1);
+        expect(result.stdout).not.toContain(payload);
+        expect(JSON.parse(result.stdout)).toEqual({
+          error: {
+            code: "persisted_data_invalid",
+            message: "Shared But Why? state contains malformed persisted data.",
+            operation: "decode Candidate Validation Run",
+          },
+          help: [
+            "Replace <git-common-dir>/but-why/state.sqlite with a known-good copy, then retry the command.",
+          ],
+        });
+      }),
   );
 
   it.effect("shows the Candidate judgment and ordered evidence with bounded previews", () =>
