@@ -120,6 +120,23 @@ describe("Reviewer Transcript discovery", () => {
     });
   });
 
+  it("falls back to the filename when a transcript header is a non-object JSON value", () => {
+    const root = createTestWorkspace();
+    const changeRoot = join(root, "change-1");
+    const producerRoot = join(changeRoot, "acceptance");
+    const relativePath = "reviewer-sessions/review_session-fallback.jsonl";
+    const path = join(producerRoot, relativePath);
+    mkdirSync(join(path, ".."), { recursive: true });
+    writeFileSync(path, "null\n");
+
+    const discovery = discoverReviewerTranscripts(changeRoot, "change-1");
+
+    expect(discovery).toEqual({
+      ok: true,
+      transcripts: [transcript("change-1", "acceptance", "session-fallback", relativePath)],
+    });
+  });
+
   it.effect("reports an index failure without recording partial references", () =>
     Effect.gen(function* () {
       const root = createTestWorkspace();
