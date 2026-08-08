@@ -329,8 +329,6 @@ describe("Change Submit orchestration", () => {
                         id: "candidate",
                         instructions: "Candidate reviewer",
                         instructionsSource: "repo",
-                        agentProfile: "candidate-reviewer",
-                        profileScope: "repo",
                         profile: {
                           agentProfile: "candidate-reviewer",
                           scope: "repo",
@@ -354,9 +352,11 @@ describe("Change Submit orchestration", () => {
               expect(input.policy.specialistReviews).toMatchObject([
                 {
                   id: "candidate",
-                  agentProfile: "candidate-reviewer",
-                  profileScope: "repo",
-                  profile: { profile: { runtimeConfig: { model: "candidate/model" } } },
+                  profile: {
+                    agentProfile: "candidate-reviewer",
+                    scope: "repo",
+                    profile: { runtimeConfig: { model: "candidate/model" } },
+                  },
                 },
               ]);
               return {
@@ -1684,8 +1684,6 @@ const dependencies = (input: {
                 acceptanceReview: {
                   instructions: "Review intent",
                   instructionsSource: "built_in",
-                  agentProfile: "default",
-                  profileScope: "global",
                   profile: {
                     agentProfile: "default",
                     scope: "global",
