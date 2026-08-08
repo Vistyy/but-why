@@ -6,6 +6,7 @@ import * as SqlClient from "@effect/sql/SqlClient";
 import { expect, it } from "@effect/vitest";
 import { Cause, Effect } from "effect";
 import { describe } from "vitest";
+import type { CurrentPublicationAuthority } from "../../src/change/changePersistence.js";
 import {
   RepositoryIdentityConflict,
   RepositoryMigrationFailed,
@@ -126,6 +127,48 @@ const migrateThrough22 = Migrator.make({})({
     "0022_change_cancel_reason": changeCancelReasonMigration,
   }),
 });
+
+const simplifiedReviewPolicy = {
+  checks: [],
+  copyFiles: [],
+  specialistReviews: [
+    {
+      id: "standards",
+      instructions: "Review standards.",
+      instructionsSource: "repo",
+      profile: {
+        agentProfile: "standards",
+        scope: "repo",
+        profile: {
+          agentRuntime: "pi",
+          runtimeConfig: { model: "standards-model" },
+        },
+      },
+    },
+  ],
+} as const;
+
+const duplicateReviewPolicy = {
+  checks: [],
+  copyFiles: [],
+  specialistReviews: [
+    {
+      id: "standards",
+      instructions: "Review standards.",
+      instructionsSource: "repo",
+      agentProfile: "standards",
+      profileScope: "repo",
+      profile: {
+        agentProfile: "standards",
+        scope: "repo",
+        profile: {
+          agentRuntime: "pi",
+          runtimeConfig: { model: "standards-model" },
+        },
+      },
+    },
+  ],
+} as const;
 
 describe("repository SQL storage", () => {
   it.scoped("persists Tasks through the Effect-native Task interface", () =>
@@ -996,9 +1039,9 @@ describe("repository SQL storage", () => {
         if (!captured.ok) throw new Error(`Candidate capture failed: ${captured.code}`);
         const authority = {
           changeBaseSha: "base-sha",
-          policy: { checks: [], copyFiles: [], specialistReviews: [] },
+          policy: simplifiedReviewPolicy,
           implementationDecisions: [],
-        };
+        } satisfies CurrentPublicationAuthority;
         yield* repository.operation("install passing publication evidence", (sql) =>
           Effect.gen(function* () {
             yield* sql`
@@ -1007,8 +1050,8 @@ describe("repository SQL storage", () => {
                 latest_resolved_blocker_id, state, outcome, created_at, updated_at
               ) VALUES (
                 'run-1', ${captured.candidateId},
-                '{"checks":[],"copyFiles":[],"specialistReviews":[]}', '[]', NULL,
-                'complete', 'passed',
+                '{"checks":[],"copyFiles":[],"specialistReviews":[{"id":"standards","instructions":"Review standards.","instructionsSource":"repo","profile":{"agentProfile":"standards","scope":"repo","profile":{"agentRuntime":"pi","runtimeConfig":{"model":"standards-model"}}}}]}',
+                '[]', NULL, 'complete', 'passed',
                 '2026-07-25T15:01:00.000Z', '2026-07-25T15:01:00.000Z'
               )
             `;
@@ -1211,27 +1254,6 @@ describe("repository SQL storage", () => {
             validationRunId: first.validationRunId,
           });
 
-          const duplicateRepresentationPolicy = {
-            checks: [],
-            copyFiles: [],
-            specialistReviews: [
-              {
-                id: "standards",
-                instructions: "Review standards.",
-                instructionsSource: "repo",
-                agentProfile: "standards",
-                profileScope: "repo",
-                profile: {
-                  agentProfile: "standards",
-                  scope: "repo",
-                  profile: {
-                    agentRuntime: "pi",
-                    runtimeConfig: { model: "standards-model" },
-                  },
-                },
-              },
-            ],
-          } as const;
           yield* repository.operation(
             "install duplicate-representation Validation Run evidence",
             (sql) =>
@@ -1241,21 +1263,21 @@ describe("repository SQL storage", () => {
                   latest_resolved_blocker_id, state, outcome, created_at, updated_at
                 ) VALUES (
                   'run-duplicate-representation', ${captured.candidateId},
-                  ${encodeSqliteCandidateValidationPolicy(duplicateRepresentationPolicy)},
+                  ${encodeSqliteCandidateValidationPolicy(duplicateReviewPolicy)},
                   '[]', NULL, 'complete', 'passed',
                   '2026-07-25T16:12:30.000Z', '2026-07-25T16:12:30.000Z'
                 )
               `,
           );
-          const duplicateRejected = yield* validation.startOrReuse({
+          const simplifiedRejected = yield* validation.startOrReuse({
             ...exact,
-            policy: duplicateRepresentationPolicy,
+            policy: simplifiedReviewPolicy,
           });
-          expect(duplicateRejected.reused).toBe(false);
-          if (duplicateRejected.reused || "blocked" in duplicateRejected)
+          expect(simplifiedRejected.reused).toBe(false);
+          if (simplifiedRejected.reused || "blocked" in simplifiedRejected)
             throw new Error("Expected the duplicate representation to be rejected");
           yield* validation.complete({
-            validationRunId: duplicateRejected.validationRunId,
+            validationRunId: simplifiedRejected.validationRunId,
             outcome: "passed",
             now: "2026-07-25T16:12:45.000Z",
           });
@@ -1367,7 +1389,7 @@ describe("repository SQL storage", () => {
               policyMismatch.validationRunId,
               decisionsMismatch.validationRunId,
               contextMismatch.validationRunId,
-              duplicateRejected.validationRunId,
+              simplifiedRejected.validationRunId,
               afterResolution.validationRunId,
               "run-duplicate-representation",
             ].sort(),
