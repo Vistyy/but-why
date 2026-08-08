@@ -427,7 +427,14 @@ const getPassingPublicationEvidence = (
     `;
     const row = rows[0];
     if (row === undefined) return undefined;
-    const expectedPolicySnapshot = encodeSqliteCandidateValidationPolicy(authority.policy);
+    const expectedPolicySnapshot = yield* Effect.try({
+      try: () => encodeSqliteCandidateValidationPolicy(authority.policy),
+      catch: (cause) =>
+        new RepositoryPersistedDataInvalid({
+          operationName: "get passing publication evidence",
+          cause,
+        }),
+    });
     const expectedDecisionsSnapshot = JSON.stringify(authority.implementationDecisions ?? []);
     if (
       row.policySnapshot !== expectedPolicySnapshot ||

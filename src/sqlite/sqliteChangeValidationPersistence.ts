@@ -223,7 +223,14 @@ const startOrReuse = (sql: SqlClient.SqlClient, input: StartCandidateValidationR
       LIMIT 1
     `;
     const latestResolvedBlockerId = latestResolved[0]?.id ?? null;
-    const policySnapshot = encodeSqliteCandidateValidationPolicy(input.policy);
+    const policySnapshot = yield* Effect.try({
+      try: () => encodeSqliteCandidateValidationPolicy(input.policy),
+      catch: (cause) =>
+        new RepositoryPersistedDataInvalid({
+          operationName: "start Candidate Validation Run",
+          cause,
+        }),
+    });
     const decisionsSnapshot = JSON.stringify(input.implementationDecisions ?? []);
     const reusable = yield* sql<{ readonly id: string }>`
       SELECT id FROM candidate_validation_runs

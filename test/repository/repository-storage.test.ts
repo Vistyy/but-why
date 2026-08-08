@@ -38,6 +38,7 @@ import { removeCandidatePublicationsMigration } from "../../src/sqlite/migration
 import { reviewerTranscriptsMigration } from "../../src/sqlite/migrations/0021_reviewer_transcripts.js";
 import { changeCancelReasonMigration } from "../../src/sqlite/migrations/0022_change_cancel_reason.js";
 import { restrictLifecycleStatesMigration } from "../../src/sqlite/migrations/0023_restrict_lifecycle_states.js";
+import { removeTaskCommentsMigration } from "../../src/sqlite/migrations/0024_remove_task_comments.js";
 import { nodeSqliteLayer } from "../../src/sqlite/nodeSqliteClient.js";
 import { RepositorySql, repositorySqlLayer } from "../../src/sqlite/repositorySql.js";
 import { openSqliteCandidateCapturePersistence } from "../../src/sqlite/sqliteCandidateCapturePersistence.js";
@@ -85,6 +86,35 @@ const migrateThrough23 = Migrator.make({})({
     "0021_reviewer_transcripts": reviewerTranscriptsMigration,
     "0022_change_cancel_reason": changeCancelReasonMigration,
     "0023_restrict_lifecycle_states": restrictLifecycleStatesMigration,
+  }),
+});
+
+const migrateThrough24 = Migrator.make({})({
+  loader: Migrator.fromRecord({
+    "0001_baseline": baselineMigration,
+    "0002_reviewer_sessions": reviewerSessionsMigration,
+    "0003_implementation_decisions": implementationDecisionsMigration,
+    "0004_implementation_blockers": implementationBlockersMigration,
+    "0005_acceptance_context_versions": acceptanceContextVersionsMigration,
+    "0006_reconcile_implementation_blocker_storage": reconcileImplementationBlockerStorageMigration,
+    "0007_reviewer_sessions_per_producer": specialistReviewerSessionsMigration,
+    "0008_recover_published_remote_branch_cleanup": recoverPublishedRemoteBranchCleanupMigration,
+    "0009_active_validation_runs": activeValidationRunsMigration,
+    "0010_validation_workspace_paths": validationWorkspacePathsMigration,
+    "0011_candidate_publications": candidatePublicationsMigration,
+    "0012_structured_implementation_decisions": structuredImplementationDecisionsMigration,
+    "0013_remove_no_change_completion": removeNoChangeCompletionMigration,
+    "0014_remove_change_readiness": removeChangeReadinessMigration,
+    "0015_remove_acceptance_context_versions": removeAcceptanceContextVersionsMigration,
+    "0016_remove_implementation_decision_content": removeImplementationDecisionContentMigration,
+    "0017_validation_run_blocker_identity": validationRunBlockerIdentityMigration,
+    "0018_remove_finding_severity": removeFindingSeverityMigration,
+    "0019_simplify_reviewer_sessions": simplifyReviewerSessionsMigration,
+    "0020_remove_candidate_publications": removeCandidatePublicationsMigration,
+    "0021_reviewer_transcripts": reviewerTranscriptsMigration,
+    "0022_change_cancel_reason": changeCancelReasonMigration,
+    "0023_restrict_lifecycle_states": restrictLifecycleStatesMigration,
+    "0024_remove_task_comments": removeTaskCommentsMigration,
   }),
 });
 
@@ -148,26 +178,22 @@ const simplifiedReviewPolicy = {
   ],
 } as const;
 
-const duplicateReviewPolicy = {
+const repairedAcceptancePolicy = {
   checks: [],
   copyFiles: [],
-  specialistReviews: [
-    {
-      id: "standards",
-      instructions: "Review standards.",
-      instructionsSource: "repo",
-      agentProfile: "standards",
-      profileScope: "repo",
+  specialistReviews: [],
+  acceptanceReview: {
+    instructions: "Review against the accepted intent.",
+    instructionsSource: "built_in" as const,
+    profile: {
+      agentProfile: "acceptance",
+      scope: "global" as const,
       profile: {
-        agentProfile: "standards",
-        scope: "repo",
-        profile: {
-          agentRuntime: "pi",
-          runtimeConfig: { model: "standards-model" },
-        },
+        agentRuntime: "pi" as const,
+        runtimeConfig: { model: "acceptance-model" },
       },
     },
-  ],
+  },
 } as const;
 
 describe("repository SQL storage", () => {
@@ -1075,6 +1101,44 @@ describe("repository SQL storage", () => {
           headSha: "head-sha",
         });
 
+        yield* repository.operation("install repaired passed publication evidence", (sql) =>
+          Effect.gen(function* () {
+            yield* sql`
+              INSERT INTO candidate_validation_runs (
+                id, candidate_id, policy_snapshot, implementation_decisions,
+                latest_resolved_blocker_id, state, outcome, created_at, updated_at
+              ) VALUES (
+                'run-repaired-publication', ${captured.candidateId},
+                ${encodeSqliteCandidateValidationPolicy(repairedAcceptancePolicy)},
+                '[]', NULL, 'complete', 'passed',
+                '2026-07-25T15:01:30.000Z', '2026-07-25T15:01:30.000Z'
+              )
+            `;
+            yield* sql`
+              UPDATE changes SET
+                publication_validation_run_id = 'run-repaired-publication'
+              WHERE id = ${captured.changeId}
+            `;
+          }),
+        );
+        expect(
+          yield* changes.getPassingPublicationEvidence(captured.changeId, {
+            changeBaseSha: "base-sha",
+            policy: repairedAcceptancePolicy,
+            implementationDecisions: [],
+          }),
+        ).toEqual({
+          candidateId: captured.candidateId,
+          validationRunId: "run-repaired-publication",
+          changeBaseSha: "base-sha",
+          headSha: "head-sha",
+        });
+        yield* repository.operation(
+          "restore publication evidence reference",
+          (sql) =>
+            sql`UPDATE changes SET publication_validation_run_id = 'run-1' WHERE id = ${captured.changeId}`,
+        );
+
         yield* repository.operation(
           "invalidate publication evidence outcome",
           (sql) => sql`UPDATE candidate_validation_runs SET outcome = 'blocked' WHERE id = 'run-1'`,
@@ -1263,7 +1327,7 @@ describe("repository SQL storage", () => {
                   latest_resolved_blocker_id, state, outcome, created_at, updated_at
                 ) VALUES (
                   'run-duplicate-representation', ${captured.candidateId},
-                  ${encodeSqliteCandidateValidationPolicy(duplicateReviewPolicy)},
+                  '{"checks":[],"copyFiles":[],"specialistReviews":[{"id":"standards","instructions":"Review standards.","instructionsSource":"repo","agentProfile":"standards","profileScope":"repo","profile":{"agentProfile":"standards","scope":"repo","profile":{"agentRuntime":"pi","runtimeConfig":{"model":"standards-model"}}}}]}',
                   '[]', NULL, 'complete', 'passed',
                   '2026-07-25T16:12:30.000Z', '2026-07-25T16:12:30.000Z'
                 )
@@ -1339,6 +1403,32 @@ describe("repository SQL storage", () => {
             outcome: "passed",
             now: "2026-07-25T16:15:00.000Z",
           });
+
+          yield* repository.operation(
+            "install repaired passed Validation Run evidence",
+            (sql) =>
+              sql`
+              INSERT INTO candidate_validation_runs (
+                id, candidate_id, policy_snapshot, implementation_decisions,
+                latest_resolved_blocker_id, state, outcome, created_at, updated_at
+              ) VALUES (
+                'run-repaired', ${captured.candidateId},
+                ${encodeSqliteCandidateValidationPolicy(repairedAcceptancePolicy)},
+                '[]', NULL, 'complete', 'passed',
+                '2026-07-25T16:15:30.000Z', '2026-07-25T16:15:30.000Z'
+              )
+            `,
+          );
+          expect(
+            yield* validation.startOrReuse({
+              candidateId: captured.candidateId,
+              changeBaseSha: "base-sha",
+              headSha: "head-sha",
+              policy: repairedAcceptancePolicy,
+              implementationDecisions: [],
+              now: "2026-07-25T16:15:40.000Z",
+            }),
+          ).toMatchObject({ reused: true, validationRunId: "run-repaired" });
 
           yield* repository.operation(
             "invalidate run state",
@@ -1771,7 +1861,7 @@ describe("repository SQL storage", () => {
                 "CREATE INDEX implementation_decisions_change_sequence_idx ON implementation_decisions (change_id, sequence)",
               );
               yield* sql`DROP TABLE IF EXISTS reviewer_transcripts`;
-              yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id IN (11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24)`;
+              yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id IN (11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25)`;
               yield* sql`INSERT INTO implementation_decisions (id, change_id, recorded_at, content) VALUES ('legacy-decision', ${captured.changeId}, '2026-07-25T15:30:00.000Z', 'Legacy unstructured decision')`;
             }),
           );
@@ -2041,6 +2131,7 @@ describe("repository SQL storage", () => {
           { migration_id: 22, name: "change_cancel_reason" },
           { migration_id: 23, name: "restrict_lifecycle_states" },
           { migration_id: 24, name: "remove_task_comments" },
+          { migration_id: 25, name: "repair_validation_policy_snapshot_ok_field" },
         ]);
         expect(identities).toEqual([{ common_directory: input.commonDirectory }]);
         expect(candidateColumns.map(({ name }) => name)).toEqual([
@@ -2312,7 +2403,7 @@ describe("repository SQL storage", () => {
                     )
                   `;
                   yield* sql`DROP TABLE IF EXISTS reviewer_transcripts`;
-                  yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id IN (13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24)`;
+                  yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id IN (13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25)`;
                 }),
               );
             }).pipe(Effect.provide(repositorySqlLayer({ commonDirectory: directory, statePath }))),
@@ -2354,6 +2445,168 @@ describe("repository SQL storage", () => {
     ),
   );
 
+  it.effect("repairs only affected current Validation Policy Snapshot rows on upgrade", () =>
+    Effect.acquireUseRelease(
+      Effect.sync(() => mkdtempSync(join(tmpdir(), "but-why-repository-sql-"))),
+      (directory) =>
+        Effect.gen(function* () {
+          const statePath = join(directory, "state.sqlite");
+          const buildAffectedPolicy = (instructions: string, acceptanceModel: string) => ({
+            agentEnvironment: ["nix", "develop", "-c"] as const,
+            prepare: { command: "pnpm install", timeoutSeconds: 60 },
+            checks: [{ id: "types", command: "pnpm typecheck", timeoutSeconds: 30 }],
+            copyFiles: [".env.test"],
+            specialistReviews: [
+              {
+                id: "security",
+                instructions: "Review security.",
+                instructionsSource: "repo" as const,
+                profile: {
+                  agentProfile: "security",
+                  scope: "repo" as const,
+                  profile: {
+                    agentRuntime: "pi" as const,
+                    runtimeConfig: { model: "security-model" },
+                  },
+                },
+              },
+            ],
+            acceptanceReview: {
+              instructions,
+              instructionsSource: "built_in" as const,
+              profile: {
+                agentProfile: "acceptance",
+                scope: "global" as const,
+                profile: {
+                  agentRuntime: "pi" as const,
+                  runtimeConfig: { model: acceptanceModel },
+                },
+              },
+            },
+            acceptanceContext: {
+              version: 1 as const,
+              title: "Keep the exact intent",
+              description: "Review the Candidate against this immutable context.",
+            },
+          });
+          const affectedPolicy = buildAffectedPolicy(
+            "Review against the accepted intent.",
+            "acceptance-model",
+          );
+          const reorderedAffectedPolicy = buildAffectedPolicy(
+            "Reordered acceptance instructions.",
+            "acceptance-reordered-model",
+          );
+          const affectedCorrectedText = encodeSqliteCandidateValidationPolicy(affectedPolicy);
+          const reorderedAffectedCorrectedText =
+            encodeSqliteCandidateValidationPolicy(reorderedAffectedPolicy);
+          const affectedBuggyText = affectedCorrectedText.replace(
+            '"acceptanceReview":{',
+            '"acceptanceReview":{"ok":true,',
+          );
+          const reorderedAffectedBuggyText = JSON.stringify({
+            ...reorderedAffectedPolicy,
+            acceptanceReview: {
+              profile: reorderedAffectedPolicy.acceptanceReview.profile,
+              ok: true,
+              instructions: reorderedAffectedPolicy.acceptanceReview.instructions,
+              instructionsSource: reorderedAffectedPolicy.acceptanceReview.instructionsSource,
+            },
+          });
+          const currentPolicy = { checks: [], copyFiles: [], specialistReviews: [] };
+          const currentPolicyText = JSON.stringify(currentPolicy);
+          const legacyPolicyText =
+            '{"checks":[],"copyFiles":[],"specialistReviews":[{"id":"s","instructions":"i","instructionsSource":"repo","agentProfile":"a","profileScope":"repo","profile":{"agentProfile":"a","scope":"repo","profile":{"agentRuntime":"pi"}}}]}';
+          const malformedPolicyText = '{"checks":';
+
+          yield* Effect.scoped(
+            Effect.gen(function* () {
+              const sql = yield* SqlClient.SqlClient;
+              yield* migrateThrough24;
+              yield* sql`
+                INSERT INTO changes (
+                  id, repository_common_directory, branch_ref, state, created_at, updated_at, cleanup_state
+                ) VALUES (
+                  'change-repair', ${directory}, 'refs/heads/repair', 'open',
+                  '2026-07-25T16:30:00.000Z', '2026-07-25T16:30:00.000Z', 'complete'
+                )
+              `;
+              yield* sql`
+                INSERT INTO candidates (id, change_id, change_base_sha, head_sha, created_at)
+                VALUES ('candidate-repair', 'change-repair', 'base-sha', 'head-sha', '2026-07-25T16:31:00.000Z')
+              `;
+              for (const run of [
+                {
+                  id: "run-affected",
+                  policy: affectedBuggyText,
+                  now: "2026-07-25T16:32:00.000Z",
+                },
+                {
+                  id: "run-affected-reordered",
+                  policy: reorderedAffectedBuggyText,
+                  now: "2026-07-25T16:32:00.500Z",
+                },
+                { id: "run-legacy", policy: legacyPolicyText, now: "2026-07-25T16:32:01.000Z" },
+                {
+                  id: "run-malformed",
+                  policy: malformedPolicyText,
+                  now: "2026-07-25T16:32:02.000Z",
+                },
+                { id: "run-current", policy: currentPolicyText, now: "2026-07-25T16:32:03.000Z" },
+              ] as const) {
+                yield* sql`
+                  INSERT INTO candidate_validation_runs (
+                    id, candidate_id, policy_snapshot, implementation_decisions,
+                    latest_resolved_blocker_id, state, outcome, created_at, updated_at
+                  ) VALUES (
+                    ${run.id}, 'candidate-repair', ${run.policy}, '[]', NULL,
+                    'complete', 'passed', ${run.now}, ${run.now}
+                  )
+                `;
+              }
+            }).pipe(Effect.provide(nodeSqliteLayer(statePath))),
+          );
+
+          yield* Effect.scoped(
+            Effect.gen(function* () {
+              const repository = yield* RepositorySql;
+              const validation = yield* openSqliteChangeValidationPersistence();
+              const rows = yield* repository.operation(
+                "read repaired Validation Policy Snapshot text",
+                (sql) => sql<{ readonly id: string; readonly policySnapshot: string }>`
+                  SELECT id, policy_snapshot AS policySnapshot
+                  FROM candidate_validation_runs
+                  ORDER BY created_at
+                `,
+              );
+              const byId = new Map(rows.map((row) => [row.id, row.policySnapshot]));
+              expect(byId.get("run-affected")).toBe(affectedCorrectedText);
+              expect(byId.get("run-affected-reordered")).toBe(reorderedAffectedCorrectedText);
+              expect(byId.get("run-legacy")).toBe(legacyPolicyText);
+              expect(byId.get("run-malformed")).toBe(malformedPolicyText);
+              expect(byId.get("run-current")).toBe(currentPolicyText);
+
+              const repaired = yield* validation.getRunById("run-affected");
+              expect(repaired).toBeDefined();
+              expect(repaired?.policy).toEqual(affectedPolicy);
+              const reorderedRepaired = yield* validation.getRunById("run-affected-reordered");
+              expect(reorderedRepaired).toBeDefined();
+              expect(reorderedRepaired?.policy).toEqual(reorderedAffectedPolicy);
+              const legacyError = yield* validation.getRunById("run-legacy").pipe(Effect.flip);
+              expect(legacyError).toBeInstanceOf(RepositoryPersistedDataInvalid);
+              const malformedError = yield* validation
+                .getRunById("run-malformed")
+                .pipe(Effect.flip);
+              expect(malformedError).toBeInstanceOf(RepositoryPersistedDataInvalid);
+              const current = yield* validation.getRunById("run-current");
+              expect(current?.policy).toEqual(currentPolicy);
+            }).pipe(Effect.provide(repositorySqlLayer({ commonDirectory: directory, statePath }))),
+          );
+        }),
+      (directory) => Effect.sync(() => rmSync(directory, { recursive: true, force: true })),
+    ),
+  );
+
   it.scoped("upgrades Shared Repository State with a Taskless Change cancellation reason", () =>
     withTemporaryState((input) =>
       Effect.gen(function* () {
@@ -2375,7 +2628,7 @@ describe("repository SQL storage", () => {
         yield* repository.operation("simulate pre-upgrade Shared Repository State", (sql) =>
           Effect.gen(function* () {
             yield* sql.unsafe("ALTER TABLE changes DROP COLUMN cancel_reason");
-            yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id IN (22, 23, 24)`;
+            yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id IN (22, 23, 24, 25)`;
           }),
         );
 
@@ -2474,7 +2727,7 @@ describe("repository SQL storage", () => {
                     )
                   `;
                   yield* sql`DROP TABLE IF EXISTS reviewer_transcripts`;
-                  yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id IN (18, 19, 20, 21, 22, 23, 24)`;
+                  yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id IN (18, 19, 20, 21, 22, 23, 24, 25)`;
                 }),
               );
             }).pipe(Effect.provide(repositorySqlLayer({ commonDirectory: directory, statePath }))),
@@ -2550,7 +2803,7 @@ describe("repository SQL storage", () => {
                       )
                     `;
                   yield* sql`DROP TABLE IF EXISTS reviewer_transcripts`;
-                  yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id IN (19, 20, 21, 22, 23, 24)`;
+                  yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id IN (19, 20, 21, 22, 23, 24, 25)`;
                 }),
               );
             }).pipe(Effect.provide(repositorySqlLayer({ commonDirectory: directory, statePath }))),
@@ -2618,7 +2871,7 @@ describe("repository SQL storage", () => {
               yield* repository.operation("restore pre-transcript storage", (sql) =>
                 Effect.gen(function* () {
                   yield* sql.unsafe(`DROP TABLE reviewer_transcripts`);
-                  yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id IN (21, 22, 23, 24)`;
+                  yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id IN (21, 22, 23, 24, 25)`;
                   yield* sql`
                     INSERT INTO changes (
                       id, repository_common_directory, branch_ref, state,
@@ -2874,7 +3127,7 @@ describe("repository SQL storage", () => {
                     )
                   `;
                   yield* sql`DROP TABLE IF EXISTS reviewer_transcripts`;
-                  yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id IN (13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24)`;
+                  yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id IN (13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25)`;
                 }),
               );
             }).pipe(Effect.provide(repositorySqlLayer({ commonDirectory: directory, statePath }))),
@@ -2933,7 +3186,7 @@ describe("repository SQL storage", () => {
                     )
                   `;
                   yield* sql`DROP TABLE IF EXISTS reviewer_transcripts`;
-                  yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id IN (14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24)`;
+                  yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id IN (14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25)`;
                 }),
               );
             }).pipe(Effect.provide(repositorySqlLayer({ commonDirectory: directory, statePath }))),
@@ -3032,7 +3285,7 @@ describe("repository SQL storage", () => {
                       )
                     `;
                     yield* sql`DROP TABLE IF EXISTS reviewer_transcripts`;
-                    yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id IN (15, 16, 17, 18, 19, 20, 21, 22, 23, 24)`;
+                    yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id IN (15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25)`;
                   }),
                 );
               }).pipe(
@@ -3138,7 +3391,7 @@ describe("repository SQL storage", () => {
                     )
                   `;
                   yield* sql`DROP TABLE IF EXISTS reviewer_transcripts`;
-                  yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id IN (16, 17, 18, 19, 20, 21, 22, 23, 24)`;
+                  yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id IN (16, 17, 18, 19, 20, 21, 22, 23, 24, 25)`;
                 }),
               );
             }).pipe(Effect.provide(repositorySqlLayer({ commonDirectory: directory, statePath }))),
@@ -3223,7 +3476,7 @@ describe("repository SQL storage", () => {
                     )
                   `;
                   yield* sql`DROP TABLE IF EXISTS reviewer_transcripts`;
-                  yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id IN (16, 17, 18, 19, 20, 21, 22, 23, 24)`;
+                  yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id IN (16, 17, 18, 19, 20, 21, 22, 23, 24, 25)`;
                 }),
               );
             }).pipe(Effect.provide(repositorySqlLayer({ commonDirectory: directory, statePath }))),
@@ -3503,8 +3756,8 @@ describe("repository SQL storage", () => {
         );
 
         return Effect.gen(function* () {
-          expect(yield* readMigrationCount).toBe(24);
-          expect(yield* readMigrationCount).toBe(24);
+          expect(yield* readMigrationCount).toBe(25);
+          expect(yield* readMigrationCount).toBe(25);
         });
       },
       (directory) => Effect.sync(() => rmSync(directory, { recursive: true, force: true })),
