@@ -93,6 +93,30 @@ rule:
     - pattern: Date["now"]()
     - pattern: globalThis.Date["now"]()
 ---
+# Parsed JSON keeps an unknown runtime shape until the owning boundary decodes it.
+# src/output/structuredValue.ts is the reviewed exception because its immediately preceding JSON serialization establishes exactly the StructuredValue representation.
+id: json-parse-assertions-keep-unknown
+language: TypeScript
+severity: error
+message: Do not assert JSON.parse output directly to a trusted type because parsed JSON has an unknown runtime shape until the owning boundary establishes it; parse into unknown and use the owning boundary's focused decoder or schema.
+files:
+  - src/**/*.ts
+ignores:
+  - src/output/structuredValue.ts
+rule:
+  all:
+    - any:
+        - pattern: JSON.parse($$$ARGS) as $TYPE
+        - pattern: (JSON.parse($$$ARGS)) as $TYPE
+        - pattern: <$TYPE>JSON.parse($$$ARGS)
+        - pattern: <$TYPE>(JSON.parse($$$ARGS))
+    - not:
+        any:
+          - pattern: JSON.parse($$$ARGS) as unknown
+          - pattern: (JSON.parse($$$ARGS)) as unknown
+          - pattern: <unknown>JSON.parse($$$ARGS)
+          - pattern: <unknown>(JSON.parse($$$ARGS))
+---
 # Expensive process startup belongs only to tests that prove an operating-system boundary.
 id: process-test-helpers-belong-to-process-boundaries
 language: TypeScript
