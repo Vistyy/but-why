@@ -264,7 +264,7 @@ const updateTaskContext = (sql: SqlClient.SqlClient, input: UpdateTaskContextInp
   Effect.gen(function* () {
     const current = yield* getTaskById(sql, input.taskId);
     if (current === undefined) return { ok: false as const, code: "task_not_found" as const };
-    if (current.state !== "new" && current.state !== "todo") {
+    if (current.state !== "new") {
       return { ok: false as const, code: "invalid_task_state" as const, state: current.state };
     }
     yield* sql`
@@ -300,8 +300,7 @@ const cancelTask = (
     return { ok: true as const, changed: true, task: updated };
   });
 
-const taskDependenciesAreEditable = (state: TaskState): boolean =>
-  state === "new" || state === "todo";
+const taskDependenciesAreEditable = (state: TaskState): boolean => state === "new";
 
 const taskDependencyEditTarget = (sql: SqlClient.SqlClient, taskId: PublicTaskId) =>
   Effect.gen(function* () {

@@ -100,7 +100,7 @@ const taskDependenciesOperationCommand = (
   );
 
 const taskDependenciesClearCommand = withCliHandler(
-  leaf("clear", "Remove all direct Task prerequisites before Start.", {
+  leaf("clear", "Remove all direct Task prerequisites before Task Approval.", {
     taskId: taskIdArgument,
   }),
   (values, environment) =>
@@ -123,11 +123,14 @@ taskDependenciesCommand = group(
   "dependencies",
   "Manage direct Task prerequisites.",
   [
-    taskDependenciesOperationCommand("add", "Add direct Task prerequisites before Start."),
-    taskDependenciesOperationCommand("remove", "Remove direct Task prerequisites before Start."),
+    taskDependenciesOperationCommand("add", "Add direct Task prerequisites before Task Approval."),
+    taskDependenciesOperationCommand(
+      "remove",
+      "Remove direct Task prerequisites before Task Approval.",
+    ),
     taskDependenciesOperationCommand(
       "replace",
-      "Replace all direct Task prerequisites before Start.",
+      "Replace all direct Task prerequisites before Task Approval.",
     ),
     taskDependenciesClearCommand,
   ],

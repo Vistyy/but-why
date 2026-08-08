@@ -374,7 +374,9 @@ describe("Change Start Managed Worktree boundaries", () => {
       );
       expect(JSON.parse(locked.stdout)).toMatchObject({
         error: { code: "dependencies_locked", taskId, state: "todo" },
-        help: ["Dependency edits are available only before Change Start."],
+        help: [
+          "Approved Task intent is immutable. Dependency edits are available only before Task Approval.",
+        ],
       });
 
       git(root, "worktree", "remove", output.worktreePath);

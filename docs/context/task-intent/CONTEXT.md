@@ -39,6 +39,7 @@ _Avoid_: Display title, raw Task ID in process names
 **Task Approval**:
 The Operator's explicit confirmation that recorded Task intent can move from New to Todo.
 V1 represents approval through Todo and does not maintain a separate approval snapshot or revalidation lifecycle.
+Task Context and Task Dependencies become immutable at Task Approval.
 _Avoid_: Change Start, Implementation Authorization
 
 **Task Lifecycle**:

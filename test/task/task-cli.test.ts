@@ -648,6 +648,44 @@ contextCommand: by task context BY-1
       }),
   );
 
+  it.effect(
+    "retains a Task Context draft when applying to an approved Task with immutable guidance",
+    () =>
+      Effect.gen(function* () {
+        const root = yield* initializedRepo();
+
+        yield* createTask(root, firstNow, "Original title");
+        const draftResult = yield* runByInProcessEffect(root, [
+          "--json",
+          "task",
+          "context",
+          "draft",
+          "BY-1",
+        ]);
+        const draft = JSON.parse(draftResult.stdout) as { draft: { path: string } };
+        writeFileSync(draft.draft.path, "# Updated title\n\nUpdated description");
+        yield* setTaskState(root, "BY-1", "todo", secondNow);
+
+        const result = yield* runByInProcessEffect(
+          root,
+          ["task", "context", "apply", "BY-1"],
+          thirdNow,
+        );
+
+        expect(result.status).toBe(1);
+        expect(result.stderr).toBe("");
+        expect(result.stdout).toContain("code: invalid_task_state");
+        expect(result.stdout).toContain("approved Task intent is immutable");
+        expect(result.stdout).toContain(
+          "Approved Task Context cannot be changed after Task Approval.",
+        );
+        expect(existsSync(draft.draft.path)).toBe(true);
+        expect((yield* runByInProcessEffect(root, ["task", "context", "BY-1"])).stdout).toContain(
+          "title: Original title\n  description: Description for Original title",
+        );
+      }),
+  );
+
   it.effect("serializes missing Task IDs before command lookup", () =>
     Effect.gen(function* () {
       const result = yield* runByInProcessEffect(createTestWorkspace(), ["task", "show"]);

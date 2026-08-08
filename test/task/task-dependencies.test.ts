@@ -339,4 +339,33 @@ describe("Task dependency CLI", () => {
         });
       }),
   );
+
+  it.effect("maps locked dependency edits on an approved Task to immutable guidance", () =>
+    Effect.gen(function* () {
+      const result = yield* runByInProcessEffect(
+        createTestWorkspace(),
+        ["--json", "task", "dependencies", "add", "BY-1", "--depends-on", "BY-2"],
+        now,
+        {
+          taskUseCases: dependencyErrorTaskUseCases({
+            editTaskDependencies: () =>
+              Effect.succeed({ ok: false, code: "dependencies_locked", state: "todo" }),
+          }),
+        },
+      );
+
+      expectJsonError(result, {
+        error: {
+          code: "dependencies_locked",
+          message:
+            "Dependencies for task BY-1 are locked because approved Task intent is immutable.",
+          taskId: "BY-1",
+          state: "todo",
+        },
+        help: [
+          "Approved Task intent is immutable. Dependency edits are available only before Task Approval.",
+        ],
+      });
+    }),
+  );
 });

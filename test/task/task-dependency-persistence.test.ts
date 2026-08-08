@@ -84,6 +84,65 @@ it.scoped("rejects Task dependency cycles without changing the graph", () =>
   ),
 );
 
+it.scoped(
+  "rejects direct Task dependency edits for approved Tasks without changing the graph",
+  () =>
+    withTasks((tasks) =>
+      Effect.gen(function* () {
+        yield* createTask(tasks, "First");
+        yield* createTask(tasks, "Second");
+        yield* createTask(tasks, "Dependent", ["BY-1"]);
+        yield* tasks.approveTask({ taskId: publicTaskId("BY-3"), now: secondNow });
+
+        for (const operation of ["add", "remove", "replace", "clear"] as const) {
+          expect(
+            yield* tasks.editTaskDependencies({
+              taskId: publicTaskId("BY-3"),
+              operation,
+              prerequisiteTaskIds:
+                operation === "clear"
+                  ? []
+                  : [publicTaskId(operation === "remove" ? "BY-1" : "BY-2")],
+            }),
+          ).toEqual({ ok: false, code: "dependencies_locked", state: "todo" });
+          expect(yield* tasks.getTaskById(publicTaskId("BY-3"))).toMatchObject({
+            prerequisites: [{ id: "BY-1", title: "First", state: "new" }],
+          });
+        }
+      }),
+    ),
+);
+
+it.scoped("continues to reject direct Task dependency edits for terminal Tasks", () =>
+  withTemporaryRepositoryState(() =>
+    Effect.gen(function* () {
+      const tasks = yield* openSqliteTaskPersistence("BY");
+      const repository = yield* RepositorySql;
+      yield* createTask(tasks, "First");
+      yield* createTask(tasks, "Dependent", ["BY-1"]);
+
+      for (const state of ["done", "cancelled"] as const) {
+        yield* repository.operation(
+          "set terminal Task fixture state",
+          (sql) => sql`
+            UPDATE tasks SET state = ${state}, updated_at = ${secondNow} WHERE id = ${publicTaskId("BY-2")}
+          `,
+        );
+        expect(
+          yield* tasks.editTaskDependencies({
+            taskId: publicTaskId("BY-2"),
+            operation: "add",
+            prerequisiteTaskIds: [publicTaskId("BY-1")],
+          }),
+        ).toEqual({ ok: false, code: "dependencies_locked", state });
+        expect(yield* tasks.getTaskById(publicTaskId("BY-2"))).toMatchObject({
+          prerequisites: [{ id: "BY-1", title: "First", state: "new" }],
+        });
+      }
+    }),
+  ),
+);
+
 it.scoped("returns direct Task dependency facts and start eligibility", () =>
   withTemporaryRepositoryState(() =>
     Effect.gen(function* () {

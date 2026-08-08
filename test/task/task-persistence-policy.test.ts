@@ -39,12 +39,81 @@ it.scoped("preserves terminal Task policy", () => {
           code: "invalid_task_state",
           state,
         });
+        expect(
+          yield* tasks.updateTaskContext({
+            taskId,
+            title: "Changed title",
+            description: "Changed description",
+            now: thirdNow,
+          }),
+        ).toEqual({
+          ok: false,
+          code: "invalid_task_state",
+          state,
+        });
         expect(yield* tasks.getTaskContextById(taskId)).toEqual(contextBefore);
         expect(yield* tasks.getTaskById(taskId)).toMatchObject({ updatedAt: secondNow });
       }
     }),
   );
 });
+
+it.scoped(
+  "rejects Task Context mutation for approved Tasks without changing stored Context",
+  () => {
+    return withTemporaryRepositoryState(() =>
+      Effect.gen(function* () {
+        const tasks = yield* openSqliteTaskPersistence("BY");
+        const approved = yield* tasks.createTask({
+          title: "Approved title",
+          description: "Approved description",
+          now: firstNow,
+        });
+        if (!approved.ok) throw new Error(approved.code);
+        const taskId = publicTaskId("BY-1");
+        yield* tasks.approveTask({ taskId, now: secondNow });
+
+        for (const proposal of [
+          { title: "Approved title", description: "Approved description" },
+          { title: "Changed title", description: "Changed description" },
+        ]) {
+          expect(
+            yield* tasks.updateTaskContext({
+              taskId,
+              title: proposal.title,
+              description: proposal.description,
+              now: thirdNow,
+            }),
+          ).toEqual({
+            ok: false,
+            code: "invalid_task_state",
+            state: "todo",
+          });
+          expect(yield* tasks.getTaskContextById(taskId)).toEqual({
+            id: taskId,
+            title: "Approved title",
+            description: "Approved description",
+          });
+        }
+
+        const unlinked = yield* tasks.createTask({
+          title: "New title",
+          description: "New description",
+          now: firstNow,
+        });
+        if (!unlinked.ok) throw new Error(unlinked.code);
+        expect(
+          yield* tasks.updateTaskContext({
+            taskId: publicTaskId("BY-2"),
+            title: "Edited title",
+            description: "Edited description",
+            now: thirdNow,
+          }),
+        ).toMatchObject({ ok: true, task: { title: "Edited title" } });
+      }),
+    );
+  },
+);
 
 it.scoped(
   "orders actionable Tasks new before todo, newer updated time first, then numeric ID",
