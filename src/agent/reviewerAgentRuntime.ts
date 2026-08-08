@@ -326,12 +326,7 @@ const prepareHostPiSession = async (
     .split("\n")
     .map((line) => {
       if (line === "") return line;
-      let entry: { type?: unknown; id?: unknown; cwd?: unknown };
-      try {
-        entry = JSON.parse(line) as { type?: unknown; id?: unknown; cwd?: unknown };
-      } catch {
-        throw new Error("Reviewer Session JSONL is corrupt.");
-      }
+      const entry = parseSessionEntry(line);
       if (entry.type !== "session") return line;
       if (sessionHeaderFound || entry.id !== sessionId || typeof entry.cwd !== "string") {
         throw new Error("Reviewer Session header is incompatible.");
@@ -346,6 +341,25 @@ const prepareHostPiSession = async (
   writeFileSync(temporaryPath, rewritten, { mode: 0o600 });
   chmodSync(temporaryPath, 0o600);
   renameSync(temporaryPath, located.path);
+};
+
+type SessionEntry = Record<string, unknown> & {
+  readonly type?: unknown;
+  readonly id?: unknown;
+  readonly cwd?: unknown;
+};
+
+const parseSessionEntry = (line: string): SessionEntry => {
+  let value: unknown;
+  try {
+    value = JSON.parse(line);
+  } catch {
+    throw new Error("Reviewer Session JSONL is corrupt.");
+  }
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    throw new Error("Reviewer Session JSONL is corrupt.");
+  }
+  return value as SessionEntry;
 };
 
 const snapshotSessionRoot = (

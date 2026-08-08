@@ -1,886 +1,781 @@
 ---
-status: requires-refresh-before-task-creation
+status: approved-awaiting-task-recording-authorization
 artifact_kind: working-plan
-remove_when: the refreshed implementation slices are complete, accepted behavior is recorded in current architecture and SQLite Tasks, and every deferred question is transferred to an authoritative open question or explicitly rejected
+remove_when: all four approved implementation Tasks are complete and accepted behavior is recorded in current authority
 ---
 
-# Task Submission planning gate
-
-> Non-authoritative working plan.
-> The previously approved detailed design requires refresh after the lifecycle and evidence simplification review.
-> The detailed sections below preserve prior planning context but must not create implementation Tasks until the operator approves a refreshed complete design.
-> Agents must use this file only when the operator or an active Task explicitly identifies it as planning context.
-
-## Refresh notice
-
-The planning capability remains a future accepted direction, but its current detailed lifecycle is not the approved implementation target.
-The refresh must use current Task Contexts and Task state, current contexts and ADRs, the current [Verification strategy](../VERIFICATION.md), and implemented product outcomes.
-
-The refresh must preserve Task-based planning, separate Planning Run and Validation Run ownership, mandatory Reviewer Session continuity, one material reviewer Finding contract, proportionate evidence, and explicit operator approval.
-It must reconsider exact immutable snapshot duplication, permanent Planning history, active-run and abandonment machinery, approval invalidation, drift rules, inspection breadth, and every constraint inherited from current Validation behavior.
-It must not reintroduce removed transient Task states, generic Run records, Finding severity, Validation phase status, Candidate Publication history, Acceptance Context version history, or a durable Follow-up lifecycle.
-
-Planning Submission remains after lifecycle simplification, broader codebase simplification, and broad verification portfolio closure.
-No Slice 3 or Slice 4 Task may be created from the preserved detail below until the refreshed design is approved.
-
-## Resolved refresh inputs
-
-These decisions govern the refresh but do not approve implementation or settle the remaining design.
-They supersede contrary preserved detail below.
-
-- **Task Review** is the canonical name for the durable repository-aware judgment of whether one Task is accurate, sufficiently verified, and suitable for Task Approval.
-  The durable execution is a Task Review, not a separate Task Review Run.
-  The corresponding names are Active Task Review, Task Review Finding, Task Review Base, Task Review Policy Snapshot, Task Review Workspace, and Task Review Tooling Failure.
-  Planning Review is reserved as a possible future name for broader review across a Task set or initiative, whose domain has not been approved.
-  Remaining `Planning` names in this temporary plan are retired provisional labels for the corresponding Task Review concepts and must be replaced during refresh.
-- Task Review checks whether the claimed problem exists, current code already supplies reusable behavior, new code is necessary, and the Task Verification Contract requires evidence proportionate to material risk.
-  It also checks Task accuracy, repository authority, Task Dependencies, and scope for one Change without prescribing a detailed implementation plan or reviewing a larger initiative.
-  When the required outcome already exists at the Task Review Base, the unchanged Task receives a Task Review Finding rather than approval for unnecessary work.
-  The Task may be cancelled or revised to describe a real missing outcome, configuration, reuse, verification, or documentation need.
-  No-Change completion remains available when implementation-time evidence later establishes that no repository change is required.
-- A historical Planning Run retains the exact reviewed Task Context and dependencies independently of the current Task backend.
-- The Planning Base records the exact Git commit used as repository evidence.
-- The Planning Base is evidence only.
-  Repository drift after review does not invalidate Task Approval or block Change Start.
-- Change Start does not compare the Task Review Base with the Change Base or expose changed paths, commit counts, ancestry, or stale hints.
-  An Implementer may inspect Git history when concrete evidence makes repository drift relevant.
-- The Task does not record relevant file paths or enter a potentially-stale state.
-- Task Review consumes Task Context and dependency evidence through Task-owned persistence interfaces.
-  SQLite remains the current Task backend, while future external Task backends remain unapproved possibilities.
-  Task Reviews, Task Review Findings, Task Reviewer Session references, and operational state remain in Shared Repository State independently of the Task backend.
-  A future external Task backend supplies current Task data while But Why retains the exact reviewed snapshot and review history locally, without requiring external custom fields, comments, or attachments.
-  Cross-store transaction and reconciliation behavior remains deferred until an external Task backend becomes accepted work.
-- Task Submission uses the current commit of the canonical main checkout's local default branch as the Task Review Base.
-  It does not fetch, require synchronization or publication, or support an alternate Planning Base in the first version.
-  Uncommitted files are excluded without blocking Task Submission, a clean-check warning, or a special status.
-  Structured output identifies the exact reviewed commit.
-- Every Planning Review receives the complete current Task proposal as its authority.
-  A later review also receives the prior Planning Run outcome and a deterministic diff from the prior reviewed proposal when applicable.
-  The prior outcome and diff are navigation evidence only and do not make unchanged content authoritative.
-  Task Submission derives this context from Planning Run history without persisting a separate review-reason state.
-- Ordinary Task Submission reuses the current completed Planning Run while the Task Context and Task Dependency set remain unchanged.
-  A passed Run returns the existing Task Approval, and a Finding-blocked Run returns its existing Planning Findings without another reviewer call.
-  A Planning Tooling Failure permits a new Run.
-  A changed Task Context or Task Dependency set requires a new Run.
-  `by task submit <task-id> --rerun` explicitly requests a new judgment of unchanged content.
-  An unchanged Todo Task retains its existing Task Approval while the rerun is active, but Change Start must reject the Task until that Active Planning Run completes or is abandoned.
-  A passing rerun replaces the current passed judgment, a Finding-blocked rerun moves the Task to New, and a Planning Tooling Failure preserves the prior approval.
-  A preflight failure does not change the Task or its approval.
-  Planning Base, planning policy, reviewer configuration, and repository drift do not silently invalidate Task Approval.
-- Task Submission supplies the complete submitted Task and exact point-in-time evidence for its direct Task Dependencies.
-  Direct dependency evidence includes each Task ID, lifecycle state, complete Task Context, and direct dependency IDs.
-  It does not automatically supply reverse dependents, textually similar Tasks, the complete Task inventory, or transitive dependency contexts.
-  The Task Reviewer may use supported read-only Task inspection commands when material evidence requires following a dependency chain or inspecting another Task.
-  An unfinished Task Dependency does not by itself block Task Review or Task Approval.
-  A dependency-related Task Review Finding requires a missing, unclear, contradictory, or materially unresolved prerequisite, while Change Start continues to require every prerequisite Task to be Done.
-  Automatic related-Task discovery and CLI authority separation remain deferred.
-- Task Comments are retired rather than integrated with Task Review.
-  Their original reviewer-feedback purpose no longer applies, their three stored Task Comment values are disposable, and no current requirement justifies preserving the feature.
-  Task `BY-157` must remove the Task Comment command, current domain and storage representations, current and portable documentation, tests, and stored values before Task Review implementation relies on the simplified Task Context.
-  Existing immutable Acceptance Context and Validation Policy Snapshots remain unchanged and readable through their historical format, including any captured comment content.
-  That historical read boundary does not retain Task Comments as a current feature or require compatibility CLI behavior.
-  A possible future Annotation mechanism does not justify retaining Task Comments now.
-- `by task revise <task-id>` explicitly moves an unlinked Todo Task to New so its Task Context or Task Dependencies can be edited.
-  `by task context draft` remains available because it creates only a disposable file.
-  Applying Task Context or adding, removing, replacing, or clearing Task Dependencies requires an unlinked New Task with no Active Task Review.
-  A Todo mutation returns `by task revise <task-id>` as its required next action, while a Change-linked Task rejects revision and durable intent changes.
-  The operation does not create a durable Revision lifecycle or invalidate historical Planning Run evidence.
-  If the Task proposal remains unchanged or is restored exactly, ordinary Task Submission reuses the matching passed Planning Run and returns the Task to Todo without another reviewer call.
-  The Operator uses `--rerun` when another judgment of unchanged content is required.
-- The first version uses one configured Task Reviewer that owns the complete Task Approval judgment.
-  It does not add Task Review phases or Specialist Reviewers.
-  Task Review uses a Task Reviewer Session, Task Reviewer Session Identity, and Task Reviewer Transcript owned by one Task rather than changing the existing Change-owned Reviewer Session domain.
-  Shared reviewer runtime components remain reusable implementation details.
-  Every later Task Review resumes the Task Reviewer Session that produced the current judgment when that session remains usable and compatible with the selected reviewer configuration.
-  The complete current proposal and deterministic diff re-anchor every resumed review.
-  An explicit `--rerun` bypasses completed-result reuse but continues the existing Reviewer Session when possible, including when external evidence changed without changing the Task proposal.
-  A fresh Reviewer Session starts only when the existing session is unusable or incompatible with the selected reviewer configuration.
-  The first version does not expose a user-selectable fresh-session option or independent-second-opinion workflow.
-  Task Reviewer Session failure follows the established Validation Review usability distinction: resume when usable, replace when proven unusable, and preserve when usability is unknown.
-  The Task-owned transcript lifecycle retains the complete JSONL transcript from every Task Reviewer Session, including restarted or superseded sessions, and preserves immutable references after the Task closes.
-- The current planning judgment is the newest completed passed or Finding-blocked Planning Run that reviewed the exact current Task Context and Task Dependency set.
-  An Active Planning Run does not replace that judgment until it completes.
-  A Planning Tooling Failure provides no judgment and therefore does not replace the newest passed or Finding-blocked Run.
-  Task Approval is derived from this ordered Planning Run History and Task state without a separate mutable current-result pointer or approval record.
-- Each Planning Run retains only its identity and order, Task identity, exact reviewed Task Context and Task Dependency set, exact direct dependency evidence, Planning Base commit, Planning Policy Snapshot, start and completion times, state, outcome, Planning Findings or Planning Tooling Failure, and Reviewer Session and transcript references.
-  Task Submission derives the current judgment, proposal diff, and review reason from this history.
-  It does not persist a separate Task Approval record, current-result pointer, relevant-file list, stale flag, generated proposal diff, review-reason field, or Planning Base tree SHA.
-- Task Review interruption uses the existing Validation Run recovery model.
-  Persistence permits at most one Active Task Review per Task, and another submission reports that Review instead of starting a second one.
-  Task Context changes, Task Dependency changes, Task revision, cancellation, and Change Start reject while the Active Task Review remains.
-  The Task Review therefore completes against the unchanged submitted proposal without a changed-during-review result.
-  Other Tasks, including direct Task Dependencies captured as point-in-time evidence, remain independently mutable.
-  But Why does not infer that interrupted processes are dead.
-  `by task-review abandon <review-id>` marks the Review as a Task Review Tooling Failure only after the Operator has stopped its processes, while preserving Review and reviewer evidence.
-  A New or Todo Task may be cancelled after its Active Task Review completes or is abandoned.
-  Cancellation preserves all Task Reviews, Findings, policy snapshots, and Task Reviewer Transcripts, removes only active session state and disposable resources through terminal cleanup, and does not mark Findings resolved.
-- Every Task Review Finding blocks Task Approval and describes one material problem in the Task or available evidence.
-  A Task Review Finding records a title, description, evidence, and relevant repository files when known.
-  It uses the shared reviewer Finding contract without Artifact references.
-  One review may return multiple independent Findings, but Task Review Findings have no severity level or required category.
-  Suggestions that do not block approval remain in the Reviewer Transcript rather than becoming Findings.
-  Task Review Outcome remains passed, blocked by Task Review Findings, or failed because of tooling, without a Needs Input outcome.
-  A failure in But Why, Repository Preparation, reviewer execution, configured tool access, or structured reviewer output is a Task Review Tooling Failure when it prevents a trustworthy judgment.
-  A deterministic failure found before Task Review creation returns a command error without creating Review history.
-  A Finding may require Task revision, a separate prerequisite Task and Change, a Spike, external setup, or Task cancellation.
-  When the submitted Task remains unchanged, an authorized `--rerun` continues the Reviewer Session against current evidence.
-  The next Planning Run decides whether the Finding remains; Findings have no mutable resolved flag.
-  The Planning Reviewer may recommend resolution actions but cannot perform lifecycle mutations.
-- The planning agent presents the exact Task Context and Task Dependency set for one human authorization before Task Submission.
-  A passing Planning Run moves the Task to Todo without a second human confirmation.
-  A revised proposal and an explicit `--rerun` each require new human authorization before submission.
-  Reducing this authorization boundary remains a future possibility rather than a first-version requirement.
-- Task Submission first loads the current Task proposal, then reports any Active Planning Run, and then returns a reusable passed or Finding-blocked judgment.
-  Only a required new review resolves the Planning Base, Planning Policy Snapshot, reviewer configuration, and Planning Workspace.
-  Deterministic preflight must pass before But Why creates a Planning Run.
-  `--rerun` bypasses completed-result reuse but not preflight.
-- Task Review Workspace preparation, use, cleanup, and recorded evidence follow the established Validation Workspace pattern through shared components.
-  Each new Task Review creates a disposable workspace from its exact Task Review Base, runs configured Repository Preparation there, and prevents the reviewer from changing the canonical main checkout.
-  Task Review does not automatically execute configured Validation Checks or add Prepare, Check, Acceptance, or Specialist phases.
-  The Task Reviewer may run focused tests, searches, and commands when needed to check a Task claim, while full Candidate validation remains owned by Change Submit.
-  Normal completion removes the workspace while preserving Task Review Findings and Task Reviewer Transcripts.
-  Task Review does not create, store, reference, inspect, or clean up Artifacts.
-  Reused Task Reviews return before workspace creation or Repository Preparation.
-- `by task submit` remains synchronous and returns its final structured result after the Planning Run completes.
-  An agent host may run the command in the background, but But Why does not add a job queue, detached worker, polling command, or notification system.
-  Durable Active Planning Run state supports inspection and recovery after interruption.
-- Task Submission replaces direct Task approval.
-  `by task approve <task-id>` is removed, `by task submit` becomes the only operation that moves a New Task to Todo, and `by task revise` provides the explicit Todo-to-New revision path.
-  Existing Todo Tasks remain Todo, startable, and unchanged without invented Task Review history or a legacy marker.
-  Ordinary submission returns their existing approval, `--rerun` may create their first Task Review, and revision followed by submission requires a Task Review when no matching passed Review exists.
-  The unreleased CLI provides no compatibility behavior for the removed approval command.
-- The first-version CLI adds `by task submit <task-id> [--rerun]`, `by task revise <task-id>`, `by task reviews <task-id>`, `by task-review show <review-id>`, and `by task-review abandon <review-id>`.
-  `by task show` exposes the current Task Review summary and next command, while Task Submission returns complete current Findings and Task Review inspection exposes historical detail.
-  The CLI does not add separate approval, retry, resume, current-Findings, global Task Review listing, or stale-status commands.
-- Planning Review reads Repo Config from the exact Planning Base for Repository Preparation, Agent Environment, reviewer overrides, and Repo Agent Profiles.
-  It reads current Global Config for the default Planning Reviewer and Global Agent Profiles.
-  Task Submission resolves those sources into one immutable Planning Policy Snapshot before Run creation.
-  Later configuration changes do not alter historical Runs or invalidate existing Task Approval.
-  Task inspection exposes the current Review and historical policy without a stale label or automatic `--rerun` hint for policy or reviewer changes.
-
-This plan is not current product behavior or implementation authority.
-`CONTEXT-MAP.md` identifies the contexts that own resolved domain language.
-`docs/architecture.md`, accepted ADRs, executable sources, and SQLite Tasks remain authoritative for implemented behavior.
-
-## Preemptive authority wording retained for refresh
-
-The following wording was removed verbatim from current authority because it describes unimplemented Planning Submission behavior.
-It remains here only as future planning input and must be reconsidered during refresh before any part returns to current authority.
-
-### ADR 0005
-
-```markdown
-V1 uses Planning Review through Task Submission to create Task Approval, dependency-checked Change Start, validation and publication through Change Submission, synchronous Task cancellation, and authoritative merge or accepted No-Change completion.
-Task Approval belongs to the exact reviewed Task proposal, planning policy, and Planning Base instead of remaining permanent after those facts change.
-An operator must explicitly confirm an approved Task revision before the Task returns to New for another Task Submission.
-A repeated Task Submission or Change Submission may recover interrupted progress only through valid lifecycle transitions and exact durable evidence.
-```
-
-### Task Intent context ownership
-
-```markdown
-This context owns requested intent, planning judgment, approval, dependencies, and user-facing Task progress.
-```
-
-### Task Intent planning language
-
-```markdown
-**Task Submission**:
-The point-in-time operation that asks But Why to judge one Planning Proposal Snapshot against one Planning Base and resolved planning policy.
-Explicit resubmission of a Todo Task under a different policy or invalid Planning Base replaces its prior approval only after preflight succeeds.
-_Avoid_: Task Approval, Change Submission, Task edit
-
-**Planning Proposal Snapshot**:
-The immutable Task Context, dependency edges, and exact direct-related-Task evidence supplied to one Planning Run.
-A concurrent change to that evidence makes an active Task Submission stale before approval.
-_Avoid_: Acceptance Context, mutable Task view, repository evidence
-
-**Planning Base**:
-The exact local default-branch commit and tree against which one Planning Run judges a Task proposal.
-_Avoid_: Change Base, remote default branch, arbitrary caller HEAD
-
-**Planning Run**:
-One durable execution and judgment of one Task proposal under one resolved planning policy that begins only after Task Submission eligibility and preflight succeed.
-A passed or Finding-blocked Planning Run is reusable while its proposal and policy match and its Planning Base remains valid.
-_Avoid_: Validation Run, Task Submission attempt, generic job
-
-**Active Planning Run**:
-The sole running Planning Run durably related to one Task until it completes or an operator explicitly abandons it.
-Its Task cannot be cancelled while it remains active.
-_Avoid_: Process lock, reviewer process, current Task Submission
-
-**Planning Run Abandonment**:
-The explicit operator recovery that completes an interrupted Active Planning Run as tooling-failed after its processes stop and its exact resources are handled.
-_Avoid_: Automatic cleanup, process termination, cancellation
-
-**Planning Run State**:
-The state of a Planning Run: running or complete.
-_Avoid_: Task state, review result
-
-**Planning Run Outcome**:
-The completed result of a Planning Run: passed, blocked by Planning Findings, or failed because of tooling.
-_Avoid_: Task state, reviewer status, abandonment
-
-**Planning Run History**:
-The ordered immutable Planning Runs retained for one Task.
-_Avoid_: Mutable planning report, Task comments
-
-**Planning Policy Snapshot**:
-The immutable resolved Repository Preparation, Planning Reviewer instructions, Agent Profile, Agent Environment, and output contract used by one Planning Run.
-Later configuration changes do not alter the snapshot or its historical Planning Run, and Planning Run reuse requires an exact snapshot match.
-_Avoid_: Mutable current config, raw config hash, Validation Policy Snapshot
-
-**Planning Reviewer**:
-The coding agent that judges whether one Task proposal is ready for implementation against repository and authoritative external evidence.
-_Avoid_: Acceptance Reviewer, Implementer, Task approver
-
-**Planning Reviewer Session**:
-A continuing reviewer conversation owned by one Task and resumed across its Planning Runs and disposable Planning Workspaces.
-_Avoid_: Fresh reviewer session per Task Submission, cross-Task reviewer conversation
-
-**Planning Reviewer Session Identity**:
-The Task, Planning Reviewer producer, resolved Agent Profile, reviewer instructions, Agent Environment, and configured resources that determine whether a Planning Reviewer Session can safely continue.
-The Planning Base, Planning Proposal Snapshot, and Planning Run do not belong to this identity.
-_Avoid_: Planning Run identity, session file path, mutable Task proposal
-
-**Planning Finding**:
-An immutable report that states one material problem and the evidence that prevents approval of the reviewed Task proposal.
-Every Planning Finding is blocking, so it has no severity classification.
-_Avoid_: Task Comment, implementation detail, optional refinement
-
-**Planning Workspace**:
-An isolated disposable workspace in which one Planning Run judges its exact Planning Base without changing it.
-_Avoid_: Validation Workspace, Managed Worktree, caller checkout
-
-**Planning Tooling Failure**:
-A failure after Planning Run creation in But Why or its planning tooling that prevents a trustworthy judgment of the Task proposal.
-Preflight rejection is not a Planning Tooling Failure.
-_Avoid_: Planning Finding, reviewer rejection
-
-**Task Approval**:
-The current confirmation that one exact Planning Proposal Snapshot passed Planning Review under its recorded Planning Policy Snapshot and Planning Base.
-Configuration changes do not invalidate it automatically, but explicit Task resubmission can replace it after preflight succeeds.
-_Avoid_: Change Start, permanent approval, operator-only assertion
-```
-
-### Task Dependency planning sentence
-
-```markdown
-An unfinished prerequisite does not prevent Task Submission, but Planning Review can report a Planning Finding when that prerequisite prevents trustworthy planning.
-```
-
-### Context Map wording
-
-```markdown
-- [Task Intent](./docs/context/task-intent/CONTEXT.md) - owns requested intent, planning judgment, approval, dependencies, and user-facing Task progress.
-- **Repository Runtime -> Task Intent**: Shared Repository State persists Tasks and Planning Runs, while resolved configuration supplies planning policy and the Planning Reviewer Agent Profile.
-```
-
-## Outcome
-
-But Why must validate a Task proposal against repository evidence and approved planning policy before implementation starts.
-`by task submit <task-id>` must be the only operation that moves a New Task to Todo.
-The operation must give an agent a trustworthy result without requiring a separate human-only approval command.
-
-Task Submission must remain Task-based.
-The first version must not add Plan, Epic, Initiative, or generic Run concepts.
-
-## Design principles
-
-- Planning and Validation must share infrastructure when they have the same mechanism.
-- Planning and Validation must retain separate domain ownership when their lifecycle meaning differs.
-- A Planning Run belongs to a Task.
-- A Validation Run belongs to a Change.
-- A Planning Finding belongs to a Planning Run.
-- A Finding belongs to a Validation Run.
-- A material planning problem is a Planning Finding.
-- A material validation problem is a Finding.
-- A non-blocking suggestion is neither a Planning Finding nor a Finding.
-- The design must compare each Planning behavior with the corresponding Validation behavior before it introduces a difference.
-- Planning Review must treat deletion or no code change as a valid complete result when that is the smallest result that satisfies current intent.
-- The first implementation must prefer a small complete path over speculative flexibility.
-
-## Task Submission and approval
-
-`by task submit <task-id>` is the public Task Submission command.
-The command invocation supplies the operator authority to approve the submitted Task proposal if Planning Review passes.
-A separate `by task approve` command must not remain.
-
-Task Submission must accept a New Task.
-Task Submission may accept a Todo Task when its prior Task Approval needs revalidation.
-A configuration change alone must not invalidate Task Approval.
-Explicit Todo resubmission under a different policy must replace the old approval only after preflight succeeds.
-A matching passed Planning Run must keep or return the Task to Todo.
-A matching Finding-blocked Planning Run must return its Findings and move the Task to New.
-Otherwise, Task Submission must move the Task to New atomically with new Planning Run creation.
-A clean Planning Review must create Task Approval and move the Task to Todo.
-Planning Findings or Planning Tooling Failure must leave the Task New.
-
-An unfinished prerequisite must not reject Task Submission by itself.
-Planning Review may report a Planning Finding when an unfinished or underspecified prerequisite prevents trustworthy planning.
-Change Start must continue to require every prerequisite to be Done.
-
-## Planning result
-
-The Planning Reviewer must return one Findings array.
-An empty Findings array means that the reviewed Task proposal is ready for implementation.
-A non-empty Findings array means that the reviewed Task proposal is not ready for implementation.
-But Why must not require a mutually exclusive top-level result such as `needs_revision`, `needs_spike`, or `cancel`.
-
-One review may report multiple independent Planning Findings.
-A Planning Finding may require Task revision, decomposition, a Spike, or cancellation.
-But Why must not assign a required `kind` to a Planning Finding in the first version.
-The Finding description must explain the required resolution.
-
-A Planning Reviewer may conclude that the Task should not be done.
-The reviewer must not cancel the Task.
-The planning agent must present the Finding, and the operator must explicitly run `by task cancel`.
-A cancellation reason should reference the applicable Planning Run or Planning Finding.
-
-## Planning Finding materiality
-
-A Planning Finding must identify a material problem that can do at least one of the following:
-
-- Change the observable outcome or acceptance boundary.
-- Make the Task infeasible or unsafe.
-- Place behavior in the wrong owner or Task.
-- Hide a required Task Dependency.
-- Prevent the verification seam from proving the requested outcome.
-- Conflict with repository evidence or authoritative external evidence.
-- Duplicate or contradict existing work.
-- Leave a consequential assumption unsupported.
-- Preserve or create a durable representation of a retired concept without an accepted current boundary.
-- Require durable evidence whose only purpose is to prove that a retired concept is absent.
-
-When a Task proposal retires a concept, the Planning Reviewer must apply the repository current-system invariant.
-The proposal and its Task Verification Contract must identify the retired concept, its replacement, affected repository surfaces, targeted search scope, and each accepted exception.
-The contract must classify evidence as durable current-behavior evidence or one-time removal evidence.
-
-A Planning Reviewer must not report a Finding only because the Task lacks file-by-file implementation steps.
-A Planning Reviewer must not report a Finding for a local reversible choice.
-A Planning Reviewer must not report a Finding for an optional refinement, style preference, or speculative future requirement.
-A Planning Reviewer must not report a Finding for information that implementation can safely discover without changing an agreed boundary.
-
-## Reviewer Finding contract
-
-Every reviewer Finding is blocking.
-Reviewer Findings must not have a severity classification.
-This rule applies to Planning Review, Acceptance Review, and Specialist Review.
-
-Planning and Validation must share one core reviewer Finding codec.
-The core codec fields are:
-
-- `title`: a short problem name.
-- `description`: the material problem and required correction.
-- `evidence`: the concrete facts that support the Finding.
-- `files`: repository-relative paths that support or locate the Finding.
-
-`files` must be present and may be empty.
-`evidence` may cite repository files, stored Artifacts, or authoritative external sources.
-When evidence uses an external source, the evidence must state the relevant fact and its URL.
-
-The Validation reviewer Finding codec must extend the core codec with required `artifactRefs` because reviewers use Check and Prepare Artifacts as durable evidence.
-The Planning reviewer Finding codec must use the core codec without `artifactRefs` in the first version because Planning Review has no equivalent Check evidence.
-Planning Run inspection may still expose operational Artifacts.
-
-## Planning evidence and Spikes
-
-The Planning Reviewer may inspect:
-
-- The Planning Proposal Snapshot.
-- The exact Planning Base.
-- Repository code, tests, and current executable behavior.
-- Installed dependency versions and source.
-- Authoritative external documentation.
-- Bounded online research.
-- Existing experiments and Spikes.
-
-Planning Review must not disable online access by policy.
-
-If repository and external evidence establish a material conflict or correction with high confidence, the Planning Reviewer must report it as a Planning Finding.
-If available evidence cannot resolve a consequential uncertainty or conflict, the Planning Reviewer must report a Planning Finding that requires a Spike.
-
-A Spike request must state a falsifiable hypothesis.
-A Spike request must identify the real system seam to test.
-A Spike request must state the evidence that would support or refute the hypothesis.
-A Spike request must propose the smallest experiment that can resolve the uncertainty.
-One Planning Run may request multiple independent Spikes.
-
-A Spike is a bounded experiment performed outside Task Submission.
-The first version must not add a Spike CLI, Task type, or persisted Spike record.
-The planning agent may delegate or perform the experiment.
-The operator must revise the Task through the supported Task Context workflow with the accepted result.
-
-## Planning Proposal Snapshot
-
-Task Submission must create one immutable Planning Proposal Snapshot.
-The snapshot must contain:
-
-- The submitted Task Context.
-- The direct Task Dependency edges.
-- The exact IDs, states, and Task Context supplied for direct prerequisites.
-- The exact IDs, states, and Task Context supplied for direct dependents.
-
-The first version must not inject every repository Task into the reviewer prompt.
-The reviewer may inspect another Task when specific evidence makes that Task relevant.
-
-The Task must remain New while its first Planning Run executes.
-Before Task Approval, But Why must atomically verify every stored Planning Proposal Snapshot field.
-The comparison must include Task Context, dependency edges, and each supplied related Task ID, state, and Task Context.
-If any field changed, But Why must preserve the historical Planning Run, return a stale-submission result, and leave the Task New.
-
-A later change to related Task evidence must not automatically invalidate an existing Task Approval in the first version.
-Post-approval Task and repository drift remains a deferred design question except for the explicit Planning Base ancestry rule.
-
-## Planning Base
-
-Planning Review must use the local default-branch HEAD from the canonical main checkout as its Planning Base.
-Task Submission must not use a remote-only branch or the caller's arbitrary HEAD.
-Task Context remains SQLite state and must be supplied separately from the Planning Base.
-
-Task Submission must reject a dirty default-branch checkout.
-Task Submission must not commit, discard, stash, reset, or otherwise repair dirty state.
-Unpushed commits on the local default branch may form the Planning Base.
-
-A Planning Run must record the exact Planning Base commit and tree SHA.
-A Planning Workspace must reproduce that exact commit.
-
-Change Start must verify that the reviewed Planning Base is an ancestor of the fetched Change Base.
-If the ancestry check fails, Change Start must reject only that start operation.
-The Task must remain Todo until the operator explicitly runs Task Submission again.
-
-Explicit resubmission of a Todo Task with an invalid Planning Base must return the Task to New while the new Planning Run executes.
-A passing Planning Run must return the Task to Todo.
-Planning Findings or Planning Tooling Failure must leave the Task New.
-
-If the reviewed Planning Base remains an ancestor of the fetched Change Base, Change Start must accept the stored Task Approval.
-Ordinary default-branch advancement must not automatically invalidate every approved Task.
-Tree-equivalent recovery after rewritten history is deferred.
-
-## Planning policy and configuration
-
-Every Task Approval must come from a completed Planning Review.
-Task Submission may reuse an eligible completed Planning Run instead of executing another reviewer turn.
-Configuration must not provide a bypass that directly approves a Task.
-
-Planning Review may select a dedicated Agent Profile.
-The Planning Reviewer Agent Profile must resolve from Repo Config, then Global Config, then the Global default Agent Profile.
-Missing or unusable reviewer configuration must reject Task Submission before a Planning Run starts.
-
-Planning Reviewer instructions must resolve from Repo Config, then Global Config, then the built-in planning instructions.
-A configured `instructionsFile` must replace the built-in planning judgment policy.
-But Why must continue to own the protocol envelope:
-
-- The exact Planning Proposal Snapshot.
-- The Findings output contract.
-- Planning Workspace integrity and cleanup.
-- The prohibition on direct Task mutation.
-- Planning Tooling Failure handling.
-- The atomic Task state transition.
-
-The user may intentionally configure a judgment policy that always returns no Findings.
-But Why must not treat that configured policy as a protocol failure.
-
-The proposed configuration keys are:
-
-```json
-{
-  "review": {
-    "planning": {
-      "agentProfile": { "scope": "global", "name": "reviewer" },
-      "instructionsFile": "review/planning.md"
-    }
-  }
-}
-```
-
-Repo Config paths must resolve from the repository root.
-Global Config paths must resolve from the Global Config directory.
-A missing or unreadable instructions file must reject Task Submission before reviewer execution.
-
-A Planning Policy Snapshot must contain the resolved Repository Preparation policy, reviewer instructions, Agent Profile, Agent Environment, and output contract.
-Later configuration changes must not mutate historical Planning Runs.
-Planning Run reuse must require an exact Planning Policy Snapshot match.
-
-## Preflight and Planning Run creation
-
-Task Submission must finish deterministic preflight before it creates a Planning Run.
-Preflight must:
-
-1. Validate the command input and Task lifecycle state.
-2. Acquire the per-Task execution lock.
-3. Reject dirty default-branch state.
-4. Resolve the Planning Base.
-5. Resolve the Planning Proposal Snapshot.
-6. Resolve and validate the Planning Policy Snapshot.
-7. Check for an Active Planning Run.
-8. Check for a reusable completed Planning Run.
-
-A preflight rejection must not create a Planning Run or Planning Tooling Failure.
-A preflight rejection during Todo resubmission must preserve the existing Task Approval and Todo state.
-A failure after Planning Run creation that prevents trustworthy judgment must become a Planning Tooling Failure.
-
-## Planning Workspace and Repository Preparation
-
-Each new Planning Run must create one disposable Planning Workspace just in time.
-Planning must not create a persistent Task Worktree.
-
-The implementation should extract generic disposable repository workspace mechanics from Validation Workspace creation.
-The shared mechanics include temporary refs, Sandcastle worktrees, exact-HEAD verification, scoped execution, interruption, and cleanup.
-Planning Workspace and Validation Workspace must remain separate domain concepts.
-
-Each new Planning Run must execute configured Repository Preparation through the shared Repository Preparation runner.
-A reused Planning Run must return before Planning Workspace creation and Repository Preparation.
-
-Planning Review must not execute configured repository Checks as a fixed gate.
-The reviewer may run focused existing tests or commands when they resolve a specific planning question.
-A larger prototype or experiment must become a Spike request.
-
-## Planning Run reuse
-
-Task Submission must reuse a completed Planning Run only when:
-
-- The Planning Proposal Snapshot matches exactly.
-- The Planning Policy Snapshot matches exactly.
-- The recorded Planning Base is an ancestor of the current local default-branch HEAD.
-- The outcome is passed or blocked by Planning Findings.
-
-A reused result must return before workspace creation, Repository Preparation, or reviewer execution.
-An unchanged Finding-blocked Planning Run must return the stored Planning Findings.
-The operator must change the Task proposal to obtain a new review under the same policy and Planning Base.
-
-A Planning Tooling Failure must permit a new Planning Run.
-A changed policy must create a new Planning Run.
-A recorded Planning Base that is not an ancestor of the current local default-branch HEAD must require a new Planning Run.
-Change Start must separately compare the reviewed Planning Base with the exact fetched Change Base.
-
-Validation Run reuse intentionally differs.
-Validation must reuse only a passed Validation Run.
-An unchanged Candidate with Findings must receive a new Validation Run because Checks, dependencies, services, and reviewer evidence can change between executions.
-
-## Reviewer Session
-
-One Planning Reviewer Session must belong to one Task and Planning Reviewer Session Identity.
-The session must continue across Task Submission attempts and disposable Planning Workspaces when its identity remains valid.
-Planning Reviewer Session Identity must contain the Task ID, fixed Planning Reviewer producer, resolved Agent Profile, reviewer instructions, Agent Environment, and configured extensions, skills, and tools.
-Planning Base, Planning Proposal Snapshot, and Planning Run identity must not affect session continuity.
-
-Each new Planning Run must review the complete current Planning Proposal Snapshot.
-A continued reviewer must re-anchor to the exact current proposal and Planning Base.
-A continued reviewer must recheck previous Planning Findings but must not limit review to those Findings.
-A continued reviewer may reuse prior repository orientation unless current evidence requires more exploration.
-
-Previous Planning Findings are historical evidence.
-Planning Findings must not have a mutable resolved flag.
-The latest valid Planning Run supplies the current Findings.
-A clean report creates Task Approval.
-
-If a Reviewer Session cannot continue safely, But Why may restart it.
-The Planning Run must record the restart reason.
-Planning Tooling Failure must not erase Reviewer Session history.
-Task cancellation must preserve Planning Run and Reviewer Session history.
-
-## Active Run ownership, concurrency, and abandonment
-
-Task Submission must use the execution-ownership primitive established for Validation after BY-54 lands.
-The implementation must share lock and lifecycle infrastructure without introducing a generic Run domain concept.
-
-A dedicated per-Task SQLite execution lock must cover the complete Task Submission operation.
-Starting a Planning Run must atomically record the sole Active Planning Run relation for its Task.
-Persistence must reject a second Active Planning Run even outside ordinary orchestration.
-A concurrent Task Submission must fail promptly and must not create Planning Run evidence.
-
-Normal completion must remove the Active Planning Run relation atomically with the Planning Run outcome.
-Process termination must release the execution lock but must leave the Active Planning Run relation durable.
-A later Task Submission must report the exact Active Planning Run and must not infer that recovery is safe.
-
-`by planning-run abandon <planning-run-id> --reason <reason>` must mirror Validation Run Abandonment.
-The operation must:
-
-- Acquire the same per-Task execution lock.
-- Require the operator to have stopped every process from the Planning Run.
-- Record a Planning Tooling Failure with the operator reason.
-- Handle the exact Planning Workspace and temporary ref.
-- Complete the Planning Run as tooling-failed.
-- Remove the Active Planning Run relation.
-- Leave the Task New.
-
-Planning Run Abandonment must not inspect PIDs, infer liveness, deliver signals, or terminate processes.
-A cleanup failure must remain visible and must prevent the operation from claiming complete recovery.
-Repeated or concurrent abandonment must return the existing terminal fact without corrupting state.
-
-Validation and Planning cancellation must follow the same rule.
-Cancellation must acquire the applicable owner execution lock.
-If Submission still owns the lock, cancellation must return an in-progress result.
-If an interrupted Active Planning Run remains, Task cancellation must require Planning Run Abandonment first.
-If an interrupted Active Validation Run remains, Change or linked-Task cancellation must require Validation Run Abandonment first.
-Cancellation must never abandon a Planning Run or Validation Run silently.
-
-## Planning Tooling Failure
-
-Shared execution failures should use common error kinds and serialization helpers when their mechanisms match.
-Examples include Git, Sandcastle, Repository Preparation, agent execution, output-contract, token-usage, workspace, and cleanup failures.
-
-Lifecycle records must remain owner-specific.
-A Validation Tooling Failure belongs to a Validation Run.
-A Planning Tooling Failure belongs to a Planning Run.
-The implementation must not introduce a generic persisted Tooling Failure that requires a generic Run owner.
-
-Planning-specific workspace fields and Validation-specific Candidate fields must remain in their applicable records.
-Shared adapters may map common execution errors into the applicable owner-specific record.
-
-## Approved Task revision
-
-The existing Task Context draft workflow must remain the supported editing path:
-
-```text
-by task context draft <task-id>
-# edit the draft
-by task context apply <task-id>
-```
-
-Applying an identical draft must be a no-op and must preserve Task Approval.
-Applying a changed draft to a Todo Task must not mutate the Task on the first command.
-The command must return a structured confirmation-required result.
-The result must show that Task Approval will become invalid, that the Task will return to New, and which exact command confirms the change.
-
-The confirmation must be bound to the current approved Task Context, proposed draft, and dependency edges by digest or equivalent exact identity.
-A confirmed apply must atomically:
-
-- Apply the exact draft.
-- Move the Task from Todo to New.
-- Invalidate the previous Task Approval.
-- Remove the Task Context Draft.
-- Return `by task submit <task-id>` as the next command.
-
-Task Comment and Task Dependency changes to a Todo Task must use the same confirmation principle.
-The design must not add a separate `by task revise` command.
-
-After Change Start, Task Context, Task Comments, and Task Dependencies must remain immutable through these commands.
-Implementation Blocker Resolution must remain the supported path for accepted intent changes during implementation.
-
-## Inspection surface
-
-The first complete Planning Gate must provide:
-
-- `by task submit <task-id>`.
-- `by task show <task-id>`.
-- `by task findings <task-id>`.
-- `by task planning-runs <task-id>`.
-- `by planning-run show <planning-run-id>`.
-- `by planning-run artifact <planning-run-id> <artifact-ref>`.
-- `by planning-run abandon <planning-run-id> --reason <reason>`.
-
-`by task show` must include the current Planning Run identity, outcome, Finding count, approval validity, and applicable next command.
-`by task findings` must expose the current Planning Findings and an explicit empty state.
-`by task planning-runs` must expose compact complete Planning Run History.
-`by planning-run show` must expose the proposal, policy, rounds, Findings, Tooling Failures, cleanup, and stored Artifact metadata.
-`by planning-run artifact` must expand one exact stored Artifact.
-
-All commands must follow the agent-first structured output policy in `docs/cli-output.md`.
-Errors must include an actionable command when recovery is possible.
-
-## Boundaries and dependencies
-
-BY-54, `Enforce one Active Validation Run per Change`, is Done.
-It establishes the reusable SQLite execution-lock primitive, durable active-run relation pattern, and accepted Validation cancellation interaction that Task Submission execution ownership requires.
-
-`src/task/` must own Task Submission, Planning Runs, Planning Findings, Task Approval, and their persistence ports.
-CLI modules must route commands and translate results without coordinating persistence.
-Shared adapters must remain under their established owners in `src/agent/`, `src/repositoryPreparation/`, `src/sqlite/`, and the extracted repository-workspace seam.
-Slice 3 must add the next ordered SQLite migration and must verify upgrade from the previous schema.
-
-Task Submission may share these mechanisms:
-
-- SQLite execution-lock infrastructure.
-- Disposable Sandcastle workspace infrastructure.
-- Repository Preparation execution.
-- Agent Profile and Agent Environment resolution.
-- Reviewer output decoding primitives.
-- Tooling error kinds and serialization helpers.
-- Artifact storage and inspection infrastructure.
-
-Task Submission must not share these domain owners:
-
-- Planning Run and Validation Run.
-- Planning Finding and Finding ownership.
-- Planning Policy Snapshot and Validation Policy Snapshot.
-- Planning Workspace and Validation Workspace.
-- Planning Tooling Failure and Validation Tooling Failure.
-- Task Approval and Candidate validation outcome.
-
-## Iterative implementation sequence
-
-The implementation should use a small number of end-to-end slices.
-Do not create every possible follow-up Task before implementation evidence exists.
-Create only the next implementable Task, complete it, dogfood it, and then refine the next slice.
-
-### Slice 1: Safe Validation execution ownership
-
-Existing Task: BY-54.
-
-Observable capability:
-One Change has at most one Active Validation Run, and an operator can recover an interrupted Validation Run explicitly.
-
-Primary seam:
-Run concurrent real `by change submit` processes, interrupt the owner, inspect the durable Active Validation Run, and recover through `by validation-run abandon`.
-
-BY-54 is Done and establishes the execution-lock and active-run primitives that Planning needs.
-
-### Slice 2: One shared reviewer Finding contract
-
-Task: BY-83.
-
-Observable capability:
-Acceptance and Specialist Review return only material blocking Findings without severity classifications.
-
-Primary seam:
-Run Change Submission with reviewer output that contains the supported fields and inspect the persisted Finding through the CLI.
-
-Required behavior:
-
-- Remove `severity` from reviewer prompts and output decoding.
-- Preserve `title`, `description`, `evidence`, `files`, and Validation `artifactRefs`.
-- Leave any legacy nullable severity storage unused by new reviewer output.
-- Omit severity from current CLI Finding views.
-- Keep all Findings blocking.
-- Keep Artifact reference validation and expansion.
-
-This slice gives Planning a smaller shared contract without making Planning implementation responsible for migrating Validation behavior.
-
-### Slice 3: End-to-end Task Submission
-
-Observable capability:
-An operator can submit one New Task for Planning Review and receive either a Todo Task or durable Planning Findings.
-
-Primary seam:
-Run `by task submit` against a real repository, inspect the Task and Planning Run, and repeat the command to prove result reuse.
-
-Observable variations must also prove:
-
-- A Finding-blocked result and unchanged Finding reuse.
-- Planning Tooling Failure and retry.
-- Concurrent Task Submission rejection.
-- Interrupted Planning Run inspection and Abandonment.
-- Concurrent Planning Proposal Snapshot mutation and stale-submission rejection.
-- Task cancellation rejection while Planning execution or recovery remains active.
-
-The Task Verification Contract must address the Material Risk that Task Context or dependency facts change after submission or approval.
-It must require evidence that Task Approval binds the exact Planning Proposal Snapshot and that concurrent mutation cannot create approval.
-Planning Review must also enforce the repository current-system invariant and its evidence-lifecycle requirements when the proposal retires a concept.
-Until Slice 4 provides confirmed approved-Task revision, the slice must reject mutation of approved Task intent.
-
-This slice owns:
-
-- Planning preflight and configuration.
-- Planning Proposal Snapshot and Planning Base.
-- Planning Policy Snapshot.
-- Planning Workspace and Repository Preparation.
-- Planning Reviewer Session.
-- Planning Run, Planning Findings, Planning Tooling Failures, and Artifacts.
-- Active Planning Run ownership and Abandonment.
-- Atomic Task Approval.
-- Removal of direct Task Approval.
-- Planning Run reuse.
-- Cancellation interaction.
-- Complete initial inspection commands.
-
-This slice is broad across files but narrow in observable capability.
-Splitting its internal layers would leave unsupported partial Planning behavior.
-
-### Slice 4: Safe approved-Task revision and Change Start validity
-
-Observable capability:
-An operator can revise a Todo Task with explicit confirmation, resubmit it, and start a Change only from a valid Task Approval.
-
-Primary seam:
-Approve a Task through Task Submission, propose a changed Task Context, confirm invalidation, resubmit it, and start a Change against a fetched descendant of the reviewed Planning Base.
-
-Observable variations must also prove:
-
-- Identical Task Context apply as a no-op.
-- Confirmed revision that removes or supersedes an over-specified accepted requirement.
-- Task Comment confirmation and invalidation.
-- Task Dependency confirmation and invalidation.
-- Rejection of every intent edit after Change Start.
-- Change Start rejection when the Planning Base is not an ancestor of the fetched Change Base.
-- Explicit Todo resubmission and each pass, Finding, and tooling-failure result after invalid ancestry.
-
-The Task Verification Contract must require evidence that confirmed revision invalidates the exact prior Task Approval.
-It must also require evidence that a revision can explicitly supersede prior accepted intent and that Change Start captures only the newly approved intent.
-
-This slice owns:
-
-- Digest-bound confirmation for Task Context changes.
-- Equivalent confirmation for Task Comments and Task Dependencies.
-- Todo-to-New invalidation.
-- Rejection after Change Start.
-- Planning Base ancestry verification at Change Start.
-- Explicit resubmission after invalid ancestry.
-
-Before this slice lands, approved Tasks must remain immutable rather than permit silent approval invalidation.
-
-## Task creation policy
-
-Do not create one Task per module, command, migration, or test group.
-The four slices above are the maximum initial decomposition.
-BY-54 already owns Slice 1.
-
-The approved high-level sequence is:
-
-1. BY-54 remains the completed owner of Validation cancellation behavior and the shared execution lock.
-2. Complete BY-83 as Slice 2 before the verification portfolio migration.
-3. Complete the verification portfolio migration and closure.
-4. Complete the codebase simplification audit and each approved shared-foundation simplification that Planning would otherwise consume.
-5. Create Slice 3 only after BY-54 and BY-83 are Done and the preceding program work is complete.
-6. Create Slice 4 only after Slice 3 is Done and has been dogfooded.
-7. Split a slice only when new evidence establishes an independently useful capability or a real blocker.
-
-Sequence does not create a Task Dependency by itself.
-Record a dependency only when the later Task cannot be implemented or verified before the prerequisite is Done.
-Slice 3 has a real dependency on BY-54 because it consumes BY-54's execution-ownership primitive.
-Slice 3 must depend on Slice 2 because it consumes the shared reviewer Finding contract.
-Slice 4 must depend on Slice 3 because it revises Task Approval created by Task Submission.
-
-## ADR disposition
-
-ADR 0005 retains ownership of named Task lifecycle operations.
-The accepted ADR now defines Task Submission as the approval operation and Task Approval as conditional on its exact reviewed proposal, planning policy, and Planning Base.
-
-## Deferred questions
-
-These questions are outside the first implementation sequence.
-Move them to `docs/open-questions.md` after that file's current ownership work is complete.
-Do not create implementation Tasks for these questions until evidence and an accepted decision establish work.
-
-### Repository drift after Task Approval
-
-How should repository changes between successful Task Submission and Change Start affect Task Approval beyond the accepted ancestry rule?
-Should tree-equivalent history repair preserve approval after a force-push?
-
-### Related Task discovery
-
-Should Planning Review discover related Tasks beyond direct dependency edges?
-If so, which bounded search and typed relationship model prevents prompt growth and false dependencies?
-The search must include Done and Cancelled Tasks because they contain implementation and failed-approach evidence.
-
-### Conditional Validation Reviewers
-
-Should Specialist Review selection depend on changed paths, Task metadata, or other evidence?
-How can conditional selection remain inspectable in the Validation Policy Snapshot?
-
-### Planning observability
-
-Which measurements justify their storage cost?
-Candidate measurements include review duration, token use, attempts per Task, Spike frequency, and later issues that Planning Review did or did not detect.
-Workspace creation and Repository Preparation duration belong to this question.
-
-## Approval
-
-The operator previously approved the detailed lifecycle design, ownership boundaries, and four-slice sequence preserved in this file.
-The later lifecycle and evidence review superseded approval to create Tasks from that detail without refresh.
-The planning capability remains accepted, but its complete current target and implementation slices are unapproved.
-Exact configuration, lifecycle, evidence, and persistence choices require renewed operator review.
-Deferred questions remain unapproved and outside implementation.
-The applicable SQLite Tasks must eventually own implementation requirements.
-Remove this working plan after refreshed Tasks and current architecture contain every accepted requirement and each deferred question has an authoritative disposition.
+# Task Review and Task Submission plan
+
+> This file is a non-authoritative working plan.
+> It does not describe current product behavior or authorize implementation.
+> SQLite Tasks become the implementation authority only after the Operator approves this complete plan and separately authorizes Task recording.
+
+## Required outcome
+
+But Why must review a New Task against repository evidence before the Task becomes approved.
+The review must determine whether the requested outcome is real, necessary, correctly scoped, and supported by a proportionate Task Verification Contract.
+
+Task Submission must replace direct Task approval.
+A passing Task Review must move an unlinked New Task to Todo without a second approval step.
+A blocking result must preserve actionable Findings without approving the Task.
+
+A later slice must let the Operator revise or explicitly reconsider an approved Task without silently invalidating approval or losing historical review evidence.
+
+## Domain ownership and language
+
+Task Intent owns Task Review and Task Submission.
+Task Review consumes repository runtime capabilities but is not part of Change Validation.
+
+The canonical terms are:
+
+- **Task Review**: One durable repository-aware judgment of one Task proposal.
+- **Active Task Review**: The one Task Review for a Task that has started but has no final outcome.
+- **Task Review Finding**: One material problem that blocks approval of the reviewed proposal.
+- **Task Review Base**: The exact Git commit used as repository evidence.
+- **Task Review Policy Snapshot**: The resolved immutable reviewer and execution policy for one Task Review.
+- **Task Review Workspace**: The disposable exact-commit workspace used by the reviewer.
+- **Task Review Tooling Failure**: A failure that prevents a trustworthy reviewer judgment.
+- **Task Reviewer Session**: The Task-owned continuation identity for reviewer execution.
+- **Task Reviewer Transcript**: The retained complete JSONL transcript for one Task Reviewer Session.
+- **Task Submission Authorization**: The Operator's explicit permission to submit one exactly presented Task proposal for Task Review.
+
+The design does not add a generic Review, Run, Finding, or Tooling Failure domain.
+Planning Review remains only a possible future term for review above one Task.
+
+## Review scope
+
+One Task Review reviews one complete Task proposal.
+The proposal consists of the exact Task Context and exact direct Task Dependency set.
+
+The reviewer must determine whether:
+
+- the claimed problem or required outcome exists at the Task Review Base;
+- current repository behavior already satisfies the outcome;
+- current behavior can be reused or configured instead of replaced;
+- new repository work is necessary;
+- the Task has one coherent scope suitable for one Change;
+- the direct Task Dependencies express real implementation or verification prerequisites;
+- the Task Verification Contract addresses the material risks with proportionate evidence; and
+- existing tests or other evidence already establish the required claims.
+
+If the required outcome already exists, the reviewer must return a Finding rather than approve unnecessary work.
+The reviewer may recommend Task revision, another prerequisite Task and Change, bounded external evidence gathering, external setup, or cancellation.
+The reviewer must not mutate Task or Change lifecycle state.
+The reviewer must not prescribe a detailed implementation plan or review an initiative spanning several Tasks.
+
+Later implementation evidence can still establish that no repository change is required.
+The current supported Change and Task cancellation behavior handles that result; Task Review must not reintroduce the retired durable No-Change completion concept.
+
+## Review input and repository evidence
+
+Every new Task Review receives:
+
+- the complete current Task Context;
+- the exact current direct Task Dependency IDs;
+- point-in-time evidence for each direct dependency;
+- the exact Task Review Base commit;
+- the resolved Task Review Policy Snapshot;
+- the previous applicable Task Review outcome when one exists; and
+- a deterministic proposal diff from the previous reviewed proposal when one exists.
+
+Direct dependency evidence contains each dependency's ID, lifecycle state, complete Task Context, and direct dependency IDs.
+It does not automatically contain reverse dependents, similar Tasks, the complete Task inventory, or transitive dependency contexts.
+The reviewer may use supported read-only Task commands when material evidence requires further inspection.
+
+An unfinished dependency does not by itself produce a Finding.
+A missing, unclear, contradictory, or materially unresolved prerequisite can produce a Finding.
+Change Start continues to require every Task Dependency to be Done.
+
+The previous outcome and proposal diff are navigation evidence only.
+But Why must not persist a separate review reason or generated diff.
+
+## Task Review Base
+
+Task Submission uses the current commit of the canonical main checkout's local default branch as the Task Review Base.
+The Task Review Base is identified by the exact Git commit.
+
+Task Submission must not:
+
+- fetch or synchronize a remote branch;
+- require the commit to be published;
+- accept an alternate base;
+- include uncommitted files;
+- require a clean canonical checkout;
+- warn about uncommitted files;
+- record a tree SHA; or
+- calculate changed paths, commit counts, ancestry, or stale status after review.
+
+The structured result identifies the reviewed commit.
+Repository drift after review does not invalidate Task Approval or block Change Start.
+An Implementer may inspect Git history when later evidence makes drift relevant.
+
+## Task data and retained evidence
+
+Task Review reads current Task data through Task-owned persistence interfaces.
+SQLite remains the current Task backend.
+A possible future external Task backend does not change first-version behavior.
+
+Shared Repository State retains Task Review records independently of the current Task backend.
+Each Task Review retains:
+
+- identity and order;
+- Task identity;
+- exact reviewed Task Context;
+- exact reviewed direct Task Dependency set;
+- exact captured direct dependency evidence;
+- Task Review Base commit;
+- Task Review Policy Snapshot;
+- start and completion times;
+- active or completed state;
+- passed, findings, or tooling-failed outcome;
+- complete Task Review Findings or Task Review Tooling Failure;
+- Task Reviewer Session references; and
+- Task Reviewer Transcript references.
+
+A Task Review does not retain a separate Task Approval record, current-result pointer, relevant-file list, stale flag, generated proposal diff, review-reason field, tree SHA, or Artifact reference.
+
+Task Review history, Findings, snapshots, session references, and transcript references remain immutable after the Task becomes Done or Cancelled.
+The first version retains this evidence permanently.
+It does not add pruning, retention settings, archive commands, or mutable Finding resolution.
+
+## Current judgment and reuse
+
+The current Task Review judgment is the newest completed passed or Finding-blocked Task Review that exactly matches the current Task Context and direct Task Dependency set.
+An Active Task Review does not replace the current completed judgment.
+A tooling-failed Task Review supplies no judgment and does not replace an earlier passed or Finding-blocked judgment.
+
+Ordinary Task Submission reuses a matching completed judgment.
+A passed judgment returns approval without another reviewer call.
+A Finding-blocked judgment returns the existing Findings without another reviewer call.
+A tooling-failed review permits another Task Review.
+
+Changes to repository state, Task Review Base, policy, reviewer configuration, or direct dependency content and lifecycle state do not invalidate a matching judgment.
+Only a changed Task Context or changed direct Task Dependency set prevents exact proposal reuse.
+
+`--rerun` bypasses completed-result reuse and requests another judgment of the unchanged proposal.
+It does not request a fresh Task Reviewer Session.
+
+## Submission flow
+
+Task Submission and Task Review abandonment hold one per-Task Execution Lock with owner `task_submission` and the Task ID as its key for the complete command operation.
+Lock contention reports a Task Review operation in progress, does not claim whether Submission or abandonment owns the lock, and makes no durable change.
+This operational contention result is distinct from the durable Active Task Review result returned after the lock is acquired.
+
+Task Submission performs these steps in order:
+
+1. Load the current Task and verify that its lifecycle and Change linkage permit submission.
+2. Return the existing Active Task Review when one exists.
+3. Unless `--rerun` was requested, return the lifecycle approval of an existing Todo Task that has no matching Task Review without creating Review history.
+4. Unless `--rerun` was requested, return a reusable passed or Finding-blocked result before resolving repository execution inputs.
+5. Resolve the Task Review Base, Repo Config, Global Config, reviewer policy, and workspace inputs only when a new Review is required.
+6. Complete deterministic preflight before creating the durable Active Task Review.
+7. In one immediate SQLite admission transaction, reread lifecycle, Change linkage, Task Context, dependencies, and Active Review state; reject a proposal that changed after the command loaded it; and atomically persist the Active Review with the exact proposal, direct dependency evidence, Base, and policy.
+8. Run the reviewer, clean up disposable workspace state, and idempotently index every Task Reviewer Session JSONL file observed by the Review into immutable transcript references.
+9. Only after cleanup and transcript indexing succeed, use one compare-and-set SQLite completion transaction to require the same Active Review, atomically persist its outcome with the slice-specific Task lifecycle transition, and remove its Active Review marker.
+
+A SQLite uniqueness constraint permits at most one Active Task Review per Task.
+Task mutation and cancellation transactions reject when that Task has an Active Task Review.
+A preflight failure creates no Task Review history.
+A failure after durable Review creation must leave inspectable active or completed evidence suitable for explicit recovery.
+
+## Findings and tooling failures
+
+Every Task Review Finding blocks approval.
+A Finding contains:
+
+- title;
+- description;
+- evidence; and
+- relevant repository files when known.
+
+Task Review uses the shared core reviewer Finding fields.
+Its Task-owned structured-output contract and decoder exclude Validation-only Artifact references.
+This does not weaken or change the existing Change Validation `reviewerOutput` contract.
+Task Review does not add severity, category, Artifact references, or a Needs Input outcome.
+Nonblocking suggestions remain only in the Task Reviewer Transcript.
+
+A Task or available-evidence problem is a Finding.
+A But Why, Repository Preparation, reviewer runtime, configured tool, workspace, or structured-output problem that prevents trustworthy judgment is a Task Review Tooling Failure.
+A deterministic preflight failure before Task Review creation returns a command error and creates no Task Review history.
+
+A later Task Review determines whether an earlier Finding remains.
+Findings do not have a mutable resolved flag.
+
+## Task Reviewer Sessions and transcripts
+
+Task Reviewer Sessions are Task-owned and do not change the Change-owned Reviewer Session domain.
+The first version uses one Task Reviewer and no review phases or Specialist Reviewers.
+
+A later Task Review continues the Task's most recent Task Reviewer Session when that session remains usable and compatible with the selected reviewer configuration, including when the proposal changed.
+Every continued review receives the complete current proposal and applicable deterministic diff.
+
+`--rerun` continues the existing compatible and usable session.
+The first Task Review starts a fresh session.
+A later Review starts a fresh session only when no earlier session exists or the most recent session is proven unusable or incompatible.
+The first version does not expose a fresh-session or second-opinion option.
+
+But Why retains the complete JSONL transcript from every Task Reviewer Session, including restarted or superseded sessions.
+Before a Task Review completes or is successfully abandoned, it idempotently discovers every Task Reviewer Session JSONL file observed by that Review and records one immutable transcript reference per file.
+A transcript-indexing failure leaves the Review active, reports the failed indexing operation, and permits recovery through successful abandonment after the indexing obstacle is resolved.
+Completed Reviews therefore already have retained transcript references before the Task can become Done or Cancelled.
+Task terminal transitions do not add a Task Terminal Cleanup lifecycle, remove Task Reviewer Session history, or repeat transcript indexing.
+
+Existing Change Validation transcript behavior remains unchanged.
+Validation retains the Acceptance Reviewer and every Specialist Reviewer transcript, including restarted or superseded sessions.
+Prepare and Check phases retain their existing evidence rather than reviewer transcripts.
+
+## Workspace and shared mechanisms
+
+Every new Task Review creates a disposable Task Review Workspace at the exact Task Review Base.
+It runs configured Repository Preparation in that workspace.
+It must not modify the canonical checkout.
+It attempts to remove the disposable workspace and temporary ref after reviewer execution and before completing the Review.
+A setup or execution failure completes the Review as tooling failed only after workspace cleanup and transcript indexing succeed.
+A cleanup or transcript-indexing failure records the exact failure, leaves the Review active, and does not approve or revoke the Task.
+The Operator may resolve the reported obstacle or remove the exact orphaned disposable resources with repository-safe external tooling, then use Task Review abandonment to retry cleanup and indexing.
+
+Task Review does not automatically run configured Validation Checks.
+The reviewer may run focused tests, searches, and commands needed to judge the Task.
+Task Review does not create, store, inspect, or clean up Artifacts.
+A reused result returns before workspace creation or Repository Preparation.
+
+The first implementation slice may extract only the low-level mechanisms required by both Task Review and Change Validation:
+
+- reviewer process execution;
+- injected reviewer output correction and contract handling;
+- session-file and transcript mechanics; and
+- disposable commit-workspace mechanics, including temporary refs, Sandcastle worktrees, exact-head checks, scoped execution, interruption, and cleanup.
+
+Task and Change domain wrappers, records, persistence, errors, policies, sessions, and lifecycle cleanup remain separate.
+The extraction must not create a generic review framework or become a separate implementation Task.
+
+## Configuration
+
+Task Review reads Repo Config from the exact Task Review Base for Repository Preparation, Agent Environment, Task Reviewer overrides, and Repo Agent Profiles.
+It reads current Global Config for the default Task Reviewer and Global Agent Profiles.
+
+Repo Config and Global Config each gain an optional `review.task` object with the same `agentProfile` and optional `instructionsFile` shape used by `review.acceptance`.
+Task Review resolves Repo selection before Global selection, then uses `defaultAgentProfile`, following current Acceptance Reviewer precedence.
+Task Review resolves Repo instructions before Global instructions, then uses built-in Task Review instructions.
+The built-in instructions require the reviewer to apply the strict Task Dependency definition and the complete Task Verification Contract rules from the portable But Why guidance.
+The implementation must use the same Agent Profile resolution and resource rules that current reviewers use.
+
+Task Submission resolves one immutable Task Review Policy Snapshot before creating a Task Review.
+Later configuration changes do not alter historical Reviews or invalidate approval.
+Task inspection does not label an approval stale or suggest rerun because configuration changed.
+
+## Authorization and output
+
+Task Submission Authorization is distinct from Task Recording Authorization, Task Approval, and Implementation Authorization.
+The planning agent must present the exact Task Context and direct Task Dependency set before asking the Operator for Task Submission Authorization.
+That authorization applies only to the presented proposal.
+The CLI does not persist a separate authorization record, digest, or token.
+The planning agent owns exact proposal presentation, while Task Submission rejects a concurrent proposal change between its initial load and durable Review admission.
+A revised proposal or explicit `--rerun` requires another authorization.
+
+A passing Task Review moves a New Task to Todo without a second human confirmation.
+
+`by task submit` follows the concise result pattern of `by change submit`.
+It reports the Task Review result, Findings when needed, reviewed commit, and actionable next command without repeating the complete Task Context or dependency evidence.
+The command waits for the final result and returns one structured result.
+Human-readable progress may use stderr under the repository's current CLI output contract.
+
+But Why does not add a queue, detached worker, polling command, or notification system.
+An external agent host may run the synchronous command in the background.
+
+## Active Review and abandonment
+
+Persistence permits at most one Active Task Review per Task.
+Another submission reports the existing Active Task Review instead of creating a second Review.
+
+Task Context mutation, Task Dependency mutation, Task revision, and cancellation reject while a Task has an Active Task Review.
+Direct dependency Tasks remain independently mutable.
+
+But Why does not infer that interrupted reviewer processes are dead.
+After the Operator stops every process owned by an interrupted Review, `by task-review abandon <review-id>` acquires the same per-Task Execution Lock, attempts to remove the exact Task Review Workspace and temporary ref, idempotently indexes every observed Task Reviewer Session transcript, and uses a compare-and-set transaction to persist Tooling Failure and remove the Active Review marker atomically.
+If cleanup or transcript indexing cannot be verified, abandonment reports the exact failure, records that tooling evidence, and leaves the Review active for another recovery attempt.
+The Operator may resolve the reported cleanup obstacle or remove the exact orphaned disposable resources with repository-safe external tooling, then retry abandonment.
+Successful abandonment preserves Review and transcript evidence.
+Abandonment does not delete history or resolve Findings.
+
+## CLI surface
+
+The complete four-slice interface is:
+
+- `by task submit <task-id> [--rerun]`;
+- `by task revise <task-id>`;
+- `by task reviews <task-id>`;
+- `by task-review show <review-id>`; and
+- `by task-review abandon <review-id>`.
+
+`by task show` reports the current Task Review summary and the valid next command.
+`by task reviews` reports ordered history.
+`by task-review show` reports one complete Review, including Findings or Tooling Failure and transcript navigation.
+
+The design does not add separate approval, retry, resume, findings, Artifact, global Review listing, or stale-status commands.
+`by task approve` is removed without a compatibility alias because But Why is unreleased and no supported external caller requires an old and new submission interface to coexist.
+
+Task Submission accepts only unlinked New and Todo Tasks.
+It rejects Change-linked, Done, and Cancelled Tasks.
+Review history remains inspectable after Change Start and terminal Task lifecycle transitions.
+
+## Delivery slices
+
+The implementation uses four vertical slices.
+Slice 1 protects approved Task intent.
+Slice 2 adds the complete first Task Review and approval path.
+Slices 3 and 4 add independent revision and rerun capabilities after Slice 2.
+
+Cancelled Tasks BY-154 and BY-155 are not prerequisites and do not establish accepted behavior.
+Slice 2 depends on completed Tasks BY-54, BY-83, and BY-157 because it reuses the owner-keyed SQLite Execution Lock and shared core reviewer Finding contract and captures the simplified Task Context after removal of Task Comments.
+Later slices inherit that prerequisite transitively.
+Slice 1 has no Task prerequisite.
+
+### Verification admission for every slice
+
+Durable evidence is required only when it protects accepted behavior or an invariant from a distinct regression that retained evidence and proportionate one-time inspection cannot establish.
+Reuse, update, or consolidate evidence at the narrowest reliable owning seam.
+Use a real SQLite or Git boundary only when the claim includes transaction, persistence, migration, or repository identity behavior that a lower seam cannot establish.
+Use targeted diff, search, schema inspection, and documentation inspection for removal and absence claims.
+Do not add durable tests whose only purpose is to prove that Task Review has no Artifacts, severity, stale state, generic framework, durable Revision record, or compatibility alias.
+Run focused evidence and the applicable mandatory repository gates identified by `docs/tooling.md`.
+
+### Slice 1: Protect approved Task intent
+
+**Outcome**
+
+An approved Todo Task retains the exact Task Context and direct Task Dependency set that the Operator approved.
+Direct approval remains available until Slice 2 replaces it.
+
+**Required behavior**
+
+Slice 1 must:
+
+- reject Task Context application for every Todo Task, including an identical draft;
+- reject dependency add, remove, replace, and clear operations for every Todo Task;
+- continue to reject durable intent mutation for Change-linked and terminal Tasks;
+- keep New Task Context and dependencies editable;
+- keep `by task context draft` available because it creates only a disposable file;
+- preserve existing Todo Tasks as startable;
+- keep `by task approve` available; and
+- report that an approved Task is immutable without suggesting the unavailable `by task revise` command.
+
+Slice 1 does not add Task Review records, commands, lifecycle, or schema.
+
+### Slice 2: Review New Tasks before approval
+
+**Outcome**
+
+An unlinked New Task can become Todo only through a completed passing Task Review of its exact proposal and repository evidence.
+Existing Todo Tasks remain approved without fabricated Task Review history.
+
+**Dependency**
+
+Slice 2 depends on Slice 1 because Task Submission cannot approve exact intent while approved Todo intent remains mutable.
+Slice 2 also depends on completed Task BY-54 because it reuses the owner-keyed SQLite Execution Lock, completed Task BY-83 because it reuses the shared core reviewer Finding contract, and completed Task BY-157 because Task Review must capture the simplified complete Task Context after Task Comments were retired.
+
+**Required behavior**
+
+Slice 2 must:
+
+- add Task Review persistence, history, Findings, Tooling Failures, policy snapshots, Task Reviewer Sessions, and transcript references;
+- add a Task-owned reviewer structured-output contract and decoder that reuse the shared core Finding fields without Validation-only Artifact references;
+- provide built-in Task Review instructions that require the strict Task Dependency definition and complete Task Verification Contract rules;
+- append migration `0025` after migration `0024`;
+- implement deterministic preflight, exact Task Review Base resolution, workspace preparation, reviewer execution, cleanup, completed-result reuse, interruption recovery, and abandonment;
+- add `by task submit <task-id>` for unlinked New Tasks and ordinary inspection of existing Todo approval;
+- move New to Todo only after a passing Review;
+- leave New unchanged after Findings or Tooling Failure;
+- return a matching passed or Finding-blocked result before policy, workspace, preparation, or reviewer execution;
+- create a new Review when the Task Context or direct Task Dependency set changed;
+- permit another ordinary submission after Tooling Failure;
+- remove `by task approve` without a compatibility alias;
+- add `by task reviews`, `by task-review show`, and `by task-review abandon`;
+- add the Task Review summary to `by task show` without revision or rerun guidance;
+- preserve existing Todo Tasks as startable without a legacy marker or fabricated Review;
+- keep `--rerun` absent from Task Submit syntax until Slice 4;
+- reject durable Task mutation and cancellation while a New Task has an Active Task Review;
+- preserve complete Task Review and transcript evidence after Task terminal transitions; and
+- perform only the bounded shared-mechanism extraction defined above.
+
+Slice 2 does not add explicit rerun or Task revision.
+It does not need a Change Start guard because only New Tasks can have an Active Task Review and New Tasks cannot start a Change.
+
+### Slice 3: Revise approved Task intent
+
+**Outcome**
+
+The Operator can explicitly move an unlinked Todo Task to New before changing its approved intent.
+
+**Dependency**
+
+Slice 3 depends on Slice 2 because revision returns an approved Task to the New lifecycle and relies on Task Submission to approve that proposal again.
+
+**Required behavior**
+
+Slice 3 must:
+
+- add `by task revise <task-id>`;
+- move an unlinked Todo Task to New without changing its Task Context or dependencies;
+- make revision of a New Task without an Active Task Review a successful idempotent no-op;
+- reject revision for Change-linked, Done, Cancelled, or actively reviewed Tasks;
+- preserve historical Task Review evidence without a durable Revision record;
+- add `by task revise <task-id>` as the Todo mutation result's required next action;
+- add revision guidance to `by task show`; and
+- let an exactly restored proposal receive the matching passed-Review reuse behavior owned by Slice 2.
+
+### Slice 4: Recheck unchanged Task proposals
+
+**Outcome**
+
+The Operator can request another judgment of an unchanged New or Todo proposal without silently losing an existing approval.
+
+**Dependency**
+
+Slice 4 depends on Slice 2 because rerun extends Task Submission and the Task Review lifecycle that Slice 2 introduces.
+Slice 4 does not depend on Slice 3 because reconsidering an unchanged approved proposal does not require intent revision.
+Slices 3 and 4 may proceed independently after Slice 2.
+
+**Required behavior**
+
+Slice 4 must:
+
+- add `by task submit <task-id> --rerun` for unlinked New and Todo Tasks;
+- bypass completed-result reuse while continuing the most recent usable compatible Task Reviewer Session;
+- let New rerun pass move the Task to Todo;
+- leave New after rerun Findings, Tooling Failure, or successful abandonment;
+- preserve Todo and its prior approval while the rerun is active;
+- keep Todo and replace the current judgment after a passing rerun;
+- move Todo to New after a Finding-blocked rerun;
+- keep Todo and preserve its previous judgment after Tooling Failure or successful abandonment;
+- extend Slice 2's Active Review mutation and cancellation guard to Todo Tasks; and
+- block Change Start while a Todo Task has an Active Task Review.
+
+## Proposed Task graph for recording
+
+The Tasks must be recorded in this order so that the returned Task IDs can be used as direct dependencies:
+
+1. Protect approved Task intent.
+2. Review New Tasks before approval, with direct dependencies on Task 1 and completed Tasks BY-54, BY-83, and BY-157.
+3. Revise approved Task intent, with a direct dependency on Task 2.
+4. Recheck unchanged Task proposals, with a direct dependency on Task 2.
+
+Task 1 has no direct dependency because its bounded result uses the current Task lifecycle and persistence behavior.
+Task 2 cannot implement or verify exact reviewed approval until Task 1 makes approved intent immutable.
+It requires BY-54's reusable owner-keyed SQLite Execution Lock, BY-83's reusable core reviewer Finding contract, and BY-157's simplified complete Task Context.
+Task 3 cannot implement or verify reapproval after revision until Task 2 provides Task Submission and retained Task Review judgments.
+Task 4 cannot implement or verify explicit reconsideration until Task 2 provides Task Submission, Active Task Review, and retained judgments.
+Task 4 does not depend on Task 3 because unchanged-proposal reconsideration does not use revision.
+After recording, verify that every new Task is New, unapproved, has the exact direct dependencies, and has no Change.
+
+BY-158 and BY-159 own simplification and safe decoding of Change Validation Policy Snapshots.
+The Task Review work must not modify or duplicate `CandidateValidationPolicySnapshot` or its Change-owned SQLite representation and decoding.
+Neither Task is a prerequisite for the Task-owned policy and persistence behavior in this graph.
+
+### Exact Task Context 1: Protect approved Task intent
+
+#### Outcome
+
+An approved Todo Task retains the exact Task Context and direct Task Dependency set that the Operator approved.
+Direct Task approval remains available until Task Submission replaces it.
+
+#### Acceptance criteria
+
+- Applying Task Context rejects every Todo Task, including when the proposed Context is identical.
+- Adding, removing, replacing, or clearing Task Dependencies rejects every Todo Task.
+- Durable Task intent mutation continues to reject Change-linked, Done, and Cancelled Tasks.
+- An unlinked New Task remains editable.
+- Task Context draft creation remains available because it does not mutate durable Task intent.
+- Existing Todo Tasks remain eligible for Change Start under the current rules.
+- `by task approve` remains available.
+- A rejected Todo mutation explains that approved intent is immutable without directing the Operator to an unavailable revision command.
+
+#### Constraints
+
+- Do not add Task Review records, commands, lifecycle, persistence, or schema.
+- Preserve the current strict Task Dependency definition.
+
+#### Verification
+
+##### Material risks
+
+- Approved Task Context or dependencies can change while the Task remains Todo or after it becomes Change-linked.
+- A protection intended for approved Tasks can accidentally prevent New Task authoring or existing Todo Change Start.
+- CLI guidance can direct an Operator to a command that does not exist in this slice.
+
+##### Required claims
+
+- Todo, Change-linked, and terminal Task intent mutations reject without changing stored Context or dependencies.
+- Unlinked New Task Context and dependencies remain editable.
+- Existing Todo Tasks remain startable, Task Context drafts remain available, and direct approval remains available.
+- Todo mutation output describes current immutable behavior and only current next actions.
+
+##### Required evidence
+
+- Update the existing real-SQLite Task persistence and dependency evidence to cover the lifecycle and mutation combinations whose stored-state invariants change.
+- This durable boundary evidence is proportionate because transaction and persistence regressions could change approved intent, and source inspection or lower-level evidence cannot establish unchanged stored state.
+- Update existing in-process Task CLI evidence for the changed mutation result and guidance.
+- Reuse existing Change Start, Task Context draft, dependency validation, terminal-state, and CLI process evidence where it already establishes unchanged behavior.
+- Use focused inspection for the absence of Task Review schema and commands rather than adding absence tests.
+- Run applicable mandatory repository gates.
+
+##### Escalation
+
+- Escalate if any current supported workflow requires editing Todo Task intent, because that conflicts with the approved-intent invariant and requires an explicit lifecycle decision.
+
+##### Not required
+
+- Task Review, Task Submission, Task revision, and schema migration are not required.
+
+### Exact Task Context 2: Review New Tasks before approval
+
+#### Outcome
+
+An unlinked New Task can become Todo only through a completed passing Task Review of its exact proposal and repository evidence.
+Existing Todo Tasks remain approved without fabricated Task Review history.
+
+#### Acceptance criteria
+
+- `by task submit <task-id>` accepts an unlinked New Task and returns one synchronous structured Task Review result.
+- A passing Task Review atomically moves the reviewed New Task to Todo.
+- Findings leave the Task New and include actionable evidence without approving it.
+- Tooling Failure leaves the Task New and permits a later ordinary submission.
+- Ordinary submission reuses the newest completed passed or Finding-blocked Review whose Task Context and direct Task Dependency set exactly match the current proposal.
+- A changed Task Context or direct Task Dependency set causes a new Review.
+- Changes only to repository state, Base, policy, configuration, direct dependency content, or direct dependency lifecycle do not invalidate a matching judgment.
+- A matching result returns before repository execution inputs are resolved or reviewer work starts.
+- A Task Review records the exact proposal, direct dependency evidence, local default-branch commit, immutable policy, outcome, Findings or Tooling Failure, sessions, and transcript references defined by this plan.
+- The reviewer receives the complete required authority, the prior applicable outcome, and the deterministic proposal diff when one exists.
+- The Task Review Base and disposable workspace identify the exact current commit of the canonical checkout's local default branch and exclude uncommitted canonical-checkout content.
+- Configured Repository Preparation runs in the disposable workspace, and automatic Validation Checks do not run.
+- One Task Reviewer uses the resolved Repo-before-Global Task Reviewer profile and instructions, with the built-in instructions as fallback.
+- The built-in instructions require the strict Task Dependency definition and complete Task Verification Contract rules.
+- Task Review structured output uses Task-owned decoding and the shared core Finding fields without Validation-only Artifact references.
+- Compatible usable Task Reviewer Sessions continue across later Reviews, and complete transcripts from every observed session file are indexed before completion or successful abandonment.
+- Cleanup or transcript-indexing failure leaves the Review active, records the exact failure, and does not change Task approval.
+- Successful abandonment records Tooling Failure and removes the Active Review only after cleanup and transcript indexing succeed.
+- Per-Task operation locking, transactional admission, one-active-Review uniqueness, proposal rereading, mutation and cancellation guards, and compare-and-set completion preserve one exact reviewed proposal.
+- `by task reviews`, `by task-review show`, `by task-review abandon`, and the Task Review summary in `by task show` expose the result and valid next action.
+- Existing Todo Tasks remain startable and inspectable as approved without a legacy marker or fabricated Review.
+- `by task approve` is removed without an alias, and `--rerun` and Task revision remain unavailable.
+- Task Review evidence remains inspectable after Change Start, Done, or Cancelled.
+- Portable planning guidance requires one Task Submission Authorization for the exact presented Context and direct dependency set and distinguishes it from Task Recording, Task Approval, and Implementation Authorization.
+
+#### Constraints
+
+- Append immutable Effect SQL migration `0025` after `0024`; do not rewrite historical migrations.
+- Task Intent owns Task Review records, lifecycle, persistence interfaces, commands, policy, sessions, errors, and Task Submission.
+- Keep Change Validation records and the Change-owned Validation Policy Snapshot separate, including work owned by BY-158 and BY-159.
+- Reuse the owner-keyed SQLite Execution Lock established by BY-54 and the shared core reviewer Finding contract established by BY-83.
+- Shared extraction is limited to reviewer execution, injected output correction and contract handling, session-file and transcript mechanics, and disposable exact-commit workspace mechanics.
+- Do not create a generic review framework or generic Review, Finding, Run, or Tooling Failure domain.
+- Do not add rerun, revision, detailed implementation planning, multi-Task review, Artifacts, severity, categories, Needs Input, stale status, alternate bases, queues, polling, or detached workers.
+- The CLI does not persist Task Submission Authorization.
+- Preserve existing Change Validation transcript and terminal cleanup behavior.
+
+#### Verification
+
+##### Material risks
+
+- Completion can approve a proposal other than the one admitted for review or leave lifecycle and Review state partially committed.
+- Concurrent submission, mutation, cancellation, completion, or abandonment can create competing Reviews or corrupt the active marker.
+- Reuse can return a judgment for a different proposal or perform unnecessary repository and reviewer work.
+- The reviewer can receive incomplete authority, wrong repository content, wrong policy, or malformed structured output.
+- Workspace, session, transcript, cleanup, or interruption behavior can lose evidence or modify the canonical checkout.
+- New persisted structures or migration behavior can admit malformed state or damage existing Task facts.
+- CLI and portable guidance can obscure the result, valid recovery action, or required human authority.
+- Bounded low-level extraction can regress Change Validation or become an unsupported generic framework.
+
+##### Required claims
+
+- Admission, completion, and abandonment preserve one exact proposal and atomically apply the specified New-to-Todo or New-preserving outcomes.
+- Operation locking, storage uniqueness, transactional guards, and compare-and-set completion prevent conflicting active work and intent mutation.
+- Exact matching reuse and changed-proposal behavior use only Task Context and direct Task Dependency identity, and reuse performs no repository or reviewer preparation.
+- Reviewer input, Base, workspace, configuration, policy snapshot, structured output, session continuation, transcript retention, and cleanup satisfy the accepted behavior.
+- Every new persisted complex Task Review value is decoded at its owning boundary, and fresh or upgraded databases preserve valid current state.
+- CLI commands, structured results, help, Task inspection, and portable guidance expose the supported workflow and authority boundaries.
+- Existing Todo compatibility and Change Validation behavior remain intact without fabricated history or duplicate broad evidence.
+
+##### Required evidence
+
+- Maintain real-SQLite evidence for Task Review admission, all first-slice outcomes, exact proposal capture, active uniqueness, transactional mutation and cancellation guards, compare-and-set completion, valid round trips, malformed persisted values, and retained history.
+- This durable evidence is necessary because persistence and atomic lifecycle regressions can approve the wrong intent, and test doubles or one-time inspection cannot establish SQLite transaction behavior.
+- Reuse BY-54's separate-process Execution Lock evidence and extend the real CLI/process seam only as needed to establish same-Task Task Submission exclusion and release; use cheaper seams for Task Review state variants.
+- Separate-process evidence is proportionate for this claim because in-process SQLite evidence cannot establish ownership across processes, while the existing owner-keyed primitive keeps the added lifecycle cost bounded.
+- Maintain focused orchestration evidence with captured collaborators for reviewer input, exact reuse short-circuiting, changed proposals, Tooling Failure retry, policy resolution, session continuation, cleanup, transcript indexing, and abandonment.
+- Maintain focused real-Git evidence for local default-branch Base resolution, dirty-checkout exclusion, exact workspace head, and canonical-checkout isolation because mocked repository identity cannot establish those claims.
+- Update migration evidence for fresh initialization at `0025` and upgrade from `0024` with representative existing Task facts.
+- Update existing configuration, in-process CLI, command-tree, help, Task inspection, package, and portable-guidance evidence at their owning seams.
+- Run existing affected reviewer-runtime, Validation Workspace, Validation abandonment, session, transcript, and Change Submission evidence after shared extraction; add new broad Change Validation tests only if an accepted behavior lacks an owning regression seam.
+- Use focused type checking, diff, search, schema inspection, and documentation inspection for ownership, removal of direct approval, absence of unsupported concepts, and unchanged historical migrations.
+- Run applicable mandatory repository gates.
+
+##### Escalation
+
+- Escalate if exact Task data cannot be read and admitted atomically through the current SQLite ownership boundary.
+- Escalate if the current reviewer runtime cannot retain every observed session transcript before completion without changing Change Validation semantics.
+- Escalate if a supported external caller requires `by task approve` to coexist with Task Submission.
+- Escalate if Task Review policy must share the Change-owned Validation Policy Snapshot representation.
+
+##### Not required
+
+- Reviewer judgment quality, explicit rerun, Task revision, Specialist Task Reviewers, Artifact handling, external Task backends, retention controls, and automatic implementation are not required.
+
+### Exact Task Context 3: Revise approved Task intent
+
+#### Outcome
+
+The Operator can explicitly move an unlinked Todo Task to New before changing its approved intent.
+
+#### Acceptance criteria
+
+- `by task revise <task-id>` moves an unlinked Todo Task to New without changing its Task Context or direct Task Dependencies.
+- Revision of an unlinked New Task without an Active Task Review succeeds as an idempotent no-op.
+- Revision rejects Change-linked, Done, Cancelled, and actively reviewed Tasks without changing stored state.
+- Historical Task Review evidence remains unchanged, and revision creates no durable Revision record.
+- Rejected Todo intent mutation identifies `by task revise <task-id>` as the required next action.
+- `by task show` identifies revision as the valid action for an unlinked Todo Task.
+- When later edits restore the exact previously passed proposal, ordinary Task Submission receives the exact matching reuse behavior introduced by the prerequisite Task.
+
+#### Constraints
+
+- Do not add a schema migration or durable Revision record.
+- Do not change Task Review proposal identity or reuse rules.
+- Do not add rerun behavior.
+
+#### Verification
+
+##### Material risks
+
+- Revision can alter approved intent, admit an invalid lifecycle transition, or erase historical evidence.
+- Revision guidance can let mutation bypass the required return to New.
+- An exactly restored proposal can be treated as different from its retained passed judgment.
+
+##### Required claims
+
+- Todo-to-New and New no-op behavior preserve Context, dependencies, and Review history.
+- Linked, terminal, and actively reviewed Tasks reject revision without stored changes.
+- CLI results and Task inspection identify the valid revision workflow.
+- An exactly restored proposal uses the prerequisite exact-match behavior, while a changed proposal does not.
+
+##### Required evidence
+
+- Update the owning real-SQLite Task lifecycle evidence for Todo-to-New, New idempotence, rejected states, unchanged intent, and retained Review history.
+- Durable persistence evidence is proportionate because revision changes approval lifecycle and an accidental stored-intent mutation cannot be established by source inspection alone.
+- Extend the prerequisite captured-collaborator reuse evidence with the observable restored-proposal path rather than duplicating the reuse algorithm's coverage.
+- Update existing in-process Task CLI and Task inspection evidence for revision results and next-action guidance.
+- Use schema inspection to establish that no durable Revision record was added.
+- Run applicable mandatory repository gates.
+
+##### Escalation
+
+- Escalate if revision must retain approval while intent changes, because that conflicts with exact-proposal approval.
+- Escalate if a revision audit record becomes a required supported interface, because this Task explicitly relies on retained Task Review history instead.
+
+##### Not required
+
+- A migration, durable Revision history, new Review identity rules, rerun, workspace behavior, and Change Start changes are not required.
+
+### Exact Task Context 4: Recheck unchanged Task proposals
+
+#### Outcome
+
+The Operator can request another judgment of an unchanged New or Todo proposal without silently losing an existing approval.
+
+#### Acceptance criteria
+
+- `by task submit <task-id> --rerun` accepts unlinked New and Todo Tasks and bypasses completed-result reuse.
+- Rerun continues the most recent compatible usable Task Reviewer Session under the existing continuation rules.
+- A passing New rerun moves the Task to Todo.
+- Findings, Tooling Failure, or successful abandonment of a New rerun leave the Task New.
+- A Todo Task remains Todo while its rerun is active.
+- A passing Todo rerun keeps the Task Todo and makes the new passed Review the current judgment.
+- A Finding-blocked Todo rerun moves the Task to New and makes the new Findings the current judgment.
+- Tooling Failure or successful abandonment of a Todo rerun keeps the Task Todo and preserves the previous completed judgment as current.
+- The Active Task Review mutation and cancellation guard also applies to Todo Tasks.
+- Change Start rejects a Todo Task with an Active Task Review and succeeds after an approval-preserving completion when all other prerequisites hold.
+- CLI results identify whether rerun started, completed, or remains active and provide the valid next action.
+- Rerun requires new Task Submission Authorization for the exact presented proposal.
+
+#### Constraints
+
+- Depend only on the Task Submission slice; do not require Task revision.
+- Preserve the existing proposal identity, Base, policy, workspace, reviewer, session compatibility, transcript, cleanup, abandonment, and history contracts.
+- Do not add a fresh-session or second-opinion option.
+- Do not add a migration.
+
+#### Verification
+
+##### Material risks
+
+- Explicit rerun can accidentally reuse a completed judgment or lose session continuity.
+- Reconsidering Todo can silently revoke approval before a trustworthy Finding or preserve approval after a blocking Finding.
+- Change Start, mutation, or cancellation can race with an Active Todo Review.
+- Failure or abandonment can replace the previous current judgment even though no new trustworthy judgment exists.
+
+##### Required claims
+
+- Rerun bypasses reuse and continues the most recent compatible usable session.
+- New and Todo rerun outcomes apply the specified lifecycle and current-judgment behavior atomically.
+- Active Todo Reviews block intent mutation, cancellation, and Change Start through their owning transactional boundaries.
+- CLI and portable authorization guidance distinguish rerun from ordinary reuse and identify the valid next action.
+
+##### Required evidence
+
+- Extend captured-runtime orchestration evidence to establish reuse bypass and session continuation without duplicating existing reviewer-process or restart coverage.
+- Maintain focused real-SQLite evidence for only the distinct New and Todo rerun outcome transitions, preservation or replacement of the current judgment, and Todo mutation and cancellation guards.
+- Maintain focused direct real-SQLite Change Start evidence for rejection during an Active Todo Review and success after approval-preserving completion.
+- These durable transaction tests are proportionate because concurrent lifecycle regressions can start implementation or mutate intent during reconsideration, and lower seams cannot establish atomic admission behavior.
+- Update existing in-process CLI and portable-guidance evidence for `--rerun`, result distinctions, next actions, and renewed Task Submission Authorization.
+- Reuse prerequisite workspace, transcript, cleanup, abandonment, runtime, and real-Git evidence rather than duplicating it.
+- Run applicable mandatory repository gates.
+
+##### Escalation
+
+- Escalate if reconsideration must preserve Todo after a trustworthy blocking Finding, because that conflicts with approval semantics.
+- Escalate if a rerun requires a fresh reviewer identity rather than continuation, because that requires a separate second-opinion design.
+
+##### Not required
+
+- Task revision, a schema migration, duplicate workspace or transcript evidence, fresh-session controls, and new reviewer policy are not required.
+
+## Deferred and excluded work
+
+This plan does not approve:
+
+- review across a Task set or initiative;
+- external Task backends or cross-store coordination;
+- automatic related-Task discovery;
+- a Task relevant-file field;
+- approval staleness or drift guards;
+- alternate Task Review Bases;
+- fresh-session or second-opinion options;
+- Specialist Task Reviewers or review phases;
+- Task Review Artifacts;
+- nonblocking Finding severity or categories;
+- mutable Finding resolution;
+- Task Review pruning or retention configuration;
+- queues, polling, notifications, or detached workers;
+- unattended implementation or automatic fixes;
+- reviewer authority isolation; or
+- a future Annotation mechanism.
+
+Deferred questions remain in `docs/open-questions.md` only when they represent a credible future design question.
+
+## Authority updates after approval
+
+After plan approval, present the exact four Task Contexts and dependency graph below and request separate Task Recording Authorization.
+Record the Tasks only after that explicit authorization.
+Do not update current-system authority to claim unimplemented behavior.
+
+Each implementation slice must update the applicable current authority when its behavior lands, including:
+
+- `docs/context/task-intent/CONTEXT.md` for Task Review, Task Approval, revision, and lifecycle terms;
+- `docs/context/repository-runtime/CONTEXT.md` for retained state and configuration ownership;
+- `docs/architecture.md` for Task Review ownership and workflow boundaries;
+- `docs/cli-output.md` for Task Submission and Review result contracts;
+- `docs/public/` and packaged agent guidance for portable operation; and
+- accepted ADRs when the implemented design changes their constraints.
+
+The obsolete detailed Planning Submission design was removed from this working plan rather than retained as current guidance.
+Git history remains sufficient historical evidence.

@@ -2,19 +2,13 @@
 status: accepted
 ---
 
-# Use forward schema migrations before release
+# Use immutable forward schema migrations before release
 
-But Why preserves current Shared Repository State across schema changes before the first public release.
-Every applied Effect SQL migration is immutable, and each later schema change appends an ordered forward migration instead of rewriting the current baseline.
-
-## Considered Options
-
-- Continue replacing one pre-release baseline and rebuild local state after each schema change.
-- Begin ordered forward migrations before release and carry the resulting chain into the first published version.
+But Why uses immutable ordered forward migrations before the first public release.
+After a migration is applied, a schema change appends a new migration instead of rewriting the applied migration.
+This decision does not require compatibility with a pre-release representation after that representation is explicitly retired.
 
 ## Consequences
 
-Migration `0001_baseline` remains unchanged.
-The Acceptance Reviewer Session schema and later schema changes use the ordered migration chain.
-Each schema-changing Task uses the next available ordered migration and proves that an existing database upgrades without losing supported facts.
+Migration `0001_baseline` and every later applied migration remain unchanged.
 The first public release freezes the complete migration chain shipped in that release rather than collapsing it into a new baseline.

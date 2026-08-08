@@ -129,15 +129,27 @@ const sessionHeaderSessionId = (filePath: string): string | undefined => {
   }
   const firstLine = content.split("\n").find((line) => line.trim().length > 0);
   if (firstLine === undefined) return undefined;
+  const header = parseSessionHeader(firstLine);
+  if (header?.type === "session" && typeof header.id === "string" && header.id.length > 0) {
+    return header.id;
+  }
+  return undefined;
+};
+
+type SessionHeader = Record<string, unknown> & {
+  readonly type?: unknown;
+  readonly id?: unknown;
+};
+
+const parseSessionHeader = (line: string): SessionHeader | undefined => {
+  let value: unknown;
   try {
-    const header = JSON.parse(firstLine) as { readonly type?: unknown; readonly id?: unknown };
-    if (header.type === "session" && typeof header.id === "string" && header.id.length > 0) {
-      return header.id;
-    }
+    value = JSON.parse(line);
   } catch {
     return undefined;
   }
-  return undefined;
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return undefined;
+  return value as SessionHeader;
 };
 
 const isFileSystemError = (error: unknown, code: string): boolean =>
