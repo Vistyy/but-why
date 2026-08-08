@@ -2498,8 +2498,6 @@ describe("repository SQL storage", () => {
             "acceptance-reordered-model",
           );
           const affectedCorrectedText = encodeSqliteCandidateValidationPolicy(affectedPolicy);
-          const reorderedAffectedCorrectedText =
-            encodeSqliteCandidateValidationPolicy(reorderedAffectedPolicy);
           const affectedBuggyText = affectedCorrectedText.replace(
             '"acceptanceReview":{',
             '"acceptanceReview":{"ok":true,',
@@ -2513,6 +2511,10 @@ describe("repository SQL storage", () => {
               instructionsSource: reorderedAffectedPolicy.acceptanceReview.instructionsSource,
             },
           });
+          const protoAffectedBuggyText = affectedBuggyText.replace(
+            '"instructionsSource":"built_in"',
+            '"instructionsSource":"built_in","__proto__":{"polluted":true}',
+          );
           const currentPolicy = { checks: [], copyFiles: [], specialistReviews: [] };
           const currentPolicyText = JSON.stringify(currentPolicy);
           const legacyPolicyText =
@@ -2545,6 +2547,11 @@ describe("repository SQL storage", () => {
                   id: "run-affected-reordered",
                   policy: reorderedAffectedBuggyText,
                   now: "2026-07-25T16:32:00.500Z",
+                },
+                {
+                  id: "run-proto",
+                  policy: protoAffectedBuggyText,
+                  now: "2026-07-25T16:32:00.750Z",
                 },
                 { id: "run-legacy", policy: legacyPolicyText, now: "2026-07-25T16:32:01.000Z" },
                 {
@@ -2581,7 +2588,8 @@ describe("repository SQL storage", () => {
               );
               const byId = new Map(rows.map((row) => [row.id, row.policySnapshot]));
               expect(byId.get("run-affected")).toBe(affectedCorrectedText);
-              expect(byId.get("run-affected-reordered")).toBe(reorderedAffectedCorrectedText);
+              expect(byId.get("run-affected-reordered")).toBe(reorderedAffectedBuggyText);
+              expect(byId.get("run-proto")).toBe(protoAffectedBuggyText);
               expect(byId.get("run-legacy")).toBe(legacyPolicyText);
               expect(byId.get("run-malformed")).toBe(malformedPolicyText);
               expect(byId.get("run-current")).toBe(currentPolicyText);
@@ -2589,9 +2597,12 @@ describe("repository SQL storage", () => {
               const repaired = yield* validation.getRunById("run-affected");
               expect(repaired).toBeDefined();
               expect(repaired?.policy).toEqual(affectedPolicy);
-              const reorderedRepaired = yield* validation.getRunById("run-affected-reordered");
-              expect(reorderedRepaired).toBeDefined();
-              expect(reorderedRepaired?.policy).toEqual(reorderedAffectedPolicy);
+              const reorderedError = yield* validation
+                .getRunById("run-affected-reordered")
+                .pipe(Effect.flip);
+              expect(reorderedError).toBeInstanceOf(RepositoryPersistedDataInvalid);
+              const protoError = yield* validation.getRunById("run-proto").pipe(Effect.flip);
+              expect(protoError).toBeInstanceOf(RepositoryPersistedDataInvalid);
               const legacyError = yield* validation.getRunById("run-legacy").pipe(Effect.flip);
               expect(legacyError).toBeInstanceOf(RepositoryPersistedDataInvalid);
               const malformedError = yield* validation

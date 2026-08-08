@@ -77,7 +77,9 @@ const isJsonObject = (value: unknown): value is JsonObject =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
 const reorderKeys = (value: JsonObject, order: readonly string[]): Record<string, unknown> => {
-  const result: Record<string, unknown> = {};
+  // A null-prototype object keeps an own parsed "__proto__" field as data instead
+  // of invoking the prototype setter, so no Snapshot content is ever discarded.
+  const result: Record<string, unknown> = Object.create(null);
   for (const key of order) {
     if (key in value) result[key] = value[key];
   }
@@ -183,7 +185,11 @@ export const repairValidationPolicySnapshotOkFieldMigration = Effect.gen(functio
     if (acceptanceReview["ok"] !== true) continue;
     const { ok: _ignored, ...rest } = acceptanceReview;
     const withoutOk = { ...parsed, acceptanceReview: rest };
-    const repairedJson = JSON.stringify(canonicalize(withoutOk, "top"));
+    const repairedJson = JSON.stringify(withoutOk);
+    // Repair only the exact historical writer defect: removing acceptanceReview.ok
+    // must already produce the corrected writer's serialized identity. Alternate
+    // key orderings remain byte-for-byte unchanged and rejected by strict decode.
+    if (repairedJson !== JSON.stringify(canonicalize(withoutOk, "top"))) continue;
     try {
       decodePolicySnapshot(repairedJson);
     } catch {
