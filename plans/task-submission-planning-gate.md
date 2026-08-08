@@ -79,6 +79,8 @@ Every new Task Review receives:
 - a deterministic proposal diff from the previous reviewed proposal when one exists.
 
 Direct dependency evidence contains each dependency's ID, lifecycle state, complete Task Context, and direct dependency IDs.
+It is immutable point-in-time evidence for what the reviewer judged, not part of proposal identity after capture.
+Ordinary reuse does not reread or reevaluate that evidence; Change Start separately enforces the current Done prerequisite.
 It does not automatically contain reverse dependents, similar Tasks, the complete Task inventory, or transitive dependency contexts.
 The reviewer may use supported read-only Task commands when material evidence requires further inspection.
 
@@ -91,8 +93,8 @@ But Why must not persist a separate review reason or generated diff.
 
 ## Task Review Base
 
-Task Submission uses the current commit of the canonical main checkout's local default branch as the Task Review Base.
-The Task Review Base is identified by the exact Git commit.
+Task Submission uses the exact `HEAD` commit currently checked out in the canonical main checkout as the Task Review Base, regardless of the local branch name.
+Task Submission fails deterministic preflight when the canonical main checkout or its `HEAD` commit is unavailable.
 
 Task Submission must not:
 
@@ -231,7 +233,10 @@ It runs configured Repository Preparation in that workspace.
 It must not modify the canonical checkout.
 It attempts to remove the disposable workspace and temporary ref after reviewer execution and before completing the Review.
 A setup or execution failure completes the Review as tooling failed only after workspace cleanup and transcript indexing succeed.
-A cleanup or transcript-indexing failure records the exact failure, leaves the Review active, and does not approve or revoke the Task.
+A cleanup or transcript-indexing failure stores the latest failed operation and exact diagnostic as mutable Active Task Review recovery state, leaves the Review active, and does not approve or revoke the Task.
+Each failed recovery attempt replaces that operational state.
+Successful cleanup and transcript indexing clear it in the same completion or abandonment transaction that removes the Active Review marker.
+`by task-review show` exposes the recovery state, and the same Review remains the only retry target.
 The Operator may resolve the reported obstacle or remove the exact orphaned disposable resources with repository-safe external tooling, then use Task Review abandonment to retry cleanup and indexing.
 
 Task Review does not automatically run configured Validation Checks.
@@ -241,10 +246,13 @@ A reused result returns before workspace creation or Repository Preparation.
 
 The first implementation slice may extract only the low-level mechanisms required by both Task Review and Change Validation:
 
-- reviewer process execution;
-- injected reviewer output correction and contract handling;
+- reviewer process execution behind a domain-neutral Adapter that translates failures into Task-owned or Change-owned errors at each wrapper;
+- injected reviewer output correction behind a domain-neutral contract boundary supplied by the owning Task or Change wrapper;
 - session-file and transcript mechanics; and
-- disposable commit-workspace mechanics, including temporary refs, Sandcastle worktrees, exact-head checks, scoped execution, interruption, and cleanup.
+- disposable commit-workspace mechanics behind a domain-neutral Adapter, including temporary refs, Sandcastle worktrees, exact-head checks, scoped execution, interruption, and cleanup.
+
+The extraction moves direct Sandcastle factory ownership to the neutral workspace Adapter and updates the structural boundary that enforces that ownership.
+Task Review must not import Change Validation errors, Validation-only reviewer output, or Change-owned workspace records.
 
 Task and Change domain wrappers, records, persistence, errors, policies, sessions, and lifecycle cleanup remain separate.
 The extraction must not create a generic review framework or become a separate implementation Task.
@@ -293,7 +301,7 @@ Direct dependency Tasks remain independently mutable.
 
 But Why does not infer that interrupted reviewer processes are dead.
 After the Operator stops every process owned by an interrupted Review, `by task-review abandon <review-id>` acquires the same per-Task Execution Lock, attempts to remove the exact Task Review Workspace and temporary ref, idempotently indexes every observed Task Reviewer Session transcript, and uses a compare-and-set transaction to persist Tooling Failure and remove the Active Review marker atomically.
-If cleanup or transcript indexing cannot be verified, abandonment reports the exact failure, records that tooling evidence, and leaves the Review active for another recovery attempt.
+If cleanup or transcript indexing cannot be verified, abandonment reports the exact failure, replaces the Active Task Review recovery state with that failure, and leaves the Review active for another recovery attempt.
 The Operator may resolve the reported cleanup obstacle or remove the exact orphaned disposable resources with repository-safe external tooling, then retry abandonment.
 Successful abandonment preserves Review and transcript evidence.
 Abandonment does not delete history or resolve Findings.
@@ -327,7 +335,7 @@ Slice 2 adds the complete first Task Review and approval path.
 Slices 3 and 4 add independent revision and rerun capabilities after Slice 2.
 
 Cancelled Tasks BY-154 and BY-155 are not prerequisites and do not establish accepted behavior.
-Slice 2 depends on completed Tasks BY-54, BY-83, and BY-157 because it reuses the owner-keyed SQLite Execution Lock and shared core reviewer Finding contract and captures the simplified Task Context after removal of Task Comments.
+Slice 2 depends on completed Tasks BY-54, BY-83, and BY-157 and on Task BY-160 because it reuses the owner-keyed SQLite Execution Lock, shared core reviewer Finding contract, simplified Task Context, and safely decoded Reviewer Session JSONL mechanics.
 Later slices inherit that prerequisite transitively.
 Slice 1 has no Task prerequisite.
 
@@ -372,7 +380,7 @@ Existing Todo Tasks remain approved without fabricated Task Review history.
 **Dependency**
 
 Slice 2 depends on Slice 1 because Task Submission cannot approve exact intent while approved Todo intent remains mutable.
-Slice 2 also depends on completed Task BY-54 because it reuses the owner-keyed SQLite Execution Lock, completed Task BY-83 because it reuses the shared core reviewer Finding contract, and completed Task BY-157 because Task Review must capture the simplified complete Task Context after Task Comments were retired.
+Slice 2 also depends on completed Task BY-54 because it reuses the owner-keyed SQLite Execution Lock, completed Task BY-83 because it reuses the shared core reviewer Finding contract, completed Task BY-157 because Task Review must capture the simplified complete Task Context after Task Comments were retired, and Task BY-160 because Task-owned session and transcript behavior must reuse safely decoded Reviewer Session JSONL mechanics.
 
 **Required behavior**
 
@@ -456,21 +464,22 @@ Slice 4 must:
 The Tasks must be recorded in this order so that the returned Task IDs can be used as direct dependencies:
 
 1. Protect approved Task intent.
-2. Review New Tasks before approval, with direct dependencies on Task 1 and completed Tasks BY-54, BY-83, and BY-157.
+2. Review New Tasks before approval, with direct dependencies on Task 1 and Tasks BY-54, BY-83, BY-157, and BY-160.
 3. Revise approved Task intent, with a direct dependency on Task 2.
 4. Recheck unchanged Task proposals, with a direct dependency on Task 2.
 
 Task 1 has no direct dependency because its bounded result uses the current Task lifecycle and persistence behavior.
 Task 2 cannot implement or verify exact reviewed approval until Task 1 makes approved intent immutable.
-It requires BY-54's reusable owner-keyed SQLite Execution Lock, BY-83's reusable core reviewer Finding contract, and BY-157's simplified complete Task Context.
+It requires BY-54's reusable owner-keyed SQLite Execution Lock, BY-83's reusable core reviewer Finding contract, BY-157's simplified complete Task Context, and BY-160's safely decoded Reviewer Session JSONL mechanics.
 Task 3 cannot implement or verify reapproval after revision until Task 2 provides Task Submission and retained Task Review judgments.
 Task 4 cannot implement or verify explicit reconsideration until Task 2 provides Task Submission, Active Task Review, and retained judgments.
 Task 4 does not depend on Task 3 because unchanged-proposal reconsideration does not use revision.
 After recording, verify that every new Task is New, unapproved, has the exact direct dependencies, and has no Change.
 
 BY-158 and BY-159 own simplification and safe decoding of Change Validation Policy Snapshots.
-The Task Review work must not modify or duplicate `CandidateValidationPolicySnapshot` or its Change-owned SQLite representation and decoding.
-Neither Task is a prerequisite for the Task-owned policy and persistence behavior in this graph.
+BY-161 owns safe decoding of Change-owned Implementation Decision Snapshots, and BY-162 owns the production `JSON.parse` structural rule.
+The Task Review work must not modify or duplicate those Change-owned Snapshot representations or decoders.
+BY-158, BY-159, BY-161, and BY-162 are not prerequisites for the Task-owned policy and persistence behavior in this graph.
 
 ### Exact Task Context 1: Protect approved Task intent
 
@@ -544,15 +553,16 @@ Existing Todo Tasks remain approved without fabricated Task Review history.
 - A changed Task Context or direct Task Dependency set causes a new Review.
 - Changes only to repository state, Base, policy, configuration, direct dependency content, or direct dependency lifecycle do not invalidate a matching judgment.
 - A matching result returns before repository execution inputs are resolved or reviewer work starts.
-- A Task Review records the exact proposal, direct dependency evidence, local default-branch commit, immutable policy, outcome, Findings or Tooling Failure, sessions, and transcript references defined by this plan.
+- A Task Review records the exact proposal, direct dependency evidence, canonical-main-checkout `HEAD` commit, immutable policy, outcome, Findings or Tooling Failure, sessions, and transcript references defined by this plan.
 - The reviewer receives the complete required authority, the prior applicable outcome, and the deterministic proposal diff when one exists.
-- The Task Review Base and disposable workspace identify the exact current commit of the canonical checkout's local default branch and exclude uncommitted canonical-checkout content.
+- The Task Review Base and disposable workspace identify the exact `HEAD` commit currently checked out in the canonical main checkout, regardless of branch name, and exclude uncommitted canonical-checkout content.
+- Deterministic preflight fails when the canonical main checkout or its `HEAD` commit is unavailable.
 - Configured Repository Preparation runs in the disposable workspace, and automatic Validation Checks do not run.
 - One Task Reviewer uses the resolved Repo-before-Global Task Reviewer profile and instructions, with the built-in instructions as fallback.
 - The built-in instructions require the strict Task Dependency definition and complete Task Verification Contract rules.
 - Task Review structured output uses Task-owned decoding and the shared core Finding fields without Validation-only Artifact references.
 - Compatible usable Task Reviewer Sessions continue across later Reviews, and complete transcripts from every observed session file are indexed before completion or successful abandonment.
-- Cleanup or transcript-indexing failure leaves the Review active, records the exact failure, and does not change Task approval.
+- Cleanup or transcript-indexing failure leaves the Review active, stores the latest failed operation and exact diagnostic for inspection and replacement by a later recovery attempt, and does not change Task approval.
 - Successful abandonment records Tooling Failure and removes the Active Review only after cleanup and transcript indexing succeed.
 - Per-Task operation locking, transactional admission, one-active-Review uniqueness, proposal rereading, mutation and cancellation guards, and compare-and-set completion preserve one exact reviewed proposal.
 - `by task reviews`, `by task-review show`, `by task-review abandon`, and the Task Review summary in `by task show` expose the result and valid next action.
@@ -566,8 +576,10 @@ Existing Todo Tasks remain approved without fabricated Task Review history.
 - Append immutable Effect SQL migration `0025` after `0024`; do not rewrite historical migrations.
 - Task Intent owns Task Review records, lifecycle, persistence interfaces, commands, policy, sessions, errors, and Task Submission.
 - Keep Change Validation records and the Change-owned Validation Policy Snapshot separate, including work owned by BY-158 and BY-159.
-- Reuse the owner-keyed SQLite Execution Lock established by BY-54 and the shared core reviewer Finding contract established by BY-83.
-- Shared extraction is limited to reviewer execution, injected output correction and contract handling, session-file and transcript mechanics, and disposable exact-commit workspace mechanics.
+- Reuse the owner-keyed SQLite Execution Lock established by BY-54, the shared core reviewer Finding contract established by BY-83, and the safely decoded Reviewer Session JSONL mechanics established by BY-160.
+- Shared extraction is limited to domain-neutral reviewer execution, owning output-contract injection, session-file and transcript mechanics, and disposable exact-commit workspace mechanics.
+- Task and Change wrappers translate shared Adapter failures into their own domain errors; Task Review does not consume Validation-only output, errors, or workspace records.
+- Move direct Sandcastle factory ownership to the neutral workspace Adapter and update the structural rule that enforces that boundary.
 - Do not create a generic review framework or generic Review, Finding, Run, or Tooling Failure domain.
 - Do not add rerun, revision, detailed implementation planning, multi-Task review, Artifacts, severity, categories, Needs Input, stale status, alternate bases, queues, polling, or detached workers.
 - The CLI does not persist Task Submission Authorization.
@@ -598,17 +610,18 @@ Existing Todo Tasks remain approved without fabricated Task Review history.
 
 ##### Required evidence
 
-- Maintain real-SQLite evidence for Task Review admission, all first-slice outcomes, exact proposal capture, active uniqueness, transactional mutation and cancellation guards, compare-and-set completion, valid round trips, malformed persisted values, and retained history.
+- Maintain real-SQLite evidence for Task Review admission, pass, Findings, Tooling Failure, cleanup or indexing recovery failure, successful abandonment, exact proposal capture, active uniqueness, transactional mutation and cancellation guards, compare-and-set completion, valid round trips, rejected malformed persisted values, and retained history.
 - This durable evidence is necessary because persistence and atomic lifecycle regressions can approve the wrong intent, and test doubles or one-time inspection cannot establish SQLite transaction behavior.
 - Reuse BY-54's separate-process Execution Lock evidence and extend the real CLI/process seam only as needed to establish same-Task Task Submission exclusion and release; use cheaper seams for Task Review state variants.
 - Separate-process evidence is proportionate for this claim because in-process SQLite evidence cannot establish ownership across processes, while the existing owner-keyed primitive keeps the added lifecycle cost bounded.
 - Maintain focused orchestration evidence with captured collaborators for reviewer input, exact reuse short-circuiting, changed proposals, Tooling Failure retry, policy resolution, session continuation, cleanup, transcript indexing, and abandonment.
-- Maintain focused real-Git evidence for local default-branch Base resolution, dirty-checkout exclusion, exact workspace head, and canonical-checkout isolation because mocked repository identity cannot establish those claims.
+- Maintain focused real-Git evidence for canonical-main-checkout `HEAD` resolution across branch names, unavailable checkout or `HEAD`, dirty-checkout exclusion, exact workspace head, and canonical-checkout isolation because mocked repository identity cannot establish those claims.
 - Update migration evidence for fresh initialization at `0025` and upgrade from `0024` with representative existing Task facts.
 - Update existing configuration, in-process CLI, command-tree, help, Task inspection, package, and portable-guidance evidence at their owning seams.
 - Run existing affected reviewer-runtime, Validation Workspace, Validation abandonment, session, transcript, and Change Submission evidence after shared extraction; add new broad Change Validation tests only if an accepted behavior lacks an owning regression seam.
 - Use focused type checking, diff, search, schema inspection, and documentation inspection for ownership, removal of direct approval, absence of unsupported concepts, and unchanged historical migrations.
 - Run applicable mandatory repository gates.
+- Before adding or expanding each durable case, identify its distinct regression failure, why retained or one-time evidence is insufficient, why the selected seam can establish the claim, and why its maintenance cost is proportionate; the grouped evidence above does not prescribe a case count.
 
 ##### Escalation
 
@@ -666,6 +679,7 @@ The Operator can explicitly move an unlinked Todo Task to New before changing it
 - Update existing in-process Task CLI and Task inspection evidence for revision results and next-action guidance.
 - Use schema inspection to establish that no durable Revision record was added.
 - Run applicable mandatory repository gates.
+- Before adding or expanding each durable case, apply the Verification Contract admission rules; prefer extending the owning lifecycle or CLI evidence and do not infer a required case count from this grouped evidence.
 
 ##### Escalation
 
@@ -729,6 +743,7 @@ The Operator can request another judgment of an unchanged New or Todo proposal w
 - Update existing in-process CLI and portable-guidance evidence for `--rerun`, result distinctions, next actions, and renewed Task Submission Authorization.
 - Reuse prerequisite workspace, transcript, cleanup, abandonment, runtime, and real-Git evidence rather than duplicating it.
 - Run applicable mandatory repository gates.
+- Before adding or expanding each durable case, identify its distinct regression failure, why retained or one-time evidence is insufficient, why the selected seam can establish the claim, and why its maintenance cost is proportionate; the grouped evidence above does not prescribe a case count.
 
 ##### Escalation
 
