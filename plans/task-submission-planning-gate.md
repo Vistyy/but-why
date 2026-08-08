@@ -1,5 +1,5 @@
 ---
-status: approved-awaiting-task-recording-authorization
+status: tasks-recorded-unapproved
 artifact_kind: working-plan
 remove_when: all four approved implementation Tasks are complete and accepted behavior is recorded in current authority
 ---
@@ -335,7 +335,8 @@ Slice 2 adds the complete first Task Review and approval path.
 Slices 3 and 4 add independent revision and rerun capabilities after Slice 2.
 
 Cancelled Tasks BY-154 and BY-155 are not prerequisites and do not establish accepted behavior.
-Slice 2 depends on completed Tasks BY-54, BY-83, and BY-157 and on Task BY-160 because it reuses the owner-keyed SQLite Execution Lock, shared core reviewer Finding contract, simplified Task Context, and safely decoded Reviewer Session JSONL mechanics.
+Slice 2 uses the existing owner-keyed SQLite Execution Lock, shared core reviewer Finding contract, simplified Task Context, and safely decoded Reviewer Session JSONL mechanics delivered by completed Tasks BY-54, BY-83, BY-157, and BY-160.
+Those completed Tasks are existing repository capabilities, not Task Dependencies.
 Later slices inherit that prerequisite transitively.
 Slice 1 has no Task prerequisite.
 
@@ -380,7 +381,8 @@ Existing Todo Tasks remain approved without fabricated Task Review history.
 **Dependency**
 
 Slice 2 depends on Slice 1 because Task Submission cannot approve exact intent while approved Todo intent remains mutable.
-Slice 2 also depends on completed Task BY-54 because it reuses the owner-keyed SQLite Execution Lock, completed Task BY-83 because it reuses the shared core reviewer Finding contract, completed Task BY-157 because Task Review must capture the simplified complete Task Context after Task Comments were retired, and Task BY-160 because Task-owned session and transcript behavior must reuse safely decoded Reviewer Session JSONL mechanics.
+Slice 2 also depends on completed Task BY-167 because BY-167 owns migration `0025` and Slice 2 must append migration `0026` after it.
+The completed results of BY-54, BY-83, BY-157, and BY-160 are current repository capabilities rather than dependencies.
 
 **Required behavior**
 
@@ -389,7 +391,7 @@ Slice 2 must:
 - add Task Review persistence, history, Findings, Tooling Failures, policy snapshots, Task Reviewer Sessions, and transcript references;
 - add a Task-owned reviewer structured-output contract and decoder that reuse the shared core Finding fields without Validation-only Artifact references;
 - provide built-in Task Review instructions that require the strict Task Dependency definition and complete Task Verification Contract rules;
-- append migration `0025` after migration `0024`;
+- append migration `0026` after migration `0025`;
 - implement deterministic preflight, exact Task Review Base resolution, workspace preparation, reviewer execution, cleanup, completed-result reuse, interruption recovery, and abandonment;
 - add `by task submit <task-id>` for unlinked New Tasks and ordinary inspection of existing Todo approval;
 - move New to Todo only after a passing Review;
@@ -459,22 +461,23 @@ Slice 4 must:
 - extend Slice 2's Active Review mutation and cancellation guard to Todo Tasks; and
 - block Change Start while a Todo Task has an Active Task Review.
 
-## Proposed Task graph for recording
+## Recorded Task graph
 
-The Tasks must be recorded in this order so that the returned Task IDs can be used as direct dependencies:
+The authorized Tasks were recorded in this order:
 
-1. Protect approved Task intent.
-2. Review New Tasks before approval, with direct dependencies on Task 1 and Tasks BY-54, BY-83, BY-157, and BY-160.
-3. Revise approved Task intent, with a direct dependency on Task 2.
-4. Recheck unchanged Task proposals, with a direct dependency on Task 2.
+1. BY-163, Protect approved Task intent, with no dependencies.
+2. BY-164, Review New Tasks before approval, with direct dependencies on BY-163 and BY-167.
+3. BY-165, Revise approved Task intent, with a direct dependency on BY-164.
+4. BY-166, Recheck unchanged Task proposals, with a direct dependency on BY-164.
 
-Task 1 has no direct dependency because its bounded result uses the current Task lifecycle and persistence behavior.
-Task 2 cannot implement or verify exact reviewed approval until Task 1 makes approved intent immutable.
-It requires BY-54's reusable owner-keyed SQLite Execution Lock, BY-83's reusable core reviewer Finding contract, BY-157's simplified complete Task Context, and BY-160's safely decoded Reviewer Session JSONL mechanics.
-Task 3 cannot implement or verify reapproval after revision until Task 2 provides Task Submission and retained Task Review judgments.
-Task 4 cannot implement or verify explicit reconsideration until Task 2 provides Task Submission, Active Task Review, and retained judgments.
-Task 4 does not depend on Task 3 because unchanged-proposal reconsideration does not use revision.
-After recording, verify that every new Task is New, unapproved, has the exact direct dependencies, and has no Change.
+BY-163 has no direct dependency because its bounded result uses the current Task lifecycle and persistence behavior.
+BY-164 cannot implement or verify exact reviewed approval until BY-163 makes approved intent immutable.
+BY-164 also requires completed Task BY-167 because BY-167 owns migration `0025` and BY-164 must append migration `0026` after it.
+The owner-keyed SQLite Execution Lock, shared core reviewer Finding contract, simplified complete Task Context, and safely decoded Reviewer Session JSONL mechanics are already supported repository capabilities from BY-54, BY-83, BY-157, and BY-160 and therefore are not dependencies.
+BY-165 cannot implement or verify reapproval after revision until BY-164 provides Task Submission and retained Task Review judgments.
+BY-166 cannot implement or verify explicit reconsideration until BY-164 provides Task Submission, Active Task Review, and retained judgments.
+BY-166 does not depend on BY-165 because unchanged-proposal reconsideration does not use revision.
+The recording results established that every Task is New, unapproved, has the exact direct dependencies, and has no Change.
 
 BY-158 and BY-159 own simplification and safe decoding of Change Validation Policy Snapshots.
 BY-161 owns safe decoding of Change-owned Implementation Decision Snapshots, and BY-162 owns the production `JSON.parse` structural rule.
@@ -553,7 +556,7 @@ Existing Todo Tasks remain approved without fabricated Task Review history.
 - A changed Task Context or direct Task Dependency set causes a new Review.
 - Changes only to repository state, Base, policy, configuration, direct dependency content, or direct dependency lifecycle do not invalidate a matching judgment.
 - A matching result returns before repository execution inputs are resolved or reviewer work starts.
-- A Task Review records the exact proposal, direct dependency evidence, canonical-main-checkout `HEAD` commit, immutable policy, outcome, Findings or Tooling Failure, sessions, and transcript references defined by this plan.
+- A Task Review records the exact proposal, direct dependency evidence, canonical-main-checkout `HEAD` commit, immutable policy, outcome, Findings or Tooling Failure, sessions, and transcript references.
 - The reviewer receives the complete required authority, the prior applicable outcome, and the deterministic proposal diff when one exists.
 - The Task Review Base and disposable workspace identify the exact `HEAD` commit currently checked out in the canonical main checkout, regardless of branch name, and exclude uncommitted canonical-checkout content.
 - Deterministic preflight fails when the canonical main checkout or its `HEAD` commit is unavailable.
@@ -573,7 +576,7 @@ Existing Todo Tasks remain approved without fabricated Task Review history.
 
 #### Constraints
 
-- Append immutable Effect SQL migration `0025` after `0024`; do not rewrite historical migrations.
+- Append immutable Effect SQL migration `0026` after `0025`; do not rewrite historical migrations.
 - Task Intent owns Task Review records, lifecycle, persistence interfaces, commands, policy, sessions, errors, and Task Submission.
 - Keep Change Validation records and the Change-owned Validation Policy Snapshot separate, including work owned by BY-158 and BY-159.
 - Reuse the owner-keyed SQLite Execution Lock established by BY-54, the shared core reviewer Finding contract established by BY-83, and the safely decoded Reviewer Session JSONL mechanics established by BY-160.
@@ -616,7 +619,7 @@ Existing Todo Tasks remain approved without fabricated Task Review history.
 - Separate-process evidence is proportionate for this claim because in-process SQLite evidence cannot establish ownership across processes, while the existing owner-keyed primitive keeps the added lifecycle cost bounded.
 - Maintain focused orchestration evidence with captured collaborators for reviewer input, exact reuse short-circuiting, changed proposals, Tooling Failure retry, policy resolution, session continuation, cleanup, transcript indexing, and abandonment.
 - Maintain focused real-Git evidence for canonical-main-checkout `HEAD` resolution across branch names, unavailable checkout or `HEAD`, dirty-checkout exclusion, exact workspace head, and canonical-checkout isolation because mocked repository identity cannot establish those claims.
-- Update migration evidence for fresh initialization at `0025` and upgrade from `0024` with representative existing Task facts.
+- Update migration evidence for fresh initialization at `0026` and upgrade from `0025` with representative existing Task facts.
 - Update existing configuration, in-process CLI, command-tree, help, Task inspection, package, and portable-guidance evidence at their owning seams.
 - Run existing affected reviewer-runtime, Validation Workspace, Validation abandonment, session, transcript, and Change Submission evidence after shared extraction; add new broad Change Validation tests only if an accepted behavior lacks an owning regression seam.
 - Use focused type checking, diff, search, schema inspection, and documentation inspection for ownership, removal of direct approval, absence of unsupported concepts, and unchanged historical migrations.
@@ -779,8 +782,8 @@ Deferred questions remain in `docs/open-questions.md` only when they represent a
 
 ## Authority updates after approval
 
-After plan approval, present the exact four Task Contexts and dependency graph below and request separate Task Recording Authorization.
-Record the Tasks only after that explicit authorization.
+The Operator approved the exact four Task Contexts and dependency graph, then granted separate Task Recording Authorization.
+The recorded Tasks remain unapproved and do not authorize implementation.
 Do not update current-system authority to claim unimplemented behavior.
 
 Each implementation slice must update the applicable current authority when its behavior lands, including:
