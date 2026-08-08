@@ -24,6 +24,7 @@ import { reviewerTranscriptsMigration as reviewerTranscripts } from "./migration
 import { changeCancelReasonMigration as changeCancelReason } from "./migrations/0022_change_cancel_reason.js";
 import { restrictLifecycleStatesMigration as restrictLifecycleStates } from "./migrations/0023_restrict_lifecycle_states.js";
 import { removeTaskCommentsMigration as removeTaskComments } from "./migrations/0024_remove_task_comments.js";
+import { repairValidationPolicySnapshotOkFieldMigration as repairValidationPolicySnapshotOkField } from "./migrations/0025_repair_validation_policy_snapshot_ok_field.js";
 
 export const migrateRepositoryState = Migrator.make({})({
   loader: Migrator.fromRecord({
@@ -51,5 +52,6 @@ export const migrateRepositoryState = Migrator.make({})({
     "0022_change_cancel_reason": changeCancelReason,
     "0023_restrict_lifecycle_states": restrictLifecycleStates,
     "0024_remove_task_comments": removeTaskComments,
+    "0025_repair_validation_policy_snapshot_ok_field": repairValidationPolicySnapshotOkField,
   }),
 });

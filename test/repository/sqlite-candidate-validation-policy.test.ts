@@ -2,10 +2,11 @@ import type * as SqlClient from "@effect/sql/SqlClient";
 import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
 import { describe } from "vitest";
-
+import type { CandidateValidationPolicySnapshot } from "../../src/change/candidateValidation/candidateValidationPolicySnapshot.js";
 import { RepositoryPersistedDataInvalid } from "../../src/contracts/repositoryStorageError.js";
 import { RepositorySql } from "../../src/sqlite/repositorySql.js";
 import { openSqliteCandidateCapturePersistence } from "../../src/sqlite/sqliteCandidateCapturePersistence.js";
+import { encodeSqliteCandidateValidationPolicy } from "../../src/sqlite/sqliteCandidateValidationPolicy.js";
 import { openSqliteChangeValidationPersistence } from "../../src/sqlite/sqliteChangeValidationPersistence.js";
 import { withTemporaryRepositoryState } from "../support/repository.js";
 
@@ -123,6 +124,74 @@ describe("SQLite Candidate Validation Policy Snapshot decode", () => {
         const stored = yield* validation.getRunById(started.validationRunId);
         expect(stored).toBeDefined();
         expect(stored?.policy).toEqual(currentPolicy);
+
+        const repository = yield* RepositorySql;
+        const rawRows = yield* repository.operation(
+          "read stored Validation Policy Snapshot text",
+          (sql) => sql<{ readonly policySnapshot: string }>`
+            SELECT policy_snapshot AS policySnapshot
+            FROM candidate_validation_runs
+            WHERE id = ${started.validationRunId}
+          `,
+        );
+        expect(rawRows[0]?.policySnapshot).toBe(
+          encodeSqliteCandidateValidationPolicy(currentPolicy),
+        );
+      }),
+    ),
+  );
+
+  it.scoped("rejects an excess policy field before inserting any Validation Run", () =>
+    withTemporaryRepositoryState((input) =>
+      Effect.gen(function* () {
+        const capture = yield* openSqliteCandidateCapturePersistence();
+        const validation = yield* openSqliteChangeValidationPersistence();
+        const repository = yield* RepositorySql;
+        const captured = yield* capture.commitCapture({
+          repositoryCommonDirectory: input.commonDirectory,
+          branchRef: "refs/heads/feature",
+          baseRef: "refs/remotes/origin/main",
+          changeBaseSha: "base-sha",
+          headSha: "head-sha",
+          now,
+        });
+        if (!captured.ok) throw new Error(`Candidate capture failed: ${captured.code}`);
+
+        const error = yield* validation
+          .startOrReuse({
+            candidateId: captured.candidateId,
+            changeBaseSha: "base-sha",
+            headSha: "head-sha",
+            policy: {
+              ...currentPolicy,
+              acceptanceReview: {
+                ...currentPolicy.acceptanceReview,
+                ok: true,
+              },
+            } as CandidateValidationPolicySnapshot,
+            now,
+          })
+          .pipe(Effect.flip);
+        expect(error).toBeInstanceOf(RepositoryPersistedDataInvalid);
+        expect(error).toMatchObject({
+          _tag: "RepositoryPersistedDataInvalid",
+          operationName: "start Candidate Validation Run",
+        });
+
+        const runs = yield* repository.operation(
+          "count Validation Runs after rejected excess-field policy",
+          (sql) => sql<{ readonly count: number }>`
+            SELECT COUNT(*) AS count FROM candidate_validation_runs
+          `,
+        );
+        const activeRuns = yield* repository.operation(
+          "count Active Validation Runs after rejected excess-field policy",
+          (sql) => sql<{ readonly count: number }>`
+            SELECT COUNT(*) AS count FROM active_validation_runs
+          `,
+        );
+        expect(runs[0]?.count ?? -1).toBe(0);
+        expect(activeRuns[0]?.count ?? -1).toBe(0);
       }),
     ),
   );

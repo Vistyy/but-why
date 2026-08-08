@@ -66,6 +66,24 @@ describe("Acceptance Review configuration", () => {
     ).toMatchObject({ ok: true, policy: { instructionsSource: "built_in" } });
   });
 
+  it("returns only instructions, instructionsSource, and profile without resolver metadata", () => {
+    const root = createTestWorkspace();
+    const globalConfigPath = join(root, "global", "config.json");
+    mkdirSync(join(root, "repo", ".but-why", "reviewers"), { recursive: true });
+    mkdirSync(join(root, "global", "reviewers"), { recursive: true });
+    writeFileSync(join(root, "repo", ".but-why", "reviewers", "acceptance.md"), "repo\n");
+
+    const result = resolveAcceptanceReviewPolicy({
+      repoConfig: repoConfig(".but-why/reviewers/acceptance.md"),
+      globalConfig: globalConfig(),
+      repoRoot: join(root, "repo"),
+      globalConfigPath,
+    });
+    expect(result).toMatchObject({ ok: true });
+    if (!result.ok) return;
+    expect(Object.keys(result.policy)).toEqual(["instructions", "instructionsSource", "profile"]);
+  });
+
   it("rejects a configured missing repo instructions file without fallback", () => {
     const root = createTestWorkspace();
     const globalConfigPath = join(root, "global", "config.json");

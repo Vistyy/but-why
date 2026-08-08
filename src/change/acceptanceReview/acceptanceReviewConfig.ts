@@ -50,7 +50,8 @@ export const resolveAcceptanceReviewPolicy = (input: {
   return {
     ok: true,
     policy: {
-      ...instructions,
+      instructions: instructions.instructions,
+      instructionsSource: instructions.instructionsSource,
       profile: resolution.resolved,
     },
   };
