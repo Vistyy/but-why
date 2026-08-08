@@ -220,6 +220,90 @@ describe("Pi reviewer agent runtime", () => {
     }),
   );
 
+  it.effect("rejects a non-object Pi session entry before resume", () =>
+    Effect.gen(function* () {
+      const { fixtureRoot, sessionRoot } = isolatedSessionRoot();
+      const sessionId = "123e4567-e89b-42d3-a456-426614174002";
+      writeFileSync(join(sessionRoot, `review_${sessionId}.jsonl`), "null\n");
+      const run = vi.fn<Pick<Sandbox, "run">["run"]>(() =>
+        Promise.resolve(runResult('<reviewer-output>{"findings":[]}</reviewer-output>')),
+      );
+
+      try {
+        const result = yield* piReviewerAgentRuntime.review({
+          sandbox: { run } as unknown as Pick<Sandbox, "run">,
+          reviewer: "acceptance",
+          validationRunId: "123e4567-e89b-42d3-a456-426614174000",
+          availableArtifactRefs: [],
+          prompt: "Review the Candidate.",
+          profile,
+          commandCwd: "/validation-workspace",
+          sessionStorageRoot: sessionRoot,
+          resumeSession: sessionId,
+        });
+
+        expect(result).toMatchObject({
+          ok: false,
+          failure: {
+            _tag: "SandcastleToolingFailed",
+            message: "Reviewer Session JSONL is corrupt.",
+          },
+          sessionUsability: "unusable",
+        });
+        expect(run).not.toHaveBeenCalled();
+      } finally {
+        rmSync(fixtureRoot, { recursive: true, force: true });
+      }
+    }),
+  );
+
+  it.effect("preserves unknown Pi JSONL content while rewriting the session header", () =>
+    Effect.gen(function* () {
+      const { fixtureRoot, sessionRoot } = isolatedSessionRoot();
+      const sessionId = "123e4567-e89b-42d3-a456-426614174005";
+      const sessionFile = join(sessionRoot, `review_${sessionId}.jsonl`);
+      writeFileSync(
+        sessionFile,
+        [
+          `{"type":"session","id":"${sessionId}","cwd":"/original-workspace","vendor":{"name":"pi"}}`,
+          '{"type":"message","role":"user","content":"hello"}',
+          "",
+        ].join("\n"),
+      );
+      let rewritten = "";
+      const run: Pick<Sandbox, "run">["run"] = async () => {
+        rewritten = readFileSync(sessionFile, "utf8");
+        return {
+          ...runResult('<reviewer-output>{"findings":[]}</reviewer-output>'),
+          iterations: [{ sessionId }],
+        };
+      };
+
+      try {
+        const result = yield* piReviewerAgentRuntime.review({
+          sandbox: { run } as unknown as Pick<Sandbox, "run">,
+          reviewer: "acceptance",
+          validationRunId: "123e4567-e89b-42d3-a456-426614174000",
+          availableArtifactRefs: [],
+          prompt: "Review the Candidate.",
+          profile,
+          commandCwd: "/validation-workspace",
+          sessionStorageRoot: sessionRoot,
+          resumeSession: sessionId,
+        });
+
+        expect(result).toMatchObject({ ok: true, attempts: 1 });
+        const lines = rewritten.split("\n");
+        const header = JSON.parse(lines[0] ?? "") as { cwd: string; vendor: { name: string } };
+        expect(header.cwd).toBe("/validation-workspace");
+        expect(header.vendor).toEqual({ name: "pi" });
+        expect(lines[1]).toBe('{"type":"message","role":"user","content":"hello"}');
+      } finally {
+        rmSync(fixtureRoot, { recursive: true, force: true });
+      }
+    }),
+  );
+
   it.effect("resolves Repo resources from the Managed Worktree root", () =>
     Effect.gen(function* () {
       let command = "";
