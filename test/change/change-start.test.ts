@@ -74,10 +74,13 @@ const fixture = (options: FixtureOptions = {}) => {
       return Effect.succeed({ ok: true as const, change: current });
     },
     getById: (id) => Effect.succeed(current?.id === id ? current : undefined),
-    recordPrepareOutcome: (_id, failure, updatedAt) => {
-      events.push("recordPrepareOutcome");
+    recordPrepareOutcome: (id, failure, updatedAt) => {
+      events.push(`recordPrepareOutcome:${id}`);
+      const captured = required(current, "recordPrepareOutcome requires a captured Change");
+      if (captured.id !== id)
+        throw new Error(`Preparation outcome targeted ${id}, not ${captured.id}`);
       current = {
-        ...required(current, "recordPrepareOutcome requires a captured Change"),
+        ...captured,
         prepareFailure: failure,
         updatedAt,
       };
@@ -126,7 +129,7 @@ describe("Change Start orchestration", () => {
           expect.stringMatching(/^resolveIntent:change-/u),
           "create",
           "provisionWorktree:create",
-          "recordPrepareOutcome",
+          expect.stringMatching(/^recordPrepareOutcome:/u),
         ]);
 
         const backed = fixture();
@@ -147,7 +150,7 @@ describe("Change Start orchestration", () => {
           expect.stringMatching(/^resolveIntent:by-197-[a-f0-9]+:main$/u),
           "create",
           "provisionWorktree:create",
-          "recordPrepareOutcome",
+          expect.stringMatching(/^recordPrepareOutcome:/u),
         ]);
       }),
   );
@@ -187,7 +190,7 @@ describe("Change Start orchestration", () => {
       expect(captured.events).toEqual([
         "prepareTask",
         "provisionWorktree:recover",
-        "recordPrepareOutcome",
+        "recordPrepareOutcome:existing",
       ]);
     }),
   );

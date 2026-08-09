@@ -203,6 +203,16 @@ describe("repository SQL storage", () => {
   it.scoped("persists, replaces, and clears Repository Preparation failure", () =>
     withTemporaryState((input) =>
       Effect.gen(function* () {
+        const tasks = yield* openSqliteTaskPersistence("BY");
+        const task = yield* tasks.createTask({
+          title: "Persist exact accepted intent",
+          description: "Capture this approved Task description.",
+          now: "2026-07-17T22:48:00.000Z",
+        });
+        if (!task.ok) throw new Error(`Task creation failed: ${task.code}`);
+        const taskId = storedPublicTaskId(task.task.id);
+        yield* tasks.approveTask({ taskId, now: "2026-07-17T22:49:00.000Z" });
+
         const starts = yield* openSqliteChangeStartPersistence();
         const created = yield* starts.create({
           id: "change-preparation-outcome",
@@ -212,10 +222,19 @@ describe("repository SQL storage", () => {
           baseRemoteUrl: "https://github.com/acme/repo.git",
           startingCommit: "1111111111111111111111111111111111111111",
           worktreePath: join(input.commonDirectory, "worktrees", "change-preparation-outcome"),
+          taskId,
           prepare: { command: "prepare repository", timeoutSeconds: 17 },
           now: "2026-07-17T22:50:00.000Z",
         });
         if (!created.ok) throw new Error(`Change Start failed: ${created.code}`);
+        expect(yield* starts.getById(created.change.id)).toMatchObject({
+          taskId,
+          acceptanceContext: {
+            version: 1,
+            title: "Persist exact accepted intent",
+            description: "Capture this approved Task description.",
+          },
+        });
 
         const firstFailure = {
           command: "prepare repository",
