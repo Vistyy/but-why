@@ -139,18 +139,21 @@ export const createChangeFixture = (
           description: task.description,
         });
       }
+      const taskBacked = options.taskId !== undefined;
       yield* repository.operation(
         "create Change inspection fixture",
         (sql) => sql`
           INSERT INTO changes (
             id, repository_common_directory, branch_ref, task_id, acceptance_context, state,
-            close_reason, created_at, updated_at, closed_at, base_ref,
+            close_reason, created_at, updated_at, closed_at, base_ref, base_remote_url,
             worktree_path, starting_commit
           ) VALUES (
             ${id}, ${join(root, ".git")}, ${branchRef}, ${options.taskId ?? null},
             ${acceptanceContext}, 'open', NULL, ${createdAt}, ${createdAt}, NULL,
-            ${options.baseRef ?? null}, ${options.worktreePath ?? null},
-            ${options.startingCommit ?? null}
+            ${options.baseRef === undefined && taskBacked ? "refs/remotes/origin/main" : (options.baseRef ?? null)},
+            ${taskBacked ? "https://github.test/acme/repo.git" : null},
+            ${options.worktreePath === undefined && taskBacked ? join(root, "worktree") : (options.worktreePath ?? null)},
+            ${options.startingCommit === undefined && taskBacked ? "inspection-base" : (options.startingCommit ?? null)}
           )
         `,
       );
