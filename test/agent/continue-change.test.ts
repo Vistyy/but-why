@@ -128,6 +128,8 @@ describe("Change Implement continuation policy", () => {
     "echo $((1 << 2))\njust by change submit change-123",
     "(( value = 1 << 2 ))\njust by change submit change-123",
     "value=$((\n  1 << 2\n))\njust by change submit change-123",
+    "commands=(foo\\()\njust by change submit change-123",
+    'output="$(\n  echo ready # )\n  just by change submit change-123\n)"',
   ])("detects a visible canonical Change Submit in %j", (command) => {
     expect(containsVisibleChangeSubmit(command)).toBe(true);
   });
@@ -145,6 +147,7 @@ describe("Change Implement continuation policy", () => {
     "commands=(pnpx but-why --json change submit change-123)",
     "commands=(\n  just by change submit change-123\n)",
     "commands=(\n  # Keep ) in this comment\n  just by change submit change-123\n)",
+    "commands=(\n  foo\\)\n  just by change submit change-123\n)",
     "cat <<'DATA'\njust by change submit change-123\nDATA",
     "cat <<\\EOF\njust by change submit change-123\nEOF",
     "./submit-change.sh",

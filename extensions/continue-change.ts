@@ -263,6 +263,11 @@ const visibleShellText = (rawCommand: string): string => {
           continue;
         }
       }
+      if (character === "\\") {
+        result += " ".repeat(Math.min(2, command.length - index));
+        index += 1;
+        continue;
+      }
       if (character === "#" && (index === 0 || /[\s;|&(){}]/u.test(command[index - 1] ?? ""))) {
         comment = true;
       } else if (character === "'" || character === '"') quote = character;
@@ -328,8 +333,13 @@ const visibleShellText = (rawCommand: string): string => {
 const findCommandSubstitutionEnd = (command: string, start: number): number | undefined => {
   let depth = 1;
   let quote: "'" | '"' | undefined;
+  let comment = false;
   for (let index = start; index < command.length; index += 1) {
     const character = command[index];
+    if (comment) {
+      if (character === "\n") comment = false;
+      continue;
+    }
     if (character === "\\" && quote !== "'") {
       index += 1;
       continue;
@@ -339,7 +349,9 @@ const findCommandSubstitutionEnd = (command: string, start: number): number | un
       continue;
     }
     if (character === "'" || character === '"') quote = character;
-    else if (character === "(") depth += 1;
+    else if (character === "#" && (index === start || /[\s;|&(){}]/u.test(command[index - 1] ?? ""))) {
+      comment = true;
+    } else if (character === "(") depth += 1;
     else if (character === ")") {
       depth -= 1;
       if (depth === 0) return index;
