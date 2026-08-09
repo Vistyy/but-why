@@ -92,10 +92,44 @@ export const readDecodedTaskGraph = (
         dependencyKeys.add(key);
         return { dependentTask, prerequisiteTask };
       });
+      assertAcyclicTaskDependencies(tasks, dependencies);
 
       return { tasks, tasksById, dependencies };
     });
   });
+
+const assertAcyclicTaskDependencies = (
+  tasks: readonly DecodedTaskRow[],
+  dependencies: readonly DecodedTaskDependency[],
+): void => {
+  const remainingPrerequisites = new Map<PublicTaskId, number>(tasks.map((task) => [task.id, 0]));
+  const dependentsByPrerequisite = new Map<PublicTaskId, PublicTaskId[]>();
+  for (const dependency of dependencies) {
+    remainingPrerequisites.set(
+      dependency.dependentTask.id,
+      (remainingPrerequisites.get(dependency.dependentTask.id) ?? 0) + 1,
+    );
+    const dependents = dependentsByPrerequisite.get(dependency.prerequisiteTask.id) ?? [];
+    dependents.push(dependency.dependentTask.id);
+    dependentsByPrerequisite.set(dependency.prerequisiteTask.id, dependents);
+  }
+
+  const ready = tasks
+    .filter((task) => remainingPrerequisites.get(task.id) === 0)
+    .map((task) => task.id);
+  let decodedCount = 0;
+  while (ready.length > 0) {
+    const taskId = ready.pop();
+    if (taskId === undefined) continue;
+    decodedCount += 1;
+    for (const dependentId of dependentsByPrerequisite.get(taskId) ?? []) {
+      const remaining = (remainingPrerequisites.get(dependentId) ?? 0) - 1;
+      remainingPrerequisites.set(dependentId, remaining);
+      if (remaining === 0) ready.push(dependentId);
+    }
+  }
+  if (decodedCount !== tasks.length) throw new Error("Task dependency graph contains a cycle");
+};
 
 export const taskDependencyFacts = (
   graph: DecodedTaskGraph,

@@ -192,6 +192,25 @@ it.scoped("rejects malformed dependency relationships before Task and Change Sta
   ),
 );
 
+it.scoped("rejects a persisted multi-Task dependency cycle", () =>
+  withTemporaryRepositoryState(() =>
+    Effect.gen(function* () {
+      const tasks = yield* openSqliteTaskPersistence("BY");
+      const repository = yield* RepositorySql;
+      yield* createTask(tasks, "First cycle Task");
+      yield* createTask(tasks, "Second cycle Task");
+      yield* repository.operation("insert cyclic Task dependencies", (sql) =>
+        sql.unsafe(`
+          INSERT INTO task_dependencies (dependent_task_id, prerequisite_task_id)
+          VALUES ('BY-1', 'BY-2'), ('BY-2', 'BY-1')
+        `),
+      );
+
+      yield* expectPersistedDataInvalid(tasks.listTasks({ includeDone: true }));
+    }),
+  ),
+);
+
 it.scoped("rejects an incomplete linked Implementation Blocker Resolution", () =>
   withTemporaryRepositoryState(({ commonDirectory }) =>
     Effect.gen(function* () {
