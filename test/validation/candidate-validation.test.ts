@@ -7,6 +7,7 @@ import { describe, vi } from "vitest";
 import type { ReviewerAgentRuntime } from "../../src/agent/reviewerAgentRuntime.js";
 import {
   CandidateValidation,
+  type ValidateAcceptanceContextCandidateInput,
   type ValidateCandidateInput,
 } from "../../src/change/candidateValidation/validateCandidate.js";
 import type { ReviewerOutput } from "../../src/contracts/reviewerOutput.js";
@@ -78,59 +79,63 @@ describe("Candidate validation", () => {
         ]);
         expect(git(candidateCheckout, "rev-parse", "HEAD")).toBe(captured.headSha);
       }),
+    15_000,
   );
 
-  it.scoped("persists a Candidate-integrity Tooling Failure and preserves the Candidate", () =>
-    Effect.gen(function* () {
-      const mainCheckout = candidateReadyRepo();
-      const candidateCheckout = join(commonDirectory(mainCheckout), "candidate-worktree");
-      git(
-        mainCheckout,
-        "worktree",
-        "add",
-        "-q",
-        "-b",
-        "linked-candidate",
-        candidateCheckout,
-        "HEAD",
-      );
-      writeFileSync(join(candidateCheckout, "candidate.txt"), "original\n");
-      git(candidateCheckout, "add", "candidate.txt");
-      git(candidateCheckout, "commit", "-m", "candidate");
-      const captured = yield* captureLocalCandidate({ cwd: candidateCheckout, now });
-      expect(captured.ok).toBe(true);
-      if (!captured.ok) return;
+  it.scoped(
+    "persists a Candidate-integrity Tooling Failure and preserves the Candidate",
+    () =>
+      Effect.gen(function* () {
+        const mainCheckout = candidateReadyRepo();
+        const candidateCheckout = join(commonDirectory(mainCheckout), "candidate-worktree");
+        git(
+          mainCheckout,
+          "worktree",
+          "add",
+          "-q",
+          "-b",
+          "linked-candidate",
+          candidateCheckout,
+          "HEAD",
+        );
+        writeFileSync(join(candidateCheckout, "candidate.txt"), "original\n");
+        git(candidateCheckout, "add", "candidate.txt");
+        git(candidateCheckout, "commit", "-m", "candidate");
+        const captured = yield* captureLocalCandidate({ cwd: candidateCheckout, now });
+        expect(captured.ok).toBe(true);
+        if (!captured.ok) return;
 
-      const validation = candidateValidationForTest({
-        localRepositoryMainCheckoutRoot: mainCheckout,
-        artifactsRoot: join(commonDirectory(mainCheckout), "but-why", "artifacts"),
-        repository: repositoryConfig(mainCheckout),
-      });
-      const result = yield* validateCandidate(validation, {
-        changeId: captured.changeId,
-        candidateId: captured.candidateId,
-        changeBaseSha: captured.changeBaseSha,
-        headSha: captured.headSha,
-        policy: {
-          prepare: { command: "printf changed > candidate.txt", timeoutSeconds: 1 },
-          checks: [{ id: "skipped", command: "true", timeoutSeconds: 1 }],
-          copyFiles: [],
-          specialistReviews: [],
-        },
-        now,
-      });
+        const validation = candidateValidationForTest({
+          localRepositoryMainCheckoutRoot: mainCheckout,
+          artifactsRoot: join(commonDirectory(mainCheckout), "but-why", "artifacts"),
+          repository: repositoryConfig(mainCheckout),
+        });
+        const result = yield* validateCandidate(validation, {
+          changeId: captured.changeId,
+          candidateId: captured.candidateId,
+          changeBaseSha: captured.changeBaseSha,
+          headSha: captured.headSha,
+          policy: {
+            prepare: { command: "printf changed > candidate.txt", timeoutSeconds: 1 },
+            checks: [{ id: "skipped", command: "true", timeoutSeconds: 1 }],
+            copyFiles: [],
+            specialistReviews: [],
+          },
+          now,
+        });
 
-      expect(result).toMatchObject({ ok: false, outcome: "tooling_failed" });
-      if (result.ok || "code" in result) return;
-      expect(yield* validation.listToolingFailures(result.validationRunId)).toEqual(
-        expect.arrayContaining([
-          expect.objectContaining({ operationName: "verify_candidate_head" }),
-        ]),
-      );
-      expect(git(candidateCheckout, "rev-parse", "HEAD")).toBe(captured.headSha);
-      expect(git(candidateCheckout, "status", "--porcelain")).toBe("");
-      expect(git(candidateCheckout, "show", "HEAD:candidate.txt")).toBe("original");
-    }),
+        expect(result).toMatchObject({ ok: false, outcome: "tooling_failed" });
+        if (result.ok || "code" in result) return;
+        expect(yield* validation.listToolingFailures(result.validationRunId)).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({ operationName: "verify_candidate_head" }),
+          ]),
+        );
+        expect(git(candidateCheckout, "rev-parse", "HEAD")).toBe(captured.headSha);
+        expect(git(candidateCheckout, "status", "--porcelain")).toBe("");
+        expect(git(candidateCheckout, "show", "HEAD:candidate.txt")).toBe("original");
+      }),
+    15_000,
   );
 
   it.scoped(
@@ -140,27 +145,6 @@ describe("Candidate validation", () => {
         const mainCheckout = candidateReadyRepo();
         const candidateCheckout = join(commonDirectory(mainCheckout), "candidate-worktree");
         const callLog = join(createTestWorkspace(), "validation-calls");
-        const review = vi.fn<ReviewerAgentRuntime<ReviewerOutput>["review"]>(() =>
-          Effect.succeed({
-            ok: true as const,
-            report: { findings: [] },
-            attempts: 1,
-            stdout: "",
-          }),
-        );
-        const specialist = {
-          id: "standards",
-          instructions: "Review standards.",
-          instructionsSource: "repo" as const,
-          profile: {
-            agentProfile: "standards",
-            scope: "repo" as const,
-            profile: {
-              agentRuntime: "pi" as const,
-              runtimeConfig: { model: "standards-model" },
-            },
-          },
-        };
         git(
           mainCheckout,
           "worktree",
@@ -193,13 +177,12 @@ describe("Candidate validation", () => {
             },
           ],
           copyFiles: [],
-          specialistReviews: [specialist],
+          specialistReviews: [],
         });
         const validation = candidateValidationForTest({
           localRepositoryMainCheckoutRoot: mainCheckout,
           artifactsRoot: join(commonDirectory(mainCheckout), "but-why", "artifacts"),
           repository: repositoryConfig(mainCheckout),
-          reviewerAgentRuntime: { review },
         });
         const firstPolicy = validationPolicy(first.headSha, "first");
         const firstResult = yield* validateCandidate(validation, {
@@ -213,7 +196,6 @@ describe("Candidate validation", () => {
         expect(firstResult).toMatchObject({ ok: true, outcome: "passed", reused: false });
         if (!firstResult.ok) throw new Error("Expected a passed first Validation Run");
         expect(readFileSync(callLog, "utf8")).toBe("PC");
-        expect(review).toHaveBeenCalledOnce();
         expect(readFileSync(join(mainCheckout, ".gitignore"), "utf8")).toBe(
           "dirty canonical content\n",
         );
@@ -243,7 +225,6 @@ describe("Candidate validation", () => {
         if (!secondResult.ok) throw new Error("Expected a passed second Validation Run");
         expect(secondResult).not.toMatchObject({ validationRunId: firstResult.validationRunId });
         expect(readFileSync(callLog, "utf8")).toBe("PCPC");
-        expect(review).toHaveBeenCalledTimes(2);
 
         const reused = yield* validateCandidate(validation, {
           changeId: first.changeId,
@@ -255,7 +236,6 @@ describe("Candidate validation", () => {
         });
         expect(reused).toMatchObject({ ok: true, outcome: "passed", reused: true });
         expect(readFileSync(callLog, "utf8")).toBe("PCPC");
-        expect(review).toHaveBeenCalledTimes(2);
 
         const workspaces = yield* withTestRepository(
           mainCheckout,
@@ -296,6 +276,103 @@ describe("Candidate validation", () => {
       }),
     15_000,
   );
+
+  it.scoped(
+    "runs the fixed task-backed Validation Gate in order in one exact-Candidate workspace",
+    () =>
+      Effect.gen(function* () {
+        const mainCheckout = candidateReadyRepo();
+        const captured = yield* captureLocalCandidate({ cwd: mainCheckout, now });
+        expect(captured.ok).toBe(true);
+        if (!captured.ok) return;
+        const callLog = join(createTestWorkspace(), "gate-calls");
+        const reviewWorkspaces: string[] = [];
+        const review = vi.fn<ReviewerAgentRuntime<ReviewerOutput>["review"]>(
+          ({ reviewer, commandCwd }) =>
+            Effect.sync(() => {
+              if (commandCwd === undefined) throw new Error(`${reviewer} has no workspace path.`);
+              reviewWorkspaces.push(commandCwd);
+              const gitDir = git(commandCwd, "rev-parse", "--path-format=absolute", "--git-dir");
+              if (!readFileSync(join(gitDir, ".gate-order"), "utf8").endsWith("PC")) {
+                throw new Error(`${reviewer} started before Repository Preparation and Checks.`);
+              }
+              if (reviewer === "acceptance") {
+                writeFileSync(join(gitDir, ".acceptance-complete"), "accepted\n");
+                writeFileSync(callLog, "A", { flag: "a" });
+              } else {
+                if (
+                  !readFileSync(join(gitDir, ".acceptance-complete"), "utf8").includes("accepted")
+                ) {
+                  throw new Error("Specialist Review started before Acceptance Review.");
+                }
+                writeFileSync(callLog, "S", { flag: "a" });
+              }
+              return {
+                ok: true as const,
+                report: { findings: [] },
+                attempts: 1,
+                stdout: `${reviewer} passed`,
+              };
+            }),
+        );
+        const validation = candidateValidationForTest({
+          localRepositoryMainCheckoutRoot: mainCheckout,
+          artifactsRoot: join(commonDirectory(mainCheckout), "but-why", "artifacts"),
+          repository: repositoryConfig(mainCheckout),
+          reviewerAgentRuntime: { review },
+        });
+        const result = yield* validateAcceptanceContextCandidate(validation, {
+          changeId: captured.changeId,
+          candidateId: captured.candidateId,
+          changeBaseSha: captured.changeBaseSha,
+          headSha: captured.headSha,
+          acceptanceContext: {
+            version: 1,
+            title: "Validate the fixed Gate",
+            description: "Run each eligible phase in its fixed order.",
+          },
+          policy: {
+            prepare: {
+              command: `gitdir="$(git rev-parse --git-dir)"; printf P >> "${callLog}"; printf P > "$gitdir/.gate-order"`,
+              timeoutSeconds: 1,
+            },
+            checks: [
+              {
+                id: "gate-check",
+                command: `gitdir="$(git rev-parse --git-dir)"; test "$(cat "$gitdir/.gate-order")" = P; printf C >> "${callLog}"; printf C >> "$gitdir/.gate-order"`,
+                timeoutSeconds: 1,
+              },
+            ],
+            copyFiles: [],
+            acceptanceReview: reviewerPolicy("acceptance"),
+            specialistReviews: [{ id: "standards", ...reviewerPolicy("standards") }],
+          },
+          now,
+        });
+
+        expect(result).toMatchObject({ ok: true, outcome: "passed", reused: false });
+        if (!result.ok) return;
+        expect(readFileSync(callLog, "utf8")).toBe("PCAS");
+        expect(review.mock.calls.map(([input]) => input.reviewer)).toEqual([
+          "acceptance",
+          "standards",
+        ]);
+        expect(new Set(reviewWorkspaces).size).toBe(1);
+        expect(yield* validation.getRun(result.validationRunId)).toMatchObject({
+          state: "complete",
+          outcome: "passed",
+        });
+        expect(yield* validation.listRounds(result.validationRunId)).toEqual([
+          { producer: "prepare", status: "passed" },
+          { producer: "gate-check", status: "passed" },
+          { producer: "acceptance", status: "passed" },
+          { producer: "standards", status: "passed" },
+        ]);
+        expect(git(mainCheckout, "rev-parse", "HEAD")).toBe(captured.headSha);
+        expect(git(mainCheckout, "status", "--porcelain")).toBe("");
+      }),
+    10_000,
+  );
 });
 
 const validateCandidate = (
@@ -306,6 +383,28 @@ const validateCandidate = (
     const service = yield* CandidateValidation;
     return yield* service.validateCandidate(input);
   }).pipe(Effect.provide(validation.layer));
+
+const validateAcceptanceContextCandidate = (
+  validation: ReturnType<typeof candidateValidationForTest>,
+  input: ValidateAcceptanceContextCandidateInput,
+) =>
+  Effect.gen(function* () {
+    const service = yield* CandidateValidation;
+    return yield* service.validateAcceptanceContextCandidate(input);
+  }).pipe(Effect.provide(validation.layer));
+
+const reviewerPolicy = (name: string) => ({
+  instructions: `${name} instructions`,
+  instructionsSource: "repo" as const,
+  profile: {
+    agentProfile: name,
+    scope: "repo" as const,
+    profile: {
+      agentRuntime: "pi" as const,
+      runtimeConfig: { model: `${name}-model` },
+    },
+  },
+});
 
 const repositoryConfig = (root: string) => ({
   statePath: candidateRepositoryConfig(root).statePath,

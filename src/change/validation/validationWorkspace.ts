@@ -1,7 +1,9 @@
 import type { Sandbox } from "@ai-hero/sandcastle";
+import type { CandidateValidationOutcome } from "../candidateValidation/candidateValidationRunStore.js";
 import type { SpecialistReviewerContinuityEvidence } from "../specialistReview/runSpecialistReviewPhase.js";
 import type { CleanupState } from "../validationRun/cleanup.js";
 import type { ReviewerExecutionEvidence } from "../validationRun/reviewerArtifacts.js";
+import type { ValidationToolingFailure } from "./validationToolingFailures.js";
 
 export type ValidationWorkspaceCleanupResult = {
   readonly worktree: CleanupState;
@@ -14,9 +16,10 @@ export type ActiveValidationWorkspace = {
 };
 
 export type ActiveValidationWorkspaceResult = {
-  readonly validationFindings: 0 | 1;
+  readonly outcome: CandidateValidationOutcome;
   readonly reviewerEvidence?: ReviewerExecutionEvidence;
   readonly specialistReviewerEvidence?: readonly SpecialistReviewerContinuityEvidence[];
+  readonly toolingFailures: readonly ValidationToolingFailure[];
 };
 
 export type ValidationWorkspaceSetup = {
