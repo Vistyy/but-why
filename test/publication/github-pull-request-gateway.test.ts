@@ -496,7 +496,6 @@ describe("GitHub pull request gateway", () => {
         if (args[0] === "rev-parse") return { ok: true, stdout: "candidate-sha\n" };
         if (args[0] === "remote")
           return { ok: true, stdout: "https://github.com/acme/widgets.git\n" };
-        if (args.includes("ls-remote")) return { ok: true, stdout: "" };
         return {
           ok: false,
           status: 1,
@@ -580,7 +579,6 @@ describe("GitHub pull request gateway", () => {
         runGit: (args) => {
           gitCalls.push(args);
           if (args[0] === "rev-parse") return { ok: true, stdout: "candidate-sha\n" };
-          if (args[0] === "ls-remote") return { ok: true, stdout: "" };
           if (args[0] === "remote") return { ok: true, stdout: destinations };
           throw new Error(`must not push for ${name}`);
         },
