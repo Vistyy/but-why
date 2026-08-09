@@ -43,6 +43,7 @@ export type CompleteTaskReviewInput = {
   readonly reviewId: string;
   readonly outcome: TaskReviewOutcome;
   readonly findings?: readonly Omit<TaskReviewFinding, "createdAt">[];
+  readonly toolingFailure?: Omit<RecordTaskReviewToolingFailureInput, "reviewId" | "now">;
   readonly now: string;
 };
 

@@ -254,14 +254,10 @@ const submitTask = (
         operationName: toolingError.operationName,
         errorMessage: toolingError.errorMessage,
       });
-      yield* dependencies.persistence.recordToolingFailure({
-        reviewId,
-        ...failure,
-        now: input.now,
-      });
       yield* dependencies.persistence.complete({
         reviewId,
         outcome: "tooling_failed",
+        toolingFailure: failure,
         now: input.now,
       });
       return yield* toolingFailedResult(dependencies.persistence, reviewId, input.taskId);
@@ -269,14 +265,10 @@ const submitTask = (
 
     const phase = workspace.activeWorkspaceResult;
     if (phase !== undefined && phase.toolingFailure !== undefined) {
-      yield* dependencies.persistence.recordToolingFailure({
-        reviewId,
-        ...phase.toolingFailure,
-        now: input.now,
-      });
       yield* dependencies.persistence.complete({
         reviewId,
         outcome: "tooling_failed",
+        toolingFailure: phase.toolingFailure,
         now: input.now,
       });
       return yield* toolingFailedResult(dependencies.persistence, reviewId, input.taskId);

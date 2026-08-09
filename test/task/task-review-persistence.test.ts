@@ -284,16 +284,14 @@ it.scoped("records Tooling Failure and leaves the Task New", () =>
         now: firstNow,
       });
 
-      yield* reviews.recordToolingFailure({
-        reviewId: "review-tooling",
-        errorKind: "infrastructure_tooling_failed",
-        operationName: "run_task_reviewer_agent",
-        errorMessage: "Agent launch failed.",
-        now: secondNow,
-      });
       const completed = yield* reviews.complete({
         reviewId: "review-tooling",
         outcome: "tooling_failed",
+        toolingFailure: {
+          errorKind: "infrastructure_tooling_failed",
+          operationName: "run_task_reviewer_agent",
+          errorMessage: "Agent launch failed.",
+        },
         now: thirdNow,
       });
 
@@ -308,7 +306,7 @@ it.scoped("records Tooling Failure and leaves the Task New", () =>
           errorKind: "infrastructure_tooling_failed",
           operationName: "run_task_reviewer_agent",
           errorMessage: "Agent launch failed.",
-          createdAt: secondNow,
+          createdAt: thirdNow,
         },
       ]);
     }),

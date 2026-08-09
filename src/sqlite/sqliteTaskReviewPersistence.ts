@@ -259,6 +259,17 @@ const complete = (
       }
     }
 
+    if (input.toolingFailure !== undefined) {
+      yield* sql`
+        INSERT INTO task_review_tooling_failures (
+          review_id, error_kind, operation_name, error_message, created_at
+        ) VALUES (
+          ${input.reviewId}, ${input.toolingFailure.errorKind},
+          ${input.toolingFailure.operationName}, ${input.toolingFailure.errorMessage}, ${input.now}
+        )
+      `;
+    }
+
     yield* Effect.forEach(
       input.findings ?? [],
       (finding) => sql`

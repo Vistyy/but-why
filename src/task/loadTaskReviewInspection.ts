@@ -1,3 +1,5 @@
+import { existsSync } from "node:fs";
+
 import { Effect } from "effect";
 import type { RepositoryStorageError } from "../contracts/repositoryStorageError.js";
 import { loadRepoLocalSubmissionContext } from "../init/repoContext.js";
@@ -34,7 +36,9 @@ export type LoadTaskReviewInspectionResult =
   | { readonly ok: true; readonly inspection: TaskReviewInspection }
   | {
       readonly ok: false;
-      readonly error: import("../init/repoContext.js").LoadRepoLocalContextError;
+      readonly error:
+        | import("../init/repoContext.js").LoadRepoLocalContextError
+        | { readonly code: "state_store_unavailable" };
     };
 
 export const loadTaskReviewInspection = (input: {
@@ -43,6 +47,9 @@ export const loadTaskReviewInspection = (input: {
   const repoContext = loadRepoLocalSubmissionContext(input.cwd);
   if (!repoContext.ok) return repoContext;
   const context = repoContext.context;
+  if (!existsSync(context.paths.statePath)) {
+    return { ok: false, error: { code: "state_store_unavailable" } };
+  }
   const repositoryLayer = repositorySqlLayer({
     statePath: context.paths.statePath,
     commonDirectory: context.commonDirectory,
