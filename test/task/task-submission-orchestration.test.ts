@@ -114,13 +114,6 @@ const submissionDependencies = (
     ) =>
       | { readonly ok: true; readonly config: GlobalConfig }
       | { readonly ok: false; readonly message: string };
-    readonly readRepoInstructionsFileAtCommit?: (
-      cwd: string,
-      commit: string,
-      instructionsFile: string,
-    ) =>
-      | { readonly ok: true; readonly instructions: string }
-      | { readonly ok: false; readonly message: string };
     readonly reviewerAgentRuntime: ReviewerAgentRuntime<TaskReviewReviewerOutput>;
     readonly createWorkspace?: TaskSubmissionDependencies["createWorkspace"];
     readonly executionLock?: ExecutionLock;
@@ -151,9 +144,6 @@ const submissionDependencies = (
       ok: true as const,
       config: emptyGlobalConfig,
     })) as TaskSubmissionDependencies["readGlobalConfig"]),
-  ...(input.readRepoInstructionsFileAtCommit === undefined
-    ? {}
-    : { readRepoInstructionsFileAtCommit: input.readRepoInstructionsFileAtCommit }),
   reviewerAgentRuntime: input.reviewerAgentRuntime,
   ...(input.createWorkspace === undefined ? {} : { createWorkspace: input.createWorkspace }),
 });

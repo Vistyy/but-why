@@ -658,6 +658,41 @@ it.scoped("enforces one active Review per Task and rejects mutation and cancella
   ),
 );
 
+it.scoped("Change Start rejects an Active Review marker for another Task", () =>
+  withTemporaryRepositoryState(() =>
+    Effect.gen(function* () {
+      const tasks = yield* openSqliteTaskPersistence("BY");
+      const reviews = yield* openSqliteTaskReviewPersistence();
+      const reviewOwner = yield* createTask(tasks, "Review owner", firstNow);
+      const selectedTask = yield* createTask(tasks, "Selected for Change Start", firstNow);
+      yield* reviews.start({
+        taskId: reviewOwner.id,
+        baseCommit,
+        policy,
+        reviewId: "review-wrong-task-marker",
+        now: firstNow,
+      });
+      yield* transitionTaskToTodo(selectedTask.id, secondNow);
+      const repository = yield* RepositorySql;
+      yield* repository.operation(
+        "misbind Active Task Review marker",
+        (sql) => sql`
+          UPDATE active_task_reviews SET task_id = ${selectedTask.id}
+          WHERE review_id = 'review-wrong-task-marker'
+        `,
+      );
+
+      const changes = yield* openSqliteChangeStartPersistence();
+      const prepared = yield* Effect.either(changes.prepareTask(selectedTask.id));
+
+      expect(prepared).toMatchObject({
+        _tag: "Left",
+        left: { _tag: "RepositoryPersistedDataInvalid" },
+      });
+    }),
+  ),
+);
+
 it.scoped("completion requires the Active Review marker and rejects passing Findings", () =>
   withTemporaryRepositoryState(() =>
     Effect.gen(function* () {
