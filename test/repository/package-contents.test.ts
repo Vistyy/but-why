@@ -316,6 +316,7 @@ exit 1
     expect(files).toContain("docs/public/skills/but-why/references/command-guidance.md");
     expect(files).toContain("docs/public/skills/but-why/references/implement-change.md");
     expect(files).toContain("docs/public/skills/but-why/references/operator-workflow.md");
+    expect(files).toContain("docs/public/skills/but-why/references/task-verification.md");
     expect(files.some((path) => path.startsWith("skills/"))).toBe(false);
     expect(files.some((path) => path.startsWith("src/"))).toBe(false);
     expect(files.some((path) => path.startsWith("test/"))).toBe(false);

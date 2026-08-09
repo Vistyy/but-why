@@ -80,6 +80,18 @@ describe("portable But Why skill", () => {
     expect(implementerSession).toContain("Do not retry an uncertain start or initial prompt.");
     expect(authorTasks).toContain("[Task verification](task-verification.md)");
     expect(taskVerification).toContain("Task Verification Contract");
+    expect(taskVerification).toContain(
+      "**Required Seam** is a boundary required by a Verification Claim or accepted verification plan because interaction across that boundary is part of the Claim.",
+    );
+    expect(taskVerification).toContain(
+      "Evidence establishes a Verification Claim only through decoded observations that contain the facts the Claim requires.",
+    );
+    expect(taskVerification).toContain(
+      "Missing, malformed, or unavailable observations do not establish the Claim.",
+    );
+    expect(taskVerification).toContain(
+      "establishes each complete Claim through every Required Seam",
+    );
     expect(taskVerification).toContain("Do not require tests by default.");
   });
 
@@ -110,6 +122,9 @@ describe("portable But Why skill", () => {
     const skill = readSkillArtifact("SKILL.md");
     expect(skill).toContain("[Setup guidance](../../setup.md)");
     expect(existsSync(join(repoRoot, "docs/public/skills/but-why/../../setup.md"))).toBe(true);
+    expect(
+      existsSync(join(fixture, "docs/public/skills/but-why/references/task-verification.md")),
+    ).toBe(true);
 
     const consumer = createTestWorkspace();
     const agentDirectory = join(createTestWorkspace(), "agent");
