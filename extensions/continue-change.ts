@@ -128,10 +128,54 @@ export const extractChangeId = (text: string): string | undefined =>
   text.match(changeIdPattern)?.[1];
 
 const submitCommandPattern =
-  /(?:^|[\n;|&()])\s*(?:just\s+by|pnpx\s+but-why|npx\s+-y\s+but-why)\s+change\s+submit(?:\s|$)/u;
+  /(?:^|[\n;|&(){}])\s*(?:(?:if|then|elif|else|while|until|do|!)\s+)*(?:just\s+by|pnpx\s+but-why|npx\s+-y\s+but-why)\s+change\s+submit(?:\s|$)/gu;
+
+const visibleShellText = (command: string): string => {
+  let result = "";
+  let quote: "'" | '"' | undefined;
+  let comment = false;
+  for (let index = 0; index < command.length; index += 1) {
+    const character = command[index] ?? "";
+    if (comment) {
+      if (character === "\n") {
+        comment = false;
+        result += character;
+      } else {
+        result += " ";
+      }
+      continue;
+    }
+    if (quote !== undefined) {
+      if (quote === '"' && character === "\\") {
+        result += " ".repeat(Math.min(2, command.length - index));
+        index += 1;
+      } else {
+        if (character === quote) quote = undefined;
+        result += " ";
+      }
+      continue;
+    }
+    if (character === "'" || character === '"') {
+      quote = character;
+      result += " ";
+    } else if (character === "\\") {
+      result += " ".repeat(Math.min(2, command.length - index));
+      index += 1;
+    } else if (character === "#" && (index === 0 || /[\s;|&(){}]/u.test(command[index - 1] ?? ""))) {
+      comment = true;
+      result += " ";
+    } else {
+      result += character;
+    }
+  }
+  return result;
+};
+
+export const countVisibleChangeSubmits = (command: string): number =>
+  [...visibleShellText(command).matchAll(submitCommandPattern)].length;
 
 export const containsVisibleChangeSubmit = (command: string): boolean =>
-  submitCommandPattern.test(command);
+  countVisibleChangeSubmits(command) > 0;
 
 const submissionReassessmentMessage = [
   "But Why blocked the complete Bash tool call before any part of it executed.",
@@ -236,15 +280,15 @@ export default function continueChange(pi: ExtensionAPI): void {
   let submitAllowed = false;
 
   pi.on("tool_call", (event) => {
-    if (!isToolCallEventType("bash", event) || !containsVisibleChangeSubmit(event.input.command)) {
-      return;
-    }
-    if (submitAllowed) {
+    if (!isToolCallEventType("bash", event)) return;
+    const submitCount = countVisibleChangeSubmits(event.input.command);
+    if (submitCount === 0) return;
+    if (submitAllowed && submitCount === 1) {
       submitAllowed = false;
       return;
     }
     submitAllowed = true;
-    pi.sendUserMessage(submissionReassessmentMessage);
+    pi.sendUserMessage(submissionReassessmentMessage, { deliverAs: "steer" });
     return { block: true, reason: submissionReassessmentMessage };
   });
 

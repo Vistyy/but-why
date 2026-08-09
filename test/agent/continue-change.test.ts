@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildContinuationMessage,
   containsVisibleChangeSubmit,
+  countVisibleChangeSubmits,
   decideContinuation,
   extractChangeId,
   nextRetryState,
@@ -111,6 +112,8 @@ describe("Change Implement continuation policy", () => {
     "npx -y but-why change submit change-123",
     "git status && just by change submit change-123",
     "git status\n npx -y but-why change submit change-123",
+    "{ just by change submit change-123; }",
+    "if true; then just by change submit change-123; fi",
   ])("detects a visible canonical Change Submit in %j", (command) => {
     expect(containsVisibleChangeSubmit(command)).toBe(true);
   });
@@ -119,10 +122,21 @@ describe("Change Implement continuation policy", () => {
     "git status",
     "just by change show change-123",
     'printf "just by change submit change-123"',
+    "printf 'line one\\njust by change submit change-123\\n'",
+    "printf 'line one\njust by change submit change-123\n'",
     'submit="just by change submit change-123"',
+    "# just by change submit change-123\ngit status",
     "./submit-change.sh",
   ])("does not classify unrelated Bash command %j as Change Submit", (command) => {
     expect(containsVisibleChangeSubmit(command)).toBe(false);
+  });
+
+  it("counts every directly visible Change Submit invocation", () => {
+    expect(
+      countVisibleChangeSubmits(
+        "just by change submit change-123; npx -y but-why change submit change-123",
+      ),
+    ).toBe(2);
   });
 
   it("extracts the Change identity from the implementer prompt", () => {

@@ -54,6 +54,7 @@ const createHarness = (cwd = sourceCwd, initialPersistedState?: unknown) => {
     });
   }
   const sent: string[] = [];
+  const sendOptions: unknown[] = [];
   const notifications: string[] = [];
   const widgets: Array<{ readonly name: string; readonly value: unknown }> = [];
   let currentSnapshot: unknown = snapshot();
@@ -80,8 +81,9 @@ const createHarness = (cwd = sourceCwd, initialPersistedState?: unknown) => {
         data,
       });
     },
-    sendUserMessage(message: string) {
+    sendUserMessage(message: string, options?: unknown) {
       sent.push(message);
+      sendOptions.push(options);
     },
     async exec(command: string, args: string[]) {
       execCalls.push({ command, args });
@@ -123,6 +125,7 @@ const createHarness = (cwd = sourceCwd, initialPersistedState?: unknown) => {
       await handler("", context);
     },
     sent,
+    sendOptions,
     notifications,
     widgets,
     execCalls,
@@ -187,6 +190,7 @@ describe("packaged Change Implement continuation extension", () => {
     ]);
     expect(harness.sent[0]).toContain("complete accepted intent");
     expect(harness.sent[0]).toContain("Retry all required commands before Change Submission");
+    expect(harness.sendOptions).toEqual([{ deliverAs: "steer" }]);
 
     expect(
       await harness.emit("tool_call", {
@@ -196,10 +200,20 @@ describe("packaged Change Implement continuation extension", () => {
       }),
     ).toBeUndefined();
     expect(await harness.emit("tool_call", { ...submit, toolCallId: "submit-2" })).toBeUndefined();
-    expect(await harness.emit("tool_call", { ...submit, toolCallId: "submit-3" })).toMatchObject({
+    expect(
+      await harness.emit("tool_call", {
+        ...submit,
+        toolCallId: "submit-3",
+        input: {
+          command: `just by change submit ${changeId}; just by change submit ${changeId}`,
+        },
+      }),
+    ).toMatchObject({ block: true });
+    expect(harness.sent).toHaveLength(2);
+    expect(await harness.emit("tool_call", { ...submit, toolCallId: "submit-4" })).toBeUndefined();
+    expect(await harness.emit("tool_call", { ...submit, toolCallId: "submit-5" })).toMatchObject({
       block: true,
     });
-    expect(harness.sent).toHaveLength(2);
   });
 
   it("sends a state-specific turn for an unfinished Change", async () => {
