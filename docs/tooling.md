@@ -88,7 +88,10 @@ The release package boundary test builds, packs, and installs one package fixtur
 Its packed-content owner verifies package metadata and the package allowlist.
 Its bundled-graph owner verifies lazy command loading and generated dynamic targets against the prepared built artifact.
 Its installed-runtime owner seeds only the required Change state through the in-process fixture, then runs the packaged CLI from the installed layout to verify trusted continuation asset loading and truthful missing or invalid extension failures.
-Broad Init, Change Start, and Change Implement semantics remain owned by [`test/repository/init-edge-cases.test.ts`](../test/repository/init-edge-cases.test.ts), [`test/change/change-start-managed-worktree.test.ts`](../test/change/change-start-managed-worktree.test.ts), and [`test/change/change-implement.test.ts`](../test/change/change-implement.test.ts).
+Broad Init and Change Implement semantics remain owned by [`test/repository/init-edge-cases.test.ts`](../test/repository/init-edge-cases.test.ts) and [`test/change/change-implement.test.ts`](../test/change/change-implement.test.ts).
+Change Start real-Git identity, recovery, and preservation evidence is owned by [`test/change/change-start-managed-worktree.test.ts`](../test/change/change-start-managed-worktree.test.ts).
+Captured Change Start orchestration and Repository Preparation evidence is owned by [`test/change/change-start.test.ts`](../test/change/change-start.test.ts).
+Durable Change Start state is owned by [`test/repository/repository-storage.test.ts`](../test/repository/repository-storage.test.ts), and Change Start and Change Prepare result translation is owned by [`test/cli/change-lifecycle-results.test.ts`](../test/cli/change-lifecycle-results.test.ts).
 See [`test/repository/package-contents.test.ts`](../test/repository/package-contents.test.ts).
 Run it with `just test test/repository/package-contents.test.ts`.
 

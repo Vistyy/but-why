@@ -1,12 +1,4 @@
-import {
-  chmodSync,
-  existsSync,
-  mkdirSync,
-  readFileSync,
-  rmSync,
-  symlinkSync,
-  writeFileSync,
-} from "node:fs";
+import { chmodSync, existsSync, mkdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 
 import { expect, it } from "@effect/vitest";
@@ -15,14 +7,12 @@ import { afterAll, beforeAll, describe } from "vitest";
 
 import { provisionChangeWorktree } from "../../src/change/changeStartGit.js";
 import type { ChangeStartRecord } from "../../src/change/changeStartStore.js";
-import { openSqliteChangeStartPersistence } from "../../src/sqlite/sqliteChangeStartPersistence.js";
 import { refreshRemoteChangeBase } from "../../src/submissionEnvironment/remoteChangeBase.js";
 import { runByInProcessEffect } from "../support/by-cli.js";
 import {
   cloneInitializedTestRepository,
   createInitializedRepo,
 } from "../support/initializedRepo.js";
-import { withTestRepository } from "../support/repository.js";
 import { runTestProcessOrThrow } from "../support/testProcess.js";
 import { acquireTestWorkspace, releaseTestWorkspace } from "../support/testWorkspace.js";
 
@@ -314,83 +304,6 @@ describe("Change Start Managed Worktree boundaries", () => {
       }),
   );
 
-  it.effect("creates and recovers one Task-backed Change with immutable intent", () =>
-    Effect.gen(function* () {
-      const root = yield* repositoryCopy();
-      const taskId = yield* createTask(root, "Prepared change", "Prepare this Change.\n");
-      expect(
-        (yield* runByInProcessEffect(root, ["--json", "task", "approve", taskId], now)).status,
-      ).toBe(0);
-
-      const started = yield* runByInProcessEffect(
-        root,
-        ["--json", "change", "start", "--task", taskId],
-        now,
-      );
-      expect(started.status).toBe(0);
-      const output = JSON.parse(started.stdout) as ChangeOutput;
-      expect(output.change).toMatchObject({ taskId });
-      expect(dirname(output.worktreePath)).toBe(
-        join(dirname(root), `${basename(root)}-worktrees`, "but-why"),
-      );
-      expect((yield* runByInProcessEffect(root, ["task", "show", taskId])).stdout).toContain(
-        "state: todo",
-      );
-      const conflictingBase = yield* runByInProcessEffect(
-        root,
-        ["--json", "change", "start", "--task", taskId, "--base", "release"],
-        now,
-      );
-      expect(JSON.parse(conflictingBase.stdout)).toMatchObject({
-        error: {
-          code: "requested_base_conflict",
-          requestedBaseBranch: "release",
-          recordedBaseBranch: "main",
-        },
-      });
-      const persisted = yield* withTestRepository(
-        root,
-        Effect.gen(function* () {
-          const changes = yield* openSqliteChangeStartPersistence();
-          return yield* changes.getById(output.change.id);
-        }),
-      );
-      expect(persisted).toMatchObject({
-        baseRemoteUrl: expect.stringMatching(/^https:\/\/github\.com\//u),
-        acceptanceContext: {
-          version: 1,
-          title: "Prepared change",
-          description: "Prepare this Change.\n",
-        },
-      });
-      const locked = yield* runByInProcessEffect(
-        root,
-        ["--json", "task", "dependencies", "add", taskId, "--depends-on", "BY-404"],
-        now,
-      );
-      expect(JSON.parse(locked.stdout)).toMatchObject({
-        error: { code: "dependencies_locked", taskId, state: "todo" },
-        help: [
-          "Approved Task intent is immutable. Dependency edits are available only before Task Approval.",
-        ],
-      });
-
-      git(root, "worktree", "remove", output.worktreePath);
-      const recovered = yield* runByInProcessEffect(
-        root,
-        ["--json", "change", "start", "--task", taskId],
-        now,
-      );
-      expect(JSON.parse(recovered.stdout)).toMatchObject({
-        change: output.change,
-        branch: output.branch,
-        startingCommit: output.startingCommit,
-        worktreePath: output.worktreePath,
-      });
-      expect(git(output.worktreePath, "symbolic-ref", "HEAD")).toBe(output.branch);
-    }),
-  );
-
   it.effect("recovers the Managed Worktree at the recorded branch's advanced commit", () =>
     Effect.gen(function* () {
       const root = yield* repositoryCopy();
@@ -575,124 +488,6 @@ describe("Change Start Managed Worktree boundaries", () => {
         ],
       });
       expect(existsSync(join(output.worktreePath, "keep.txt"))).toBe(true);
-    }),
-  );
-
-  it.effect("preserves failed preparation and retries it in the same worktree", () =>
-    Effect.gen(function* () {
-      const root = yield* repositoryCopy();
-      writeFileSync(
-        join(root, ".but-why", "config.json"),
-        `${JSON.stringify(
-          {
-            taskPrefix: "BY",
-            prepare: {
-              command:
-                "count=$(cat .prepare-count 2>/dev/null || echo 0); count=$((count + 1)); printf '%s' $count > .prepare-count; if [ $count -le 2 ]; then printf 'failed attempt %s' $count >&2; exit $((6 + count)); else printf 'prepared'; exit 0; fi",
-            },
-          },
-          null,
-          2,
-        )}\n`,
-      );
-      git(root, "add", ".but-why/config.json");
-      git(root, "commit", "-m", "Configure preparation");
-      configurePublicationRemote(root, root);
-
-      const started = yield* runByInProcessEffect(root, ["--json", "change", "start"], now);
-      expect(started.status).toBe(0);
-      const output = JSON.parse(started.stdout) as ChangeOutput;
-      expect(output).toMatchObject({
-        change: { id: expect.any(String), taskId: null },
-        worktreePath: expect.any(String),
-        prepareFailure: {
-          exitCode: 7,
-          timedOut: false,
-          stderr: "failed attempt 1",
-        },
-      });
-      expect(existsSync(output.worktreePath)).toBe(true);
-      expect(readFileSync(join(output.worktreePath, ".prepare-count"), "utf8")).toBe("1");
-
-      const shown = yield* runByInProcessEffect(
-        root,
-        ["--json", "change", "show", output.change.id],
-        now,
-      );
-      expect(shown.status).toBe(0);
-      expect(JSON.parse(shown.stdout)).toMatchObject({
-        change: {
-          id: output.change.id,
-          state: "open",
-          worktreePath: output.worktreePath,
-          prepareFailure: {
-            exitCode: 7,
-            timedOut: false,
-            stderr: "failed attempt 1",
-          },
-        },
-      });
-
-      const retried = yield* runByInProcessEffect(
-        root,
-        ["--json", "change", "prepare", output.change.id],
-        now,
-      );
-      expect(retried.status).toBe(0);
-      expect(JSON.parse(retried.stdout)).toMatchObject({
-        change: { id: output.change.id, taskId: null },
-        worktreePath: output.worktreePath,
-        prepareFailure: {
-          exitCode: 8,
-          timedOut: false,
-          stderr: "failed attempt 2",
-        },
-      });
-      expect(readFileSync(join(output.worktreePath, ".prepare-count"), "utf8")).toBe("2");
-
-      const succeeded = yield* runByInProcessEffect(
-        root,
-        ["--json", "change", "prepare", output.change.id],
-        now,
-      );
-      expect(succeeded.status).toBe(0);
-      const succeededOutput = JSON.parse(succeeded.stdout) as ChangeOutput;
-      expect(succeededOutput).toMatchObject({
-        change: { id: output.change.id, taskId: null },
-        worktreePath: output.worktreePath,
-      });
-      expect(succeededOutput).not.toHaveProperty("prepareFailure");
-      expect(readFileSync(join(output.worktreePath, ".prepare-count"), "utf8")).toBe("3");
-    }),
-  );
-
-  it.effect("rejects Change Start while a Task dependency is unsatisfied", () =>
-    Effect.gen(function* () {
-      const root = yield* repositoryCopy();
-      const prerequisite = yield* createTask(root, "Prerequisite", "First");
-      const dependent = yield* createTask(root, "Dependent", "Second");
-      expect(
-        (yield* runByInProcessEffect(
-          root,
-          ["--json", "task", "dependencies", "add", dependent, "--depends-on", prerequisite],
-          now,
-        )).status,
-      ).toBe(0);
-      expect((yield* runByInProcessEffect(root, ["task", "approve", dependent], now)).status).toBe(
-        0,
-      );
-
-      const blocked = yield* runByInProcessEffect(
-        root,
-        ["--json", "change", "start", "--task", dependent],
-        now,
-      );
-      expect(JSON.parse(blocked.stdout)).toMatchObject({
-        error: {
-          code: "task_dependencies_unsatisfied",
-          blockedBy: [{ id: prerequisite, state: "new" }],
-        },
-      });
     }),
   );
 
