@@ -130,12 +130,20 @@ export const extractChangeId = (text: string): string | undefined =>
 const submitCommandPattern =
   /(?:^|[\n;|&(){}])\s*(?:(?:if|then|elif|else|while|until|do|!)\s+)*(?:just\s+by|pnpx\s+but-why|npx\s+-y\s+but-why)\s+change\s+submit(?:\s|$)/gu;
 
+type ShellLineState = {
+  readonly quote: "'" | '"' | undefined;
+  readonly arithmeticDepth: number;
+};
+
 const hereDocumentDeclarations = (
   line: string,
-): Array<{ readonly delimiter: string; readonly stripTabs: boolean }> => {
+  state: ShellLineState,
+): {
+  readonly declarations: Array<{ readonly delimiter: string; readonly stripTabs: boolean }>;
+  readonly state: ShellLineState;
+} => {
   const declarations: Array<{ readonly delimiter: string; readonly stripTabs: boolean }> = [];
-  let quote: "'" | '"' | undefined;
-  let arithmeticDepth = 0;
+  let { quote, arithmeticDepth } = state;
   for (let index = 0; index < line.length; index += 1) {
     const character = line[index];
     if (character === "\\" && quote !== "'") {
@@ -193,12 +201,13 @@ const hereDocumentDeclarations = (
       index = cursor - 1;
     }
   }
-  return declarations;
+  return { declarations, state: { quote, arithmeticDepth } };
 };
 
 const withoutHereDocumentBodies = (command: string): string => {
   const lines = command.split(/(?<=\n)/u);
   const pending: Array<{ readonly delimiter: string; readonly stripTabs: boolean }> = [];
+  let scanState: ShellLineState = { quote: undefined, arithmeticDepth: 0 };
   return lines
     .map((line) => {
       const body = pending[0];
@@ -209,7 +218,9 @@ const withoutHereDocumentBodies = (command: string): string => {
         }
         return line.endsWith("\n") ? `${" ".repeat(line.length - 1)}\n` : " ".repeat(line.length);
       }
-      pending.push(...hereDocumentDeclarations(line));
+      const scanned = hereDocumentDeclarations(line, scanState);
+      pending.push(...scanned.declarations);
+      scanState = scanned.state;
       return line;
     })
     .join("");

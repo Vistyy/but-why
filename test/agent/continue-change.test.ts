@@ -121,6 +121,7 @@ describe("Change Implement continuation policy", () => {
     "cat <<END-MARKER\ntext\nEND-MARKER\njust by change submit change-123",
     "echo $((1 << 2))\njust by change submit change-123",
     "(( value = 1 << 2 ))\njust by change submit change-123",
+    "value=$((\n  1 << 2\n))\njust by change submit change-123",
   ])("detects a visible canonical Change Submit in %j", (command) => {
     expect(containsVisibleChangeSubmit(command)).toBe(true);
   });
