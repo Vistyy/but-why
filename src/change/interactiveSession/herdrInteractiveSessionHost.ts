@@ -477,6 +477,7 @@ const decodeWorktreeList = (source: string): readonly HerdrWorktree[] | undefine
   for (const value of worktrees) {
     if (
       !isRecord(value) ||
+      (typeof value["path"] !== "string" && typeof value["worktree_path"] !== "string") ||
       (value["path"] !== undefined && typeof value["path"] !== "string") ||
       (value["worktree_path"] !== undefined && typeof value["worktree_path"] !== "string") ||
       (value["branch"] !== undefined &&
@@ -511,7 +512,8 @@ const decodeOpenedWorktree = (source: string): OpenedWorktree | undefined => {
 
 const decodeAgentStarted = (source: string): { readonly terminalId: string } | undefined => {
   const result = decodeResult(source, "agent_started");
-  const terminalId = result?.["terminal_id"];
+  const agent = result?.["agent"];
+  const terminalId = isRecord(agent) ? agent["terminal_id"] : undefined;
   return typeof terminalId === "string" && terminalId.length > 0 ? { terminalId } : undefined;
 };
 
