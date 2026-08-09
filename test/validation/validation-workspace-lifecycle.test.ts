@@ -656,27 +656,26 @@ const loadCreateValidationWorkspace = async (
     noSandbox: () => ({}),
   }));
 
-  vi.doMock("../../src/change/validation/validationGitGlue.js", () => ({
-    validationTempRefName: () => tempRefName,
-    expectedSandcastleWorktreePath: () => expectedWorktreePath,
-    ensureValidationTempRef: () => {
+  vi.doMock("../../src/workspace/workspaceGit.js", () => ({
+    disposableWorktreePath: () => expectedWorktreePath,
+    ensureDisposableTempRef: () => {
       events.push("acquire:temp_ref");
 
       return options.tempRefFailure === undefined
         ? { ok: true }
         : { ok: false, message: options.tempRefFailure };
     },
-    deleteValidationTempRef: () => {
+    deleteDisposableTempRef: () => {
       events.push("release:temp_ref");
       return options.tempRefCleanup ?? "removed";
     },
-    inspectExistingWorktree: () =>
+    inspectDisposableWorktree: () =>
       existingWorktree === undefined
         ? worktreeExists
           ? { exists: true, branch: undefined, head: input.submittedSha, dirty: false }
           : { exists: false }
         : { exists: true, ...existingWorktree },
-    removeValidationWorktree: () => {
+    removeDisposableWorktree: () => {
       events.push("remove:worktree");
       removalCount += 1;
       const removed =
@@ -690,7 +689,7 @@ const loadCreateValidationWorkspace = async (
 
       return removed;
     },
-    isValidationWorktreeRemoved: () => !worktreeExists && existingWorktree === undefined,
+    isDisposableWorktreeRemoved: () => !worktreeExists && existingWorktree === undefined,
   }));
 
   const module = await import("../../src/change/validation/createValidationWorkspace.js");

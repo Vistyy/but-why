@@ -30,10 +30,8 @@ import {
   ValidationWorkspaceSetupFailed,
   validationToolingFailureRecord,
 } from "../validation/validationToolingFailures.js";
-import {
-  expectedSandcastleWorktreePath,
-  validationTempRefName,
-} from "../validation/validationWorkspacePath.js";
+import { validationTempRefName } from "../validation/validationWorkspacePath.js";
+import { disposableWorktreePath } from "../../workspace/workspaceGit.js";
 import type { AcceptanceContextSnapshotV1 } from "../validationRun/acceptanceContextSnapshot.js";
 import { maxValidationArtifactBytes } from "../validationRun/artifactFiles.js";
 import type { CandidateValidationOutcome } from "./candidateValidationRunStore.js";
@@ -182,7 +180,7 @@ const makeCandidateValidation = (dependencies: {
       validationRunId,
       workspaceSetup: {
         tempRefName,
-        worktreePath: expectedSandcastleWorktreePath(
+        worktreePath: disposableWorktreePath(
           dependencies.localRepositoryMainCheckoutRoot,
           tempRefName,
         ),

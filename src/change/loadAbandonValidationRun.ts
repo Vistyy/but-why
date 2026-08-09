@@ -7,9 +7,9 @@ import { openSqliteChangeValidationPersistence } from "../sqlite/sqliteChangeVal
 import { openSqliteExecutionLock } from "../sqlite/sqliteExecutionLock.js";
 import { type AbandonValidationRun, openAbandonValidationRun } from "./abandonValidationRun.js";
 import {
-  deleteValidationTempRef,
-  removeValidationWorktree,
-} from "./validation/validationGitGlue.js";
+  deleteDisposableTempRef,
+  removeDisposableWorktree,
+} from "../workspace/workspaceGit.js";
 import { validationTempRefName } from "./validation/validationWorkspacePath.js";
 
 export type LoadAbandonValidationRunResult =
@@ -50,9 +50,9 @@ export const loadAbandonValidationRun = (input: {
             workspaceCleanup: {
               tempRefName: validationTempRefName,
               removeWorktree: (worktreePath) =>
-                removeValidationWorktree(context.mainCheckoutRoot, worktreePath),
+                removeDisposableWorktree(context.mainCheckoutRoot, worktreePath),
               deleteTempRef: (tempRefName) =>
-                deleteValidationTempRef(context.mainCheckoutRoot, tempRefName),
+                deleteDisposableTempRef(context.mainCheckoutRoot, tempRefName),
             },
           }).abandon(command),
         ).pipe(Effect.provide(repositoryLayer)),
