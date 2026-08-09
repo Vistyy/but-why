@@ -163,7 +163,7 @@ const createHarness = (cwd = sourceCwd, initialPersistedState?: unknown) => {
     async emit(event: string, value: unknown = {}) {
       const handler = handlers.get(event);
       if (handler === undefined) throw new Error(`Missing ${event} handler`);
-      await handler(value, context);
+      return await handler(value, context);
     },
   };
 };
@@ -171,6 +171,37 @@ const createHarness = (cwd = sourceCwd, initialPersistedState?: unknown) => {
 const result = (stdout: string) => ({ stdout, stderr: "", code: 0, killed: false });
 
 describe("packaged Change Implement continuation extension", () => {
+  it("blocks each first visible Submission, steers reassessment, and allows exactly one retry", async () => {
+    const harness = createHarness();
+    const submit = {
+      type: "tool_call",
+      toolCallId: "submit-1",
+      toolName: "bash",
+      input: { command: `git status && just by change submit ${changeId}` },
+    };
+
+    const first = await harness.emit("tool_call", submit);
+    expect(first).toMatchObject({ block: true });
+    expect(harness.sent).toEqual([
+      expect.stringContaining("complete Bash tool call before any part of it executed"),
+    ]);
+    expect(harness.sent[0]).toContain("complete accepted intent");
+    expect(harness.sent[0]).toContain("Retry all required commands before Change Submission");
+
+    expect(
+      await harness.emit("tool_call", {
+        ...submit,
+        toolCallId: "unrelated-1",
+        input: { command: "git status" },
+      }),
+    ).toBeUndefined();
+    expect(await harness.emit("tool_call", { ...submit, toolCallId: "submit-2" })).toBeUndefined();
+    expect(await harness.emit("tool_call", { ...submit, toolCallId: "submit-3" })).toMatchObject({
+      block: true,
+    });
+    expect(harness.sent).toHaveLength(2);
+  });
+
   it("sends a state-specific turn for an unfinished Change", async () => {
     const harness = createHarness();
 

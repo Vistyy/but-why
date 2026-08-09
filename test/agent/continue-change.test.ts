@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   buildContinuationMessage,
+  containsVisibleChangeSubmit,
   decideContinuation,
   extractChangeId,
   nextRetryState,
@@ -102,6 +103,26 @@ describe("Change Implement continuation policy", () => {
     expect(message).toContain("linked Task Context when present");
     expect(message).toContain("complete accepted intent");
     expect(message).toContain("until Change Submit passes");
+  });
+
+  it.each([
+    "just by change submit change-123",
+    "pnpx but-why change submit change-123",
+    "npx -y but-why change submit change-123",
+    "git status && just by change submit change-123",
+    "git status\n npx -y but-why change submit change-123",
+  ])("detects a visible canonical Change Submit in %j", (command) => {
+    expect(containsVisibleChangeSubmit(command)).toBe(true);
+  });
+
+  it.each([
+    "git status",
+    "just by change show change-123",
+    'printf "just by change submit change-123"',
+    'submit="just by change submit change-123"',
+    "./submit-change.sh",
+  ])("does not classify unrelated Bash command %j as Change Submit", (command) => {
+    expect(containsVisibleChangeSubmit(command)).toBe(false);
   });
 
   it("extracts the Change identity from the implementer prompt", () => {

@@ -2,7 +2,12 @@ import { createHash } from "node:crypto";
 import { accessSync, constants, readFileSync } from "node:fs";
 import { join } from "node:path";
 
-import type { ExtensionAPI, ExtensionContext, SessionEntry } from "@earendil-works/pi-coding-agent";
+import {
+  isToolCallEventType,
+  type ExtensionAPI,
+  type ExtensionContext,
+  type SessionEntry,
+} from "@earendil-works/pi-coding-agent";
 
 type ChangeState = "open" | "closed";
 type ChangeCloseReason = "completed" | "cancelled";
@@ -122,6 +127,18 @@ const butWhyCommand = (prefix: ButWhyCommandPrefix, ...args: readonly string[]):
 export const extractChangeId = (text: string): string | undefined =>
   text.match(changeIdPattern)?.[1];
 
+const submitCommandPattern =
+  /(?:^|[\n;|&()])\s*(?:just\s+by|pnpx\s+but-why|npx\s+-y\s+but-why)\s+change\s+submit(?:\s|$)/u;
+
+export const containsVisibleChangeSubmit = (command: string): boolean =>
+  submitCommandPattern.test(command);
+
+const submissionReassessmentMessage = [
+  "But Why blocked the complete Bash tool call before any part of it executed.",
+  "Reassess the Candidate against the complete accepted intent.",
+  "Retry all required commands before Change Submission, including the blocked Change Submit command.",
+].join(" ");
+
 const findChangeId = (entries: readonly SessionEntry[]): string | undefined => {
   for (const entry of entries) {
     if (entry.type !== "message" || entry.message.role !== "user") continue;
@@ -216,6 +233,20 @@ export default function continueChange(pi: ExtensionAPI): void {
   let settling = false;
   let pauseGeneration = 0;
   let watcherDisplay: WatcherDisplay = { kind: "watching" };
+  let submitAllowed = false;
+
+  pi.on("tool_call", (event) => {
+    if (!isToolCallEventType("bash", event) || !containsVisibleChangeSubmit(event.input.command)) {
+      return;
+    }
+    if (submitAllowed) {
+      submitAllowed = false;
+      return;
+    }
+    submitAllowed = true;
+    pi.sendUserMessage(submissionReassessmentMessage);
+    return { block: true, reason: submissionReassessmentMessage };
+  });
 
   const showWatcher = (ctx: ExtensionContext, display: WatcherDisplay): void => {
     watcherDisplay = display;
