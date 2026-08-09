@@ -6,6 +6,7 @@ import { Context, Effect, Layer } from "effect";
 import type { AgentEnvironmentCommand } from "../../agent/agentEnvironment.js";
 import type { ReviewerAgentRuntime } from "../../agent/reviewerAgentRuntime.js";
 import type { RepositoryStorageError } from "../../contracts/repositoryStorageError.js";
+import type { ReviewerOutput } from "../../contracts/reviewerOutput.js";
 import { disposableWorktreePath } from "../../workspace/workspaceGit.js";
 import type { AcceptanceReviewPolicy } from "../acceptanceReview/acceptanceReviewConfig.js";
 import { runAcceptanceReviewPhase } from "../acceptanceReview/runAcceptanceReviewPhase.js";
@@ -114,7 +115,7 @@ export class CandidateValidationPersistence extends Context.Tag("CandidateValida
 
 export class CandidateReviewerAgentRuntime extends Context.Tag("CandidateReviewerAgentRuntime")<
   CandidateReviewerAgentRuntime,
-  ReviewerAgentRuntime
+  ReviewerAgentRuntime<ReviewerOutput>
 >() {}
 
 export type CandidateValidationService = {
@@ -154,7 +155,7 @@ const makeCandidateValidation = (dependencies: {
   readonly localRepositoryMainCheckoutRoot: string;
   readonly artifactsRoot: string;
   readonly persistence: ChangeValidationPersistence;
-  readonly reviewerAgentRuntime: ReviewerAgentRuntime;
+  readonly reviewerAgentRuntime: ReviewerAgentRuntime<ReviewerOutput>;
   readonly sessionStore?: ReviewerSessionStore;
   readonly reviewerSessionsRoot?: string;
 }): CandidateValidationService => {
@@ -329,7 +330,7 @@ const runCandidatePhases = (
   dependencies: {
     readonly artifactsRoot: string;
     readonly persistence: ChangeValidationPersistence;
-    readonly reviewerAgentRuntime: ReviewerAgentRuntime;
+    readonly reviewerAgentRuntime: ReviewerAgentRuntime<ReviewerOutput>;
     readonly sessionStore?: ReviewerSessionStore;
     readonly reviewerSessionsRoot?: string;
   },

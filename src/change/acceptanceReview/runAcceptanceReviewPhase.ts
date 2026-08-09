@@ -8,7 +8,7 @@ import {
   reviewerFindingHistory,
 } from "../../agent/reviewerPrompts.js";
 import type { RepositoryStorageError } from "../../contracts/repositoryStorageError.js";
-import { decodeReviewerOutputContract } from "../../contracts/reviewerOutput.js";
+import { type ReviewerOutput } from "../../contracts/reviewerOutput.js";
 import type { RecordCandidateAcceptanceRoundInput } from "../candidateValidation/candidateValidationRunStore.js";
 import type { ImplementationBlockerHistory } from "../implementationBlocker.js";
 import type { ImplementationDecision } from "../implementationDecision.js";
@@ -47,7 +47,7 @@ export type RunAcceptanceReviewPhaseInput = {
   readonly blockerHistory?: ImplementationBlockerHistory;
   readonly policy: AcceptanceReviewPolicy;
   readonly agentEnvironment?: AgentEnvironmentCommand;
-  readonly runtime: ReviewerAgentRuntime;
+  readonly runtime: ReviewerAgentRuntime<ReviewerOutput>;
   readonly sandbox: Pick<Sandbox, "exec" | "run">;
   readonly artifactsRoot: string;
   readonly artifactMaxBytes?: number;
@@ -254,15 +254,8 @@ const runAcceptanceReviewPhaseImpl = (
       ...(input.artifactMaxBytes === undefined ? {} : { artifactMaxBytes: input.artifactMaxBytes }),
       executionEvidence: reviewerEvidence,
     });
-    const report = result.ok
-      ? yield* decodeReviewerOutputContract({
-          reviewer: "acceptance",
-          attempts: result.attempts,
-          output: result.report,
-        })
-      : undefined;
-    const findings = report
-      ? report.findings.map((finding, index) => ({
+    const findings = result.ok
+      ? result.report.findings.map((finding, index) => ({
           id: `${input.validationRunId}-acceptance-F${index + 1}`,
           validationRunId: input.validationRunId,
           phase: validationPhase.acceptanceReview,

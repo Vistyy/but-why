@@ -3,7 +3,7 @@ import { existsSync } from "node:fs";
 import { Effect } from "effect";
 
 import {
-  piReviewerAgentRuntime,
+  piReviewerAgentRuntimeFor,
   type ReviewerAgentRuntime,
 } from "../agent/reviewerAgentRuntime.js";
 import type { RepositoryStorageError } from "../contracts/repositoryStorageError.js";
@@ -19,6 +19,10 @@ import { openSqliteTaskReviewPersistence } from "../sqlite/sqliteTaskReviewPersi
 import { runGitCommand } from "../submissionEnvironment/gitFacts.js";
 import { readRepositoryFileAtCommit } from "../submissionEnvironment/repositoryFile.js";
 import { openTaskSubmission, type TaskSubmission, type TaskSubmitResult } from "./submitTask.js";
+import {
+  decodeTaskReviewRuntimeOutput,
+  type TaskReviewReviewerOutput,
+} from "./taskReviewPolicy.js";
 
 export type LoadTaskSubmissionResult =
   | { readonly ok: true; readonly submission: TaskSubmission }
@@ -30,7 +34,7 @@ export type LoadTaskSubmissionResult =
 export const loadTaskSubmission = (input: {
   readonly cwd: string;
   readonly globalConfigPath: string;
-  readonly reviewerAgentRuntime?: ReviewerAgentRuntime;
+  readonly reviewerAgentRuntime?: ReviewerAgentRuntime<TaskReviewReviewerOutput>;
 }): LoadTaskSubmissionResult => {
   const repoContext = loadRepoLocalSubmissionContext(input.cwd);
   if (!repoContext.ok) return repoContext;
@@ -83,7 +87,9 @@ export const loadTaskSubmission = (input: {
                 const global = readGlobalConfig(path);
                 return global.ok ? global : { ok: false as const, message: global.error.message };
               },
-              reviewerAgentRuntime: input.reviewerAgentRuntime ?? piReviewerAgentRuntime,
+              reviewerAgentRuntime:
+                input.reviewerAgentRuntime ??
+                piReviewerAgentRuntimeFor(decodeTaskReviewRuntimeOutput),
             }).submit(submitInput),
           ),
           Effect.provide(repositoryLayer),

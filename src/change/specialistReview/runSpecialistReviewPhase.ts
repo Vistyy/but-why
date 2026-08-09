@@ -14,7 +14,7 @@ import {
   reviewerFindingHistory,
 } from "../../agent/reviewerPrompts.js";
 import type { RepositoryStorageError } from "../../contracts/repositoryStorageError.js";
-import { decodeReviewerOutputContract } from "../../contracts/reviewerOutput.js";
+import { type ReviewerOutput } from "../../contracts/reviewerOutput.js";
 import type { RecordCandidateSpecialistRoundInput } from "../candidateValidation/candidateValidationRunStore.js";
 import {
   type ReviewerContinuity,
@@ -46,7 +46,7 @@ export type RunSpecialistReviewPhaseInput = {
   readonly policies: readonly SpecialistReviewPolicy[];
   readonly acceptanceContext?: AcceptanceContextSnapshotV1;
   readonly agentEnvironment?: AgentEnvironmentCommand;
-  readonly runtime: ReviewerAgentRuntime;
+  readonly runtime: ReviewerAgentRuntime<ReviewerOutput>;
   readonly sandbox: Pick<Sandbox, "exec" | "run">;
   readonly artifactsRoot: string;
   readonly artifactMaxBytes?: number;
@@ -267,18 +267,13 @@ const runSpecialist = (
     }
     yield* verifyIntegrity(input);
 
-    let result: ReviewerAgentResult = provisional;
+    let result: ReviewerAgentResult<ReviewerOutput> = provisional;
     if (provisional.ok && earlierFindings.length > 0) {
-      const provisionalReport = yield* decodeReviewerOutputContract({
-        reviewer: policy.id,
-        attempts: provisional.attempts,
-        output: provisional.report,
-      });
       result = yield* review(
         provisional.sessionReference,
         buildReviewerRevisionPrompt({
           reviewPrompt: prompt,
-          provisionalReport,
+          provisionalReport: provisional.report,
           earlierFindings,
         }),
       );
@@ -308,15 +303,8 @@ const runSpecialist = (
         reviewCalls,
       },
     });
-    const report = result.ok
-      ? yield* decodeReviewerOutputContract({
-          reviewer: policy.id,
-          attempts: result.attempts,
-          output: result.report,
-        })
-      : undefined;
-    const findings = report
-      ? report.findings.map((finding, findingIndex) => ({
+    const findings = result.ok
+      ? result.report.findings.map((finding, findingIndex) => ({
           id: `${input.validationRunId}-${policy.id}-F${findingIndex + 1}`,
           validationRunId: input.validationRunId,
           phase: validationPhase.specialistReview,

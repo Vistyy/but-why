@@ -4,7 +4,6 @@ import { Effect, Either } from "effect";
 
 import { repoAgentEnvironment } from "../agent/agentEnvironment.js";
 import type { ReviewerAgentRuntime } from "../agent/reviewerAgentRuntime.js";
-import { parseTaggedReviewerOutput } from "../agent/reviewerOutputWire.js";
 import type { SubmitPrepareConfig } from "../change/submit/submitRepoConfig.js";
 import type { ExecutionLock } from "../contracts/executionLock.js";
 import type { GlobalConfig } from "../contracts/globalConfig.js";
@@ -20,11 +19,10 @@ import type {
   TaskReviewToolingFailure,
 } from "./taskReview.js";
 import {
-  decodeTaskReviewReviewerOutput,
-  decodeTaskReviewRuntimeOutput,
   resolveTaskReviewPolicy,
   reviewerOutputToFindings,
   type TaskReviewPolicy,
+  type TaskReviewReviewerOutput,
   taskReviewPolicySnapshot,
 } from "./taskReviewPolicy.js";
 import { buildTaskReviewerPrompt } from "./taskReviewPrompts.js";
@@ -58,7 +56,7 @@ export type TaskSubmissionDependencies = {
   readonly readMainCheckoutHead: (cwd: string) => MainCheckoutHeadResult;
   readonly readRepoConfigAtCommit: (cwd: string, commit: string) => RepoConfigAtCommitResult;
   readonly readGlobalConfig: (globalConfigPath: string) => TaskGlobalConfigReadResult;
-  readonly reviewerAgentRuntime: ReviewerAgentRuntime;
+  readonly reviewerAgentRuntime: ReviewerAgentRuntime<TaskReviewReviewerOutput>;
 };
 
 export type TaskSubmitResult =
@@ -358,7 +356,7 @@ const runTaskReviewPhases = (input: {
   readonly baseCommit: string;
   readonly policy: TaskReviewPolicy;
   readonly prepare?: SubmitPrepareConfig;
-  readonly reviewerAgentRuntime: ReviewerAgentRuntime;
+  readonly reviewerAgentRuntime: ReviewerAgentRuntime<TaskReviewReviewerOutput>;
   readonly sandbox: Pick<Sandbox, "exec" | "run">;
   readonly commandCwd: string;
   readonly resourceRoot?: string;
@@ -408,7 +406,6 @@ const runTaskReviewPhases = (input: {
       reviewer: "task_review",
       validationRunId: input.reviewId,
       availableArtifactRefs: [],
-      decodeOutput: decodeTaskReviewRuntimeOutput,
       prompt: buildTaskReviewerPrompt({
         reviewId: input.reviewId,
         baseCommit: input.baseCommit,
@@ -425,39 +422,19 @@ const runTaskReviewPhases = (input: {
         outcome: "blocked" as const,
         findings: [],
         toolingFailure: taskReviewToolingFailureRecord({
-          errorKind: "infrastructure_tooling_failed",
-          operationName: "run_task_reviewer_agent",
+          errorKind:
+            result.failure._tag === "ReviewerOutputContractFailed"
+              ? "reviewer_output_contract_failed"
+              : "infrastructure_tooling_failed",
+          operationName:
+            result.failure._tag === "ReviewerOutputContractFailed"
+              ? result.failure.operationName
+              : "run_task_reviewer_agent",
           errorMessage: result.failure.message,
         }),
       };
     }
-    const decodedAttempt = yield* decodeTaskReviewReviewerOutput({
-      reviewer: "task_review",
-      attempts: result.attempts,
-      output:
-        result.outputContract === "injected"
-          ? result.report
-          : parseTaggedReviewerOutput(result.stdout),
-    }).pipe(
-      Effect.mapError(
-        (error): TaskReviewToolingFailureRecord =>
-          taskReviewToolingFailureRecord({
-            errorKind: "reviewer_output_contract_failed",
-            operationName: "decode_task_review_output",
-            errorMessage: errorMessage(error),
-          }),
-      ),
-      Effect.either,
-    );
-    if (Either.isLeft(decodedAttempt)) {
-      return {
-        outcome: "blocked" as const,
-        findings: [],
-        toolingFailure: decodedAttempt.left,
-      };
-    }
-    const decoded = decodedAttempt.right;
-    const findings = reviewerOutputToFindings(input.reviewId, decoded);
+    const findings = reviewerOutputToFindings(input.reviewId, result.report);
     return {
       outcome: findings.length === 0 ? "passed" : "blocked",
       findings,

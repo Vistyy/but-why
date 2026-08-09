@@ -9,6 +9,7 @@ import type { InteractiveSessionHost } from "../../src/change/interactiveSession
 import type { TextInputStdin } from "../../src/cli/input/textInput.js";
 import { type CliResult, runCli } from "../../src/cli.js";
 import { serializeOutput } from "../../src/output/serialize.js";
+import type { TaskReviewReviewerOutput } from "../../src/task/taskReviewPolicy.js";
 import type { TaskUseCases } from "../../src/task/taskUseCases.js";
 import { runTestProcess } from "./testProcess.js";
 import { createTestWorkspace } from "./testWorkspace.js";
@@ -121,6 +122,7 @@ type InProcessCliOptions = {
   readonly taskUseCases?: TaskUseCases;
   readonly cancellationUseCases?: CancellationUseCases;
   readonly reviewerAgentRuntime?: ReviewerAgentRuntime;
+  readonly taskReviewerAgentRuntime?: ReviewerAgentRuntime<TaskReviewReviewerOutput>;
   readonly interactiveSessionHost?: InteractiveSessionHost;
 };
 
@@ -149,6 +151,9 @@ const runByInProcessEffectRaw = (
     ...(options.reviewerAgentRuntime === undefined
       ? {}
       : { reviewerAgentRuntime: options.reviewerAgentRuntime }),
+    ...(options.taskReviewerAgentRuntime === undefined
+      ? {}
+      : { taskReviewerAgentRuntime: options.taskReviewerAgentRuntime }),
     ...(options.interactiveSessionHost === undefined
       ? {}
       : { interactiveSessionHost: options.interactiveSessionHost }),

@@ -26,9 +26,9 @@ export const runSubmitCommand = (
   const loaded = loadTaskSubmission({
     cwd: environment.cwd,
     globalConfigPath: environment.globalConfigPath,
-    ...(environment.reviewerAgentRuntime === undefined
+    ...(environment.taskReviewerAgentRuntime === undefined
       ? {}
-      : { reviewerAgentRuntime: environment.reviewerAgentRuntime }),
+      : { reviewerAgentRuntime: environment.taskReviewerAgentRuntime }),
   });
   if (!loaded.ok) return Effect.succeed(repoStateLoadError(loaded.error));
   return loaded.submission

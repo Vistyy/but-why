@@ -6,6 +6,7 @@ import type { TextInputStdin } from "./cli/input/textInput.js";
 import { runCommandTree } from "./cliCommandTree.js";
 import { type CliResult, runtimeError } from "./cliResults.js";
 import type { OutputFormat } from "./output/structured.js";
+import type { TaskReviewReviewerOutput } from "./task/taskReviewPolicy.js";
 import type { TaskUseCases } from "./task/taskUseCases.js";
 
 export type { CliResult } from "./cliResults.js";
@@ -18,6 +19,7 @@ export type CliEnvironment = {
   readonly taskUseCases?: TaskUseCases;
   readonly cancellationUseCases?: CancellationUseCases;
   readonly reviewerAgentRuntime?: ReviewerAgentRuntime;
+  readonly taskReviewerAgentRuntime?: ReviewerAgentRuntime<TaskReviewReviewerOutput>;
   readonly interactiveSessionHost?: InteractiveSessionHost;
   readonly writeStderr?: (message: string) => void;
 };

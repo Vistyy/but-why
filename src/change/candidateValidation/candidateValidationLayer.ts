@@ -3,6 +3,7 @@ import {
   piReviewerAgentRuntime,
   type ReviewerAgentRuntime,
 } from "../../agent/reviewerAgentRuntime.js";
+import type { ReviewerOutput } from "../../contracts/reviewerOutput.js";
 import type { ChangeValidationPersistence } from "../validation/changeValidationPersistence.js";
 import {
   CandidateReviewerAgentRuntime,
@@ -16,7 +17,7 @@ export const candidateValidationLayer = (input: {
   readonly localRepositoryMainCheckoutRoot: string;
   readonly artifactsRoot: string;
   readonly persistence: ChangeValidationPersistence;
-  readonly reviewerAgentRuntime?: ReviewerAgentRuntime;
+  readonly reviewerAgentRuntime?: ReviewerAgentRuntime<ReviewerOutput>;
   readonly sessionStore?: unknown;
   readonly reviewerSessionsRoot?: string;
 }): Layer.Layer<CandidateValidation, never, never> =>

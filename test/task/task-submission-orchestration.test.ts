@@ -10,7 +10,8 @@ import type {
   ReviewerAgentResult,
   ReviewerAgentRuntime,
 } from "../../src/agent/reviewerAgentRuntime.js";
-import { SandcastleToolingFailed } from "../../src/change/validation/validationToolingFailures.js";
+import { SandcastleToolingFailed } from "../../src/agent/reviewerExecutionFailure.js";
+import { ReviewerOutputContractFailed } from "../../src/contracts/reviewerOutputContractFailure.js";
 import type { ExecutionLock } from "../../src/contracts/executionLock.js";
 import type { GlobalConfig } from "../../src/contracts/globalConfig.js";
 import type { RepoConfig } from "../../src/contracts/repoConfig.js";
@@ -20,6 +21,7 @@ import { openSqliteTaskReviewPersistence } from "../../src/sqlite/sqliteTaskRevi
 import { openAbandonTaskReview } from "../../src/task/abandonTaskReview.js";
 import { openTaskSubmission, type TaskSubmissionDependencies } from "../../src/task/submitTask.js";
 import { publicTaskId } from "../../src/task/taskId.js";
+import type { TaskReviewReviewerOutput } from "../../src/task/taskReviewPolicy.js";
 import type { TaskReviewPersistence } from "../../src/task/taskReviewStore.js";
 import {
   commitButWhyConfigAndRecordDefault,
@@ -45,7 +47,9 @@ const emptyGlobalConfig: GlobalConfig = {
 const taggedReviewerOutput = (value: unknown): string =>
   `<reviewer-output>${JSON.stringify(value)}</reviewer-output>`;
 
-const passingReviewer = (reviewInputs: ReviewerAgentInput[]): ReviewerAgentRuntime => ({
+const passingReviewer = (
+  reviewInputs: ReviewerAgentInput[],
+): ReviewerAgentRuntime<TaskReviewReviewerOutput> => ({
   review: (input) =>
     Effect.sync((): ReviewerAgentResult => {
       reviewInputs.push(input);
@@ -59,7 +63,9 @@ const passingReviewer = (reviewInputs: ReviewerAgentInput[]): ReviewerAgentRunti
     }),
 });
 
-const failingReviewer = (failure: ReviewerAgentResult): ReviewerAgentRuntime => ({
+const failingReviewer = (
+  failure: ReviewerAgentResult<TaskReviewReviewerOutput>,
+): ReviewerAgentRuntime<TaskReviewReviewerOutput> => ({
   review: () => Effect.sync(() => failure),
 });
 
@@ -108,7 +114,7 @@ const submissionDependencies = (
     ) =>
       | { readonly ok: true; readonly instructions: string }
       | { readonly ok: false; readonly message: string };
-    readonly reviewerAgentRuntime: ReviewerAgentRuntime;
+    readonly reviewerAgentRuntime: ReviewerAgentRuntime<TaskReviewReviewerOutput>;
     readonly executionLock?: ExecutionLock;
     readonly persistence: TaskReviewPersistence;
   },
@@ -230,7 +236,7 @@ describe("Task Submission orchestration", () => {
           root,
           Effect.gen(function* () {
             const reviews = yield* openSqliteTaskReviewPersistence();
-            const runtime: ReviewerAgentRuntime = {
+            const runtime: ReviewerAgentRuntime<TaskReviewReviewerOutput> = {
               review: () =>
                 Effect.sync(
                   (): ReviewerAgentResult => ({
@@ -305,7 +311,7 @@ describe("Task Submission orchestration", () => {
             const reviews = yield* openSqliteTaskReviewPersistence();
             const reviewInputs: ReviewerAgentInput[] = [];
             const headReads = { count: 0 };
-            const blockedReviewer: ReviewerAgentRuntime = {
+            const blockedReviewer: ReviewerAgentRuntime<TaskReviewReviewerOutput> = {
               review: (input) =>
                 Effect.sync((): ReviewerAgentResult => {
                   reviewInputs.push(input);
@@ -370,7 +376,7 @@ describe("Task Submission orchestration", () => {
           root,
           Effect.gen(function* () {
             const reviews = yield* openSqliteTaskReviewPersistence();
-            const failure: ReviewerAgentResult = {
+            const failure: ReviewerAgentResult<TaskReviewReviewerOutput> = {
               ok: false,
               failure: new SandcastleToolingFailed({
                 operationName: "run_reviewer_agent",
@@ -413,6 +419,40 @@ describe("Task Submission orchestration", () => {
             const setup = yield* reviews.getAbandonmentContext(result.reviewId);
             expect(setup?.cleanupWorktree).toBe("removed");
             expect(setup?.cleanupTempRef).toBe("removed");
+
+            const malformedOutputSubmission = openTaskSubmission(
+              submissionDependencies(root, {
+                reviewerAgentRuntime: failingReviewer({
+                  ok: false,
+                  failure: new ReviewerOutputContractFailed({
+                    operationName: "decode_task_reviewer_output",
+                    reviewer: "task_review",
+                    attempts: 3,
+                    diagnostics: [],
+                    message: "Task Reviewer output is malformed.",
+                  }),
+                  sessionUsability: "unknown",
+                  attempts: 3,
+                  stdout: "<reviewer-output>{malformed}</reviewer-output>",
+                }),
+                persistence: reviews,
+              }),
+            );
+            const malformed = yield* malformedOutputSubmission.submit({
+              taskId: publicTaskId("BY-1"),
+              now: secondNow,
+            });
+            expect(malformed).toMatchObject({ ok: true, status: "tooling_failed" });
+            if (!malformed.ok || malformed.status !== "tooling_failed") {
+              throw new Error("unexpected malformed-output result");
+            }
+            expect(malformed.toolingFailures).toEqual([
+              expect.objectContaining({
+                errorKind: "reviewer_output_contract_failed",
+                operationName: "decode_task_reviewer_output",
+                errorMessage: "Task Reviewer output is malformed.",
+              }),
+            ]);
           }),
         );
       }),
@@ -490,7 +530,7 @@ describe("Task Submission orchestration", () => {
           Effect.gen(function* () {
             const reviews = yield* openSqliteTaskReviewPersistence();
             let workspacePath: string | undefined;
-            const runtime: ReviewerAgentRuntime = {
+            const runtime: ReviewerAgentRuntime<TaskReviewReviewerOutput> = {
               review: (input) =>
                 Effect.sync((): ReviewerAgentResult => {
                   workspacePath = input.commandCwd;

@@ -14,6 +14,7 @@ import { loadRepoLocalContext } from "../../init/repoContext.js";
 import { withTaskUseCases } from "../../task/loadTaskUseCases.js";
 import type { TaskRecord } from "../../task/task.js";
 import type { PublicTaskId } from "../../task/taskId.js";
+import type { TaskReviewReviewerOutput } from "../../task/taskReviewPolicy.js";
 import type { TaskUseCases } from "../../task/taskUseCases.js";
 
 export type TaskIdCommand = { readonly taskId: string };
@@ -25,7 +26,7 @@ export type TaskCommandEnvironment = {
   readonly stdin: TextInputStdin;
   readonly taskUseCases?: TaskUseCases;
   readonly cancellationUseCases?: CancellationUseCases;
-  readonly reviewerAgentRuntime?: ReviewerAgentRuntime;
+  readonly taskReviewerAgentRuntime?: ReviewerAgentRuntime<TaskReviewReviewerOutput>;
 };
 
 export const withTasks = (

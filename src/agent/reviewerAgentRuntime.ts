@@ -13,12 +13,12 @@ import { dirname, join } from "node:path";
 import { type AgentProvider, pi, type Sandbox, type SandboxRunResult } from "@ai-hero/sandcastle";
 import { Effect } from "effect";
 import {
+  type ReviewerExecutionFailure,
   SandcastleToolingFailed,
-  type ValidationToolingFailure,
-} from "../change/validation/validationToolingFailures.js";
+} from "./reviewerExecutionFailure.js";
 import {
-  decodeReviewerOutputContract,
-  validateReviewerArtifactRefs,
+  decodeValidationReviewerOutput,
+  type ReviewerOutput,
 } from "../contracts/reviewerOutput.js";
 import type { ReviewerOutputContractFailed } from "../contracts/reviewerOutputContractFailure.js";
 import {
@@ -31,8 +31,8 @@ import { piResourceFlags } from "./piRuntime.js";
 import { parseTaggedReviewerOutput } from "./reviewerOutputWire.js";
 import { buildReviewerOutputCorrectionPrompt } from "./reviewerPrompts.js";
 
-export type ReviewerAgentRuntime = {
-  readonly review: (input: ReviewerAgentInput) => Effect.Effect<ReviewerAgentResult>;
+export type ReviewerAgentRuntime<Report = ReviewerOutput> = {
+  readonly review: (input: ReviewerAgentInput) => Effect.Effect<ReviewerAgentResult<Report>>;
 };
 
 export type ReviewerSessionUsability = "unusable" | "unknown";
@@ -49,18 +49,12 @@ export type ReviewerAgentInput = {
   readonly agentEnvironment?: AgentEnvironmentCommand;
   readonly sessionStorageRoot?: string;
   readonly resumeSession?: string;
-  readonly decodeOutput?: (input: {
-    readonly reviewer: string;
-    readonly attempts: number;
-    readonly output: unknown;
-  }) => Effect.Effect<unknown, ReviewerOutputContractFailed>;
 };
 
-export type ReviewerAgentResult =
+export type ReviewerAgentResult<Report = ReviewerOutput> =
   | {
       readonly ok: true;
-      readonly outputContract?: "validation" | "injected";
-      readonly report: unknown;
+      readonly report: Report;
       readonly attempts: number;
       readonly stdout: string;
       readonly sessionReference?: string;
@@ -68,7 +62,7 @@ export type ReviewerAgentResult =
     }
   | {
       readonly ok: false;
-      readonly failure: ValidationToolingFailure;
+      readonly failure: ReviewerExecutionFailure;
       readonly sessionUsability: ReviewerSessionUsability;
       readonly attempts: number;
       readonly stdout: string;
@@ -76,7 +70,18 @@ export type ReviewerAgentResult =
       readonly sessionFilePath?: string;
     };
 
-const reviewWithPi = (input: ReviewerAgentInput): Effect.Effect<ReviewerAgentResult> =>
+type ReviewerOutputDecoder<Report> = (input: {
+  readonly reviewer: string;
+  readonly attempts: number;
+  readonly output: unknown;
+  readonly validationRunId: string;
+  readonly availableArtifactRefs: readonly string[];
+}) => Effect.Effect<Report, ReviewerOutputContractFailed>;
+
+const reviewWithPi = <Report>(
+  input: ReviewerAgentInput,
+  decodeOutput: ReviewerOutputDecoder<Report>,
+): Effect.Effect<ReviewerAgentResult<Report>> =>
   Effect.gen(function* () {
     const sessionSnapshot =
       input.resumeSession === undefined || input.sessionStorageRoot === undefined
@@ -139,12 +144,13 @@ const reviewWithPi = (input: ReviewerAgentInput): Effect.Effect<ReviewerAgentRes
         ),
       );
       if (recovered._tag === "Right") {
-        const decoded = yield* Effect.either(validateRunResult(input, recovered.right, 1));
+        const decoded = yield* Effect.either(
+          validateRunResult(input, decodeOutput, recovered.right, 1),
+        );
         if (decoded._tag === "Right") {
           restoreSession();
           return {
             ok: true,
-            ...(input.decodeOutput === undefined ? {} : { outputContract: "injected" as const }),
             report: decoded.right,
             attempts: 1,
             stdout: recovered.right.stdout,
@@ -166,12 +172,11 @@ const reviewWithPi = (input: ReviewerAgentInput): Effect.Effect<ReviewerAgentRes
     }
 
     let current = initial.right;
-    let validation = yield* Effect.either(validateRunResult(input, current, 1));
+    let validation = yield* Effect.either(validateRunResult(input, decodeOutput, current, 1));
     if (validation._tag === "Right") {
       cleanupSessionSnapshot(sessionSnapshot);
       return {
         ok: true,
-        ...(input.decodeOutput === undefined ? {} : { outputContract: "injected" as const }),
         report: validation.right,
         attempts: 1,
         stdout: current.stdout,
@@ -202,13 +207,12 @@ const reviewWithPi = (input: ReviewerAgentInput): Effect.Effect<ReviewerAgentRes
         return sandcastleFailure(corrected.left, attempts, current.stdout);
       }
       current = corrected.right;
-      validation = yield* Effect.either(validateRunResult(input, current, attempts));
+      validation = yield* Effect.either(validateRunResult(input, decodeOutput, current, attempts));
     }
     if (validation._tag === "Right") {
       cleanupSessionSnapshot(sessionSnapshot);
       return {
         ok: true,
-        ...(input.decodeOutput === undefined ? {} : { outputContract: "injected" as const }),
         report: validation.right,
         attempts,
         stdout: current.stdout,
@@ -226,9 +230,13 @@ const reviewWithPi = (input: ReviewerAgentInput): Effect.Effect<ReviewerAgentRes
     };
   });
 
-export const piReviewerAgentRuntime: ReviewerAgentRuntime = {
-  review: reviewWithPi,
-};
+export const piReviewerAgentRuntimeFor = <Report>(
+  decodeOutput: ReviewerOutputDecoder<Report>,
+): ReviewerAgentRuntime<Report> => ({
+  review: (input) => reviewWithPi(input, decodeOutput),
+});
+
+export const piReviewerAgentRuntime = piReviewerAgentRuntimeFor(decodeValidationReviewerOutput);
 
 const isolatedPiReviewerAgent = (
   profile: ResolvedPiAgentProfile,
@@ -272,29 +280,19 @@ const isolatedPiReviewerAgent = (
   };
 };
 
-const validateRunResult = (
+const validateRunResult = <Report>(
   input: ReviewerAgentInput,
+  decodeOutput: ReviewerOutputDecoder<Report>,
   result: SandboxRunResult,
   attempts: number,
-) => {
-  const decodeInput = {
+) =>
+  decodeOutput({
     reviewer: input.reviewer,
     attempts,
     output: parseTaggedReviewerOutput(result.stdout),
-  };
-  if (input.decodeOutput !== undefined) return input.decodeOutput(decodeInput);
-  return decodeReviewerOutputContract(decodeInput).pipe(
-    Effect.flatMap((output) =>
-      validateReviewerArtifactRefs({
-        reviewer: input.reviewer,
-        attempts,
-        validationRunId: input.validationRunId,
-        output,
-        availableArtifactRefs: input.availableArtifactRefs,
-      }),
-    ),
-  );
-};
+    validationRunId: input.validationRunId,
+    availableArtifactRefs: input.availableArtifactRefs,
+  });
 
 const runSandbox = (
   run: () => Promise<SandboxRunResult>,
@@ -312,7 +310,7 @@ const sandcastleFailure = (
   failure: SandcastleToolingFailed,
   attempts: number,
   stdout: string,
-): ReviewerAgentResult => ({
+): ReviewerAgentResult<never> => ({
   ok: false,
   failure,
   sessionUsability: classifyReviewerSessionUsability(failure),
@@ -321,7 +319,7 @@ const sandcastleFailure = (
 });
 
 const classifyReviewerSessionUsability = (
-  failure: ValidationToolingFailure,
+  failure: ReviewerExecutionFailure,
 ): ReviewerSessionUsability =>
   failure._tag === "SandcastleToolingFailed" &&
   (/^resumeSession ".+" not found(?: under|: expected)/m.test(failure.message) ||

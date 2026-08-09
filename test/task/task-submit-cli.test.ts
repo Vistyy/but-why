@@ -10,6 +10,7 @@ import type {
   ReviewerAgentResult,
   ReviewerAgentRuntime,
 } from "../../src/agent/reviewerAgentRuntime.js";
+import type { TaskReviewReviewerOutput } from "../../src/task/taskReviewPolicy.js";
 import {
   commitButWhyConfigAndRecordDefault,
   createGitRepo,
@@ -22,9 +23,11 @@ const secondNow = "2026-06-30T12:05:00.000Z";
 const taggedReviewerOutput = (value: unknown): string =>
   `<reviewer-output>${JSON.stringify(value)}</reviewer-output>`;
 
-const reviewerThatPasses = (reviewInputs: ReviewerAgentInput[]): ReviewerAgentRuntime => ({
+const reviewerThatPasses = (
+  reviewInputs: ReviewerAgentInput[],
+): ReviewerAgentRuntime<TaskReviewReviewerOutput> => ({
   review: (input) =>
-    Effect.sync((): ReviewerAgentResult => {
+    Effect.sync((): ReviewerAgentResult<TaskReviewReviewerOutput> => {
       reviewInputs.push(input);
       return {
         ok: true,
@@ -35,9 +38,11 @@ const reviewerThatPasses = (reviewInputs: ReviewerAgentInput[]): ReviewerAgentRu
     }),
 });
 
-const reviewerThatBlocks = (reviewInputs: ReviewerAgentInput[]): ReviewerAgentRuntime => ({
+const reviewerThatBlocks = (
+  reviewInputs: ReviewerAgentInput[],
+): ReviewerAgentRuntime<TaskReviewReviewerOutput> => ({
   review: (input) =>
-    Effect.sync((): ReviewerAgentResult => {
+    Effect.sync((): ReviewerAgentResult<TaskReviewReviewerOutput> => {
       reviewInputs.push(input);
       return {
         ok: true,
@@ -48,7 +53,6 @@ const reviewerThatBlocks = (reviewInputs: ReviewerAgentInput[]): ReviewerAgentRu
               description: "The proposal needs repository evidence.",
               evidence: "command: none\nexitCode: 0",
               files: [],
-              artifactRefs: [],
             },
           ],
         },
@@ -108,7 +112,7 @@ describe("by task submission CLI", () => {
           root,
           ["--json", "task", "submit", "BY-1"],
           firstNow,
-          { reviewerAgentRuntime: reviewerThatPasses(reviewInputs) },
+          { taskReviewerAgentRuntime: reviewerThatPasses(reviewInputs) },
         );
 
         expect(submitted.status).toBe(0);
@@ -150,7 +154,7 @@ describe("by task submission CLI", () => {
           root,
           ["--json", "task", "submit", "BY-1"],
           firstNow,
-          { reviewerAgentRuntime: reviewerThatBlocks(reviewInputs) },
+          { taskReviewerAgentRuntime: reviewerThatBlocks(reviewInputs) },
         );
 
         expect(submitted.status).toBe(0);
@@ -183,7 +187,7 @@ describe("by task submission CLI", () => {
           root,
           ["--json", "task", "submit", "BY-1"],
           firstNow,
-          { reviewerAgentRuntime: reviewerThatBlocks(reviewInputs) },
+          { taskReviewerAgentRuntime: reviewerThatBlocks(reviewInputs) },
         );
         expect(first.status).toBe(0);
         expect(reviewInputs).toHaveLength(1);
@@ -192,7 +196,7 @@ describe("by task submission CLI", () => {
           root,
           ["--json", "task", "submit", "BY-1"],
           secondNow,
-          { reviewerAgentRuntime: reviewerThatBlocks(reviewInputs) },
+          { taskReviewerAgentRuntime: reviewerThatBlocks(reviewInputs) },
         );
         expect(second.status).toBe(0);
         const result = JSON.parse(second.stdout) as {
@@ -217,7 +221,7 @@ describe("by task submission CLI", () => {
           root,
           ["--json", "task", "submit", "BY-1"],
           firstNow,
-          { reviewerAgentRuntime: reviewerThatPasses(reviewInputs) },
+          { taskReviewerAgentRuntime: reviewerThatPasses(reviewInputs) },
         );
         expect(submitted.status).toBe(0);
 
@@ -225,7 +229,7 @@ describe("by task submission CLI", () => {
           root,
           ["--json", "task", "submit", "BY-1"],
           secondNow,
-          { reviewerAgentRuntime: reviewerThatPasses(reviewInputs) },
+          { taskReviewerAgentRuntime: reviewerThatPasses(reviewInputs) },
         );
         expect(again.status).toBe(1);
         expect(JSON.parse(again.stdout)).toMatchObject({
