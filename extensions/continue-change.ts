@@ -130,7 +130,60 @@ export const extractChangeId = (text: string): string | undefined =>
 const submitCommandPattern =
   /(?:^|[\n;|&(){}])\s*(?:(?:if|then|elif|else|while|until|do|!)\s+)*(?:just\s+by|pnpx\s+but-why|npx\s+-y\s+but-why)\s+change\s+submit(?:\s|$)/gu;
 
-const visibleShellText = (command: string): string => {
+const hereDocumentDeclarations = (
+  line: string,
+): Array<{ readonly delimiter: string; readonly stripTabs: boolean }> => {
+  const declarations: Array<{ readonly delimiter: string; readonly stripTabs: boolean }> = [];
+  let quote: "'" | '"' | undefined;
+  for (let index = 0; index < line.length; index += 1) {
+    const character = line[index];
+    if (character === "\\" && quote !== "'") {
+      index += 1;
+      continue;
+    }
+    if (quote !== undefined) {
+      if (character === quote) quote = undefined;
+      continue;
+    }
+    if (character === "'" || character === '"') {
+      quote = character;
+      continue;
+    }
+    if (character === "#" && (index === 0 || /[\s;|&(){}]/u.test(line[index - 1] ?? ""))) break;
+    if (character !== "<" || line[index + 1] !== "<") continue;
+    const match = line
+      .slice(index)
+      .match(/^<<(-)?\s*(?:'([^']+)'|"([^"]+)"|([A-Za-z_][A-Za-z0-9_]*))/u);
+    const delimiter = match?.[2] ?? match?.[3] ?? match?.[4];
+    if (match !== null && match !== undefined && delimiter !== undefined) {
+      declarations.push({ delimiter, stripTabs: match[1] === "-" });
+      index += match[0].length - 1;
+    }
+  }
+  return declarations;
+};
+
+const withoutHereDocumentBodies = (command: string): string => {
+  const lines = command.split(/(?<=\n)/u);
+  const pending: Array<{ readonly delimiter: string; readonly stripTabs: boolean }> = [];
+  return lines
+    .map((line) => {
+      const body = pending[0];
+      if (body !== undefined) {
+        const value = line.replace(/\n$/u, "");
+        if ((body.stripTabs ? value.replace(/^\t+/u, "") : value) === body.delimiter) {
+          pending.shift();
+        }
+        return line.endsWith("\n") ? `${" ".repeat(line.length - 1)}\n` : " ".repeat(line.length);
+      }
+      pending.push(...hereDocumentDeclarations(line));
+      return line;
+    })
+    .join("");
+};
+
+const visibleShellText = (rawCommand: string): string => {
+  const command = withoutHereDocumentBodies(rawCommand);
   let result = "";
   let quote: "'" | '"' | undefined;
   let comment = false;
@@ -146,6 +199,14 @@ const visibleShellText = (command: string): string => {
       continue;
     }
     if (quote !== undefined) {
+      if (quote === '"' && character === "$" && command[index + 1] === "(") {
+        const closing = findCommandSubstitutionEnd(command, index + 2);
+        if (closing !== undefined) {
+          result += `( ${visibleShellText(command.slice(index + 2, closing))} )`;
+          index = closing;
+          continue;
+        }
+      }
       if (quote === '"' && character === "\\") {
         result += " ".repeat(Math.min(2, command.length - index));
         index += 1;
@@ -155,7 +216,15 @@ const visibleShellText = (command: string): string => {
       }
       continue;
     }
-    if (character === "'" || character === '"') {
+    if (character === "`") {
+      const closing = command.indexOf("`", index + 1);
+      if (closing === -1) {
+        result += " ";
+      } else {
+        result += `( ${visibleShellText(command.slice(index + 1, closing))} )`;
+        index = closing;
+      }
+    } else if (character === "'" || character === '"') {
       quote = character;
       result += " ";
     } else if (character === "\\") {
@@ -169,6 +238,29 @@ const visibleShellText = (command: string): string => {
     }
   }
   return result;
+};
+
+const findCommandSubstitutionEnd = (command: string, start: number): number | undefined => {
+  let depth = 1;
+  let quote: "'" | '"' | undefined;
+  for (let index = start; index < command.length; index += 1) {
+    const character = command[index];
+    if (character === "\\" && quote !== "'") {
+      index += 1;
+      continue;
+    }
+    if (quote !== undefined) {
+      if (character === quote) quote = undefined;
+      continue;
+    }
+    if (character === "'" || character === '"') quote = character;
+    else if (character === "(") depth += 1;
+    else if (character === ")") {
+      depth -= 1;
+      if (depth === 0) return index;
+    }
+  }
+  return undefined;
 };
 
 export const countVisibleChangeSubmits = (command: string): number =>

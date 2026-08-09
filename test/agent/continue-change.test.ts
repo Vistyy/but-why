@@ -114,6 +114,9 @@ describe("Change Implement continuation policy", () => {
     "git status\n npx -y but-why change submit change-123",
     "{ just by change submit change-123; }",
     "if true; then just by change submit change-123; fi",
+    `printf '%s\\n' "$(just by change submit change-123)"`,
+    "echo `just by change submit change-123`",
+    "printf '<<DATA'; just by change submit change-123",
   ])("detects a visible canonical Change Submit in %j", (command) => {
     expect(containsVisibleChangeSubmit(command)).toBe(true);
   });
@@ -126,6 +129,7 @@ describe("Change Implement continuation policy", () => {
     "printf 'line one\njust by change submit change-123\n'",
     'submit="just by change submit change-123"',
     "# just by change submit change-123\ngit status",
+    "cat <<'DATA'\njust by change submit change-123\nDATA",
     "./submit-change.sh",
   ])("does not classify unrelated Bash command %j as Change Submit", (command) => {
     expect(containsVisibleChangeSubmit(command)).toBe(false);
