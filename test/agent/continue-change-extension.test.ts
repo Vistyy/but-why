@@ -180,7 +180,7 @@ describe("packaged Change Implement continuation extension", () => {
       type: "tool_call",
       toolCallId: "submit-1",
       toolName: "bash",
-      input: { command: `git status && just by change submit ${changeId}` },
+      input: { command: `git status && just by --json change submit ${changeId}` },
     };
 
     const first = await harness.emit("tool_call", submit);
