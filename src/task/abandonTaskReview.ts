@@ -2,10 +2,12 @@ import { Effect } from "effect";
 
 import type { ExecutionLock } from "../contracts/executionLock.js";
 import type { RepositoryStorageError } from "../contracts/repositoryStorageError.js";
+import { RepositoryPersistedDataInvalid } from "../contracts/repositoryStorageError.js";
 import {
   deleteDisposableWorkspaceRef,
   removeDisposableWorktree,
 } from "../disposableWorkspace/disposableWorkspaceGit.js";
+import { expectedDisposableWorkspacePath } from "../disposableWorkspace/disposableWorkspacePath.js";
 import type { TaskState } from "./lifecycle.js";
 import type { PublicTaskId } from "./taskId.js";
 import type { TaskReviewAbandonmentContext, TaskReviewOutcome } from "./taskReview.js";
@@ -117,7 +119,19 @@ const abandonWhileLocked = (
       };
     }
 
-    const tempRefName = context.tempRefName ?? taskReviewTempRefName(command.reviewId);
+    const tempRefName = taskReviewTempRefName(command.reviewId);
+    const expectedWorktreePath = expectedDisposableWorkspacePath(input.repoRoot, tempRefName);
+    if (
+      context.tempRefName !== tempRefName ||
+      (context.worktreePath !== undefined && context.worktreePath !== expectedWorktreePath)
+    ) {
+      return yield* Effect.fail(
+        new RepositoryPersistedDataInvalid({
+          operationName: "validate Task Review workspace ownership",
+          cause: new Error("Task Review workspace evidence does not identify its owned resources"),
+        }),
+      );
+    }
     const tempRef =
       context.cleanupTempRef === "removed"
         ? "removed"
@@ -150,6 +164,8 @@ const abandonWhileLocked = (
     }
     yield* input.persistence.abandon({
       reviewId: command.reviewId,
+      cleanupWorktree: "removed",
+      cleanupTempRef: "removed",
       errorKind: "infrastructure_tooling_failed",
       operationName: "task_review_abandonment",
       errorMessage: command.reason,

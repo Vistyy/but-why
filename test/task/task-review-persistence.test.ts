@@ -8,7 +8,10 @@ import { openSqliteTaskReviewPersistence } from "../../src/sqlite/sqliteTaskRevi
 import { publicTaskId } from "../../src/task/taskId.js";
 import type { TaskPersistence } from "../../src/task/taskPersistence.js";
 import type { TaskReviewPolicySnapshot } from "../../src/task/taskReview.js";
-import type { CompleteTaskReviewInput } from "../../src/task/taskReviewStore.js";
+import type {
+  CompleteTaskReviewInput,
+  TaskReviewPersistence,
+} from "../../src/task/taskReviewStore.js";
 import { withTemporaryRepositoryState } from "../support/repository.js";
 import { transitionTaskToTodo } from "../support/taskApproval.js";
 
@@ -41,6 +44,17 @@ const createTask = (tasks: TaskPersistence, title: string, now: string) =>
     const created = yield* tasks.createTask({ title, description: `Description: ${title}`, now });
     if (!created.ok) throw new Error(created.code);
     return { id: publicTaskId(created.task.id) };
+  });
+
+const recordRemovedWorkspace = (reviews: TaskReviewPersistence, reviewId: string, now: string) =>
+  reviews.recordWorkspaceSetup({
+    reviewId,
+    tempRefName: `refs/but-why/task-reviews/${reviewId}/review`,
+    submittedSha: baseCommit,
+    worktreeHead: baseCommit,
+    cleanupWorktree: "removed",
+    cleanupTempRef: "removed",
+    createdAt: now,
   });
 
 it.scoped("admits a Task Review and captures the exact proposal and workspace setup", () =>
@@ -169,6 +183,7 @@ it.scoped("clears a stored completion failure after successful completion or aba
         errorMessage: "workspace removal failed",
         now: firstNow,
       });
+      yield* recordRemovedWorkspace(reviews, "review-recovered-complete", secondNow);
       yield* reviews.complete({
         reviewId: "review-recovered-complete",
         outcome: "blocked",
@@ -193,6 +208,8 @@ it.scoped("clears a stored completion failure after successful completion or aba
       });
       yield* reviews.abandon({
         reviewId: "review-recovered-abandon",
+        cleanupWorktree: "removed",
+        cleanupTempRef: "removed",
         errorKind: "infrastructure_tooling_failed",
         operationName: "cleanup_disposable_workspace",
         errorMessage: "submission stopped",
@@ -218,6 +235,7 @@ it.scoped("completes a passing Task Review atomically and leaves the Task New", 
       });
       if (!started.ok) throw new Error("start failed");
 
+      yield* recordRemovedWorkspace(reviews, "review-pass", secondNow);
       const completed = yield* reviews.complete({
         reviewId: "review-pass",
         outcome: "passed",
@@ -250,6 +268,7 @@ it.scoped("records Findings and leaves the Task New for a blocked Review", () =>
         now: firstNow,
       });
 
+      yield* recordRemovedWorkspace(reviews, "review-blocked", secondNow);
       const completed = yield* reviews.complete({
         reviewId: "review-blocked",
         outcome: "blocked",
@@ -299,6 +318,7 @@ it.scoped("records Tooling Failure and leaves the Task New", () =>
         now: firstNow,
       });
 
+      yield* recordRemovedWorkspace(reviews, "review-tooling", thirdNow);
       const completed = yield* reviews.complete({
         reviewId: "review-tooling",
         outcome: "tooling_failed",
@@ -523,6 +543,8 @@ it.scoped("rejects non-passing completion after the Task leaves New", () =>
           const abandoned = yield* Effect.either(
             reviews.abandon({
               reviewId,
+              cleanupWorktree: "removed",
+              cleanupTempRef: "removed",
               errorKind: "infrastructure_tooling_failed",
               operationName: "task_review_abandonment",
               errorMessage: "Submission process stopped",
@@ -553,6 +575,7 @@ it.scoped("compare-and-set completion rejects a second completion and unknown re
         reviewId: "review-cas",
         now: firstNow,
       });
+      yield* recordRemovedWorkspace(reviews, "review-cas", secondNow);
       yield* reviews.complete({
         reviewId: "review-cas",
         outcome: "blocked",
@@ -733,6 +756,7 @@ it.scoped("rejects malformed persisted Review evidence before another admission"
         now: firstNow,
       });
       if (!started.ok) throw new Error("start failed");
+      yield* recordRemovedWorkspace(reviews, "review-corrupt-history", secondNow);
       const completed = yield* reviews.complete({
         reviewId: "review-corrupt-history",
         outcome: "passed",
@@ -785,6 +809,7 @@ it.scoped("rejects malformed persisted workspace evidence before another admissi
         now: firstNow,
       });
       if (!started.ok) throw new Error("start failed");
+      yield* recordRemovedWorkspace(reviews, "review-corrupt-workspace", secondNow);
       const completed = yield* reviews.complete({
         reviewId: "review-corrupt-workspace",
         outcome: "passed",
@@ -810,6 +835,26 @@ it.scoped("rejects malformed persisted workspace evidence before another admissi
         }),
       );
       expect(attempted).toMatchObject({
+        _tag: "Left",
+        left: { _tag: "RepositoryPersistedDataInvalid" },
+      });
+
+      yield* repository.operation(
+        "remove Task Review workspace evidence",
+        (sql) =>
+          sql`DELETE FROM task_review_workspace_setups
+            WHERE review_id = 'review-corrupt-workspace'`,
+      );
+      const missingWorkspace = yield* Effect.either(
+        reviews.start({
+          taskId: task.id,
+          baseCommit,
+          policy,
+          reviewId: "review-after-missing-workspace",
+          now: thirdNow,
+        }),
+      );
+      expect(missingWorkspace).toMatchObject({
         _tag: "Left",
         left: { _tag: "RepositoryPersistedDataInvalid" },
       });

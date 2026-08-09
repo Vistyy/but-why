@@ -18,6 +18,7 @@ import {
 import type { ExecutionLock } from "../../src/contracts/executionLock.js";
 import type { GlobalConfig } from "../../src/contracts/globalConfig.js";
 import type { RepoConfig } from "../../src/contracts/repoConfig.js";
+import { RepositorySql } from "../../src/sqlite/repositorySql.js";
 import { openSqliteExecutionLock } from "../../src/sqlite/sqliteExecutionLock.js";
 import { openSqliteTaskPersistence } from "../../src/sqlite/sqliteTaskPersistence.js";
 import { openSqliteTaskReviewPersistence } from "../../src/sqlite/sqliteTaskReviewPersistence.js";
@@ -549,8 +550,8 @@ describe("Task Submission orchestration", () => {
                       tempRefName: `refs/but-why/task-reviews/${input.reviewId}/review`,
                       submittedSha: input.submittedSha,
                       worktreeHead: input.submittedSha,
-                      cleanupWorktree: "not_created",
-                      cleanupTempRef: "not_created",
+                      cleanupWorktree: "removed",
+                      cleanupTempRef: "removed",
                       createdAt: now,
                     },
                   }),
@@ -793,6 +794,37 @@ describe("Task Submission orchestration", () => {
               executionLock: openSqliteExecutionLock({ commonDirectory: join(root, ".git") }),
               repoRoot: root,
             });
+            const repository = yield* RepositorySql;
+            yield* repository.operation(
+              "corrupt Task Review worktree ownership",
+              (sql) =>
+                sql`UPDATE task_review_workspace_setups
+                  SET worktree_path = ${`${worktreePath}-unowned`}
+                  WHERE review_id = 'review-abandon'`,
+            );
+            const unsafeAbandonment = yield* Effect.either(
+              abandon.abandon({
+                reviewId: "review-abandon",
+                reason: "Submission process stopped",
+                now,
+              }),
+            );
+            expect(unsafeAbandonment).toMatchObject({
+              _tag: "Left",
+              left: { _tag: "RepositoryPersistedDataInvalid" },
+            });
+            expect(existsSync(worktreePath)).toBe(true);
+            expect(
+              runTestProcess("git", ["rev-parse", "--verify", `${tempRefName}^{commit}`], {
+                cwd: root,
+              }).status,
+            ).toBe(0);
+            yield* repository.operation(
+              "restore Task Review worktree ownership",
+              (sql) =>
+                sql`UPDATE task_review_workspace_setups SET worktree_path = ${worktreePath}
+                  WHERE review_id = 'review-abandon'`,
+            );
 
             const result = yield* abandon.abandon({
               reviewId: "review-abandon",
@@ -820,6 +852,10 @@ describe("Task Submission orchestration", () => {
             expect(recorded).toMatchObject({
               state: "complete",
               outcome: "tooling_failed",
+            });
+            expect(yield* reviews.getAbandonmentContext("review-abandon")).toMatchObject({
+              cleanupWorktree: "removed",
+              cleanupTempRef: "removed",
             });
 
             expect(

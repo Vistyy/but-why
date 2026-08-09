@@ -124,6 +124,16 @@ it.effect("upgrades Shared Repository State at 0025 and admits Task Reviews", ()
               reviewId: "review-upgraded",
             });
 
+            yield* reviews.recordWorkspaceSetup({
+              reviewId: "review-upgraded",
+              tempRefName: "refs/but-why/task-reviews/review-upgraded/review",
+              submittedSha: baseCommit,
+              worktreeHead: baseCommit,
+              worktreePath: "/tmp/worktrees/task-reviews-review-upgraded",
+              cleanupWorktree: "removed",
+              cleanupTempRef: "removed",
+              createdAt: "2026-08-01T09:10:00.000Z",
+            });
             const completed = yield* reviews.complete({
               reviewId: "review-upgraded",
               outcome: "blocked",

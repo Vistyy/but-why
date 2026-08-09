@@ -95,6 +95,8 @@ export type TaskReviewCompletionFailure = {
 
 export type AbandonTaskReviewInput = {
   readonly reviewId: string;
+  readonly cleanupWorktree: "removed";
+  readonly cleanupTempRef: "removed";
   readonly errorKind: string;
   readonly operationName: string;
   readonly errorMessage: string;

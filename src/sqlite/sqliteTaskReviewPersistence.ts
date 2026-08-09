@@ -35,6 +35,7 @@ import type {
   TaskReviewPersistence,
   TaskReviewTaskFact,
 } from "../task/taskReviewStore.js";
+import { taskReviewTempRefName } from "../task/taskReviewWorkspace.js";
 import { RepositorySql } from "./repositorySql.js";
 import { decodeSqliteJsonStringArray } from "./sqliteJsonStringArray.js";
 import { type DecodedTaskGraph, readDecodedTaskGraph } from "./sqliteTaskReadModel.js";
@@ -189,17 +190,16 @@ const start = (
       INSERT INTO active_task_reviews (task_id, review_id, created_at)
       VALUES (${input.taskId}, ${reviewId}, ${input.now})
     `;
-    if (input.workspaceSetup !== undefined) {
-      yield* sql`
-        INSERT INTO task_review_workspace_setups (
-          review_id, temp_ref_name, submitted_sha, worktree_head, worktree_path,
-          cleanup_worktree, cleanup_temp_ref, created_at
-        ) VALUES (
-          ${reviewId}, ${input.workspaceSetup.tempRefName}, ${input.baseCommit}, ${input.baseCommit},
-          ${input.workspaceSetup.worktreePath}, 'not_created', 'not_created', ${input.now}
-        )
-      `;
-    }
+    yield* sql`
+      INSERT INTO task_review_workspace_setups (
+        review_id, temp_ref_name, submitted_sha, worktree_head, worktree_path,
+        cleanup_worktree, cleanup_temp_ref, created_at
+      ) VALUES (
+        ${reviewId}, ${input.workspaceSetup?.tempRefName ?? taskReviewTempRefName(reviewId)},
+        ${input.baseCommit}, ${input.baseCommit}, ${input.workspaceSetup?.worktreePath ?? null},
+        'not_created', 'not_created', ${input.now}
+      )
+    `;
     return { ok: true as const, reviewId, proposal, dependencyEvidence };
   });
 
@@ -217,8 +217,13 @@ const complete = (
   input: CompleteTaskReviewInput,
 ): Effect.Effect<CompleteTaskReviewResult, SqlError | RepositoryPersistedDataInvalid> =>
   Effect.gen(function* () {
-    const reviewRows = yield* sql<{ readonly taskId: string; readonly state: string }>`
-      SELECT task_id AS taskId, state FROM task_reviews WHERE id = ${input.reviewId}
+    const reviewRows = yield* sql<{
+      readonly taskId: string;
+      readonly state: string;
+      readonly baseCommit: string;
+    }>`
+      SELECT task_id AS taskId, state, base_commit AS baseCommit
+      FROM task_reviews WHERE id = ${input.reviewId}
     `;
     const review = reviewRows[0];
     if (review === undefined) return { ok: false as const, code: "review_not_found" as const };
@@ -248,6 +253,28 @@ const complete = (
     const taskGraph = yield* readDecodedTaskGraph(sql, "complete Task Review");
     if (taskGraph.tasksById.get(taskId)?.state !== "new") {
       return { ok: false as const, code: "task_state_changed" as const };
+    }
+    const workspaceRows = yield* sql<TaskReviewWorkspaceSetupRow>`
+      SELECT review_id AS reviewId, temp_ref_name AS tempRefName,
+        submitted_sha AS submittedSha, worktree_head AS worktreeHead,
+        worktree_path AS worktreePath, cleanup_worktree AS cleanupWorktree,
+        cleanup_temp_ref AS cleanupTempRef, created_at AS createdAt
+      FROM task_review_workspace_setups WHERE review_id = ${input.reviewId}
+    `;
+    const workspace =
+      workspaceRows[0] === undefined ? undefined : yield* decodeWorkspaceSetup(workspaceRows[0]);
+    if (
+      workspace === undefined ||
+      workspace.tempRefName !== taskReviewTempRefName(input.reviewId) ||
+      workspace.submittedSha !== review.baseCommit ||
+      workspace.worktreeHead !== review.baseCommit ||
+      workspace.cleanupWorktree === "failed" ||
+      workspace.cleanupTempRef === "failed"
+    ) {
+      return yield* invalidData(
+        "complete Task Review",
+        `Task Review ${input.reviewId} does not have successful owned workspace cleanup evidence`,
+      );
     }
 
     if (toolingFailure !== undefined) {
@@ -408,6 +435,9 @@ const decodeAbandonmentContextOptional = (
       const reviewState = Schema.decodeUnknownSync(taskReviewStateSchema)(row.reviewState);
       const outcome = Schema.decodeUnknownSync(taskReviewOutcomeSchema)(row.outcome);
       if (!isTaskState(row.taskState)) throw new Error("Task Review Task has an invalid state");
+      if (row.tempRefName !== taskReviewTempRefName(reviewId)) {
+        throw new Error("Task Review temporary ref does not identify its owned workspace");
+      }
       const hasExactActiveMarker = row.activeTaskId === taskId && row.activeReviewId === reviewId;
       if (
         (reviewState === "running" && (!hasExactActiveMarker || outcome !== null)) ||
@@ -495,9 +525,12 @@ const validateStoredTaskReviewEvidence = (
           );
           const workspace = workspaces.find((setup) => setup.reviewId === review.id);
           if (
-            workspace !== undefined &&
-            (workspace.submittedSha !== review.baseCommit ||
-              workspace.worktreeHead !== review.baseCommit)
+            workspace === undefined ||
+            workspace.tempRefName !== taskReviewTempRefName(review.id) ||
+            workspace.submittedSha !== review.baseCommit ||
+            workspace.worktreeHead !== review.baseCommit ||
+            (review.state === "complete" &&
+              (workspace.cleanupWorktree === "failed" || workspace.cleanupTempRef === "failed"))
           ) {
             return yield* invalidData(
               "validate stored Task Review evidence",
@@ -642,6 +675,19 @@ const abandon = (
       return yield* invalidData(
         "abandon Task Review",
         `Running Task Review ${input.reviewId} does not own its exact Active marker`,
+      );
+    }
+    const updatedWorkspace = yield* sql<{ readonly reviewId: string }>`
+      UPDATE task_review_workspace_setups
+      SET cleanup_worktree = ${input.cleanupWorktree},
+        cleanup_temp_ref = ${input.cleanupTempRef}
+      WHERE review_id = ${input.reviewId}
+      RETURNING review_id AS reviewId
+    `;
+    if (updatedWorkspace.length !== 1) {
+      return yield* invalidData(
+        "abandon Task Review",
+        `Running Task Review ${input.reviewId} has no workspace evidence`,
       );
     }
     yield* sql`
