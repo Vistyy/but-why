@@ -691,6 +691,102 @@ describe("Task Submission orchestration", () => {
   );
 
   it.scoped(
+    "resolves the exact feature-branch HEAD, excludes dirty content, and isolates the canonical checkout",
+    () =>
+      Effect.gen(function* () {
+        const root = yield* prepareInitializedTask();
+        git(root, "checkout", "-b", "feature");
+        git(root, "commit", "--allow-empty", "-m", "feature work");
+        writeFileSync(join(root, "uncommitted.txt"), "not in any commit");
+        const featureHead = git(root, "rev-parse", "HEAD");
+
+        yield* withTestRepository(
+          root,
+          Effect.gen(function* () {
+            const reviews = yield* openSqliteTaskReviewPersistence();
+            let workspacePath: string | undefined;
+            const runtime: ReviewerAgentRuntime = {
+              review: (input) =>
+                Effect.sync((): ReviewerAgentResult => {
+                  workspacePath = input.commandCwd;
+                  const workspaceHead = runTestProcess("git", ["rev-parse", "HEAD"], {
+                    cwd: input.commandCwd ?? root,
+                  });
+                  const dirtyContentPresent =
+                    input.commandCwd === undefined
+                      ? false
+                      : existsSync(join(input.commandCwd, "uncommitted.txt"));
+                  return {
+                    ok: true,
+                    report: {
+                      findings: [
+                        {
+                          title: "Workspace evidence",
+                          description: JSON.stringify({
+                            headMatches:
+                              workspaceHead.status === 0 &&
+                              workspaceHead.stdout.trim() === featureHead,
+                            dirtyContentPresent,
+                          }),
+                          evidence: "command: git rev-parse HEAD",
+                          files: [],
+                          artifactRefs: [],
+                        },
+                      ],
+                    },
+                    attempts: 1,
+                    stdout: taggedReviewerOutput({
+                      findings: [
+                        {
+                          title: "Workspace evidence",
+                          description: JSON.stringify({
+                            headMatches:
+                              workspaceHead.status === 0 &&
+                              workspaceHead.stdout.trim() === featureHead,
+                            dirtyContentPresent,
+                          }),
+                          evidence: "command: git rev-parse HEAD",
+                          files: [],
+                        },
+                      ],
+                    }),
+                  };
+                }),
+            };
+            const submission = openTaskSubmission(
+              submissionDependencies(root, {
+                reviewerAgentRuntime: runtime,
+                persistence: reviews,
+              }),
+            );
+
+            const result = yield* submission.submit({ taskId: publicTaskId("BY-1"), now });
+            expect(result).toMatchObject({ ok: true, status: "blocked" });
+            if (!result.ok || result.status === "reused" || result.status === "tooling_failed") {
+              throw new Error("unexpected result");
+            }
+            const evidence = JSON.parse(result.findings?.[0]?.description ?? "{}") as {
+              readonly headMatches: boolean;
+              readonly dirtyContentPresent: boolean;
+            };
+            expect(evidence.headMatches).toBe(true);
+            expect(evidence.dirtyContentPresent).toBe(false);
+            expect(workspacePath).toBeDefined();
+            expect(workspacePath).not.toBe(root);
+
+            // The canonical checkout remains untouched on the feature branch.
+            expect(git(root, "rev-parse", "HEAD")).toBe(featureHead);
+            expect(existsSync(join(root, "uncommitted.txt"))).toBe(true);
+
+            const recorded = yield* reviews.getReviewById(result.reviewId);
+            expect(recorded?.baseCommit).toBe(featureHead);
+          }),
+        );
+      }),
+    60_000,
+  );
+
+  it.scoped(
     "abandons a Review left active by a stopped Submission process",
     () =>
       Effect.gen(function* () {
