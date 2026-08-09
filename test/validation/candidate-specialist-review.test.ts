@@ -420,6 +420,7 @@ describe("Candidate Specialist Review phase", () => {
           captured: typeof first,
           policies: readonly SpecialistReviewPolicy[],
           runtime: ReviewerAgentRuntime<ReviewerOutput>,
+          outcome: "passed" | "blocked" | "tooling_failed",
           runNow: string,
         ) =>
           validation.runWithPersistence((persistence) =>
@@ -462,18 +463,12 @@ describe("Candidate Specialist Review phase", () => {
                   now: runNow,
                 });
               }
-              const outcome =
-                result.toolingFailures.length > 0
-                  ? "tooling_failed"
-                  : result.findings === 1
-                    ? "blocked"
-                    : "passed";
               yield* persistence.complete({
                 validationRunId: started.validationRunId,
                 outcome,
                 now: runNow,
               });
-              return { validationRunId: started.validationRunId, result, outcome };
+              return { validationRunId: started.validationRunId, result };
             }),
           );
 
@@ -482,10 +477,10 @@ describe("Candidate Specialist Review phase", () => {
             first,
             [policy("standards"), policy("broken")],
             { review: firstReview },
+            "tooling_failed",
             now,
           ),
         );
-        expect(durable.outcome).toBe("tooling_failed");
         expect(yield* Effect.suspend(() => validation.listRounds(durable.validationRunId))).toEqual(
           [
             { producer: "standards", status: "failed" },
@@ -514,6 +509,31 @@ describe("Candidate Specialist Review phase", () => {
           ]),
         );
 
+        git(repo, "commit", "--allow-empty", "-m", "failed Specialist successor");
+        const failedSuccessor = yield* Effect.suspend(() =>
+          captureLocalCandidate({ cwd: repo, now: "2026-07-15T10:03:00.000Z" }),
+        );
+        if (!failedSuccessor.ok)
+          throw new Error(`Candidate capture failed: ${failedSuccessor.code}`);
+        const failedReview = vi.fn<ReviewerAgentRuntime<ReviewerOutput>["review"]>(() =>
+          Effect.succeed({
+            ok: false as const,
+            failure: outputFailure("standards", "Intermediate Specialist output failed."),
+            sessionUsability: "unknown" as const,
+            attempts: 2,
+            stdout: "invalid intermediate output",
+          }),
+        );
+        yield* Effect.suspend(() =>
+          runPersisted(
+            failedSuccessor,
+            [policy("standards")],
+            { review: failedReview },
+            "tooling_failed",
+            "2026-07-15T10:03:00.000Z",
+          ),
+        );
+
         git(repo, "commit", "--allow-empty", "-m", "clean Specialist successor");
         const successor = yield* Effect.suspend(() =>
           captureLocalCandidate({ cwd: repo, now: "2026-07-15T10:05:00.000Z" }),
@@ -527,11 +547,10 @@ describe("Candidate Specialist Review phase", () => {
             successor,
             [policy("standards")],
             { review: successorReview },
+            "passed",
             "2026-07-15T10:05:00.000Z",
           ),
         );
-
-        expect(clean.outcome).toBe("passed");
         expect(successorReview).toHaveBeenCalledTimes(2);
         expect(successorReview.mock.calls[0]?.[0].prompt).not.toContain(
           "Durable Specialist Finding",
@@ -554,16 +573,15 @@ describe("Candidate Specialist Review phase", () => {
         const laterReview = vi.fn<ReviewerAgentRuntime<ReviewerOutput>["review"]>(() =>
           Effect.succeed(success()),
         );
-        const later = yield* Effect.suspend(() =>
+        yield* Effect.suspend(() =>
           runPersisted(
             laterSuccessor,
             [policy("standards")],
             { review: laterReview },
+            "passed",
             "2026-07-15T10:10:00.000Z",
           ),
         );
-
-        expect(later.outcome).toBe("passed");
         expect(laterReview).toHaveBeenCalledTimes(1);
         expect(laterReview.mock.calls[0]?.[0].prompt).not.toContain("Durable Specialist Finding");
       }),

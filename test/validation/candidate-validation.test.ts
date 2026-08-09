@@ -9,6 +9,7 @@ import {
   CandidateValidation,
   type ValidateCandidateInput,
 } from "../../src/change/candidateValidation/validateCandidate.js";
+import { ReviewerOutputContractFailed } from "../../src/change/validation/validationToolingFailures.js";
 import type { ReviewerOutput } from "../../src/contracts/reviewerOutput.js";
 import { RepositorySql } from "../../src/sqlite/repositorySql.js";
 import { captureLocalCandidate } from "../support/candidateCapture.js";
@@ -130,6 +131,93 @@ describe("Candidate validation", () => {
       expect(git(candidateCheckout, "rev-parse", "HEAD")).toBe(captured.headSha);
       expect(git(candidateCheckout, "status", "--porcelain")).toBe("");
       expect(git(candidateCheckout, "show", "HEAD:candidate.txt")).toBe("original");
+    }),
+  );
+
+  it.scoped("blocks aggregate pass for adverse Specialist phase results", () =>
+    Effect.gen(function* () {
+      const repo = candidateReadyRepo();
+      const captured = yield* captureLocalCandidate({ cwd: repo, now });
+      if (!captured.ok) throw new Error(`Candidate capture failed: ${captured.code}`);
+      const outputFailure = new ReviewerOutputContractFailed({
+        operationName: "decode_reviewer_output",
+        reviewer: "broken",
+        attempts: 2,
+        diagnostics: [],
+        message: "Broken Specialist output.",
+      });
+      const review = vi.fn<ReviewerAgentRuntime<ReviewerOutput>["review"]>((input) =>
+        input.reviewer === "standards"
+          ? Effect.succeed({
+              ok: true as const,
+              report: {
+                findings: [
+                  {
+                    title: "Specialist Finding",
+                    description: "Specialist Finding description",
+                    evidence: "Specialist Finding evidence",
+                    files: [],
+                    artifactRefs: [],
+                  },
+                ],
+              },
+              attempts: 1,
+              stdout: "Specialist Finding output",
+            })
+          : Effect.succeed({
+              ok: false as const,
+              failure: outputFailure,
+              sessionUsability: "unknown" as const,
+              attempts: 2,
+              stdout: "invalid Specialist output",
+            }),
+      );
+      const validation = candidateValidationForTest({
+        localRepositoryMainCheckoutRoot: repo,
+        artifactsRoot: join(commonDirectory(repo), "but-why", "artifacts"),
+        repository: repositoryConfig(repo),
+        reviewerAgentRuntime: { review },
+      });
+      const specialist = (id: string) => ({
+        id,
+        instructions: `${id} concern`,
+        instructionsSource: "repo" as const,
+        profile: {
+          agentProfile: id,
+          scope: "repo" as const,
+          profile: { agentRuntime: "pi" as const, runtimeConfig: { model: `${id}-model` } },
+        },
+      });
+
+      const result = yield* validateCandidate(validation, {
+        changeId: captured.changeId,
+        candidateId: captured.candidateId,
+        changeBaseSha: captured.changeBaseSha,
+        headSha: captured.headSha,
+        policy: {
+          checks: [],
+          copyFiles: [],
+          specialistReviews: [specialist("standards"), specialist("broken")],
+        },
+        now,
+      });
+
+      expect(result).toMatchObject({ ok: false, outcome: "tooling_failed" });
+      if (result.ok || "code" in result) return;
+      expect(yield* validation.getRun(result.validationRunId)).toMatchObject({
+        outcome: "tooling_failed",
+      });
+      expect(review.mock.calls.map(([input]) => input.reviewer)).toEqual(["standards", "broken"]);
+      expect(
+        (yield* validation.listFindings(result.validationRunId)).map((item) => item.title),
+      ).toEqual(["Specialist Finding"]);
+      expect(yield* validation.listToolingFailures(result.validationRunId)).toEqual([
+        expect.objectContaining({ errorKind: "reviewer_output_contract_failed" }),
+      ]);
+      expect(yield* validation.listRounds(result.validationRunId)).toEqual([
+        { producer: "standards", status: "failed" },
+        { producer: "broken", status: "failed" },
+      ]);
     }),
   );
 
