@@ -15,7 +15,11 @@ import type {
   TaskReviewToolingFailure,
   TaskReviewTranscript,
 } from "./taskReview.js";
-import type { ActiveTaskReview, TaskReviewPersistence } from "./taskReviewStore.js";
+import type {
+  ActiveTaskReview,
+  TaskReviewCompletionFailure,
+  TaskReviewPersistence,
+} from "./taskReviewStore.js";
 
 export type TaskReviewInspection = {
   readonly listReviewsForTask: (
@@ -36,6 +40,9 @@ export type TaskReviewInspection = {
   readonly toolingFailures: (
     reviewId: string,
   ) => Effect.Effect<readonly TaskReviewToolingFailure[], RepositoryStorageError>;
+  readonly completionFailure: (
+    reviewId: string,
+  ) => Effect.Effect<TaskReviewCompletionFailure | undefined, RepositoryStorageError>;
   readonly session: (
     taskId: PublicTaskId,
     producer: string,
@@ -91,6 +98,8 @@ export const loadTaskReviewInspection = (input: {
       findings: (reviewId) => run((persistence) => persistence.listFindings(reviewId)),
       toolingFailures: (reviewId) =>
         run((persistence) => persistence.listToolingFailures(reviewId)),
+      completionFailure: (reviewId) =>
+        run((persistence) => persistence.getCompletionFailure(reviewId)),
       session: (taskId, producer) =>
         run((persistence) => persistence.getTaskReviewSession(taskId, producer)),
       transcripts: (taskId) => run((persistence) => persistence.listTaskReviewTranscripts(taskId)),

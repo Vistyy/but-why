@@ -126,7 +126,7 @@ Its `count` is the number of returned Tasks and its `total` is the number matchi
 - `by task show` owns Task lifecycle, dependency, Task Review summary, and linked Change metadata.
 - `by task submit` returns one structured Task Review result: `reused`, `passed`, `blocked`, or `tooling_failed`, with the reviewed Task state and a valid next action.
 - `by task reviews` owns compact complete Task Review History for one Task.
-- `by task-review show` owns one Task Review's exact proposal, policy result, Findings, Tooling Failures, and retained Session and Transcript references.
+- `by task-review show` owns one Task Review's exact proposal, policy result, Findings, Tooling Failures, completion-failure diagnostic, and retained Session and Transcript references.
 - `by task-review abandon` owns interrupted Task Review cleanup and abandonment.
 - `by task context` owns the complete Task title, description, and approved Resolution context.
 - `by change show` owns current implementation, validation, delivery, blocker, and cleanup state.

@@ -27,10 +27,11 @@ export const runShowCommand = (
         : Effect.all({
             findings: loaded.inspection.findings(command.reviewId),
             toolingFailures: loaded.inspection.toolingFailures(command.reviewId),
+            completionFailure: loaded.inspection.completionFailure(command.reviewId),
             session: loaded.inspection.session(review.taskId, "task_review"),
             transcripts: loaded.inspection.transcripts(review.taskId),
           }).pipe(
-            Effect.map(({ findings, toolingFailures, session, transcripts }) =>
+            Effect.map(({ findings, toolingFailures, completionFailure, session, transcripts }) =>
               success({
                 review: {
                   id: review.id,
@@ -70,6 +71,15 @@ export const runShowCommand = (
                       }),
                   ...(findings.length === 0 ? {} : { findings }),
                   ...(toolingFailures.length === 0 ? {} : { toolingFailures }),
+                  ...(completionFailure === undefined
+                    ? {}
+                    : {
+                        completionFailure: {
+                          operationName: completionFailure.operationName,
+                          errorMessage: completionFailure.errorMessage,
+                          createdAt: completionFailure.createdAt,
+                        },
+                      }),
                 },
                 ...(review.state === "complete" &&
                 (review.outcome === "passed" || review.outcome === "blocked")

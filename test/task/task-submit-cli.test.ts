@@ -332,11 +332,21 @@ describe("by task submission CLI", () => {
         ]);
         expect(shown.status).toBe(0);
         const reviewShow = JSON.parse(shown.stdout) as {
-          readonly review: { readonly state: string; readonly outcome: string | null };
+          readonly review: {
+            readonly state: string;
+            readonly outcome: string | null;
+            readonly completionFailure?: {
+              readonly operationName: string;
+              readonly errorMessage: string;
+            };
+          };
           readonly nextAction?: string;
         };
         expect(reviewShow.review.state).toBe("running");
         expect(reviewShow.review.outcome).toBeNull();
+        expect(reviewShow.review.completionFailure).toMatchObject({
+          operationName: "abandon_task_review_transcripts",
+        });
         expect(reviewShow.nextAction).toContain("Abandon with");
       }),
     60_000,

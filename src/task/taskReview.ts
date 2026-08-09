@@ -19,7 +19,9 @@ export const taskReviewCleanupStateSchema = Schema.Union(
 export type TaskReviewProposalDependency = {
   readonly taskId: PublicTaskId;
   readonly title: string;
+  readonly description: string;
   readonly state: TaskState;
+  readonly dependencyIds: readonly string[];
 };
 
 export type TaskReviewProposal = {
@@ -131,7 +133,9 @@ const persistedTaskReviewProposalSchema = Schema.Struct({
     Schema.Struct({
       taskId: nonBlankStringSchema,
       title: nonBlankStringSchema,
+      description: nonBlankStringSchema,
       state: Schema.Literal("new", "todo", "done", "cancelled"),
+      dependencyIds: Schema.Array(nonBlankStringSchema),
     }),
   ),
 });
@@ -146,7 +150,9 @@ export const decodePersistedTaskReviewProposal = (value: unknown): TaskReviewPro
     dependencies: decoded.dependencies.map((dependency) => ({
       taskId: storedPublicTaskId(dependency.taskId),
       title: dependency.title,
+      description: dependency.description,
       state: dependency.state,
+      dependencyIds: dependency.dependencyIds,
     })),
   };
 };

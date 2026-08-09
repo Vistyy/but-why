@@ -461,6 +461,9 @@ const complete = (
       WHERE id = ${input.reviewId} AND state = 'running'
     `;
     yield* sql`DELETE FROM active_task_reviews WHERE review_id = ${input.reviewId}`;
+    // Successful completion clears any earlier cleanup or indexing diagnostic so
+    // the Review carries no stale recovery state.
+    yield* sql`DELETE FROM task_review_completion_failures WHERE review_id = ${input.reviewId}`;
 
     const updated = yield* getReviewById(sql, input.reviewId);
     if (updated === undefined) {
@@ -660,6 +663,9 @@ const abandon = (
       WHERE id = ${input.reviewId} AND state = 'running'
     `;
     yield* sql`DELETE FROM active_task_reviews WHERE review_id = ${input.reviewId}`;
+    // Successful abandonment clears any earlier cleanup or indexing diagnostic so
+    // the Review carries no stale recovery state.
+    yield* sql`DELETE FROM task_review_completion_failures WHERE review_id = ${input.reviewId}`;
     return { ok: true as const, status: "abandoned" as const };
   });
 
@@ -717,7 +723,15 @@ const decodeFinding = (row: TaskReviewFindingRow) =>
   Effect.try({
     try: (): TaskReviewFinding => {
       const { files, ...finding } = row;
-      return { ...finding, files: decodeSqliteJsonStringArray(files) };
+      return {
+        id: Schema.decodeUnknownSync(nonBlankStringSchema)(finding.id),
+        reviewId: Schema.decodeUnknownSync(nonBlankStringSchema)(finding.reviewId),
+        title: Schema.decodeUnknownSync(nonBlankStringSchema)(finding.title),
+        description: Schema.decodeUnknownSync(nonBlankStringSchema)(finding.description),
+        evidence: Schema.decodeUnknownSync(nonBlankStringSchema)(finding.evidence),
+        files: decodeSqliteJsonStringArray(files),
+        createdAt: finding.createdAt,
+      };
     },
     catch: (cause) =>
       new RepositoryPersistedDataInvalid({
@@ -811,20 +825,39 @@ const readTaskReviewDependencies = (
     const rows = yield* sql<{
       readonly taskId: string;
       readonly title: string;
+      readonly description: string;
       readonly state: TaskState;
     }>`
-      SELECT tasks.id AS taskId, tasks.title, tasks.state
+      SELECT tasks.id AS taskId, tasks.title, tasks.description, tasks.state
       FROM task_dependencies
       JOIN tasks ON tasks.id = task_dependencies.prerequisite_task_id
       WHERE task_dependencies.dependent_task_id = ${taskId}
       ORDER BY tasks.numeric_id ASC
     `;
+    const nested = yield* sql<{
+      readonly dependentTaskId: string;
+      readonly prerequisiteTaskId: string;
+    }>`
+      SELECT nested.dependent_task_id AS dependentTaskId,
+        nested.prerequisite_task_id AS prerequisiteTaskId
+      FROM task_dependencies AS direct
+      JOIN task_dependencies AS nested ON nested.dependent_task_id = direct.prerequisite_task_id
+      WHERE direct.dependent_task_id = ${taskId}
+      ORDER BY nested.prerequisite_task_id
+    `;
+    const nestedByDependent = new Map<string, readonly string[]>();
+    for (const row of nested) {
+      const existing = nestedByDependent.get(row.dependentTaskId) ?? [];
+      nestedByDependent.set(row.dependentTaskId, [...existing, row.prerequisiteTaskId]);
+    }
     return yield* Effect.forEach(rows, (row) =>
       Effect.try({
         try: (): TaskReviewProposalDependency => ({
           taskId: storedPublicTaskId(row.taskId),
           title: row.title,
+          description: row.description,
           state: row.state,
+          dependencyIds: nestedByDependent.get(row.taskId) ?? [],
         }),
         catch: (cause) =>
           new RepositoryPersistedDataInvalid({

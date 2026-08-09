@@ -42,7 +42,9 @@ export const buildTaskReviewerPrompt = (input: TaskReviewPromptInput): string =>
       dependencies: input.proposal.dependencies.map((dependency) => ({
         taskId: dependency.taskId,
         title: dependency.title,
+        description: dependency.description,
         state: dependency.state,
+        dependencyIds: dependency.dependencyIds,
       })),
     }),
     ...(input.proposalDiff === undefined

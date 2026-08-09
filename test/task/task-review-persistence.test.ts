@@ -62,7 +62,15 @@ it.scoped("admits a Task Review and captures the exact proposal and workspace se
         proposal: {
           title: "Admitted",
           description: "Description: Admitted",
-          dependencies: [{ taskId: first.id, title: "Prerequisite", state: "new" }],
+          dependencies: [
+            {
+              taskId: first.id,
+              title: "Prerequisite",
+              description: "Description: Prerequisite",
+              state: "new",
+              dependencyIds: [],
+            },
+          ],
         },
       });
 
@@ -80,7 +88,15 @@ it.scoped("admits a Task Review and captures the exact proposal and workspace se
         proposal: {
           title: "Admitted",
           description: "Description: Admitted",
-          dependencies: [{ taskId: first.id, title: "Prerequisite", state: "new" }],
+          dependencies: [
+            {
+              taskId: first.id,
+              title: "Prerequisite",
+              description: "Description: Prerequisite",
+              state: "new",
+              dependencyIds: [],
+            },
+          ],
         },
         policy,
       });
@@ -95,6 +111,117 @@ it.scoped("admits a Task Review and captures the exact proposal and workspace se
         cleanupWorktree: "not_created",
         cleanupTempRef: "not_created",
       });
+    }),
+  ),
+);
+
+it.scoped("captures each direct dependency's full context and nested dependency IDs", () =>
+  withTemporaryRepositoryState(() =>
+    Effect.gen(function* () {
+      const tasks = yield* openSqliteTaskPersistence("BY");
+      const reviews = yield* openSqliteTaskReviewPersistence();
+      const root = yield* createTask(tasks, "Root prerequisite", firstNow);
+      const middle = yield* createTask(tasks, "Middle prerequisite", firstNow);
+      const edited = yield* tasks.editTaskDependencies({
+        taskId: middle.id,
+        operation: "replace",
+        prerequisiteTaskIds: [root.id],
+      });
+      if (!edited.ok) throw new Error(edited.code);
+      const subject = yield* createTask(tasks, "Dependent subject", firstNow);
+      const added = yield* tasks.editTaskDependencies({
+        taskId: subject.id,
+        operation: "replace",
+        prerequisiteTaskIds: [middle.id],
+      });
+      if (!added.ok) throw new Error(added.code);
+
+      const started = yield* reviews.startOrReuse({
+        taskId: subject.id,
+        baseCommit,
+        policy,
+        reviewId: "review-dependencies",
+        now: firstNow,
+      });
+      expect(started).toMatchObject({
+        ok: true,
+        reused: false,
+        proposal: {
+          dependencies: [
+            {
+              taskId: middle.id,
+              title: "Middle prerequisite",
+              description: "Description: Middle prerequisite",
+              state: "new",
+              dependencyIds: [root.id],
+            },
+          ],
+        },
+      });
+
+      // The proposal round-trips through the persisted snapshot with the same evidence.
+      const recorded = yield* reviews.getReviewById("review-dependencies");
+      expect(recorded?.proposal.dependencies).toEqual([
+        {
+          taskId: middle.id,
+          title: "Middle prerequisite",
+          description: "Description: Middle prerequisite",
+          state: "new",
+          dependencyIds: [root.id],
+        },
+      ]);
+    }),
+  ),
+);
+
+it.scoped("clears a stored completion failure after successful completion or abandonment", () =>
+  withTemporaryRepositoryState(() =>
+    Effect.gen(function* () {
+      const tasks = yield* openSqliteTaskPersistence("BY");
+      const reviews = yield* openSqliteTaskReviewPersistence();
+      const completedTask = yield* createTask(tasks, "Recovered completion", firstNow);
+      yield* reviews.startOrReuse({
+        taskId: completedTask.id,
+        baseCommit,
+        policy,
+        reviewId: "review-recovered-complete",
+        now: firstNow,
+      });
+      yield* reviews.recordCompletionFailure({
+        reviewId: "review-recovered-complete",
+        operationName: "index_task_review_transcripts",
+        errorMessage: "unreadable session",
+        now: firstNow,
+      });
+      yield* reviews.complete({
+        reviewId: "review-recovered-complete",
+        outcome: "blocked",
+        now: secondNow,
+      });
+      expect(yield* reviews.getCompletionFailure("review-recovered-complete")).toBeUndefined();
+
+      const abandonedTask = yield* createTask(tasks, "Recovered abandonment", secondNow);
+      yield* reviews.startOrReuse({
+        taskId: abandonedTask.id,
+        baseCommit,
+        policy,
+        reviewId: "review-recovered-abandon",
+        now: secondNow,
+      });
+      yield* reviews.recordCompletionFailure({
+        reviewId: "review-recovered-abandon",
+        operationName: "index_task_review_transcripts",
+        errorMessage: "unreadable session",
+        now: secondNow,
+      });
+      yield* reviews.abandon({
+        reviewId: "review-recovered-abandon",
+        errorKind: "infrastructure_tooling_failed",
+        operationName: "cleanup_disposable_workspace",
+        errorMessage: "submission stopped",
+        now: thirdNow,
+      });
+      expect(yield* reviews.getCompletionFailure("review-recovered-abandon")).toBeUndefined();
     }),
   ),
 );
@@ -264,7 +391,15 @@ it.scoped("reuses the newest matching completed Review and returns before reposi
         proposal: {
           title: "Reuse",
           description: "Description: Reuse",
-          dependencies: [{ taskId: prerequisite.id, title: "Prerequisite", state: "new" }],
+          dependencies: [
+            {
+              taskId: prerequisite.id,
+              title: "Prerequisite",
+              description: "Description: Prerequisite",
+              state: "new",
+              dependencyIds: [],
+            },
+          ],
         },
       });
       yield* reviews.complete({ reviewId: "review-second", outcome: "blocked", now: thirdNow });
@@ -736,6 +871,25 @@ it.scoped("rejects malformed persisted values at each owning boundary", () =>
           sql`UPDATE task_review_tooling_failures SET error_kind = '' WHERE review_id = 'review-decoded'`,
       );
       expect(yield* Effect.isFailure(reviews.listToolingFailures("review-decoded"))).toBe(true);
+
+      // Finding core fields are decoded at the owning boundary.
+      yield* repository.operation(
+        "insert Finding",
+        (sql) =>
+          sql`
+            INSERT INTO task_review_findings (
+              id, review_id, title, description, evidence, files, created_at
+            ) VALUES (
+              'review-decoded-F1', 'review-decoded', 'Title', 'Description', 'Evidence',
+              '[]', ${secondNow}
+            )
+          `,
+      );
+      yield* repository.operation(
+        "corrupt Finding title",
+        (sql) => sql`UPDATE task_review_findings SET title = '' WHERE review_id = 'review-decoded'`,
+      );
+      expect(yield* Effect.isFailure(reviews.listFindings("review-decoded"))).toBe(true);
 
       // Session and transcript records are decoded at the owning boundary.
       yield* repository.operation(
