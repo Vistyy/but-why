@@ -418,7 +418,7 @@ type HerdrAgent = {
 type HerdrWorktree = {
   readonly path?: string;
   readonly worktreePath?: string;
-  readonly branch: string;
+  readonly branch?: string | null;
 };
 
 type OpenedWorktree = { readonly rootPaneId: string };
@@ -479,11 +479,15 @@ const decodeWorktreeList = (source: string): readonly HerdrWorktree[] | undefine
       !isRecord(value) ||
       (value["path"] !== undefined && typeof value["path"] !== "string") ||
       (value["worktree_path"] !== undefined && typeof value["worktree_path"] !== "string") ||
-      typeof value["branch"] !== "string"
+      (value["branch"] !== undefined &&
+        value["branch"] !== null &&
+        typeof value["branch"] !== "string")
     )
       return undefined;
     decoded.push({
-      branch: value["branch"],
+      ...(value["branch"] === null || typeof value["branch"] === "string"
+        ? { branch: value["branch"] }
+        : {}),
       ...(typeof value["path"] === "string" ? { path: value["path"] } : {}),
       ...(typeof value["worktree_path"] === "string"
         ? { worktreePath: value["worktree_path"] }
@@ -569,6 +573,7 @@ const worktreeMatchesTarget = (worktrees: readonly HerdrWorktree[], targetPath: 
   worktrees.some(
     (worktree) =>
       (worktree.path === targetPath || worktree.worktreePath === targetPath) &&
+      typeof worktree.branch === "string" &&
       worktree.branch.trim() !== "",
   );
 

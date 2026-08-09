@@ -232,7 +232,7 @@ describe("Herdr Interactive Session Host", () => {
         return {
           ok: true,
           stdout:
-            '{"result":{"type":"worktree_list","worktrees":[{"path":"/workspace/change-123","branch":"change-123","future_field":true}],"future_field":true}}',
+            '{"result":{"type":"worktree_list","worktrees":[{"path":"/detached-one","branch":null},{"path":"/detached-two"},{"path":"/workspace/change-123","branch":"change-123","future_field":true}],"future_field":true}}',
         };
       }
       if (args[0] === "agent" && args[1] === "start") {
