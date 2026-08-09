@@ -37,28 +37,34 @@ if [[ -s "${BY_CAPACITY_LOCK_ACQUIRED_AT_FILE:-}" ]]; then
 fi
 
 start_child() {
-    setsid --wait "$@" &
+    setsid env --default-signal=INT,TERM "$@" &
     child_pids+=("$!")
 }
 
 terminate_children() {
     interrupted_status=$1
+    local signal=$2
     terminator_pids=()
     for pid in "${child_pids[@]}"; do
-        process_tree_terminate "$pid" &
+        process_tree_terminate "$pid" "$signal" &
         terminator_pids+=("$!")
     done
     for pid in "${terminator_pids[@]}"; do
         wait "$pid" 2>/dev/null || true
     done
 }
-trap 'terminate_children 130' INT
-trap 'terminate_children 143' TERM
+trap 'terminate_children 130 INT' INT
+trap 'terminate_children 143 TERM' TERM
 
 wait_for_child() {
     local pid=$1
     wait "$pid"
     local status=$?
+    if (( interrupted_status == 0 )); then
+        case "$status" in
+            130|143) interrupted_status=$status ;;
+        esac
+    fi
     if (( interrupted_status != 0 )); then
         return "$interrupted_status"
     fi
@@ -97,6 +103,12 @@ else
 fi
 
 trap - INT TERM
+if (( interrupted_status == 0 )) && [[ -s "${BY_CAPACITY_INTERRUPTION_FILE:-}" ]]; then
+    interruption_status=$(<"$BY_CAPACITY_INTERRUPTION_FILE")
+    case "$interruption_status" in
+        130|143) interrupted_status=$interruption_status ;;
+    esac
+fi
 if (( interrupted_status != 0 )); then
     for pid in "${child_pids[@]}"; do
         wait "$pid" 2>/dev/null || true
