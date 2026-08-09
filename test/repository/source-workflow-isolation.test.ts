@@ -61,10 +61,7 @@ test("source workflow delegates a Candidate worktree to the canonical executable
         '    "0008_recover_published_remote_branch_cleanup": recoverPublishedRemoteBranchCleanup,\n    "0009_candidate_probe": candidateProbe,\n',
       )}\n`,
   );
-  writeFileSync(
-    join(candidate, "src/main.ts"),
-    'throw new Error("candidate_cli_probe_loaded");\n',
-  );
+  writeFileSync(join(candidate, "src/main.ts"), 'throw new Error("candidate_cli_probe_loaded");\n');
   writeFileSync(join(candidate, "description.md"), "Created by the trusted executable.\n");
 
   const result = runTestProcess(
@@ -108,7 +105,6 @@ test("source workflow fails without Candidate fallback when the main checkout is
     },
     help: ["Restore the canonical main checkout, then retry the command."],
   });
-
 }, 30_000);
 
 test("source workflow preserves a newline in the canonical checkout path", () => {

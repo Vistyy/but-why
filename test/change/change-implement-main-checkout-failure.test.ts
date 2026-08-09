@@ -15,10 +15,7 @@ import {
   createInitializedRepo,
 } from "../support/initializedRepo.js";
 import { runTestProcess, runTestProcessOrThrow } from "../support/testProcess.js";
-import {
-  acquireTestWorkspace,
-  releaseTestWorkspace,
-} from "../support/testWorkspace.js";
+import { acquireTestWorkspace, releaseTestWorkspace } from "../support/testWorkspace.js";
 
 const now = "2026-06-30T12:00:00.000Z";
 const mainCheckoutFailureProcessTimeoutMs = 10_000;
@@ -107,11 +104,7 @@ describe("Change Implement canonical main checkout failures", () => {
   );
 });
 
-const runTestProcessOrThrowResult = (
-  command: string,
-  args: readonly string[],
-  cwd: string,
-) => {
+const runTestProcessOrThrowResult = (command: string, args: readonly string[], cwd: string) => {
   const result = runTestProcess(command, args, {
     cwd,
     timeout: mainCheckoutFailureProcessTimeoutMs,
