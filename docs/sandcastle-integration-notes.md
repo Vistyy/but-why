@@ -29,7 +29,7 @@ Sandboxing should be a separate execution-provider decision rather than another 
 
 | Current use | But Why ownership | Sandcastle contribution |
 | --- | --- | --- |
-| Validation Workspace lifecycle | Workspace policy, exact Candidate SHA, setup evidence, cleanup result, and Change error translation | Creates and verifies the disposable exact-commit workspace, copies allowlisted files, exposes its path, and closes it |
+| Validation Workspace lifecycle | Workspace policy, requested-commit verification, setup evidence, cleanup result, and Change error translation | Creates the Git worktree, copies allowlisted files, exposes its path, and closes it |
 | Preparation and Checks | Commands, ordering, findings, diagnostics, integrity checks | Runs shell commands through `Sandbox.exec()` |
 | Pi reviewer execution | Profiles, prompts, output contract, bounded same-session corrections, Reviewer Session identity, persistence, and evidence | Builds and runs the Pi process, parses its stream, and exposes session resume |
 | Process handle | Effect scope and cleanup policy | Provides `run()`, `exec()`, and `close()` on one handle |
