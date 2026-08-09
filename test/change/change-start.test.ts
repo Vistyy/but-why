@@ -52,6 +52,11 @@ type FixtureOptions = {
   readonly execute?: RepositoryPreparationEffectExecutor["effect"];
 };
 
+const required = <Value>(value: Value | undefined, message: string): Value => {
+  if (value === undefined) throw new Error(message);
+  return value;
+};
+
 const fixture = (options: FixtureOptions = {}) => {
   const events: string[] = [];
   let current = options.existing;
@@ -71,7 +76,11 @@ const fixture = (options: FixtureOptions = {}) => {
     getById: (id) => Effect.succeed(current?.id === id ? current : undefined),
     recordPrepareOutcome: (_id, failure, updatedAt) => {
       events.push("recordPrepareOutcome");
-      current = { ...current!, prepareFailure: failure, updatedAt };
+      current = {
+        ...required(current, "recordPrepareOutcome requires a captured Change"),
+        prepareFailure: failure,
+        updatedAt,
+      };
       return Effect.succeed(current);
     },
   };
@@ -174,7 +183,7 @@ describe("Change Start orchestration", () => {
       const captured = fixture({ existing });
       const result = yield* captured.useCases.start({ taskId, now });
       expect(result).toMatchObject({ ok: true, change: { id: existing.id, taskId } });
-      expect(captured.current()!.acceptanceContext).toBe(existing.acceptanceContext);
+      expect(captured.current()?.acceptanceContext).toBe(existing.acceptanceContext);
       expect(captured.events).toEqual([
         "prepareTask",
         "provisionWorktree:recover",
@@ -243,7 +252,7 @@ describe("Change Start orchestration", () => {
             commands.push(command);
             return command.startsWith("command -v timeout")
               ? Effect.succeed({ exitCode: 0, stdout: "", stderr: "" })
-              : responses.shift()!;
+              : required(responses.shift(), "missing captured preparation response");
           },
         });
 
@@ -252,7 +261,7 @@ describe("Change Start orchestration", () => {
           ok: true,
           change: { prepareFailure: { exitCode: 7, timedOut: false } },
         });
-        const id = captured.current()!.id;
+        const id = required(captured.current(), "Change Start did not capture a Change").id;
         expect(yield* captured.useCases.prepare(id, now)).toMatchObject({
           ok: true,
           change: { id, prepareFailure: { exitCode: 124, timedOut: true, stderr: "timed out" } },
