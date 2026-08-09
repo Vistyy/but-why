@@ -434,7 +434,10 @@ const runTaskReviewPhases = (input: {
     const decodedAttempt = yield* decodeTaskReviewReviewerOutput({
       reviewer: "task_review",
       attempts: result.attempts,
-      output: parseTaggedReviewerOutput(result.stdout),
+      output:
+        result.outputContract === "injected"
+          ? result.report
+          : parseTaggedReviewerOutput(result.stdout),
     }).pipe(
       Effect.mapError(
         (error): TaskReviewToolingFailureRecord =>

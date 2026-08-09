@@ -4,7 +4,7 @@ import { Effect, type ParseResult, Schema } from "effect";
 
 import type { AgentProfileResolutionError } from "../agent/agentProfileErrors.js";
 import { type ResolvedPiAgentProfile, resolveAgentProfile } from "../agent/agentProfiles.js";
-import { ReviewerOutputContractFailed } from "../change/validation/validationToolingFailures.js";
+import { ReviewerOutputContractFailed } from "../contracts/reviewerOutputContractFailure.js";
 import type { GlobalConfigValidationFailed } from "../contracts/configErrors.js";
 import {
   contractDiagnostics,
@@ -13,7 +13,6 @@ import {
 import type { GlobalConfig } from "../contracts/globalConfig.js";
 import type { RepoConfig } from "../contracts/repoConfig.js";
 import { reviewerFindingCoreSchema } from "../contracts/reviewerFinding.js";
-import type { ReviewerOutput } from "../contracts/reviewerOutput.js";
 import type { TaskReviewFinding, TaskReviewPolicySnapshot } from "./taskReview.js";
 
 export type TaskReviewPolicyError = AgentProfileResolutionError | GlobalConfigValidationFailed;
@@ -113,11 +112,8 @@ export const decodeTaskReviewRuntimeOutput = (input: {
   readonly reviewer: string;
   readonly attempts: number;
   readonly output: unknown;
-}): Effect.Effect<ReviewerOutput, ReviewerOutputContractFailed> =>
+}): Effect.Effect<TaskReviewReviewerOutput, ReviewerOutputContractFailed> =>
   decodeTaskReviewReviewerOutput(input).pipe(
-    Effect.map((output) => ({
-      findings: output.findings.map((finding) => ({ ...finding, artifactRefs: [] })),
-    })),
     Effect.mapError((error) => {
       const diagnostics = contractDiagnostics(error, input.output);
       return new ReviewerOutputContractFailed({

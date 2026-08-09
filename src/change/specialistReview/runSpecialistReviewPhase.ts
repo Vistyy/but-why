@@ -14,6 +14,7 @@ import {
   reviewerFindingHistory,
 } from "../../agent/reviewerPrompts.js";
 import type { RepositoryStorageError } from "../../contracts/repositoryStorageError.js";
+import { decodeReviewerOutputContract } from "../../contracts/reviewerOutput.js";
 import type { RecordCandidateSpecialistRoundInput } from "../candidateValidation/candidateValidationRunStore.js";
 import {
   type ReviewerContinuity,
@@ -268,11 +269,16 @@ const runSpecialist = (
 
     let result: ReviewerAgentResult = provisional;
     if (provisional.ok && earlierFindings.length > 0) {
+      const provisionalReport = yield* decodeReviewerOutputContract({
+        reviewer: policy.id,
+        attempts: provisional.attempts,
+        output: provisional.report,
+      });
       result = yield* review(
         provisional.sessionReference,
         buildReviewerRevisionPrompt({
           reviewPrompt: prompt,
-          provisionalReport: provisional.report,
+          provisionalReport,
           earlierFindings,
         }),
       );
@@ -302,8 +308,15 @@ const runSpecialist = (
         reviewCalls,
       },
     });
-    const findings = result.ok
-      ? result.report.findings.map((finding, findingIndex) => ({
+    const report = result.ok
+      ? yield* decodeReviewerOutputContract({
+          reviewer: policy.id,
+          attempts: result.attempts,
+          output: result.report,
+        })
+      : undefined;
+    const findings = report
+      ? report.findings.map((finding, findingIndex) => ({
           id: `${input.validationRunId}-${policy.id}-F${findingIndex + 1}`,
           validationRunId: input.validationRunId,
           phase: validationPhase.specialistReview,

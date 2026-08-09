@@ -60,6 +60,16 @@
           }
         }
       }
+    },
+    {
+      "includes": ["src/sqlite/migrations/0025_repair_validation_policy_snapshot_ok_field.ts"],
+      "linter": {
+        "rules": {
+          "complexity": {
+            "useLiteralKeys": "off"
+          }
+        }
+      }
     }
   ],
   "javascript": {

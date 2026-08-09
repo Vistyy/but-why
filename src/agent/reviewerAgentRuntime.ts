@@ -13,13 +13,12 @@ import { dirname, join } from "node:path";
 import { type AgentProvider, pi, type Sandbox, type SandboxRunResult } from "@ai-hero/sandcastle";
 import { Effect } from "effect";
 import {
-  type ReviewerOutputContractFailed,
   SandcastleToolingFailed,
   type ValidationToolingFailure,
 } from "../change/validation/validationToolingFailures.js";
+import type { ReviewerOutputContractFailed } from "../contracts/reviewerOutputContractFailure.js";
 import {
   decodeReviewerOutputContract,
-  type ReviewerOutput,
   validateReviewerArtifactRefs,
 } from "../contracts/reviewerOutput.js";
 import {
@@ -54,13 +53,14 @@ export type ReviewerAgentInput = {
     readonly reviewer: string;
     readonly attempts: number;
     readonly output: unknown;
-  }) => Effect.Effect<ReviewerOutput, ReviewerOutputContractFailed>;
+  }) => Effect.Effect<unknown, ReviewerOutputContractFailed>;
 };
 
 export type ReviewerAgentResult =
   | {
       readonly ok: true;
-      readonly report: ReviewerOutput;
+      readonly outputContract?: "validation" | "injected";
+      readonly report: unknown;
       readonly attempts: number;
       readonly stdout: string;
       readonly sessionReference?: string;
@@ -144,6 +144,7 @@ const reviewWithPi = (input: ReviewerAgentInput): Effect.Effect<ReviewerAgentRes
           restoreSession();
           return {
             ok: true,
+            ...(input.decodeOutput === undefined ? {} : { outputContract: "injected" as const }),
             report: decoded.right,
             attempts: 1,
             stdout: recovered.right.stdout,
@@ -170,6 +171,7 @@ const reviewWithPi = (input: ReviewerAgentInput): Effect.Effect<ReviewerAgentRes
       cleanupSessionSnapshot(sessionSnapshot);
       return {
         ok: true,
+        ...(input.decodeOutput === undefined ? {} : { outputContract: "injected" as const }),
         report: validation.right,
         attempts: 1,
         stdout: current.stdout,
@@ -206,6 +208,7 @@ const reviewWithPi = (input: ReviewerAgentInput): Effect.Effect<ReviewerAgentRes
       cleanupSessionSnapshot(sessionSnapshot);
       return {
         ok: true,
+        ...(input.decodeOutput === undefined ? {} : { outputContract: "injected" as const }),
         report: validation.right,
         attempts,
         stdout: current.stdout,
@@ -269,12 +272,18 @@ const isolatedPiReviewerAgent = (
   };
 };
 
-const validateRunResult = (input: ReviewerAgentInput, result: SandboxRunResult, attempts: number) =>
-  (input.decodeOutput ?? decodeReviewerOutputContract)({
+const validateRunResult = (
+  input: ReviewerAgentInput,
+  result: SandboxRunResult,
+  attempts: number,
+) => {
+  const decodeInput = {
     reviewer: input.reviewer,
     attempts,
     output: parseTaggedReviewerOutput(result.stdout),
-  }).pipe(
+  };
+  if (input.decodeOutput !== undefined) return input.decodeOutput(decodeInput);
+  return decodeReviewerOutputContract(decodeInput).pipe(
     Effect.flatMap((output) =>
       validateReviewerArtifactRefs({
         reviewer: input.reviewer,
@@ -285,6 +294,7 @@ const validateRunResult = (input: ReviewerAgentInput, result: SandboxRunResult, 
       }),
     ),
   );
+};
 
 const runSandbox = (
   run: () => Promise<SandboxRunResult>,
