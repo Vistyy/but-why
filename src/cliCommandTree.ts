@@ -6,7 +6,8 @@ import * as HelpDoc from "@effect/cli/HelpDoc";
 import * as Options from "@effect/cli/Options";
 import * as ValidationError from "@effect/cli/ValidationError";
 import { NodeFileSystem, NodePath, NodeTerminal } from "@effect/platform-node";
-import { Console, Context, Effect, Layer, Logger, Ref } from "effect";
+import { Console, Context, Effect, Layer, Logger, Option, Ref } from "effect";
+import type * as Types from "effect/Types";
 import type { ChangeCommandEnvironment } from "./cli/change/changeTypes.js";
 import { collapseHome } from "./cli/cliPath.js";
 import type { CliEnvironment } from "./cli.js";
@@ -16,7 +17,7 @@ import {
   nativeBooleanValue,
   outputFormatForArgs,
 } from "./output/selection.js";
-import { type TaskState, taskStates } from "./task/lifecycle.js";
+import { taskStates } from "./task/lifecycle.js";
 
 class CliEnvironmentContext extends Context.Tag("@but-why/CliEnvironment")<
   CliEnvironmentContext,
@@ -28,46 +29,56 @@ class CliResultSink extends Context.Tag("@but-why/CliResultSink")<
   (result: CliResult) => Effect.Effect<void>
 >() {}
 
-type AnyCommand = Command.Command<string, never, never, unknown>;
+type CliHandlerContext = CliEnvironmentContext | CliResultSink;
+// biome-ignore lint/suspicious/noExplicitAny: Effect CLI requires type erasure for heterogeneous command storage after handlers are attached.
+type AnyCommand = Command.Command<any, CliHandlerContext, never, any>;
 type Subcommands = readonly [AnyCommand, ...AnyCommand[]];
-type CommandConfig = Record<string, Args.Args<unknown> | Options.Options<unknown>>;
-type CliOperation = (
-  values: Record<string, unknown>,
+type ParsedConfig<Config extends Command.Command.Config> = Types.Simplify<
+  Command.Command.ParseConfig<Config>
+>;
+type CliOperation<Values> = (
+  values: Values,
   environment: CliEnvironment,
 ) => Effect.Effect<CliResult>;
 
-type SubcommandBuilder = <Name extends string, R, E, A>(
-  self: Command.Command<Name, R, E, A>,
-) => Command.Command<Name, R, E, A>;
+const eraseCommandType = <Name extends string, Values>(
+  command: Command.Command<Name, CliHandlerContext, never, Values>,
+): AnyCommand => command;
 
-const withSubcommands = (children: Subcommands): SubcommandBuilder =>
-  (Command.withSubcommands as unknown as (children: Subcommands) => SubcommandBuilder)(children);
+const leaf = <Name extends string, const Config extends Command.Command.Config>(
+  name: Name,
+  description: string,
+  config: Config,
+) => Command.make(name, config).pipe(Command.withDescription(description));
 
-const leaf = (name: string, description: string, config: CommandConfig = {}): AnyCommand =>
-  Command.make(name, config).pipe(Command.withDescription(description)) as unknown as AnyCommand;
-
-const group = (
-  name: string,
+const group = <Name extends string, const Config extends Command.Command.Config>(
+  name: Name,
   description: string,
   children: readonly AnyCommand[],
-  config: CommandConfig = {},
-  operation?: CliOperation,
+  config: Config,
+  operation: CliOperation<ParsedConfig<Config>>,
 ): AnyCommand => {
-  const base = Command.make(name, config).pipe(
-    Command.withDescription(description),
-  ) as unknown as AnyCommand;
-  const handled = operation === undefined ? base : withCliHandler(base, operation);
-  return handled.pipe(withSubcommands(children as Subcommands)) as unknown as AnyCommand;
+  const handled = withCliHandler(
+    Command.make(name, config).pipe(Command.withDescription(description)),
+    operation,
+  );
+  return eraseCommandType(handled.pipe(Command.withSubcommands(children as Subcommands)));
 };
 
-const withCliHandler = (command: AnyCommand, operation: CliOperation): AnyCommand =>
-  Command.withHandler(command, (value: unknown) =>
-    Effect.contextWithEffect((context) =>
-      operation(isRecord(value) ? value : {}, Context.get(context, CliEnvironmentContext)).pipe(
-        Effect.flatMap((result) => Context.get(context, CliResultSink)(result)),
-      ),
+const withCliHandler = <Name extends string, R, E, Values>(
+  command: Command.Command<Name, R, E, Values>,
+  operation: CliOperation<Values>,
+) => Command.withHandler(command, (values) => runCliOperation(values, operation));
+
+const runCliOperation = <Values>(
+  values: Values,
+  operation: CliOperation<Values>,
+): Effect.Effect<void, never, CliHandlerContext> =>
+  Effect.contextWithEffect((context) =>
+    operation(values, Context.get(context, CliEnvironmentContext)).pipe(
+      Effect.flatMap((result) => Context.get(context, CliResultSink)(result)),
     ),
-  ) as unknown as AnyCommand;
+  );
 
 const optionalText = (name: string) => Options.text(name).pipe(Options.optional);
 const repeatedText = (name: string) => Options.repeated(Options.text(name));
@@ -90,8 +101,8 @@ const taskDependenciesOperationCommand = (
           runDependenciesCommand(
             {
               operation,
-              taskId: requiredString(values, "taskId"),
-              dependsOn: strings(values, "dependsOn"),
+              taskId: values.taskId,
+              dependsOn: values.dependsOn,
             },
             environment,
           ),
@@ -109,7 +120,7 @@ const taskDependenciesClearCommand = withCliHandler(
         runDependenciesCommand(
           {
             operation: "clear",
-            taskId: requiredString(values, "taskId"),
+            taskId: values.taskId,
             dependsOn: [],
           },
           environment,
@@ -143,7 +154,7 @@ const taskContextDraftCommand = withCliHandler(
   (values, environment) =>
     Effect.promise(() => import("./cli/task/commands/contextDraft.js")).pipe(
       Effect.flatMap(({ runContextDraftCommand }) =>
-        runContextDraftCommand(taskId(values), environment),
+        runContextDraftCommand({ taskId: values.taskId }, environment),
       ),
     ),
 );
@@ -152,7 +163,7 @@ const taskContextApplyCommand = withCliHandler(
   (values, environment) =>
     Effect.promise(() => import("./cli/task/commands/contextApply.js")).pipe(
       Effect.flatMap(({ runContextApplyCommand }) =>
-        runContextApplyCommand(taskId(values), environment),
+        runContextApplyCommand({ taskId: values.taskId }, environment),
       ),
     ),
 );
@@ -163,7 +174,7 @@ taskContextCommand = group(
   [taskContextDraftCommand, taskContextApplyCommand],
   { taskId: Args.optional(taskIdArgument) },
   (values, environment) => {
-    const taskId = optionalString(values, "taskId");
+    const taskId = Option.getOrUndefined(values.taskId);
     if (taskId === undefined) return generatedCommandUsage(taskContextCommand);
     return Effect.promise(() => import("./cli/task/commands/context.js")).pipe(
       Effect.flatMap(({ runContextCommand }) => runContextCommand({ taskId }, environment)),
@@ -186,9 +197,9 @@ const taskCreateCommand = withCliHandler(
       Effect.flatMap(({ runCreateCommand }) =>
         runCreateCommand(
           {
-            title: requiredString(values, "title"),
-            file: requiredString(values, "file"),
-            dependsOn: strings(values, "dependsOn"),
+            title: values.title,
+            file: values.file,
+            dependsOn: values.dependsOn,
           },
           environment,
         ),
@@ -206,9 +217,9 @@ const taskListCommand = withCliHandler(
       Effect.flatMap(({ runListCommand }) =>
         runListCommand(
           {
-            all: boolean(values, "all"),
-            state: optionalString(values, "state") as TaskState | undefined,
-            limit: requiredString(values, "limit"),
+            all: values.all,
+            state: Option.getOrUndefined(values.state),
+            limit: values.limit,
           },
           environment,
         ),
@@ -219,7 +230,9 @@ const taskShowCommand = withCliHandler(
   leaf("show", "Show decision-oriented Task metadata.", { taskId: taskIdArgument }),
   (values, environment) =>
     Effect.promise(() => import("./cli/task/commands/show.js")).pipe(
-      Effect.flatMap(({ runTaskShowCommand }) => runTaskShowCommand(taskId(values), environment)),
+      Effect.flatMap(({ runTaskShowCommand }) =>
+        runTaskShowCommand({ taskId: values.taskId }, environment),
+      ),
     ),
 );
 const taskApproveCommand = withCliHandler(
@@ -229,7 +242,7 @@ const taskApproveCommand = withCliHandler(
   (values, environment) =>
     Effect.promise(() => import("./cli/task/commands/approve.js")).pipe(
       Effect.flatMap(({ runApproveCommand }) =>
-        runApproveCommand({ taskId: requiredString(values, "taskId") }, environment),
+        runApproveCommand({ taskId: values.taskId }, environment),
       ),
     ),
 );
@@ -239,7 +252,7 @@ const taskSubmitCommand = withCliHandler(
   }),
   (values, environment) =>
     Effect.promise(() => import("./cli/task/commands/submit.js")).pipe(
-      Effect.flatMap(({ runSubmitCommand }) => runSubmitCommand(taskId(values), environment)),
+      Effect.flatMap(({ runSubmitCommand }) => runSubmitCommand({ taskId: values.taskId }, environment)),
     ),
 );
 const taskCancelCommand = withCliHandler(
@@ -250,10 +263,7 @@ const taskCancelCommand = withCliHandler(
   (values, environment) =>
     Effect.promise(() => import("./cli/task/commands/cancel.js")).pipe(
       Effect.flatMap(({ runCancelCommand }) =>
-        runCancelCommand(
-          { taskId: requiredString(values, "taskId"), reason: requiredString(values, "reason") },
-          environment,
-        ),
+        runCancelCommand({ taskId: values.taskId, reason: values.reason }, environment),
       ),
     ),
 );
@@ -285,8 +295,8 @@ const taskReviewAbandonCommand = withCliHandler(
       Effect.flatMap(({ runAbandonCommand }) =>
         runAbandonCommand(
           {
-            reviewId: requiredString(values, "reviewId"),
-            reason: requiredString(values, "reason"),
+            reviewId: values.reviewId,
+            reason: values.reason,
           },
           environment,
         ),
@@ -318,9 +328,9 @@ const changeDecisionAddCommand = withCliHandler(
         runDecision(
           {
             action: "add",
-            changeId: requiredString(values, "changeId"),
-            choice: requiredString(values, "choice"),
-            rationale: requiredString(values, "rationale"),
+            changeId: values.changeId,
+            choice: values.choice,
+            rationale: values.rationale,
           },
           environment as ChangeCommandEnvironment,
         ),
@@ -335,7 +345,7 @@ const changeDecisionListCommand = withCliHandler(
     Effect.promise(() => import("./cli/change/decision.js")).pipe(
       Effect.flatMap(({ runDecision }) =>
         runDecision(
-          { action: "list", changeId: requiredString(values, "changeId") },
+          { action: "list", changeId: values.changeId },
           environment as ChangeCommandEnvironment,
         ),
       ),
@@ -369,8 +379,8 @@ const changeBlockerRaiseCommand = withCliHandler(
         runBlocker(
           {
             action: "raise",
-            changeId: requiredString(values, "changeId"),
-            file: requiredString(values, "file"),
+            changeId: values.changeId,
+            file: values.file,
           },
           environment as ChangeCommandEnvironment,
         ),
@@ -392,8 +402,8 @@ const changeBlockerResolveCommand = withCliHandler(
         runBlocker(
           {
             action: "resolve",
-            changeId: requiredString(values, "changeId"),
-            file: requiredString(values, "file"),
+            changeId: values.changeId,
+            file: values.file,
           },
           environment as ChangeCommandEnvironment,
         ),
@@ -406,7 +416,7 @@ const changeBlockerListCommand = withCliHandler(
     Effect.promise(() => import("./cli/change/blocker.js")).pipe(
       Effect.flatMap(({ runBlocker }) =>
         runBlocker(
-          { action: "list", changeId: requiredString(values, "changeId") },
+          { action: "list", changeId: values.changeId },
           environment as ChangeCommandEnvironment,
         ),
       ),
@@ -431,8 +441,8 @@ const changeStartCommand = withCliHandler(
       Effect.flatMap(({ runStart }) =>
         runStart(
           {
-            taskId: optionalString(values, "task"),
-            baseBranch: optionalString(values, "base"),
+            taskId: Option.getOrUndefined(values.task),
+            baseBranch: Option.getOrUndefined(values.base),
           },
           environment as ChangeCommandEnvironment,
         ),
@@ -447,7 +457,7 @@ const changePrepareCommand = withCliHandler(
     Effect.promise(() => import("./cli/change/prepare.js")).pipe(
       Effect.flatMap(({ runPrepare }) =>
         runPrepare(
-          { changeId: optionalString(values, "changeId") },
+          { changeId: Option.getOrUndefined(values.changeId) },
           environment as ChangeCommandEnvironment,
         ),
       ),
@@ -458,7 +468,7 @@ const changeListCommand = withCliHandler(
   (values, environment) =>
     Effect.promise(() => import("./cli/change/list.js")).pipe(
       Effect.flatMap(({ runList }) =>
-        runList({ all: boolean(values, "all") }, environment as ChangeCommandEnvironment),
+        runList({ all: values.all }, environment as ChangeCommandEnvironment),
       ),
     ),
 );
@@ -470,7 +480,7 @@ const changeShowCommand = withCliHandler(
     Effect.promise(() => import("./cli/change/show.js")).pipe(
       Effect.flatMap(({ runShow }) =>
         runShow(
-          { changeId: optionalString(values, "changeId") },
+          { changeId: Option.getOrUndefined(values.changeId) },
           environment as ChangeCommandEnvironment,
         ),
       ),
@@ -484,7 +494,7 @@ const changeFindingsCommand = withCliHandler(
     Effect.promise(() => import("./cli/change/findings.js")).pipe(
       Effect.flatMap(({ runFindings }) =>
         runFindings(
-          { changeId: optionalString(values, "changeId") },
+          { changeId: Option.getOrUndefined(values.changeId) },
           environment as ChangeCommandEnvironment,
         ),
       ),
@@ -498,7 +508,7 @@ const changeValidationRunsCommand = withCliHandler(
     Effect.promise(() => import("./cli/change/validationRuns.js")).pipe(
       Effect.flatMap(({ runValidationRuns }) =>
         runValidationRuns(
-          { changeId: optionalString(values, "changeId") },
+          { changeId: Option.getOrUndefined(values.changeId) },
           environment as ChangeCommandEnvironment,
         ),
       ),
@@ -512,7 +522,7 @@ const changeSubmitCommand = withCliHandler(
     Effect.promise(() => import("./cli/change/submit.js")).pipe(
       Effect.flatMap(({ runSubmit }) =>
         runSubmit(
-          { changeId: optionalString(values, "changeId") },
+          { changeId: Option.getOrUndefined(values.changeId) },
           environment as ChangeCommandEnvironment,
         ),
       ),
@@ -528,8 +538,8 @@ const changeCancelCommand = withCliHandler(
       Effect.flatMap(({ runCancel }) =>
         runCancel(
           {
-            changeId: optionalString(values, "changeId"),
-            reason: requiredString(values, "reason"),
+            changeId: Option.getOrUndefined(values.changeId),
+            reason: values.reason,
           },
           environment as ChangeCommandEnvironment,
         ),
@@ -546,8 +556,8 @@ const changeReconcileCommand = withCliHandler(
       Effect.flatMap(({ runReconcile }) =>
         runReconcile(
           {
-            changeId: optionalString(values, "changeId"),
-            discardWork: boolean(values, "discardWork"),
+            changeId: Option.getOrUndefined(values.changeId),
+            discardWork: values.discardWork,
           },
           environment as ChangeCommandEnvironment,
         ),
@@ -564,8 +574,8 @@ const changeImplementCommand = withCliHandler(
       Effect.flatMap(({ runImplement }) =>
         runImplement(
           {
-            changeId: optionalString(values, "changeId"),
-            implementerPromptFile: optionalString(values, "implementerPromptFile"),
+            changeId: Option.getOrUndefined(values.changeId),
+            implementerPromptFile: Option.getOrUndefined(values.implementerPromptFile),
           },
           environment as ChangeCommandEnvironment,
         ),
@@ -601,7 +611,7 @@ const validationRunShowCommand = withCliHandler(
   (values, environment) =>
     Effect.promise(() => import("./cli/validationRun/show.js")).pipe(
       Effect.flatMap(({ runShowCommand }) =>
-        runShowCommand({ validationRunId: requiredString(values, "validationRunId") }, environment),
+        runShowCommand({ validationRunId: values.validationRunId }, environment),
       ),
     ),
 );
@@ -615,8 +625,8 @@ const validationRunAbandonCommand = withCliHandler(
       Effect.flatMap(({ runAbandonCommand }) =>
         runAbandonCommand(
           {
-            validationRunId: requiredString(values, "validationRunId"),
-            reason: requiredString(values, "reason"),
+            validationRunId: values.validationRunId,
+            reason: values.reason,
           },
           environment,
         ),
@@ -633,8 +643,8 @@ const validationRunArtifactCommand = withCliHandler(
       Effect.flatMap(({ runArtifactCommand }) =>
         runArtifactCommand(
           {
-            validationRunId: requiredString(values, "validationRunId"),
-            artifactRef: requiredString(values, "artifactRef"),
+            validationRunId: values.validationRunId,
+            artifactRef: values.artifactRef,
           },
           environment,
         ),
@@ -657,12 +667,12 @@ const initCommand = withCliHandler(
   (values, environment) =>
     Effect.promise(() => import("./cli/initCli.js")).pipe(
       Effect.flatMap(({ runInitCommand }) =>
-        runInitCommand({ taskPrefix: requiredString(values, "taskPrefix") }, environment),
+        runInitCommand({ taskPrefix: values.taskPrefix }, environment),
       ),
     ),
 );
 const snapshotCommand = withCliHandler(
-  leaf("snapshot", "Create an immutable Shared Repository State Snapshot."),
+  leaf("snapshot", "Create an immutable Shared Repository State Snapshot.", {}),
   (_values, environment) =>
     Effect.promise(() => import("./cli/snapshot.js")).pipe(
       Effect.flatMap(({ runSnapshotCommand }) => runSnapshotCommand(environment)),
@@ -671,12 +681,12 @@ const snapshotCommand = withCliHandler(
 
 const commandRootBase = Command.make("by", { json: Options.boolean("json") }).pipe(
   Command.withDescription("Validate completed code changes against approved human intent."),
-) as unknown as AnyCommand;
+);
 const commandRootWithHandler = withCliHandler(commandRootBase, (_values, environment) =>
   dashboardResult(environment),
 );
 const commandTree = commandRootWithHandler.pipe(
-  withSubcommands([
+  Command.withSubcommands([
     initCommand,
     snapshotCommand,
     taskCommand,
@@ -684,7 +694,7 @@ const commandTree = commandRootWithHandler.pipe(
     changeCommand,
     validationRunCommand,
   ]),
-) as unknown as AnyCommand;
+);
 
 const cliConfig = CliConfig.make({});
 const finalCheckBuiltInConfig = CliConfig.make({ finalCheckBuiltIn: true });
@@ -840,38 +850,6 @@ const dependencyOptionRequiredErrorResult = (operation: "add" | "remove" | "repl
         : `Use \`by task dependencies ${operation} <task-id> --depends-on <task-id>\`.`,
     ],
   });
-
-const requiredString = (values: Record<string, unknown>, key: string): string => {
-  const value = optionalValue(values[key]);
-  return typeof value === "string" ? value : "";
-};
-
-const optionalString = (values: Record<string, unknown>, key: string): string | undefined => {
-  const value = optionalValue(values[key]);
-  return typeof value === "string" ? value : undefined;
-};
-
-const strings = (values: Record<string, unknown>, key: string): readonly string[] => {
-  const value = values[key];
-  return Array.isArray(value)
-    ? value.filter((item): item is string => typeof item === "string")
-    : [];
-};
-
-const boolean = (values: Record<string, unknown>, key: string): boolean => values[key] === true;
-
-const optionalValue = (value: unknown): unknown => {
-  if (!isRecord(value)) return value;
-  const option = value as { readonly _tag?: unknown; readonly value?: unknown };
-  return option._tag === "Some" ? option.value : undefined;
-};
-
-const taskId = (values: Record<string, unknown>): { readonly taskId: string } => ({
-  taskId: requiredString(values, "taskId"),
-});
-
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === "object" && value !== null;
 
 const missingDependencyOperation = (
   args: readonly string[],
