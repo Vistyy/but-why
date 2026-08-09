@@ -79,7 +79,9 @@ describe("portable But Why skill", () => {
     expect(implementerSession).toContain("Do not repeat the Change ID, Task ID");
     expect(implementerSession).toContain("Do not retry an uncertain start or initial prompt.");
     expect(authorTasks).toContain("[Task verification](task-verification.md)");
-    expect(authorTasks).toContain("Include a `## Review path` section in every proposed Task Context.");
+    expect(authorTasks).toContain(
+      "Include a `## Review path` section in every proposed Task Context.",
+    );
     expect(authorTasks).toContain(
       "State a concise path by which one human can understand and judge the complete implementation and required evidence as one coherent Change.",
     );
