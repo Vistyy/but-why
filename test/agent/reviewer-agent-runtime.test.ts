@@ -7,6 +7,7 @@ import { Effect } from "effect";
 import { describe, expect, vi } from "vitest";
 
 import { piReviewerAgentRuntime } from "../../src/agent/reviewerAgentRuntime.js";
+
 const profile = {
   agentProfile: "review",
   scope: "global" as const,
