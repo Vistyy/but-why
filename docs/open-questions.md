@@ -8,9 +8,14 @@ Settled behavior belongs in the contexts linked from `CONTEXT-MAP.md`, accepted 
 
 ## How should reviewer quality be measured?
 
-After v1 dogfooding, create SQLite Tasks for an Acceptance Reviewer fixture and a calibrated reviewer suite.
-Compare Finding detection, clean-result accuracy, unsupported Findings, prompts, models, and configuration against fixed fixtures.
-The suite is not a release requirement for the first manual workflow.
+After v1 dogfooding, consider a repository-specific reviewer benchmark only when real use or a focused architecture investigation supplies difficult, consequential cases.
+Do not create obvious smoke fixtures solely to establish a baseline.
+Candidate cases should come from material reviewer misses, unsupported Findings, inconsistent judgments, and concrete architecture problems that require substantial repository reasoning.
+Any benchmark must keep Acceptance Reviewer and Specialist authority distinct and preserve each exact Candidate, applicable authority, and reviewer configuration under evaluation.
+It should include difficult valid Candidates that test whether reviewers avoid optional or out-of-scope Findings.
+Evaluate material-problem recall, unsupported Findings, evidence quality, and difficult correct passes through semantic human adjudication initially.
+Do not use exact wording matches, aggregate scoring, repeated statistical runs, or an LLM judge before evidence establishes that the added machinery improves trustworthy evaluation.
+A benchmark remains deferred work rather than a v1 release requirement or an approved initiative.
 
 ## Should Specialists run in parallel?
 
