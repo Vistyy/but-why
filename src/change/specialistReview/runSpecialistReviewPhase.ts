@@ -14,7 +14,6 @@ import {
   reviewerFindingHistory,
 } from "../../agent/reviewerPrompts.js";
 import type { RepositoryStorageError } from "../../contracts/repositoryStorageError.js";
-import type { ReviewerContinuityEvidence } from "../acceptanceReview/runAcceptanceReviewPhase.js";
 import type { RecordCandidateSpecialistRoundInput } from "../candidateValidation/candidateValidationRunStore.js";
 import {
   type ReviewerContinuity,
@@ -30,6 +29,7 @@ import {
 import type { ValidationToolingFailure } from "../validation/validationToolingFailures.js";
 import { verifyCandidateIntegrity } from "../validation/verifyCandidateIntegrity.js";
 import type { AcceptanceContextSnapshotV1 } from "../validationRun/acceptanceContextSnapshot.js";
+import type { ReviewerExecutionEvidence } from "../validationRun/reviewerArtifacts.js";
 import { writeReviewerArtifacts } from "../validationRun/reviewerArtifacts.js";
 import { validationPhase } from "../validationRun/validationRun.js";
 import type { SpecialistReviewPolicy } from "./specialistReviewConfig.js";
@@ -78,7 +78,7 @@ export type RunSpecialistReviewPhaseInput = {
   ) => Effect.Effect<void, RepositoryStorageError>;
 };
 
-export type SpecialistReviewerContinuityEvidence = ReviewerContinuityEvidence & {
+export type SpecialistReviewerContinuityEvidence = ReviewerExecutionEvidence & {
   readonly producer: string;
 };
 

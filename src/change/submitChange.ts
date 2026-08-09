@@ -8,7 +8,6 @@ import type {
   RemoteChangeBaseError,
   RemoteChangeBaseResult,
 } from "../submissionEnvironment/remoteChangeBase.js";
-import type { ReviewerContinuityEvidence } from "./acceptanceReview/runAcceptanceReviewPhase.js";
 import type { RepositoryBranchHeadResult } from "./candidateCapture/candidateCaptureGit.js";
 import type {
   CaptureLocalCandidateInput,
@@ -42,6 +41,7 @@ import type { ReconciledChange } from "./reconcileChange.js";
 import type { SpecialistReviewerContinuityEvidence } from "./specialistReview/runSpecialistReviewPhase.js";
 import type { SubmitRejectionError } from "./submit/submitRejectionErrors.js";
 import type { SubmitProgress } from "./validation/submitProgress.js";
+import type { ReviewerExecutionEvidence } from "./validationRun/reviewerArtifacts.js";
 
 export type ChangeSubmitResult =
   | {
@@ -57,7 +57,7 @@ export type ChangeSubmitResult =
       readonly validationRunId: string;
       readonly created: boolean;
       readonly pullRequest: { readonly number: number; readonly url: string };
-      readonly reviewerEvidence?: ReviewerContinuityEvidence;
+      readonly reviewerEvidence?: ReviewerExecutionEvidence;
       readonly specialistReviewerEvidence?: readonly SpecialistReviewerContinuityEvidence[];
     }
   | {
@@ -72,7 +72,7 @@ export type ChangeSubmitResult =
       readonly candidateId: string;
       readonly validationRunId: string;
       readonly findings: readonly CandidateValidationFinding[];
-      readonly reviewerEvidence?: ReviewerContinuityEvidence;
+      readonly reviewerEvidence?: ReviewerExecutionEvidence;
       readonly specialistReviewerEvidence?: readonly SpecialistReviewerContinuityEvidence[];
     }
   | {
@@ -82,7 +82,7 @@ export type ChangeSubmitResult =
       readonly candidateId: string;
       readonly validationRunId: string;
       readonly toolingFailures: readonly CandidateValidationToolingFailure[];
-      readonly reviewerEvidence?: ReviewerContinuityEvidence;
+      readonly reviewerEvidence?: ReviewerExecutionEvidence;
       readonly specialistReviewerEvidence?: readonly SpecialistReviewerContinuityEvidence[];
     }
   | {
@@ -583,7 +583,7 @@ const blockedValidationResult = (
   validation: {
     readonly outcome: "blocked" | "tooling_failed";
     readonly validationRunId: string;
-    readonly reviewerEvidence?: ReviewerContinuityEvidence;
+    readonly reviewerEvidence?: ReviewerExecutionEvidence;
     readonly specialistReviewerEvidence?: readonly SpecialistReviewerContinuityEvidence[];
   },
 ): Effect.Effect<ChangeSubmitResult, RepositoryStorageError> =>
