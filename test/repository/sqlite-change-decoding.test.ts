@@ -65,6 +65,11 @@ describe("SQLite Change decoding", () => {
           comments: ["first\ncomment", "second"],
           resolutions: ["keep  spacing"],
         });
+        yield* repository.operation(
+          "inject incomplete task-backed Change Start",
+          (sql) => sql`UPDATE changes SET starting_commit = NULL WHERE id = 'change-decoded'`,
+        );
+        yield* expectPersistedDataInvalid(changes.getChangeById("change-decoded"));
       }),
     ),
   );
@@ -286,7 +291,7 @@ describe("SQLite Change decoding", () => {
           `,
         );
 
-        yield* repository.operation("install malformed Acceptance Context", (sql) =>
+        yield* repository.operation("install unsupported Acceptance Context shape", (sql) =>
           Effect.gen(function* () {
             yield* sql`
               INSERT INTO tasks (
@@ -298,10 +303,19 @@ describe("SQLite Change decoding", () => {
             `;
             yield* sql`
               UPDATE changes SET task_id = 'BY-902', acceptance_context =
-                '{"version":1,"title":"Malformed intent","description":"Reject it.","resolutions":"not-an-array"}'
+                '{"version":1,"title":"Malformed intent","description":"Reject it.","unexpected":true}'
               WHERE id = 'change-malformed'
             `;
           }),
+        );
+        yield* expectPersistedDataInvalid(changes.getChangeById("change-malformed"));
+        yield* repository.operation(
+          "install malformed Acceptance Context resolutions",
+          (sql) => sql`
+            UPDATE changes SET acceptance_context =
+              '{"version":1,"title":"Malformed intent","description":"Reject it.","resolutions":"not-an-array"}'
+            WHERE id = 'change-malformed'
+          `,
         );
         yield* expectPersistedDataInvalid(changes.getChangeById("change-malformed"));
         yield* repository.operation(

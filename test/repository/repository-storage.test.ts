@@ -3345,12 +3345,15 @@ describe("repository SQL storage", () => {
                     yield* sql`
                       INSERT INTO changes (
                         id, repository_common_directory, branch_ref, task_id, state, close_reason,
-                        created_at, updated_at, closed_at, acceptance_context
+                        created_at, updated_at, closed_at, acceptance_context, base_ref,
+                        base_remote_url, starting_commit, worktree_path
                       ) VALUES (
                         'change-with-context', ${directory}, 'refs/heads/with-context', 'BY-1',
                         'open', NULL, '2026-07-25T18:00:00.000Z', '2026-07-25T18:00:00.000Z',
                         NULL,
-                        '{"version":1,"title":"Current intent","description":"Must survive.","comments":["Historical Task comment."]}'
+                        '{"version":1,"title":"Current intent","description":"Must survive.","comments":["Historical Task comment."]}',
+                        'refs/remotes/origin/main', 'https://github.test/acme/repo.git',
+                        'base-sha', ${join(directory, "worktree")}
                       )
                     `;
                     yield* sql`

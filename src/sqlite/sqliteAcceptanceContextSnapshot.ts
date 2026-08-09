@@ -19,6 +19,14 @@ export const decodeSqliteAcceptanceContextSnapshot = (
   if (
     typeof value !== "object" ||
     value === null ||
+    Object.keys(value).some(
+      (key) =>
+        key !== "version" &&
+        key !== "title" &&
+        key !== "description" &&
+        key !== "comments" &&
+        key !== "resolutions",
+    ) ||
     !("version" in value) ||
     value.version !== 1 ||
     !("title" in value) ||

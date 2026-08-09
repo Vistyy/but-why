@@ -102,6 +102,16 @@ export const decodeChangeRow = (row: UnknownChangeRow): ChangeRecord => {
   if ((taskId === null) !== (encodedAcceptanceContext === null)) {
     throw new Error("Stored Change Task and Acceptance Context relationship is incomplete");
   }
+  const baseRef = decodeStoredNullableString(row.baseRef, "Change Base ref");
+  const baseRemoteUrl = decodeStoredNullableString(row.baseRemoteUrl, "Change Base remote URL");
+  const startingCommit = decodeStoredNullableString(row.startingCommit, "Change starting commit");
+  const worktreePath = decodeStoredNullableString(row.worktreePath, "Change Managed Worktree path");
+  if (
+    taskId !== null &&
+    (baseRef === null || baseRemoteUrl === null || startingCommit === null || worktreePath === null)
+  ) {
+    throw new Error("Stored task-backed Change Start relationship is incomplete");
+  }
 
   const prepareCommand = decodeStoredNullableString(row.prepareCommand, "Change prepare command");
   const prepareTimeoutSeconds = decodeNullablePositiveInteger(
@@ -162,11 +172,11 @@ export const decodeChangeRow = (row: UnknownChangeRow): ChangeRecord => {
       "Change repository common directory",
     ),
     branchRef: decodeStoredString(row.branchRef, "Change Repository Branch"),
-    baseRef: decodeStoredNullableString(row.baseRef, "Change Base ref"),
-    baseRemoteUrl: decodeStoredNullableString(row.baseRemoteUrl, "Change Base remote URL"),
+    baseRef,
+    baseRemoteUrl,
     taskId: taskId === null ? null : storedPublicTaskId(taskId),
-    startingCommit: decodeStoredNullableString(row.startingCommit, "Change starting commit"),
-    worktreePath: decodeStoredNullableString(row.worktreePath, "Change Managed Worktree path"),
+    startingCommit,
+    worktreePath,
     acceptanceContext:
       encodedAcceptanceContext === null
         ? null
