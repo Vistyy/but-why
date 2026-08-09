@@ -19,6 +19,7 @@ import type {
   UpdateTaskContextInput,
 } from "../task/taskStore.js";
 import { RepositorySql } from "./repositorySql.js";
+import { readValidatedActiveTaskReviewForTask } from "./sqliteActiveTaskReview.js";
 import {
   type DecodedTaskGraph,
   type DecodedTaskRow,
@@ -303,11 +304,8 @@ const taskDependencyEditTarget = (sql: SqlClient.SqlClient, taskId: PublicTaskId
   });
 
 const taskReviewActive = (sql: SqlClient.SqlClient, taskId: PublicTaskId) =>
-  Effect.map(
-    sql<{ readonly reviewId: string }>`
-      SELECT review_id AS reviewId FROM active_task_reviews WHERE task_id = ${taskId} LIMIT 1
-    `,
-    (rows) => rows.length > 0,
+  readValidatedActiveTaskReviewForTask(sql, taskId, "guard Task mutation for Active Review").pipe(
+    Effect.map((review) => review !== undefined),
   );
 
 type DependencyValidationResult = {

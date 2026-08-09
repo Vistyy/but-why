@@ -6,9 +6,10 @@ import type { ChangeStartPersistence } from "../change/changeStartPersistence.js
 import type { CreateChangeStartInput } from "../change/changeStartStore.js";
 import type { AcceptanceContextSnapshotV1 } from "../change/validationRun/acceptanceContextSnapshot.js";
 import { RepositoryPersistedDataInvalid } from "../contracts/repositoryStorageError.js";
-import { type PublicTaskId, storedPublicTaskId } from "../task/taskId.js";
+import type { PublicTaskId } from "../task/taskId.js";
 import { RepositorySql } from "./repositorySql.js";
 import { encodeSqliteAcceptanceContextSnapshot } from "./sqliteAcceptanceContextSnapshot.js";
+import { readValidatedActiveTaskReviewForTask } from "./sqliteActiveTaskReview.js";
 import { encodeSqliteChangePrepareFailure } from "./sqliteChangePreparation.js";
 import {
   changeReadColumns,
@@ -20,7 +21,6 @@ import {
 import {
   type DecodedTaskGraph,
   decodePersisted,
-  decodeStoredString,
   readDecodedTaskGraph,
   taskDependencyFacts,
 } from "./sqliteTaskReadModel.js";
@@ -47,7 +47,11 @@ const prepareTask = (sql: SqlClient.SqlClient, taskId: PublicTaskId) =>
   Effect.gen(function* () {
     const task = yield* readTask(sql, taskId);
     if (task === undefined) return { ok: false as const, code: "task_not_found" as const };
-    const activeReview = yield* readActiveTaskReview(sql, taskId);
+    const activeReview = yield* readValidatedActiveTaskReviewForTask(
+      sql,
+      taskId,
+      "prepare Task-backed Change Start",
+    );
     if (activeReview !== undefined) {
       return {
         ok: false as const,
@@ -117,7 +121,11 @@ const readEligibility = (sql: SqlClient.SqlClient, taskId: PublicTaskId) =>
     const graph = yield* readDecodedTaskGraph(sql, "prepare Task-backed Change Start");
     const task = graph.tasksById.get(taskId);
     if (task === undefined) return { ok: false as const, code: "task_not_found" as const };
-    const activeReview = yield* readActiveTaskReview(sql, taskId);
+    const activeReview = yield* readValidatedActiveTaskReviewForTask(
+      sql,
+      taskId,
+      "prepare Task-backed Change Start",
+    );
     if (activeReview !== undefined) {
       return {
         ok: false as const,
@@ -141,45 +149,6 @@ const readTask = (sql: SqlClient.SqlClient, taskId: PublicTaskId) =>
     readDecodedTaskGraph(sql, "prepare Task-backed Change Start"),
     (graph: DecodedTaskGraph) => graph.tasksById.get(taskId),
   );
-
-const readActiveTaskReview = (sql: SqlClient.SqlClient, taskId: PublicTaskId) =>
-  Effect.gen(function* () {
-    const rows = yield* sql<{
-      readonly markerTaskId: unknown;
-      readonly reviewId: unknown;
-      readonly reviewTaskId: unknown;
-      readonly reviewState: unknown;
-      readonly reviewOutcome: unknown;
-    }>`
-      SELECT active.task_id AS markerTaskId, active.review_id AS reviewId,
-        review.task_id AS reviewTaskId, review.state AS reviewState,
-        review.outcome AS reviewOutcome
-      FROM active_task_reviews AS active
-      LEFT JOIN task_reviews AS review ON review.id = active.review_id
-      WHERE active.task_id = ${taskId}
-    `;
-    const row = rows[0];
-    if (row === undefined) return undefined;
-    return yield* decodePersisted("read Active Task Review for Change Start", () => {
-      const markerTaskId = storedPublicTaskId(
-        decodeStoredString(row.markerTaskId, "Active Task Review Task ID"),
-      );
-      const reviewTaskId = storedPublicTaskId(
-        decodeStoredString(row.reviewTaskId, "Task Review Task ID"),
-      );
-      const reviewId = decodeStoredString(row.reviewId, "Active Task Review ID");
-      if (reviewId.length === 0) throw new Error("Active Task Review ID must not be empty");
-      if (
-        markerTaskId !== taskId ||
-        reviewTaskId !== taskId ||
-        row.reviewState !== "running" ||
-        row.reviewOutcome !== null
-      ) {
-        throw new Error("Active Task Review does not match its running Task Review");
-      }
-      return { reviewId };
-    });
-  });
 
 const recordPrepareOutcome = (
   sql: SqlClient.SqlClient,

@@ -682,6 +682,14 @@ it.scoped("Change Start rejects an Active Review marker for another Task", () =>
         `,
       );
 
+      const approval = yield* Effect.either(
+        tasks.approveTask({ taskId: reviewOwner.id, now: thirdNow }),
+      );
+      expect(approval).toMatchObject({
+        _tag: "Left",
+        left: { _tag: "RepositoryPersistedDataInvalid" },
+      });
+
       const changes = yield* openSqliteChangeStartPersistence();
       const prepared = yield* Effect.either(changes.prepareTask(selectedTask.id));
 
