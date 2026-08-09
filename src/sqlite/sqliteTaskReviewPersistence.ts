@@ -163,11 +163,10 @@ const start = (
     }
 
     const dependencyEvidence = readTaskReviewDependencies(taskGraph, input.taskId);
-    const proposal: TaskReviewProposal = {
-      title: task.title,
-      description: task.description,
-      dependencyIds: dependencyEvidence.map((dependency) => dependency.taskId),
-    };
+    const proposal = taskReviewProposalFromGraph(taskGraph, input.taskId);
+    if (proposal === undefined) {
+      return yield* invalidData("start Task Review", `Task ${input.taskId} disappeared`);
+    }
     const proposalKey = proposalKeyOf(proposal);
 
     yield* validateStoredTaskReviewEvidence(sql, input.taskId);
@@ -230,8 +229,9 @@ const complete = (
       readonly taskId: string;
       readonly state: string;
       readonly baseCommit: string;
+      readonly proposalKey: string;
     }>`
-      SELECT task_id AS taskId, state, base_commit AS baseCommit
+      SELECT task_id AS taskId, state, base_commit AS baseCommit, proposal_key AS proposalKey
       FROM task_reviews WHERE id = ${input.reviewId}
     `;
     const review = reviewRows[0];
@@ -274,6 +274,13 @@ const complete = (
     const taskGraph = yield* readDecodedTaskGraph(sql, "complete Task Review");
     if (taskGraph.tasksById.get(taskId)?.state !== "new") {
       return { ok: false as const, code: "task_state_changed" as const };
+    }
+    const currentProposal = taskReviewProposalFromGraph(taskGraph, taskId);
+    if (currentProposal === undefined || proposalKeyOf(currentProposal) !== review.proposalKey) {
+      return yield* invalidData(
+        "complete Task Review",
+        `Running Task Review ${input.reviewId} does not match its current Task proposal`,
+      );
     }
     const workspaceRows = yield* sql<TaskReviewWorkspaceSetupRow>`
       SELECT review_id AS reviewId, temp_ref_name AS tempRefName,
@@ -503,6 +510,7 @@ const validateStoredTaskReviewEvidence = (
   taskId: PublicTaskId,
 ): Effect.Effect<void, SqlError | RepositoryPersistedDataInvalid> =>
   Effect.gen(function* () {
+    const taskGraph = yield* readDecodedTaskGraph(sql, "validate stored Task Review evidence");
     const rows = yield* sql<TaskReviewRow>`
       SELECT id, task_id AS taskId, proposal_snapshot AS proposalSnapshot,
         proposal_key AS proposalKey, dependency_evidence AS dependencyEvidence,
@@ -583,6 +591,16 @@ const validateStoredTaskReviewEvidence = (
             Effect.flatMap(decodeCompletionFailureOptional),
           );
           if (review.state === "running") {
+            const currentProposal = taskReviewProposalFromGraph(taskGraph, taskId);
+            if (
+              currentProposal === undefined ||
+              proposalKeyOf(currentProposal) !== row.proposalKey
+            ) {
+              return yield* invalidData(
+                "validate stored Task Review evidence",
+                `Running Task Review ${review.id} does not match its current Task proposal`,
+              );
+            }
             if (findings.length > 0 || toolingFailures.length > 0) {
               return yield* invalidData(
                 "validate stored Task Review evidence",
@@ -868,6 +886,19 @@ const decodeCompletionFailureOptional = (
         cause,
       }),
   });
+};
+
+const taskReviewProposalFromGraph = (
+  graph: DecodedTaskGraph,
+  taskId: PublicTaskId,
+): TaskReviewProposal | undefined => {
+  const task = graph.tasksById.get(taskId);
+  if (task === undefined) return undefined;
+  return {
+    title: task.title,
+    description: task.description,
+    dependencyIds: readTaskReviewDependencies(graph, taskId).map((dependency) => dependency.taskId),
+  };
 };
 
 const readTaskReviewDependencies = (

@@ -351,6 +351,60 @@ it.scoped("rejects abandonment when a running Review already has terminal eviden
   ),
 );
 
+it.scoped(
+  "rejects terminal transitions for a Review whose proposal no longer matches its Task",
+  () =>
+    withTemporaryRepositoryState(() =>
+      Effect.gen(function* () {
+        const tasks = yield* openSqliteTaskPersistence("BY");
+        const reviews = yield* openSqliteTaskReviewPersistence();
+        const repository = yield* RepositorySql;
+
+        for (const transition of ["complete", "abandon"] as const) {
+          const reviewId = `review-changed-proposal-${transition}`;
+          const task = yield* createTask(tasks, `Changed proposal ${transition}`, firstNow);
+          yield* reviews.start({ taskId: task.id, baseCommit, policy, reviewId, now: firstNow });
+          const changedProposal = JSON.stringify({
+            title: `Different ${transition} proposal`,
+            description: "A proposal that was not admitted.",
+            dependencyIds: [],
+          });
+          yield* repository.operation(
+            "replace running Task Review proposal",
+            (sql) => sql`
+            UPDATE task_reviews
+            SET proposal_snapshot = ${changedProposal}, proposal_key = ${changedProposal}
+            WHERE id = ${reviewId}
+          `,
+          );
+
+          const result =
+            transition === "complete"
+              ? yield* Effect.either(
+                  reviews.complete({ reviewId, outcome: "passed", now: secondNow }),
+                )
+              : yield* Effect.either(
+                  reviews.abandon({
+                    reviewId,
+                    cleanupWorktree: "removed",
+                    cleanupTempRef: "removed",
+                    errorKind: "infrastructure_tooling_failed",
+                    operationName: "task_review_abandonment",
+                    errorMessage: "Submission process stopped.",
+                    now: secondNow,
+                  }),
+                );
+
+          expect(result).toMatchObject({
+            _tag: "Left",
+            left: { _tag: "RepositoryPersistedDataInvalid" },
+          });
+          expect(yield* reviews.getActiveForTask(task.id)).toBeDefined();
+        }
+      }),
+    ),
+);
+
 it.scoped("rejects malformed relational evidence when reading the latest Review", () =>
   withTemporaryRepositoryState(() =>
     Effect.gen(function* () {
