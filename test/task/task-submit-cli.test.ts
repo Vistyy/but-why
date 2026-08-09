@@ -435,6 +435,23 @@ describe("by task submission CLI", () => {
         expect(listed.status).toBe(0);
         const history = JSON.parse(listed.stdout) as { readonly nextAction?: string };
         expect(history.nextAction).toContain("by task submit BY-1");
+
+        // After cancellation, the historical Review no longer suggests submit.
+        const cancelled = yield* runByInProcessEffect(
+          root,
+          ["--json", "task", "cancel", "BY-1", "--reason", "No longer needed"],
+          secondNow,
+        );
+        expect(cancelled.status).toBe(0);
+        const afterCancel = yield* runByInProcessEffect(root, [
+          "--json",
+          "task-review",
+          "show",
+          result.review.id,
+        ]);
+        expect(afterCancel.status).toBe(0);
+        const cancelledShow = JSON.parse(afterCancel.stdout) as { readonly nextAction?: string };
+        expect(cancelledShow.nextAction).toBeUndefined();
       }),
     60_000,
   );

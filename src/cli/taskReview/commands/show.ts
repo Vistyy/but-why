@@ -30,77 +30,96 @@ export const runShowCommand = (
             completionFailure: loaded.inspection.completionFailure(command.reviewId),
             session: loaded.inspection.session(review.taskId, "task_review"),
             transcripts: loaded.inspection.transcripts(review.taskId),
+            taskFact: loaded.inspection.getTaskFact(review.taskId),
+            active: loaded.inspection.activeForTask(review.taskId),
           }).pipe(
-            Effect.map(({ findings, toolingFailures, completionFailure, session, transcripts }) =>
-              success({
-                review: {
-                  id: review.id,
-                  taskId: review.taskId,
-                  state: review.state,
-                  outcome: review.outcome,
-                  baseCommit: review.baseCommit,
-                  createdAt: review.createdAt,
-                  updatedAt: review.updatedAt,
-                  proposal: {
-                    title: review.proposal.title,
-                    description: review.proposal.description,
-                    dependencies: review.proposal.dependencies.map((dependency) => ({
-                      taskId: dependency.taskId,
-                      title: dependency.title,
-                      description: dependency.description,
-                      state: dependency.state,
-                      dependencyIds: dependency.dependencyIds,
-                    })),
+            Effect.map(
+              ({
+                findings,
+                toolingFailures,
+                completionFailure,
+                session,
+                transcripts,
+                taskFact,
+                active,
+              }) =>
+                success({
+                  review: {
+                    id: review.id,
+                    taskId: review.taskId,
+                    state: review.state,
+                    outcome: review.outcome,
+                    baseCommit: review.baseCommit,
+                    createdAt: review.createdAt,
+                    updatedAt: review.updatedAt,
+                    proposal: {
+                      title: review.proposal.title,
+                      description: review.proposal.description,
+                      dependencies: review.proposal.dependencies.map((dependency) => ({
+                        taskId: dependency.taskId,
+                        title: dependency.title,
+                        description: dependency.description,
+                        state: dependency.state,
+                        dependencyIds: dependency.dependencyIds,
+                      })),
+                    },
+                    policy: structuredValue(review.policy),
+                    ...(session === undefined
+                      ? {}
+                      : {
+                          session: {
+                            producer: session.producer,
+                            fingerprint: session.fingerprint,
+                            sessionReference: session.sessionReference,
+                          },
+                        }),
+                    ...(transcripts.length === 0
+                      ? {}
+                      : {
+                          transcripts: transcripts.map((transcript) => ({
+                            producer: transcript.producer,
+                            piSessionId: transcript.piSessionId,
+                            filePath: transcript.filePath,
+                          })),
+                        }),
+                    ...(findings.length === 0 ? {} : { findings }),
+                    ...(toolingFailures.length === 0 ? {} : { toolingFailures }),
+                    ...(completionFailure === undefined
+                      ? {}
+                      : {
+                          completionFailure: {
+                            operationName: completionFailure.operationName,
+                            errorMessage: completionFailure.errorMessage,
+                            createdAt: completionFailure.createdAt,
+                          },
+                        }),
                   },
-                  policy: structuredValue(review.policy),
-                  ...(session === undefined
-                    ? {}
-                    : {
-                        session: {
-                          producer: session.producer,
-                          fingerprint: session.fingerprint,
-                          sessionReference: session.sessionReference,
-                        },
-                      }),
-                  ...(transcripts.length === 0
-                    ? {}
-                    : {
-                        transcripts: transcripts.map((transcript) => ({
-                          producer: transcript.producer,
-                          piSessionId: transcript.piSessionId,
-                          filePath: transcript.filePath,
-                        })),
-                      }),
-                  ...(findings.length === 0 ? {} : { findings }),
-                  ...(toolingFailures.length === 0 ? {} : { toolingFailures }),
-                  ...(completionFailure === undefined
-                    ? {}
-                    : {
-                        completionFailure: {
-                          operationName: completionFailure.operationName,
-                          errorMessage: completionFailure.errorMessage,
-                          createdAt: completionFailure.createdAt,
-                        },
-                      }),
-                },
-                ...(review.state === "complete" &&
-                (review.outcome === "passed" || review.outcome === "blocked")
-                  ? {
-                      nextAction:
-                        review.outcome === "passed"
-                          ? `Task ${review.taskId} is approved.`
-                          : `Fix the Findings, then run \`by task submit ${review.taskId}\`.`,
-                    }
-                  : review.state === "complete" && review.outcome === "tooling_failed"
+                  ...(active !== undefined
                     ? {
-                        nextAction: `Tooling failed. Retry with \`by task submit ${review.taskId}\`.`,
+                        nextAction: `Active Task Review ${active.reviewId} is in progress. Abandon with \`by task-review abandon ${active.reviewId} --reason <reason>\` if its Submission process stopped.`,
                       }
-                    : review.state === "running"
+                    : review.state === "complete" && review.outcome === "passed"
                       ? {
-                          nextAction: `Abandon with \`by task-review abandon ${review.id} --reason <reason>\` if its Submission process stopped.`,
+                          nextAction: `Task ${review.taskId} is approved.`,
                         }
-                      : {}),
-              }),
+                      : review.state === "complete" &&
+                          review.outcome === "blocked" &&
+                          taskFact?.state === "new"
+                        ? {
+                            nextAction: `Fix the Findings, then run \`by task submit ${review.taskId}\`.`,
+                          }
+                        : review.state === "complete" &&
+                            review.outcome === "tooling_failed" &&
+                            taskFact?.state === "new"
+                          ? {
+                              nextAction: `Tooling failed. Retry with \`by task submit ${review.taskId}\`.`,
+                            }
+                          : review.state === "running"
+                            ? {
+                                nextAction: `Abandon with \`by task-review abandon ${review.id} --reason <reason>\` if its Submission process stopped.`,
+                              }
+                            : {}),
+                }),
             ),
           ),
     ),
