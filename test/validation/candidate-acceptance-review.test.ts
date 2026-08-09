@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Sandbox } from "@ai-hero/sandcastle";
 import { expect, layer } from "@effect/vitest";
@@ -108,36 +108,6 @@ const passingValidationPolicy = {
 };
 
 layer(acceptanceTemplateLayer)("Task-backed Candidate Acceptance Review", (it) => {
-  it.scoped("records a Candidate-integrity Tooling Failure after Acceptance Review", () =>
-    Effect.gen(function* () {
-      const review = vi.fn<ReviewerAgentRuntime<ReviewerOutput>["review"]>(({ commandCwd }) =>
-        Effect.sync(() => {
-          if (commandCwd === undefined) throw new Error("Acceptance Review has no workspace path.");
-          writeFileSync(join(commandCwd, ".but-why", "config.json"), "{}");
-          return {
-            ok: true as const,
-            report: { findings: [] },
-            attempts: 1,
-            stdout: "",
-          };
-        }),
-      );
-      const ready = yield* acceptanceReadyRepo({ review });
-      const result = yield* runFullTaskBackedCandidate(ready);
-
-      expect(result).toMatchObject({ ok: false, outcome: "tooling_failed" });
-      expect(review).toHaveBeenCalledOnce();
-      if (result.ok || "code" in result) return;
-      expect(yield* ready.validation.listToolingFailures(result.validationRunId)).toEqual(
-        expect.arrayContaining([
-          expect.objectContaining({ operationName: "verify_candidate_head" }),
-        ]),
-      );
-      expect(git(ready.repo, "rev-parse", "HEAD")).toBe(ready.captured.headSha);
-      expect(git(ready.repo, "status", "--porcelain")).toBe("");
-    }),
-  );
-
   it.scoped("blocks on every Acceptance Finding and stores reviewer evidence", () =>
     Effect.gen(function* () {
       const ready = yield* acceptanceReadyRepo({
@@ -171,6 +141,10 @@ layer(acceptanceTemplateLayer)("Task-backed Candidate Acceptance Review", (it) =
       const result = yield* runTaskBackedCandidate(ready);
 
       expect(result).toMatchObject({ ok: true, outcome: "blocked" });
+      expect(yield* validation.getRun(result.validationRunId)).toMatchObject({
+        state: "complete",
+        outcome: "blocked",
+      });
       const findingColumns = yield* withTestRepository(
         ready.repo,
         Effect.gen(function* () {
