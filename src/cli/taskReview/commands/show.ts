@@ -8,6 +8,7 @@ import {
   runtimeError,
   success,
 } from "../../../cliResults.js";
+import { structuredValue } from "../../../output/structuredValue.js";
 import { loadTaskReviewInspection } from "../../../task/loadTaskReviewInspection.js";
 import type { TaskCommandEnvironment } from "../../task/taskCliSupport.js";
 
@@ -26,8 +27,10 @@ export const runShowCommand = (
         : Effect.all({
             findings: loaded.inspection.findings(command.reviewId),
             toolingFailures: loaded.inspection.toolingFailures(command.reviewId),
+            session: loaded.inspection.session(review.taskId, "task_review"),
+            transcripts: loaded.inspection.transcripts(review.taskId),
           }).pipe(
-            Effect.map(({ findings, toolingFailures }) =>
+            Effect.map(({ findings, toolingFailures, session, transcripts }) =>
               success({
                 review: {
                   id: review.id,
@@ -46,6 +49,25 @@ export const runShowCommand = (
                       state: dependency.state,
                     })),
                   },
+                  policy: structuredValue(review.policy),
+                  ...(session === undefined
+                    ? {}
+                    : {
+                        session: {
+                          producer: session.producer,
+                          fingerprint: session.fingerprint,
+                          sessionReference: session.sessionReference,
+                        },
+                      }),
+                  ...(transcripts.length === 0
+                    ? {}
+                    : {
+                        transcripts: transcripts.map((transcript) => ({
+                          producer: transcript.producer,
+                          piSessionId: transcript.piSessionId,
+                          filePath: transcript.filePath,
+                        })),
+                      }),
                   ...(findings.length === 0 ? {} : { findings }),
                   ...(toolingFailures.length === 0 ? {} : { toolingFailures }),
                 },

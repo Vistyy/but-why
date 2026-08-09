@@ -106,6 +106,13 @@ const submissionDependencies = (
     ) =>
       | { readonly ok: true; readonly config: GlobalConfig }
       | { readonly ok: false; readonly message: string };
+    readonly readRepoInstructionsFileAtCommit?: (
+      cwd: string,
+      commit: string,
+      instructionsFile: string,
+    ) =>
+      | { readonly ok: true; readonly instructions: string }
+      | { readonly ok: false; readonly message: string };
     readonly reviewerSessionsRoot?: string;
     readonly reviewerAgentRuntime: ReviewerAgentRuntime;
     readonly executionLock?: ExecutionLock;
@@ -137,6 +144,9 @@ const submissionDependencies = (
       ok: true as const,
       config: emptyGlobalConfig,
     })) as TaskSubmissionDependencies["readGlobalConfig"]),
+  ...(input.readRepoInstructionsFileAtCommit === undefined
+    ? {}
+    : { readRepoInstructionsFileAtCommit: input.readRepoInstructionsFileAtCommit }),
   reviewerAgentRuntime: input.reviewerAgentRuntime,
 });
 
@@ -441,6 +451,219 @@ describe("Task Submission orchestration", () => {
             expect(secondInput?.prompt).toContain("Prior applicable Task Review outcome:");
             expect(secondInput?.prompt).toContain(firstReviewId);
             expect(secondInput?.prompt).toContain("Prerequisite");
+          }),
+        );
+      }),
+    60_000,
+  );
+
+  it.scoped(
+    "uses an earlier applicable outcome when a newer Review is Tooling Failure",
+    () =>
+      Effect.gen(function* () {
+        const root = yield* prepareInitializedTask();
+        yield* withTestRepository(
+          root,
+          Effect.gen(function* () {
+            const reviews = yield* openSqliteTaskReviewPersistence();
+            const reviewInputs: ReviewerAgentInput[] = [];
+            let calls = 0;
+            const reviewer: ReviewerAgentRuntime = {
+              review: (input) =>
+                Effect.sync((): ReviewerAgentResult => {
+                  reviewInputs.push(input);
+                  calls += 1;
+                  if (calls === 2) {
+                    return {
+                      ok: false,
+                      failure: new SandcastleToolingFailed({
+                        operationName: "run_reviewer_agent",
+                        message: "reviewer process failed",
+                      }),
+                      sessionUsability: "unknown",
+                      attempts: 1,
+                      stdout: "",
+                    };
+                  }
+                  return {
+                    ok: true,
+                    report: {
+                      findings: [
+                        {
+                          title: "Needs evidence",
+                          description: "Provide repository evidence.",
+                          evidence: "command: none",
+                          files: [],
+                          artifactRefs: [],
+                        },
+                      ],
+                    },
+                    attempts: 1,
+                    stdout: taggedReviewerOutput({
+                      findings: [
+                        {
+                          title: "Needs evidence",
+                          description: "Provide repository evidence.",
+                          evidence: "command: none",
+                          files: [],
+                        },
+                      ],
+                    }),
+                  };
+                }),
+            };
+            const submission = openTaskSubmission(
+              submissionDependencies(root, {
+                reviewerAgentRuntime: reviewer,
+                persistence: reviews,
+              }),
+            );
+
+            // First Review is blocked on the original proposal.
+            const first = yield* submission.submit({ taskId: publicTaskId("BY-1"), now });
+            expect(first).toMatchObject({ ok: true, status: "blocked" });
+            const firstReviewId = (first as Extract<TaskSubmitResult, { readonly ok: true }>)
+              .reviewId;
+
+            // Change the proposal, then a Tooling Failure on the changed proposal
+            // becomes the newest completed Review.
+            const tasks = yield* openSqliteTaskPersistence("BY");
+            const edited = yield* tasks.updateTaskContext({
+              taskId: publicTaskId("BY-1"),
+              title: "Changed proposal",
+              description: "Changed description",
+              now: secondNow,
+            });
+            expect(edited.ok).toBe(true);
+            if (!edited.ok) throw new Error(edited.code);
+
+            const tooled = yield* submission.submit({
+              taskId: publicTaskId("BY-1"),
+              now: secondNow,
+            });
+            expect(tooled).toMatchObject({ ok: true, status: "tooling_failed" });
+
+            // Submit the changed proposal again: the earlier blocked outcome is
+            // the applicable prior even though a newer Tooling Failure exists.
+            const third = yield* submission.submit({
+              taskId: publicTaskId("BY-1"),
+              now: secondNow,
+            });
+            expect(third).toMatchObject({ ok: true, status: "blocked" });
+            const priorInput = reviewInputs[reviewInputs.length - 1];
+            expect(priorInput?.prompt).toContain("Prior applicable Task Review outcome:");
+            expect(priorInput?.prompt).toContain(firstReviewId);
+            expect(priorInput?.prompt).toContain(
+              "Deterministic proposal diff from the prior reviewed proposal:",
+            );
+          }),
+        );
+      }),
+    60_000,
+  );
+
+  it.scoped(
+    "reads repository Task Reviewer instructions at the exact HEAD commit",
+    () =>
+      Effect.gen(function* () {
+        const root = yield* prepareInitializedTask();
+        yield* withTestRepository(
+          root,
+          Effect.gen(function* () {
+            const reviews = yield* openSqliteTaskReviewPersistence();
+            const reviewInputs: ReviewerAgentInput[] = [];
+            const readCalls: Array<{ cwd: string; commit: string; path: string }> = [];
+            const repoConfig: RepoConfig = {
+              taskPrefix: "BY",
+              review: {
+                task: {
+                  agentProfile: { name: "task-reviewer", scope: "repo" },
+                  instructionsFile: "docs/task-review.md",
+                },
+              },
+              agentProfiles: {
+                "task-reviewer": {
+                  agentRuntime: "pi",
+                  runtimeConfig: { model: "test-model" },
+                },
+              },
+            };
+            const submission = openTaskSubmission(
+              submissionDependencies(root, {
+                reviewerAgentRuntime: passingReviewer(reviewInputs),
+                persistence: reviews,
+                readRepoConfig: () => ({ ok: true as const, config: repoConfig }),
+                readRepoInstructionsFileAtCommit: (cwd, commit, path) => {
+                  readCalls.push({ cwd, commit, path });
+                  return {
+                    ok: true as const,
+                    instructions: `Committed instructions at ${commit}`,
+                  };
+                },
+              }),
+            );
+
+            const head = git(root, "rev-parse", "HEAD");
+            const result = yield* submission.submit({ taskId: publicTaskId("BY-1"), now });
+            expect(result).toMatchObject({ ok: true, status: "passed" });
+            const passed = result as Extract<TaskSubmitResult, { readonly ok: true }>;
+            expect(readCalls).toEqual([{ cwd: root, commit: head, path: "docs/task-review.md" }]);
+            const prompt = reviewInputs[0]?.prompt ?? "";
+            expect(prompt).toContain(`Committed instructions at ${head}`);
+            expect(prompt).not.toContain("dirty checkout instructions");
+
+            // The immutable policy snapshot records the committed instructions.
+            const recorded = yield* reviews.getReviewById(passed.reviewId);
+            expect(recorded?.policy.instructions).toBe(`Committed instructions at ${head}`);
+          }),
+        );
+      }),
+    60_000,
+  );
+
+  it.scoped(
+    "records context-file discovery in the immutable policy and session identity",
+    () =>
+      Effect.gen(function* () {
+        const root = yield* prepareInitializedTask();
+        yield* withTestRepository(
+          root,
+          Effect.gen(function* () {
+            const reviews = yield* openSqliteTaskReviewPersistence();
+            const reviewInputs: ReviewerAgentInput[] = [];
+            const repoConfig: RepoConfig = {
+              taskPrefix: "BY",
+              review: { task: { agentProfile: { name: "task-reviewer", scope: "repo" } } },
+              agentProfiles: {
+                "task-reviewer": {
+                  agentRuntime: "pi",
+                  runtimeConfig: {
+                    model: "test-model",
+                    contextFileDiscovery: false,
+                  },
+                },
+              },
+            };
+            const submission = openTaskSubmission(
+              submissionDependencies(root, {
+                reviewerAgentRuntime: passingReviewer(reviewInputs),
+                persistence: reviews,
+                readRepoConfig: () => ({ ok: true as const, config: repoConfig }),
+              }),
+            );
+
+            const result = yield* submission.submit({ taskId: publicTaskId("BY-1"), now });
+            expect(result).toMatchObject({ ok: true, status: "passed" });
+            const passed = result as Extract<TaskSubmitResult, { readonly ok: true }>;
+
+            const recorded = yield* reviews.getReviewById(passed.reviewId);
+            expect(recorded?.policy.profile.runtimeConfig?.contextFileDiscovery).toBe(false);
+            const session = yield* reviews.getTaskReviewSession(
+              publicTaskId("BY-1"),
+              "task_review",
+            );
+            expect(session?.fingerprint).toBeDefined();
+            expect(session?.fingerprint.length).toBeGreaterThan(0);
           }),
         );
       }),

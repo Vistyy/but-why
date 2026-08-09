@@ -137,6 +137,9 @@ export type TaskReviewPersistence = {
   readonly latestCompletedReviewForTask: (
     taskId: PublicTaskId,
   ) => StorageEffect<TaskReviewRecord | undefined>;
+  readonly latestApplicableReviewForTask: (
+    taskId: PublicTaskId,
+  ) => StorageEffect<TaskReviewRecord | undefined>;
   readonly recordWorkspaceSetup: (input: TaskReviewWorkspaceSetup) => StorageEffect<void>;
   readonly recordToolingFailure: (
     input: RecordTaskReviewToolingFailureInput,

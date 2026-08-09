@@ -188,6 +188,7 @@ describe("by task submission CLI", () => {
             readonly state: string;
             readonly outcome: string;
             readonly findings: readonly { readonly title: string }[];
+            readonly policy: { readonly version: number; readonly instructions: string };
           };
         };
         expect(reviewShow.review.state).toBe("complete");
@@ -195,6 +196,8 @@ describe("by task submission CLI", () => {
         expect(reviewShow.review.findings).toEqual([
           expect.objectContaining({ title: "Missing evidence" }),
         ]);
+        expect(reviewShow.review.policy.version).toBe(1);
+        expect(reviewShow.review.policy.instructions.length).toBeGreaterThan(0);
       }),
     60_000,
   );

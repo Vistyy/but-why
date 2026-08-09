@@ -327,6 +327,174 @@ it.scoped("rejects reuse for a changed proposal and starts a new Review", () =>
   ),
 );
 
+it.scoped("applyReuse revalidates the exact proposal and review facts atomically", () =>
+  withTemporaryRepositoryState(() =>
+    Effect.gen(function* () {
+      const tasks = yield* openSqliteTaskPersistence("BY");
+      const reviews = yield* openSqliteTaskReviewPersistence();
+      const task = yield* createTask(tasks, "Revalidate", firstNow);
+      const started = yield* reviews.startOrReuse({
+        taskId: task.id,
+        baseCommit,
+        policy,
+        reviewId: "review-revalidate",
+        now: firstNow,
+      });
+      if (!started.ok || started.reused) throw new Error("start failed");
+      yield* reviews.complete({
+        reviewId: "review-revalidate",
+        outcome: "blocked",
+        now: secondNow,
+      });
+
+      // A mutation between the reuse fast-path and this transaction changes the
+      // proposal, so applying the stale judgment must not approve the Task.
+      const edited = yield* tasks.updateTaskContext({
+        taskId: task.id,
+        title: "Changed after reuse check",
+        description: "Changed description",
+        now: thirdNow,
+      });
+      expect(edited.ok).toBe(true);
+      if (!edited.ok) throw new Error(edited.code);
+
+      const applied = yield* reviews.applyReuse({
+        reviewId: "review-revalidate",
+        outcome: "blocked",
+        now: thirdNow,
+      });
+      expect(applied).toEqual({ ok: false, code: "task_state_changed" });
+      expect(yield* tasks.getTaskById(task.id)).toMatchObject({ state: "new" });
+
+      // A running Review cannot be applied, and a non-matching outcome cannot be applied.
+      const running = yield* reviews.startOrReuse({
+        taskId: task.id,
+        baseCommit,
+        policy,
+        reviewId: "review-running",
+        now: thirdNow,
+      });
+      if (!running.ok || running.reused) throw new Error("start failed");
+      expect(
+        yield* reviews.applyReuse({
+          reviewId: "review-running",
+          outcome: "blocked",
+          now: thirdNow,
+        }),
+      ).toEqual({ ok: false, code: "task_state_changed" });
+      expect(
+        yield* reviews.applyReuse({
+          reviewId: "review-revalidate",
+          outcome: "passed",
+          now: thirdNow,
+        }),
+      ).toEqual({ ok: false, code: "task_state_changed" });
+    }),
+  ),
+);
+
+it.scoped(
+  "applyReuse reports the post-update Task state for blocked reuse and refuses stale passed reuse",
+  () =>
+    withTemporaryRepositoryState(() =>
+      Effect.gen(function* () {
+        const tasks = yield* openSqliteTaskPersistence("BY");
+        const reviews = yield* openSqliteTaskReviewPersistence();
+        const task = yield* createTask(tasks, "Applied state", firstNow);
+        yield* reviews.startOrReuse({
+          taskId: task.id,
+          baseCommit,
+          policy,
+          reviewId: "review-blocked-state",
+          now: firstNow,
+        });
+        yield* reviews.complete({
+          reviewId: "review-blocked-state",
+          outcome: "blocked",
+          now: secondNow,
+        });
+        expect(
+          yield* reviews.applyReuse({
+            reviewId: "review-blocked-state",
+            outcome: "blocked",
+            now: secondNow,
+          }),
+        ).toEqual({ ok: true, task: { id: task.id, state: "new" } });
+        expect(yield* tasks.getTaskById(task.id)).toMatchObject({ state: "new" });
+
+        // A passing Review already moved the Task to Todo at completion, so a
+        // later reuse cannot apply it again to a still-New Task.
+        const secondTask = yield* createTask(tasks, "Applied passed state", secondNow);
+        yield* reviews.startOrReuse({
+          taskId: secondTask.id,
+          baseCommit,
+          policy,
+          reviewId: "review-passed-state",
+          now: secondNow,
+        });
+        yield* reviews.complete({
+          reviewId: "review-passed-state",
+          outcome: "passed",
+          now: thirdNow,
+        });
+        expect(yield* tasks.getTaskById(secondTask.id)).toMatchObject({ state: "todo" });
+        expect(
+          yield* reviews.applyReuse({
+            reviewId: "review-passed-state",
+            outcome: "passed",
+            now: thirdNow,
+          }),
+        ).toEqual({ ok: false, code: "task_state_changed" });
+      }),
+    ),
+);
+
+it.scoped("latestApplicableReviewForTask skips Tooling Failure and returns the prior outcome", () =>
+  withTemporaryRepositoryState(() =>
+    Effect.gen(function* () {
+      const tasks = yield* openSqliteTaskPersistence("BY");
+      const reviews = yield* openSqliteTaskReviewPersistence();
+      const task = yield* createTask(tasks, "Applicable prior", firstNow);
+      yield* reviews.startOrReuse({
+        taskId: task.id,
+        baseCommit,
+        policy,
+        reviewId: "review-prior",
+        now: firstNow,
+      });
+      yield* reviews.complete({ reviewId: "review-prior", outcome: "blocked", now: secondNow });
+
+      // Change the proposal so a newer Review can be created on the same Task.
+      const edited = yield* tasks.updateTaskContext({
+        taskId: task.id,
+        title: "Newer proposal",
+        description: "Newer description",
+        now: secondNow,
+      });
+      expect(edited.ok).toBe(true);
+      if (!edited.ok) throw new Error(edited.code);
+      yield* reviews.startOrReuse({
+        taskId: task.id,
+        baseCommit,
+        policy,
+        reviewId: "review-tooling-newer",
+        now: secondNow,
+      });
+      yield* reviews.complete({
+        reviewId: "review-tooling-newer",
+        outcome: "tooling_failed",
+        now: thirdNow,
+      });
+
+      const latest = yield* reviews.latestCompletedReviewForTask(task.id);
+      expect(latest?.id).toBe("review-tooling-newer");
+      const applicable = yield* reviews.latestApplicableReviewForTask(task.id);
+      expect(applicable?.id).toBe("review-prior");
+      expect(applicable?.outcome).toBe("blocked");
+    }),
+  ),
+);
+
 it.scoped("enforces one active Review per Task and rejects mutation and cancellation", () =>
   withTemporaryRepositoryState(() =>
     Effect.gen(function* () {
@@ -484,6 +652,102 @@ it.scoped("retains complete Review history and rejects malformed persisted value
       );
       const malformed = yield* Effect.isFailure(reviews.getReviewById("review-history-1"));
       expect(malformed).toBe(true);
+    }),
+  ),
+);
+
+it.scoped("rejects malformed persisted values at each owning boundary", () =>
+  withTemporaryRepositoryState(() =>
+    Effect.gen(function* () {
+      const tasks = yield* openSqliteTaskPersistence("BY");
+      const reviews = yield* openSqliteTaskReviewPersistence();
+      const task = yield* createTask(tasks, "Decoded", firstNow);
+      const started = yield* reviews.startOrReuse({
+        taskId: task.id,
+        baseCommit,
+        policy,
+        reviewId: "review-decoded",
+        workspaceSetup: {
+          tempRefName: "refs/but-why/task-reviews/review-decoded/review",
+          worktreePath: "/tmp/worktrees/review-decoded",
+        },
+        now: firstNow,
+      });
+      if (!started.ok || started.reused) throw new Error("start failed");
+      yield* reviews.recordToolingFailure({
+        reviewId: "review-decoded",
+        errorKind: "infrastructure_tooling_failed",
+        operationName: "run_task_reviewer_agent",
+        errorMessage: "Agent launch failed.",
+        now: secondNow,
+      });
+      yield* reviews.saveTaskReviewSession({
+        taskId: task.id,
+        producer: "task_review",
+        fingerprint: "fingerprint-1",
+        sessionReference: "session-1",
+      });
+      yield* reviews.recordTaskReviewTranscripts({
+        taskId: task.id,
+        transcripts: [
+          {
+            taskId: task.id,
+            producer: "task_review",
+            piSessionId: "session-1",
+            filePath: "sessions/task_review.jsonl",
+          },
+        ],
+      });
+
+      const repository = yield* RepositorySql;
+
+      // Migration CHECK constraints reject invalid Review state, outcome, and
+      // workspace cleanup values before they can reach the decode boundary.
+      expect(
+        yield* Effect.isFailure(
+          repository.operation(
+            "corrupt Task Review state",
+            (sql) => sql`UPDATE task_reviews SET state = 'banana' WHERE id = 'review-decoded'`,
+          ),
+        ),
+      ).toBe(true);
+      expect(
+        yield* Effect.isFailure(
+          repository.operation(
+            "corrupt Task Review outcome",
+            (sql) => sql`UPDATE task_reviews SET outcome = 'maybe' WHERE id = 'review-decoded'`,
+          ),
+        ),
+      ).toBe(true);
+      expect(
+        yield* Effect.isFailure(
+          repository.operation(
+            "corrupt cleanup state",
+            (sql) =>
+              sql`UPDATE task_review_workspace_setups SET cleanup_worktree = 'partially' WHERE review_id = 'review-decoded'`,
+          ),
+        ),
+      ).toBe(true);
+
+      // Tooling Failure values are decoded at the owning boundary.
+      yield* repository.operation(
+        "corrupt Tooling Failure error kind",
+        (sql) =>
+          sql`UPDATE task_review_tooling_failures SET error_kind = '' WHERE review_id = 'review-decoded'`,
+      );
+      expect(yield* Effect.isFailure(reviews.listToolingFailures("review-decoded"))).toBe(true);
+
+      // Session and transcript records are decoded at the owning boundary.
+      yield* repository.operation(
+        "corrupt Session producer",
+        (sql) => sql`UPDATE task_review_sessions SET producer = ' ' WHERE task_id = ${task.id}`,
+      );
+      expect(yield* Effect.isFailure(reviews.getTaskReviewSession(task.id, " "))).toBe(true);
+      yield* repository.operation(
+        "corrupt Transcript file path",
+        (sql) => sql`UPDATE task_review_transcripts SET file_path = '' WHERE task_id = ${task.id}`,
+      );
+      expect(yield* Effect.isFailure(reviews.listTaskReviewTranscripts(task.id))).toBe(true);
     }),
   ),
 );

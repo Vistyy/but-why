@@ -8,7 +8,7 @@ import type { GlobalConfigValidationFailed } from "../contracts/configErrors.js"
 import type { GlobalConfig } from "../contracts/globalConfig.js";
 import type { RepoConfig } from "../contracts/repoConfig.js";
 import { reviewerFindingCoreSchema } from "../contracts/reviewerFinding.js";
-import { readInstructionsFile } from "../init/instructionsFile.js";
+import { type InstructionsReadResult, readInstructionsFile } from "../init/instructionsFile.js";
 import type { TaskReviewFinding, TaskReviewPolicySnapshot } from "./taskReview.js";
 
 // fallow-ignore-next-line unused-export -- public Task Reviewer policy error
@@ -34,6 +34,10 @@ export const resolveTaskReviewPolicy = (input: {
   readonly globalConfig: GlobalConfig;
   readonly repoRoot: string;
   readonly globalConfigPath: string;
+  readonly readRepoInstructionsFile?: (
+    repoRoot: string,
+    instructionsFile: string,
+  ) => InstructionsReadResult;
 }):
   | { readonly ok: true; readonly policy: TaskReviewPolicy }
   | { readonly ok: false; readonly error: TaskReviewPolicyError } => {
@@ -75,12 +79,22 @@ const resolveInstructions = (input: {
   readonly globalConfig: GlobalConfig;
   readonly repoRoot: string;
   readonly globalConfigPath: string;
+  readonly readRepoInstructionsFile?: (
+    repoRoot: string,
+    instructionsFile: string,
+  ) => InstructionsReadResult;
 }):
   | (Pick<TaskReviewPolicy, "instructions" | "instructionsSource"> & { readonly ok: true })
   | { readonly ok: false; readonly error: TaskReviewInstructionsInvalid } => {
   const repoInstructionsFile = input.repoConfig.review?.task?.instructionsFile;
   if (repoInstructionsFile !== undefined) {
-    return readInstructions(join(input.repoRoot, repoInstructionsFile), "repo");
+    const result =
+      input.readRepoInstructionsFile === undefined
+        ? readInstructionsFile(join(input.repoRoot, repoInstructionsFile))
+        : input.readRepoInstructionsFile(input.repoRoot, repoInstructionsFile);
+    return result.ok
+      ? { ok: true, instructions: result.instructions, instructionsSource: "repo" }
+      : { ok: false, error: new TaskReviewInstructionsInvalid({ message: result.message }) };
   }
 
   const globalInstructionsFile = input.globalConfig.review?.task?.instructionsFile;
@@ -136,6 +150,11 @@ export const taskReviewPolicySnapshot = (policy: TaskReviewPolicy): TaskReviewPo
             ...(policy.profile.profile.runtimeConfig.tools === undefined
               ? {}
               : { tools: policy.profile.profile.runtimeConfig.tools }),
+            ...(policy.profile.profile.runtimeConfig.contextFileDiscovery === undefined
+              ? {}
+              : {
+                  contextFileDiscovery: policy.profile.profile.runtimeConfig.contextFileDiscovery,
+                }),
           },
         }),
   },

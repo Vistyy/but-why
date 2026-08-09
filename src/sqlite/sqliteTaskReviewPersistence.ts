@@ -3,6 +3,7 @@ import type * as SqlClient from "@effect/sql/SqlClient";
 import type { SqlError } from "@effect/sql/SqlError";
 import { Effect, Schema } from "effect";
 
+import { nonBlankStringSchema } from "../contracts/agentConfig.js";
 import { RepositoryPersistedDataInvalid } from "../contracts/repositoryStorageError.js";
 import type { TaskState } from "../task/lifecycle.js";
 import { type PublicTaskId, storedPublicTaskId } from "../task/taskId.js";
@@ -17,7 +18,10 @@ import {
   type TaskReviewSessionRecord,
   type TaskReviewToolingFailure,
   type TaskReviewTranscript,
+  taskReviewCleanupStateSchema,
+  taskReviewOutcomeSchema,
   taskReviewPolicySnapshotSchema,
+  taskReviewStateSchema,
 } from "../task/taskReview.js";
 import type {
   AbandonTaskReviewInput,
@@ -63,7 +67,7 @@ export const openSqliteTaskReviewPersistence = (): Effect.Effect<
         .operation("read Task Review abandonment context", (sql) =>
           getAbandonmentContext(sql, reviewId),
         )
-        .pipe(Effect.map((row) => row)),
+        .pipe(Effect.flatMap(decodeAbandonmentContextOptional)),
     getReviewById: (reviewId) =>
       repository
         .operation("read Task Review", (sql) => getReviewById(sql, reviewId))
@@ -77,13 +81,19 @@ export const openSqliteTaskReviewPersistence = (): Effect.Effect<
         .operation("list Task Review Findings", (sql) => listFindings(sql, reviewId))
         .pipe(Effect.flatMap((rows) => Effect.forEach(rows, decodeFinding))),
     listToolingFailures: (reviewId) =>
-      repository.operation("list Task Review Tooling Failures", (sql) =>
-        listToolingFailures(sql, reviewId),
-      ),
+      repository
+        .operation("list Task Review Tooling Failures", (sql) => listToolingFailures(sql, reviewId))
+        .pipe(Effect.flatMap((rows) => Effect.forEach(rows, decodeToolingFailure))),
     latestCompletedReviewForTask: (taskId) =>
       repository
         .operation("read latest completed Task Review", (sql) =>
           latestCompletedReviewForTask(sql, taskId),
+        )
+        .pipe(Effect.flatMap(decodeReviewOptional)),
+    latestApplicableReviewForTask: (taskId) =>
+      repository
+        .operation("read latest applicable Task Review", (sql) =>
+          latestApplicableReviewForTask(sql, taskId),
         )
         .pipe(Effect.flatMap(decodeReviewOptional)),
     recordWorkspaceSetup: (input) =>
@@ -134,15 +144,17 @@ export const openSqliteTaskReviewPersistence = (): Effect.Effect<
         `),
       ),
     getCompletionFailure: (reviewId) =>
-      repository.operation("read Task Review completion failure", (sql) =>
-        getCompletionFailure(sql, reviewId),
-      ),
+      repository
+        .operation("read Task Review completion failure", (sql) =>
+          getCompletionFailure(sql, reviewId),
+        )
+        .pipe(Effect.flatMap(decodeCompletionFailureOptional)),
     abandon: (input) =>
       repository.transactionImmediate("abandon Task Review", (sql) => abandon(sql, input)),
     getTaskReviewSession: (taskId, producer) =>
-      repository.operation("read Task Review Session", (sql) =>
-        getTaskReviewSession(sql, taskId, producer),
-      ),
+      repository
+        .operation("read Task Review Session", (sql) => getTaskReviewSession(sql, taskId, producer))
+        .pipe(Effect.flatMap(decodeSessionRecordOptional)),
     saveTaskReviewSession: (input) =>
       repository.transactionImmediate("save Task Review Session", (sql) =>
         Effect.asVoid(sql`
@@ -160,9 +172,9 @@ export const openSqliteTaskReviewPersistence = (): Effect.Effect<
         ),
       ),
     listTaskReviewTranscripts: (taskId) =>
-      repository.operation("list Task Review Transcripts", (sql) =>
-        listTaskReviewTranscripts(sql, taskId),
-      ),
+      repository
+        .operation("list Task Review Transcripts", (sql) => listTaskReviewTranscripts(sql, taskId))
+        .pipe(Effect.flatMap((rows) => Effect.forEach(rows, decodeTranscriptRecord))),
     recordTaskReviewTranscripts: (input) =>
       repository.transactionImmediate("record Task Review Transcripts", (sql) =>
         input.transcripts.length === 0
@@ -332,19 +344,53 @@ const applyReuse = (
   },
 ): Effect.Effect<ApplyTaskReviewReuseResult, SqlError | RepositoryPersistedDataInvalid> =>
   Effect.gen(function* () {
-    const reviews = yield* sql<{ readonly taskId: string; readonly state: string }>`
-      SELECT task_id AS taskId, state FROM task_reviews WHERE id = ${input.reviewId}
+    const reviews = yield* sql<{
+      readonly taskId: string;
+      readonly state: string;
+      readonly outcome: string | null;
+      readonly proposalKey: string;
+    }>`
+      SELECT task_id AS taskId, state, outcome, proposal_key AS proposalKey
+      FROM task_reviews WHERE id = ${input.reviewId}
     `;
     const review = reviews[0];
     if (review === undefined) {
       return { ok: false as const, code: "review_not_found" as const };
     }
+    // Apply only an exact completed judgment. The matching outcome and proposal
+    // are revalidated here because the Task Context and direct Task Dependency
+    // set can change between the reuse fast-path and this transaction.
+    if (review.state !== "complete" || review.outcome !== input.outcome) {
+      return { ok: false as const, code: "task_state_changed" as const };
+    }
     const taskId = storedPublicTaskId(review.taskId);
-    const tasks = yield* sql<{ readonly state: TaskState }>`
-      SELECT state FROM tasks WHERE id = ${taskId}
+    const tasks = yield* sql<{
+      readonly title: string;
+      readonly description: string;
+      readonly state: TaskState;
+    }>`
+      SELECT title, description, state FROM tasks WHERE id = ${taskId}
     `;
     const task = tasks[0];
     if (task === undefined) return { ok: false as const, code: "task_not_found" as const };
+    if (task.state !== "new") {
+      return { ok: false as const, code: "task_state_changed" as const };
+    }
+    const linked = yield* sql<{ readonly id: string }>`
+      SELECT id FROM changes WHERE task_id = ${taskId} LIMIT 1
+    `;
+    if (linked.length > 0) {
+      return { ok: false as const, code: "task_state_changed" as const };
+    }
+    const dependencies = yield* readTaskReviewDependencies(sql, taskId);
+    const proposalKey = JSON.stringify({
+      title: task.title,
+      description: task.description,
+      dependencyIds: dependencies.map((dependency) => dependency.taskId),
+    });
+    if (proposalKey !== review.proposalKey) {
+      return { ok: false as const, code: "task_state_changed" as const };
+    }
     if (input.outcome === "passed") {
       const transitioned = yield* sql<{ readonly id: string }>`
         UPDATE tasks SET state = 'todo', updated_at = ${input.now}
@@ -354,8 +400,9 @@ const applyReuse = (
       if (transitioned.length !== 1) {
         return { ok: false as const, code: "task_state_changed" as const };
       }
+      return { ok: true as const, task: { id: taskId, state: "todo" } };
     }
-    return { ok: true as const, task: { id: taskId, state: task.state } };
+    return { ok: true as const, task: { id: taskId, state: "new" } };
   });
 
 const getTaskFact = (
@@ -473,20 +520,30 @@ const getAbandonmentContext = (sql: SqlClient.SqlClient, reviewId: string) =>
       LEFT JOIN task_review_workspace_setups AS setup ON setup.review_id = review.id
       WHERE review.id = ${reviewId}
     `,
-    (rows) => {
-      const row = rows[0];
-      if (row === undefined) return undefined;
-      return {
-        reviewId: row.reviewId,
-        taskId: storedPublicTaskId(row.taskId),
-        submittedSha: row.submittedSha,
-        ...(row.tempRefName === null ? {} : { tempRefName: row.tempRefName }),
-        ...(row.worktreePath === null ? {} : { worktreePath: row.worktreePath }),
-        cleanupWorktree: row.cleanupWorktree,
-        cleanupTempRef: row.cleanupTempRef,
-      } satisfies TaskReviewAbandonmentContext;
-    },
+    (rows) => rows[0],
   );
+
+const decodeAbandonmentContextOptional = (
+  row: TaskReviewAbandonmentContextRow | undefined,
+): Effect.Effect<TaskReviewAbandonmentContext | undefined, RepositoryPersistedDataInvalid> => {
+  if (row === undefined) return Effect.succeed(undefined);
+  return Effect.try({
+    try: (): TaskReviewAbandonmentContext => ({
+      reviewId: row.reviewId,
+      taskId: storedPublicTaskId(row.taskId),
+      submittedSha: row.submittedSha,
+      ...(row.tempRefName === null ? {} : { tempRefName: row.tempRefName }),
+      ...(row.worktreePath === null ? {} : { worktreePath: row.worktreePath }),
+      cleanupWorktree: Schema.decodeUnknownSync(taskReviewCleanupStateSchema)(row.cleanupWorktree),
+      cleanupTempRef: Schema.decodeUnknownSync(taskReviewCleanupStateSchema)(row.cleanupTempRef),
+    }),
+    catch: (cause) =>
+      new RepositoryPersistedDataInvalid({
+        operationName: "decode Task Review abandonment context",
+        cause,
+      }),
+  });
+};
 
 const getReviewById = (sql: SqlClient.SqlClient, reviewId: string) =>
   Effect.map(
@@ -526,6 +583,21 @@ const latestCompletedReviewForTask = (sql: SqlClient.SqlClient, taskId: PublicTa
     (rows) => rows[0],
   );
 
+const latestApplicableReviewForTask = (sql: SqlClient.SqlClient, taskId: PublicTaskId) =>
+  Effect.map(
+    sql<TaskReviewRow>`
+      SELECT id, task_id AS taskId, proposal_snapshot AS proposalSnapshot,
+        proposal_key AS proposalKey, base_commit AS baseCommit,
+        policy_snapshot AS policySnapshot, state, outcome, created_at AS createdAt,
+        updated_at AS updatedAt
+      FROM task_reviews
+      WHERE task_id = ${taskId} AND state = 'complete' AND outcome IN ('passed', 'blocked')
+      ORDER BY created_at DESC, id DESC
+      LIMIT 1
+    `,
+    (rows) => rows[0],
+  );
+
 const listFindings = (sql: SqlClient.SqlClient, reviewId: string) =>
   sql<TaskReviewFindingRow>`
     SELECT id, review_id AS reviewId, title, description, evidence, files,
@@ -536,7 +608,7 @@ const listFindings = (sql: SqlClient.SqlClient, reviewId: string) =>
   `;
 
 const listToolingFailures = (sql: SqlClient.SqlClient, reviewId: string) =>
-  sql<TaskReviewToolingFailure>`
+  sql<TaskReviewToolingFailureRow>`
     SELECT sequence, review_id AS reviewId, error_kind AS errorKind,
       operation_name AS operationName, error_message AS errorMessage,
       created_at AS createdAt
@@ -547,7 +619,7 @@ const listToolingFailures = (sql: SqlClient.SqlClient, reviewId: string) =>
 
 const getCompletionFailure = (sql: SqlClient.SqlClient, reviewId: string) =>
   Effect.map(
-    sql<TaskReviewCompletionFailure>`
+    sql<TaskReviewCompletionFailureRow>`
       SELECT review_id AS reviewId, operation_name AS operationName,
         error_message AS errorMessage, created_at AS createdAt
       FROM task_review_completion_failures
@@ -598,37 +670,16 @@ const getTaskReviewSession = (sql: SqlClient.SqlClient, taskId: PublicTaskId, pr
       FROM task_review_sessions
       WHERE task_id = ${taskId} AND producer = ${producer}
     `,
-    (rows) => {
-      const row = rows[0];
-      if (row === undefined) return undefined;
-      return {
-        taskId: storedPublicTaskId(row.taskId),
-        producer: row.producer,
-        fingerprint: row.fingerprint,
-        sessionReference: row.sessionReference,
-      } satisfies TaskReviewSessionRecord;
-    },
+    (rows) => rows[0],
   );
 
 const listTaskReviewTranscripts = (sql: SqlClient.SqlClient, taskId: PublicTaskId) =>
-  Effect.map(
-    sql<TaskReviewTranscriptRow>`
-      SELECT task_id AS taskId, producer, pi_session_id AS piSessionId, file_path AS filePath
-      FROM task_review_transcripts
-      WHERE task_id = ${taskId}
-      ORDER BY producer, file_path
-    `,
-    (rows) =>
-      rows.map(
-        (row) =>
-          ({
-            taskId: storedPublicTaskId(row.taskId),
-            producer: row.producer,
-            piSessionId: row.piSessionId,
-            filePath: row.filePath,
-          }) satisfies TaskReviewTranscript,
-      ),
-  );
+  sql<TaskReviewTranscriptRow>`
+    SELECT task_id AS taskId, producer, pi_session_id AS piSessionId, file_path AS filePath
+    FROM task_review_transcripts
+    WHERE task_id = ${taskId}
+    ORDER BY producer, file_path
+  `;
 
 const decodeReviewOptional = (row: TaskReviewRow | undefined) =>
   row === undefined ? Effect.succeed(undefined) : decodeReview(row);
@@ -643,8 +694,8 @@ const decodeReview = (
       proposal: decodeProposal(row.proposalSnapshot),
       baseCommit: row.baseCommit,
       policy: decodePolicy(row.policySnapshot),
-      state: row.state,
-      outcome: row.outcome,
+      state: Schema.decodeUnknownSync(taskReviewStateSchema)(row.state),
+      outcome: Schema.decodeUnknownSync(taskReviewOutcomeSchema)(row.outcome),
       createdAt: row.createdAt,
       updatedAt: row.updatedAt,
     }),
@@ -671,6 +722,80 @@ const decodeFinding = (row: TaskReviewFindingRow) =>
     catch: (cause) =>
       new RepositoryPersistedDataInvalid({
         operationName: "decode Task Review Finding",
+        cause,
+      }),
+  });
+
+const decodeToolingFailure = (row: TaskReviewToolingFailureRow) =>
+  Effect.try({
+    try: (): TaskReviewToolingFailure => ({
+      sequence: Schema.decodeUnknownSync(Schema.Number)(row.sequence),
+      reviewId: row.reviewId,
+      errorKind: Schema.decodeUnknownSync(nonBlankStringSchema)(row.errorKind),
+      operationName: Schema.decodeUnknownSync(nonBlankStringSchema)(row.operationName),
+      errorMessage: Schema.decodeUnknownSync(nonBlankStringSchema)(row.errorMessage),
+      createdAt: row.createdAt,
+    }),
+    catch: (cause) =>
+      new RepositoryPersistedDataInvalid({
+        operationName: "decode Task Review Tooling Failure",
+        cause,
+      }),
+  });
+
+const decodeCompletionFailureOptional = (
+  row: TaskReviewCompletionFailureRow | undefined,
+): Effect.Effect<TaskReviewCompletionFailure | undefined, RepositoryPersistedDataInvalid> => {
+  if (row === undefined) return Effect.succeed(undefined);
+  return Effect.try({
+    try: (): TaskReviewCompletionFailure => ({
+      reviewId: row.reviewId,
+      operationName: Schema.decodeUnknownSync(nonBlankStringSchema)(row.operationName),
+      errorMessage: Schema.decodeUnknownSync(nonBlankStringSchema)(row.errorMessage),
+      createdAt: row.createdAt,
+    }),
+    catch: (cause) =>
+      new RepositoryPersistedDataInvalid({
+        operationName: "decode Task Review completion failure",
+        cause,
+      }),
+  });
+};
+
+const decodeSessionRecordOptional = (
+  row: TaskReviewSessionRow | undefined,
+): Effect.Effect<TaskReviewSessionRecord | undefined, RepositoryPersistedDataInvalid> => {
+  if (row === undefined) return Effect.succeed(undefined);
+  return Effect.try({
+    try: (): TaskReviewSessionRecord => ({
+      taskId: storedPublicTaskId(row.taskId),
+      producer: Schema.decodeUnknownSync(nonBlankStringSchema)(row.producer),
+      fingerprint: Schema.decodeUnknownSync(nonBlankStringSchema)(row.fingerprint),
+      // The domain stores an empty session reference when the runtime provides
+      // no usable session, and the continuation check treats it as incompatible.
+      sessionReference: Schema.decodeUnknownSync(Schema.String)(row.sessionReference),
+    }),
+    catch: (cause) =>
+      new RepositoryPersistedDataInvalid({
+        operationName: "decode Task Review Session",
+        cause,
+      }),
+  });
+};
+
+const decodeTranscriptRecord = (
+  row: TaskReviewTranscriptRow,
+): Effect.Effect<TaskReviewTranscript, RepositoryPersistedDataInvalid> =>
+  Effect.try({
+    try: (): TaskReviewTranscript => ({
+      taskId: storedPublicTaskId(row.taskId),
+      producer: Schema.decodeUnknownSync(nonBlankStringSchema)(row.producer),
+      piSessionId: Schema.decodeUnknownSync(nonBlankStringSchema)(row.piSessionId),
+      filePath: Schema.decodeUnknownSync(nonBlankStringSchema)(row.filePath),
+    }),
+    catch: (cause) =>
+      new RepositoryPersistedDataInvalid({
+        operationName: "decode Task Review transcript",
         cause,
       }),
   });
@@ -730,6 +855,20 @@ type TaskReviewRow = Omit<TaskReviewRecord, "taskId" | "proposal" | "policy"> & 
 };
 type TaskReviewFindingRow = Omit<TaskReviewFinding, "files"> & {
   readonly files: string;
+};
+type TaskReviewToolingFailureRow = {
+  readonly sequence: number;
+  readonly reviewId: string;
+  readonly errorKind: string;
+  readonly operationName: string;
+  readonly errorMessage: string;
+  readonly createdAt: string;
+};
+type TaskReviewCompletionFailureRow = {
+  readonly reviewId: string;
+  readonly operationName: string;
+  readonly errorMessage: string;
+  readonly createdAt: string;
 };
 type TaskReviewAbandonmentContextRow = {
   readonly reviewId: string;

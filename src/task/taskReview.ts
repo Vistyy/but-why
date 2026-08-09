@@ -6,6 +6,16 @@ import { type PublicTaskId, storedPublicTaskId } from "./taskId.js";
 
 export type TaskReviewOutcome = "passed" | "blocked" | "tooling_failed";
 
+export const taskReviewStateSchema = Schema.Literal("running", "complete");
+export const taskReviewOutcomeSchema = Schema.Union(
+  Schema.Literal("passed", "blocked", "tooling_failed"),
+  Schema.Null,
+);
+export const taskReviewCleanupStateSchema = Schema.Union(
+  Schema.Literal("removed", "not_created", "failed"),
+  Schema.Null,
+);
+
 export type TaskReviewProposalDependency = {
   readonly taskId: PublicTaskId;
   readonly title: string;
@@ -40,6 +50,7 @@ export const taskReviewPolicySnapshotSchema = Schema.Struct({
         extensions: Schema.optional(Schema.Array(nonBlankStringSchema)),
         skills: Schema.optional(Schema.Array(nonBlankStringSchema)),
         tools: Schema.optional(Schema.Array(nonBlankStringSchema)),
+        contextFileDiscovery: Schema.optional(Schema.Boolean),
       }),
     ),
   }),

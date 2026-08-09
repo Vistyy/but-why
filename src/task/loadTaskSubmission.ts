@@ -80,6 +80,15 @@ export const loadTaskSubmission = (input: {
                       message: `Repo Config is invalid: ${decoded.error.message}`,
                     };
               },
+              readRepoInstructionsFileAtCommit: (cwd, commit, instructionsFile) => {
+                const source = readRepositoryFileAtCommit(cwd, commit, instructionsFile);
+                return source.ok
+                  ? { ok: true as const, instructions: source.content }
+                  : {
+                      ok: false as const,
+                      message: `Task Reviewer instructions file could not be read at commit ${commit}: ${instructionsFile}`,
+                    };
+              },
               readGlobalConfig: (path) => {
                 const global = readGlobalConfig(path);
                 return global.ok ? global : { ok: false as const, message: global.error.message };

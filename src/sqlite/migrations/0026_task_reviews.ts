@@ -70,8 +70,10 @@ export const taskReviewsMigration = Effect.gen(function* () {
       submitted_sha TEXT NOT NULL,
       worktree_head TEXT NOT NULL,
       worktree_path TEXT,
-      cleanup_worktree TEXT NOT NULL,
-      cleanup_temp_ref TEXT NOT NULL,
+      cleanup_worktree TEXT NOT NULL
+        CHECK (cleanup_worktree IN ('removed', 'not_created', 'failed')),
+      cleanup_temp_ref TEXT NOT NULL
+        CHECK (cleanup_temp_ref IN ('removed', 'not_created', 'failed')),
       created_at TEXT NOT NULL,
       FOREIGN KEY (review_id) REFERENCES task_reviews(id)
     )

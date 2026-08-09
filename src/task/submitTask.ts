@@ -72,6 +72,13 @@ export type TaskSubmissionDependencies = {
   readonly readMainCheckoutHead: (cwd: string) => MainCheckoutHeadResult;
   readonly readRepoConfigAtCommit: (cwd: string, commit: string) => RepoConfigAtCommitResult;
   readonly readGlobalConfig: (globalConfigPath: string) => TaskGlobalConfigReadResult;
+  readonly readRepoInstructionsFileAtCommit?: (
+    cwd: string,
+    commit: string,
+    instructionsFile: string,
+  ) =>
+    | { readonly ok: true; readonly instructions: string }
+    | { readonly ok: false; readonly message: string };
   readonly reviewerAgentRuntime: ReviewerAgentRuntime;
 };
 
@@ -168,11 +175,18 @@ const submitTask = (
         message: global.message,
       };
     }
+    const readRepoInstructionsFileAtCommit = dependencies.readRepoInstructionsFileAtCommit;
     const policy = resolveTaskReviewPolicy({
       repoConfig: repoConfig.config,
       globalConfig: global.config,
       repoRoot: dependencies.mainCheckoutRoot,
       globalConfigPath: dependencies.globalConfigPath,
+      ...(readRepoInstructionsFileAtCommit === undefined
+        ? {}
+        : {
+            readRepoInstructionsFile: (repoRoot: string, instructionsFile: string) =>
+              readRepoInstructionsFileAtCommit(repoRoot, head.commit, instructionsFile),
+          }),
     });
     if (!policy.ok) {
       return {
@@ -200,9 +214,9 @@ const submitTask = (
       return yield* applyReuseResult(dependencies.persistence, input, started);
     }
 
-    const prior = yield* dependencies.persistence.latestCompletedReviewForTask(input.taskId);
+    const prior = yield* dependencies.persistence.latestApplicableReviewForTask(input.taskId);
     const priorEvidence =
-      prior === undefined || prior.outcome === null || prior.outcome === "tooling_failed"
+      prior === undefined
         ? undefined
         : yield* previousReviewEvidence(dependencies.persistence, prior);
     const proposalDiff =
@@ -551,6 +565,11 @@ const runTaskReviewPhases = (input: {
         ...(input.policy.profile.profile.runtimeConfig?.tools === undefined
           ? {}
           : { tools: input.policy.profile.profile.runtimeConfig.tools }),
+        ...(input.policy.profile.profile.runtimeConfig?.contextFileDiscovery === undefined
+          ? {}
+          : {
+              contextFileDiscovery: input.policy.profile.profile.runtimeConfig.contextFileDiscovery,
+            }),
       },
     };
     const fingerprint = reviewerSessionFingerprint(identity);
