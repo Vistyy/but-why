@@ -128,7 +128,7 @@ export const extractChangeId = (text: string): string | undefined =>
   text.match(changeIdPattern)?.[1];
 
 const submitCommandPattern =
-  /(?:^|[\n;|&(){}])\s*(?:(?:if|then|elif|else|while|until|do|!)\s+)*(?:just\s+by|pnpx\s+but-why|npx\s+-y\s+but-why)\s+(?:--json\s+)?change\s+submit(?:\s|$)/gu;
+  /(?:^|[\n;|&){}]|(?<!=)\()\s*(?:(?:if|then|elif|else|while|until|do|!)\s+)*(?:just\s+by|pnpx\s+but-why|npx\s+-y\s+but-why)\s+(?:--json\s+)?change\s+submit(?:\s|$)/gu;
 
 type ShellLineState = {
   readonly quote: "'" | '"' | undefined;
