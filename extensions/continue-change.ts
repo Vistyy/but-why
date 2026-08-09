@@ -151,13 +151,34 @@ const hereDocumentDeclarations = (
     }
     if (character === "#" && (index === 0 || /[\s;|&(){}]/u.test(line[index - 1] ?? ""))) break;
     if (character !== "<" || line[index + 1] !== "<") continue;
-    const match = line
-      .slice(index)
-      .match(/^<<(-)?\s*(?:'([^']+)'|"([^"]+)"|([A-Za-z_][A-Za-z0-9_]*))/u);
-    const delimiter = match?.[2] ?? match?.[3] ?? match?.[4];
-    if (match !== null && match !== undefined && delimiter !== undefined) {
-      declarations.push({ delimiter, stripTabs: match[1] === "-" });
-      index += match[0].length - 1;
+    let cursor = index + 2;
+    const stripTabs = line[cursor] === "-";
+    if (stripTabs) cursor += 1;
+    while (line[cursor] === " " || line[cursor] === "\t") cursor += 1;
+    let delimiter = "";
+    let delimiterQuote: "'" | '"' | undefined;
+    for (; cursor < line.length; cursor += 1) {
+      const delimiterCharacter = line[cursor] ?? "";
+      if (delimiterQuote !== undefined) {
+        if (delimiterCharacter === delimiterQuote) delimiterQuote = undefined;
+        else if (delimiterCharacter === "\\" && delimiterQuote === '"') {
+          cursor += 1;
+          delimiter += line[cursor] ?? "";
+        } else delimiter += delimiterCharacter;
+      } else if (delimiterCharacter === "'" || delimiterCharacter === '"') {
+        delimiterQuote = delimiterCharacter;
+      } else if (delimiterCharacter === "\\") {
+        cursor += 1;
+        delimiter += line[cursor] ?? "";
+      } else if (/[\s;|&()<>]/u.test(delimiterCharacter)) {
+        break;
+      } else {
+        delimiter += delimiterCharacter;
+      }
+    }
+    if (delimiter !== "") {
+      declarations.push({ delimiter, stripTabs });
+      index = cursor - 1;
     }
   }
   return declarations;
@@ -203,6 +224,14 @@ const visibleShellText = (rawCommand: string): string => {
         const closing = findCommandSubstitutionEnd(command, index + 2);
         if (closing !== undefined) {
           result += `( ${visibleShellText(command.slice(index + 2, closing))} )`;
+          index = closing;
+          continue;
+        }
+      }
+      if (quote === '"' && character === "`") {
+        const closing = command.indexOf("`", index + 1);
+        if (closing !== -1) {
+          result += `( ${visibleShellText(command.slice(index + 1, closing))} )`;
           index = closing;
           continue;
         }
