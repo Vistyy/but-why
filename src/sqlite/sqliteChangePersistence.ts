@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type * as SqlClient from "@effect/sql/SqlClient";
-import { Effect } from "effect";
+import { Effect, Schema } from "effect";
 
 import {
   type ChangeCleanup,
@@ -23,57 +23,33 @@ import type {
   RecordPublishedPullRequestInput,
   ReplacePendingChangePublicationInput,
 } from "../change/changeStore.js";
-import type {
-  ImplementationBlocker,
-  ImplementationBlockerHistory,
-} from "../change/implementationBlocker.js";
-import type { ImplementationDecision } from "../change/implementationDecision.js";
+import { implementationDecisionSnapshotSchema } from "../change/implementationDecision.js";
 import type { ObservedMergedChangeEvidence } from "../change/ownedPullRequestClassifier.js";
-import type { ReviewerSessionRecord } from "../change/reviewerSession/reviewerSession.js";
-import type { ReviewerTranscript } from "../change/reviewerSession/reviewerTranscript.js";
 import { RepositoryPersistedDataInvalid } from "../contracts/repositoryStorageError.js";
-import { storedPublicTaskId } from "../task/taskId.js";
 import { RepositorySql } from "./repositorySql.js";
-import { decodeSqliteAcceptanceContextSnapshot } from "./sqliteAcceptanceContextSnapshot.js";
-import { encodeSqliteCandidateValidationPolicy } from "./sqliteCandidateValidationPolicy.js";
-import { decodeSqliteChangePrepareFailure } from "./sqliteChangePreparation.js";
 import {
-  decodeSqliteChangePublication,
-  type SqliteChangePublicationRow,
-} from "./sqliteChangePublication.js";
-
-const columns = [
-  "id",
-  "repository_common_directory AS repositoryCommonDirectory",
-  "branch_ref AS branchRef",
-  "base_ref AS baseRef",
-  "base_remote_url AS baseRemoteUrl",
-  "task_id AS taskId",
-  "starting_commit AS startingCommit",
-  "worktree_path AS worktreePath",
-  "acceptance_context AS acceptanceContext",
-  "prepare_command AS prepareCommand",
-  "prepare_timeout_seconds AS prepareTimeoutSeconds",
-  "prepare_failure AS prepareFailure",
-  "publication_candidate_id AS publicationCandidateId",
-  "publication_validation_run_id AS publicationValidationRunId",
-  "publication_owner AS publicationOwner",
-  "publication_repo AS publicationRepo",
-  "publication_base_branch AS publicationBaseBranch",
-  "publication_remote_name AS publicationRemoteName",
-  "publication_head_branch AS publicationHeadBranch",
-  "publication_expected_head_sha AS publicationExpectedHeadSha",
-  "publication_pr_number AS publicationPrNumber",
-  "publication_pr_url AS publicationPrUrl",
-  "cleanup_state AS cleanupState",
-  "cleanup_blocking_reason AS cleanupBlockingReason",
-  "state",
-  "close_reason AS closeReason",
-  "cancel_reason AS cancelReason",
-  "created_at AS createdAt",
-  "updated_at AS updatedAt",
-  "closed_at AS closedAt",
-].join(", ");
+  decodeSqliteCandidateValidationPolicy,
+  encodeSqliteCandidateValidationPolicy,
+} from "./sqliteCandidateValidationPolicy.js";
+import {
+  changeReadColumns,
+  decodeChangeRow,
+  decodeImplementationBlockerHistory,
+  decodeImplementationDecisions,
+  decodeReviewerSession,
+  decodeReviewerTranscript,
+  implementationBlockerReadColumns,
+  latestResolvedBlockerId,
+  type UnknownChangeRow,
+  type UnknownImplementationBlockerRow,
+  type UnknownImplementationDecisionRow,
+  validateChangeRelationships,
+} from "./sqliteChangeReadModel.js";
+import {
+  decodePersisted,
+  decodeStoredNullableString,
+  decodeStoredString,
+} from "./sqliteTaskReadModel.js";
 
 export const openSqliteChangePersistence = (): Effect.Effect<
   ChangePersistence,
@@ -90,13 +66,15 @@ export const openSqliteChangePersistence = (): Effect.Effect<
         resolveBlocker(sql, input),
       ),
     listImplementationBlockers: (changeId) =>
-      repository.operation("list Implementation Blockers", (sql) => listBlockers(sql, changeId)),
+      repository.transaction("list Implementation Blockers", (sql) => listBlockers(sql, changeId)),
     getChangeById: (changeId) =>
       repository.transaction("read Change", (sql) => getById(sql, changeId)),
     getChangeByTaskId: (taskId) =>
       repository.transaction("read Change by Task", (sql) => getByTaskId(sql, taskId)),
     listImplementationDecisions: (changeId) =>
-      repository.operation("list Implementation Decisions", (sql) => listDecisions(sql, changeId)),
+      repository.transaction("list Implementation Decisions", (sql) =>
+        listDecisions(sql, changeId),
+      ),
     recordImplementationDecision: (input) =>
       repository.transactionImmediate("record Implementation Decision", (sql) =>
         recordDecision(sql, input),
@@ -120,18 +98,18 @@ export const openSqliteChangePersistence = (): Effect.Effect<
     recordCleanup: (input) =>
       repository.transactionImmediate("record Change cleanup", (sql) => recordCleanup(sql, input)),
     getReviewerSession: (changeId, producer) =>
-      repository.operation("read Reviewer Session", (sql) =>
-        Effect.map(
-          sql<ReviewerSessionRow>`SELECT change_id AS changeId, producer, fingerprint, session_reference AS sessionReference FROM reviewer_sessions WHERE change_id = ${changeId} AND producer = ${producer}`,
+      repository.transaction("read Reviewer Session", (sql) =>
+        Effect.flatMap(
+          sql<
+            Record<string, unknown>
+          >`SELECT change_id AS changeId, producer, fingerprint, session_reference AS sessionReference FROM reviewer_sessions WHERE change_id = ${changeId} AND producer = ${producer}`,
           (rows) => {
             const row = rows[0];
-            if (row === undefined) return undefined;
-            return {
-              changeId: row.changeId,
-              producer: row.producer,
-              fingerprint: row.fingerprint,
-              sessionReference: row.sessionReference,
-            } satisfies ReviewerSessionRecord;
+            return row === undefined
+              ? Effect.succeed(undefined)
+              : decodePersisted("read Reviewer Session", () =>
+                  decodeReviewerSession(row, changeId),
+                );
           },
         ),
       ),
@@ -154,18 +132,20 @@ export const openSqliteChangePersistence = (): Effect.Effect<
         Effect.asVoid(sql`DELETE FROM reviewer_sessions WHERE change_id = ${changeId}`),
       ),
     listReviewerTranscripts: (changeId) =>
-      repository.operation("list Reviewer Transcripts", (sql) =>
-        Effect.map(
-          sql<ReviewerTranscriptRow>`SELECT change_id AS changeId, producer, pi_session_id AS piSessionId, file_path AS filePath FROM reviewer_transcripts WHERE change_id = ${changeId} ORDER BY producer, file_path`,
+      repository.transaction("list Reviewer Transcripts", (sql) =>
+        Effect.flatMap(
+          sql<
+            Record<string, unknown>
+          >`SELECT change_id AS changeId, producer, pi_session_id AS piSessionId, file_path AS filePath FROM reviewer_transcripts WHERE change_id = ${changeId}`,
           (rows) =>
-            rows.map(
-              (row) =>
-                ({
-                  changeId: row.changeId,
-                  producer: row.producer,
-                  piSessionId: row.piSessionId,
-                  filePath: row.filePath,
-                }) satisfies ReviewerTranscript,
+            decodePersisted("list Reviewer Transcripts", () =>
+              rows
+                .map((row) => decodeReviewerTranscript(row, changeId))
+                .sort(
+                  (left, right) =>
+                    compareStoredStrings(left.producer, right.producer) ||
+                    compareStoredStrings(left.filePath, right.filePath),
+                ),
             ),
         ),
       ),
@@ -215,18 +195,16 @@ const raiseBlocker = (
     if (change === undefined) return { ok: false as const, code: "change_not_found" as const };
     if (change.state === changeState.closed)
       return { ok: false as const, code: "change_not_open" as const };
-    const activeRows =
-      yield* sql<ImplementationBlockerRow>`SELECT sequence, id, change_id AS changeId, reported_at AS reportedAt, content, resolved_at AS resolvedAt FROM implementation_blockers WHERE change_id = ${input.changeId} AND resolved_at IS NULL LIMIT 1`;
-    if (activeRows.length > 0) return { ok: false as const, code: "change_blocked" as const };
+    const history = yield* readBlockers(sql, input.changeId, "raise Implementation Blocker");
+    if (history.active !== null) return { ok: false as const, code: "change_blocked" as const };
     const id = randomUUID();
     yield* sql`INSERT INTO implementation_blockers (id, change_id, reported_at, content) VALUES (${id}, ${input.changeId}, ${input.now}, ${input.content})`;
     const updated = yield* requireChange(sql, input.changeId, "raise Implementation Blocker");
-    const rows =
-      yield* sql<ImplementationBlockerRow>`SELECT sequence, id, change_id AS changeId, reported_at AS reportedAt, content, resolved_at AS resolvedAt FROM implementation_blockers WHERE id = ${id}`;
-    const stored = rows[0];
+    const recorded = yield* readBlockers(sql, input.changeId, "raise Implementation Blocker");
+    const stored = recorded.blockers.find((blocker) => blocker.id === id);
     if (stored === undefined)
       return yield* invalidData("raise Implementation Blocker", "Blocker disappeared");
-    return { ok: true as const, change: updated, blocker: mapBlocker(stored) };
+    return { ok: true as const, change: updated, blocker: stored };
   });
 
 const resolveBlocker = (
@@ -238,130 +216,68 @@ const resolveBlocker = (
     if (change === undefined) return { ok: false as const, code: "change_not_found" as const };
     if (change.state === changeState.closed)
       return { ok: false as const, code: "no_active_blocker" as const };
-    const rows =
-      yield* sql<ImplementationBlockerRow>`SELECT sequence, id, change_id AS changeId, reported_at AS reportedAt, content, resolved_at AS resolvedAt FROM implementation_blockers WHERE change_id = ${input.changeId} AND resolved_at IS NULL LIMIT 1`;
-    const blocker = rows[0];
-    if (blocker === undefined) return { ok: false as const, code: "no_active_blocker" as const };
+    const history = yield* readBlockers(sql, input.changeId, "resolve Implementation Blocker");
+    const blocker = history.active;
+    if (blocker === null) return { ok: false as const, code: "no_active_blocker" as const };
     const resolutionId = randomUUID();
     yield* sql`UPDATE implementation_blockers SET resolved_at = ${input.now}, resolution_id = ${resolutionId}, resolution_recorded_at = ${input.now}, resolution_content = ${input.content} WHERE id = ${blocker.id}`;
     if (change.taskId !== null && change.acceptanceContext !== null) {
       yield* sql`UPDATE changes SET acceptance_context = json_set(acceptance_context, '$.resolutions', json_insert(COALESCE(json_extract(acceptance_context, '$.resolutions'), '[]'), '$[#]', ${input.content})), updated_at = ${input.now} WHERE id = ${input.changeId}`;
     }
     const updated = yield* requireChange(sql, input.changeId, "resolve Implementation Blocker");
-    return {
-      ok: true as const,
-      change: updated,
-      blocker: {
-        ...mapBlocker(blocker),
-        resolvedAt: input.now,
-        resolution: {
-          id: resolutionId,
-          blockerId: blocker.id,
-          recordedAt: input.now,
-          content: input.content,
-        },
-      },
-    };
+    const recorded = yield* readBlockers(sql, input.changeId, "resolve Implementation Blocker");
+    const resolved = recorded.blockers.find((item) => item.id === blocker.id);
+    if (resolved === undefined)
+      return yield* invalidData("resolve Implementation Blocker", "Blocker disappeared");
+    return { ok: true as const, change: updated, blocker: resolved };
   });
 
 const listBlockers = (sql: SqlClient.SqlClient, changeId: string) =>
   Effect.gen(function* () {
-    const exists = yield* sql`SELECT id FROM changes WHERE id = ${changeId}`;
+    const exists = yield* sql<
+      Record<string, unknown>
+    >`SELECT id FROM changes WHERE id = ${changeId}`;
     if (exists.length === 0) return undefined;
-    const rows = yield* sql<
-      ImplementationBlockerRow & {
-        readonly resolutionId: string | null;
-        readonly resolutionRecordedAt: string | null;
-        readonly resolutionContent: string | null;
-      }
-    >`SELECT sequence, id, change_id AS changeId, reported_at AS reportedAt, content, resolved_at AS resolvedAt, resolution_id AS resolutionId, resolution_recorded_at AS resolutionRecordedAt, resolution_content AS resolutionContent FROM implementation_blockers WHERE change_id = ${changeId} ORDER BY sequence`;
-    const blockers = rows.map((row) => {
-      if (
-        row.resolutionId === null ||
-        row.resolutionRecordedAt === null ||
-        row.resolutionContent === null
-      ) {
-        return { ...mapBlocker(row), resolution: null };
-      }
-      return {
-        ...mapBlocker(row),
-        resolution: {
-          id: row.resolutionId,
-          blockerId: row.id,
-          recordedAt: row.resolutionRecordedAt,
-          content: row.resolutionContent,
-        },
-      };
-    });
-    return {
-      blockers,
-      resolutions: blockers.flatMap((blocker) =>
-        blocker.resolution === null ? [] : [blocker.resolution],
-      ),
-      active: blockers.find((blocker) => blocker.resolvedAt === null) ?? null,
-    } satisfies ImplementationBlockerHistory;
+    yield* decodePersisted("list Implementation Blockers", () =>
+      decodeStoredString(exists[0]?.["id"], "Change ID"),
+    );
+    return yield* readBlockers(sql, changeId, "list Implementation Blockers");
   });
 
-const mapBlocker = (row: ImplementationBlockerRow): ImplementationBlocker => ({
-  id: row.id,
-  changeId: row.changeId,
-  sequence: Number(row.sequence),
-  reportedAt: row.reportedAt,
-  content: row.content,
-  resolvedAt: row.resolvedAt,
-  resolution: null,
-});
-
-type ImplementationBlockerRow = {
-  readonly sequence: number | bigint;
-  readonly id: string;
-  readonly changeId: string;
-  readonly reportedAt: string;
-  readonly content: string;
-  readonly resolvedAt: string | null;
-};
+const readBlockers = (sql: SqlClient.SqlClient, changeId: string, operationName: string) =>
+  Effect.flatMap(
+    sql.unsafe<UnknownImplementationBlockerRow>(
+      `SELECT ${implementationBlockerReadColumns} FROM implementation_blockers WHERE change_id = ?`,
+      [changeId],
+    ),
+    (rows) =>
+      decodePersisted(operationName, () => decodeImplementationBlockerHistory(rows, changeId)),
+  );
 
 const getById = (sql: SqlClient.SqlClient, changeId: string) =>
   Effect.flatMap(
-    sql.unsafe<ChangeRow>(`SELECT ${columns} FROM changes WHERE id = ?`, [changeId]),
+    sql.unsafe<UnknownChangeRow>(`SELECT ${changeReadColumns} FROM changes WHERE id = ?`, [
+      changeId,
+    ]),
     (rows) => mapRow(rows[0], "read Change", sql),
   );
 
 const listDecisions = (sql: SqlClient.SqlClient, changeId: string) =>
-  Effect.map(
-    sql<{
-      readonly id: string;
-      readonly changeId: string;
-      readonly sequence: number | bigint;
-      readonly recordedAt: string;
-      readonly choice: string;
-      readonly rationale: string;
-    }>`
-      SELECT id, change_id AS changeId, sequence, recorded_at AS recordedAt, choice, rationale
+  Effect.flatMap(
+    sql<UnknownImplementationDecisionRow>`
+      SELECT id, change_id AS changeId, CAST(sequence AS TEXT) AS sequence,
+        typeof(sequence) AS sequenceType, recorded_at AS recordedAt, choice, rationale
       FROM implementation_decisions WHERE change_id = ${changeId}
-      ORDER BY sequence ASC
     `,
     (rows) =>
-      rows.map(
-        (row): ImplementationDecision => ({
-          id: row.id,
-          changeId: row.changeId,
-          sequence: Number(row.sequence),
-          recordedAt: row.recordedAt,
-          choice: row.choice,
-          rationale: row.rationale,
-        }),
+      decodePersisted("list Implementation Decisions", () =>
+        decodeImplementationDecisions(rows, changeId),
       ),
   );
 
 const recordDecision = (sql: SqlClient.SqlClient, input: RecordImplementationDecisionInput) =>
   Effect.gen(function* () {
-    const changes = yield* sql<{
-      readonly state: string;
-    }>`
-      SELECT state FROM changes WHERE id = ${input.changeId}
-    `;
-    const change = changes[0];
+    const change = yield* getById(sql, input.changeId);
     if (change === undefined) return { ok: false as const, code: "change_not_found" as const };
     if (change.state !== "open") return { ok: false as const, code: "change_not_open" as const };
     const id = randomUUID();
@@ -378,7 +294,9 @@ const recordDecision = (sql: SqlClient.SqlClient, input: RecordImplementationDec
 
 const getByTaskId = (sql: SqlClient.SqlClient, taskId: string) =>
   Effect.flatMap(
-    sql.unsafe<ChangeRow>(`SELECT ${columns} FROM changes WHERE task_id = ?`, [taskId]),
+    sql.unsafe<UnknownChangeRow>(`SELECT ${changeReadColumns} FROM changes WHERE task_id = ?`, [
+      taskId,
+    ]),
     (rows) => mapRow(rows[0], "read Change by Task", sql),
   );
 
@@ -388,45 +306,87 @@ const getPassingPublicationEvidence = (
   authority: CurrentPublicationAuthority,
 ) =>
   Effect.gen(function* () {
+    const change = yield* getById(sql, changeId);
+    if (change === undefined || change.publication === null) return undefined;
+    if (change.publication.pullRequest === null) return undefined;
     const rows = yield* sql<PassingPublicationEvidenceRow>`
-      SELECT
-        candidate.id AS candidateId,
-        run.id AS validationRunId,
-        candidate.change_base_sha AS changeBaseSha,
-        candidate.head_sha AS headSha,
+      SELECT candidate.id AS candidateId, run.id AS validationRunId,
+        candidate.change_base_sha AS changeBaseSha, candidate.head_sha AS headSha,
         run.policy_snapshot AS policySnapshot,
-        run.implementation_decisions AS implementationDecisions
-      FROM changes AS change
-      JOIN candidates AS candidate
-        ON candidate.id = change.publication_candidate_id
-        AND candidate.change_id = change.id
-      JOIN candidate_validation_runs AS run
-        ON run.id = change.publication_validation_run_id
-        AND run.candidate_id = candidate.id
-      WHERE change.id = ${changeId}
-        AND change.publication_pr_number IS NOT NULL
-        AND run.state = 'complete'
-        AND run.outcome = 'passed'
-        AND candidate.change_base_sha = ${authority.changeBaseSha}
-        AND (
-          (run.latest_resolved_blocker_id IS NULL AND NOT EXISTS (
-            SELECT 1
-            FROM implementation_blockers AS blocker
-            WHERE blocker.change_id = change.id
-              AND blocker.resolved_at IS NOT NULL
-          ))
-          OR run.latest_resolved_blocker_id = (
-            SELECT blocker.id
-            FROM implementation_blockers AS blocker
-            WHERE blocker.change_id = change.id
-              AND blocker.resolved_at IS NOT NULL
-            ORDER BY blocker.resolved_at DESC, blocker.sequence DESC
-            LIMIT 1
-          )
-        )
+        run.implementation_decisions AS implementationDecisions,
+        run.state, run.outcome, run.latest_resolved_blocker_id AS latestResolvedBlockerId
+      FROM candidates AS candidate
+      JOIN candidate_validation_runs AS run ON run.id = ${change.publication.validationRunId}
+      WHERE candidate.id = ${change.publication.candidateId}
     `;
     const row = rows[0];
-    if (row === undefined) return undefined;
+    if (row === undefined) {
+      return yield* invalidData(
+        "get passing publication evidence",
+        "Publication identity disappeared",
+      );
+    }
+    const decoded = yield* decodePersisted("get passing publication evidence", () => {
+      const state = decodeStoredString(row.state, "Validation Run state");
+      const outcome = decodeStoredNullableString(row.outcome, "Validation Run outcome");
+      if (state !== "running" && state !== "complete") {
+        throw new Error("Stored Validation Run state is unsupported");
+      }
+      if (
+        outcome !== null &&
+        outcome !== "passed" &&
+        outcome !== "blocked" &&
+        outcome !== "tooling_failed"
+      ) {
+        throw new Error("Stored Validation Run outcome is unsupported");
+      }
+      if ((state === "running" && outcome !== null) || (state === "complete" && outcome === null)) {
+        throw new Error("Stored Validation Run lifecycle relationship is inconsistent");
+      }
+      const policySnapshot = decodeStoredString(row.policySnapshot, "Validation Policy Snapshot");
+      decodeSqliteCandidateValidationPolicy(policySnapshot);
+      const implementationDecisions = decodeStoredString(
+        row.implementationDecisions,
+        "Implementation Decision Snapshot",
+      );
+      Schema.decodeUnknownSync(Schema.parseJson(implementationDecisionSnapshotSchema), {
+        onExcessProperty: "error",
+      })(implementationDecisions);
+      return {
+        candidateId: decodeStoredString(row.candidateId, "publication Candidate ID"),
+        validationRunId: decodeStoredString(row.validationRunId, "publication Validation Run ID"),
+        changeBaseSha: decodeStoredString(row.changeBaseSha, "Candidate Change Base SHA"),
+        headSha: decodeStoredString(row.headSha, "Candidate head SHA"),
+        policySnapshot,
+        implementationDecisions,
+        state,
+        outcome,
+        latestResolvedBlockerId: decodeStoredNullableString(
+          row.latestResolvedBlockerId,
+          "Validation Run latest resolved Blocker ID",
+        ),
+      };
+    });
+    const blockerHistory = yield* readBlockers(sql, change.id, "get passing publication evidence");
+    if (
+      decoded.latestResolvedBlockerId !== null &&
+      !blockerHistory.blockers.some(
+        (blocker) => blocker.id === decoded.latestResolvedBlockerId && blocker.resolution !== null,
+      )
+    ) {
+      return yield* invalidData(
+        "get passing publication evidence",
+        "Validation Run latest resolved Blocker belongs to another Change",
+      );
+    }
+    if (
+      decoded.state !== "complete" ||
+      decoded.outcome !== "passed" ||
+      decoded.changeBaseSha !== authority.changeBaseSha ||
+      decoded.latestResolvedBlockerId !== latestResolvedBlockerId(blockerHistory)
+    ) {
+      return undefined;
+    }
     const expectedPolicySnapshot = yield* Effect.try({
       try: () => encodeSqliteCandidateValidationPolicy(authority.policy),
       catch: (cause) =>
@@ -437,37 +397,62 @@ const getPassingPublicationEvidence = (
     });
     const expectedDecisionsSnapshot = JSON.stringify(authority.implementationDecisions ?? []);
     if (
-      row.policySnapshot !== expectedPolicySnapshot ||
-      row.implementationDecisions !== expectedDecisionsSnapshot
+      decoded.policySnapshot !== expectedPolicySnapshot ||
+      decoded.implementationDecisions !== expectedDecisionsSnapshot
     ) {
       return undefined;
     }
     return {
-      candidateId: row.candidateId,
-      validationRunId: row.validationRunId,
-      changeBaseSha: row.changeBaseSha,
-      headSha: row.headSha,
+      candidateId: decoded.candidateId,
+      validationRunId: decoded.validationRunId,
+      changeBaseSha: decoded.changeBaseSha,
+      headSha: decoded.headSha,
     } satisfies ChangePublicationEvidence;
   });
 
 const listChanges = (sql: SqlClient.SqlClient, input: ListChangesInput) =>
   Effect.flatMap(
-    sql.unsafe<ChangeRow>(
-      `SELECT ${columns} FROM changes WHERE repository_common_directory = ? AND (? = 1 OR state = 'open') ORDER BY created_at ASC, id ASC`,
-      [input.repositoryCommonDirectory, input.includeClosed ? 1 : 0],
+    sql.unsafe<UnknownChangeRow>(
+      `SELECT ${changeReadColumns} FROM changes WHERE repository_common_directory = ?`,
+      [input.repositoryCommonDirectory],
     ),
-    (rows) => Effect.forEach(rows, (row) => mapRequiredRow(row, "list Changes", sql)),
+    (rows) =>
+      Effect.map(
+        Effect.forEach(rows, (row) => mapRequiredRow(row, "list Changes", sql)),
+        (changes) =>
+          changes
+            .filter((change) => input.includeClosed || change.state === changeState.open)
+            .sort(compareChanges),
+      ),
   );
 
 const listForReconciliation = (sql: SqlClient.SqlClient, commonDirectory: string) =>
   Effect.flatMap(
-    sql.unsafe<ChangeRow>(
-      `SELECT ${columns} FROM changes WHERE repository_common_directory = ? AND ((state = 'open' AND publication_pr_number IS NOT NULL) OR (state = 'closed' AND cleanup_state = 'pending')) ORDER BY created_at ASC, id ASC`,
+    sql.unsafe<UnknownChangeRow>(
+      `SELECT ${changeReadColumns} FROM changes WHERE repository_common_directory = ?`,
       [commonDirectory],
     ),
     (rows) =>
-      Effect.forEach(rows, (row) => mapRequiredRow(row, "list Changes for reconciliation", sql)),
+      Effect.map(
+        Effect.forEach(rows, (row) => mapRequiredRow(row, "list Changes for reconciliation", sql)),
+        (changes) =>
+          changes
+            .filter(
+              (change) =>
+                (change.state === changeState.open &&
+                  change.publication !== null &&
+                  change.publication.pullRequest !== null) ||
+                (change.state === changeState.closed && change.cleanup.state === "pending"),
+            )
+            .sort(compareChanges),
+      ),
   );
+
+const compareChanges = (left: ChangeRecord, right: ChangeRecord): number =>
+  compareStoredStrings(left.createdAt, right.createdAt) || compareStoredStrings(left.id, right.id);
+
+const compareStoredStrings = (left: string, right: string): number =>
+  left === right ? 0 : left < right ? -1 : 1;
 
 const beginPublication = (sql: SqlClient.SqlClient, input: BeginChangePublicationInput) =>
   Effect.gen(function* () {
@@ -713,86 +698,44 @@ const sameTarget = (
   left.baseBranch === right.baseBranch &&
   left.remoteName === right.remoteName;
 
-const mapRequiredRow = (row: ChangeRow, operationName: string, sql: SqlClient.SqlClient) =>
+const mapRequiredRow = (row: UnknownChangeRow, operationName: string, sql: SqlClient.SqlClient) =>
   Effect.flatMap(mapRow(row, operationName, sql), (change) =>
     change === undefined
       ? invalidData(operationName, "Change row disappeared")
       : Effect.succeed(change),
   );
-const mapRow = (row: ChangeRow | undefined, operationName: string, sql: SqlClient.SqlClient) =>
+
+const mapRow = (
+  row: UnknownChangeRow | undefined,
+  operationName: string,
+  sql: SqlClient.SqlClient,
+) =>
   row === undefined
     ? Effect.succeed(undefined)
     : Effect.gen(function* () {
-        const decisions = yield* listDecisions(sql, row.id);
-        const activeRows =
-          yield* sql<ImplementationBlockerRow>`SELECT sequence, id, change_id AS changeId, reported_at AS reportedAt, content, resolved_at AS resolvedAt FROM implementation_blockers WHERE change_id = ${row.id} AND resolved_at IS NULL LIMIT 1`;
-        return yield* Effect.try({
-          try: (): ChangeRecord => ({
-            id: row.id,
-            repositoryCommonDirectory: row.repositoryCommonDirectory,
-            branchRef: row.branchRef,
-            baseRef: row.baseRef,
-            baseRemoteUrl: row.baseRemoteUrl,
-            taskId: row.taskId === null ? null : storedPublicTaskId(row.taskId),
-            startingCommit: row.startingCommit,
-            worktreePath: row.worktreePath,
-            acceptanceContext:
-              row.acceptanceContext === null
-                ? null
-                : decodeSqliteAcceptanceContextSnapshot(row.acceptanceContext),
-            implementationDecisions: decisions,
-            prepare:
-              row.prepareCommand === null || row.prepareTimeoutSeconds === null
-                ? null
-                : { command: row.prepareCommand, timeoutSeconds: row.prepareTimeoutSeconds },
-            prepareFailure:
-              row.prepareFailure === null
-                ? null
-                : decodeSqliteChangePrepareFailure(row.prepareFailure),
-            publication: decodeSqliteChangePublication(row),
-            cleanup: { state: row.cleanupState, blockingReason: row.cleanupBlockingReason },
-            state: row.state,
-            activeBlocker: activeRows[0] === undefined ? null : mapBlocker(activeRows[0]),
-            closeReason: row.closeReason,
-            cancelReason: row.cancelReason,
-            createdAt: row.createdAt,
-            updatedAt: row.updatedAt,
-            closedAt: row.closedAt,
-          }),
-          catch: (cause) => new RepositoryPersistedDataInvalid({ operationName, cause }),
-        });
+        const base = yield* decodePersisted(operationName, () => decodeChangeRow(row));
+        const decisions = yield* listDecisions(sql, base.id);
+        const blockers = yield* readBlockers(sql, base.id, operationName);
+        const change: ChangeRecord = {
+          ...base,
+          implementationDecisions: decisions,
+          activeBlocker: blockers.active,
+        };
+        yield* validateChangeRelationships(sql, change, operationName);
+        return change;
       });
+
 const invalidData = (operationName: string, message: string) =>
   Effect.fail(new RepositoryPersistedDataInvalid({ operationName, cause: new Error(message) }));
 
-type ReviewerSessionRow = {
-  readonly changeId: string;
-  readonly producer: string;
-  readonly fingerprint: string;
-  readonly sessionReference: string;
+type PassingPublicationEvidenceRow = {
+  readonly candidateId: unknown;
+  readonly validationRunId: unknown;
+  readonly changeBaseSha: unknown;
+  readonly headSha: unknown;
+  readonly policySnapshot: unknown;
+  readonly implementationDecisions: unknown;
+  readonly state: unknown;
+  readonly outcome: unknown;
+  readonly latestResolvedBlockerId: unknown;
 };
-
-type ReviewerTranscriptRow = {
-  readonly changeId: string;
-  readonly producer: string;
-  readonly piSessionId: string;
-  readonly filePath: string;
-};
-
-type PassingPublicationEvidenceRow = ChangePublicationEvidence & {
-  readonly policySnapshot: string;
-  readonly implementationDecisions: string;
-};
-
-type ChangeRow = Omit<
-  ChangeRecord,
-  "taskId" | "acceptanceContext" | "prepare" | "prepareFailure" | "publication"
-> & {
-  readonly taskId: string | null;
-  readonly acceptanceContext: string | null;
-  readonly prepareCommand: string | null;
-  readonly prepareTimeoutSeconds: number | null;
-  readonly prepareFailure: string | null;
-  readonly cleanupState: ChangeCleanup["state"];
-  readonly cleanupBlockingReason: string | null;
-} & SqliteChangePublicationRow;

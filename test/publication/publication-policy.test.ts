@@ -314,7 +314,9 @@ layer(publicationTemplateLayer)("Candidate publication", (it) => {
           "attach Task publication metadata",
           (sql) => sql`
         UPDATE changes
-        SET task_id = 'BY-1', acceptance_context = ${JSON.stringify({ version: 1, title: "Publish exact Candidate", description: "Description" })}
+        SET task_id = 'BY-1',
+            acceptance_context = ${JSON.stringify({ version: 1, title: "Publish exact Candidate", description: "Description" })},
+            base_remote_url = 'https://github.test/acme/widgets.git'
         WHERE id = ${fixture.captured.changeId}
       `,
         );
