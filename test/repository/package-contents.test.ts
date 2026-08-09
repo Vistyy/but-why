@@ -9,15 +9,19 @@ import {
   writeFileSync,
 } from "node:fs";
 import { dirname, join } from "node:path";
+import { Effect } from "effect";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { createGitRepo, repoRoot } from "../support/by-cli.js";
+import { createChangeImplementFixture } from "../support/changeImplementFixture.js";
 import { runTestProcess } from "../support/testProcess.js";
 import {
   acquireTestWorkspace,
   createTestWorkspace,
   releaseTestWorkspace,
 } from "../support/testWorkspace.js";
+
+const packageProcessTimeoutMs = 30_000;
 
 type PackedPackageMetadata = {
   readonly id: string;
@@ -74,10 +78,16 @@ describe("release package boundary", () => {
     writeFileSync(join(root, "justfile"), "default:\n");
     symlinkSync(join(repoRoot, "node_modules"), join(root, "node_modules"));
 
-    const build = runTestProcess("pnpm", ["run", "build"], { cwd: root });
+    const build = runTestProcess("pnpm", ["run", "build"], {
+      cwd: root,
+      timeout: packageProcessTimeoutMs,
+    });
     expect(build.error).toBeUndefined();
     expect(build.status, build.stderr || build.stdout).toBe(0);
-    const pack = runTestProcess("npm", ["pack", "--ignore-scripts", "--json"], { cwd: root });
+    const pack = runTestProcess("npm", ["pack", "--ignore-scripts", "--json"], {
+      cwd: root,
+      timeout: packageProcessTimeoutMs,
+    });
     expect(pack.error).toBeUndefined();
     expect(pack.status, pack.stderr || pack.stdout).toBe(0);
     const [metadata] = JSON.parse(pack.stdout) as readonly (PackedPackageMetadata & {
@@ -98,7 +108,7 @@ describe("release package boundary", () => {
         installedRoot,
         join(root, metadata.filename),
       ],
-      { cwd: root },
+      { cwd: root, timeout: packageProcessTimeoutMs },
     );
     expect(install.status, install.stderr || install.stdout).toBe(0);
     prepared = {
@@ -185,13 +195,14 @@ describe("release package boundary", () => {
         if (target !== undefined) staticEntryQueue.push(join(dirname(current), target));
       }
     }
-    for (const forbidden of ["/cli/task/", "/cli/change/", "/cli/validationRun/"]) {
-      expect([...staticEntryFiles].every((file) => !file.includes(forbidden))).toBe(true);
-    }
     const dynamicTargets = [...entrySource.matchAll(/import\([`"](\.\/[^`"]+)[`"]\)/g)].flatMap(
       ([, target]) => (target === undefined ? [] : [target]),
     );
     expect(dynamicTargets.length).toBeGreaterThan(10);
+    const dynamicTargetFiles = new Set(
+      dynamicTargets.map((target) => join(prepared.root, "dist", target.slice(2))),
+    );
+    expect([...staticEntryFiles].every((file) => !dynamicTargetFiles.has(file))).toBe(true);
     const packedFiles = new Set(prepared.metadata.files.map((file) => file.path));
     expect(
       dynamicTargets.every(
@@ -202,12 +213,23 @@ describe("release package boundary", () => {
     ).toBe(true);
   });
 
-  it("loads installed continuation assets and reports invalid or missing extensions truthfully", () => {
+  it("loads installed continuation assets and reports invalid or missing extensions truthfully", async () => {
     const { installedPackage, installedRoot: installed } = prepared;
     expect(readFileSync(join(installedPackage, "extensions/continue-change.ts"), "utf8")).toContain(
       "continue-change",
     );
     const repository = createGitRepo();
+    mkdirSync(join(repository, ".git", "but-why"), { recursive: true });
+    mkdirSync(join(repository, ".but-why"));
+    writeFileSync(join(repository, ".but-why", "config.json"), '{"taskPrefix":"BY"}\n');
+    const change = await Effect.runPromise(
+      createChangeImplementFixture(repository, {
+        managedRepoConfig: {
+          taskPrefix: "BY",
+          agentEnvironment: { command: ["nix", "develop", "-c"] },
+        },
+      }),
+    );
     const tools = createTestWorkspace();
     writeFileSync(
       join(tools, "gh"),
@@ -251,26 +273,6 @@ exit 1
       BY_FAKE_CAPTURE: join(repository, "herdr-capture.txt"),
     };
     const isolatedHome = createTestWorkspace();
-    const init = runTestProcess(bin, ["init", "--task-prefix", "BY"], {
-      cwd: repository,
-      env,
-      isolatedHome,
-    });
-    expect(init.status, `${init.stdout}${init.stderr}`).toBe(0);
-    for (const args of [
-      ["config", "user.name", "But Why Test"],
-      ["config", "user.email", "but-why@example.test"],
-      ["add", ".but-why/config.json", ".gitignore"],
-      ["commit", "-m", "Initialize But Why"],
-      ["branch", "-M", "main"],
-      ["config", `url.${repository}.insteadOf`, "https://github.com/acme/repo.git"],
-      ["remote", "add", "origin", "https://github.com/acme/repo.git"],
-      ["update-ref", "refs/remotes/origin/main", "refs/heads/main"],
-      ["symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/main"],
-    ]) {
-      const git = runTestProcess("git", args, { cwd: repository, isolatedHome });
-      expect(git.status, `${git.stdout}${git.stderr}`).toBe(0);
-    }
     mkdirSync(join(isolatedHome, ".config", "but-why"), { recursive: true });
     writeFileSync(
       join(isolatedHome, ".config", "but-why", "config.json"),
@@ -279,24 +281,15 @@ exit 1
         agentProfiles: { test: { agentRuntime: "pi", runtimeConfig: { model: "test/model" } } },
       })}\n`,
     );
-    const started = runTestProcess(bin, ["--json", "change", "start"], {
-      cwd: repository,
-      env,
-      isolatedHome,
-    });
-    expect(started.status, `${started.stdout}${started.stderr}`).toBe(0);
-    const change = JSON.parse(started.stdout) as {
-      readonly change: { readonly id: string };
-      readonly worktreePath: string;
-    };
-    const implement = runTestProcess(bin, ["--json", "change", "implement", change.change.id], {
+    const implement = runTestProcess(bin, ["--json", "change", "implement", change.id], {
       cwd: repository,
       env: {
         ...env,
         BY_FAKE_WORKTREE: change.worktreePath,
-        BY_FAKE_SESSION: `change-${change.change.id.slice(0, 8)}`,
+        BY_FAKE_SESSION: `change-${change.id.slice(0, 8)}`,
       },
       isolatedHome,
+      timeout: packageProcessTimeoutMs,
     });
     expect(implement.status, `${implement.stdout}${implement.stderr}`).toBe(0);
     const startArgs = readFileSync(`${env.BY_FAKE_CAPTURE}.args`, "utf8");
@@ -316,19 +309,16 @@ exit 1
 
     writeFileSync(extension, "export default 42;\n");
     rmSync(env.BY_FAKE_CAPTURE);
-    const invalidExtension = runTestProcess(
-      bin,
-      ["--json", "change", "implement", change.change.id],
-      {
-        cwd: repository,
-        env: {
-          ...env,
-          BY_FAKE_WORKTREE: change.worktreePath,
-          BY_FAKE_SESSION: `change-${change.change.id.slice(0, 8)}`,
-        },
-        isolatedHome,
+    const invalidExtension = runTestProcess(bin, ["--json", "change", "implement", change.id], {
+      cwd: repository,
+      env: {
+        ...env,
+        BY_FAKE_WORKTREE: change.worktreePath,
+        BY_FAKE_SESSION: `change-${change.id.slice(0, 8)}`,
       },
-    );
+      isolatedHome,
+      timeout: packageProcessTimeoutMs,
+    });
     expect(invalidExtension.status).toBe(1);
     expect(JSON.parse(invalidExtension.stdout)).toMatchObject({
       error: {
@@ -341,19 +331,16 @@ exit 1
     expect(existsSync(env.BY_FAKE_CAPTURE)).toBe(false);
 
     rmSync(extension);
-    const missingExtension = runTestProcess(
-      bin,
-      ["--json", "change", "implement", change.change.id],
-      {
-        cwd: repository,
-        env: {
-          ...env,
-          BY_FAKE_WORKTREE: change.worktreePath,
-          BY_FAKE_SESSION: `change-${change.change.id.slice(0, 8)}`,
-        },
-        isolatedHome,
+    const missingExtension = runTestProcess(bin, ["--json", "change", "implement", change.id], {
+      cwd: repository,
+      env: {
+        ...env,
+        BY_FAKE_WORKTREE: change.worktreePath,
+        BY_FAKE_SESSION: `change-${change.id.slice(0, 8)}`,
       },
-    );
+      isolatedHome,
+      timeout: packageProcessTimeoutMs,
+    });
     expect(missingExtension.status).toBe(1);
     expect(JSON.parse(missingExtension.stdout)).toMatchObject({
       error: {
