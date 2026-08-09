@@ -8,10 +8,7 @@ import type { ReviewerAgentRuntime } from "../../agent/reviewerAgentRuntime.js";
 import type { RepositoryStorageError } from "../../contracts/repositoryStorageError.js";
 import { disposableWorktreePath } from "../../workspace/workspaceGit.js";
 import type { AcceptanceReviewPolicy } from "../acceptanceReview/acceptanceReviewConfig.js";
-import {
-  type ReviewerContinuityEvidence,
-  runAcceptanceReviewPhase,
-} from "../acceptanceReview/runAcceptanceReviewPhase.js";
+import { runAcceptanceReviewPhase } from "../acceptanceReview/runAcceptanceReviewPhase.js";
 import type { ImplementationBlockerHistory } from "../implementationBlocker.js";
 import type { ImplementationDecision } from "../implementationDecision.js";
 import type { ReviewerSessionStore } from "../reviewerSession/reviewerSession.js";
@@ -34,6 +31,7 @@ import {
 import { validationTempRefName } from "../validation/validationWorkspacePath.js";
 import type { AcceptanceContextSnapshotV1 } from "../validationRun/acceptanceContextSnapshot.js";
 import { maxValidationArtifactBytes } from "../validationRun/artifactFiles.js";
+import type { ReviewerExecutionEvidence } from "../validationRun/reviewerArtifacts.js";
 import type { CandidateValidationOutcome } from "./candidateValidationRunStore.js";
 
 export type CandidateValidationPolicy = {
@@ -80,7 +78,7 @@ type ValidateCandidateResult =
       readonly reused: boolean;
       readonly validationRunId: string;
       readonly outcome: CandidateValidationOutcome;
-      readonly reviewerEvidence?: ReviewerContinuityEvidence;
+      readonly reviewerEvidence?: ReviewerExecutionEvidence;
       readonly specialistReviewerEvidence?: readonly SpecialistReviewerContinuityEvidence[];
     }
   | {
@@ -93,7 +91,7 @@ type ValidateCandidateResult =
       readonly ok: false;
       readonly validationRunId: string;
       readonly outcome: "tooling_failed";
-      readonly reviewerEvidence?: ReviewerContinuityEvidence;
+      readonly reviewerEvidence?: ReviewerExecutionEvidence;
       readonly specialistReviewerEvidence?: readonly SpecialistReviewerContinuityEvidence[];
     };
 
@@ -344,7 +342,7 @@ const runCandidatePhases = (
 ): Effect.Effect<
   {
     readonly validationFindings: 0 | 1;
-    readonly reviewerEvidence?: ReviewerContinuityEvidence;
+    readonly reviewerEvidence?: ReviewerExecutionEvidence;
     readonly specialistReviewerEvidence?: readonly SpecialistReviewerContinuityEvidence[];
     readonly toolingFailures?: readonly ValidationToolingFailure[];
   },
@@ -353,7 +351,7 @@ const runCandidatePhases = (
   Effect.fn("CandidateValidation.runPhases")(function* () {
     const agentEnvironment = input.policy.agentEnvironment;
     const resourceRoot = activeWorkspace.worktreePath;
-    let reviewerEvidence: ReviewerContinuityEvidence | undefined;
+    let reviewerEvidence: ReviewerExecutionEvidence | undefined;
     const sessionOptions = {
       ...(dependencies.sessionStore === undefined
         ? {}
