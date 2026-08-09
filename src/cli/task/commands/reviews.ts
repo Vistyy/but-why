@@ -24,35 +24,43 @@ export const runReviewsCommand = (
   return withTasks(environment, false, (tasks) => {
     const taskId = resolveTaskId(tasks, parsed.taskId);
     if (!taskId.ok) return Effect.succeed(taskId.result);
-    return Effect.flatMap(tasks.getTaskById(taskId.taskId), (task) =>
-      task === undefined
-        ? Effect.succeed(taskNotFound(taskId.taskId))
-        : loaded.inspection.listReviewsForTask(taskId.taskId).pipe(
-            Effect.map((reviews) =>
-              reviews.length === 0
-                ? success({ taskId: taskId.taskId, reviews: [] })
-                : (() => {
-                    const latest = reviews[reviews.length - 1];
-                    const needsRetry =
-                      latest !== undefined &&
-                      task.state === "new" &&
-                      latest.state === "complete" &&
-                      latest.outcome === "tooling_failed";
-                    return success({
-                      taskId: taskId.taskId,
-                      reviews: reviews.map((review) => reviewSummary(review)),
-                      ...(needsRetry
-                        ? {
-                            nextAction: `Tooling failed. Retry with \`by task submit ${taskId.taskId}\`.`,
-                          }
-                        : {}),
-                    });
-                  })(),
-            ),
-            Effect.catchAll((error) => Effect.succeed(repositoryStorageErrorResult(error))),
-          ),
-    );
+    return Effect.gen(function* () {
+      const task = yield* tasks.getTaskById(taskId.taskId);
+      if (task === undefined) return taskNotFound(taskId.taskId);
+      const reviews = yield* loaded.inspection.listReviewsForTask(taskId.taskId);
+      const active = yield* loaded.inspection.activeForTask(taskId.taskId);
+      const latest = reviews[reviews.length - 1];
+      const nextAction = nextActionForHistory(task.state, active?.reviewId, latest, taskId.taskId);
+      return success({
+        taskId: taskId.taskId,
+        reviews: reviews.map((review) => reviewSummary(review)),
+        ...(nextAction === undefined ? {} : { nextAction }),
+      });
+    }).pipe(Effect.catchAll((error) => Effect.succeed(repositoryStorageErrorResult(error))));
   });
+};
+
+// A valid next action depends on the current Task state, the current Active
+// Review, and the latest Review outcome. Submit and retry actions are valid
+// only while the Task is New; an Active Review owns submission until it ends.
+const nextActionForHistory = (
+  state: string,
+  activeReviewId: string | undefined,
+  latest: { readonly state: string; readonly outcome: string | null } | undefined,
+  taskId: string,
+): string | undefined => {
+  if (state === "todo") return `by change start --task ${taskId}`;
+  if (state !== "new") return undefined;
+  if (activeReviewId !== undefined) {
+    return `Active Task Review ${activeReviewId} is in progress. Abandon with \`by task-review abandon ${activeReviewId} --reason <reason>\` if its Submission process stopped.`;
+  }
+  if (latest?.state === "complete" && latest.outcome === "blocked") {
+    return `Fix the Findings, then run \`by task submit ${taskId}\`.`;
+  }
+  if (latest?.state === "complete" && latest.outcome === "tooling_failed") {
+    return `Tooling failed. Retry with \`by task submit ${taskId}\`.`;
+  }
+  return `by task submit ${taskId}`;
 };
 
 export const reviewSummary = (review: {

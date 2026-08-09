@@ -135,6 +135,11 @@ describe("by task submission CLI", () => {
         };
         expect(show.taskReview?.latest?.outcome).toBe("passed");
         expect(show.nextAction).toBe(`by change start --task BY-1`);
+
+        const reviewed = yield* runByInProcessEffect(root, ["--json", "task", "reviews", "BY-1"]);
+        expect(reviewed.status).toBe(0);
+        const history = JSON.parse(reviewed.stdout) as { readonly nextAction?: string };
+        expect(history.nextAction).toBe(`by change start --task BY-1`);
       }),
     60_000,
   );
@@ -173,9 +178,12 @@ describe("by task submission CLI", () => {
         expect(reviews.status).toBe(0);
         const listed = JSON.parse(reviews.stdout) as {
           readonly reviews: readonly { readonly id: string; readonly outcome: string }[];
+          readonly nextAction?: string;
         };
         expect(listed.reviews).toHaveLength(1);
         expect(listed.reviews[0]).toMatchObject({ outcome: "blocked" });
+        expect(listed.nextAction).toContain("Fix the Findings");
+        expect(listed.nextAction).toContain("by task submit BY-1");
 
         const shown = yield* runByInProcessEffect(root, [
           "--json",
@@ -357,6 +365,12 @@ describe("by task submission CLI", () => {
         expect(taskShow.nextAction).toContain("Active Task Review");
         expect(taskShow.nextAction).toContain("by task-review abandon");
 
+        const history = yield* runByInProcessEffect(root, ["--json", "task", "reviews", "BY-1"]);
+        expect(history.status).toBe(0);
+        const historyOutput = JSON.parse(history.stdout) as { readonly nextAction?: string };
+        expect(historyOutput.nextAction).toContain("Active Task Review");
+        expect(historyOutput.nextAction).toContain("by task-review abandon");
+
         // After the broken session storage is repaired, abandonment succeeds and
         // reports a fresh-submission recovery action.
         rmSync(join(root, ".git", "but-why", "BY-1", "task_review", "reviewer-sessions"), {
@@ -454,6 +468,20 @@ describe("by task submission CLI", () => {
         expect(cancelledShow.nextAction).toBeUndefined();
       }),
     60_000,
+  );
+
+  it.effect("suggests submission for a New Task with no Review history", () =>
+    Effect.gen(function* () {
+      const root = yield* createInitializedTask();
+      const reviews = yield* runByInProcessEffect(root, ["--json", "task", "reviews", "BY-1"]);
+      expect(reviews.status).toBe(0);
+      const history = JSON.parse(reviews.stdout) as {
+        readonly reviews: readonly unknown[];
+        readonly nextAction?: string;
+      };
+      expect(history.reviews).toEqual([]);
+      expect(history.nextAction).toBe("by task submit BY-1");
+    }),
   );
 
   it.effect("reports an unknown Review for abandonment", () =>
