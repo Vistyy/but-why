@@ -333,8 +333,7 @@ const isObjectRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
 const decodeRemoteBranchDeletionResponse = (value: unknown): boolean => {
-  if (!isObjectRecord(value) || hasGraphqlErrors(value)) return false;
-  if ("errors" in value && !Array.isArray(value["errors"])) return false;
+  if (!isObjectRecord(value) || "errors" in value) return false;
   const data = value["data"];
   if (!isObjectRecord(data)) return false;
   const updateRefs = data["updateRefs"];

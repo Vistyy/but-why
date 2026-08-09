@@ -609,6 +609,25 @@ describe("GitHub pull request gateway", () => {
         },
       ],
       [
+        "empty-errors",
+        {
+          ok: true as const,
+          stdout: '{"data":{"updateRefs":{"clientMutationId":null}},"errors":[]}',
+        },
+        {
+          ok: true as const,
+          stdout:
+            '{"data":{"repository":{"id":"repo-id","defaultBranchRef":{"name":"main"},"ref":{"id":"ref-id","target":{"oid":"candidate-sha"}}}}}',
+        },
+        {
+          state: "present" as const,
+          headSha: "candidate-sha",
+          remoteUrl: input.remoteUrl,
+          repositoryId: "repo-id",
+          refId: "ref-id",
+        },
+      ],
+      [
         "missing-selected-fact",
         { ok: true as const, stdout: '{"data":{"updateRefs":{}}}' },
         {
