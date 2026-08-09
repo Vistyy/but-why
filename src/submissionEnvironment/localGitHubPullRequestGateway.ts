@@ -340,8 +340,7 @@ const decodeRemoteBranchDeletionResponse = (value: unknown): boolean => {
   const updateRefs = data["updateRefs"];
   if (!isObjectRecord(updateRefs) || !("clientMutationId" in updateRefs)) return false;
   return (
-    updateRefs["clientMutationId"] === null ||
-    typeof updateRefs["clientMutationId"] === "string"
+    updateRefs["clientMutationId"] === null || typeof updateRefs["clientMutationId"] === "string"
   );
 };
 
