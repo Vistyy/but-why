@@ -30,16 +30,10 @@ export type TaskReviewProposal = {
   readonly dependencies: readonly TaskReviewProposalDependency[];
 };
 
-export type TaskReviewProposalKey = {
-  readonly title: string;
-  readonly description: string;
-  readonly dependencyIds: readonly string[];
-};
-
 export const taskReviewPolicySnapshotSchema = Schema.Struct({
   version: Schema.Literal(1),
   instructions: nonBlankStringSchema,
-  instructionsSource: Schema.Literal("repo", "global", "built_in"),
+  instructionsSource: Schema.Literal("built_in"),
   profile: Schema.Struct({
     agentProfile: nonBlankStringSchema,
     scope: Schema.Literal("repo", "global"),
