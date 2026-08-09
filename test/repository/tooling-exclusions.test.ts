@@ -49,7 +49,7 @@ const createToolingFixture = (): string => {
 const justfile = `
 tooling-check:
     @"__BIOME__" check .
-    @env BY_TEST_SUITE= "__VITEST__" run --config "__VITEST_CONFIG__" --root . --reporter=verbose
+    @"__VITEST__" run --config "__VITEST_CONFIG__" --root . --reporter=verbose
 `;
 
 const visibleTest = `import { expect, test } from "vitest";
