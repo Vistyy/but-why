@@ -23,19 +23,20 @@ child_pid=
 interrupted_status=0
 terminate_child() {
     interrupted_status=$1
+    local signal=$2
     if [[ -z "$child_pid" ]]; then
         return
     fi
 
-    process_tree_terminate "$child_pid"
+    process_tree_terminate "$child_pid" "$signal"
 }
 
 report_interruption() {
     echo "interrupted: $workload_class; rerun the same command to retry" >&2
 }
 
-trap 'terminate_child 130; report_interruption' INT
-trap 'terminate_child 143; report_interruption' TERM
+trap 'terminate_child 130 INT; report_interruption' INT
+trap 'terminate_child 143 TERM; report_interruption' TERM
 
 lock_owned=0
 cleanup() {

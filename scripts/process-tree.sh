@@ -63,16 +63,17 @@ process_tree_wait_until_gone() {
 
 process_tree_terminate() {
     local root=$1
+    local signal=${2:-TERM}
     local pid
     local pgid
     local index
     process_tree_snapshot "$root"
 
     for ((index = ${#PROCESS_TREE_PIDS[@]} - 1; index >= 0; index -= 1)); do
-        kill -TERM "${PROCESS_TREE_PIDS[index]}" 2>/dev/null || true
+        kill -"$signal" "${PROCESS_TREE_PIDS[index]}" 2>/dev/null || true
     done
     for pgid in "${PROCESS_TREE_PGIDS[@]}"; do
-        kill -TERM -- "-$pgid" 2>/dev/null || true
+        kill -"$signal" -- "-$pgid" 2>/dev/null || true
     done
 
     process_tree_wait_until_gone && return

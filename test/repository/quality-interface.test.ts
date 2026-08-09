@@ -470,7 +470,6 @@ describe("quality interface", () => {
     } finally {
       await stopRunner(holder);
     }
-
   });
 
   test("interrupts an actual unselected test workload with SIGINT and releases capacity", async () => {
