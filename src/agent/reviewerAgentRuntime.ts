@@ -158,57 +158,62 @@ const reviewWithPi = (input: ReviewerAgentInput): Effect.Effect<ReviewerAgentRes
       return sandcastleFailure(initial.left, 1, "");
     }
 
-    const first = yield* Effect.either(validateRunResult(input, initial.right, 1));
-    if (first._tag === "Right") {
+    let current = initial.right;
+    let validation = yield* Effect.either(validateRunResult(input, current, 1));
+    if (validation._tag === "Right") {
       cleanupSessionSnapshot(sessionSnapshot);
       return {
         ok: true,
-        report: first.right,
+        report: validation.right,
         attempts: 1,
-        stdout: initial.right.stdout,
-        ...(yield* sessionMetadata(agent, initial.right)),
+        stdout: current.stdout,
+        ...(yield* sessionMetadata(agent, current)),
       };
     }
-    const resume = initial.right.resume;
-    if (resume === undefined) {
-      restoreSession();
-      return {
-        ok: false,
-        failure: first.left,
-        sessionUsability: "unknown",
-        attempts: 1,
-        stdout: initial.right.stdout,
-        ...(yield* sessionMetadata(agent, initial.right)),
-      };
+    let attempts = 1;
+    while (validation._tag === "Left" && attempts < 3) {
+      const failure = validation.left;
+      const resume = current.resume;
+      if (resume === undefined) {
+        restoreSession();
+        return {
+          ok: false,
+          failure,
+          sessionUsability: "unknown",
+          attempts,
+          stdout: current.stdout,
+          ...(yield* sessionMetadata(agent, current)),
+        };
+      }
+      attempts += 1;
+      const corrected = yield* Effect.either(
+        runSandbox(() => resume(buildReviewerOutputCorrectionPrompt(failure))),
+      );
+      if (corrected._tag === "Left") {
+        restoreSession();
+        return sandcastleFailure(corrected.left, attempts, current.stdout);
+      }
+      current = corrected.right;
+      validation = yield* Effect.either(validateRunResult(input, current, attempts));
     }
-
-    const corrected = yield* Effect.either(
-      runSandbox(() => resume(buildReviewerOutputCorrectionPrompt(first.left))),
-    );
-    if (corrected._tag === "Left") {
-      restoreSession();
-      return sandcastleFailure(corrected.left, 2, initial.right.stdout);
-    }
-
-    const second = yield* Effect.either(validateRunResult(input, corrected.right, 2));
-    if (second._tag === "Right") {
+    if (validation._tag === "Right") {
       cleanupSessionSnapshot(sessionSnapshot);
       return {
         ok: true,
-        report: second.right,
-        attempts: 2,
-        stdout: corrected.right.stdout,
-        ...(yield* sessionMetadata(agent, corrected.right)),
+        report: validation.right,
+        attempts,
+        stdout: current.stdout,
+        ...(yield* sessionMetadata(agent, current)),
       };
     }
     restoreSession();
     return {
       ok: false,
-      failure: second.left,
+      failure: validation.left,
       sessionUsability: "unknown",
-      attempts: 2,
-      stdout: corrected.right.stdout,
-      ...(yield* sessionMetadata(agent, corrected.right)),
+      attempts,
+      stdout: current.stdout,
+      ...(yield* sessionMetadata(agent, current)),
     };
   });
 
