@@ -728,6 +728,64 @@ describe("Task Submission orchestration", () => {
     60_000,
   );
 
+  it.scoped(
+    "records a Tooling Failure when Reviewer Session permissions cannot be hardened",
+    () =>
+      Effect.gen(function* () {
+        const root = yield* prepareInitializedTask();
+        yield* withTestRepository(
+          root,
+          Effect.gen(function* () {
+            const reviews = yield* openSqliteTaskReviewPersistence();
+            const runtime: ReviewerAgentRuntime = {
+              review: () =>
+                Effect.sync(
+                  (): ReviewerAgentResult => ({
+                    ok: true,
+                    report: { findings: [] },
+                    attempts: 1,
+                    stdout: taggedReviewerOutput({ findings: [] }),
+                    sessionReference: "session-hardening",
+                    sessionFilePath: join(root, "no-such-session-file"),
+                  }),
+                ),
+            };
+            const submission = openTaskSubmission(
+              submissionDependencies(root, {
+                reviewerAgentRuntime: runtime,
+                persistence: reviews,
+              }),
+            );
+
+            const result = yield* submission.submit({ taskId: publicTaskId("BY-1"), now });
+
+            expect(result).toMatchObject({
+              ok: true,
+              status: "tooling_failed",
+              task: { id: "BY-1", state: "new" },
+            });
+            if (!result.ok || result.status !== "tooling_failed") {
+              throw new Error("unexpected result");
+            }
+            expect(result.toolingFailures).toEqual([
+              expect.objectContaining({
+                errorKind: "reviewer_session_hardening_failed",
+                operationName: "harden_reviewer_session_permissions",
+              }),
+            ]);
+            const recorded = yield* reviews.getReviewById(result.reviewId);
+            expect(recorded).toMatchObject({ state: "complete", outcome: "tooling_failed" });
+            const session = yield* reviews.getTaskReviewSession(
+              publicTaskId("BY-1"),
+              "task_review",
+            );
+            expect(session).toBeUndefined();
+          }),
+        );
+      }),
+    60_000,
+  );
+
   it.scoped("reports an unavailable main checkout before any workspace work", () =>
     Effect.gen(function* () {
       const root = yield* prepareInitializedTask();

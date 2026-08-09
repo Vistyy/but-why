@@ -4,7 +4,8 @@ export type TaskReviewToolingFailureKind =
   | "git_tooling_failed"
   | "sandcastle_tooling_failed"
   | "prepare_command_execution_tooling_failed"
-  | "reviewer_output_contract_failed";
+  | "reviewer_output_contract_failed"
+  | "reviewer_session_hardening_failed";
 
 export type TaskReviewToolingFailureRecord = {
   readonly errorKind: TaskReviewToolingFailureKind;

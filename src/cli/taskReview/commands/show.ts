@@ -47,7 +47,9 @@ export const runShowCommand = (
                     dependencies: review.proposal.dependencies.map((dependency) => ({
                       taskId: dependency.taskId,
                       title: dependency.title,
+                      description: dependency.description,
                       state: dependency.state,
+                      dependencyIds: dependency.dependencyIds,
                     })),
                   },
                   policy: structuredValue(review.policy),

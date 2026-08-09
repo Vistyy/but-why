@@ -798,13 +798,12 @@ it.scoped("rejects reuse and reads when the stored proposal snapshot mismatches 
       // Reads decode the proposal at the owning boundary and reject the mismatch.
       expect(yield* Effect.isFailure(reviews.getReviewById("review-snapshot-key"))).toBe(true);
 
-      // Reuse revalidates the stored snapshot against its key before applying.
+      // Reuse fast paths decode the stored snapshot and verify it produces its
+      // own key, so the mismatched Review is never treated as reusable.
       const checked = yield* reviews.checkReuse(task.id);
-      expect(checked).toEqual({
-        reused: true,
-        reviewId: "review-snapshot-key",
-        outcome: "blocked",
-      });
+      expect(checked).toEqual({ reused: false });
+
+      // The direct apply guard still rejects an inconsistent Review.
       const applied = yield* reviews.applyReuse({
         reviewId: "review-snapshot-key",
         outcome: "blocked",

@@ -232,8 +232,10 @@ const startOrReuse = (
       dependencyIds: proposal.dependencies.map((dependency) => dependency.taskId),
     });
 
-    const reusable = yield* sql<{ readonly id: string; readonly outcome: string }>`
-      SELECT id, outcome FROM task_reviews
+    const reusable = yield* sql<ReusableTaskReviewRow>`
+      SELECT id, outcome, proposal_snapshot AS proposalSnapshot,
+        proposal_key AS proposalKey
+      FROM task_reviews
       WHERE task_id = ${input.taskId}
         AND state = 'complete'
         AND outcome IN ('passed', 'blocked')
@@ -242,12 +244,13 @@ const startOrReuse = (
       LIMIT 1
     `;
     const existing = reusable[0];
-    if (existing !== undefined) {
+    const existingReusable = existing === undefined ? undefined : decodeReusableReview(existing);
+    if (existingReusable !== undefined) {
       return {
         ok: true as const,
         reused: true as const,
-        reviewId: existing.id,
-        outcome: existing.outcome === "passed" ? ("passed" as const) : ("blocked" as const),
+        reviewId: existingReusable.id,
+        outcome: existingReusable.outcome,
       };
     }
 
@@ -317,8 +320,10 @@ const checkReuse = (
       description: task.description,
       dependencyIds: dependencies.map((dependency) => dependency.taskId),
     });
-    const rows = yield* sql<{ readonly id: string; readonly outcome: string }>`
-      SELECT id, outcome FROM task_reviews
+    const rows = yield* sql<ReusableTaskReviewRow>`
+      SELECT id, outcome, proposal_snapshot AS proposalSnapshot,
+        proposal_key AS proposalKey
+      FROM task_reviews
       WHERE task_id = ${taskId}
         AND state = 'complete'
         AND outcome IN ('passed', 'blocked')
@@ -327,13 +332,39 @@ const checkReuse = (
       LIMIT 1
     `;
     const row = rows[0];
-    if (row === undefined) return { reused: false as const };
+    const reusable = row === undefined ? undefined : decodeReusableReview(row);
+    if (reusable === undefined) return { reused: false as const };
     return {
       reused: true as const,
-      reviewId: row.id,
-      outcome: row.outcome === "passed" ? ("passed" as const) : ("blocked" as const),
+      reviewId: reusable.id,
+      outcome: reusable.outcome,
     };
   });
+
+type ReusableTaskReviewRow = {
+  readonly id: string;
+  readonly outcome: string;
+  readonly proposalSnapshot: string;
+  readonly proposalKey: string;
+};
+
+// A Review is reusable only when its stored proposal snapshot decodes and
+// itself produces the stored proposal key, so malformed or inconsistent
+// persisted evidence never approves a different proposal through reuse.
+const decodeReusableReview = (
+  row: ReusableTaskReviewRow,
+): { readonly id: string; readonly outcome: "passed" | "blocked" } | undefined => {
+  try {
+    const proposal = decodePersistedTaskReviewProposal(JSON.parse(row.proposalSnapshot));
+    if (proposalKeyOf(proposal) !== row.proposalKey) return undefined;
+    return {
+      id: row.id,
+      outcome: row.outcome === "passed" ? "passed" : "blocked",
+    };
+  } catch {
+    return undefined;
+  }
+};
 
 const applyReuse = (
   sql: SqlClient.SqlClient,

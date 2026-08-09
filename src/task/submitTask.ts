@@ -676,6 +676,17 @@ const runTaskReviewPhases = (input: {
     const decoded = decodedAttempt.right;
     const sessionPermissionsOk =
       result.sessionFilePath === undefined || chmodSessionFile(result.sessionFilePath);
+    if (result.sessionFilePath !== undefined && !sessionPermissionsOk) {
+      return {
+        outcome: "blocked" as const,
+        findings: [],
+        toolingFailure: taskReviewToolingFailureRecord({
+          errorKind: "reviewer_session_hardening_failed",
+          operationName: "harden_reviewer_session_permissions",
+          errorMessage: `Reviewer session permissions could not be hardened: ${result.sessionFilePath}`,
+        }),
+      };
+    }
     if (sessionPermissionsOk) {
       yield* input.sessionStore.save({
         taskId: input.taskId,
