@@ -24,11 +24,7 @@ import {
 } from "../support/initializedRepo.js";
 import { withTestRepository } from "../support/repository.js";
 import { runTestProcessOrThrow } from "../support/testProcess.js";
-import {
-  acquireTestWorkspace,
-  createTestWorkspace,
-  releaseTestWorkspace,
-} from "../support/testWorkspace.js";
+import { acquireTestWorkspace, releaseTestWorkspace } from "../support/testWorkspace.js";
 
 const now = "2026-06-30T12:00:00.000Z";
 
