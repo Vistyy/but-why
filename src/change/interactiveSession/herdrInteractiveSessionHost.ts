@@ -174,7 +174,7 @@ const launchHerdrSession = async (
         )
       : launchFailure(openedResult.message);
   }
-  const opened = decodeOpenedWorktree(openedResult.stdout);
+  const opened = decodeOpenedWorktree(openedResult.stdout, input.worktreePath);
   if (opened === undefined)
     return launchIndeterminate("Herdr returned malformed worktree-open output.");
 
@@ -498,15 +498,34 @@ const decodeWorktreeList = (source: string): readonly HerdrWorktree[] | undefine
   return decoded;
 };
 
-const decodeOpenedWorktree = (source: string): OpenedWorktree | undefined => {
+const decodeOpenedWorktree = (
+  source: string,
+  requestedWorktreePath: string,
+): OpenedWorktree | undefined => {
   const result = decodeResult(source, "worktree_opened");
+  const worktree = result?.["worktree"];
   const workspace = result?.["workspace"];
+  const workspaceWorktree = isRecord(workspace) ? workspace["worktree"] : undefined;
+  const tab = result?.["tab"];
   const rootPane = result?.["root_pane"];
-  return isRecord(workspace) &&
-    typeof workspace["workspace_id"] === "string" &&
+  const workspaceId = isRecord(workspace) ? workspace["workspace_id"] : undefined;
+  const tabId = isRecord(tab) ? tab["tab_id"] : undefined;
+  const rootPaneId = isRecord(rootPane) ? rootPane["pane_id"] : undefined;
+  return isRecord(worktree) &&
+    worktree["path"] === requestedWorktreePath &&
+    worktree["open_workspace_id"] === workspaceId &&
+    isNonEmptyString(workspaceId) &&
+    isRecord(workspaceWorktree) &&
+    workspaceWorktree["checkout_path"] === requestedWorktreePath &&
+    isRecord(tab) &&
+    isNonEmptyString(tabId) &&
+    tab["workspace_id"] === workspaceId &&
     isRecord(rootPane) &&
-    typeof rootPane["pane_id"] === "string"
-    ? { rootPaneId: rootPane["pane_id"] }
+    isNonEmptyString(rootPaneId) &&
+    rootPane["workspace_id"] === workspaceId &&
+    rootPane["tab_id"] === tabId &&
+    typeof result?.["already_open"] === "boolean"
+    ? { rootPaneId }
     : undefined;
 };
 
@@ -573,11 +592,11 @@ const isActiveAgentStatus = (status: HerdrAgent["agentStatus"]): boolean =>
 
 const worktreeMatchesTarget = (worktrees: readonly HerdrWorktree[], targetPath: string): boolean =>
   worktrees.some(
-    (worktree) =>
-      (worktree.path === targetPath || worktree.worktreePath === targetPath) &&
-      typeof worktree.branch === "string" &&
-      worktree.branch.trim() !== "",
+    (worktree) => worktree.path === targetPath || worktree.worktreePath === targetPath,
   );
+
+const isNonEmptyString = (value: unknown): value is string =>
+  typeof value === "string" && value.trim().length > 0;
 
 const isRecord = (value: unknown): value is JsonRecord =>
   typeof value === "object" && value !== null && !Array.isArray(value);
