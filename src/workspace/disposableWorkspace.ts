@@ -54,7 +54,7 @@ export type CreateDisposableWorkspaceInput<R, E> = {
   ) => Effect.Effect<void, RepositoryStorageError>;
   readonly recordInterruptedCleanupResult?: (
     toolingError: DisposableWorkspaceToolingError,
-  ) => Effect.Effect<void>;
+  ) => Effect.Effect<void, unknown>;
   readonly runInWorkspace?: (
     workspace: ActiveDisposableWorkspace,
   ) => Effect.Effect<R, E | RepositoryStorageError>;

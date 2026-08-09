@@ -17,6 +17,7 @@ import { provisionChangeWorktree } from "../../src/change/changeStartGit.js";
 import type { ChangeStartRecord } from "../../src/change/changeStartStore.js";
 import { openSqliteChangeStartPersistence } from "../../src/sqlite/sqliteChangeStartPersistence.js";
 import { refreshRemoteChangeBase } from "../../src/submissionEnvironment/remoteChangeBase.js";
+import { transitionTaskToTodoForRepo } from "../support/taskApproval.js";
 import { runByInProcessEffect } from "../support/by-cli.js";
 import {
   cloneInitializedTestRepository,
@@ -141,7 +142,7 @@ describe("Change Start Managed Worktree boundaries", () => {
     Effect.gen(function* () {
       const root = yield* repositoryCopy();
       const taskId = yield* createTask(root, "Remote required", "Do not start without it.\n");
-      expect((yield* runByInProcessEffect(root, ["task", "approve", taskId], now)).status).toBe(0);
+      yield* transitionTaskToTodoForRepo(root, taskId, now);
       git(root, "remote", "remove", "origin");
 
       const started = yield* runByInProcessEffect(
@@ -263,9 +264,7 @@ describe("Change Start Managed Worktree boundaries", () => {
       Effect.gen(function* () {
         const root = yield* repositoryCopy();
         const taskId = yield* createTask(root, "Blocked path", "Recover this Change.\n");
-        expect((yield* runByInProcessEffect(root, ["task", "approve", taskId], now)).status).toBe(
-          0,
-        );
+        yield* transitionTaskToTodoForRepo(root, taskId, now);
         const siblingRoot = join(dirname(root), `${basename(root)}-worktrees`);
         writeFileSync(siblingRoot, "occupied\n");
 
@@ -322,9 +321,7 @@ describe("Change Start Managed Worktree boundaries", () => {
     Effect.gen(function* () {
       const root = yield* repositoryCopy();
       const taskId = yield* createTask(root, "Prepared change", "Prepare this Change.\n");
-      expect(
-        (yield* runByInProcessEffect(root, ["--json", "task", "approve", taskId], now)).status,
-      ).toBe(0);
+      yield* transitionTaskToTodoForRepo(root, taskId, now);
 
       const started = yield* runByInProcessEffect(
         root,
@@ -682,9 +679,7 @@ describe("Change Start Managed Worktree boundaries", () => {
           now,
         )).status,
       ).toBe(0);
-      expect((yield* runByInProcessEffect(root, ["task", "approve", dependent], now)).status).toBe(
-        0,
-      );
+      yield* transitionTaskToTodoForRepo(root, dependent, now);
 
       const blocked = yield* runByInProcessEffect(
         root,

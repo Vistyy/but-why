@@ -27,7 +27,7 @@ export type CreateValidationWorkspaceInput = {
   ) => Effect.Effect<void, RepositoryStorageError>;
   readonly recordInterruptedCleanupResult?: (
     toolingError: ValidationWorkspaceToolingError,
-  ) => Effect.Effect<void>;
+  ) => Effect.Effect<void, unknown>;
   readonly runInWorkspace?: (
     workspace: ActiveValidationWorkspace,
   ) => Effect.Effect<

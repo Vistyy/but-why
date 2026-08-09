@@ -14,6 +14,11 @@ const globalAcceptanceReviewConfigSchema = Schema.Struct({
   instructionsFile: Schema.optional(repoRelativePathSchema),
 });
 
+const globalTaskReviewConfigSchema = Schema.Struct({
+  agentProfile: Schema.optional(agentProfileReferenceSchema),
+  instructionsFile: Schema.optional(repoRelativePathSchema),
+});
+
 const globalReviewerSchema = Schema.Struct({
   agentProfile: Schema.optional(agentProfileReferenceSchema),
   instructionsFile: repoRelativePathSchema,
@@ -40,6 +45,7 @@ const globalConfigSchema = Schema.Struct({
   review: Schema.optional(
     Schema.Struct({
       acceptance: Schema.optional(globalAcceptanceReviewConfigSchema),
+      task: Schema.optional(globalTaskReviewConfigSchema),
       specialists: Schema.optional(Schema.Array(configNameSchema)),
     }),
   ),

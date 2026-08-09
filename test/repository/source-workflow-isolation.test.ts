@@ -99,6 +99,7 @@ test("source workflow delegates a Candidate worktree to the canonical executable
     "restrict_lifecycle_states",
     "remove_task_comments",
     "repair_validation_policy_snapshot_ok_field",
+    "task_reviews",
   ]);
   expect(readTableNames(main)).not.toContain("candidate_migration_probe");
 }, 30_000);

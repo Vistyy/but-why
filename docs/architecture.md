@@ -27,6 +27,8 @@ The source hierarchy follows these owners:
 - `src/init/` owns Local Repository initialization and repository-context Adapters.
 - `src/output/` owns structured output codecs and serializers.
 - `src/repositoryPreparation/` owns the shared Repository Preparation Adapter.
+- `src/workspace/` owns neutral disposable exact-commit workspace and Git mechanics shared by Validation and Task Review Adapters.
+- `src/reviewerSession/` owns neutral reviewer session-file and transcript mechanics shared by Change and Task Review Adapters.
 - `src/sqlite/` owns SQLite persistence Adapters.
 - `src/submissionEnvironment/` owns Git and GitHub submission-environment Adapters.
 
@@ -99,6 +101,29 @@ Completed and Cancelled Changes use the same cleanup scope and safeguards, cover
 Terminal cleanup first records one immutable Reviewer Transcript reference for every retained Reviewer Session JSONL file in the Change's per-producer storage, then removes active Reviewer Session records after successful transcript indexing without deleting the retained JSONL files or historical references.
 When cleanup completes, the operation invokes the Reviewer Session and Artifact lifecycle owners for the exact terminal Change.
 Dirty worktrees, unique local commits, changed Remote Change Branches, unreadable identities, and incomplete transcript indexing keep cleanup pending without undoing terminal truth.
+
+## Task Review workflow
+
+An unlinked New Task can become Todo only through a completed passing Task Review of its exact proposal and repository evidence.
+Existing Todo Tasks remain approved without fabricated Task Review history.
+`by task submit <task-id>` replaces the retired direct approval command and accepts only an unlinked New Task.
+Task Submission resolves the canonical-main-checkout `HEAD` commit first and reads the Repo Config at that exact commit for the Task Reviewer policy and prepare command.
+It resolves the Task Reviewer profile and instructions Repo-before-Global, with built-in instructions as fallback.
+Configured Repository Preparation runs in the disposable exact-commit workspace; automatic Validation Checks never run.
+One Task Reviewer judges the exact proposal with complete authority, the prior applicable outcome, and the deterministic proposal diff when the proposal changed.
+Task-owned decoding consumes the shared core Finding fields without Validation-only Artifact references.
+A passing Review atomically moves the Task to Todo.
+Findings or Tooling Failure leave the Task New and permit a later ordinary submission.
+
+Ordinary submission reuses the newest completed passed or Finding-blocked Review whose Task Context and direct Task Dependency set exactly match the current proposal, before repository inputs are resolved or reviewer work starts.
+Changes only to repository state, Base, policy, configuration, direct dependency content, or direct dependency lifecycle do not invalidate a matching judgment.
+A changed Task Context or direct Task Dependency set causes a new Review.
+Per-Task execution locking, transactional admission, one-active-Review uniqueness, proposal rereading, mutation and cancellation guards, and compare-and-set completion preserve one exact reviewed proposal.
+Compatible usable Task Reviewer Sessions continue across later Reviews, and complete transcripts from every observed session file are indexed before completion or successful abandonment.
+Cleanup or transcript-indexing failure leaves the Review active, stores the latest failed operation and exact diagnostic, and does not change Task approval.
+`by task-review abandon <review-id>` records Tooling Failure and removes the Active Review only after cleanup and transcript indexing succeed.
+`by task reviews`, `by task-review show`, and the Task Review summary in `by task show` expose the result and valid next action.
+`by task approve` is removed without an alias.
 
 ## Storage
 

@@ -35,6 +35,14 @@ export const runContextApplyCommand = (
         }
         if ("error" in result) return taskContextDraftReadError(result.error);
         if (result.code === "task_not_found") return taskNotFound(taskId.taskId);
+        if (result.code === "task_review_active") {
+          return runtimeError({
+            code: result.code,
+            message: `Cannot apply a Task Context draft to task ${taskId.taskId}: a Task Review is active.`,
+            details: { taskId: taskId.taskId },
+            help: ["Wait for the active Task Review to finish, then retry the draft apply."],
+          });
+        }
         if (result.code === "task_context_draft_cleanup_failed") {
           return runtimeError({
             code: result.code,

@@ -7,6 +7,7 @@ import { afterAll, beforeAll, describe } from "vitest";
 
 import type { InteractiveSessionHost } from "../../src/change/interactiveSession/interactiveSessionHost.js";
 import { publicTaskId, taskSlugForId } from "../../src/task/taskId.js";
+import { transitionTaskToTodoForRepo } from "../support/taskApproval.js";
 import { commitButWhyConfigAndRecordDefault, runByInProcessEffect } from "../support/by-cli.js";
 import {
   cloneInitializedTestRepository,
@@ -231,7 +232,7 @@ describe("by change implement", () => {
         "Record cancellation reasons",
         "Implement this Change.\n",
       );
-      expect((yield* runByInProcessEffect(root, ["task", "approve", taskId], now)).status).toBe(0);
+      yield* transitionTaskToTodoForRepo(root, taskId, now);
       const started = yield* runByInProcessEffect(
         root,
         ["--json", "change", "start", "--task", taskId],

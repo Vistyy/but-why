@@ -13,6 +13,7 @@ import { openSqliteChangePersistence } from "../../src/sqlite/sqliteChangePersis
 import { openSqliteChangeStartPersistence } from "../../src/sqlite/sqliteChangeStartPersistence.js";
 import { openSqliteTaskPersistence } from "../../src/sqlite/sqliteTaskPersistence.js";
 import { publicTaskId } from "../../src/task/taskId.js";
+import { transitionTaskToTodo } from "../support/taskApproval.js";
 import { withTemporaryRepositoryState } from "../support/repository.js";
 import { runTestProcess } from "../support/testProcess.js";
 
@@ -215,8 +216,7 @@ describe("by change reconcile", () => {
         });
         if (!createdTask.ok) throw new Error(createdTask.code);
         const taskId = publicTaskId(createdTask.task.id);
-        const approved = yield* tasks.approveTask({ taskId, now });
-        if (!approved.ok) throw new Error(approved.code);
+        yield* transitionTaskToTodo(taskId, now);
 
         const starts = yield* openSqliteChangeStartPersistence();
         const prepared = yield* starts.prepareTask(taskId);
@@ -510,8 +510,7 @@ describe("by change reconcile", () => {
           });
           if (!createdTask.ok) throw new Error(createdTask.code);
           const taskId = publicTaskId(createdTask.task.id);
-          const approved = yield* tasks.approveTask({ taskId, now });
-          if (!approved.ok) throw new Error(approved.code);
+          yield* transitionTaskToTodo(taskId, now);
 
           const starts = yield* openSqliteChangeStartPersistence();
           const prepared = yield* starts.prepareTask(taskId);
@@ -623,8 +622,7 @@ describe("by change reconcile", () => {
           });
           if (!createdTask.ok) throw new Error(createdTask.code);
           const taskId = publicTaskId(createdTask.task.id);
-          const approved = yield* tasks.approveTask({ taskId, now });
-          if (!approved.ok) throw new Error(approved.code);
+          yield* transitionTaskToTodo(taskId, now);
 
           const starts = yield* openSqliteChangeStartPersistence();
           const prepared = yield* starts.prepareTask(taskId);

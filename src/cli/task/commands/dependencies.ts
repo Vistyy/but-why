@@ -93,7 +93,11 @@ const dependencyError = (
   const details = {
     taskId,
     ...(result.code === "dependencies_locked" ? { state: result.state } : {}),
-    ...(result.code !== "dependencies_locked" && result.taskId !== undefined
+    ...(result.code !== "dependencies_locked" &&
+    (result.code === "dependency_unknown_task" ||
+      result.code === "dependency_self" ||
+      result.code === "dependency_duplicate") &&
+    result.taskId !== undefined
       ? { dependencyTaskId: result.taskId }
       : {}),
   };
@@ -103,13 +107,15 @@ const dependencyError = (
     message: dependencyErrorMessage(taskId, result),
     details,
     help: [
-      result.code === "dependencies_locked"
-        ? result.state === "todo"
-          ? "Approved Task intent is immutable. Dependency edits are available only before Task Approval."
-          : "Dependency edits are available only before Change Start."
-        : result.code === "replace_requires_dependency"
-          ? "Use `by task dependencies clear <task-id>` to remove all prerequisites."
-          : "Use existing Tasks and keep the direct dependency graph acyclic.",
+      result.code === "task_review_active"
+        ? "Wait for the active Task Review to complete, then retry the dependency edit."
+        : result.code === "dependencies_locked"
+          ? result.state === "todo"
+            ? "Approved Task intent is immutable. Dependency edits are available only before Task Approval."
+            : "Dependency edits are available only before Change Start."
+          : result.code === "replace_requires_dependency"
+            ? "Use `by task dependencies clear <task-id>` to remove all prerequisites."
+            : "Use existing Tasks and keep the direct dependency graph acyclic.",
     ],
   });
 };
@@ -135,5 +141,7 @@ const dependencyErrorMessage = (
       return result.state === "todo"
         ? `Dependencies for task ${taskId} are locked because approved Task intent is immutable.`
         : `Dependencies for task ${taskId} are locked after Start.`;
+    case "task_review_active":
+      return `Dependencies for task ${taskId} are locked while a Task Review is active.`;
   }
 };

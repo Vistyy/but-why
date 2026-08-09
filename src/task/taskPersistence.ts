@@ -4,7 +4,6 @@ import type { RepositoryStorageError } from "../contracts/repositoryStorageError
 import type { DependencyValidationCode, TaskContext, TaskRecord, TaskSummary } from "./task.js";
 import type { PublicTaskId } from "./taskId.js";
 import type {
-  ApproveTaskInput,
   CancelTaskInput,
   CancelTaskResult,
   CreateTaskInput,
@@ -13,7 +12,6 @@ import type {
   ListTasksInput,
   ListTasksResult,
   StoredTaskRecord,
-  TaskApprovalResult,
   UpdateTaskContextInput,
   UpdateTaskContextResult,
 } from "./taskStore.js";
@@ -43,9 +41,6 @@ export type TaskPersistence = {
   readonly getTaskContextById: (
     taskId: PublicTaskId,
   ) => Effect.Effect<TaskContext | undefined, RepositoryStorageError>;
-  readonly approveTask: (
-    input: ApproveTaskInput,
-  ) => Effect.Effect<TaskApprovalResult, RepositoryStorageError>;
   readonly updateTaskContext: (
     input: UpdateTaskContextInput,
   ) => Effect.Effect<UpdateTaskContextResult, RepositoryStorageError>;

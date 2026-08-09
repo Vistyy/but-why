@@ -39,7 +39,7 @@ describe("portable But Why skill", () => {
     const authority = section(workflow, "Authority");
     const selectRoute = section(workflow, "Select a Work Route");
     const authorTasks = section(workflow, "Author Tasks");
-    const approveTask = section(workflow, "Approve a Task");
+    const submitTask = section(workflow, "Submit a Task for Review");
     const authorizeImplementation = section(workflow, "Authorize Implementation");
     const implementerSession = section(
       workflow,
@@ -59,8 +59,8 @@ describe("portable But Why skill", () => {
       "Verify every recorded Task remains unapproved and has no Change through the returned state or the applicable inspection command.",
     );
     expect(authorTasks).not.toContain("by task approve");
-    expect(approveTask).toContain("by task approve <task-id>");
-    expect(approveTask).toContain(
+    expect(submitTask).toContain("by task submit <task-id>");
+    expect(submitTask).toContain(
       "Do not start a Change or launch an Implementer Interactive Session",
     );
     expect(authority).toContain(
