@@ -3,6 +3,22 @@ import { describe, expect, it } from "vitest";
 import { submitResult } from "../../src/cli/change/submitResult.js";
 
 describe("Change Submit validation-policy errors", () => {
+  it("serializes unchanged Candidate guidance without running Submission setup", () => {
+    expect(
+      submitResult({ ok: true, status: "nothing_to_submit", changeId: "change-1" }, "change-1"),
+    ).toEqual({
+      exitCode: 0,
+      stdout: {
+        changeId: "change-1",
+        status: "nothing_to_submit",
+        help: [
+          "Continue implementation in the Managed Worktree and retry Change Submit, or cancel explicitly.",
+          'Run `by change cancel change-1 --reason "<reason>"` to cancel this unchanged Change.',
+        ],
+      },
+    });
+  });
+
   it("serializes remote mismatch commits and normalized failure evidence", () => {
     const result = submitResult(
       {
