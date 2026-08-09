@@ -5,6 +5,7 @@ import { Effect } from "effect";
 
 import type { ReviewerAgentRuntime } from "../agent/reviewerAgentRuntime.js";
 import type { RepositoryStorageError } from "../contracts/repositoryStorageError.js";
+import type { ReviewerOutput } from "../contracts/reviewerOutput.js";
 import { decodeRepoConfigSource, readRepoConfig } from "../init/repoConfig.js";
 import {
   type LoadRepoLocalContextError,
@@ -47,7 +48,7 @@ export type LoadChangeSubmitResult =
 export const loadChangeSubmit = (input: {
   readonly cwd: string;
   readonly globalConfigPath: string;
-  readonly reviewerAgentRuntime?: ReviewerAgentRuntime;
+  readonly reviewerAgentRuntime?: ReviewerAgentRuntime<ReviewerOutput>;
 }): LoadChangeSubmitResult => {
   const repoContext = loadRepoLocalSubmissionContext(input.cwd);
   if (!repoContext.ok) return repoContext;

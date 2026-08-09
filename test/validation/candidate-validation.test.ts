@@ -9,6 +9,7 @@ import {
   CandidateValidation,
   type ValidateCandidateInput,
 } from "../../src/change/candidateValidation/validateCandidate.js";
+import type { ReviewerOutput } from "../../src/contracts/reviewerOutput.js";
 import { RepositorySql } from "../../src/sqlite/repositorySql.js";
 import { captureLocalCandidate } from "../support/candidateCapture.js";
 import {
@@ -139,7 +140,7 @@ describe("Candidate validation", () => {
         const mainCheckout = candidateReadyRepo();
         const candidateCheckout = join(commonDirectory(mainCheckout), "candidate-worktree");
         const callLog = join(createTestWorkspace(), "validation-calls");
-        const review = vi.fn<ReviewerAgentRuntime["review"]>(() =>
+        const review = vi.fn<ReviewerAgentRuntime<ReviewerOutput>["review"]>(() =>
           Effect.succeed({
             ok: true as const,
             report: { findings: [] },

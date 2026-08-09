@@ -6,7 +6,35 @@ import { it } from "@effect/vitest";
 import { Effect } from "effect";
 import { describe, expect, vi } from "vitest";
 
-import { piReviewerAgentRuntime } from "../../src/agent/reviewerAgentRuntime.js";
+import {
+  piReviewerAgentRuntime,
+  ReviewerExecutionFailed,
+} from "../../src/agent/reviewerAgentRuntime.js";
+import {
+  decodeReviewerOutputContract,
+  validateReviewerArtifactRefs,
+} from "../../src/contracts/reviewerOutput.js";
+
+const decodeEmptyFindings = (output: unknown) =>
+  decodeReviewerOutputContract({ reviewer: "acceptance", attempts: 1, output }).pipe(
+    Effect.flatMap((decoded) =>
+      validateReviewerArtifactRefs({
+        reviewer: "acceptance",
+        attempts: 1,
+        validationRunId: "123e4567-e89b-42d3-a456-426614174000",
+        output: decoded,
+        availableArtifactRefs: [],
+      }),
+    ),
+    Effect.mapError(
+      (failure) =>
+        new ReviewerExecutionFailed({
+          operationName: "decode_reviewer_output",
+          message: failure.message,
+          diagnostics: failure.diagnostics,
+        }),
+    ),
+  );
 
 const profile = {
   agentProfile: "review",
@@ -39,8 +67,7 @@ describe("Pi reviewer agent runtime", () => {
       const result = yield* piReviewerAgentRuntime.review({
         sandbox: { run } as unknown as Pick<Sandbox, "run">,
         reviewer: "acceptance",
-        validationRunId: "123e4567-e89b-42d3-a456-426614174000",
-        availableArtifactRefs: [],
+        decodeOutput: decodeEmptyFindings,
         prompt: "Judge only approved intent for the exact Candidate.",
         profile,
       });
@@ -52,6 +79,57 @@ describe("Pi reviewer agent runtime", () => {
         stdout: '<reviewer-output>{"findings":[]}</reviewer-output>',
       });
       expect(prompt).toBe("Judge only approved intent for the exact Candidate.");
+    }),
+  );
+
+  it.effect("returns output from a caller-owned decoder", () =>
+    Effect.gen(function* () {
+      const result = yield* piReviewerAgentRuntime.review({
+        sandbox: {
+          run: () =>
+            Promise.resolve(runResult('<reviewer-output>{"verdict":"clear"}</reviewer-output>')),
+        } as unknown as Pick<Sandbox, "run">,
+        reviewer: "caller",
+        decodeOutput: (output) =>
+          typeof output === "object" &&
+          output !== null &&
+          "verdict" in output &&
+          output.verdict === "clear"
+            ? Effect.succeed("decoded by caller" as const)
+            : Effect.fail(
+                new ReviewerExecutionFailed({
+                  operationName: "decode_reviewer_output",
+                  message: "Expected a clear verdict.",
+                }),
+              ),
+        prompt: "Review with the caller contract.",
+        profile,
+      });
+
+      expect(result).toMatchObject({ ok: true, report: "decoded by caller", attempts: 1 });
+    }),
+  );
+
+  it.effect("returns a neutral failure when reviewer output is missing", () =>
+    Effect.gen(function* () {
+      const result = yield* piReviewerAgentRuntime.review({
+        sandbox: {
+          run: () => Promise.resolve(runResult("Reviewer completed without structured output.")),
+        } as unknown as Pick<Sandbox, "run">,
+        reviewer: "acceptance",
+        decodeOutput: decodeEmptyFindings,
+        prompt: "Review the Candidate.",
+        profile,
+      });
+
+      expect(result).toMatchObject({
+        ok: false,
+        attempts: 1,
+        failure: {
+          _tag: "ReviewerExecutionFailed",
+          operationName: "decode_reviewer_output",
+        },
+      });
     }),
   );
 
@@ -70,8 +148,7 @@ describe("Pi reviewer agent runtime", () => {
       const result = yield* piReviewerAgentRuntime.review({
         sandbox: { run } as unknown as Pick<Sandbox, "run">,
         reviewer: "specialist:security",
-        validationRunId: "123e4567-e89b-42d3-a456-426614174000",
-        availableArtifactRefs: [],
+        decodeOutput: decodeEmptyFindings,
         prompt: "Review the Candidate.",
         profile,
         agentEnvironment: ["nix", "develop", "-c"],
@@ -109,8 +186,7 @@ describe("Pi reviewer agent runtime", () => {
         const result = yield* piReviewerAgentRuntime.review({
           sandbox: { run } as unknown as Pick<Sandbox, "run">,
           reviewer: "acceptance",
-          validationRunId: "123e4567-e89b-42d3-a456-426614174000",
-          availableArtifactRefs: [],
+          decodeOutput: decodeEmptyFindings,
           prompt: "Review the Candidate.",
           profile,
           commandCwd: workspace,
@@ -155,8 +231,7 @@ describe("Pi reviewer agent runtime", () => {
         const result = yield* piReviewerAgentRuntime.review({
           sandbox: { run } as unknown as Pick<Sandbox, "run">,
           reviewer: "acceptance",
-          validationRunId: "123e4567-e89b-42d3-a456-426614174000",
-          availableArtifactRefs: [],
+          decodeOutput: decodeEmptyFindings,
           prompt: "Review the Candidate.",
           profile,
           commandCwd: "/validation-workspace",
@@ -192,8 +267,7 @@ describe("Pi reviewer agent runtime", () => {
         const result = yield* piReviewerAgentRuntime.review({
           sandbox: { run } as unknown as Pick<Sandbox, "run">,
           reviewer: "acceptance",
-          validationRunId: "123e4567-e89b-42d3-a456-426614174000",
-          availableArtifactRefs: [],
+          decodeOutput: decodeEmptyFindings,
           prompt: "Review the Candidate.",
           profile,
           commandCwd: "/validation-workspace",
@@ -204,7 +278,8 @@ describe("Pi reviewer agent runtime", () => {
         expect(result).toMatchObject({
           ok: false,
           failure: {
-            _tag: "SandcastleToolingFailed",
+            _tag: "ReviewerExecutionFailed",
+            operationName: "run_reviewer_agent",
             message: "Reviewer Session JSONL is corrupt.",
           },
           sessionUsability: "unusable",
@@ -229,8 +304,7 @@ describe("Pi reviewer agent runtime", () => {
         const result = yield* piReviewerAgentRuntime.review({
           sandbox: { run } as unknown as Pick<Sandbox, "run">,
           reviewer: "acceptance",
-          validationRunId: "123e4567-e89b-42d3-a456-426614174000",
-          availableArtifactRefs: [],
+          decodeOutput: decodeEmptyFindings,
           prompt: "Review the Candidate.",
           profile,
           commandCwd: "/validation-workspace",
@@ -241,7 +315,8 @@ describe("Pi reviewer agent runtime", () => {
         expect(result).toMatchObject({
           ok: false,
           failure: {
-            _tag: "SandcastleToolingFailed",
+            _tag: "ReviewerExecutionFailed",
+            operationName: "run_reviewer_agent",
             message: "Reviewer Session JSONL is corrupt.",
           },
           sessionUsability: "unusable",
@@ -279,8 +354,7 @@ describe("Pi reviewer agent runtime", () => {
         const result = yield* piReviewerAgentRuntime.review({
           sandbox: { run } as unknown as Pick<Sandbox, "run">,
           reviewer: "acceptance",
-          validationRunId: "123e4567-e89b-42d3-a456-426614174000",
-          availableArtifactRefs: [],
+          decodeOutput: decodeEmptyFindings,
           prompt: "Review the Candidate.",
           profile,
           commandCwd: "/validation-workspace",
@@ -314,8 +388,7 @@ describe("Pi reviewer agent runtime", () => {
       const result = yield* piReviewerAgentRuntime.review({
         sandbox: { run } as unknown as Pick<Sandbox, "run">,
         reviewer: "acceptance",
-        validationRunId: "123e4567-e89b-42d3-a456-426614174000",
-        availableArtifactRefs: [],
+        decodeOutput: decodeEmptyFindings,
         prompt: "Review the Candidate.",
         profile: {
           ...profile,
@@ -354,8 +427,7 @@ describe("Pi reviewer agent runtime", () => {
       const result = yield* piReviewerAgentRuntime.review({
         sandbox: { run } as unknown as Pick<Sandbox, "run">,
         reviewer: "acceptance",
-        validationRunId: "123e4567-e89b-42d3-a456-426614174000",
-        availableArtifactRefs: [],
+        decodeOutput: decodeEmptyFindings,
         prompt: "Review the Candidate.",
         profile: {
           ...profile,
@@ -395,8 +467,7 @@ describe("Pi reviewer agent runtime", () => {
           },
         } as unknown as Pick<Sandbox, "run">,
         reviewer: "acceptance",
-        validationRunId: "123e4567-e89b-42d3-a456-426614174000",
-        availableArtifactRefs: [],
+        decodeOutput: decodeEmptyFindings,
         prompt: "Review the Candidate.",
         profile,
         agentEnvironment: ["nix", "develop", "-c"],
@@ -405,7 +476,11 @@ describe("Pi reviewer agent runtime", () => {
       expect(result).toMatchObject({
         ok: false,
         attempts: 1,
-        failure: { _tag: "SandcastleToolingFailed", message: "wrapper failed" },
+        failure: {
+          _tag: "ReviewerExecutionFailed",
+          operationName: "run_reviewer_agent",
+          message: "wrapper failed",
+        },
         sessionUsability: "unknown",
       });
       expect(command.startsWith("'nix' 'develop' '-c' pi ")).toBe(true);
@@ -427,8 +502,7 @@ describe("Pi reviewer agent runtime", () => {
           run: () => Promise.resolve(dangling),
         } as unknown as Pick<Sandbox, "run">,
         reviewer: "acceptance",
-        validationRunId: "123e4567-e89b-42d3-a456-426614174000",
-        availableArtifactRefs: [],
+        decodeOutput: decodeEmptyFindings,
         prompt: "Review the Candidate.",
         profile,
       });
@@ -453,8 +527,7 @@ describe("Pi reviewer agent runtime", () => {
       const result = yield* piReviewerAgentRuntime.review({
         sandbox: { run } as unknown as Pick<Sandbox, "run">,
         reviewer: "acceptance",
-        validationRunId: "123e4567-e89b-42d3-a456-426614174000",
-        availableArtifactRefs: [],
+        decodeOutput: decodeEmptyFindings,
         prompt: "Review the Candidate.",
         profile,
       });
@@ -494,8 +567,7 @@ describe("Pi reviewer agent runtime", () => {
       const result = yield* piReviewerAgentRuntime.review({
         sandbox: { run } as unknown as Pick<Sandbox, "run">,
         reviewer: "acceptance",
-        validationRunId: "123e4567-e89b-42d3-a456-426614174000",
-        availableArtifactRefs: [],
+        decodeOutput: decodeEmptyFindings,
         prompt: "Review the Candidate.",
         profile,
       });
@@ -504,9 +576,8 @@ describe("Pi reviewer agent runtime", () => {
         ok: false,
         attempts: 3,
         failure: {
-          _tag: "ReviewerOutputContractFailed",
-          reviewer: "acceptance",
-          attempts: 3,
+          _tag: "ReviewerExecutionFailed",
+          operationName: "decode_reviewer_output",
         },
         sessionUsability: "unknown",
         stdout: '<reviewer-output>{"findings":[{"title":"T"}]}</reviewer-output>',
@@ -531,8 +602,7 @@ describe("Pi reviewer agent runtime", () => {
       const result = yield* piReviewerAgentRuntime.review({
         sandbox: { run } as unknown as Pick<Sandbox, "run">,
         reviewer: "acceptance",
-        validationRunId: "123e4567-e89b-42d3-a456-426614174000",
-        availableArtifactRefs: [],
+        decodeOutput: decodeEmptyFindings,
         prompt: "Review the Candidate.",
         profile,
       });
@@ -540,7 +610,11 @@ describe("Pi reviewer agent runtime", () => {
       expect(result).toMatchObject({
         ok: false,
         attempts: 2,
-        failure: { _tag: "SandcastleToolingFailed", message: "provider failed" },
+        failure: {
+          _tag: "ReviewerExecutionFailed",
+          operationName: "run_reviewer_agent",
+          message: "provider failed",
+        },
         sessionUsability: "unknown",
         stdout: "<reviewer-output>not json</reviewer-output>",
       });

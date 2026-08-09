@@ -12,6 +12,7 @@ import {
 } from "../../src/change/candidateValidation/validateCandidate.js";
 import type { ReviewerSessionStore } from "../../src/change/reviewerSession/reviewerSession.js";
 import type { ChangeValidationPersistence } from "../../src/change/validation/changeValidationPersistence.js";
+import type { ReviewerOutput } from "../../src/contracts/reviewerOutput.js";
 import { type RepositorySqlConfig, repositorySqlLayer } from "../../src/sqlite/repositorySql.js";
 import { openSqliteChangeValidationPersistence } from "../../src/sqlite/sqliteChangeValidationPersistence.js";
 
@@ -19,7 +20,7 @@ export const candidateValidationForTest = (input: {
   readonly localRepositoryMainCheckoutRoot: string;
   readonly artifactsRoot: string;
   readonly repository: RepositorySqlConfig;
-  readonly reviewerAgentRuntime?: ReviewerAgentRuntime;
+  readonly reviewerAgentRuntime?: ReviewerAgentRuntime<ReviewerOutput>;
   readonly reviewerSessionsRoot?: string;
   readonly sessionStore?: ReviewerSessionStore;
 }) => {

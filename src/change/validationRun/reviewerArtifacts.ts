@@ -1,5 +1,4 @@
 import { Effect } from "effect";
-import type { ReviewerAgentResult } from "../../agent/reviewerAgentRuntime.js";
 import { encodeReviewerWireValue } from "../../agent/reviewerOutputWire.js";
 import type { ReviewerContinuity } from "../reviewerSession/reviewerSession.js";
 import {
@@ -21,7 +20,19 @@ export const writeReviewerArtifacts = (input: {
   readonly validationRunId: string;
   readonly phase: ValidationPhase;
   readonly producer: string;
-  readonly result: ReviewerAgentResult;
+  readonly result:
+    | {
+        readonly ok: true;
+        readonly report: unknown;
+        readonly attempts: number;
+        readonly stdout: string;
+      }
+    | {
+        readonly ok: false;
+        readonly failure: ValidationToolingFailure;
+        readonly attempts: number;
+        readonly stdout: string;
+      };
   readonly artifactsRoot: string;
   readonly artifactMaxBytes?: number;
   readonly executionEvidence: ReviewerExecutionEvidence;
