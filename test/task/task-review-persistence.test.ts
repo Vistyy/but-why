@@ -519,6 +519,21 @@ it.scoped("rejects non-passing completion after the Task leaves New", () =>
           now: thirdNow,
         });
         expect(rejected).toEqual({ ok: false, code: "task_state_changed" });
+        if (reviewId === "review-blocked-task-changed") {
+          const abandoned = yield* Effect.either(
+            reviews.abandon({
+              reviewId,
+              errorKind: "infrastructure_tooling_failed",
+              operationName: "task_review_abandonment",
+              errorMessage: "Submission process stopped",
+              now: thirdNow,
+            }),
+          );
+          expect(abandoned).toMatchObject({
+            _tag: "Left",
+            left: { _tag: "RepositoryPersistedDataInvalid" },
+          });
+        }
         expect(yield* reviews.getActiveByReviewId(reviewId)).toBeDefined();
       }
     }),
@@ -745,6 +760,61 @@ it.scoped("rejects malformed persisted Review evidence before another admission"
       ).toBe(true);
       const rows = yield* repository.operation(
         "count Task Reviews after rejected admission",
+        (sql) => sql<{ readonly count: number }>`SELECT COUNT(*) AS count FROM task_reviews`,
+      );
+      expect(rows[0]?.count).toBe(1);
+    }),
+  ),
+);
+
+it.scoped("rejects malformed persisted workspace evidence before another admission", () =>
+  withTemporaryRepositoryState(() =>
+    Effect.gen(function* () {
+      const tasks = yield* openSqliteTaskPersistence("BY");
+      const reviews = yield* openSqliteTaskReviewPersistence();
+      const task = yield* createTask(tasks, "Corrupt workspace history", firstNow);
+      const started = yield* reviews.start({
+        taskId: task.id,
+        baseCommit,
+        policy,
+        reviewId: "review-corrupt-workspace",
+        workspaceSetup: {
+          tempRefName: "refs/but-why/task-reviews/review-corrupt-workspace/review",
+          worktreePath: "/tmp/worktrees/review-corrupt-workspace",
+        },
+        now: firstNow,
+      });
+      if (!started.ok) throw new Error("start failed");
+      const completed = yield* reviews.complete({
+        reviewId: "review-corrupt-workspace",
+        outcome: "passed",
+        now: secondNow,
+      });
+      if (!completed.ok) throw new Error(completed.code);
+
+      const repository = yield* RepositorySql;
+      yield* repository.operation(
+        "corrupt Task Review workspace evidence",
+        (sql) =>
+          sql`UPDATE task_review_workspace_setups SET temp_ref_name = ''
+            WHERE review_id = 'review-corrupt-workspace'`,
+      );
+
+      const attempted = yield* Effect.either(
+        reviews.start({
+          taskId: task.id,
+          baseCommit,
+          policy,
+          reviewId: "review-after-corrupt-workspace",
+          now: thirdNow,
+        }),
+      );
+      expect(attempted).toMatchObject({
+        _tag: "Left",
+        left: { _tag: "RepositoryPersistedDataInvalid" },
+      });
+      const rows = yield* repository.operation(
+        "count Task Reviews after malformed workspace rejection",
         (sql) => sql<{ readonly count: number }>`SELECT COUNT(*) AS count FROM task_reviews`,
       );
       expect(rows[0]?.count).toBe(1);

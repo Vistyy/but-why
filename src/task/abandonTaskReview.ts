@@ -160,7 +160,7 @@ const abandonWhileLocked = (
       status: "abandoned" as const,
       reviewId: command.reviewId,
       outcome: "tooling_failed" as const,
-      task: { id: context.taskId, state: "new" as const },
+      task: { id: context.taskId, state: context.taskState },
       cleanup,
     };
   });

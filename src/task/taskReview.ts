@@ -100,15 +100,18 @@ export type TaskReviewWorkspaceSetup = {
 export type TaskReviewAbandonmentContext = {
   readonly reviewId: string;
   readonly taskId: PublicTaskId;
-  readonly taskState: TaskState;
   readonly submittedSha: string;
   readonly tempRefName?: string;
   readonly worktreePath?: string;
   readonly cleanupWorktree: "removed" | "not_created" | "failed" | null;
   readonly cleanupTempRef: "removed" | "not_created" | "failed" | null;
 } & (
-  | { readonly reviewState: "running"; readonly outcome: null }
-  | { readonly reviewState: "complete"; readonly outcome: TaskReviewOutcome }
+  | { readonly reviewState: "running"; readonly outcome: null; readonly taskState: "new" }
+  | {
+      readonly reviewState: "complete";
+      readonly outcome: TaskReviewOutcome;
+      readonly taskState: TaskState;
+    }
 );
 
 const persistedTaskReviewProposalSchema = Schema.Struct({
