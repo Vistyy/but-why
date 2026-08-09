@@ -5,7 +5,6 @@ import { Effect, Schema } from "effect";
 
 import { nonBlankStringSchema } from "../contracts/agentConfig.js";
 import { RepositoryPersistedDataInvalid } from "../contracts/repositoryStorageError.js";
-import type { TaskState } from "../task/lifecycle.js";
 import { type PublicTaskId, storedPublicTaskId } from "../task/taskId.js";
 import {
   decodePersistedTaskReviewDependencyEvidence,
@@ -36,6 +35,7 @@ import type {
 } from "../task/taskReviewStore.js";
 import { RepositorySql } from "./repositorySql.js";
 import { decodeSqliteJsonStringArray } from "./sqliteJsonStringArray.js";
+import { type DecodedTaskGraph, readDecodedTaskGraph } from "./sqliteTaskReadModel.js";
 
 export const openSqliteTaskReviewPersistence = (): Effect.Effect<
   TaskReviewPersistence,
@@ -46,7 +46,7 @@ export const openSqliteTaskReviewPersistence = (): Effect.Effect<
     start: (input) =>
       repository.transactionImmediate("start Task Review", (sql) => start(sql, input)),
     getTaskFact: (taskId) =>
-      repository.operation("read Task Review Task fact", (sql) => getTaskFact(sql, taskId)),
+      repository.transaction("read Task Review Task fact", (sql) => getTaskFact(sql, taskId)),
     complete: (input) =>
       repository.transactionImmediate("complete Task Review", (sql) => complete(sql, input)),
     getActiveForTask: (taskId) =>
@@ -137,14 +137,8 @@ const start = (
   input: StartTaskReviewInput,
 ): Effect.Effect<StartTaskReviewResult, SqlError | RepositoryPersistedDataInvalid> =>
   Effect.gen(function* () {
-    const taskRows = yield* sql<{
-      readonly title: string;
-      readonly description: string;
-      readonly state: TaskState;
-    }>`
-      SELECT title, description, state FROM tasks WHERE id = ${input.taskId}
-    `;
-    const task = taskRows[0];
+    const taskGraph = yield* readDecodedTaskGraph(sql, "start Task Review");
+    const task = taskGraph.tasksById.get(input.taskId);
     if (task === undefined) return { ok: false as const, code: "task_not_found" as const };
     if (task.state !== "new") {
       return { ok: false as const, code: "invalid_task_state" as const, state: task.state };
@@ -156,7 +150,7 @@ const start = (
       return { ok: false as const, code: "task_linked_to_change" as const };
     }
 
-    const dependencyEvidence = yield* readTaskReviewDependencies(sql, input.taskId);
+    const dependencyEvidence = readTaskReviewDependencies(taskGraph, input.taskId);
     const proposal: TaskReviewProposal = {
       title: task.title,
       description: task.description,
@@ -210,14 +204,11 @@ const start = (
 const getTaskFact = (
   sql: SqlClient.SqlClient,
   taskId: PublicTaskId,
-): Effect.Effect<TaskReviewTaskFact | undefined, SqlError> =>
-  Effect.map(
-    sql<{ readonly state: TaskState }>`SELECT state FROM tasks WHERE id = ${taskId}`,
-    (rows) => {
-      const row = rows[0];
-      return row === undefined ? undefined : { id: taskId, state: row.state };
-    },
-  );
+): Effect.Effect<TaskReviewTaskFact | undefined, SqlError | RepositoryPersistedDataInvalid> =>
+  Effect.map(readDecodedTaskGraph(sql, "read Task Review Task fact"), (graph) => {
+    const task = graph.tasksById.get(taskId);
+    return task === undefined ? undefined : { id: task.id, state: task.state };
+  });
 
 const complete = (
   sql: SqlClient.SqlClient,
@@ -252,10 +243,8 @@ const complete = (
       return { ok: false as const, code: "review_not_active" as const };
     }
 
-    const taskState = yield* sql<{ readonly state: string }>`
-      SELECT state FROM tasks WHERE id = ${taskId}
-    `;
-    if (taskState[0]?.state !== "new") {
+    const taskGraph = yield* readDecodedTaskGraph(sql, "complete Task Review");
+    if (taskGraph.tasksById.get(taskId)?.state !== "new") {
       return { ok: false as const, code: "task_state_changed" as const };
     }
 
@@ -307,10 +296,7 @@ const complete = (
     if (updated === undefined) {
       return yield* invalidData("complete Task Review", "Task Review disappeared");
     }
-    const taskFacts = yield* sql<{ readonly state: TaskState }>`
-      SELECT state FROM tasks WHERE id = ${taskId}
-    `;
-    const taskFact = taskFacts[0];
+    const taskFact = taskGraph.tasksById.get(taskId);
     if (taskFact === undefined) {
       return yield* invalidData("complete Task Review", "Task disappeared");
     }
@@ -318,7 +304,7 @@ const complete = (
     return {
       ok: true as const,
       review: decoded,
-      task: { id: taskId, state: taskFact.state } satisfies TaskReviewTaskFact,
+      task: { id: taskFact.id, state: taskFact.state } satisfies TaskReviewTaskFact,
     };
   });
 
@@ -664,58 +650,24 @@ const decodeCompletionFailureOptional = (
 };
 
 const readTaskReviewDependencies = (
-  sql: SqlClient.SqlClient,
+  graph: DecodedTaskGraph,
   taskId: PublicTaskId,
-): Effect.Effect<
-  readonly TaskReviewDependencyEvidence[],
-  SqlError | RepositoryPersistedDataInvalid
-> =>
-  Effect.gen(function* () {
-    const rows = yield* sql<{
-      readonly taskId: string;
-      readonly title: string;
-      readonly description: string;
-      readonly state: TaskState;
-    }>`
-      SELECT tasks.id AS taskId, tasks.title, tasks.description, tasks.state
-      FROM task_dependencies
-      JOIN tasks ON tasks.id = task_dependencies.prerequisite_task_id
-      WHERE task_dependencies.dependent_task_id = ${taskId}
-      ORDER BY tasks.numeric_id ASC
-    `;
-    const nested = yield* sql<{
-      readonly dependentTaskId: string;
-      readonly prerequisiteTaskId: string;
-    }>`
-      SELECT nested.dependent_task_id AS dependentTaskId,
-        nested.prerequisite_task_id AS prerequisiteTaskId
-      FROM task_dependencies AS direct
-      JOIN task_dependencies AS nested ON nested.dependent_task_id = direct.prerequisite_task_id
-      WHERE direct.dependent_task_id = ${taskId}
-      ORDER BY nested.prerequisite_task_id
-    `;
-    const nestedByDependent = new Map<string, readonly string[]>();
-    for (const row of nested) {
-      const existing = nestedByDependent.get(row.dependentTaskId) ?? [];
-      nestedByDependent.set(row.dependentTaskId, [...existing, row.prerequisiteTaskId]);
-    }
-    return yield* Effect.forEach(rows, (row) =>
-      Effect.try({
-        try: (): TaskReviewDependencyEvidence => ({
-          taskId: storedPublicTaskId(row.taskId),
-          title: row.title,
-          description: row.description,
-          state: row.state,
-          dependencyIds: (nestedByDependent.get(row.taskId) ?? []).map(storedPublicTaskId),
-        }),
-        catch: (cause) =>
-          new RepositoryPersistedDataInvalid({
-            operationName: "read Task Review dependencies",
-            cause,
-          }),
-      }),
-    );
-  });
+): readonly TaskReviewDependencyEvidence[] =>
+  graph.dependencies
+    .filter((dependency) => dependency.dependentTask.id === taskId)
+    .map((dependency) => dependency.prerequisiteTask)
+    .sort((left, right) => left.numericId - right.numericId)
+    .map((dependency) => ({
+      taskId: dependency.id,
+      title: dependency.title,
+      description: dependency.description,
+      state: dependency.state,
+      dependencyIds: graph.dependencies
+        .filter((nested) => nested.dependentTask.id === dependency.id)
+        .map((nested) => nested.prerequisiteTask)
+        .sort((left, right) => left.numericId - right.numericId)
+        .map((nested) => nested.id),
+    }));
 
 const invalidData = (operationName: string, message: string) =>
   Effect.fail(

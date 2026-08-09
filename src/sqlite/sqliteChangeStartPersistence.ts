@@ -79,6 +79,8 @@ export const openSqliteChangeStartPersistence = (): Effect.Effect<
 
 const prepareTask = (sql: SqlClient.SqlClient, taskId: PublicTaskId) =>
   Effect.gen(function* () {
+    const task = yield* readTask(sql, taskId);
+    if (task === undefined) return { ok: false as const, code: "task_not_found" as const };
     const activeReview = yield* readActiveTaskReview(sql, taskId);
     if (activeReview !== undefined) {
       return {
@@ -89,8 +91,6 @@ const prepareTask = (sql: SqlClient.SqlClient, taskId: PublicTaskId) =>
     }
     const existing = yield* getByTaskId(sql, taskId);
     if (existing !== undefined) {
-      const task = yield* readTask(sql, taskId);
-      if (task === undefined) return { ok: false as const, code: "task_not_found" as const };
       return task.state === "todo"
         ? { ok: true as const, existing }
         : { ok: false as const, code: "invalid_task_state" as const, state: task.state };
