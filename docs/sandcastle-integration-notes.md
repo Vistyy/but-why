@@ -31,7 +31,7 @@ Sandboxing should be a separate execution-provider decision rather than another 
 | --- | --- | --- |
 | Validation Workspace lifecycle | Temporary ref, exact Candidate SHA, dirty-workspace recovery, setup evidence, cleanup result | Creates the Git worktree, copies allowlisted files, exposes its path, and closes it |
 | Preparation and Checks | Commands, ordering, findings, diagnostics, integrity checks | Runs shell commands through `Sandbox.exec()` |
-| Pi reviewer execution | Profiles, prompts, output contract, correction attempt, Reviewer Session identity, persistence, and evidence | Builds and runs the Pi process, parses its stream, and exposes session resume |
+| Pi reviewer execution | Profiles, prompts, output contract, bounded same-session corrections, Reviewer Session identity, persistence, and evidence | Builds and runs the Pi process, parses its stream, and exposes session resume |
 | Process handle | Effect scope and cleanup policy | Provides `run()`, `exec()`, and `close()` on one handle |
 
 The main integration points are `src/change/validation/createValidationWorkspace.ts` and `src/agent/reviewerAgentRuntime.ts`.
@@ -51,7 +51,10 @@ But Why does not use these Sandcastle capabilities:
 
 The installed Sandcastle `0.12.0` declarations expose `Output.object()`, `Output.string()`, and retry configuration for the top-level `run()` interface.
 They do not expose that output contract through the reusable `Sandbox.run()` interface that But Why uses for a shared Validation Workspace.
-The current reviewer Adapter therefore performs its own tagged-output validation and one same-session correction, as recorded in [Open Questions](open-questions.md#should-sandcastle-own-structured-reviewer-retries).
+The current reviewer Adapter therefore performs its own strict output tag, schema, and Artifact-reference validation with up to two same-session corrections.
+Each correction resumes through the latest returned session result, receives the latest output-contract diagnostics, and does not increase the phase-level review call count.
+The recorded reviewer stdout is the final invocation's unmodified raw stdout, and the recorded attempt count is exact.
+A future replacement must preserve this bounded same-session correction, strict validation, raw stdout evidence, exact attempt counts, and existing Reviewer Session semantics.
 
 Sandcastle's usage parser is implemented for Claude Code, not Pi.
 It does not solve But Why's Pi usage requirement.
@@ -178,7 +181,7 @@ Replacing Sandcastle with current behavior requires this complete set:
 1. A Validation Workspace Adapter creates the Git worktree on But Why's temporary ref, copies allowlisted files, returns its path, and removes it.
 2. A Command Execution Adapter runs preparation, Checks, and Git integrity commands in that workspace, handles cancellation, and reports whether process termination is proved.
    The executable entry must translate supported host termination signals into Effect interruption so the Adapter can stop its supervised process group and complete scoped cleanup before exit.
-3. A Pi Reviewer Adapter resolves the model and resources, starts or resumes one Change-owned session, collects the reviewer result, performs the correction attempt, and returns session and usage evidence.
+3. A Pi Reviewer Adapter resolves the model and resources, starts or resumes one Change-owned session, collects the reviewer result, performs the bounded same-session output corrections, and returns session and usage evidence.
 4. The Validation Workspace scope composes those Adapters behind one `exec`, reviewer-run, and `close` handle so existing Validation Gate phases do not learn provider details.
 5. Migration removes Sandcastle types, failure names, `.sandcastle` path assumptions, ignore rules, tests, documentation, and the package dependency after equivalent conformance tests pass.
 
@@ -189,7 +192,7 @@ Use Git itself for Validation Workspace creation and the installed Effect Scope 
 Worktrunk, simple-git, execa, and zx do not remove But Why's Candidate, recovery, or evidence rules and would duplicate existing infrastructure.
 
 Use the Pi SDK for reviewer sessions because it already owns Pi models, explicit resources, JSONL sessions, cancellation, and usage statistics.
-A TypeBox `review_result` terminal tool can collect a typed result, and one second `session.prompt()` on the same session can implement the current correction attempt.
+A TypeBox `review_result` terminal tool can collect a typed result, and up to two `session.prompt()` calls on the same session can implement the bounded same-session corrections.
 `SessionManager.open()` with a current-working-directory override can resume a Reviewer Session in a successor Validation Workspace without rewriting its JSONL header.
 
 The Pi SDK cannot apply the configured Agent Environment around an in-process session.
@@ -250,6 +253,7 @@ A future second harness would require its own Adapter and conformance work after
 A replacement is credible only when conformance tests prove:
 
 - The Validation Workspace contains the exact Candidate SHA.
+- Reviewer output corrections stay bounded to the same Reviewer Session, use the strict output tag, schema, and Artifact-reference validation, and record final raw stdout and exact attempt counts.
 - Preparation, Checks, and reviewers share the intended workspace state.
 - The Candidate integrity check detects reviewer or command writes.
 - Reviewer Sessions resume in a successor disposable workspace without stale paths or duplicate authority.
