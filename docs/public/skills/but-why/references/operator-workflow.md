@@ -69,11 +69,16 @@ Before designing or revising a Task Verification Contract, read [Task verificati
    Keep acceptance criteria separate from verification mechanisms.
    Do not use generic gates, test counts, coverage targets, or unsupported test categories as acceptance criteria.
    Follow the Task verification reference to define proportionate implementation confidence.
+   Include a `## Review path` section in every proposed Task Context.
+   State a concise path by which one human can understand and judge the complete implementation and required evidence as one coherent Change.
+   Use available repository evidence, including evidence from prior implementation attempts, to decide whether the path is practical.
+   Files, modules, layers, verification areas, and expected effort can inform this judgment, but none determines it alone.
+   Do not turn the review path into a detailed implementation plan, an exact file forecast, a line estimate, or an effort estimate.
 4. Before requesting Task Recording Authorization, review the exact final Task Contexts and dependencies against current authority, ownership, verification feasibility, and cross-Task overlap.
-   Use each completed Task Verification Contract to confirm that one practical coherent implementation, review, and evidence path exists.
-   If it does not, reconsider the boundary or present the concern before requesting Task Recording Authorization.
+   Confirm that each review path covers its complete supported result and remains practical in light of the available evidence.
+   If no practical review path can be stated, present the evidence and concern instead of requesting Task Recording Authorization.
    Task lifecycle state does not establish implementation readiness.
-5. Present the complete Task graph, Task Context, Task Dependency rationale, and recording order.
+5. Present the complete Task graph, exact Task Contexts including each `## Review path` section, Task Dependency rationale, and recording order.
    Obtain Task Recording Authorization before any Task or Task Dependency mutation.
 6. Record only the authorized Task Context and Task Dependencies.
    Use CLI help for the exact syntax before each command.

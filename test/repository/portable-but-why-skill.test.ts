@@ -79,6 +79,25 @@ describe("portable But Why skill", () => {
     expect(implementerSession).toContain("Do not repeat the Change ID, Task ID");
     expect(implementerSession).toContain("Do not retry an uncertain start or initial prompt.");
     expect(authorTasks).toContain("[Task verification](task-verification.md)");
+    expect(authorTasks).toContain(
+      "Include a `## Review path` section in every proposed Task Context.",
+    );
+    expect(authorTasks).toContain(
+      "State a concise path by which one human can understand and judge the complete implementation and required evidence as one coherent Change.",
+    );
+    expect(authorTasks).toContain(
+      "Use available repository evidence, including evidence from prior implementation attempts, to decide whether the path is practical.",
+    );
+    expect(authorTasks).toContain(
+      "Do not turn the review path into a detailed implementation plan, an exact file forecast, a line estimate, or an effort estimate.",
+    );
+    expect(authorTasks).toContain(
+      "Confirm that each review path covers its complete supported result and remains practical in light of the available evidence.",
+    );
+    expect(authorTasks).toContain(
+      "If no practical review path can be stated, present the evidence and concern instead of requesting Task Recording Authorization.",
+    );
+    expect(authorTasks).toContain("exact Task Contexts including each `## Review path` section");
     expect(taskVerification).toContain("Task Verification Contract");
     expect(taskVerification).toContain(
       "**Required Seam** is a boundary required by a Verification Claim or accepted verification plan because interaction across that boundary is part of the Claim.",
