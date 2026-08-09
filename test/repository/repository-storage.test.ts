@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import * as Migrator from "@effect/sql/Migrator";
@@ -3638,7 +3638,6 @@ describe("repository SQL storage", () => {
   const runHelperProcess = (
     args: readonly string[],
     cwd: string,
-    onOpening?: () => void,
   ): Promise<{ readonly status: number | null; readonly stdout: string }> =>
     new Promise((resolveResult) => {
       const child = startTestProcess(
@@ -3648,16 +3647,11 @@ describe("repository SQL storage", () => {
       );
       let stdout = "";
       let stderr = "";
-      let openingObserved = false;
       child.stdout.on("data", (chunk: Buffer) => {
         stdout += chunk.toString();
       });
       child.stderr.on("data", (chunk: Buffer) => {
         stderr += chunk.toString();
-        if (!openingObserved && stderr.includes("opening")) {
-          openingObserved = true;
-          onOpening?.();
-        }
       });
       child.on("close", (status) => resolveResult({ status, stdout: (stdout || stderr).trim() }));
     });
@@ -3666,7 +3660,7 @@ describe("repository SQL storage", () => {
     const child = startTestProcess(
       process.execPath,
       ["--import", helperTsxLoader, helperScript, "hold-lock", statePath, releasePath],
-      { cwd: dirname(statePath), timeout: 30_000 },
+      { cwd: dirname(statePath), timeout: 90_000 },
     );
     let output = "";
     child.stdout.on("data", (chunk: Buffer) => {
@@ -3704,20 +3698,40 @@ describe("repository SQL storage", () => {
         Effect.gen(function* () {
           const statePath = join(directory, "state.sqlite");
           const releasePath = join(directory, "release-migration-lock");
+          const contentionObservedPath = join(directory, "migration-contention-observed");
           const holder = startMigrationLockHolder(statePath, releasePath);
           yield* Effect.promise(() => waitForMigrationLock(holder));
 
-          const results = yield* Effect.promise(() =>
-            Promise.all(
-              ["ConcurrentA", "ConcurrentB", "ConcurrentC"].map((title, index) =>
-                runHelperProcess(
-                  ["open-state", statePath, directory, "5000", "30000", "50", title],
-                  directory,
-                  index === 0 ? () => writeFileSync(releasePath, "release\n") : undefined,
-                ),
-              ),
+          const first = runHelperProcess(
+            [
+              "open-contended-state",
+              statePath,
+              directory,
+              contentionObservedPath,
+              releasePath,
+              "5000",
+              "30000",
+              "50",
+              "ConcurrentA",
+            ],
+            directory,
+          );
+          const others = ["ConcurrentB", "ConcurrentC"].map((title) =>
+            runHelperProcess(
+              ["open-state", statePath, directory, "5000", "30000", "50", title],
+              directory,
             ),
           );
+          yield* Effect.promise(() =>
+            observeUntil({
+              description: "a separate process to observe SQLite migration contention",
+              observe: () => existsSync(contentionObservedPath),
+              isReady: Boolean,
+              timeoutMs: 15_000,
+            }),
+          );
+          writeFileSync(releasePath, "release\n");
+          const results = yield* Effect.promise(() => Promise.all([first, ...others]));
           const released = yield* Effect.promise(() => holder.done);
           expect(released.status).toBe(0);
           expect(released.stdout).toContain("released");

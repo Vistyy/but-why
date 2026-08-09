@@ -1,4 +1,4 @@
-import { existsSync, watch } from "node:fs";
+import { existsSync, watch, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 
@@ -8,7 +8,7 @@ import { RepositorySql, repositorySqlLayer } from "../src/sqlite/repositorySql.j
 import { openSqliteTaskPersistence } from "../src/sqlite/sqliteTaskPersistence.js";
 import { storedPublicTaskId } from "../src/task/taskId.js";
 
-const usage = `Usage: repositoryProcessHelper.ts <hold-lock|open-state|open-read> ...
+const usage = `Usage: repositoryProcessHelper.ts <hold-lock|open-state|open-contended-state|open-read> ...
 
 Commands:
   hold-lock <statePath> <releasePath>
@@ -19,6 +19,10 @@ Commands:
     Open Shared Repository State through the repository SQL layer and create and
     read back one Task. Prints one JSON line and exits 0 on success or 1 on
     failure with the typed storage error tag.
+  open-contended-state <statePath> <commonDirectory> <observedPath> <releasePath>
+                       [busyTimeoutMs] [contentionTimeoutMs] [retryDelayMs] <title>
+    Observe the held SQLite write lock from this process, report it through
+    <observedPath>, await <releasePath>, then open state through the ordinary layer.
   open-read <statePath> <commonDirectory> [busyTimeoutMs] [contentionTimeoutMs]
             [retryDelayMs]
     Open Shared Repository State through the repository SQL layer and read the
@@ -36,7 +40,6 @@ type OpenStateInput = {
 };
 
 const openState = async (input: OpenStateInput): Promise<number> => {
-  process.stderr.write("opening\n");
   const program = Effect.gen(function* () {
     const tasks = yield* openSqliteTaskPersistence("BY");
     const created = yield* tasks.createTask({
@@ -148,6 +151,27 @@ const waitForRelease = (releasePath: string): Promise<void> =>
     });
   });
 
+const observeContentionAndWaitForRelease = async (
+  statePath: string,
+  observedPath: string,
+  releasePath: string,
+): Promise<void> => {
+  const database = new DatabaseSync(statePath, { timeout: 0 });
+  try {
+    database.exec("BEGIN IMMEDIATE");
+    database.exec("ROLLBACK");
+    throw new Error("Expected the SQLite migration write lock to be held");
+  } catch (error) {
+    if (!(error instanceof Error) || !("code" in error) || error.code !== "ERR_SQLITE_ERROR") {
+      throw error;
+    }
+  } finally {
+    database.close();
+  }
+  writeFileSync(observedPath, "contended\n");
+  await waitForRelease(releasePath);
+};
+
 const holdLock = async (statePath: string, releasePath: string): Promise<number> => {
   const database = new DatabaseSync(statePath, { timeout: 2_000 });
   database.exec(`
@@ -188,6 +212,39 @@ const main = async (): Promise<number> => {
         process.stderr.write(usage + "\n");
         return 2;
       }
+      return await openState({
+        statePath,
+        commonDirectory,
+        ...(busyTimeoutMs === undefined ? {} : { busyTimeoutMs: Number(busyTimeoutMs) }),
+        ...(contentionTimeoutMs === undefined
+          ? {}
+          : { contentionTimeoutMs: Number(contentionTimeoutMs) }),
+        ...(retryDelayMs === undefined ? {} : { retryDelayMs: Number(retryDelayMs) }),
+        title,
+      });
+    }
+    case "open-contended-state": {
+      const [
+        statePath,
+        commonDirectory,
+        observedPath,
+        releasePath,
+        busyTimeoutMs,
+        contentionTimeoutMs,
+        retryDelayMs,
+        title,
+      ] = rest;
+      if (
+        statePath === undefined ||
+        commonDirectory === undefined ||
+        observedPath === undefined ||
+        releasePath === undefined ||
+        title === undefined
+      ) {
+        process.stderr.write(usage + "\n");
+        return 2;
+      }
+      await observeContentionAndWaitForRelease(statePath, observedPath, releasePath);
       return await openState({
         statePath,
         commonDirectory,
