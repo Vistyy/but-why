@@ -1,4 +1,3 @@
-// biome-ignore-all lint/complexity/useLiteralKeys: TypeScript requires bracket access for decoded index-signature records.
 import { readFileSync, statSync } from "node:fs";
 import { createJiti } from "jiti/static";
 

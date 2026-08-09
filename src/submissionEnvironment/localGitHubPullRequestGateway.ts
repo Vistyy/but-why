@@ -1,4 +1,3 @@
-// biome-ignore-all lint/complexity/useLiteralKeys: TypeScript requires bracket access for decoded index-signature records.
 import type { SpawnSyncOptionsWithStringEncoding } from "node:child_process";
 import { spawnSync } from "node:child_process";
 
