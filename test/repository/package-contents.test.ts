@@ -90,6 +90,12 @@ describe("CLI package contents", () => {
       '#!/usr/bin/env sh\nif [ "$1" = "repo" ] && [ "$2" = "view" ]; then printf \'{\\"defaultBranchRef\\":{\\"name\\":\\"main\\"}}\\n\'; exit 0; fi\nexit 1\n',
     );
     writeFileSync(
+      join(tools, "pi"),
+      `#!/usr/bin/env sh
+printf '<reviewer-output>{"findings":[]}</reviewer-output>\\n'
+`,
+    );
+    writeFileSync(
       join(tools, "herdr"),
       `#!/usr/bin/env sh
 if [ "$1" = "agent" ] && [ "$2" = "list" ]; then
@@ -119,6 +125,7 @@ exit 1
 `,
     );
     chmodSync(join(tools, "gh"), 0o755);
+    chmodSync(join(tools, "pi"), 0o755);
     chmodSync(join(tools, "herdr"), 0o755);
     const bin = join(installed, "node_modules", ".bin", "by");
     const env = {
@@ -155,6 +162,33 @@ exit 1
         agentProfiles: { test: { agentRuntime: "pi", runtimeConfig: { model: "test/model" } } },
       })}\n`,
     );
+    const taskContext = join(repository, "task-context.md");
+    writeFileSync(taskContext, "Implement package-extracted Task Submission.\n");
+    const createdTask = runTestProcess(
+      bin,
+      ["--json", "task", "create", "--title", "Package submission", "--file", taskContext],
+      { cwd: repository, env, isolatedHome },
+    );
+    expect(createdTask.status, `${createdTask.stdout}${createdTask.stderr}`).toBe(0);
+    writeFileSync(join(repository, ".but-why", "config.json"), "not-json\n");
+    const submittedTask = runTestProcess(bin, ["--json", "task", "submit", "BY-1"], {
+      cwd: repository,
+      env,
+      isolatedHome,
+    });
+    expect(submittedTask.status, `${submittedTask.stdout}${submittedTask.stderr}`).toBe(0);
+    const submittedOutput = submittedTask.stdout.slice(
+      Math.max(0, submittedTask.stdout.lastIndexOf("\n{") + 1),
+    );
+    expect(JSON.parse(submittedOutput)).toMatchObject({
+      review: { outcome: "passed", task: { id: "BY-1", state: "todo" } },
+      nextAction: "by change start --task BY-1",
+    });
+    runTestProcess("git", ["checkout", "--", ".but-why/config.json"], {
+      cwd: repository,
+      isolatedHome,
+    });
+
     const started = runTestProcess(bin, ["--json", "change", "start"], {
       cwd: repository,
       env,

@@ -42,8 +42,8 @@ export const openSqliteTaskReviewPersistence = (): Effect.Effect<
   RepositorySql
 > =>
   Effect.map(RepositorySql, (repository) => ({
-    startOrReuse: (input) =>
-      repository.transactionImmediate("start Task Review", (sql) => startOrReuse(sql, input)),
+    start: (input) =>
+      repository.transactionImmediate("start Task Review", (sql) => start(sql, input)),
     getTaskFact: (taskId) =>
       repository.operation("read Task Review Task fact", (sql) => getTaskFact(sql, taskId)),
     complete: (input) =>
@@ -60,14 +60,12 @@ export const openSqliteTaskReviewPersistence = (): Effect.Effect<
           getAbandonmentContext(sql, reviewId),
         )
         .pipe(Effect.flatMap(decodeAbandonmentContextOptional)),
-    getReviewById: (reviewId) =>
+    latestCompletedReviewForTask: (taskId) =>
       repository
-        .operation("read Task Review", (sql) => getReviewById(sql, reviewId))
+        .operation("read latest completed Task Review", (sql) =>
+          latestCompletedReviewForTask(sql, taskId),
+        )
         .pipe(Effect.flatMap(decodeReviewOptional)),
-    listReviewsForTask: (taskId) =>
-      repository
-        .operation("list Task Reviews", (sql) => listReviewsForTask(sql, taskId))
-        .pipe(Effect.flatMap((rows) => Effect.forEach(rows, decodeReview))),
     listFindings: (reviewId) =>
       repository
         .operation("list Task Review Findings", (sql) => listFindings(sql, reviewId))
@@ -76,18 +74,6 @@ export const openSqliteTaskReviewPersistence = (): Effect.Effect<
       repository
         .operation("list Task Review Tooling Failures", (sql) => listToolingFailures(sql, reviewId))
         .pipe(Effect.flatMap((rows) => Effect.forEach(rows, decodeToolingFailure))),
-    latestCompletedReviewForTask: (taskId) =>
-      repository
-        .operation("read latest completed Task Review", (sql) =>
-          latestCompletedReviewForTask(sql, taskId),
-        )
-        .pipe(Effect.flatMap(decodeReviewOptional)),
-    latestApplicableReviewForTask: (taskId) =>
-      repository
-        .operation("read latest applicable Task Review", (sql) =>
-          latestApplicableReviewForTask(sql, taskId),
-        )
-        .pipe(Effect.flatMap(decodeReviewOptional)),
     recordWorkspaceSetup: (input) =>
       repository.operation("record Task Review workspace setup", (sql) =>
         Effect.asVoid(sql`
@@ -145,7 +131,7 @@ export const openSqliteTaskReviewPersistence = (): Effect.Effect<
       repository.transactionImmediate("abandon Task Review", (sql) => abandon(sql, input)),
   }));
 
-const startOrReuse = (
+const start = (
   sql: SqlClient.SqlClient,
   input: StartTaskReviewInput,
 ): Effect.Effect<StartTaskReviewResult, SqlError | RepositoryPersistedDataInvalid> =>
@@ -218,7 +204,7 @@ const startOrReuse = (
         )
       `;
     }
-    return { ok: true as const, reused: false as const, reviewId, proposal };
+    return { ok: true as const, reviewId, proposal };
   });
 
 const getTaskFact = (
@@ -295,7 +281,7 @@ const complete = (
     // the Review carries no stale recovery state.
     yield* sql`DELETE FROM task_review_completion_failures WHERE review_id = ${input.reviewId}`;
 
-    const updated = yield* getReviewById(sql, input.reviewId);
+    const updated = yield* readReviewForCompletion(sql, input.reviewId);
     if (updated === undefined) {
       return yield* invalidData("complete Task Review", "Task Review disappeared");
     }
@@ -382,7 +368,7 @@ const decodeAbandonmentContextOptional = (
   });
 };
 
-const getReviewById = (sql: SqlClient.SqlClient, reviewId: string) =>
+const readReviewForCompletion = (sql: SqlClient.SqlClient, reviewId: string) =>
   Effect.map(
     sql<TaskReviewRow>`
       SELECT id, task_id AS taskId, proposal_snapshot AS proposalSnapshot,
@@ -394,17 +380,6 @@ const getReviewById = (sql: SqlClient.SqlClient, reviewId: string) =>
     (rows) => rows[0],
   );
 
-const listReviewsForTask = (sql: SqlClient.SqlClient, taskId: PublicTaskId) =>
-  sql<TaskReviewRow>`
-    SELECT id, task_id AS taskId, proposal_snapshot AS proposalSnapshot,
-      proposal_key AS proposalKey, base_commit AS baseCommit,
-      policy_snapshot AS policySnapshot, state, outcome, created_at AS createdAt,
-      updated_at AS updatedAt
-    FROM task_reviews
-    WHERE task_id = ${taskId}
-    ORDER BY created_at ASC, id ASC
-  `;
-
 const latestCompletedReviewForTask = (sql: SqlClient.SqlClient, taskId: PublicTaskId) =>
   Effect.map(
     sql<TaskReviewRow>`
@@ -414,21 +389,6 @@ const latestCompletedReviewForTask = (sql: SqlClient.SqlClient, taskId: PublicTa
         updated_at AS updatedAt
       FROM task_reviews
       WHERE task_id = ${taskId} AND state = 'complete'
-      ORDER BY created_at DESC, id DESC
-      LIMIT 1
-    `,
-    (rows) => rows[0],
-  );
-
-const latestApplicableReviewForTask = (sql: SqlClient.SqlClient, taskId: PublicTaskId) =>
-  Effect.map(
-    sql<TaskReviewRow>`
-      SELECT id, task_id AS taskId, proposal_snapshot AS proposalSnapshot,
-        proposal_key AS proposalKey, base_commit AS baseCommit,
-        policy_snapshot AS policySnapshot, state, outcome, created_at AS createdAt,
-        updated_at AS updatedAt
-      FROM task_reviews
-      WHERE task_id = ${taskId} AND state = 'complete' AND outcome IN ('passed', 'blocked')
       ORDER BY created_at DESC, id DESC
       LIMIT 1
     `,

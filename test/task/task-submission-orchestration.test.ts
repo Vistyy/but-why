@@ -108,7 +108,6 @@ const submissionDependencies = (
     ) =>
       | { readonly ok: true; readonly instructions: string }
       | { readonly ok: false; readonly message: string };
-    readonly reviewerSessionsRoot?: string;
     readonly reviewerAgentRuntime: ReviewerAgentRuntime;
     readonly executionLock?: ExecutionLock;
     readonly persistence: TaskReviewPersistence;
@@ -118,7 +117,6 @@ const submissionDependencies = (
   executionLock:
     input.executionLock ?? openSqliteExecutionLock({ commonDirectory: join(root, ".git") }),
   mainCheckoutRoot: root,
-  reviewerSessionsRoot: input.reviewerSessionsRoot ?? join(root, ".but-why"),
   globalConfigPath: join(root, ".test-global-config.json"),
   readMainCheckoutHead:
     input.readHead ??
@@ -189,7 +187,7 @@ describe("Task Submission orchestration", () => {
             );
             expect(reviewInputs[0]?.resumeSession).toBeUndefined();
 
-            const recorded = yield* reviews.getReviewById(result.reviewId);
+            const recorded = yield* reviews.latestCompletedReviewForTask(publicTaskId("BY-1"));
             expect(recorded).toMatchObject({
               id: result.reviewId,
               state: "complete",
@@ -406,7 +404,7 @@ describe("Task Submission orchestration", () => {
                 errorMessage: "reviewer process failed",
               }),
             ]);
-            const recorded = yield* reviews.getReviewById(result.reviewId);
+            const recorded = yield* reviews.latestCompletedReviewForTask(publicTaskId("BY-1"));
             expect(recorded).toMatchObject({ state: "complete", outcome: "tooling_failed" });
             expect(yield* reviews.listToolingFailures(result.reviewId)).toHaveLength(1);
 
@@ -565,7 +563,7 @@ describe("Task Submission orchestration", () => {
             expect(git(root, "rev-parse", "HEAD")).toBe(featureHead);
             expect(existsSync(join(root, "uncommitted.txt"))).toBe(true);
 
-            const recorded = yield* reviews.getReviewById(result.reviewId);
+            const recorded = yield* reviews.latestCompletedReviewForTask(publicTaskId("BY-1"));
             expect(recorded?.baseCommit).toBe(featureHead);
 
             // The final cleanup result is persisted after scoped cleanup, so the
@@ -600,7 +598,7 @@ describe("Task Submission orchestration", () => {
           root,
           Effect.gen(function* () {
             const reviews = yield* openSqliteTaskReviewPersistence();
-            const started = yield* reviews.startOrReuse({
+            const started = yield* reviews.start({
               taskId: publicTaskId("BY-1"),
               baseCommit: head,
               policy: {
@@ -612,7 +610,7 @@ describe("Task Submission orchestration", () => {
               reviewId: "review-abandon",
               now,
             });
-            expect(started).toMatchObject({ ok: true, reused: false });
+            expect(started).toMatchObject({ ok: true });
             yield* reviews.recordWorkspaceSetup({
               reviewId: "review-abandon",
               tempRefName,
@@ -645,7 +643,7 @@ describe("Task Submission orchestration", () => {
             );
             expect(tempRef.status).not.toBe(0);
             expect(yield* reviews.getActiveForTask(publicTaskId("BY-1"))).toBeUndefined();
-            const recorded = yield* reviews.getReviewById("review-abandon");
+            const recorded = yield* reviews.latestCompletedReviewForTask(publicTaskId("BY-1"));
             expect(recorded).toMatchObject({
               state: "complete",
               outcome: "tooling_failed",

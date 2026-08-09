@@ -43,7 +43,7 @@ it.scoped("admits a Task Review and captures the exact proposal and workspace se
       });
       if (!added.ok) throw new Error(added.code);
 
-      const started = yield* reviews.startOrReuse({
+      const started = yield* reviews.start({
         taskId: second.id,
         baseCommit,
         policy,
@@ -57,7 +57,6 @@ it.scoped("admits a Task Review and captures the exact proposal and workspace se
 
       expect(started).toMatchObject({
         ok: true,
-        reused: false,
         reviewId: "review-1",
         proposal: {
           title: "Admitted",
@@ -76,30 +75,6 @@ it.scoped("admits a Task Review and captures the exact proposal and workspace se
 
       const active = yield* reviews.getActiveForTask(second.id);
       expect(active).toEqual({ taskId: second.id, reviewId: "review-1" });
-
-      const recorded = yield* reviews.getReviewById("review-1");
-      expect(recorded).toMatchObject({
-        id: "review-1",
-        taskId: second.id,
-        baseCommit,
-        state: "running",
-        outcome: null,
-        createdAt: firstNow,
-        proposal: {
-          title: "Admitted",
-          description: "Description: Admitted",
-          dependencies: [
-            {
-              taskId: first.id,
-              title: "Prerequisite",
-              description: "Description: Prerequisite",
-              state: "new",
-              dependencyIds: [],
-            },
-          ],
-        },
-        policy,
-      });
 
       const context = yield* reviews.getAbandonmentContext("review-1");
       expect(context).toMatchObject({
@@ -136,7 +111,7 @@ it.scoped("captures each direct dependency's full context and nested dependency 
       });
       if (!added.ok) throw new Error(added.code);
 
-      const started = yield* reviews.startOrReuse({
+      const started = yield* reviews.start({
         taskId: subject.id,
         baseCommit,
         policy,
@@ -145,7 +120,6 @@ it.scoped("captures each direct dependency's full context and nested dependency 
       });
       expect(started).toMatchObject({
         ok: true,
-        reused: false,
         proposal: {
           dependencies: [
             {
@@ -158,18 +132,6 @@ it.scoped("captures each direct dependency's full context and nested dependency 
           ],
         },
       });
-
-      // The proposal round-trips through the persisted snapshot with the same evidence.
-      const recorded = yield* reviews.getReviewById("review-dependencies");
-      expect(recorded?.proposal.dependencies).toEqual([
-        {
-          taskId: middle.id,
-          title: "Middle prerequisite",
-          description: "Description: Middle prerequisite",
-          state: "new",
-          dependencyIds: [root.id],
-        },
-      ]);
     }),
   ),
 );
@@ -180,7 +142,7 @@ it.scoped("clears a stored completion failure after successful completion or aba
       const tasks = yield* openSqliteTaskPersistence("BY");
       const reviews = yield* openSqliteTaskReviewPersistence();
       const completedTask = yield* createTask(tasks, "Recovered completion", firstNow);
-      yield* reviews.startOrReuse({
+      yield* reviews.start({
         taskId: completedTask.id,
         baseCommit,
         policy,
@@ -201,7 +163,7 @@ it.scoped("clears a stored completion failure after successful completion or aba
       expect(yield* reviews.getCompletionFailure("review-recovered-complete")).toBeUndefined();
 
       const abandonedTask = yield* createTask(tasks, "Recovered abandonment", secondNow);
-      yield* reviews.startOrReuse({
+      yield* reviews.start({
         taskId: abandonedTask.id,
         baseCommit,
         policy,
@@ -232,14 +194,14 @@ it.scoped("completes a passing Task Review atomically and moves the Task to Todo
       const tasks = yield* openSqliteTaskPersistence("BY");
       const reviews = yield* openSqliteTaskReviewPersistence();
       const task = yield* createTask(tasks, "Pass", firstNow);
-      const started = yield* reviews.startOrReuse({
+      const started = yield* reviews.start({
         taskId: task.id,
         baseCommit,
         policy,
         reviewId: "review-pass",
         now: firstNow,
       });
-      if (!started.ok || started.reused) throw new Error("start failed");
+      if (!started.ok) throw new Error("start failed");
 
       const completed = yield* reviews.complete({
         reviewId: "review-pass",
@@ -265,7 +227,7 @@ it.scoped("records Findings and leaves the Task New for a blocked Review", () =>
       const tasks = yield* openSqliteTaskPersistence("BY");
       const reviews = yield* openSqliteTaskReviewPersistence();
       const task = yield* createTask(tasks, "Blocked", firstNow);
-      yield* reviews.startOrReuse({
+      yield* reviews.start({
         taskId: task.id,
         baseCommit,
         policy,
@@ -314,7 +276,7 @@ it.scoped("records Tooling Failure and leaves the Task New", () =>
       const tasks = yield* openSqliteTaskPersistence("BY");
       const reviews = yield* openSqliteTaskReviewPersistence();
       const task = yield* createTask(tasks, "Tooling", firstNow);
-      yield* reviews.startOrReuse({
+      yield* reviews.start({
         taskId: task.id,
         baseCommit,
         policy,
@@ -353,59 +315,13 @@ it.scoped("records Tooling Failure and leaves the Task New", () =>
   ),
 );
 
-it.scoped("latestApplicableReviewForTask skips Tooling Failure and returns the prior outcome", () =>
-  withTemporaryRepositoryState(() =>
-    Effect.gen(function* () {
-      const tasks = yield* openSqliteTaskPersistence("BY");
-      const reviews = yield* openSqliteTaskReviewPersistence();
-      const task = yield* createTask(tasks, "Applicable prior", firstNow);
-      yield* reviews.startOrReuse({
-        taskId: task.id,
-        baseCommit,
-        policy,
-        reviewId: "review-prior",
-        now: firstNow,
-      });
-      yield* reviews.complete({ reviewId: "review-prior", outcome: "blocked", now: secondNow });
-
-      // Change the proposal so a newer Review can be created on the same Task.
-      const edited = yield* tasks.updateTaskContext({
-        taskId: task.id,
-        title: "Newer proposal",
-        description: "Newer description",
-        now: secondNow,
-      });
-      expect(edited.ok).toBe(true);
-      if (!edited.ok) throw new Error(edited.code);
-      yield* reviews.startOrReuse({
-        taskId: task.id,
-        baseCommit,
-        policy,
-        reviewId: "review-tooling-newer",
-        now: secondNow,
-      });
-      yield* reviews.complete({
-        reviewId: "review-tooling-newer",
-        outcome: "tooling_failed",
-        now: thirdNow,
-      });
-
-      const latest = yield* reviews.latestCompletedReviewForTask(task.id);
-      expect(latest?.id).toBe("review-tooling-newer");
-      const applicable = yield* reviews.latestApplicableReviewForTask(task.id);
-      expect(applicable?.id).toBe("review-prior");
-      expect(applicable?.outcome).toBe("blocked");
-    }),
-  ),
-);
-
 it.scoped("enforces one active Review per Task and rejects mutation and cancellation", () =>
   withTemporaryRepositoryState(() =>
     Effect.gen(function* () {
       const tasks = yield* openSqliteTaskPersistence("BY");
       const reviews = yield* openSqliteTaskReviewPersistence();
       const task = yield* createTask(tasks, "Locked", firstNow);
-      yield* reviews.startOrReuse({
+      yield* reviews.start({
         taskId: task.id,
         baseCommit,
         policy,
@@ -413,7 +329,7 @@ it.scoped("enforces one active Review per Task and rejects mutation and cancella
         now: firstNow,
       });
 
-      const second = yield* reviews.startOrReuse({
+      const second = yield* reviews.start({
         taskId: task.id,
         baseCommit,
         policy,
@@ -452,7 +368,7 @@ it.scoped("completion requires the Active Review marker and rejects passing Find
       const tasks = yield* openSqliteTaskPersistence("BY");
       const reviews = yield* openSqliteTaskReviewPersistence();
       const missingMarker = yield* createTask(tasks, "Missing marker", firstNow);
-      yield* reviews.startOrReuse({
+      yield* reviews.start({
         taskId: missingMarker.id,
         baseCommit,
         policy,
@@ -473,7 +389,7 @@ it.scoped("completion requires the Active Review marker and rejects passing Find
       expect(yield* tasks.getTaskById(missingMarker.id)).toMatchObject({ state: "new" });
 
       const passingFindings = yield* createTask(tasks, "Passing with findings", firstNow);
-      yield* reviews.startOrReuse({
+      yield* reviews.start({
         taskId: passingFindings.id,
         baseCommit,
         policy,
@@ -508,7 +424,7 @@ it.scoped("compare-and-set completion rejects a second completion and unknown re
       const tasks = yield* openSqliteTaskPersistence("BY");
       const reviews = yield* openSqliteTaskReviewPersistence();
       const task = yield* createTask(tasks, "CAS", firstNow);
-      yield* reviews.startOrReuse({
+      yield* reviews.start({
         taskId: task.id,
         baseCommit,
         policy,
@@ -542,14 +458,14 @@ it.scoped("completion rejects an Active marker bound to a different Task", () =>
       const first = yield* createTask(tasks, "Marker first", firstNow);
       const second = yield* createTask(tasks, "Marker second", firstNow);
       const unmarked = yield* createTask(tasks, "Marker unmarked", firstNow);
-      yield* reviews.startOrReuse({
+      yield* reviews.start({
         taskId: first.id,
         baseCommit,
         policy,
         reviewId: "review-marker-first",
         now: firstNow,
       });
-      yield* reviews.startOrReuse({
+      yield* reviews.start({
         taskId: second.id,
         baseCommit,
         policy,
@@ -585,7 +501,7 @@ it.scoped("rejects admission for non-New, linked, and unknown Tasks", () =>
       const task = yield* createTask(tasks, "Stateful", firstNow);
       yield* transitionTaskToTodo(task.id, firstNow);
 
-      const nonNew = yield* reviews.startOrReuse({
+      const nonNew = yield* reviews.start({
         taskId: task.id,
         baseCommit,
         policy,
@@ -598,7 +514,7 @@ it.scoped("rejects admission for non-New, linked, and unknown Tasks", () =>
         state: "todo",
       });
 
-      const linked = yield* reviews.startOrReuse({
+      const linked = yield* reviews.start({
         taskId: publicTaskId("BY-404"),
         baseCommit,
         policy,
@@ -610,62 +526,13 @@ it.scoped("rejects admission for non-New, linked, and unknown Tasks", () =>
   ),
 );
 
-it.scoped("retains complete Review history and rejects malformed persisted values", () =>
-  withTemporaryRepositoryState(() =>
-    Effect.gen(function* () {
-      const tasks = yield* openSqliteTaskPersistence("BY");
-      const reviews = yield* openSqliteTaskReviewPersistence();
-      const firstTask = yield* createTask(tasks, "History A", firstNow);
-      const secondTask = yield* createTask(tasks, "History B", firstNow);
-      yield* reviews.startOrReuse({
-        taskId: firstTask.id,
-        baseCommit,
-        policy,
-        reviewId: "review-history-1",
-        now: firstNow,
-      });
-      yield* reviews.complete({
-        reviewId: "review-history-1",
-        outcome: "blocked",
-        now: secondNow,
-      });
-      yield* reviews.startOrReuse({
-        taskId: secondTask.id,
-        baseCommit,
-        policy,
-        reviewId: "review-history-2",
-        now: secondNow,
-      });
-      yield* reviews.complete({ reviewId: "review-history-2", outcome: "passed", now: thirdNow });
-
-      const history = yield* reviews.listReviewsForTask(firstTask.id);
-      expect(history.map((review) => review.id)).toEqual(["review-history-1"]);
-      expect(history.map((review) => review.outcome)).toEqual(["blocked"]);
-      const secondHistory = yield* reviews.listReviewsForTask(secondTask.id);
-      expect(secondHistory.map((review) => review.id)).toEqual(["review-history-2"]);
-
-      const latest = yield* reviews.latestCompletedReviewForTask(secondTask.id);
-      expect(latest?.id).toBe("review-history-2");
-
-      const repository = yield* RepositorySql;
-      yield* repository.operation(
-        "corrupt Task Review proposal",
-        (sql) =>
-          sql`UPDATE task_reviews SET proposal_snapshot = 'not-json' WHERE id = 'review-history-1'`,
-      );
-      const malformed = yield* Effect.isFailure(reviews.getReviewById("review-history-1"));
-      expect(malformed).toBe(true);
-    }),
-  ),
-);
-
 it.scoped("rejects malformed persisted values at each owning boundary", () =>
   withTemporaryRepositoryState(() =>
     Effect.gen(function* () {
       const tasks = yield* openSqliteTaskPersistence("BY");
       const reviews = yield* openSqliteTaskReviewPersistence();
       const task = yield* createTask(tasks, "Decoded", firstNow);
-      const started = yield* reviews.startOrReuse({
+      const started = yield* reviews.start({
         taskId: task.id,
         baseCommit,
         policy,
@@ -676,7 +543,7 @@ it.scoped("rejects malformed persisted values at each owning boundary", () =>
         },
         now: firstNow,
       });
-      if (!started.ok || started.reused) throw new Error("start failed");
+      if (!started.ok) throw new Error("start failed");
       yield* reviews.recordToolingFailure({
         reviewId: "review-decoded",
         errorKind: "infrastructure_tooling_failed",

@@ -31,13 +31,6 @@ export type StartTaskReviewInput = {
 export type StartTaskReviewResult =
   | {
       readonly ok: true;
-      readonly reused: true;
-      readonly reviewId: string;
-      readonly outcome: "passed" | "blocked";
-    }
-  | {
-      readonly ok: true;
-      readonly reused: false;
       readonly reviewId: string;
       readonly proposal: TaskReviewProposal;
     }
@@ -105,7 +98,7 @@ export type ActiveTaskReview = {
 };
 
 export type TaskReviewPersistence = {
-  readonly startOrReuse: (input: StartTaskReviewInput) => StorageEffect<StartTaskReviewResult>;
+  readonly start: (input: StartTaskReviewInput) => StorageEffect<StartTaskReviewResult>;
   readonly getTaskFact: (taskId: PublicTaskId) => StorageEffect<TaskReviewTaskFact | undefined>;
   readonly complete: (input: CompleteTaskReviewInput) => StorageEffect<CompleteTaskReviewResult>;
   readonly getActiveForTask: (taskId: PublicTaskId) => StorageEffect<ActiveTaskReview | undefined>;
@@ -113,16 +106,11 @@ export type TaskReviewPersistence = {
   readonly getAbandonmentContext: (
     reviewId: string,
   ) => StorageEffect<TaskReviewAbandonmentContext | undefined>;
-  readonly getReviewById: (reviewId: string) => StorageEffect<TaskReviewRecord | undefined>;
-  readonly listReviewsForTask: (taskId: PublicTaskId) => StorageEffect<readonly TaskReviewRecord[]>;
   readonly listFindings: (reviewId: string) => StorageEffect<readonly TaskReviewFinding[]>;
   readonly listToolingFailures: (
     reviewId: string,
   ) => StorageEffect<readonly TaskReviewToolingFailure[]>;
   readonly latestCompletedReviewForTask: (
-    taskId: PublicTaskId,
-  ) => StorageEffect<TaskReviewRecord | undefined>;
-  readonly latestApplicableReviewForTask: (
     taskId: PublicTaskId,
   ) => StorageEffect<TaskReviewRecord | undefined>;
   readonly recordWorkspaceSetup: (input: TaskReviewWorkspaceSetup) => StorageEffect<void>;

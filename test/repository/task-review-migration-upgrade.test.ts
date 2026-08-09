@@ -96,7 +96,7 @@ it.effect("upgrades Shared Repository State at 0025 and admits Task Reviews", ()
         yield* Effect.scoped(
           Effect.gen(function* () {
             const reviews = yield* openSqliteTaskReviewPersistence();
-            const started = yield* reviews.startOrReuse({
+            const started = yield* reviews.start({
               taskId: publicTaskId("BY-1"),
               baseCommit,
               policy,
@@ -109,7 +109,6 @@ it.effect("upgrades Shared Repository State at 0025 and admits Task Reviews", ()
             });
             expect(started).toMatchObject({
               ok: true,
-              reused: false,
               reviewId: "review-upgraded",
             });
 
@@ -130,7 +129,7 @@ it.effect("upgrades Shared Repository State at 0025 and admits Task Reviews", ()
             });
             expect(completed).toMatchObject({ ok: true });
 
-            const recorded = yield* reviews.getReviewById("review-upgraded");
+            const recorded = yield* reviews.latestCompletedReviewForTask(publicTaskId("BY-1"));
             expect(recorded).toMatchObject({
               id: "review-upgraded",
               taskId: "BY-1",

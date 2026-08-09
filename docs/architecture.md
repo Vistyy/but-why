@@ -108,10 +108,10 @@ An unlinked New Task can become Todo through a completed passing Task Review of 
 Existing Todo Tasks remain approved without fabricated Task Review history.
 `by task submit <task-id>` accepts only an unlinked New Task.
 `by task approve <task-id>` remains available during this expansion stage.
-Task Submission resolves the canonical-main-checkout `HEAD` commit first and reads the Repo Config at that exact commit for the Task Reviewer policy and prepare command.
-It resolves the Task Reviewer profile and instructions Repo-before-Global, with built-in instructions as fallback.
+Task Submission resolves the canonical-main-checkout `HEAD` commit and reads the Repo Config at that exact commit for Repository Preparation.
+It resolves the Global default Agent Profile and always uses the built-in Task Reviewer instructions.
 Configured Repository Preparation runs in the disposable exact-commit workspace; automatic Validation Checks never run.
-One Task Reviewer judges the exact proposal with complete authority, the prior applicable outcome, and the deterministic proposal diff when the proposal changed.
+One Task Reviewer judges the exact proposal with complete built-in authority.
 Task-owned decoding consumes the shared core Finding fields without Validation-only Artifact references.
 A passing Review atomically moves the Task to Todo.
 Findings or Tooling Failure leave the Task New and permit a later ordinary submission.
@@ -120,7 +120,7 @@ Every ordinary submission starts a fresh Task Review.
 Completed-result reuse is not supported during this expansion stage.
 Per-Task execution locking, transactional admission, one-active-Review uniqueness, proposal rereading, mutation and cancellation guards, and compare-and-set completion preserve one exact reviewed proposal.
 Cleanup failure leaves the Review active, stores the latest failed operation and exact diagnostic, and does not change Task approval.
-`by task-review abandon <review-id>` records Tooling Failure and removes the Active Review only after cleanup and transcript indexing succeed.
+`by task-review abandon <review-id>` records Tooling Failure and removes the Active Review only after cleanup succeeds.
 The Task Review summary in `by task show` exposes current state and the valid next action.
 
 ## Storage

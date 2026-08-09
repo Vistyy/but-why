@@ -56,7 +56,6 @@ export const loadTaskSubmission = (input: {
                 commonDirectory: context.commonDirectory,
               }),
               mainCheckoutRoot: context.mainCheckoutRoot,
-              reviewerSessionsRoot: context.paths.operationalDir,
               globalConfigPath: input.globalConfigPath,
               readMainCheckoutHead: (cwd) => {
                 const head = runGitCommand(["rev-parse", "--verify", "HEAD^{commit}"], cwd);

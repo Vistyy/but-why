@@ -43,11 +43,7 @@ A complete example is:
     "acceptance": {
       "agentProfile": { "scope": "repo", "name": "strict-reviewer" }
     },
-    "specialists": ["standards"],
-    "task": {
-      "agentProfile": { "scope": "repo", "name": "strict-reviewer" },
-      "instructionsFile": ".but-why/reviewers/task-review.md"
-    }
+    "specialists": ["standards"]
   },
   "reviewers": {
     "standards": {

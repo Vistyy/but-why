@@ -12,11 +12,9 @@ import { parseCliTaskIdValue } from "../../../cliTaskId.js";
 import { loadTaskSubmission } from "../../../task/loadTaskSubmission.js";
 import type { TaskSubmitResult } from "../../../task/submitTask.js";
 import {
-  resolveTaskId,
   type TaskCommandEnvironment,
   type TaskIdCommand,
   taskNotFound,
-  withTasks,
 } from "../taskCliSupport.js";
 
 export const runSubmitCommand = (
@@ -25,24 +23,20 @@ export const runSubmitCommand = (
 ): Effect.Effect<CliResult> => {
   const parsed = parseCliTaskIdValue(command.taskId);
   if (!parsed.ok) return Effect.succeed(parsed.result);
-  return withTasks(environment, false, (tasks) => {
-    const taskId = resolveTaskId(tasks, parsed.taskId);
-    if (!taskId.ok) return Effect.succeed(taskId.result);
-    const loaded = loadTaskSubmission({
-      cwd: environment.cwd,
-      globalConfigPath: environment.globalConfigPath,
-      ...(environment.reviewerAgentRuntime === undefined
-        ? {}
-        : { reviewerAgentRuntime: environment.reviewerAgentRuntime }),
-    });
-    if (!loaded.ok) return Effect.succeed(repoStateLoadError(loaded.error));
-    return loaded.submission
-      .submit({ taskId: taskId.taskId, now: environment.now().toISOString() })
-      .pipe(
-        Effect.map((result) => submitResult(result, taskId.taskId)),
-        Effect.catchAll((error) => Effect.succeed(repositoryStorageErrorResult(error))),
-      );
+  const loaded = loadTaskSubmission({
+    cwd: environment.cwd,
+    globalConfigPath: environment.globalConfigPath,
+    ...(environment.reviewerAgentRuntime === undefined
+      ? {}
+      : { reviewerAgentRuntime: environment.reviewerAgentRuntime }),
   });
+  if (!loaded.ok) return Effect.succeed(repoStateLoadError(loaded.error));
+  return loaded.submission
+    .submit({ taskId: parsed.taskId, now: environment.now().toISOString() })
+    .pipe(
+      Effect.map((result) => submitResult(result, parsed.taskId)),
+      Effect.catchAll((error) => Effect.succeed(repositoryStorageErrorResult(error))),
+    );
 };
 
 const submitResult = (result: TaskSubmitResult, taskId: string): CliResult => {

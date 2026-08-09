@@ -53,7 +53,6 @@ export type TaskSubmissionDependencies = {
   readonly persistence: TaskReviewPersistence;
   readonly executionLock: ExecutionLock;
   readonly mainCheckoutRoot: string;
-  readonly reviewerSessionsRoot: string;
   readonly globalConfigPath: string;
   readonly readMainCheckoutHead: (cwd: string) => MainCheckoutHeadResult;
   readonly readRepoConfigAtCommit: (cwd: string, commit: string) => RepoConfigAtCommitResult;
@@ -158,7 +157,7 @@ const submitTask = (
 
     const reviewId = randomUUID();
     const tempRefName = taskReviewTempRefName(reviewId);
-    const started = yield* dependencies.persistence.startOrReuse({
+    const started = yield* dependencies.persistence.start({
       taskId: input.taskId,
       baseCommit: head.commit,
       policy: taskReviewPolicySnapshot(policy.policy),
@@ -170,9 +169,6 @@ const submitTask = (
       now: input.now,
     });
     if (!started.ok) return startedError(started);
-    if (started.reused) {
-      return yield* Effect.dieMessage("Fresh Task Review admission unexpectedly reused a result");
-    }
 
     const copyFiles: readonly string[] = [];
     const prepare = taskReviewPrepareConfig(repoConfig.config.prepare);

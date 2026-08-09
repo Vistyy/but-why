@@ -24,12 +24,6 @@ export type TaskReviewInspection = {
   readonly getTaskFact: (
     taskId: PublicTaskId,
   ) => Effect.Effect<TaskReviewTaskFact | undefined, RepositoryStorageError>;
-  readonly listReviewsForTask: (
-    taskId: PublicTaskId,
-  ) => Effect.Effect<readonly TaskReviewRecord[], RepositoryStorageError>;
-  readonly getReviewById: (
-    reviewId: string,
-  ) => Effect.Effect<TaskReviewRecord | undefined, RepositoryStorageError>;
   readonly latestCompletedForTask: (
     taskId: PublicTaskId,
   ) => Effect.Effect<TaskReviewRecord | undefined, RepositoryStorageError>;
@@ -86,8 +80,6 @@ export const loadTaskReviewInspection = (input: {
     ok: true,
     inspection: {
       getTaskFact: (taskId) => run((persistence) => persistence.getTaskFact(taskId)),
-      listReviewsForTask: (taskId) => run((persistence) => persistence.listReviewsForTask(taskId)),
-      getReviewById: (reviewId) => run((persistence) => persistence.getReviewById(reviewId)),
       latestCompletedForTask: (taskId) =>
         run((persistence) => persistence.latestCompletedReviewForTask(taskId)),
       activeForTask: (taskId) => run((persistence) => persistence.getActiveForTask(taskId)),
